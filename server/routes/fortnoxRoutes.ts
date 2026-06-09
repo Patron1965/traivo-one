@@ -1796,7 +1796,7 @@ app.post("/api/order-concepts/:id/execute", asyncHandler(async (req, res) => {
         quantity = Number(objWithMeta.metadata[concept.crossPollinationField]) || 1;
       }
       // Honorera den länkade artikelns quantityMode ovanpå ev. cross-pollination-bas:
-      // per_styck/single_per_task→1, group→groupSize, matches_field→objektets metadatavärde.
+      // single_per_task→1, per_styck→bas, group→groupSize, matches_field→objektets metadatavärde.
       // matches_field upplöses ärvningsmedvetet via getArticleMetadataForObject (samma
       // resolver som manuella orderrader) — objekten här saknar populerad .metadata.
       if (linkedArticle) {

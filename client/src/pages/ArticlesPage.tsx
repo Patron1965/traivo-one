@@ -47,6 +47,7 @@ import {
   Plus,
   Search,
   Loader2,
+  FileText,
   Pencil,
   Trash2,
   Filter,
@@ -87,15 +88,18 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
-import type { Article, ServiceObject, MetadataDefinition } from "@shared/schema";
+import type { Article, ServiceObject, MetadataDefinition, ArticleTypeDefinition } from "@shared/schema";
+import { useUpload } from "@/hooks/use-upload";
 import { deriveIsPreTask } from "@/lib/article-pre-task";
 import { QueryState } from "@/components/QueryState";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { Separator } from "@/components/ui/separator";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { HelpTooltip, PageHelp } from "@/components/ui/help-tooltip";
 import { ScrollArea } from "@/components/ui/scroll-area";
 
-const articleTypeOptions = [
+// Fallback om registret ännu inte hunnit laddas (eller är tomt). Riktiga
+// alternativ hämtas per-tenant från /api/article-types (Task #834).
+const DEFAULT_ARTICLE_TYPE_OPTIONS = [
   { value: "tjanst", label: "Tjänst" },
   { value: "felanmalan", label: "Felanmälan" },
   { value: "kontroll", label: "Kontroll" },
@@ -115,10 +119,6 @@ const objectTypeOptions = [
   { value: "matavfall", label: "Matavfall" },
   { value: "atervinning", label: "Återvinning" },
 ];
-
-const articleTypeLabels: Record<string, string> = Object.fromEntries(
-  articleTypeOptions.map(t => [t.value, t.label])
-);
 
 const objectTypeLabels: Record<string, string> = Object.fromEntries(
   objectTypeOptions.map(t => [t.value, t.label])
@@ -187,6 +187,7 @@ interface ArticleFormData {
   replacementArticleId: string;
   externInfoUrl: string;
   externInfoDescription: string;
+  externInfoFileUrl: string;
 }
 
 const emptyFormData: ArticleFormData = {
@@ -217,7 +218,7 @@ const emptyFormData: ArticleFormData = {
   showPreviousValue: false,
   isInfoCarrier: false,
   limitationType: "unlimited",
-  quantityMode: "use_object_quantity",
+  quantityMode: "per_styck",
   quantityMetadataField: "",
   quantityUnit: "",
   groupSize: 1,
@@ -228,6 +229,7 @@ const emptyFormData: ArticleFormData = {
   replacementArticleId: "",
   externInfoUrl: "",
   externInfoDescription: "",
+  externInfoFileUrl: "",
 };
 
 // Status-livscykel: aktiv → utgående → utgått. Legacy "active"/"inactive" stöds
@@ -256,6 +258,45 @@ function articleStatusBadgeClass(status: string | null | undefined): string {
     case "inactive": return "text-muted-foreground";
     default: return "";
   }
+}
+
+function FormSection({
+  title,
+  icon,
+  description,
+  defaultOpen = false,
+  testId,
+  children,
+}: {
+  title: string;
+  icon?: React.ReactNode;
+  description?: string;
+  defaultOpen?: boolean;
+  testId?: string;
+  children: React.ReactNode;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <Collapsible open={open} onOpenChange={setOpen} className="rounded-md border">
+      <CollapsibleTrigger asChild>
+        <button
+          type="button"
+          className="flex w-full items-center justify-between gap-2 px-3 py-2.5 text-left hover:bg-muted/50 rounded-md"
+          data-testid={testId}
+        >
+          <span className="flex items-center gap-2 text-sm font-semibold">
+            {icon}
+            {title}
+          </span>
+          <ChevronDown className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform ${open ? "rotate-180" : ""}`} />
+        </button>
+      </CollapsibleTrigger>
+      <CollapsibleContent className="px-3 pb-4 pt-1">
+        {description && <p className="mb-3 text-xs text-muted-foreground">{description}</p>}
+        <div className="space-y-4">{children}</div>
+      </CollapsibleContent>
+    </Collapsible>
+  );
 }
 
 export default function ArticlesPage() {
@@ -307,6 +348,34 @@ export default function ArticlesPage() {
 
   const { data: metadataTypes = [] } = useQuery<{ id: string; namn: string; datatyp: string }[]>({
     queryKey: ["/api/metadata/types"],
+  });
+
+  // Task #834: artikeltyper kommer från ett per-tenant register. Faller tillbaka
+  // på systemstandarderna om registret ännu inte laddats.
+  const { data: articleTypeDefs = [] } = useQuery<ArticleTypeDefinition[]>({
+    queryKey: ["/api/article-types"],
+  });
+  const articleTypeOptions = useMemo(
+    () => (articleTypeDefs.length > 0
+      ? articleTypeDefs.map((d) => ({ value: d.key, label: d.label }))
+      : DEFAULT_ARTICLE_TYPE_OPTIONS),
+    [articleTypeDefs],
+  );
+  const articleTypeLabels = useMemo(
+    () => Object.fromEntries(articleTypeOptions.map((t) => [t.value, t.label])) as Record<string, string>,
+    [articleTypeOptions],
+  );
+
+  // Task #834: filuppladdning för extern info (säkerhetsdatablad m.m.) via det
+  // delade upload-flödet (request-url → PUT → confirm sätter tenant-ACL).
+  const { uploadFile: uploadExternFile, isUploading: externFileUploading } = useUpload({
+    onSuccess: (res) => {
+      setFormData((prev) => ({ ...prev, externInfoFileUrl: res.objectPath }));
+      toast({ title: "Fil uppladdad", description: "Den externa filen har sparats." });
+    },
+    onError: (err) => {
+      toast({ title: "Uppladdning misslyckades", description: err.message, variant: "destructive" });
+    },
   });
 
   const { data: metadataDefinitions = [] } = useQuery<MetadataDefinition[]>({
@@ -502,7 +571,10 @@ export default function ArticlesPage() {
       showPreviousValue: article.showPreviousValue || false,
       isInfoCarrier: article.isInfoCarrier || false,
       limitationType: article.limitationType || "unlimited",
-      quantityMode: article.quantityMode || "use_object_quantity",
+      // Normalisera äldre lägen till per_styck (samma beteende) — alternativet finns inte längre i UI.
+      quantityMode: (article.quantityMode === "use_object_quantity" || article.quantityMode === "configurable" || !article.quantityMode)
+        ? "per_styck"
+        : article.quantityMode,
       quantityMetadataField: article.quantityMetadataField || "",
       quantityUnit: article.quantityUnit || "",
       groupSize: article.groupSize ?? 1,
@@ -513,6 +585,7 @@ export default function ArticlesPage() {
       replacementArticleId: article.replacementArticleId || "",
       externInfoUrl: article.externInfoUrl || "",
       externInfoDescription: article.externInfoDescription || "",
+      externInfoFileUrl: (article as any).externInfoFileUrl || "",
     });
     {
       const om = article.offsetMinutes ?? 0;
@@ -529,8 +602,18 @@ export default function ArticlesPage() {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
+    if (!formData.articleNumber.trim() || !formData.name.trim()) {
+      toast({ title: "Fyll i obligatoriska fält", description: "Artikelnummer och namn krävs innan du sparar.", variant: "destructive" });
+      return;
+    }
+
     if (articleNumberDuplicate) {
       toast({ title: "Artikelnummer används redan", description: "Välj ett unikt artikelnummer innan du sparar.", variant: "destructive" });
+      return;
+    }
+
+    if (externFileUploading) {
+      toast({ title: "Vänta på uppladdning", description: "Den externa filen laddas fortfarande upp.", variant: "destructive" });
       return;
     }
 
@@ -1161,9 +1244,10 @@ export default function ArticlesPage() {
           </DialogHeader>
           <form onSubmit={handleSubmit}>
             <div className="grid gap-4 py-4">
+              <FormSection title="Grundinformation" icon={<Package className="h-4 w-4" />} defaultOpen testId="section-grundinfo">
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="articleNumber">Artikelnummer</Label>
+                  <Label htmlFor="articleNumber">Artikelnummer <span className="text-destructive">*</span></Label>
                   <Input
                     id="articleNumber"
                     value={formData.articleNumber}
@@ -1197,6 +1281,11 @@ export default function ArticlesPage() {
                           {type.label}
                         </SelectItem>
                       ))}
+                      {formData.articleType && !articleTypeOptions.some(t => t.value === formData.articleType) && (
+                        <SelectItem value={formData.articleType}>
+                          {formData.articleType} (arkiverad)
+                        </SelectItem>
+                      )}
                     </SelectContent>
                   </Select>
                 </div>
@@ -1327,18 +1416,27 @@ export default function ArticlesPage() {
               )}
 
               <div className="space-y-2">
-                <Label htmlFor="name">Namn</Label>
+                <Label htmlFor="name">Namn <span className="text-destructive">*</span></Label>
                 <Input
                   id="name"
                   value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  onChange={(e) => setFormData({ ...formData, name: e.target.value.slice(0, 50) })}
                   placeholder="Kärltömning 240L"
                   required
+                  maxLength={50}
                   data-testid="input-article-name"
                 />
-                <p className="text-xs text-muted-foreground">
-                  Kundbeskrivning — syns på fakturor och följesedlar.
-                </p>
+                <div className="flex items-center justify-between">
+                  <p className="text-xs text-muted-foreground">
+                    Kundbeskrivning — syns på fakturor och följesedlar.
+                  </p>
+                  <span
+                    className={`text-xs tabular-nums ${formData.name.length >= 50 ? "text-warning" : "text-muted-foreground"}`}
+                    data-testid="text-name-char-count"
+                  >
+                    {formData.name.length}/50
+                  </span>
+                </div>
               </div>
 
               <div className="space-y-2">
@@ -1356,6 +1454,8 @@ export default function ArticlesPage() {
                 </p>
               </div>
 
+              </FormSection>
+              <FormSection title="Extern info & leverantör" icon={<FileText className="h-4 w-4" />} testId="section-extern">
               <div className="space-y-2">
                 <Label htmlFor="externInfoUrl">Extern info — länk</Label>
                 <Input
@@ -1377,6 +1477,50 @@ export default function ArticlesPage() {
                 <p className="text-xs text-muted-foreground">
                   Länk till extern information (t.ex. produktblad eller säkerhetsdatablad) med en kort beskrivning.
                 </p>
+
+                <div className="pt-1 space-y-2">
+                  <Label htmlFor="externInfoFile" className="text-sm">Eller ladda upp fil (PDF, bild)</Label>
+                  {formData.externInfoFileUrl ? (
+                    <div className="flex items-center justify-between rounded-md border px-3 py-2 text-sm" data-testid="row-extern-info-file">
+                      <a
+                        href={formData.externInfoFileUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-2 text-primary hover:underline truncate"
+                        data-testid="link-extern-info-file"
+                      >
+                        <FileText className="h-4 w-4 shrink-0" />
+                        <span className="truncate">Öppna uppladdad fil</span>
+                      </a>
+                      <button
+                        type="button"
+                        onClick={() => setFormData({ ...formData, externInfoFileUrl: "" })}
+                        className="ml-2 text-muted-foreground hover:text-destructive shrink-0"
+                        data-testid="button-remove-extern-info-file"
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
+                    </div>
+                  ) : (
+                    <Input
+                      id="externInfoFile"
+                      type="file"
+                      accept="application/pdf,image/*"
+                      disabled={externFileUploading}
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) uploadExternFile(file);
+                        e.target.value = "";
+                      }}
+                      data-testid="input-extern-info-file"
+                    />
+                  )}
+                  {externFileUploading && (
+                    <p className="text-xs text-muted-foreground flex items-center gap-1">
+                      <Loader2 className="h-3 w-3 animate-spin" /> Laddar upp...
+                    </p>
+                  )}
+                </div>
               </div>
 
               <div className="space-y-2">
@@ -1434,6 +1578,8 @@ export default function ArticlesPage() {
                 <p className="text-xs text-muted-foreground">Artikelns nummer hos olika leverantörer (valfritt, flera tillåtna).</p>
               </div>
 
+              </FormSection>
+              <FormSection title="Pris & kvantitet" icon={<DollarSign className="h-4 w-4" />} testId="section-pris">
               <div className="grid grid-cols-3 gap-4">
                 {formData.articleType === "vara" ? (
                   <div className="space-y-2">
@@ -1468,6 +1614,7 @@ export default function ArticlesPage() {
                       min="0"
                       step="0.01"
                       value={formData.cost ? (formData.cost / 100).toString() : ""}
+                      placeholder="0.00"
                       onChange={(e) => {
                         const v = e.target.value;
                         setFormData({ ...formData, cost: v === "" ? 0 : Math.round(parseFloat(v) * 100) || 0 });
@@ -1484,6 +1631,7 @@ export default function ArticlesPage() {
                     min="0"
                     step="0.01"
                     value={formData.listPrice ? (formData.listPrice / 100).toString() : ""}
+                    placeholder="0.00"
                     onChange={(e) => {
                       const v = e.target.value;
                       setFormData({ ...formData, listPrice: v === "" ? 0 : Math.round(parseFloat(v) * 100) || 0 });
@@ -1533,13 +1681,6 @@ export default function ArticlesPage() {
                     <SelectItem value="single_per_task">En per uppdrag (alltid 1)</SelectItem>
                     <SelectItem value="group">Grupp — fast multipel (gruppstorlek)</SelectItem>
                     <SelectItem value="matches_field">Matchar metadatafält — antal från objektets metadata</SelectItem>
-                    {(formData.quantityMode === "use_object_quantity" || formData.quantityMode === "configurable") && (
-                      <SelectItem value={formData.quantityMode}>
-                        {formData.quantityMode === "use_object_quantity"
-                          ? "Multiplicera med objektets antal (äldre)"
-                          : "Konfigurerbar per orderkoncept (äldre)"}
-                      </SelectItem>
-                    )}
                   </SelectContent>
                 </Select>
                 <p className="text-xs text-muted-foreground">
@@ -1696,6 +1837,8 @@ export default function ArticlesPage() {
                 </p>
               </div>
 
+              </FormSection>
+              <FormSection title="Enhet & ersättning" icon={<Package className="h-4 w-4" />} testId="section-enhet">
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="unit">Enhet</Label>
@@ -1757,16 +1900,8 @@ export default function ArticlesPage() {
                 </div>
               )}
 
-              <Separator />
-              <div className="space-y-1">
-                <h4 className="text-sm font-semibold flex items-center gap-2">
-                  <Database className="h-4 w-4" />
-                  Metadata-koppling
-                </h4>
-                <p className="text-xs text-muted-foreground">
-                  Koppla artikeln till metadata som hämtas/lämnas vid utförande
-                </p>
-              </div>
+              </FormSection>
+              <FormSection title="Metadata-koppling" icon={<Database className="h-4 w-4" />} description="Koppla artikeln till metadata som hämtas/lämnas vid utförande" testId="section-metadata">
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
@@ -1848,16 +1983,8 @@ export default function ArticlesPage() {
                 </div>
               )}
 
-              <Separator />
-              <div className="space-y-1">
-                <h4 className="text-sm font-semibold flex items-center gap-2">
-                  <Database className="h-4 w-4" />
-                  Etikett-koppling (Kinab)
-                </h4>
-                <p className="text-xs text-muted-foreground">
-                  Koppla artikeln till metadata-etiketter för hämtning/uppdatering i fält
-                </p>
-              </div>
+              </FormSection>
+              <FormSection title="Etikett-koppling (Kinab)" icon={<Database className="h-4 w-4" />} description="Koppla artikeln till metadata-etiketter för hämtning/uppdatering i fält" testId="section-etikett">
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
@@ -1999,16 +2126,8 @@ export default function ArticlesPage() {
                 <p className="text-xs text-muted-foreground">Styr hur ofta denna artikel får utföras</p>
               </div>
 
-              <Separator />
-              <div className="space-y-1">
-                <h4 className="text-sm font-semibold flex items-center gap-2">
-                  <LinkIcon className="h-4 w-4" />
-                  Association (tvåstegsfilter)
-                </h4>
-                <p className="text-xs text-muted-foreground">
-                  Koppla artikeln till objekt via metadata-etikett och värde
-                </p>
-              </div>
+              </FormSection>
+              <FormSection title="Association (tvåstegsfilter)" icon={<LinkIcon className="h-4 w-4" />} description="Koppla artikeln till objekt via metadata-etikett och värde" testId="section-association">
 
               <div className="grid grid-cols-3 gap-4">
                 <div className="space-y-2">
@@ -2109,8 +2228,8 @@ export default function ArticlesPage() {
                 </div>
               )}
 
-              <Separator />
-
+              </FormSection>
+              <FormSection title="Objekttyper" icon={<Package className="h-4 w-4" />} testId="section-objekttyper">
               <div className="space-y-2">
                 <Label>Objekttyper (vad artikeln kan utföras på)</Label>
                 <div className="flex flex-wrap gap-2 p-3 rounded-md border bg-muted/30">
@@ -2135,6 +2254,7 @@ export default function ArticlesPage() {
                   Klicka för att välja/avmarkera objekttyper
                 </p>
               </div>
+              </FormSection>
             </div>
             <DialogFooter>
               <Button

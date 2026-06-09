@@ -1,6 +1,6 @@
 import { db } from "./db";
-import { tenants, customers, objects, resources, workOrders, brandingTemplates, tenantBranding, userTenantRoles, users, metadataKatalog, clusters, teams, tenantFeatures, featureAuditLog } from "@shared/schema";
-import { sql, eq, and, or } from "drizzle-orm";
+import { tenants, customers, objects, resources, workOrders, brandingTemplates, tenantBranding, userTenantRoles, users, metadataKatalog, clusters, teams, tenantFeatures, featureAuditLog, articleTypeDefinitions, articles, orderConceptArticles } from "@shared/schema";
+import { sql, eq, and, or, inArray } from "drizzle-orm";
 import { getModulesForPackage } from "@shared/modules";
 
 const DEFAULT_TENANT_ID = "kinab";
@@ -45,6 +45,11 @@ export async function seedDatabase() {
   // custom/premium/pilot ska inte revertas.
   await backfillSystemTierModules();
   await ensureKinabPilotFeatures();
+
+  // Task #834: artikeltyp-register + migrering av äldre quantity-lägen.
+  // Prod-säkra och idempotenta — körs alltid, även när tenants redan finns.
+  await seedArticleTypesForAllTenants();
+  await backfillArticleQuantityModes();
 
   // Skip seed entirely if any tenant already exists (production / customer setup).
   // Demo seed only runs against a completely empty tenants table.
@@ -1019,6 +1024,50 @@ async function seedSystemMetadataLabels() {
   if (created > 0) {
     console.log(`Seeded ${created} system metadata labels (etiketter)`);
   }
+}
+
+/**
+ * Task #834: seedar systemstandard-artikeltyper per tenant (insert-only, idempotent).
+ * `key` är back-compat med fri text i articles.articleType.
+ */
+async function seedArticleTypesForAllTenants() {
+  const DEFAULT_ARTICLE_TYPES = [
+    { key: "tjanst", label: "Tjänst" },
+    { key: "vara", label: "Vara" },
+    { key: "kontroll", label: "Kontroll" },
+    { key: "felanmalan", label: "Felanmälan" },
+    { key: "beroende", label: "Beroende" },
+  ];
+  const allTenants = await db.select({ id: tenants.id }).from(tenants);
+  let total = 0;
+  for (const t of allTenants) {
+    const existing = await db.select({ key: articleTypeDefinitions.key })
+      .from(articleTypeDefinitions)
+      .where(eq(articleTypeDefinitions.tenantId, t.id));
+    const existingKeys = new Set(existing.map((r) => r.key));
+    const toInsert = DEFAULT_ARTICLE_TYPES
+      .map((x, i) => ({ tenantId: t.id, key: x.key, label: x.label, sortOrder: i, isSystem: true }))
+      .filter((x) => !existingKeys.has(x.key));
+    if (toInsert.length > 0) {
+      await db.insert(articleTypeDefinitions).values(toInsert);
+      total += toInsert.length;
+    }
+  }
+  if (total > 0) console.log(`Seeded ${total} article type definitions across tenants`);
+}
+
+/**
+ * Task #834: migrerar äldre quantity-lägen till `per_styck` (idempotent).
+ * `use_object_quantity`/`configurable` betedde sig som bas-mängd × objektets antal —
+ * vilket nu är exakt `per_styck`. `single_per_task` (=1) lämnas orört.
+ */
+async function backfillArticleQuantityModes() {
+  await db.update(articles)
+    .set({ quantityMode: "per_styck" })
+    .where(inArray(articles.quantityMode, ["use_object_quantity", "configurable"]));
+  await db.update(orderConceptArticles)
+    .set({ quantityModeOverride: "per_styck" })
+    .where(inArray(orderConceptArticles.quantityModeOverride, ["use_object_quantity", "configurable"]));
 }
 
 /**

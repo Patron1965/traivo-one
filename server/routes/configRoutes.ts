@@ -7,7 +7,7 @@ import { formatZodError, verifyTenantOwnership, DEFAULT_TENANT_ID } from "./help
 import { getTenantIdWithFallback, requireAdmin } from "../tenant-middleware";
 import { asyncHandler } from "../asyncHandler";
 import { AppError, NotFoundError, ValidationError, ForbiddenError, ConflictError } from "../errors";
-import { insertArticleSchema, insertArticleComponentSchema, insertPriceListSchema, insertPriceListArticleSchema, insertResourceArticleSchema, insertVehicleSchema, insertEquipmentSchema, insertResourceVehicleSchema, insertResourceEquipmentSchema, insertResourceAvailabilitySchema, insertVehicleScheduleSchema, insertSubscriptionSchema, insertTeamSchema, insertTeamMemberSchema, insertPlanningParameterSchema, insertResourceProfileSchema, insertResourceProfileAssignmentSchema, insertWorkSessionSchema, insertWorkEntrySchema, insertFuelLogSchema, insertMaintenanceLogSchema, workSessions, workEntries, timeLogs, equipmentBookings } from "@shared/schema";
+import { insertArticleSchema, insertArticleTypeDefinitionSchema, insertArticleComponentSchema, insertPriceListSchema, insertPriceListArticleSchema, insertResourceArticleSchema, insertVehicleSchema, insertEquipmentSchema, insertResourceVehicleSchema, insertResourceEquipmentSchema, insertResourceAvailabilitySchema, insertVehicleScheduleSchema, insertSubscriptionSchema, insertTeamSchema, insertTeamMemberSchema, insertPlanningParameterSchema, insertResourceProfileSchema, insertResourceProfileAssignmentSchema, insertWorkSessionSchema, insertWorkEntrySchema, insertFuelLogSchema, insertMaintenanceLogSchema, workSessions, workEntries, timeLogs, equipmentBookings } from "@shared/schema";
 import { getISOWeek, getStartOfISOWeek } from "./helpers";
 import { notificationService } from "../notifications";
 
@@ -142,6 +142,59 @@ app.delete("/api/articles/:id", asyncHandler(async (req, res) => {
     }
     await storage.deleteArticle(req.params.id);
     res.status(204).send();
+}));
+
+// ============== ARTICLE TYPE REGISTRY (Task #834) ==============
+// Per-tenant katalog över artikeltyper. `key` är back-compat med fri text i
+// articles.articleType. Läsning är öppen för tenant-medlemmar; skrivning kräver admin.
+app.get("/api/article-types", asyncHandler(async (req, res) => {
+  const tenantId = getTenantIdWithFallback(req);
+  // Seed-on-read: säkerställ att tenanten alltid har systemstandarderna även
+  // innan startup-seedningen hunnit köra (idempotent, insert-only).
+  let list = await storage.getArticleTypeDefinitions(tenantId);
+  if (list.length === 0) {
+    await storage.seedArticleTypeDefinitions(tenantId);
+    list = await storage.getArticleTypeDefinitions(tenantId);
+  }
+  res.json(list);
+}));
+
+app.post("/api/article-types", requireAdmin, asyncHandler(async (req, res) => {
+  const tenantId = getTenantIdWithFallback(req);
+  const data = insertArticleTypeDefinitionSchema.parse({ ...req.body, tenantId, isSystem: false });
+  const existing = await storage.getArticleTypeDefinitions(tenantId);
+  if (existing.some((t) => t.key === data.key)) {
+    throw new ConflictError(`Artikeltypen med nyckel "${data.key}" finns redan.`);
+  }
+  const created = await storage.createArticleTypeDefinition(data);
+  res.status(201).json(created);
+}));
+
+app.patch("/api/article-types/:id", requireAdmin, asyncHandler(async (req, res) => {
+  const tenantId = getTenantIdWithFallback(req);
+  const existing = await storage.getArticleTypeDefinition(req.params.id, tenantId);
+  if (!existing) throw new NotFoundError("Artikeltyp hittades inte");
+  const patchSchema = insertArticleTypeDefinitionSchema
+    .partial()
+    .omit({ tenantId: true, key: true, isSystem: true, deletedAt: true });
+  const parsed = patchSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json(formatZodError(parsed.error));
+  const updated = await storage.updateArticleTypeDefinition(req.params.id, tenantId, parsed.data);
+  res.json(updated);
+}));
+
+// Aldrig hard-delete: en typ som används av artiklar arkiveras (soft-delete) så att
+// befintlig data behåller en giltig referens. Oanvända typer arkiveras också.
+app.delete("/api/article-types/:id", requireAdmin, asyncHandler(async (req, res) => {
+  const tenantId = getTenantIdWithFallback(req);
+  const existing = await storage.getArticleTypeDefinition(req.params.id, tenantId);
+  if (!existing) throw new NotFoundError("Artikeltyp hittades inte");
+  if (existing.isSystem) {
+    throw new ConflictError("Systemstandard-artikeltyper kan inte tas bort eller arkiveras.");
+  }
+  const usage = await storage.getArticleTypeUsageCount(tenantId, existing.key);
+  await storage.archiveArticleTypeDefinition(req.params.id, tenantId);
+  res.json({ archived: true, usage });
 }));
 
 // ============== ADR v3 (F4): ARTICLE COMPONENTS (BOM) ==============

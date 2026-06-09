@@ -649,9 +649,10 @@ export const articles = pgTable("articles", {
   associationValue: text("association_value"),
   associationOperator: text("association_operator").default("equals"),
   maxPerAddress: integer("max_per_address"),
-  // Kvantitetsläge: 'use_object_quantity' (default — multiplicera med objektets antal),
-  // 'single_per_task' (alltid 1, t.ex. fotodokumentation), 'configurable' (sätts per orderkoncept-rad)
-  quantityMode: text("quantity_mode").default("use_object_quantity"),
+  // Kvantitetsläge (Task #834): 'per_styck' (default — bas-mängd × objektets antal),
+  // 'single_per_task' (alltid 1, t.ex. fotodokumentation). Äldre värden
+  // 'use_object_quantity'/'configurable' migreras till 'per_styck' (samma beteende).
+  quantityMode: text("quantity_mode").default("per_styck"),
   // Offsettid i minuter (Mats prislista: A100=120, N100=2400). Negativt = före huvudjobbet,
   // 0 = samtidigt, positivt = efter. Används vid expand av orderkoncept för att skapa
   // förberedande work_orders med tidsfönster relativt huvudjobbet (parent_work_order_id).
@@ -672,9 +673,14 @@ export const articles = pgTable("articles", {
   shouldBeReturned: boolean("should_be_returned").default(false),
   // Session 12 (Steg 6): förvalt metadatafält som föreslås som "Hakar fast på" vid tillägg i orderkoncept
   defaultMetadataAssociation: text("default_metadata_association"),
-  // Session 08-15: kvantitetslägen utöver legacy (use_object_quantity/single_per_task/configurable).
-  // quantityMode kan nu även vara 'per_styck' (=1), 'matches_field' (multiplicera med objektets
-  // metadatavärde i quantityMetadataField) eller 'group' (fast multipel = groupSize).
+  // Session 08-15 / Task #834: kvantitetslägen. Legacy 'use_object_quantity'/'configurable'
+  // migreras till 'per_styck'. Aktiva lägen:
+  //   'per_styck'      = multiplicera med objektets/orderradens basantal (motsv. gamla use_object_quantity)
+  //   'single_per_task'= alltid 1 (t.ex. fotodokumentation)
+  //   'group'          = fast multipel = groupSize
+  //   'matches_field'  = antal från objektets metadatavärde i quantityMetadataField
+  // OBS: 'per_styck' returnerade tidigare 1 (= dubblett av single_per_task) — det var en bugg
+  // som rättades i Task #834 så att etiketten "multipliceras med objektets antal" stämmer.
   quantityMetadataField: text("quantity_metadata_field"),
   quantityUnit: text("quantity_unit"),
   groupSize: integer("group_size"),
@@ -686,6 +692,9 @@ export const articles = pgTable("articles", {
   // Session 08-28: extern informationslänk (säkerhetsblad/monteringsanvisning) + etikett
   externInfoUrl: text("extern_info_url"),
   externInfoDescription: text("extern_info_description"),
+  // Task #834: uppladdad extern info-fil (säkerhetsdatablad/produktblad) via Object Storage,
+  // lagras som /objects/...-path. Komplement till externInfoUrl (länk).
+  externInfoFileUrl: text("extern_info_file_url"),
   unit: text("unit").default("st"),
   status: text("status").default("active").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
@@ -694,6 +703,24 @@ export const articles = pgTable("articles", {
   index("idx_articles_tenant").on(table.tenantId),
   index("idx_articles_tenant_article_number").on(table.tenantId, table.articleNumber),
   index("idx_articles_tenant_created").on(table.tenantId, table.createdAt),
+]);
+
+// Task #834: Per-tenant register över artikeltyper. `key` är det stabila värde som
+// lagras i articles.articleType (och i fritext på t.ex. checklist-mallar) — back-compat
+// med befintlig fri text. `label` är den svenska visningstexten. Soft-delete via
+// deletedAt (arkivering) — typer som används får aldrig hard-deleteas.
+export const articleTypeDefinitions = pgTable("article_type_definitions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
+  key: text("key").notNull(),
+  label: text("label").notNull(),
+  sortOrder: integer("sort_order").default(0).notNull(),
+  isSystem: boolean("is_system").default(false).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  deletedAt: timestamp("deleted_at"),
+}, (table) => [
+  index("idx_article_type_defs_tenant").on(table.tenantId),
+  uniqueIndex("uq_article_type_defs_tenant_key").on(table.tenantId, table.key),
 ]);
 
 // Prislistor - generella, kundunikt eller rabattbrev
@@ -1493,7 +1520,14 @@ export const insertWorkOrderObjectSchema = createInsertSchema(workOrderObjects).
 export const insertSimulationScenarioSchema = createInsertSchema(simulationScenarios).omit({ id: true, createdAt: true });
 export const insertSetupTimeLogSchema = createInsertSchema(setupTimeLogs).omit({ id: true, createdAt: true });
 export const insertProcurementSchema = createInsertSchema(procurements).omit({ id: true, createdAt: true });
-export const insertArticleSchema = createInsertSchema(articles).omit({ id: true, createdAt: true });
+export const insertArticleSchema = createInsertSchema(articles).omit({ id: true, createdAt: true }).extend({
+  // Task #834: hård gräns 50 tecken på artikelnamn (validering speglas i frontend-räknaren).
+  name: z.string().trim().min(1, "Namn krävs").max(50, "Namnet får vara högst 50 tecken"),
+});
+export const insertArticleTypeDefinitionSchema = createInsertSchema(articleTypeDefinitions).omit({ id: true, createdAt: true }).extend({
+  key: z.string().trim().min(1, "Nyckel krävs").max(50, "Nyckeln får vara högst 50 tecken"),
+  label: z.string().trim().min(1, "Visningsnamn krävs").max(80, "Visningsnamnet får vara högst 80 tecken"),
+});
 export const insertPriceListSchema = createInsertSchema(priceLists).omit({ id: true, createdAt: true });
 export const insertPriceListArticleSchema = createInsertSchema(priceListArticles).omit({ id: true, createdAt: true });
 export const insertResourceArticleSchema = createInsertSchema(resourceArticles).omit({ id: true, createdAt: true });
@@ -1571,6 +1605,8 @@ export type Procurement = typeof procurements.$inferSelect;
 export type InsertProcurement = z.infer<typeof insertProcurementSchema>;
 export type Article = typeof articles.$inferSelect;
 export type InsertArticle = z.infer<typeof insertArticleSchema>;
+export type ArticleTypeDefinition = typeof articleTypeDefinitions.$inferSelect;
+export type InsertArticleTypeDefinition = z.infer<typeof insertArticleTypeDefinitionSchema>;
 
 export const taskMetadataUpdates = pgTable("task_metadata_updates", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),

@@ -41,6 +41,7 @@ import {
   Link2,
   Archive,
   Layers,
+  Tag,
   type LucideIcon,
 } from "lucide-react";
 import { translate } from "./i18n";
@@ -84,6 +85,7 @@ export function getGrunddataItems(t: (key: string, fallback: string) => string, 
     { title: useI18n ? l("nav.vehicles") : t("vehicle_plural", l("nav.vehicles")), url: "/vehicles", icon: Truck, description: l("nav.vehicles.desc") },
     { title: l("nav.fleet"), url: "/fleet", icon: Fuel, description: l("nav.fleet.desc") },
     { title: useI18n ? l("nav.articles") : t("article_plural", l("nav.articles")), url: "/articles", icon: Package, description: l("nav.articles.desc") },
+    { title: "Artikeltyper", url: "/article-types", icon: Tag, description: "Hantera artikeltyper (kategorier) per organisation", adminOnly: true },
     { title: l("nav.article-components"), url: "/article-components", icon: Package, description: l("nav.article-components.desc") },
     { title: "Strukturartiklar", url: "/structure-articles", icon: Layers, description: "Strukturartikelregister: paket av komponenter med kvantitet och rapportering" },
     { title: "Produktionstider", url: "/production-time-lists", icon: Clock, description: "Produktionstidslista per artikel, utförare och utrustning" },

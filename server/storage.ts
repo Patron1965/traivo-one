@@ -10,6 +10,7 @@ import {
   type SetupTimeLog, type InsertSetupTimeLog,
   type Procurement, type InsertProcurement,
   type Article, type InsertArticle,
+  type ArticleTypeDefinition, type InsertArticleTypeDefinition,
   type PriceList, type InsertPriceList,
   type PriceListArticle, type InsertPriceListArticle,
   type ResourceArticle, type InsertResourceArticle,
@@ -118,7 +119,7 @@ import {
   resourceProfiles, resourceProfileAssignments,
   fortnoxConfig, fortnoxMappings, fortnoxInvoiceExports, manualInvoiceLines,
   users, tenants, customers, customerRelationships, objects, resources, workOrders, setupTimeLogs, procurements,
-  articles, priceLists, priceListArticles, resourceArticles, workOrderLines, simulationScenarios,
+  articles, articleTypeDefinitions, priceLists, priceListArticles, resourceArticles, workOrderLines, simulationScenarios,
   vehicles, equipment, resourceVehicles, resourceEquipment, resourceAvailability,
   vehicleSchedule, subscriptions, teams, teamMembers, planningParameters, clusters,
   resourcePositions,
@@ -497,7 +498,16 @@ export interface IStorage {
   createArticle(article: InsertArticle): Promise<Article>;
   updateArticle(id: string, article: Partial<InsertArticle>): Promise<Article | undefined>;
   deleteArticle(id: string): Promise<void>;
-  
+
+  // Article type registry (Task #834) — per-tenant katalog över artikeltyper
+  getArticleTypeDefinitions(tenantId: string): Promise<ArticleTypeDefinition[]>;
+  getArticleTypeDefinition(id: string, tenantId: string): Promise<ArticleTypeDefinition | undefined>;
+  createArticleTypeDefinition(data: InsertArticleTypeDefinition): Promise<ArticleTypeDefinition>;
+  updateArticleTypeDefinition(id: string, tenantId: string, patch: Partial<InsertArticleTypeDefinition>): Promise<ArticleTypeDefinition | undefined>;
+  archiveArticleTypeDefinition(id: string, tenantId: string): Promise<void>;
+  getArticleTypeUsageCount(tenantId: string, key: string): Promise<number>;
+  seedArticleTypeDefinitions(tenantId: string): Promise<void>;
+
   // Object Articles (manual article links)
   getObjectArticles(tenantId: string, objectId: string): Promise<ObjectArticle[]>;
   addObjectArticle(data: InsertObjectArticle): Promise<ObjectArticle>;
@@ -4217,6 +4227,85 @@ export class DatabaseStorage implements IStorage {
       await this.deleteFortnoxMappingsForEntity("article", id);
     } catch (e) {
       console.warn("[fortnox-mapping] kunde inte rensa mappning för artikel", id, e);
+    }
+  }
+
+  // ===== Article type registry (Task #834) =====
+  // Systemstandard som seedas per tenant. `key` är back-compat med befintlig fri
+  // text i articles.articleType (tjanst/vara/kontroll/felanmalan/beroende).
+  private static readonly DEFAULT_ARTICLE_TYPES: { key: string; label: string }[] = [
+    { key: "tjanst", label: "Tjänst" },
+    { key: "vara", label: "Vara" },
+    { key: "kontroll", label: "Kontroll" },
+    { key: "felanmalan", label: "Felanmälan" },
+    { key: "beroende", label: "Beroende" },
+  ];
+
+  async getArticleTypeDefinitions(tenantId: string): Promise<ArticleTypeDefinition[]> {
+    return db.select().from(articleTypeDefinitions)
+      .where(and(eq(articleTypeDefinitions.tenantId, tenantId), isNull(articleTypeDefinitions.deletedAt)))
+      .orderBy(articleTypeDefinitions.sortOrder, articleTypeDefinitions.label);
+  }
+
+  async getArticleTypeDefinition(id: string, tenantId: string): Promise<ArticleTypeDefinition | undefined> {
+    const [row] = await db.select().from(articleTypeDefinitions)
+      .where(and(eq(articleTypeDefinitions.id, id), eq(articleTypeDefinitions.tenantId, tenantId)));
+    return row || undefined;
+  }
+
+  async createArticleTypeDefinition(data: InsertArticleTypeDefinition): Promise<ArticleTypeDefinition> {
+    // Återuppliva en arkiverad typ med samma nyckel istället för att krocka mot
+    // unik-index (tenantId, key) — annars kan en raderad nyckel aldrig återskapas.
+    const [existing] = await db.select().from(articleTypeDefinitions)
+      .where(and(eq(articleTypeDefinitions.tenantId, data.tenantId), eq(articleTypeDefinitions.key, data.key)));
+    if (existing) {
+      const [revived] = await db.update(articleTypeDefinitions)
+        .set({ label: data.label, sortOrder: data.sortOrder ?? existing.sortOrder, deletedAt: null })
+        .where(eq(articleTypeDefinitions.id, existing.id))
+        .returning();
+      return revived;
+    }
+    const [row] = await db.insert(articleTypeDefinitions).values(data).returning();
+    return row;
+  }
+
+  async updateArticleTypeDefinition(id: string, tenantId: string, patch: Partial<InsertArticleTypeDefinition>): Promise<ArticleTypeDefinition | undefined> {
+    // `key`/`tenantId` är immutable efter skapande (key binder data i articles.articleType).
+    // `isSystem`/`deletedAt` får aldrig muteras via denna väg — annars kan en systemtyp
+    // göras icke-system och sedan raderas (livscykel-tampering). Arkivering sker via
+    // archiveArticleTypeDefinition.
+    const { key: _k, tenantId: _t, isSystem: _s, deletedAt: _d, ...safe } = patch as any;
+    const [row] = await db.update(articleTypeDefinitions)
+      .set(safe)
+      .where(and(eq(articleTypeDefinitions.id, id), eq(articleTypeDefinitions.tenantId, tenantId)))
+      .returning();
+    return row || undefined;
+  }
+
+  async archiveArticleTypeDefinition(id: string, tenantId: string): Promise<void> {
+    await db.update(articleTypeDefinitions)
+      .set({ deletedAt: new Date() })
+      .where(and(eq(articleTypeDefinitions.id, id), eq(articleTypeDefinitions.tenantId, tenantId)));
+  }
+
+  async getArticleTypeUsageCount(tenantId: string, key: string): Promise<number> {
+    const { count } = await import("drizzle-orm");
+    const [row] = await db.select({ count: count() }).from(articles)
+      .where(and(eq(articles.tenantId, tenantId), eq(articles.articleType, key), isNull(articles.deletedAt)));
+    return row?.count || 0;
+  }
+
+  async seedArticleTypeDefinitions(tenantId: string): Promise<void> {
+    // Insert-only: lägg bara till saknade systemnycklar (idempotent). Befintliga
+    // (inkl. arkiverade eller omdöpta) lämnas orörda.
+    const existing = await db.select({ key: articleTypeDefinitions.key }).from(articleTypeDefinitions)
+      .where(eq(articleTypeDefinitions.tenantId, tenantId));
+    const existingKeys = new Set(existing.map((r) => r.key));
+    const toInsert = DatabaseStorage.DEFAULT_ARTICLE_TYPES
+      .map((t, i) => ({ tenantId, key: t.key, label: t.label, sortOrder: i, isSystem: true }))
+      .filter((t) => !existingKeys.has(t.key));
+    if (toInsert.length > 0) {
+      await db.insert(articleTypeDefinitions).values(toInsert);
     }
   }
 

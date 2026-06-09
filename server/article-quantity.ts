@@ -28,17 +28,21 @@ export function metadataValueToNumber(v: unknown): number | null {
 
 /**
  * Räknar ut den effektiva kvantiteten för en artikelrad baserat på quantityMode.
- * - per_styck / single_per_task → alltid 1
+ * - single_per_task → alltid 1
  * - group → fast multipel (groupSize, minst 1)
  * - matches_field → objektets metadatavärde (faller tillbaka på baseQuantity om värde saknas)
- * - use_object_quantity / configurable / okänt → baseQuantity (legacy-beteende)
+ * - per_styck / use_object_quantity (legacy) / configurable (legacy) / okänt → baseQuantity
+ *
+ * Task #834: 'per_styck' returnerade tidigare 1 (= identiskt med single_per_task, en bugg)
+ * trots att UI-etiketten lovade "multipliceras med objektets antal". Nu faller per_styck till
+ * baseQuantity precis som legacy use_object_quantity, så migreringen legacy→per_styck bevarar
+ * paritet och etiketten stämmer.
  */
 export function computeArticleQuantity(input: ArticleQuantityInput): number {
   const { quantityMode, baseQuantity, groupSize, metadataValue } = input;
   const base =
     Number.isFinite(baseQuantity) && baseQuantity > 0 ? Math.round(baseQuantity) : 1;
   switch (quantityMode) {
-    case "per_styck":
     case "single_per_task":
       return 1;
     case "group": {

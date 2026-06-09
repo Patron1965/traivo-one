@@ -197,7 +197,14 @@ app.patch("/api/order-concepts/:id/articles/:articleId", asyncHandler(async (req
     if (req.body.unitPrice === null || typeof req.body.unitPrice === "number") allowed.unitPrice = req.body.unitPrice;
     if (req.body.quantityModeOverride === null || typeof req.body.quantityModeOverride === "string") {
       const v = req.body.quantityModeOverride;
-      if (v === null || v === "use_object_quantity" || v === "single_per_task") {
+      const ALLOWED_QUANTITY_MODES = new Set([
+        "per_styck",
+        "single_per_task",
+        "group",
+        "matches_field",
+        "use_object_quantity", // legacy, back-compat
+      ]);
+      if (v === null || ALLOWED_QUANTITY_MODES.has(v)) {
         allowed.quantityModeOverride = v;
       } else {
         throw new ValidationError("Ogiltigt quantityModeOverride");
@@ -264,18 +271,19 @@ app.post("/api/order-concepts/:id/article-mappings/auto", asyncHandler(async (re
       }
 
       // Respektera quantity_mode (artikel eller orderkoncept-override):
-      //  - single_per_task / per_styck → tvingad 1
+      //  - single_per_task → tvingad 1
       //  - group → fast multipel (group_size)
       //  - matches_field → faller tillbaka på a.quantity här (ELSE); det verkliga
       //    metadatavärdet (ärvningsmedvetet) upplöses vid order-expansion, inte i
       //    denna förhandsmappning.
-      //  - annars (use_object_quantity / configurable) → a.quantity som tidigare.
+      //  - per_styck (Task #834) / use_object_quantity (legacy) / configurable (legacy)
+      //    → a.quantity (bas-kvantitet), i linje med computeArticleQuantity.
       await tx.execute(sql`
         INSERT INTO article_object_mappings (id, order_concept_article_id, order_concept_object_id, quantity, created_at)
         SELECT gen_random_uuid(), a.id, o.id,
           CASE
-            WHEN COALESCE(a.quantity_mode_override, art.quantity_mode, 'use_object_quantity') IN ('single_per_task', 'per_styck') THEN 1
-            WHEN COALESCE(a.quantity_mode_override, art.quantity_mode, 'use_object_quantity') = 'group' THEN GREATEST(COALESCE(art.group_size, 1), 1)
+            WHEN COALESCE(a.quantity_mode_override, art.quantity_mode, 'per_styck') = 'single_per_task' THEN 1
+            WHEN COALESCE(a.quantity_mode_override, art.quantity_mode, 'per_styck') = 'group' THEN GREATEST(COALESCE(art.group_size, 1), 1)
             ELSE COALESCE(a.quantity, 1)
           END,
           NOW()

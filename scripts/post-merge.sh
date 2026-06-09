@@ -33,7 +33,8 @@ if command -v psql >/dev/null 2>&1 && [ -n "$DATABASE_URL" ]; then
            migrations/0070_articles_session13_fields.sql \
            migrations/0071_weekly_planning_foundation.sql \
            migrations/0072_object_import_sessions.sql \
-           migrations/0073_object_import_rows.sql; do
+           migrations/0073_object_import_rows.sql \
+           migrations/0074_article_types_and_extern_info.sql; do
     if [ -f "$f" ]; then
       echo "[post-merge] Applying $f"
       psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f "$f"
