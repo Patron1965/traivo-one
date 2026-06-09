@@ -338,6 +338,11 @@ export default function ArticlesPage() {
   const [editingArticle, setEditingArticle] = useState<Article | null>(null);
   const [articleToDelete, setArticleToDelete] = useState<Article | null>(null);
   const [formData, setFormData] = useState<ArticleFormData>(emptyFormData);
+  // Task #837: Fortnox-koppling. `fortnoxArticleNumber` skickas till backend bara
+  // när `fortnoxLinkTouched` är true (val ur Fortnox, eller fritext som bryter länken),
+  // så att en oförändrad redigering inte råkar radera en befintlig koppling.
+  const [fortnoxArticleNumber, setFortnoxArticleNumber] = useState<string | null>(null);
+  const [fortnoxLinkTouched, setFortnoxLinkTouched] = useState(false);
   const [showDiscontinued, setShowDiscontinued] = useState(false);
   const [supplierNumberInput, setSupplierNumberInput] = useState("");
   const [debouncedArticleNumber, setDebouncedArticleNumber] = useState("");
@@ -601,6 +606,8 @@ export default function ArticlesPage() {
     setEditingArticle(null);
     setComponentDraft([]);
     setOriginalComponents([]);
+    setFortnoxArticleNumber(null);
+    setFortnoxLinkTouched(false);
   };
 
   const openCreateDialog = () => {
@@ -610,6 +617,9 @@ export default function ArticlesPage() {
 
   const openEditDialog = (article: Article) => {
     setEditingArticle(article);
+    // Lämna Fortnox-kopplingen orörd om användaren inte rör fältet (untouched).
+    setFortnoxArticleNumber(null);
+    setFortnoxLinkTouched(false);
     setFormData({
       articleNumber: article.articleNumber,
       name: article.name,
@@ -744,10 +754,14 @@ export default function ArticlesPage() {
       }
     }
 
+    const payload: Partial<ArticleFormData> & { fortnoxArticleNumber?: string | null } = { ...formData };
+    if (fortnoxLinkTouched) {
+      payload.fortnoxArticleNumber = fortnoxArticleNumber;
+    }
     if (editingArticle) {
-      updateMutation.mutate({ id: editingArticle.id, data: formData });
+      updateMutation.mutate({ id: editingArticle.id, data: payload });
     } else {
-      createMutation.mutate(formData);
+      createMutation.mutate(payload);
     }
   };
 
@@ -1377,12 +1391,20 @@ export default function ArticlesPage() {
                   <Label htmlFor="articleNumber">Artikelnummer <span className="text-destructive">*</span></Label>
                   <FortnoxArticleNumberField
                     value={formData.articleNumber}
-                    onChange={(v) => setFormData(prev => ({ ...prev, articleNumber: v }))}
-                    onSelectFortnox={(a) => setFormData(prev => ({
-                      ...prev,
-                      articleNumber: a.articleNumber,
-                      name: prev.name.trim() ? prev.name : a.description,
-                    }))}
+                    onChange={(v) => {
+                      setFormData(prev => ({ ...prev, articleNumber: v }));
+                      setFortnoxLinkTouched(true);
+                      setFortnoxArticleNumber(prev => (prev === v ? prev : null));
+                    }}
+                    onSelectFortnox={(a) => {
+                      setFormData(prev => ({
+                        ...prev,
+                        articleNumber: a.articleNumber,
+                        name: prev.name.trim() ? prev.name : a.description,
+                      }));
+                      setFortnoxArticleNumber(a.articleNumber);
+                      setFortnoxLinkTouched(true);
+                    }}
                     invalid={articleNumberDuplicate}
                   />
                   {articleNumberDuplicate ? (

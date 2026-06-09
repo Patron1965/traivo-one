@@ -144,6 +144,7 @@ export function FortnoxArticleNumberField({
         align="start"
         onOpenAutoFocus={(e) => e.preventDefault()}
         onCloseAutoFocus={(e) => e.preventDefault()}
+        onMouseDown={(e) => e.preventDefault()}
       >
         <Command shouldFilter={false}>
           <CommandList>

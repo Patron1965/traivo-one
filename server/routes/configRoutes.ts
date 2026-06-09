@@ -98,7 +98,28 @@ app.post("/api/articles", asyncHandler(async (req, res) => {
         throw new ValidationError("Ersättningsartikeln hittades inte i denna tenant");
       }
     }
+    // Task #837: Fortnox-koppling. Frontend skickar `fortnoxArticleNumber` vid sidan
+    // av artikeldatan när användaren valt en artikel ur Fortnox-registret. Kopplingen
+    // lagras i fortnox_mappings (entityType="article") och är det Fortnox-export
+    // faktiskt läser — inte article.articleNumber.
+    const fnxNumber = typeof req.body.fortnoxArticleNumber === "string"
+      ? req.body.fortnoxArticleNumber.trim()
+      : "";
+    if (fnxNumber) {
+      const existingMappings = await storage.getFortnoxMappings(tenantId, "article");
+      if (existingMappings.some((m) => m.fortnoxId === fnxNumber)) {
+        throw new ConflictError(`Fortnox-artikelnumret "${fnxNumber}" är redan kopplat till en annan artikel.`);
+      }
+    }
     const article = await storage.createArticle(data);
+    if (fnxNumber) {
+      await storage.createFortnoxMapping({
+        tenantId,
+        entityType: "article",
+        unicornId: article.id,
+        fortnoxId: fnxNumber,
+      });
+    }
     res.status(201).json(article);
 }));
 
@@ -129,8 +150,40 @@ app.patch("/api/articles/:id", asyncHandler(async (req, res) => {
         throw new ValidationError("Ersättningsartikeln hittades inte i denna tenant");
       }
     }
+    // Task #837: Fortnox-koppling. `fortnoxArticleNumber` skickas bara med när
+    // användaren faktiskt rört Fortnox-fältet (val eller fritext som bryter länken).
+    // Saknas nyckeln lämnas befintlig koppling orörd; tom sträng/null tar bort den.
+    const hasFnxKey = Object.prototype.hasOwnProperty.call(req.body, "fortnoxArticleNumber");
+    const fnxNumber = hasFnxKey && typeof req.body.fortnoxArticleNumber === "string"
+      ? req.body.fortnoxArticleNumber.trim()
+      : "";
+    if (hasFnxKey && fnxNumber) {
+      const existingMappings = await storage.getFortnoxMappings(tenantId, "article");
+      if (existingMappings.some((m) => m.fortnoxId === fnxNumber && m.unicornId !== req.params.id)) {
+        throw new ConflictError(`Fortnox-artikelnumret "${fnxNumber}" är redan kopplat till en annan artikel.`);
+      }
+    }
     const article = await storage.updateArticle(req.params.id, updateData);
     if (!article) throw new NotFoundError("Artikel hittades inte");
+    if (hasFnxKey) {
+      if (fnxNumber) {
+        const current = await storage.getFortnoxMapping(tenantId, "article", req.params.id);
+        if (current) {
+          if (current.fortnoxId !== fnxNumber) {
+            await storage.updateFortnoxMapping(current.id, tenantId, { fortnoxId: fnxNumber, lastSyncedAt: new Date() });
+          }
+        } else {
+          await storage.createFortnoxMapping({
+            tenantId,
+            entityType: "article",
+            unicornId: req.params.id,
+            fortnoxId: fnxNumber,
+          });
+        }
+      } else {
+        await storage.deleteFortnoxMappingsForEntity("article", req.params.id);
+      }
+    }
     res.json(article);
 }));
 
