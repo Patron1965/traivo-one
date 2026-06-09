@@ -92,6 +92,7 @@ import type { Article, ServiceObject, MetadataDefinition, ArticleTypeDefinition,
 import { useUpload } from "@/hooks/use-upload";
 import { deriveIsPreTask } from "@/lib/article-pre-task";
 import { QueryState } from "@/components/QueryState";
+import { FortnoxArticleNumberField } from "@/components/articles/FortnoxArticleNumberField";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { HelpTooltip, PageHelp } from "@/components/ui/help-tooltip";
@@ -1374,14 +1375,15 @@ export default function ArticlesPage() {
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="articleNumber">Artikelnummer <span className="text-destructive">*</span></Label>
-                  <Input
-                    id="articleNumber"
+                  <FortnoxArticleNumberField
                     value={formData.articleNumber}
-                    onChange={(e) => setFormData({ ...formData, articleNumber: e.target.value })}
-                    placeholder="t.ex. ART-001 eller fritext"
-                    required
-                    className={articleNumberDuplicate ? "border-destructive focus-visible:ring-destructive" : ""}
-                    data-testid="input-article-number"
+                    onChange={(v) => setFormData(prev => ({ ...prev, articleNumber: v }))}
+                    onSelectFortnox={(a) => setFormData(prev => ({
+                      ...prev,
+                      articleNumber: a.articleNumber,
+                      name: prev.name.trim() ? prev.name : a.description,
+                    }))}
+                    invalid={articleNumberDuplicate}
                   />
                   {articleNumberDuplicate ? (
                     <p className="text-xs text-destructive flex items-start gap-1" data-testid="error-article-number-duplicate">
@@ -1389,7 +1391,7 @@ export default function ArticlesPage() {
                       <span>Artikelnumret används redan{articleNumberCheck?.existingName ? ` av "${articleNumberCheck.existingName}"` : ""}.</span>
                     </p>
                   ) : (
-                    <p className="text-xs text-muted-foreground">Fritext — måste vara unikt per organisation.</p>
+                    <p className="text-xs text-muted-foreground">Sök i Fortnox eller skriv fritext — måste vara unikt per organisation.</p>
                   )}
                 </div>
                 <div className="space-y-2">

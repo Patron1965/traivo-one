@@ -22,6 +22,30 @@ async function verifyObjectTenant(objectId: string, tenantId: string): Promise<b
   }
 }
 
+// Task #837: per-tenant cache av Fortnox-artikelregistret för sök-i-rullgardin.
+// Hela registret hämtas en gång (paginerat) och filtreras server-side så att
+// sök-medan-du-skriver inte träffar Fortnox vid varje tangenttryck. Stale-värden
+// återanvänds om ett senare API-anrop fallerar (robust mot långsamt/otillgängligt API).
+interface FortnoxArticleOption {
+  articleNumber: string;
+  description: string;
+  unit: string;
+  salesPrice: number;
+  active: boolean;
+}
+const fortnoxArticleSearchCache = new Map<string, { fetchedAt: number; articles: FortnoxArticleOption[] }>();
+const FORTNOX_ARTICLE_CACHE_TTL_MS = 5 * 60 * 1000;
+const FORTNOX_ARTICLE_FETCH_TIMEOUT_MS = 20_000;
+
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) =>
+      setTimeout(() => reject(new Error(`${label} timeout efter ${ms} ms`)), ms),
+    ),
+  ]);
+}
+
 export async function registerFortnoxRoutes(app: Express) {
 // ============================================
 // FORTNOX INTEGRATION
@@ -2616,6 +2640,66 @@ app.get("/api/fortnox/articles/fetch", asyncHandler(async (req, res) => {
     });
 
     res.json({ total: enriched.length, articles: enriched });
+}));
+
+// Task #837: Sök artiklar i Fortnox-registret för den sökbara rullgardinen i
+// artikelformuläret. Tenant-skyddad, cache:ad och timeout-skyddad — fallerar
+// "mjukt" (returnerar tomt + status) så att frontend kan falla tillbaka på fritext.
+app.get("/api/fortnox/articles/search", asyncHandler(async (req, res) => {
+    const tenantId = getTenantIdWithFallback(req);
+    const q = (typeof req.query.q === "string" ? req.query.q : "").trim().toLowerCase();
+    const limit = Math.min(Math.max(parseInt(req.query.limit as string) || 20, 1), 50);
+
+    const client = createFortnoxClient(tenantId);
+    if (!(await client.isConnected())) {
+      return res.json({ connected: false, articles: [], total: 0 });
+    }
+
+    let entry = fortnoxArticleSearchCache.get(tenantId);
+    const now = Date.now();
+    if (!entry || now - entry.fetchedAt > FORTNOX_ARTICLE_CACHE_TTL_MS) {
+      try {
+        const fetched = await withTimeout(
+          client.getArticles(),
+          FORTNOX_ARTICLE_FETCH_TIMEOUT_MS,
+          "Fortnox artikelhämtning",
+        );
+        entry = {
+          fetchedAt: now,
+          articles: (fetched as any[]).map((fa) => ({
+            articleNumber: fa.ArticleNumber || "",
+            description: fa.Description || "",
+            unit: fa.Unit || "st",
+            salesPrice: fa.SalesPrice || 0,
+            active: fa.Active !== false,
+          })),
+        };
+        fortnoxArticleSearchCache.set(tenantId, entry);
+      } catch (err) {
+        // Återanvänd ev. tidigare (stale) cache; annars mjukt fel utan att läcka detaljer.
+        console.error("Fortnox artikelsök misslyckades:", err instanceof Error ? err.message : err);
+        if (!entry) {
+          return res.json({
+            connected: true,
+            articles: [],
+            total: 0,
+            error: "Kunde inte hämta artiklar från Fortnox just nu. Försök igen om en stund eller skriv artikelnumret manuellt.",
+          });
+        }
+      }
+    }
+
+    const source = entry?.articles ?? [];
+    const matched = (q
+      ? source.filter(
+          (a) =>
+            a.articleNumber.toLowerCase().includes(q) ||
+            a.description.toLowerCase().includes(q),
+        )
+      : source
+    ).slice(0, limit);
+
+    res.json({ connected: true, articles: matched, total: source.length });
 }));
 
 app.post("/api/fortnox/articles/import", asyncHandler(async (req, res) => {
