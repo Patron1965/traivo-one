@@ -1397,11 +1397,20 @@ export default function ArticlesPage() {
                       setFortnoxArticleNumber(prev => (prev === v ? prev : null));
                     }}
                     onSelectFortnox={(a) => {
-                      setFormData(prev => ({
-                        ...prev,
-                        articleNumber: a.articleNumber,
-                        name: prev.name.trim() ? prev.name : a.description,
-                      }));
+                      setFormData(prev => {
+                        // Fyll bara fält som är tomma så manuellt inmatade värden inte skrivs över.
+                        // unit har default-värdet "st" (systemdefault, inte manuellt inmatat) → betrakta det som tomt.
+                        const unitEmpty = !prev.unit.trim() || prev.unit === "st";
+                        // Öre vs kronor: Fortnox salesPrice är i kronor, formData.listPrice lagras i öre.
+                        const priceEmpty = !prev.listPrice;
+                        return {
+                          ...prev,
+                          articleNumber: a.articleNumber,
+                          name: prev.name.trim() ? prev.name : a.description,
+                          unit: unitEmpty && a.unit?.trim() ? a.unit.trim() : prev.unit,
+                          listPrice: priceEmpty && a.salesPrice ? Math.round(a.salesPrice * 100) : prev.listPrice,
+                        };
+                      });
                       setFortnoxArticleNumber(a.articleNumber);
                       setFortnoxLinkTouched(true);
                     }}
