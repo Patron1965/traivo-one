@@ -35,6 +35,7 @@ import {
   Layers,
   ListChecks,
   Loader2,
+  RotateCcw,
   Upload,
 } from "lucide-react";
 import Papa from "papaparse";
@@ -109,6 +110,49 @@ const STEPS: { num: StepNum; label: string; icon: typeof Upload }[] = [
 
 const TARGET_NONE = "__empty";
 
+// Senaste kolumnmatchning sparas lokalt (per webbläsare) så att samma
+// filstruktur slipper matchas om vid nästa import. En signatur av
+// kolumnrubrikerna avgör om strukturen är densamma; matchningen lagras
+// per kolumnindex.
+const LAST_MAPPING_KEY = "traivo:import-v2:last-mapping";
+
+interface SavedMapping {
+  signature: string;
+  byIndex: Record<string, Mapping>;
+}
+
+function headerSignature(cols: DetectedColumn[]): string {
+  return cols.map((c) => c.userHeader || c.header || "").join("|");
+}
+
+function loadSavedMapping(): SavedMapping | null {
+  try {
+    const raw = localStorage.getItem(LAST_MAPPING_KEY);
+    return raw ? (JSON.parse(raw) as SavedMapping) : null;
+  } catch {
+    return null;
+  }
+}
+
+function persistMapping(cols: DetectedColumn[], mappings: Mappings) {
+  try {
+    // Lagra per kolumnindex (inte rubriktext) så att dubblettrubriker inte
+    // skriver över varandra. Signaturen garanterar att index matchar exakt
+    // vid återanvändning av samma filstruktur.
+    const byIndex: Record<string, Mapping> = {};
+    for (const c of cols) {
+      const m = mappings[String(c.index)];
+      if (m) byIndex[String(c.index)] = m;
+    }
+    localStorage.setItem(
+      LAST_MAPPING_KEY,
+      JSON.stringify({ signature: headerSignature(cols), byIndex } satisfies SavedMapping),
+    );
+  } catch {
+    // localStorage kan vara otillgängligt (privat läge) — ignorera tyst.
+  }
+}
+
 // Parsa uppladdad fil till en matris (alla rader inkl. headers).
 async function fileToMatrix(file: File): Promise<string[][]> {
   const name = file.name.toLowerCase();
@@ -149,6 +193,8 @@ async function fileToMatrix(file: File): Promise<string[][]> {
 export function ObjectImportV2Flow() {
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  // Vilken rubriksignatur restore-effekten redan hanterat (en gång per uppladdning).
+  const restoredSigRef = useRef<string | null>(null);
 
   const [step, setStep] = useState<StepNum>(1);
   const [sessionId, setSessionId] = useState<string | null>(null);
@@ -157,6 +203,7 @@ export function ObjectImportV2Flow() {
   const [previewRows, setPreviewRows] = useState<Record<string, string>[]>([]);
   const [totalRows, setTotalRows] = useState(0);
   const [mappings, setMappings] = useState<Mappings>({});
+  const [autoMappings, setAutoMappings] = useState<Mappings>({});
   const [validation, setValidation] = useState<ValidationResponse | null>(null);
   const [result, setResult] = useState<ExecuteResponse | null>(null);
   const [customerId, setCustomerId] = useState<string>("");
@@ -191,7 +238,10 @@ export function ObjectImportV2Flow() {
       setColumns(data.columns);
       setPreviewRows(data.preview_rows);
       setTotalRows(data.total_rows);
+      setAutoMappings(data.mappings);
       setMappings(data.mappings);
+      // Låt restore-effekten köra för denna (ev. nya) filstruktur.
+      restoredSigRef.current = null;
       setStep(2);
     },
     onError: (err: Error) => toast({ title: "Uppladdning misslyckades", description: err.message, variant: "destructive" }),
@@ -202,7 +252,11 @@ export function ObjectImportV2Flow() {
       const res = await apiRequest("PUT", `/api/import/objects-v2/${sessionId}/mappings`, { mappings });
       return await res.json();
     },
-    onSuccess: () => setStep(4),
+    onSuccess: () => {
+      // Spara matchningen som användaren faktiskt bekräftat (inte mellanlägen).
+      persistMapping(columns, mappings);
+      setStep(4);
+    },
     onError: (err: Error) => toast({ title: "Kunde inte spara mappning", description: err.message, variant: "destructive" }),
   });
 
@@ -263,6 +317,30 @@ export function ObjectImportV2Flow() {
     }
   }, [importing, statusQuery.data, sessionId, toast]);
 
+  // Återanvänd senaste sparade matchning när en fil med samma rubrikstruktur
+  // laddas upp. Körs först när fältkatalogen finns så att ogiltiga targets
+  // (t.ex. borttagna metadatafält) kan filtreras bort och falla till auto.
+  useEffect(() => {
+    if (columns.length === 0 || fields.length === 0) return;
+    const sig = headerSignature(columns);
+    if (restoredSigRef.current === sig) return;
+    restoredSigRef.current = sig;
+    const saved = loadSavedMapping();
+    if (!saved || saved.signature !== sig) return;
+    const validKeys = new Set(fields.map((f) => f.key));
+    const restored: Mappings = {};
+    for (const c of columns) {
+      const m = saved.byIndex[String(c.index)];
+      if (m && validKeys.has(m.target)) restored[String(c.index)] = m;
+    }
+    if (Object.keys(restored).length === 0) return;
+    setMappings(restored);
+    toast({
+      title: "Senaste matchning återanvänd",
+      description: "Din tidigare kolumnmatchning för samma filstruktur har återställts.",
+    });
+  }, [columns, fields, toast]);
+
   const toggleSkipRow = (rowNumber: number) => {
     setSkippedRows((prev) => {
       const next = new Set(prev);
@@ -286,6 +364,14 @@ export function ObjectImportV2Flow() {
         };
       }
       return next;
+    });
+  };
+
+  const resetMappings = () => {
+    setMappings(autoMappings);
+    toast({
+      title: "Matchning återställd",
+      description: "Kolumnmatchningen är återställd till systemets förslag.",
     });
   };
 
@@ -502,10 +588,15 @@ export function ObjectImportV2Flow() {
                 );
               })}
             </div>
-            <div className="flex justify-between">
-              <Button variant="outline" onClick={() => setStep(2)} data-testid="button-back-to-preview">
-                Tillbaka
-              </Button>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex gap-2">
+                <Button variant="outline" onClick={() => setStep(2)} data-testid="button-back-to-preview">
+                  Tillbaka
+                </Button>
+                <Button variant="ghost" onClick={resetMappings} data-testid="button-reset-mappings">
+                  <RotateCcw className="mr-2 h-4 w-4" /> Återställ matchning
+                </Button>
+              </div>
               <Button
                 onClick={() => saveMappingsMutation.mutate()}
                 disabled={!hasNameMapping || saveMappingsMutation.isPending}
