@@ -210,6 +210,15 @@ function rowCountOf(result: unknown): number {
 }
 import { invalidateWorkflowCaches } from "./services/dashboardCache";
 import { inferTeamIdForResource, invalidateTeamInferenceCache } from "./utils/teamInference";
+// Task #835: konsoliderad artikelmatchning. legacyHookMatch delas med resolvern → paritet.
+import {
+  legacyHookMatch,
+  evaluateArticleAssociationRules,
+  extractDisplayValue as extractMetaDisplayValue,
+  type HookObjectContext,
+} from "./association-service";
+import { getObjectWithAllMetadata } from "./metadata-queries";
+import type { AssociationCondition } from "@shared/schema";
 
 export interface ResolvedArticlePrice {
   articleId: string;
@@ -4118,95 +4127,46 @@ export class DatabaseStorage implements IStorage {
     }
 
     const allArticles = await this.getArticles(tenantId);
-    const objectType = object.objectType?.toLowerCase() || '';
-    const hierarchyLevel = object.hierarchyLevel?.toLowerCase() || '';
-    
-    // Kärltypsmappning
-    const karlTypes = ['matavfall', 'atervinning', 'uj_hushallsavfall', 'plastemballage', 'restavfall'];
-    const isKarl = karlTypes.includes(objectType) || hierarchyLevel === 'karl';
-    const isMatKarl = objectType === 'matavfall' || objectType.includes('mat');
-    const isRestKarl = objectType === 'restavfall' || objectType.includes('rest');
-    const isPlastKarl = objectType === 'plastemballage' || objectType.includes('plast');
-    
-    // Hierarkinivåer
-    const isFastighet = objectType === 'fastighet' || hierarchyLevel === 'fastighet';
-    const isRum = ['rum', 'soprum', 'kok'].includes(objectType) || hierarchyLevel === 'rum';
-    const isBrf = hierarchyLevel === 'brf';
-    const isKoncern = hierarchyLevel === 'koncern';
-    
-    // Kolla om objektet har accesskod direkt på objektet
-    const hasAccessCode = !!(object.accessCode && object.accessCode.trim() !== '');
 
-    // Hierarkiordning för propagering nedåt
-    // Koncern → BRF → Fastighet → Rum → Kärl
-    // Artiklar som är fasthakade på högre nivå propagerar nedåt till alla undernivåer
-    const hierarchyOrder = ['koncern', 'brf', 'fastighet', 'rum', 'karl'];
-    
-    const getHierarchyPosition = (level: string): number => {
-      if (level === 'koncern') return 0;
-      if (level === 'brf') return 1;
-      if (level === 'fastighet') return 2;
-      if (level === 'rum') return 3;
-      if (level === 'karl' || level === 'karl_mat' || level === 'karl_rest' || level === 'karl_plast') return 4;
-      if (level === 'kod') return -1; // Specialfall - hanteras separat
-      return -1;
+    // Task #835: konsoliderad matchning via associationRules. Hook-kontexten delas med
+    // legacyHookMatch (extraherad ordagrant) → paritet by construction. Artiklar utan regler
+    // (ej migrerade) faller tillbaka på legacy hookLevel/hookConditions med samma matchare.
+    const hookCtx: HookObjectContext = {
+      objectType: object.objectType || '',
+      hierarchyLevel: object.hierarchyLevel || '',
+      accessCode: object.accessCode ?? null,
     };
-    
-    const getCurrentObjectLevel = (): number => {
-      if (isKoncern) return 0;
-      if (isBrf) return 1;
-      if (isFastighet) return 2;
-      if (isRum) return 3;
-      if (isKarl) return 4;
-      return -1;
-    };
-    
-    const currentLevel = getCurrentObjectLevel();
-    
-    return allArticles.filter(article => {
+
+    // Hämta objektets metadata bara om någon artikel faktiskt har metadata-villkor (perf).
+    const needsMeta = allArticles.some(
+      (a) =>
+        Array.isArray(a.associationRules) &&
+        (a.associationRules as AssociationCondition[]).some((c) => c.source === 'metadata'),
+    );
+    let lookupMeta: (label: string) => string | null = () => null;
+    if (needsMeta) {
+      const objMeta = await getObjectWithAllMetadata(objectId, tenantId);
+      const metaList = objMeta?.metadata ?? [];
+      lookupMeta = (label: string) => {
+        const m = metaList.find(
+          (mm: any) => mm.katalog.beteckning === label || mm.katalog.namn === label,
+        );
+        return m ? extractMetaDisplayValue(m) : null;
+      };
+    }
+
+    return allArticles.filter((article) => {
+      const rules = (article.associationRules as AssociationCondition[] | null) || [];
+      if (rules.length > 0) {
+        return evaluateArticleAssociationRules(rules, { hook: hookCtx, lookupMeta });
+      }
+      // Legacy-fallback: artiklar som ännu inte migrerats till regler.
       if (!article.hookLevel) return false;
-      
-      const hookLevel = article.hookLevel.toLowerCase();
-      const hookConditions = (article.hookConditions as Record<string, unknown>) || {};
-      
-      // Matchningslogik med hierarkisk propagering nedåt
-      let levelMatches = false;
-      
-      // Specialfall: kod-hook (matchar om objektet har accesskod)
-      if (hookLevel === 'kod') {
-        levelMatches = hasAccessCode;
-      }
-      // Specialfall: kärl-subtyper (exakt matchning)
-      else if (hookLevel === 'karl_mat') {
-        levelMatches = isMatKarl;
-      }
-      else if (hookLevel === 'karl_rest') {
-        levelMatches = isRestKarl;
-      }
-      else if (hookLevel === 'karl_plast') {
-        levelMatches = isPlastKarl;
-      }
-      // Hierarkisk propagering: artikel-hook på högre nivå matchar alla undernivåer
-      else {
-        const hookPosition = getHierarchyPosition(hookLevel);
-        if (hookPosition >= 0 && currentLevel >= 0) {
-          // Artikeln matchar om objektets nivå är samma eller djupare i hierarkin
-          levelMatches = currentLevel >= hookPosition;
-        }
-      }
-      
-      if (!levelMatches) return false;
-      
-      // Kontrollera hookConditions om de finns
-      if (Object.keys(hookConditions).length > 0) {
-        // container_type-villkor
-        if (hookConditions.container_type && hookConditions.container_type !== objectType) {
-          return false;
-        }
-        // Kan utökas med fler villkor (waste_fraction, etc.)
-      }
-      
-      return true;
+      return legacyHookMatch(
+        hookCtx,
+        article.hookLevel,
+        (article.hookConditions as Record<string, unknown> | null) ?? null,
+      );
     });
   }
 

@@ -644,10 +644,18 @@ export const articles = pgTable("articles", {
   limitationType: text("limitation_type").default("unlimited"),
   // Associations-kod för artikelhook mot metadata-typ (legacy)
   associationCode: text("association_code"),
-  // Kinab tvåstegsfilter: association via metadata-etikett + värde
+  // Kinab tvåstegsfilter (legacy enkel-villkor): association via metadata-etikett + värde.
+  // Task #835: ersatt av associationRules (multi-AND). Behålls för bakåtkompatibilitet
+  // (expand-contract) och migreras in i associationRules.
   associationLabel: text("association_label"),
   associationValue: text("association_value"),
   associationOperator: text("association_operator").default("equals"),
+  // Task #835: konsoliderad artikelmatchning. Array av AND-villkor (AssociationCondition).
+  // source = "metadata" (etikett+operator+värde), "hook_level" (migrerad fasthakning, evalueras
+  // med exakt legacy-matchare → paritet), "object_type" (migrerade objekttyper, påverkar bara
+  // mobil-relevans, ej resolvern). Tom array = ingen regelbaserad matchning (fallback till
+  // legacy hookLevel/associationLabel under expand-fasen).
+  associationRules: jsonb("association_rules").default([]),
   maxPerAddress: integer("max_per_address"),
   // Kvantitetsläge (Task #834): 'per_styck' (default — bas-mängd × objektets antal),
   // 'single_per_task' (alltid 1, t.ex. fotodokumentation). Äldre värden
@@ -1520,9 +1528,42 @@ export const insertWorkOrderObjectSchema = createInsertSchema(workOrderObjects).
 export const insertSimulationScenarioSchema = createInsertSchema(simulationScenarios).omit({ id: true, createdAt: true });
 export const insertSetupTimeLogSchema = createInsertSchema(setupTimeLogs).omit({ id: true, createdAt: true });
 export const insertProcurementSchema = createInsertSchema(procurements).omit({ id: true, createdAt: true });
+// Task #835: konsoliderad artikelmatchning. Ett villkor i articles.associationRules.
+// AND-kombineras. Bakåtkompatibel back-fill från hookLevel/objectTypes/associationLabel.
+export const associationConditionSchema = z.discriminatedUnion("source", [
+  z.object({
+    source: z.literal("metadata"),
+    // Katalogreferens: metadataKatalog.beteckning eller .namn (immutabla nycklar i bruk).
+    label: z.string().trim().min(1),
+    operator: z.enum([
+      "equals", "greater", "less", "has_value",
+      // legacy-operatorer behålls för befintliga enkel-villkor
+      "contains", "starts_with", "not_equals",
+    ]).default("equals"),
+    // has_value behöver inget värde
+    value: z.string().optional(),
+  }),
+  z.object({
+    source: z.literal("hook_level"),
+    level: z.string().trim().min(1),
+    conditions: z.object({
+      container_type: z.string().optional(),
+      min_volume: z.number().optional(),
+      requires_access_code: z.boolean().optional(),
+    }).partial().optional(),
+  }),
+  z.object({
+    source: z.literal("object_type"),
+    types: z.array(z.string()).default([]),
+  }),
+]);
+export type AssociationCondition = z.infer<typeof associationConditionSchema>;
+
 export const insertArticleSchema = createInsertSchema(articles).omit({ id: true, createdAt: true }).extend({
   // Task #834: hård gräns 50 tecken på artikelnamn (validering speglas i frontend-räknaren).
   name: z.string().trim().min(1, "Namn krävs").max(50, "Namnet får vara högst 50 tecken"),
+  // Task #835: validera regelarrayen vid skrivning.
+  associationRules: z.array(associationConditionSchema).optional(),
 });
 export const insertArticleTypeDefinitionSchema = createInsertSchema(articleTypeDefinitions).omit({ id: true, createdAt: true }).extend({
   key: z.string().trim().min(1, "Nyckel krävs").max(50, "Nyckeln får vara högst 50 tecken"),

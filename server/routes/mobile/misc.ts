@@ -707,17 +707,20 @@ app.get("/api/mobile/tasks/:id/metadata-context", isMobileAuthenticated, asyncHa
     const orderArticleIds: string[] = [];
     if (order.articleId) orderArticleIds.push(order.articleId);
 
-    const relevantArticles = allArticles.filter(a =>
-      a.status === "active" && (
-        a.fetchMetadataLabel ||
-        a.canUpdateMetadata ||
-        a.isInfoCarrier
-      ) && (
-        orderArticleIds.includes(a.id) ||
-        !a.hookLevel ||
-        (a.objectTypes && a.objectTypes.length === 0)
-      )
-    );
+    // Task #835: härled hook-/objekttyp-restriktion från BÅDE legacy-fält OCH nya
+    // associationRules (back-compat under expand-fasen; nya artiklar sätter bara regler).
+    const relevantArticles = allArticles.filter(a => {
+      if (a.status !== "active") return false;
+      if (!(a.fetchMetadataLabel || a.canUpdateMetadata || a.isInfoCarrier)) return false;
+      const rules = (a.associationRules as Array<{ source: string; types?: string[] }> | null) || [];
+      const hasHook = !!(a.hookLevel && a.hookLevel.trim() !== "") ||
+        rules.some(c => c.source === "hook_level");
+      const objTypeRule = rules.find(c => c.source === "object_type");
+      const hasObjectTypes = (Array.isArray(a.objectTypes) && a.objectTypes.length > 0) ||
+        !!(objTypeRule && Array.isArray(objTypeRule.types) && objTypeRule.types.length > 0);
+      // Original semantik: ta med order-artikeln, eller artiklar utan hook, eller utan objekttyp-restriktion.
+      return orderArticleIds.includes(a.id) || !hasHook || !hasObjectTypes;
+    });
 
     const objectMetadata = await getArticleMetadataForObject(order.objectId, tenantId);
 

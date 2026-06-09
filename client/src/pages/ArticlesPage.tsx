@@ -88,7 +88,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
-import type { Article, ServiceObject, MetadataDefinition, ArticleTypeDefinition } from "@shared/schema";
+import type { Article, ServiceObject, MetadataDefinition, ArticleTypeDefinition, AssociationCondition } from "@shared/schema";
 import { useUpload } from "@/hooks/use-upload";
 import { deriveIsPreTask } from "@/lib/article-pre-task";
 import { QueryState } from "@/components/QueryState";
@@ -168,6 +168,7 @@ interface ArticleFormData {
   associationLabel: string;
   associationValue: string;
   associationOperator: string;
+  associationRules: AssociationCondition[];
   fetchMetadataLabel: string;
   fetchMetadataLabelFormat: string;
   canUpdateMetadata: boolean;
@@ -210,6 +211,7 @@ const emptyFormData: ArticleFormData = {
   associationLabel: "",
   associationValue: "",
   associationOperator: "equals",
+  associationRules: [],
   fetchMetadataLabel: "",
   fetchMetadataLabelFormat: "",
   canUpdateMetadata: false,
@@ -563,6 +565,7 @@ export default function ArticlesPage() {
       associationLabel: article.associationLabel || "",
       associationValue: article.associationValue || "",
       associationOperator: article.associationOperator || "equals",
+      associationRules: Array.isArray(article.associationRules) ? (article.associationRules as AssociationCondition[]) : [],
       fetchMetadataLabel: article.fetchMetadataLabel || "",
       fetchMetadataLabelFormat: article.fetchMetadataLabelFormat || "",
       canUpdateMetadata: article.canUpdateMetadata || false,
@@ -598,6 +601,26 @@ export default function ArticlesPage() {
     }
     setDialogOpen(true);
   };
+
+  // Task #835: multi-AND metadata-villkor (Association). Icke-metadata-villkor
+  // (hook_level/object_type) bevaras orörda i associationRules — endast migrerade
+  // legacy-data, ej redigerbara i UI:t men får inte tappas vid spar.
+  type MetadataCondition = Extract<AssociationCondition, { source: "metadata" }>;
+  const metadataConditions = formData.associationRules.filter(
+    (c): c is MetadataCondition => c.source === "metadata",
+  );
+  const writeMetadataConditions = (next: MetadataCondition[]) => {
+    setFormData(prev => ({
+      ...prev,
+      associationRules: [...prev.associationRules.filter(c => c.source !== "metadata"), ...next],
+    }));
+  };
+  const addMetadataCondition = () =>
+    writeMetadataConditions([...metadataConditions, { source: "metadata", label: "", operator: "equals", value: "" }]);
+  const updateMetadataCondition = (idx: number, patch: Partial<MetadataCondition>) =>
+    writeMetadataConditions(metadataConditions.map((c, i) => (i === idx ? { ...c, ...patch } : c)));
+  const removeMetadataCondition = (idx: number) =>
+    writeMetadataConditions(metadataConditions.filter((_, i) => i !== idx));
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -1292,130 +1315,6 @@ export default function ArticlesPage() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="hookLevel" className="flex items-center gap-1">
-                  Fasthakning
-                  <HelpTooltip content="Fasthakning bestämmer på vilken nivå artikeln automatiskt föreslås. Välj t.ex. 'Objekt' för att artikeln ska föreslås på alla objekt." />
-                </Label>
-                <Select
-                  value={formData.hookLevel}
-                  onValueChange={(value) => setFormData({ ...formData, hookLevel: value, hookConditions: {} })}
-                >
-                  <SelectTrigger data-testid="select-hook-level">
-                    <SelectValue placeholder="Välj nivå" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {hookLevelOptions.map(level => (
-                      <SelectItem key={level.value} value={level.value}>
-                        {level.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <p className="text-xs text-muted-foreground">
-                  Bestämmer på vilken hierarkinivå artikeln hakar fast och genererar ordrar
-                </p>
-              </div>
-
-              {formData.hookLevel && formData.hookLevel.startsWith("karl") && (
-                <div className="space-y-3 p-3 rounded-md border bg-muted/30">
-                  <Label className="text-sm font-medium">Villkor för fasthakning</Label>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="containerType" className="text-sm">Objekttyp</Label>
-                      <Select
-                        value={formData.hookConditions.container_type || "all"}
-                        onValueChange={(value) => setFormData({
-                          ...formData,
-                          hookConditions: { ...formData.hookConditions, container_type: value === "all" ? undefined : value }
-                        })}
-                      >
-                        <SelectTrigger data-testid="select-container-type-condition">
-                          <SelectValue placeholder="Alla kärltyper" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="all">Alla kärltyper</SelectItem>
-                          <SelectItem value="matavfall">Matavfall</SelectItem>
-                          <SelectItem value="restavfall">Restavfall</SelectItem>
-                          <SelectItem value="plastemballage">Plast</SelectItem>
-                          <SelectItem value="atervinning">Återvinning</SelectItem>
-                          <SelectItem value="uj_hushallsavfall">UJ Hushållsavfall</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="minVolume" className="text-sm">Min volym (L)</Label>
-                      <Input
-                        id="minVolume"
-                        type="number"
-                        min="0"
-                        placeholder="Ingen gräns"
-                        value={formData.hookConditions.min_volume || ""}
-                        onChange={(e) => setFormData({
-                          ...formData,
-                          hookConditions: { 
-                            ...formData.hookConditions, 
-                            min_volume: e.target.value ? parseInt(e.target.value) : undefined 
-                          }
-                        })}
-                        data-testid="input-min-volume"
-                      />
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {formData.hookLevel === "kod" && (
-                <div className="space-y-2 p-3 rounded-md border bg-muted/30">
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      id="requiresAccessCode"
-                      checked={formData.hookConditions.requires_access_code || false}
-                      onChange={(e) => setFormData({
-                        ...formData,
-                        hookConditions: { ...formData.hookConditions, requires_access_code: e.target.checked }
-                      })}
-                      className="rounded"
-                      data-testid="checkbox-requires-access-code"
-                    />
-                    <Label htmlFor="requiresAccessCode" className="text-sm cursor-pointer">
-                      Kräver att objektet har en accesskod
-                    </Label>
-                  </div>
-                  <p className="text-xs text-muted-foreground">
-                    Artikeln kommer endast att gälla för objekt som har en registrerad accesskod (t.ex. portkod)
-                  </p>
-                </div>
-              )}
-
-              {formData.hookLevel && formData.hookLevel !== "" && (
-                <div className="space-y-2 p-3 rounded-md border bg-muted/30">
-                  <Label htmlFor="maxPerAddress">Max antal per adress</Label>
-                  <div className="flex items-center gap-3">
-                    <Input
-                      id="maxPerAddress"
-                      type="number"
-                      min={1}
-                      placeholder="Obegränsat"
-                      value={formData.maxPerAddress ?? ""}
-                      onChange={(e) => setFormData({ 
-                        ...formData, 
-                        maxPerAddress: e.target.value ? parseInt(e.target.value) : null 
-                      })}
-                      className="w-32"
-                      data-testid="input-max-per-address"
-                    />
-                    <span className="text-xs text-muted-foreground">
-                      {formData.maxPerAddress ? `Max ${formData.maxPerAddress} per adress` : "Ingen begränsning"}
-                    </span>
-                  </div>
-                  <p className="text-xs text-muted-foreground">
-                    T.ex. etablering = 1 per adress, tvätt = obegränsad
-                  </p>
-                </div>
-              )}
-
-              <div className="space-y-2">
                 <Label htmlFor="name">Namn <span className="text-destructive">*</span></Label>
                 <Input
                   id="name"
@@ -1983,8 +1882,10 @@ export default function ArticlesPage() {
                 </div>
               )}
 
-              </FormSection>
-              <FormSection title="Etikett-koppling (Kinab)" icon={<Database className="h-4 w-4" />} description="Koppla artikeln till metadata-etiketter för hämtning/uppdatering i fält" testId="section-etikett">
+              <div className="border-t pt-4 mt-2">
+                <p className="text-sm font-medium">Fält-etiketter (visning & uppdatering i fält)</p>
+                <p className="text-xs text-muted-foreground">Etiketter som fältarbetaren ser och kan uppdatera vid utförande.</p>
+              </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
@@ -2127,133 +2028,120 @@ export default function ArticlesPage() {
               </div>
 
               </FormSection>
-              <FormSection title="Association (tvåstegsfilter)" icon={<LinkIcon className="h-4 w-4" />} description="Koppla artikeln till objekt via metadata-etikett och värde" testId="section-association">
+              <FormSection title="Association (tvåstegsfilter)" icon={<LinkIcon className="h-4 w-4" />} description="Haka fast artikeln på objekt vars metadata uppfyller ALLA villkor (OCH-logik)" testId="section-association">
 
-              <div className="grid grid-cols-3 gap-4">
-                <div className="space-y-2">
-                  <Label>Etikett (beteckning)</Label>
-                  <Select
-                    value={formData.associationLabel || "_none"}
-                    onValueChange={(v) => {
-                      setFormData({ ...formData, associationLabel: v === "_none" ? "" : v });
-                      setAssocTestResult(null);
-                    }}
-                  >
-                    <SelectTrigger data-testid="select-association-label">
-                      <SelectValue placeholder="Ingen" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="_none">Ingen</SelectItem>
-                      {metadataLabels.map(ml => (
-                        <SelectItem key={ml.id} value={ml.beteckning || ml.namn}>
-                          {ml.beteckning ? `${ml.beteckning} — ${ml.namn}` : ml.namn}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label>Värde att matcha</Label>
-                  <Input
-                    value={formData.associationValue}
-                    onChange={(e) => {
-                      setFormData({ ...formData, associationValue: e.target.value });
-                      setAssocTestResult(null);
-                    }}
-                    placeholder="t.ex. Ja, Matavfall"
-                    data-testid="input-association-value"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Operator</Label>
-                  <Select
-                    value={formData.associationOperator || "equals"}
-                    onValueChange={(v) => {
-                      setFormData({ ...formData, associationOperator: v });
-                      setAssocTestResult(null);
-                    }}
-                  >
-                    <SelectTrigger data-testid="select-association-operator">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="equals">Lika med</SelectItem>
-                      <SelectItem value="contains">Innehåller</SelectItem>
-                      <SelectItem value="starts_with">Börjar med</SelectItem>
-                      <SelectItem value="not_equals">Inte lika med</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
+              <div className="space-y-3">
+                {metadataConditions.length === 0 && (
+                  <p className="text-sm text-muted-foreground" data-testid="text-no-association-rules">
+                    Inga villkor. Artikeln hakar inte fast automatiskt via metadata.
+                  </p>
+                )}
 
-              {formData.associationLabel && formData.associationValue && (
-                <div className="space-y-2">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={handleTestAssociation}
-                    disabled={assocTestLoading}
-                    data-testid="btn-test-association"
-                  >
-                    {assocTestLoading ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Beaker className="h-4 w-4 mr-1" />}
-                    Testa koppling
-                  </Button>
-
-                  {assocTestResult && (
-                    <div className="rounded-md border p-3 text-sm space-y-2">
-                      {!assocTestResult.labelFound ? (
-                        <p className="text-destructive">Etiketten hittades inte i metadata-katalogen.</p>
-                      ) : (
-                        <>
-                          <p className="font-medium">
-                            {assocTestResult.matchCount} objekt matchar
-                            {assocTestResult.labelName && <span className="text-muted-foreground ml-1">({assocTestResult.labelName})</span>}
-                          </p>
-                          {assocTestResult.matches.length > 0 && (
-                            <div className="max-h-32 overflow-y-auto space-y-1">
-                              {assocTestResult.matches.map((m) => (
-                                <div key={m.objectId} className="flex items-center gap-2 text-xs">
-                                  <Badge variant="outline" className="font-mono text-xs">{m.metadataValue}</Badge>
-                                  <span>{m.objectName}</span>
-                                  {m.objectAddress && <span className="text-muted-foreground">— {m.objectAddress}</span>}
-                                </div>
-                              ))}
-                            </div>
-                          )}
-                        </>
-                      )}
-                    </div>
-                  )}
-                </div>
-              )}
-
-              </FormSection>
-              <FormSection title="Objekttyper" icon={<Package className="h-4 w-4" />} testId="section-objekttyper">
-              <div className="space-y-2">
-                <Label>Objekttyper (vad artikeln kan utföras på)</Label>
-                <div className="flex flex-wrap gap-2 p-3 rounded-md border bg-muted/30">
-                  {objectTypeOptions.filter(t => t.value !== "all").map(type => (
-                    <Badge
-                      key={type.value}
-                      variant={formData.objectTypes.includes(type.value) ? "default" : "outline"}
-                      className="cursor-pointer"
-                      onClick={() => {
-                        const newTypes = formData.objectTypes.includes(type.value)
-                          ? formData.objectTypes.filter(t => t !== type.value)
-                          : [...formData.objectTypes, type.value];
-                        setFormData({ ...formData, objectTypes: newTypes });
-                      }}
-                      data-testid={`badge-object-type-${type.value}`}
+                {metadataConditions.map((cond, idx) => {
+                  const needsValue = cond.operator !== "has_value";
+                  return (
+                    <div
+                      key={idx}
+                      className="grid grid-cols-[1fr_1fr_1fr_auto] gap-2 items-end p-3 rounded-md border bg-muted/30"
+                      data-testid={`row-association-rule-${idx}`}
                     >
-                      {type.label}
-                    </Badge>
-                  ))}
+                      <div className="space-y-1">
+                        <Label className="text-xs">Metadatafält</Label>
+                        <Select
+                          value={cond.label || "_none"}
+                          onValueChange={(v) => updateMetadataCondition(idx, { label: v === "_none" ? "" : v })}
+                        >
+                          <SelectTrigger data-testid={`select-association-label-${idx}`}>
+                            <SelectValue placeholder="Välj fält" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="_none">Välj fält</SelectItem>
+                            {metadataLabels.map(ml => (
+                              <SelectItem key={ml.id} value={ml.beteckning || ml.namn}>
+                                {ml.beteckning ? `${ml.beteckning} — ${ml.namn}` : ml.namn}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs">Operator</Label>
+                        <Select
+                          value={cond.operator || "equals"}
+                          onValueChange={(v) => updateMetadataCondition(idx, { operator: v as MetadataCondition["operator"] })}
+                        >
+                          <SelectTrigger data-testid={`select-association-operator-${idx}`}>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="equals">Lika med</SelectItem>
+                            <SelectItem value="greater">Större än</SelectItem>
+                            <SelectItem value="less">Mindre än</SelectItem>
+                            <SelectItem value="has_value">Fältet har ett värde</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs">Värde</Label>
+                        <Input
+                          value={cond.value ?? ""}
+                          disabled={!needsValue}
+                          onChange={(e) => updateMetadataCondition(idx, { value: e.target.value })}
+                          placeholder={needsValue ? "t.ex. Matavfall, 240" : "—"}
+                          data-testid={`input-association-value-${idx}`}
+                        />
+                      </div>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => removeMetadataCondition(idx)}
+                        data-testid={`btn-remove-association-rule-${idx}`}
+                        aria-label="Ta bort villkor"
+                      >
+                        <Trash2 className="h-4 w-4 text-destructive" />
+                      </Button>
+                    </div>
+                  );
+                })}
+
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={addMetadataCondition}
+                  data-testid="btn-add-association-rule"
+                >
+                  <Plus className="h-4 w-4 mr-1" />
+                  Lägg till villkor
+                </Button>
+
+                <div className="space-y-2 pt-2">
+                  <Label htmlFor="maxPerAddress">Max antal per adress</Label>
+                  <div className="flex items-center gap-3">
+                    <Input
+                      id="maxPerAddress"
+                      type="number"
+                      min={1}
+                      placeholder="Obegränsat"
+                      value={formData.maxPerAddress ?? ""}
+                      onChange={(e) => setFormData({
+                        ...formData,
+                        maxPerAddress: e.target.value ? parseInt(e.target.value) : null,
+                      })}
+                      className="w-32"
+                      data-testid="input-max-per-address"
+                    />
+                    <span className="text-xs text-muted-foreground">
+                      {formData.maxPerAddress ? `Max ${formData.maxPerAddress} per adress` : "Ingen begränsning"}
+                    </span>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    T.ex. etablering = 1 per adress, tvätt = obegränsad
+                  </p>
                 </div>
-                <p className="text-xs text-muted-foreground">
-                  Klicka för att välja/avmarkera objekttyper
-                </p>
               </div>
+
               </FormSection>
             </div>
             <DialogFooter>

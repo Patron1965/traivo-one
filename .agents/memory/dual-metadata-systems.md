@@ -104,3 +104,18 @@ Källa till områdesvärden/ordning/etiketter: `shared/metadata-areas.ts` (delas
 **How to apply:** Lägg aldrig nya beroenden mot `kategori` och gruppera/filtrera aldrig på
 den. Lägg nya områdesvärden i `shared/metadata-areas.ts`. OBS: detta gäller ENBART svenska
 systemet — engelska `metadataDefinitions` har sitt eget `category`-fält, orört.
+
+## Artikel-koppling: två katalog-nycklar i SAMMA formulär
+Artikel-metadata kopplas på två sätt som råkar se identiska ut i UI:t men träffar
+olika kataloger:
+- **fetch/leaveMetadataCode** (`namn`): WO-writeback + concept-filters
+  (`metadata-queries.ts`). "Metadata-koppling".
+- **fetch/updateMetadataLabel** (`beteckning`): mobil/portal-fältvisning.
+  "Etikett-koppling".
+
+**Why:** De delar visuell sektion (slogs ihop visuellt i Task #835) men är två
+distinkta katalog-nycklar. Fysisk sammanslagning kräver egen backend-migration +
+paritet och är prod-riskabel.
+
+**How to apply:** Slå ALDRIG ihop fetch/leaveMetadataCode med fetch/updateMetadataLabel
+utan migration — de matchar olika katalog-kolumner och olika konsumenter.

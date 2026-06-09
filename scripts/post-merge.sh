@@ -34,7 +34,8 @@ if command -v psql >/dev/null 2>&1 && [ -n "$DATABASE_URL" ]; then
            migrations/0071_weekly_planning_foundation.sql \
            migrations/0072_object_import_sessions.sql \
            migrations/0073_object_import_rows.sql \
-           migrations/0074_article_types_and_extern_info.sql; do
+           migrations/0074_article_types_and_extern_info.sql \
+           migrations/0075_article_association_rules.sql; do
     if [ -f "$f" ]; then
       echo "[post-merge] Applying $f"
       psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f "$f"
@@ -53,4 +54,14 @@ if [ -n "$DATABASE_URL" ]; then
   npx tsx scripts/schema-drift-check.ts
 else
   echo "[post-merge] DATABASE_URL unset — skipping schema-drift check"
+fi
+
+# Task #835: paritetstest mellan legacy-fasthakning och den nya regelbaserade resolvern.
+# Körs efter migration 0075 (back-fill av association_rules). Icke-blockerande: rapporterar
+# avvikelser HÖGT i loggen utan att brick:a reconciliationen. Eventuella avvikelser måste
+# utredas innan gamla kolumner tas bort (Fas 3, Task #836).
+if [ -n "$DATABASE_URL" ]; then
+  echo "[post-merge] Running article association parity check (Task #835)"
+  npx tsx scripts/article-association-parity-check.ts \
+    || echo "[post-merge] ⚠⚠ ARTIKEL-ASSOCIATION PARITET: avvikelser upptäckta — se loggen ovan. Blockerar ej, men måste utredas före Fas 3."
 fi
