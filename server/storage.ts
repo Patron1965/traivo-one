@@ -1767,12 +1767,19 @@ export class DatabaseStorage implements IStorage {
 
   async getCustomerStats(tenantId: string, customerId: string) {
     // Kundkoppling läses via object_payers (primary), inte legacy
-    // objects.customer_id — ADR v3.
+    // objects.customer_id — ADR v3. Snöret/KPI på kundöversikten aggregeras över
+    // HELA kund-hierarkin (kund + ättlingar) så att en koncern visar rollup av
+    // alla regioners/lokalers objekt, ordrar och abonnemang. Leaf-kund (inga
+    // ättlingar) ger oförändrat resultat.
+    const descendants = await this.getCustomerDescendants(tenantId, customerId);
+    const customerIds = [customerId, ...descendants];
+    const customerIdList = sql.join(customerIds.map((id) => sql`${id}`), sql`, `);
     const objectIsForCustomerSql = sql`EXISTS (
       SELECT 1 FROM object_payers op
       WHERE op.object_id = objects.id
+        AND op.tenant_id = ${tenantId}
         AND op.is_primary = true
-        AND op.customer_id = ${customerId}
+        AND op.customer_id IN (${customerIdList})
     )`;
     const [levelsRes, ordersRes, subsRes, invoicedRes, clusterRes] = await Promise.all([
       db.execute(sql`
@@ -1788,18 +1795,18 @@ export class DatabaseStorage implements IStorage {
           COUNT(*) FILTER (WHERE order_status = 'fakturerad')::int as invoiced_orders,
           COUNT(*)::int as total_orders
         FROM work_orders
-        WHERE tenant_id = ${tenantId} AND customer_id = ${customerId} AND deleted_at IS NULL
+        WHERE tenant_id = ${tenantId} AND customer_id IN (${customerIdList}) AND deleted_at IS NULL
       `),
       db.execute(sql`
         SELECT COUNT(*)::int as active_subscriptions
         FROM subscriptions
-        WHERE tenant_id = ${tenantId} AND customer_id = ${customerId}
+        WHERE tenant_id = ${tenantId} AND customer_id IN (${customerIdList})
           AND (end_date IS NULL OR end_date > NOW())
       `),
       db.execute(sql`
         SELECT COALESCE(SUM(cached_value), 0)::bigint as invoiced_total
         FROM work_orders
-        WHERE tenant_id = ${tenantId} AND customer_id = ${customerId} AND deleted_at IS NULL
+        WHERE tenant_id = ${tenantId} AND customer_id IN (${customerIdList}) AND deleted_at IS NULL
           AND order_status = 'fakturerad'
           AND scheduled_date >= NOW() - INTERVAL '12 months'
       `),
@@ -1814,7 +1821,7 @@ export class DatabaseStorage implements IStorage {
           WHERE tenant_id = ${tenantId} AND ${objectIsForCustomerSql} AND deleted_at IS NULL
           GROUP BY cluster_id
         ) oc ON oc.cluster_id = cl.id
-        WHERE cl.tenant_id = ${tenantId} AND cl.deleted_at IS NULL AND cl.root_customer_id = ${customerId}
+        WHERE cl.tenant_id = ${tenantId} AND cl.deleted_at IS NULL AND cl.root_customer_id IN (${customerIdList})
         ORDER BY cl.name
       `),
     ]);

@@ -9,7 +9,7 @@
 // annan relation används `contextParentId`/getContextualAncestorChain explicit.
 import { db } from "./db";
 import { objects, clusters, objectParents } from "@shared/schema";
-import { eq, and, isNull, desc } from "drizzle-orm";
+import { eq, and, isNull, desc, sql } from "drizzle-orm";
 import type { ServiceObject, Cluster } from "@shared/schema";
 
 interface ResolvedObjectData {
@@ -301,6 +301,54 @@ export class InheritanceProcessor {
         }
 
         processed++;
+      } catch (error) {
+        errors.push(`Failed to process ${root.name}: ${error}`);
+      }
+    }
+
+    return { processed, errors };
+  }
+
+  // Räknar om ärvda värden för alla objekt som hör till angivna kunder
+  // (kund + ev. ättlingar). Kundkoppling via object_payers (primary) — ADR v3.
+  // Processar top-down: rötter (objekt utan förälder i mängden) först, sedan
+  // deras ättlingar, så att arv hämtas från redan uppdaterade föräldrar.
+  async processCustomerHierarchy(customerIds: string[]): Promise<{ processed: number; errors: string[] }> {
+    if (customerIds.length === 0) return { processed: 0, errors: [] };
+    const idList = sql.join(customerIds.map((id) => sql`${id}`), sql`, `);
+    const rows = await db.execute(sql`
+      SELECT o.id, o.parent_id, o.name
+      FROM objects o
+      WHERE o.tenant_id = ${this.tenantId} AND o.deleted_at IS NULL
+        AND EXISTS (
+          SELECT 1 FROM object_payers op
+          WHERE op.object_id = o.id AND op.tenant_id = ${this.tenantId}
+            AND op.is_primary = true
+            AND op.customer_id IN (${idList})
+        )
+    `);
+    const objs = rows.rows as Array<{ id: string; parent_id: string | null; name: string }>;
+    const idSet = new Set(objs.map((o) => o.id));
+    const roots = objs.filter((o) => !o.parent_id || !idSet.has(o.parent_id));
+
+    let processed = 0;
+    const errors: string[] = [];
+    const visited = new Set<string>();
+
+    for (const root of roots) {
+      try {
+        if (!visited.has(root.id)) {
+          await this.updateResolvedValues(root.id);
+          visited.add(root.id);
+          processed++;
+        }
+        const descendants = await this.getDescendants(root.id);
+        for (const desc of descendants) {
+          if (visited.has(desc.id)) continue;
+          await this.updateResolvedValues(desc.id);
+          visited.add(desc.id);
+          processed++;
+        }
       } catch (error) {
         errors.push(`Failed to process ${root.name}: ${error}`);
       }

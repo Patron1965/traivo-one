@@ -13,6 +13,7 @@ import { ensureClusterAndAssign } from "../auto-cluster";
 import { triggerGeocodeIfMissing } from "../services/geocoding";
 import { copyObjectTree } from "../services/object-copy";
 import { signObjectQrToken } from "../dynamic-qr-token";
+import { createInheritanceProcessor } from "../inheritance-processor";
 
 export async function registerCustomerRoutes(app: Express) {
 
@@ -189,6 +190,24 @@ app.get("/api/customers/:id/stats", asyncHandler(async (req, res) => {
   if (!verifyTenantOwnership(customer, tenantId)) throw new NotFoundError("Kund");
   const stats = await storage.getCustomerStats(tenantId, req.params.id);
   res.json(stats);
+}));
+
+// Räkna om ärvda värden för alla objekt under kunden (kund + ättlingar).
+// Konsekvent med klustervyns "Räkna om arv". ADR v3: kundkoppling via primary payer.
+app.post("/api/customers/:id/recalculate-inheritance", asyncHandler(async (req, res) => {
+  const tenantId = getTenantIdWithFallback(req);
+  const customer = await storage.getCustomer(req.params.id);
+  if (!verifyTenantOwnership(customer, tenantId)) throw new NotFoundError("Kund");
+  const descendants = await storage.getCustomerDescendants(tenantId, req.params.id);
+  const customerIds = [req.params.id, ...descendants];
+  const processor = await createInheritanceProcessor(tenantId);
+  const result = await processor.processCustomerHierarchy(customerIds);
+  res.json({
+    success: true,
+    processed: result.processed,
+    errors: result.errors,
+    message: `Uppdaterade ärvda värden för ${result.processed} objekt`,
+  });
 }));
 
 // Lönsamhet per kund: aggregerar work_orders.cachedValue/cachedCost + månadstrend

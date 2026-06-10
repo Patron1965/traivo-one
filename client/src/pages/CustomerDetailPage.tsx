@@ -24,7 +24,7 @@ import { SnoretPipeline } from "@/components/SnoretPipeline";
 import {
   ArrowLeft, Building2, Layers, Package, ClipboardList, Phone, Mail, MapPin,
   ChevronDown, ChevronRight, Users, Home, Container, Trash2, TreePine, Map as MapIcon,
-  Repeat, Receipt, GitBranch, Hash, FileText, AlertTriangle, Loader2, Search, X,
+  Repeat, Receipt, GitBranch, Hash, FileText, AlertTriangle, Loader2, Search, X, RefreshCw,
   Pyramid, DoorClosed, ArrowUp, ArrowDown, ArrowUpDown, TrendingUp, TrendingDown,
   Send, Clock,
 } from "lucide-react";
@@ -1222,6 +1222,28 @@ export default function CustomerDetailPage() {
     enabled: !!customerId,
   });
 
+  const { toast } = useToast();
+  const recalculateInheritanceMutation = useMutation({
+    mutationFn: async () => {
+      return apiRequest("POST", `/api/customers/${customerId}/recalculate-inheritance`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/customers", customerId, "stats"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/customers", customerId, "objects"] });
+      toast({
+        title: "Arv omräknat",
+        description: "Alla ärvda värden har uppdaterats för kundens objekt.",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Kunde inte räkna om ärvda värden",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
   const rootsQuery = useQuery<TreeNode[]>({
     queryKey: ["/api/customers", customerId, "objects", "tree-roots", sync.selectedClusterId ?? "all"],
     queryFn: async () => {
@@ -1506,6 +1528,22 @@ export default function CustomerDetailPage() {
               activeOrders={stats.activeOrders}
               completedOrders={stats.completedOrders}
               invoicedOrders={stats.invoicedOrders}
+              action={
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => recalculateInheritanceMutation.mutate()}
+                  disabled={recalculateInheritanceMutation.isPending}
+                  data-testid="button-recalculate-inheritance"
+                >
+                  {recalculateInheritanceMutation.isPending ? (
+                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                  ) : (
+                    <RefreshCw className="h-4 w-4 mr-2" />
+                  )}
+                  Räkna om arv
+                </Button>
+              }
             />
           )}
 

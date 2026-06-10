@@ -1,3 +1,4 @@
+import { ReactNode } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Target,
@@ -15,6 +16,7 @@ interface SnoretPipelineProps {
   activeOrders: number;
   completedOrders: number;
   invoicedOrders: number;
+  action?: ReactNode;
 }
 
 interface Step {
@@ -33,6 +35,7 @@ export function SnoretPipeline({
   activeOrders,
   completedOrders,
   invoicedOrders,
+  action,
 }: SnoretPipelineProps) {
   const steps: Step[] = [
     { label: "Objekt", value: objectCount, icon: Building2, bg: "bg-chart-1/15", fg: "text-chart-1", testId: "snoret-objects" },
@@ -45,10 +48,13 @@ export function SnoretPipeline({
   return (
     <Card data-testid="card-snoret">
       <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <Target className="h-5 w-5" />
-          {title}
-        </CardTitle>
+        <div className="flex items-center justify-between gap-2">
+          <CardTitle className="flex items-center gap-2">
+            <Target className="h-5 w-5" />
+            {title}
+          </CardTitle>
+          {action}
+        </div>
       </CardHeader>
       <CardContent>
         <div className="flex items-center justify-between gap-4 overflow-x-auto pb-2">
