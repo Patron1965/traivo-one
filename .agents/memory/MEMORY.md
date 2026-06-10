@@ -15,6 +15,7 @@
 - [Metadata kundlås read-paths](metadata-customer-lock.md) — kundlåsta katalogfält måste filtreras på ALLA objekt-vända läsningar (objekt-scoped endpoint, server-härledd kund), ej bara admin /types.
 - [wouter useParams outside Route](wouter-direct-render-params.md) — pages rendered via App.tsx `location.startsWith` branches get `{}` from useParams; parse the param from the pathname instead.
 - [Public endpoint tenant token](public-endpoint-tenant-token.md) — `/api/public/*` får aldrig ta rå tenant-slug (enumeration); resolva tenant server-side via QR-code eller HMAC-signed token (`server/dynamic-qr-token.ts`).
+- [pg Pool error listener mandatory](pg-pool-error-listener.md) — varje long-lived node-postgres Pool MÅSTE ha `pool.on('error')`; annars kraschar en tappad idle-anslutning (SQLSTATE 57P01) hela servern via uncaughtException→exit(1).
 - [Schema-drift & post-merge replay](schema-drift-replay.md) — strukturella schema.ts-ändringar måste ha idempotent migration OCH stå i post-merge replay-listan; kör `scripts/schema-drift-check.ts` för att hitta drift.
 - [Prod schema via Publish](prod-schema-publish-propagation.md) — ny kolumn når prod ENBART via Publish; symptom = trunkerad "Failed query: insert" 500 i publicerad app; diagnos = jämför prod-replica vs dev-schema; fix = re-publish, aldrig startup-DDL.
 - [Drizzle korrelerad subquery-kolumn](drizzle-unqualified-subquery-column.md) — i sql`` correlated subquery referera ${table}.col (ej ${table.col}); som SELECT-kolumn droppar drizzle prefixet → binder fel tabell → tyst NULL.

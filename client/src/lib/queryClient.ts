@@ -116,7 +116,18 @@ async function throwIfResNotOk(res: Response): Promise<void> {
       }
       if (typeof json.requestId === "string") requestId = json.requestId;
     } catch {
-      message = text;
+      // Icke-JSON-svar. Detta händer t.ex. när servern startar om och Replits
+      // edge svarar med rå text ("Internal Server Error") — då vill vi INTE
+      // visa rå engelsk text eller en kryptisk JSON.parse-fel-sträng för
+      // användaren. Visa ett begripligt svenskt meddelande för 5xx, annars
+      // en trimmad variant av texten.
+      const trimmed = text.trim();
+      if (res.status >= 500) {
+        message =
+          "Servern är tillfälligt otillgänglig. Försök igen om en liten stund.";
+      } else if (trimmed) {
+        message = trimmed.slice(0, 200);
+      }
     }
   }
 
