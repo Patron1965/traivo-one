@@ -9,7 +9,7 @@ import type { Express } from "express";
     mapGoCategory, ONE_CATEGORIES, SEVERITY_LEVELS, GO_CATEGORY_MAP, AUTO_LINK_DEVIATION_TYPES,
     notificationService, triggerETANotification,
     OpenAI,
-    getArticleMetadataForObject, writeArticleMetadataOnObject,
+    getArticleMetadataForObject, writeArticleMetadataOnObject, findMissingRequiredLeaveMetadata,
     handleWorkOrderStatusChange,
   } from "./shared";
   import type { WorkOrder } from "./shared";
@@ -397,6 +397,22 @@ app.patch("/api/mobile/orders/:id/status", isMobileAuthenticated, asyncHandler(a
     } else if (status === 'planned' || status === 'assigned') {
       updateData.executionStatus = 'planned_fine';
     } else if (status === 'utford' || status === 'completed') {
+      // Kap 6 (master-spec): obligatorisk informationslämning. Blockera slutförande
+      // om någon artikel kräver leave-metadata (format "value") som varken finns på
+      // objektet eller skickats med i begäran.
+      if (order.objectId && order.tenantId) {
+        const providedLeaveValues: Record<string, string> =
+          (req.body?.leaveMetadataValues && typeof req.body.leaveMetadataValues === "object")
+            ? (req.body.leaveMetadataValues as Record<string, string>)
+            : {};
+        const lines = await storage.getWorkOrderLines(orderId);
+        const missing = await findMissingRequiredLeaveMetadata(lines, order.objectId, order.tenantId, providedLeaveValues);
+        if (missing.length > 0) {
+          throw new ValidationError(
+            `Obligatorisk informationslämning saknas: ${missing.join(", ")}. Fyll i fält(en) innan uppgiften kan slutföras.`,
+          );
+        }
+      }
       updateData.orderStatus = 'utford';
       updateData.executionStatus = 'completed';
       updateData.completedAt = new Date();

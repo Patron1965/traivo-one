@@ -153,6 +153,7 @@ interface ArticleFormData {
   articleNumber: string;
   name: string;
   description: string;
+  internalDescription: string;
   articleType: string;
   hookLevel: string;
   hookConditions: HookConditions;
@@ -165,6 +166,7 @@ interface ArticleFormData {
   fetchMetadataCode: string;
   leaveMetadataCode: string;
   leaveMetadataFormat: string;
+  leaveMetadataRequired: boolean;
   maxPerAddress: number | null;
   associationLabel: string;
   associationValue: string;
@@ -179,6 +181,8 @@ interface ArticleFormData {
   isInfoCarrier: boolean;
   limitationType: string;
   quantityMode: string;
+  operatorCanUpdateQuantity: boolean;
+  freeMetadataUpdate: boolean;
   quantityMetadataField: string;
   quantityUnit: string;
   groupSize: number;
@@ -211,6 +215,7 @@ const emptyFormData: ArticleFormData = {
   articleNumber: "",
   name: "",
   description: "",
+  internalDescription: "",
   articleType: "tjanst",
   hookLevel: "",
   hookConditions: {},
@@ -223,6 +228,7 @@ const emptyFormData: ArticleFormData = {
   fetchMetadataCode: "",
   leaveMetadataCode: "",
   leaveMetadataFormat: "",
+  leaveMetadataRequired: false,
   maxPerAddress: null,
   associationLabel: "",
   associationValue: "",
@@ -237,6 +243,8 @@ const emptyFormData: ArticleFormData = {
   isInfoCarrier: false,
   limitationType: "unlimited",
   quantityMode: "per_styck",
+  operatorCanUpdateQuantity: false,
+  freeMetadataUpdate: false,
   quantityMetadataField: "",
   quantityUnit: "",
   groupSize: 1,
@@ -626,6 +634,7 @@ export default function ArticlesPage() {
       articleNumber: article.articleNumber,
       name: article.name,
       description: article.description || "",
+      internalDescription: (article as any).internalDescription || "",
       articleType: article.articleType,
       hookLevel: article.hookLevel || "",
       hookConditions: (article.hookConditions as HookConditions) || {},
@@ -638,6 +647,7 @@ export default function ArticlesPage() {
       fetchMetadataCode: article.fetchMetadataCode || "",
       leaveMetadataCode: article.leaveMetadataCode || "",
       leaveMetadataFormat: article.leaveMetadataFormat || "",
+      leaveMetadataRequired: (article as any).leaveMetadataRequired ?? false,
       maxPerAddress: article.maxPerAddress ?? null,
       associationLabel: article.associationLabel || "",
       associationValue: article.associationValue || "",
@@ -655,6 +665,8 @@ export default function ArticlesPage() {
       quantityMode: (article.quantityMode === "use_object_quantity" || article.quantityMode === "configurable" || !article.quantityMode)
         ? "per_styck"
         : article.quantityMode,
+      operatorCanUpdateQuantity: (article as any).operatorCanUpdateQuantity ?? false,
+      freeMetadataUpdate: (article as any).freeMetadataUpdate ?? false,
       quantityMetadataField: article.quantityMetadataField || "",
       quantityUnit: article.quantityUnit || "",
       groupSize: article.groupSize ?? 1,
@@ -1492,6 +1504,21 @@ export default function ArticlesPage() {
                 </p>
               </div>
 
+              <div className="space-y-2">
+                <Label htmlFor="internalDescription">Intern beskrivning</Label>
+                <Textarea
+                  id="internalDescription"
+                  value={formData.internalDescription}
+                  onChange={(e) => setFormData({ ...formData, internalDescription: e.target.value })}
+                  placeholder="Intern beskrivning för administration (t.ex. inköpsnoteringar, hantering)..."
+                  rows={3}
+                  data-testid="input-article-internal-description"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Fritt internt fält för administration — visas aldrig för kund eller i Fortnox-export.
+                </p>
+              </div>
+
               </FormSection>
               <FormSection title="Extern info & leverantör" icon={<FileText className="h-4 w-4" />} testId="section-extern">
               <div className="space-y-2">
@@ -1777,6 +1804,46 @@ export default function ArticlesPage() {
                     <span>Välj ett metadatafält — annars faller antalet tillbaka på objektets standardantal.</span>
                   </p>
                 )}
+
+                <div className="space-y-3 pt-2 border-t mt-2">
+                  <p className="text-sm font-medium">Antal-behörighet i fält</p>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={formData.operatorCanUpdateQuantity}
+                      onChange={(e) => setFormData({ ...formData, operatorCanUpdateQuantity: e.target.checked })}
+                      className="rounded border-gray-300"
+                      data-testid="checkbox-operator-can-update-quantity"
+                    />
+                    <span className="text-sm">Fältarbetare får ändra antal vid utförande</span>
+                  </label>
+                  <p className="text-xs text-muted-foreground">
+                    När detta är på kan utföraren justera antalet (t.ex. faktiskt antalet tömda kärl). Priset räknas om automatiskt utifrån det nya antalet.
+                  </p>
+                  {formData.operatorCanUpdateQuantity && (
+                    <>
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={formData.freeMetadataUpdate}
+                          onChange={(e) => setFormData({ ...formData, freeMetadataUpdate: e.target.checked })}
+                          className="rounded border-gray-300"
+                          data-testid="checkbox-free-metadata-update"
+                        />
+                        <span className="text-sm">Skriv tillbaka nytt antal till objektets metadata</span>
+                      </label>
+                      <p className="text-xs text-muted-foreground">
+                        När antalet ändras uppdateras objektets metadatafält{formData.quantityMetadataField ? ` "${formData.quantityMetadataField}"` : " (välj metadatafält ovan via läget Matchar metadatafält)"} med det nya antalet.
+                      </p>
+                      {formData.freeMetadataUpdate && !formData.quantityMetadataField && (
+                        <p className="text-xs text-warning flex items-start gap-1" data-testid="warning-free-metadata-no-field">
+                          <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+                          <span>Inget metadatafält valt — välj kvantitetsläget "Matchar metadatafält" och ett fält för att återskrivningen ska ske.</span>
+                        </p>
+                      )}
+                    </>
+                  )}
+                </div>
               </div>
 
               <div className="space-y-3">
@@ -2203,6 +2270,24 @@ export default function ArticlesPage() {
                     </SelectContent>
                   </Select>
                   <p className="text-xs text-muted-foreground">Hur metadata-värdet skapas vid utförande</p>
+
+                  {(formData.leaveMetadataFormat === "value" || formData.leaveMetadataFormat === "") && (
+                    <div className="pt-2">
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={formData.leaveMetadataRequired}
+                          onChange={(e) => setFormData({ ...formData, leaveMetadataRequired: e.target.checked })}
+                          className="rounded border-gray-300"
+                          data-testid="checkbox-leave-metadata-required"
+                        />
+                        <span className="text-sm">Obligatorisk — kräv värde innan uppgiften kan slutföras</span>
+                      </label>
+                      <p className="text-xs text-muted-foreground pt-1">
+                        Uppgiften kan inte markeras som utförd förrän fältarbetaren fyllt i ett värde. Gäller endast format "Värde (direkt input)" — automatiska format fylls i av systemet.
+                      </p>
+                    </div>
+                  )}
                 </div>
               )}
 

@@ -3695,3 +3695,43 @@ export async function resolveOrderTypeMetadataFields(
 
   return out;
 }
+
+// Kap 6 (master-spec): obligatorisk informationslämning. Returnerar listan av
+// leave-metadata-koder som SAKNAR värde men är obligatoriska — anropas precis
+// innan en uppgift markeras som slutförd (både web- och mobil-completion) för
+// att blockera slutförandet tills värdena finns.
+//
+// Regler:
+//  * Endast artiklar med `leaveMetadataRequired = true` och en `leaveMetadataCode`.
+//  * Auto-format (timestamp/boolean_true/counter_increment) uppfyller alltid kravet
+//    automatiskt (systemet skriver värdet vid slutförandet) → räknas aldrig som saknat.
+//  * Format "value" (direkt input) kräver ett värde: antingen medskickat i
+//    `providedValues` (kod → värde) eller redan satt på objektet.
+export async function findMissingRequiredLeaveMetadata(
+  lines: Array<{ articleId: string | null }>,
+  objectId: string,
+  tenantId: string,
+  providedValues: Record<string, string> = {},
+): Promise<string[]> {
+  const missing: string[] = [];
+  const seen = new Set<string>();
+  for (const line of lines) {
+    if (!line.articleId) continue;
+    const article = await db.query.articles.findFirst({
+      where: and(eq(articles.id, line.articleId), eq(articles.tenantId, tenantId)),
+    });
+    if (!article?.leaveMetadataRequired || !article.leaveMetadataCode) continue;
+    const fmt = article.leaveMetadataFormat;
+    // Auto-format fylls i av systemet → aldrig obligatoriskt att fylla i manuellt.
+    if (fmt === "timestamp" || fmt === "boolean_true" || fmt === "counter_increment") continue;
+    const code = article.leaveMetadataCode;
+    if (seen.has(code)) continue;
+    seen.add(code);
+    const provided = providedValues[code];
+    if (provided !== undefined && String(provided).trim() !== "") continue;
+    const existing = await getArticleMetadataForObject(objectId, code, tenantId);
+    if (existing?.value !== undefined && existing?.value !== null && String(existing.value).trim() !== "") continue;
+    missing.push(code);
+  }
+  return missing;
+}

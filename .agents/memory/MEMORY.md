@@ -33,3 +33,4 @@
 - [Tenant module enablement](tenant-module-enablement.md) — aktivera modul för system-tier-tenant via PACKAGE_DEFINITIONS, ej DB-raden (startup-backfill skriver över); literal \\u00xx bara bugg i JSX-text, ej i JS-strängar.
 - [Koncept-expansion skriver assignments](concept-expansion-target-table.md) — orderkoncept-expansion (fortnoxRoutes) skapar rader i `assignments`, INTE `work_orders`; per-uppgift/beroende-fält (ack, kritikalitet) måste stämplas där.
 - [Prod-only DB 500 debugging](prod-db-500-debugging.md) — Drizzle gömmer PG-orsaken i err.cause + trunkerad "Failed query"-message; hoista compact dbError (SQLSTATE). Valfria varchar-FK: tvinga ""→null (annars 23503).
+- [Kap5 antal-behörighet server-side](kap5-quantity-permission.md) — operatörs-antal-behörighet härleds från req.tenantRole (owner/admin/planner alltid OK; övriga kräver article-flagga), aldrig klient-payload.

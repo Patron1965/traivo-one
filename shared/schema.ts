@@ -641,6 +641,10 @@ export const articles = pgTable("articles", {
   fetchMetadataCode: text("fetch_metadata_code"),
   leaveMetadataCode: text("leave_metadata_code"),
   leaveMetadataFormat: text("leave_metadata_format"),
+  // Kap 6 (master-spec): obligatorisk informationslämning. När true måste leave-metadata-värdet
+  // (format "value") finnas innan uppgiften kan slutföras. Auto-format (timestamp/boolean_true/
+  // counter_increment) uppfyller alltid kravet automatiskt. Expand-contract: default false.
+  leaveMetadataRequired: boolean("leave_metadata_required").default(false),
   // Kinab: metadata-etikett-koppling (P4/P7)
   fetchMetadataLabel: text("fetch_metadata_label"),
   fetchMetadataLabelFormat: text("fetch_metadata_label_format"),
@@ -671,6 +675,12 @@ export const articles = pgTable("articles", {
   // 'single_per_task' (alltid 1, t.ex. fotodokumentation). Äldre värden
   // 'use_object_quantity'/'configurable' migreras till 'per_styck' (samma beteende).
   quantityMode: text("quantity_mode").default("per_styck"),
+  // Kap 5 (master-spec): antal-behörighet. operatorCanUpdateQuantity = fältarbetaren får ändra
+  // antal vid utförande (annars låst). freeMetadataUpdate = när antalet ändras skrivs det nya
+  // antalet tillbaka till objektets metadata (quantityMetadataField). Expand-contract: default
+  // false (oförändrat beteende).
+  operatorCanUpdateQuantity: boolean("operator_can_update_quantity").default(false),
+  freeMetadataUpdate: boolean("free_metadata_update").default(false),
   // Offsettid i minuter (Mats prislista: A100=120, N100=2400). Negativt = före huvudjobbet,
   // 0 = samtidigt, positivt = efter. Används vid expand av orderkoncept för att skapa
   // förberedande work_orders med tidsfönster relativt huvudjobbet (parent_work_order_id).

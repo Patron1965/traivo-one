@@ -37,7 +37,7 @@ async function computeOutsidePreferredWindow(
     deliveryPreferencePriority: effective.priority ?? "preferred",
   };
 }
-import { getArticleMetadataForObject, writeArticleMetadataOnObject, writeSystemMetadataOnObject } from "../metadata-queries";
+import { getArticleMetadataForObject, writeArticleMetadataOnObject, writeSystemMetadataOnObject, findMissingRequiredLeaveMetadata } from "../metadata-queries";
 import { computeArticleQuantity, metadataValueToNumber } from "../article-quantity";
 
 // Hämtar de artikelfält som styr orderradens kvantitet + utgått→ersättning.
@@ -1413,6 +1413,27 @@ app.patch("/api/work-orders/:id", asyncHandler(async (req, res) => {
     updateData.deliveryPreferencePriority = prefFlags.deliveryPreferencePriority;
   }
 
+  // Kap 6 (master-spec): obligatorisk informationslämning. Blockera slutförandet
+  // INNAN ordern uppdateras om någon artikel kräver leave-metadata (format "value")
+  // som varken finns på objektet eller skickats med i begäran.
+  const providedLeaveValues: Record<string, string> =
+    (req.body?.leaveMetadataValues && typeof req.body.leaveMetadataValues === "object")
+      ? (req.body.leaveMetadataValues as Record<string, string>)
+      : {};
+  if (
+    updateData.executionStatus === "completed" &&
+    existingOrder.executionStatus !== "completed" &&
+    existingOrder.objectId
+  ) {
+    const lines = await storage.getWorkOrderLines(existingOrder.id);
+    const missing = await findMissingRequiredLeaveMetadata(lines, existingOrder.objectId, tenantId, providedLeaveValues);
+    if (missing.length > 0) {
+      throw new ValidationError(
+        `Obligatorisk informationslämning saknas: ${missing.join(", ")}. Fyll i fält(en) innan uppgiften kan slutföras.`,
+      );
+    }
+  }
+
   const workOrder = await storage.updateWorkOrder(req.params.id, updateData);
   if (!workOrder) throw new NotFoundError("Arbetsorder");
 
@@ -1522,6 +1543,13 @@ app.patch("/api/work-orders/:id", asyncHandler(async (req, res) => {
               const current = await getArticleMetadataForObject(workOrder.objectId, article.leaveMetadataCode, tenantId);
               const currentNum = parseInt(current?.value || "0") || 0;
               coercedValue = String(currentNum + 1);
+            } else if (article.leaveMetadataFormat === "value") {
+              // Format "value": använd det medskickade värdet (Kap 6 obligatorisk
+              // informationslämning). Saknas det behålls bakåtkompatibel default.
+              const provided = providedLeaveValues[article.leaveMetadataCode];
+              coercedValue = (provided !== undefined && String(provided).trim() !== "")
+                ? String(provided)
+                : new Date().toISOString();
             } else {
               coercedValue = new Date().toISOString();
             }
@@ -1979,8 +2007,45 @@ app.patch("/api/work-order-lines/:id", asyncHandler(async (req, res) => {
       ? (existingLine.completedAt ?? new Date())
       : null;
   }
+
+  // Kap 5 (master-spec): antal-behörighet. Behörigheten härleds server-side från
+  // den autentiserade tenant-rollen — aldrig från klient-payload. Privilegierade
+  // planeringsroller (owner/admin/planner) får alltid ändra antal; övriga roller
+  // (fältarbetare) får bara ändra om artikeln har operatorCanUpdateQuantity.
+  const quantityChanging =
+    Object.prototype.hasOwnProperty.call(updateData, "quantity") &&
+    Number(updateData.quantity) !== Number(existingLine.quantity);
+  const actorRole = (req as any).tenantRole as string | undefined;
+  const isPlanningRole = actorRole === "owner" || actorRole === "admin" || actorRole === "planner";
+  let quantityArticle: typeof articles.$inferSelect | undefined;
+  if (quantityChanging && existingLine.articleId) {
+    quantityArticle = await db.query.articles.findFirst({
+      where: and(eq(articles.id, existingLine.articleId), eq(articles.tenantId, tenantId)),
+    });
+    if (!isPlanningRole && quantityArticle && quantityArticle.operatorCanUpdateQuantity !== true) {
+      throw new ForbiddenError("Du har inte behörighet att ändra antal för denna artikel.");
+    }
+  }
+
   const line = await storage.updateWorkOrderLine(req.params.id, updateData);
   if (!line) throw new NotFoundError("Orderrad");
+
+  // Kap 5 (master-spec): fri metadata-uppdatering. När antalet ändrats och artikeln
+  // har free_metadata_update + ett kopplat kvantitets-metadatafält skrivs det nya
+  // antalet tillbaka till objektets metadata. Best-effort — blockerar aldrig svaret.
+  if (quantityChanging && quantityArticle?.freeMetadataUpdate && quantityArticle.quantityMetadataField && workOrder?.objectId) {
+    try {
+      await writeArticleMetadataOnObject(
+        workOrder.objectId,
+        quantityArticle.quantityMetadataField,
+        String(line.quantity ?? updateData.quantity),
+        tenantId,
+        `auto:qty:${line.id}`,
+      );
+    } catch (metaErr) {
+      console.error("[kap5-quantity-writeback] Misslyckades skriva tillbaka antal till objekt-metadata:", metaErr);
+    }
+  }
 
   res.json(line);
 }));
