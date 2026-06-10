@@ -115,7 +115,7 @@ function normalizeDayString(value: Date | string): string {
   return Number.isNaN(d.getTime()) ? s : dateToDayString(d);
 }
 
-interface CascadeOrder {
+export interface CascadeOrder {
   id: string;
   title: string;
   scheduledStartTime: string | null;
@@ -130,7 +130,7 @@ interface CascadeOrder {
  * (en uppgift kan aldrig starta innan föregående (försenade) uppgift slutat,
  * men inte heller tidigare än sin ursprungliga starttid).
  */
-function computeDownstreamCascade(orders: CascadeOrder[], delayMinutes: number): DownstreamEtaEntry[] {
+export function computeDownstreamCascade(orders: CascadeOrder[], delayMinutes: number): DownstreamEtaEntry[] {
   const withStart = orders
     .map(o => ({ o, startMin: parseTimeToMinutes(o.scheduledStartTime) }))
     .filter((x): x is { o: CascadeOrder; startMin: number } => x.startMin !== null)
@@ -184,7 +184,7 @@ function computeDownstreamCascade(orders: CascadeOrder[], delayMinutes: number):
   return result;
 }
 
-interface AltDayChoice {
+export interface AltDayChoice {
   dayString: string; // "YYYY-MM-DD"
   weekday: string; // svenskt veckodagsnamn
   loadMinutes: number; // resursens belastning den dagen
@@ -197,7 +197,7 @@ interface AltDayChoice {
  * om inga vardagar återstår denna vecka faller vi tillbaka på nästa vardag.
  * `loadByDay` är resursens redan planerade produktion (min) per dagsträng.
  */
-function pickAlternativeDay(loadByDay: Map<string, number>): AltDayChoice | null {
+export function pickAlternativeDay(loadByDay: Map<string, number>): AltDayChoice | null {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const todayDow = today.getDay() || 7; // 1=mån … 7=sön
