@@ -18,6 +18,8 @@ interface SuggestionAction {
   workOrderTitle?: string;
   targetResourceId?: string;
   targetResourceName?: string;
+  scheduledDate?: string;
+  scheduledStartTime?: string;
 }
 
 interface DisruptionSuggestion {
@@ -26,6 +28,17 @@ interface DisruptionSuggestion {
   description: string;
   score: number;
   actions: SuggestionAction[];
+}
+
+interface DownstreamEtaEntry {
+  workOrderId: string;
+  workOrderTitle: string;
+  originalStartTime: string | null;
+  newEtaTime: string | null;
+  delayMinutes: number;
+  windowEnd: string | null;
+  windowRisk: boolean;
+  riskReason?: string;
 }
 
 interface DisruptionEvent {
@@ -39,6 +52,7 @@ interface DisruptionEvent {
   suggestions: DisruptionSuggestion[];
   status: "active" | "resolved" | "dismissed";
   decisionTrace: Array<{ step: string; detail: string; timestamp: string }>;
+  downstreamEta?: DownstreamEtaEntry[];
 }
 
 const typeIcons: Record<string, typeof AlertTriangle> = {
@@ -151,6 +165,52 @@ export function DisruptionPanel() {
                       <div className="text-xs text-muted-foreground">
                         {event.affectedWorkOrderIds.length} jobb påverkas
                       </div>
+
+                      {event.downstreamEta && event.downstreamEta.length > 0 && (
+                        <div className="space-y-1.5" data-testid={`downstream-eta-${event.id}`}>
+                          <div className="flex items-center gap-1 text-xs font-medium">
+                            <Clock className="h-3 w-3" />
+                            Nedströms ankomsttider
+                            {event.downstreamEta.some(e => e.windowRisk) && (
+                              <Badge className="text-[10px] px-1.5 py-0 bg-warning text-warning-foreground ml-1">
+                                {event.downstreamEta.filter(e => e.windowRisk).length} i riskzon
+                              </Badge>
+                            )}
+                          </div>
+                          <div className="space-y-0.5">
+                            {event.downstreamEta.map(eta => (
+                              <div
+                                key={eta.workOrderId}
+                                className={`flex items-start gap-2 px-2 py-1 rounded text-[11px] ${eta.windowRisk ? "bg-warning/10 border border-warning/40" : "bg-muted/40"}`}
+                                data-testid={`downstream-eta-row-${eta.workOrderId}`}
+                              >
+                                {eta.windowRisk ? (
+                                  <AlertTriangle className="h-3 w-3 mt-0.5 shrink-0 text-warning" />
+                                ) : (
+                                  <Clock className="h-3 w-3 mt-0.5 shrink-0 text-muted-foreground" />
+                                )}
+                                <div className="flex-1 min-w-0">
+                                  <div className="truncate font-medium">{eta.workOrderTitle}</div>
+                                  <div className="text-muted-foreground">
+                                    {eta.originalStartTime && eta.newEtaTime ? (
+                                      <span data-testid={`eta-shift-${eta.workOrderId}`}>
+                                        {eta.originalStartTime} → {eta.newEtaTime}
+                                        {eta.delayMinutes > 0 ? ` (+${eta.delayMinutes} min)` : " (oförändrad)"}
+                                      </span>
+                                    ) : (
+                                      <span>Ingen starttid satt</span>
+                                    )}
+                                    {eta.windowEnd && <span className="ml-1">· fönster t.o.m. {eta.windowEnd}</span>}
+                                  </div>
+                                  {eta.windowRisk && eta.riskReason && (
+                                    <div className="text-warning mt-0.5">{eta.riskReason}</div>
+                                  )}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
 
                       {event.suggestions.length > 0 && (
                         <div className="space-y-1.5">

@@ -17,6 +17,8 @@ export interface DisruptionEvent {
   suggestions: DisruptionSuggestion[];
   status: "active" | "resolved" | "dismissed";
   decisionTrace: DecisionTraceEntry[];
+  /** Nedströms ETA-kaskad (endass för significant_delay). */
+  downstreamEta?: DownstreamEtaEntry[];
 }
 
 export interface DisruptionSuggestion {
@@ -37,6 +39,21 @@ export interface SuggestionAction {
   scheduledStartTime?: string;
 }
 
+/**
+ * Nedströms ETA-kaskad: en post per återstående uppgift på den drabbade
+ * resursens dag, med ny beräknad ankomsttid och flagga för tidsfönster-risk.
+ */
+export interface DownstreamEtaEntry {
+  workOrderId: string;
+  workOrderTitle: string;
+  originalStartTime: string | null; // "HH:MM" enligt ursprunglig plan
+  newEtaTime: string | null; // "HH:MM" efter kaskad
+  delayMinutes: number; // hur många min uppgiften skjuts fram
+  windowEnd: string | null; // önskat/planerat fönster-slut "HH:MM"
+  windowRisk: boolean; // ankomst riskerar hamna utanför fönstret
+  riskReason?: string;
+}
+
 interface DecisionTraceEntry {
   step: string;
   detail: string;
@@ -51,6 +68,155 @@ function generateId(): string {
 
 function trace(entries: DecisionTraceEntry[], step: string, detail: string) {
   entries.push({ step, detail, timestamp: new Date().toISOString() });
+}
+
+const SWEDISH_WEEKDAYS = ["söndag", "måndag", "tisdag", "onsdag", "torsdag", "fredag", "lördag"];
+const FINISHED_STATUSES = ["utford", "fakturerad", "avbruten"];
+
+/** Parsa "HH:MM" → minuter sedan midnatt, eller null. */
+function parseTimeToMinutes(t?: string | null): number | null {
+  if (!t) return null;
+  const m = /^(\d{1,2}):(\d{2})/.exec(t.trim());
+  if (!m) return null;
+  const h = parseInt(m[1], 10);
+  const min = parseInt(m[2], 10);
+  if (Number.isNaN(h) || Number.isNaN(min)) return null;
+  return h * 60 + min;
+}
+
+/** Minuter sedan midnatt → "HH:MM" (klamras inom dygnet för visning). */
+function minutesToTime(min: number): string {
+  const wrapped = ((Math.round(min) % 1440) + 1440) % 1440;
+  const h = Math.floor(wrapped / 60);
+  const m = wrapped % 60;
+  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+}
+
+/** Tidsstämpel → tid-på-dygnet i minuter (lokal tid), eller null. */
+function timestampToMinutesOfDay(d?: Date | string | null): number | null {
+  if (!d) return null;
+  const date = d instanceof Date ? d : new Date(d);
+  if (Number.isNaN(date.getTime())) return null;
+  return date.getHours() * 60 + date.getMinutes();
+}
+
+function dateToDayString(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+/** Normalisera ett scheduledDate-värde (Date eller sträng) till lokal "YYYY-MM-DD". */
+function normalizeDayString(value: Date | string): string {
+  if (value instanceof Date) return dateToDayString(value);
+  const s = String(value);
+  // Rena datumsträngar ("2026-06-10" eller "2026-06-10T..") tas som lokal dag.
+  const m = /^(\d{4}-\d{2}-\d{2})/.exec(s);
+  if (m) return m[1];
+  const d = new Date(s);
+  return Number.isNaN(d.getTime()) ? s : dateToDayString(d);
+}
+
+interface CascadeOrder {
+  id: string;
+  title: string;
+  scheduledStartTime: string | null;
+  estimatedDuration: number;
+  windowEndMin: number | null;
+}
+
+/**
+ * Räkna om nedströms-ETA för en resurs dagssekvens efter en försening.
+ * Första återstående uppgiften skjuts fram med hela förseningen; därefter
+ * absorberar naturliga luckor mellan uppgifter en del av förseningen
+ * (en uppgift kan aldrig starta innan föregående (försenade) uppgift slutat,
+ * men inte heller tidigare än sin ursprungliga starttid).
+ */
+function computeDownstreamCascade(orders: CascadeOrder[], delayMinutes: number): DownstreamEtaEntry[] {
+  const withStart = orders
+    .map(o => ({ o, startMin: parseTimeToMinutes(o.scheduledStartTime) }))
+    .filter((x): x is { o: CascadeOrder; startMin: number } => x.startMin !== null)
+    .sort((a, b) => a.startMin - b.startMin);
+  const withoutStart = orders.filter(o => parseTimeToMinutes(o.scheduledStartTime) === null);
+
+  const result: DownstreamEtaEntry[] = [];
+  let prevNewEnd: number | null = null;
+
+  for (let i = 0; i < withStart.length; i++) {
+    const { o, startMin } = withStart[i];
+    const newStart: number = i === 0 ? startMin + delayMinutes : Math.max(startMin, prevNewEnd ?? startMin);
+    const dur = o.estimatedDuration || 60;
+    prevNewEnd = newStart + dur;
+    const delay = Math.max(0, newStart - startMin);
+
+    let windowRisk = false;
+    let riskReason: string | undefined;
+    if (o.windowEndMin != null && newStart > o.windowEndMin) {
+      windowRisk = true;
+      riskReason = `Beräknad ankomst ${minutesToTime(newStart)} efter önskat fönster (t.o.m. ${minutesToTime(o.windowEndMin)})`;
+    } else if (newStart >= 1440) {
+      windowRisk = true;
+      riskReason = "Skjuts till efter arbetsdagens slut";
+    }
+
+    result.push({
+      workOrderId: o.id,
+      workOrderTitle: o.title,
+      originalStartTime: minutesToTime(startMin),
+      newEtaTime: minutesToTime(newStart),
+      delayMinutes: delay,
+      windowEnd: o.windowEndMin != null ? minutesToTime(o.windowEndMin) : null,
+      windowRisk,
+      riskReason,
+    });
+  }
+
+  for (const o of withoutStart) {
+    result.push({
+      workOrderId: o.id,
+      workOrderTitle: o.title,
+      originalStartTime: null,
+      newEtaTime: null,
+      delayMinutes,
+      windowEnd: o.windowEndMin != null ? minutesToTime(o.windowEndMin) : null,
+      windowRisk: false,
+    });
+  }
+
+  return result;
+}
+
+interface AltDayChoice {
+  dayString: string; // "YYYY-MM-DD"
+  weekday: string; // svenskt veckodagsnamn
+  loadMinutes: number; // resursens belastning den dagen
+  sameWeek: boolean;
+}
+
+/**
+ * Välj en alternativ dag (helst samma ISO-vecka, mån–fre) för att flytta en
+ * uppgift till. Vi väljer den minst belastade vardagen efter idag inom veckan;
+ * om inga vardagar återstår denna vecka faller vi tillbaka på nästa vardag.
+ * `loadByDay` är resursens redan planerade produktion (min) per dagsträng.
+ */
+function pickAlternativeDay(loadByDay: Map<string, number>): AltDayChoice | null {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const todayDow = today.getDay() || 7; // 1=mån … 7=sön
+  const daysUntilSunday = 7 - todayDow; // återstående dagar denna ISO-vecka
+
+  const candidates: AltDayChoice[] = [];
+  // Endast resten av DENNA ISO-vecka (mån–fre), från imorgon. Spec kräver
+  // "annan dag/tid samma vecka" — vi faller aldrig tillbaka på nästa vecka.
+  for (let offset = 1; offset <= daysUntilSunday; offset++) {
+    const d = new Date(today);
+    d.setDate(today.getDate() + offset);
+    const dow = d.getDay();
+    if (dow === 0 || dow === 6) continue; // hoppa helg
+    const ds = dateToDayString(d);
+    candidates.push({ dayString: ds, weekday: SWEDISH_WEEKDAYS[dow], loadMinutes: loadByDay.get(ds) || 0, sameWeek: true });
+  }
+  if (candidates.length === 0) return null;
+  candidates.sort((a, b) => a.loadMinutes - b.loadMinutes);
+  return candidates[0];
 }
 
 export function getActiveDisruptions(tenantId: string): DisruptionEvent[] {
@@ -323,53 +489,119 @@ export async function triggerSignificantDelay(
   const decisionTrace: DecisionTraceEntry[] = [];
   trace(decisionTrace, "trigger", `Jobb ${workOrderTitle} tar ${ratio.toFixed(1)}x längre tid (${actualDuration} vs ${estimatedDuration} min)`);
 
-  const today = new Date().toISOString().split("T")[0];
   const allOrders = await storage.getWorkOrders(tenantId);
+
+  // Förankra dagen till det FÖRSENADE jobbets planerade dag (ej server-UTC-"idag")
+  // så kaskaden alltid gäller rätt dagssekvens, även kring tidszonsgränser.
+  const delayedOrder = allOrders.find(o => o.id === workOrderId);
+  const anchorDay = delayedOrder?.scheduledDate
+    ? normalizeDayString(delayedOrder.scheduledDate)
+    : normalizeDayString(new Date());
+  const delayedStartMin = parseTimeToMinutes(delayedOrder?.scheduledStartTime ?? null);
+
   const remainingOrders = allOrders.filter(o => {
     if (o.resourceId !== resourceId || !o.scheduledDate) return false;
-    const dateStr = o.scheduledDate instanceof Date
-      ? o.scheduledDate.toISOString().split("T")[0]
-      : String(o.scheduledDate).split("T")[0];
-    return dateStr === today && o.id !== workOrderId && !["utford", "fakturerad", "avbruten"].includes(o.orderStatus);
+    if (o.id === workOrderId || FINISHED_STATUSES.includes(o.orderStatus)) return false;
+    if (normalizeDayString(o.scheduledDate) !== anchorDay) return false;
+    // Endast nedströms: jobb som startar på/efter det försenade jobbet (eller saknar
+    // starttid och därmed inte kan placeras före det i sekvensen).
+    if (delayedStartMin != null) {
+      const startMin = parseTimeToMinutes(o.scheduledStartTime ?? null);
+      if (startMin != null && startMin < delayedStartMin) return false;
+    }
+    return true;
   });
 
   const delayMinutes = actualDuration - estimatedDuration;
   trace(decisionTrace, "impact", `${delayMinutes} min försening, ${remainingOrders.length} resterande jobb påverkas`);
 
+  // --- Nedströms ETA-kaskad: räkna om ankomsttid för ALLA resterande jobb ---
+  const cascadeOrders: CascadeOrder[] = remainingOrders.map(o => ({
+    id: o.id,
+    title: o.title || `Order ${o.id.slice(0, 8)}`,
+    scheduledStartTime: o.scheduledStartTime ?? null,
+    estimatedDuration: o.estimatedDuration || 60,
+    // Önskat/planerat fönster-slut: planerat fönster först, annars önskad leverans.
+    windowEndMin: timestampToMinutesOfDay(o.plannedWindowEnd ?? o.desiredDeliveryEnd ?? null),
+  }));
+  const downstreamEta = computeDownstreamCascade(cascadeOrders, delayMinutes);
+  const atRiskCount = downstreamEta.filter(e => e.windowRisk).length;
+  trace(
+    decisionTrace,
+    "eta_cascade",
+    `Nedströms-ETA omräknad för ${downstreamEta.length} jobb; ${atRiskCount} riskerar sitt tidsfönster`,
+  );
+
+  const etaByOrderId = new Map(downstreamEta.map(e => [e.workOrderId, e]));
+
   const suggestions: DisruptionSuggestion[] = [];
 
   if (remainingOrders.length > 0) {
-    const actions: SuggestionAction[] = remainingOrders.map(o => ({
-      type: "reschedule" as const,
-      workOrderId: o.id,
-      workOrderTitle: o.title || `Order ${o.id.slice(0, 8)}`,
-      targetResourceId: resourceId,
-      targetResourceName: resourceName,
-    }));
+    // Förslag 1: skjut fram resterande jobb enligt kaskaden (skriver nya starttider).
+    const actions: SuggestionAction[] = remainingOrders.map(o => {
+      const eta = etaByOrderId.get(o.id);
+      return {
+        type: "reschedule" as const,
+        workOrderId: o.id,
+        workOrderTitle: o.title || `Order ${o.id.slice(0, 8)}`,
+        targetResourceId: resourceId,
+        targetResourceName: resourceName,
+        scheduledStartTime: eta?.newEtaTime ?? undefined,
+      };
+    });
 
     suggestions.push({
       id: "sug-delay-adjust",
-      label: `Skjut fram resterande ${remainingOrders.length} jobb med ${delayMinutes} min`,
-      description: `Uppdatera starttider för resterande jobb denna dag`,
+      label: `Skjut fram resterande ${remainingOrders.length} jobb`,
+      description: atRiskCount > 0
+        ? `Uppdatera starttider enligt kaskaden — ${atRiskCount} jobb riskerar sitt tidsfönster`
+        : `Uppdatera starttider för resterande jobb denna dag`,
       score: 70,
       actions,
     });
 
-    if (remainingOrders.length > 1) {
-      const lastOrder = remainingOrders[remainingOrders.length - 1];
-      suggestions.push({
-        id: "sug-delay-move-last",
-        label: `Flytta sista jobbet till imorgon`,
-        description: `${lastOrder.title || "Sista jobbet"} omplaneras till nästa dag`,
-        score: 50,
-        actions: [{
-          type: "reschedule",
-          workOrderId: lastOrder.id,
-          workOrderTitle: lastOrder.title || `Order ${lastOrder.id.slice(0, 8)}`,
-          targetResourceId: resourceId,
-          targetResourceName: resourceName,
-        }],
-      });
+    // Förslag 2 (alternativfönster): flytta det mest utsatta jobbet till annan
+    // dag samma vecka för att lyfta bort risk/belastning.
+    const riskTarget = remainingOrders.find(o => etaByOrderId.get(o.id)?.windowRisk)
+      || remainingOrders[remainingOrders.length - 1];
+    if (riskTarget) {
+      // Resursens belastning per dag (produktion, min) för veckans val.
+      const loadByDay = new Map<string, number>();
+      for (const o of allOrders) {
+        if (o.resourceId !== resourceId || !o.scheduledDate) continue;
+        if (FINISHED_STATUSES.includes(o.orderStatus)) continue;
+        const ds = normalizeDayString(o.scheduledDate);
+        loadByDay.set(ds, (loadByDay.get(ds) || 0) + (o.estimatedDuration || 60));
+      }
+      const altDay = pickAlternativeDay(loadByDay);
+      if (altDay) {
+        const targetEta = etaByOrderId.get(riskTarget.id);
+        const keepStart = riskTarget.scheduledStartTime || "08:00";
+        const effectParts: string[] = [];
+        if (targetEta?.windowRisk) effectParts.push("tar bort tidsfönster-risk idag");
+        effectParts.push(`flyttar ${riskTarget.estimatedDuration || 60} min produktion till ${altDay.weekday}`);
+        effectParts.push(`vald dag har lägst belastning (${Math.round((altDay.loadMinutes) / 60 * 10) / 10} h planerat)`);
+        suggestions.push({
+          id: "sug-delay-alt-window",
+          label: `Flytta ${riskTarget.title || "jobbet"} till ${altDay.weekday} ${keepStart}`,
+          description: `Alternativfönster${altDay.sameWeek ? " (samma vecka)" : ""}: ${effectParts.join(", ")}.`,
+          score: targetEta?.windowRisk ? 75 : 55,
+          actions: [{
+            type: "reschedule",
+            workOrderId: riskTarget.id,
+            workOrderTitle: riskTarget.title || `Order ${riskTarget.id.slice(0, 8)}`,
+            targetResourceId: resourceId,
+            targetResourceName: resourceName,
+            scheduledDate: altDay.dayString,
+            scheduledStartTime: keepStart,
+          }],
+        });
+        trace(
+          decisionTrace,
+          "alt_window",
+          `Alternativfönster: ${riskTarget.title || riskTarget.id} → ${altDay.dayString} (${altDay.weekday}), belastning ${altDay.loadMinutes} min`,
+        );
+      }
     }
   }
 
@@ -379,13 +611,14 @@ export async function triggerSignificantDelay(
     tenantId,
     createdAt: new Date().toISOString(),
     title: `Fördröjning: ${workOrderTitle}`,
-    description: `${resourceName} — jobbet tar ${ratio.toFixed(1)}x längre (+${delayMinutes} min). ${remainingOrders.length} efterföljande jobb påverkas.`,
-    severity: ratio > 2.0 ? "critical" : "warning",
+    description: `${resourceName} — jobbet tar ${ratio.toFixed(1)}x längre (+${delayMinutes} min). ${remainingOrders.length} efterföljande jobb påverkas${atRiskCount > 0 ? `, ${atRiskCount} riskerar tidsfönster` : ""}.`,
+    severity: ratio > 2.0 || atRiskCount > 0 ? "critical" : "warning",
     affectedResourceId: resourceId,
     affectedWorkOrderIds: [workOrderId, ...remainingOrders.map(o => o.id)],
     suggestions,
     status: "active",
     decisionTrace,
+    downstreamEta,
   };
 
   addDisruption(tenantId, event);
@@ -506,24 +739,56 @@ export async function applySuggestion(
 
   const details: string[] = [];
   let applied = 0;
+  let datesMoved = false;
   const today = new Date().toISOString().split("T")[0];
 
   for (const action of suggestion.actions) {
     try {
+      // Defense-in-depth: verifiera att ordern tillhör tenanten innan UPDATE
+      // (storage.updateWorkOrder är en rå-ID-helper utan tenant-predikat).
+      const existing = await storage.getWorkOrder(action.workOrderId);
+      if (!existing || existing.tenantId !== tenantId) {
+        details.push(`Fel: ${action.workOrderTitle || action.workOrderId} tillhör inte denna tenant`);
+        continue;
+      }
+
       if (action.type === "reassign" || action.type === "insert") {
         await storage.updateWorkOrder(action.workOrderId, {
           resourceId: action.targetResourceId,
           scheduledDate: action.scheduledDate ? new Date(action.scheduledDate) : new Date(today),
           orderStatus: "planerad_resurs",
         });
+        if (action.scheduledDate) datesMoved = true;
         details.push(`${action.workOrderTitle || action.workOrderId} → ${action.targetResourceName || action.targetResourceId}`);
         applied++;
       } else if (action.type === "reschedule") {
-        details.push(`${action.workOrderTitle || action.workOrderId}: tider uppdaterade`);
+        const update: Partial<{ scheduledDate: Date; scheduledStartTime: string }> = {};
+        if (action.scheduledDate) update.scheduledDate = new Date(action.scheduledDate);
+        if (action.scheduledStartTime) update.scheduledStartTime = action.scheduledStartTime;
+        if (Object.keys(update).length > 0) {
+          await storage.updateWorkOrder(action.workOrderId, update);
+          if (action.scheduledDate) datesMoved = true;
+          const moved = action.scheduledDate ? ` → ${action.scheduledDate}` : "";
+          const at = action.scheduledStartTime ? ` ${action.scheduledStartTime}` : "";
+          details.push(`${action.workOrderTitle || action.workOrderId}: omplanerad${moved}${at}`);
+        } else {
+          details.push(`${action.workOrderTitle || action.workOrderId}: tider uppdaterade`);
+        }
         applied++;
       }
     } catch (err) {
       details.push(`Fel: ${action.workOrderTitle || action.workOrderId} kunde ej uppdateras`);
+    }
+  }
+
+  // Berörda dagars KPI:er/risk räknas om när jobb flyttats till annan dag.
+  if (datesMoved) {
+    try {
+      const { computeTenantSlaRisk } = await import("./services/sla-risk-engine");
+      await computeTenantSlaRisk(tenantId);
+      details.push("SLA-risk omräknad för berörda dagar");
+    } catch (err) {
+      console.error("[disruption] SLA-risk recompute failed:", err);
     }
   }
 
