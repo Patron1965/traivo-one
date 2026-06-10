@@ -188,6 +188,7 @@ interface ArticleFormData {
   dependencyCriticality: string;
   isStructure: boolean;
   isComponent: boolean;
+  isGeoDependent: boolean;
   defaultMetadataAssociation: string;
   stockLocation: string;
   supplierNumbers: string[];
@@ -245,6 +246,7 @@ const emptyFormData: ArticleFormData = {
   dependencyCriticality: "critical",
   isStructure: false,
   isComponent: false,
+  isGeoDependent: true,
   defaultMetadataAssociation: "",
   stockLocation: "",
   supplierNumbers: [],
@@ -662,6 +664,7 @@ export default function ArticlesPage() {
       dependencyCriticality: (article as any).dependencyCriticality ?? "critical",
       isStructure: (article as any).isStructure ?? false,
       isComponent: (article as any).isComponent ?? false,
+      isGeoDependent: (article as any).isGeoDependent ?? true,
       defaultMetadataAssociation: article.defaultMetadataAssociation || "",
       stockLocation: article.stockLocation || "",
       supplierNumbers: article.supplierNumbers || [],
@@ -2104,6 +2107,22 @@ export default function ArticlesPage() {
                 </div>
               )}
 
+              <div className="space-y-2 rounded-md border border-border p-3" data-testid="section-geo-dependent">
+                <label className="flex items-start gap-2 cursor-pointer text-sm">
+                  <input
+                    type="checkbox"
+                    className="mt-0.5"
+                    checked={!formData.isGeoDependent}
+                    onChange={(e) => setFormData({ ...formData, isGeoDependent: !e.target.checked })}
+                    data-testid="checkbox-not-geo-dependent"
+                  />
+                  <span>Ej beroende av objektets geografiska position</span>
+                </label>
+                <p className="text-xs text-muted-foreground">
+                  Normalt ärver artikeln objektets geografiska position för planering och ruttoptimering. Kryssa i för artiklar som inte behöver geopositionering (t.ex. administrativa eller centralt utförda poster).
+                </p>
+              </div>
+
               </FormSection>
               <FormSection title="Metadata-koppling" icon={<Database className="h-4 w-4" />} description="Koppla artikeln till metadata som hämtas/lämnas vid utförande" testId="section-metadata">
 
@@ -2380,6 +2399,7 @@ export default function ArticlesPage() {
                           </SelectTrigger>
                           <SelectContent>
                             <SelectItem value="equals">Lika med</SelectItem>
+                            <SelectItem value="contains">Innehåller</SelectItem>
                             <SelectItem value="greater">Större än</SelectItem>
                             <SelectItem value="less">Mindre än</SelectItem>
                             <SelectItem value="has_value">Fältet har ett värde</SelectItem>

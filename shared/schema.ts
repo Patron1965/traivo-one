@@ -631,6 +631,10 @@ export const articles = pgTable("articles", {
   // Komponentartikel = child i BOM.
   isStructure: boolean("is_structure").default(false),
   isComponent: boolean("is_component").default(false),
+  // Geografiskt positionsberoende: artikelns tjänst/vara ärver objektets geo-position
+  // för planering (default på). Avmarkera för artiklar som inte behöver geopositionering
+  // (t.ex. administrativa eller centralt utförda poster).
+  isGeoDependent: boolean("is_geo_dependent").default(true),
   // Utförandekod som krävs (t.ex. "kranbil", "tvatt", "sug")
   executionCode: text("execution_code"),
   // Metadata-koppling (per Mats spec Funktion 3 & 7)
