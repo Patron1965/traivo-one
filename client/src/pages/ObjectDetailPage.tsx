@@ -8,6 +8,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { DeliveryPreferencesEditor } from "@/components/DeliveryPreferencesEditor";
 import { ObjectHistoryArchiveTab } from "@/components/ObjectHistoryArchiveTab";
 import { ObjectVignetteSection } from "@/components/ObjectVignetteSection";
+import { ObjectMetadataForm, type MetadataFormEntry, type MetadataFormType } from "@/components/ObjectMetadataForm";
 import { ObjectTimeline } from "@/components/timeline/ObjectTimeline";
 import InvoiceRecipientsCard from "@/components/InvoiceRecipientsCard";
 import ObjectPayersCard from "@/components/ObjectPayersCard";
@@ -1616,174 +1617,28 @@ export default function ObjectDetailPage() {
 
         {/* ==================== METADATA ==================== */}
         <TabsContent value="metadata">
-          <Card>
-            <CardHeader className="pb-3">
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-base flex items-center gap-2">
-                  <FileText className="h-4 w-4" /> Metadata
-                </CardTitle>
-                <MetadataAddButton
+          <ObjectMetadataForm
+            objectId={objectId}
+            entries={metadata as MetadataFormEntry[]}
+            types={metadataTypes as MetadataFormType[]}
+            onAdd={(data) => addMetadataMutation.mutate(data)}
+            isAdding={addMetadataMutation.isPending}
+            onSoftDelete={(katalogId) => softDeleteMetadataMutation.mutate(katalogId)}
+            onRestore={(katalogId) => restoreMetadataMutation.mutate(katalogId)}
+            softDeletePending={softDeleteMetadataMutation.isPending}
+            restorePending={restoreMetadataMutation.isPending}
+            onReorder={(orderedKatalogIds) => reorderMetadataMutation.mutate(orderedKatalogIds)}
+            reorderPending={reorderMetadataMutation.isPending}
+            renderHistoryButton={(entry) =>
+              entry.katalog?.kronologiskVisning ? (
+                <MetadataHistorikButton
                   objectId={objectId}
-                  metadataTypes={metadataTypes}
-                  onAdd={(data) => addMetadataMutation.mutate(data)}
-                  isPending={addMetadataMutation.isPending}
+                  katalogId={entry.metadataKatalogId || ""}
+                  katalogNamn={entry.katalog?.namn || ""}
                 />
-              </div>
-            </CardHeader>
-            <CardContent>
-              {metadata.length > 0 ? (
-                <div className="divide-y">
-                  {metadata.map((m, idx) => {
-                    const isInherited = m.source === "inherited";
-                    const isSystem = isReadonlyMetadataOrigin(m.metod);
-                    const isSoftDeleted = !!m.softDeleted || !!m.raderad;
-                    // Tombstone som stryker ett ärvt värde är en lokal rad
-                    // (source='local') men har upplöst ärvt ursprung. Visa då
-                    // ärvd-ursprung ("Ärvd från X") istället för "Egen".
-                    const isInheritedRemoval =
-                      isSoftDeleted && (m.inheritedFromName != null || m.inheritedValue != null);
-                    const isInheritedOrigin = isInherited || isInheritedRemoval;
-                    const rawDisplay = m.vardeString ?? m.vardeInteger ?? m.vardeDecimal ??
-                      (m.vardeBoolean !== null && m.vardeBoolean !== undefined ? (m.vardeBoolean ? "Ja" : "Nej") : null) ??
-                      (m.vardeDatetime ? new Date(m.vardeDatetime).toLocaleDateString("sv-SE") : null) ??
-                      (m.vardeJson ? JSON.stringify(m.vardeJson) : null) ?? null;
-                    // Tombstone utan eget värde: visa det borttagna ärvda värdet
-                    // (överstruket) så användaren ser exakt vad som togs bort.
-                    const displayValue =
-                      rawDisplay ?? (isSoftDeleted ? m.inheritedValue ?? null : null) ?? "—";
-                    const lastChanged = m.lastChangedAt ? new Date(m.lastChangedAt) : null;
-                    const showHistory = !!m.katalog?.kronologiskVisning;
-                    return (
-                      <div
-                        key={m.id}
-                        className={`flex items-center justify-between py-3 gap-2 ${isSoftDeleted ? "opacity-60" : ""}`}
-                        data-testid={`metadata-row-${m.id}`}
-                      >
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-center gap-2">
-                            <div className="flex flex-col gap-0.5">
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                className="h-4 w-5 p-0 text-muted-foreground"
-                                disabled={idx === 0 || reorderMetadataMutation.isPending}
-                                onClick={() => moveMetadata(idx, -1)}
-                                data-testid={`button-metadata-up-${m.id}`}
-                                aria-label="Flytta upp"
-                              >
-                                <ArrowUp className="h-3 w-3" />
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                className="h-4 w-5 p-0 text-muted-foreground"
-                                disabled={idx === metadata.length - 1 || reorderMetadataMutation.isPending}
-                                onClick={() => moveMetadata(idx, 1)}
-                                data-testid={`button-metadata-down-${m.id}`}
-                                aria-label="Flytta ner"
-                              >
-                                <ArrowDown className="h-3 w-3" />
-                              </Button>
-                            </div>
-                            <div className={`text-sm font-medium ${isSoftDeleted ? "line-through" : ""}`}>{m.katalog?.namn || "—"}</div>
-                          </div>
-                          <div className="text-xs text-muted-foreground flex items-center gap-2 flex-wrap pl-7">
-                            {m.katalog?.kategori && <span>{m.katalog.kategori}</span>}
-                            {m.metod && <span>{m.metod}</span>}
-                            {lastChanged && (
-                              <span className="inline-flex items-center gap-1" data-testid={`text-metadata-last-changed-${m.id}`}>
-                                <Clock className="h-3 w-3" />
-                                Senast ändrad {lastChanged.toLocaleString("sv-SE", { dateStyle: "short", timeStyle: "short" })}
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                        <div className="text-sm font-mono text-right flex items-center gap-2 shrink-0">
-                          <span className={isSoftDeleted ? "line-through" : ""}>{String(displayValue)}</span>
-                          {/* Ursprungsbadge: Systemgenererad / Ärvd (ev. ändrad) / Egen */}
-                          {isSystem ? (
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <Badge variant="outline" className="text-[10px] cursor-help inline-flex items-center gap-1" data-testid={`badge-metadata-origin-${m.id}`}>
-                                  <Cog className="h-3 w-3" /> Systemgenererad
-                                </Badge>
-                              </TooltipTrigger>
-                              <TooltipContent>Automatiskt satt av systemet ({m.metod})</TooltipContent>
-                            </Tooltip>
-                          ) : isInheritedOrigin ? (
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <Badge variant="outline" className="text-[10px] cursor-help inline-flex items-center gap-1" data-testid={`badge-metadata-origin-${m.id}`}>
-                                  <LinkIcon className="h-3 w-3" />
-                                  {m.inheritedFromName || m.fromObject?.namn ? `Ärvd från ${m.inheritedFromName || m.fromObject?.namn}` : "Ärvd"}
-                                </Badge>
-                              </TooltipTrigger>
-                              <TooltipContent>
-                                {isInheritedRemoval
-                                  ? `Ärvt värde borttaget${m.inheritedFromName ? ` (från ${m.inheritedFromName})` : ""}`
-                                  : m.fromObject?.namn ? `Ärvd från: ${m.fromObject.namn}` : "Ärvd från förälder"}
-                              </TooltipContent>
-                            </Tooltip>
-                          ) : (
-                            <Badge variant="secondary" className="text-[10px]" data-testid={`badge-metadata-origin-${m.id}`}>Egen</Badge>
-                          )}
-                          {/* Override: lokalt värde som skiljer sig från ärvt */}
-                          {m.overridden && !isInheritedOrigin && (
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <Badge variant="outline" className="text-[10px] cursor-help border-warning text-warning" data-testid={`badge-metadata-overridden-${m.id}`}>
-                                  Ärvd, men ändrad
-                                </Badge>
-                              </TooltipTrigger>
-                              <TooltipContent>
-                                {m.inheritedValue != null
-                                  ? `Ärvt värde: ${m.inheritedValue}${m.inheritedFromName ? ` (från ${m.inheritedFromName})` : ""}`
-                                  : "Skiljer sig från ärvt värde"}
-                              </TooltipContent>
-                            </Tooltip>
-                          )}
-                          {showHistory && (
-                            <MetadataHistorikButton
-                              objectId={objectId}
-                              katalogId={m.metadataKatalogId || ""}
-                              katalogNamn={m.katalog?.namn || ""}
-                            />
-                          )}
-                          {/* Återställ mjuk-raderat fält */}
-                          {isSoftDeleted ? (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="h-7 w-7 p-0"
-                              onClick={() => restoreMetadataMutation.mutate(m.metadataKatalogId || "")}
-                              disabled={restoreMetadataMutation.isPending || !m.metadataKatalogId}
-                              data-testid={`button-restore-metadata-${m.id}`}
-                              aria-label="Återställ"
-                            >
-                              <RotateCcw className="h-3.5 w-3.5" />
-                            </Button>
-                          ) : !isSystem && (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="h-7 w-7 p-0 text-destructive hover:text-destructive"
-                              onClick={() => softDeleteMetadataMutation.mutate(m.metadataKatalogId || "")}
-                              disabled={softDeleteMetadataMutation.isPending || !m.metadataKatalogId}
-                              data-testid={`button-delete-metadata-${m.id}`}
-                            >
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </Button>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              ) : (
-                <p className="text-sm text-muted-foreground">Ingen metadata registrerad.</p>
-              )}
-            </CardContent>
-          </Card>
+              ) : null
+            }
+          />
         </TabsContent>
 
         {/* ==================== KONTAKTER ==================== */}
@@ -3161,128 +3016,6 @@ export default function ObjectDetailPage() {
         </DialogContent>
       </Dialog>
     </div>
-  );
-}
-
-function MetadataAddButton({ objectId, metadataTypes, onAdd, isPending }: {
-  objectId: string;
-  metadataTypes: MetadataType[];
-  onAdd: (data: { objektId: string; metadataTypNamn: string; varde: string }) => void;
-  isPending: boolean;
-}) {
-  const [open, setOpen] = useState(false);
-  const [selectedType, setSelectedType] = useState("");
-  const [value, setValue] = useState("");
-
-  const selectedMetaType = metadataTypes.find((t) => t.namn === selectedType || t.id === selectedType);
-  const allowedValues = selectedMetaType?.allowedValues ?? null;
-  const hasAllowedValues = !!allowedValues && allowedValues.length > 0;
-
-  const sortedTypes = [...metadataTypes].sort((a, b) => {
-    const an = a.displayNumber ?? 9999;
-    const bn = b.displayNumber ?? 9999;
-    if (an !== bn) return an - bn;
-    return a.namn.localeCompare(b.namn, "sv");
-  });
-
-  const handleAdd = () => {
-    if (!selectedType) return;
-    onAdd({
-      objektId: objectId,
-      metadataTypNamn: selectedMetaType?.namn || selectedType,
-      varde: value,
-    });
-    setOpen(false);
-    setSelectedType("");
-    setValue("");
-  };
-
-  return (
-    <>
-      <Button
-        variant="outline"
-        size="sm"
-        onClick={() => setOpen(true)}
-        data-testid="button-add-metadata"
-      >
-        <Plus className="h-3.5 w-3.5 mr-1" /> Lägg till
-      </Button>
-      <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>Lägg till metadata</DialogTitle>
-            <DialogDescription>Välj metadatatyp och ange värde.</DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 py-2">
-            <div className="space-y-2">
-              <Label>Metadatatyp *</Label>
-              {metadataTypes.length > 0 ? (
-                <Select value={selectedType} onValueChange={(v) => { setSelectedType(v); setValue(""); }}>
-                  <SelectTrigger data-testid="select-metadata-type">
-                    <SelectValue placeholder="Välj typ..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {sortedTypes.map((t) => {
-                      const prefix = t.displayNumber != null ? `${t.displayNumber}. ` : "";
-                      const dropdownHint = t.allowedValues && t.allowedValues.length > 0 ? " · fasta val" : "";
-                      return (
-                        <SelectItem key={t.id || t.namn} value={t.namn}>
-                          {prefix}{t.namn} {t.kategori ? `(${t.kategori})` : ""}{dropdownHint}
-                        </SelectItem>
-                      );
-                    })}
-                  </SelectContent>
-                </Select>
-              ) : (
-                <Input
-                  value={selectedType}
-                  onChange={(e) => setSelectedType(e.target.value)}
-                  placeholder="Ange typnamn"
-                  data-testid="input-metadata-type"
-                />
-              )}
-            </div>
-            <div className="space-y-2">
-              <Label>Värde *</Label>
-              {hasAllowedValues ? (
-                <Select value={value} onValueChange={setValue} disabled={!selectedType}>
-                  <SelectTrigger data-testid="select-metadata-value">
-                    <SelectValue placeholder="Välj värde..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {allowedValues!.map((opt) => (
-                      <SelectItem key={opt} value={opt}>
-                        {opt}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              ) : (
-                <Input
-                  value={value}
-                  onChange={(e) => setValue(e.target.value)}
-                  placeholder="Ange värde"
-                  data-testid="input-metadata-value"
-                />
-              )}
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setOpen(false)} data-testid="button-cancel-metadata">
-              Avbryt
-            </Button>
-            <Button
-              onClick={handleAdd}
-              disabled={!selectedType || !value || isPending}
-              data-testid="button-save-metadata"
-            >
-              {isPending ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Plus className="h-4 w-4 mr-1" />}
-              Lägg till
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </>
   );
 }
 
