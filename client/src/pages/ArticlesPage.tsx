@@ -2442,7 +2442,9 @@ export default function ArticlesPage() {
                     </span>
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    T.ex. etablering = 1 per adress, tvätt = obegränsad
+                    Hur många gånger artikeln får beställas på samma adress. Lämna tomt för obegränsat.
+                    <br />
+                    Exempel: en etablering behövs bara en gång per adress – skriv 1. En tvätt kan göras hur ofta som helst – lämna tomt.
                   </p>
                 </div>
               </div>
