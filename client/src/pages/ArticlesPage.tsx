@@ -2128,7 +2128,7 @@ export default function ArticlesPage() {
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label>Hämta metadata (fetchMetadataCode)</Label>
+                  <Label>Hämta metadata</Label>
                   <Select
                     value={formData.fetchMetadataCode || "_none"}
                     onValueChange={(v) => {
@@ -2156,7 +2156,7 @@ export default function ArticlesPage() {
                   )}
                 </div>
                 <div className="space-y-2">
-                  <Label>Lämna metadata (leaveMetadataCode)</Label>
+                  <Label>Lämna metadata</Label>
                   <Select
                     value={formData.leaveMetadataCode || "_none"}
                     onValueChange={(v) => {
