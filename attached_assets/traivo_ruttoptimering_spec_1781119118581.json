@@ -1,0 +1,988 @@
+{
+  "metadata": {
+    "titel": "Traivo Planeringsmotor – Teknisk Specifikation",
+    "version": "1.0.0",
+    "datum": "2026-06-10",
+    "författare": "Baserad på Mats specifikation",
+    "beskrivning": "Omfattande teknisk specifikation för grovplanering, veckoplanering och dynamisk ruttoptimering för objektbaserad fältproduktion.",
+    "språk": "sv-SE"
+  },
+  "systemöversikt": {
+    "syfte": "Hantera stora mängder uppgifter (flera tusen samtidigt) och omvandla dessa till praktiskt genomförbara arbetsplaner för produktionsteam.",
+    "omfattning": "Tvåstegsoptimering: strategisk grovplanering följt av operativ veckoplanering med dynamisk omplanering i realtid.",
+    "mål": [
+      "Optimera kundens önskade leveranstid",
+      "Minimera restider genom geografisk närhet",
+      "Balansera tillgängliga resurser",
+      "Hantera arbetstider och tidsfönster",
+      "Maximera ekonomisk effektivitet",
+      "Kontinuerligt optimera utifrån verkliga förhållanden"
+    ],
+    "nivåer": {
+      "strategisk": {
+        "namn": "Grovplanering",
+        "frågor": [
+          "Var skall vi vara nästa vecka?",
+          "Vilken ort har störst tyngdpunkt?",
+          "Hur mycket produktion finns?",
+          "Hur ser kapacitetsutnyttjandet ut?"
+        ]
+      },
+      "operativ": {
+        "namn": "Veckoplanering",
+        "frågor": [
+          "Vilken dag skall jobbet utföras?",
+          "I vilken ordning skall jobben göras?",
+          "Hur lång blir restiden?",
+          "Hur påverkas veckan av förändringar?"
+        ]
+      }
+    }
+  },
+  "datamodell": {
+    "uppgift": {
+      "beskrivning": "En enskild arbetsuppgift som skall utföras i fält.",
+      "fält": {
+        "uppgift_id": {
+          "typ": "string",
+          "format": "UUID",
+          "beskrivning": "Unikt ID för uppgiften"
+        },
+        "objekt_id": {
+          "typ": "string",
+          "format": "UUID",
+          "beskrivning": "Referens till objekt/anläggning"
+        },
+        "objekt": {
+          "typ": "string",
+          "beskrivning": "Namn på objekt eller anläggning"
+        },
+        "adress": {
+          "typ": "string",
+          "beskrivning": "Gatuadress"
+        },
+        "postnummer": {
+          "typ": "string",
+          "pattern": "^[0-9]{3}\\s?[0-9]{2}$",
+          "beskrivning": "Svenskt postnummer, t.ex. '151 52'"
+        },
+        "ort": {
+          "typ": "string",
+          "beskrivning": "Ortnamn, t.ex. 'Södertälje'"
+        },
+        "distrikt": {
+          "typ": "string",
+          "beskrivning": "Geografiskt distrikt, t.ex. 'Stockholm Syd'"
+        },
+        "latitud": {
+          "typ": "number",
+          "format": "float64",
+          "beskrivning": "WGS84 latitud",
+          "exempel": 59.3293
+        },
+        "longitud": {
+          "typ": "number",
+          "format": "float64",
+          "beskrivning": "WGS84 longitud",
+          "exempel": 18.0686
+        },
+        "tjänst": {
+          "typ": "string",
+          "beskrivning": "Typ av tjänst eller arbetsmoment"
+        },
+        "produktionstid_timmar": {
+          "typ": "number",
+          "format": "float",
+          "beskrivning": "Uppskattad produktionstid i timmar"
+        },
+        "ordervärde_sek": {
+          "typ": "number",
+          "format": "float",
+          "beskrivning": "Ordervärde i SEK"
+        },
+        "tidigaste_datum": {
+          "typ": "string",
+          "format": "date (ISO 8601)",
+          "beskrivning": "Tidigaste utförandedatum"
+        },
+        "senaste_datum": {
+          "typ": "string",
+          "format": "date (ISO 8601)",
+          "beskrivning": "Senaste utförandedatum (deadline)"
+        },
+        "prioritet": {
+          "typ": "integer",
+          "min": 1,
+          "max": 5,
+          "beskrivning": "Prioritetsnivå (1 = högst)"
+        },
+        "särskilda_krav": {
+          "typ": "array",
+          "items": "string",
+          "beskrivning": "Lista med eventuella särskilda krav"
+        },
+        "status": {
+          "typ": "string",
+          "enum": [
+            "ej_planerad",
+            "grovplanerad",
+            "veckoplanerad",
+            "pågående",
+            "slutförd",
+            "avbokad"
+          ],
+          "beskrivning": "Aktuell status för uppgiften"
+        }
+      }
+    },
+    "objekt": {
+      "beskrivning": "En fysisk anläggning eller plats där arbete utförs.",
+      "fält": {
+        "objekt_id": {
+          "typ": "string",
+          "format": "UUID"
+        },
+        "namn": {
+          "typ": "string",
+          "beskrivning": "Namn på objektet/anläggningen"
+        },
+        "adress": {
+          "typ": "string"
+        },
+        "postnummer": {
+          "typ": "string"
+        },
+        "ort": {
+          "typ": "string"
+        },
+        "distrikt": {
+          "typ": "string"
+        },
+        "latitud": {
+          "typ": "number",
+          "format": "float64"
+        },
+        "longitud": {
+          "typ": "number",
+          "format": "float64"
+        },
+        "kontaktperson": {
+          "typ": "string"
+        },
+        "telefon": {
+          "typ": "string"
+        },
+        "åtkomstkrav": {
+          "typ": "string",
+          "beskrivning": "T.ex. nyckel, portkod, kontakt"
+        }
+      }
+    },
+    "team": {
+      "beskrivning": "Ett produktionsteam som utför arbete i fält.",
+      "fält": {
+        "team_id": {
+          "typ": "string",
+          "format": "UUID"
+        },
+        "namn": {
+          "typ": "string",
+          "beskrivning": "Teamnamn, t.ex. 'Team Stockholm Syd'"
+        },
+        "distrikt": {
+          "typ": "string",
+          "beskrivning": "Primärt verksamhetsområde"
+        },
+        "medlemmar": {
+          "typ": "array",
+          "items": "resurs_id",
+          "beskrivning": "Lista med resurs-ID:n"
+        },
+        "basposition": {
+          "typ": "object",
+          "beskrivning": "Teamets utgångspunkt (t.ex. kontor eller depå)",
+          "fält": {
+            "latitud": {
+              "typ": "number"
+            },
+            "longitud": {
+              "typ": "number"
+            },
+            "adress": {
+              "typ": "string"
+            }
+          }
+        },
+        "kapacitet_timmar_vecka": {
+          "typ": "number",
+          "standard": 40,
+          "beskrivning": "Total kapacitet i timmar per vecka"
+        }
+      }
+    },
+    "resurs": {
+      "beskrivning": "En enskild medarbetare eller resurs.",
+      "fält": {
+        "resurs_id": {
+          "typ": "string",
+          "format": "UUID"
+        },
+        "namn": {
+          "typ": "string"
+        },
+        "kompetenser": {
+          "typ": "array",
+          "items": "string",
+          "beskrivning": "Lista med certifieringar/kompetenser"
+        },
+        "bostadsposition": {
+          "typ": "object",
+          "beskrivning": "Bostad – används för beräkning av inställelsetid",
+          "fält": {
+            "latitud": {
+              "typ": "number"
+            },
+            "longitud": {
+              "typ": "number"
+            }
+          }
+        },
+        "arbetstid": {
+          "typ": "object",
+          "fält": {
+            "start": {
+              "typ": "string",
+              "format": "HH:MM",
+              "standard": "07:00"
+            },
+            "slut": {
+              "typ": "string",
+              "format": "HH:MM",
+              "standard": "19:00"
+            },
+            "arbetsdagar": {
+              "typ": "array",
+              "items": "string",
+              "standard": [
+                "måndag",
+                "tisdag",
+                "onsdag",
+                "torsdag"
+              ]
+            }
+          }
+        }
+      }
+    }
+  },
+  "grovplanering": {
+    "beskrivning": "Strategisk överblick över kommande veckor och månader. Analyserar samtliga framtida uppgifter och identifierar naturliga geografiska och tidsmässiga tyngdpunkter.",
+    "indata": "Samtliga uppgifter med status 'ej_planerad' som har tidigaste_datum och senaste_datum framåt i tiden.",
+    "geografisk_gruppering": {
+      "beskrivning": "Hierarkisk gruppering i tre nivåer för att identifiera naturliga kluster.",
+      "nivå_1_distrikt": {
+        "beskrivning": "Grov indelning i verksamhetsområden.",
+        "exempel": [
+          "Stockholm Syd",
+          "Stockholm Nord",
+          "Mälardalen",
+          "Sundsvall"
+        ],
+        "metod": "Fördefinierade distriktsgränser baserade på verksamhetsstruktur."
+      },
+      "nivå_2_postnummerområde": {
+        "beskrivning": "Gruppering på postnummernivå (de tre första siffrorna).",
+        "exempel": [
+          {
+            "kod": "151",
+            "ort": "Södertälje"
+          },
+          {
+            "kod": "171",
+            "ort": "Solna"
+          },
+          {
+            "kod": "172",
+            "ort": "Sundbyberg"
+          }
+        ],
+        "metod": "Prefix-matchning på postnummerfältet (första 3 siffror)."
+      },
+      "nivå_3_geografisk_närhet": {
+        "beskrivning": "Fingruppering baserad på faktiska koordinater. Identifierar verkliga geografiska kluster även när uppgifter ligger nära varandra men tillhör olika postnummerområden.",
+        "indata": [
+          "longitud",
+          "latitud"
+        ],
+        "metod": "Klusteralgoritm (k-means, hierarkisk klustring eller DBSCAN) applicerad på koordinater."
+      }
+    },
+    "tyngdpunktsberäkning": {
+      "beskrivning": "För varje tidsperiod (vecka) beräknas en geografisk och produktionsmässig tyngdpunkt.",
+      "output_per_period": {
+        "period": {
+          "typ": "string",
+          "format": "veckonummer",
+          "beskrivning": "T.ex. 'Vecka 32'"
+        },
+        "geografisk_mittpunkt": {
+          "typ": "object",
+          "fält": {
+            "latitud": {
+              "typ": "number",
+              "beskrivning": "Medelvärde av latitud för alla uppgifter i perioden"
+            },
+            "longitud": {
+              "typ": "number",
+              "beskrivning": "Medelvärde av longitud för alla uppgifter i perioden"
+            },
+            "ort": {
+              "typ": "string",
+              "beskrivning": "Närmaste ort till mittpunkten"
+            }
+          }
+        },
+        "totalt_ordervärde_sek": {
+          "typ": "number"
+        },
+        "totalt_antal_uppgifter": {
+          "typ": "integer"
+        },
+        "total_produktionstid_timmar": {
+          "typ": "number"
+        }
+      },
+      "exempeldata": [
+        {
+          "period": "Vecka 32",
+          "tyngdpunkt_ort": "Södertälje",
+          "antal_uppgifter": 42,
+          "produktionstid_timmar": 34,
+          "ordervärde_sek": 180000
+        },
+        {
+          "period": "Vecka 33",
+          "tyngdpunkt_ort": "Solna",
+          "antal_uppgifter": 55,
+          "produktionstid_timmar": 41,
+          "ordervärde_sek": 230000
+        }
+      ]
+    },
+    "kapacitetsberäkning": {
+      "beskrivning": "Beräknar kapacitetsutnyttjande per team och vecka.",
+      "mål": {
+        "produktionstid_timmar": 28,
+        "restid_och_inställelse_timmar": 12,
+        "total_veckokapacitet_timmar": 40
+      },
+      "fördelning_procent": {
+        "produktion": 70,
+        "restid_och_inställelse": 30
+      }
+    },
+    "visualisering": {
+      "beskrivning": "Tabellvy som ger planeraren överblick.",
+      "kolumner": [
+        "vecka",
+        "tyngdpunkt_ort",
+        "antal_uppgifter",
+        "ordervärde_sek",
+        "produktionstid_timmar"
+      ],
+      "exempeldata": [
+        {
+          "vecka": 31,
+          "tyngdpunkt_ort": "Södertälje",
+          "produktionstid_timmar": 26
+        },
+        {
+          "vecka": 32,
+          "tyngdpunkt_ort": "Solna",
+          "produktionstid_timmar": 29
+        },
+        {
+          "vecka": 33,
+          "tyngdpunkt_ort": "Sundbyberg",
+          "produktionstid_timmar": 31
+        }
+      ]
+    },
+    "överföring_till_veckoplanering": {
+      "beskrivning": "Planeraren markerar ett kluster och överför uppgifterna till en specifik arbetsvecka och team.",
+      "åtgärd": "Markera uppgifter → Välj vecka → Välj team → Skapa detaljplaneringsunderlag",
+      "exempel": {
+        "vecka": 32,
+        "team": "Team Stockholm Syd",
+        "resultat": "Detaljplaneringsunderlag skapas med alla markerade uppgifter."
+      }
+    }
+  },
+  "veckoplanering": {
+    "beskrivning": "Operativ detaljplanering. Skapar en verklig arbetsvecka med optimerade rutter per dag.",
+    "ruttoptimering": {
+      "beskrivning": "Optimerar dagliga rutter baserat på flera faktorer.",
+      "optimeringsfaktorer": [
+        "Vägnät – faktiska körvägar (ej fågelvägen)",
+        "Trafiksituation – realtidsdata eller historiska mönster",
+        "Tidsfönster – kundens önskade leveranstid",
+        "Produktionslängd – beräknad tid per uppgift",
+        "Arbetstid – teamets tillgängliga arbetstimmar"
+      ],
+      "algoritm": "VRP med tidsfönster (Vehicle Routing Problem with Time Windows)"
+    },
+    "arbetstid": {
+      "standard": {
+        "arbetsdag_start": "07:00",
+        "arbetsdag_slut": "19:00",
+        "arbetsdagar": [
+          "måndag",
+          "tisdag",
+          "onsdag",
+          "torsdag"
+        ],
+        "timmar_per_dag": 12,
+        "timmar_per_vecka": 40,
+        "kommentar": "Notera: 4 dagar × ~10h effektiv tid = 40h vecka (inkl. raster)"
+      }
+    },
+    "dagsfördelning": {
+      "beskrivning": "Systemet fördelar automatiskt uppgifter över veckans dagar baserat på geografisk närhet och ruttoptimering.",
+      "exempeldata": {
+        "vecka": 32,
+        "team": "Team Stockholm Syd",
+        "dagar": [
+          {
+            "dag": "måndag",
+            "orter": [
+              "Södertälje",
+              "Nykvarn",
+              "Järna"
+            ]
+          },
+          {
+            "dag": "tisdag",
+            "orter": [
+              "Södertälje",
+              "Salem"
+            ]
+          },
+          {
+            "dag": "onsdag",
+            "orter": [
+              "Botkyrka",
+              "Tumba"
+            ]
+          },
+          {
+            "dag": "torsdag",
+            "orter": []
+          }
+        ]
+      }
+    },
+    "tidsberäkningar": {
+      "beskrivning": "Systemet beräknar och redovisar fyra tidskategorier per dag och vecka.",
+      "kategorier": {
+        "produktionstid": {
+          "beskrivning": "Faktisk tid hos kund för att utföra arbete.",
+          "enhet": "timmar"
+        },
+        "restid": {
+          "beskrivning": "Tid mellan kunder (baserat på vägnät och trafikdata).",
+          "enhet": "timmar"
+        },
+        "inställelsetid": {
+          "beskrivning": "Resa mellan bostad/depå och första/sista kund på dagen.",
+          "enhet": "timmar"
+        },
+        "buffert": {
+          "beskrivning": "Tillgänglig reservtid som återstår efter planering.",
+          "enhet": "timmar"
+        }
+      },
+      "veckosummering_exempel": {
+        "produktion_timmar": 29.5,
+        "restid_timmar": 6.8,
+        "inställelse_timmar": 3.2,
+        "buffert_timmar": 0.5,
+        "totalt_timmar": 40.0
+      }
+    },
+    "drag_and_drop": {
+      "beskrivning": "Interaktiv planering där användaren kan flytta uppgifter.",
+      "flytta_mellan": [
+        "dagar",
+        "veckor",
+        "team"
+      ],
+      "beteende_vid_flytt": {
+        "automatisk_omkalkylering": true,
+        "omberäknar": [
+          "Rutter för berörda dagar",
+          "Restider",
+          "Beläggning per dag",
+          "Veckokapacitet"
+        ]
+      }
+    }
+  },
+  "dynamisk_omplanering": {
+    "beskrivning": "Realtidsuppdatering av planer baserat på faktiska händelser under pågående produktion.",
+    "triggers": {
+      "beskrivning": "Händelser som utlöser omplanering.",
+      "händelser": [
+        {
+          "typ": "trafikolycka",
+          "beskrivning": "Oplanerad trafikstörning som påverkar restider"
+        },
+        {
+          "typ": "köbildning",
+          "beskrivning": "Ökad restid på grund av trafik"
+        },
+        {
+          "typ": "vägavstängning",
+          "beskrivning": "Väg otillgänglig, alternativ rutt krävs"
+        },
+        {
+          "typ": "extra_arbete",
+          "beskrivning": "Uppgift tar längre tid än beräknat"
+        },
+        {
+          "typ": "avbokning",
+          "beskrivning": "Kund avbokar, tid frigörs"
+        },
+        {
+          "typ": "tidsavvikelse",
+          "beskrivning": "Faktisk tid avviker från planerad tid"
+        }
+      ]
+    },
+    "dynamisk_tidsberäkning": {
+      "beskrivning": "Om en uppgift avviker från beräknad tid justeras resten av dagen automatiskt.",
+      "exempel": {
+        "scenario": "Ett arbete beräknat till 1 timme tar i verkligheten 2 timmar.",
+        "åtgärder": [
+          "Flytta fram efterföljande jobb med 1 timme",
+          "Uppdatera ETA för alla efterföljande kunder",
+          "Varna för riskerade tidsfönster",
+          "Föreslå alternativ planering vid behov"
+        ]
+      }
+    },
+    "reoptimering": {
+      "beskrivning": "Vid större förändringar körs en fullständig reoptimering.",
+      "åtgärder": [
+        "Omberäkna rutter med aktuell trafikdata",
+        "Omfördela uppgifter mellan dagar om nödvändigt",
+        "Justera kluster baserat på nya förutsättningar",
+        "Balansera produktion mot restid"
+      ]
+    }
+  },
+  "algoritmer": {
+    "klusteralgoritmer": {
+      "beskrivning": "Algoritmer för att identifiera geografiska tyngdpunkter och gruppera uppgifter.",
+      "k_means": {
+        "beskrivning": "Partitioneringsalgoritm som delar upp datapunkter i k kluster baserat på avstånd till klustercentrum.",
+        "användning": "Identifiera huvudsakliga geografiska arbetsområden per vecka.",
+        "parametrar": {
+          "k": "Antal kluster (kan motsvara antal team eller antal arbetsdagar)",
+          "indata": "Koordinater (latitud, longitud) för alla uppgifter",
+          "avståndsmått": "Euklidiskt avstånd (eller haversine för geografisk precision)"
+        }
+      },
+      "hierarkisk_klustring": {
+        "beskrivning": "Bygger en hierarki av kluster, antingen bottom-up (agglomerative) eller top-down (divisive).",
+        "användning": "Stödjer den hierarkiska grupperingen: distrikt → postnummer → geografisk närhet.",
+        "fördelar": [
+          "Kräver inget fördefinierat antal kluster",
+          "Ger naturlig hierarki som matchar nivå 1-2-3-strukturen",
+          "Kan visualiseras som dendrogram"
+        ]
+      },
+      "kd_tree": {
+        "beskrivning": "Rumslig datastruktur för effektiv sökning av närmaste grannar i flerdimensionella rum.",
+        "användning": "Snabb sökning av geografiskt närliggande uppgifter. Skalar väl till tusentals punkter.",
+        "kodexempel_python": "from scipy.spatial import cKDTree\n\n# Exempelkoordinater (longitud, latitud)\npunkter = [(18.0686, 59.3293),\n           (18.0649, 59.3326),\n           (18.0576, 59.3347)]\n\n# Bygg k-d tree\nträd = cKDTree(punkter)\n\n# Referenspunkt att sortera mot (ex. en centralpunkt)\nreferens = (18.0650, 59.3300)\n\n# Beräkna avstånd och sortera\ndistanser, index = träd.query(referens, k=len(punkter))\n\n# Sorterade punkter i närhetsordning\nsorterade_punkter = [punkter[i] for i in index]\n\nprint(sorterade_punkter)"
+      },
+      "dbscan": {
+        "beskrivning": "Densitetsbaserad klustring som hittar kluster av godtycklig form.",
+        "användning": "Alternativ till k-means för nivå 3. Bra för att identifiera oregelbundna geografiska kluster och uteliggare."
+      }
+    },
+    "ruttoptimering_vrp": {
+      "beskrivning": "Vehicle Routing Problem with Time Windows (VRPTW). Klassiskt optimeringsproblem för att hitta optimala rutter.",
+      "parametrar": {
+        "depå": "Teamets utgångspunkt (bostad eller kontor)",
+        "kunder": "Lista med uppgifter (position, tidsfönster, servicetid)",
+        "fordon": "Antal tillgängliga team/resurser",
+        "tidsfönster": "Varje kunds önskade besökstid",
+        "servicetid": "Produktionstid per uppgift",
+        "kapacitet": "Max arbetstid per dag"
+      },
+      "optimeringskriterier": [
+        "Minimera total restid",
+        "Respektera alla tidsfönster",
+        "Hålla sig inom maximal arbetstid per dag",
+        "Balansera arbetsbelastning mellan dagar"
+      ],
+      "implementationsalternativ": [
+        "Google OR-Tools (öppen källkod, Python/C++)",
+        "OptaPlanner (Java-baserad)",
+        "VROOM (C++, snabb heuristik)",
+        "Egenutvecklad med heuristiker (nearest neighbor, 2-opt)"
+      ]
+    },
+    "iterativ_optimering": {
+      "beskrivning": "Systemet tar vid omfördelning hänsyn till framtida veckor för att undvika onödiga resor.",
+      "princip": "En uppgift som kan utföras vecka 32 eller 33 placeras i den vecka där den geografiskt passar bäst."
+    }
+  },
+  "användargränssnitt": {
+    "grovplaneringsvy": {
+      "beskrivning": "Strategisk översiktsvy med veckotabell och kartvisualisering.",
+      "komponenter": [
+        {
+          "typ": "tabell",
+          "kolumner": [
+            "Vecka",
+            "Tyngdpunkt",
+            "Antal uppgifter",
+            "Ordervärde",
+            "Produktion (h)"
+          ],
+          "interaktion": "Klick på rad visar detaljer och karta"
+        },
+        {
+          "typ": "karta",
+          "beskrivning": "Geografisk karta med klusterpunkter och tyngdpunkter markerade.",
+          "funktioner": [
+            "Zoom",
+            "Pan",
+            "Kluster-färgkodning",
+            "Tyngdpunktsmarkör"
+          ]
+        },
+        {
+          "typ": "kapacitetsindikator",
+          "beskrivning": "Visuell indikator för kapacitetsutnyttjande per vecka/team."
+        }
+      ]
+    },
+    "veckoplaneringsvy": {
+      "beskrivning": "Operativ vy med dagsindelning och drag-and-drop.",
+      "komponenter": [
+        {
+          "typ": "veckokalender",
+          "beskrivning": "Dagar som kolumner med uppgifter som kort.",
+          "interaktion": "Drag-and-drop mellan dagar, veckor och team"
+        },
+        {
+          "typ": "ruttkarta",
+          "beskrivning": "Karta som visar dagens rutt med ordning och restider."
+        },
+        {
+          "typ": "tidslinje",
+          "beskrivning": "Tidsbaserad vy med produktionstid, restid, inställelse och buffert."
+        },
+        {
+          "typ": "veckosummering",
+          "beskrivning": "Panel med total produktion, restid, inställelse, buffert."
+        }
+      ]
+    },
+    "drag_and_drop": {
+      "beteende": [
+        "Visuell feedback vid dragning (skugga, highlight av mål)",
+        "Omedelbar omkalkylering vid släpp",
+        "Ångra/återställ-funktion",
+        "Varning om flytten orsakar kapacitetsöverbelastning eller missade tidsfönster"
+      ]
+    }
+  },
+  "api_endpoints": {
+    "beskrivning": "Föreslagna REST API-endpoints för planeringsmotorn.",
+    "uppgifter": [
+      {
+        "metod": "GET",
+        "path": "/api/v1/uppgifter",
+        "beskrivning": "Hämta alla uppgifter med filtrering och paginering"
+      },
+      {
+        "metod": "GET",
+        "path": "/api/v1/uppgifter/{id}",
+        "beskrivning": "Hämta en specifik uppgift"
+      },
+      {
+        "metod": "POST",
+        "path": "/api/v1/uppgifter",
+        "beskrivning": "Skapa ny uppgift"
+      },
+      {
+        "metod": "PUT",
+        "path": "/api/v1/uppgifter/{id}",
+        "beskrivning": "Uppdatera en uppgift"
+      },
+      {
+        "metod": "DELETE",
+        "path": "/api/v1/uppgifter/{id}",
+        "beskrivning": "Ta bort en uppgift"
+      }
+    ],
+    "grovplanering": [
+      {
+        "metod": "GET",
+        "path": "/api/v1/grovplanering/tyngdpunkter",
+        "beskrivning": "Hämta tyngdpunktsberäkningar per vecka"
+      },
+      {
+        "metod": "GET",
+        "path": "/api/v1/grovplanering/kluster",
+        "beskrivning": "Hämta geografiska kluster för en period"
+      },
+      {
+        "metod": "GET",
+        "path": "/api/v1/grovplanering/kapacitet",
+        "beskrivning": "Hämta kapacitetsutnyttjande per team och vecka"
+      },
+      {
+        "metod": "POST",
+        "path": "/api/v1/grovplanering/överför",
+        "beskrivning": "Överför markerade uppgifter till veckoplanering"
+      }
+    ],
+    "veckoplanering": [
+      {
+        "metod": "GET",
+        "path": "/api/v1/veckoplanering/{team_id}/{vecka}",
+        "beskrivning": "Hämta veckoplan för ett team"
+      },
+      {
+        "metod": "POST",
+        "path": "/api/v1/veckoplanering/optimera",
+        "beskrivning": "Kör ruttoptimering för en veckoplan"
+      },
+      {
+        "metod": "PUT",
+        "path": "/api/v1/veckoplanering/flytta",
+        "beskrivning": "Flytta uppgift (drag-and-drop) och omberäkna"
+      },
+      {
+        "metod": "GET",
+        "path": "/api/v1/veckoplanering/{team_id}/{vecka}/summering",
+        "beskrivning": "Hämta veckosummering (produktion, restid, etc.)"
+      }
+    ],
+    "ruttoptimering": [
+      {
+        "metod": "POST",
+        "path": "/api/v1/rutter/optimera",
+        "beskrivning": "Beräkna optimal rutt för en uppsättning uppgifter"
+      },
+      {
+        "metod": "GET",
+        "path": "/api/v1/rutter/{dag_id}",
+        "beskrivning": "Hämta rutt för en specifik dag"
+      },
+      {
+        "metod": "POST",
+        "path": "/api/v1/rutter/omplanera",
+        "beskrivning": "Dynamisk omplanering vid avvikelse"
+      }
+    ],
+    "realtid": [
+      {
+        "metod": "POST",
+        "path": "/api/v1/realtid/statusuppdatering",
+        "beskrivning": "Rapportera faktisk tid och status från fält"
+      },
+      {
+        "metod": "GET",
+        "path": "/api/v1/realtid/eta/{uppgift_id}",
+        "beskrivning": "Hämta uppdaterad ETA för en uppgift"
+      },
+      {
+        "metod": "GET",
+        "path": "/api/v1/realtid/varningar",
+        "beskrivning": "Hämta aktiva varningar (riskerade tidsfönster etc.)"
+      }
+    ],
+    "team": [
+      {
+        "metod": "GET",
+        "path": "/api/v1/team",
+        "beskrivning": "Hämta alla team"
+      },
+      {
+        "metod": "GET",
+        "path": "/api/v1/team/{id}",
+        "beskrivning": "Hämta specifikt team med resurser och kapacitet"
+      }
+    ]
+  },
+  "exempeldata": {
+    "beskrivning": "Konkreta exempel från Mats specifikation för att illustrera systemets funktion.",
+    "exempel_uppgifter": [
+      {
+        "uppgift_id": "uppg-001",
+        "objekt": "Fastighet Södertälje Centrum",
+        "adress": "Storgatan 12",
+        "postnummer": "151 72",
+        "ort": "Södertälje",
+        "distrikt": "Stockholm Syd",
+        "latitud": 59.1955,
+        "longitud": 17.6253,
+        "tjänst": "Underhållsinspektion",
+        "produktionstid_timmar": 1.5,
+        "ordervärde_sek": 4500,
+        "tidigaste_datum": "2026-08-03",
+        "senaste_datum": "2026-08-14",
+        "prioritet": 2,
+        "status": "ej_planerad"
+      },
+      {
+        "uppgift_id": "uppg-002",
+        "objekt": "Kontorskomplex Solna",
+        "adress": "Industrivägen 8",
+        "postnummer": "171 48",
+        "ort": "Solna",
+        "distrikt": "Stockholm Nord",
+        "latitud": 59.36,
+        "longitud": 18.0,
+        "tjänst": "Serviceavtal",
+        "produktionstid_timmar": 2.0,
+        "ordervärde_sek": 6200,
+        "tidigaste_datum": "2026-08-10",
+        "senaste_datum": "2026-08-21",
+        "prioritet": 3,
+        "status": "ej_planerad"
+      }
+    ],
+    "exempel_team": {
+      "team_id": "team-sthlm-syd",
+      "namn": "Team Stockholm Syd",
+      "distrikt": "Stockholm Syd",
+      "basposition": {
+        "latitud": 59.275,
+        "longitud": 17.85,
+        "adress": "Depå Södertälje"
+      },
+      "kapacitet_timmar_vecka": 40
+    },
+    "exempel_veckoplan": {
+      "vecka": 32,
+      "team": "Team Stockholm Syd",
+      "dagar": [
+        {
+          "dag": "måndag",
+          "orter": [
+            "Södertälje",
+            "Nykvarn",
+            "Järna"
+          ],
+          "antal_uppgifter": 5,
+          "produktionstid_timmar": 7.5,
+          "restid_timmar": 1.8,
+          "inställelsetid_timmar": 0.8
+        },
+        {
+          "dag": "tisdag",
+          "orter": [
+            "Södertälje",
+            "Salem"
+          ],
+          "antal_uppgifter": 4,
+          "produktionstid_timmar": 8.0,
+          "restid_timmar": 1.5,
+          "inställelsetid_timmar": 0.8
+        },
+        {
+          "dag": "onsdag",
+          "orter": [
+            "Botkyrka",
+            "Tumba"
+          ],
+          "antal_uppgifter": 5,
+          "produktionstid_timmar": 7.5,
+          "restid_timmar": 1.8,
+          "inställelsetid_timmar": 0.8
+        },
+        {
+          "dag": "torsdag",
+          "orter": [
+            "Botkyrka"
+          ],
+          "antal_uppgifter": 3,
+          "produktionstid_timmar": 6.5,
+          "restid_timmar": 1.7,
+          "inställelsetid_timmar": 0.8
+        }
+      ],
+      "veckosummering": {
+        "produktion_timmar": 29.5,
+        "restid_timmar": 6.8,
+        "inställelse_timmar": 3.2,
+        "buffert_timmar": 0.5,
+        "totalt_timmar": 40.0
+      }
+    },
+    "exempel_tyngdpunkter": [
+      {
+        "vecka": 31,
+        "tyngdpunkt_ort": "Södertälje",
+        "antal_uppgifter": 38,
+        "produktionstid_timmar": 26,
+        "ordervärde_sek": 156000
+      },
+      {
+        "vecka": 32,
+        "tyngdpunkt_ort": "Södertälje",
+        "antal_uppgifter": 42,
+        "produktionstid_timmar": 34,
+        "ordervärde_sek": 180000
+      },
+      {
+        "vecka": 33,
+        "tyngdpunkt_ort": "Solna",
+        "antal_uppgifter": 55,
+        "produktionstid_timmar": 41,
+        "ordervärde_sek": 230000
+      }
+    ],
+    "exempel_dynamisk_omplanering": {
+      "scenario": "Jobb hos kund tar längre tid än planerat",
+      "original_tid_timmar": 1.0,
+      "faktisk_tid_timmar": 2.0,
+      "avvikelse_timmar": 1.0,
+      "systemåtgärder": [
+        "Efterföljande jobb på dagen flyttas fram 1 timme",
+        "ETA uppdateras för alla återstående kunder",
+        "Varning genereras: 'Kund Andersson AB riskerar att hamna utanför tidsfönster 15:00-17:00'",
+        "Alternativ föreslagen: 'Flytta Kund Andersson AB till tisdag, restidsvinst 12 min'"
+      ]
+    }
+  },
+  "tekniska_rekommendationer": {
+    "backend": {
+      "språk": "Python 3.11+",
+      "ramverk": "FastAPI eller Django REST Framework",
+      "optimeringsbibliotek": [
+        "scipy.spatial (cKDTree för geografisk sökning)",
+        "scikit-learn (k-means, DBSCAN, hierarkisk klustring)",
+        "Google OR-Tools (VRP med tidsfönster)",
+        "OSRM eller Google Maps API (faktiska restider och vägnät)"
+      ]
+    },
+    "frontend": {
+      "ramverk": "React eller Vue.js",
+      "kartbibliotek": "Leaflet eller Mapbox GL JS",
+      "drag_and_drop": "react-beautiful-dnd eller dnd-kit",
+      "visualisering": "Recharts, D3.js eller Plotly"
+    },
+    "databas": {
+      "primär": "PostgreSQL med PostGIS-tillägg för geografiska queries",
+      "cache": "Redis för realtidsdata och sessionshantering"
+    }
+  }
+}
