@@ -44,30 +44,62 @@ const GENERIC_INTERNAL_MESSAGE =
  * does not exist`), bara den trunkerade "Failed query"-texten. Plockar även ut
  * standard-fält från node-postgres-fel (`code`, `detail`, `column`, ...).
  */
+const PG_FIELDS = [
+  "code",
+  "detail",
+  "hint",
+  "schema",
+  "table",
+  "column",
+  "constraint",
+  "routine",
+  "severity",
+  "where",
+] as const;
+
+function cap(s: string, n: number): string {
+  return s.length > n ? `${s.slice(0, n)}…[${s.length - n} more]` : s;
+}
+
 function serializeError(err: unknown, depth = 0): unknown {
   if (!err || typeof err !== "object" || depth > 4) return err;
   const e = err as Record<string, unknown>;
   const out: Record<string, unknown> = {};
-  if (typeof e.message === "string") out.message = e.message;
-  if (typeof e.stack === "string") out.stack = e.stack;
-  for (const k of [
-    "code",
-    "detail",
-    "hint",
-    "schema",
-    "table",
-    "column",
-    "constraint",
-    "routine",
-    "severity",
-    "where",
-  ]) {
+  // Trunkera message/stack — Drizzles "Failed query"-message är enormt och
+  // trycker annars ut den faktiska PG-orsaken (cause) ur loggradens synliga del.
+  if (typeof e.message === "string") out.message = cap(e.message, 600);
+  if (typeof e.stack === "string") out.stack = cap(e.stack, 800);
+  for (const k of PG_FIELDS) {
     if (e[k] !== undefined) out[k] = e[k];
   }
   if (e.cause !== undefined && e.cause !== e) {
     out.cause = serializeError(e.cause, depth + 1);
   }
   return out;
+}
+
+/**
+ * Letar upp det djupaste node-postgres-felet i `cause`-kedjan och plockar ut
+ * ett kompakt, garanterat-synligt fält (`dbError`) med SQLSTATE m.m. PG-fel har
+ * en 5-teckens `code` (SQLSTATE) och/eller `severity`. Returnerar undefined om
+ * felet inte är ett DB-fel.
+ */
+function extractDbError(
+  err: unknown,
+  depth = 0,
+): Record<string, unknown> | undefined {
+  if (!err || typeof err !== "object" || depth > 6) return undefined;
+  const e = err as Record<string, unknown>;
+  const isPg =
+    (typeof e.code === "string" && /^[0-9A-Z]{5}$/.test(e.code)) ||
+    typeof e.severity === "string";
+  if (isPg) {
+    const out: Record<string, unknown> = {};
+    if (typeof e.message === "string") out.message = cap(e.message, 300);
+    for (const k of PG_FIELDS) if (e[k] !== undefined) out[k] = e[k];
+    return out;
+  }
+  return extractDbError(e.cause, depth + 1);
 }
 
 function normalizeError(err: unknown): NormalizedError {
@@ -130,6 +162,9 @@ export function errorHandler(
   const logPayload = {
     status,
     code,
+    // Kompakt, garanterat-synligt PG-fel (SQLSTATE m.m.) hoistat före det
+    // enorma Drizzle-`err`-objektet så att det aldrig trunkeras bort i loggen.
+    dbError: extractDbError(err),
     err: serializeError(err),
     route: req.path,
     method: req.method,
