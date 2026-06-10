@@ -38,6 +38,7 @@ export interface Notification {
   resourceId?: string;
   timestamp: string;
   data?: Record<string, unknown>;
+  metadata?: Record<string, unknown>;
 }
 
 interface ConnectedClient {
