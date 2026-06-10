@@ -11,7 +11,6 @@ import { db } from "../db";
 import { workOrders } from "@shared/schema";
 import { and, eq, inArray, isNull, notInArray, sql } from "drizzle-orm";
 import { storage } from "../storage";
-import { evaluateAllDynamicClusters } from "./dynamic-clusters";
 
 // Alla icke-finaliserade statusar — exkluderar bara invoiced/cancelled/completed.
 // Recalc får alltså träffa även in_progress/ongoing/on_hold etc. så att pågående
@@ -68,14 +67,10 @@ async function runMetadataChangeJob(tenantId: string, objectIds: string[]): Prom
     console.error(`[metadata-change-jobs] recalc failed:`, err);
   }
 
-  // 2. Re-evaluera dynamiska kluster
-  let clusterAssigned = 0;
-  try {
-    const r = await evaluateAllDynamicClusters(tenantId);
-    clusterAssigned = r.totalAssigned + r.totalRemoved;
-  } catch (err) {
-    console.error(`[metadata-change-jobs] dynamic-cluster eval failed:`, err);
-  }
+  // 2. Dynamiska kluster är avvecklade (Task #856) — automatisk om-tilldelning
+  //    av objects.clusterId via regler är avstängd. clusterId bevaras i DB
+  //    bakåtkompatibelt men utvärderas inte längre.
+  const clusterAssigned = 0;
 
   const ms = Date.now() - start;
   console.log(`[metadata-change-jobs] tenant=${tenantId} objects=${objectIds.length} recalc=${recalcCount} clusterDelta=${clusterAssigned} ms=${ms}`);

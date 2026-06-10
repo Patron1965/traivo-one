@@ -26,7 +26,6 @@ import {
   restoreObject,
   listArchivedObjects,
 } from "../services/object-archive";
-import { evaluateDynamicCluster } from "../services/dynamic-clusters";
 
 export function registerObjectLifecycleRoutes(app: Express): void {
   // === (A) DISPLAY NAME / SLÄKTNAMN =========================================
@@ -134,16 +133,11 @@ export function registerObjectLifecycleRoutes(app: Express): void {
     res.json({ ok: true });
   }));
 
+  // Dynamiska kluster-regler är avvecklade (Task #856). Automatisk om-tilldelning
+  // av objekt till kluster via regler körs inte längre. Endpointen behålls för
+  // bakåtkompatibilitet men returnerar ett avvecklat-svar utan att ändra data.
   app.post("/api/clusters/:id/apply-dynamic-rules", asyncHandler(async (req, res) => {
-    const tenantId = getTenantIdWithFallback(req);
-    const [c] = await db.select().from(clusters).where(and(eq(clusters.id, req.params.id), eq(clusters.tenantId, tenantId)));
-    if (!c) throw new NotFoundError("Kluster");
-    if (!c.dynamicRules) throw new ValidationError("Klustret saknar dynamiska regler");
-    const parsed = clusterDynamicRulesSchema.safeParse(c.dynamicRules);
-    if (!parsed.success) throw new ValidationError("Sparade regler är ogiltiga");
-    const dryRun = req.query.dryRun === "true" || req.body?.dryRun === true;
-    const result = await evaluateDynamicCluster(c.id, tenantId, parsed.data, { dryRun });
-    res.json({ dryRun, ...result });
+    throw new ValidationError("Dynamiska kluster-regler är avvecklade och utvärderas inte längre.");
   }));
 
   // === (F) ITERATIV UNDEROBJEKT-IMPORT ======================================

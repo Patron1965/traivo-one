@@ -74,7 +74,6 @@ const allNavItems: NavItemConfig[] = [
   { title: "Resurser", url: "/resources", icon: Users, category: "Grunddata", keywords: ["personal", "tekniker", "medarbetare"] },
   { title: "Fordon", url: "/vehicles", icon: Truck, category: "Grunddata", keywords: ["bil", "lastbil", "transport"] },
   { title: "Artiklar", url: "/articles", icon: Package, category: "Grunddata", keywords: ["produkt", "tjänst", "material"] },
-  { title: "Kluster", url: "/clusters", icon: Target, category: "Grunddata", keywords: ["område", "zon", "geografisk"] },
   { title: "Veckoplanering", url: "/planner", icon: Calendar, category: "Planering", keywords: ["schema", "vecka", "planera"] },
   { title: "Orderstock", url: "/order-stock", icon: ClipboardList, category: "Planering", keywords: ["order", "beställning", "jobb"] },
   { title: "Mobilapp", url: "/mobile", icon: Smartphone, category: "Planering", keywords: ["fält", "tekniker", "app"] },

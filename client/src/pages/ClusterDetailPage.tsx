@@ -52,8 +52,6 @@ import {
 } from "lucide-react";
 import { QueryErrorState } from "@/components/ErrorBoundary";
 import { QueryState } from "@/components/QueryState";
-import { SnoretPipeline } from "@/components/SnoretPipeline";
-import { ClusterDynamicRulesTab } from "@/components/ClusterDynamicRulesTab";
 import { format } from "date-fns";
 import { sv } from "date-fns/locale";
 import { MapContainer, TileLayer, Marker, Popup, Circle, useMap } from "react-leaflet";
@@ -528,15 +526,6 @@ export default function ClusterDetailPage() {
         </Card>
       </div>
 
-      <SnoretPipeline
-        title="Snöret - Flödet genom klustret"
-        objectCount={clusterObjects.length}
-        subscriptionCount={subscriptions.length}
-        activeOrders={activeOrders.length}
-        completedOrders={completedOrders.length}
-        invoicedOrders={invoicedOrders.length}
-      />
-
       <Tabs defaultValue="hierarchy" className="space-y-4">
         <TabsList className="flex-wrap gap-1">
           <TabsTrigger value="hierarchy" data-testid="tab-hierarchy">
@@ -556,9 +545,6 @@ export default function ClusterDetailPage() {
           </TabsTrigger>
           <TabsTrigger value="orders" data-testid="tab-orders">
             Ordrar ({workOrders.length})
-          </TabsTrigger>
-          <TabsTrigger value="rules" data-testid="tab-cluster-rules">
-            Regler
           </TabsTrigger>
         </TabsList>
 
@@ -882,9 +868,6 @@ export default function ClusterDetailPage() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="rules">
-          <ClusterDynamicRulesTab clusterId={clusterId} />
-        </TabsContent>
       </Tabs>
 
       <Dialog open={objectDialogOpen} onOpenChange={setObjectDialogOpen}>

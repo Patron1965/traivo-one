@@ -1270,12 +1270,6 @@ export default function ObjectDetailPage() {
                 {customer && (
                   <InfoRow label="Kund" value={customer.name} icon={Users} />
                 )}
-                {obj.customerId && !customer && (
-                  <InfoRow label="Kund-ID" value={obj.customerId} icon={Users} />
-                )}
-                {obj.clusterId && (
-                  <InfoRow label="Kluster-ID" value={obj.clusterId} icon={MapPin} />
-                )}
                 <InfoRow label="Senaste service" value={obj.lastServiceDate ? new Date(obj.lastServiceDate).toLocaleDateString("sv-SE") : null} icon={Calendar} />
                 <InfoRow label="Genomsnittlig ställtid" value={obj.avgSetupTime ? `${obj.avgSetupTime} min` : null} icon={Timer} />
               </CardContent>
@@ -2430,19 +2424,6 @@ export default function ObjectDetailPage() {
                   </Select>
                 </div>
                 <div className="space-y-2">
-                  <Label>Hierarkinivå</Label>
-                  <Select value={editForm.hierarchyLevel} onValueChange={(v) => setEditForm({ ...editForm, hierarchyLevel: v })}>
-                    <SelectTrigger data-testid="select-edit-hierarchyLevel">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {Object.entries(hierarchyLevelLabels).map(([val, { label }]) => (
-                        <SelectItem key={val} value={val}>{label}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
                   <Label>Status</Label>
                   <Select value={editForm.status} onValueChange={(v) => setEditForm({ ...editForm, status: v })}>
                     <SelectTrigger data-testid="select-edit-status">
@@ -2580,7 +2561,6 @@ export default function ObjectDetailPage() {
                   payload.name = editForm.name;
                   payload.objectNumber = editForm.objectNumber;
                   payload.objectType = editForm.objectType;
-                  payload.hierarchyLevel = editForm.hierarchyLevel;
                   payload.status = editForm.status;
                   payload.notes = editForm.notes;
                 }

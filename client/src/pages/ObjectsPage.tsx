@@ -1775,30 +1775,6 @@ export default function ObjectsPage() {
                 className="w-[180px]"
                 testId="select-customer-filter"
               />
-              <Select value={hierarchyFilter} onValueChange={setHierarchyFilter}>
-                <SelectTrigger className="w-[140px]" data-testid="select-hierarchy-filter">
-                  <SelectValue placeholder="Nivå" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Alla nivåer</SelectItem>
-                  {Object.entries(hierarchyLevelLabels).map(([key, config]) => (
-                    <SelectItem key={key} value={key}>{config.label}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Select value={clusterFilter} onValueChange={setClusterFilter}>
-                <SelectTrigger className="w-[180px]" data-testid="select-cluster-filter">
-                  <SelectValue placeholder="Filtrera kluster" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Alla kluster</SelectItem>
-                  {clustersList.filter(c => c.cachedObjectCount > 0).map(c => (
-                    <SelectItem key={c.id} value={c.id}>
-                      {c.name} ({c.cachedObjectCount})
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
             </div>
           </CardContent>
         )}
