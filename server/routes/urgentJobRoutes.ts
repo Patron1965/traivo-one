@@ -6,7 +6,7 @@ import { urgentJobAssignments } from "@shared/schema";
 import { db } from "../db";
 import { eq, and, not, inArray } from "drizzle-orm";
 import { z } from "zod";
-import { getErrorMessage } from "./helpers";
+import { getErrorMessage, isMobileAuthenticated } from "./helpers";
 import { AppError, ValidationError } from "../errors";
 
 const router = Router();
@@ -36,6 +36,12 @@ router.post("/urgent-jobs/assign", async (req: Request, res: Response, next: Nex
       deadline: z.string().optional(),
     });
     const data = schema.parse(req.body);
+
+    const resource = await storage.getResource(data.resourceId);
+    if (!resource || resource.tenantId !== tenantId) {
+      return next(new ValidationError("Resursen hittades inte i denna tenant"));
+    }
+
     const user = req.user;
     const assignedBy = user?.claims?.first_name
       ? `${user.claims.first_name} ${user.claims.last_name || ""}`.trim()
@@ -58,7 +64,6 @@ router.post("/urgent-jobs/assign", async (req: Request, res: Response, next: Nex
       assignedBy,
     }).returning();
 
-    const resource = await storage.getResource(data.resourceId);
     let distance: string | undefined;
     let estimatedMinutes: number | undefined;
     if (resource?.currentLatitude && resource?.currentLongitude && data.latitude && data.longitude) {
@@ -154,7 +159,10 @@ router.get("/urgent-jobs", async (req: Request, res: Response, next: NextFunctio
 router.get("/urgent-jobs/:id", async (req: Request, res: Response, next: NextFunction) => {
   try {
     const assignment = await db.query.urgentJobAssignments.findFirst({
-      where: eq(urgentJobAssignments.id, req.params.id),
+      where: and(
+        eq(urgentJobAssignments.id, req.params.id),
+        eq(urgentJobAssignments.tenantId, req.tenantId!)
+      ),
     });
     if (!assignment) return next(new AppError("Hittades inte", 404, { code: "ERR_NOT_FOUND" }));
     res.json(assignment);
@@ -169,13 +177,24 @@ router.post("/urgent-jobs/:id/reassign", async (req: Request, res: Response, nex
     if (!newResourceId) return next(new ValidationError("newResourceId krävs"));
 
     const existing = await db.query.urgentJobAssignments.findFirst({
-      where: eq(urgentJobAssignments.id, req.params.id),
+      where: and(
+        eq(urgentJobAssignments.id, req.params.id),
+        eq(urgentJobAssignments.tenantId, req.tenantId!)
+      ),
     });
     if (!existing) return next(new AppError("Hittades inte", 404, { code: "ERR_NOT_FOUND" }));
 
+    const targetResource = await storage.getResource(newResourceId);
+    if (!targetResource || targetResource.tenantId !== req.tenantId!) {
+      return next(new ValidationError("Resursen hittades inte i denna tenant"));
+    }
+
     await db.update(urgentJobAssignments)
       .set({ status: "reassigned", updatedAt: new Date() })
-      .where(eq(urgentJobAssignments.id, req.params.id));
+      .where(and(
+        eq(urgentJobAssignments.id, req.params.id),
+        eq(urgentJobAssignments.tenantId, req.tenantId!)
+      ));
 
     const user = req.user;
     const assignedBy = user?.claims?.first_name
@@ -264,14 +283,26 @@ router.post("/urgent-jobs/find-nearest", async (req: Request, res: Response, nex
   }
 });
 
-router.post("/mobile/jobs/urgent/accept", async (req: Request, res: Response, next: NextFunction) => {
+router.post("/mobile/jobs/urgent/accept", isMobileAuthenticated, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { jobId, startNavigation } = req.body;
     if (!jobId) return next(new ValidationError("jobId krävs"));
 
+    const owned = await db.query.urgentJobAssignments.findFirst({
+      where: and(
+        eq(urgentJobAssignments.id, jobId),
+        eq(urgentJobAssignments.tenantId, req.mobileTenantId!),
+        eq(urgentJobAssignments.resourceId, req.mobileResourceId!)
+      ),
+    });
+    if (!owned) return next(new AppError("Hittades inte", 404, { code: "ERR_NOT_FOUND" }));
+
     await db.update(urgentJobAssignments)
       .set({ status: "accepted", acceptedAt: new Date(), startNavigation: startNavigation || false, updatedAt: new Date() })
-      .where(eq(urgentJobAssignments.id, jobId));
+      .where(and(
+        eq(urgentJobAssignments.id, jobId),
+        eq(urgentJobAssignments.tenantId, req.mobileTenantId!)
+      ));
 
     const assignment = await db.query.urgentJobAssignments.findFirst({
       where: eq(urgentJobAssignments.id, jobId),
@@ -290,14 +321,26 @@ router.post("/mobile/jobs/urgent/accept", async (req: Request, res: Response, ne
   }
 });
 
-router.post("/mobile/jobs/urgent/decline", async (req: Request, res: Response, next: NextFunction) => {
+router.post("/mobile/jobs/urgent/decline", isMobileAuthenticated, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { jobId, reason } = req.body;
     if (!jobId) return next(new ValidationError("jobId krävs"));
 
+    const owned = await db.query.urgentJobAssignments.findFirst({
+      where: and(
+        eq(urgentJobAssignments.id, jobId),
+        eq(urgentJobAssignments.tenantId, req.mobileTenantId!),
+        eq(urgentJobAssignments.resourceId, req.mobileResourceId!)
+      ),
+    });
+    if (!owned) return next(new AppError("Hittades inte", 404, { code: "ERR_NOT_FOUND" }));
+
     await db.update(urgentJobAssignments)
       .set({ status: "declined", declinedAt: new Date(), declineReason: reason || null, updatedAt: new Date() })
-      .where(eq(urgentJobAssignments.id, jobId));
+      .where(and(
+        eq(urgentJobAssignments.id, jobId),
+        eq(urgentJobAssignments.tenantId, req.mobileTenantId!)
+      ));
 
     const assignment = await db.query.urgentJobAssignments.findFirst({
       where: eq(urgentJobAssignments.id, jobId),
@@ -316,11 +359,20 @@ router.post("/mobile/jobs/urgent/decline", async (req: Request, res: Response, n
   }
 });
 
-router.post("/mobile/jobs/urgent/:id/status", async (req: Request, res: Response, next: NextFunction) => {
+router.post("/mobile/jobs/urgent/:id/status", isMobileAuthenticated, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { status } = req.body;
     const validStatuses = ["en_route", "arrived", "in_progress", "completed", "issue_reported"];
     if (!validStatuses.includes(status)) return next(new ValidationError(`Ogiltig status. Giltiga: ${validStatuses.join(", ")}`));
+
+    const owned = await db.query.urgentJobAssignments.findFirst({
+      where: and(
+        eq(urgentJobAssignments.id, req.params.id),
+        eq(urgentJobAssignments.tenantId, req.mobileTenantId!),
+        eq(urgentJobAssignments.resourceId, req.mobileResourceId!)
+      ),
+    });
+    if (!owned) return next(new AppError("Hittades inte", 404, { code: "ERR_NOT_FOUND" }));
 
     const updates: any = { status, updatedAt: new Date() };
     if (status === "arrived") updates.arrivedAt = new Date();
@@ -328,7 +380,10 @@ router.post("/mobile/jobs/urgent/:id/status", async (req: Request, res: Response
 
     await db.update(urgentJobAssignments)
       .set(updates)
-      .where(eq(urgentJobAssignments.id, req.params.id));
+      .where(and(
+        eq(urgentJobAssignments.id, req.params.id),
+        eq(urgentJobAssignments.tenantId, req.mobileTenantId!)
+      ));
 
     const assignment = await db.query.urgentJobAssignments.findFirst({
       where: eq(urgentJobAssignments.id, req.params.id),
@@ -347,14 +402,14 @@ router.post("/mobile/jobs/urgent/:id/status", async (req: Request, res: Response
   }
 });
 
-router.get("/mobile/jobs/urgent/active", async (req: Request, res: Response, next: NextFunction) => {
+router.get("/mobile/jobs/urgent/active", isMobileAuthenticated, async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const resourceId = req.query.resourceId as string;
-    if (!resourceId) return next(new ValidationError("resourceId query param krävs"));
+    const resourceId = req.mobileResourceId!;
 
     const activeJob = await db.query.urgentJobAssignments.findFirst({
       where: and(
         eq(urgentJobAssignments.resourceId, resourceId),
+        eq(urgentJobAssignments.tenantId, req.mobileTenantId!),
         not(inArray(urgentJobAssignments.status, ["completed", "declined", "reassigned"]))
       ),
       orderBy: (t, { desc }) => [desc(t.createdAt)],

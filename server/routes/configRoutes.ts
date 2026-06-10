@@ -83,7 +83,7 @@ app.get("/api/articles/:id", asyncHandler(async (req, res) => {
     res.json(verified);
 }));
 
-app.post("/api/articles", asyncHandler(async (req, res) => {
+app.post("/api/articles", requireAdmin, asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const data = insertArticleSchema.parse({ ...req.body, tenantId });
     if (data.articleNumber && data.articleNumber.trim()) {
@@ -123,7 +123,7 @@ app.post("/api/articles", asyncHandler(async (req, res) => {
     res.status(201).json(article);
 }));
 
-app.patch("/api/articles/:id", asyncHandler(async (req, res) => {
+app.patch("/api/articles/:id", requireAdmin, asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const existing = await storage.getArticle(req.params.id);
     if (!verifyTenantOwnership(existing, tenantId)) {
@@ -187,7 +187,7 @@ app.patch("/api/articles/:id", asyncHandler(async (req, res) => {
     res.json(article);
 }));
 
-app.delete("/api/articles/:id", asyncHandler(async (req, res) => {
+app.delete("/api/articles/:id", requireAdmin, asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const existing = await storage.getArticle(req.params.id);
     if (!verifyTenantOwnership(existing, tenantId)) {
@@ -440,14 +440,14 @@ app.get("/api/price-lists/:id", asyncHandler(async (req, res) => {
     res.json(verified);
 }));
 
-app.post("/api/price-lists", asyncHandler(async (req, res) => {
+app.post("/api/price-lists", requireAdmin, asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const data = insertPriceListSchema.parse({ ...req.body, tenantId });
     const priceList = await storage.createPriceList(data);
     res.status(201).json(priceList);
 }));
 
-app.patch("/api/price-lists/:id", asyncHandler(async (req, res) => {
+app.patch("/api/price-lists/:id", requireAdmin, asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const existing = await storage.getPriceList(req.params.id);
     if (!verifyTenantOwnership(existing, tenantId)) {
@@ -478,7 +478,7 @@ app.post("/api/price-lists/:id/apply-index-adjustment", requireAdmin, asyncHandl
     }
 }));
 
-app.delete("/api/price-lists/:id", asyncHandler(async (req, res) => {
+app.delete("/api/price-lists/:id", requireAdmin, asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const existing = await storage.getPriceList(req.params.id);
     if (!verifyTenantOwnership(existing, tenantId)) {
