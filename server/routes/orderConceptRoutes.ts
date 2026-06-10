@@ -1157,7 +1157,75 @@ app.get("/api/assignments/:id", asyncHandler(async (req, res) => {
     }
     
     const articles = await storage.getAssignmentArticles(assignment!.id);
-    res.json({ ...assignment, articles });
+
+    // Task #857: berika med orderkoncept- och objektnamn för korsnavigering
+    // uppgift → orderkoncept / objekt i uppgiftsdetaljen.
+    let orderConceptName: string | null = null;
+    let objectName: string | null = null;
+    if (assignment!.orderConceptId) {
+      const concept = await storage.getOrderConcept(assignment!.orderConceptId);
+      if (concept && concept.tenantId === tenantId) orderConceptName = concept.name;
+    }
+    if (assignment!.objectId) {
+      const obj = await storage.getObject(assignment!.objectId);
+      if (obj && obj.tenantId === tenantId) objectName = obj.name;
+    }
+    res.json({ ...assignment, articles, orderConceptName, objectName });
+}));
+
+// Task #857: alla uppgifter (assignments) som ett orderkoncept har genererat,
+// plus de objekt de hänger på — för djuplänkning orderkoncept → uppgift → objekt.
+// Tenant-scopad — cross-tenant koncept ger 404.
+app.get("/api/order-concepts/:id/assignments", asyncHandler(async (req, res) => {
+    const tenantId = getTenantIdWithFallback(req);
+    const concept = await storage.getOrderConcept(req.params.id);
+    if (!verifyTenantOwnership(concept, tenantId)) {
+      throw new NotFoundError("Orderkoncept hittades inte");
+    }
+
+    const rows = await db
+      .select({
+        id: assignmentsTable.id,
+        title: assignmentsTable.title,
+        status: assignmentsTable.status,
+        priority: assignmentsTable.priority,
+        scheduledDate: assignmentsTable.scheduledDate,
+        quantity: assignmentsTable.quantity,
+        createdAt: assignmentsTable.createdAt,
+        objectId: assignmentsTable.objectId,
+        objectName: objects.name,
+        objectAddress: objects.address,
+        objectNumber: objects.objectNumber,
+      })
+      .from(assignmentsTable)
+      .leftJoin(objects, eq(assignmentsTable.objectId, objects.id))
+      .where(and(
+        eq(assignmentsTable.tenantId, tenantId),
+        eq(assignmentsTable.orderConceptId, req.params.id),
+        isNull(assignmentsTable.deletedAt),
+      ))
+      .orderBy(desc(assignmentsTable.createdAt))
+      .limit(200);
+
+    // Distinkta objekt (ett objekt kan ha flera uppgifter från samma koncept).
+    const objectMap = new Map<string, { id: string; name: string | null; address: string | null; objectNumber: string | null; assignmentCount: number }>();
+    for (const r of rows) {
+      if (!r.objectId) continue;
+      const existing = objectMap.get(r.objectId);
+      if (existing) {
+        existing.assignmentCount += 1;
+      } else {
+        objectMap.set(r.objectId, {
+          id: r.objectId,
+          name: r.objectName,
+          address: r.objectAddress,
+          objectNumber: r.objectNumber,
+          assignmentCount: 1,
+        });
+      }
+    }
+
+    res.json({ assignments: rows, objects: Array.from(objectMap.values()) });
 }));
 
 app.post("/api/assignments", asyncHandler(async (req, res) => {

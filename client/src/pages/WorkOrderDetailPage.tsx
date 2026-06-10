@@ -33,6 +33,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { PageHeader } from "@/components/layout/PageHeader";
+import { ChainTracePanel } from "@/components/ChainTracePanel";
 import { QueryErrorState } from "@/components/ErrorBoundary";
 import { apiRequest, ApiError } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -55,6 +56,7 @@ import {
   AlertTriangle,
   Loader2,
   MapPin,
+  Link2,
   Phone,
   Mail,
   Pencil,
@@ -303,6 +305,7 @@ export default function WorkOrderDetailPage() {
     priority: "normal",
   });
   const [pendingStatus, setPendingStatus] = useState<string | null>(null);
+  const [chainTraceOpen, setChainTraceOpen] = useState(false);
   const [cancelOpen, setCancelOpen] = useState(false);
   const [cancelReason, setCancelReason] = useState("");
   const [forceCancel, setForceCancel] = useState(false);
@@ -854,6 +857,18 @@ export default function WorkOrderDetailPage() {
               icon={Building2}
             />
             {objectAddress && <InfoRow label="Adress" value={objectAddress} icon={MapPin} />}
+            {/* Task #857: spåra hela kedjan order → orderkoncept → objekt → kund → faktura */}
+            <div className="pt-2">
+              <Button
+                variant="outline"
+                size="sm"
+                className="w-full"
+                onClick={() => setChainTraceOpen(true)}
+                data-testid="button-chain-trace"
+              >
+                <Link2 className="h-4 w-4 mr-1.5" /> Spåra hela kedjan
+              </Button>
+            </div>
           </CardContent>
         </Card>
       </div>
@@ -1102,6 +1117,12 @@ export default function WorkOrderDetailPage() {
           </CardContent>
         </Card>
       )}
+
+      <ChainTracePanel
+        workOrderId={chainTraceOpen ? workOrderId : null}
+        open={chainTraceOpen}
+        onClose={() => setChainTraceOpen(false)}
+      />
     </div>
   );
 }

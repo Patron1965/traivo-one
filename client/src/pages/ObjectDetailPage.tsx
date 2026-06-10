@@ -200,6 +200,20 @@ type WorkOrderListItem = Partial<Omit<WorkOrder, "id" | "scheduledDate">> & {
   lineCount?: number;
 };
 
+interface ObjectAssignmentItem {
+  id: string;
+  title: string;
+  status: string;
+  priority?: string | null;
+  scheduledDate?: string | null;
+  quantity?: number | null;
+  createdAt?: string | null;
+  orderConceptId?: string | null;
+  orderConceptName?: string | null;
+  customerId?: string | null;
+  customerName?: string | null;
+}
+
 interface IssueReportItem {
   id: string;
   title: string;
@@ -493,6 +507,18 @@ export default function ObjectDetailPage() {
     queryKey: ["/api/objects", objectId, "work-orders"],
     queryFn: async () => {
       const res = await fetch(`/api/objects/${objectId}/work-orders`);
+      if (!res.ok) return [];
+      return res.json();
+    },
+    enabled: !!objectId,
+  });
+
+  // Task #857: planeringslager-uppgifter (assignments) kopplade till objektet,
+  // berikade med orderkoncept + kund för djuplänkning objekt → uppgift → koncept → kund.
+  const { data: objectAssignments = [] } = useQuery<ObjectAssignmentItem[]>({
+    queryKey: ["/api/objects", objectId, "assignments"],
+    queryFn: async () => {
+      const res = await fetch(`/api/objects/${objectId}/assignments`);
       if (!res.ok) return [];
       return res.json();
     },
@@ -2024,6 +2050,86 @@ export default function ObjectDetailPage() {
                 </div>
               ) : (
                 <p className="text-sm text-muted-foreground">Inga uppgifter kopplade till detta objekt.</p>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Task #857: planeringslager-uppgifter (assignments) med djuplänk till
+              orderkoncept och kund — objekt → uppgift → orderkoncept → kund. */}
+          <Card className="mt-4" data-testid="card-object-assignments">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base flex items-center gap-2">
+                <LinkIcon className="h-4 w-4" /> Orderkoncept-uppgifter
+                {objectAssignments.length > 0 && (
+                  <Badge variant="secondary" className="text-xs" data-testid="badge-assignment-count">
+                    {objectAssignments.length}
+                  </Badge>
+                )}
+              </CardTitle>
+              <p className="text-xs text-muted-foreground">
+                Planerade uppgifter som genererats från orderkoncept för detta objekt. Klicka för att navigera till orderkonceptet eller kunden.
+              </p>
+            </CardHeader>
+            <CardContent>
+              {objectAssignments.length > 0 ? (
+                <div className="space-y-2">
+                  {objectAssignments.map((a) => (
+                    <div
+                      key={a.id}
+                      className="rounded-lg border border-border p-3"
+                      data-testid={`assignment-row-${a.id}`}
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0 flex-1">
+                          <div className="text-sm font-medium truncate" data-testid={`text-assignment-title-${a.id}`}>
+                            {a.title}
+                          </div>
+                          <div className="mt-1 flex items-center gap-3 flex-wrap text-xs text-muted-foreground">
+                            {a.scheduledDate && (
+                              <span className="flex items-center gap-1">
+                                <Calendar className="h-3 w-3" />
+                                {new Date(a.scheduledDate).toLocaleDateString("sv-SE")}
+                              </span>
+                            )}
+                            {typeof a.quantity === "number" && a.quantity > 0 && (
+                              <span>{a.quantity} st</span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                      <div className="mt-2 flex items-center gap-2 flex-wrap">
+                        {a.orderConceptId && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-7 px-2 text-xs"
+                            onClick={() => navigate(`/order-concepts/${a.orderConceptId}/edit`)}
+                            data-testid={`link-assignment-concept-${a.id}`}
+                          >
+                            <LinkIcon className="h-3 w-3 mr-1" />
+                            {a.orderConceptName || "Orderkoncept"}
+                          </Button>
+                        )}
+                        {a.customerId && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 px-2 text-xs"
+                            onClick={() => navigate(`/customers/${a.customerId}`)}
+                            data-testid={`link-assignment-customer-${a.id}`}
+                          >
+                            <Users className="h-3 w-3 mr-1" />
+                            {a.customerName || "Kund"}
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground" data-testid="empty-object-assignments">
+                  Inga orderkoncept-uppgifter genererade för detta objekt ännu.
+                </p>
               )}
             </CardContent>
           </Card>

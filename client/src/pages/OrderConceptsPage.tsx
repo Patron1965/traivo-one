@@ -69,6 +69,9 @@ import {
   Lightbulb,
   ScanSearch,
   Receipt,
+  Boxes,
+  Building2,
+  ClipboardList,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
@@ -195,6 +198,7 @@ export default function OrderConceptsPage() {
   const [invoiceRuleDialogOpen, setInvoiceRuleDialogOpen] = useState(false);
   const [runLogsDialogOpen, setRunLogsDialogOpen] = useState(false);
   const [chainTraceWorkOrderId, setChainTraceWorkOrderId] = useState<string | null>(null);
+  const [assignmentsConceptId, setAssignmentsConceptId] = useState<string | null>(null);
   const [selectedConceptForPhase2, setSelectedConceptForPhase2] = useState<string | null>(null);
   const [detectChangesDialogOpen, setDetectChangesDialogOpen] = useState(false);
   const [invoicingStatusDialogOpen, setInvoicingStatusDialogOpen] = useState(false);
@@ -441,6 +445,21 @@ export default function OrderConceptsPage() {
       return res.json();
     },
     enabled: !!selectedConceptForFas4 && invoicingStatusDialogOpen,
+  });
+
+  // Task #857: uppgifter + objekt som ett orderkoncept genererat (för djuplänkning
+  // orderkoncept → uppgift → objekt).
+  const { data: conceptAssignments, isLoading: conceptAssignmentsLoading } = useQuery<{
+    assignments: Array<{ id: string; title: string; status: string; scheduledDate?: string | null; quantity?: number | null; objectId?: string | null; objectName?: string | null; objectNumber?: string | null }>;
+    objects: Array<{ id: string; name?: string | null; address?: string | null; objectNumber?: string | null; assignmentCount: number }>;
+  }>({
+    queryKey: ["/api/order-concepts", assignmentsConceptId, "assignments"],
+    queryFn: async () => {
+      const res = await fetch(`/api/order-concepts/${assignmentsConceptId}/assignments`);
+      if (!res.ok) throw new Error("Kunde inte hämta uppgifter");
+      return res.json();
+    },
+    enabled: !!assignmentsConceptId,
   });
 
   const handleEdit = (concept: OrderConcept) => {
@@ -855,6 +874,19 @@ export default function OrderConceptsPage() {
                             </Button>
                           </TooltipTrigger>
                           <TooltipContent>Spåra kedja</TooltipContent>
+                        </Tooltip>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              onClick={() => setAssignmentsConceptId(concept.id)}
+                              data-testid={`button-concept-assignments-${concept.id}`}
+                            >
+                              <Boxes className="h-4 w-4 text-chart-1" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>Uppgifter &amp; objekt</TooltipContent>
                         </Tooltip>
                         <Tooltip>
                           <TooltipTrigger asChild>
@@ -2052,6 +2084,99 @@ export default function OrderConceptsPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Task #857: orderkoncept → uppgifter + objekt djuplänkning */}
+      <Dialog open={!!assignmentsConceptId} onOpenChange={(open) => { if (!open) setAssignmentsConceptId(null); }}>
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto" data-testid="dialog-concept-assignments">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Boxes className="h-5 w-5" /> Genererade uppgifter &amp; objekt
+            </DialogTitle>
+            <DialogDescription>
+              Uppgifter som detta orderkoncept genererat och de objekt de hänger på. Klicka på ett objekt för att navigera dit.
+            </DialogDescription>
+          </DialogHeader>
+          {conceptAssignmentsLoading ? (
+            <div className="flex items-center justify-center py-8">
+              <RefreshCw className="h-6 w-6 animate-spin text-muted-foreground" />
+            </div>
+          ) : (
+            <div className="space-y-6">
+              <div>
+                <h4 className="text-sm font-medium mb-2 flex items-center gap-2">
+                  <Building2 className="h-4 w-4" /> Objekt
+                  <Badge variant="secondary" className="text-xs">{conceptAssignments?.objects.length ?? 0}</Badge>
+                </h4>
+                {conceptAssignments && conceptAssignments.objects.length > 0 ? (
+                  <div className="space-y-2">
+                    {conceptAssignments.objects.map((o) => (
+                      <button
+                        key={o.id}
+                        type="button"
+                        onClick={() => { setAssignmentsConceptId(null); navigate(`/objects/${o.id}`); }}
+                        className="w-full text-left rounded-lg border border-border p-3 hover-elevate"
+                        data-testid={`link-concept-object-${o.id}`}
+                      >
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="min-w-0">
+                            <div className="text-sm font-medium truncate">{o.name || "Okänt objekt"}</div>
+                            {(o.objectNumber || o.address) && (
+                              <div className="text-xs text-muted-foreground truncate">
+                                {[o.objectNumber, o.address].filter(Boolean).join(" · ")}
+                              </div>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-2 shrink-0">
+                            <Badge variant="outline" className="text-xs">{o.assignmentCount} uppgift{o.assignmentCount === 1 ? "" : "er"}</Badge>
+                            <ArrowRight className="h-4 w-4 text-muted-foreground" />
+                          </div>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground" data-testid="empty-concept-objects">Inga objekt kopplade ännu.</p>
+                )}
+              </div>
+
+              <div>
+                <h4 className="text-sm font-medium mb-2 flex items-center gap-2">
+                  <ClipboardList className="h-4 w-4" /> Uppgifter
+                  <Badge variant="secondary" className="text-xs">{conceptAssignments?.assignments.length ?? 0}</Badge>
+                </h4>
+                {conceptAssignments && conceptAssignments.assignments.length > 0 ? (
+                  <div className="space-y-2">
+                    {conceptAssignments.assignments.map((a) => (
+                      <div
+                        key={a.id}
+                        className="rounded-lg border border-border p-3"
+                        data-testid={`concept-assignment-row-${a.id}`}
+                      >
+                        <div className="text-sm font-medium">{a.title}</div>
+                        <div className="mt-1 flex items-center gap-3 flex-wrap text-xs text-muted-foreground">
+                          {a.objectName && (
+                            <span className="flex items-center gap-1">
+                              <Building2 className="h-3 w-3" />{a.objectName}
+                            </span>
+                          )}
+                          {a.scheduledDate && (
+                            <span className="flex items-center gap-1">
+                              <Calendar className="h-3 w-3" />{new Date(a.scheduledDate).toLocaleDateString("sv-SE")}
+                            </span>
+                          )}
+                          {typeof a.quantity === "number" && a.quantity > 0 && <span>{a.quantity} st</span>}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground" data-testid="empty-concept-assignments">Inga uppgifter genererade ännu.</p>
+                )}
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
 
       <ChainTracePanel
         workOrderId={chainTraceWorkOrderId}

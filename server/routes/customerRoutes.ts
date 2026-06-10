@@ -1,7 +1,7 @@
 import type { Express } from "express";
 import { storage } from "../storage";
 import { z } from "zod";
-import { insertCustomerSchema, insertCustomerRelationshipSchema, insertObjectSchema, objects, objectParents, customers, workOrders, workOrderLines, technicianRatings, resources, CUSTOMER_HIERARCHY_TYPES, insertInvoiceRecipientSchema, INVOICE_RECIPIENT_LEVELS, type InvoiceRecipientLevel } from "@shared/schema";
+import { insertCustomerSchema, insertCustomerRelationshipSchema, insertObjectSchema, objects, objectParents, customers, workOrders, workOrderLines, technicianRatings, resources, assignments, orderConcepts, CUSTOMER_HIERARCHY_TYPES, insertInvoiceRecipientSchema, INVOICE_RECIPIENT_LEVELS, type InvoiceRecipientLevel } from "@shared/schema";
 import { formatZodError, verifyTenantOwnership } from "./helpers";
 import { getTenantIdWithFallback, requireAdmin } from "../tenant-middleware";
 import { asyncHandler } from "../asyncHandler";
@@ -711,6 +711,42 @@ app.get("/api/objects/:id/work-orders", asyncHandler(async (req, res) => {
   }
   const enriched = objectOrders.map(wo => ({ ...wo, lineCount: lineCounts.get(wo.id) ?? 0 }));
   res.json(enriched);
+}));
+
+// Task #857: planeringslager-uppgifter (assignments) kopplade till ett objekt,
+// berikade med orderkoncept-namn samt kund (via koncept) för djuplänkning
+// objekt → uppgift → orderkoncept → kund. Tenant-scopad — cross-tenant ger 404.
+app.get("/api/objects/:id/assignments", asyncHandler(async (req, res) => {
+  const tenantId = getTenantIdWithFallback(req);
+  const object = await storage.getObject(req.params.id);
+  if (!verifyTenantOwnership(object, tenantId)) {
+    throw new NotFoundError("Objekt");
+  }
+  const rows = await db
+    .select({
+      id: assignments.id,
+      title: assignments.title,
+      status: assignments.status,
+      priority: assignments.priority,
+      scheduledDate: assignments.scheduledDate,
+      quantity: assignments.quantity,
+      createdAt: assignments.createdAt,
+      orderConceptId: assignments.orderConceptId,
+      orderConceptName: orderConcepts.name,
+      customerId: orderConcepts.customerId,
+      customerName: customers.name,
+    })
+    .from(assignments)
+    .leftJoin(orderConcepts, eq(assignments.orderConceptId, orderConcepts.id))
+    .leftJoin(customers, eq(orderConcepts.customerId, customers.id))
+    .where(and(
+      eq(assignments.tenantId, tenantId),
+      eq(assignments.objectId, req.params.id),
+      isNull(assignments.deletedAt),
+    ))
+    .orderBy(sql`${assignments.createdAt} DESC`)
+    .limit(100);
+  res.json(rows);
 }));
 
 // Task #714: kronologisk lista över felanmälningar på ett objekt (för galleri

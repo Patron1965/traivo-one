@@ -55,6 +55,8 @@ import {
   ChevronDown,
   ChevronUp,
   ArrowRight,
+  Building2,
+  Boxes,
 } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Link } from "wouter";
@@ -718,7 +720,18 @@ export default function AssignmentsPage() {
                 <div>
                   <Label className="text-muted-foreground">Objekt</Label>
                   <p className="text-sm">
-                    {objects.find((o) => o.id === selectedAssignment.objectId)?.name || "Okänt"}
+                    {selectedAssignment.objectId ? (
+                      <Link
+                        href={`/objects/${selectedAssignment.objectId}`}
+                        className="text-primary hover:underline inline-flex items-center gap-1"
+                        data-testid="link-assignment-object"
+                      >
+                        <Building2 className="h-3.5 w-3.5" />
+                        {objects.find((o) => o.id === selectedAssignment.objectId)?.name || "Okänt"}
+                      </Link>
+                    ) : (
+                      "Okänt"
+                    )}
                   </p>
                 </div>
                 <div>
@@ -726,6 +739,21 @@ export default function AssignmentsPage() {
                   <p className="text-sm">{selectedAssignment.quantity || 1} st</p>
                 </div>
               </div>
+              {selectedAssignment.orderConceptId && (
+                <div>
+                  <Label className="text-muted-foreground">Orderkoncept</Label>
+                  <p className="text-sm">
+                    <Link
+                      href={`/order-concepts/${selectedAssignment.orderConceptId}/edit`}
+                      className="text-primary hover:underline inline-flex items-center gap-1"
+                      data-testid="link-assignment-concept"
+                    >
+                      <Boxes className="h-3.5 w-3.5" />
+                      Visa orderkoncept
+                    </Link>
+                  </p>
+                </div>
+              )}
               {selectedAssignment.address && (
                 <div>
                   <Label className="text-muted-foreground">Adress</Label>
