@@ -9,7 +9,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { useToast } from "@/hooks/use-toast";
 import {
   AlertTriangle, AlertCircle, Info, Check, X, ChevronDown, ChevronRight,
-  Zap, UserX, Clock, Coffee, ArrowRight, Activity,
+  Zap, UserX, Clock, Coffee, ArrowRight, Activity, Send,
 } from "lucide-react";
 
 interface SuggestionAction {
@@ -106,6 +106,26 @@ export function DisruptionPanel() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/disruptions"] });
+    },
+  });
+
+  const notifyDownstreamMutation = useMutation({
+    mutationFn: async (disruptionId: string) => {
+      const res = await apiRequest("POST", `/api/disruptions/${disruptionId}/notify-downstream`);
+      return res.json();
+    },
+    onSuccess: (data: { notified: number; skipped: number; failed: number; details: string[] }) => {
+      const parts = [`${data.notified} aviserade`];
+      if (data.skipped > 0) parts.push(`${data.skipped} hoppade`);
+      if (data.failed > 0) parts.push(`${data.failed} misslyckades`);
+      toast({
+        title: data.notified > 0 ? "Nedströmskunder aviserade" : "Inga kunder aviserade",
+        description: parts.join(", "),
+        variant: data.failed > 0 && data.notified === 0 ? "destructive" : undefined,
+      });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Kunde inte avisera kunder", description: error.message, variant: "destructive" });
     },
   });
 
@@ -209,6 +229,22 @@ export function DisruptionPanel() {
                               </div>
                             ))}
                           </div>
+                          {event.downstreamEta.some(e => e.delayMinutes > 0 && e.newEtaTime) && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-7 text-xs w-full"
+                              disabled={notifyDownstreamMutation.isPending}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                notifyDownstreamMutation.mutate(event.id);
+                              }}
+                              data-testid={`notify-downstream-${event.id}`}
+                            >
+                              <Send className="h-3 w-3 mr-1" />
+                              Avisera {event.downstreamEta.filter(e => e.delayMinutes > 0 && e.newEtaTime).length} nedströmskunder
+                            </Button>
+                          )}
                         </div>
                       )}
 

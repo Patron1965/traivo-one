@@ -14,6 +14,7 @@ import {
   triggerSignificantDelay,
   triggerEarlyCompletion,
   applySuggestion,
+  notifyDownstreamCustomers,
 } from "../disruption-service";
 
 export function registerDisruptionRoutes(app: Express) {
@@ -146,6 +147,12 @@ export function registerDisruptionRoutes(app: Express) {
   app.post("/api/disruptions/:id/apply/:suggestionId", asyncHandler(async (req: Request, res: Response) => {
     const tenantId = getTenantIdWithFallback(req);
     const result = await applySuggestion(tenantId, req.params.id, req.params.suggestionId);
+    res.json(result);
+  }));
+
+  app.post("/api/disruptions/:id/notify-downstream", asyncHandler(async (req: Request, res: Response) => {
+    const tenantId = getTenantIdWithFallback(req);
+    const result = await notifyDownstreamCustomers(tenantId, req.params.id);
     res.json(result);
   }));
 

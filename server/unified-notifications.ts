@@ -6,6 +6,7 @@ export type NotificationChannel = "email" | "sms" | "both";
 export type NotificationType = 
   | "technician_on_way" 
   | "technician_arriving" 
+  | "eta_updated" 
   | "job_completed" 
   | "job_rescheduled" 
   | "reminder"
@@ -129,7 +130,7 @@ function generateSmsContent(
   data: Record<string, any>,
   companyName: string
 ): string {
-  const { customerName, resourceName, estimatedArrival, objectAddress, scheduledDate, scheduledTime } = data;
+  const { customerName, resourceName, estimatedArrival, objectAddress, scheduledDate, scheduledTime, etaTime, delayMinutes } = data;
   
   switch (notificationType) {
     case "technician_on_way":
@@ -137,6 +138,9 @@ function generateSmsContent(
     
     case "technician_arriving":
       return `${companyName}: ${resourceName} anländer till ${objectAddress} inom kort.`;
+    
+    case "eta_updated":
+      return `${companyName}: Tyvärr är vi försenade till ${objectAddress}.${etaTime ? ` Ny beräknad ankomst: ca ${etaTime}.` : ""}${delayMinutes ? ` (ca ${delayMinutes} min senare än planerat.)` : ""}`;
     
     case "job_completed":
       return `${companyName}: Arbetet på ${objectAddress} är slutfört. Kvittera besöket på kundportalen.`;
@@ -171,6 +175,8 @@ function generateEmailSubject(notificationType: NotificationType, data: Record<s
       return "Tekniker är på väg";
     case "technician_arriving":
       return "Tekniker anländer snart";
+    case "eta_updated":
+      return "Uppdaterad ankomsttid";
     case "job_completed":
       return "Arbete slutfört";
     case "job_rescheduled":
@@ -195,7 +201,7 @@ function generateEmailHtml(
   data: Record<string, any>,
   companyName: string
 ): string {
-  const { customerName, resourceName, estimatedArrival, objectAddress, scheduledDate, scheduledTime, portalUrl, customMessage } = data;
+  const { customerName, resourceName, estimatedArrival, objectAddress, scheduledDate, scheduledTime, portalUrl, customMessage, etaTime, delayMinutes } = data;
   
   const baseStyle = `
     font-family: 'Segoe UI', Arial, sans-serif;
@@ -237,6 +243,20 @@ function generateEmailHtml(
         <p>Vår tekniker <strong>${resourceName}</strong> är på väg till dig.</p>
         ${estimatedArrival ? `<div style="${infoBoxStyle}"><strong>Beräknad ankomst:</strong> Om cirka ${estimatedArrival} minuter</div>` : ""}
         <p><strong>Adress:</strong> ${objectAddress}</p>
+      `;
+      break;
+    
+    case "eta_updated":
+      content = `
+        <h1 style="${headerStyle}">Uppdaterad ankomsttid</h1>
+        <p>Hej ${customerName || ""}!</p>
+        <p>Tyvärr har vårt besök blivit försenat och din beräknade ankomsttid har justerats.</p>
+        <div style="${infoBoxStyle}">
+          ${etaTime ? `<strong>Ny beräknad ankomst:</strong> ca ${etaTime}<br/>` : ""}
+          ${delayMinutes ? `<strong>Försening:</strong> ca ${delayMinutes} min senare än planerat<br/>` : ""}
+          ${objectAddress ? `<strong>Adress:</strong> ${objectAddress}` : ""}
+        </div>
+        <p>Vi ber om ursäkt för eventuella besvär.</p>
       `;
       break;
     

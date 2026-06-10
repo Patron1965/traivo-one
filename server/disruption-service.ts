@@ -774,6 +774,64 @@ export async function triggerEarlyCompletion(
   return event;
 }
 
+/**
+ * Avisera nedströmskunder vars tidsfönster påverkats av en kaskaderande
+ * försening. Planerar-utlöst (opt-in) — itererar `downstreamEta` för en aktiv
+ * significant_delay-störning och skickar en ETA-uppdatering per drabbad kund
+ * via det befintliga ETA-/SMS-flödet. Endast jobb som faktiskt skjutits fram
+ * (delayMinutes > 0) och har en ny beräknad ankomsttid aviseras.
+ */
+export async function notifyDownstreamCustomers(
+  tenantId: string,
+  disruptionId: string,
+): Promise<{ notified: number; skipped: number; failed: number; details: string[] }> {
+  const events = activeDisruptions.get(tenantId);
+  const event = events?.find(e => e.id === disruptionId);
+  if (!event) throw new Error("Störning ej hittad");
+
+  const entries = (event.downstreamEta || []).filter(e => e.delayMinutes > 0 && e.newEtaTime);
+  if (entries.length === 0) {
+    return { notified: 0, skipped: 0, failed: 0, details: ["Inga nedströmskunder med påverkat tidsfönster att avisera"] };
+  }
+
+  const { triggerDownstreamEtaNotification } = await import("./eta-notification-service");
+
+  const details: string[] = [];
+  let notified = 0;
+  let skipped = 0;
+  let failed = 0;
+
+  for (const entry of entries) {
+    const res = await triggerDownstreamEtaNotification(
+      entry.workOrderId,
+      tenantId,
+      entry.newEtaTime,
+      entry.delayMinutes,
+    );
+    const label = res.customerName || entry.workOrderTitle;
+    if (res.sent) {
+      notified++;
+      details.push(`${label}: aviserad (ny ETA ${entry.newEtaTime})`);
+    } else if (res.reason === "Skickad") {
+      notified++;
+    } else if (/avaktiverat|kontaktuppgifter|avaktiverade/i.test(res.reason)) {
+      skipped++;
+      details.push(`${label}: hoppad — ${res.reason}`);
+    } else {
+      failed++;
+      details.push(`${label}: misslyckades — ${res.reason}`);
+    }
+  }
+
+  event.decisionTrace.push({
+    step: "notify_downstream",
+    detail: `Nedströmsavisering: ${notified} aviserade, ${skipped} hoppade, ${failed} misslyckades`,
+    timestamp: new Date().toISOString(),
+  });
+
+  return { notified, skipped, failed, details };
+}
+
 export async function applySuggestion(
   tenantId: string,
   disruptionId: string,

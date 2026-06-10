@@ -215,6 +215,123 @@ export async function triggerETANotification(
   }
 }
 
+/**
+ * Skicka en ETA-uppdatering till EN nedströmskund vars tidsfönster påverkats av
+ * en kaskaderande försening. Återanvänder ETA-/SMS-flödet (`sendNotification`)
+ * och respekterar kundens aviseringspreferenser. Loggas i `etaNotifications`
+ * med typ `eta_updated` så att den inte krockar med `technician_on_way`-
+ * idempotenskontrollen och syns i notifieringshistoriken.
+ *
+ * Anropas av planeraren (opt-in) via störningspanelen — aldrig helautomatiskt.
+ */
+export async function triggerDownstreamEtaNotification(
+  workOrderId: string,
+  tenantId: string,
+  newEtaTime: string | null,
+  delayMinutes: number,
+): Promise<{ sent: boolean; reason: string; customerName?: string }> {
+  try {
+    const tenant = await storage.getTenant(tenantId);
+    const settings = (tenant?.settings as any) || {};
+    const config: ETANotificationConfig = {
+      ...DEFAULT_ETA_NOTIFICATION_CONFIG,
+      ...(settings.etaNotificationConfig || {}),
+    };
+
+    if (!config.enabled) {
+      return { sent: false, reason: "ETA-notifieringar avaktiverade" };
+    }
+
+    const order = await storage.getWorkOrder(workOrderId);
+    if (!order) {
+      return { sent: false, reason: "Order saknas" };
+    }
+    // Defense-in-depth: rå-ID-helper utan tenant-predikat — verifiera ägarskap.
+    if (order.tenantId !== tenantId) {
+      return { sent: false, reason: "Tenant matchar inte ordern" };
+    }
+    if (!order.customerId) {
+      return { sent: false, reason: "Order saknar kund" };
+    }
+
+    let customerSettings: any = null;
+    try {
+      const csRows = await db.execute(
+        sql`SELECT * FROM customer_notification_settings WHERE customer_id = ${order.customerId} AND tenant_id = ${tenantId} LIMIT 1`
+      );
+      customerSettings = csRows.rows?.[0] || null;
+    } catch {}
+
+    // Återanvänder samma kundpreferens som "tekniker på väg" — ETA-relaterad.
+    if (customerSettings && !customerSettings.notify_on_technician_on_way) {
+      return { sent: false, reason: "Kund har avaktiverat ETA-notifieringar" };
+    }
+
+    const customer = await storage.getCustomer(order.customerId);
+    if (!customer) {
+      return { sent: false, reason: "Kund hittades inte" };
+    }
+
+    const recipientEmail = customerSettings?.preferred_contact_email || customer.email;
+    const recipientPhone = customerSettings?.preferred_contact_phone || customer.phone;
+
+    const channel = config.channel;
+    const hasEmail = !!recipientEmail;
+    const hasSms = !!recipientPhone;
+
+    if ((channel === "email" && !hasEmail) || (channel === "sms" && !hasSms) || (channel === "both" && !hasEmail && !hasSms)) {
+      return { sent: false, reason: "Inga kontaktuppgifter", customerName: customer.contactPerson || customer.name };
+    }
+
+    const obj = order.objectId ? await storage.getObject(order.objectId) : null;
+
+    const result = await sendNotification({
+      tenantId,
+      recipients: [{
+        email: recipientEmail || undefined,
+        phone: recipientPhone || undefined,
+        name: customer.contactPerson || customer.name,
+      }],
+      notificationType: "eta_updated",
+      channel,
+      scopeContext: { customerId: order.customerId, objectId: order.objectId },
+      data: {
+        customerName: customer.contactPerson || customer.name,
+        etaTime: newEtaTime || undefined,
+        delayMinutes: delayMinutes > 0 ? delayMinutes : undefined,
+        objectAddress: obj?.address || order.title,
+      },
+    });
+
+    await db.insert(etaNotifications).values({
+      tenantId,
+      workOrderId,
+      customerId: order.customerId,
+      resourceId: order.resourceId || null,
+      channel,
+      notificationType: "eta_updated",
+      recipientEmail: recipientEmail || null,
+      recipientPhone: recipientPhone || null,
+      etaMinutes: null,
+      etaTime: newEtaTime,
+      marginMinutes: config.marginMinutes,
+      status: result.success ? "sent" : "failed",
+      errorMessage: result.errors.length > 0 ? result.errors.join("; ") : null,
+    });
+
+    console.log(`[eta-notification] Sent downstream ETA update for order ${workOrderId}: ny ETA ${newEtaTime ?? "?"} (+${delayMinutes} min)`);
+
+    return {
+      sent: result.success,
+      reason: result.success ? "Skickad" : result.errors.join("; "),
+      customerName: customer.contactPerson || customer.name,
+    };
+  } catch (error: any) {
+    console.error("[eta-notification] Downstream error:", error);
+    return { sent: false, reason: error.message };
+  }
+}
+
 export async function getETAForPortal(
   workOrderId: string,
   tenantId: string
