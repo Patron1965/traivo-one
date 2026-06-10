@@ -11,7 +11,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Calendar, MapPin, Clock, User, LogOut, Plus, Loader2, CalendarDays, History, FileText, MessageCircle, Send, Grid3X3, Truck, AlertCircle, RefreshCw, CheckCircle2, ArrowRight, Sparkles, Package, Phone, Trash2, Recycle, TreeDeciduous, Star, Camera, Menu, X, Home, Settings, Bell, ChevronRight, Map as MapIcon, Image as ImageIcon, Shield, ClipboardCheck } from "lucide-react";
+import { Calendar, MapPin, Clock, User, LogOut, Plus, Loader2, CalendarDays, History, FileText, MessageCircle, Send, Grid3X3, Truck, AlertCircle, RefreshCw, CheckCircle2, ArrowRight, Sparkles, Package, Phone, Trash2, Recycle, TreeDeciduous, Star, Camera, Menu, X, Home, Settings, Bell, ChevronRight, Map as MapIcon, Image as ImageIcon, Shield, ClipboardCheck, CalendarRange } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -142,6 +142,7 @@ function PortalSidebar({ unreadCount, currentPath }: { unreadCount: number; curr
     { href: "/portal/dashboard", label: "Översikt", icon: Home, badge: 0 },
     { href: "/portal/clusters", label: "Mina platser", icon: TreeDeciduous, badge: 0 },
     { href: "/portal/map", label: "Karta", icon: MapIcon, badge: 0 },
+    { href: "/portal/calendar", label: "Kalender", icon: CalendarRange, badge: 0 },
     { href: "/portal/execution", label: "Uppgifter", icon: ClipboardCheck, badge: 0 },
     { href: "/portal/completed-jobs", label: "Utförda jobb", icon: ImageIcon, badge: 0 },
     { href: "/portal/invoices", label: "Fakturor", icon: FileText, badge: 0 },

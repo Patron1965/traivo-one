@@ -472,6 +472,10 @@ export interface IStorage {
    * arbetsordrar inom [startDate, endDate], tenant-scopat, ordnade på datum.
    */
   getObjectSubtreeTimeline(tenantId: string, rootObjectId: string, startDate: Date, endDate: Date): Promise<WorkOrderWithObject[]>;
+  /** Subträds-id:n (self + ättlingar) via rekursiv CTE, tenant-scopat, exkl. soft-deletade. */
+  getObjectSubtreeIds(tenantId: string, rootObjectId: string): Promise<string[]>;
+  /** Schemalagda arbetsordrar för en explicit mängd objekt-id:n inom [startDate, endDate], tenant-scopat. */
+  getWorkOrdersForObjectIds(tenantId: string, objectIds: string[], startDate: Date, endDate: Date): Promise<WorkOrderWithObject[]>;
   getUnscheduledWorkOrdersPaginated(tenantId: string, limit: number, offset: number, search?: string, dateFilter?: { field: 'desired' | 'created' | 'sla'; from?: string; to?: string }): Promise<{ workOrders: WorkOrderWithObject[]; total: number; missingDateFieldCount?: number }>;
   getUnscheduledMissingDateField(tenantId: string, field: 'desired' | 'sla', search?: string, limit?: number): Promise<WorkOrderWithObject[]>;
   /** Paginerad variant av {@link getWorkOrders} — föredragen för UI/list-vyer. */
@@ -3011,7 +3015,7 @@ export class DatabaseStorage implements IStorage {
     return query;
   }
 
-  async getObjectSubtreeTimeline(tenantId: string, rootObjectId: string, startDate: Date, endDate: Date): Promise<WorkOrderWithObject[]> {
+  async getObjectSubtreeIds(tenantId: string, rootObjectId: string): Promise<string[]> {
     // Resolvar objektets subträd (self + alla ättlingar) via rekursiv CTE på
     // parent_id, tenant-scopat och exkl. soft-deletade noder.
     const subtreeRes = await db.execute(sql`
@@ -3025,7 +3029,15 @@ export class DatabaseStorage implements IStorage {
       )
       SELECT id FROM subtree
     `);
-    const objectIds = rowsOf<{ id: string }>(subtreeRes).map(r => r.id);
+    return rowsOf<{ id: string }>(subtreeRes).map(r => r.id);
+  }
+
+  async getObjectSubtreeTimeline(tenantId: string, rootObjectId: string, startDate: Date, endDate: Date): Promise<WorkOrderWithObject[]> {
+    const objectIds = await this.getObjectSubtreeIds(tenantId, rootObjectId);
+    return this.getWorkOrdersForObjectIds(tenantId, objectIds, startDate, endDate);
+  }
+
+  async getWorkOrdersForObjectIds(tenantId: string, objectIds: string[], startDate: Date, endDate: Date): Promise<WorkOrderWithObject[]> {
     if (objectIds.length === 0) return [];
 
     return db.select({

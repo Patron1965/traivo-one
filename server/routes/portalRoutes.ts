@@ -619,6 +619,60 @@ app.get("/api/portal/clusters/children", asyncHandler(async (req: any, res: any)
   res.json({ parentId, nodes, matchAncestorIds, matchIds: matchIdList });
 }));
 
+// GET /api/portal/timeline?startDate&endDate&objectId?
+// Task #855: zoombar kalender/tidslinje för portalanvändarens objekt. Strikt
+// scope-filtrerad — visar enbart schemalagda arbetsordrar för kundens objekt
+// inom portal-scope. Med objectId filtreras till det objektet + dess underträd,
+// alltid begränsat av scope (vald nod måste vara inom scope; annars 404 som
+// döljer existens). Datum krävs som ISO (YYYY-MM-DD), fönster max ~6 år.
+app.get("/api/portal/timeline", asyncHandler(async (req: any, res: any) => {
+  const session = await requirePortalAuth(req, res);
+  if (!session) return;
+
+  const startRaw = typeof req.query.startDate === "string" ? req.query.startDate : "";
+  const endRaw = typeof req.query.endDate === "string" ? req.query.endDate : "";
+  const startDate = new Date(`${startRaw}T00:00:00`);
+  const endDate = new Date(`${endRaw}T23:59:59.999`);
+  if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime())) {
+    throw new ValidationError("startDate och endDate krävs (format YYYY-MM-DD)");
+  }
+  if (startDate > endDate) {
+    throw new ValidationError("startDate måste vara före endDate");
+  }
+  const MAX_RANGE_MS = 6 * 366 * 24 * 60 * 60 * 1000;
+  if (endDate.getTime() - startDate.getTime() > MAX_RANGE_MS) {
+    throw new ValidationError("Tidsintervallet är för stort (max 6 år)");
+  }
+
+  // Tillåtna objekt = kundens objekt (object_payers primary) ∩ portal-scope.
+  const allCustomerObjects = await storage.getObjectsByCustomer(session.customerId!, session.tenantId!);
+  const allowedIds = new Set(
+    (session.scopedObjectIds
+      ? allCustomerObjects.filter(o => session.scopedObjectIds!.has(o.id))
+      : allCustomerObjects
+    ).map(o => o.id),
+  );
+
+  const objectIdRaw = typeof req.query.objectId === "string" ? req.query.objectId : "";
+  let targetIds: string[];
+  if (objectIdRaw) {
+    // Vald nod måste vara inom scope OCH tillhöra kunden — annars dölj existens.
+    if (!isObjectInScope(session, objectIdRaw) || !allowedIds.has(objectIdRaw)) {
+      throw new AppError("Hittades inte", 404, { code: "ERR_NOT_FOUND" });
+    }
+    const subtree = await storage.getObjectSubtreeIds(session.tenantId!, objectIdRaw);
+    // Skär subträdet mot tillåtna id:n så att alternativa föräldrars barn
+    // eller ej-kund-ägda noder aldrig läcker in.
+    targetIds = subtree.filter(id => allowedIds.has(id));
+  } else {
+    targetIds = Array.from(allowedIds);
+  }
+
+  const orders = await storage.getWorkOrdersForObjectIds(session.tenantId!, targetIds, startDate, endDate);
+  res.set("Cache-Control", "no-cache, must-revalidate");
+  res.json(orders);
+}));
+
 // GET /api/portal/clusters/:objectId/ancestors
 // Returnerar breadcrumb-stigen från rotnivå ner till objektet (exkl. virtuell "Hem"-rot).
 // Använder samma primär-förälder-resolution och scope-kontroll som /children.

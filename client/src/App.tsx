@@ -99,6 +99,7 @@ const PortalLoginPage = lazy(() => import("@/pages/portal/PortalLoginPage"));
 const PortalVerifyPage = lazy(() => import("@/pages/portal/PortalVerifyPage"));
 const PortalDashboardPage = lazy(() => import("@/pages/portal/PortalDashboardPage"));
 const PortalClusterOverviewPage = lazy(() => import("@/pages/portal/PortalClusterOverviewPage"));
+const PortalCalendarPage = lazy(() => import("@/pages/portal/PortalCalendarPage"));
 const PortalInvoicesPage = lazy(() => import("@/pages/portal/PortalInvoicesPage"));
 const PortalContractsPage = lazy(() => import("@/pages/portal/PortalContractsPage"));
 const PortalSettingsPage = lazy(() => import("@/pages/portal/PortalSettingsPage"));
@@ -269,6 +270,7 @@ function PortalRouter() {
         <Route path="/portal/verify" component={PortalVerifyPage} />
         <Route path="/portal/dashboard" component={PortalDashboardPage} />
         <Route path="/portal/clusters" component={PortalClusterOverviewPage} />
+        <Route path="/portal/calendar" component={PortalCalendarPage} />
         <Route path="/portal/invoices" component={PortalInvoicesPage} />
         <Route path="/portal/contracts" component={PortalContractsPage} />
         <Route path="/portal/settings" component={PortalSettingsPage} />
