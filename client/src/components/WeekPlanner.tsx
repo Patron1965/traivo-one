@@ -23,6 +23,8 @@ import { DisruptionPanel } from "./weekplanner/DisruptionPanel";
 import { DayTimelineView } from "./weekplanner/DayTimelineView";
 import { WeekGridView } from "./weekplanner/WeekGridView";
 import { MonthView } from "./weekplanner/MonthView";
+import { QuarterView } from "./weekplanner/QuarterView";
+import { YearView } from "./weekplanner/YearView";
 import { RouteMapView } from "./weekplanner/RouteMapView";
 import { ResourceFilterBar } from "./weekplanner/ResourceFilterBar";
 import { usePlannerData } from "./weekplanner/usePlannerData";
@@ -442,6 +444,14 @@ export function WeekPlanner({ onAddJob, onSelectJob, onSelectedJobIdsChange, sho
           e.preventDefault();
           d.handleViewModeChange("month");
           break;
+        case "4":
+          e.preventDefault();
+          d.handleViewModeChange("quarter");
+          break;
+        case "5":
+          e.preventDefault();
+          d.handleViewModeChange("year");
+          break;
       }
     };
     window.addEventListener("keydown", handler);
@@ -668,6 +678,18 @@ export function WeekPlanner({ onAddJob, onSelectJob, onSelectedJobIdsChange, sho
               currentDate={d.currentDate} filteredScheduledJobs={d.filteredScheduledJobs}
               jobConflicts={d.jobConflicts} timeRestrictions={d.timeRestrictions}
               zoom={zoom} goToDay={d.goToDay}
+            />
+          )}
+          {d.viewMode === "quarter" && (
+            <QuarterView
+              currentDate={d.currentDate} filteredScheduledJobs={d.filteredScheduledJobs}
+              jobConflicts={d.jobConflicts} goToMonth={d.goToMonth}
+            />
+          )}
+          {d.viewMode === "year" && (
+            <YearView
+              currentDate={d.currentDate} filteredScheduledJobs={d.filteredScheduledJobs}
+              jobConflicts={d.jobConflicts} goToMonth={d.goToMonth}
             />
           )}
           {d.viewMode === "route" && (

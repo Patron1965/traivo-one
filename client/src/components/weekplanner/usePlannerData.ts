@@ -1,6 +1,6 @@
 import { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { format, addDays, startOfWeek, startOfMonth, isSameDay, getDaysInMonth, addMonths } from "date-fns";
+import { format, addDays, startOfWeek, startOfMonth, isSameDay, getDaysInMonth, addMonths, startOfYear, endOfYear, startOfQuarter, endOfQuarter } from "date-fns";
 import { sv } from "date-fns/locale";
 import type { Resource, WorkOrderWithObject, Customer, TaskDependency, Cluster, ObjectTimeRestriction } from "@shared/schema";
 import { RESTRICTION_TYPE_LABELS } from "@shared/schema";
@@ -149,6 +149,7 @@ export function usePlannerData() {
   const visibleDates = useMemo((): Date[] => {
     if (viewMode === "day") return [currentDate];
     if (viewMode === "week") return Array.from({ length: 5 }, (_, i) => addDays(currentWeekStart, i));
+    if (viewMode === "quarter" || viewMode === "year") return [currentDate];
     const monthStart = startOfMonth(currentDate);
     return Array.from({ length: getDaysInMonth(currentDate) }, (_, i) => addDays(monthStart, i));
   }, [viewMode, currentDate, currentWeekStart]);
@@ -180,7 +181,16 @@ export function usePlannerData() {
     });
   }, [resources, hiddenResourceIds, teamResourceIds, resourceNameFilter, resourceExecutionCodeFilter]);
 
-  const dateRange = useMemo(() => { const ms = startOfMonth(currentDate); return { startDate: format(addDays(ms, -14), "yyyy-MM-dd"), endDate: format(addDays(ms, 45), "yyyy-MM-dd") }; }, [currentDate.getFullYear(), currentDate.getMonth()]);
+  const dateRange = useMemo(() => {
+    if (viewMode === "year") {
+      return { startDate: format(startOfYear(currentDate), "yyyy-MM-dd"), endDate: format(endOfYear(currentDate), "yyyy-MM-dd") };
+    }
+    if (viewMode === "quarter") {
+      return { startDate: format(startOfQuarter(currentDate), "yyyy-MM-dd"), endDate: format(endOfQuarter(currentDate), "yyyy-MM-dd") };
+    }
+    const ms = startOfMonth(currentDate);
+    return { startDate: format(addDays(ms, -14), "yyyy-MM-dd"), endDate: format(addDays(ms, 45), "yyyy-MM-dd") };
+  }, [viewMode, currentDate.getFullYear(), currentDate.getMonth()]);
 
   const { data: scheduledWorkOrders = [], isLoading: scheduledLoading } = useQuery<WorkOrderWithObject[]>({
     queryKey: ["/api/work-orders", "scheduled", dateRange.startDate, dateRange.endDate],
@@ -409,7 +419,9 @@ export function usePlannerData() {
 
   const currentViewScheduledJobs = useMemo(() => {
     let rs: Date, re: Date;
-    if (viewMode === "month") { rs = startOfMonth(currentDate); re = addDays(rs, getDaysInMonth(currentDate)); }
+    if (viewMode === "year") { rs = startOfYear(currentDate); re = addDays(endOfYear(currentDate), 1); }
+    else if (viewMode === "quarter") { rs = startOfQuarter(currentDate); re = addDays(endOfQuarter(currentDate), 1); }
+    else if (viewMode === "month") { rs = startOfMonth(currentDate); re = addDays(rs, getDaysInMonth(currentDate)); }
     else if (viewMode === "day") { rs = new Date(currentDate); rs.setHours(0, 0, 0, 0); re = addDays(rs, 1); }
     else { rs = currentWeekStart; re = addDays(currentWeekStart, 5); }
     return filteredScheduledJobs.filter(j => { if (!j.scheduledDate) return false; const d = new Date(j.scheduledDate); return d >= rs && d < re; });
@@ -803,12 +815,21 @@ export function usePlannerData() {
   const navigate = (direction: "prev" | "next") => {
     if (viewMode === "day" || viewMode === "route") { const d = addDays(currentDate, direction === "next" ? 1 : -1); setCurrentDate(d); setCurrentWeekStart(startOfWeek(d, { weekStartsOn: 1 })); }
     else if (viewMode === "week") { const ws = addDays(currentWeekStart, direction === "next" ? 7 : -7); setCurrentWeekStart(ws); setCurrentDate(ws); }
+    else if (viewMode === "quarter") { const d = addMonths(currentDate, direction === "next" ? 3 : -3); setCurrentDate(d); setCurrentWeekStart(startOfWeek(d, { weekStartsOn: 1 })); }
+    else if (viewMode === "year") { const d = addMonths(currentDate, direction === "next" ? 12 : -12); setCurrentDate(d); setCurrentWeekStart(startOfWeek(d, { weekStartsOn: 1 })); }
     else { const d = addMonths(currentDate, direction === "next" ? 1 : -1); setCurrentDate(d); setCurrentWeekStart(startOfWeek(d, { weekStartsOn: 1 })); }
   };
   const handleViewModeChange = (m: ViewMode) => { if (m === "week") setCurrentWeekStart(startOfWeek(currentDate, { weekStartsOn: 1 })); setViewMode(m); };
   const goToToday = () => { const t = new Date(); setCurrentDate(t); setCurrentWeekStart(startOfWeek(t, { weekStartsOn: 1 })); };
   const goToDay = (day: Date) => { setCurrentDate(day); setCurrentWeekStart(startOfWeek(day, { weekStartsOn: 1 })); setViewMode("day"); };
-  const getHeaderLabel = () => { if (viewMode === "day" || viewMode === "route") return format(currentDate, "EEEE d MMMM yyyy", { locale: sv }); if (viewMode === "week") return `Vecka ${format(currentWeekStart, "w", { locale: sv })} - ${format(currentWeekStart, "MMMM yyyy", { locale: sv })}`; return format(currentDate, "MMMM yyyy", { locale: sv }); };
+  const goToMonth = (day: Date) => { setCurrentDate(day); setCurrentWeekStart(startOfWeek(day, { weekStartsOn: 1 })); setViewMode("month"); };
+  const getHeaderLabel = () => {
+    if (viewMode === "day" || viewMode === "route") return format(currentDate, "EEEE d MMMM yyyy", { locale: sv });
+    if (viewMode === "week") return `Vecka ${format(currentWeekStart, "w", { locale: sv })} - ${format(currentWeekStart, "MMMM yyyy", { locale: sv })}`;
+    if (viewMode === "quarter") return `Kvartal ${Math.floor(currentDate.getMonth() / 3) + 1} ${format(currentDate, "yyyy")}`;
+    if (viewMode === "year") return `År ${format(currentDate, "yyyy")}`;
+    return format(currentDate, "MMMM yyyy", { locale: sv });
+  };
 
   const [whatIfOpen, setWhatIfOpen] = useState(false);
   const [whatIfLoading, setWhatIfLoading] = useState(false);
@@ -901,6 +922,8 @@ export function usePlannerData() {
   const getResourceScheduleJobs = useCallback((rid: string) => { const sd = viewMode === "week" ? currentWeekStart : currentDate; const ed = viewMode === "week" ? addDays(currentWeekStart, 4) : viewMode === "month" ? addDays(startOfMonth(currentDate), getDaysInMonth(currentDate) - 1) : currentDate; return workOrders.filter(j => j.resourceId === rid && j.scheduledDate && new Date(j.scheduledDate) >= sd && new Date(j.scheduledDate) <= ed).map(j => ({ id: j.id, title: j.title, objectName: j.objectName || undefined, objectAddress: j.objectAddress || undefined, scheduledDate: typeof j.scheduledDate === "string" ? j.scheduledDate : j.scheduledDate instanceof Date ? j.scheduledDate.toISOString() : new Date(String(j.scheduledDate)).toISOString(), scheduledStartTime: j.scheduledStartTime || undefined, estimatedDuration: j.estimatedDuration || undefined, accessCode: j.objectAccessCode || undefined, keyNumber: j.objectKeyNumber || undefined })); }, [workOrders, viewMode, currentWeekStart, currentDate]);
 
   const computeCurrentDateRange = useCallback(() => {
+    if (viewMode === "year") return { start: format(startOfYear(currentDate), "yyyy-MM-dd"), end: format(endOfYear(currentDate), "yyyy-MM-dd") };
+    if (viewMode === "quarter") return { start: format(startOfQuarter(currentDate), "yyyy-MM-dd"), end: format(endOfQuarter(currentDate), "yyyy-MM-dd") };
     const sd = viewMode === "week" ? format(currentWeekStart, "yyyy-MM-dd") : format(currentDate, "yyyy-MM-dd");
     const ed = viewMode === "week"
       ? format(addDays(currentWeekStart, 4), "yyyy-MM-dd")
@@ -1014,7 +1037,7 @@ export function usePlannerData() {
 
   const handleClearAllScheduled = async () => {
     setClearLoading(true);
-    try { let cs: Date, ce: Date; if (viewMode === "month") { cs = startOfMonth(currentDate); ce = addDays(cs, getDaysInMonth(currentDate) - 1); } else if (viewMode === "day") { cs = currentDate; ce = currentDate; } else { cs = currentWeekStart; ce = addDays(currentWeekStart, 4); } const data = await (await apiRequest("POST", "/api/work-orders/bulk-unschedule", { startDate: format(cs, "yyyy-MM-dd"), endDate: format(ce, "yyyy-MM-dd") })).json(); queryClient.invalidateQueries({ queryKey: ["/api/work-orders"] }); setUnscheduledPage(0); setClearDialogOpen(false); toast({ title: "Planering rensad", description: `${data.count} jobb avplanerade och flyttade tillbaka till orderstocken.` }); } catch (error) { toast({ title: "Kunde inte rensa planeringen", description: error.message, variant: "destructive" }); } finally { setClearLoading(false); }
+    try { let cs: Date, ce: Date; if (viewMode === "year") { cs = startOfYear(currentDate); ce = endOfYear(currentDate); } else if (viewMode === "quarter") { cs = startOfQuarter(currentDate); ce = endOfQuarter(currentDate); } else if (viewMode === "month") { cs = startOfMonth(currentDate); ce = addDays(cs, getDaysInMonth(currentDate) - 1); } else if (viewMode === "day") { cs = currentDate; ce = currentDate; } else { cs = currentWeekStart; ce = addDays(currentWeekStart, 4); } const data = await (await apiRequest("POST", "/api/work-orders/bulk-unschedule", { startDate: format(cs, "yyyy-MM-dd"), endDate: format(ce, "yyyy-MM-dd") })).json(); queryClient.invalidateQueries({ queryKey: ["/api/work-orders"] }); setUnscheduledPage(0); setClearDialogOpen(false); toast({ title: "Planering rensad", description: `${data.count} jobb avplanerade och flyttade tillbaka till orderstocken.` }); } catch (error) { toast({ title: "Kunde inte rensa planeringen", description: error.message, variant: "destructive" }); } finally { setClearLoading(false); }
   };
 
   const handleAutoFillPreview = async () => {
@@ -1189,7 +1212,7 @@ export function usePlannerData() {
     getCapacityPercentage, getCapacityColor, getCapacityBgColor, getDropFitClass,
     resourceWeekSummary, jobConflicts,
     updateWorkOrderMutation, assignTeamMutation, unscheduleWorkOrderMutation, sendScheduleMutation,
-    navigate, handleViewModeChange, goToToday, goToDay, getHeaderLabel,
+    navigate, handleViewModeChange, goToToday, goToDay, goToMonth, getHeaderLabel,
     handleJobClick, handleOpenAssignDialog,
     handleAcceptConflict, handleUnschedule, handleUndo, handleRedo,
     handleResourceClick, handleSendSchedule, handleSendScheduleEmail, submitSendSchedule, handleCopyFieldAppLink,

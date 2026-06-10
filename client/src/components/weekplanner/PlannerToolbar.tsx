@@ -449,6 +449,22 @@ export const PlannerToolbar = memo(function PlannerToolbar(props: PlannerToolbar
             </Tooltip>
             <Tooltip>
               <TooltipTrigger asChild>
+                <ToggleGroupItem value="quarter" aria-label="Kvartalsvy (4)" className="h-7 px-1.5" data-testid="toggle-quarter">
+                  <span className="text-[10px] font-semibold leading-none">Kv</span>
+                </ToggleGroupItem>
+              </TooltipTrigger>
+              <TooltipContent side="top">Kvartalsvy (4)</TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <ToggleGroupItem value="year" aria-label="Årsvy (5)" className="h-7 px-1.5" data-testid="toggle-year">
+                  <span className="text-[10px] font-semibold leading-none">År</span>
+                </ToggleGroupItem>
+              </TooltipTrigger>
+              <TooltipContent side="top">Årsvy (5)</TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger asChild>
                 <ToggleGroupItem value="route" aria-label="Ruttvy" className="h-7 w-7 p-0" data-testid="toggle-route">
                   <MapPin className="h-3.5 w-3.5" />
                 </ToggleGroupItem>

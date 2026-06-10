@@ -7,6 +7,8 @@ export { PlannerToolbar, PlannerFooter } from "./PlannerToolbar";
 export { DayTimelineView } from "./DayTimelineView";
 export { WeekGridView } from "./WeekGridView";
 export { MonthView } from "./MonthView";
+export { QuarterView } from "./QuarterView";
+export { YearView } from "./YearView";
 export { RouteMapView } from "./RouteMapView";
 export { ResourceDetailSheet } from "./ResourceDetailSheet";
 export { ResourceColumn } from "./ResourceColumn";

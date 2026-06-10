@@ -41,7 +41,7 @@ export interface WeekPlannerProps {
   popoutRole?: "main" | "popout-calendar" | "popout-orderlager";
 }
 
-export type ViewMode = "day" | "week" | "month" | "route";
+export type ViewMode = "day" | "week" | "month" | "quarter" | "year" | "route";
 
 export type TimeBlockCategory = "production" | "travel" | "break" | "free";
 

@@ -381,7 +381,7 @@ export const ClearDialog = memo(function ClearDialog(props: ClearDialogProps) {
             Rensa planering
           </DialogTitle>
           <DialogDescription>
-            Är du säker? <strong>{jobCount} schemalagda jobb</strong> i {viewMode === "month" ? "denna månad" : viewMode === "day" ? "denna dag" : "denna vecka"} kommer att avplaneras och flyttas tillbaka till orderstocken.
+            Är du säker? <strong>{jobCount} schemalagda jobb</strong> i {viewMode === "year" ? "detta år" : viewMode === "quarter" ? "detta kvartal" : viewMode === "month" ? "denna månad" : viewMode === "day" ? "denna dag" : "denna vecka"} kommer att avplaneras och flyttas tillbaka till orderstocken.
           </DialogDescription>
         </DialogHeader>
         <DialogFooter className="gap-2">
