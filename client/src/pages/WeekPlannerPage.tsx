@@ -57,8 +57,8 @@ export default function WeekPlannerPage() {
           </Button>
           <Button
             size="sm"
-            variant="ghost"
-            className="gap-1.5 text-muted-foreground"
+            variant="outline"
+            className="gap-1.5"
             onClick={() => setShowJobModal(true)}
             data-testid="button-open-engangsorder"
           >

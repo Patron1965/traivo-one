@@ -94,9 +94,9 @@ export default function PlannerPopoutPage() {
             Enkel uppgift
           </Button>
           <Button
-            variant="ghost"
+            variant="outline"
             size="sm"
-            className="h-8 text-xs gap-1.5 text-muted-foreground"
+            className="h-8 text-xs gap-1.5"
             onClick={() => setShowJobModal(true)}
             data-testid="button-open-engangsorder"
           >
