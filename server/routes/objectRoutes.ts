@@ -833,6 +833,36 @@ app.get("/api/objects/:id/descendants", asyncHandler(async (req, res) => {
   res.json(descendants);
 }));
 
+// Task #854: zoombar tidslinje för objektuppgifter. Returnerar schemalagda
+// arbetsordrar för objektet + hela dess underträd inom [startDate, endDate].
+// Tenant- och objektägarskap verifieras innan läsning. Datumen krävs och
+// måste vara giltiga ISO-datum (YYYY-MM-DD) — fönstret begränsas till ~6 år
+// för att skydda mot oavsiktligt enorma intervall.
+app.get("/api/objects/:id/timeline", asyncHandler(async (req, res) => {
+  const tenantId = getTenantIdWithFallback(req);
+  const existing = await storage.getObject(req.params.id);
+  if (!verifyTenantOwnership(existing, tenantId)) {
+    throw new NotFoundError("Objekt");
+  }
+  const startRaw = typeof req.query.startDate === "string" ? req.query.startDate : "";
+  const endRaw = typeof req.query.endDate === "string" ? req.query.endDate : "";
+  const startDate = new Date(`${startRaw}T00:00:00`);
+  const endDate = new Date(`${endRaw}T23:59:59.999`);
+  if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime())) {
+    throw new ValidationError("startDate och endDate krävs (format YYYY-MM-DD)");
+  }
+  if (startDate > endDate) {
+    throw new ValidationError("startDate måste vara före endDate");
+  }
+  const MAX_RANGE_MS = 6 * 366 * 24 * 60 * 60 * 1000;
+  if (endDate.getTime() - startDate.getTime() > MAX_RANGE_MS) {
+    throw new ValidationError("Tidsintervallet är för stort (max 6 år)");
+  }
+  const orders = await storage.getObjectSubtreeTimeline(tenantId, req.params.id, startDate, endDate);
+  res.set("Cache-Control", "no-cache, must-revalidate");
+  res.json(orders);
+}));
+
 // Task #681: avvikelser kopplade till objektet — driver detaljpanelens
 // Avvikelser-flik. Tenant- och objektägarskap verifieras innan läsning.
 app.get("/api/objects/:id/deviations", asyncHandler(async (req, res) => {

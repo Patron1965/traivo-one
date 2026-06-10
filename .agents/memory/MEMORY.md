@@ -36,3 +36,4 @@
 - [WeekPlanner ViewMode range-fanout](weekplanner-viewmode-range-fanout.md) — ny ViewMode kräver uppdatering av ALLA period-deriverande funktioner i usePlannerData.ts (clear/send/range) — `else`-fallback ger tyst fel-scope; ingen TS-switch fångar det.
 - [Prod-only DB 500 debugging](prod-db-500-debugging.md) — Drizzle gömmer PG-orsaken i err.cause + trunkerad "Failed query"-message; hoista compact dbError (SQLSTATE). Valfria varchar-FK: tvinga ""→null (annars 23503).
 - [Kap5 antal-behörighet server-side](kap5-quantity-permission.md) — operatörs-antal-behörighet härleds från req.tenantRole (owner/admin/planner alltid OK; övriga kräver article-flagga), aldrig klient-payload.
+- [ObjectTimeline återanvändning](object-timeline-reuse.md) — zoombar objekt-tidslinje (år→dag, subträd via CTE) är datakälls-agnostisk: injicera fetchTimeline+queryKeyPrefix för portal-återbruk; YearView/QuarterView/MonthView återanvänds direkt.

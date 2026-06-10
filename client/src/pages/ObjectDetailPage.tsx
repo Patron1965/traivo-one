@@ -8,6 +8,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { DeliveryPreferencesEditor } from "@/components/DeliveryPreferencesEditor";
 import { ObjectHistoryArchiveTab } from "@/components/ObjectHistoryArchiveTab";
 import { ObjectVignetteSection } from "@/components/ObjectVignetteSection";
+import { ObjectTimeline } from "@/components/timeline/ObjectTimeline";
 import InvoiceRecipientsCard from "@/components/InvoiceRecipientsCard";
 import ObjectPayersCard from "@/components/ObjectPayersCard";
 import { TelinkSyncButton } from "@/components/TelinkSyncButton";
@@ -1118,6 +1119,9 @@ export default function ObjectDetailPage() {
           <TabsTrigger value="workorders" data-testid="tab-workorders">
             Kopplade uppgifter {workOrders.length > 0 && <Badge variant="secondary" className="ml-1 text-xs">{workOrders.length}</Badge>}
           </TabsTrigger>
+          <TabsTrigger value="timeline" data-testid="tab-timeline">
+            Tidslinje
+          </TabsTrigger>
           <TabsTrigger value="kundkontakt" data-testid="tab-kundkontakt">
             Kundkontakt {issueReports.length > 0 && <Badge variant="secondary" className="ml-1 text-xs">{issueReports.length}</Badge>}
           </TabsTrigger>
@@ -2027,6 +2031,36 @@ export default function ObjectDetailPage() {
               ) : (
                 <p className="text-sm text-muted-foreground">Inga uppgifter kopplade till detta objekt.</p>
               )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* ==================== TIDSLINJE (Task #854 — zoombar år→dag, inkl. underträd) ==================== */}
+        <TabsContent value="timeline">
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base flex items-center gap-2">
+                <Calendar className="h-4 w-4" /> Tidslinje
+              </CardTitle>
+              <p className="text-xs text-muted-foreground">
+                Schemalagda uppgifter för objektet och alla dess underliggande objekt. Zooma mellan år, kvartal, månad, vecka och dag.
+              </p>
+            </CardHeader>
+            <CardContent className="p-0">
+              <ObjectTimeline
+                queryKeyPrefix={["/api/objects", objectId, "timeline"]}
+                fetchTimeline={async (startDate, endDate) => {
+                  const res = await apiRequest(
+                    "GET",
+                    `/api/objects/${objectId}/timeline?startDate=${startDate}&endDate=${endDate}`,
+                  );
+                  return res.json();
+                }}
+                onSelectTask={(taskId) => {
+                  setHighlightedWorkOrderId(taskId);
+                  setActiveTab("workorders");
+                }}
+              />
             </CardContent>
           </Card>
         </TabsContent>

@@ -466,6 +466,12 @@ export interface IStorage {
    */
   getUnplannedRoughWorkOrders(tenantId: string, limit: number, offset: number): Promise<{ workOrders: WorkOrderWithObject[]; total: number }>;
   getUnscheduledWorkOrders(tenantId: string, limit?: number): Promise<WorkOrderWithObject[]>;
+  /**
+   * Task #854: tidslinje-data för ett objekt + hela dess underträd. Resolvar
+   * subträdet via rekursiv CTE (parentId) och returnerar schemalagda
+   * arbetsordrar inom [startDate, endDate], tenant-scopat, ordnade på datum.
+   */
+  getObjectSubtreeTimeline(tenantId: string, rootObjectId: string, startDate: Date, endDate: Date): Promise<WorkOrderWithObject[]>;
   getUnscheduledWorkOrdersPaginated(tenantId: string, limit: number, offset: number, search?: string, dateFilter?: { field: 'desired' | 'created' | 'sla'; from?: string; to?: string }): Promise<{ workOrders: WorkOrderWithObject[]; total: number; missingDateFieldCount?: number }>;
   getUnscheduledMissingDateField(tenantId: string, field: 'desired' | 'sla', search?: string, limit?: number): Promise<WorkOrderWithObject[]>;
   /** Paginerad variant av {@link getWorkOrders} — föredragen för UI/list-vyer. */
@@ -3003,6 +3009,106 @@ export class DatabaseStorage implements IStorage {
     }
     
     return query;
+  }
+
+  async getObjectSubtreeTimeline(tenantId: string, rootObjectId: string, startDate: Date, endDate: Date): Promise<WorkOrderWithObject[]> {
+    // Resolvar objektets subträd (self + alla ättlingar) via rekursiv CTE på
+    // parent_id, tenant-scopat och exkl. soft-deletade noder.
+    const subtreeRes = await db.execute(sql`
+      WITH RECURSIVE subtree AS (
+        SELECT id FROM objects
+          WHERE id = ${rootObjectId} AND tenant_id = ${tenantId} AND deleted_at IS NULL
+        UNION ALL
+        SELECT o.id FROM objects o
+          INNER JOIN subtree s ON o.parent_id = s.id
+          WHERE o.tenant_id = ${tenantId} AND o.deleted_at IS NULL
+      )
+      SELECT id FROM subtree
+    `);
+    const objectIds = rowsOf<{ id: string }>(subtreeRes).map(r => r.id);
+    if (objectIds.length === 0) return [];
+
+    return db.select({
+      id: workOrders.id,
+      tenantId: workOrders.tenantId,
+      customerId: workOrders.customerId,
+      objectId: workOrders.objectId,
+      clusterId: workOrders.clusterId,
+      resourceId: workOrders.resourceId,
+      teamId: workOrders.teamId,
+      title: workOrders.title,
+      description: workOrders.description,
+      orderType: workOrders.orderType,
+      priority: workOrders.priority,
+      orderStatus: workOrders.orderStatus,
+      scheduledDate: workOrders.scheduledDate,
+      scheduledStartTime: workOrders.scheduledStartTime,
+      plannedWindowStart: workOrders.plannedWindowStart,
+      plannedWindowEnd: workOrders.plannedWindowEnd,
+      estimatedDuration: workOrders.estimatedDuration,
+      actualDuration: workOrders.actualDuration,
+      setupTime: workOrders.setupTime,
+      setupReason: workOrders.setupReason,
+      lockedAt: workOrders.lockedAt,
+      completedAt: workOrders.completedAt,
+      invoicedAt: workOrders.invoicedAt,
+      cachedValue: workOrders.cachedValue,
+      cachedCost: workOrders.cachedCost,
+      cachedProductionMinutes: workOrders.cachedProductionMinutes,
+      isSimulated: workOrders.isSimulated,
+      simulationScenarioId: workOrders.simulationScenarioId,
+      plannedBy: workOrders.plannedBy,
+      plannedNotes: workOrders.plannedNotes,
+      notes: workOrders.notes,
+      metadata: workOrders.metadata,
+      createdAt: workOrders.createdAt,
+      deletedAt: workOrders.deletedAt,
+      impossibleReason: workOrders.impossibleReason,
+      impossibleReasonText: workOrders.impossibleReasonText,
+      impossibleAt: workOrders.impossibleAt,
+      impossibleBy: workOrders.impossibleBy,
+      impossiblePhotoUrl: workOrders.impossiblePhotoUrl,
+      executionStatus: workOrders.executionStatus,
+      creationMethod: workOrders.creationMethod,
+      structuralArticleId: workOrders.structuralArticleId,
+      roughPlannedWeek: workOrders.roughPlannedWeek,
+      districtId: workOrders.districtId,
+      taskLatitude: workOrders.taskLatitude,
+      taskLongitude: workOrders.taskLongitude,
+      externalReference: workOrders.externalReference,
+      onWayAt: workOrders.onWayAt,
+      onSiteAt: workOrders.onSiteAt,
+      inspectedAt: workOrders.inspectedAt,
+      executionCode: workOrders.executionCode,
+      importBatchId: workOrders.importBatchId,
+      outsidePreferredWindow: workOrders.outsidePreferredWindow,
+      deliveryPreferencePriority: workOrders.deliveryPreferencePriority,
+      taskCategory: workOrders.taskCategory,
+      status: workOrders.status,
+      desiredDeliveryStart: workOrders.desiredDeliveryStart,
+      desiredDeliveryEnd: workOrders.desiredDeliveryEnd,
+      etaSmsSent: workOrders.etaSmsSent,
+      objectName: objects.name,
+      objectNameTranslations: objects.nameTranslations,
+      objectAddress: objects.address,
+      objectAccessCode: objects.resolvedAccessCode,
+      objectKeyNumber: objects.resolvedKeyNumber,
+      objectLatitude: objects.latitude,
+      objectLongitude: objects.longitude,
+      customerName: customers.name,
+    })
+    .from(workOrders)
+    .leftJoin(objects, eq(workOrders.objectId, objects.id))
+    .leftJoin(customers, eq(workOrders.customerId, customers.id))
+    .where(and(
+      eq(workOrders.tenantId, tenantId),
+      isNull(workOrders.deletedAt),
+      inArray(workOrders.objectId, objectIds),
+      isNotNull(workOrders.scheduledDate),
+      gte(workOrders.scheduledDate, startDate),
+      lte(workOrders.scheduledDate, endDate),
+    ))
+    .orderBy(desc(workOrders.scheduledDate));
   }
 
   async getRoughPlanningSummary(tenantId: string, week: string, districtId?: string): Promise<RoughPlanningSummary> {
