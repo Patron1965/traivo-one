@@ -12,6 +12,7 @@ import {
   MapPin,
   ClipboardList,
   Plus,
+  Crosshair,
 } from "lucide-react";
 
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -42,9 +43,12 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { formatSekFromOre } from "@/lib/format";
 import { getExecutionStatusBadge } from "@/lib/status-colors";
+import { RoughPlanningMap } from "@/components/grovplanering/RoughPlanningMap";
 import type {
   GeographicDistrict,
+  RoughPlanningMapPoint,
   RoughPlanningSummary,
+  RoughPlanningTyngdpunktWeek,
   Team,
   WorkOrderWithObject,
 } from "@shared/schema";
@@ -99,6 +103,34 @@ export default function GrovplaneringPage() {
   });
   const teamsQuery = useQuery<Team[]>({ queryKey: ["/api/teams"] });
   const districtsQuery = useQuery<GeographicDistrict[]>({ queryKey: ["/api/districts"] });
+
+  // Flerveckors översikt: vald vecka + kommande 7 veckor.
+  const overviewWeeks = useMemo(() => {
+    const start = weekStartFromString(week);
+    return Array.from({ length: 8 }, (_, i) => isoWeekString(addWeeks(start, i)));
+  }, [week]);
+
+  const districtIdParam = districtFilter === "all" ? undefined : districtFilter;
+
+  const overviewQuery = useQuery<RoughPlanningTyngdpunktWeek[]>({
+    queryKey: ["/api/rough-planning/tyngdpunkt-overview", { weeks: overviewWeeks, districtId: districtIdParam }],
+    queryFn: async () => {
+      const params = new URLSearchParams({ weeks: overviewWeeks.join(",") });
+      if (districtIdParam) params.set("districtId", districtIdParam);
+      const res = await apiRequest("GET", `/api/rough-planning/tyngdpunkt-overview?${params.toString()}`);
+      return res.json();
+    },
+  });
+
+  const mapQuery = useQuery<RoughPlanningMapPoint[]>({
+    queryKey: ["/api/rough-planning/map", { week, districtId: districtIdParam }],
+    queryFn: async () => {
+      const params = new URLSearchParams({ week });
+      if (districtIdParam) params.set("districtId", districtIdParam);
+      const res = await apiRequest("GET", `/api/rough-planning/map?${params.toString()}`);
+      return res.json();
+    },
+  });
 
   const summary = summaryQuery.data;
   const teams = (teamsQuery.data ?? []).filter((t) => t.status === "active");
@@ -171,6 +203,8 @@ export default function GrovplaneringPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/rough-planning/summary"] });
       queryClient.invalidateQueries({ queryKey: ["/api/rough-planning/unplanned"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/rough-planning/map"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/rough-planning/tyngdpunkt-overview"] });
       toast({ title: "Order grovplanerad", description: `Lagd på ${week}` });
     },
     onError: (e: Error) => toast({ title: "Kunde inte grovplanera", description: e.message, variant: "destructive" }),
@@ -213,6 +247,8 @@ export default function GrovplaneringPage() {
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["/api/rough-planning/summary"] });
       queryClient.invalidateQueries({ queryKey: ["/api/rough-planning/unplanned"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/rough-planning/map"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/rough-planning/tyngdpunkt-overview"] });
       setSelectedIds(new Set());
       const { planned, error, autoAssigned } = data.summary;
       const parts = [`${planned} grovplanerade på ${week}`];
@@ -358,6 +394,131 @@ export default function GrovplaneringPage() {
             ))}
           </div>
         )}
+
+        <div className="grid gap-4 lg:grid-cols-3">
+          <Card className="lg:col-span-1" data-testid="card-tyngdpunkt">
+            <CardHeader>
+              <CardTitle className="text-base flex items-center gap-2">
+                <Crosshair className="h-4 w-4" /> Tyngdpunkt {week}
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {summary?.tyngdpunkt ? (
+                <>
+                  <div>
+                    <p className="text-xs text-muted-foreground">Närmaste ort</p>
+                    <p className="text-lg font-semibold" data-testid="text-tyngdpunkt-ort">
+                      {summary.tyngdpunkt.nearestDistrictName ?? "Okänd ort"}
+                    </p>
+                    <p className="text-xs text-muted-foreground" data-testid="text-tyngdpunkt-coords">
+                      {summary.tyngdpunkt.lat.toFixed(4)}, {summary.tyngdpunkt.lng.toFixed(4)}
+                    </p>
+                  </div>
+                  <div className="grid grid-cols-3 gap-2 pt-1">
+                    <div>
+                      <p className="text-xs text-muted-foreground">Uppgifter</p>
+                      <p className="text-sm font-semibold" data-testid="text-tyngdpunkt-count">{totals.count}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground">Ordervärde</p>
+                      <p className="text-sm font-semibold" data-testid="text-tyngdpunkt-value">{formatSekFromOre(totals.value)}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground">Produktionstid</p>
+                      <p className="text-sm font-semibold" data-testid="text-tyngdpunkt-demand">{totals.demandH.toFixed(1)} h</p>
+                    </div>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Baserat på {summary.tyngdpunkt.pointCount} ordrar med koordinater
+                  </p>
+                </>
+              ) : (
+                <p className="text-sm text-muted-foreground py-4" data-testid="text-tyngdpunkt-empty">
+                  Inga grovplanerade ordrar med koordinater denna vecka.
+                </p>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card className="lg:col-span-2" data-testid="card-grovplanering-map">
+            <CardHeader>
+              <CardTitle className="text-base flex items-center gap-2">
+                <MapPin className="h-4 w-4" /> Karta — grovplanerade ordrar
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {mapQuery.isLoading ? (
+                <div className="h-[420px] w-full rounded-md border bg-muted/30 animate-pulse" data-testid="map-loading" />
+              ) : (mapQuery.data?.length ?? 0) === 0 ? (
+                <div className="flex h-[420px] w-full items-center justify-center rounded-md border text-sm text-muted-foreground" data-testid="map-empty">
+                  Inga grovplanerade ordrar med koordinater denna vecka.
+                </div>
+              ) : (
+                <RoughPlanningMap
+                  points={mapQuery.data ?? []}
+                  tyngdpunkt={summary?.tyngdpunkt ?? null}
+                  districts={districts}
+                />
+              )}
+            </CardContent>
+          </Card>
+        </div>
+
+        <Card data-testid="card-tyngdpunkt-overview">
+          <CardHeader>
+            <CardTitle className="text-base flex items-center gap-2">
+              <CalendarDays className="h-4 w-4" /> Tyngdpunkt över tid (kommande veckor)
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Vecka</TableHead>
+                  <TableHead>Tyngdpunkt-ort</TableHead>
+                  <TableHead className="text-right">Uppgifter</TableHead>
+                  <TableHead className="text-right">Ordervärde</TableHead>
+                  <TableHead className="text-right">Produktionstid (h)</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {(overviewQuery.data ?? []).map((row) => (
+                  <TableRow
+                    key={row.week}
+                    data-state={row.week === week ? "selected" : undefined}
+                    data-testid={`row-overview-${row.week}`}
+                  >
+                    <TableCell className="font-medium">
+                      <button
+                        type="button"
+                        className="hover:underline"
+                        onClick={() => setWeek(row.week)}
+                        data-testid={`button-overview-week-${row.week}`}
+                      >
+                        {row.week}
+                      </button>
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">
+                      {row.orderCount === 0
+                        ? "—"
+                        : row.nearestDistrictName ?? (row.lat != null ? "Okänd ort" : "Saknar koordinater")}
+                    </TableCell>
+                    <TableCell className="text-right">{row.orderCount}</TableCell>
+                    <TableCell className="text-right">{formatSekFromOre(row.valueOre)}</TableCell>
+                    <TableCell className="text-right">{row.demandHours.toFixed(1)}</TableCell>
+                  </TableRow>
+                ))}
+                {(overviewQuery.data?.length ?? 0) === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={5} className="text-center text-muted-foreground py-6">
+                      {overviewQuery.isLoading ? "Laddar…" : "Ingen data"}
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
 
         {groupBy === "team" ? (
           <Card>

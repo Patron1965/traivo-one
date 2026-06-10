@@ -7,6 +7,8 @@ import {
   type Resource, type InsertResource,
   type WorkOrder, type InsertWorkOrder, type WorkOrderWithObject,
   type RoughPlanningSummary,
+  type RoughPlanningTyngdpunktWeek,
+  type RoughPlanningMapPoint,
   type SetupTimeLog, type InsertSetupTimeLog,
   type Procurement, type InsertProcurement,
   type Article, type InsertArticle,
@@ -218,6 +220,7 @@ import {
   type HookObjectContext,
 } from "./association-service";
 import { getObjectWithAllMetadata } from "./metadata-queries";
+import { haversineDistanceKm } from "./distance-matrix-service";
 import type { AssociationCondition } from "@shared/schema";
 
 export interface ResolvedArticlePrice {
@@ -311,6 +314,37 @@ export interface WeeklyPlanTaskFact {
   lng: number | null;
   objectId: string | null;
   locationName: string | null;
+}
+
+/** Distriktscentrum för "närmaste ort"-approximation (Task #877). */
+interface DistrictCoord {
+  id: string;
+  name: string;
+  lat: number;
+  lng: number;
+}
+
+/**
+ * Närmaste distrikt (haversine) till en koordinat — används som proxy för
+ * "närmaste ort" i grovplaneringens tyngdpunkt. Returnerar null om koordinaten
+ * eller distriktslistan saknas.
+ */
+function nearestDistrictLabel(
+  lat: number | null,
+  lng: number | null,
+  districts: DistrictCoord[],
+): { id: string; name: string } | null {
+  if (lat == null || lng == null || districts.length === 0) return null;
+  let best: DistrictCoord | null = null;
+  let bestDist = Infinity;
+  for (const d of districts) {
+    const dist = haversineDistanceKm(lat, lng, d.lat, d.lng);
+    if (dist < bestDist) {
+      bestDist = dist;
+      best = d;
+    }
+  }
+  return best ? { id: best.id, name: best.name } : null;
 }
 
 export interface IStorage {
@@ -465,6 +499,17 @@ export interface IStorage {
    * omojlig/avbruten).
    */
   getUnplannedRoughWorkOrders(tenantId: string, limit: number, offset: number): Promise<{ workOrders: WorkOrderWithObject[]; total: number }>;
+  /**
+   * Flerveckors geografisk tyngdpunkt (Task #877). Returnerar en rad per
+   * begärd vecka (saknade veckor fylls med nollor) med centroid + närmaste
+   * distrikt. Flyktigt — ingen DB-persistering.
+   */
+  getRoughPlanningTyngdpunktOverview(tenantId: string, weeks: string[], districtId?: string): Promise<RoughPlanningTyngdpunktWeek[]>;
+  /**
+   * Kart-punkter för grovplanerade ordrar en vecka (Task #877): grovplanerade
+   * ordrar (`rough_planned_week = week`) med koordinater, ev. distriktsfiltrerat.
+   */
+  getRoughPlanningMapPoints(tenantId: string, week: string, districtId?: string): Promise<RoughPlanningMapPoint[]>;
   getUnscheduledWorkOrders(tenantId: string, limit?: number): Promise<WorkOrderWithObject[]>;
   /**
    * Task #854: tidslinje-data för ett objekt + hela dess underträd. Resolvar
@@ -3139,7 +3184,7 @@ export class DatabaseStorage implements IStorage {
     const valueOreSql = sql<number>`COALESCE(SUM(${workOrders.cachedValue}), 0)::bigint`;
     const countSql = sql<number>`COUNT(*)::int`;
 
-    const [byTeamRows, byDistrictRows, byStatusRows, capacityRow] = await Promise.all([
+    const [byTeamRows, byDistrictRows, byStatusRows, capacityRow, centroidRow, districtRows] = await Promise.all([
       db
         .select({
           teamId: workOrders.teamId,
@@ -3174,9 +3219,48 @@ export class DatabaseStorage implements IStorage {
         })
         .from(teams)
         .where(and(eq(teams.tenantId, tenantId), eq(teams.status, "active"), isNull(teams.deletedAt))),
+      // Geografisk tyngdpunkt: medel av ordrarnas koordinater. Endast rader med BÅDA
+      // koordinaterna räknas så att lat/lng/pointCount kommer från samma radmängd.
+      db
+        .select({
+          lat: sql<number | null>`AVG(${workOrders.taskLatitude})`,
+          lng: sql<number | null>`AVG(${workOrders.taskLongitude})`,
+          pointCount: sql<number>`COUNT(*)::int`,
+        })
+        .from(workOrders)
+        .where(and(where, isNotNull(workOrders.taskLatitude), isNotNull(workOrders.taskLongitude))),
+      // Distriktscentrum för "närmaste ort"-approximation.
+      db
+        .select({
+          id: geographicDistricts.id,
+          name: geographicDistricts.name,
+          lat: geographicDistricts.centerLat,
+          lng: geographicDistricts.centerLng,
+        })
+        .from(geographicDistricts)
+        .where(and(eq(geographicDistricts.tenantId, tenantId), isNull(geographicDistricts.deletedAt))),
     ]);
 
     const toNum = (v: unknown) => (v == null ? 0 : Number(v));
+
+    const districtCoords: DistrictCoord[] = districtRows
+      .filter((d) => d.lat != null && d.lng != null)
+      .map((d) => ({ id: d.id, name: d.name, lat: Number(d.lat), lng: Number(d.lng) }));
+
+    const centroidLat = centroidRow[0]?.lat == null ? null : Number(centroidRow[0].lat);
+    const centroidLng = centroidRow[0]?.lng == null ? null : Number(centroidRow[0].lng);
+    const centroidPoints = toNum(centroidRow[0]?.pointCount);
+    const nearest = nearestDistrictLabel(centroidLat, centroidLng, districtCoords);
+    const tyngdpunkt =
+      centroidLat != null && centroidLng != null && centroidPoints > 0
+        ? {
+            lat: centroidLat,
+            lng: centroidLng,
+            pointCount: centroidPoints,
+            nearestDistrictId: nearest?.id ?? null,
+            nearestDistrictName: nearest?.name ?? null,
+          }
+        : null;
 
     const byTeam = byTeamRows.map((r) => ({
       teamId: r.teamId ?? null,
@@ -3217,7 +3301,130 @@ export class DatabaseStorage implements IStorage {
       byTeam,
       byDistrict,
       statusCounts,
+      tyngdpunkt,
     };
+  }
+
+  async getRoughPlanningTyngdpunktOverview(
+    tenantId: string,
+    weeks: string[],
+    districtId?: string,
+  ): Promise<RoughPlanningTyngdpunktWeek[]> {
+    const uniqueWeeks = Array.from(new Set(weeks));
+    if (uniqueWeeks.length === 0) return [];
+
+    const conditions = [
+      eq(workOrders.tenantId, tenantId),
+      isNull(workOrders.deletedAt),
+      inArray(workOrders.roughPlannedWeek, uniqueWeeks),
+    ];
+    if (districtId) conditions.push(eq(workOrders.districtId, districtId));
+
+    const [aggRows, districtRows] = await Promise.all([
+      db
+        .select({
+          week: workOrders.roughPlannedWeek,
+          orderCount: sql<number>`COUNT(*)::int`,
+          valueOre: sql<number>`COALESCE(SUM(${workOrders.cachedValue}), 0)::bigint`,
+          demandHours: sql<number>`COALESCE(SUM(${workOrders.estimatedDuration}), 0)::float / 60`,
+          // Tyngdpunkt räknas endast på rader med BÅDA koordinaterna (orderCount avser alla rader).
+          lat: sql<number | null>`AVG(${workOrders.taskLatitude}) FILTER (WHERE ${workOrders.taskLatitude} IS NOT NULL AND ${workOrders.taskLongitude} IS NOT NULL)`,
+          lng: sql<number | null>`AVG(${workOrders.taskLongitude}) FILTER (WHERE ${workOrders.taskLatitude} IS NOT NULL AND ${workOrders.taskLongitude} IS NOT NULL)`,
+          pointCount: sql<number>`COUNT(*) FILTER (WHERE ${workOrders.taskLatitude} IS NOT NULL AND ${workOrders.taskLongitude} IS NOT NULL)::int`,
+        })
+        .from(workOrders)
+        .where(and(...conditions))
+        .groupBy(workOrders.roughPlannedWeek),
+      db
+        .select({
+          id: geographicDistricts.id,
+          name: geographicDistricts.name,
+          lat: geographicDistricts.centerLat,
+          lng: geographicDistricts.centerLng,
+        })
+        .from(geographicDistricts)
+        .where(and(eq(geographicDistricts.tenantId, tenantId), isNull(geographicDistricts.deletedAt))),
+    ]);
+
+    const toNum = (v: unknown) => (v == null ? 0 : Number(v));
+    const districtCoords: DistrictCoord[] = districtRows
+      .filter((d) => d.lat != null && d.lng != null)
+      .map((d) => ({ id: d.id, name: d.name, lat: Number(d.lat), lng: Number(d.lng) }));
+
+    const byWeek = new Map(aggRows.map((r) => [r.week ?? "", r]));
+
+    return uniqueWeeks.map((week) => {
+      const r = byWeek.get(week);
+      if (!r) {
+        return {
+          week,
+          lat: null,
+          lng: null,
+          pointCount: 0,
+          orderCount: 0,
+          valueOre: 0,
+          demandHours: 0,
+          nearestDistrictId: null,
+          nearestDistrictName: null,
+        };
+      }
+      const lat = r.lat == null ? null : Number(r.lat);
+      const lng = r.lng == null ? null : Number(r.lng);
+      const nearest = nearestDistrictLabel(lat, lng, districtCoords);
+      return {
+        week,
+        lat,
+        lng,
+        pointCount: toNum(r.pointCount),
+        orderCount: toNum(r.orderCount),
+        valueOre: toNum(r.valueOre),
+        demandHours: toNum(r.demandHours),
+        nearestDistrictId: nearest?.id ?? null,
+        nearestDistrictName: nearest?.name ?? null,
+      };
+    });
+  }
+
+  async getRoughPlanningMapPoints(
+    tenantId: string,
+    week: string,
+    districtId?: string,
+  ): Promise<RoughPlanningMapPoint[]> {
+    const conditions = [
+      eq(workOrders.tenantId, tenantId),
+      isNull(workOrders.deletedAt),
+      eq(workOrders.roughPlannedWeek, week),
+      isNotNull(workOrders.taskLatitude),
+      isNotNull(workOrders.taskLongitude),
+    ];
+    if (districtId) conditions.push(eq(workOrders.districtId, districtId));
+
+    const rows = await db
+      .select({
+        id: workOrders.id,
+        lat: workOrders.taskLatitude,
+        lng: workOrders.taskLongitude,
+        districtId: workOrders.districtId,
+        valueOre: workOrders.cachedValue,
+        title: workOrders.title,
+        objectName: objects.name,
+      })
+      .from(workOrders)
+      .leftJoin(
+        objects,
+        and(eq(workOrders.objectId, objects.id), eq(objects.tenantId, tenantId), isNull(objects.deletedAt)),
+      )
+      .where(and(...conditions));
+
+    return rows.map((r) => ({
+      id: r.id,
+      lat: Number(r.lat),
+      lng: Number(r.lng),
+      districtId: r.districtId ?? null,
+      valueOre: r.valueOre == null ? 0 : Number(r.valueOre),
+      title: r.title ?? null,
+      objectName: r.objectName ?? null,
+    }));
   }
 
   async getUnplannedRoughWorkOrders(tenantId: string, limit: number, offset: number): Promise<{ workOrders: WorkOrderWithObject[]; total: number }> {

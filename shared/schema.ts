@@ -1674,6 +1674,41 @@ export type RoughPlanningSummary = {
     valueOre: number;
   }>;
   statusCounts: Array<{ status: string; count: number }>;
+  // Geografisk tyngdpunkt (Task #877): medel av ordrarnas koordinater för veckan
+  // (+ ev. distriktsfilter). "Närmaste ort" approximeras via närmaste distrikts-
+  // centrum (haversine) — flyktigt, ingen DB-persistering. null när inga
+  // grovplanerade ordrar har koordinater.
+  tyngdpunkt: {
+    lat: number;
+    lng: number;
+    pointCount: number;
+    nearestDistrictId: string | null;
+    nearestDistrictName: string | null;
+  } | null;
+};
+
+// Flerveckors tyngdpunkts-rad (Task #877). En rad per vecka i ett spann.
+export type RoughPlanningTyngdpunktWeek = {
+  week: string;
+  lat: number | null;
+  lng: number | null;
+  pointCount: number;
+  orderCount: number;
+  valueOre: number;
+  demandHours: number;
+  nearestDistrictId: string | null;
+  nearestDistrictName: string | null;
+};
+
+// Kart-punkt för grovplanerade ordrar en given vecka (Task #877).
+export type RoughPlanningMapPoint = {
+  id: string;
+  lat: number;
+  lng: number;
+  districtId: string | null;
+  valueOre: number;
+  title: string | null;
+  objectName: string | null;
 };
 
 export type SetupTimeLog = typeof setupTimeLogs.$inferSelect;

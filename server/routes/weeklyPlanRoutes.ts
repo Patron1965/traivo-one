@@ -81,6 +81,44 @@ export function registerWeeklyPlanRoutes(app: Express) {
     res.json(summary);
   }));
 
+  // Flerveckors tyngdpunkts-översikt (Task #877). Frontend skickar explicit
+  // lista av veckor (cap 12) så ISO-veckomatten ligger på klienten.
+  const tyngdpunktOverviewSchema = z.object({
+    weeks: z
+      .array(z.string().regex(/^\d{4}-W\d{2}$/, "Ogiltig vecka (format YYYY-Www)"))
+      .min(1)
+      .max(12),
+    districtId: z.string().min(1).optional(),
+  });
+
+  app.get("/api/rough-planning/tyngdpunkt-overview", ...guard, asyncHandler(async (req, res) => {
+    const tenantId = getTenantIdWithFallback(req);
+    const weeksRaw = typeof req.query.weeks === "string" ? req.query.weeks.split(",").map((w) => w.trim()).filter(Boolean) : [];
+    const parsed = tyngdpunktOverviewSchema.safeParse({
+      weeks: weeksRaw,
+      districtId: typeof req.query.districtId === "string" && req.query.districtId ? req.query.districtId : undefined,
+    });
+    if (!parsed.success) {
+      const formatted = formatZodError(parsed.error);
+      throw new ValidationError(formatted.error, formatted.details);
+    }
+    res.json(await storage.getRoughPlanningTyngdpunktOverview(tenantId, parsed.data.weeks, parsed.data.districtId));
+  }));
+
+  // Kart-punkter för grovplanerade ordrar en vecka (Task #877).
+  app.get("/api/rough-planning/map", ...guard, asyncHandler(async (req, res) => {
+    const tenantId = getTenantIdWithFallback(req);
+    const parsed = roughSummarySchema.safeParse({
+      week: req.query.week,
+      districtId: typeof req.query.districtId === "string" && req.query.districtId ? req.query.districtId : undefined,
+    });
+    if (!parsed.success) {
+      const formatted = formatZodError(parsed.error);
+      throw new ValidationError(formatted.error, formatted.details);
+    }
+    res.json(await storage.getRoughPlanningMapPoints(tenantId, parsed.data.week, parsed.data.districtId));
+  }));
+
   // Ogrovplanerade (aktiva) ordrar — paginerat, separat från aggregatet.
   app.get("/api/rough-planning/unplanned", ...guard, asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
