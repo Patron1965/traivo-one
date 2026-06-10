@@ -32,3 +32,4 @@
 - [Import 2.0 interim-mapping](object-import-interim-mapping.md) — execute: skriv `interimToObjectId` ENBART för primary-rader (utrustning delar interim_id) — annars hierarki-korruption.
 - [Tenant module enablement](tenant-module-enablement.md) — aktivera modul för system-tier-tenant via PACKAGE_DEFINITIONS, ej DB-raden (startup-backfill skriver över); literal \\u00xx bara bugg i JSX-text, ej i JS-strängar.
 - [Koncept-expansion skriver assignments](concept-expansion-target-table.md) — orderkoncept-expansion (fortnoxRoutes) skapar rader i `assignments`, INTE `work_orders`; per-uppgift/beroende-fält (ack, kritikalitet) måste stämplas där.
+- [Prod-only DB 500 debugging](prod-db-500-debugging.md) — Drizzle gömmer PG-orsaken i err.cause + trunkerad "Failed query"-message; hoista compact dbError (SQLSTATE). Valfria varchar-FK: tvinga ""→null (annars 23503).

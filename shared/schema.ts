@@ -1584,6 +1584,12 @@ export const insertArticleSchema = createInsertSchema(articles).omit({ id: true,
   name: z.string().trim().min(1, "Namn krävs").max(50, "Namnet får vara högst 50 tecken"),
   // Task #835: validera regelarrayen vid skrivning.
   associationRules: z.array(associationConditionSchema).optional(),
+  // Valfria FK-kolumner: frontend skickar "" när inget valts. Tom sträng bryter
+  // FK-constraints (articles_replaces/replacement_article_id_articles_id_fk → 23503
+  // "Key (...)=() is not present"). Tvinga "" → null vid valideringsgränsen så att
+  // både POST och PATCH (partial) hanteras korrekt.
+  replacesArticleId: z.preprocess((v) => (typeof v === "string" && v.trim() === "" ? null : v), z.string().nullable().optional()),
+  replacementArticleId: z.preprocess((v) => (typeof v === "string" && v.trim() === "" ? null : v), z.string().nullable().optional()),
 });
 export const insertArticleTypeDefinitionSchema = createInsertSchema(articleTypeDefinitions).omit({ id: true, createdAt: true }).extend({
   key: z.string().trim().min(1, "Nyckel krävs").max(50, "Nyckeln får vara högst 50 tecken"),
