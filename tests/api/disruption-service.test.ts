@@ -170,16 +170,40 @@ describe("pickAlternativeDay", () => {
 // ============================================================================
 // applySuggestion — tenant-säkerhet + SLA-omräkning vid datumflytt
 // ============================================================================
-const { storageMock, computeTenantSlaRiskMock } = vi.hoisted(() => ({
-  storageMock: {
-    getWorkOrders: vi.fn(),
-    getWorkOrder: vi.fn(),
-    getResource: vi.fn(),
-    getResources: vi.fn(),
-    updateWorkOrder: vi.fn(),
-  },
-  computeTenantSlaRiskMock: vi.fn(),
-}));
+const { storageMock, computeTenantSlaRiskMock, disruptionStore } = vi.hoisted(() => {
+  // In-memory backing store som simulerar den persistenta disruptions-tabellen,
+  // så att triggerSignificantDelay → applySuggestion-flödet kan läsa tillbaka
+  // störningen (precis som mot DB:n i prod).
+  const disruptionStore: any[] = [];
+  return {
+    disruptionStore,
+    storageMock: {
+      getWorkOrders: vi.fn(),
+      getWorkOrder: vi.fn(),
+      getResource: vi.fn(),
+      getResources: vi.fn(),
+      updateWorkOrder: vi.fn(),
+      createDisruption: vi.fn(async (data: any) => {
+        const row = { ...data, createdAt: data.createdAt ?? new Date() };
+        disruptionStore.push(row);
+        return row;
+      }),
+      getDisruptions: vi.fn(async (tenantId: string, opts?: { includeResolved?: boolean }) =>
+        disruptionStore.filter(d => d.tenantId === tenantId && (opts?.includeResolved ? true : d.status === "active")),
+      ),
+      getDisruption: vi.fn(async (tenantId: string, id: string) =>
+        disruptionStore.find(d => d.tenantId === tenantId && d.id === id),
+      ),
+      updateDisruption: vi.fn(async (tenantId: string, id: string, patch: any) => {
+        const row = disruptionStore.find(d => d.tenantId === tenantId && d.id === id);
+        if (!row) return undefined;
+        Object.assign(row, patch);
+        return row;
+      }),
+    },
+    computeTenantSlaRiskMock: vi.fn(),
+  };
+});
 
 vi.mock("../../server/storage", () => ({
   storage: storageMock,
@@ -254,6 +278,7 @@ async function seedDelayDisruption() {
 describe("applySuggestion", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    disruptionStore.length = 0;
     // Frys till onsdag så pickAlternativeDay hittar en alternativdag (datumflytt).
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-06-10T09:00:00"));

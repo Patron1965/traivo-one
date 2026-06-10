@@ -7055,3 +7055,31 @@ export const execTypePreTaskRules = pgTable("exec_type_pre_task_rules", {
 export type ExecTypePreTaskRule = typeof execTypePreTaskRules.$inferSelect;
 export const insertExecTypePreTaskRuleSchema = createInsertSchema(execTypePreTaskRules).omit({ id: true, createdAt: true, updatedAt: true });
 export type InsertExecTypePreTaskRule = z.infer<typeof insertExecTypePreTaskRuleSchema>;
+
+// Pågående störningar (resursbortfall, akutjobb, försening, ledig tid) med sina
+// förslag och beslutsspår. Persisteras (i stället för en process-lokal Map) så att
+// aktiva störningar och deras förslag överlever serveromstart / flerinstans-deploy.
+// `id` är tjänst-genererad ("dis-...") så ingen DB-default. Nästlade strukturer
+// (förslag, beslutsspår, nedströms-ETA, påverkade order-id:n) lagras som jsonb.
+export const disruptions = pgTable("disruptions", {
+  id: varchar("id").primaryKey(),
+  tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
+  type: text("type").notNull(),
+  status: text("status").default("active").notNull(),
+  severity: text("severity").notNull(),
+  title: text("title").notNull(),
+  description: text("description").notNull(),
+  affectedResourceId: varchar("affected_resource_id"),
+  affectedWorkOrderIds: jsonb("affected_work_order_ids").default([]).notNull(),
+  suggestions: jsonb("suggestions").default([]).notNull(),
+  decisionTrace: jsonb("decision_trace").default([]).notNull(),
+  downstreamEta: jsonb("downstream_eta"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_disruptions_tenant").on(table.tenantId),
+  index("idx_disruptions_tenant_status").on(table.tenantId, table.status),
+]);
+
+export type Disruption = typeof disruptions.$inferSelect;
+export const insertDisruptionSchema = createInsertSchema(disruptions);
+export type InsertDisruption = z.infer<typeof insertDisruptionSchema>;

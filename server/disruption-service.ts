@@ -1,6 +1,7 @@
 import { storage } from "./storage";
 import { haversineDistanceKm } from "./distance-matrix-service";
 import { notificationService } from "./notifications";
+import type { Disruption, InsertDisruption } from "@shared/schema";
 
 export type DisruptionType = "resource_unavailable" | "emergency_job" | "significant_delay" | "early_completion";
 
@@ -60,7 +61,43 @@ interface DecisionTraceEntry {
   timestamp: string;
 }
 
-const activeDisruptions = new Map<string, DisruptionEvent[]>();
+/** Mappa en persisterad rad till ett DisruptionEvent (domän-objektet i tjänsten). */
+function rowToEvent(row: Disruption): DisruptionEvent {
+  return {
+    id: row.id,
+    type: row.type as DisruptionType,
+    tenantId: row.tenantId,
+    createdAt: row.createdAt instanceof Date ? row.createdAt.toISOString() : String(row.createdAt),
+    title: row.title,
+    description: row.description,
+    severity: row.severity as DisruptionEvent["severity"],
+    affectedResourceId: row.affectedResourceId ?? undefined,
+    affectedWorkOrderIds: (row.affectedWorkOrderIds as string[]) ?? [],
+    suggestions: (row.suggestions as DisruptionSuggestion[]) ?? [],
+    status: row.status as DisruptionEvent["status"],
+    decisionTrace: (row.decisionTrace as DecisionTraceEntry[]) ?? [],
+    downstreamEta: (row.downstreamEta as DownstreamEtaEntry[] | null) ?? undefined,
+  };
+}
+
+/** Mappa ett DisruptionEvent till en insert-rad för persistens. */
+function eventToInsert(event: DisruptionEvent): InsertDisruption {
+  return {
+    id: event.id,
+    tenantId: event.tenantId,
+    type: event.type,
+    status: event.status,
+    severity: event.severity,
+    title: event.title,
+    description: event.description,
+    affectedResourceId: event.affectedResourceId ?? null,
+    affectedWorkOrderIds: event.affectedWorkOrderIds,
+    suggestions: event.suggestions,
+    decisionTrace: event.decisionTrace,
+    downstreamEta: event.downstreamEta ?? null,
+    createdAt: new Date(event.createdAt),
+  };
+}
 
 function generateId(): string {
   return `dis-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -219,46 +256,28 @@ export function pickAlternativeDay(loadByDay: Map<string, number>): AltDayChoice
   return candidates[0];
 }
 
-export function getActiveDisruptions(tenantId: string): DisruptionEvent[] {
-  return (activeDisruptions.get(tenantId) || []).filter(d => d.status === "active");
+export async function getActiveDisruptions(tenantId: string): Promise<DisruptionEvent[]> {
+  const rows = await storage.getDisruptions(tenantId, { includeResolved: false });
+  return rows.map(rowToEvent);
 }
 
-export function getAllDisruptions(tenantId: string): DisruptionEvent[] {
-  return activeDisruptions.get(tenantId) || [];
+export async function getAllDisruptions(tenantId: string): Promise<DisruptionEvent[]> {
+  const rows = await storage.getDisruptions(tenantId, { includeResolved: true });
+  return rows.map(rowToEvent);
 }
 
-export function resolveDisruption(tenantId: string, disruptionId: string): boolean {
-  const events = activeDisruptions.get(tenantId);
-  if (!events) return false;
-  const event = events.find(e => e.id === disruptionId);
-  if (!event) return false;
-  event.status = "resolved";
-  return true;
+export async function resolveDisruption(tenantId: string, disruptionId: string): Promise<boolean> {
+  const row = await storage.updateDisruption(tenantId, disruptionId, { status: "resolved" });
+  return !!row;
 }
 
-export function dismissDisruption(tenantId: string, disruptionId: string): boolean {
-  const events = activeDisruptions.get(tenantId);
-  if (!events) return false;
-  const event = events.find(e => e.id === disruptionId);
-  if (!event) return false;
-  event.status = "dismissed";
-  return true;
+export async function dismissDisruption(tenantId: string, disruptionId: string): Promise<boolean> {
+  const row = await storage.updateDisruption(tenantId, disruptionId, { status: "dismissed" });
+  return !!row;
 }
 
-function addDisruption(tenantId: string, event: DisruptionEvent) {
-  if (!activeDisruptions.has(tenantId)) activeDisruptions.set(tenantId, []);
-  const events = activeDisruptions.get(tenantId)!;
-  events.push(event);
-  if (events.length > 100) {
-    const resolved = events.filter(e => e.status !== "active");
-    if (resolved.length > 50) {
-      const toRemove = resolved.slice(0, resolved.length - 50);
-      for (const r of toRemove) {
-        const idx = events.indexOf(r);
-        if (idx >= 0) events.splice(idx, 1);
-      }
-    }
-  }
+async function addDisruption(tenantId: string, event: DisruptionEvent): Promise<void> {
+  await storage.createDisruption(eventToInsert(event));
 }
 
 export async function triggerResourceUnavailable(
@@ -361,7 +380,7 @@ export async function triggerResourceUnavailable(
     decisionTrace,
   };
 
-  addDisruption(tenantId, event);
+  await addDisruption(tenantId, event);
 
   notificationService.broadcastSystemAlert({
     type: "anomaly_alert",
@@ -463,7 +482,7 @@ export async function triggerEmergencyJob(
     decisionTrace,
   };
 
-  addDisruption(tenantId, event);
+  await addDisruption(tenantId, event);
   notificationService.broadcastSystemAlert({
     type: "anomaly_alert",
     title: event.title,
@@ -672,7 +691,7 @@ export async function triggerSignificantDelay(
     downstreamEta,
   };
 
-  addDisruption(tenantId, event);
+  await addDisruption(tenantId, event);
   notificationService.broadcastSystemAlert({
     type: "anomaly_alert",
     title: event.title,
@@ -762,7 +781,7 @@ export async function triggerEarlyCompletion(
     decisionTrace,
   };
 
-  addDisruption(tenantId, event);
+  await addDisruption(tenantId, event);
   notificationService.broadcastSystemAlert({
     type: "anomaly_alert",
     title: event.title,
@@ -785,9 +804,9 @@ export async function notifyDownstreamCustomers(
   tenantId: string,
   disruptionId: string,
 ): Promise<{ notified: number; skipped: number; failed: number; details: string[] }> {
-  const events = activeDisruptions.get(tenantId);
-  const event = events?.find(e => e.id === disruptionId);
-  if (!event) throw new Error("Störning ej hittad");
+  const row = await storage.getDisruption(tenantId, disruptionId);
+  if (!row) throw new Error("Störning ej hittad");
+  const event = rowToEvent(row);
 
   const entries = (event.downstreamEta || []).filter(e => e.delayMinutes > 0 && e.newEtaTime);
   if (entries.length === 0) {
@@ -828,6 +847,7 @@ export async function notifyDownstreamCustomers(
     detail: `Nedströmsavisering: ${notified} aviserade, ${skipped} hoppade, ${failed} misslyckades`,
     timestamp: new Date().toISOString(),
   });
+  await storage.updateDisruption(tenantId, disruptionId, { decisionTrace: event.decisionTrace });
 
   return { notified, skipped, failed, details };
 }
@@ -837,11 +857,9 @@ export async function applySuggestion(
   disruptionId: string,
   suggestionId: string,
 ): Promise<{ applied: number; details: string[] }> {
-  const events = activeDisruptions.get(tenantId);
-  if (!events) throw new Error("Inga störningar hittade");
-
-  const event = events.find(e => e.id === disruptionId);
-  if (!event) throw new Error("Störning ej hittad");
+  const row = await storage.getDisruption(tenantId, disruptionId);
+  if (!row) throw new Error("Störning ej hittad");
+  const event = rowToEvent(row);
 
   const suggestion = event.suggestions.find(s => s.id === suggestionId);
   if (!suggestion) throw new Error("Förslag ej hittat");
@@ -906,6 +924,10 @@ export async function applySuggestion(
     step: "applied",
     detail: `Förslag "${suggestion.label}" tillämpat: ${applied} åtgärder`,
     timestamp: new Date().toISOString(),
+  });
+  await storage.updateDisruption(tenantId, disruptionId, {
+    status: event.status,
+    decisionTrace: event.decisionTrace,
   });
 
   return { applied, details };

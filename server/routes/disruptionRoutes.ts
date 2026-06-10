@@ -22,7 +22,7 @@ export function registerDisruptionRoutes(app: Express) {
   app.get("/api/disruptions", asyncHandler(async (req: Request, res: Response) => {
     const tenantId = getTenantIdWithFallback(req);
     const includeResolved = req.query.includeResolved === "true";
-    const events = includeResolved ? getAllDisruptions(tenantId) : getActiveDisruptions(tenantId);
+    const events = includeResolved ? await getAllDisruptions(tenantId) : await getActiveDisruptions(tenantId);
     res.json(events);
   }));
 
@@ -158,13 +158,13 @@ export function registerDisruptionRoutes(app: Express) {
 
   app.post("/api/disruptions/:id/dismiss", asyncHandler(async (req: Request, res: Response) => {
     const tenantId = getTenantIdWithFallback(req);
-    const success = dismissDisruption(tenantId, req.params.id);
+    const success = await dismissDisruption(tenantId, req.params.id);
     res.json({ success });
   }));
 
   app.post("/api/disruptions/:id/resolve", asyncHandler(async (req: Request, res: Response) => {
     const tenantId = getTenantIdWithFallback(req);
-    const success = resolveDisruption(tenantId, req.params.id);
+    const success = await resolveDisruption(tenantId, req.params.id);
     res.json({ success });
   }));
 }

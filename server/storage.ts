@@ -157,7 +157,7 @@ import {
   // Task #785 — Veckoplanering: datafundament
   weeklyPlans, weeklyPlanTasks, personalTasks, personalTaskSchedules,
   travelTimeEntries, weeklyPlanWarnings, geographicDistricts, districtZones,
-  preTasks, execTypePreTaskRules,
+  preTasks, execTypePreTaskRules, disruptions,
   type WeeklyPlan, type InsertWeeklyPlan,
   type WeeklyPlanTask, type InsertWeeklyPlanTask,
   type PersonalTask, type InsertPersonalTask,
@@ -168,6 +168,7 @@ import {
   type DistrictZone, type InsertDistrictZone,
   type PreTask, type InsertPreTask,
   type ExecTypePreTaskRule, type InsertExecTypePreTaskRule,
+  type Disruption, type InsertDisruption,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, ne, and, or, isNull, isNotNull, desc, gte, lte, lt, sql, inArray, notInArray, getTableColumns, type SQL, type SQLWrapper } from "drizzle-orm";
@@ -1302,6 +1303,11 @@ export interface IStorage {
   createExecTypePreTaskRule(data: InsertExecTypePreTaskRule): Promise<ExecTypePreTaskRule>;
   updateExecTypePreTaskRule(tenantId: string, id: string, data: Partial<InsertExecTypePreTaskRule>): Promise<ExecTypePreTaskRule | undefined>;
   deleteExecTypePreTaskRule(tenantId: string, id: string): Promise<void>;
+  // Pågående störningar (persisterade — överlever omstart)
+  getDisruptions(tenantId: string, opts?: { includeResolved?: boolean }): Promise<Disruption[]>;
+  getDisruption(tenantId: string, id: string): Promise<Disruption | undefined>;
+  createDisruption(data: InsertDisruption): Promise<Disruption>;
+  updateDisruption(tenantId: string, id: string, data: Partial<InsertDisruption>): Promise<Disruption | undefined>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -10056,6 +10062,41 @@ export class DatabaseStorage implements IStorage {
   }
   async deleteExecTypePreTaskRule(tenantId: string, id: string): Promise<void> {
     await db.delete(execTypePreTaskRules).where(and(eq(execTypePreTaskRules.id, id), eq(execTypePreTaskRules.tenantId, tenantId)));
+  }
+
+  // Pågående störningar (persisterade — överlever omstart)
+  async getDisruptions(tenantId: string, opts?: { includeResolved?: boolean }): Promise<Disruption[]> {
+    const conds: Condition[] = [eq(disruptions.tenantId, tenantId)];
+    if (!opts?.includeResolved) conds.push(eq(disruptions.status, "active"));
+    return db.select().from(disruptions).where(and(...conds)).orderBy(desc(disruptions.createdAt));
+  }
+  async getDisruption(tenantId: string, id: string): Promise<Disruption | undefined> {
+    const [row] = await db.select().from(disruptions)
+      .where(and(eq(disruptions.id, id), eq(disruptions.tenantId, tenantId)));
+    return row || undefined;
+  }
+  async createDisruption(data: InsertDisruption): Promise<Disruption> {
+    const [row] = await db.insert(disruptions).values(data).returning();
+    // Pruna gamla avslutade störningar per tenant så tabellen inte växer obegränsat
+    // (motsvarar den tidigare in-memory-cappningen). Aktiva störningar rörs aldrig.
+    const stale = await db.select({ id: disruptions.id }).from(disruptions)
+      .where(and(eq(disruptions.tenantId, data.tenantId), ne(disruptions.status, "active")))
+      .orderBy(desc(disruptions.createdAt))
+      .limit(1000)
+      .offset(50);
+    if (stale.length > 0) {
+      await db.delete(disruptions).where(and(
+        eq(disruptions.tenantId, data.tenantId),
+        inArray(disruptions.id, stale.map(s => s.id)),
+      ));
+    }
+    return row;
+  }
+  async updateDisruption(tenantId: string, id: string, data: Partial<InsertDisruption>): Promise<Disruption | undefined> {
+    const { tenantId: _t, id: _id, ...patch } = data as Partial<InsertDisruption>;
+    const [row] = await db.update(disruptions).set(patch)
+      .where(and(eq(disruptions.id, id), eq(disruptions.tenantId, tenantId))).returning();
+    return row || undefined;
   }
 }
 

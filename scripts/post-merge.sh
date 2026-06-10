@@ -38,7 +38,8 @@ if command -v psql >/dev/null 2>&1 && [ -n "$DATABASE_URL" ]; then
            migrations/0075_article_association_rules.sql \
            migrations/0076_article_phase3_time_structure.sql \
            migrations/0077_article_geo_dependent.sql \
-           migrations/0078_article_quantity_perm_required_leave.sql; do
+           migrations/0078_article_quantity_perm_required_leave.sql \
+           migrations/0079_disruptions.sql; do
     if [ -f "$f" ]; then
       echo "[post-merge] Applying $f"
       psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f "$f"
