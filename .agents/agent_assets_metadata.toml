@@ -150,3 +150,9 @@ id = "LR-Q5wMdSdxsO5LNvrmrH"
 uri = "file://attached_assets/Inläsning_Hemköp_med_kärl_klar_för_import.xlsx"
 type = "table"
 title = "Inläsning Hemköp – med kärl (klar för import)"
+
+[[outputs]]
+id = "MxXuplOlN7Q1QMkNMqNq3"
+uri = "file://docs/traivo-go-api-match-report.md"
+type = "text"
+title = "Traivo Go ↔ Traivo One — API-matchningsrapport"
