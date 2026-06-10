@@ -13,4 +13,8 @@ When you add a column to `shared/schema.ts`, it reaches **production** ONLY thro
 
 **Why:** prod schema is not the application's responsibility; only Publish mutates it.
 
-**How to apply / fix:** re-publish (the supported path). NEVER "self-heal" prod with startup-time DDL, deploy-build hooks (`.replit [deployment].build` running `db:push`), or `executeSql` DDL against prod — all explicitly forbidden by the `database` skill. To make root-causing faster next time, surface `err.cause` (the real PG error) in the API error handler instead of only Drizzle's truncated wrapper message.
+**How to apply / fix:** re-publish (the supported path). NEVER "self-heal" prod with startup-time DDL, deploy-build hooks (`.replit [deployment].build` running `db:push`), or `executeSql` DDL against prod — all explicitly forbidden by the `database` skill.
+
+**Already done (don't re-investigate):** `server/middleware/errorHandler.ts` now has `serializeError()` that walks `err.cause` and extracts node-postgres fields (`code`, `detail`, `column`, `constraint`, ...) into the server log, and 5xx responses return a generic Swedish message instead of raw Drizzle SQL. So next recurrence: read deployment logs for the real PG `code`/`column` instead of guessing.
+
+**Note on DB identity:** the app connects via the global `DATABASE_URL` *secret* (`server/db.ts`); dev → `heliumdb`, prod deployment → `neondb`. `executeSql` dev/prod targets line up with these. Confirmed `neondb` has `is_geo_dependent` (63 cols, identical schema to dev) — so the article-insert failures were a propagation-timing artifact, not a permanent prod schema gap.

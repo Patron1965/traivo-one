@@ -34,6 +34,42 @@ function statusFromUnknown(err: unknown): number | undefined {
   return undefined;
 }
 
+const GENERIC_INTERNAL_MESSAGE =
+  "Ett internt serverfel uppstod. Försök igen senare.";
+
+/**
+ * Serialiserar ett fel för loggning inklusive HELA `cause`-kedjan. Drizzle
+ * (`DrizzleQueryError`) wrappar det underliggande Postgres-felet i `.cause` —
+ * utan detta syns aldrig den faktiska orsaken (t.ex. `code: 42703 column ...
+ * does not exist`), bara den trunkerade "Failed query"-texten. Plockar även ut
+ * standard-fält från node-postgres-fel (`code`, `detail`, `column`, ...).
+ */
+function serializeError(err: unknown, depth = 0): unknown {
+  if (!err || typeof err !== "object" || depth > 4) return err;
+  const e = err as Record<string, unknown>;
+  const out: Record<string, unknown> = {};
+  if (typeof e.message === "string") out.message = e.message;
+  if (typeof e.stack === "string") out.stack = e.stack;
+  for (const k of [
+    "code",
+    "detail",
+    "hint",
+    "schema",
+    "table",
+    "column",
+    "constraint",
+    "routine",
+    "severity",
+    "where",
+  ]) {
+    if (e[k] !== undefined) out[k] = e[k];
+  }
+  if (e.cause !== undefined && e.cause !== e) {
+    out.cause = serializeError(e.cause, depth + 1);
+  }
+  return out;
+}
+
 function normalizeError(err: unknown): NormalizedError {
   if (err instanceof AppError) {
     return {
@@ -94,7 +130,7 @@ export function errorHandler(
   const logPayload = {
     status,
     code,
-    err: err instanceof Error ? { message: err.message, stack: err.stack } : err,
+    err: serializeError(err),
     route: req.path,
     method: req.method,
     tenantId: req.tenantId,
@@ -106,13 +142,17 @@ export function errorHandler(
     reqLog.warn(logPayload, `request error ${status} ${code}`);
   }
 
+  // Exponera aldrig interna 5xx-meddelanden (t.ex. rå Drizzle-SQL) för klienten
+  // — de kan läcka schema-detaljer och ger usel UX. AppError/Zod (<500) har
+  // avsiktligt användarvänliga meddelanden och behålls. Full orsak loggas ovan.
+  const clientMessage = status >= 500 ? GENERIC_INTERNAL_MESSAGE : message;
   const body: ErrorResponse = {
-    error: message,
+    error: clientMessage,
     code,
-    message,
+    message: clientMessage,
     requestId: req.requestId,
   };
-  if (details !== undefined) body.details = details;
+  if (details !== undefined && status < 500) body.details = details;
 
   res.status(status).json(body);
 }
