@@ -38,6 +38,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { MetadataFieldBuilder, type BuilderFieldValue, type InheritedFieldSeed } from "@/components/MetadataFieldBuilder";
 import { ObjectDetailSheet } from "@/components/ObjectDetailSheet";
+import { ObjectHierarchyTree } from "@/components/objectTree/ObjectHierarchyTree";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { QueryState } from "@/components/QueryState";
 import { AICard } from "@/components/AICard";
@@ -139,7 +140,7 @@ export default function ObjectsPage() {
   const [hierarchyFilter, setHierarchyFilterRaw] = useState("all");
   const [clusterFilter, setClusterFilterRaw] = useState("all");
   const [expandedAreas, setExpandedAreas] = useState<Set<string>>(new Set());
-  const [viewMode, setViewMode] = useState<"list" | "map">("list");
+  const [viewMode, setViewMode] = useState<"list" | "map" | "tree">("list");
   const [editingObject, setEditingObject] = useState<ServiceObject | null>(null);
   const [editField, setEditField] = useState<"accessCode" | null>(null);
   const [editValue, setEditValue] = useState("");
@@ -1780,11 +1781,15 @@ export default function ObjectsPage() {
         )}
       </Card>
 
-      <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as "list" | "map")}>
+      <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as "list" | "map" | "tree")}>
         <TabsList>
           <TabsTrigger value="list" className="gap-2" data-testid="tab-list">
             <List className="h-4 w-4" />
             Lista
+          </TabsTrigger>
+          <TabsTrigger value="tree" className="gap-2" data-testid="tab-tree">
+            <Network className="h-4 w-4" />
+            Träd
           </TabsTrigger>
           <TabsTrigger value="map" className="gap-2" data-testid="tab-map">
             <MapIcon className="h-4 w-4" />
@@ -1899,6 +1904,28 @@ export default function ObjectsPage() {
               </div>
             )}
           </div>
+        </TabsContent>
+
+        <TabsContent value="tree" className="mt-4">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base flex items-center gap-2">
+                <Network className="h-4 w-4" />
+                Objekthierarki
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm text-muted-foreground mb-3">
+                Sök på namn och metadata för att hitta {t("object_plural").toLowerCase()} i hela
+                trädet. Klicka på ett {t("object_singular").toLowerCase()} för att öppna helheten.
+              </p>
+              <ObjectHierarchyTree
+                enableScopeModes
+                height={600}
+                onNodeClick={(node) => navigate(`/objects/${node.id}`)}
+              />
+            </CardContent>
+          </Card>
         </TabsContent>
 
         <TabsContent value="map" className="mt-4">

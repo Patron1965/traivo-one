@@ -13,6 +13,10 @@ import {
   X,
   FoldVertical,
   UnfoldVertical,
+  Loader2,
+  AlertCircle,
+  Building2,
+  Network,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -125,7 +129,15 @@ interface ObjectHierarchyTreeProps {
   height?: number;
   /** Called when a non-selection row is clicked (normal explore mode). */
   onNodeClick?: (node: TreeNode) => void;
+  /**
+   * Task #858: visa växlingen mellan söklägena "hela företaget" (laddar hela
+   * trädet) och "endast toppnivå" (laddar bara rötter, lättare). Default av —
+   * Step4Inspection visar ingen växling och laddar alltid hela trädet.
+   */
+  enableScopeModes?: boolean;
 }
+
+type TreeScope = "all" | "top";
 
 export function ObjectHierarchyTree({
   selectedClusterIds,
@@ -133,14 +145,23 @@ export function ObjectHierarchyTree({
   clusterColors,
   height = 400,
   onNodeClick,
+  enableScopeModes = false,
 }: ObjectHierarchyTreeProps) {
   const selectionMode = !!selectedClusterIds && !!onToggleCluster;
 
   const [searchInput, setSearchInput] = useState("");
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const [scope, setScope] = useState<TreeScope>("all");
+  const topMode = enableScopeModes && scope === "top";
 
-  const { data } = useQuery<{ nodes: TreeNode[] }>({
-    queryKey: ["/api/clusters/tree"],
+  const { data, isLoading, isError, refetch, isFetching } = useQuery<{ nodes: TreeNode[] }>({
+    queryKey: topMode ? ["/api/clusters/tree", "top"] : ["/api/clusters/tree"],
+    queryFn: async () => {
+      const url = topMode ? "/api/clusters/tree?scope=top" : "/api/clusters/tree";
+      const res = await fetch(url, { credentials: "include" });
+      if (!res.ok) throw new Error("Kunde inte hämta objektträdet");
+      return res.json();
+    },
   });
 
   const nodes = useMemo(() => data?.nodes ?? [], [data]);
@@ -251,7 +272,9 @@ export function ObjectHierarchyTree({
       const row = flatRows[index];
       if (!row) return null;
       const { node, depth, hasChildren, isOpen } = row;
-      const desc = descendantCount.get(node.id) ?? 0;
+      // I toppnivå-läget är barnen inte laddade → fall tillbaka på serverns
+      // direkta barn-räknare (node.childCount) så rötterna ändå visar antal.
+      const desc = descendantCount.get(node.id) || node.childCount || 0;
       const isMatch = matchedIds.has(node.id);
       const clusterColor = clusterColors?.get(node.clusterId ?? "") ?? null;
       const clusterSelected = selectionMode && node.clusterId
@@ -385,6 +408,32 @@ export function ObjectHierarchyTree({
         )}
       </div>
 
+      {/* Task #858: söklägen — hela företaget vs endast toppnivå (prestanda) */}
+      {enableScopeModes && (
+        <div className="inline-flex rounded-md border border-border p-0.5 bg-muted/40" data-testid="group-tree-scope">
+          <Button
+            variant={scope === "all" ? "secondary" : "ghost"}
+            size="sm"
+            onClick={() => setScope("all")}
+            className="h-7"
+            data-testid="button-scope-all"
+          >
+            <Network className="h-4 w-4 mr-1" />
+            Hela företaget
+          </Button>
+          <Button
+            variant={scope === "top" ? "secondary" : "ghost"}
+            size="sm"
+            onClick={() => setScope("top")}
+            className="h-7"
+            data-testid="button-scope-top"
+          >
+            <Building2 className="h-4 w-4 mr-1" />
+            Endast toppnivå
+          </Button>
+        </div>
+      )}
+
       {/* Toolbar */}
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2">
@@ -392,7 +441,7 @@ export function ObjectHierarchyTree({
             variant="outline"
             size="sm"
             onClick={expandAll}
-            disabled={filterActive}
+            disabled={filterActive || topMode}
             data-testid="button-expand-all"
           >
             <UnfoldVertical className="h-4 w-4 mr-1" />
@@ -402,7 +451,7 @@ export function ObjectHierarchyTree({
             variant="outline"
             size="sm"
             onClick={collapseAll}
-            disabled={filterActive}
+            disabled={filterActive || topMode}
             data-testid="button-collapse-all"
           >
             <FoldVertical className="h-4 w-4 mr-1" />
@@ -410,20 +459,46 @@ export function ObjectHierarchyTree({
           </Button>
         </div>
         <Badge variant="outline" className="text-xs" data-testid="badge-match-count">
-          {filterActive ? `${matchedIds.size} träffar` : `${nodes.length} objekt`}
+          {filterActive
+            ? `${matchedIds.size} träffar`
+            : topMode
+              ? `${nodes.length} toppnivå`
+              : `${nodes.length} objekt`}
         </Badge>
       </div>
 
       {/* Tree list — identical virtual list rendering as ClusterTreeExplorer */}
       <Card className="overflow-hidden">
         <CardContent className="p-0">
-          {flatRows.length === 0 ? (
+          {isLoading ? (
+            <div
+              className="flex flex-col items-center justify-center gap-2 text-sm text-muted-foreground"
+              style={{ height: Math.min(height, 200) }}
+              data-testid="loading-tree"
+            >
+              <Loader2 className="h-5 w-5 animate-spin" />
+              Laddar objektträd…
+            </div>
+          ) : isError ? (
+            <div
+              className="flex flex-col items-center justify-center gap-3 text-sm text-muted-foreground px-6 text-center"
+              style={{ height: Math.min(height, 200) }}
+              data-testid="error-tree"
+            >
+              <AlertCircle className="h-6 w-6 text-destructive" />
+              <span>Kunde inte hämta objektträdet.</span>
+              <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isFetching} data-testid="button-retry-tree">
+                {isFetching ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : null}
+                Försök igen
+              </Button>
+            </div>
+          ) : flatRows.length === 0 ? (
             <div
               className="flex items-center justify-center text-sm text-muted-foreground"
               style={{ height: Math.min(height, 200) }}
               data-testid="empty-tree-results"
             >
-              Inga objekt matchar filtret
+              {filterActive ? "Inga objekt matchar filtret" : "Inga objekt att visa"}
             </div>
           ) : (
             <List

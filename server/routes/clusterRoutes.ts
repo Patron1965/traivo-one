@@ -23,6 +23,10 @@ app.get("/api/clusters", asyncHandler(async (req, res) => {
 // (från arbetsordrar) + direkt metadata för sök/filtrering. Allt tenant-scopat.
 app.get("/api/clusters/tree", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
+    // Task #858: söklägen för objektträdet. scope=top laddar enbart toppnivå-
+    // objekt (parentId IS NULL) för att minska belastning på stora tenants;
+    // default (scope=all) laddar hela trädet. Step4Inspection använder default.
+    const scope = req.query.scope === "top" ? "top" : "all";
 
     const objRows = await db.select({
       id: objects.id,
@@ -39,28 +43,44 @@ app.get("/api/clusters/tree", asyncHandler(async (req, res) => {
       postalCode: objects.postalCode,
       city: objects.city,
       accessType: objects.accessType,
-    }).from(objects).where(and(eq(objects.tenantId, tenantId), isNull(objects.deletedAt)));
+    }).from(objects).where(
+      scope === "top"
+        ? and(eq(objects.tenantId, tenantId), isNull(objects.deletedAt), isNull(objects.parentId))
+        : and(eq(objects.tenantId, tenantId), isNull(objects.deletedAt)),
+    );
+
+    // I toppnivå-läget begränsar vi berikningsfrågorna till de laddade rötterna.
+    const objIds = objRows.map(o => o.id);
+    const topScopeEmpty = scope === "top" && objIds.length === 0;
 
     // Primär betalare (kund) per objekt
-    const payerRows = await db.select({
+    const payerRows = topScopeEmpty ? [] : await db.select({
       objectId: objectPayers.objectId,
       customerId: objectPayers.customerId,
       customerName: customers.name,
     }).from(objectPayers)
       .innerJoin(customers, eq(objectPayers.customerId, customers.id))
-      .where(and(eq(objectPayers.tenantId, tenantId), eq(objectPayers.isPrimary, true)));
+      .where(
+        scope === "top"
+          ? and(eq(objectPayers.tenantId, tenantId), eq(objectPayers.isPrimary, true), inArray(objectPayers.objectId, objIds))
+          : and(eq(objectPayers.tenantId, tenantId), eq(objectPayers.isPrimary, true)),
+      );
     const customerByObject = new Map<string, { id: string; name: string }>();
     for (const p of payerRows) {
       if (!customerByObject.has(p.objectId)) customerByObject.set(p.objectId, { id: p.customerId, name: p.customerName });
     }
 
     // Arbetsordrar → utförare + orderstatus per objekt
-    const woRows = await db.select({
+    const woRows = topScopeEmpty ? [] : await db.select({
       objectId: workOrders.objectId,
       orderStatus: workOrders.orderStatus,
       resourceId: workOrders.resourceId,
       teamId: workOrders.teamId,
-    }).from(workOrders).where(and(eq(workOrders.tenantId, tenantId), isNull(workOrders.deletedAt)));
+    }).from(workOrders).where(
+      scope === "top"
+        ? and(eq(workOrders.tenantId, tenantId), isNull(workOrders.deletedAt), inArray(workOrders.objectId, objIds))
+        : and(eq(workOrders.tenantId, tenantId), isNull(workOrders.deletedAt)),
+    );
 
     const resourceRows = await db.select({ id: resources.id, name: resources.name })
       .from(resources).where(eq(resources.tenantId, tenantId));
@@ -80,7 +100,7 @@ app.get("/api/clusters/tree", asyncHandler(async (req, res) => {
     }
 
     // Direkt metadata per objekt (ej mjukraderad)
-    const metaRows = await db.select({
+    const metaRows = topScopeEmpty ? [] : await db.select({
       objektId: metadataVarden.objektId,
       namn: metadataKatalog.namn,
       vardeString: metadataVarden.vardeString,
@@ -91,7 +111,11 @@ app.get("/api/clusters/tree", asyncHandler(async (req, res) => {
       vardeJson: metadataVarden.vardeJson,
     }).from(metadataVarden)
       .innerJoin(metadataKatalog, eq(metadataVarden.metadataKatalogId, metadataKatalog.id))
-      .where(and(eq(metadataVarden.tenantId, tenantId), eq(metadataVarden.raderad, false)));
+      .where(
+        scope === "top"
+          ? and(eq(metadataVarden.tenantId, tenantId), eq(metadataVarden.raderad, false), inArray(metadataVarden.objektId, objIds))
+          : and(eq(metadataVarden.tenantId, tenantId), eq(metadataVarden.raderad, false)),
+      );
 
     const metaByObject = new Map<string, Record<string, string>>();
     for (const r of metaRows) {
@@ -111,8 +135,24 @@ app.get("/api/clusters/tree", asyncHandler(async (req, res) => {
 
     // Direkta barn-räknare
     const childCount = new Map<string, number>();
-    for (const o of objRows) {
-      if (o.parentId) childCount.set(o.parentId, (childCount.get(o.parentId) || 0) + 1);
+    if (scope === "top") {
+      // I toppnivå-läget är barnen inte laddade — räkna direkta barn separat
+      // så att rötterna ändå visar hur många barn de har.
+      if (!topScopeEmpty) {
+        const ccRows = await db.select({
+          parentId: objects.parentId,
+          c: sql<number>`count(*)::int`,
+        }).from(objects)
+          .where(and(eq(objects.tenantId, tenantId), isNull(objects.deletedAt), inArray(objects.parentId, objIds)))
+          .groupBy(objects.parentId);
+        for (const r of ccRows) {
+          if (r.parentId) childCount.set(r.parentId, Number(r.c) || 0);
+        }
+      }
+    } else {
+      for (const o of objRows) {
+        if (o.parentId) childCount.set(o.parentId, (childCount.get(o.parentId) || 0) + 1);
+      }
     }
 
     const nodes = objRows.map(o => {
