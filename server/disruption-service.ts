@@ -577,9 +577,60 @@ export async function triggerSignificantDelay(
       if (altDay) {
         const targetEta = etaByOrderId.get(riskTarget.id);
         const keepStart = riskTarget.scheduledStartTime || "08:00";
+
+        // Uppskattad restidspåverkan när jobbet flyttas från ankardagen till
+        // altDay. Marginalkostnaden i en rutt approximeras som tur-och-retur
+        // till närmaste grannjobb samma dag (eller resursens hem-/nuvarande
+        // position om dagen saknar andra jobb med koordinater). Restidsdeltat
+        // är (insättning på altDay − borttag från ankardagen).
+        let travelEffect: string | null = null;
+        if (riskTarget.taskLatitude != null && riskTarget.taskLongitude != null) {
+          const resource = await storage.getResource(resourceId);
+          const homeLat = resource?.currentLatitude ?? resource?.homeLatitude ?? null;
+          const homeLng = resource?.currentLongitude ?? resource?.homeLongitude ?? null;
+          const targetLat = riskTarget.taskLatitude;
+          const targetLng = riskTarget.taskLongitude;
+
+          const coordsForDay = (dayString: string, excludeId?: string) =>
+            allOrders
+              .filter(o =>
+                o.resourceId === resourceId &&
+                o.scheduledDate != null &&
+                normalizeDayString(o.scheduledDate) === dayString &&
+                o.id !== excludeId &&
+                !FINISHED_STATUSES.includes(o.orderStatus) &&
+                o.taskLatitude != null && o.taskLongitude != null,
+              )
+              .map(o => ({ lat: o.taskLatitude as number, lng: o.taskLongitude as number }));
+
+          const marginalKm = (others: Array<{ lat: number; lng: number }>): number | null => {
+            let min = Infinity;
+            for (const o of others) {
+              const d = haversineDistanceKm(targetLat, targetLng, o.lat, o.lng);
+              if (d < min) min = d;
+            }
+            if (min !== Infinity) return min;
+            if (homeLat != null && homeLng != null) {
+              return haversineDistanceKm(targetLat, targetLng, homeLat, homeLng);
+            }
+            return null;
+          };
+
+          const removeKm = marginalKm(coordsForDay(anchorDay, riskTarget.id));
+          const insertKm = marginalKm(coordsForDay(altDay.dayString));
+          if (removeKm != null && insertKm != null) {
+            // Tur-och-retur-detour ≈ 2× närmaste granne; ~35 km/h fältsnitt.
+            const deltaMin = Math.round(((insertKm - removeKm) * 2 / 35) * 60);
+            if (deltaMin > 0) travelEffect = `+${deltaMin} min restid`;
+            else if (deltaMin < 0) travelEffect = `${deltaMin} min restid`;
+            else travelEffect = "oförändrad restid";
+          }
+        }
+
         const effectParts: string[] = [];
         if (targetEta?.windowRisk) effectParts.push("tar bort tidsfönster-risk idag");
         effectParts.push(`flyttar ${riskTarget.estimatedDuration || 60} min produktion till ${altDay.weekday}`);
+        if (travelEffect) effectParts.push(travelEffect);
         effectParts.push(`vald dag har lägst belastning (${Math.round((altDay.loadMinutes) / 60 * 10) / 10} h planerat)`);
         suggestions.push({
           id: "sug-delay-alt-window",
@@ -599,7 +650,7 @@ export async function triggerSignificantDelay(
         trace(
           decisionTrace,
           "alt_window",
-          `Alternativfönster: ${riskTarget.title || riskTarget.id} → ${altDay.dayString} (${altDay.weekday}), belastning ${altDay.loadMinutes} min`,
+          `Alternativfönster: ${riskTarget.title || riskTarget.id} → ${altDay.dayString} (${altDay.weekday}), belastning ${altDay.loadMinutes} min${travelEffect ? `, restidspåverkan ${travelEffect}` : ""}`,
         );
       }
     }
