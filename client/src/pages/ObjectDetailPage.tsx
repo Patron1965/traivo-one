@@ -400,6 +400,8 @@ export default function ObjectDetailPage() {
   // Task #713: flytta- och kopiera-dialoger
   const [moveDialogOpen, setMoveDialogOpen] = useState(false);
   const [moveSearch, setMoveSearch] = useState("");
+  // Task #863: vilket objekt som flyttas (sidans objekt eller ett barn i grenträdet).
+  const [moveTargetId, setMoveTargetId] = useState<string | null>(null);
   const [copyDialogOpen, setCopyDialogOpen] = useState(false);
   const [copyName, setCopyName] = useState("");
   const [copyMode, setCopyMode] = useState<"single" | "branch">("single");
@@ -654,13 +656,23 @@ export default function ObjectDetailPage() {
   // cykelskyddar och validerar ägarskap; barnobjekt + släktnamn uppdateras.
   const moveObjectMutation = useMutation({
     mutationFn: async (newParentId: string | null) => {
-      await apiRequest("PATCH", `/api/objects/${objectId}/move`, { parentId: newParentId });
+      const targetId = moveTargetId || objectId;
+      await apiRequest("PATCH", `/api/objects/${targetId}/move`, { parentId: newParentId });
     },
     onSuccess: () => {
+      const targetId = moveTargetId || objectId;
+      // Sidans objekt: grenträd, släktnamn och resolved-vy kan ha ändrats.
       queryClient.invalidateQueries({ queryKey: ["/api/objects", objectId, "ancestors"] });
       queryClient.invalidateQueries({ queryKey: ["/api/objects", objectId, "descendants"] });
       queryClient.invalidateQueries({ queryKey: ["/api/objects", objectId, "resolved"] });
       queryClient.invalidateQueries({ queryKey: ["/api/objects", objectId, "parents"] });
+      // Det flyttade objektet (om det är ett barn) — egna ancestors/parents/resolved.
+      if (targetId !== objectId) {
+        queryClient.invalidateQueries({ queryKey: ["/api/objects", targetId, "ancestors"] });
+        queryClient.invalidateQueries({ queryKey: ["/api/objects", targetId, "descendants"] });
+        queryClient.invalidateQueries({ queryKey: ["/api/objects", targetId, "resolved"] });
+        queryClient.invalidateQueries({ queryKey: ["/api/objects", targetId, "parents"] });
+      }
       queryClient.invalidateQueries({ queryKey: ["/api/objects"] });
       toast({ title: "Objekt flyttat" });
       setMoveDialogOpen(false);
@@ -670,6 +682,37 @@ export default function ObjectDetailPage() {
       toast({ title: "Kunde inte flytta objektet", description: error.message, variant: "destructive" });
     },
   });
+
+  // Task #863: öppna flytt-dialogen för ett valfritt objekt (sidans objekt eller
+  // ett barn i grenträdet). Servern cykelskyddar/ägarskapskontrollerar oavsett.
+  const openMoveDialog = (targetId: string) => {
+    setMoveTargetId(targetId);
+    setMoveSearch("");
+    setMoveDialogOpen(true);
+  };
+
+  // Task #863: ids i ett underträd (rot + alla barn) härlett ur descendants-listan,
+  // används för att exkludera ogiltiga föräldra-mål i flytt-dialogen.
+  const getSubtreeIds = (rootId: string): Set<string> => {
+    const byParent = new Map<string, ServiceObject[]>();
+    for (const d of descendants) {
+      const p = d.parentId || "";
+      if (!byParent.has(p)) byParent.set(p, []);
+      byParent.get(p)!.push(d);
+    }
+    const ids = new Set<string>([rootId]);
+    const stack = [rootId];
+    while (stack.length) {
+      const cur = stack.pop()!;
+      for (const c of byParent.get(cur) || []) {
+        if (!ids.has(c.id)) {
+          ids.add(c.id);
+          stack.push(c.id);
+        }
+      }
+    }
+    return ids;
+  };
 
   // Task #713: kopiera objekt (single) eller hela grenen (branch).
   const copyObjectMutation = useMutation({
@@ -921,6 +964,13 @@ export default function ObjectDetailPage() {
 
   const obj = resolvedObject;
   const inheritanceSources: InheritanceSource[] = obj.inheritanceSources || [];
+
+  // Task #863: objektet som flytt-dialogen avser — sidans objekt eller ett barn
+  // i grenträdet (hämtas från descendants-listan).
+  const moveTargetObj: { name?: string | null; objectNumber?: string | null } | undefined =
+    !moveTargetId || moveTargetId === objectId
+      ? obj
+      : descendants.find((d) => d.id === moveTargetId);
 
   // Task #713: Släktnamn = hela kedjan rot → detta objekt, sammanfogad med " > ".
   // ancestors (root→self) inkluderar normalt objektet självt sist; dedupliceras
@@ -1521,7 +1571,7 @@ export default function ObjectDetailPage() {
             <Button
               variant="outline"
               size="sm"
-              onClick={() => { setMoveSearch(""); setMoveDialogOpen(true); }}
+              onClick={() => openMoveDialog(objectId)}
               data-testid="button-open-move"
             >
               <ArrowRightLeft className="h-4 w-4 mr-2" /> Flytta objekt
@@ -1630,7 +1680,19 @@ export default function ObjectDetailPage() {
                               {hierarchyLevelLabels[child.hierarchyLevel].label}
                             </Badge>
                           )}
-                          <ExternalLink className="h-3 w-3 text-muted-foreground ml-auto shrink-0" />
+                          <div className="ml-auto flex items-center gap-1 shrink-0">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 px-2"
+                              onClick={(e) => { e.stopPropagation(); openMoveDialog(child.id); }}
+                              data-testid={`button-move-child-${child.id}`}
+                              title="Flytta detta objekt"
+                            >
+                              <ArrowRightLeft className="h-3.5 w-3.5" />
+                            </Button>
+                            <ExternalLink className="h-3 w-3 text-muted-foreground" />
+                          </div>
                         </div>
                       ));
                     })()}
@@ -2585,7 +2647,7 @@ export default function ObjectDetailPage() {
           <DialogHeader>
             <DialogTitle>Flytta objekt</DialogTitle>
             <DialogDescription>
-              Välj ny förälder för {obj.name || obj.objectNumber}. Eventuella barnobjekt följer med och släktnamnet uppdateras automatiskt.
+              Välj ny förälder för {moveTargetObj?.name || moveTargetObj?.objectNumber || obj.name || obj.objectNumber}. Eventuella barnobjekt följer med och släktnamnet uppdateras automatiskt.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-3 py-2">
@@ -2607,7 +2669,7 @@ export default function ObjectDetailPage() {
                   (ingen — flytta till rotnivå)
                 </button>
                 {(() => {
-                  const excludedIds = new Set<string>([objectId, ...descendants.map((d) => d.id)]);
+                  const excludedIds = getSubtreeIds(moveTargetId || objectId);
                   const q = moveSearch.trim().toLowerCase();
                   const candidates = allObjects
                     .filter((o) => !excludedIds.has(o.id))
