@@ -404,6 +404,142 @@ export function mergeCompositeJsonValues(valuesNearestFirst: unknown[]): unknown
 }
 
 // ============================================================================
+// BATCH: METADATAVÄRDEN (INKL. ÄRVD) FÖR FLERA OBJEKT + URVAL KATALOGFÄLT
+// Task #859: driver de valbara metadatakolumnerna i objektlistan. En enda
+// rekursiv CTE går uppåt i hierarkin för ALLA efterfrågade objekt samtidigt
+// (root_id-spårning) och plockar närmaste värdet per (objekt, katalogfält).
+// Returnerar { [objektId]: { [katalogId]: visningsvärde } }. Endast värden som
+// faktiskt finns lokalt eller ärvs från en förälder tas med; mjuk-raderade
+// (raderad=TRUE) lokala tombstones ger inget värde.
+// ============================================================================
+
+export async function getObjectsMetadataValuesForCatalog(
+  tenantId: string,
+  objectIds: string[],
+  katalogIds: string[],
+): Promise<Record<string, Record<string, string>>> {
+  const result: Record<string, Record<string, string>> = {};
+  if (objectIds.length === 0 || katalogIds.length === 0) return result;
+
+  const query = sql`
+    WITH RECURSIVE parent_chain AS (
+      SELECT
+        id AS root_id,
+        id,
+        parent_id,
+        0 as level,
+        ARRAY[]::varchar[] as blocked_katalog_ids
+      FROM objects
+      WHERE id = ANY(${objectIds}) AND tenant_id = ${tenantId}
+
+      UNION ALL
+
+      SELECT
+        pc.root_id,
+        o.id,
+        o.parent_id,
+        pc.level + 1,
+        pc.blocked_katalog_ids || COALESCE(
+          (SELECT ARRAY_AGG(mv.metadata_katalog_id)
+           FROM metadata_varden mv
+           WHERE mv.objekt_id = pc.id
+             AND mv.stoppa_vidare_arvning = TRUE
+             AND mv.tenant_id = ${tenantId}),
+          ARRAY[]::varchar[]
+        )
+      FROM objects o
+      INNER JOIN parent_chain pc ON o.id = pc.parent_id
+      WHERE o.tenant_id = ${tenantId}
+    ),
+    metadata_with_context AS (
+      SELECT
+        pc.root_id,
+        mv.objekt_id,
+        mv.metadata_katalog_id,
+        mv.varde_string,
+        mv.varde_integer,
+        mv.varde_decimal,
+        mv.varde_boolean,
+        mv.varde_datetime,
+        mv.varde_json,
+        mv.varde_referens,
+        mv.raderad,
+        mk.datatyp as katalog_datatyp,
+        pc.level,
+        ROW_NUMBER() OVER (
+          PARTITION BY pc.root_id, mv.metadata_katalog_id
+          ORDER BY pc.level ASC
+        ) as rn
+      FROM parent_chain pc
+      INNER JOIN metadata_varden mv ON mv.objekt_id = pc.id
+      INNER JOIN metadata_katalog mk ON mv.metadata_katalog_id = mk.id
+      WHERE
+        (
+          mv.objekt_id = pc.root_id
+          OR (mv.arvs_nedat = TRUE AND COALESCE(mv.niva_las, FALSE) = FALSE AND COALESCE(mv.raderad, FALSE) = FALSE AND NOT (mv.metadata_katalog_id = ANY(pc.blocked_katalog_ids)))
+        )
+        AND mv.tenant_id = ${tenantId}
+        AND mk.tenant_id = ${tenantId}
+        AND mv.metadata_katalog_id = ANY(${katalogIds})
+    )
+    SELECT * FROM metadata_with_context
+    ORDER BY root_id, metadata_katalog_id, rn
+  `;
+
+  const rows = (await db.execute(query)).rows as any[];
+
+  const rawRowDisplay = (r: any): string | null =>
+    r.varde_string ??
+    (r.varde_integer != null ? String(r.varde_integer) : null) ??
+    (r.varde_decimal != null ? String(r.varde_decimal) : null) ??
+    (r.varde_boolean != null ? String(r.varde_boolean) : null) ??
+    (r.varde_datetime ? new Date(r.varde_datetime).toISOString() : null) ??
+    (r.varde_json ? JSON.stringify(r.varde_json) : null) ??
+    r.varde_referens ??
+    null;
+
+  // Gruppera per (root_id, katalog_id) — raderna är ordnade närmast-först.
+  const groups = new Map<string, any[]>();
+  for (const r of rows) {
+    const key = `${r.root_id}\u0000${r.metadata_katalog_id}`;
+    let g = groups.get(key);
+    if (!g) {
+      g = [];
+      groups.set(key, g);
+    }
+    g.push(r);
+  }
+
+  for (const [key, group] of Array.from(groups.entries())) {
+    const sep = key.indexOf("\u0000");
+    const rootId = key.slice(0, sep);
+    const katalogId = key.slice(sep + 1);
+    const nearest = group[0];
+    const nearestIsLocal = nearest.objekt_id === rootId;
+    const softDeleted = nearestIsLocal && nearest.raderad === true;
+    if (softDeleted) continue; // mjuk-raderad → inget visningsvärde
+
+    let display: string | null;
+    if (nearest.katalog_datatyp === "json") {
+      const merged = mergeCompositeJsonValues(group.map((r) => r.varde_json));
+      display = merged != null ? JSON.stringify(merged) : null;
+    } else {
+      display = rawRowDisplay(nearest);
+    }
+    if (display == null || display === "") continue;
+
+    let objMap = result[rootId];
+    if (!objMap) {
+      objMap = {};
+      result[rootId] = objMap;
+    }
+    objMap[katalogId] = display;
+  }
+
+  return result;
+}
+
+// ============================================================================
 // HÄMTA OBJEKT MED ALL METADATA (INKL. ÄRVD)
 // Rekursiv CTE som går uppåt i hierarkin och samlar metadata
 // ============================================================================

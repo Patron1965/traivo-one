@@ -29,7 +29,7 @@ import {
   Map as MapIcon, List, Copy, Upload, Clock, Key, Keyboard, Users, DoorOpen,
   Check, X, FileSpreadsheet, Download, BarChart3, MoreHorizontal, AlertTriangle, AlertCircle, ChevronDown, ChevronUp, XCircle,
   Image, GitFork, Link2, Globe, ShieldAlert, ShieldCheck, ShieldX, Package, Info, Camera, Layers, FileUp, Pyramid,
-  ArrowUp, ArrowDown, ArrowUpDown, Network, Pencil, FolderPlus, Archive
+  ArrowUp, ArrowDown, ArrowUpDown, Network, Pencil, FolderPlus, Archive, Columns3
 } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import {
@@ -58,6 +58,7 @@ import { CustomerCombobox, CustomerMultiCombobox, useCustomerLookup } from "@/co
 import { GeocodedObjectsMap, ObjectsMapTab } from "@/components/ObjectsMapView";
 import { BulkActionBar } from "@/components/BulkActionBar";
 import { Checkbox } from "@/components/ui/checkbox";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import type { ServiceObject } from "@shared/schema";
 
 const hierarchyLevelLabels: Record<string, { label: string; color: string }> = {
@@ -93,6 +94,30 @@ const accessTypeLabels: Record<string, { label: string; icon: typeof Key }> = {
 };
 
 const PAGE_SIZE = 100;
+
+// Task #859: valbara metadatakolumner i objektlistan persisteras per användare
+// (per webbläsare) via localStorage — "spara enkelt"-nivån i taskspecen.
+const METADATA_COLUMNS_STORAGE_KEY = "traivo:objects:metadataColumns";
+
+// Delmängd av metadataKatalog som klienten behöver för kolumnväljaren.
+type MetadataCatalogType = {
+  id: string;
+  namn: string;
+  beteckning: string | null;
+  datatyp: string;
+  area: string | null;
+  kategori: string | null;
+  sortOrder: number | null;
+};
+
+// Task #859: neutralisera CSV-formelinjektion (prefix `'` på celler som börjar
+// med = + - @ \t \r) och escape:a citattecken. Se .agents/memory/csv-export-hardening.md.
+function sanitizeCSVCell(value: unknown): string {
+  const s = value == null ? "" : String(value);
+  const escaped = s.replace(/"/g, '""');
+  const guarded = /^[=+\-@\t\r]/.test(escaped) ? `'${escaped}` : escaped;
+  return `"${guarded}"`;
+}
 
 type SearchInputProps = {
   placeholder: string;
@@ -779,6 +804,79 @@ export default function ObjectsPage() {
     return sortObjects(filteredObjects.filter(obj => !childIdsRenderedUnderParent.has(obj.id)));
   }, [filteredObjects, sortObjects]);
 
+  // ── Task #859: valbara metadatakolumner ───────────────────────────────────
+  const [metadataColumnsDialogOpen, setMetadataColumnsDialogOpen] = useState(false);
+  const [metadataColumnSearch, setMetadataColumnSearch] = useState("");
+  const [selectedMetadataColumns, setSelectedMetadataColumns] = useState<string[]>(() => {
+    try {
+      const raw = localStorage.getItem(METADATA_COLUMNS_STORAGE_KEY);
+      const parsed = raw ? JSON.parse(raw) : [];
+      return Array.isArray(parsed) ? parsed.filter((x) => typeof x === "string") : [];
+    } catch {
+      return [];
+    }
+  });
+  useEffect(() => {
+    try {
+      localStorage.setItem(METADATA_COLUMNS_STORAGE_KEY, JSON.stringify(selectedMetadataColumns));
+    } catch {
+      /* localStorage kan saknas/vara full — kolumnvalet är best-effort */
+    }
+  }, [selectedMetadataColumns]);
+
+  const { data: metadataCatalog = [] } = useQuery<MetadataCatalogType[]>({
+    queryKey: ["/api/metadata/types"],
+    staleTime: 5 * 60 * 1000,
+  });
+
+  // Behåll endast valda kolumner som fortfarande finns i katalogen, i katalogens
+  // ordning (area → sortOrder) så kolumnerna ligger stabilt.
+  const selectedMetadataFields = useMemo(() => {
+    const selected = new Set(selectedMetadataColumns);
+    return metadataCatalog.filter((t) => selected.has(t.id));
+  }, [metadataCatalog, selectedMetadataColumns]);
+
+  const metadataObjectIds = useMemo(() => filteredObjects.map((o) => o.id), [filteredObjects]);
+
+  const { data: metadataValuesData } = useQuery<{ values: Record<string, Record<string, string>> }>({
+    queryKey: ["/api/metadata/objects/values-batch", selectedMetadataColumns, metadataObjectIds],
+    queryFn: async () => {
+      const res = await apiRequest("POST", "/api/metadata/objects/values-batch", {
+        objectIds: metadataObjectIds,
+        katalogIds: selectedMetadataColumns,
+      });
+      return res.json();
+    },
+    enabled: selectedMetadataColumns.length > 0 && metadataObjectIds.length > 0,
+    staleTime: 30000,
+  });
+  const metadataValues = metadataValuesData?.values ?? {};
+
+  // Namn-lookup för förälder/barn-relationsindikator (sidans objekt).
+  const objectNameById = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const o of objects) m.set(o.id, (o as any).displayName || o.name);
+    return m;
+  }, [objects]);
+
+  const toggleMetadataColumn = useCallback((id: string) => {
+    setSelectedMetadataColumns((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
+    );
+  }, []);
+
+  const filteredCatalogForPicker = useMemo(() => {
+    const q = metadataColumnSearch.trim().toLowerCase();
+    const base = q
+      ? metadataCatalog.filter(
+          (t) =>
+            t.namn.toLowerCase().includes(q) ||
+            (t.beteckning || "").toLowerCase().includes(q),
+        )
+      : metadataCatalog;
+    return base;
+  }, [metadataCatalog, metadataColumnSearch]);
+
   const activeFilterCount = useMemo(() => [
     typeFilter !== "all" ? 1 : 0,
     accessFilter !== "all" ? 1 : 0,
@@ -1142,18 +1240,30 @@ export default function ObjectsPage() {
   };
 
   const exportCSV = () => {
-    const headers = ["Namn", "Visningsnamn", "Objektnummer", "Typ", "Adress", "Stad", "Tillgång", "Kod"];
-    const rows = filteredObjects.map(obj => [
-      obj.name,
-      (obj as any).displayName ?? obj.name,
-      obj.objectNumber || "",
-      objectTypeLabels[obj.objectType] || obj.objectType,
-      obj.address || "",
-      obj.city || "",
-      accessTypeLabels[obj.accessType || "open"]?.label || obj.accessType,
-      obj.accessCode || "",
-    ]);
-    const csv = [headers, ...rows].map(row => row.map(cell => `"${cell}"`).join(",")).join("\n");
+    const metaHeaders = selectedMetadataFields.map(f => f.namn);
+    const headers = [
+      "Namn", "Visningsnamn", "Objektnummer", "Typ", "Adress", "Stad", "Tillgång", "Kod",
+      "Överordnat objekt", "Antal underordnade (denna sida)",
+      ...metaHeaders,
+    ];
+    const rows = filteredObjects.map(obj => {
+      const childCount = (childrenMap.get(obj.id) || []).length;
+      const base = [
+        obj.name,
+        (obj as any).displayName ?? obj.name,
+        obj.objectNumber || "",
+        objectTypeLabels[obj.objectType] || obj.objectType,
+        obj.address || "",
+        obj.city || "",
+        accessTypeLabels[obj.accessType || "open"]?.label || obj.accessType,
+        obj.accessCode || "",
+        obj.parentId ? (objectNameById.get(obj.parentId) ?? "") : "",
+        String(childCount),
+      ];
+      const metaCells = selectedMetadataFields.map(f => metadataValues[obj.id]?.[f.id] ?? "");
+      return [...base, ...metaCells];
+    });
+    const csv = [headers, ...rows].map(row => row.map(sanitizeCSVCell).join(",")).join("\n");
     const blob = new Blob([csv], { type: "text/csv" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -1398,7 +1508,48 @@ export default function ObjectsPage() {
                   <TooltipContent>Antal kärl (K1)</TooltipContent>
                 </Tooltip>
               )}
+              {/* Task #859: förälder/barn-relation. Barn på samma sida ligger redan
+                  indenterat under föräldern; toppnivå-rader som ändå har en förälder
+                  får en explicit "under {förälder}"-indikator. */}
+              {level === 0 && obj.parentId && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span className="flex items-center gap-1 cursor-help text-foreground/70" data-testid={`text-parent-${obj.id}`}>
+                      <GitFork className="h-3 w-3" />
+                      Under {objectNameById.get(obj.parentId) ?? "överordnat objekt"}
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent>Överordnat objekt</TooltipContent>
+                </Tooltip>
+              )}
+              {hasChildren && (
+                <span className="flex items-center gap-1 text-muted-foreground" data-testid={`text-childcount-${obj.id}`}>
+                  <Network className="h-3 w-3" />
+                  {children.length} underordnade
+                </span>
+              )}
             </div>
+
+            {/* Task #859: valda metadatakolumner som etikett/värde-chips */}
+            {selectedMetadataFields.length > 0 && (
+              <div className="flex items-center gap-x-4 gap-y-1 mt-1.5 flex-wrap" data-testid={`metadata-columns-${obj.id}`}>
+                {selectedMetadataFields.map(field => {
+                  const value = metadataValues[obj.id]?.[field.id];
+                  return (
+                    <span
+                      key={field.id}
+                      className="inline-flex items-center gap-1 text-xs"
+                      data-testid={`metadata-cell-${field.id}-${obj.id}`}
+                    >
+                      <span className="text-muted-foreground">{field.namn}:</span>
+                      <span className={value ? "font-medium text-foreground" : "text-muted-foreground/60"}>
+                        {value ?? "—"}
+                      </span>
+                    </span>
+                  );
+                })}
+              </div>
+            )}
           </div>
 
           <div className="flex items-center gap-1 shrink-0">
@@ -1610,6 +1761,15 @@ export default function ObjectsPage() {
         >
           <Pyramid className="h-4 w-4 mr-2" />
           Härled hierarki
+        </Button>
+        <Button variant="outline" onClick={() => setMetadataColumnsDialogOpen(true)} data-testid="button-metadata-columns">
+          <Columns3 className="h-4 w-4 mr-2" />
+          Kolumner
+          {selectedMetadataColumns.length > 0 && (
+            <Badge variant="secondary" className="ml-2" data-testid="badge-metadata-columns-count">
+              {selectedMetadataColumns.length}
+            </Badge>
+          )}
         </Button>
         <Button variant="outline" onClick={exportCSV} data-testid="button-export">
           <Download className="h-4 w-4 mr-2" />
@@ -2009,6 +2169,80 @@ export default function ObjectsPage() {
             <Button onClick={executeCopy} disabled={copyObjectMutation.isPending} data-testid="button-confirm-copy">
               {copyObjectMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Copy className="h-4 w-4 mr-2" />}
               Kopiera
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Task #859: kolumnväljare för metadatafält från svenska metadatakatalogen */}
+      <Dialog open={metadataColumnsDialogOpen} onOpenChange={setMetadataColumnsDialogOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Metadatakolumner</DialogTitle>
+            <DialogDescription>
+              Välj vilka metadatafält som ska visas som kolumner i listan och i CSV-exporten.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="flex items-center justify-between gap-2">
+              <Input
+                placeholder="Sök fält…"
+                value={metadataColumnSearch}
+                onChange={(e) => setMetadataColumnSearch(e.target.value)}
+                data-testid="input-metadata-column-search"
+              />
+              {selectedMetadataColumns.length > 0 && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setSelectedMetadataColumns([])}
+                  data-testid="button-clear-metadata-columns"
+                >
+                  Rensa
+                </Button>
+              )}
+            </div>
+            <ScrollArea className="h-72 pr-3">
+              <div className="space-y-1">
+                {filteredCatalogForPicker.length === 0 ? (
+                  <p className="text-sm text-muted-foreground py-6 text-center" data-testid="text-no-metadata-fields">
+                    Inga metadatafält hittades.
+                  </p>
+                ) : (
+                  filteredCatalogForPicker.map((field) => {
+                    const checked = selectedMetadataColumns.includes(field.id);
+                    return (
+                      <label
+                        key={field.id}
+                        className="flex items-center gap-3 rounded-md px-2 py-1.5 hover:bg-muted/50 cursor-pointer"
+                        data-testid={`row-metadata-field-${field.id}`}
+                      >
+                        <Checkbox
+                          checked={checked}
+                          onCheckedChange={() => toggleMetadataColumn(field.id)}
+                          data-testid={`checkbox-metadata-field-${field.id}`}
+                        />
+                        <div className="min-w-0 flex-1">
+                          <div className="text-sm font-medium truncate">{field.namn}</div>
+                          {(field.area || field.beteckning) && (
+                            <div className="text-xs text-muted-foreground truncate">
+                              {[field.area, field.beteckning].filter(Boolean).join(" · ")}
+                            </div>
+                          )}
+                        </div>
+                      </label>
+                    );
+                  })
+                )}
+              </div>
+            </ScrollArea>
+          </div>
+          <DialogFooter>
+            <span className="text-xs text-muted-foreground mr-auto" data-testid="text-selected-metadata-count">
+              {selectedMetadataColumns.length} valda
+            </span>
+            <Button onClick={() => setMetadataColumnsDialogOpen(false)} data-testid="button-close-metadata-columns">
+              Klar
             </Button>
           </DialogFooter>
         </DialogContent>

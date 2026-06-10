@@ -9,6 +9,7 @@ import { parseFormula } from "./metadata-formula";
 import { slugifyMetadataAreaValue } from "@shared/metadata-areas";
 import {
   getObjectWithAllMetadata,
+  getObjectsMetadataValuesForCatalog,
   getMetadataValue,
   createMetadata,
   updateMetadata,
@@ -828,6 +829,30 @@ metadataRouter.delete("/types/:id", requireAdmin, async (req: Request, res: Resp
 // ============================================================================
 // OBJEKTMETADATA ENDPOINTS
 // ============================================================================
+
+// Task #859: batch-uppslagning av metadatavärden (med arv) för en lista objekt
+// och ett urval katalogfält — driver de valbara metadatakolumnerna i objektlistan.
+metadataRouter.post("/objects/values-batch", async (req: Request, res: Response) => {
+  try {
+    const tenantId = getTenantIdWithFallback(req);
+    if (!tenantId) {
+      return res.status(401).json({ error: "Ingen tenant hittad" });
+    }
+    const schema = z.object({
+      objectIds: z.array(z.string()).max(500),
+      katalogIds: z.array(z.string()).max(60),
+    });
+    const { objectIds, katalogIds } = schema.parse(req.body);
+    const values = await getObjectsMetadataValuesForCatalog(tenantId, objectIds, katalogIds);
+    res.json({ values });
+  } catch (error) {
+    if (error instanceof ZodError) {
+      return res.status(400).json({ error: "Ogiltig förfrågan", details: error.errors });
+    }
+    console.error("Error fetching batch metadata values:", error);
+    res.status(500).json({ error: "Kunde inte hämta metadatavärden" });
+  }
+});
 
 metadataRouter.get("/objects/:objectId", async (req: Request, res: Response) => {
   try {
