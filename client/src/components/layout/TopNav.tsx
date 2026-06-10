@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { TourMenu } from "@/components/TourMenu";
 import { getNavGroups, type NavItem } from "@/lib/navItems";
+import { getDisruptionDisplay } from "@/lib/disruption-display";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import {
@@ -555,6 +556,8 @@ function NotificationsBell() {
           ) : (
             <ul className="divide-y">
               {items.map((n) => {
+                const disruptionType = (n.data as Record<string, unknown> | undefined)?.disruptionType;
+                const DisruptionIcon = disruptionType ? getDisruptionDisplay(disruptionType).Icon : null;
                 const content = (
                   <div
                     className={`flex items-start gap-2 px-3 py-2 cursor-pointer hover:bg-accent ${
@@ -568,6 +571,12 @@ function NotificationsBell() {
                   >
                     {!n.isRead && (
                       <span className="mt-1.5 h-2 w-2 rounded-full bg-destructive/15 flex-shrink-0" />
+                    )}
+                    {DisruptionIcon && (
+                      <DisruptionIcon
+                        className="mt-0.5 h-4 w-4 flex-shrink-0 text-warning"
+                        data-testid={`icon-disruption-${n.id}`}
+                      />
                     )}
                     <div className="flex-1 min-w-0">
                       <div className="text-sm font-medium truncate" data-testid={`text-notification-title-${n.id}`}>

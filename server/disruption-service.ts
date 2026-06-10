@@ -1,7 +1,9 @@
 import { storage } from "./storage";
 import { haversineDistanceKm } from "./distance-matrix-service";
 import { notificationService } from "./notifications";
-import type { Disruption, InsertDisruption } from "@shared/schema";
+import { db } from "./db";
+import { and, eq, inArray } from "drizzle-orm";
+import { userTenantRoles, type Disruption, type InsertDisruption } from "@shared/schema";
 
 export type DisruptionType = "resource_unavailable" | "emergency_job" | "significant_delay" | "early_completion";
 
@@ -280,6 +282,72 @@ async function addDisruption(tenantId: string, event: DisruptionEvent): Promise<
   await storage.createDisruption(eventToInsert(event));
 }
 
+/**
+ * Skickar störningsnotis till klienten på två sätt:
+ *  1. Live WS-broadcast (driver mobil-/web-toast som tidigare), med
+ *     `metadata.disruptionId` + `metadata.disruptionType`.
+ *  2. Persistenta notiser till planerande roller (owner/admin/planner) så att
+ *     störningen syns i notisflödet (klockan + /notifications) och kan klickas
+ *     för att öppna exakt rätt störning på WeekPlanner via
+ *     `link=/planner?disruption=<id>` och `data.disruptionType` för ikon/etikett.
+ */
+async function dispatchDisruptionNotification(
+  tenantId: string,
+  event: DisruptionEvent,
+  opts: { resourceId?: string } = {},
+): Promise<void> {
+  notificationService.broadcastSystemAlert({
+    type: "anomaly_alert",
+    title: event.title,
+    message: event.description,
+    ...(opts.resourceId ? { resourceId: opts.resourceId } : {}),
+    metadata: { disruptionId: event.id, disruptionType: event.type },
+  }, tenantId);
+
+  try {
+    const planners = await db
+      .select({ userId: userTenantRoles.userId })
+      .from(userTenantRoles)
+      .where(
+        and(
+          eq(userTenantRoles.tenantId, tenantId),
+          eq(userTenantRoles.isActive, true),
+          inArray(userTenantRoles.role, ["owner", "admin", "planner"]),
+        ),
+      );
+
+    const link = `/planner?disruption=${encodeURIComponent(event.id)}`;
+    const data = { disruptionId: event.id, disruptionType: event.type };
+
+    for (const p of planners) {
+      try {
+        const created = await storage.createUserNotification({
+          tenantId,
+          userId: p.userId,
+          type: "anomaly_alert",
+          title: event.title,
+          message: event.description,
+          link,
+          data,
+        });
+        notificationService.sendUserNotification(p.userId, {
+          notificationId: created.id,
+          type: created.type,
+          title: created.title,
+          message: created.message,
+          link: created.link,
+          data: created.data as Record<string, unknown>,
+          createdAt: created.createdAt.toISOString(),
+        });
+      } catch (err) {
+        console.error("[disruption] notification persist/push failed", err);
+      }
+    }
+  } catch (err) {
+    console.error("[disruption] planner lookup failed", err);
+  }
+}
+
 export async function triggerResourceUnavailable(
   tenantId: string,
   resourceId: string,
@@ -381,14 +449,7 @@ export async function triggerResourceUnavailable(
   };
 
   await addDisruption(tenantId, event);
-
-  notificationService.broadcastSystemAlert({
-    type: "anomaly_alert",
-    title: event.title,
-    message: event.description,
-    resourceId,
-    metadata: { disruptionId: event.id, disruptionType: event.type },
-  }, tenantId);
+  await dispatchDisruptionNotification(tenantId, event, { resourceId });
 
   return event;
 }
@@ -483,12 +544,7 @@ export async function triggerEmergencyJob(
   };
 
   await addDisruption(tenantId, event);
-  notificationService.broadcastSystemAlert({
-    type: "anomaly_alert",
-    title: event.title,
-    message: event.description,
-    metadata: { disruptionId: event.id, disruptionType: event.type },
-  }, tenantId);
+  await dispatchDisruptionNotification(tenantId, event);
 
   return event;
 }
@@ -692,13 +748,7 @@ export async function triggerSignificantDelay(
   };
 
   await addDisruption(tenantId, event);
-  notificationService.broadcastSystemAlert({
-    type: "anomaly_alert",
-    title: event.title,
-    message: event.description,
-    resourceId,
-    metadata: { disruptionId: event.id, disruptionType: event.type },
-  }, tenantId);
+  await dispatchDisruptionNotification(tenantId, event, { resourceId });
 
   return event;
 }
@@ -782,13 +832,7 @@ export async function triggerEarlyCompletion(
   };
 
   await addDisruption(tenantId, event);
-  notificationService.broadcastSystemAlert({
-    type: "anomaly_alert",
-    title: event.title,
-    message: event.description,
-    resourceId,
-    metadata: { disruptionId: event.id, disruptionType: event.type },
-  }, tenantId);
+  await dispatchDisruptionNotification(tenantId, event, { resourceId });
 
   return event;
 }

@@ -17,6 +17,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Bell, ChevronLeft, ChevronRight, ExternalLink, Inbox, CheckCheck, Settings } from "lucide-react";
+import { getDisruptionDisplay } from "@/lib/disruption-display";
 
 interface UserNotificationItem {
   id: string;
@@ -26,6 +27,7 @@ interface UserNotificationItem {
   link: string | null;
   isRead: boolean;
   createdAt: string;
+  data?: Record<string, unknown>;
 }
 
 interface NotificationsResponse {
@@ -295,6 +297,9 @@ export default function NotificationsPage() {
           ) : (
             <ul className="divide-y">
               {items.map((n) => {
+                const disruptionType = (n.data as Record<string, unknown> | undefined)?.disruptionType;
+                const disruptionDisplay = disruptionType ? getDisruptionDisplay(disruptionType) : null;
+                const DisruptionIcon = disruptionDisplay?.Icon;
                 const row = (
                   <div
                     className={`flex items-start gap-3 p-4 hover-elevate ${n.isRead ? "" : "bg-accent/30"}`}
@@ -309,11 +314,17 @@ export default function NotificationsPage() {
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
+                        {DisruptionIcon && (
+                          <DisruptionIcon
+                            className="h-4 w-4 shrink-0 text-warning"
+                            data-testid={`icon-disruption-${n.id}`}
+                          />
+                        )}
                         <span className="text-sm font-medium" data-testid={`text-notif-title-${n.id}`}>
                           {n.title}
                         </span>
                         <Badge variant="outline" className="text-[10px] font-normal" data-testid={`badge-notif-type-${n.id}`}>
-                          {typeLabel(n.type)}
+                          {disruptionDisplay ? disruptionDisplay.label : typeLabel(n.type)}
                         </Badge>
                         {n.link && (
                           <ExternalLink className="h-3 w-3 text-muted-foreground" />

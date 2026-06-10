@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useSearch } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
@@ -78,6 +79,10 @@ export function DisruptionPanel() {
   const { toast } = useToast();
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [showTrace, setShowTrace] = useState<string | null>(null);
+  const [highlightId, setHighlightId] = useState<string | null>(null);
+  const search = useSearch();
+  const handledFocusRef = useRef<string | null>(null);
+  const highlightTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const { data: disruptions = [], isLoading } = useQuery<DisruptionEvent[]>({
     queryKey: ["/api/disruptions"],
@@ -131,6 +136,30 @@ export function DisruptionPanel() {
 
   const activeDisruptions = disruptions.filter(d => d.status === "active");
 
+  // Notisflöde-djuplänk: `/planner?disruption=<id>` expanderar och scrollar
+  // fram exakt rätt störning (en gång), så att en klickad störningsnotis leder
+  // direkt till störningen.
+  useEffect(() => {
+    const targetId = new URLSearchParams(search).get("disruption");
+    if (!targetId || handledFocusRef.current === targetId) return;
+    if (!activeDisruptions.some(d => d.id === targetId)) return;
+
+    handledFocusRef.current = targetId;
+    setExpandedId(targetId);
+    setHighlightId(targetId);
+    requestAnimationFrame(() => {
+      document
+        .querySelector(`[data-testid="disruption-card-${targetId}"]`)
+        ?.scrollIntoView({ behavior: "smooth", block: "center" });
+    });
+    if (highlightTimerRef.current) clearTimeout(highlightTimerRef.current);
+    highlightTimerRef.current = setTimeout(() => setHighlightId(null), 3000);
+  }, [search, activeDisruptions]);
+
+  useEffect(() => () => {
+    if (highlightTimerRef.current) clearTimeout(highlightTimerRef.current);
+  }, []);
+
   if (isLoading || activeDisruptions.length === 0) return null;
 
   return (
@@ -153,7 +182,7 @@ export function DisruptionPanel() {
             return (
               <Card
                 key={event.id}
-                className={`border-l-4 ${severityColors[event.severity]}`}
+                className={`border-l-4 ${severityColors[event.severity]} ${highlightId === event.id ? "ring-2 ring-primary" : ""}`}
                 data-testid={`disruption-card-${event.id}`}
               >
                 <Collapsible open={isExpanded} onOpenChange={() => setExpandedId(isExpanded ? null : event.id)}>
