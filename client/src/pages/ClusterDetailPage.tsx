@@ -30,8 +30,6 @@ import {
   ArrowLeft,
   Package,
   FileText,
-  CheckCircle2,
-  Receipt,
   Clock,
   MapPin,
   Users,
@@ -54,6 +52,7 @@ import {
 } from "lucide-react";
 import { QueryErrorState } from "@/components/ErrorBoundary";
 import { QueryState } from "@/components/QueryState";
+import { SnoretPipeline } from "@/components/SnoretPipeline";
 import { ClusterDynamicRulesTab } from "@/components/ClusterDynamicRulesTab";
 import { format } from "date-fns";
 import { sv } from "date-fns/locale";
@@ -529,65 +528,14 @@ export default function ClusterDetailPage() {
         </Card>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Target className="h-5 w-5" />
-            Snöret - Flödet genom klustret
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="flex items-center justify-between gap-4 overflow-x-auto pb-2">
-            <div className="flex flex-col items-center min-w-[120px]">
-              <div className="p-4 rounded-full bg-chart-1/15 mb-2">
-                <Building2 className="h-6 w-6 text-chart-1" />
-              </div>
-              <p className="font-medium">{clusterObjects.length}</p>
-              <p className="text-sm text-muted-foreground">Objekt</p>
-            </div>
-
-            <div className="h-px flex-1 bg-border min-w-[40px]" />
-
-            <div className="flex flex-col items-center min-w-[120px]">
-              <div className="p-4 rounded-full bg-chart-4/15 mb-2">
-                <RefreshCw className="h-6 w-6 text-chart-4" />
-              </div>
-              <p className="font-medium">{subscriptions.length}</p>
-              <p className="text-sm text-muted-foreground">Abonnemang</p>
-            </div>
-
-            <div className="h-px flex-1 bg-border min-w-[40px]" />
-
-            <div className="flex flex-col items-center min-w-[120px]">
-              <div className="p-4 rounded-full bg-chart-3/15 mb-2">
-                <FileText className="h-6 w-6 text-chart-3" />
-              </div>
-              <p className="font-medium">{activeOrders.length}</p>
-              <p className="text-sm text-muted-foreground">Aktiva ordrar</p>
-            </div>
-
-            <div className="h-px flex-1 bg-border min-w-[40px]" />
-
-            <div className="flex flex-col items-center min-w-[120px]">
-              <div className="p-4 rounded-full bg-chart-2/15 mb-2">
-                <CheckCircle2 className="h-6 w-6 text-chart-2" />
-              </div>
-              <p className="font-medium">{completedOrders.length}</p>
-              <p className="text-sm text-muted-foreground">Utförda</p>
-            </div>
-
-            <div className="h-px flex-1 bg-border min-w-[40px]" />
-
-            <div className="flex flex-col items-center min-w-[120px]">
-              <div className="p-4 rounded-full bg-chart-2/15 mb-2">
-                <Receipt className="h-6 w-6 text-chart-2" />
-              </div>
-              <p className="font-medium">{invoicedOrders.length}</p>
-              <p className="text-sm text-muted-foreground">Fakturerade</p>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+      <SnoretPipeline
+        title="Snöret - Flödet genom klustret"
+        objectCount={clusterObjects.length}
+        subscriptionCount={subscriptions.length}
+        activeOrders={activeOrders.length}
+        completedOrders={completedOrders.length}
+        invoicedOrders={invoicedOrders.length}
+      />
 
       <Tabs defaultValue="hierarchy" className="space-y-4">
         <TabsList className="flex-wrap gap-1">

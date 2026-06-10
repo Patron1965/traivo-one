@@ -20,6 +20,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { QueryErrorState } from "@/components/ErrorBoundary";
+import { SnoretPipeline } from "@/components/SnoretPipeline";
 import {
   ArrowLeft, Building2, Layers, Package, ClipboardList, Phone, Mail, MapPin,
   ChevronDown, ChevronRight, Users, Home, Container, Trash2, TreePine, Map as MapIcon,
@@ -1497,6 +1498,16 @@ export default function CustomerDetailPage() {
               </CardContent>
             </Card>
           </div>
+
+          {stats && (
+            <SnoretPipeline
+              objectCount={stats.totalObjects}
+              subscriptionCount={stats.activeSubscriptions}
+              activeOrders={stats.activeOrders}
+              completedOrders={stats.completedOrders}
+              invoicedOrders={stats.invoicedOrders}
+            />
+          )}
 
           {stats && Object.keys(stats.objectsByLevel || {}).length > 0 && (
             <Card data-testid="card-objects-by-level">
