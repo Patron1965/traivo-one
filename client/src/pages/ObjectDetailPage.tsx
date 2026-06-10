@@ -918,6 +918,12 @@ export default function ObjectDetailPage() {
   const hasEntrance = obj.entranceLatitude && obj.entranceLongitude;
   const AccessIcon = accessTypeLabels[obj.accessType || "open"]?.icon || DoorOpen;
 
+  // Task #848: objectType och hierarchyLevel sammanfaller ofta (t.ex. "Rum"/"Rum")
+  // efter etikett-mappning. Visa då bara ett fält; visa båda först när de skiljer sig.
+  const objectTypeLabel = (obj.objectType && objectTypeLabels[obj.objectType]) || obj.objectType || "";
+  const hierarchyLabel = (obj.hierarchyLevel && hierarchyLevelLabels[obj.hierarchyLevel]?.label) || obj.hierarchyLevel || "";
+  const typeAndLevelMatch = !!objectTypeLabel && !!hierarchyLabel && objectTypeLabel === hierarchyLabel;
+
   const containerCounts = [
     { label: "K1", value: obj.containerCount },
     { label: "K2", value: obj.containerCountK2 },
@@ -970,9 +976,11 @@ export default function ObjectDetailPage() {
                 {hierarchyLevelLabels[obj.hierarchyLevel].label}
               </Badge>
             )}
-            <Badge variant="secondary" data-testid="badge-object-type">
-              {(obj.objectType && objectTypeLabels[obj.objectType]) || obj.objectType}
-            </Badge>
+            {!(typeAndLevelMatch && obj.hierarchyLevel && hierarchyLevelLabels[obj.hierarchyLevel]) && (
+              <Badge variant="secondary" data-testid="badge-object-type">
+                {objectTypeLabel}
+              </Badge>
+            )}
             <Badge className={statusColors[obj.status || "active"] || statusColors.active} data-testid="badge-status">
               {obj.status === "active" ? "Aktiv" : obj.status === "inactive" ? "Inaktiv" : obj.status || "Aktiv"}
             </Badge>
@@ -1235,8 +1243,14 @@ export default function ObjectDetailPage() {
               <CardContent className="space-y-1">
                 <InfoRow label="Objektnamn" value={obj.name} icon={Building2} />
                 <InfoRow label="Objektnummer" value={obj.objectNumber} icon={Hash} />
-                <InfoRow label="Objekttyp" value={(obj.objectType && objectTypeLabels[obj.objectType]) || obj.objectType} icon={Box} />
-                <InfoRow label="Hierarkinivå" value={(obj.hierarchyLevel && hierarchyLevelLabels[obj.hierarchyLevel]?.label) || obj.hierarchyLevel} icon={Layers} />
+                {typeAndLevelMatch ? (
+                  <InfoRow label="Objekttyp / nivå" value={objectTypeLabel} icon={Box} />
+                ) : (
+                  <>
+                    <InfoRow label="Objekttyp" value={objectTypeLabel} icon={Box} />
+                    <InfoRow label="Hierarkinivå" value={hierarchyLabel} icon={Layers} />
+                  </>
+                )}
                 <InfoRow label="Status" value={obj.status === "active" ? "Aktiv" : obj.status === "inactive" ? "Inaktiv" : obj.status} icon={Info} />
                 {obj.notes && <InfoRow label="Anteckningar" value={obj.notes} icon={FileText} />}
               </CardContent>

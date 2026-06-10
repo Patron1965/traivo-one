@@ -1247,9 +1247,12 @@ export default function ObjectsPage() {
                   {hierarchyLevelLabels[obj.hierarchyLevel].label}
                 </Badge>
               )}
-              <Badge variant="secondary" className="text-xs">
-                {objectTypeLabels[obj.objectType] || obj.objectType}
-              </Badge>
+              {/* Task #848: dölj objekttyp-badgen när den ger samma etikett som hierarkinivån */}
+              {(objectTypeLabels[obj.objectType] || obj.objectType) !== (obj.hierarchyLevel && hierarchyLevelLabels[obj.hierarchyLevel]?.label) && (
+                <Badge variant="secondary" className="text-xs">
+                  {objectTypeLabels[obj.objectType] || obj.objectType}
+                </Badge>
+              )}
               {obj.isInterimObject && (
                 <Tooltip>
                   <TooltipTrigger asChild>
