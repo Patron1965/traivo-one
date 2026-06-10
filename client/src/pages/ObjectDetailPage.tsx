@@ -1585,27 +1585,55 @@ export default function ObjectDetailPage() {
               <CardContent>
                 {descendants.length > 0 ? (
                   <div className="space-y-1 max-h-96 overflow-y-auto">
-                    {descendants.map((child) => (
-                      <div
-                        key={child.id}
-                        className="flex items-center gap-2 p-2 rounded-md hover:bg-muted/50 cursor-pointer"
-                        onClick={() => navigate(`/objects/${child.id}`)}
-                        data-testid={`link-child-${child.id}`}
-                      >
-                        <span className="text-sm font-medium">{child.name || child.objectNumber}</span>
-                        {child.objectType && (
-                          <Badge variant="secondary" className="text-[10px]">
-                            {objectTypeLabels[child.objectType] || child.objectType}
-                          </Badge>
-                        )}
-                        {child.hierarchyLevel && hierarchyLevelLabels[child.hierarchyLevel] && (
-                          <Badge className={`text-[10px] ${hierarchyLevelLabels[child.hierarchyLevel].color}`}>
-                            {hierarchyLevelLabels[child.hierarchyLevel].label}
-                          </Badge>
-                        )}
-                        <ExternalLink className="h-3 w-3 text-muted-foreground ml-auto" />
-                      </div>
-                    ))}
+                    {(() => {
+                      // Bygg grenen som ett träd (barn → barnbarn) utifrån parentId
+                      // relativt det aktuella objektet, så användaren ser hela
+                      // grenen som följer med vid en flytt. getDescendants ger
+                      // hela underträdet (BFS) där varje rad bär parentId.
+                      const byParent = new Map<string, ServiceObject[]>();
+                      for (const d of descendants) {
+                        const p = d.parentId || "";
+                        if (!byParent.has(p)) byParent.set(p, []);
+                        byParent.get(p)!.push(d);
+                      }
+                      const ordered: Array<{ obj: ServiceObject; depth: number }> = [];
+                      const walk = (parentId: string, depth: number) => {
+                        for (const k of byParent.get(parentId) || []) {
+                          ordered.push({ obj: k, depth });
+                          walk(k.id, depth + 1);
+                        }
+                      };
+                      walk(objectId, 0);
+                      // Fallback: rader vars förälder inte nåddes (t.ex. bruten
+                      // kedja) läggs sist på rotnivå så inget tappas bort.
+                      const seen = new Set(ordered.map((o) => o.obj.id));
+                      for (const d of descendants) {
+                        if (!seen.has(d.id)) ordered.push({ obj: d, depth: 0 });
+                      }
+                      return ordered.map(({ obj: child, depth }) => (
+                        <div
+                          key={child.id}
+                          className="flex items-center gap-2 p-2 rounded-md hover:bg-muted/50 cursor-pointer"
+                          style={{ paddingLeft: `${depth * 16 + 8}px` }}
+                          onClick={() => navigate(`/objects/${child.id}`)}
+                          data-testid={`link-child-${child.id}`}
+                        >
+                          {depth > 0 && <ChevronRight className="h-3 w-3 text-muted-foreground shrink-0" />}
+                          <span className="text-sm font-medium">{child.name || child.objectNumber}</span>
+                          {child.objectType && (
+                            <Badge variant="secondary" className="text-[10px]">
+                              {objectTypeLabels[child.objectType] || child.objectType}
+                            </Badge>
+                          )}
+                          {child.hierarchyLevel && hierarchyLevelLabels[child.hierarchyLevel] && (
+                            <Badge className={`text-[10px] ${hierarchyLevelLabels[child.hierarchyLevel].color}`}>
+                              {hierarchyLevelLabels[child.hierarchyLevel].label}
+                            </Badge>
+                          )}
+                          <ExternalLink className="h-3 w-3 text-muted-foreground ml-auto shrink-0" />
+                        </div>
+                      ));
+                    })()}
                   </div>
                 ) : (
                   <p className="text-sm text-muted-foreground">Inga barnobjekt.</p>
