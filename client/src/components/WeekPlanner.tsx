@@ -1,13 +1,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { DndContext, DragOverlay, type DragEndEvent } from "@dnd-kit/core";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { AlertTriangle, Calendar as CalendarIcon, Inbox, Loader2, ShieldAlert, User } from "lucide-react";
+import { AlertTriangle, Calendar as CalendarIcon, Inbox, Loader2, Search, ShieldAlert, User, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { ToastAction } from "@/components/ui/toast";
 import { SlaRiskJobsList, SlaRiskSummaryBadge } from "@/components/SlaRiskPanel";
-import { format, isSameDay } from "date-fns";
+import { format, isSameDay, startOfWeek } from "date-fns";
 import { sv } from "date-fns/locale";
 import type { WeekPlannerProps, PlannerDisplayMode } from "./weekplanner/types";
 import { zoomLevels } from "./weekplanner/types";
@@ -66,12 +68,134 @@ function parseDropIdToTarget(dropId: string): { kind: "team"; teamId: string; da
   };
 }
 
+type WorkOrderSearchHit = {
+  id: string;
+  title: string | null;
+  objectName: string | null;
+  objectAddress: string | null;
+  customerName: string | null;
+  scheduledDate: string | null;
+  resourceId: string | null;
+  teamId: string | null;
+  orderStatus: string;
+};
+
+function PlannerOrderSearch({
+  resources,
+  teamsData,
+  open,
+  onNavigate,
+  onClose,
+}: {
+  resources: import("@shared/schema").Resource[];
+  teamsData: Array<{ id: string; name: string; color: string | null }>;
+  open: boolean;
+  onNavigate: (jobId: string, resourceId?: string, teamId?: string, dateStr?: string) => void;
+  onClose: () => void;
+}) {
+  const [query, setQuery] = useState("");
+  const [debouncedQuery, setDebouncedQuery] = useState("");
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (open) {
+      setQuery("");
+      setDebouncedQuery("");
+      setTimeout(() => inputRef.current?.focus(), 50);
+    }
+  }, [open]);
+
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedQuery(query.trim()), 300);
+    return () => clearTimeout(t);
+  }, [query]);
+
+  useEffect(() => {
+    if (!open) return;
+    const h = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", h);
+    return () => window.removeEventListener("keydown", h);
+  }, [open, onClose]);
+
+  const { data: results = [], isFetching } = useQuery<WorkOrderSearchHit[]>({
+    queryKey: ["/api/work-orders/search", debouncedQuery],
+    queryFn: async () => {
+      if (!debouncedQuery || debouncedQuery.length < 2) return [];
+      const res = await fetch(`/api/work-orders/search?q=${encodeURIComponent(debouncedQuery)}&limit=20`);
+      if (!res.ok) throw new Error("Search failed");
+      return res.json();
+    },
+    enabled: open && debouncedQuery.length >= 2,
+    staleTime: 30000,
+  });
+
+  if (!open) return null;
+
+  return (
+    <div className="px-3 py-2 border-b bg-background" data-testid="panel-order-search">
+      <div className="relative max-w-lg">
+        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
+        <input
+          ref={inputRef}
+          className="w-full h-8 pl-8 pr-8 text-sm border border-input rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-ring"
+          placeholder="Sök order på titel, objekt, adress, kund…"
+          value={query}
+          onChange={e => setQuery(e.target.value)}
+          data-testid="input-order-search"
+        />
+        <button
+          className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+          onClick={onClose}
+          data-testid="button-order-search-close"
+        >
+          <X className="h-3.5 w-3.5" />
+        </button>
+      </div>
+      {isFetching && debouncedQuery.length >= 2 && (
+        <p className="text-xs text-muted-foreground py-1.5 max-w-lg">Söker…</p>
+      )}
+      {!isFetching && results.length > 0 && (
+        <div className="mt-1.5 bg-popover border rounded-md shadow-md max-h-56 overflow-y-auto max-w-lg" data-testid="list-order-search-results">
+          {results.map(job => {
+            const resource = job.resourceId ? resources.find(r => r.id === job.resourceId) : null;
+            const team = job.teamId ? teamsData.find(t => t.id === job.teamId!) : null;
+            const dateStr = job.scheduledDate ? String(job.scheduledDate).split("T")[0] : null;
+            return (
+              <button
+                key={job.id}
+                className="w-full text-left px-3 py-2 text-sm hover:bg-accent transition-colors border-b last:border-b-0"
+                onClick={() => {
+                  onNavigate(job.id, job.resourceId || undefined, job.teamId || undefined, dateStr || undefined);
+                  onClose();
+                }}
+                data-testid={`button-order-search-result-${job.id}`}
+              >
+                <div className="font-medium truncate">{job.title || job.objectName || job.id.slice(0, 8)}</div>
+                <div className="text-xs text-muted-foreground truncate">
+                  {job.objectName ? `${job.objectName} · ` : ""}
+                  {dateStr ? format(new Date(dateStr + "T00:00:00"), "d MMM", { locale: sv }) : "Oschemalagd"}
+                  {(resource || team) ? ` · ${resource?.name || team?.name}` : ""}
+                  {job.customerName ? ` · ${job.customerName}` : ""}
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      )}
+      {!isFetching && query.trim().length >= 2 && debouncedQuery.length >= 2 && results.length === 0 && (
+        <p className="text-xs text-muted-foreground py-2 max-w-lg">Inga aktiva order hittades för &ldquo;{query}&rdquo;</p>
+      )}
+    </div>
+  );
+}
+
 export function WeekPlanner({ onAddJob, onSelectJob, onSelectedJobIdsChange, showAIPanel, onToggleAIPanel, displayMode = "full", popoutRole = "main" }: WeekPlannerProps) {
   const d = usePlannerData();
   const zoom = zoomLevels[d.zoomLevel];
   const [urgentDialogOpen, setUrgentDialogOpen] = useState(false);
   const [conflictListOpen, setConflictListOpen] = useState(false);
   const [slaRiskOpen, setSlaRiskOpen] = useState(false);
+  const [orderSearchOpen, setOrderSearchOpen] = useState(false);
   const [areaSearchOpen, setAreaSearchOpen] = useState<boolean>(() => {
     if (typeof window === "undefined") return false;
     return new URLSearchParams(window.location.search).get("areaSearch") === "open";
@@ -253,34 +377,6 @@ export function WeekPlanner({ onAddJob, onSelectJob, onSelectedJobIdsChange, sho
     openPlannerPopout(view);
   }, [poppedOutViews]);
 
-  const handleCrossWindowAssign = useCallback((job: WorkOrderWithObject) => {
-    if (!remoteSelectedSlot) return;
-    const slotLabel = `${remoteSelectedSlot.resourceName} · ${remoteSelectedSlot.date}${remoteSelectedSlot.startTime ? ` ${remoteSelectedSlot.startTime}` : ""}`;
-    d.updateWorkOrderMutation.mutate(
-      {
-        id: job.id,
-        resourceId: remoteSelectedSlot.resourceId,
-        scheduledDate: remoteSelectedSlot.date,
-        ...(remoteSelectedSlot.startTime ? { scheduledStartTime: remoteSelectedSlot.startTime } : {}),
-      },
-      {
-        onSuccess: () => {
-          d.toast({
-            title: "Uppgift tilldelad",
-            description: `${(job.title || "Uppgift").slice(0, 60)} → ${slotLabel}`,
-          });
-        },
-        onError: (err: unknown) => {
-          d.toast({
-            title: "Tilldelning misslyckades",
-            description: err instanceof Error ? err.message : "Kunde inte tilldela uppgiften till vald slot.",
-            variant: "destructive",
-          });
-        },
-      },
-    );
-  }, [remoteSelectedSlot, d]);
-
   type EffectiveDisplayMode = "full" | "calendar-only" | "orderlager-only" | "neither";
   const effectiveDisplayMode = useMemo<EffectiveDisplayMode>(() => {
     if (displayMode !== "full") return displayMode;
@@ -318,6 +414,128 @@ export function WeekPlanner({ onAddJob, onSelectJob, onSelectedJobIdsChange, sho
     return extras.length ? [...d.workOrders, ...extras] : d.workOrders;
   }, [d.workOrders, dndWorkOrders]);
 
+  // Navigera till ett specifikt jobb i planeraren (rätt vecka, avdölj resurs/team, rensa blockerande filter, markera jobbet).
+  const navigateToScheduledJob = useCallback((jobId: string, resourceId?: string, teamId?: string, dateStr?: string) => {
+    if (dateStr) {
+      const date = new Date(dateStr + "T00:00:00");
+      d.setCurrentWeekStart(startOfWeek(date, { weekStartsOn: 1 }));
+      d.setCurrentDate(date);
+    }
+    if (resourceId && d.hiddenResourceIds.has(resourceId)) {
+      d.setHiddenResourceIds(new Set(Array.from(d.hiddenResourceIds).filter(id => id !== resourceId)));
+    }
+    // Rensa resursfilter (namn, exekveringskod, beläggning, team) om resursen inte visas p.g.a. dem.
+    if (resourceId && !d.visibleResources.some(r => r.id === resourceId)) {
+      d.clearResourceFilters();
+    }
+    if (teamId && d.selectedTeamIds.length > 0 && !d.selectedTeamIds.includes(teamId)) {
+      d.setSelectedTeamIds([...d.selectedTeamIds, teamId]);
+    }
+    // Rensa kalenderfiltren (kund/prioritet) som kan dölja jobbet i rutnätet.
+    if (d.filterCustomer !== "all") d.setFilterCustomer("all");
+    if (d.filterPriority !== "all") d.setFilterPriority("all");
+    if (!dateStr) {
+      d.setShowUnscheduled(true);
+    }
+    d.setSelectedJob(jobId);
+  }, [d]);
+
+  // Visa en toast om ett drag-drop-jobb hamnade utanför den vy som visas just nu.
+  const handleScheduledOutOfView = useCallback((info: { jobId: string; resourceId?: string; teamId?: string; dateStr: string }) => {
+    const { jobId, resourceId, teamId, dateStr } = info;
+    const isDateVisible = d.visibleDates.some(vd => format(vd, "yyyy-MM-dd") === dateStr);
+    // Use d.visibleResources to align with actual rendered rows (covers name, executionCode, occupancy, team, hiddenResourceIds filters).
+    const isResourceNotVisible = !!resourceId && !d.visibleResources.some(r => r.id === resourceId);
+    const isTeamHidden = !!teamId && d.selectedTeamIds.length > 0 && !d.selectedTeamIds.includes(teamId);
+    // Check calendar-grid filters (filterCustomer + filterPriority affect filteredScheduledJobs used by the grid).
+    const job = d.workOrders.find(j => j.id === jobId);
+    const isFilteredByCustomer = d.filterCustomer !== "all" && !!job && job.customerId !== d.filterCustomer;
+    const isFilteredByPriority = d.filterPriority !== "all" && !!job && job.priority !== d.filterPriority;
+    if (isDateVisible && !isResourceNotVisible && !isTeamHidden && !isFilteredByCustomer && !isFilteredByPriority) return;
+
+    const resource = resourceId ? d.resources.find(r => r.id === resourceId) : null;
+    const team = teamId ? d.teamsData.find(t => t.id === teamId) : null;
+    const assignedTo = resource?.name || team?.name;
+    const jobDate = new Date(dateStr + "T00:00:00");
+    const weekNum = format(jobDate, "w");
+    const parts: string[] = [];
+    if (!isDateVisible) parts.push(`vecka ${weekNum}`);
+    if (assignedTo) parts.push(assignedTo);
+
+    d.toast({
+      title: "Jobb schemalagt utanför vyn",
+      description: `Förflyttat till ${parts.join(", ") || "annan vecka"}`,
+      action: (
+        <ToastAction
+          altText="Visa ordern"
+          onClick={() => navigateToScheduledJob(jobId, resourceId, teamId, dateStr)}
+        >
+          Visa ordern
+        </ToastAction>
+      ),
+    });
+  }, [d, navigateToScheduledJob]);
+
+  // Koppla out-of-view-detektering till What-If-bekräftelse (vanligaste enkeljobb-sökvägen).
+  const handleWhatIfConfirmWithOutOfView = useCallback(() => {
+    const pending = d.whatIfPending;
+    d.handleWhatIfConfirm();
+    if (pending) {
+      handleScheduledOutOfView({
+        jobId: pending.jobId,
+        resourceId: pending.resourceId,
+        dateStr: pending.scheduledDate,
+      });
+    }
+  }, [d, handleScheduledOutOfView]);
+
+  // Koppla out-of-view-detektering till konflikt-bekräftelse.
+  const handleAcceptConflictWithOutOfView = useCallback(() => {
+    const pending = d.pendingSchedule;
+    d.handleAcceptConflict();
+    if (pending) {
+      handleScheduledOutOfView({
+        jobId: pending.jobId,
+        resourceId: pending.resourceId,
+        dateStr: pending.scheduledDate,
+      });
+    }
+  }, [d, handleScheduledOutOfView]);
+
+  // Tilldela ett jobb från orderlager till den markerade remot-slotten via cross-window-drag.
+  const handleCrossWindowAssign = useCallback((job: WorkOrderWithObject) => {
+    if (!remoteSelectedSlot) return;
+    const slotLabel = `${remoteSelectedSlot.resourceName} · ${remoteSelectedSlot.date}${remoteSelectedSlot.startTime ? ` ${remoteSelectedSlot.startTime}` : ""}`;
+    d.updateWorkOrderMutation.mutate(
+      {
+        id: job.id,
+        resourceId: remoteSelectedSlot.resourceId,
+        scheduledDate: remoteSelectedSlot.date,
+        ...(remoteSelectedSlot.startTime ? { scheduledStartTime: remoteSelectedSlot.startTime } : {}),
+      },
+      {
+        onSuccess: () => {
+          d.toast({
+            title: "Uppgift tilldelad",
+            description: `${(job.title || "Uppgift").slice(0, 60)} → ${slotLabel}`,
+          });
+          handleScheduledOutOfView({
+            jobId: job.id,
+            resourceId: remoteSelectedSlot.resourceId,
+            dateStr: remoteSelectedSlot.date,
+          });
+        },
+        onError: (err: unknown) => {
+          d.toast({
+            title: "Tilldelning misslyckades",
+            description: err instanceof Error ? err.message : "Kunde inte tilldela uppgiften till vald slot.",
+            variant: "destructive",
+          });
+        },
+      },
+    );
+  }, [remoteSelectedSlot, d, handleScheduledOutOfView]);
+
   const dnd = usePlannerDnd({
     workOrders: combinedWorkOrders,
     viewMode: d.viewMode,
@@ -341,6 +559,7 @@ export function WeekPlanner({ onAddJob, onSelectJob, onSelectedJobIdsChange, sho
     setWhatIfOpen: d.setWhatIfOpen,
     fetchWhatIf: d.fetchWhatIf,
     onSpringNavigate: d.navigate,
+    onScheduledOutOfView: handleScheduledOutOfView,
   });
 
   // Wrap dnd.handleDragEnd to auto-assign on cross-window drop:
@@ -359,6 +578,7 @@ export function WeekPlanner({ onAddJob, onSelectJob, onSelectedJobIdsChange, sho
       if (target && job) {
         if (target.kind === "team" && d.executeTeamSchedule) {
           d.executeTeamSchedule(job.id, target.teamId, target.dateStr);
+          handleScheduledOutOfView({ jobId: job.id, teamId: target.teamId, dateStr: target.dateStr });
         } else if (target.kind === "resource") {
           // Mirror usePlannerDnd.computeStartTime: use the cell hour when present;
           // otherwise (week-mode whole-day drop) compute the next free slot for that resource/day.
@@ -379,6 +599,7 @@ export function WeekPlanner({ onAddJob, onSelectJob, onSelectedJobIdsChange, sho
             startTime = h < 17 ? `${String(h).padStart(2, "0")}:${String(nextSlot % 60).padStart(2, "0")}` : "07:00";
           }
           d.executeSchedule(job.id, target.resourceId, target.dateStr, startTime);
+          handleScheduledOutOfView({ jobId: job.id, resourceId: target.resourceId, dateStr: target.dateStr });
         }
         d.toast({ title: "Schemalagt över fönster", description: `${job.title} tilldelad via popout-fönster` });
         d.setActiveDragJob(null);
@@ -391,7 +612,7 @@ export function WeekPlanner({ onAddJob, onSelectJob, onSelectedJobIdsChange, sho
     }
     localDragRemoteHoverRef.current = null;
     dnd.handleDragEnd(event);
-  }, [dnd, d]);
+  }, [dnd, d, handleScheduledOutOfView]);
 
   const handleJobClickWithCallback = useCallback((jobId: string) => {
     d.handleJobClick(jobId);
@@ -458,6 +679,18 @@ export function WeekPlanner({ onAddJob, onSelectJob, onSelectedJobIdsChange, sho
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
   }, [onAddJob, d.setAutoFillDialogOpen, d.handleViewModeChange]);
+
+  // Ctrl+K öppnar ordersökning.
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        setOrderSearchOpen(o => !o);
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, []);
 
   const isLoading = d.resourcesLoading || d.workOrdersLoading;
   if (isLoading) return <div className="flex items-center justify-center h-full"><Loader2 className="h-8 w-8 animate-spin text-muted-foreground" /></div>;
@@ -560,6 +793,8 @@ export function WeekPlanner({ onAddJob, onSelectJob, onSelectedJobIdsChange, sho
             showAIPanel={showAIPanel} onToggleAIPanel={onToggleAIPanel}
             areaSearchOpen={areaSearchOpen}
             onToggleAreaSearch={() => setAreaSearchOpen(o => !o)}
+            orderSearchOpen={orderSearchOpen}
+            onOrderSearch={() => setOrderSearchOpen(o => !o)}
             weekGoals={d.weekGoals} weekTravelTotal={d.weekTravelTotal}
             visibleDates={d.visibleDates} getResourceDayHours={d.getResourceDayHours}
             jobConflictCount={Object.keys(d.jobConflicts).length}
@@ -574,6 +809,14 @@ export function WeekPlanner({ onAddJob, onSelectJob, onSelectedJobIdsChange, sho
             onOpenPopout={handleOpenPopout}
             crossWindowSlot={crossWindowSlot}
             setCrossWindowSlot={setCrossWindowSlot}
+          />
+
+          <PlannerOrderSearch
+            resources={d.resources}
+            teamsData={d.teamsData}
+            open={orderSearchOpen}
+            onNavigate={navigateToScheduledJob}
+            onClose={() => setOrderSearchOpen(false)}
           />
 
           <DisruptionPanel />
@@ -845,7 +1088,7 @@ export function WeekPlanner({ onAddJob, onSelectJob, onSelectedJobIdsChange, sho
         isPending={d.bulkSending}
         results={d.bulkResults}
       />
-      <ConflictDialog open={d.conflictDialogOpen} onOpenChange={(o) => { if (!o) { d.setConflictDialogOpen(false); d.setPendingSchedule(null); } }} pendingSchedule={d.pendingSchedule} workOrders={d.workOrders} onAccept={d.handleAcceptConflict} onCancel={() => { d.setConflictDialogOpen(false); d.setPendingSchedule(null); }} />
+      <ConflictDialog open={d.conflictDialogOpen} onOpenChange={(o) => { if (!o) { d.setConflictDialogOpen(false); d.setPendingSchedule(null); } }} pendingSchedule={d.pendingSchedule} workOrders={d.workOrders} onAccept={handleAcceptConflictWithOutOfView} onCancel={() => { d.setConflictDialogOpen(false); d.setPendingSchedule(null); }} />
       <ClearDialog open={d.clearDialogOpen} onOpenChange={d.setClearDialogOpen} viewMode={d.viewMode} jobCount={d.currentViewScheduledJobs.length} onConfirm={d.handleClearAllScheduled} loading={d.clearLoading} />
       <AutoFillDialog open={d.autoFillDialogOpen} onOpenChange={d.setAutoFillDialogOpen} overbooking={d.autoFillOverbooking} setOverbooking={d.setAutoFillOverbooking} geoClustering={d.autoFillGeoClustering} setGeoClustering={d.setAutoFillGeoClustering} geoSpread={d.autoFillGeoSpread} loading={d.autoFillLoading} applying={d.autoFillApplying} preview={d.autoFillPreview} skipped={d.autoFillSkipped} diag={d.autoFillDiag} resources={d.resources} viewMode={d.viewMode} currentWeekStart={d.currentWeekStart} currentDate={d.currentDate} onPreview={d.handleAutoFillPreview} onApply={d.handleAutoFillApply} />
       <DepChainDialog open={d.depChainDialogOpen} onOpenChange={(o) => { if (!o) { d.setDepChainDialogOpen(false); } }} depChainJobId={d.depChainJobId} workOrders={d.workOrders} depChainData={d.depChainData} />
@@ -856,7 +1099,7 @@ export function WeekPlanner({ onAddJob, onSelectJob, onSelectedJobIdsChange, sho
         result={d.whatIfResult}
         loading={d.whatIfLoading}
         jobTitle={d.whatIfPending?.jobTitle || ""}
-        onConfirm={d.handleWhatIfConfirm}
+        onConfirm={handleWhatIfConfirmWithOutOfView}
         onCancel={d.handleWhatIfCancel}
       />
       <UrgentJobDialog open={urgentDialogOpen} onClose={() => setUrgentDialogOpen(false)} preselectedOrder={urgentPreselectedOrder} />

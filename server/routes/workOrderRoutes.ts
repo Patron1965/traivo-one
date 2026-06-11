@@ -196,6 +196,15 @@ function getRequestUserId(req: any): string | null {
 
 export async function registerWorkOrderRoutes(app: Express) {
 
+app.get("/api/work-orders/search", asyncHandler(async (req, res) => {
+  const tenantId = getTenantIdWithFallback(req);
+  const q = (req.query.q as string || "").trim();
+  if (!q || q.length < 2) return res.json([]);
+  const limit = Math.min(parseInt((req.query.limit as string) || "20", 10), 50);
+  const results = await storage.searchActiveWorkOrders(tenantId, q, limit);
+  res.json(results);
+}));
+
 app.get("/api/work-orders", asyncHandler(async (req, res) => {
   const tenantId = getTenantIdWithFallback(req);
   const allDates = req.query.allDates === 'true';

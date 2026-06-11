@@ -46,6 +46,8 @@ interface PlannerToolbarProps {
   onToggleAIPanel?: () => void;
   areaSearchOpen?: boolean;
   onToggleAreaSearch?: () => void;
+  orderSearchOpen?: boolean;
+  onOrderSearch?: () => void;
   weekGoals: {
     time: { current: number; target: number; pct: number };
     economy: { current: number; target: number; pct: number };
@@ -616,6 +618,23 @@ export const PlannerToolbar = memo(function PlannerToolbar(props: PlannerToolbar
             onChange={props.setCrossWindowSlot}
           />
 
+          {props.onOrderSearch && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant={props.orderSearchOpen ? "default" : "ghost"}
+                  size="sm"
+                  className="h-8 gap-1.5 px-2"
+                  onClick={props.onOrderSearch}
+                  data-testid="button-order-search-open"
+                >
+                  <Search className="h-3.5 w-3.5" />
+                  <span className="text-xs hidden lg:inline">Hitta order</span>
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="top">Sök upp en order och hoppa dit (Ctrl+K)</TooltipContent>
+            </Tooltip>
+          )}
           {props.onToggleAreaSearch && (
             <Tooltip>
               <TooltipTrigger asChild>

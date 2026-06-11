@@ -488,6 +488,8 @@ export interface IStorage {
    * dataset. För UI-listor: använd {@link getWorkOrdersPaginated}.
    */
   getWorkOrders(tenantId: string, startDate?: Date, endDate?: Date, includeUnscheduled?: boolean, limit?: number): Promise<WorkOrderWithObject[]>;
+  /** Fritextsökning av aktiva ordrar för planerarens "Hitta order" — utan datumgränser, max `limit` träffar. */
+  searchActiveWorkOrders(tenantId: string, query: string, limit?: number): Promise<Array<{ id: string; title: string | null; objectName: string | null; objectAddress: string | null; customerName: string | null; scheduledDate: string | null; resourceId: string | null; teamId: string | null; orderStatus: string }>>;
   getWorkOrdersByExternalRefs(tenantId: string, refs: string[]): Promise<Array<{ id: string; externalReference: string | null; modusId: string | null; metadata: unknown }>>;
   /**
    * Grovplanering-aggregat per vecka (Task #795). Returnerar färdiga summor per
@@ -3184,6 +3186,37 @@ export class DatabaseStorage implements IStorage {
     }
     
     return query;
+  }
+
+  async searchActiveWorkOrders(tenantId: string, query: string, limit = 20) {
+    const searchTerm = `%${query.trim().toLowerCase()}%`;
+    return db.select({
+      id: workOrders.id,
+      title: workOrders.title,
+      objectName: objects.name,
+      objectAddress: objects.address,
+      customerName: customers.name,
+      scheduledDate: workOrders.scheduledDate,
+      resourceId: workOrders.resourceId,
+      teamId: workOrders.teamId,
+      orderStatus: workOrders.orderStatus,
+    })
+    .from(workOrders)
+    .leftJoin(objects, eq(workOrders.objectId, objects.id))
+    .leftJoin(customers, eq(workOrders.customerId, customers.id))
+    .where(and(
+      eq(workOrders.tenantId, tenantId),
+      isNull(workOrders.deletedAt),
+      notInArray(workOrders.orderStatus, ['utford', 'fakturerad', 'avbruten', 'omojlig']),
+      or(
+        sql`LOWER(COALESCE(${workOrders.title}, '')) LIKE ${searchTerm}`,
+        sql`LOWER(COALESCE(${objects.name}, '')) LIKE ${searchTerm}`,
+        sql`LOWER(COALESCE(${objects.address}, '')) LIKE ${searchTerm}`,
+        sql`LOWER(COALESCE(${customers.name}, '')) LIKE ${searchTerm}`
+      )
+    ))
+    .orderBy(desc(workOrders.scheduledDate))
+    .limit(limit);
   }
 
   async getObjectSubtreeIds(tenantId: string, rootObjectId: string): Promise<string[]> {

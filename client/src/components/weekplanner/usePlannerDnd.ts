@@ -40,6 +40,8 @@ interface UsePlannerDndOptions {
   fetchWhatIf?: (workOrderId: string, toResourceId: string, scheduledDate: string, scheduledStartTime?: string, fromResourceId?: string | null, fromDate?: string | null) => void;
   // F2: hoppa mellan veckor mitt i ett drag genom att hovra kant-zonerna.
   onSpringNavigate?: (dir: "prev" | "next") => void;
+  // Callback som anropas när ett schemalagt jobb hamnar utanför den vy som visas.
+  onScheduledOutOfView?: (info: { jobId: string; resourceId?: string; teamId?: string; dateStr: string }) => void;
 }
 
 export function usePlannerDnd({
@@ -49,6 +51,7 @@ export function usePlannerDnd({
   selectedJobIds, clearSelection,
   setWhatIfPending, setWhatIfOpen, fetchWhatIf,
   onSpringNavigate,
+  onScheduledOutOfView,
 }: UsePlannerDndOptions) {
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -74,6 +77,9 @@ export function usePlannerDnd({
   // i en stale closure över currentWeekStart (annars navigerar varje tick tillbaka till samma vecka).
   const onSpringNavigateRef = useRef(onSpringNavigate);
   onSpringNavigateRef.current = onSpringNavigate;
+  // Håll alltid senaste out-of-view-callback i en ref för att undvika stale closures i handleDragEnd.
+  const onScheduledOutOfViewRef = useRef(onScheduledOutOfView);
+  onScheduledOutOfViewRef.current = onScheduledOutOfView;
   const clearSpring = useCallback(() => {
     if (springTimerRef.current) {
       clearInterval(springTimerRef.current);
@@ -274,6 +280,7 @@ export function usePlannerDnd({
         playDeliveryWindowAlert("drop");
       }
       executeTeamSchedule(jobId, teamId, dateStr);
+      onScheduledOutOfViewRef.current?.({ jobId, teamId, dateStr });
       return;
     }
 
@@ -347,6 +354,7 @@ export function usePlannerDnd({
         accumulatedMinutes += (j.estimatedDuration || 60);
       }
       toast({ title: "Bulk-flytt klar", description: `${jobsToMove.length} order flyttade till ${dateStr}` });
+      onScheduledOutOfViewRef.current?.({ jobId, resourceId, dateStr });
       clearSelection?.();
       return;
     }
@@ -382,6 +390,7 @@ export function usePlannerDnd({
         setPendingSchedule({ jobId, resourceId, scheduledDate: dateStr, scheduledStartTime, conflicts }); setConflictDialogOpen(true); return;
       }
       executeSchedule(jobId, resourceId, dateStr, scheduledStartTime);
+      onScheduledOutOfViewRef.current?.({ jobId, resourceId, dateStr });
       if (scheduledStartTime) toast({ title: "Schemalagt", description: `Starttid ${scheduledStartTime} tilldelad automatiskt` });
     }
   }, [workOrders, viewMode, currentDate, routeJobsForView, resourceDayJobMap, setActiveDragJob, setRouteJobOrder, updateWorkOrderMutation, detectConflictsForJob, detectTeamConflictsForJob, setPendingSchedule, setConflictDialogOpen, executeSchedule, executeTeamSchedule, toast, selectedJobIds, clearSelection, computeStartTime, resolveDropTarget, setWhatIfPending, setWhatIfOpen, fetchWhatIf, clearSpring]);
