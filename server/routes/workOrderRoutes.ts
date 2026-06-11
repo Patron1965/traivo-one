@@ -799,6 +799,7 @@ const bulkRoughPlanSchema = z.object({
   workOrderIds: z.array(z.string().min(1)).min(1).max(500),
   roughPlannedWeek: z.string().regex(/^\d{4}-W\d{2}$/, "Ogiltigt veckoformat (YYYY-Www)"),
   districtId: z.string().min(1).nullable().optional(),
+  teamId: z.string().min(1).nullable().optional(),
   autoSuggestDistrict: z.boolean().optional(),
 });
 
@@ -821,12 +822,15 @@ app.post("/api/work-orders/bulk-rough-plan", requirePlanner, asyncHandler(async 
   if (!parsed.success) throw new ValidationError(formatZodError(parsed.error));
   const { workOrderIds, roughPlannedWeek, autoSuggestDistrict } = parsed.data;
   const manualDistrictId = parsed.data.districtId ?? null;
+  const teamId = parsed.data.teamId ?? null;
 
   // Validera manuellt valt distrikt mot tenant innan vi rör några ordrar.
   if (manualDistrictId) {
     const district = await storage.getGeographicDistrict(tenantId, manualDistrictId);
     if (!district) throw new ValidationError("Distriktet finns inte i denna tenant");
   }
+  // Validera valt team mot tenant (tilldelning av uppgifter till team).
+  if (teamId) await ensureTeamInTenant(teamId, tenantId);
 
   // Bygg postnummer → distrikt-uppslag från district_zones (endast vid auto-förslag).
   const postalToDistrict = new Map<string, string>();
@@ -870,6 +874,7 @@ app.post("/api/work-orders/bulk-rough-plan", requirePlanner, asyncHandler(async 
     try {
       const updateData: Record<string, unknown> = { roughPlannedWeek };
       if (resolvedDistrictId) updateData.districtId = resolvedDistrictId;
+      if (teamId) updateData.teamId = teamId;
       const updated = await storage.updateWorkOrder(id, updateData);
       if (!updated) {
         results.push({ workOrderId: id, status: "error", districtId: resolvedDistrictId, districtSource, message: "Uppdatering misslyckades" });
