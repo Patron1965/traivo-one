@@ -22,6 +22,45 @@ async function verifyObjectTenant(objectId: string, tenantId: string): Promise<b
   }
 }
 
+// Task #911: leveransdatum tolkas i Europe/Stockholm. Ett datum-only-värde
+// ("2026-07-01") saknar tidszon och `new Date("2026-07-01")` tolkar det som
+// UTC-midnatt. På en server väster om UTC (t.ex. Replits US-regioner) blir det
+// då föregående kalenderdag vid lokal/tidszonsfri formattering → off-by-one i
+// planeringsvyer. Vi förankrar därför datum-only till midnatt i Europe/Stockholm.
+const DELIVERY_DATE_TIMEZONE = "Europe/Stockholm";
+
+// Tidszonens offset (minuter, positivt öster om UTC) för en given instant.
+function getDeliveryTimeZoneOffsetMinutes(timeZone: string, instant: Date): number {
+  const fmt = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    hour12: false,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  });
+  const parts = fmt.formatToParts(instant);
+  const get = (t: string) => parseInt(parts.find(p => p.type === t)?.value ?? "0", 10);
+  let hour = get("hour");
+  if (hour === 24) hour = 0; // Intl kan returnera "24" beroende på locale
+  const asUTC = Date.UTC(get("year"), get("month") - 1, get("day"), hour, get("minute"), get("second"));
+  return (asUTC - instant.getTime()) / 60000;
+}
+
+// Tolka ett datum-only-värde som midnatt i angiven tidszon. Två offset-pass
+// hanterar DST-kanter korrekt (offseten vid UTC-gissningen kan skilja sig från
+// offseten vid den justerade instanten kring DST-bytet).
+function dateOnlyToZonedMidnight(year: number, month: number, day: number, timeZone: string): Date {
+  const guessUtcMs = Date.UTC(year, month - 1, day, 0, 0, 0);
+  let offset = getDeliveryTimeZoneOffsetMinutes(timeZone, new Date(guessUtcMs));
+  let utcMs = guessUtcMs - offset * 60000;
+  offset = getDeliveryTimeZoneOffsetMinutes(timeZone, new Date(utcMs));
+  utcMs = guessUtcMs - offset * 60000;
+  return new Date(utcMs);
+}
+
 // Task #901 (B8): tolka ett metadatavärde till ett leveransdatum vid orderkoncept-
 // expansion. Accepterar ENBART Date-instanser och datum-/datetime-strängar
 // ("YYYY-MM-DD" eller "YYYY-MM-DD HH:mm[:ss]"). Nummer/boolean avvisas medvetet —
@@ -36,7 +75,28 @@ export function parseDeliveryDate(value: unknown): Date | null {
   if (typeof value === "string") {
     const trimmed = value.trim();
     if (!trimmed) return null;
-    // Normalisera "YYYY-MM-DD HH:mm[:ss]" → ISO-T så Date tolkar korrekt.
+    // Datum-only ("YYYY-MM-DD"): förankra till midnatt i Europe/Stockholm (se
+    // Task #911-noten ovan) i stället för UTC-midnatt.
+    const dateOnly = trimmed.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (dateOnly) {
+      const year = Number(dateOnly[1]);
+      const month = Number(dateOnly[2]);
+      const day = Number(dateOnly[3]);
+      // Avvisa ogiltiga kalenderdatum (t.ex. "2026-13-45") — Date.UTC rullar
+      // annars över till ett giltigt datum och döljer felet.
+      const check = new Date(Date.UTC(year, month - 1, day));
+      if (
+        check.getUTCFullYear() !== year ||
+        check.getUTCMonth() !== month - 1 ||
+        check.getUTCDate() !== day
+      ) {
+        return null;
+      }
+      const zoned = dateOnlyToZonedMidnight(year, month, day, DELIVERY_DATE_TIMEZONE);
+      return Number.isNaN(zoned.getTime()) ? null : zoned;
+    }
+    // Värden med tidskomponent ("YYYY-MM-DD HH:mm[:ss]") tolkas oförändrat:
+    // normalisera mellanslag → ISO-T så Date tolkar korrekt (server-lokal tid).
     const normalized = trimmed.replace(/^(\d{4}-\d{2}-\d{2}) (\d{2}:\d{2})/, "$1T$2");
     const parsed = new Date(normalized);
     return Number.isNaN(parsed.getTime()) ? null : parsed;
@@ -1790,6 +1850,11 @@ app.post("/api/order-concepts/:id/execute", asyncHandler(async (req, res) => {
 
     // Generate assignments for each matching object
     const createdAssignments = [];
+    // Task #911-beslut: Stockholm-normaliseringen gäller ENBART datum-only-
+    // metadatavärden via parseDeliveryDate. Konceptets schemalagda fallback nedan
+    // kommer som full ISO-tidsstämpel från klienten (med tid/offset) och ska
+    // tolkas oförändrat — den är redan en entydig instant och har inget
+    // datum-only/UTC-midnatt-problem.
     const scheduledDate = req.body.scheduledDate ? new Date(req.body.scheduledDate) : undefined;
     // Task #901 (B8): observability — räkna hur många assignments som fick sin
     // leveranstid från metadatafältet resp. föll tillbaka på schemalagt datum.
