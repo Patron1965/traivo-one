@@ -1145,6 +1145,32 @@ async function migrateDefaultTenantToKinab() {
       `));
     }
 
+    // Vissa tabeller har ett (tenant_id, <kol>)-unikt index. Om bade OLD och NEW
+    // redan har en rad for samma nyckel (t.ex. en daglig snapshot per tenant och
+    // datum) kraschar den raka UPDATE:en med 23505. OLD-raden ar redundant efter
+    // sammanslagningen, sa rensa krockande OLD-rader innan rename.
+    const COLLISION_KEYS: Record<string, string[]> = {
+      geocoding_missing_snapshots: ["date"],
+    };
+    for (const [table, keyCols] of Object.entries(COLLISION_KEYS)) {
+      if (!childTables.includes(table)) continue;
+      const onClause = keyCols.map((c) => `n."${c}" = o."${c}"`).join(" AND ");
+      // nosemgrep: javascript.drizzle-orm.security.audit.ban-drizzle-sql-raw
+      // table/keyCols ar hardkodade ovan, OLD_ID/NEW_ID konstanter. Ingen user-input.
+      const del = await tx.execute(sql.raw(`
+        DELETE FROM "${table}" o
+        WHERE o.tenant_id = '${OLD_ID}'
+          AND EXISTS (
+            SELECT 1 FROM "${table}" n
+            WHERE n.tenant_id = '${NEW_ID}' AND ${onClause}
+          )
+      `));
+      const pruned = (del as any).rowCount ?? 0;
+      if (pruned > 0) {
+        console.log(`[migration]   pruned ${pruned} redundant '${OLD_ID}' rows in ${table} (krockar med '${NEW_ID}')`);
+      }
+    }
+
     let totalRows = 0;
     for (const table of childTables) {
       // nosemgrep: javascript.drizzle-orm.security.audit.ban-drizzle-sql-raw
