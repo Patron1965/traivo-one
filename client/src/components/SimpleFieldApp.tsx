@@ -10,7 +10,8 @@ import {
   HelpCircle, Clock, Trash2, Ban, MapPinOff, Timer, Bell, WifiOff, FileSignature, Camera, X,
   Key, DoorOpen, ListChecks, CircleDot, Circle, Mail, Coffee, MessageSquare, ChevronRight,
   User, CloudSun, Pause, SkipForward, Send, Flag, Thermometer, Wind, Download, Share,
-  Lock, Unlock, ClipboardCheck, Wrench, UserX, AlarmClock, Car, Database, FileText, ListTodo, Eye, EyeOff, Settings, Network, Plus
+  Lock, Unlock, ClipboardCheck, Wrench, UserX, AlarmClock, Car, Database, FileText, ListTodo, Eye, EyeOff, Settings, Network, Plus,
+  Search, Route, Users, Warehouse, ChevronDown, Package
 } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
@@ -50,7 +51,17 @@ import {
 } from "@/lib/file-mime";
 import { DailyProgressCard } from "@/components/DailyProgressCard";
 import { DayReport } from "@/components/DayReport";
-import { FieldTodoList, getUncompletedTodoCount } from "@/components/FieldTodoList";
+import { FieldTodoList, getUncompletedTodoCount, addPersonalTodo } from "@/components/FieldTodoList";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import {
+  type FieldJobMeta,
+  compareByRoute,
+  sortByRoute,
+  groupByLocation,
+  groupByCustomer,
+  filterBySearch,
+} from "@/lib/field-job-list";
 import { VoiceInput } from "@/components/VoiceInput";
 import { FocusTimeline, FocusCTA, ExpandableDetail, OrderStatusBadge, getTimelineStep, useFocusMode } from "@/components/FocusMode";
 import { OutboxCenter } from "@/components/OutboxCenter";
@@ -200,6 +211,9 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
   const [view, setView] = useState<View>("jobs");
   const [showEnkelUppgift, setShowEnkelUppgift] = useState(false);
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
+  const [jobSearch, setJobSearch] = useState("");
+  const [jobListMode, setJobListMode] = useState<"rutt" | "plats" | "kund">("rutt");
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
   const [jobStarted, setJobStarted] = useState(false);
   const [startTime, setStartTime] = useState<Date | null>(null);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
@@ -628,7 +642,7 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
     return timeA.localeCompare(timeB);
   });
 
-  const { data: dependencyData = {} } = useQuery<Record<string, { dependsOn: Array<{ parentId: string; type: string; completed: boolean }>; isLocked: boolean; isDependentTask: boolean }>>({
+  const { data: dependencyData = {} } = useQuery<Record<string, { dependsOn: Array<{ parentId: string; type: string; completed: boolean }>; isLocked: boolean; isDependentTask: boolean; routeSequence: number | null }>>({
     queryKey: ["/api/field-worker/dependency-info"],
     queryFn: async () => {
       const ids = todayJobs.map(j => j.id);
@@ -639,7 +653,7 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
       if (res.ok) {
         const tasks = await res.json();
         for (const t of tasks) {
-          results[t.id] = { dependsOn: t.dependsOn || [], isLocked: t.isLocked || false, isDependentTask: t.isDependentTask || false };
+          results[t.id] = { dependsOn: t.dependsOn || [], isLocked: t.isLocked || false, isDependentTask: t.isDependentTask || false, routeSequence: t.routeSequence ?? null };
         }
       }
       return results;
@@ -647,6 +661,23 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
     enabled: todayJobs.length > 0,
     refetchInterval: 30000,
   });
+
+  // G1: ruttsekvens per uppgift (planerarens stopp-ordning) härledd ur dependency-svaret.
+  const routeSeqMap = useMemo(() => {
+    const m = new Map<string, number | null>();
+    for (const [id, d] of Object.entries(dependencyData)) {
+      m.set(id, d.routeSequence ?? null);
+    }
+    return m;
+  }, [dependencyData]);
+
+  // Minimal FieldJobMeta för ren ruttsortering (compareByRoute läser bara sekvens + tid).
+  const toRouteMeta = useCallback((job: WorkOrderWithObject): FieldJobMeta => ({
+    id: job.id,
+    routeSequence: routeSeqMap.get(job.id) ?? null,
+    scheduledStartTime: job.scheduledStartTime ?? null,
+    lat: null, lng: null, address: null, customerId: null, customerName: null, searchText: "",
+  }), [routeSeqMap]);
 
   useEffect(() => {
     if (todayJobs.length === 0) return;
@@ -704,13 +735,24 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
     previousValue: string | null;
   }
 
+  interface DependencyArticleContext {
+    articleId: string;
+    articleName: string;
+    articleNumber: string;
+    quantity: number;
+    stockLocation: string | null;
+    stockLatitude: number | null;
+    stockLongitude: number | null;
+    dependencyMinutesBefore: number | null;
+  }
+
   const [metadataUpdates, setMetadataUpdates] = useState<Record<string, { value: string; status?: string; comment?: string; photo?: string }>>({});
   const [savingMetadata, setSavingMetadata] = useState<string | null>(null);
 
-  const { data: metadataContext } = useQuery<{ articles: MetadataArticleContext[] }>({
+  const { data: metadataContext } = useQuery<{ articles: MetadataArticleContext[]; dependencyArticles?: DependencyArticleContext[] }>({
     queryKey: ["/api/mobile/tasks", selectedJobId, "metadata-context"],
     queryFn: async () => {
-      if (!selectedJobId) return { articles: [] };
+      if (!selectedJobId) return { articles: [], dependencyArticles: [] };
       const res = await mobileApiCall("GET", `/api/mobile/tasks/${selectedJobId}/metadata-context`);
       return res.json();
     },
@@ -1092,12 +1134,8 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
       if (resourceId && wo.resourceId !== resourceId) return false;
       const scheduled = new Date(wo.scheduledDate);
       return scheduled >= dayStart && scheduled <= dayEnd;
-    }).sort((a, b) => {
-      const timeA = a.scheduledStartTime || "00:00";
-      const timeB = b.scheduledStartTime || "00:00";
-      return timeA.localeCompare(timeB);
-    });
-  }, [workOrders, resourceId]);
+    }).sort((a, b) => compareByRoute(toRouteMeta(a), toRouteMeta(b)));
+  }, [workOrders, resourceId, toRouteMeta]);
 
   const handleNextJob = () => {
     setShowCompletedDialog(false);
@@ -1241,8 +1279,10 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
   }, []);
 
   const getNextPendingJob = useCallback(() => {
-    return todayJobs.find(j => j.orderStatus !== "utford") || null;
-  }, [todayJobs]);
+    if (todayJobs.length === 0) return null;
+    const sorted = [...todayJobs].sort((a, b) => compareByRoute(toRouteMeta(a), toRouteMeta(b)));
+    return sorted.find(j => j.orderStatus !== "utford") || null;
+  }, [todayJobs, toRouteMeta]);
 
   const getPriorityBadge = (priority?: string) => {
     switch (priority) {
@@ -1253,6 +1293,129 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
       default:
         return null;
     }
+  };
+
+  // G1/G2/G3/G8/G9: berikade metadata för listkontrollerna (ruttsortering, plats-/
+  // kundgruppering, fritextsök). Stop-numret är ruttpositionen och hålls stabilt
+  // oavsett sök/gruppering så fältarbetaren känner igen "stopp 3" hela dagen.
+  const jobMetas = useMemo<FieldJobMeta[]>(() => {
+    return todayJobs.map(job => {
+      const obj = job.objectId ? objectMap.get(job.objectId) : null;
+      const customer = customerMap.get(job.customerId);
+      const lat = (obj?.latitude as number | null | undefined) ?? job.taskLatitude ?? null;
+      const lng = (obj?.longitude as number | null | undefined) ?? job.taskLongitude ?? null;
+      const address = job.objectAddress || (obj?.address as string | null | undefined) || null;
+      const objName = localizedObjectName(job.objectName, job.objectNameTranslations);
+      const metaValues = job.metadata
+        ? Object.values(job.metadata as Record<string, unknown>)
+            .map(v => (typeof v === "string" || typeof v === "number" ? String(v) : ""))
+        : [];
+      const searchText = [
+        job.title, address, (obj?.city as string | null | undefined), objName,
+        customer?.name, job.orderType, job.plannedNotes,
+        job.objectAccessCode, job.objectKeyNumber, ...metaValues,
+      ].filter(Boolean).join(" ").toLowerCase();
+      return {
+        id: job.id,
+        routeSequence: routeSeqMap.get(job.id) ?? null,
+        scheduledStartTime: job.scheduledStartTime ?? null,
+        lat, lng, address,
+        customerId: job.customerId ?? null,
+        customerName: customer?.name ?? null,
+        searchText,
+      };
+    });
+  }, [todayJobs, objectMap, customerMap, routeSeqMap, localizedObjectName]);
+
+  const routeSortedMetas = useMemo(() => sortByRoute(jobMetas), [jobMetas]);
+  const stopNumberMap = useMemo(() => {
+    const m = new Map<string, number>();
+    routeSortedMetas.forEach((meta, i) => m.set(meta.id, i + 1));
+    return m;
+  }, [routeSortedMetas]);
+  const filteredMetas = useMemo(() => filterBySearch(routeSortedMetas, jobSearch), [routeSortedMetas, jobSearch]);
+  const locationGroups = useMemo(() => groupByLocation(filteredMetas), [filteredMetas]);
+  const customerGroups = useMemo(() => groupByCustomer(filteredMetas), [filteredMetas]);
+  const jobById = useMemo(() => new Map(todayJobs.map(j => [j.id, j])), [todayJobs]);
+
+  const renderJobCard = (job: WorkOrderWithObject) => {
+    const stopNumber = stopNumberMap.get(job.id);
+    return (
+      <Card
+        key={job.id}
+        className={`hover-elevate active-elevate-2 cursor-pointer ${dependencyData[job.id]?.isLocked ? 'opacity-60 border-destructive/20 dark:border-destructive/80' : ''}`}
+        onClick={() => {
+          if (dependencyData[job.id]?.isLocked) {
+            toast({ title: "Beroende ej klart", description: "Det finns olösta beroenden för detta jobb.", variant: "destructive" });
+          }
+          handleSelectJob(job.id);
+        }}
+        data-testid={`button-job-${job.id}`}
+      >
+        <CardContent className="p-4">
+          <div className="flex items-start gap-3">
+            <div className="flex items-center justify-center w-10 h-10 rounded-full bg-primary text-primary-foreground text-sm font-bold shrink-0">
+              {stopNumber ?? "–"}
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-start justify-between gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <p className="font-medium">{job.title}</p>
+                  {getPriorityBadge(job.priority)}
+                  {dependencyData[job.id]?.isLocked && (
+                    <Badge variant="outline" className="text-[10px] border-destructive/30 text-destructive gap-0.5">
+                      <Lock className="h-3 w-3" />
+                      Låst
+                    </Badge>
+                  )}
+                  {dependencyData[job.id]?.isDependentTask && !dependencyData[job.id]?.isLocked && (
+                    <Badge variant="outline" className="text-[10px] border-chart-2/30 text-chart-2 gap-0.5">
+                      <Unlock className="h-3 w-3" />
+                      Upplåst
+                    </Badge>
+                  )}
+                </div>
+                {job.scheduledStartTime && (
+                  <Badge variant="outline" className="shrink-0 text-xs">
+                    <Clock className="h-3 w-3 mr-1" />
+                    {job.scheduledStartTime}
+                  </Badge>
+                )}
+              </div>
+              <div className="flex items-center gap-1 text-sm text-muted-foreground mt-1">
+                <MapPin className="h-3.5 w-3.5 shrink-0" />
+                <span className="truncate">{job.objectAddress || localizedObjectName(job.objectName, job.objectNameTranslations)}</span>
+              </div>
+              {job.plannedNotes && (
+                <div className="flex items-start gap-1.5 mt-1.5 p-1.5 rounded bg-chart-1/10 dark:bg-chart-1/15 border border-chart-1/20 dark:border-chart-1/80" data-testid={`planned-notes-preview-${job.id}`}>
+                  <MessageSquare className="h-3 w-3 text-chart-1 shrink-0 mt-0.5" />
+                  <span className="text-xs text-chart-1 line-clamp-2">{job.plannedNotes}</span>
+                </div>
+              )}
+              <div className="flex items-center gap-2 mt-1 flex-wrap">
+                {job.estimatedDuration && (
+                  <span className="text-xs text-muted-foreground">
+                    {job.estimatedDuration} min
+                  </span>
+                )}
+                {travelDistances[job.id] && travelDistances[job.id].distanceKm != null && (
+                  <span className="text-xs text-muted-foreground flex items-center gap-0.5" data-testid={`travel-info-${job.id}`}>
+                    <Navigation className="h-2.5 w-2.5" />
+                    {travelDistances[job.id].distanceKm} km · {travelDistances[job.id].travelMinutes} min
+                  </span>
+                )}
+                {(job.objectAccessCode || job.objectKeyNumber) && (
+                  <Badge variant="outline" className="text-[10px] gap-0.5">
+                    <Key className="h-2.5 w-2.5" />
+                    Kod
+                  </Badge>
+                )}
+              </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    );
   };
 
   if (isLoading) {
@@ -1501,6 +1664,74 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
               <p className="text-xs text-muted-foreground">Metadata-artiklar finns — växla till detaljvy för redigering.</p>
             )}
           </ExpandableDetail>}
+
+          {!focusMode && metadataContext?.dependencyArticles && metadataContext.dependencyArticles.length > 0 && (
+            <div className="space-y-2" data-testid="panel-dependency-stock">
+              <div className="flex items-center gap-1.5 px-1">
+                <Warehouse className="h-4 w-4 text-chart-4" />
+                <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Lagerplats — hämta före jobbet</span>
+              </div>
+              {metadataContext.dependencyArticles.map(dep => (
+                <Card key={dep.articleId} className="border-chart-4/20 dark:border-chart-4/80 bg-chart-4/5 dark:bg-chart-4/10" data-testid={`card-dependency-stock-${dep.articleId}`}>
+                  <CardContent className="py-3 space-y-2">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-1.5">
+                          <Package className="h-4 w-4 text-chart-4 shrink-0" />
+                          <span className="text-sm font-medium truncate" data-testid={`text-dependency-name-${dep.articleId}`}>{dep.articleName}</span>
+                        </div>
+                        {(dep.quantity > 0 || dep.articleNumber) && (
+                          <p className="text-xs text-muted-foreground mt-0.5">
+                            {dep.quantity > 0 ? `${dep.quantity} st` : ""}{dep.quantity > 0 && dep.articleNumber ? " · " : ""}{dep.articleNumber || ""}
+                          </p>
+                        )}
+                      </div>
+                      {dep.dependencyMinutesBefore != null && (
+                        <Badge variant="outline" className="text-[10px] gap-0.5 shrink-0 border-warning/40 text-warning">
+                          <Clock className="h-3 w-3" />
+                          {dep.dependencyMinutesBefore} min före
+                        </Badge>
+                      )}
+                    </div>
+                    {dep.stockLocation && (
+                      <div className="flex items-center gap-1.5 text-sm" data-testid={`text-dependency-location-${dep.articleId}`}>
+                        <MapPin className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                        <span className="truncate">{dep.stockLocation}</span>
+                      </div>
+                    )}
+                    <div className="flex gap-2">
+                      {dep.stockLatitude != null && dep.stockLongitude != null && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="flex-1 h-9 gap-1.5"
+                          onClick={() => openNavigation(dep.stockLatitude!, dep.stockLongitude!)}
+                          data-testid={`button-navigate-stock-${dep.articleId}`}
+                        >
+                          <Navigation className="h-4 w-4" />
+                          Navigera
+                        </Button>
+                      )}
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="flex-1 h-9 gap-1.5"
+                        onClick={() => {
+                          const label = `Hämta ${dep.quantity > 0 ? dep.quantity + " st " : ""}${dep.articleName}${dep.stockLocation ? " @ " + dep.stockLocation : ""}`;
+                          const added = addPersonalTodo(label);
+                          toast({ title: added ? "Tillagd i kom ihåg" : "Finns redan i kom ihåg", description: label });
+                        }}
+                        data-testid={`button-remember-stock-${dep.articleId}`}
+                      >
+                        <ListTodo className="h-4 w-4" />
+                        Lägg i kom ihåg
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
 
           {!focusMode && metadataContext && metadataContext.articles.length > 0 && (
             /* Detail view metadata - only shown when focus mode is off */
@@ -2932,82 +3163,96 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
             </div>
           </div>
         ) : (
-          todayJobs.map((job, index) => (
-            <Card 
-              key={job.id}
-              className={`hover-elevate active-elevate-2 cursor-pointer ${dependencyData[job.id]?.isLocked ? 'opacity-60 border-destructive/20 dark:border-destructive/80' : ''}`}
-              onClick={() => {
-                if (dependencyData[job.id]?.isLocked) {
-                  toast({ title: "Beroende ej klart", description: "Det finns olösta beroenden för detta jobb.", variant: "destructive" });
-                }
-                handleSelectJob(job.id);
-              }}
-              data-testid={`button-job-${job.id}`}
-            >
-              <CardContent className="p-4">
-                <div className="flex items-start gap-3">
-                  <div className="flex items-center justify-center w-10 h-10 rounded-full bg-primary text-primary-foreground text-sm font-bold shrink-0">
-                    {index + 1}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <p className="font-medium">{job.title}</p>
-                        {getPriorityBadge(job.priority)}
-                        {dependencyData[job.id]?.isLocked && (
-                          <Badge variant="outline" className="text-[10px] border-destructive/30 text-destructive gap-0.5">
-                            <Lock className="h-3 w-3" />
-                            Låst
-                          </Badge>
-                        )}
-                        {dependencyData[job.id]?.isDependentTask && !dependencyData[job.id]?.isLocked && (
-                          <Badge variant="outline" className="text-[10px] border-chart-2/30 text-chart-2 gap-0.5">
-                            <Unlock className="h-3 w-3" />
-                            Upplåst
-                          </Badge>
-                        )}
-                      </div>
-                      {job.scheduledStartTime && (
-                        <Badge variant="outline" className="shrink-0 text-xs">
-                          <Clock className="h-3 w-3 mr-1" />
-                          {job.scheduledStartTime}
-                        </Badge>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-1 text-sm text-muted-foreground mt-1">
-                      <MapPin className="h-3.5 w-3.5 shrink-0" />
-                      <span className="truncate">{job.objectAddress || localizedObjectName(job.objectName, job.objectNameTranslations)}</span>
-                    </div>
-                    {job.plannedNotes && (
-                      <div className="flex items-start gap-1.5 mt-1.5 p-1.5 rounded bg-chart-1/10 dark:bg-chart-1/15 border border-chart-1/20 dark:border-chart-1/80" data-testid={`planned-notes-preview-${job.id}`}>
-                        <MessageSquare className="h-3 w-3 text-chart-1 shrink-0 mt-0.5" />
-                        <span className="text-xs text-chart-1 line-clamp-2">{job.plannedNotes}</span>
-                      </div>
-                    )}
-                    <div className="flex items-center gap-2 mt-1 flex-wrap">
-                      {job.estimatedDuration && (
-                        <span className="text-xs text-muted-foreground">
-                          {job.estimatedDuration} min
-                        </span>
-                      )}
-                      {travelDistances[job.id] && travelDistances[job.id].distanceKm != null && (
-                        <span className="text-xs text-muted-foreground flex items-center gap-0.5" data-testid={`travel-info-${job.id}`}>
-                          <Navigation className="h-2.5 w-2.5" />
-                          {travelDistances[job.id].distanceKm} km · {travelDistances[job.id].travelMinutes} min
-                        </span>
-                      )}
-                      {(job.objectAccessCode || job.objectKeyNumber) && (
-                        <Badge variant="outline" className="text-[10px] gap-0.5">
-                          <Key className="h-2.5 w-2.5" />
-                          Kod
-                        </Badge>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          ))
+          <>
+            <div className="space-y-2 sticky top-0 z-10 bg-background pb-2" data-testid="controls-job-list">
+              <div className="relative">
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+                <Input
+                  value={jobSearch}
+                  onChange={(e) => setJobSearch(e.target.value)}
+                  placeholder="Sök jobb, adress, kund, metadata…"
+                  className="pl-8 h-9"
+                  data-testid="input-job-search"
+                />
+                {jobSearch && (
+                  <button
+                    type="button"
+                    onClick={() => setJobSearch("")}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover-elevate rounded p-0.5"
+                    data-testid="button-clear-search"
+                    aria-label="Rensa sökning"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                )}
+              </div>
+              <ToggleGroup
+                type="single"
+                value={jobListMode}
+                onValueChange={(v) => v && setJobListMode(v as "rutt" | "plats" | "kund")}
+                className="justify-start gap-1"
+                data-testid="toggle-list-mode"
+              >
+                <ToggleGroupItem value="rutt" className="h-8 px-3 gap-1.5 text-xs" data-testid="toggle-mode-rutt">
+                  <Route className="h-3.5 w-3.5" /> Rutt
+                </ToggleGroupItem>
+                <ToggleGroupItem value="plats" className="h-8 px-3 gap-1.5 text-xs" data-testid="toggle-mode-plats">
+                  <MapPin className="h-3.5 w-3.5" /> Plats
+                </ToggleGroupItem>
+                <ToggleGroupItem value="kund" className="h-8 px-3 gap-1.5 text-xs" data-testid="toggle-mode-kund">
+                  <Users className="h-3.5 w-3.5" /> Kund
+                </ToggleGroupItem>
+              </ToggleGroup>
+            </div>
+
+            {filteredMetas.length === 0 ? (
+              <div className="text-center py-8 text-muted-foreground" data-testid="empty-search-results">
+                <Search className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                <p className="text-sm">Inga jobb matchar "{jobSearch}"</p>
+              </div>
+            ) : jobListMode === "rutt" ? (
+              filteredMetas.map(meta => {
+                const job = jobById.get(meta.id);
+                return job ? renderJobCard(job) : null;
+              })
+            ) : (
+              (jobListMode === "plats" ? locationGroups : customerGroups).map(group => {
+                const collapsed = collapsedGroups.has(group.key);
+                return (
+                  <Collapsible
+                    key={group.key}
+                    open={!collapsed}
+                    onOpenChange={(open) => {
+                      setCollapsedGroups(prev => {
+                        const next = new Set(prev);
+                        if (open) next.delete(group.key); else next.add(group.key);
+                        return next;
+                      });
+                    }}
+                    className="space-y-2"
+                  >
+                    <CollapsibleTrigger
+                      className="flex items-center gap-2 w-full text-left px-1 py-1.5 hover-elevate rounded"
+                      data-testid={`group-header-${group.key}`}
+                    >
+                      <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform ${collapsed ? '-rotate-90' : ''}`} />
+                      {jobListMode === "plats"
+                        ? <MapPin className="h-4 w-4 text-chart-4 shrink-0" />
+                        : <Users className="h-4 w-4 text-chart-4 shrink-0" />}
+                      <span className="font-medium text-sm truncate flex-1">{group.label}</span>
+                      <Badge variant="secondary" className="text-[10px] shrink-0">{group.items.length}</Badge>
+                    </CollapsibleTrigger>
+                    <CollapsibleContent className="space-y-2 pl-2 border-l-2 border-muted ml-2">
+                      {group.items.map(meta => {
+                        const job = jobById.get(meta.id);
+                        return job ? renderJobCard(job) : null;
+                      })}
+                    </CollapsibleContent>
+                  </Collapsible>
+                );
+              })
+            )}
+          </>
         )}
       </div>
 

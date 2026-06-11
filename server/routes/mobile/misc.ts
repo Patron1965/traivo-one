@@ -699,9 +699,11 @@ app.get("/api/mobile/tasks/:id/metadata-context", isMobileAuthenticated, asyncHa
     const order = await storage.getWorkOrder(orderId);
     if (!order) throw new NotFoundError("Order hittades inte");
     if (order.resourceId !== resourceId) throw new ForbiddenError("Ej behörig");
-    if (!order.objectId) return res.json({ articles: [], metadata: [] });
+    if (!order.objectId) return res.json({ articles: [], metadata: [], dependencyArticles: [] });
 
-    const tenantId = getTenantIdWithFallback(req);
+    // Mobil-ytan kringgår tenant-middleware: härled tenant från den ägarskaps-
+    // kontrollerade ordern, aldrig från req.tenantId (se replit.md-gotcha).
+    const tenantId = order.tenantId;
     const allArticles = await storage.getArticles(tenantId);
 
     const orderArticleIds: string[] = [];
@@ -764,7 +766,44 @@ app.get("/api/mobile/tasks/:id/metadata-context", isMobileAuthenticated, asyncHa
       };
     });
 
-    res.json({ articles: result });
+    // G5: beroendeartiklarnas egna lagerplatser (depå) så att fältarbetaren kan
+    // hämta material före huvuduppgiften. Härleds från orderns rader → artiklar med
+    // dependencyMinutesBefore satt. Dedupar per artikel och summerar antal.
+    const articleById = new Map(allArticles.map(a => [a.id, a]));
+    const orderLines = await storage.getWorkOrderLines(order.id);
+    const depMap = new Map<string, {
+      articleId: string;
+      articleName: string;
+      articleNumber: string;
+      quantity: number;
+      stockLocation: string | null;
+      stockLatitude: number | null;
+      stockLongitude: number | null;
+      dependencyMinutesBefore: number | null;
+    }>();
+    for (const line of orderLines) {
+      if (!line.articleId) continue;
+      const a = articleById.get(line.articleId);
+      if (!a || a.status !== "active" || a.dependencyMinutesBefore == null) continue;
+      const existing = depMap.get(a.id);
+      if (existing) {
+        existing.quantity += line.quantity ?? 0;
+        continue;
+      }
+      depMap.set(a.id, {
+        articleId: a.id,
+        articleName: a.name,
+        articleNumber: a.articleNumber,
+        quantity: line.quantity ?? 0,
+        stockLocation: a.stockLocation || null,
+        stockLatitude: a.stockLatitude ?? null,
+        stockLongitude: a.stockLongitude ?? null,
+        dependencyMinutesBefore: a.dependencyMinutesBefore ?? null,
+      });
+    }
+    const dependencyArticles = Array.from(depMap.values());
+
+    res.json({ articles: result, dependencyArticles });
 }));
 
 app.post("/api/mobile/tasks/:id/metadata-update", isMobileAuthenticated, asyncHandler(async (req: MobileAuthenticatedRequest, res: Response) => {

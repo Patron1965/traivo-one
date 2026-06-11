@@ -37,6 +37,24 @@ export function getUncompletedTodoCount(): number {
   return loadTodos().filter(t => !t.completed).length;
 }
 
+// G5: lägg en post i "kom ihåg"-listan utifrån annan vy (t.ex. lagerplats i
+// jobbdetaljen). Hoppar över dubbletter av öppna poster. Returnerar true om en ny
+// post lades till.
+export function addPersonalTodo(text: string): boolean {
+  const trimmed = text.trim();
+  if (!trimmed) return false;
+  const items = loadTodos();
+  if (items.some(t => !t.completed && t.text === trimmed)) return false;
+  items.unshift({
+    id: crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`,
+    text: trimmed,
+    completed: false,
+    createdAt: new Date().toISOString(),
+  });
+  saveTodos(items);
+  return true;
+}
+
 interface FieldTodoListProps {
   onBack: () => void;
 }

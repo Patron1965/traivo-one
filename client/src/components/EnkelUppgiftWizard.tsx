@@ -33,6 +33,8 @@ import {
   Layers,
   X,
   User,
+  Phone,
+  Truck,
 } from "lucide-react";
 import { apiRequest, queryClient, versionedUrl } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -105,6 +107,27 @@ interface Placement {
 
 type Mode = "tillagg" | "ny";
 type Coupling = "objekt" | "kluster" | "ingen";
+
+// G7: obundna uppgiftsmallar — snabbskapa fristående uppgifter utan objekt-/klusterkoppling.
+const UNBOUND_TASK_TEMPLATES: Array<{
+  key: string;
+  title: string;
+  description: string;
+  icon: typeof Phone;
+}> = [
+  {
+    key: "telefonsamtal",
+    title: "Telefonsamtal",
+    description: "Ring kund/kontakt och stäm av ärendet.",
+    icon: Phone,
+  },
+  {
+    key: "fordonskontroll",
+    title: "Fordonskontroll",
+    description: "Kontrollera fordonets skick (däck, vätskor, belysning).",
+    icon: Truck,
+  },
+];
 
 interface DraftPayload {
   mode: Mode | null;
@@ -747,6 +770,37 @@ export function EnkelUppgiftWizard({
                     <div className="text-xs text-muted-foreground mt-1">Välj kund &amp; objekt</div>
                   </button>
                 </div>
+
+                {mode === "ny" && (
+                  <div className="space-y-2" data-testid="section-task-templates">
+                    <Label className="text-xs text-muted-foreground">Snabbmallar (utan koppling)</Label>
+                    <div className="flex flex-wrap gap-2">
+                      {UNBOUND_TASK_TEMPLATES.map((tpl) => {
+                        const Icon = tpl.icon;
+                        const active = coupling === "ingen" && title === tpl.title;
+                        return (
+                          <button
+                            key={tpl.key}
+                            type="button"
+                            onClick={() => {
+                              setMode("ny");
+                              setCoupling("ingen");
+                              setSelectedObject(null);
+                              setSelectedCluster(null);
+                              setTitle(tpl.title);
+                              setDescription(tpl.description);
+                            }}
+                            className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs transition hover-elevate ${active ? "border-primary bg-primary/5 text-primary" : ""}`}
+                            data-testid={`button-template-${tpl.key}`}
+                          >
+                            <Icon className="h-3.5 w-3.5" />
+                            {tpl.title}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
 
                 {mode === "tillagg" && (
                   <div className="space-y-2">

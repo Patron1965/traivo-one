@@ -7,7 +7,7 @@ import { formatZodError, verifyTenantOwnership, DEFAULT_TENANT_ID } from "./help
 import { getTenantIdWithFallback, assignUserToTenant, getUserTenants } from "../tenant-middleware";
 import { asyncHandler } from "../asyncHandler";
 import { NotFoundError, ValidationError, UnauthorizedError, ForbiddenError, ConflictError } from "../errors";
-import { objects, workOrders, articles , insertDeviationReportSchema, insertProtocolSchema, apiUsageLogs, taskDependencyInstances, invitations } from "@shared/schema";
+import { objects, workOrders, articles , insertDeviationReportSchema, insertProtocolSchema, apiUsageLogs, taskDependencyInstances, invitations, weeklyPlanTasks } from "@shared/schema";
 import { getISOWeek, getStartOfISOWeek, getDateFromWeekdayInMonth } from "./helpers";
 import { notificationService } from "../notifications";
 import { sendEmail } from "../replit_integrations/resend";
@@ -1794,6 +1794,36 @@ app.get("/api/field-worker/tasks", asyncHandler(async (req, res) => {
       depsByChildId.set(d.childWorkOrderId, arr);
     }
 
+    // G1: planerarens ruttordning (weekly_plan_tasks.sequence) per uppgift, batchad i
+    // en fråga. En uppgift kan ligga i flera veckor — föredra raden vars plannedDate
+    // matchar den efterfrågade dagen, annars första träffen.
+    const planRows = childIds.length > 0
+      ? await db.select({
+          taskId: weeklyPlanTasks.taskId,
+          sequence: weeklyPlanTasks.sequence,
+          plannedDate: weeklyPlanTasks.plannedDate,
+        })
+          .from(weeklyPlanTasks)
+          .where(and(inArray(weeklyPlanTasks.taskId, childIds), eq(weeklyPlanTasks.tenantId, tenantId)))
+      : [];
+    const toDateStr = (d: unknown): string | null => {
+      if (!d) return null;
+      if (typeof d === "string") return d.slice(0, 10);
+      try { return new Date(d as string | number | Date).toISOString().split("T")[0]; } catch { return null; }
+    };
+    const planByTask = new Map<string, { sequence: number | null; plannedDate: string | null }[]>();
+    for (const r of planRows) {
+      const arr = planByTask.get(r.taskId) ?? [];
+      arr.push({ sequence: r.sequence ?? null, plannedDate: toDateStr(r.plannedDate) });
+      planByTask.set(r.taskId, arr);
+    }
+    const resolveRouteSequence = (taskId: string): number | null => {
+      const rows = planByTask.get(taskId);
+      if (!rows || rows.length === 0) return null;
+      const chosen = rows.find(r => r.plannedDate === dateStr) ?? rows[0];
+      return chosen.sequence ?? null;
+    };
+
     const tasksWithDeps = filtered.map((wo) => {
       const deps = depsByChildId.get(wo.id) ?? [];
       const dependsOn = deps.map(d => ({
@@ -1807,6 +1837,7 @@ app.get("/api/field-worker/tasks", asyncHandler(async (req, res) => {
         dependsOn,
         isLocked,
         isDependentTask: dependsOn.length > 0,
+        routeSequence: resolveRouteSequence(wo.id),
       };
     });
     
