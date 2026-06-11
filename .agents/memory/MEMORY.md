@@ -39,3 +39,4 @@
 - [ObjectTimeline återanvändning](object-timeline-reuse.md) — zoombar objekt-tidslinje (år→dag, subträd via CTE) är datakälls-agnostisk: injicera fetchTimeline+queryKeyPrefix för portal-återbruk; YearView/QuarterView/MonthView återanvänds direkt.
 - [Kluster & hierarkinivå avvecklade i UI](cluster-hierarchy-decommission.md) — ADR v3: kluster/hierarkinivå/snöret/dynamiska kluster borta i UI, men DB-kolumner + backend-plumbing (WeekPlanner/team-vehicles/optimization/SLA) behålls (expand-contract).
 - [Orderkoncept metadata-pekarfält](order-concept-metadata-pointer-coercion.md) — *MetadataField-kolumner = metadata_katalog.namn via getArticleMetadataForObject; coercion till Date/number måste typsäkras (annars tyst epoch-skräp).
+- [Råa db.execute timestamp=sträng](raw-execute-timestamp-strings.md) — drizzle node-postgres råa db.execute() ger timestamp som STRÄNG ej Date; wrappa i new Date() före .toISOString() annars krasch.

@@ -65,7 +65,11 @@ export function getDisplayValue(existing: MetadataVarden): string | null {
     (existing.vardeInteger != null ? String(existing.vardeInteger) : null) ??
     (existing.vardeDecimal != null ? String(existing.vardeDecimal) : null) ??
     (existing.vardeBoolean != null ? String(existing.vardeBoolean) : null) ??
-    (existing.vardeDatetime ? existing.vardeDatetime.toISOString() : null) ??
+    // OBS: råa db.execute()-rader (t.ex. getObjectWithAllMetadata) returnerar
+    // timestamp-kolumner som STRÄNGAR, inte Date — wrappa i new Date() så att
+    // .toISOString() inte kastar (annars kraschar bl.a. getArticleMetadataForObject
+    // för datetime-fält → metadatastyrd leveranstid faller alltid tillbaka).
+    (existing.vardeDatetime ? new Date(existing.vardeDatetime).toISOString() : null) ??
     (existing.vardeJson ? JSON.stringify(existing.vardeJson) : null) ??
     existing.vardeReferens ?? null;
 }

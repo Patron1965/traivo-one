@@ -28,7 +28,7 @@ async function verifyObjectTenant(objectId: string, tenantId: string): Promise<b
 // annars skulle ett numeriskt metadatafält tolkas som epoch-millisekunder
 // (1970-skräp). Returnerar null vid saknat/ogiltigt värde så att expansionen kan
 // falla tillbaka på konceptets schemalagda datum utan att krascha.
-function parseDeliveryDate(value: unknown): Date | null {
+export function parseDeliveryDate(value: unknown): Date | null {
   if (value == null) return null;
   if (value instanceof Date) {
     return Number.isNaN(value.getTime()) ? null : value;
