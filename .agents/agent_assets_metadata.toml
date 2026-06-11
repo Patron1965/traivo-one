@@ -156,3 +156,9 @@ id = "MxXuplOlN7Q1QMkNMqNq3"
 uri = "file://docs/traivo-go-api-match-report.md"
 type = "text"
 title = "Traivo Go ↔ Traivo One — API-matchningsrapport"
+
+[[outputs]]
+id = "wbY3zgjefqtYjJi-J6Kcj"
+uri = "file://docs/kinab-simulering-arbetsflode.md"
+type = "text"
+title = "KINAB – Steg-för-steg simulering av arbetsflöde"
