@@ -38,3 +38,4 @@
 - [Kap5 antal-behörighet server-side](kap5-quantity-permission.md) — operatörs-antal-behörighet härleds från req.tenantRole (owner/admin/planner alltid OK; övriga kräver article-flagga), aldrig klient-payload.
 - [ObjectTimeline återanvändning](object-timeline-reuse.md) — zoombar objekt-tidslinje (år→dag, subträd via CTE) är datakälls-agnostisk: injicera fetchTimeline+queryKeyPrefix för portal-återbruk; YearView/QuarterView/MonthView återanvänds direkt.
 - [Kluster & hierarkinivå avvecklade i UI](cluster-hierarchy-decommission.md) — ADR v3: kluster/hierarkinivå/snöret/dynamiska kluster borta i UI, men DB-kolumner + backend-plumbing (WeekPlanner/team-vehicles/optimization/SLA) behålls (expand-contract).
+- [Orderkoncept metadata-pekarfält](order-concept-metadata-pointer-coercion.md) — *MetadataField-kolumner = metadata_katalog.namn via getArticleMetadataForObject; coercion till Date/number måste typsäkras (annars tyst epoch-skräp).

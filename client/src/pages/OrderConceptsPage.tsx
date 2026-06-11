@@ -127,6 +127,7 @@ interface FormData {
   billingFrequency: string;
   contractLockMonths: number;
   subscriptionMetadataField: string;
+  deliveryTimeMetadataField: string;
   deliverySchedule: DeliveryScheduleEntry[];
 }
 
@@ -177,6 +178,7 @@ const defaultForm: FormData = {
   billingFrequency: "monthly",
   contractLockMonths: 0,
   subscriptionMetadataField: "",
+  deliveryTimeMetadataField: "",
   deliverySchedule: [],
 };
 
@@ -484,6 +486,7 @@ export default function OrderConceptsPage() {
       billingFrequency: (concept as any).billingFrequency || "monthly",
       contractLockMonths: (concept as any).contractLockMonths || 0,
       subscriptionMetadataField: (concept as any).subscriptionMetadataField || "",
+      deliveryTimeMetadataField: (concept as any).deliveryTimeMetadataField || "",
       deliverySchedule: schedule,
     });
     setIsDialogOpen(true);
@@ -509,6 +512,7 @@ export default function OrderConceptsPage() {
       billingFrequency: formData.scenario === "abonnemang" ? formData.billingFrequency : null,
       contractLockMonths: formData.scenario === "abonnemang" ? (formData.contractLockMonths || null) : null,
       subscriptionMetadataField: formData.scenario === "abonnemang" ? (formData.subscriptionMetadataField || null) : null,
+      deliveryTimeMetadataField: formData.deliveryTimeMetadataField || null,
     };
 
     if (editingConcept) {
@@ -1206,6 +1210,32 @@ export default function OrderConceptsPage() {
                       </div>
                     )}
                   </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Task #901 (B8): metadatastyrd leveranstid (gäller avrop + schema) */}
+            {(formData.scenario === "avrop" || formData.scenario === "schema") && (
+              <Card className="border-chart-4/20 dark:border-chart-4/80">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-sm flex items-center gap-2">
+                    <Clock className="h-4 w-4" />
+                    Leveranstid från metadata
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-2">
+                  <Label>Metadatafält för leveranstid</Label>
+                  <Input
+                    value={formData.deliveryTimeMetadataField}
+                    onChange={(e) => setFormData({ ...formData, deliveryTimeMetadataField: e.target.value })}
+                    placeholder="T.ex. tömningstid"
+                    data-testid="input-delivery-time-metadata"
+                  />
+                  <p className="text-sm text-muted-foreground">
+                    Ange metadatatypens namn (t.ex. "tömningstid"). Vid körning hämtas leveranstiden
+                    från objektets metadatavärde (datum eller datum + tid). Saknas värdet eller är det
+                    ogiltigt används det schemalagda datumet istället.
+                  </p>
                 </CardContent>
               </Card>
             )}

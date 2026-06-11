@@ -2769,6 +2769,12 @@ export const orderConcepts = pgTable("order_concepts", {
   deliverySchedule: jsonb("delivery_schedule"), // Array of { month, weekNumber, weekday, timeWindowStart, timeWindowEnd }
   rollingMonths: integer("rolling_months").default(3), // Antal månader att generera framåt
   minDaysBetween: integer("min_days_between"), // Minsta antal dagar mellan besök
+  // Task #901 (B8): hämta leveranstid från objektets metadatafält
+  // (metadata_katalog.namn) istället för fast deliverySchedule/scheduledDate.
+  // NULL/tom = oförändrat beteende. Vid /execute läses värdet per objekt
+  // (ärvningsmedvetet via getArticleMetadataForObject) och tolkas som datum/
+  // datetime; saknas/ogiltigt ⇒ fallback till scheduledDate.
+  deliveryTimeMetadataField: text("delivery_time_metadata_field"),
   
   // === ABONNEMANG (Subscription) ===
   washesPerYear: integer("washes_per_year"),

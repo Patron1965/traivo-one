@@ -22,6 +22,28 @@ async function verifyObjectTenant(objectId: string, tenantId: string): Promise<b
   }
 }
 
+// Task #901 (B8): tolka ett metadatavärde till ett leveransdatum vid orderkoncept-
+// expansion. Accepterar ENBART Date-instanser och datum-/datetime-strängar
+// ("YYYY-MM-DD" eller "YYYY-MM-DD HH:mm[:ss]"). Nummer/boolean avvisas medvetet —
+// annars skulle ett numeriskt metadatafält tolkas som epoch-millisekunder
+// (1970-skräp). Returnerar null vid saknat/ogiltigt värde så att expansionen kan
+// falla tillbaka på konceptets schemalagda datum utan att krascha.
+function parseDeliveryDate(value: unknown): Date | null {
+  if (value == null) return null;
+  if (value instanceof Date) {
+    return Number.isNaN(value.getTime()) ? null : value;
+  }
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (!trimmed) return null;
+    // Normalisera "YYYY-MM-DD HH:mm[:ss]" → ISO-T så Date tolkar korrekt.
+    const normalized = trimmed.replace(/^(\d{4}-\d{2}-\d{2}) (\d{2}:\d{2})/, "$1T$2");
+    const parsed = new Date(normalized);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  }
+  return null;
+}
+
 // Task #837: per-tenant cache av Fortnox-artikelregistret för sök-i-rullgardin.
 // Hela registret hämtas en gång (paginerat) och filtreras server-side så att
 // sök-medan-du-skriver inte träffar Fortnox vid varje tangenttryck. Stale-värden
@@ -1769,6 +1791,10 @@ app.post("/api/order-concepts/:id/execute", asyncHandler(async (req, res) => {
     // Generate assignments for each matching object
     const createdAssignments = [];
     const scheduledDate = req.body.scheduledDate ? new Date(req.body.scheduledDate) : undefined;
+    // Task #901 (B8): observability — räkna hur många assignments som fick sin
+    // leveranstid från metadatafältet resp. föll tillbaka på schemalagt datum.
+    let deliveryTimeFromMetadata = 0;
+    let deliveryTimeFallback = 0;
     
     // Fetch article + resolve customer-specific price once before the loop.
     // Task #391: Använd resolveArticlePrice så kundunik/rabattbrev slår igenom
@@ -1852,6 +1878,29 @@ app.post("/api/order-concepts/:id/execute", asyncHandler(async (req, res) => {
         totalCost = linkedPrice.cost * quantity;
       }
 
+      // Task #901 (B8): metadatastyrd leveranstid. När konceptet pekar ut ett
+      // metadatafält läses objektets värde (ärvningsmedvetet) och tolkas som
+      // leveransdatum; saknas/ogiltigt ⇒ fallback till det schemalagda datumet.
+      let effectiveScheduledDate = scheduledDate;
+      if (concept.deliveryTimeMetadataField) {
+        let metaDate: Date | null = null;
+        try {
+          const md = await getArticleMetadataForObject(obj.id, concept.deliveryTimeMetadataField, tenantId);
+          metaDate = parseDeliveryDate(md?.value);
+        } catch (e) {
+          console.error("[fortnox delivery-time metadata] resolve failed:", e);
+        }
+        if (metaDate) {
+          effectiveScheduledDate = metaDate;
+          deliveryTimeFromMetadata++;
+        } else {
+          deliveryTimeFallback++;
+          console.warn(
+            `[fortnox delivery-time metadata] objekt ${obj.id}: fältet "${concept.deliveryTimeMetadataField}" saknas/ogiltigt — faller tillbaka på schemalagt datum`,
+          );
+        }
+      }
+
       const assignment = await storage.createAssignment({
         tenantId,
         orderConceptId: concept.id,
@@ -1861,7 +1910,7 @@ app.post("/api/order-concepts/:id/execute", asyncHandler(async (req, res) => {
         description: concept.description || undefined,
         status: "not_planned",
         priority: concept.priority || "normal",
-        scheduledDate,
+        scheduledDate: effectiveScheduledDate,
         quantity,
         address: obj.address || undefined,
         latitude: obj.latitude || undefined,
@@ -2015,9 +2064,12 @@ app.post("/api/order-concepts/:id/execute", asyncHandler(async (req, res) => {
       success: true,
       message: `Skapade ${createdAssignments.length} uppgifter från ${matchingObjects.length} matchande objekt` +
         (createdPreTasks.length > 0 ? ` + ${createdPreTasks.length} föruppgifter` : "") +
-        (createdAdminWorkOrders.length > 0 ? ` + ${createdAdminWorkOrders.length} administrativa uppgifter` : ""),
+        (createdAdminWorkOrders.length > 0 ? ` + ${createdAdminWorkOrders.length} administrativa uppgifter` : "") +
+        (concept.deliveryTimeMetadataField ? ` (leveranstid från metadata: ${deliveryTimeFromMetadata}, schemalagd fallback: ${deliveryTimeFallback})` : ""),
       assignmentsCreated: createdAssignments.length,
       objectsMatched: matchingObjects.length,
+      deliveryTimeFromMetadata,
+      deliveryTimeFallback,
       assignments: createdAssignments,
       preTasksCreated: createdPreTasks.length,
       preTasks: createdPreTasks,
