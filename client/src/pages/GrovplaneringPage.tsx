@@ -102,16 +102,9 @@ const GROUP_OPTIONS: { value: GroupBy; label: string }[] = [
   { value: "ingen", label: "Ingen" },
 ];
 
-function buildGridUrl(
-  applied: AppliedFilter,
-  groupBy: GroupBy,
-  offset: number,
-  limit: number,
-): string {
+function buildFilterParams(applied: AppliedFilter, groupBy: GroupBy): URLSearchParams {
   const p = new URLSearchParams();
   p.set("groupBy", groupBy);
-  p.set("offset", String(offset));
-  p.set("limit", String(limit));
   if (applied.districtIds.length) p.set("districtIds", applied.districtIds.join(","));
   if (applied.teamIds.length) p.set("teamIds", applied.teamIds.join(","));
   if (applied.postalCode) p.set("postalCode", applied.postalCode);
@@ -120,6 +113,18 @@ function buildGridUrl(
   if (applied.to) p.set("to", applied.to);
   if (applied.taskTypes.length) p.set("taskTypes", applied.taskTypes.join(","));
   if (applied.statuses.length) p.set("statuses", applied.statuses.join(","));
+  return p;
+}
+
+function buildGridUrl(
+  applied: AppliedFilter,
+  groupBy: GroupBy,
+  offset: number,
+  limit: number,
+): string {
+  const p = buildFilterParams(applied, groupBy);
+  p.set("offset", String(offset));
+  p.set("limit", String(limit));
   return `/api/rough-planning/grid?${p.toString()}`;
 }
 
@@ -204,6 +209,36 @@ export default function GrovplaneringPage() {
       }
       return next;
     });
+
+  // "Markera grupp": markera ALLA rader i gruppen över alla sidor (Task #922).
+  // Hämtar hela gruppens rader serverside (samma filter/gruppering) och slår ihop
+  // dem i urvalet — inte bara den synliga sidans rader.
+  const [selectingGroupKey, setSelectingGroupKey] = useState<string | null>(null);
+  const selectWholeGroup = async (group: GridGroup) => {
+    setSelectingGroupKey(group.key);
+    try {
+      const p = buildFilterParams(applied, groupBy);
+      p.set("groupKey", group.key);
+      const res = await apiRequest(
+        "GET",
+        `/api/rough-planning/group-rows?${p.toString()}`,
+      );
+      const data = (await res.json()) as { rows: GridTaskRow[] };
+      setSelected((prev) => {
+        const next = new Map(prev);
+        for (const r of data.rows) next.set(r.id, r);
+        return next;
+      });
+    } catch (err) {
+      toast({
+        title: "Kunde inte markera gruppen",
+        description: err instanceof Error ? err.message : undefined,
+        variant: "destructive",
+      });
+    } finally {
+      setSelectingGroupKey(null);
+    }
+  };
 
   const toggleAllVisible = (checked: boolean) =>
     setSelected((prev) => {
@@ -458,11 +493,15 @@ export default function GrovplaneringPage() {
                 {groups.map((g) => (
                   <DropdownMenuItem
                     key={g.key}
-                    onClick={() => toggleGroup(g, true)}
+                    onClick={() => selectWholeGroup(g)}
+                    disabled={selectingGroupKey !== null}
                     data-testid={`menuitem-select-group-${g.key}`}
                   >
                     <span className="truncate">{g.label}</span>
-                    <span className="ml-auto pl-3 text-xs text-muted-foreground">
+                    <span className="ml-auto flex items-center gap-1.5 pl-3 text-xs text-muted-foreground">
+                      {selectingGroupKey === g.key && (
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                      )}
                       {formatCount(g.summary.taskCount)}
                     </span>
                   </DropdownMenuItem>

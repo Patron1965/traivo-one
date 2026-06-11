@@ -40,6 +40,7 @@ import {
 } from "../planning/weeklyPlanEngine";
 import {
   getGrovplaneringGrid,
+  getGrovplaneringGroupRows,
   getRoughPlanningCities,
   revokeRoughAssignments,
   TASK_TYPE_KEYS,
@@ -185,35 +186,39 @@ export function registerWeeklyPlanRoutes(app: Express) {
 
   const gridQuerySchema = z.object({
     groupBy: z.enum(["objekt", "kund", "orderkoncept", "ingen"]).default("objekt"),
-    offset: z.coerce.number().int().min(0).default(0),
-    limit: z.coerce.number().int().min(1).max(200).default(20),
     postalCode: z.string().trim().max(20).optional(),
     city: z.string().trim().max(120).optional(),
     from: z.coerce.date().optional(),
     to: z.coerce.date().optional(),
   });
 
-  app.get("/api/rough-planning/grid", ...guard, asyncHandler(async (req, res) => {
-    const tenantId = getTenantIdWithFallback(req);
+  const gridPageSchema = z.object({
+    offset: z.coerce.number().int().min(0).default(0),
+    limit: z.coerce.number().int().min(1).max(200).default(20),
+  });
+
+  // Delad parser: läser groupBy + filter ur query (gemensamt för rutnät & grupp-rader).
+  function parseGridQuery(query: Record<string, unknown>): {
+    groupBy: GroupBy;
+    filters: GridFilters;
+  } {
     const parsed = gridQuerySchema.safeParse({
-      groupBy: req.query.groupBy,
-      offset: req.query.offset,
-      limit: req.query.limit,
-      postalCode: req.query.postalCode,
-      city: req.query.city,
-      from: req.query.from,
-      to: req.query.to,
+      groupBy: query.groupBy,
+      postalCode: query.postalCode,
+      city: query.city,
+      from: query.from,
+      to: query.to,
     });
     if (!parsed.success) {
       const formatted = formatZodError(parsed.error);
       throw new ValidationError(formatted.error, formatted.details);
     }
-    const districtIds = csv(req.query.districtIds);
-    const teamIds = csv(req.query.teamIds);
-    const taskTypes = csv(req.query.taskTypes).filter((t) =>
+    const districtIds = csv(query.districtIds);
+    const teamIds = csv(query.teamIds);
+    const taskTypes = csv(query.taskTypes).filter((t) =>
       (TASK_TYPE_KEYS as readonly string[]).includes(t),
     );
-    const statuses = csv(req.query.statuses).filter((s) =>
+    const statuses = csv(query.statuses).filter((s) =>
       (ROUGH_STATUS_KEYS as readonly string[]).includes(s),
     ) as RoughStatus[];
 
@@ -227,13 +232,48 @@ export function registerWeeklyPlanRoutes(app: Express) {
       taskTypes: taskTypes.length ? taskTypes : undefined,
       statuses: statuses.length ? statuses : undefined,
     };
+    return { groupBy: parsed.data.groupBy as GroupBy, filters };
+  }
 
+  app.get("/api/rough-planning/grid", ...guard, asyncHandler(async (req, res) => {
+    const tenantId = getTenantIdWithFallback(req);
+    const pageParsed = gridPageSchema.safeParse({
+      offset: req.query.offset,
+      limit: req.query.limit,
+    });
+    if (!pageParsed.success) {
+      const formatted = formatZodError(pageParsed.error);
+      throw new ValidationError(formatted.error, formatted.details);
+    }
+    const { groupBy, filters } = parseGridQuery(req.query);
     const result = await getGrovplaneringGrid(
       tenantId,
       filters,
-      parsed.data.groupBy as GroupBy,
-      parsed.data.offset,
-      parsed.data.limit,
+      groupBy,
+      pageParsed.data.offset,
+      pageParsed.data.limit,
+    );
+    res.json(result);
+  }));
+
+  // Alla rader i EN grupp över alla sidor (Task #922) — driver "Markera grupp"
+  // så att hela gruppen markeras, inte bara den synliga sidans rader. Återanvänder
+  // samma filter/gruppering som rutnätet (tenant-säkert via buildConditions).
+  const groupRowsSchema = z.object({ groupKey: z.string().min(1).max(200) });
+
+  app.get("/api/rough-planning/group-rows", ...guard, asyncHandler(async (req, res) => {
+    const tenantId = getTenantIdWithFallback(req);
+    const keyParsed = groupRowsSchema.safeParse({ groupKey: req.query.groupKey });
+    if (!keyParsed.success) {
+      const formatted = formatZodError(keyParsed.error);
+      throw new ValidationError(formatted.error, formatted.details);
+    }
+    const { groupBy, filters } = parseGridQuery(req.query);
+    const result = await getGrovplaneringGroupRows(
+      tenantId,
+      filters,
+      groupBy,
+      keyParsed.data.groupKey,
     );
     res.json(result);
   }));

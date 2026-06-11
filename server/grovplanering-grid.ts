@@ -298,16 +298,32 @@ function clusterObjects(
   return map;
 }
 
+interface BuiltGroup {
+  key: string;
+  label: string;
+  rows: GridTaskRow[];
+  objects: Set<string>;
+  summary: GridKpis;
+  earliest: string | null;
+}
+
+interface OrderedGroupsResult {
+  orderedGroups: BuiltGroup[];
+  summary: GridKpis;
+  truncated: boolean;
+}
+
 // ---------------------------------------------------------------------------
-// Huvud-endpoint
+// Delad kärna: filtrera i SQL, normalisera typ, klustra/gruppera i applagret.
+// Returnerar de fullständiga, sorterade grupperna (alla rader, ej paginerade) +
+// hela-mängd-summeringen. Återanvänds av både rutnätet (paginerar) och
+// grupp-rad-uppslaget (markera hel grupp över alla sidor).
 // ---------------------------------------------------------------------------
-export async function getGrovplaneringGrid(
+async function buildOrderedGroups(
   tenantId: string,
   filters: GridFilters,
   grouping: GroupBy,
-  offset: number,
-  limit: number,
-): Promise<GridResponse> {
+): Promise<OrderedGroupsResult> {
   const conditions = buildConditions(tenantId, filters);
 
   const fetched = (await db
@@ -461,14 +477,6 @@ export async function getGrovplaneringGrid(
     }
   }
 
-  interface BuiltGroup {
-    key: string;
-    label: string;
-    rows: GridTaskRow[];
-    objects: Set<string>;
-    summary: GridKpis;
-    earliest: string | null;
-  }
   const groupMap = new Map<string, BuiltGroup>();
   for (const r of rows) {
     const { key, label } = groupOf(r);
@@ -501,6 +509,25 @@ export async function getGrovplaneringGrid(
     );
     g.summary.objectCount = g.objects.size;
   }
+
+  return { orderedGroups, summary, truncated };
+}
+
+// ---------------------------------------------------------------------------
+// Huvud-endpoint — paginerar den grupp-ordnade, platta listan per UPPGIFT.
+// ---------------------------------------------------------------------------
+export async function getGrovplaneringGrid(
+  tenantId: string,
+  filters: GridFilters,
+  grouping: GroupBy,
+  offset: number,
+  limit: number,
+): Promise<GridResponse> {
+  const { orderedGroups, summary, truncated } = await buildOrderedGroups(
+    tenantId,
+    filters,
+    grouping,
+  );
 
   // Paginera per UPPGIFT över den grupp-ordnade, platta listan.
   const flat: { groupKey: string; row: GridTaskRow }[] = [];
@@ -540,6 +567,27 @@ export async function getGrovplaneringGrid(
     grouping,
     truncated,
   };
+}
+
+// ---------------------------------------------------------------------------
+// Alla rader i EN grupp över alla sidor (Task #922) — för "Markera grupp".
+// Återanvänder exakt samma filter/klustring/gruppering som rutnätet så att
+// nyckeln matchar 1:1. Returnerar de fullständiga, sorterade raderna i gruppen
+// (samma form som rutnätets `tasks`). Okänd nyckel → tom lista.
+// ---------------------------------------------------------------------------
+export async function getGrovplaneringGroupRows(
+  tenantId: string,
+  filters: GridFilters,
+  grouping: GroupBy,
+  groupKey: string,
+): Promise<{ rows: GridTaskRow[]; truncated: boolean }> {
+  const { orderedGroups, truncated } = await buildOrderedGroups(
+    tenantId,
+    filters,
+    grouping,
+  );
+  const group = orderedGroups.find((g) => g.key === groupKey);
+  return { rows: group ? group.rows : [], truncated };
 }
 
 // ---------------------------------------------------------------------------
