@@ -62,6 +62,7 @@ import {
   groupByCustomer,
   groupByOrderNumber,
   filterBySearch,
+  DEFAULT_LOCATION_GROUP_RADIUS_KM,
 } from "@/lib/field-job-list";
 import { VoiceInput } from "@/components/VoiceInput";
 import { FocusTimeline, FocusCTA, ExpandableDetail, OrderStatusBadge, getTimelineStep, useFocusMode } from "@/components/FocusMode";
@@ -1337,7 +1338,18 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
     return m;
   }, [routeSortedMetas]);
   const filteredMetas = useMemo(() => filterBySearch(routeSortedMetas, jobSearch), [routeSortedMetas, jobSearch]);
-  const locationGroups = useMemo(() => groupByLocation(filteredMetas), [filteredMetas]);
+  // Å5: platsgrupperingsradien är konfigurerbar (per enhet via localStorage,
+  // i meter) med fallback till standardradien — ingen begravd magisk konstant.
+  const locationGroupRadiusKm = useMemo(() => {
+    const raw = typeof window !== "undefined"
+      ? window.localStorage.getItem("traivo:locationGroupRadiusMeters")
+      : null;
+    const meters = raw != null ? parseFloat(raw) : NaN;
+    return Number.isFinite(meters) && meters > 0
+      ? meters / 1000
+      : DEFAULT_LOCATION_GROUP_RADIUS_KM;
+  }, []);
+  const locationGroups = useMemo(() => groupByLocation(filteredMetas, locationGroupRadiusKm), [filteredMetas, locationGroupRadiusKm]);
   const customerGroups = useMemo(() => groupByCustomer(filteredMetas), [filteredMetas]);
   const orderGroups = useMemo(() => groupByOrderNumber(filteredMetas), [filteredMetas]);
   const jobById = useMemo(() => new Map(todayJobs.map(j => [j.id, j])), [todayJobs]);

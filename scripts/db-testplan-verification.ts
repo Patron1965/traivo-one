@@ -86,7 +86,11 @@ async function loadIntrospection() {
   );
   for (const r of i.rows) {
     const unique = /CREATE UNIQUE INDEX/i.test(r.indexdef);
-    const m = r.indexdef.match(/\(([^)]+)\)\s*$/);
+    // Ta bort ev. partiellt WHERE-predikat först — annars fångar regexen nedan
+    // predikatets parentes (t.ex. "WHERE (deleted_at IS NULL)") i stället för
+    // nyckelkolumnerna, vilket gör att partiella index feldetekteras.
+    const defNoWhere = r.indexdef.replace(/\s+WHERE\s+.*$/i, "");
+    const m = defNoWhere.match(/\(([^)]+)\)\s*$/);
     const cols = m ? m[1].split(",").map((s) => s.trim().replace(/"/g, "").split(" ")[0]) : [];
     indexes.push({ table: r.tablename, name: r.indexname, columns: cols, unique });
   }
@@ -272,6 +276,52 @@ async function sectionB() {
 
   add("B. Multi-tenant", "B4", "Cascade inom tenant-gränser", "PASS",
     "Borttag är soft-delete (deletedAt) + preflight (object-archive). Ingen hård cross-tenant cascade.");
+
+  // B5 (Å4c): Runtime korstenant-integritet. FK:erna spärrar bara (id), inte
+  // (tenant_id, id) — se B3. Här verifierar vi att app-lagrets tenant-disciplin
+  // faktiskt hållit i datan: finns det rader där barnets tenant_id avviker från
+  // förälderns? Direkta relationer jämför tenant_id mot tenant_id; join-tabeller
+  // utan eget tenant_id (assignment_articles, order_concept_articles) jämför
+  // förälderns tenant mot artikelns tenant transitivt.
+  const xtChecks: Array<{ label: string; sql: string }> = [
+    { label: "assignments → objects", sql:
+      `SELECT count(*)::text c FROM assignments ch JOIN objects p ON ch.object_id = p.id WHERE ch.tenant_id <> p.tenant_id` },
+    { label: "work_orders → objects", sql:
+      `SELECT count(*)::text c FROM work_orders ch JOIN objects p ON ch.object_id = p.id WHERE ch.object_id IS NOT NULL AND ch.tenant_id <> p.tenant_id` },
+    { label: "work_orders → customers", sql:
+      `SELECT count(*)::text c FROM work_orders ch JOIN customers p ON ch.customer_id = p.id WHERE ch.tenant_id <> p.tenant_id` },
+    { label: "object_payers → objects", sql:
+      `SELECT count(*)::text c FROM object_payers ch JOIN objects p ON ch.object_id = p.id WHERE ch.tenant_id <> p.tenant_id` },
+    { label: "object_payers → customers", sql:
+      `SELECT count(*)::text c FROM object_payers ch JOIN customers p ON ch.customer_id = p.id WHERE ch.tenant_id <> p.tenant_id` },
+    { label: "metadata_varden → objects", sql:
+      `SELECT count(*)::text c FROM metadata_varden ch JOIN objects p ON ch.objekt_id = p.id WHERE ch.objekt_id IS NOT NULL AND ch.tenant_id <> p.tenant_id` },
+    { label: "metadata_varden → work_orders", sql:
+      `SELECT count(*)::text c FROM metadata_varden ch JOIN work_orders p ON ch.work_order_id = p.id WHERE ch.work_order_id IS NOT NULL AND ch.tenant_id <> p.tenant_id` },
+    { label: "assignment_articles (assignment.tenant = article.tenant)", sql:
+      `SELECT count(*)::text c FROM assignment_articles aa JOIN assignments a ON aa.assignment_id = a.id JOIN articles ar ON aa.article_id = ar.id WHERE a.tenant_id <> ar.tenant_id` },
+    { label: "order_concept_articles (concept.tenant = article.tenant)", sql:
+      `SELECT count(*)::text c FROM order_concept_articles oca JOIN order_concepts oc ON oca.order_concept_id = oc.id JOIN articles ar ON oca.article_id = ar.id WHERE oc.tenant_id <> ar.tenant_id` },
+  ];
+  let xtViolations = 0;
+  let xtRan = 0;
+  for (const chk of xtChecks) {
+    try {
+      const r = await pool.query<{ c: string }>(chk.sql);
+      const n = parseInt(r.rows[0]?.c ?? "0", 10);
+      xtRan++;
+      if (n > 0) {
+        xtViolations += n;
+        add("B. Multi-tenant", "B5", `Korstenant-data: ${chk.label}`, "FAIL", `${n} rader med avvikande tenant_id`);
+      } else {
+        add("B. Multi-tenant", "B5", `Korstenant-data: ${chk.label}`, "PASS", "0 korstenant-rader");
+      }
+    } catch (e: any) {
+      add("B. Multi-tenant", "B5", `Korstenant-data: ${chk.label}`, "INFO", `kunde ej köra: ${e.message}`);
+    }
+  }
+  add("B. Multi-tenant", "B5", "Korstenant-integritet (sammanfattning)", xtViolations === 0 ? "PASS" : "FAIL",
+    `${xtRan}/${xtChecks.length} kontroller kördes; ${xtViolations} korstenant-rader totalt`);
 }
 
 // =====================================================================
@@ -395,16 +445,20 @@ function sectionE() {
     hasCol("order_concepts", "rolling_months") ? "order_concepts.rolling_months finns" : "saknas");
   // E5 30m gruppering + kundfiltrering
   add("E. Dataflöden", "E5", "30m jobbgruppering (samma kund)", "DEVIATION",
-    "Implementerad i frontend (client/src/lib/field-job-list.ts, 0.03 km, hårdkodad). Ej DB-konfigurerbar radie.");
+    "Implementerad i frontend (client/src/lib/field-job-list.ts). Radien är nu parameteriserad (Å5): groupByLocation(metas, radiusKm?) med DEFAULT_LOCATION_GROUP_RADIUS_KM=0.03 km, override via SimpleFieldApp. Ej DB-konfigurerbar (klient-override).");
   // E6 tidskonsolidering
   add("E. Dataflöden", "E6", "Tidskonsolidering ('hela maj, torsdagar' → första torsdag)", hasCol("order_concepts", "delivery_schedule") ? "PASS" : "FAIL",
     "delivery_schedule (jsonb) + getDateFromWeekdayInMonth i fortnoxRoutes");
   // E7 fakturagruppering
   add("E. Dataflöden", "E7", "Fakturagruppering (per objekt/beställning/referens)", hasTable("invoice_consolidation_policies") ? "PASS" : "FAIL",
     hasTable("invoice_consolidation_policies") ? "invoice_consolidation_policies + departmentMetadataField" : "saknas");
-  // E8 dynamisk uppdatering
-  add("E. Dataflöden", "E8", "Dynamisk uppdatering av framtida ogjorda uppgifter vid metadata-ändring", "FAIL",
-    "Saknas som auto-push. Systemet fryser värden vid expansion (frozen snapshot) + manuell omräkning. STÖRSTA avvikelsen mot Mats modell.");
+  // E8 dynamisk uppdatering (Å1 — speglar samma env-gate som servern)
+  const dynPropEnabled = process.env.DYNAMIC_TASK_PROPAGATION_ENABLED !== "false";
+  add("E. Dataflöden", "E8", "Dynamisk uppdatering av framtida ogjorda uppgifter vid metadata-ändring",
+    dynPropEnabled ? "PASS" : "INFO",
+    dynPropEnabled
+      ? "Implementerad (Å1): metadata-change-jobs.propagateTaskQuantities räknar om antal + totaler för icke-finaliserade assignments vars artikel har quantityMode='matches_field'. Utförda/avbrutna fryses (frozen snapshot). Env-gate DYNAMIC_TASK_PROPAGATION_ENABLED. OBS: triggas av individuella metadata-ändringar (enqueueMetadataChange); bulk-import skriver utan enqueue och propagerar ej automatiskt."
+      : "Avstängd via DYNAMIC_TASK_PROPAGATION_ENABLED=false — frozen snapshot + manuell omräkning gäller.");
   // E1 helflöde
   add("E. Dataflöden", "E1", "Komplett flöde Order→Uppgift→Utförande→Fakturering", "INFO",
     "Alla mekanismer finns (expansion → assignments → work_orders → Fortnox-export). Full e2e-körning kräver testing-harness + seedade objekt med matchande metadata.");
@@ -437,8 +491,8 @@ function acceptance() {
     [4, "Komplett flöde Order→Uppgift→Utförande→Fakturering", get("E1")[0]?.status ?? "INFO", "Mekanismer finns; e2e ej kört"],
     [5, "Haka-på logik matchar Mats (villkor, multipla kriterier)", verdict(["E3"]), "association_rules + concept_filters"],
     [6, "3-stegs kvantitetsresolution", verdict(["E4"]), "computeArticleQuantity"],
-    [7, "Dynamisk uppdatering av framtida uppgifter", verdict(["E8"]), "SAKNAS — frozen snapshot istället"],
-    [8, "30m jobbgruppering med kundfiltrering", verdict(["E5"]), "Frontend-logik, hårdkodad radie"],
+    [7, "Dynamisk uppdatering av framtida uppgifter", verdict(["E8"]), "Implementerad (Å1) — dynamisk omräkning av framtida ogjorda uppgifter; utförda fryses"],
+    [8, "30m jobbgruppering med kundfiltrering", verdict(["E5"]), "Frontend-logik, parameteriserad radie (Å5)"],
     [9, "Strukturartiklar genererar uppgifter för alla underartiklar", verdict(["C5"]), "article_components"],
     [10, "Metadata-hierarki (Kontakt → underfält)", verdict(["C4"]), "parent_metadata_id"],
     [11, "Metadata-arv neråt i kluster", "PASS", "inheritance-processor + CTE"],

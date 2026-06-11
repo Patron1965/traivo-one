@@ -40,7 +40,11 @@ if command -v psql >/dev/null 2>&1 && [ -n "$DATABASE_URL" ]; then
            migrations/0077_article_geo_dependent.sql \
            migrations/0078_article_quantity_perm_required_leave.sql \
            migrations/0079_disruptions.sql \
-           migrations/0080_order_concept_delivery_time_metadata_field.sql; do
+           migrations/0080_order_concept_delivery_time_metadata_field.sql \
+           migrations/0081_unique_business_numbers.sql \
+           migrations/0082_perf_tenant_geo_indexes.sql \
+           migrations/0083_object_hierarchy_cycle_guard.sql \
+           migrations/0084_tenant_index_completion.sql; do
     if [ -f "$f" ]; then
       echo "[post-merge] Applying $f"
       psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f "$f"

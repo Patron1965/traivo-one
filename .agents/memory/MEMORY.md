@@ -40,3 +40,4 @@
 - [Kluster & hierarkinivå avvecklade i UI](cluster-hierarchy-decommission.md) — ADR v3: kluster/hierarkinivå/snöret/dynamiska kluster borta i UI, men DB-kolumner + backend-plumbing (WeekPlanner/team-vehicles/optimization/SLA) behålls (expand-contract).
 - [Orderkoncept metadata-pekarfält](order-concept-metadata-pointer-coercion.md) — *MetadataField-kolumner = metadata_katalog.namn via getArticleMetadataForObject; coercion till Date/number måste typsäkras (annars tyst epoch-skräp).
 - [Råa db.execute timestamp=sträng](raw-execute-timestamp-strings.md) — drizzle node-postgres råa db.execute() ger timestamp som STRÄNG ej Date; wrappa i new Date() före .toISOString() annars krasch.
+- [work_orders dubbla status-kolumner](work-order-dual-status-columns.md) — `status` (livscykel) ≠ `order_status` (Modus); `CREATE INDEX IF NOT EXISTS` matchar på NAMN → samma namn på fel kolumn ger tyst no-op.

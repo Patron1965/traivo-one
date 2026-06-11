@@ -26,8 +26,10 @@ export interface JobGroup {
   items: FieldJobMeta[];
 }
 
-// 30 meter = platsgruppering enligt G3.
-const LOCATION_GROUP_RADIUS_KM = 0.03;
+// 30 meter = standardradie för platsgruppering enligt G3. Konfigurerbar per anrop
+// (t.ex. tenant-inställning) via radiusKm-argumentet till groupByLocation, så att
+// radien inte längre är en begravd magisk konstant (Å5).
+export const DEFAULT_LOCATION_GROUP_RADIUS_KM = 0.03;
 
 export function normalizeAddress(addr: string | null | undefined): string {
   if (!addr) return "";
@@ -54,7 +56,10 @@ export function sortByRoute(metas: FieldJobMeta[]): FieldJobMeta[] {
 // Greedy gruppering över en redan ruttsorterad lista: samma normaliserade
 // gatuadress ELLER inom 30 m från gruppens ankare (G2/G3, täcker C8). Jobb utan
 // koordinater och adress hamnar i egna grupper.
-export function groupByLocation(metas: FieldJobMeta[]): JobGroup[] {
+export function groupByLocation(
+  metas: FieldJobMeta[],
+  radiusKm: number = DEFAULT_LOCATION_GROUP_RADIUS_KM,
+): JobGroup[] {
   const groups: JobGroup[] = [];
   for (const m of metas) {
     let placed = false;
@@ -68,7 +73,7 @@ export function groupByLocation(metas: FieldJobMeta[]): JobGroup[] {
         m.lat != null && m.lng != null &&
         anchor.lat != null && anchor.lng != null
       ) {
-        near = haversineDistanceKm(m.lat, m.lng, anchor.lat, anchor.lng) <= LOCATION_GROUP_RADIUS_KM;
+        near = haversineDistanceKm(m.lat, m.lng, anchor.lat, anchor.lng) <= radiusKm;
       }
       if (sameAddr || near) {
         g.items.push(m);

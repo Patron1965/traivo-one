@@ -7,6 +7,7 @@ import {
   groupByOrderNumber,
   jobMatchesSearch,
   filterBySearch,
+  DEFAULT_LOCATION_GROUP_RADIUS_KM,
   type FieldJobMeta,
 } from "@/lib/field-job-list";
 
@@ -87,6 +88,30 @@ describe("groupByLocation (G2/G3)", () => {
   it("puts jobs without coords or address in their own groups", () => {
     const metas = [meta({ id: "a" }), meta({ id: "b" })];
     expect(groupByLocation(metas)).toHaveLength(2);
+  });
+
+  it("uses DEFAULT_LOCATION_GROUP_RADIUS_KM (30 m) when no radius is passed", () => {
+    expect(DEFAULT_LOCATION_GROUP_RADIUS_KM).toBe(0.03);
+  });
+
+  it("groups jobs further apart when a larger radius is supplied (Å5)", () => {
+    // ~78 m isär: utanför default 30 m, men innanför en konfigurerad 100 m-radie.
+    const metas = [
+      meta({ id: "a", lat: 59.3293, lng: 18.0686, address: "A" }),
+      meta({ id: "b", lat: 59.32999, lng: 18.0686, address: "B" }),
+    ];
+    expect(groupByLocation(metas)).toHaveLength(2);
+    expect(groupByLocation(metas, 0.1)).toHaveLength(1);
+  });
+
+  it("splits jobs that default-grouping would merge when a tighter radius is supplied (Å5)", () => {
+    // ~12 m isär: innanför default 30 m, men utanför en strikt 5 m-radie.
+    const metas = [
+      meta({ id: "a", lat: 59.3293, lng: 18.0686, address: "A" }),
+      meta({ id: "b", lat: 59.329411, lng: 18.0686, address: "B" }),
+    ];
+    expect(groupByLocation(metas)).toHaveLength(1);
+    expect(groupByLocation(metas, 0.005)).toHaveLength(2);
   });
 });
 

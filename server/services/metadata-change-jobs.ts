@@ -1,21 +1,33 @@
 // Bakgrundsjob för metadata-ändringar — task #552 krav (D).
 // När metadata uppdateras på ett objekt kan det påverka:
 //  1. Priser/totaler på aktiva arbetsordrar (om metadata används i prisregler)
-//  2. Dynamisk kluster-tillhörighet
+//  2. Framtida ogjorda uppgifters antal (artiklar med quantityMode='matches_field')
+//  3. Dynamisk kluster-tillhörighet (avvecklad, se nedan)
 //
 // Designval: fire-and-forget, debounced per tenant. Vi blockerar inte
 // metadata-skrivningen, men loggar misslyckanden. Större batchar (CSV-import)
 // kan kalla `enqueueMetadataChange` med `force: true` för att alltid köra
-// kluster-utvärdering efteråt.
+// efterbehandling. OBS: bulk-import går via batch-writers (writeObjectImportMetadataBatch
+// m.fl.) som INTE enqueue:ar hit — därför träffar uppgifts-omräkningen nedan bara
+// enskilda redigeringar (createMetadata/updateMetadata), aldrig massimport.
 import { db } from "../db";
-import { workOrders } from "@shared/schema";
-import { and, eq, inArray, isNull, notInArray, sql } from "drizzle-orm";
+import { workOrders, assignments } from "@shared/schema";
+import { and, eq, inArray, isNull, notInArray } from "drizzle-orm";
 import { storage } from "../storage";
+import { computeArticleQuantity, metadataValueToNumber } from "../article-quantity";
 
-// Alla icke-finaliserade statusar — exkluderar bara invoiced/cancelled/completed.
+// Alla icke-finaliserade WO-statusar — exkluderar bara invoiced/cancelled/completed.
 // Recalc får alltså träffa även in_progress/ongoing/on_hold etc. så att pågående
 // arbete får uppdaterade priser/totaler om metadata påverkar prisregler.
 const FINALIZED_STATUSES = ["invoiced", "cancelled", "completed"];
+
+// Finaliserade assignment-statusar som ALDRIG rörs av antals-propagering (frysta fakta).
+const ASSIGNMENT_FINALIZED_STATUSES = ["completed", "cancelled"];
+
+// Å1 / kriterium 7 / E8: dynamisk uppdatering av framtida ogjorda uppgifters antal.
+// På som standard; sätt DYNAMIC_TASK_PROPAGATION_ENABLED=false för att stänga av.
+const DYNAMIC_TASK_PROPAGATION_ENABLED =
+  process.env.DYNAMIC_TASK_PROPAGATION_ENABLED !== "false";
 
 type Pending = { tenantId: string; objectIds: Set<string>; timer: NodeJS.Timeout | null };
 const pendingByTenant = new Map<string, Pending>();
@@ -72,11 +84,115 @@ async function runMetadataChangeJob(tenantId: string, objectIds: string[]): Prom
   //    bakåtkompatibelt men utvärderas inte längre.
   const clusterAssigned = 0;
 
+  // 3. Dynamisk omräkning av framtida ogjorda uppgifters antal (Å1 / E8).
+  let taskQtyUpdated = 0;
+  if (DYNAMIC_TASK_PROPAGATION_ENABLED) {
+    try {
+      taskQtyUpdated = await propagateTaskQuantities(tenantId, objectIds);
+    } catch (err) {
+      console.error(`[metadata-change-jobs] task-qty propagation failed:`, err);
+    }
+  }
+
   const ms = Date.now() - start;
-  console.log(`[metadata-change-jobs] tenant=${tenantId} objects=${objectIds.length} recalc=${recalcCount} clusterDelta=${clusterAssigned} ms=${ms}`);
+  console.log(`[metadata-change-jobs] tenant=${tenantId} objects=${objectIds.length} recalc=${recalcCount} clusterDelta=${clusterAssigned} taskQty=${taskQtyUpdated} ms=${ms}`);
 }
 
-// Test-helper för synkron körning (används endast i utveckling).
+// Räknar om antal + cachade totaler för icke-finaliserade assignments vars artikel
+// använder quantityMode='matches_field', när objektets metadatavärde ändrats.
+// Speglar expansionens kvantitetslogik (server/routes/fortnoxRoutes.ts): nytt antal
+// via computeArticleQuantity med objektets aktuella (ärvningsmedvetna) metadatavärde,
+// och totaler skalas om från redan lagrade enhetspriser/-tider. Completed/cancelled
+// rörs aldrig. Returnerar antal uppdaterade assignments.
+async function propagateTaskQuantities(tenantId: string, objectIds: string[]): Promise<number> {
+  if (objectIds.length === 0) return 0;
+
+  const rows = await db
+    .select({
+      id: assignments.id,
+      objectId: assignments.objectId,
+      quantity: assignments.quantity,
+    })
+    .from(assignments)
+    .where(and(
+      eq(assignments.tenantId, tenantId),
+      inArray(assignments.objectId, objectIds),
+      isNull(assignments.deletedAt),
+      notInArray(assignments.status, ASSIGNMENT_FINALIZED_STATUSES),
+    ));
+  if (rows.length === 0) return 0;
+
+  // Ärvningsmedveten resolver — dynamisk import för att undvika cirkulärt toppimport
+  // (metadata-queries laddar i sin tur denna modul lazy).
+  const { getArticleMetadataForObject } = await import("../metadata-queries");
+
+  let updatedCount = 0;
+
+  for (const a of rows) {
+    const aArticles = await storage.getAssignmentArticles(a.id);
+    if (aArticles.length === 0) continue;
+
+    let anyChanged = false;
+    let sumValue = 0;
+    let sumCost = 0;
+    let sumTime = 0;
+    let primaryQty: number | null = null;
+
+    for (const aa of aArticles) {
+      const article = await storage.getArticle(aa.articleId);
+      let qty = aa.quantity ?? 1;
+
+      if (article && article.quantityMode === "matches_field" && article.quantityMetadataField) {
+        let mv: number | null = null;
+        try {
+          const md = await getArticleMetadataForObject(a.objectId, article.quantityMetadataField, tenantId);
+          mv = metadataValueToNumber(md?.value);
+        } catch (e) {
+          console.error("[metadata-change-jobs] matches_field resolve failed:", e);
+        }
+        const newQty = computeArticleQuantity({
+          quantityMode: article.quantityMode,
+          baseQuantity: 1,
+          groupSize: article.groupSize,
+          metadataValue: mv,
+        });
+        if (newQty !== (aa.quantity ?? 1)) {
+          const unitPrice = aa.unitPrice ?? 0;
+          const unitCost = aa.unitCost ?? 0;
+          const unitTime = aa.unitTime ?? 0;
+          await storage.updateAssignmentArticle(aa.id, a.id, {
+            quantity: newQty,
+            totalPrice: unitPrice * newQty,
+            totalCost: unitCost * newQty,
+            totalTime: unitTime * newQty,
+          });
+          anyChanged = true;
+          qty = newQty;
+          primaryQty = newQty;
+        }
+      }
+
+      sumValue += (aa.unitPrice ?? 0) * qty;
+      sumCost += (aa.unitCost ?? 0) * qty;
+      sumTime += (aa.unitTime ?? 0) * qty;
+    }
+
+    if (anyChanged) {
+      await storage.updateAssignment(a.id, tenantId, {
+        quantity: primaryQty ?? a.quantity ?? 1,
+        cachedValue: sumValue,
+        cachedCost: sumCost,
+        estimatedDuration: sumTime,
+      });
+      updatedCount++;
+      console.log(`[metadata-change-jobs] task-qty updated assignment=${a.id} object=${a.objectId} newQty=${primaryQty}`);
+    }
+  }
+
+  return updatedCount;
+}
+
+// Test-helper för synkron körning (används endast i utveckling/test).
 export async function runMetadataChangeJobNow(tenantId: string, objectIds: string[]): Promise<void> {
   return runMetadataChangeJob(tenantId, objectIds);
 }
