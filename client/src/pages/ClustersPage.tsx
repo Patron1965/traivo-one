@@ -297,6 +297,17 @@ export default function ClustersPage() {
     setDialogOpen(true);
   };
 
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("create") === "true") {
+      handleOpenCreate();
+      params.delete("create");
+      const remaining = params.toString();
+      window.history.replaceState({}, "", window.location.pathname + (remaining ? `?${remaining}` : ""));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const handleOpenEdit = (cluster: Cluster) => {
     setEditingCluster(cluster);
     form.reset({
