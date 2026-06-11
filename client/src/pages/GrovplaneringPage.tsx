@@ -6,6 +6,7 @@ import {
 } from "@tanstack/react-query";
 import {
   CalendarRange,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
   Loader2,
@@ -24,6 +25,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Label } from "@/components/ui/label";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -60,6 +69,7 @@ import type { Team, GeographicDistrict } from "@shared/schema";
 
 interface AppliedFilter {
   districtIds: string[];
+  teamIds: string[];
   postalCode: string;
   city: string;
   from?: string;
@@ -70,6 +80,7 @@ interface AppliedFilter {
 
 const EMPTY_APPLIED: AppliedFilter = {
   districtIds: [],
+  teamIds: [],
   postalCode: "",
   city: "",
   taskTypes: [],
@@ -85,10 +96,10 @@ const EMPTY_KPIS: GridKpis = {
 };
 
 const GROUP_OPTIONS: { value: GroupBy; label: string }[] = [
-  { value: "objekt", label: "Gruppera: Objekt" },
-  { value: "kund", label: "Gruppera: Kund" },
-  { value: "orderkoncept", label: "Gruppera: Orderkoncept" },
-  { value: "ingen", label: "Gruppera: Ingen" },
+  { value: "objekt", label: "Objekt" },
+  { value: "kund", label: "Kund" },
+  { value: "orderkoncept", label: "Orderkoncept" },
+  { value: "ingen", label: "Ingen" },
 ];
 
 function buildGridUrl(
@@ -102,6 +113,7 @@ function buildGridUrl(
   p.set("offset", String(offset));
   p.set("limit", String(limit));
   if (applied.districtIds.length) p.set("districtIds", applied.districtIds.join(","));
+  if (applied.teamIds.length) p.set("teamIds", applied.teamIds.join(","));
   if (applied.postalCode) p.set("postalCode", applied.postalCode);
   if (applied.city) p.set("city", applied.city);
   if (applied.from) p.set("from", applied.from);
@@ -250,6 +262,7 @@ export default function GrovplaneringPage() {
     );
     setApplied({
       districtIds: draft.districtIds,
+      teamIds: draft.teamIds,
       postalCode: draft.postalCode.trim(),
       city: draft.city,
       from,
@@ -341,20 +354,7 @@ export default function GrovplaneringPage() {
         icon={CalendarRange}
         title="Grovplanering"
         description="Filtrera, gruppera och tilldela uppgifter till team och veckor."
-      >
-        <Select value={groupBy} onValueChange={(v) => setGroupBy(v as GroupBy)}>
-          <SelectTrigger className="w-[200px]" data-testid="select-groupby">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {GROUP_OPTIONS.map((o) => (
-              <SelectItem key={o.value} value={o.value}>
-                {o.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </PageHeader>
+      />
 
       {/* Summeringskort */}
       <div className="grid gap-3 lg:grid-cols-2">
@@ -377,32 +377,98 @@ export default function GrovplaneringPage() {
         value={draft}
         onChange={setDraft}
         districts={districts.map((d) => ({ id: d.id, name: d.name }))}
+        teams={teams.map((t) => ({ id: t.id, name: t.name }))}
         cities={cities}
         onApply={applyFilters}
         onClear={clearFilters}
         isFetching={isFetching}
       />
 
-      {/* Verktygsrad */}
+      {/* Gruppering & Åtgärder */}
       <Card>
-        <CardContent className="flex flex-wrap items-center justify-between gap-3 p-3">
-          <div className="flex items-center gap-2 text-sm">
-            <span className="text-muted-foreground" data-testid="text-selection-count">
+        <CardContent className="flex flex-wrap items-center justify-between gap-4 p-3">
+          <div className="flex flex-wrap items-center gap-3">
+            <span className="text-sm font-medium">Gruppera per:</span>
+            <RadioGroup
+              value={groupBy}
+              onValueChange={(v) => setGroupBy(v as GroupBy)}
+              className="flex flex-wrap items-center gap-4"
+              data-testid="radiogroup-groupby"
+            >
+              {GROUP_OPTIONS.map((o) => (
+                <div key={o.value} className="flex items-center gap-1.5">
+                  <RadioGroupItem
+                    value={o.value}
+                    id={`group-${o.value}`}
+                    data-testid={`radio-group-${o.value}`}
+                  />
+                  <Label
+                    htmlFor={`group-${o.value}`}
+                    className="cursor-pointer text-sm font-normal"
+                  >
+                    {o.label}
+                  </Label>
+                </div>
+              ))}
+            </RadioGroup>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <span
+              className="text-sm text-muted-foreground"
+              data-testid="text-selection-count"
+            >
               {formatCount(selected.size)} markerade
             </span>
-            {selected.size > 0 && (
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={clearSelection}
-                data-testid="button-clear-selection"
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={visibleRows.length === 0}
+              onClick={() => toggleAllVisible(true)}
+              data-testid="button-select-all"
+            >
+              Markera alla
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              disabled={selected.size === 0}
+              onClick={clearSelection}
+              data-testid="button-clear-selection"
+            >
+              <XCircle className="h-4 w-4" />
+              Avmarkera alla
+            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={groups.length === 0}
+                  data-testid="button-select-group"
+                >
+                  Markera grupp
+                  <ChevronDown className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent
+                align="end"
+                className="max-h-72 w-64 overflow-y-auto"
               >
-                <XCircle className="h-4 w-4" />
-                Avmarkera alla
-              </Button>
-            )}
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
+                {groups.map((g) => (
+                  <DropdownMenuItem
+                    key={g.key}
+                    onClick={() => toggleGroup(g, true)}
+                    data-testid={`menuitem-select-group-${g.key}`}
+                  >
+                    <span className="truncate">{g.label}</span>
+                    <span className="ml-auto pl-3 text-xs text-muted-foreground">
+                      {formatCount(g.summary.taskCount)}
+                    </span>
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
             <Button
               size="sm"
               variant="outline"
@@ -427,7 +493,7 @@ export default function GrovplaneringPage() {
               data-testid="button-assign-selected"
             >
               <Users className="h-4 w-4" />
-              Tilldela
+              Tilldela markerade
             </Button>
           </div>
         </CardContent>

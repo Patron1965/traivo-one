@@ -1,5 +1,7 @@
+import { useState } from "react";
 import { addWeeks, addMonths } from "date-fns";
 import {
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
   Filter,
@@ -33,6 +35,7 @@ import {
 
 export interface FilterState {
   districtIds: string[];
+  teamIds: string[];
   postalCode: string;
   city: string;
   periodMode: PeriodMode;
@@ -47,6 +50,7 @@ export function createDefaultFilter(): FilterState {
   const today = new Date();
   return {
     districtIds: [],
+    teamIds: [],
     postalCode: "",
     city: "",
     periodMode: "vecka",
@@ -67,6 +71,7 @@ interface RoughFilterPanelProps {
   value: FilterState;
   onChange: (next: FilterState) => void;
   districts: DistrictOption[];
+  teams: DistrictOption[];
   cities: string[];
   onApply: () => void;
   onClear: () => void;
@@ -79,6 +84,7 @@ export function RoughFilterPanel({
   value,
   onChange,
   districts,
+  teams,
   cities,
   onApply,
   onClear,
@@ -86,6 +92,7 @@ export function RoughFilterPanel({
 }: RoughFilterPanelProps) {
   const patch = (p: Partial<FilterState>) => onChange({ ...value, ...p });
   const anchorDate = new Date(value.anchor);
+  const [showMore, setShowMore] = useState(value.teamIds.length > 0);
 
   const toggleArray = <T extends string>(arr: T[], item: T): T[] =>
     arr.includes(item) ? arr.filter((x) => x !== item) : [...arr, item];
@@ -96,6 +103,8 @@ export function RoughFilterPanel({
   const selectedDistricts = districts.filter((d) =>
     value.districtIds.includes(d.id),
   );
+  const availableTeams = teams.filter((t) => !value.teamIds.includes(t.id));
+  const selectedTeams = teams.filter((t) => value.teamIds.includes(t.id));
 
   const stepAnchor = (delta: number) => {
     const next =
@@ -315,28 +324,108 @@ export function RoughFilterPanel({
           </div>
         </div>
 
-        <div className="flex items-center justify-end gap-2 border-t pt-3">
+        {/* Fler filter — utökad sektion */}
+        {showMore && (
+          <div
+            className="space-y-2 rounded-md border border-dashed p-3"
+            data-testid="panel-more-filters"
+          >
+            <Label className="text-xs">Team</Label>
+            <Select
+              value=""
+              onValueChange={(id) =>
+                patch({ teamIds: [...value.teamIds, id] })
+              }
+              disabled={availableTeams.length === 0}
+            >
+              <SelectTrigger data-testid="select-team-filter">
+                <SelectValue placeholder="Lägg till team" />
+              </SelectTrigger>
+              <SelectContent>
+                {availableTeams.map((t) => (
+                  <SelectItem key={t.id} value={t.id}>
+                    {t.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {selectedTeams.length > 0 && (
+              <div className="flex flex-wrap gap-1.5 pt-1">
+                {selectedTeams.map((t) => (
+                  <Badge
+                    key={t.id}
+                    variant="secondary"
+                    className="gap-1"
+                    data-testid={`tag-team-${t.id}`}
+                  >
+                    {t.name}
+                    <button
+                      type="button"
+                      onClick={() =>
+                        patch({
+                          teamIds: value.teamIds.filter((x) => x !== t.id),
+                        })
+                      }
+                      className="rounded-sm hover-elevate"
+                      aria-label={`Ta bort ${t.name}`}
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </Badge>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        <div className="flex items-center justify-between gap-2 border-t pt-3">
           <Button
             type="button"
             variant="ghost"
-            onClick={onClear}
-            data-testid="button-clear-filters"
+            size="sm"
+            className="gap-1 text-muted-foreground"
+            onClick={() => setShowMore((s) => !s)}
+            data-testid="button-toggle-more-filters"
           >
-            Rensa filter
-          </Button>
-          <Button
-            type="button"
-            onClick={onApply}
-            disabled={isFetching}
-            data-testid="button-apply-filters"
-          >
-            {isFetching ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <Filter className="h-4 w-4" />
+            <ChevronDown
+              className={
+                "h-4 w-4 transition-transform " + (showMore ? "rotate-180" : "")
+              }
+            />
+            Fler filter
+            {value.teamIds.length > 0 && (
+              <Badge
+                variant="secondary"
+                className="ml-1 h-5 px-1.5 text-xs"
+                data-testid="badge-more-filters-count"
+              >
+                {value.teamIds.length}
+              </Badge>
             )}
-            Filtrera
           </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={onClear}
+              data-testid="button-clear-filters"
+            >
+              Rensa filter
+            </Button>
+            <Button
+              type="button"
+              onClick={onApply}
+              disabled={isFetching}
+              data-testid="button-apply-filters"
+            >
+              {isFetching ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Filter className="h-4 w-4" />
+              )}
+              Filtrera
+            </Button>
+          </div>
         </div>
       </CardContent>
     </Card>

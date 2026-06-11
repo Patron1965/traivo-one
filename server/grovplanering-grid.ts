@@ -48,6 +48,7 @@ export interface GridFilters {
   to?: Date; // önskad leveranstid – intervallslut
   taskTypes?: string[]; // normaliserade nycklar (se TASK_TYPE_KEYS)
   statuses?: RoughStatus[];
+  teamIds?: string[]; // "Fler filter" — filtrera på tilldelat team
 }
 
 export interface GridKpis {
@@ -187,6 +188,9 @@ function buildConditions(tenantId: string, filters: GridFilters): SQL[] {
 
   if (filters.districtIds && filters.districtIds.length > 0) {
     conditions.push(inArray(workOrders.districtId, filters.districtIds));
+  }
+  if (filters.teamIds && filters.teamIds.length > 0) {
+    conditions.push(inArray(workOrders.teamId, filters.teamIds));
   }
   if (filters.postalCode) {
     const norm = filters.postalCode.replace(/\s/g, "");

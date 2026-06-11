@@ -209,6 +209,7 @@ export function registerWeeklyPlanRoutes(app: Express) {
       throw new ValidationError(formatted.error, formatted.details);
     }
     const districtIds = csv(req.query.districtIds);
+    const teamIds = csv(req.query.teamIds);
     const taskTypes = csv(req.query.taskTypes).filter((t) =>
       (TASK_TYPE_KEYS as readonly string[]).includes(t),
     );
@@ -218,6 +219,7 @@ export function registerWeeklyPlanRoutes(app: Express) {
 
     const filters: GridFilters = {
       districtIds: districtIds.length ? districtIds : undefined,
+      teamIds: teamIds.length ? teamIds : undefined,
       postalCode: parsed.data.postalCode || undefined,
       city: parsed.data.city || undefined,
       from: parsed.data.from,
