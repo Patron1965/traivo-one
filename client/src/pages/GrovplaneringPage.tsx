@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { format, getISOWeek, getISOWeekYear, startOfISOWeek, addWeeks } from "date-fns";
 import { sv } from "date-fns/locale";
@@ -13,6 +13,9 @@ import {
   ClipboardList,
   Plus,
   Crosshair,
+  Search,
+  Compass,
+  Loader2,
 } from "lucide-react";
 
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -21,9 +24,18 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Progress } from "@/components/ui/progress";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   Select,
   SelectContent,
@@ -42,6 +54,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { formatSekFromOre } from "@/lib/format";
+import { haversineDistanceKm, formatDistanceKm } from "@/lib/geo";
 import { getExecutionStatusBadge } from "@/lib/status-colors";
 import { RoughPlanningMap } from "@/components/grovplanering/RoughPlanningMap";
 import type {
@@ -56,8 +69,28 @@ import type {
 const UNPLANNED_PAGE_SIZE = 50;
 
 type UnplannedResponse = { workOrders: WorkOrderWithObject[]; total: number };
+type NearbyWorkOrder = WorkOrderWithObject & { distanceKm: number };
+type SortMode = "created" | "centroid" | "delivery" | "combined";
 
 const UNASSIGNED = "__none__";
+
+// D9-vikt: varje dag till önskad leverans väger som så här många km i kombi-sorten.
+const KM_PER_DAY = 5;
+// D9: WO utan koordinat får en stor (men ändlig) distanspenalty i kombi-sorten så
+// de sjunker under koordinatförsedda ordrar men fortfarande sorteras inbördes på datum.
+const COORD_PENALTY_KM = 100000;
+
+// Effektiv koordinat för en WO (uppgiftens koordinat, annars objektets). Returnerar
+// null när giltig koordinat saknas (NaN-säkert).
+function woCoords(o: WorkOrderWithObject): { lat: number; lng: number } | null {
+  const la = o.taskLatitude ?? o.objectLatitude;
+  const lo = o.taskLongitude ?? o.objectLongitude;
+  if (la == null || lo == null) return null;
+  const lat = Number(la);
+  const lng = Number(lo);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+  return { lat, lng };
+}
 
 function isoWeekString(date: Date): string {
   return `${getISOWeekYear(date)}-W${String(getISOWeek(date)).padStart(2, "0")}`;
@@ -81,6 +114,21 @@ export default function GrovplaneringPage() {
   const [assignDistrict, setAssignDistrict] = useState<string>(UNASSIGNED);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [autoSuggestDistrict, setAutoSuggestDistrict] = useState(false);
+  // D7 — fri metadata-sök (debouncad innan den når servern).
+  const [searchInput, setSearchInput] = useState("");
+  const [search, setSearch] = useState("");
+  // D9 — sorteringsläge för ogrovplanerade ordrar.
+  const [sortMode, setSortMode] = useState<SortMode>("created");
+  // D11 — "Sök fler jobb i närområdet"-dialog.
+  const [nearbyOpen, setNearbyOpen] = useState(false);
+  const [nearbyRadius, setNearbyRadius] = useState("10");
+  const [nearbySelected, setNearbySelected] = useState<Set<string>>(new Set());
+  const [extraById, setExtraById] = useState<Map<string, WorkOrderWithObject>>(new Map());
+
+  useEffect(() => {
+    const t = setTimeout(() => setSearch(searchInput.trim()), 300);
+    return () => clearTimeout(t);
+  }, [searchInput]);
 
   const summaryQuery = useQuery<RoughPlanningSummary>({
     queryKey: [
@@ -95,9 +143,11 @@ export default function GrovplaneringPage() {
     },
   });
   const unplannedQuery = useQuery<UnplannedResponse>({
-    queryKey: ["/api/rough-planning/unplanned", { limit: UNPLANNED_PAGE_SIZE }],
+    queryKey: ["/api/rough-planning/unplanned", { limit: UNPLANNED_PAGE_SIZE, search }],
     queryFn: async () => {
-      const res = await apiRequest("GET", `/api/rough-planning/unplanned?limit=${UNPLANNED_PAGE_SIZE}`);
+      const params = new URLSearchParams({ limit: String(UNPLANNED_PAGE_SIZE) });
+      if (search) params.set("search", search);
+      const res = await apiRequest("GET", `/api/rough-planning/unplanned?${params.toString()}`);
       return res.json();
     },
   });
@@ -200,17 +250,86 @@ export default function GrovplaneringPage() {
       if (assignDistrict !== UNASSIGNED) payload.districtId = assignDistrict;
       return apiRequest("PATCH", `/api/work-orders/${orderId}`, payload);
     },
-    onSuccess: () => {
+    onSuccess: (_data, orderId) => {
       queryClient.invalidateQueries({ queryKey: ["/api/rough-planning/summary"] });
       queryClient.invalidateQueries({ queryKey: ["/api/rough-planning/unplanned"] });
       queryClient.invalidateQueries({ queryKey: ["/api/rough-planning/map"] });
       queryClient.invalidateQueries({ queryKey: ["/api/rough-planning/tyngdpunkt-overview"] });
+      setSelectedIds((prev) => {
+        if (!prev.has(orderId)) return prev;
+        const next = new Set(prev);
+        next.delete(orderId);
+        return next;
+      });
+      setExtraById((prev) => {
+        if (!prev.has(orderId)) return prev;
+        const next = new Map(prev);
+        next.delete(orderId);
+        return next;
+      });
       toast({ title: "Order grovplanerad", description: `Lagd på ${week}` });
     },
     onError: (e: Error) => toast({ title: "Kunde inte grovplanera", description: e.message, variant: "destructive" }),
   });
 
-  const unplannedShown = useMemo(() => unplanned.slice(0, 50), [unplanned]);
+  const tyngdpunkt = summary?.tyngdpunkt ?? null;
+
+  // Distans (km) från en WO till veckans tyngdpunkt, eller null om koordinat/
+  // tyngdpunkt saknas. NaN-säker via woCoords.
+  const distanceToCentroid = useMemo(() => {
+    return (o: WorkOrderWithObject): number | null => {
+      if (!tyngdpunkt) return null;
+      const c = woCoords(o);
+      if (!c) return null;
+      return haversineDistanceKm(c.lat, c.lng, tyngdpunkt.lat, tyngdpunkt.lng);
+    };
+  }, [tyngdpunkt]);
+
+  // D11 — extra-ordrar tillagda från "närområdet"-dialogen. Slås ihop med bas-
+  // listan (server-filtrerad på sök) så de både renderas och kan bulk-grovplaneras.
+  const extras = useMemo(() => {
+    const baseIds = new Set(unplanned.map((o) => o.id));
+    return Array.from(extraById.values()).filter((o) => !baseIds.has(o.id));
+  }, [unplanned, extraById]);
+  const extraIds = useMemo(() => new Set(extras.map((o) => o.id)), [extras]);
+
+  // D9 — sorterad visningslista. Saknad koordinat/leveranstid sjunker till botten;
+  // komparatorn returnerar aldrig NaN.
+  const unplannedShown = useMemo(() => {
+    const list = [...unplanned, ...extras];
+    if (sortMode === "created") {
+      return list.sort((a, b) => {
+        const ta = a.createdAt ? new Date(a.createdAt as unknown as string).getTime() : 0;
+        const tb = b.createdAt ? new Date(b.createdAt as unknown as string).getTime() : 0;
+        return (Number.isFinite(tb) ? tb : 0) - (Number.isFinite(ta) ? ta : 0);
+      });
+    }
+    const now = Date.now();
+    const scoreOf = (o: WorkOrderWithObject): number => {
+      const dist = distanceToCentroid(o);
+      let days = Number.POSITIVE_INFINITY;
+      if (o.desiredDeliveryStart) {
+        const t = new Date(o.desiredDeliveryStart as unknown as string).getTime();
+        if (Number.isFinite(t)) days = (t - now) / 86_400_000;
+      }
+      if (sortMode === "centroid") return dist == null ? Number.POSITIVE_INFINITY : dist;
+      if (sortMode === "delivery") return Number.isFinite(days) ? days : Number.POSITIVE_INFINITY;
+      // combined: distans + framtida dagar omräknat till km-ekvivalent
+      if (dist == null && !Number.isFinite(days)) return Number.POSITIVE_INFINITY;
+      const distComp = dist == null ? COORD_PENALTY_KM : dist;
+      const delComp = Number.isFinite(days) ? Math.max(0, days) * KM_PER_DAY : 0;
+      return distComp + delComp;
+    };
+    return list
+      .map((o) => ({ o, s: scoreOf(o) }))
+      .sort((a, b) => {
+        if (a.s === b.s) return 0;
+        if (!Number.isFinite(a.s)) return 1;
+        if (!Number.isFinite(b.s)) return -1;
+        return a.s - b.s;
+      })
+      .map((x) => x.o);
+  }, [unplanned, extras, sortMode, distanceToCentroid]);
 
   const selectedShownIds = useMemo(
     () => unplannedShown.filter((o) => selectedIds.has(o.id)).map((o) => o.id),
@@ -229,6 +348,70 @@ export default function GrovplaneringPage() {
   };
   const toggleAll = (checked: boolean) => {
     setSelectedIds(() => (checked ? new Set(unplannedShown.map((o) => o.id)) : new Set()));
+  };
+
+  // D11 — centrum för närområdessök: urvalets tyngdpunkt om något är markerat,
+  // annars veckans tyngdpunkt. null = går inte att söka (ingen koordinat alls).
+  const nearbyCenter = useMemo(() => {
+    const sel = unplannedShown.filter((o) => selectedIds.has(o.id));
+    const coords = sel.map(woCoords).filter((c): c is { lat: number; lng: number } => c != null);
+    if (coords.length > 0) {
+      const lat = coords.reduce((s, c) => s + c.lat, 0) / coords.length;
+      const lng = coords.reduce((s, c) => s + c.lng, 0) / coords.length;
+      return { lat, lng, source: "selection" as const };
+    }
+    if (tyngdpunkt) return { lat: tyngdpunkt.lat, lng: tyngdpunkt.lng, source: "tyngdpunkt" as const };
+    return null;
+  }, [unplannedShown, selectedIds, tyngdpunkt]);
+
+  const nearbyQuery = useQuery<NearbyWorkOrder[]>({
+    queryKey: ["/api/rough-planning/nearby", { lat: nearbyCenter?.lat, lng: nearbyCenter?.lng, radiusKm: nearbyRadius }],
+    enabled: nearbyOpen && !!nearbyCenter,
+    queryFn: async () => {
+      const params = new URLSearchParams({
+        lat: String(nearbyCenter!.lat),
+        lng: String(nearbyCenter!.lng),
+        radiusKm: nearbyRadius,
+        limit: "50",
+      });
+      const res = await apiRequest("GET", `/api/rough-planning/nearby?${params.toString()}`);
+      return res.json();
+    },
+  });
+
+  // Filtrera bort ordrar som redan visas i listan — dialogen visar bara nya jobb.
+  const nearbyResults = useMemo(() => {
+    const existing = new Set(unplannedShown.map((o) => o.id));
+    return (nearbyQuery.data ?? []).filter((o) => !existing.has(o.id));
+  }, [nearbyQuery.data, unplannedShown]);
+
+  const toggleNearby = (id: string, checked: boolean) => {
+    setNearbySelected((prev) => {
+      const next = new Set(prev);
+      if (checked) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  };
+
+  const addNearbyToSelection = () => {
+    const byId = new Map(nearbyResults.map((o) => [o.id, o]));
+    setExtraById((prev) => {
+      const next = new Map(prev);
+      nearbySelected.forEach((id) => {
+        const wo = byId.get(id);
+        if (wo) next.set(id, wo);
+      });
+      return next;
+    });
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      nearbySelected.forEach((id) => next.add(id));
+      return next;
+    });
+    toast({ title: "Tillagda i urval", description: `${nearbySelected.size} ordrar från närområdet` });
+    setNearbySelected(new Set());
+    setNearbyOpen(false);
   };
 
   const bulkMutation = useMutation({
@@ -250,6 +433,7 @@ export default function GrovplaneringPage() {
       queryClient.invalidateQueries({ queryKey: ["/api/rough-planning/map"] });
       queryClient.invalidateQueries({ queryKey: ["/api/rough-planning/tyngdpunkt-overview"] });
       setSelectedIds(new Set());
+      setExtraById(new Map());
       const { planned, error, autoAssigned } = data.summary;
       const parts = [`${planned} grovplanerade på ${week}`];
       if (autoAssigned > 0) parts.push(`${autoAssigned} fick distrikt via postnummer`);
@@ -636,9 +820,46 @@ export default function GrovplaneringPage() {
           <CardHeader className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <CardTitle className="text-base">
               Ogrovplanerade ordrar ({unplannedTotal}
-              {unplannedTotal > unplanned.length ? `, visar ${unplanned.length}` : ""})
+              {unplannedTotal > unplanned.length ? `, visar ${unplanned.length}` : ""}
+              {extras.length > 0 ? ` +${extras.length} från närområdet` : ""})
             </CardTitle>
             <div className="flex flex-wrap items-center gap-3">
+              <div className="relative">
+                <Search className="pointer-events-none absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  value={searchInput}
+                  onChange={(e) => setSearchInput(e.target.value)}
+                  placeholder="Sök objekt, metadata…"
+                  className="w-[220px] pl-8"
+                  data-testid="input-unplanned-search"
+                />
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-muted-foreground">Sortera</span>
+                <Select value={sortMode} onValueChange={(v) => setSortMode(v as SortMode)}>
+                  <SelectTrigger className="w-[210px]" data-testid="select-sort-mode">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="created">Senast skapad</SelectItem>
+                    <SelectItem value="centroid">Närmast tyngdpunkt</SelectItem>
+                    <SelectItem value="delivery">Leveranstid</SelectItem>
+                    <SelectItem value="combined">Tyngdpunkt + leveranstid</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={!nearbyCenter}
+                onClick={() => {
+                  setNearbySelected(new Set());
+                  setNearbyOpen(true);
+                }}
+                data-testid="button-open-nearby"
+              >
+                <Compass className="h-4 w-4 mr-1" /> Sök fler jobb i närområdet
+              </Button>
               <div className="flex items-center gap-2">
                 <span className="text-sm text-muted-foreground">Lägg på distrikt</span>
                 <Select value={assignDistrict} onValueChange={setAssignDistrict}>
@@ -695,8 +916,12 @@ export default function GrovplaneringPage() {
                 </div>
               </div>
             )}
-            {unplanned.length === 0 ? (
-              <p className="text-sm text-muted-foreground py-4">Alla aktiva ordrar är grovplanerade.</p>
+            {unplannedShown.length === 0 ? (
+              <p className="text-sm text-muted-foreground py-4">
+                {search
+                  ? "Inga ordrar matchar sökningen."
+                  : "Alla aktiva ordrar är grovplanerade."}
+              </p>
             ) : (
               <Table>
                 <TableHeader>
@@ -711,6 +936,7 @@ export default function GrovplaneringPage() {
                     </TableHead>
                     <TableHead>Order</TableHead>
                     <TableHead>Objekt</TableHead>
+                    <TableHead className="text-right">Avstånd</TableHead>
                     <TableHead className="text-right">Tid (h)</TableHead>
                     <TableHead className="text-right">Värde</TableHead>
                     <TableHead className="text-right">Åtgärd</TableHead>
@@ -731,8 +957,23 @@ export default function GrovplaneringPage() {
                           data-testid={`checkbox-unplanned-${o.id}`}
                         />
                       </TableCell>
-                      <TableCell className="font-medium">{o.title || o.id.slice(0, 8)}</TableCell>
+                      <TableCell className="font-medium">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span>{o.title || o.id.slice(0, 8)}</span>
+                          {extraIds.has(o.id) && (
+                            <Badge variant="outline" className="text-xs" data-testid={`badge-nearby-${o.id}`}>
+                              tillagd från närområdet
+                            </Badge>
+                          )}
+                        </div>
+                      </TableCell>
                       <TableCell className="text-muted-foreground">{o.objectName ?? "-"}</TableCell>
+                      <TableCell className="text-right text-muted-foreground" data-testid={`text-distance-${o.id}`}>
+                        {(() => {
+                          const d = distanceToCentroid(o);
+                          return d == null ? "—" : formatDistanceKm(d);
+                        })()}
+                      </TableCell>
                       <TableCell className="text-right">{((o.estimatedDuration ?? 0) / 60).toFixed(1)}</TableCell>
                       <TableCell className="text-right">{formatSekFromOre(o.cachedValue)}</TableCell>
                       <TableCell className="text-right">
@@ -754,6 +995,104 @@ export default function GrovplaneringPage() {
           </CardContent>
         </Card>
       </QueryState>
+
+      <Dialog
+        open={nearbyOpen}
+        onOpenChange={(open) => {
+          setNearbyOpen(open);
+          if (!open) setNearbySelected(new Set());
+        }}
+      >
+        <DialogContent className="max-w-2xl" data-testid="dialog-nearby">
+          <DialogHeader>
+            <DialogTitle>Sök fler jobb i närområdet</DialogTitle>
+            <DialogDescription>
+              {nearbyCenter
+                ? `Centrum: ${
+                    nearbyCenter.source === "selection"
+                      ? "markerade ordrars tyngdpunkt"
+                      : `veckans tyngdpunkt (${week})`
+                  } · ${nearbyCenter.lat.toFixed(4)}, ${nearbyCenter.lng.toFixed(4)}`
+                : "Ingen koordinat att utgå från."}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-muted-foreground">Radie</span>
+            <Select value={nearbyRadius} onValueChange={setNearbyRadius}>
+              <SelectTrigger className="w-[140px]" data-testid="select-nearby-radius">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="5">5 km</SelectItem>
+                <SelectItem value="10">10 km</SelectItem>
+                <SelectItem value="25">25 km</SelectItem>
+                <SelectItem value="50">50 km</SelectItem>
+                <SelectItem value="100">100 km</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="max-h-[360px] overflow-y-auto">
+            {nearbyQuery.isLoading ? (
+              <div
+                className="flex items-center justify-center gap-2 py-8 text-sm text-muted-foreground"
+                data-testid="nearby-loading"
+              >
+                <Loader2 className="h-4 w-4 animate-spin" /> Söker…
+              </div>
+            ) : nearbyResults.length === 0 ? (
+              <p className="py-8 text-center text-sm text-muted-foreground" data-testid="nearby-empty">
+                Inga nya ogrovplanerade ordrar inom {nearbyRadius} km.
+              </p>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-[40px]" />
+                    <TableHead>Order</TableHead>
+                    <TableHead>Objekt</TableHead>
+                    <TableHead className="text-right">Avstånd</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {nearbyResults.map((o) => (
+                    <TableRow key={o.id} data-testid={`row-nearby-${o.id}`}>
+                      <TableCell>
+                        <Checkbox
+                          checked={nearbySelected.has(o.id)}
+                          onCheckedChange={(c) => toggleNearby(o.id, c === true)}
+                          aria-label={`Markera ${o.title || o.id.slice(0, 8)}`}
+                          data-testid={`checkbox-nearby-${o.id}`}
+                        />
+                      </TableCell>
+                      <TableCell className="font-medium">{o.title || o.id.slice(0, 8)}</TableCell>
+                      <TableCell className="text-muted-foreground">{o.objectName ?? "-"}</TableCell>
+                      <TableCell className="text-right text-muted-foreground">
+                        {formatDistanceKm(o.distanceKm)}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+          </div>
+
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setNearbyOpen(false)} data-testid="button-nearby-cancel">
+              Avbryt
+            </Button>
+            <Button
+              disabled={nearbySelected.size === 0}
+              onClick={addNearbyToSelection}
+              data-testid="button-nearby-add"
+            >
+              <Plus className="h-4 w-4 mr-1" /> Lägg till {nearbySelected.size > 0 ? `${nearbySelected.size} ` : ""}i
+              urval
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

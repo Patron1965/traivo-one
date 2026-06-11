@@ -120,13 +120,42 @@ export function registerWeeklyPlanRoutes(app: Express) {
   }));
 
   // Ogrovplanerade (aktiva) ordrar — paginerat, separat från aggregatet.
+  // `search` (Task #899, D7): fri metadata-text (objektnamn/adress, WO-titel,
+  // svenska metadatavärden) — tom sträng = oförändrat beteende.
   app.get("/api/rough-planning/unplanned", ...guard, asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const limitRaw = parseInt(String(req.query.limit ?? "50"), 10);
     const offsetRaw = parseInt(String(req.query.offset ?? "0"), 10);
     const limit = Number.isFinite(limitRaw) ? Math.min(Math.max(limitRaw, 1), 200) : 50;
     const offset = Number.isFinite(offsetRaw) && offsetRaw > 0 ? offsetRaw : 0;
-    res.json(await storage.getUnplannedRoughWorkOrders(tenantId, limit, offset));
+    const searchRaw = typeof req.query.search === "string" ? req.query.search.trim().slice(0, 100) : "";
+    const search = searchRaw.length > 0 ? searchRaw : undefined;
+    res.json(await storage.getUnplannedRoughWorkOrders(tenantId, limit, offset, search));
+  }));
+
+  // Oplanerade ordrar inom en radie från en koordinat (Task #899, D11). Centrum
+  // skickas av klienten (urvalets tyngdpunkt eller veckans tyngdpunkt).
+  const roughNearbySchema = z.object({
+    lat: z.coerce.number().min(-90).max(90),
+    lng: z.coerce.number().min(-180).max(180),
+    radiusKm: z.coerce.number().positive().max(100).default(10),
+    limit: z.coerce.number().int().positive().max(200).default(50),
+  });
+
+  app.get("/api/rough-planning/nearby", ...guard, asyncHandler(async (req, res) => {
+    const tenantId = getTenantIdWithFallback(req);
+    const parsed = roughNearbySchema.safeParse({
+      lat: req.query.lat,
+      lng: req.query.lng,
+      radiusKm: req.query.radiusKm,
+      limit: req.query.limit,
+    });
+    if (!parsed.success) {
+      const formatted = formatZodError(parsed.error);
+      throw new ValidationError(formatted.error, formatted.details);
+    }
+    const { lat, lng, radiusKm, limit } = parsed.data;
+    res.json(await storage.getUnplannedRoughNearby(tenantId, lat, lng, radiusKm, limit));
   }));
 
   // ==========================================================================

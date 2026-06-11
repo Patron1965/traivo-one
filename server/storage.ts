@@ -499,7 +499,13 @@ export interface IStorage {
    * `rough_planned_week IS NULL` och status inte terminal (utford/fakturerad/
    * omojlig/avbruten).
    */
-  getUnplannedRoughWorkOrders(tenantId: string, limit: number, offset: number): Promise<{ workOrders: WorkOrderWithObject[]; total: number }>;
+  getUnplannedRoughWorkOrders(tenantId: string, limit: number, offset: number, search?: string): Promise<{ workOrders: WorkOrderWithObject[]; total: number }>;
+  /**
+   * Oplanerade ordrar inom en radie (km) från en koordinat (Task #899). Återanvänder
+   * grundfiltret för grovplanering + haversine och returnerar närmast först med
+   * `distanceKm`. Bounding-box-prefilter i SQL håller kandidatmängden begränsad.
+   */
+  getUnplannedRoughNearby(tenantId: string, lat: number, lng: number, radiusKm: number, limit: number): Promise<Array<WorkOrderWithObject & { distanceKm: number }>>;
   /**
    * Flerveckors geografisk tyngdpunkt (Task #877). Returnerar en rad per
    * begärd vecka (saknade veckor fylls med nollor) med centroid + närmaste
@@ -1308,6 +1314,120 @@ export interface IStorage {
   getDisruption(tenantId: string, id: string): Promise<Disruption | undefined>;
   createDisruption(data: InsertDisruption): Promise<Disruption>;
   updateDisruption(tenantId: string, id: string, data: Partial<InsertDisruption>): Promise<Disruption | undefined>;
+}
+
+// Delad SELECT-form för oplanerade grovplanerings-ordrar (Task #899). Återanvänds
+// av getUnplannedRoughWorkOrders (paginerat) och getUnplannedRoughNearby (radie).
+const ROUGH_UNPLANNED_SELECT = {
+  id: workOrders.id,
+  tenantId: workOrders.tenantId,
+  customerId: workOrders.customerId,
+  objectId: workOrders.objectId,
+  clusterId: workOrders.clusterId,
+  resourceId: workOrders.resourceId,
+  teamId: workOrders.teamId,
+  title: workOrders.title,
+  description: workOrders.description,
+  orderType: workOrders.orderType,
+  priority: workOrders.priority,
+  orderStatus: workOrders.orderStatus,
+  scheduledDate: workOrders.scheduledDate,
+  scheduledStartTime: workOrders.scheduledStartTime,
+  plannedWindowStart: workOrders.plannedWindowStart,
+  plannedWindowEnd: workOrders.plannedWindowEnd,
+  estimatedDuration: workOrders.estimatedDuration,
+  actualDuration: workOrders.actualDuration,
+  setupTime: workOrders.setupTime,
+  setupReason: workOrders.setupReason,
+  lockedAt: workOrders.lockedAt,
+  completedAt: workOrders.completedAt,
+  invoicedAt: workOrders.invoicedAt,
+  cachedValue: workOrders.cachedValue,
+  cachedCost: workOrders.cachedCost,
+  cachedProductionMinutes: workOrders.cachedProductionMinutes,
+  isSimulated: workOrders.isSimulated,
+  simulationScenarioId: workOrders.simulationScenarioId,
+  plannedBy: workOrders.plannedBy,
+  plannedNotes: workOrders.plannedNotes,
+  notes: workOrders.notes,
+  metadata: workOrders.metadata,
+  createdAt: workOrders.createdAt,
+  deletedAt: workOrders.deletedAt,
+  impossibleReason: workOrders.impossibleReason,
+  impossibleReasonText: workOrders.impossibleReasonText,
+  impossibleAt: workOrders.impossibleAt,
+  impossibleBy: workOrders.impossibleBy,
+  impossiblePhotoUrl: workOrders.impossiblePhotoUrl,
+  executionStatus: workOrders.executionStatus,
+  creationMethod: workOrders.creationMethod,
+  structuralArticleId: workOrders.structuralArticleId,
+  roughPlannedWeek: workOrders.roughPlannedWeek,
+  districtId: workOrders.districtId,
+
+  taskLatitude: workOrders.taskLatitude,
+  taskLongitude: workOrders.taskLongitude,
+  externalReference: workOrders.externalReference,
+  onWayAt: workOrders.onWayAt,
+  onSiteAt: workOrders.onSiteAt,
+  inspectedAt: workOrders.inspectedAt,
+  executionCode: workOrders.executionCode,
+  importBatchId: workOrders.importBatchId,
+  outsidePreferredWindow: workOrders.outsidePreferredWindow,
+  deliveryPreferencePriority: workOrders.deliveryPreferencePriority,
+  taskCategory: workOrders.taskCategory,
+  status: workOrders.status,
+  desiredDeliveryStart: workOrders.desiredDeliveryStart,
+  desiredDeliveryEnd: workOrders.desiredDeliveryEnd,
+  etaSmsSent: workOrders.etaSmsSent,
+  objectName: objects.name,
+  objectNameTranslations: objects.nameTranslations,
+  objectAddress: objects.address,
+  objectAccessCode: objects.resolvedAccessCode,
+  objectKeyNumber: objects.resolvedKeyNumber,
+  objectLatitude: objects.latitude,
+  objectLongitude: objects.longitude,
+  customerName: customers.name,
+};
+
+// Fri metadata-sök för grovplaneringen (Task #899, D7). Tokeniserar på blanksteg
+// (cap 6) och AND:ar tokens; varje token OR-matchar WO-titel/beskrivning, WO-
+// metadata (jsonb-text), objektnamn/adress samt objektets svenska metadatavärden
+// (metadata_varden) + katalognamn. Objektberoende matchning ligger i KORRELERADE
+// subqueries (refererar work_orders.object_id) så samma villkor funkar i både
+// count-frågan (utan join) och data-frågan (med join). v1 matchar endast värden
+// satta DIREKT på objektet — inte nedärvda från förälder.
+function buildRoughUnplannedSearchCondition(tenantId: string, search: string): SQL | undefined {
+  const tokens = search.trim().split(/\s+/).filter(Boolean).slice(0, 6);
+  if (tokens.length === 0) return undefined;
+  const escapeLike = (s: string) => s.replace(/[\\%_]/g, (m) => `\\${m}`);
+  const tokenConds: SQL[] = tokens.map((tok) => {
+    const like = `%${escapeLike(tok)}%`;
+    return sql`(
+      ${workOrders.title} ILIKE ${like}
+      OR ${workOrders.description} ILIKE ${like}
+      OR CAST(${workOrders.metadata} AS TEXT) ILIKE ${like}
+      OR EXISTS (
+        SELECT 1 FROM objects o2
+        WHERE o2.id = ${workOrders.objectId}
+          AND o2.tenant_id = ${tenantId}
+          AND (o2.name ILIKE ${like} OR o2.address ILIKE ${like})
+      )
+      OR EXISTS (
+        SELECT 1 FROM metadata_varden mv
+        JOIN metadata_katalog mk ON mk.id = mv.metadata_katalog_id
+        WHERE mv.objekt_id = ${workOrders.objectId}
+          AND mv.tenant_id = ${tenantId}
+          AND mv.raderad = false
+          AND (
+            mv.varde_string ILIKE ${like}
+            OR mv.varde_referens ILIKE ${like}
+            OR CAST(mv.varde_integer AS TEXT) ILIKE ${like}
+            OR mk.namn ILIKE ${like}
+          )
+      )
+    )`;
+  });
+  return tokenConds.length === 1 ? tokenConds[0] : and(...tokenConds);
 }
 
 export class DatabaseStorage implements IStorage {
@@ -3433,90 +3553,24 @@ export class DatabaseStorage implements IStorage {
     }));
   }
 
-  async getUnplannedRoughWorkOrders(tenantId: string, limit: number, offset: number): Promise<{ workOrders: WorkOrderWithObject[]; total: number }> {
+  async getUnplannedRoughWorkOrders(tenantId: string, limit: number, offset: number, search?: string): Promise<{ workOrders: WorkOrderWithObject[]; total: number }> {
     const terminalStatuses = ["utford", "fakturerad", "omojlig", "avbruten"];
-    const whereClause = and(
+    const conditions: SQL[] = [
       eq(workOrders.tenantId, tenantId),
       isNull(workOrders.deletedAt),
       isNull(workOrders.roughPlannedWeek),
       notInArray(workOrders.orderStatus, terminalStatuses),
-    );
+    ];
+    const searchCondition = search ? buildRoughUnplannedSearchCondition(tenantId, search) : undefined;
+    if (searchCondition) conditions.push(searchCondition);
+    const whereClause = and(...conditions);
 
     const [countResult] = await db
       .select({ count: sql<number>`count(*)::int` })
       .from(workOrders)
       .where(whereClause);
 
-    const data = await db.select({
-      id: workOrders.id,
-      tenantId: workOrders.tenantId,
-      customerId: workOrders.customerId,
-      objectId: workOrders.objectId,
-      clusterId: workOrders.clusterId,
-      resourceId: workOrders.resourceId,
-      teamId: workOrders.teamId,
-      title: workOrders.title,
-      description: workOrders.description,
-      orderType: workOrders.orderType,
-      priority: workOrders.priority,
-      orderStatus: workOrders.orderStatus,
-      scheduledDate: workOrders.scheduledDate,
-      scheduledStartTime: workOrders.scheduledStartTime,
-      plannedWindowStart: workOrders.plannedWindowStart,
-      plannedWindowEnd: workOrders.plannedWindowEnd,
-      estimatedDuration: workOrders.estimatedDuration,
-      actualDuration: workOrders.actualDuration,
-      setupTime: workOrders.setupTime,
-      setupReason: workOrders.setupReason,
-      lockedAt: workOrders.lockedAt,
-      completedAt: workOrders.completedAt,
-      invoicedAt: workOrders.invoicedAt,
-      cachedValue: workOrders.cachedValue,
-      cachedCost: workOrders.cachedCost,
-      cachedProductionMinutes: workOrders.cachedProductionMinutes,
-      isSimulated: workOrders.isSimulated,
-      simulationScenarioId: workOrders.simulationScenarioId,
-      plannedBy: workOrders.plannedBy,
-      plannedNotes: workOrders.plannedNotes,
-      notes: workOrders.notes,
-      metadata: workOrders.metadata,
-      createdAt: workOrders.createdAt,
-      deletedAt: workOrders.deletedAt,
-      impossibleReason: workOrders.impossibleReason,
-      impossibleReasonText: workOrders.impossibleReasonText,
-      impossibleAt: workOrders.impossibleAt,
-      impossibleBy: workOrders.impossibleBy,
-      impossiblePhotoUrl: workOrders.impossiblePhotoUrl,
-      executionStatus: workOrders.executionStatus,
-      creationMethod: workOrders.creationMethod,
-      structuralArticleId: workOrders.structuralArticleId,
-      roughPlannedWeek: workOrders.roughPlannedWeek,
-      districtId: workOrders.districtId,
-
-      taskLatitude: workOrders.taskLatitude,
-      taskLongitude: workOrders.taskLongitude,
-      externalReference: workOrders.externalReference,
-      onWayAt: workOrders.onWayAt,
-      onSiteAt: workOrders.onSiteAt,
-      inspectedAt: workOrders.inspectedAt,
-      executionCode: workOrders.executionCode,
-      importBatchId: workOrders.importBatchId,
-      outsidePreferredWindow: workOrders.outsidePreferredWindow,
-      deliveryPreferencePriority: workOrders.deliveryPreferencePriority,
-      taskCategory: workOrders.taskCategory,
-      status: workOrders.status,
-      desiredDeliveryStart: workOrders.desiredDeliveryStart,
-      desiredDeliveryEnd: workOrders.desiredDeliveryEnd,
-      etaSmsSent: workOrders.etaSmsSent,
-      objectName: objects.name,
-      objectNameTranslations: objects.nameTranslations,
-      objectAddress: objects.address,
-      objectAccessCode: objects.resolvedAccessCode,
-      objectKeyNumber: objects.resolvedKeyNumber,
-      objectLatitude: objects.latitude,
-      objectLongitude: objects.longitude,
-      customerName: customers.name,
-    })
+    const data = await db.select(ROUGH_UNPLANNED_SELECT)
     .from(workOrders)
     .leftJoin(objects, eq(workOrders.objectId, objects.id))
     .leftJoin(customers, eq(workOrders.customerId, customers.id))
@@ -3525,7 +3579,44 @@ export class DatabaseStorage implements IStorage {
     .limit(limit)
     .offset(offset);
 
-    return { workOrders: data, total: countResult?.count || 0 };
+    return { workOrders: data as WorkOrderWithObject[], total: countResult?.count || 0 };
+  }
+
+  async getUnplannedRoughNearby(tenantId: string, lat: number, lng: number, radiusKm: number, limit: number): Promise<Array<WorkOrderWithObject & { distanceKm: number }>> {
+    const terminalStatuses = ["utford", "fakturerad", "omojlig", "avbruten"];
+    // Bounding-box-prefilter: ~111 km/grad lat; lng skalas med cos(lat). Skär ner
+    // kandidatmängden i SQL innan exakt haversine i JS (Task #899, D11).
+    const latDelta = radiusKm / 111;
+    const lngDelta = radiusKm / (111 * Math.max(Math.cos((lat * Math.PI) / 180), 0.01));
+    const effLat = sql`COALESCE(${workOrders.taskLatitude}, ${objects.latitude})`;
+    const effLng = sql`COALESCE(${workOrders.taskLongitude}, ${objects.longitude})`;
+    const whereClause = and(
+      eq(workOrders.tenantId, tenantId),
+      isNull(workOrders.deletedAt),
+      isNull(workOrders.roughPlannedWeek),
+      notInArray(workOrders.orderStatus, terminalStatuses),
+      sql`${effLat} BETWEEN ${lat - latDelta} AND ${lat + latDelta}`,
+      sql`${effLng} BETWEEN ${lng - lngDelta} AND ${lng + lngDelta}`,
+    );
+
+    const candidates = await db.select(ROUGH_UNPLANNED_SELECT)
+      .from(workOrders)
+      .leftJoin(objects, eq(workOrders.objectId, objects.id))
+      .leftJoin(customers, eq(workOrders.customerId, customers.id))
+      .where(whereClause)
+      .orderBy(desc(workOrders.createdAt))
+      .limit(2000);
+
+    const results = candidates.flatMap((wo) => {
+      const la = wo.taskLatitude ?? wo.objectLatitude;
+      const lo = wo.taskLongitude ?? wo.objectLongitude;
+      if (la == null || lo == null) return [];
+      const distanceKm = haversineDistanceKm(lat, lng, Number(la), Number(lo));
+      if (distanceKm > radiusKm) return [];
+      return [{ ...wo, distanceKm }];
+    });
+    results.sort((a, b) => a.distanceKm - b.distanceKm);
+    return results.slice(0, limit) as Array<WorkOrderWithObject & { distanceKm: number }>;
   }
 
   async getUnscheduledWorkOrders(tenantId: string, limit: number = 500): Promise<WorkOrderWithObject[]> {
