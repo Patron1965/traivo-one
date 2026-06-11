@@ -45,9 +45,9 @@ export function FloatingActionButton() {
     const allActions: QuickAction[] = [
       { id: "new-object", title: `Nytt ${objectLabel}`, url: "/objects", href: "/objects?create=true", icon: Package },
       { id: "new-order", title: "Ny order", url: "/order-stock", icon: ClipboardList },
-      { id: "new-customer", title: "Ny kund", url: "/objects", icon: Users },
+      { id: "new-customer", title: "Ny kund", url: "/customers", icon: Users },
       { id: "new-cluster", title: "Nytt kluster", url: "/clusters", icon: Target },
-      { id: "quick-plan", title: "Snabbplanering", url: "/", icon: Calendar },
+      { id: "quick-plan", title: "Snabbplanering", url: "/planner", icon: Calendar },
       { id: "new-vehicle", title: "Nytt fordon", url: "/vehicles", icon: Truck },
     ];
     return allActions.filter((action) => canAccessRoute(userRole, action.url) && isNavItemEnabled(action.url));
