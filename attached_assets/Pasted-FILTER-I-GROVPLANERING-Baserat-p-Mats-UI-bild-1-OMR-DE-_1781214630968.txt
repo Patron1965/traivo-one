@@ -1,0 +1,98 @@
+FILTER I GROVPLANERING
+Baserat på Mats UI-bild:
+1️⃣ OMRÅDE / GEOGRAFI
+📍 Distrikt
+   [Dropdown med sökning]
+   [X-knapp för att ta bort valt distrikt]
+   Exempel: "Distrikt Norr"
+
+📮 Postnummer  
+   [Textfält]
+   Exempel: "Ange postnummer"
+
+🏙️ Ort
+   [Dropdown]
+   Exempel: "Välj ort"
+2️⃣ TIDSPERIOD (Önskad / möjlig leveranstid)
+Välj vy:
+[Månad] [Vecka] [Datumintervall]
+
+Veckoväljare:
+< > 2026 - V26 [📅]
+(Pilar för att bläddra mellan veckor)
+3️⃣ UPPGIFTSTYP (Checkboxar)
+☐ BÖK
+☐ RBK
+☐ Service
+☐ Driftkontroll
+☐ Tvätt
+☐ Besiktning
+☐ Administration
+☐ Konsultation
+4️⃣ UPPGIFTSSTATUS (Checkboxar)
+☐ Otilldelad
+☐ Tilldelad
+☐ Utförd
+☐ Delvis utförd
+☐ Avviker
+5️⃣ ÅTGÄRDSKNAPPAR
+[Rensa filter]  (Tömmer alla filter)
+[Filtrera]      (Blå knapp - Applicerar filter)
+[Fler filter ▾] (Expanderar för fler alternativ)
+🎯 HUR FILTRERING FUNGERAR:
+Logik:
+Användaren väljer filter (distrikt, typ, status, etc.)
+Klickar "Filtrera"
+Dashboard uppdateras:
+"SUMMERING - ENLIGT FILTER" visar filtrerad data
+Tabellen visar bara uppgifter som matchar filtren
+"SUMMERING - MARKERADE UPPGIFTER" är oberoende (visar vad användaren markerat)
+Kombinering:
+Alla filter kombineras med AND-logik:
+
+Distrikt = "Norr" 
+AND Uppgiftstyp IN ("BÖK", "Service")
+AND Status = "Otilldelad"
+AND Vecka = "V26"
+💡 "FLER FILTER" - UTÖKADE ALTERNATIV
+(Dessa specificerades inte i bilden men är logiska tillägg)
+
+Möjliga extra filter:
+
+Kund (sök/välj specifik kund)
+Team (visa bara vissa team)
+Orderkoncept (filtrera på avtal/projekt)
+Objekttyp (fastighet, station, butik, etc.)
+Prioritet (hög/normal/låg)
+Ordervärde (min/max belopp)
+Produktionstid (min/max timmar)
+🔄 FILTERPANEL BETEENDE:
+[FILTER] ▼  (Expanderbar)
+När kollapsad: Bara "FILTER ▼" syns
+När expanderad: Alla filter-alternativ visas
+
+Default: Expanderad när sidan laddas
+📊 EXEMPEL:
+Scenario: Hitta otilldelade BÖK-jobb i Distrikt Norr för vecka 26
+1. Välj filter:
+   ✓ Distrikt: "Distrikt Norr"
+   ✓ Vecka: "2026 - V26"
+   ✓ Uppgiftstyp: ☑ BÖK
+   ✓ Status: ☑ Otilldelad
+
+2. Klicka [Filtrera]
+
+3. Resultat:
+   Dashboard visar:
+   - Produktionstid: 482 h
+   - Ordervärde: 610 000 kr
+   - Antal uppgifter: 145
+   - Antal objekt: 54
+   
+   Tabell visar bara matchande uppgifter
+⚠️ VIKTIGT FÖR REPLIT:
+✅ Alla filter ska vara SNABBA (< 1 sekund respons)
+✅ Dashboard uppdateras LIVE när filter appliceras
+✅ Filter-state sparas (om användaren laddar om sidan)
+✅ "Rensa filter" återställer ALLT till default
+✅ Multi-tenant: Filtrera ALLTID på tenantId först

@@ -18,6 +18,7 @@ import {
   MapPin,
   Moon,
   Home,
+  GraduationCap,
   Plus,
   RefreshCw,
   Sparkles,
@@ -116,6 +117,7 @@ const CATEGORY_ICON: Record<string, IconType> = {
   travel_commute: Car,
   break_meal: Utensils,
   personal_time: Clock,
+  internal_training: GraduationCap,
   rest_night: Moon,
   rest_weekend: Home,
   overtime: AlertTriangle,
@@ -181,7 +183,12 @@ function localMinutes(iso: string | Date): number {
 }
 
 function toIso(date: string, minutes: number): string {
-  return new Date(`${date}T${minutesToHHMM(minutes)}:00`).toISOString();
+  // Bygg via Date-aritmetik så att minuter >= 1440 (t.ex. natt-/helgvila som
+  // sträcker sig över midnatt) rullar över till nästa dygn i stället för att ge
+  // en ogiltig "30:00"-tid → Invalid Date.
+  const base = new Date(`${date}T00:00:00`);
+  base.setMinutes(base.getMinutes() + minutes);
+  return base.toISOString();
 }
 
 function formatHours(minutes: number | null | undefined): string {
@@ -295,6 +302,7 @@ export default function WeeklyPlanViewPage() {
   const [leftCollapsed, setLeftCollapsed] = useState(false);
   const [rightCollapsed, setRightCollapsed] = useState(false);
   const [bottomCollapsed, setBottomCollapsed] = useState(false);
+  const [addTimeOpen, setAddTimeOpen] = useState(false);
   const [, setLocation] = useLocation();
 
   const { data: teams = [], isLoading: teamsLoading } = useQuery<Team[]>({
@@ -417,6 +425,29 @@ export default function WeeklyPlanViewPage() {
     // Refresh both plan and candidate lists regardless of partial failure so the
     // panel never shows already-added jobs as still unplanned.
     onSettled: () => invalidatePlan(),
+  });
+
+  // Manuellt tidsblock (matrast, egentid, interntid, vila, övertid) — skapar ett
+  // personal_task som motorn bokför och kalendern renderar.
+  const createPersonalTask = useMutation({
+    mutationFn: async (vars: { category: string; title: string; date: string; startMinutes: number; duration: number }) => {
+      const start = toIso(vars.date, vars.startMinutes);
+      const end = toIso(vars.date, vars.startMinutes + vars.duration);
+      await apiRequest("POST", `/api/weekly-plans/${planId}/personal-tasks`, {
+        timeCategory: vars.category,
+        title: vars.title,
+        plannedDate: vars.date,
+        startAt: start,
+        endAt: end,
+        durationMinutes: vars.duration,
+      });
+    },
+    onSuccess: () => {
+      invalidatePlan();
+      setAddTimeOpen(false);
+      toast({ title: "Tid tillagd i schemat" });
+    },
+    onError: (e: Error) => toast({ title: "Kunde inte lägga till tid", description: e.message, variant: "destructive" }),
   });
 
   const moveBlock = useMutation({
@@ -688,6 +719,18 @@ export default function WeeklyPlanViewPage() {
                 <Sparkles className="h-4 w-4" />
               )}
               Automatisk veckoplanering
+            </Button>
+          )}
+          {planId && (
+            <Button
+              size="sm"
+              className="gap-1.5"
+              onClick={() => setAddTimeOpen(true)}
+              title="Lägg till ett manuellt tidsblock (matrast, egentid, interntid/utbildning, vila eller övertid) i schemat."
+              data-testid="button-add-time"
+            >
+              <Plus className="h-4 w-4" />
+              Lägg till tid
             </Button>
           )}
         </div>
@@ -1117,6 +1160,14 @@ export default function WeeklyPlanViewPage() {
         }
         saving={moveBlock.isPending}
       />
+
+      <AddTimeDialog
+        open={addTimeOpen}
+        defaultDate={selectedDay}
+        saving={createPersonalTask.isPending}
+        onClose={() => setAddTimeOpen(false)}
+        onSave={(vars) => createPersonalTask.mutate(vars)}
+      />
     </div>
   );
 }
@@ -1533,6 +1584,130 @@ function BlockEditDialog({
           <Button variant="outline" onClick={onClose} data-testid="button-cancel-edit">Avbryt</Button>
           <Button onClick={handleSave} disabled={locked || saving || !date} data-testid="button-save-block">
             Spara
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// Manuellt tillåtna tidskategorier ("Lägg till tid"). Produktion och
+// auto-restid utelämnas — de härleds av motorn, inte handpåläggs.
+const ADDABLE_TIME_CATEGORIES: TimeCategoryKey[] = [
+  "break_meal",
+  "personal_time",
+  "internal_training",
+  "rest_night",
+  "rest_weekend",
+  "overtime",
+];
+
+function AddTimeDialog({
+  open,
+  defaultDate,
+  saving,
+  onClose,
+  onSave,
+}: {
+  open: boolean;
+  defaultDate: string | null;
+  saving: boolean;
+  onClose: () => void;
+  onSave: (vars: { category: string; title: string; date: string; startMinutes: number; duration: number }) => void;
+}) {
+  const [category, setCategory] = useState<string>("break_meal");
+  const [title, setTitle] = useState(TIME_CATEGORY_STYLES.break_meal.label);
+  const [date, setDate] = useState("");
+  const [time, setTime] = useState("08:00");
+  const [duration, setDuration] = useState("60");
+
+  // Återställ fälten varje gång dialogen öppnas.
+  useEffect(() => {
+    if (open) {
+      setCategory("break_meal");
+      setTitle(TIME_CATEGORY_STYLES.break_meal.label);
+      setDate(defaultDate ?? "");
+      setTime("08:00");
+      setDuration("60");
+    }
+  }, [open, defaultDate]);
+
+  // Default-etiketter — låter oss byta benämning automatiskt så länge användaren
+  // inte skrivit en egen text.
+  const knownLabels = useMemo(
+    () => new Set(ADDABLE_TIME_CATEGORIES.map((k) => TIME_CATEGORY_STYLES[k].label)),
+    [],
+  );
+
+  const handleCategoryChange = (next: string) => {
+    setCategory(next);
+    const label = getTimeCategoryStyle(next).label;
+    setTitle((prev) => (prev.trim() === "" || knownLabels.has(prev.trim()) ? label : prev));
+  };
+
+  const handleSave = () => {
+    if (!date) return;
+    const [h, m] = time.split(":").map((n) => parseInt(n, 10));
+    const startMinutes = (h || 0) * 60 + (m || 0);
+    const dur = Math.max(1, parseInt(duration, 10) || 0);
+    const finalTitle = title.trim() || getTimeCategoryStyle(category).label;
+    onSave({ category, title: finalTitle, date, startMinutes, duration: dur });
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
+      <DialogContent data-testid="dialog-add-time">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Plus className="h-4 w-4" />
+            Lägg till tid
+          </DialogTitle>
+          <DialogDescription>
+            Skapa ett manuellt tidsblock (matrast, egentid, interntid, vila eller övertid). Sparas och triggar serveromräkning.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-3">
+          <div className="space-y-1.5">
+            <Label htmlFor="add-time-category">Typ av tid</Label>
+            <Select value={category} onValueChange={handleCategoryChange}>
+              <SelectTrigger id="add-time-category" data-testid="select-add-time-category">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {ADDABLE_TIME_CATEGORIES.map((key) => (
+                  <SelectItem key={key} value={key} data-testid={`option-time-category-${key}`}>
+                    <span className="flex items-center gap-2">
+                      <span className={`h-2.5 w-2.5 rounded-full ${TIME_CATEGORY_STYLES[key].dot}`} />
+                      {TIME_CATEGORY_STYLES[key].label}
+                    </span>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="add-time-title">Benämning</Label>
+            <Input id="add-time-title" value={title} onChange={(e) => setTitle(e.target.value)} data-testid="input-add-time-title" />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="add-time-date">Dag</Label>
+            <Input id="add-time-date" type="date" value={date} onChange={(e) => setDate(e.target.value)} data-testid="input-add-time-date" />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="add-time-start">Starttid</Label>
+              <Input id="add-time-start" type="time" value={time} onChange={(e) => setTime(e.target.value)} data-testid="input-add-time-start" />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="add-time-duration">Längd (min)</Label>
+              <Input id="add-time-duration" type="number" min={1} value={duration} onChange={(e) => setDuration(e.target.value)} data-testid="input-add-time-duration" />
+            </div>
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose} data-testid="button-cancel-add-time">Avbryt</Button>
+          <Button onClick={handleSave} disabled={saving || !date} data-testid="button-save-add-time">
+            Lägg till
           </Button>
         </DialogFooter>
       </DialogContent>

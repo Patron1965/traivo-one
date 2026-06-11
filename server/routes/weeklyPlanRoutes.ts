@@ -551,7 +551,14 @@ export function registerWeeklyPlanRoutes(app: Express) {
   // ==========================================================================
   // Personliga block (vila, rast, personlig tid, inställelse/återresa)
   // ==========================================================================
-  const personalCreateSchema = insertPersonalTaskSchema.omit({ tenantId: true, weeklyPlanId: true });
+  // startAt/endAt är timestamp-kolumner → drizzle-zod ger z.date(), men HTTP-klienten
+  // skickar ISO-strängar. Coerce till Date här (PATCH ärver via .partial()).
+  const personalCreateSchema = insertPersonalTaskSchema
+    .omit({ tenantId: true, weeklyPlanId: true })
+    .extend({
+      startAt: z.coerce.date().nullish(),
+      endAt: z.coerce.date().nullish(),
+    });
   const personalPatchSchema = personalCreateSchema.partial();
 
   app.get("/api/weekly-plans/:planId/personal-tasks", ...guard, asyncHandler(async (req, res) => {
