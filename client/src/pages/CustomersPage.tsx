@@ -10,6 +10,26 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -22,7 +42,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { PageHeader } from "@/components/layout/PageHeader";
-import { Search, Layers, Package, ClipboardList, ArrowRight, Users, ChevronLeft, ChevronRight, ArrowUp, ArrowDown, ArrowUpDown, Trash2, ExternalLink, Loader2 } from "lucide-react";
+import { Search, Layers, Package, ClipboardList, ArrowRight, Users, ChevronLeft, ChevronRight, ArrowUp, ArrowDown, ArrowUpDown, Trash2, ExternalLink, Loader2, Plus } from "lucide-react";
 import { versionedUrl, apiRequest, queryClient } from "@/lib/queryClient";
 import { QueryState } from "@/components/QueryState";
 import { useAuth } from "@/hooks/use-auth";
@@ -52,6 +72,20 @@ interface CustomerTotals {
 }
 
 const PAGE_SIZE = 50;
+
+const customerFormSchema = z.object({
+  name: z.string().min(1, "Namn krävs"),
+  customerNumber: z.string().optional(),
+  orgNumber: z.string().optional(),
+  contactPerson: z.string().optional(),
+  email: z.string().email("Ogiltig e-postadress").or(z.literal("")).optional(),
+  phone: z.string().optional(),
+  address: z.string().optional(),
+  postalCode: z.string().optional(),
+  city: z.string().optional(),
+  notes: z.string().optional(),
+});
+type CustomerFormValues = z.infer<typeof customerFormSchema>;
 
 function useDebounced<T>(value: T, delay = 300): T {
   const [debounced, setDebounced] = useState(value);
@@ -189,6 +223,51 @@ export default function CustomersPage() {
     queryClient.invalidateQueries({ queryKey: ["/api/customers/aggregates"] });
   };
 
+  const [createDialogOpen, setCreateDialogOpen] = useState(false);
+
+  const createForm = useForm<CustomerFormValues>({
+    resolver: zodResolver(customerFormSchema),
+    defaultValues: {
+      name: "", customerNumber: "", orgNumber: "", contactPerson: "",
+      email: "", phone: "", address: "", postalCode: "", city: "", notes: "",
+    },
+  });
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("create") === "true") {
+      setCreateDialogOpen(true);
+      params.delete("create");
+      const remaining = params.toString();
+      window.history.replaceState({}, "", window.location.pathname + (remaining ? `?${remaining}` : ""));
+    }
+  }, []);
+
+  const createMutation = useMutation({
+    mutationFn: async (data: CustomerFormValues) => {
+      const payload: Record<string, string> = { name: data.name.trim() };
+      (["customerNumber", "orgNumber", "contactPerson", "email", "phone", "address", "postalCode", "city", "notes"] as const).forEach((k) => {
+        const v = data[k]?.trim();
+        if (v) payload[k] = v;
+      });
+      const res = await apiRequest("POST", "/api/customers", payload);
+      return res.json() as Promise<Customer>;
+    },
+    onSuccess: (created) => {
+      invalidateCustomers();
+      setCreateDialogOpen(false);
+      createForm.reset();
+      toast({ title: "Kund skapad", description: `${created.name} har lagts till.` });
+    },
+    onError: (err) => {
+      toast({
+        title: "Kunde inte skapa kund",
+        description: err instanceof Error ? err.message : "Okänt fel",
+        variant: "destructive",
+      });
+    },
+  });
+
   const restoreCustomer = async (c: Customer) => {
     try {
       await apiRequest("POST", `/api/customers/${c.id}/restore`);
@@ -259,7 +338,15 @@ export default function CustomersPage() {
         title="Kunder"
         description="Översikt över alla kunder, deras kluster och objekt"
         icon={Users}
-      />
+      >
+        <Button
+          onClick={() => { createForm.reset(); setCreateDialogOpen(true); }}
+          data-testid="button-new-customer"
+        >
+          <Plus className="h-4 w-4 mr-2" />
+          Ny kund
+        </Button>
+      </PageHeader>
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <Card>
@@ -534,6 +621,166 @@ export default function CustomersPage() {
           </QueryState>
         </CardContent>
       </Card>
+
+      <Dialog open={createDialogOpen} onOpenChange={(open) => { setCreateDialogOpen(open); if (!open) createForm.reset(); }}>
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Ny kund</DialogTitle>
+            <DialogDescription>
+              Lägg till en ny kund i registret. Endast namn är obligatoriskt.
+            </DialogDescription>
+          </DialogHeader>
+          <Form {...createForm}>
+            <form onSubmit={createForm.handleSubmit((data) => createMutation.mutate(data))} className="space-y-4">
+              <FormField
+                control={createForm.control}
+                name="name"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Namn *</FormLabel>
+                    <FormControl>
+                      <Input {...field} placeholder="Företagsnamn" data-testid="input-customer-name" />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <div className="grid grid-cols-2 gap-4">
+                <FormField
+                  control={createForm.control}
+                  name="customerNumber"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Kundnummer</FormLabel>
+                      <FormControl>
+                        <Input {...field} placeholder="t.ex. 1001" data-testid="input-customer-number" />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={createForm.control}
+                  name="orgNumber"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Org.nummer</FormLabel>
+                      <FormControl>
+                        <Input {...field} placeholder="556xxx-xxxx" data-testid="input-customer-orgnumber" />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+              <FormField
+                control={createForm.control}
+                name="contactPerson"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Kontaktperson</FormLabel>
+                    <FormControl>
+                      <Input {...field} placeholder="För- och efternamn" data-testid="input-customer-contact" />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <div className="grid grid-cols-2 gap-4">
+                <FormField
+                  control={createForm.control}
+                  name="email"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>E-post</FormLabel>
+                      <FormControl>
+                        <Input {...field} type="email" placeholder="kund@exempel.se" data-testid="input-customer-email" />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={createForm.control}
+                  name="phone"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Telefon</FormLabel>
+                      <FormControl>
+                        <Input {...field} placeholder="070-123 45 67" data-testid="input-customer-phone" />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+              <FormField
+                control={createForm.control}
+                name="address"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Adress</FormLabel>
+                    <FormControl>
+                      <Input {...field} placeholder="Gatuadress" data-testid="input-customer-address" />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <div className="grid grid-cols-2 gap-4">
+                <FormField
+                  control={createForm.control}
+                  name="postalCode"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Postnummer</FormLabel>
+                      <FormControl>
+                        <Input {...field} placeholder="123 45" data-testid="input-customer-postalcode" />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={createForm.control}
+                  name="city"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Ort</FormLabel>
+                      <FormControl>
+                        <Input {...field} placeholder="Stad" data-testid="input-customer-city" />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+              <FormField
+                control={createForm.control}
+                name="notes"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Anteckningar</FormLabel>
+                    <FormControl>
+                      <Textarea {...field} rows={3} placeholder="Valfria interna anteckningar" data-testid="input-customer-notes" />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <DialogFooter>
+                <Button type="button" variant="outline" onClick={() => setCreateDialogOpen(false)} data-testid="button-cancel-create-customer">
+                  Avbryt
+                </Button>
+                <Button type="submit" disabled={createMutation.isPending} data-testid="button-submit-create-customer">
+                  {createMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  Skapa kund
+                </Button>
+              </DialogFooter>
+            </form>
+          </Form>
+        </DialogContent>
+      </Dialog>
 
       <AlertDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
         <AlertDialogContent>
