@@ -74,7 +74,7 @@ interface CustomerTotals {
 const PAGE_SIZE = 50;
 
 const customerFormSchema = z.object({
-  name: z.string().min(1, "Namn krävs"),
+  name: z.string().trim().min(1, "Namn krävs"),
   customerNumber: z.string().optional(),
   orgNumber: z.string().optional(),
   contactPerson: z.string().optional(),
