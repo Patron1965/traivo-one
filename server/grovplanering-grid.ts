@@ -1,0 +1,579 @@
+/**
+ * Grovplanering — läs-optimerad rutnäts-endpoint (Task #921).
+ *
+ * En enda läsväg som filtrerar i SQL och grupperar/paginerar i applagret över hela
+ * den filtrerade mängden (cap ROW_CAP). Härledd status uttrycks som ETT återanvändbart
+ * SQL-CASE-fragment så att både SELECT och status-filtret blir SQL-korrekta.
+ *
+ * Tenant-ägarskap: tenantId sätts alltid server-side och ingår i WHERE på alla frågor.
+ */
+import { db } from "./db";
+import {
+  eq,
+  ne,
+  and,
+  isNull,
+  isNotNull,
+  inArray,
+  sql,
+  type SQL,
+} from "drizzle-orm";
+import {
+  workOrders,
+  objects,
+  customers,
+  teams,
+  assignments,
+  orderConcepts,
+} from "@shared/schema";
+import { haversineDistanceKm } from "./distance-matrix-service";
+
+// ---------------------------------------------------------------------------
+// Typer
+// ---------------------------------------------------------------------------
+export type RoughStatus =
+  | "otilldelad"
+  | "tilldelad"
+  | "delvis"
+  | "utford"
+  | "avviker";
+
+export type GroupBy = "objekt" | "kund" | "orderkoncept" | "ingen";
+
+export interface GridFilters {
+  districtIds?: string[];
+  postalCode?: string;
+  city?: string;
+  from?: Date; // önskad leveranstid – intervallstart
+  to?: Date; // önskad leveranstid – intervallslut
+  taskTypes?: string[]; // normaliserade nycklar (se TASK_TYPE_KEYS)
+  statuses?: RoughStatus[];
+}
+
+export interface GridKpis {
+  productionMinutes: number;
+  value: number; // öre
+  cost: number; // öre
+  taskCount: number;
+  objectCount: number;
+}
+
+export interface GridTaskRow {
+  id: string;
+  status: RoughStatus;
+  customerId: string | null;
+  customerName: string | null;
+  objectId: string | null;
+  objectName: string | null;
+  title: string | null;
+  taskType: string; // normaliserad nyckel
+  taskTypeLabel: string;
+  desiredDeliveryStart: string | null;
+  desiredDeliveryEnd: string | null;
+  productionMinutes: number;
+  teamId: string | null;
+  teamName: string | null;
+  teamColor: string | null;
+  roughPlannedWeek: string | null;
+  lastServiceDate: string | null;
+  value: number; // öre
+  cost: number; // öre
+}
+
+export interface GridGroup {
+  key: string;
+  label: string;
+  groupType: GroupBy;
+  objectCount: number;
+  earliestDesired: string | null;
+  summary: GridKpis;
+  tasks: GridTaskRow[]; // endast aktuell sidas rader
+}
+
+export interface GridResponse {
+  summary: GridKpis; // vänster kort — hela filtrerade mängden
+  groups: GridGroup[]; // grupper som har rader på aktuell sida
+  pagination: { offset: number; limit: number; total: number };
+  grouping: GroupBy;
+  truncated: boolean; // träffade ROW_CAP
+}
+
+// ---------------------------------------------------------------------------
+// Uppgiftstyp-normalisering (Öppet beslut #1 — härled från fritext-orderType).
+// Mappar råa orderType-värden till specens 8 kontrollerade etiketter; okänt → "ovrigt".
+// ---------------------------------------------------------------------------
+export const TASK_TYPE_KEYS = [
+  "bok",
+  "rbk",
+  "service",
+  "driftkontroll",
+  "tvatt",
+  "besiktning",
+  "administration",
+  "konsultation",
+] as const;
+
+export const TASK_TYPE_LABELS: Record<string, string> = {
+  bok: "BÖK",
+  rbk: "RBK",
+  service: "Service",
+  driftkontroll: "Driftkontroll",
+  tvatt: "Tvätt",
+  besiktning: "Besiktning",
+  administration: "Administration",
+  konsultation: "Konsultation",
+  ovrigt: "Övrigt",
+};
+
+export function normalizeTaskType(orderType: string | null | undefined): string {
+  const raw = (orderType ?? "").trim().toLowerCase();
+  if (!raw) return "ovrigt";
+  if (raw.includes("bök") || raw === "bok" || raw.startsWith("bok")) return "bok";
+  if (raw === "rbk" || raw.startsWith("rbk")) return "rbk";
+  if (raw.includes("driftkontroll") || raw.includes("drift")) return "driftkontroll";
+  if (raw.includes("tvätt") || raw.includes("tvatt") || raw.includes("wash")) return "tvatt";
+  if (raw.includes("besikt")) return "besiktning";
+  if (raw.includes("administ") || raw === "admin") return "administration";
+  if (raw.includes("konsult")) return "konsultation";
+  if (raw.includes("service")) return "service";
+  return "ovrigt";
+}
+
+// ---------------------------------------------------------------------------
+// Härledd status — ETT återanvändbart SQL-CASE-fragment.
+// Kolumner refereras med litterala kvalificerade namn ("work_orders"."col") eftersom
+// drizzle kan rendera ${table.col} okvalificerat och då binda fel tabell i korrelerade
+// subqueries (se memory: drizzle-correlated-subquery-column-qualification).
+// Precedens: Avviker → Utförd → Delvis utförd → Tilldelad → Otilldelad.
+// ---------------------------------------------------------------------------
+const STATUS_CASE = sql<RoughStatus>`
+  CASE
+    WHEN "work_orders"."impossible_reason" IS NOT NULL
+      OR "work_orders"."order_status" = 'omojlig'
+      OR "work_orders"."execution_status" = 'impossible'
+      THEN 'avviker'
+    WHEN "work_orders"."completed_at" IS NOT NULL
+      OR "work_orders"."order_status" IN ('utford', 'fakturerad')
+      OR "work_orders"."execution_status" IN ('completed', 'inspected')
+      THEN 'utford'
+    WHEN EXISTS (
+        SELECT 1 FROM work_order_lines wol
+        WHERE wol.work_order_id = "work_orders"."id" AND wol.is_completed = true
+      ) AND EXISTS (
+        SELECT 1 FROM work_order_lines wol2
+        WHERE wol2.work_order_id = "work_orders"."id" AND wol2.is_completed = false
+      )
+      THEN 'delvis'
+    WHEN "work_orders"."team_id" IS NOT NULL AND "work_orders"."rough_planned_week" IS NOT NULL
+      THEN 'tilldelad'
+    ELSE 'otilldelad'
+  END
+`;
+
+const ROW_CAP = 10000;
+const CLUSTER_OBJECT_CAP = 1500; // över detta: hoppa 30 m-klustring (varje objekt = egen grupp)
+const CLUSTER_RADIUS_M = 30;
+
+// ---------------------------------------------------------------------------
+// WHERE-villkor från filter (de billiga/SQL-vänliga). Uppgiftstyp filtreras i
+// applagret efter normalisering (fuzzy fritext).
+// ---------------------------------------------------------------------------
+function buildConditions(tenantId: string, filters: GridFilters): SQL[] {
+  const conditions: SQL[] = [
+    eq(workOrders.tenantId, tenantId),
+    isNull(workOrders.deletedAt),
+    ne(workOrders.orderStatus, "avbruten"),
+  ];
+
+  if (filters.districtIds && filters.districtIds.length > 0) {
+    conditions.push(inArray(workOrders.districtId, filters.districtIds));
+  }
+  if (filters.postalCode) {
+    const norm = filters.postalCode.replace(/\s/g, "");
+    conditions.push(
+      sql`REPLACE(COALESCE(${objects.postalCode}, ''), ' ', '') ILIKE ${norm + "%"}`,
+    );
+  }
+  if (filters.city) {
+    conditions.push(sql`${objects.city} ILIKE ${filters.city}`);
+  }
+  // Tidsperiod = överlapp mot önskad leveranstid (start..COALESCE(end,start)).
+  if (filters.from) {
+    conditions.push(
+      sql`COALESCE(${workOrders.desiredDeliveryEnd}, ${workOrders.desiredDeliveryStart}) >= ${filters.from}`,
+    );
+  }
+  if (filters.to) {
+    conditions.push(sql`${workOrders.desiredDeliveryStart} <= ${filters.to}`);
+  }
+  if (filters.statuses && filters.statuses.length > 0) {
+    conditions.push(
+      sql`(${STATUS_CASE}) IN (${sql.join(
+        filters.statuses.map((s) => sql`${s}`),
+        sql`, `,
+      )})`,
+    );
+  }
+  return conditions;
+}
+
+interface RawRow {
+  id: string;
+  status: RoughStatus;
+  customerId: string | null;
+  customerName: string | null;
+  objectId: string | null;
+  objectName: string | null;
+  title: string | null;
+  orderType: string | null;
+  desiredDeliveryStart: Date | null;
+  desiredDeliveryEnd: Date | null;
+  productionMinutes: number | null;
+  teamId: string | null;
+  teamName: string | null;
+  teamColor: string | null;
+  roughPlannedWeek: string | null;
+  lastServiceDate: Date | null;
+  value: number | null;
+  cost: number | null;
+  lat: number | null;
+  lng: number | null;
+}
+
+function emptyKpis(): GridKpis {
+  return { productionMinutes: 0, value: 0, cost: 0, taskCount: 0, objectCount: 0 };
+}
+
+function toIso(d: Date | string | null): string | null {
+  if (!d) return null;
+  const date = d instanceof Date ? d : new Date(d);
+  return Number.isFinite(date.getTime()) ? date.toISOString() : null;
+}
+
+// 30 m-klustring (union-find) över DISTINKTA objekt. Returnerar objectId → representant
+// (minsta objectId i klustret). Objekt utan koordinat = eget kluster.
+function clusterObjects(
+  objs: { id: string; lat: number | null; lng: number | null }[],
+): Map<string, string> {
+  const parent = new Map<string, string>();
+  for (const o of objs) parent.set(o.id, o.id);
+
+  const find = (x: string): string => {
+    let r = x;
+    while (parent.get(r) !== r) r = parent.get(r)!;
+    let cur = x;
+    while (parent.get(cur) !== r) {
+      const next = parent.get(cur)!;
+      parent.set(cur, r);
+      cur = next;
+    }
+    return r;
+  };
+  const union = (a: string, b: string) => {
+    const ra = find(a);
+    const rb = find(b);
+    if (ra === rb) return;
+    if (ra < rb) parent.set(rb, ra);
+    else parent.set(ra, rb);
+  };
+
+  const withCoords = objs.filter((o) => o.lat != null && o.lng != null);
+  if (withCoords.length <= CLUSTER_OBJECT_CAP) {
+    for (let i = 0; i < withCoords.length; i++) {
+      for (let j = i + 1; j < withCoords.length; j++) {
+        const a = withCoords[i];
+        const b = withCoords[j];
+        const m = haversineDistanceKm(a.lat!, a.lng!, b.lat!, b.lng!) * 1000;
+        if (m <= CLUSTER_RADIUS_M) union(a.id, b.id);
+      }
+    }
+  }
+
+  const map = new Map<string, string>();
+  for (const o of objs) map.set(o.id, find(o.id));
+  return map;
+}
+
+// ---------------------------------------------------------------------------
+// Huvud-endpoint
+// ---------------------------------------------------------------------------
+export async function getGrovplaneringGrid(
+  tenantId: string,
+  filters: GridFilters,
+  grouping: GroupBy,
+  offset: number,
+  limit: number,
+): Promise<GridResponse> {
+  const conditions = buildConditions(tenantId, filters);
+
+  const fetched = (await db
+    .select({
+      id: workOrders.id,
+      status: STATUS_CASE,
+      customerId: workOrders.customerId,
+      customerName: customers.name,
+      objectId: workOrders.objectId,
+      objectName: objects.name,
+      title: workOrders.title,
+      orderType: workOrders.orderType,
+      desiredDeliveryStart: workOrders.desiredDeliveryStart,
+      desiredDeliveryEnd: workOrders.desiredDeliveryEnd,
+      productionMinutes: workOrders.cachedProductionMinutes,
+      teamId: workOrders.teamId,
+      teamName: teams.name,
+      teamColor: teams.color,
+      roughPlannedWeek: workOrders.roughPlannedWeek,
+      lastServiceDate: objects.lastServiceDate,
+      value: workOrders.cachedValue,
+      cost: workOrders.cachedCost,
+      lat: sql<number | null>`COALESCE(${workOrders.taskLatitude}, ${objects.latitude})`,
+      lng: sql<number | null>`COALESCE(${workOrders.taskLongitude}, ${objects.longitude})`,
+    })
+    .from(workOrders)
+    .leftJoin(objects, eq(workOrders.objectId, objects.id))
+    .leftJoin(customers, eq(workOrders.customerId, customers.id))
+    .leftJoin(teams, eq(workOrders.teamId, teams.id))
+    .where(and(...conditions))
+    .limit(ROW_CAP + 1)) as RawRow[];
+
+  const truncated = fetched.length > ROW_CAP;
+  const raw = truncated ? fetched.slice(0, ROW_CAP) : fetched;
+
+  // Uppgiftstyp-filter i applagret (fuzzy normalisering).
+  const typeFilter =
+    filters.taskTypes && filters.taskTypes.length > 0
+      ? new Set(filters.taskTypes)
+      : null;
+
+  const rows: (GridTaskRow & { lat: number | null; lng: number | null })[] = [];
+  for (const r of raw) {
+    const taskType = normalizeTaskType(r.orderType);
+    if (typeFilter && !typeFilter.has(taskType)) continue;
+    rows.push({
+      id: r.id,
+      status: r.status,
+      customerId: r.customerId,
+      customerName: r.customerName,
+      objectId: r.objectId,
+      objectName: r.objectName,
+      title: r.title,
+      taskType,
+      taskTypeLabel: TASK_TYPE_LABELS[taskType] ?? "Övrigt",
+      desiredDeliveryStart: toIso(r.desiredDeliveryStart),
+      desiredDeliveryEnd: toIso(r.desiredDeliveryEnd),
+      productionMinutes: r.productionMinutes ?? 0,
+      teamId: r.teamId,
+      teamName: r.teamName,
+      teamColor: r.teamColor,
+      roughPlannedWeek: r.roughPlannedWeek,
+      lastServiceDate: toIso(r.lastServiceDate),
+      value: r.value ?? 0,
+      cost: r.cost ?? 0,
+      lat: r.lat != null ? Number(r.lat) : null,
+      lng: r.lng != null ? Number(r.lng) : null,
+    });
+  }
+
+  // Vänster kort — KPI:er över hela filtrerade mängden.
+  const summary = emptyKpis();
+  const summaryObjects = new Set<string>();
+  for (const r of rows) {
+    summary.productionMinutes += r.productionMinutes;
+    summary.value += r.value;
+    summary.cost += r.cost;
+    summary.taskCount += 1;
+    if (r.objectId) summaryObjects.add(r.objectId);
+  }
+  summary.objectCount = summaryObjects.size;
+
+  // Grupperingsnycklar.
+  const objectIds = Array.from(
+    new Set(rows.map((r) => r.objectId).filter((id): id is string => !!id)),
+  );
+
+  let conceptByObject = new Map<string, { id: string; name: string }>();
+  if (grouping === "orderkoncept" && objectIds.length > 0) {
+    const conceptRows = await db
+      .select({
+        objectId: assignments.objectId,
+        conceptId: assignments.orderConceptId,
+        conceptName: orderConcepts.name,
+      })
+      .from(assignments)
+      .innerJoin(orderConcepts, eq(assignments.orderConceptId, orderConcepts.id))
+      .where(
+        and(
+          eq(assignments.tenantId, tenantId),
+          inArray(assignments.objectId, objectIds),
+          isNotNull(assignments.orderConceptId),
+        ),
+      );
+    // Representant per objekt: minsta conceptId (deterministiskt).
+    for (const c of conceptRows) {
+      if (!c.conceptId) continue;
+      const existing = conceptByObject.get(c.objectId);
+      if (!existing || c.conceptId < existing.id) {
+        conceptByObject.set(c.objectId, { id: c.conceptId, name: c.conceptName });
+      }
+    }
+  }
+
+  let objectCluster = new Map<string, string>();
+  const objectName = new Map<string, string>();
+  if (grouping === "objekt") {
+    const distinctObjs = new Map<string, { id: string; lat: number | null; lng: number | null }>();
+    for (const r of rows) {
+      if (!r.objectId) continue;
+      if (!distinctObjs.has(r.objectId)) {
+        distinctObjs.set(r.objectId, { id: r.objectId, lat: r.lat, lng: r.lng });
+        objectName.set(r.objectId, r.objectName ?? "Objekt");
+      }
+    }
+    objectCluster = clusterObjects(Array.from(distinctObjs.values()));
+  }
+
+  // Bestäm grupp per rad.
+  function groupOf(r: (typeof rows)[number]): { key: string; label: string } {
+    switch (grouping) {
+      case "kund":
+        return {
+          key: r.customerId ?? "__nocustomer__",
+          label: r.customerName ?? "Ingen kund",
+        };
+      case "orderkoncept": {
+        const c = r.objectId ? conceptByObject.get(r.objectId) : undefined;
+        return c
+          ? { key: c.id, label: c.name }
+          : { key: "__noconcept__", label: "Inget orderkoncept" };
+      }
+      case "ingen":
+        return { key: "__all__", label: "Alla uppgifter" };
+      case "objekt":
+      default: {
+        if (!r.objectId) return { key: "__noobject__", label: "Inget objekt" };
+        const rep = objectCluster.get(r.objectId) ?? r.objectId;
+        return { key: rep, label: objectName.get(rep) ?? r.objectName ?? "Objekt" };
+      }
+    }
+  }
+
+  interface BuiltGroup {
+    key: string;
+    label: string;
+    rows: GridTaskRow[];
+    objects: Set<string>;
+    summary: GridKpis;
+    earliest: string | null;
+  }
+  const groupMap = new Map<string, BuiltGroup>();
+  for (const r of rows) {
+    const { key, label } = groupOf(r);
+    let g = groupMap.get(key);
+    if (!g) {
+      g = { key, label, rows: [], objects: new Set(), summary: emptyKpis(), earliest: null };
+      groupMap.set(key, g);
+    }
+    // Strippa interna geo-fält ur radobjektet som skickas till klienten.
+    const { lat: _lat, lng: _lng, ...clientRow } = r;
+    g.rows.push(clientRow);
+    g.summary.productionMinutes += r.productionMinutes;
+    g.summary.value += r.value;
+    g.summary.cost += r.cost;
+    g.summary.taskCount += 1;
+    if (r.objectId) g.objects.add(r.objectId);
+    if (r.desiredDeliveryStart) {
+      if (!g.earliest || r.desiredDeliveryStart < g.earliest) g.earliest = r.desiredDeliveryStart;
+    }
+  }
+
+  const collator = new Intl.Collator("sv");
+  const orderedGroups = Array.from(groupMap.values()).sort((a, b) =>
+    collator.compare(a.label, b.label),
+  );
+  // Stabil radordning inom grupp: titel, sen id.
+  for (const g of orderedGroups) {
+    g.rows.sort(
+      (a, b) => collator.compare(a.title ?? "", b.title ?? "") || a.id.localeCompare(b.id),
+    );
+    g.summary.objectCount = g.objects.size;
+  }
+
+  // Paginera per UPPGIFT över den grupp-ordnade, platta listan.
+  const flat: { groupKey: string; row: GridTaskRow }[] = [];
+  for (const g of orderedGroups) {
+    for (const row of g.rows) flat.push({ groupKey: g.key, row });
+  }
+  const total = flat.length;
+  const pageSlice = flat.slice(offset, offset + limit);
+
+  // Återbygg grupper för sidan (bevara grupp-ordning), bifoga FULLA grupp-summeringar.
+  const pageRowsByGroup = new Map<string, GridTaskRow[]>();
+  for (const { groupKey, row } of pageSlice) {
+    const arr = pageRowsByGroup.get(groupKey) ?? [];
+    arr.push(row);
+    pageRowsByGroup.set(groupKey, arr);
+  }
+
+  const groups: GridGroup[] = [];
+  for (const g of orderedGroups) {
+    const pageRows = pageRowsByGroup.get(g.key);
+    if (!pageRows || pageRows.length === 0) continue;
+    groups.push({
+      key: g.key,
+      label: g.label,
+      groupType: grouping,
+      objectCount: g.objects.size,
+      earliestDesired: g.earliest,
+      summary: g.summary,
+      tasks: pageRows,
+    });
+  }
+
+  return {
+    summary,
+    groups,
+    pagination: { offset, limit, total },
+    grouping,
+    truncated,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Distinkta orter (för Ort-filtret).
+// ---------------------------------------------------------------------------
+export async function getRoughPlanningCities(tenantId: string): Promise<string[]> {
+  const rows = await db
+    .selectDistinct({ city: objects.city })
+    .from(objects)
+    .where(and(eq(objects.tenantId, tenantId), isNotNull(objects.city)));
+  return rows
+    .map((r) => (r.city ?? "").trim())
+    .filter((c) => c.length > 0)
+    .sort((a, b) => new Intl.Collator("sv").compare(a, b));
+}
+
+// ---------------------------------------------------------------------------
+// Återkalla tilldelning — EN mängd-baserad UPDATE. Nollar team + vecka + kommentar
+// ENDAST för rader vars härledda status är 'tilldelad' (rör aldrig Utförd/Avviker/Delvis).
+// ---------------------------------------------------------------------------
+export async function revokeRoughAssignments(
+  tenantId: string,
+  ids: string[],
+): Promise<{ updated: number; skipped: number }> {
+  const unique = Array.from(new Set(ids));
+  if (unique.length === 0) return { updated: 0, skipped: 0 };
+
+  const result = await db
+    .update(workOrders)
+    .set({ teamId: null, roughPlannedWeek: null, plannedNotes: null })
+    .where(
+      and(
+        eq(workOrders.tenantId, tenantId),
+        inArray(workOrders.id, unique),
+        sql`(${STATUS_CASE}) = 'tilldelad'`,
+      ),
+    )
+    .returning({ id: workOrders.id });
+
+  return { updated: result.length, skipped: unique.length - result.length };
+}

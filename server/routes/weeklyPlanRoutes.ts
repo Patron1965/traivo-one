@@ -38,6 +38,23 @@ import {
   convertPersonalTimeToOrdered,
   DEFAULT_PLAN_ENGINE_CONFIG,
 } from "../planning/weeklyPlanEngine";
+import {
+  getGrovplaneringGrid,
+  getRoughPlanningCities,
+  revokeRoughAssignments,
+  TASK_TYPE_KEYS,
+  type GroupBy,
+  type GridFilters,
+  type RoughStatus,
+} from "../grovplanering-grid";
+
+const ROUGH_STATUS_KEYS = [
+  "otilldelad",
+  "tilldelad",
+  "delvis",
+  "utford",
+  "avviker",
+] as const;
 
 const requirePlannerAccess = requireRole("owner", "admin", "planner");
 
@@ -156,6 +173,84 @@ export function registerWeeklyPlanRoutes(app: Express) {
     }
     const { lat, lng, radiusKm, limit } = parsed.data;
     res.json(await storage.getUnplannedRoughNearby(tenantId, lat, lng, radiusKm, limit));
+  }));
+
+  // Grovplanerings-rutnät (Task #921) — filtrerat + grupperat + paginerat aggregat.
+  // En läsväg: filtrerar i SQL, grupperar/paginerar i applagret. Returnerar
+  // { summary, groups[], pagination, grouping, truncated }.
+  const csv = (v: unknown): string[] =>
+    typeof v === "string" && v.trim()
+      ? v.split(",").map((s) => s.trim()).filter(Boolean)
+      : [];
+
+  const gridQuerySchema = z.object({
+    groupBy: z.enum(["objekt", "kund", "orderkoncept", "ingen"]).default("objekt"),
+    offset: z.coerce.number().int().min(0).default(0),
+    limit: z.coerce.number().int().min(1).max(200).default(20),
+    postalCode: z.string().trim().max(20).optional(),
+    city: z.string().trim().max(120).optional(),
+    from: z.coerce.date().optional(),
+    to: z.coerce.date().optional(),
+  });
+
+  app.get("/api/rough-planning/grid", ...guard, asyncHandler(async (req, res) => {
+    const tenantId = getTenantIdWithFallback(req);
+    const parsed = gridQuerySchema.safeParse({
+      groupBy: req.query.groupBy,
+      offset: req.query.offset,
+      limit: req.query.limit,
+      postalCode: req.query.postalCode,
+      city: req.query.city,
+      from: req.query.from,
+      to: req.query.to,
+    });
+    if (!parsed.success) {
+      const formatted = formatZodError(parsed.error);
+      throw new ValidationError(formatted.error, formatted.details);
+    }
+    const districtIds = csv(req.query.districtIds);
+    const taskTypes = csv(req.query.taskTypes).filter((t) =>
+      (TASK_TYPE_KEYS as readonly string[]).includes(t),
+    );
+    const statuses = csv(req.query.statuses).filter((s) =>
+      (ROUGH_STATUS_KEYS as readonly string[]).includes(s),
+    ) as RoughStatus[];
+
+    const filters: GridFilters = {
+      districtIds: districtIds.length ? districtIds : undefined,
+      postalCode: parsed.data.postalCode || undefined,
+      city: parsed.data.city || undefined,
+      from: parsed.data.from,
+      to: parsed.data.to,
+      taskTypes: taskTypes.length ? taskTypes : undefined,
+      statuses: statuses.length ? statuses : undefined,
+    };
+
+    const result = await getGrovplaneringGrid(
+      tenantId,
+      filters,
+      parsed.data.groupBy as GroupBy,
+      parsed.data.offset,
+      parsed.data.limit,
+    );
+    res.json(result);
+  }));
+
+  // Distinkta orter för Ort-filtret.
+  app.get("/api/rough-planning/cities", ...guard, asyncHandler(async (req, res) => {
+    const tenantId = getTenantIdWithFallback(req);
+    res.json(await getRoughPlanningCities(tenantId));
+  }));
+
+  // Återkalla tilldelning — nollar team + vecka + kommentar för rader som är 'tilldelad'.
+  const revokeSchema = z.object({
+    workOrderIds: z.array(z.string().min(1)).min(1).max(500),
+  });
+
+  app.post("/api/rough-planning/revoke", ...guard, asyncHandler(async (req, res) => {
+    const tenantId = getTenantIdWithFallback(req);
+    const data = parseBody(revokeSchema, req.body);
+    res.json(await revokeRoughAssignments(tenantId, data.workOrderIds));
   }));
 
   // ==========================================================================

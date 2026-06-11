@@ -1,21 +1,22 @@
 import { useEffect, useMemo, useState } from "react";
-import { useQuery, useMutation } from "@tanstack/react-query";
 import {
-  format,
-  getISOWeek,
-  getISOWeekYear,
-  startOfISOWeek,
-  addWeeks,
-} from "date-fns";
-import { sv } from "date-fns/locale";
-import { CalendarDays, MapPin, Search, Users, Loader2 } from "lucide-react";
+  useQuery,
+  useMutation,
+  keepPreviousData,
+} from "@tanstack/react-query";
+import {
+  CalendarRange,
+  ChevronLeft,
+  ChevronRight,
+  Loader2,
+  RotateCcw,
+  Users,
+  XCircle,
+} from "lucide-react";
 
 import { PageHeader } from "@/components/layout/PageHeader";
-import { QueryState } from "@/components/QueryState";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { Card, CardContent } from "@/components/ui/card";
 import {
   Select,
   SelectContent,
@@ -23,396 +24,580 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { RoughSummaryCard } from "@/components/grovplanering/RoughSummaryCard";
 import {
-  UnplannedTasksMap,
-  type UnplannedTaskPin,
-} from "@/components/grovplanering/UnplannedTasksMap";
-import type {
-  GeographicDistrict,
-  Team,
-  WorkOrderWithObject,
-} from "@shared/schema";
+  RoughFilterPanel,
+  createDefaultFilter,
+  type FilterState,
+} from "@/components/grovplanering/RoughFilterPanel";
+import { RoughGridTable } from "@/components/grovplanering/RoughGridTable";
+import { RoughAssignModal } from "@/components/grovplanering/RoughAssignModal";
+import {
+  ROUGH_STATUS_ORDER,
+  ROUGH_STATUS_META,
+  resolvePeriodRange,
+  formatCount,
+  type GridResponse,
+  type GridTaskRow,
+  type GridGroup,
+  type GridKpis,
+  type GroupBy,
+  type RoughStatus,
+} from "@/lib/rough-planning";
+import type { Team, GeographicDistrict } from "@shared/schema";
 
-const UNPLANNED_PAGE_SIZE = 200;
-const ALL_DISTRICTS = "all";
-
-type UnplannedResponse = { workOrders: WorkOrderWithObject[]; total: number };
-
-// Effektiv koordinat för en uppgift (uppgiftens koordinat, annars objektets).
-// Returnerar null när giltig koordinat saknas (NaN-säkert).
-function woCoords(o: WorkOrderWithObject): { lat: number; lng: number } | null {
-  const la = o.taskLatitude ?? o.objectLatitude;
-  const lo = o.taskLongitude ?? o.objectLongitude;
-  if (la == null || lo == null) return null;
-  const lat = Number(la);
-  const lng = Number(lo);
-  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
-  return { lat, lng };
+interface AppliedFilter {
+  districtIds: string[];
+  postalCode: string;
+  city: string;
+  from?: string;
+  to?: string;
+  taskTypes: string[];
+  statuses: RoughStatus[];
 }
 
-function isoWeekString(date: Date): string {
-  return `${getISOWeekYear(date)}-W${String(getISOWeek(date)).padStart(2, "0")}`;
+const EMPTY_APPLIED: AppliedFilter = {
+  districtIds: [],
+  postalCode: "",
+  city: "",
+  taskTypes: [],
+  statuses: [],
+};
+
+const EMPTY_KPIS: GridKpis = {
+  productionMinutes: 0,
+  value: 0,
+  cost: 0,
+  taskCount: 0,
+  objectCount: 0,
+};
+
+const GROUP_OPTIONS: { value: GroupBy; label: string }[] = [
+  { value: "objekt", label: "Gruppera: Objekt" },
+  { value: "kund", label: "Gruppera: Kund" },
+  { value: "orderkoncept", label: "Gruppera: Orderkoncept" },
+  { value: "ingen", label: "Gruppera: Ingen" },
+];
+
+function buildGridUrl(
+  applied: AppliedFilter,
+  groupBy: GroupBy,
+  offset: number,
+  limit: number,
+): string {
+  const p = new URLSearchParams();
+  p.set("groupBy", groupBy);
+  p.set("offset", String(offset));
+  p.set("limit", String(limit));
+  if (applied.districtIds.length) p.set("districtIds", applied.districtIds.join(","));
+  if (applied.postalCode) p.set("postalCode", applied.postalCode);
+  if (applied.city) p.set("city", applied.city);
+  if (applied.from) p.set("from", applied.from);
+  if (applied.to) p.set("to", applied.to);
+  if (applied.taskTypes.length) p.set("taskTypes", applied.taskTypes.join(","));
+  if (applied.statuses.length) p.set("statuses", applied.statuses.join(","));
+  return `/api/rough-planning/grid?${p.toString()}`;
 }
 
-// Plats (geografisk) för en uppgift — adress i första hand, annars objektnamn.
-function taskLocation(o: WorkOrderWithObject): string {
-  return o.objectAddress || o.objectName || "Okänd plats";
-}
-
-// "Senast utförande" — leveransfönstrets slut, annars start.
-function latestDeliveryLabel(o: WorkOrderWithObject): string {
-  const raw = o.desiredDeliveryEnd ?? o.desiredDeliveryStart;
-  if (!raw) return "Ingen leveranstid satt";
-  const d = new Date(raw as unknown as string);
-  if (!Number.isFinite(d.getTime())) return "Ingen leveranstid satt";
-  return format(d, "d MMM yyyy", { locale: sv });
+function pageWindow(current: number, total: number): (number | "ellipsis")[] {
+  if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1);
+  const pages: (number | "ellipsis")[] = [1];
+  const start = Math.max(2, current - 1);
+  const end = Math.min(total - 1, current + 1);
+  if (start > 2) pages.push("ellipsis");
+  for (let i = start; i <= end; i++) pages.push(i);
+  if (end < total - 1) pages.push("ellipsis");
+  pages.push(total);
+  return pages;
 }
 
 export default function GrovplaneringPage() {
   const { toast } = useToast();
 
-  const [searchInput, setSearchInput] = useState("");
-  const [search, setSearch] = useState("");
-  const [districtFilter, setDistrictFilter] = useState<string>(ALL_DISTRICTS);
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const [assignTeam, setAssignTeam] = useState<string>("");
-  const [assignWeek, setAssignWeek] = useState<string>(() =>
-    isoWeekString(new Date()),
-  );
+  const [groupBy, setGroupBy] = useState<GroupBy>("objekt");
+  const [pageSize, setPageSize] = useState(20);
+  const [offset, setOffset] = useState(0);
 
-  // Debounce fri-textsöket innan det når servern.
-  useEffect(() => {
-    const t = setTimeout(() => setSearch(searchInput.trim()), 300);
-    return () => clearTimeout(t);
-  }, [searchInput]);
+  const [draft, setDraft] = useState<FilterState>(createDefaultFilter);
+  const [applied, setApplied] = useState<AppliedFilter>(EMPTY_APPLIED);
 
-  const unplannedQuery = useQuery<UnplannedResponse>({
-    queryKey: ["/api/rough-planning/unplanned", { limit: UNPLANNED_PAGE_SIZE, search }],
-    queryFn: async () => {
-      const params = new URLSearchParams({ limit: String(UNPLANNED_PAGE_SIZE) });
-      if (search) params.set("search", search);
-      const res = await apiRequest(
-        "GET",
-        `/api/rough-planning/unplanned?${params.toString()}`,
-      );
-      return res.json();
-    },
-  });
-  const teamsQuery = useQuery<Team[]>({ queryKey: ["/api/teams"] });
-  const districtsQuery = useQuery<GeographicDistrict[]>({
+  const [selected, setSelected] = useState<Map<string, GridTaskRow>>(new Map());
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+
+  const [assignTarget, setAssignTarget] = useState<GridTaskRow[] | null>(null);
+  const [revokeTarget, setRevokeTarget] = useState<
+    { ids: string[]; label: string } | null
+  >(null);
+
+  // Referensdata.
+  const { data: teams = [] } = useQuery<Team[]>({ queryKey: ["/api/teams"] });
+  const { data: districts = [] } = useQuery<GeographicDistrict[]>({
     queryKey: ["/api/districts"],
   });
-
-  const teams = useMemo(
-    () => (teamsQuery.data ?? []).filter((t) => t.status === "active"),
-    [teamsQuery.data],
-  );
-  const districts = districtsQuery.data ?? [];
-
-  const unplanned = unplannedQuery.data?.workOrders ?? [];
-  const totalMatching = unplannedQuery.data?.total ?? unplanned.length;
-  const truncated = totalMatching > unplanned.length;
-
-  // Distriktsfilter sker på klienten mot uppgiftens districtId.
-  const tasks = useMemo(() => {
-    if (districtFilter === ALL_DISTRICTS) return unplanned;
-    return unplanned.filter((o) => o.districtId === districtFilter);
-  }, [unplanned, districtFilter]);
-
-  // Kart-pins: endast uppgifter med giltig koordinat, samma urval som listan.
-  const pins = useMemo<UnplannedTaskPin[]>(() => {
-    return tasks
-      .map((o): UnplannedTaskPin | null => {
-        const c = woCoords(o);
-        if (!c) return null;
-        return {
-          id: o.id,
-          lat: c.lat,
-          lng: c.lng,
-          title: o.title || o.id.slice(0, 8),
-          reference: o.externalReference,
-          address: taskLocation(o),
-        };
-      })
-      .filter((p): p is UnplannedTaskPin => p !== null);
-  }, [tasks]);
-
-  const selectedCount = useMemo(
-    () => tasks.filter((o) => selectedIds.has(o.id)).length,
-    [tasks, selectedIds],
-  );
-  const allSelected = tasks.length > 0 && selectedCount === tasks.length;
-  const someSelected = selectedCount > 0 && !allSelected;
-
-  const toggleOne = (id: string, checked: boolean) => {
-    setSelectedIds((prev) => {
-      const next = new Set(prev);
-      if (checked) next.add(id);
-      else next.delete(id);
-      return next;
-    });
-  };
-  const toggleAll = (checked: boolean) => {
-    setSelectedIds(() => (checked ? new Set(tasks.map((o) => o.id)) : new Set()));
-  };
-
-  // Veckoval för tilldelning: aktuell vecka + kommande 11 veckor.
-  const weekOptions = useMemo(() => {
-    const start = startOfISOWeek(new Date());
-    return Array.from({ length: 12 }, (_, i) => {
-      const d = addWeeks(start, i);
-      return {
-        value: isoWeekString(d),
-        label: `v.${getISOWeek(d)} · ${format(d, "d MMM", { locale: sv })}`,
-      };
-    });
-  }, []);
-
-  const assignMutation = useMutation({
-    mutationFn: async (ids: string[]) => {
-      const res = await apiRequest("POST", "/api/work-orders/bulk-rough-plan", {
-        workOrderIds: ids,
-        roughPlannedWeek: assignWeek,
-        teamId: assignTeam,
-      });
-      return res.json() as Promise<{
-        summary: { total: number; planned: number; error: number };
-      }>;
-    },
-    onSuccess: (data) => {
-      queryClient.invalidateQueries({
-        queryKey: ["/api/rough-planning/unplanned"],
-      });
-      setSelectedIds(new Set());
-      const teamName = teams.find((t) => t.id === assignTeam)?.name ?? "team";
-      const { planned, error } = data.summary;
-      toast({
-        title: error > 0 ? "Tilldelning delvis klar" : "Uppgifter tilldelade",
-        description:
-          `${planned} uppgifter tilldelade ${teamName} (${assignWeek})` +
-          (error > 0 ? ` · ${error} misslyckades` : ""),
-        variant: error > 0 ? "destructive" : undefined,
-      });
-    },
-    onError: (e: Error) =>
-      toast({
-        title: "Kunde inte tilldela",
-        description: e.message,
-        variant: "destructive",
-      }),
+  const { data: cities = [] } = useQuery<string[]>({
+    queryKey: ["/api/rough-planning/cities"],
   });
 
-  const handleAssign = () => {
-    const ids = tasks.filter((o) => selectedIds.has(o.id)).map((o) => o.id);
-    if (ids.length === 0 || !assignTeam) return;
-    assignMutation.mutate(ids);
+  // Rutnät.
+  const gridUrl = buildGridUrl(applied, groupBy, offset, pageSize);
+  const {
+    data,
+    isLoading,
+    isError,
+    isFetching,
+  } = useQuery<GridResponse>({
+    queryKey: ["/api/rough-planning/grid", applied, groupBy, offset, pageSize],
+    queryFn: async () => (await apiRequest("GET", gridUrl)).json(),
+    placeholderData: keepPreviousData,
+  });
+
+  const groups: GridGroup[] = data?.groups ?? [];
+  const total = data?.pagination.total ?? 0;
+  const summary = data?.summary ?? EMPTY_KPIS;
+
+  // Selektion.
+  const visibleRows = useMemo(
+    () => groups.flatMap((g) => g.tasks),
+    [groups],
+  );
+  const allVisibleSelected =
+    visibleRows.length > 0 && visibleRows.every((r) => selected.has(r.id));
+
+  const toggleRow = (row: GridTaskRow) =>
+    setSelected((prev) => {
+      const next = new Map(prev);
+      if (next.has(row.id)) next.delete(row.id);
+      else next.set(row.id, row);
+      return next;
+    });
+
+  const toggleGroup = (group: GridGroup, checked: boolean) =>
+    setSelected((prev) => {
+      const next = new Map(prev);
+      for (const t of group.tasks) {
+        if (checked) next.set(t.id, t);
+        else next.delete(t.id);
+      }
+      return next;
+    });
+
+  const toggleAllVisible = (checked: boolean) =>
+    setSelected((prev) => {
+      const next = new Map(prev);
+      for (const r of visibleRows) {
+        if (checked) next.set(r.id, r);
+        else next.delete(r.id);
+      }
+      return next;
+    });
+
+  const clearSelection = () => setSelected(new Map());
+
+  const toggleCollapse = (key: string) =>
+    setCollapsed((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+
+  const selectionKpis: GridKpis = useMemo(() => {
+    const objs = new Set<string>();
+    let pm = 0;
+    let v = 0;
+    let c = 0;
+    for (const r of Array.from(selected.values())) {
+      pm += r.productionMinutes;
+      v += r.value;
+      c += r.cost;
+      if (r.objectId) objs.add(r.objectId);
+    }
+    return {
+      productionMinutes: pm,
+      value: v,
+      cost: c,
+      taskCount: selected.size,
+      objectCount: objs.size,
+    };
+  }, [selected]);
+
+  const selectedTilldeladCount = useMemo(
+    () =>
+      Array.from(selected.values()).filter((r) => r.status === "tilldelad")
+        .length,
+    [selected],
+  );
+
+  // Filter apply/clear.
+  const applyFilters = () => {
+    const { from, to } = resolvePeriodRange(
+      draft.periodMode,
+      new Date(draft.anchor),
+      draft.rangeFrom,
+      draft.rangeTo,
+    );
+    setApplied({
+      districtIds: draft.districtIds,
+      postalCode: draft.postalCode.trim(),
+      city: draft.city,
+      from,
+      to,
+      taskTypes: draft.taskTypes,
+      statuses: draft.statuses,
+    });
+    setOffset(0);
   };
 
-  const isLoading = unplannedQuery.isLoading || teamsQuery.isLoading || districtsQuery.isLoading;
-  const isError = unplannedQuery.isError || teamsQuery.isError || districtsQuery.isError;
+  const clearFilters = () => {
+    setDraft(createDefaultFilter());
+    setApplied(EMPTY_APPLIED);
+    setOffset(0);
+  };
+
+  // Återställ sida vid grupperings-/sidstorleksbyte.
+  useEffect(() => {
+    setOffset(0);
+  }, [groupBy, pageSize]);
+
+  // Mutationer.
+  const assignMutation = useMutation({
+    mutationFn: async (vars: {
+      ids: string[];
+      week: string;
+      teamId: string;
+      kommentar: string;
+    }) => {
+      const res = await apiRequest("POST", "/api/work-orders/bulk-rough-plan", {
+        workOrderIds: vars.ids,
+        roughPlannedWeek: vars.week,
+        teamId: vars.teamId,
+        kommentar: vars.kommentar || undefined,
+      });
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Uppgifter tilldelade" });
+      queryClient.invalidateQueries({ queryKey: ["/api/rough-planning/grid"] });
+      clearSelection();
+      setAssignTarget(null);
+    },
+    onError: (err: Error) => {
+      toast({
+        title: "Kunde inte tilldela",
+        description: err.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  const revokeMutation = useMutation({
+    mutationFn: async (ids: string[]) => {
+      const res = await apiRequest("POST", "/api/rough-planning/revoke", {
+        workOrderIds: ids,
+      });
+      return res.json() as Promise<{ updated: number; skipped: number }>;
+    },
+    onSuccess: (result) => {
+      toast({
+        title: "Tilldelning återkallad",
+        description:
+          result.skipped > 0
+            ? `${result.updated} återkallade, ${result.skipped} hoppades över (ej tilldelade).`
+            : `${result.updated} återkallade.`,
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/rough-planning/grid"] });
+      clearSelection();
+      setRevokeTarget(null);
+    },
+    onError: (err: Error) => {
+      toast({
+        title: "Kunde inte återkalla",
+        description: err.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  const currentPage = Math.floor(offset / pageSize) + 1;
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  const rangeStart = total === 0 ? 0 : offset + 1;
+  const rangeEnd = Math.min(offset + pageSize, total);
 
   return (
-    <div className="space-y-6 p-4 md:p-6">
+    <div className="space-y-4 p-4 md:p-6">
       <PageHeader
-        icon={CalendarDays}
+        icon={CalendarRange}
         title="Grovplanering"
-        description="Ej planerade uppgifter — filtrera, se på kartan och tilldela till team."
-      />
+        description="Filtrera, gruppera och tilldela uppgifter till team och veckor."
+      >
+        <Select value={groupBy} onValueChange={(v) => setGroupBy(v as GroupBy)}>
+          <SelectTrigger className="w-[200px]" data-testid="select-groupby">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {GROUP_OPTIONS.map((o) => (
+              <SelectItem key={o.value} value={o.value}>
+                {o.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </PageHeader>
 
-      {/* Filter: distrikt + sök */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
-        <div className="sm:w-64">
-          <Label htmlFor="filter-district">Distrikt</Label>
-          <Select value={districtFilter} onValueChange={setDistrictFilter}>
-            <SelectTrigger id="filter-district" className="mt-1" data-testid="select-district-filter">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value={ALL_DISTRICTS}>Alla distrikt</SelectItem>
-              {districts.map((d) => (
-                <SelectItem key={d.id} value={d.id} data-testid={`option-district-${d.id}`}>
-                  {d.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="flex-1">
-          <Label htmlFor="filter-search">Sök</Label>
-          <div className="relative mt-1">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              id="filter-search"
-              value={searchInput}
-              onChange={(e) => setSearchInput(e.target.value)}
-              placeholder="Sök uppgift, adress eller objekt…"
-              className="pl-9"
-              data-testid="input-search"
-            />
-          </div>
-        </div>
+      {/* Summeringskort */}
+      <div className="grid gap-3 lg:grid-cols-2">
+        <RoughSummaryCard
+          title="Summering — enligt filter"
+          kpis={summary}
+          variant="filter"
+          testIdPrefix="summary-filter"
+        />
+        <RoughSummaryCard
+          title="Summering — markerade"
+          kpis={selectionKpis}
+          variant="selection"
+          testIdPrefix="summary-selection"
+        />
       </div>
 
-      {/* Tilldelningsrad — visas när uppgifter är markerade */}
-      {selectedCount > 0 && (
-        <div
-          className="flex flex-wrap items-center gap-3 rounded-md border bg-muted/40 px-3 py-2"
-          data-testid="assign-bar"
-        >
-          <span className="text-sm font-medium" data-testid="text-selected-count">
-            {selectedCount} markerade
-          </span>
-          <div className="flex items-center gap-2">
-            <Users className="h-4 w-4 text-muted-foreground" />
-            <Select value={assignTeam} onValueChange={setAssignTeam}>
-              <SelectTrigger className="w-[180px]" data-testid="select-assign-team">
-                <SelectValue placeholder="Välj team" />
-              </SelectTrigger>
-              <SelectContent>
-                {teams.map((t) => (
-                  <SelectItem key={t.id} value={t.id} data-testid={`option-team-${t.id}`}>
-                    {t.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <Select value={assignWeek} onValueChange={setAssignWeek}>
-            <SelectTrigger className="w-[160px]" data-testid="select-assign-week">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {weekOptions.map((w) => (
-                <SelectItem key={w.value} value={w.value} data-testid={`option-week-${w.value}`}>
-                  {w.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Button
-            size="sm"
-            disabled={!assignTeam || assignMutation.isPending}
-            onClick={handleAssign}
-            data-testid="button-assign"
-          >
-            {assignMutation.isPending && <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />}
-            Tilldela team
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setSelectedIds(new Set())}
-            data-testid="button-clear-selection"
-          >
-            Avmarkera
-          </Button>
-        </div>
-      )}
+      {/* Filterpanel */}
+      <RoughFilterPanel
+        value={draft}
+        onChange={setDraft}
+        districts={districts.map((d) => ({ id: d.id, name: d.name }))}
+        cities={cities}
+        onApply={applyFilters}
+        onClear={clearFilters}
+        isFetching={isFetching}
+      />
 
-      <QueryState
-        isLoading={isLoading}
-        isError={isError}
-        isEmpty={false}
-        error={(unplannedQuery.error || teamsQuery.error || districtsQuery.error) as Error | null}
-        onRetry={() => {
-          unplannedQuery.refetch();
-          teamsQuery.refetch();
-          districtsQuery.refetch();
-        }}
-      >
-        {/* Uppgiftslista */}
-        <section className="space-y-3">
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="text-lg font-semibold" data-testid="text-list-title">
-                Ej planerade uppgifter ({tasks.length})
-              </h2>
-              {truncated && (
-                <p className="text-xs text-muted-foreground" data-testid="text-truncation-hint">
-                  Visar de första {unplanned.length} av {totalMatching} — förfina sökningen för att se fler.
-                </p>
-              )}
-            </div>
-            {tasks.length > 0 && (
-              <label className="flex cursor-pointer items-center gap-2 text-sm text-muted-foreground">
-                <Checkbox
-                  checked={allSelected ? true : someSelected ? "indeterminate" : false}
-                  onCheckedChange={(c) => toggleAll(c === true)}
-                  data-testid="checkbox-select-all"
-                />
-                Markera alla
-              </label>
+      {/* Verktygsrad */}
+      <Card>
+        <CardContent className="flex flex-wrap items-center justify-between gap-3 p-3">
+          <div className="flex items-center gap-2 text-sm">
+            <span className="text-muted-foreground" data-testid="text-selection-count">
+              {formatCount(selected.size)} markerade
+            </span>
+            {selected.size > 0 && (
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={clearSelection}
+                data-testid="button-clear-selection"
+              >
+                <XCircle className="h-4 w-4" />
+                Avmarkera alla
+              </Button>
             )}
           </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={selectedTilldeladCount === 0}
+              onClick={() =>
+                setRevokeTarget({
+                  ids: Array.from(selected.values())
+                    .filter((r) => r.status === "tilldelad")
+                    .map((r) => r.id),
+                  label: `${selectedTilldeladCount} markerade`,
+                })
+              }
+              data-testid="button-revoke-selected"
+            >
+              <RotateCcw className="h-4 w-4" />
+              Återkalla tilldelning
+            </Button>
+            <Button
+              size="sm"
+              disabled={selected.size === 0}
+              onClick={() => setAssignTarget(Array.from(selected.values()))}
+              data-testid="button-assign-selected"
+            >
+              <Users className="h-4 w-4" />
+              Tilldela
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
 
-          {tasks.length === 0 ? (
-            <p className="py-8 text-center text-sm text-muted-foreground" data-testid="text-empty-list">
-              {search || districtFilter !== ALL_DISTRICTS
-                ? "Inga uppgifter matchar filtret."
-                : "Det finns inga ej planerade uppgifter."}
+      {/* Rutnät */}
+      {isLoading ? (
+        <div className="flex items-center justify-center rounded-lg border py-16 text-muted-foreground">
+          <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+          Laddar uppgifter…
+        </div>
+      ) : isError ? (
+        <div className="rounded-lg border py-16 text-center text-destructive" data-testid="text-grid-error">
+          Kunde inte ladda uppgifter. Försök igen.
+        </div>
+      ) : (
+        <>
+          {data?.truncated && (
+            <p className="text-xs text-warning" data-testid="text-truncated-warning">
+              Visar de första 10 000 uppgifterna. Förfina filtret för fullständigt resultat.
             </p>
-          ) : (
-            <div className="space-y-2">
-              {tasks.map((o) => {
-                const selected = selectedIds.has(o.id);
-                return (
-                  <div
-                    key={o.id}
-                    role="button"
-                    tabIndex={0}
-                    onClick={() => toggleOne(o.id, !selected)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" || e.key === " ") {
-                        e.preventDefault();
-                        toggleOne(o.id, !selected);
-                      }
-                    }}
-                    className="hover-elevate flex items-start gap-3 rounded-md border p-3"
-                    data-state={selected ? "selected" : undefined}
-                    data-testid={`row-uppgift-${o.id}`}
-                  >
-                    <div className="pointer-events-none pt-0.5">
-                      <Checkbox checked={selected} aria-label={`Markera ${o.title}`} />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="font-medium" data-testid={`text-uppgift-title-${o.id}`}>
-                        {o.externalReference && (
-                          <span className="mr-2 text-muted-foreground">
-                            {o.externalReference}
-                          </span>
-                        )}
-                        {o.title || o.id.slice(0, 8)}
-                      </div>
-                      <div className="mt-1 flex items-center gap-1.5 text-sm text-muted-foreground" data-testid={`text-uppgift-location-${o.id}`}>
-                        <MapPin className="h-3.5 w-3.5 shrink-0" />
-                        {taskLocation(o)}
-                      </div>
-                      <div className="flex items-center gap-1.5 text-sm text-muted-foreground" data-testid={`text-uppgift-delivery-${o.id}`}>
-                        <CalendarDays className="h-3.5 w-3.5 shrink-0" />
-                        Senast: {latestDeliveryLabel(o)}
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
+          )}
+          <RoughGridTable
+            groups={groups}
+            grouping={data?.grouping ?? groupBy}
+            selected={selected}
+            collapsed={collapsed}
+            onToggleRow={toggleRow}
+            onToggleGroup={toggleGroup}
+            onToggleCollapse={toggleCollapse}
+            onToggleAllVisible={toggleAllVisible}
+            allVisibleSelected={allVisibleSelected}
+            onAssignRow={(row) => setAssignTarget([row])}
+            onRevokeRow={(row) =>
+              setRevokeTarget({
+                ids: [row.id],
+                label: row.objectName ?? row.title ?? "uppgift",
+              })
+            }
+          />
+
+          {/* Paginering + legend */}
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-3 text-sm text-muted-foreground">
+              <span data-testid="text-pagination-range">
+                Visar {formatCount(rangeStart)}–{formatCount(rangeEnd)} av{" "}
+                {formatCount(total)} uppgifter
+              </span>
+              <Select
+                value={String(pageSize)}
+                onValueChange={(v) => setPageSize(Number(v))}
+              >
+                <SelectTrigger className="h-8 w-[110px]" data-testid="select-pagesize">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {[20, 50, 100].map((n) => (
+                    <SelectItem key={n} value={String(n)}>
+                      {n}/sida
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
-          )}
-        </section>
 
-        {/* Karta */}
-        <section className="mt-6 space-y-3">
-          <h2 className="text-lg font-semibold">Karta</h2>
-          {pins.length === 0 ? (
-            <p className="rounded-md border py-8 text-center text-sm text-muted-foreground" data-testid="text-map-empty">
-              Inga uppgifter med koordinater att visa på kartan.
-            </p>
-          ) : (
-            <UnplannedTasksMap pins={pins} />
-          )}
-        </section>
-      </QueryState>
+            {totalPages > 1 && (
+              <div className="flex items-center gap-1">
+                <Button
+                  size="icon"
+                  variant="outline"
+                  className="h-8 w-8"
+                  disabled={currentPage <= 1}
+                  onClick={() => setOffset(Math.max(0, offset - pageSize))}
+                  data-testid="button-page-prev"
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </Button>
+                {pageWindow(currentPage, totalPages).map((p, i) =>
+                  p === "ellipsis" ? (
+                    <span key={`e-${i}`} className="px-1 text-muted-foreground">
+                      …
+                    </span>
+                  ) : (
+                    <Button
+                      key={p}
+                      size="icon"
+                      variant={p === currentPage ? "default" : "outline"}
+                      className="h-8 w-8 tabular-nums"
+                      onClick={() => setOffset((p - 1) * pageSize)}
+                      data-testid={`button-page-${p}`}
+                    >
+                      {p}
+                    </Button>
+                  ),
+                )}
+                <Button
+                  size="icon"
+                  variant="outline"
+                  className="h-8 w-8"
+                  disabled={currentPage >= totalPages}
+                  onClick={() => setOffset(offset + pageSize)}
+                  data-testid="button-page-next"
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+              </div>
+            )}
+          </div>
+        </>
+      )}
+
+      {/* Statuslegend */}
+      <div className="flex flex-wrap items-center gap-4 rounded-lg border bg-muted/30 p-3">
+        <span className="text-xs font-medium text-muted-foreground">Status:</span>
+        {ROUGH_STATUS_ORDER.map((s) => (
+          <span key={s} className="flex items-center gap-1.5 text-xs">
+            <span
+              className={
+                "inline-block h-2.5 w-2.5 rounded-full " + ROUGH_STATUS_META[s].dot
+              }
+            />
+            {ROUGH_STATUS_META[s].label}
+          </span>
+        ))}
+      </div>
+
+      {/* Tilldela-modal */}
+      <RoughAssignModal
+        open={assignTarget !== null}
+        onOpenChange={(o) => !o && setAssignTarget(null)}
+        selectedRows={assignTarget ?? []}
+        teams={teams}
+        isPending={assignMutation.isPending}
+        onSubmit={({ teamId, week, kommentar }) =>
+          assignMutation.mutate({
+            ids: (assignTarget ?? []).map((r) => r.id),
+            week,
+            teamId,
+            kommentar,
+          })
+        }
+      />
+
+      {/* Återkalla-bekräftelse */}
+      <AlertDialog
+        open={revokeTarget !== null}
+        onOpenChange={(o) => !o && setRevokeTarget(null)}
+      >
+        <AlertDialogContent data-testid="dialog-revoke">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Återkalla tilldelning?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Detta tar bort team, vecka och kommentar för {revokeTarget?.label}.
+              Endast uppgifter med status “Tilldelad” påverkas — utförda eller
+              avvikande uppgifter lämnas orörda.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid="button-revoke-cancel">
+              Avbryt
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => revokeTarget && revokeMutation.mutate(revokeTarget.ids)}
+              data-testid="button-revoke-confirm"
+            >
+              Återkalla
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

@@ -810,6 +810,7 @@ const bulkRoughPlanSchema = z.object({
   districtId: z.string().min(1).nullable().optional(),
   teamId: z.string().min(1).nullable().optional(),
   autoSuggestDistrict: z.boolean().optional(),
+  kommentar: z.string().max(250).optional(),
 });
 
 type BulkRoughPlanStatus = "planned" | "error";
@@ -832,6 +833,7 @@ app.post("/api/work-orders/bulk-rough-plan", requirePlanner, asyncHandler(async 
   const { workOrderIds, roughPlannedWeek, autoSuggestDistrict } = parsed.data;
   const manualDistrictId = parsed.data.districtId ?? null;
   const teamId = parsed.data.teamId ?? null;
+  const kommentar = parsed.data.kommentar?.trim() || null;
 
   // Validera manuellt valt distrikt mot tenant innan vi rör några ordrar.
   if (manualDistrictId) {
@@ -884,6 +886,7 @@ app.post("/api/work-orders/bulk-rough-plan", requirePlanner, asyncHandler(async 
       const updateData: Record<string, unknown> = { roughPlannedWeek };
       if (resolvedDistrictId) updateData.districtId = resolvedDistrictId;
       if (teamId) updateData.teamId = teamId;
+      if (kommentar) updateData.plannedNotes = kommentar;
       const updated = await storage.updateWorkOrder(id, updateData);
       if (!updated) {
         results.push({ workOrderId: id, status: "error", districtId: resolvedDistrictId, districtSource, message: "Uppdatering misslyckades" });
