@@ -82,7 +82,6 @@ export function getGrunddataItems(t: (key: string, fallback: string) => string, 
   const useI18n = lang === "en";
   return [
     { title: "Kunder", url: "/customers", icon: Building, description: "Översikt av kunder, kluster och objekt" },
-    { title: l("nav.new-customer"), url: "/onboarding", icon: Building2, description: l("nav.new-customer.desc"), adminOnly: true },
     { title: useI18n ? l("nav.objects") : t("object_plural", l("nav.objects")), url: "/objects", icon: Building2, description: l("nav.objects.desc") },
     { title: "Objekt utan koordinater", url: "/objects/missing-coordinates", icon: Building2, description: "Lista över objekt som saknar lat/lng och kan geokodas på nytt" },
     { title: useI18n ? l("nav.resources") : t("resource_plural", l("nav.resources")), url: "/resources", icon: Users, description: l("nav.resources.desc") },
