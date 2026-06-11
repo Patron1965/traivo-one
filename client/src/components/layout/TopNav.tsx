@@ -17,6 +17,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
@@ -159,11 +160,25 @@ function NavDropdown({ label, items, icon: Icon, colorClass, badges, isFavorite,
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="w-72">
-        {items.map((item) => {
+        {items.flatMap((item, idx) => {
+          const prev = idx > 0 ? items[idx - 1] : undefined;
+          const sectionChanged = item.subSection !== prev?.subSection;
           const badgeKey = BADGE_URL_MAP[item.url];
           const badgeCount = badgeKey ? badges[badgeKey] : 0;
           const fav = isFavorite(item.url);
-          return (
+          const prefix = [];
+          if (sectionChanged && idx > 0) {
+            prefix.push(<DropdownMenuSeparator key={`sep-${idx}`} />);
+          }
+          if (sectionChanged && item.subSection) {
+            prefix.push(
+              <DropdownMenuLabel key={`lbl-${item.subSection}`} className="px-3 py-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                {item.subSection}
+              </DropdownMenuLabel>
+            );
+          }
+          return [
+            ...prefix,
             <DropdownMenuItem key={item.url} asChild>
               <Link
                 href={item.url}
@@ -201,8 +216,8 @@ function NavDropdown({ label, items, icon: Icon, colorClass, badges, isFavorite,
                   </button>
                 </div>
               </Link>
-            </DropdownMenuItem>
-          );
+            </DropdownMenuItem>,
+          ];
         })}
       </DropdownMenuContent>
     </DropdownMenu>

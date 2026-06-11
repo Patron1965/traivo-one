@@ -59,6 +59,9 @@ export interface NavItem {
    * meny-grupp som är öppen för bredare roller (t.ex. Grunddata), men där
    * själva åtgärden ändå är admin-only. */
   adminOnly?: boolean;
+  /** Visuell undersektion i dropdown-menyn. Poster med samma värde grupperas
+   * under en etikett med avdelare. Poster utan värde visas utan etikett. */
+  subSection?: string;
 }
 
 export interface NavGroup {
@@ -108,11 +111,11 @@ export function getOrdrarItems(t: (key: string, fallback: string) => string, tl?
 export function getPlaneringItems(tl?: (key: string) => string): NavItem[] {
   const l = tl || svFallback;
   return [
+    { title: l("nav.week-planner"), url: "/planner", icon: Calendar, description: l("nav.week-planner.desc"), subSection: "1 Planering" },
+    { title: "Veckoplan (168h)", url: "/veckoplan", icon: CalendarDays, description: "Fullständigt 168h-schema per team och vecka", subSection: "1 Planering" },
+    { title: "Grovplanering", url: "/grovplanering", icon: CalendarDays, description: "Veckoöversikt: behov vs kapacitet per team, ordervärde, status och geografisk fördelning per distrikt", subSection: "1 Planering" },
     { title: "Kontrollpanel", url: "/control-tower", icon: Gauge, description: "Heatmap med beläggning och SLA-risk" },
     { title: "Produktionsledare", url: "/enhetsansvarig", icon: Target, description: "Dagsproduktion, break-even per resurs och avvikelseprocess" },
-    { title: l("nav.week-planner"), url: "/planner", icon: Calendar, description: l("nav.week-planner.desc") },
-    { title: "Veckoplan (168h)", url: "/veckoplan", icon: CalendarDays, description: "Fullständigt 168h-schema per team och vecka" },
-    { title: "Grovplanering", url: "/grovplanering", icon: CalendarDays, description: "Veckoöversikt: behov vs kapacitet per team, ordervärde, status och geografisk fördelning per distrikt" },
     { title: "Distrikt", url: "/distrikt", icon: Globe, description: "Hantera geografiska distrikt och zoner (postnummer/polygon)" },
     { title: l("nav.route-planning"), url: "/routes", icon: Map, description: l("nav.route-planning.desc") },
     { title: l("nav.planner-map"), url: "/planner-map", icon: MapPin, description: l("nav.planner-map.desc") },
