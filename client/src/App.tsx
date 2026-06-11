@@ -128,6 +128,7 @@ const HistoricalMapPage = lazy(() => import("@/pages/HistoricalMapPage"));
 const ChecklistTemplatesPage = lazy(() => import("@/pages/ChecklistTemplatesPage"));
 const UserManagementPage = lazy(() => import("@/pages/UserManagementPage"));
 const TenantConfigPage = lazy(() => import("@/pages/TenantConfigPage"));
+const ExecutionTypesPage = lazy(() => import("@/pages/ExecutionTypesPage"));
 const WorkSessionsPage = lazy(() => import("@/pages/WorkSessionsPage"));
 const AnnualPlanningPage = lazy(() => import("@/pages/AnnualPlanningPage"));
 const PredictiveMaintenancePage = lazy(() => import("@/pages/PredictiveMaintenancePage"));
@@ -196,6 +197,7 @@ function Router() {
         <Route path="/cases">{() => <ProtectedRoute component={CasesPage} path="/cases" />}</Route>
         <Route path="/portal-messages">{() => <ProtectedRoute component={PortalMessagesPage} path="/portal-messages" />}</Route>
         <Route path="/booking-slots">{() => <ProtectedRoute component={BookingSlotsAdminPage} path="/booking-slots" />}</Route>
+        <Route path="/utforandetyper">{() => <ProtectedRoute component={ExecutionTypesPage} path="/utforandetyper" />}</Route>
         <Route path="/import">{() => <ProtectedRoute component={ImportPage} path="/import" />}</Route>
         <Route path="/objektmall-import">{() => <ProtectedRoute component={ObjektmallImportPage} path="/objektmall-import" />}</Route>
         <Route path="/import-templates">{() => <ProtectedRoute component={ImportTemplatesPage} path="/import-templates" />}</Route>

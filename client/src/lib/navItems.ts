@@ -120,6 +120,7 @@ export function getPlaneringItems(tl?: (key: string) => string): NavItem[] {
     { title: l("nav.historical-map"), url: "/historical-map", icon: History, description: l("nav.historical-map.desc") },
     { title: l("nav.production-control"), url: "/planning-parameters", icon: Settings2, description: l("nav.production-control.desc") },
     { title: l("nav.planner-search-filters"), url: "/planner-search-filters", icon: Sliders, description: l("nav.planner-search-filters.desc") },
+    { title: "Utförandetyper", url: "/utforandetyper", icon: ListChecks, description: "Hantera utförandetyper och automatiska förberedelseuppgifter per typ" },
   ];
 }
 

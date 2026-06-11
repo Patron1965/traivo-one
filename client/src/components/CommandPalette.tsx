@@ -53,6 +53,7 @@ import {
   Loader2,
   Globe,
   ExternalLink,
+  ListChecks,
 } from "lucide-react";
 
 interface NavItemConfig {
@@ -85,6 +86,7 @@ const allNavItems: NavItemConfig[] = [
   { title: "Fortnox", url: "/fortnox", icon: Receipt, category: "System", keywords: ["faktura", "bokföring", "export"] },
   { title: "Produktionsstyrning", url: "/planning-parameters", icon: Settings2, category: "Planering", keywords: ["sla", "tid", "parameter"] },
   { title: "Sparade sökmönster", url: "/planner-search-filters", icon: Sliders, category: "Planering", keywords: ["filter", "sök", "planerare", "sparat"] },
+  { title: "Utförandetyper", url: "/utforandetyper", icon: ListChecks, category: "Planering", keywords: ["utförandetyp", "pre-task", "förberedelseuppgift", "execution"] },
   { title: "Artikelkomponenter (BOM)", url: "/article-components", icon: Package, category: "Grunddata", keywords: ["bom", "struktur", "komponent", "tilg"] },
   { title: "Omräkningslogg (faktura)", url: "/invoice-recalculation-log", icon: Receipt, category: "Analys", keywords: ["faktura", "omräkning", "frozen", "spårbarhet", "bokföring", "ekonomi"] },
   { title: "Importera data", url: "/import", icon: Upload, category: "Grunddata", keywords: ["csv", "fil", "ladda upp"] },
