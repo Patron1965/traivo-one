@@ -489,7 +489,7 @@ export interface IStorage {
    */
   getWorkOrders(tenantId: string, startDate?: Date, endDate?: Date, includeUnscheduled?: boolean, limit?: number): Promise<WorkOrderWithObject[]>;
   /** Fritextsökning av aktiva ordrar för planerarens "Hitta order" — utan datumgränser, max `limit` träffar. */
-  searchActiveWorkOrders(tenantId: string, query: string, limit?: number): Promise<Array<{ id: string; title: string | null; objectName: string | null; objectAddress: string | null; customerName: string | null; scheduledDate: string | null; resourceId: string | null; teamId: string | null; orderStatus: string }>>;
+  searchActiveWorkOrders(tenantId: string, query: string, limit?: number): Promise<Array<{ id: string; title: string | null; objectName: string | null; objectAddress: string | null; customerName: string | null; externalReference: string | null; executionCode: string | null; scheduledDate: string | null; resourceId: string | null; teamId: string | null; orderStatus: string }>>;
   getWorkOrdersByExternalRefs(tenantId: string, refs: string[]): Promise<Array<{ id: string; externalReference: string | null; modusId: string | null; metadata: unknown }>>;
   /**
    * Grovplanering-aggregat per vecka (Task #795). Returnerar färdiga summor per
@@ -3196,6 +3196,8 @@ export class DatabaseStorage implements IStorage {
       objectName: objects.name,
       objectAddress: objects.address,
       customerName: customers.name,
+      externalReference: workOrders.externalReference,
+      executionCode: workOrders.executionCode,
       scheduledDate: workOrders.scheduledDate,
       resourceId: workOrders.resourceId,
       teamId: workOrders.teamId,
@@ -3212,7 +3214,9 @@ export class DatabaseStorage implements IStorage {
         sql`LOWER(COALESCE(${workOrders.title}, '')) LIKE ${searchTerm}`,
         sql`LOWER(COALESCE(${objects.name}, '')) LIKE ${searchTerm}`,
         sql`LOWER(COALESCE(${objects.address}, '')) LIKE ${searchTerm}`,
-        sql`LOWER(COALESCE(${customers.name}, '')) LIKE ${searchTerm}`
+        sql`LOWER(COALESCE(${customers.name}, '')) LIKE ${searchTerm}`,
+        sql`LOWER(COALESCE(${workOrders.externalReference}, '')) LIKE ${searchTerm}`,
+        sql`LOWER(COALESCE(${workOrders.executionCode}, '')) LIKE ${searchTerm}`
       )
     ))
     .orderBy(desc(workOrders.scheduledDate))

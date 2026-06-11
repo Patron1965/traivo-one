@@ -74,11 +74,52 @@ type WorkOrderSearchHit = {
   objectName: string | null;
   objectAddress: string | null;
   customerName: string | null;
+  externalReference: string | null;
+  executionCode: string | null;
   scheduledDate: string | null;
   resourceId: string | null;
   teamId: string | null;
   orderStatus: string;
 };
+
+// Markerar (highlightar) den del av texten som matchar sökfrågan, så att
+// planeraren ser VARFÖR en träff returnerades. Skiftlägesokänslig.
+function highlightMatch(text: string, query: string): React.ReactNode {
+  const q = query.trim();
+  if (!q) return text;
+  const lower = text.toLowerCase();
+  const idx = lower.indexOf(q.toLowerCase());
+  if (idx === -1) return text;
+  return (
+    <>
+      {text.slice(0, idx)}
+      <mark className="bg-warning/40 text-foreground rounded-sm px-0.5">
+        {text.slice(idx, idx + q.length)}
+      </mark>
+      {text.slice(idx + q.length)}
+    </>
+  );
+}
+
+// Returnerar de fält som matchar sökfrågan (utöver titel/objekt som redan visas),
+// så att vi kan visa en liten "Matchar: …"-rad med highlightad fragment.
+function matchingFields(job: WorkOrderSearchHit, query: string): Array<{ label: string; value: string }> {
+  const q = query.trim().toLowerCase();
+  if (!q) return [];
+  const out: Array<{ label: string; value: string }> = [];
+  const candidates: Array<{ label: string; value: string | null }> = [
+    { label: "Kund", value: job.customerName },
+    { label: "Adress", value: job.objectAddress },
+    { label: "Referensnr", value: job.externalReference },
+    { label: "Kod", value: job.executionCode },
+  ];
+  for (const c of candidates) {
+    if (c.value && c.value.toLowerCase().includes(q)) {
+      out.push({ label: c.label, value: c.value });
+    }
+  }
+  return out;
+}
 
 function PlannerOrderSearch({
   resources,
@@ -138,7 +179,7 @@ function PlannerOrderSearch({
         <input
           ref={inputRef}
           className="w-full h-8 pl-8 pr-8 text-sm border border-input rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-ring"
-          placeholder="Sök order på titel, objekt, adress, kund…"
+          placeholder="Sök order på titel, objekt, adress, kund, referensnr, kod…"
           value={query}
           onChange={e => setQuery(e.target.value)}
           data-testid="input-order-search"
@@ -160,6 +201,8 @@ function PlannerOrderSearch({
             const resource = job.resourceId ? resources.find(r => r.id === job.resourceId) : null;
             const team = job.teamId ? teamsData.find(t => t.id === job.teamId!) : null;
             const dateStr = job.scheduledDate ? String(job.scheduledDate).split("T")[0] : null;
+            const titleText = job.title || job.objectName || job.id.slice(0, 8);
+            const matches = matchingFields(job, debouncedQuery);
             return (
               <button
                 key={job.id}
@@ -170,13 +213,26 @@ function PlannerOrderSearch({
                 }}
                 data-testid={`button-order-search-result-${job.id}`}
               >
-                <div className="font-medium truncate">{job.title || job.objectName || job.id.slice(0, 8)}</div>
+                <div className="font-medium truncate" data-testid={`text-order-search-title-${job.id}`}>
+                  {highlightMatch(titleText, debouncedQuery)}
+                </div>
                 <div className="text-xs text-muted-foreground truncate">
-                  {job.objectName ? `${job.objectName} · ` : ""}
+                  {job.objectName ? <>{highlightMatch(job.objectName, debouncedQuery)}{" · "}</> : ""}
                   {dateStr ? format(new Date(dateStr + "T00:00:00"), "d MMM", { locale: sv }) : "Oschemalagd"}
                   {(resource || team) ? ` · ${resource?.name || team?.name}` : ""}
-                  {job.customerName ? ` · ${job.customerName}` : ""}
+                  {job.customerName ? <>{" · "}{highlightMatch(job.customerName, debouncedQuery)}</> : ""}
                 </div>
+                {matches.length > 0 && (
+                  <div className="text-xs text-muted-foreground truncate mt-0.5" data-testid={`text-order-search-matches-${job.id}`}>
+                    <span className="opacity-70">Matchar: </span>
+                    {matches.map((m, i) => (
+                      <span key={m.label}>
+                        {i > 0 ? ", " : ""}
+                        {m.label} <span className="text-foreground">{highlightMatch(m.value, debouncedQuery)}</span>
+                      </span>
+                    ))}
+                  </div>
+                )}
               </button>
             );
           })}
