@@ -113,7 +113,7 @@ export function getPlaneringItems(tl?: (key: string) => string): NavItem[] {
   const l = tl || svFallback;
   return [
     { title: l("nav.week-planner"), url: "/planner", icon: Calendar, description: l("nav.week-planner.desc"), subSection: "1 Planering" },
-    { title: "Veckoplan (168h)", url: "/veckoplan", icon: CalendarDays, description: "Fullständigt 168h-schema per team och vecka", subSection: "1 Planering" },
+    { title: "Veckoplanering", url: "/veckoplanering", icon: CalendarDays, description: "168h-veckoschema per team: ej planerade jobb, kalender, ruttoptimerad tur och summering", subSection: "1 Planering" },
     { title: "Grovplanering", url: "/grovplanering", icon: CalendarDays, description: "Ej planerade uppgifter: filtrera per distrikt, se på kartan och tilldela till team", subSection: "1 Planering" },
     { title: "Kontrollpanel", url: "/control-tower", icon: Gauge, description: "Heatmap med beläggning och SLA-risk" },
     { title: "Produktionsledare", url: "/enhetsansvarig", icon: Target, description: "Dagsproduktion, break-even per resurs och avvikelseprocess" },

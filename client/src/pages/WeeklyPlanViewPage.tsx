@@ -20,6 +20,7 @@ import {
   Home,
   Plus,
   RefreshCw,
+  Sparkles,
   AlertTriangle,
   Info,
   CheckCircle2,
@@ -44,6 +45,12 @@ import {
   Pencil,
   Save,
   X,
+  PanelLeftClose,
+  PanelLeftOpen,
+  PanelRightClose,
+  PanelRightOpen,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/button";
@@ -91,6 +98,11 @@ import type {
 } from "@shared/schema";
 import { useLocation } from "wouter";
 import { RouteDayMap, type RouteMapJob, type RouteMapCommute } from "@/components/ui/map";
+import {
+  UnplannedPanel,
+  CANDIDATE_DND_KEY,
+  type WeeklyPlanCandidate,
+} from "@/components/weeklyplan/UnplannedPanel";
 
 const WEEK_TOTAL_MINUTES = 168 * 60;
 const HOUR_PX = 28;
@@ -280,6 +292,9 @@ export default function WeeklyPlanViewPage() {
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
   const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null);
   const [egentidId, setEgentidId] = useState<string | null>(null);
+  const [leftCollapsed, setLeftCollapsed] = useState(false);
+  const [rightCollapsed, setRightCollapsed] = useState(false);
+  const [bottomCollapsed, setBottomCollapsed] = useState(false);
   const [, setLocation] = useLocation();
 
   const { data: teams = [], isLoading: teamsLoading } = useQuery<Team[]>({
@@ -298,6 +313,12 @@ export default function WeeklyPlanViewPage() {
   const detailKey = planId ? `/api/weekly-plans/${planId}` : "";
   const { data: plan, isLoading: detailLoading } = useQuery<WeeklyPlanDetail>({
     queryKey: [detailKey],
+    enabled: !!planId,
+  });
+
+  const candidatesKey = planId ? `/api/weekly-plans/${planId}/candidates` : "";
+  const { data: candidates = [], isLoading: candidatesLoading } = useQuery<WeeklyPlanCandidate[]>({
+    queryKey: [candidatesKey],
     enabled: !!planId,
   });
 
@@ -322,6 +343,7 @@ export default function WeeklyPlanViewPage() {
 
   const invalidatePlan = () => {
     if (detailKey) queryClient.invalidateQueries({ queryKey: [detailKey] });
+    if (candidatesKey) queryClient.invalidateQueries({ queryKey: [candidatesKey] });
     queryClient.invalidateQueries({ queryKey: [listKey] });
   };
 
@@ -352,6 +374,49 @@ export default function WeeklyPlanViewPage() {
       toast({ title: "Planen omräknad" });
     },
     onError: (e: Error) => toast({ title: "Omräkning misslyckades", description: e.message, variant: "destructive" }),
+  });
+
+  const addCandidates = useMutation({
+    mutationFn: async (vars: { ids: string[]; date: string }) => {
+      let added = 0;
+      let firstError: string | null = null;
+      for (const taskId of vars.ids) {
+        try {
+          await apiRequest("POST", `/api/weekly-plans/${planId}/tasks`, {
+            taskId,
+            teamId: effectiveTeamId,
+            plannedDate: vars.date,
+          });
+          added++;
+        } catch (err) {
+          if (!firstError) firstError = err instanceof Error ? err.message : String(err);
+        }
+      }
+      return { added, total: vars.ids.length, firstError };
+    },
+    onSuccess: (res) => {
+      if (res.added === 0) {
+        toast({
+          title: "Kunde inte lägga till jobb",
+          description: res.firstError ?? undefined,
+          variant: "destructive",
+        });
+        return;
+      }
+      if (res.added < res.total) {
+        toast({
+          title: `${res.added} av ${res.total} jobb tillagda`,
+          description: res.firstError ?? "Vissa jobb kunde inte läggas till.",
+          variant: "destructive",
+        });
+        return;
+      }
+      toast({ title: res.total > 1 ? `${res.total} jobb tillagda i planen` : "Jobb tillagt i planen" });
+    },
+    onError: (e: Error) => toast({ title: "Kunde inte lägga till jobb", description: e.message, variant: "destructive" }),
+    // Refresh both plan and candidate lists regardless of partial failure so the
+    // panel never shows already-added jobs as still unplanned.
+    onSettled: () => invalidatePlan(),
   });
 
   const moveBlock = useMutation({
@@ -403,6 +468,18 @@ export default function WeeklyPlanViewPage() {
 
   const handleDropOnDay = (date: string, e: React.DragEvent) => {
     e.preventDefault();
+    // Ny kandidat från "Ej planerade" — har egen payload-nyckel.
+    const candidateRaw = e.dataTransfer.getData(CANDIDATE_DND_KEY);
+    if (candidateRaw) {
+      try {
+        const parsed = JSON.parse(candidateRaw) as { id?: string };
+        if (parsed?.id) addCandidates.mutate({ ids: [parsed.id], date });
+      } catch {
+        /* ogiltig payload — ignorera */
+      }
+      return;
+    }
+    // Annars: flytt av befintligt block.
     const id = e.dataTransfer.getData("text/plain");
     const block = blocks.find((b) => b.id === id);
     if (!block || block.locked) return;
@@ -427,6 +504,9 @@ export default function WeeklyPlanViewPage() {
   const restWeekend = plan?.personalTasks?.find((p) => p.timeCategory === "rest_weekend");
 
   const activeWarnings = (plan?.warnings ?? []).filter((w) => !w.resolved);
+  const selectedDayLabel = selectedDay
+    ? format(new Date(`${selectedDay}T00:00:00`), "EEEE d MMM", { locale: sv })
+    : null;
 
   // Serverberäknade nyckeltal — använd berikat antal från detalj-endpointen.
   const taskCount = plan?.taskCount ?? plan?.tasks?.length ?? 0;
@@ -599,10 +679,15 @@ export default function WeeklyPlanViewPage() {
               className="gap-1.5"
               onClick={() => recompute.mutate()}
               disabled={recompute.isPending}
+              title="Räknar om schemat: restid, nyckeltal och varningar för planerade block. Fördelar inte oplanerade jobb automatiskt."
               data-testid="button-recompute"
             >
-              <RefreshCw className={`h-4 w-4 ${recompute.isPending ? "animate-spin" : ""}`} />
-              Räkna om
+              {recompute.isPending ? (
+                <RefreshCw className="h-4 w-4 animate-spin" />
+              ) : (
+                <Sparkles className="h-4 w-4" />
+              )}
+              Automatisk veckoplanering
             </Button>
           )}
         </div>
@@ -685,73 +770,159 @@ export default function WeeklyPlanViewPage() {
 
         {plan && (
           <>
-            {/* Veckoschema — 168h rutnät */}
-            <Card>
-              <CardContent className="pt-6">
-                <WeekCalendar
-                  dayDates={dayDates}
-                  blocks={blocks}
-                  selectedDay={selectedDay}
-                  onSelectDay={setSelectedDay}
-                  onDropOnDay={handleDropOnDay}
-                  onSelectBlock={(b) => setEditing(b)}
-                />
-                <Legend />
-              </CardContent>
-            </Card>
+            {/* Bilaga C: tre kolumner [Ej planerade | Kalender | Ruttoptimerad tur] */}
+            <div className="flex items-stretch gap-3">
+              {/* VÄNSTER — Ej planerade */}
+              {leftCollapsed ? (
+                <button
+                  type="button"
+                  onClick={() => setLeftCollapsed(false)}
+                  className="shrink-0 w-9 rounded-md border border-border bg-card flex flex-col items-center gap-2 py-2 hover-elevate"
+                  title="Visa Ej planerade"
+                  data-testid="rail-expand-left"
+                >
+                  <PanelLeftOpen className="h-4 w-4 text-muted-foreground" />
+                  <span className="text-xs font-medium [writing-mode:vertical-rl] rotate-180 whitespace-nowrap">
+                    Ej planerade{candidates.length > 0 ? ` (${candidates.length})` : ""}
+                  </span>
+                </button>
+              ) : (
+                <Card className="shrink-0 w-72 overflow-hidden flex flex-col">
+                  <div className="flex items-center justify-between px-2 py-1 border-b border-border shrink-0">
+                    <span className="text-xs font-semibold text-muted-foreground">
+                      Ej planerade{candidates.length > 0 ? ` (${candidates.length})` : ""}
+                    </span>
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      className="h-6 w-6"
+                      onClick={() => setLeftCollapsed(true)}
+                      title="Dölj panel"
+                      data-testid="rail-collapse-left"
+                    >
+                      <PanelLeftClose className="h-4 w-4" />
+                    </Button>
+                  </div>
+                  <div className="flex-1 min-h-0">
+                    <UnplannedPanel
+                      candidates={candidates}
+                      loading={candidatesLoading}
+                      selectedDayLabel={selectedDayLabel}
+                      onAddCandidates={(ids) =>
+                        selectedDay && addCandidates.mutate({ ids, date: selectedDay })
+                      }
+                      addPending={addCandidates.isPending}
+                    />
+                  </div>
+                </Card>
+              )}
 
-            {/* Karta & dagsdetalj */}
-            <div className="grid grid-cols-1 xl:grid-cols-5 gap-4">
-              <Card className="xl:col-span-3">
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-base flex items-center gap-2">
-                    <MapIcon className="h-4 w-4" />
-                    Karta – jobb &amp; rutt
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  <WeeklyRouteMap
-                    jobs={dayJobs}
-                    commutes={dayCommutes}
-                    selectedBlockId={selectedBlockId}
-                    onSelectJob={(id) => setSelectedBlockId(id)}
-                  />
-                </CardContent>
-              </Card>
-
-              <Card className="xl:col-span-2">
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-base flex items-center gap-2" data-testid="text-day-detail-title">
-                    <Briefcase className="h-4 w-4" />
-                    Jobb –{" "}
-                    {selectedDay
-                      ? format(new Date(`${selectedDay}T00:00:00`), "EEEE d MMMM", { locale: sv })
-                      : "—"}
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <DayDetailPanel
+              {/* MITTEN — veckoschema 168h (växer) */}
+              <Card className="flex-1 min-w-0">
+                <CardContent className="pt-6">
+                  <WeekCalendar
+                    dayDates={dayDates}
+                    blocks={blocks}
                     selectedDay={selectedDay}
-                    sequence={daySequence}
-                    jobNumberById={jobNumberById}
-                    taskByBlockId={taskByBlockId}
-                    personalById={personalById}
-                    selectedBlockId={selectedBlockId}
-                    onSelectBlock={setSelectedBlockId}
-                    onOpenJob={(taskId) => setLocation(`/work-orders/${taskId}`)}
-                    onMoveBlock={(b) => setEditing(b)}
-                    egentidId={egentidId}
-                    onEditEgentid={setEgentidId}
-                    onCancelEgentid={() => setEgentidId(null)}
-                    onSaveEgentid={(vars) => saveEgentid.mutate(vars)}
-                    saving={saveEgentid.isPending}
+                    onSelectDay={setSelectedDay}
+                    onDropOnDay={handleDropOnDay}
+                    onSelectBlock={(b) => setEditing(b)}
                   />
+                  <Legend />
                 </CardContent>
               </Card>
+
+              {/* HÖGER — Ruttoptimerad tur (karta + dagsdetalj) */}
+              {rightCollapsed ? (
+                <button
+                  type="button"
+                  onClick={() => setRightCollapsed(false)}
+                  className="shrink-0 w-9 rounded-md border border-border bg-card flex flex-col items-center gap-2 py-2 hover-elevate"
+                  title="Visa karta och dagsdetalj"
+                  data-testid="rail-expand-right"
+                >
+                  <PanelRightOpen className="h-4 w-4 text-muted-foreground" />
+                  <span className="text-xs font-medium [writing-mode:vertical-rl] whitespace-nowrap">
+                    Karta &amp; rutt
+                  </span>
+                </button>
+              ) : (
+                <div className="shrink-0 w-96 flex flex-col gap-3">
+                  <Card className="flex flex-col flex-1 min-h-0">
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-base flex items-center justify-between gap-2">
+                        <span className="flex items-center gap-2">
+                          <MapIcon className="h-4 w-4" />
+                          Karta – jobb &amp; rutt
+                        </span>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="h-6 w-6"
+                          onClick={() => setRightCollapsed(true)}
+                          title="Dölj panel"
+                          data-testid="rail-collapse-right"
+                        >
+                          <PanelRightClose className="h-4 w-4" />
+                        </Button>
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-3">
+                      <WeeklyRouteMap
+                        jobs={dayJobs}
+                        commutes={dayCommutes}
+                        selectedBlockId={selectedBlockId}
+                        onSelectJob={(id) => setSelectedBlockId(id)}
+                      />
+                    </CardContent>
+                  </Card>
+
+                  <Card>
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-base flex items-center gap-2" data-testid="text-day-detail-title">
+                        <Briefcase className="h-4 w-4" />
+                        Jobb –{" "}
+                        {selectedDay
+                          ? format(new Date(`${selectedDay}T00:00:00`), "EEEE d MMMM", { locale: sv })
+                          : "—"}
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <DayDetailPanel
+                        selectedDay={selectedDay}
+                        sequence={daySequence}
+                        jobNumberById={jobNumberById}
+                        taskByBlockId={taskByBlockId}
+                        personalById={personalById}
+                        selectedBlockId={selectedBlockId}
+                        onSelectBlock={setSelectedBlockId}
+                        onOpenJob={(taskId) => setLocation(`/work-orders/${taskId}`)}
+                        onMoveBlock={(b) => setEditing(b)}
+                        egentidId={egentidId}
+                        onEditEgentid={setEgentidId}
+                        onCancelEgentid={() => setEgentidId(null)}
+                        onSaveEgentid={(vars) => saveEgentid.mutate(vars)}
+                        saving={saveEgentid.isPending}
+                      />
+                    </CardContent>
+                  </Card>
+                </div>
+              )}
             </div>
 
             {/* Bottenpaneler: tidssummering, ordervärde, produktion, resor, varningar */}
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-10 gap-4">
+            <div data-testid="section-bottom">
+              <button
+                type="button"
+                onClick={() => setBottomCollapsed((v) => !v)}
+                className="w-full flex items-center justify-between gap-2 rounded-md border border-border bg-card px-3 py-2 hover-elevate"
+                data-testid="toggle-bottom"
+              >
+                <span className="text-sm font-semibold">Summering &amp; nyckeltal</span>
+                {bottomCollapsed ? <ChevronDown className="h-4 w-4" /> : <ChevronUp className="h-4 w-4" />}
+              </button>
+              {!bottomCollapsed && (
+                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-10 gap-4 mt-3">
               {/* Tidssummering (donut) */}
               <Card className="md:col-span-1 xl:col-span-2">
                 <CardHeader className="pb-2">
@@ -920,6 +1091,8 @@ export default function WeeklyPlanViewPage() {
                     ))}
                 </CardContent>
               </Card>
+                </div>
+              )}
             </div>
 
             {/* Fotnot */}

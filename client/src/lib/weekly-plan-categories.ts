@@ -15,7 +15,8 @@ export type TimeCategoryKey =
   | "personal_time"
   | "rest_night"
   | "rest_weekend"
-  | "overtime";
+  | "overtime"
+  | "internal_training";
 
 export interface TimeCategoryStyle {
   /** Svensk etikett. */
@@ -87,6 +88,13 @@ export const TIME_CATEGORY_STYLES: Record<TimeCategoryKey, TimeCategoryStyle> = 
     bar: "bg-warning",
     text: "text-warning",
   },
+  internal_training: {
+    label: "Interntid/utbildning",
+    block: "bg-accent border-l-4 border-l-accent-foreground/50 text-accent-foreground",
+    dot: "bg-accent-foreground/70",
+    bar: "bg-accent-foreground/60",
+    text: "text-accent-foreground",
+  },
 };
 
 const FALLBACK_STYLE: TimeCategoryStyle = {
@@ -112,6 +120,7 @@ export const TIME_CATEGORY_ORDER: TimeCategoryKey[] = [
   "rest_night",
   "rest_weekend",
   "overtime",
+  "internal_training",
 ];
 
 export type WarningSeverity = "error" | "warning" | "info" | "ok";

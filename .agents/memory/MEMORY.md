@@ -42,3 +42,4 @@
 - [Råa db.execute timestamp=sträng](raw-execute-timestamp-strings.md) — drizzle node-postgres råa db.execute() ger timestamp som STRÄNG ej Date; wrappa i new Date() före .toISOString() annars krasch.
 - [work_orders dubbla status-kolumner](work-order-dual-status-columns.md) — `status` (livscykel) ≠ `order_status` (Modus); `CREATE INDEX IF NOT EXISTS` matchar på NAMN → samma namn på fel kolumn ger tyst no-op.
 - [Tenant lifecycle DB ops](tenant-lifecycle-db-ops.md) — full-tenant-delete kräver replica-role + NOT EXISTS orphan-sweep (142 NO ACTION FK, 23 join-tabeller utan tenant_id); rename-prune bara säker för leaf-tabeller.
+- [Veckoplanering-vyn (Bilaga C)](veckoplanering-page.md) — `/veckoplanering` = alias för `/veckoplan`; 9:e time_category är frontend-only platshållare; "Automatisk veckoplanering"-knappen = bara recompute (ej auto-placering).

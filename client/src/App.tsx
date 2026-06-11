@@ -164,6 +164,7 @@ function Router() {
         <Route path="/planner">{() => <ProtectedRoute component={WeekPlannerPage} path="/planner" />}</Route>
         <Route path="/week-planner">{() => <Redirect to="/planner" />}</Route>
         <Route path="/veckoplan">{() => <ProtectedRoute component={WeeklyPlanViewPage} path="/veckoplan" />}</Route>
+        <Route path="/veckoplanering">{() => <ProtectedRoute component={WeeklyPlanViewPage} path="/veckoplan" />}</Route>
         <Route path="/grovplanering">{() => <ProtectedRoute component={GrovplaneringPage} path="/grovplanering" />}</Route>
         <Route path="/distrikt">{() => <ProtectedRoute component={DistrictsAdminPage} path="/distrikt" />}</Route>
         <Route path="/clusters">{() => <ProtectedRoute component={ClustersPage} path="/clusters" />}</Route>

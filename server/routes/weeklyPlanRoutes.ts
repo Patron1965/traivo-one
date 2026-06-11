@@ -396,6 +396,21 @@ export function registerWeeklyPlanRoutes(app: Express) {
     });
   }));
 
+  // Ej planerade kandidater: grovplanerade arbetsordrar för teamets vecka som
+  // ännu inte är tillagda i veckoplanen. Read-only — driver "Ej planerade"-panelen.
+  app.get("/api/weekly-plans/:id/candidates", ...guard, asyncHandler(async (req, res) => {
+    const tenantId = getTenantIdWithFallback(req);
+    const plan = await storage.getWeeklyPlan(tenantId, req.params.id);
+    if (!plan) throw new NotFoundError("Veckoplan");
+    if (!plan.teamId) {
+      res.json([]);
+      return;
+    }
+    const week = `${plan.year}-W${String(plan.weekNumber).padStart(2, "0")}`;
+    const candidates = await storage.getWeeklyPlanCandidates(tenantId, plan.id, plan.teamId, week);
+    res.json(candidates);
+  }));
+
   app.post("/api/weekly-plans", ...guard, asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const data = parseBody(planCreateSchema, req.body);

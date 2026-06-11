@@ -317,6 +317,23 @@ export interface WeeklyPlanTaskFact {
   locationName: string | null;
 }
 
+/**
+ * Ej planerad kandidat till veckoplanen: en arbetsorder som är grovplanerad
+ * (`rough_planned_week`) för teamets vecka men ännu inte tillagd som
+ * `weekly_plan_tasks`-block. Används av "Ej planerade"-panelen.
+ */
+export interface WeeklyPlanCandidate {
+  id: string; // work_orders.id
+  name: string | null;
+  value: number; // öre (cachedValue)
+  productionMinutes: number;
+  lat: number | null;
+  lng: number | null;
+  objectId: string | null;
+  locationName: string | null;
+  orderType: string | null;
+}
+
 /** Distriktscentrum för "närmaste ort"-approximation (Task #877). */
 interface DistrictCoord {
   id: string;
@@ -1270,6 +1287,7 @@ export interface IStorage {
   // Veckoplan-uppgifter
   getWeeklyPlanTasks(tenantId: string, weeklyPlanId: string): Promise<WeeklyPlanTask[]>;
   getWeeklyPlanTaskFacts(tenantId: string, taskIds: string[]): Promise<WeeklyPlanTaskFact[]>;
+  getWeeklyPlanCandidates(tenantId: string, planId: string, teamId: string, week: string): Promise<WeeklyPlanCandidate[]>;
   getWeeklyPlanTask(tenantId: string, id: string): Promise<WeeklyPlanTask | undefined>;
   createWeeklyPlanTask(data: InsertWeeklyPlanTask): Promise<WeeklyPlanTask>;
   updateWeeklyPlanTask(tenantId: string, id: string, data: Partial<InsertWeeklyPlanTask>): Promise<WeeklyPlanTask | undefined>;
@@ -10011,6 +10029,62 @@ export class DatabaseStorage implements IStorage {
       lng: r.taskLng ?? r.objectLng ?? null,
       objectId: r.objectId ?? null,
       locationName: r.objectCity ?? r.objectName ?? null,
+    }));
+  }
+  async getWeeklyPlanCandidates(
+    tenantId: string,
+    planId: string,
+    teamId: string,
+    week: string,
+  ): Promise<WeeklyPlanCandidate[]> {
+    const terminalStatuses = ["utford", "fakturerad", "omojlig", "avbruten"];
+    // Arbetsorder som redan ligger som block i denna plan ska inte föreslås igen.
+    const existing = await db
+      .select({ taskId: weeklyPlanTasks.taskId })
+      .from(weeklyPlanTasks)
+      .where(and(eq(weeklyPlanTasks.tenantId, tenantId), eq(weeklyPlanTasks.weeklyPlanId, planId)));
+    const excludeIds = existing.map((r) => r.taskId).filter((id): id is string => !!id);
+
+    const conditions: SQL[] = [
+      eq(workOrders.tenantId, tenantId),
+      isNull(workOrders.deletedAt),
+      eq(workOrders.teamId, teamId),
+      eq(workOrders.roughPlannedWeek, week),
+      notInArray(workOrders.orderStatus, terminalStatuses),
+    ];
+    if (excludeIds.length > 0) conditions.push(notInArray(workOrders.id, excludeIds));
+
+    const rows = await db
+      .select({
+        id: workOrders.id,
+        title: workOrders.title,
+        orderType: workOrders.orderType,
+        cachedValue: workOrders.cachedValue,
+        cachedProductionMinutes: workOrders.cachedProductionMinutes,
+        estimatedDuration: workOrders.estimatedDuration,
+        taskLat: workOrders.taskLatitude,
+        taskLng: workOrders.taskLongitude,
+        objectId: workOrders.objectId,
+        objectName: objects.name,
+        objectCity: objects.city,
+        objectLat: objects.latitude,
+        objectLng: objects.longitude,
+      })
+      .from(workOrders)
+      .leftJoin(objects, eq(workOrders.objectId, objects.id))
+      .where(and(...conditions))
+      .orderBy(workOrders.title);
+
+    return rows.map((r) => ({
+      id: r.id,
+      name: r.title ?? null,
+      value: r.cachedValue ?? 0,
+      productionMinutes: r.cachedProductionMinutes ?? r.estimatedDuration ?? 0,
+      lat: r.taskLat ?? r.objectLat ?? null,
+      lng: r.taskLng ?? r.objectLng ?? null,
+      objectId: r.objectId ?? null,
+      locationName: r.objectCity ?? r.objectName ?? null,
+      orderType: r.orderType ?? null,
     }));
   }
   async getWeeklyPlanTask(tenantId: string, id: string): Promise<WeeklyPlanTask | undefined> {
