@@ -1,9 +1,20 @@
-import { useCallback, useState, useRef } from "react";
+import { useCallback, useState, useRef, useEffect } from "react";
 import { useSensor, useSensors, PointerSensor, KeyboardSensor, pointerWithin, rectIntersection, type DragStartEvent, type DragEndEvent, type DragOverEvent, type CollisionDetection } from "@dnd-kit/core";
 import { arrayMove } from "@dnd-kit/sortable";
 import { format, isSameDay } from "date-fns";
 import { DAY_START_HOUR, DAY_END_HOUR } from "./types";
+import { playDeliveryWindowAlert } from "@/lib/audio-cues";
 import type { WorkOrderWithObject } from "@shared/schema";
+
+// Drop-zoner i kanten av veckovyn för att hoppa till föregående/nästa vecka mitt i ett drag (F2).
+const WEEK_NAV_PREV_ID = "week-nav-prev";
+const WEEK_NAV_NEXT_ID = "week-nav-next";
+const SPRING_NAV_INTERVAL_MS = 850;
+
+// Avgör om en konfliktlista innehåller en leveransfönster-/tidsfönster-överträdelse (F4).
+function hasWindowViolation(reasons: string[]): boolean {
+  return reasons.some(r => /leveransfönster|tidsfönster|fel dag/i.test(r));
+}
 
 interface UsePlannerDndOptions {
   workOrders: WorkOrderWithObject[];
@@ -27,6 +38,8 @@ interface UsePlannerDndOptions {
   setWhatIfPending?: (pending: { jobId: string; jobTitle: string; resourceId: string; scheduledDate: string; scheduledStartTime?: string; clusterOverride?: boolean; bulkJobs?: Array<{ jobId: string; startTime: string }> } | null) => void;
   setWhatIfOpen?: (open: boolean) => void;
   fetchWhatIf?: (workOrderId: string, toResourceId: string, scheduledDate: string, scheduledStartTime?: string, fromResourceId?: string | null, fromDate?: string | null) => void;
+  // F2: hoppa mellan veckor mitt i ett drag genom att hovra kant-zonerna.
+  onSpringNavigate?: (dir: "prev" | "next") => void;
 }
 
 export function usePlannerDnd({
@@ -35,6 +48,7 @@ export function usePlannerDnd({
   detectConflictsForJob, detectTeamConflictsForJob, setPendingSchedule, setConflictDialogOpen, executeSchedule, executeTeamSchedule, toast,
   selectedJobIds, clearSelection,
   setWhatIfPending, setWhatIfOpen, fetchWhatIf,
+  onSpringNavigate,
 }: UsePlannerDndOptions) {
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -43,12 +57,31 @@ export function usePlannerDnd({
 
   const customCollisionDetection: CollisionDetection = useCallback((args) => {
     const pointerCollisions = pointerWithin(args);
-    if (pointerCollisions.length > 0) return pointerCollisions;
+    if (pointerCollisions.length > 0) {
+      // F2: prioritera vecka-navigerings-zonerna i kanten så att de vinner över cellen under.
+      const navHit = pointerCollisions.find(c => c.id === WEEK_NAV_PREV_ID || c.id === WEEK_NAV_NEXT_ID);
+      if (navHit) return [navHit];
+      return pointerCollisions;
+    }
     return rectIntersection(args);
   }, []);
 
   const [dragOverConflicts, setDragOverConflicts] = useState<Record<string, string[]>>({});
   const lastOverIdRef = useRef<string | null>(null);
+  // F2: timer som upprepar vecka-byte medan man håller dragget i kant-zonen.
+  const springTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // F2: håll alltid senaste navigate-callbacken i en ref så spring-intervallet inte fastnar
+  // i en stale closure över currentWeekStart (annars navigerar varje tick tillbaka till samma vecka).
+  const onSpringNavigateRef = useRef(onSpringNavigate);
+  onSpringNavigateRef.current = onSpringNavigate;
+  const clearSpring = useCallback(() => {
+    if (springTimerRef.current) {
+      clearInterval(springTimerRef.current);
+      springTimerRef.current = null;
+    }
+  }, []);
+  // F2: städa spring-timern om planeraren avmonteras mitt i en kant-zon-hover.
+  useEffect(() => clearSpring, [clearSpring]);
 
   const handleDragStart = useCallback((event: DragStartEvent) => {
     const activeId = String(event.active.id);
@@ -59,7 +92,8 @@ export function usePlannerDnd({
     setActiveDragJob(found || null);
     setDragOverConflicts({});
     lastOverIdRef.current = null;
-  }, [workOrders, setActiveDragJob]);
+    clearSpring();
+  }, [workOrders, setActiveDragJob, clearSpring]);
 
   const computeStartTime = useCallback((resourceId: string, dateStr: string, hour?: number): string | undefined => {
     let scheduledStartTime = hour !== undefined ? `${hour.toString().padStart(2, "0")}:00` : undefined;
@@ -91,6 +125,7 @@ export function usePlannerDnd({
   const handleDragOver = useCallback((event: DragOverEvent) => {
     const { active, over } = event;
     if (!over) {
+      clearSpring();
       if (lastOverIdRef.current) {
         setDragOverConflicts({});
         lastOverIdRef.current = null;
@@ -100,6 +135,18 @@ export function usePlannerDnd({
     const dropId = over.id as string;
     if (dropId === lastOverIdRef.current) return;
     lastOverIdRef.current = dropId;
+    clearSpring();
+
+    // F2: hovra en kant-zon → hoppa till föregående/nästa vecka, upprepa medan dragget hålls kvar.
+    if (dropId === WEEK_NAV_PREV_ID || dropId === WEEK_NAV_NEXT_ID) {
+      setDragOverConflicts({});
+      if (onSpringNavigateRef.current) {
+        const dir = dropId === WEEK_NAV_NEXT_ID ? "next" : "prev";
+        onSpringNavigateRef.current(dir);
+        springTimerRef.current = setInterval(() => onSpringNavigateRef.current?.(dir), SPRING_NAV_INTERVAL_MS);
+      }
+      return;
+    }
 
     if (dropId.startsWith("team:")) {
       const job = workOrders.find(j => String(j.id) === String(active.id));
@@ -116,6 +163,7 @@ export function usePlannerDnd({
       const conflicts = detectTeamConflictsForJob(job, teamId, dateStr);
       if (conflicts.length > 0) {
         setDragOverConflicts({ [dropId]: conflicts });
+        if (hasWindowViolation(conflicts)) playDeliveryWindowAlert("hover");
       } else {
         setDragOverConflicts({});
       }
@@ -151,15 +199,25 @@ export function usePlannerDnd({
 
     if (allConflicts.length > 0) {
       setDragOverConflicts({ [dropId]: allConflicts });
+      if (hasWindowViolation(allConflicts)) playDeliveryWindowAlert("hover");
     } else {
       setDragOverConflicts({});
     }
-  }, [workOrders, detectConflictsForJob, detectTeamConflictsForJob, computeStartTime, selectedJobIds, resolveDropTarget]);
+  }, [workOrders, detectConflictsForJob, detectTeamConflictsForJob, computeStartTime, selectedJobIds, resolveDropTarget, clearSpring]);
+
+  // F2: avbrutet dragg (Escape) triggar inte onDragEnd → städa spring-timer + drag-state här annars läcker intervallet.
+  const handleDragCancel = useCallback(() => {
+    clearSpring();
+    setDragOverConflicts({});
+    lastOverIdRef.current = null;
+    setActiveDragJob(null);
+  }, [clearSpring, setActiveDragJob]);
 
   const handleDragEnd = useCallback((event: DragEndEvent) => {
     setActiveDragJob(null);
     setDragOverConflicts({});
     lastOverIdRef.current = null;
+    clearSpring();
     const { active, over } = event;
     if (!over) {
       toast({ title: "Släppte utanför", description: "Dra jobbet till en cell i schemat" });
@@ -167,6 +225,11 @@ export function usePlannerDnd({
     }
     const jobId = String(active.id);
     const dropId = String(over.id);
+
+    // F2: släpp på en kant-zon gör inget i sig — vecka-bytet har redan skett under hovern.
+    if (dropId === WEEK_NAV_PREV_ID || dropId === WEEK_NAV_NEXT_ID) {
+      return;
+    }
 
     if (viewMode === "route" && routeJobsForView.length > 0) {
       const isRouteJob = routeJobsForView.some(j => j.id === jobId);
@@ -206,6 +269,10 @@ export function usePlannerDnd({
         console.warn("[dnd] team drop: executeTeamSchedule not provided");
         return;
       }
+      // F4: ljudsignal om släppet hamnar utanför jobbets leveransfönster.
+      if (detectTeamConflictsForJob && hasWindowViolation(detectTeamConflictsForJob(job, teamId, dateStr))) {
+        playDeliveryWindowAlert("drop");
+      }
       executeTeamSchedule(jobId, teamId, dateStr);
       return;
     }
@@ -220,6 +287,14 @@ export function usePlannerDnd({
     if (job.resourceId === resourceId && job.scheduledDate && isSameDay(new Date(job.scheduledDate), day) && hour === undefined) {
       console.info("[dnd] handleDragEnd: same-slot drop ignored (same resource + same day, no hour change)");
       return;
+    }
+
+    // F4: ljudsignal om släppet hamnar utanför jobbets leveransfönster (resurs-läge).
+    {
+      const dropStartTime = computeStartTime(resourceId, dateStr, hour);
+      if (hasWindowViolation(detectConflictsForJob(job, resourceId, dateStr, dropStartTime || null))) {
+        playDeliveryWindowAlert("drop");
+      }
     }
 
     const isBulk = selectedJobIds && selectedJobIds.size > 1 && selectedJobIds.has(jobId);
@@ -309,7 +384,7 @@ export function usePlannerDnd({
       executeSchedule(jobId, resourceId, dateStr, scheduledStartTime);
       if (scheduledStartTime) toast({ title: "Schemalagt", description: `Starttid ${scheduledStartTime} tilldelad automatiskt` });
     }
-  }, [workOrders, viewMode, currentDate, routeJobsForView, resourceDayJobMap, setActiveDragJob, setRouteJobOrder, updateWorkOrderMutation, detectConflictsForJob, setPendingSchedule, setConflictDialogOpen, executeSchedule, executeTeamSchedule, toast, selectedJobIds, clearSelection, computeStartTime, resolveDropTarget, setWhatIfPending, setWhatIfOpen, fetchWhatIf]);
+  }, [workOrders, viewMode, currentDate, routeJobsForView, resourceDayJobMap, setActiveDragJob, setRouteJobOrder, updateWorkOrderMutation, detectConflictsForJob, detectTeamConflictsForJob, setPendingSchedule, setConflictDialogOpen, executeSchedule, executeTeamSchedule, toast, selectedJobIds, clearSelection, computeStartTime, resolveDropTarget, setWhatIfPending, setWhatIfOpen, fetchWhatIf, clearSpring]);
 
   return {
     sensors,
@@ -317,6 +392,7 @@ export function usePlannerDnd({
     handleDragStart,
     handleDragOver,
     handleDragEnd,
+    handleDragCancel,
     dragOverConflicts,
   };
 }

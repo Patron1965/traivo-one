@@ -6,7 +6,7 @@ import type { Resource, WorkOrderWithObject, Customer, TaskDependency, Cluster, 
 import { RESTRICTION_TYPE_LABELS } from "@shared/schema";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import type { ViewMode, PlannerAction, WeatherForecastData, WeatherImpactDay, ConstraintData, ConstraintCell } from "./types";
+import type { ViewMode, PlannerAction, WeatherForecastData, WeatherImpactDay, ConstraintData, ConstraintCell, CommuteSummaryResult } from "./types";
 import { computeDateFilterParams, buildUnscheduledQueryString } from "./dateFilterUtils";
 import { HOURS_IN_DAY, DAY_START_HOUR, DAY_END_HOUR } from "./types";
 import type { WhatIfResult } from "./WhatIfPreview";
@@ -581,6 +581,77 @@ export function usePlannerData() {
 
   const getJobsForTeamAndDay = useCallback((rowId: string, day: Date) => teamDayJobMap.jobs[rowId]?.[format(day, "yyyy-MM-dd")] || [], [teamDayJobMap]);
   const getTeamDayHours = useCallback((rowId: string, day: Date) => teamDayJobMap.hours[rowId]?.[format(day, "yyyy-MM-dd")] || 0, [teamDayJobMap]);
+
+  // E8: Sammanställning av ENBART inställelseresa (hem ↔ arbetsområde) för en rad/dag.
+  // Resa till första jobbet + hem från sista jobbet — separat från restid mellan jobb.
+  const getCommuteSummary = useCallback((rowId: string, day: Date, kind: "resource" | "team"): CommuteSummaryResult => {
+    const empty = (reason: "no-base" | "no-jobs", baseLabel = "", baseSource = ""): CommuteSummaryResult => ({
+      ok: false, reason, baseLabel, baseSource, outKm: 0, outMin: 0, backKm: 0, backMin: 0, totalKm: 0, totalMin: 0, firstLabel: "", lastLabel: "", jobCount: 0,
+    });
+
+    // 1. Lös utgångspunkt (bas).
+    let baseLat: number | null = null, baseLng: number | null = null, baseLabel = "", baseSource = "";
+    if (kind === "resource") {
+      const res = resources.find(r => r.id === rowId);
+      if (res) {
+        if (res.homeLatitude != null && res.homeLongitude != null) {
+          baseLat = res.homeLatitude; baseLng = res.homeLongitude; baseLabel = res.name || "Hemadress"; baseSource = "Hemadress";
+        } else if (res.currentLatitude != null && res.currentLongitude != null) {
+          baseLat = res.currentLatitude; baseLng = res.currentLongitude; baseLabel = res.name || "Senaste position"; baseSource = "Senaste position";
+        }
+      }
+    } else {
+      // Team: teamledarens hem → någon medlems hem → medlems senaste position → klustercentrum.
+      const members = teamMembersData.filter(tm => tm.teamId === rowId);
+      const ordered = [...members].sort((a, b) => (b.role === "leader" ? 1 : 0) - (a.role === "leader" ? 1 : 0));
+      for (const m of ordered) {
+        const res = resources.find(r => r.id === m.resourceId);
+        if (!res) continue;
+        if (res.homeLatitude != null && res.homeLongitude != null) {
+          baseLat = res.homeLatitude; baseLng = res.homeLongitude;
+          baseLabel = res.name || "Teammedlem"; baseSource = m.role === "leader" ? "Teamledarens hemadress" : "Teammedlems hemadress";
+          break;
+        }
+        if (baseLat == null && res.currentLatitude != null && res.currentLongitude != null) {
+          baseLat = res.currentLatitude; baseLng = res.currentLongitude;
+          baseLabel = res.name || "Teammedlem"; baseSource = "Teammedlems senaste position";
+        }
+      }
+      if (baseLat == null) {
+        const team = teamsData.find(t => t.id === rowId);
+        const cl = team?.clusterId ? clusters.find(c => c.id === team.clusterId) : undefined;
+        if (cl && cl.centerLatitude != null && cl.centerLongitude != null) {
+          baseLat = cl.centerLatitude; baseLng = cl.centerLongitude; baseLabel = cl.name || "Kluster"; baseSource = "Klustercentrum";
+        }
+      }
+    }
+
+    if (baseLat == null || baseLng == null) return empty("no-base");
+
+    // 2. Lokaliserade, schemalagda jobb för raden/dagen, sorterade på starttid.
+    const jobs = (kind === "team" ? getJobsForTeamAndDay(rowId, day) : getJobsForResourceAndDay(rowId, day))
+      .map(j => ({ j, lat: (j.taskLatitude ?? j.objectLatitude) as number | null | undefined, lng: (j.taskLongitude ?? j.objectLongitude) as number | null | undefined }))
+      .filter(x => x.j.scheduledStartTime && x.lat != null && x.lng != null)
+      .sort((a, b) => (a.j.scheduledStartTime || "").localeCompare(b.j.scheduledStartTime || ""));
+
+    if (jobs.length === 0) return empty("no-jobs", baseLabel, baseSource);
+
+    const first = jobs[0], last = jobs[jobs.length - 1];
+    const outKm = haversineKm(baseLat, baseLng, first.lat!, first.lng!);
+    const backKm = haversineKm(last.lat!, last.lng!, baseLat, baseLng);
+    const outMin = estimateTravelMinutes(outKm);
+    const backMin = estimateTravelMinutes(backKm);
+
+    return {
+      ok: true, baseLabel, baseSource,
+      outKm: Math.round(outKm * 10) / 10, outMin,
+      backKm: Math.round(backKm * 10) / 10, backMin,
+      totalKm: Math.round((outKm + backKm) * 10) / 10, totalMin: outMin + backMin,
+      firstLabel: first.j.objectName || first.j.title || "Första jobbet",
+      lastLabel: last.j.objectName || last.j.title || "Sista jobbet",
+      jobCount: jobs.length,
+    };
+  }, [resources, teamMembersData, teamsData, clusters, getJobsForTeamAndDay, getJobsForResourceAndDay]);
 
   const teamRows = useMemo(() => {
     const rows: Array<{ id: string; name: string; color: string | null; isUncategorized: boolean; isResourceFallback: boolean; resourceId: string | null; memberCount: number }> = [];
@@ -1194,6 +1265,7 @@ export function usePlannerData() {
     selectedTeamIds, setSelectedTeamIds,
     showUntiedTeamRows, setShowUntiedTeamRows, hiddenUntiedTeamSummary,
     teamRows, getJobsForTeamAndDay, getTeamDayHours, teamWeekSummary,
+    getCommuteSummary,
     executeTeamSchedule,
     workOrders, workOrdersLoading,
     dependenciesData, timeRestrictions, restrictionsByObject, timewindowMap,

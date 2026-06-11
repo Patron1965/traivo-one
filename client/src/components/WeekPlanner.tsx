@@ -340,6 +340,7 @@ export function WeekPlanner({ onAddJob, onSelectJob, onSelectedJobIdsChange, sho
     setWhatIfPending: d.setWhatIfPending,
     setWhatIfOpen: d.setWhatIfOpen,
     fetchWhatIf: d.fetchWhatIf,
+    onSpringNavigate: d.navigate,
   });
 
   // Wrap dnd.handleDragEnd to auto-assign on cross-window drop:
@@ -464,7 +465,7 @@ export function WeekPlanner({ onAddJob, onSelectJob, onSelectedJobIdsChange, sho
   const showPersistentPopoutStrip = popoutRole === "main" && effectiveDisplayMode !== "full";
 
   return (
-    <DndContext sensors={dnd.sensors} collisionDetection={dnd.collisionDetection} onDragStart={dnd.handleDragStart} onDragOver={dnd.handleDragOver} onDragEnd={handleDragEndWithRemote}>
+    <DndContext sensors={dnd.sensors} collisionDetection={dnd.collisionDetection} onDragStart={dnd.handleDragStart} onDragOver={dnd.handleDragOver} onDragEnd={handleDragEndWithRemote} onDragCancel={dnd.handleDragCancel}>
       <div className="flex flex-col h-full">
         {showPersistentPopoutStrip && (
           <div className="flex items-center justify-between gap-2 border-y border-card-border bg-card px-3 py-1.5 text-xs" data-testid="strip-popout-controls">
@@ -671,6 +672,7 @@ export function WeekPlanner({ onAddJob, onSelectJob, onSelectedJobIdsChange, sho
               onHideUntiedTeamRows={() => d.setShowUntiedTeamRows(false)}
               allResources={d.resources}
               teamMembersData={d.teamMembersData}
+              getCommuteSummary={d.getCommuteSummary}
             />
           )}
           {d.viewMode === "month" && (

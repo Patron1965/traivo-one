@@ -7,14 +7,17 @@ import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, Command
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
-import { AlertTriangle, Plus, Navigation, Cloud, Sun, CloudRain, Snowflake, ShieldAlert, ShieldCheck, ShieldX, EyeOff, ChevronDown, ChevronRight, Trash2, UserPlus, Loader2, Repeat, Users } from "lucide-react";
+import { AlertTriangle, Plus, Navigation, Cloud, Sun, CloudRain, Snowflake, ShieldAlert, ShieldCheck, ShieldX, EyeOff, ChevronDown, ChevronRight, ChevronLeft, Trash2, UserPlus, Loader2, Repeat, Users, Home, ArrowRight, ArrowLeft, Volume2, VolumeX } from "lucide-react";
+import { useDroppable } from "@dnd-kit/core";
 import { format, isSameDay } from "date-fns";
 import { sv } from "date-fns/locale";
 import type { Resource, WorkOrderWithObject, ObjectTimeRestriction } from "@shared/schema";
 import { HOURS_IN_DAY, getJobCategory, haversineDistance } from "./types";
-import type { WeatherImpactDay, WeatherForecastData, ConstraintCell } from "./types";
+import type { WeatherImpactDay, WeatherForecastData, ConstraintCell, CommuteSummaryResult } from "./types";
 import { constraintCategoryLabels } from "./types";
 import { DroppableCell, DraggableJobCard } from "./DndComponents";
+import { ContextMenu, ContextMenuTrigger, ContextMenuContent, ContextMenuLabel, ContextMenuSeparator } from "@/components/ui/context-menu";
+import { isDeliveryAlertMuted, setDeliveryAlertMuted } from "@/lib/audio-cues";
 import { JobCard } from "./JobCard";
 import { ResourceColumn } from "./ResourceColumn";
 
@@ -64,6 +67,7 @@ interface WeekGridViewProps {
   onHideUntiedTeamRows?: () => void;
   allResources?: Resource[];
   teamMembersData?: Array<{ id: string; teamId: string; resourceId: string; role: string | null }>;
+  getCommuteSummary?: (rowId: string, day: Date, kind: "resource" | "team") => CommuteSummaryResult;
 }
 
 type TeamMemberRow = { id: string; teamId: string; resourceId: string; role: string | null };
@@ -319,6 +323,81 @@ function getWeatherMultiplierLabel(multiplier: number) {
   return `+${pctIncrease}% tid`;
 }
 
+// F2: smal drop-zon i vänster/höger kant som hoppar en vecka när man hovrar den mitt i ett drag.
+function WeekNavDropZone({ dir }: { dir: "prev" | "next" }) {
+  const id = dir === "prev" ? "week-nav-prev" : "week-nav-next";
+  const { setNodeRef, isOver } = useDroppable({ id });
+  const Icon = dir === "prev" ? ChevronLeft : ChevronRight;
+  return (
+    <div
+      ref={setNodeRef}
+      className={[
+        "absolute top-0 bottom-0 w-14 z-40 flex items-center justify-center transition-colors",
+        dir === "prev" ? "left-0 border-r border-primary/30" : "right-0 border-l border-primary/30",
+        isOver ? "bg-primary/25 dark:bg-primary/30" : "bg-primary/10 dark:bg-primary/15",
+      ].join(" ")}
+      data-testid={`week-nav-dropzone-${dir}`}
+    >
+      <div className={`flex flex-col items-center gap-1 text-primary ${isOver ? "animate-pulse" : "opacity-70"}`}>
+        <Icon className="h-5 w-5" />
+        <span className="text-[9px] font-semibold uppercase tracking-wide text-center leading-tight">
+          {dir === "prev" ? "Föreg. vecka" : "Nästa vecka"}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+// E8: innehållet i högerklicks-menyn — beräknas lat (endast när menyn öppnas).
+function CommuteSummaryBody({
+  rowId, day, kind, rowLabel, getCommuteSummary,
+}: {
+  rowId: string;
+  day: Date;
+  kind: "resource" | "team";
+  rowLabel: string;
+  getCommuteSummary: (rowId: string, day: Date, kind: "resource" | "team") => CommuteSummaryResult;
+}) {
+  const c = useMemo(() => getCommuteSummary(rowId, day, kind), [getCommuteSummary, rowId, day, kind]);
+  const dayLabel = format(day, "EEEE d MMM", { locale: sv });
+  return (
+    <div className="px-2 py-1.5 text-xs" data-testid={`commute-summary-${rowId}-${format(day, "yyyy-MM-dd")}`}>
+      <div className="flex items-center gap-1.5 font-medium text-foreground mb-1">
+        <Navigation className="h-3.5 w-3.5 text-chart-3" />
+        <span>Inställelseresa</span>
+      </div>
+      <p className="text-muted-foreground mb-2 capitalize">{rowLabel} · {dayLabel}</p>
+      {!c.ok ? (
+        <p className="text-muted-foreground" data-testid={`commute-summary-empty-${rowId}`}>
+          {c.reason === "no-base"
+            ? "Ingen utgångspunkt (hemadress/position) hittad för raden."
+            : "Inga lokaliserade jobb denna dag."}
+        </p>
+      ) : (
+        <div className="space-y-1.5">
+          <div className="flex items-center gap-1.5 text-muted-foreground">
+            <Home className="h-3 w-3 shrink-0" />
+            <span>Bas: {c.baseLabel} <span className="text-muted-foreground/70">({c.baseSource})</span></span>
+          </div>
+          <div className="flex items-center justify-between gap-3" data-testid={`commute-out-${rowId}`}>
+            <span className="flex items-center gap-1.5"><ArrowRight className="h-3 w-3 text-chart-3 shrink-0" />Till {c.firstLabel}</span>
+            <span className="tabular-nums font-medium">{c.outMin} min · {c.outKm} km</span>
+          </div>
+          <div className="flex items-center justify-between gap-3" data-testid={`commute-back-${rowId}`}>
+            <span className="flex items-center gap-1.5"><ArrowLeft className="h-3 w-3 text-chart-3 shrink-0" />Hem från {c.lastLabel}</span>
+            <span className="tabular-nums font-medium">{c.backMin} min · {c.backKm} km</span>
+          </div>
+          <div className="flex items-center justify-between gap-3 pt-1.5 mt-1 border-t font-semibold" data-testid={`commute-total-${rowId}`}>
+            <span>Total inställelse</span>
+            <span className="tabular-nums">{c.totalMin} min · {c.totalKm} km</span>
+          </div>
+          <p className="text-[10px] text-muted-foreground/70 pt-0.5">Exkl. restid mellan jobb.</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export const WeekGridView = memo(function WeekGridView(props: WeekGridViewProps) {
   const {
     visibleDates, visibleResources, filterBar, getJobsForResourceAndDay, getResourceDayHours,
@@ -329,10 +408,21 @@ export const WeekGridView = memo(function WeekGridView(props: WeekGridViewProps)
     rowMode = "resource", teamRows = [], getJobsForTeamAndDay, getTeamDayHours, teamWeekSummary,
     hiddenUntiedTeamSummary, showingUntiedUnderFilter, onShowUntiedTeamRows, onHideUntiedTeamRows,
     allResources = [], teamMembersData = [],
+    getCommuteSummary,
   } = props;
 
   const { user } = useAuth();
   const fallbackStorageKey = `planner.fallbackRows.expanded.${user?.tenantId ?? "anon"}`;
+
+  // F4: av/på för den hörbara leveransfönster-varningen (kompletterar den röda markeringen).
+  const [deliveryAlertMuted, setDeliveryAlertMutedState] = useState(() => isDeliveryAlertMuted());
+  const toggleDeliveryAlert = () => {
+    setDeliveryAlertMutedState(prev => {
+      const next = !prev;
+      setDeliveryAlertMuted(next);
+      return next;
+    });
+  };
 
   const resourcesById = useMemo(() => {
     const m = new Map<string, Resource>();
@@ -471,17 +561,9 @@ export const WeekGridView = memo(function WeekGridView(props: WeekGridViewProps)
               else if (projectedPct > 65) teamDropFit = { bg: "bg-chart-3/15 dark:bg-chart-3/15 ring-chart-3/40", label: "Belastad", color: "text-chart-3" };
               else teamDropFit = { bg: "bg-chart-2/15 dark:bg-chart-2/15 ring-chart-2/40", label: "Fri kapacitet", color: "text-chart-2" };
             }
-            return (
-              <DroppableCell
-                key={dayIndex}
-                id={droppableId}
-                className={`${zoomPadClass} border-r last:border-r-0 transition-colors overflow-hidden min-w-0 ${getCapacityBgColor(capacityPct)}`}
-                style={{ minHeight: `${zoom.weekH}px` }}
-                dragOverConflicts={dragOverConflicts?.[droppableId]}
-                dropFitInfo={teamDropFit}
-                remoteDragActive={remoteDragActive}
-                remoteHovered={remoteHoveredDropId === droppableId}
-              >
+            const teamCommuteRowId = isFallback ? (team.resourceId ?? team.id) : team.id;
+            const teamCommuteKind: "resource" | "team" = isFallback ? "resource" : "team";
+            const teamCellContent = (
                 <div className="min-w-0 overflow-hidden" data-testid={isFallback ? `drop-zone-resource-fallback-${team.resourceId}-${dayStr}` : `drop-zone-team-${team.id}-${dayStr}`}>
                   <div className="flex items-center gap-1 mb-2">
                     <div className="h-2 flex-1 bg-muted-foreground/15 rounded-full overflow-hidden">
@@ -504,6 +586,28 @@ export const WeekGridView = memo(function WeekGridView(props: WeekGridViewProps)
                     ))}
                   </div>
                 </div>
+            );
+            return (
+              <DroppableCell
+                key={dayIndex}
+                id={droppableId}
+                className={`${zoomPadClass} border-r last:border-r-0 transition-colors overflow-hidden min-w-0 ${getCapacityBgColor(capacityPct)}`}
+                style={{ minHeight: `${zoom.weekH}px` }}
+                dragOverConflicts={dragOverConflicts?.[droppableId]}
+                dropFitInfo={teamDropFit}
+                remoteDragActive={remoteDragActive}
+                remoteHovered={remoteHoveredDropId === droppableId}
+              >
+                {getCommuteSummary ? (
+                  <ContextMenu>
+                    <ContextMenuTrigger asChild>
+                      {teamCellContent}
+                    </ContextMenuTrigger>
+                    <ContextMenuContent className="w-72">
+                      <CommuteSummaryBody rowId={teamCommuteRowId} day={day} kind={teamCommuteKind} rowLabel={team.name} getCommuteSummary={getCommuteSummary} />
+                    </ContextMenuContent>
+                  </ContextMenu>
+                ) : teamCellContent}
               </DroppableCell>
             );
           })}
@@ -520,12 +624,31 @@ export const WeekGridView = memo(function WeekGridView(props: WeekGridViewProps)
     );
   };
   return (
-    <div className="flex-1 flex flex-col overflow-hidden">
+    <div className="flex-1 flex flex-col overflow-hidden relative">
       {filterBar}
-    <div className="flex-1 overflow-y-auto overflow-x-auto">
+    <div className="flex-1 overflow-y-auto overflow-x-auto relative">
       <div className="w-full min-w-[700px]">
         <div className="grid grid-cols-[160px_repeat(5,minmax(0,1fr))] border-b sticky top-0 bg-background z-20">
-          <div className="p-2 font-medium text-sm text-muted-foreground border-r sticky left-0 bg-background z-30" data-testid="week-grid-row-header">{headerLabel}</div>
+          <div className="p-2 font-medium text-sm text-muted-foreground border-r sticky left-0 bg-background z-30 flex items-center justify-between gap-1" data-testid="week-grid-row-header">
+            <span className="truncate">{headerLabel}</span>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-6 w-6 shrink-0"
+                  onClick={toggleDeliveryAlert}
+                  aria-label={deliveryAlertMuted ? "Slå på ljudvarning för leveransfönster" : "Stäng av ljudvarning för leveransfönster"}
+                  data-testid="button-toggle-delivery-alert"
+                >
+                  {deliveryAlertMuted ? <VolumeX className="h-3.5 w-3.5 text-muted-foreground" /> : <Volume2 className="h-3.5 w-3.5 text-chart-3" />}
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom">
+                {deliveryAlertMuted ? "Ljudvarning av" : "Ljudvarning på"} — vid drag utanför leveransfönster
+              </TooltipContent>
+            </Tooltip>
+          </div>
           {visibleDates.map((day, i) => {
             const isToday = isSameDay(day, new Date());
             const dayStr = format(day, "yyyy-MM-dd");
@@ -716,17 +839,7 @@ export const WeekGridView = memo(function WeekGridView(props: WeekGridViewProps)
 
                 const cellDropFit = activeDragJob ? getDropFitClass(resource.id, dayStr, activeDragJob.estimatedDuration || 60) : null;
 
-                return (
-                  <DroppableCell
-                    key={dayIndex}
-                    id={droppableId}
-                    className={`${zoomPadClass} border-r last:border-r-0 transition-colors overflow-hidden min-w-0 ${getCapacityBgColor(capacityPct)} ${restrictedJobs.length > 0 ? "bg-destructive/10 dark:bg-destructive/15" : ""}`}
-                    dropFitInfo={cellDropFit}
-                    style={{ minHeight: `${zoom.weekH}px` }}
-                    dragOverConflicts={dragOverConflicts?.[droppableId]}
-                    remoteDragActive={remoteDragActive}
-                    remoteHovered={remoteHoveredDropId === droppableId}
-                  >
+                const resourceCellContent = (
                     <div className="min-w-0 overflow-hidden" data-testid={`drop-zone-${resource.id}-${dayStr}`}>
                       <div className="flex items-center gap-1 mb-2">
                         <div className="h-2 flex-1 bg-muted-foreground/15 rounded-full overflow-hidden">
@@ -836,6 +949,28 @@ export const WeekGridView = memo(function WeekGridView(props: WeekGridViewProps)
                         </Tooltip>
                       )}
                     </div>
+                );
+                return (
+                  <DroppableCell
+                    key={dayIndex}
+                    id={droppableId}
+                    className={`${zoomPadClass} border-r last:border-r-0 transition-colors overflow-hidden min-w-0 ${getCapacityBgColor(capacityPct)} ${restrictedJobs.length > 0 ? "bg-destructive/10 dark:bg-destructive/15" : ""}`}
+                    dropFitInfo={cellDropFit}
+                    style={{ minHeight: `${zoom.weekH}px` }}
+                    dragOverConflicts={dragOverConflicts?.[droppableId]}
+                    remoteDragActive={remoteDragActive}
+                    remoteHovered={remoteHoveredDropId === droppableId}
+                  >
+                    {getCommuteSummary ? (
+                      <ContextMenu>
+                        <ContextMenuTrigger asChild>
+                          {resourceCellContent}
+                        </ContextMenuTrigger>
+                        <ContextMenuContent className="w-72">
+                          <CommuteSummaryBody rowId={resource.id} day={day} kind="resource" rowLabel={resource.name} getCommuteSummary={getCommuteSummary} />
+                        </ContextMenuContent>
+                      </ContextMenu>
+                    ) : resourceCellContent}
                   </DroppableCell>
                 );
               })}
@@ -844,6 +979,13 @@ export const WeekGridView = memo(function WeekGridView(props: WeekGridViewProps)
         })}
       </div>
     </div>
+      {/* F2: vecka-navigerings-rälsar pinnade till den synliga planeringsytan (utanför scroll-containern) så de når även när rutnätet är nedskrollat. */}
+      {activeDragJob && (
+        <>
+          <WeekNavDropZone dir="prev" />
+          <WeekNavDropZone dir="next" />
+        </>
+      )}
     </div>
   );
 });

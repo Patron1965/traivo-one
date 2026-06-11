@@ -164,6 +164,24 @@ export const constraintCategoryLabels: Record<string, string> = {
   planned_window: "Planfönster",
 };
 
+// Sammanställning av inställelseresa (commute home↔arbetsområde) för en rad/dag (Task #900 E8).
+// Endast resa till första jobbet och hem från sista jobbet — exkl. restid mellan jobb.
+export interface CommuteSummaryResult {
+  ok: boolean;
+  reason?: "no-base" | "no-jobs";
+  baseLabel: string;
+  baseSource: string;
+  outKm: number;
+  outMin: number;
+  backKm: number;
+  backMin: number;
+  totalKm: number;
+  totalMin: number;
+  firstLabel: string;
+  lastLabel: string;
+  jobCount: number;
+}
+
 export function getJobCategory(job: WorkOrderWithObject): TimeBlockCategory {
   const title = (job.title || "").toLowerCase();
   if (title.includes("restid") || title.includes("körning") || title.includes("transport")) return "travel";
