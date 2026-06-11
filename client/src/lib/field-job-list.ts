@@ -13,6 +13,8 @@ export interface FieldJobMeta {
   address: string | null;
   customerId: string | null;
   customerName: string | null;
+  // Ordernummer (kort referens, t.ex. WO-id-prefix) för gruppering/sök (G8).
+  orderNumber: string | null;
   // Förlågrad (lowercased) sök-sträng byggd av anroparen.
   searchText: string;
 }
@@ -94,6 +96,30 @@ export function groupByCustomer(metas: FieldJobMeta[]): JobGroup[] {
     let group = map.get(key);
     if (!group) {
       group = { key: `cust-${key}`, label: m.customerName || "Ingen kund", items: [] };
+      map.set(key, group);
+      order.push(key);
+    }
+    group.items.push(m);
+  }
+  return order.map(k => map.get(k)!);
+}
+
+// Gruppering per ordernummer (G8). Varje order blir en utfällbar sektion och
+// inkommande (ruttsorterad) ordning bevaras. Ordrar utan nummer samlas under en
+// fallback-etikett.
+export function groupByOrderNumber(metas: FieldJobMeta[]): JobGroup[] {
+  const map = new Map<string, JobGroup>();
+  const order: string[] = [];
+  for (const m of metas) {
+    const num = m.orderNumber;
+    const key = num || "__utan__";
+    let group = map.get(key);
+    if (!group) {
+      group = {
+        key: `order-${key}`,
+        label: num ? `Order #${num}` : "Utan ordernummer",
+        items: [],
+      };
       map.set(key, group);
       order.push(key);
     }

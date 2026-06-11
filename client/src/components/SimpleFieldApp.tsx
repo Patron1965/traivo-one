@@ -11,7 +11,7 @@ import {
   Key, DoorOpen, ListChecks, CircleDot, Circle, Mail, Coffee, MessageSquare, ChevronRight,
   User, CloudSun, Pause, SkipForward, Send, Flag, Thermometer, Wind, Download, Share,
   Lock, Unlock, ClipboardCheck, Wrench, UserX, AlarmClock, Car, Database, FileText, ListTodo, Eye, EyeOff, Settings, Network, Plus,
-  Search, Route, Users, Warehouse, ChevronDown, Package
+  Search, Route, Users, Warehouse, ChevronDown, Package, Hash
 } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
@@ -60,6 +60,7 @@ import {
   sortByRoute,
   groupByLocation,
   groupByCustomer,
+  groupByOrderNumber,
   filterBySearch,
 } from "@/lib/field-job-list";
 import { VoiceInput } from "@/components/VoiceInput";
@@ -212,7 +213,7 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
   const [showEnkelUppgift, setShowEnkelUppgift] = useState(false);
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
   const [jobSearch, setJobSearch] = useState("");
-  const [jobListMode, setJobListMode] = useState<"rutt" | "plats" | "kund">("rutt");
+  const [jobListMode, setJobListMode] = useState<"rutt" | "plats" | "kund" | "order">("rutt");
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
   const [jobStarted, setJobStarted] = useState(false);
   const [startTime, setStartTime] = useState<Date | null>(null);
@@ -676,7 +677,7 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
     id: job.id,
     routeSequence: routeSeqMap.get(job.id) ?? null,
     scheduledStartTime: job.scheduledStartTime ?? null,
-    lat: null, lng: null, address: null, customerId: null, customerName: null, searchText: "",
+    lat: null, lng: null, address: null, customerId: null, customerName: null, orderNumber: null, searchText: "",
   }), [routeSeqMap]);
 
   useEffect(() => {
@@ -1306,6 +1307,7 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
       const lng = (obj?.longitude as number | null | undefined) ?? job.taskLongitude ?? null;
       const address = job.objectAddress || (obj?.address as string | null | undefined) || null;
       const objName = localizedObjectName(job.objectName, job.objectNameTranslations);
+      const orderNumber = job.id ? job.id.slice(0, 8) : null;
       const metaValues = job.metadata
         ? Object.values(job.metadata as Record<string, unknown>)
             .map(v => (typeof v === "string" || typeof v === "number" ? String(v) : ""))
@@ -1313,7 +1315,7 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
       const searchText = [
         job.title, address, (obj?.city as string | null | undefined), objName,
         customer?.name, job.orderType, job.plannedNotes,
-        job.objectAccessCode, job.objectKeyNumber, ...metaValues,
+        job.objectAccessCode, job.objectKeyNumber, orderNumber, ...metaValues,
       ].filter(Boolean).join(" ").toLowerCase();
       return {
         id: job.id,
@@ -1322,6 +1324,7 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
         lat, lng, address,
         customerId: job.customerId ?? null,
         customerName: customer?.name ?? null,
+        orderNumber,
         searchText,
       };
     });
@@ -1336,6 +1339,7 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
   const filteredMetas = useMemo(() => filterBySearch(routeSortedMetas, jobSearch), [routeSortedMetas, jobSearch]);
   const locationGroups = useMemo(() => groupByLocation(filteredMetas), [filteredMetas]);
   const customerGroups = useMemo(() => groupByCustomer(filteredMetas), [filteredMetas]);
+  const orderGroups = useMemo(() => groupByOrderNumber(filteredMetas), [filteredMetas]);
   const jobById = useMemo(() => new Map(todayJobs.map(j => [j.id, j])), [todayJobs]);
 
   const renderJobCard = (job: WorkOrderWithObject) => {
@@ -1361,6 +1365,7 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
               <div className="flex items-start justify-between gap-2">
                 <div className="flex items-center gap-2 flex-wrap">
                   <p className="font-medium">{job.title}</p>
+                  <span className="text-[10px] text-muted-foreground font-mono" data-testid={`text-ordernr-${job.id}`}>#{job.id.slice(0, 8)}</span>
                   {getPriorityBadge(job.priority)}
                   {dependencyData[job.id]?.isLocked && (
                     <Badge variant="outline" className="text-[10px] border-destructive/30 text-destructive gap-0.5">
@@ -3189,7 +3194,7 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
               <ToggleGroup
                 type="single"
                 value={jobListMode}
-                onValueChange={(v) => v && setJobListMode(v as "rutt" | "plats" | "kund")}
+                onValueChange={(v) => v && setJobListMode(v as "rutt" | "plats" | "kund" | "order")}
                 className="justify-start gap-1"
                 data-testid="toggle-list-mode"
               >
@@ -3201,6 +3206,9 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
                 </ToggleGroupItem>
                 <ToggleGroupItem value="kund" className="h-8 px-3 gap-1.5 text-xs" data-testid="toggle-mode-kund">
                   <Users className="h-3.5 w-3.5" /> Kund
+                </ToggleGroupItem>
+                <ToggleGroupItem value="order" className="h-8 px-3 gap-1.5 text-xs" data-testid="toggle-mode-order">
+                  <Hash className="h-3.5 w-3.5" /> Order
                 </ToggleGroupItem>
               </ToggleGroup>
             </div>
@@ -3216,7 +3224,7 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
                 return job ? renderJobCard(job) : null;
               })
             ) : (
-              (jobListMode === "plats" ? locationGroups : customerGroups).map(group => {
+              (jobListMode === "plats" ? locationGroups : jobListMode === "kund" ? customerGroups : orderGroups).map(group => {
                 const collapsed = collapsedGroups.has(group.key);
                 return (
                   <Collapsible
@@ -3238,7 +3246,9 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
                       <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform ${collapsed ? '-rotate-90' : ''}`} />
                       {jobListMode === "plats"
                         ? <MapPin className="h-4 w-4 text-chart-4 shrink-0" />
-                        : <Users className="h-4 w-4 text-chart-4 shrink-0" />}
+                        : jobListMode === "kund"
+                          ? <Users className="h-4 w-4 text-chart-4 shrink-0" />
+                          : <Hash className="h-4 w-4 text-chart-4 shrink-0" />}
                       <span className="font-medium text-sm truncate flex-1">{group.label}</span>
                       <Badge variant="secondary" className="text-[10px] shrink-0">{group.items.length}</Badge>
                     </CollapsibleTrigger>
