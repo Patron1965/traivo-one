@@ -121,6 +121,32 @@ function DropdownBadge({ count }: { count: number }) {
   );
 }
 
+interface NavDirectLinkProps {
+  label: string;
+  href: string;
+  icon: React.ElementType;
+  colorClass: string;
+  items: NavItem[];
+}
+
+function NavDirectLink({ label, href, icon: Icon, colorClass, items }: NavDirectLinkProps) {
+  const [location] = useLocation();
+  const isActive = location === href || items.some((item) => item.url === location);
+  return (
+    <Link href={href}>
+      <Button
+        variant="ghost"
+        size="sm"
+        className={`gap-1 h-8 px-2 text-xs ${isActive ? "bg-muted text-foreground" : ""}`}
+        data-testid={`nav-link-${label.toLowerCase()}`}
+      >
+        <Icon className={`h-3.5 w-3.5 ${colorClass}`} />
+        <span className="hidden xl:inline">{label}</span>
+      </Button>
+    </Link>
+  );
+}
+
 interface NavDropdownProps {
   label: string;
   items: NavItem[];
@@ -721,16 +747,27 @@ export function TopNav() {
             <FavoritesDropdown allItems={roleFilteredItems} badges={badgeCounts} favorites={favorites} toggleFavorite={toggleFavorite} />
             {menuGroups.map((menu) =>
               canAccessMenu(userRole, menu.group as NavMenuGroup) && menu.items.length > 0 ? (
-                <NavDropdown
-                  key={menu.key}
-                  label={menu.label}
-                  items={menu.items}
-                  icon={menu.icon}
-                  colorClass={menu.colorClass}
-                  badges={badgeCounts}
-                  isFavorite={isFavorite}
-                  onToggleFavorite={toggleFavorite}
-                />
+                menu.directUrl ? (
+                  <NavDirectLink
+                    key={menu.key}
+                    label={menu.label}
+                    href={menu.directUrl}
+                    icon={menu.icon}
+                    colorClass={menu.colorClass}
+                    items={menu.items}
+                  />
+                ) : (
+                  <NavDropdown
+                    key={menu.key}
+                    label={menu.label}
+                    items={menu.items}
+                    icon={menu.icon}
+                    colorClass={menu.colorClass}
+                    badges={badgeCounts}
+                    isFavorite={isFavorite}
+                    onToggleFavorite={toggleFavorite}
+                  />
+                )
               ) : null
             )}
           </nav>

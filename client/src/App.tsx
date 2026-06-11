@@ -27,6 +27,7 @@ const AccessDeniedPage = lazy(() => import("@/pages/AccessDeniedPage"));
 const WeekPlannerPage = lazy(() => import("@/pages/WeekPlannerPage"));
 const WeeklyPlanViewPage = lazy(() => import("@/pages/WeeklyPlanViewPage"));
 const GrovplaneringPage = lazy(() => import("@/pages/GrovplaneringPage"));
+const PlaneringsHubPage = lazy(() => import("@/pages/PlaneringsHubPage"));
 const DistrictsAdminPage = lazy(() => import("@/pages/DistrictsAdminPage"));
 const RoutesPage = lazy(() => import("@/pages/RoutesPage"));
 const ObjectsPage = lazy(() => import("@/pages/ObjectsPage"));
@@ -159,6 +160,7 @@ function Router() {
       <Switch>
         <Route path="/">{() => <ProtectedRoute component={MyTasksPage} path="/" />}</Route>
         <Route path="/home">{() => <Redirect to="/" />}</Route>
+        <Route path="/planering">{() => <ProtectedRoute component={PlaneringsHubPage} path="/planering" />}</Route>
         <Route path="/planner">{() => <ProtectedRoute component={WeekPlannerPage} path="/planner" />}</Route>
         <Route path="/week-planner">{() => <Redirect to="/planner" />}</Route>
         <Route path="/veckoplan">{() => <ProtectedRoute component={WeeklyPlanViewPage} path="/veckoplan" />}</Route>

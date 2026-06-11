@@ -71,6 +71,8 @@ export interface NavGroup {
   colorClass: string;
   group: "grunddata" | "ordrar" | "planering" | "falt" | "analys" | "admin";
   items: NavItem[];
+  /** Om satt renderas gruppen som en direktlänk i navbaren istället för dropdown. */
+  directUrl?: string;
 }
 
 const svFallback = (k: string) => translate(k, "sv");
@@ -193,7 +195,7 @@ export function getNavGroups(t: (key: string, fallback: string) => string, tl?: 
   const l = tl || svFallback;
   return [
     { key: "ordrar", label: l("nav.ordrar"), items: getOrdrarItems(t, tl), icon: ClipboardList, group: "ordrar", colorClass: "text-chart-4" },
-    { key: "planering", label: l("nav.planering"), items: getPlaneringItems(tl), icon: Calendar, group: "planering", colorClass: "text-chart-2" },
+    { key: "planering", label: l("nav.planering"), items: getPlaneringItems(tl), icon: Calendar, group: "planering", colorClass: "text-chart-2", directUrl: "/planering" },
     { key: "falt", label: l("nav.falt"), items: getFaltItems(t, tl, lang), icon: Smartphone, group: "falt", colorClass: "text-chart-2" },
     { key: "ekonomi", label: l("nav.ekonomi"), items: getEkonomiItems(tl), icon: BarChart3, group: "analys", colorClass: "text-chart-5" },
     { key: "ai", label: l("nav.ai"), items: getAIItems(tl), icon: Brain, group: "analys", colorClass: "text-chart-5" },
