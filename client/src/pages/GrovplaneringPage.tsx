@@ -128,6 +128,57 @@ function buildGridUrl(
   return `/api/rough-planning/grid?${p.toString()}`;
 }
 
+// Persistens av filter-state över sidladdningar (spec: "Filter-state sparas").
+const FILTER_STORAGE_KEY = "grovplanering.filter.v1";
+
+// Härled applicerbart filter från utkastet — delas av applyFilters och
+// återställning vid mount så att de alltid är identiska.
+function deriveApplied(draft: FilterState): AppliedFilter {
+  const { from, to } = resolvePeriodRange(
+    draft.periodMode,
+    new Date(draft.anchor),
+    draft.rangeFrom,
+    draft.rangeTo,
+  );
+  return {
+    districtIds: draft.districtIds,
+    teamIds: draft.teamIds,
+    postalCode: draft.postalCode.trim(),
+    city: draft.city,
+    from,
+    to,
+    taskTypes: draft.taskTypes,
+    statuses: draft.statuses,
+  };
+}
+
+function loadPersistedFilter(): FilterState | null {
+  try {
+    const raw = localStorage.getItem(FILTER_STORAGE_KEY);
+    if (!raw) return null;
+    // Merga över defaults så att tillkommande/borttagna nycklar inte korrumperar formen.
+    return { ...createDefaultFilter(), ...(JSON.parse(raw) as Partial<FilterState>) };
+  } catch {
+    return null;
+  }
+}
+
+function persistFilter(draft: FilterState): void {
+  try {
+    localStorage.setItem(FILTER_STORAGE_KEY, JSON.stringify(draft));
+  } catch {
+    /* localStorage kan vara blockerad (privat läge) — ignorera tyst */
+  }
+}
+
+function clearPersistedFilter(): void {
+  try {
+    localStorage.removeItem(FILTER_STORAGE_KEY);
+  } catch {
+    /* ignore */
+  }
+}
+
 function pageWindow(current: number, total: number): (number | "ellipsis")[] {
   if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1);
   const pages: (number | "ellipsis")[] = [1];
@@ -147,8 +198,13 @@ export default function GrovplaneringPage() {
   const [pageSize, setPageSize] = useState(20);
   const [offset, setOffset] = useState(0);
 
-  const [draft, setDraft] = useState<FilterState>(createDefaultFilter);
-  const [applied, setApplied] = useState<AppliedFilter>(EMPTY_APPLIED);
+  const [draft, setDraft] = useState<FilterState>(
+    () => loadPersistedFilter() ?? createDefaultFilter(),
+  );
+  const [applied, setApplied] = useState<AppliedFilter>(() => {
+    const persisted = loadPersistedFilter();
+    return persisted ? deriveApplied(persisted) : EMPTY_APPLIED;
+  });
 
   const [selected, setSelected] = useState<Map<string, GridTaskRow>>(new Map());
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
@@ -289,29 +345,16 @@ export default function GrovplaneringPage() {
 
   // Filter apply/clear.
   const applyFilters = () => {
-    const { from, to } = resolvePeriodRange(
-      draft.periodMode,
-      new Date(draft.anchor),
-      draft.rangeFrom,
-      draft.rangeTo,
-    );
-    setApplied({
-      districtIds: draft.districtIds,
-      teamIds: draft.teamIds,
-      postalCode: draft.postalCode.trim(),
-      city: draft.city,
-      from,
-      to,
-      taskTypes: draft.taskTypes,
-      statuses: draft.statuses,
-    });
+    setApplied(deriveApplied(draft));
     setOffset(0);
+    persistFilter(draft);
   };
 
   const clearFilters = () => {
     setDraft(createDefaultFilter());
     setApplied(EMPTY_APPLIED);
     setOffset(0);
+    clearPersistedFilter();
   };
 
   // Återställ sida vid grupperings-/sidstorleksbyte.

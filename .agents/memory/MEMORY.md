@@ -40,7 +40,7 @@
 - [Kluster & hierarkinivå avvecklade i UI](cluster-hierarchy-decommission.md) — ADR v3: kluster/hierarkinivå/snöret/dynamiska kluster borta i UI, men DB-kolumner + backend-plumbing (WeekPlanner/team-vehicles/optimization/SLA) behålls (expand-contract).
 - [Orderkoncept metadata-pekarfält](order-concept-metadata-pointer-coercion.md) — *MetadataField-kolumner = metadata_katalog.namn via getArticleMetadataForObject; coercion till Date/number måste typsäkras (annars tyst epoch-skräp).
 - [Råa db.execute timestamp=sträng](raw-execute-timestamp-strings.md) — drizzle node-postgres råa db.execute() ger timestamp som STRÄNG ej Date; wrappa i new Date() före .toISOString() annars krasch.
-- [drizzle-zod timestamp coerce](drizzle-zod-timestamp-coerce.md) — route-schema som skriver timestamp()-kolumn måste `.extend({col: z.coerce.date()})` annars 400 "Expected date, received string" på varje write (tsc fångar ej).
+- [drizzle-zod timestamp coerce](drizzle-zod-timestamp-coerce.md) — route-schema som skriver timestamp()-kolumn måste `.extend({col: z.coerce.date()})`, annars 400 på varje write (tsc fångar ej).
 - [work_orders dubbla status-kolumner](work-order-dual-status-columns.md) — `status` (livscykel) ≠ `order_status` (Modus); `CREATE INDEX IF NOT EXISTS` matchar på NAMN → samma namn på fel kolumn ger tyst no-op.
 - [Tenant lifecycle DB ops](tenant-lifecycle-db-ops.md) — full-tenant-delete kräver replica-role + NOT EXISTS orphan-sweep (142 NO ACTION FK, 23 join-tabeller utan tenant_id); rename-prune bara säker för leaf-tabeller.
-- [Veckoplanering-vyn (Bilaga C)](veckoplanering-page.md) — `/veckoplanering` = alias för `/veckoplan`; 9:e time_category är frontend-only platshållare; "Automatisk veckoplanering"-knappen = bara recompute (ej auto-placering).
+- [Veckoplanering-vyn (Bilaga C)](veckoplanering-page.md) — `/veckoplanering` = alias för `/veckoplan`; 9:e time_category frontend-only; "Automatisk veckoplanering" = bara recompute (ej auto-placering).
