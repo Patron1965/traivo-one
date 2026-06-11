@@ -1605,7 +1605,12 @@ export const insertArticleTypeDefinitionSchema = createInsertSchema(articleTypeD
   key: z.string().trim().min(1, "Nyckel krävs").max(50, "Nyckeln får vara högst 50 tecken"),
   label: z.string().trim().min(1, "Visningsnamn krävs").max(80, "Visningsnamnet får vara högst 80 tecken"),
 });
-export const insertPriceListSchema = createInsertSchema(priceLists).omit({ id: true, createdAt: true });
+export const insertPriceListSchema = createInsertSchema(priceLists)
+  .omit({ id: true, createdAt: true })
+  .extend({
+    validFrom: z.coerce.date().nullish(),
+    validTo: z.coerce.date().nullish(),
+  });
 export const insertPriceListArticleSchema = createInsertSchema(priceListArticles).omit({ id: true, createdAt: true });
 export const insertResourceArticleSchema = createInsertSchema(resourceArticles).omit({ id: true, createdAt: true });
 export const insertVehicleSchema = createInsertSchema(vehicles).omit({ id: true, createdAt: true });
