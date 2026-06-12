@@ -3694,6 +3694,34 @@ export const EXECUTION_STATUS_LABELS: Record<ExecutionStatus, string> = {
 };
 
 // ============================================
+// UPPGIFTSTYP-REGISTER (Mats Uppdateringar 2026-06-12)
+// ============================================
+// Per-tenant register över uppgiftstyper som driver Uppgiftstyp-filtret i
+// Grovplaneringen. `key` är den normaliserade nyckeln (se normalizeTaskType i
+// server/grovplanering-grid.ts) och är JOIN-punkten mot work_orders.orderType.
+// Att lagra `key` explicit gör att filtreringen fungerar UTAN att peka om
+// work_orders till ett taskTypeId (expand-contract). `key` ska därför behandlas
+// som IMMUTABLE när typen är i bruk (jfr metadata_katalog.namn).
+export const taskTypes = pgTable("task_types", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
+  key: text("key").notNull(),
+  label: text("label").notNull(),
+  sortOrder: integer("sort_order").default(0).notNull(),
+  isActive: boolean("is_active").default(true).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex("uq_task_types_tenant_key").on(table.tenantId, table.key),
+]);
+
+export const insertTaskTypeSchema = createInsertSchema(taskTypes).omit({
+  id: true,
+  createdAt: true,
+});
+export type InsertTaskType = z.infer<typeof insertTaskTypeSchema>;
+export type TaskType = typeof taskTypes.$inferSelect;
+
+// ============================================
 // UTFÖRANDEKODER (C8)
 // ============================================
 

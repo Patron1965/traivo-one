@@ -1,7 +1,6 @@
-import { useState } from "react";
 import { addWeeks, addMonths } from "date-fns";
+import { useQuery } from "@tanstack/react-query";
 import {
-  ChevronDown,
   ChevronLeft,
   ChevronRight,
   Filter,
@@ -67,6 +66,11 @@ interface DistrictOption {
   name: string;
 }
 
+interface TaskTypeOption {
+  key: string;
+  label: string;
+}
+
 interface RoughFilterPanelProps {
   value: FilterState;
   onChange: (next: FilterState) => void;
@@ -92,7 +96,14 @@ export function RoughFilterPanel({
 }: RoughFilterPanelProps) {
   const patch = (p: Partial<FilterState>) => onChange({ ...value, ...p });
   const anchorDate = new Date(value.anchor);
-  const [showMore, setShowMore] = useState(value.teamIds.length > 0);
+
+  // Uppgiftstyper hämtas från det dynamiska, per-tenant registret. Faller tillbaka
+  // till de statiska standardtyperna tills svaret är inne (eller om registret är tomt).
+  const { data: taskTypeData } = useQuery<TaskTypeOption[]>({
+    queryKey: ["/api/reference/task-types"],
+  });
+  const taskTypeOptions: TaskTypeOption[] =
+    taskTypeData && taskTypeData.length > 0 ? taskTypeData : TASK_TYPE_OPTIONS;
 
   const toggleArray = <T extends string>(arr: T[], item: T): T[] =>
     arr.includes(item) ? arr.filter((x) => x !== item) : [...arr, item];
@@ -105,6 +116,16 @@ export function RoughFilterPanel({
   );
   const availableTeams = teams.filter((t) => !value.teamIds.includes(t.id));
   const selectedTeams = teams.filter((t) => value.teamIds.includes(t.id));
+
+  const availableTaskTypes = taskTypeOptions.filter(
+    (t) => !value.taskTypes.includes(t.key),
+  );
+  // Persisterade nycklar som inte längre finns i registret visas ändå som
+  // borttagbara taggar (med rå nyckel som etikett) så filtret aldrig "fastnar".
+  const selectedTaskTypeTags = value.taskTypes.map((key) => ({
+    key,
+    label: taskTypeOptions.find((t) => t.key === key)?.label ?? key,
+  }));
 
   const stepAnchor = (delta: number) => {
     const next =
@@ -277,23 +298,50 @@ export function RoughFilterPanel({
         <div className="grid gap-5 md:grid-cols-2">
           <div className="space-y-2">
             <Label className="text-xs">Uppgiftstyp</Label>
-            <div className="grid grid-cols-2 gap-2">
-              {TASK_TYPE_OPTIONS.map((t) => (
-                <label
-                  key={t.key}
-                  className="flex items-center gap-2 text-sm"
-                  data-testid={`check-tasktype-${t.key}`}
-                >
-                  <Checkbox
-                    checked={value.taskTypes.includes(t.key)}
-                    onCheckedChange={() =>
-                      patch({ taskTypes: toggleArray(value.taskTypes, t.key) })
-                    }
-                  />
-                  {t.label}
-                </label>
-              ))}
-            </div>
+            <Select
+              value=""
+              onValueChange={(key) =>
+                patch({ taskTypes: [...value.taskTypes, key] })
+              }
+              disabled={availableTaskTypes.length === 0}
+            >
+              <SelectTrigger data-testid="select-tasktype">
+                <SelectValue placeholder="Lägg till uppgiftstyp" />
+              </SelectTrigger>
+              <SelectContent>
+                {availableTaskTypes.map((t) => (
+                  <SelectItem key={t.key} value={t.key}>
+                    {t.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {selectedTaskTypeTags.length > 0 && (
+              <div className="flex flex-wrap gap-1.5 pt-1">
+                {selectedTaskTypeTags.map((t) => (
+                  <Badge
+                    key={t.key}
+                    variant="secondary"
+                    className="gap-1"
+                    data-testid={`tag-tasktype-${t.key}`}
+                  >
+                    {t.label}
+                    <button
+                      type="button"
+                      onClick={() =>
+                        patch({
+                          taskTypes: value.taskTypes.filter((x) => x !== t.key),
+                        })
+                      }
+                      className="rounded-sm hover-elevate"
+                      aria-label={`Ta bort ${t.label}`}
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </Badge>
+                ))}
+              </div>
+            )}
           </div>
 
           <div className="space-y-2">
@@ -324,12 +372,9 @@ export function RoughFilterPanel({
           </div>
         </div>
 
-        {/* Fler filter — utökad sektion */}
-        {showMore && (
-          <div
-            className="space-y-2 rounded-md border border-dashed p-3"
-            data-testid="panel-more-filters"
-          >
+        {/* Team — alltid synligt */}
+        <div className="grid gap-5 md:grid-cols-2">
+          <div className="space-y-2">
             <Label className="text-xs">Team</Label>
             <Select
               value=""
@@ -376,56 +421,30 @@ export function RoughFilterPanel({
               </div>
             )}
           </div>
-        )}
+        </div>
 
-        <div className="flex items-center justify-between gap-2 border-t pt-3">
+        <div className="flex items-center justify-end gap-2 border-t pt-3">
           <Button
             type="button"
             variant="ghost"
-            size="sm"
-            className="gap-1 text-muted-foreground"
-            onClick={() => setShowMore((s) => !s)}
-            data-testid="button-toggle-more-filters"
+            onClick={onClear}
+            data-testid="button-clear-filters"
           >
-            <ChevronDown
-              className={
-                "h-4 w-4 transition-transform " + (showMore ? "rotate-180" : "")
-              }
-            />
-            Fler filter
-            {value.teamIds.length > 0 && (
-              <Badge
-                variant="secondary"
-                className="ml-1 h-5 px-1.5 text-xs"
-                data-testid="badge-more-filters-count"
-              >
-                {value.teamIds.length}
-              </Badge>
-            )}
+            Rensa filter
           </Button>
-          <div className="flex items-center gap-2">
-            <Button
-              type="button"
-              variant="ghost"
-              onClick={onClear}
-              data-testid="button-clear-filters"
-            >
-              Rensa filter
-            </Button>
-            <Button
-              type="button"
-              onClick={onApply}
-              disabled={isFetching}
-              data-testid="button-apply-filters"
-            >
-              {isFetching ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <Filter className="h-4 w-4" />
-              )}
-              Filtrera
-            </Button>
-          </div>
+          <Button
+            type="button"
+            onClick={onApply}
+            disabled={isFetching}
+            data-testid="button-apply-filters"
+          >
+            {isFetching ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Filter className="h-4 w-4" />
+            )}
+            Filtrera
+          </Button>
         </div>
       </CardContent>
     </Card>

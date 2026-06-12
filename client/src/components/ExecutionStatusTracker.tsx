@@ -1,6 +1,7 @@
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { cn } from "@/lib/utils";
+import { getExecutionStatusLabel, getExecutionStatusTone, type ExecutionStatusTone } from "@/lib/status-colors";
 import {
   Circle,
   Calendar,
@@ -13,17 +14,6 @@ import {
   LucideIcon,
 } from "lucide-react";
 
-export const EXECUTION_STATUS_LABELS: Record<string, string> = {
-  not_planned: "Ej planerad",
-  planned_rough: "Grovplanerad",
-  planned_fine: "Finplanerad",
-  on_way: "På väg",
-  on_site: "På plats",
-  completed: "Utförd",
-  inspected: "Kontrollerad",
-  invoiced: "Fakturerad",
-};
-
 export const EXECUTION_STATUS_ORDER = [
   "not_planned",
   "planned_rough",
@@ -34,6 +24,12 @@ export const EXECUTION_STATUS_ORDER = [
   "inspected",
   "invoiced",
 ] as const;
+
+// Etiketter härleds ur den enda källan (status-colors.executionStatusMeta) så
+// trackern aldrig motsäger badge/WO-detalj.
+export const EXECUTION_STATUS_LABELS: Record<string, string> = Object.fromEntries(
+  EXECUTION_STATUS_ORDER.map((s) => [s, getExecutionStatusLabel(s)]),
+);
 
 const STATUS_ICONS: Record<string, LucideIcon> = {
   not_planned: Circle,
@@ -46,16 +42,19 @@ const STATUS_ICONS: Record<string, LucideIcon> = {
   invoiced: FileText,
 };
 
-const STATUS_COLORS: Record<string, { bg: string; text: string; border: string }> = {
-  not_planned: { bg: "bg-muted", text: "text-muted-foreground", border: "border-muted-foreground/30" },
-  planned_rough: { bg: "bg-chart-1/10 dark:bg-chart-1/15", text: "text-chart-1", border: "border-chart-1/30 dark:border-chart-1/70" },
-  planned_fine: { bg: "bg-chart-1/10 dark:bg-chart-1/15", text: "text-chart-1", border: "border-chart-1/30 dark:border-chart-1/70" },
-  on_way: { bg: "bg-chart-4/10 dark:bg-chart-4/15", text: "text-chart-4", border: "border-chart-4/30 dark:border-chart-4/70" },
-  on_site: { bg: "bg-chart-4/10 dark:bg-chart-4/15", text: "text-chart-4", border: "border-chart-4/30 dark:border-chart-4/70" },
-  completed: { bg: "bg-chart-2/10 dark:bg-chart-2/15", text: "text-chart-2", border: "border-chart-2/30 dark:border-chart-2/70" },
-  inspected: { bg: "bg-chart-2/10 dark:bg-chart-2/15", text: "text-chart-2", border: "border-chart-2/30 dark:border-chart-2/70" },
-  invoiced: { bg: "bg-chart-2/10 dark:bg-chart-2/15", text: "text-chart-2", border: "border-chart-2/30 dark:border-chart-2/70" },
+// Färgerna härleds ur den enda källan (status-colors.executionStatusMeta.tone) så
+// trackern aldrig motsäger badge/WO-detalj. Varje tone får sin fyllda tracker-variant här.
+const TONE_COLORS: Record<ExecutionStatusTone, { bg: string; text: string; border: string }> = {
+  "chart-2": { bg: "bg-chart-2/10 dark:bg-chart-2/15", text: "text-chart-2", border: "border-chart-2/30 dark:border-chart-2/70" },
+  warning: { bg: "bg-warning/10 dark:bg-warning/15", text: "text-warning", border: "border-warning/30 dark:border-warning/70" },
+  "chart-4": { bg: "bg-chart-4/10 dark:bg-chart-4/15", text: "text-chart-4", border: "border-chart-4/30 dark:border-chart-4/70" },
+  muted: { bg: "bg-muted", text: "text-muted-foreground", border: "border-muted-foreground/30" },
+  destructive: { bg: "bg-destructive/10 dark:bg-destructive/15", text: "text-destructive", border: "border-destructive/30 dark:border-destructive/70" },
 };
+
+function colorsFor(status: string): { bg: string; text: string; border: string } {
+  return TONE_COLORS[getExecutionStatusTone(status)];
+}
 
 interface ExecutionStatusTrackerProps {
   status: string;
@@ -72,9 +71,9 @@ export function ExecutionStatusTracker({
 }: ExecutionStatusTrackerProps) {
   const currentIndex = EXECUTION_STATUS_ORDER.indexOf(status as typeof EXECUTION_STATUS_ORDER[number]);
   const progress = currentIndex >= 0 ? ((currentIndex + 1) / EXECUTION_STATUS_ORDER.length) * 100 : 0;
-  const colors = STATUS_COLORS[status] || STATUS_COLORS.not_planned;
+  const colors = colorsFor(status);
   const Icon = STATUS_ICONS[status] || Circle;
-  const label = EXECUTION_STATUS_LABELS[status] || status;
+  const label = getExecutionStatusLabel(status);
 
   if (variant === "badge") {
     return (
@@ -128,7 +127,7 @@ export function ExecutionStatusTracker({
           const isCompleted = index <= currentIndex;
           const isCurrent = index === currentIndex;
           const StepIcon = STATUS_ICONS[s];
-          const stepColors = STATUS_COLORS[s];
+          const stepColors = colorsFor(s);
 
           return (
             <div
@@ -155,7 +154,7 @@ export function ExecutionStatusTracker({
                     ? "bg-primary border-primary"
                     : "bg-muted border-muted-foreground/30"
                 )}
-                title={EXECUTION_STATUS_LABELS[s]}
+                title={getExecutionStatusLabel(s)}
               >
                 <StepIcon
                   className={cn(
@@ -174,8 +173,8 @@ export function ExecutionStatusTracker({
       </div>
 
       <div className="flex justify-between text-xs text-muted-foreground">
-        <span>Ej planerad</span>
-        <span>Fakturerad</span>
+        <span>{getExecutionStatusLabel(EXECUTION_STATUS_ORDER[0])}</span>
+        <span>{getExecutionStatusLabel(EXECUTION_STATUS_ORDER[EXECUTION_STATUS_ORDER.length - 1])}</span>
       </div>
     </div>
   );

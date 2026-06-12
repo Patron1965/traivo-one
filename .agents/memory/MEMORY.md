@@ -44,3 +44,4 @@
 - [work_orders dubbla status-kolumner](work-order-dual-status-columns.md) — `status` (livscykel) ≠ `order_status` (Modus); `CREATE INDEX IF NOT EXISTS` matchar på NAMN → samma namn på fel kolumn ger tyst no-op.
 - [Tenant lifecycle DB ops](tenant-lifecycle-db-ops.md) — full-tenant-delete kräver replica-role + NOT EXISTS orphan-sweep (142 NO ACTION FK, 23 join-tabeller utan tenant_id); rename-prune bara säker för leaf-tabeller.
 - [Veckoplanering-vyn (Bilaga C)](veckoplanering-page.md) — `/veckoplanering` = alias för `/veckoplan`; 9:e time_category frontend-only; "Automatisk veckoplanering" = bara recompute (ej auto-placering).
+- [tsc baseline noise](tsc-baseline-noise.md) — repo har stabilt brus av pre-existing tsc-fel; bara NYA fel i rörda filer räknas; kör tsc synkront (bg-loggar i /tmp/.local rullas tillbaka mellan bash-anrop).

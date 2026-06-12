@@ -26,7 +26,7 @@ import {
   type ResourceAvailability, type InsertResourceAvailability,
   type VehicleSchedule, type InsertVehicleSchedule,
   type Subscription, type InsertSubscription,
-  type Team, type InsertTeam,
+  type Team, type InsertTeam, type TaskType,
   type TeamMember, type InsertTeamMember,
   type PlanningParameter, type InsertPlanningParameter,
   type Cluster, type InsertCluster,
@@ -123,7 +123,7 @@ import {
   users, tenants, customers, customerRelationships, objects, resources, workOrders, setupTimeLogs, procurements,
   articles, articleTypeDefinitions, priceLists, priceListArticles, resourceArticles, workOrderLines, simulationScenarios,
   vehicles, equipment, resourceVehicles, resourceEquipment, resourceAvailability,
-  vehicleSchedule, subscriptions, teams, teamMembers, planningParameters, clusters,
+  vehicleSchedule, subscriptions, teams, teamMembers, taskTypes, planningParameters, clusters,
   resourcePositions,
   brandingTemplates, tenantBranding, userTenantRoles, auditLogs,
   industryPackages, industryPackageData, tenantPackageInstallations,
@@ -5776,6 +5776,14 @@ export class DatabaseStorage implements IStorage {
   // ============== TEAMS ==============
   async getTeams(tenantId: string): Promise<Team[]> {
     return db.select().from(teams).where(and(eq(teams.tenantId, tenantId), isNull(teams.deletedAt)));
+  }
+
+  async getTaskTypes(tenantId: string): Promise<TaskType[]> {
+    return db
+      .select()
+      .from(taskTypes)
+      .where(and(eq(taskTypes.tenantId, tenantId), eq(taskTypes.isActive, true)))
+      .orderBy(taskTypes.sortOrder, taskTypes.label);
   }
 
   async getTeam(id: string): Promise<Team | undefined> {

@@ -10,6 +10,7 @@ import { AppError, NotFoundError, ValidationError, ForbiddenError, ConflictError
 import { insertArticleSchema, insertArticleTypeDefinitionSchema, insertArticleComponentSchema, insertPriceListSchema, insertPriceListArticleSchema, insertResourceArticleSchema, insertVehicleSchema, insertEquipmentSchema, insertResourceVehicleSchema, insertResourceEquipmentSchema, insertResourceAvailabilitySchema, insertVehicleScheduleSchema, insertSubscriptionSchema, insertTeamSchema, insertTeamMemberSchema, insertPlanningParameterSchema, insertResourceProfileSchema, insertResourceProfileAssignmentSchema, insertWorkSessionSchema, insertWorkEntrySchema, insertFuelLogSchema, insertMaintenanceLogSchema, workSessions, workEntries, timeLogs, equipmentBookings } from "@shared/schema";
 import { getISOWeek, getStartOfISOWeek } from "./helpers";
 import { notificationService } from "../notifications";
+import { TASK_TYPE_KEYS, TASK_TYPE_LABELS } from "../grovplanering-grid";
 
 export async function registerConfigRoutes(app: Express) {
 // ============== ARTICLES ==============
@@ -1581,6 +1582,22 @@ app.post("/api/subscriptions/generate-orders", asyncHandler(async (req, res) => 
     }
 
     res.json({ success: true, generatedCount });
+}));
+
+// ============== REFERENS: UPPGIFTSTYP-REGISTER ==============
+// Dynamiskt, per-tenant register som driver Uppgiftstyp-filtret i Grovplaneringen.
+// Tenant härleds server-side (aldrig från klient-angiven ?tenantId — threat-model).
+// Saknar tenant register-rader (ny tenant innan seed) → syntetisera de 8 standardtyperna.
+app.get("/api/reference/task-types", asyncHandler(async (req, res) => {
+    const tenantId = getTenantIdWithFallback(req);
+    const types = await storage.getTaskTypes(tenantId);
+    if (types.length > 0) {
+      res.json(types.map((t) => ({ key: t.key, label: t.label })));
+      return;
+    }
+    res.json(
+      TASK_TYPE_KEYS.map((k) => ({ key: k, label: TASK_TYPE_LABELS[k] ?? k })),
+    );
 }));
 
 // ============== TEAMS ==============

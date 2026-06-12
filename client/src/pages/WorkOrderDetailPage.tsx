@@ -39,7 +39,7 @@ import { apiRequest, ApiError } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
 import { formatSekFromOre } from "@/lib/format";
-import { workOrderStatusBadge, priorityBadgeClasses, priorityLabels } from "@/lib/status-colors";
+import { workOrderStatusBadge, priorityBadgeClasses, priorityLabels, getExecutionStatusLabel, getExecutionStatusBadge, executionStatusMeta } from "@/lib/status-colors";
 import {
   ArrowLeft,
   ClipboardList,
@@ -191,17 +191,6 @@ function allowedNextStatuses(current: string): string[] {
   return Array.from(allowed);
 }
 
-const EXECUTION_STATUS_LABELS: Record<string, string> = {
-  not_planned: "Ej planerad",
-  planned_rough: "Grovplanerad",
-  planned_fine: "Finplanerad",
-  on_way: "På väg",
-  on_site: "På plats",
-  completed: "Slutförd",
-  inspected: "Inspekterad",
-  invoiced: "Fakturerad",
-};
-
 function statusBadgeClass(orderStatus?: string | null): string {
   if (orderStatus === "utford" || orderStatus === "fakturerad") return workOrderStatusBadge.completed;
   if (orderStatus === "planerad_resurs" || orderStatus === "planerad_las") return workOrderStatusBadge.scheduled;
@@ -241,7 +230,7 @@ const FIELD_LABELS: Record<string, string> = {
 function fmtFieldValue(field: string, value: unknown): string {
   if (value === null || value === undefined || value === "") return "—";
   if (field === "orderStatus") return ORDER_STATUS_LABELS[String(value)] || String(value);
-  if (field === "executionStatus") return EXECUTION_STATUS_LABELS[String(value)] || String(value);
+  if (field === "executionStatus") return getExecutionStatusLabel(String(value));
   if (field === "priority") return priorityLabels[String(value)] || String(value);
   if (field === "scheduledDate") return fmtDate(String(value)) ?? String(value);
   if (typeof value === "string" && value.length > 60) return value.slice(0, 60) + "…";
@@ -502,9 +491,9 @@ export default function WorkOrderDetailPage() {
             {priorityLabels[order.priority] || order.priority}
           </Badge>
         )}
-        {order.executionStatus && EXECUTION_STATUS_LABELS[order.executionStatus] && order.executionStatus !== "not_planned" && (
-          <Badge variant="outline" data-testid="badge-execution-status">
-            {EXECUTION_STATUS_LABELS[order.executionStatus]}
+        {order.executionStatus && executionStatusMeta[order.executionStatus] && order.executionStatus !== "not_planned" && (
+          <Badge variant="outline" className={getExecutionStatusBadge(order.executionStatus)} data-testid="badge-execution-status">
+            {getExecutionStatusLabel(order.executionStatus)}
           </Badge>
         )}
       </PageHeader>

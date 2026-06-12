@@ -75,22 +75,59 @@ export function getWorkOrderStatusBadge(status: string | null | undefined): stri
   return workOrderStatusBadge[status] ?? workOrderStatusBadge.unassigned;
 }
 
-// Execution-status (orderns utförande-tillstånd) — används bl.a. på AssignmentsPage.
-export const executionStatusBadge: Record<string, string> = {
-  not_planned: "bg-muted text-muted-foreground border border-border",
-  planned_rough: "bg-chart-1/15 text-chart-1 border border-chart-1/30",
-  planned_fine: "bg-chart-1/15 text-chart-1 border border-chart-1/30",
-  dispatched: "bg-chart-1/15 text-chart-1 border border-chart-1/30",
-  on_way: "bg-chart-3/15 text-chart-3 border border-chart-3/30",
-  on_site: "bg-chart-4/15 text-chart-4 border border-chart-4/30",
-  completed: "bg-chart-2/15 text-chart-2 border border-chart-2/30",
-  inspected: "bg-chart-2/15 text-chart-2 border border-chart-2/30",
-  impossible: "bg-destructive/15 text-destructive border border-destructive/30",
+// Execution-status (orderns utförande-tillstånd) — ENDA källan för etikett + färg
+// i hela UI:t (badge, tracker, WO-detalj, AssignmentsPage). DB-enumen (se
+// EXECUTION_STATUSES i shared/schema.ts) byter INTE namn — vi mappar bara svenska
+// 8-stegs-etiketter och tema-tokens här (användargodkänd lösning 2026-06-12).
+// `step` är livscykelns ordningsnummer (0 = avvikande/sidospår).
+// Färgspråk: Orderlagd = grön kontur (ej startad), planerad = warning,
+// pågående/avslutad/kontrollerad = chart-4 (neutralt slutfört), fakturerad = muted,
+// avviker = destructive.
+// `tone` är färgfamiljen (tema-token) som ALLA execution-status-ytor delar —
+// badge härleder sin klass av den, och trackern (ExecutionStatusTracker) bygger
+// sina fyllda/outline-varianter ur samma tone. Så slipper vi att t.ex. "Avslutad"
+// blir grön på ett ställe och teal på ett annat.
+export type ExecutionStatusTone = "chart-2" | "warning" | "chart-4" | "muted" | "destructive";
+
+export interface ExecutionStatusMeta {
+  step: number;
+  label: string;
+  tone: ExecutionStatusTone;
+  badge: string;
+}
+
+export const executionStatusMeta: Record<string, ExecutionStatusMeta> = {
+  not_planned: { step: 1, label: "Orderlagd", tone: "chart-2", badge: "bg-background text-chart-2 border-2 border-chart-2/60" },
+  planned_rough: { step: 2, label: "Grovplanerad", tone: "warning", badge: "bg-warning/15 text-warning border border-warning/30" },
+  planned_fine: { step: 3, label: "Finplanerad", tone: "warning", badge: "bg-warning/15 text-warning border border-warning/30" },
+  dispatched: { step: 3, label: "Skickad", tone: "warning", badge: "bg-warning/15 text-warning border border-warning/30" },
+  on_way: { step: 4, label: "På väg", tone: "chart-4", badge: "bg-chart-4/15 text-chart-4 border border-chart-4/30" },
+  on_site: { step: 5, label: "På plats", tone: "chart-4", badge: "bg-chart-4/15 text-chart-4 border border-chart-4/30" },
+  completed: { step: 6, label: "Avslutad", tone: "chart-4", badge: "bg-chart-4/15 text-chart-4 border border-chart-4/30" },
+  inspected: { step: 7, label: "Kontrollerad", tone: "chart-4", badge: "bg-chart-4/15 text-chart-4 border border-chart-4/30" },
+  invoiced: { step: 8, label: "Fakturerad", tone: "muted", badge: "bg-muted text-muted-foreground border border-border" },
+  impossible: { step: 0, label: "Avviker", tone: "destructive", badge: "bg-destructive/15 text-destructive border border-destructive/30" },
+  avviker: { step: 0, label: "Avviker", tone: "destructive", badge: "bg-destructive/15 text-destructive border border-destructive/30" },
 };
 
+// Back-compat: behåll det platta badge-objektet (härlett ur meta) för befintliga importer.
+export const executionStatusBadge: Record<string, string> = Object.fromEntries(
+  Object.entries(executionStatusMeta).map(([key, meta]) => [key, meta.badge]),
+);
+
 export function getExecutionStatusBadge(status: string | null | undefined): string {
-  if (!status) return executionStatusBadge.not_planned;
-  return executionStatusBadge[status] ?? executionStatusBadge.not_planned;
+  if (!status) return executionStatusMeta.not_planned.badge;
+  return executionStatusMeta[status]?.badge ?? executionStatusMeta.not_planned.badge;
+}
+
+export function getExecutionStatusLabel(status: string | null | undefined): string {
+  if (!status) return executionStatusMeta.not_planned.label;
+  return executionStatusMeta[status]?.label ?? status;
+}
+
+export function getExecutionStatusTone(status: string | null | undefined): ExecutionStatusTone {
+  if (!status) return executionStatusMeta.not_planned.tone;
+  return executionStatusMeta[status]?.tone ?? "muted";
 }
 
 // Kund-rapport-status (issue reports/portal field reports).
