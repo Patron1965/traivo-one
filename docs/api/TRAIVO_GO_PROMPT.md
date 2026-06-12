@@ -1,363 +1,83 @@
-TRAIVO GO — CHAUFFÖRSAPP
-========================
-Projektprompt för att bygga den fristående mobilappen kopplad till Traivo-backend.
-
-
-BAKGRUND
-========
-Traivo är en AI-driven fältserviceplattform (SaaS) för nordiska företag inom
-avfallshantering och fastighetsservice. Plattformen har en fullständig backend
-med ca 995 API-endpoints (varav 94 dedikerade `/api/mobile/*`-endpoints för
-mobilappen), 138 databastabeller och komplett mobilapp-API. Alla endpoints är
-tillgängliga både utan prefix och via versions-prefixet `/api/v1/`.
-
-Traivo Go är den fristående mobilappen som fältarbetare (chaufförer, tekniker,
-servicepersonal) använder dagligen. Appen ersätter papper, telefonsamtal och
-manuell rapportering med ett digitalt arbetsflöde som synkar i realtid med
-planerarens system.
-
-Appen ska vara snabb, pålitlig och fungera offline. Den ska vara så enkel
-att en chaufför kan lära sig den på 5 minuter.
-
-
-MÅLGRUPP
-========
-- Chaufförer inom avfallshantering
-- Fastighetstekniker
-- Servicepersonal inom fältservice
-- Nordiska marknaden (primärt Sverige)
-
-
-TECH STACK (rekommenderad)
-==========================
-Framework:      React Native (Expo) eller Flutter
-Språk:          TypeScript / Dart
-State:          Zustand eller Riverpod
-Offline:        WatermelonDB eller Hive (lokal DB)
-Kartor:         react-native-maps eller Google Maps
-Kamera:         expo-camera / image-picker
-GPS:            expo-location med bakgrundsspårning
-Push:           Firebase Cloud Messaging
-Navigation:     React Navigation (stack + bottom tabs)
-HTTP:           Axios med interceptors för auth
-Signatur:       react-native-signature-canvas
-
-
-BEFINTLIGT API (Traivo Backend)
-===============================
-Bas-URL: https://<traivo-domain>/api/mobile/
-Auth: Bearer token via POST /api/mobile/login
-
-AUTENTISERING
-  POST   /api/mobile/login          — Inloggning med PIN eller e-post+PIN
-  POST   /api/mobile/logout         — Utloggning, invalidera token
-  GET    /api/mobile/me             — Hämta inloggad resurs/chaufför
-
-ORDRAR & UPPGIFTER
-  GET    /api/mobile/my-orders      — Dagens ordrar för inloggad resurs
-  GET    /api/mobile/orders         — Alla ordrar (med filter)
-  GET    /api/mobile/orders/:id     — Orderdetalj med objekt, artiklar, metadata
-  PATCH  /api/mobile/orders/:id/status  — Uppdatera status (påbörjad/utförd/etc)
-  PATCH  /api/mobile/orders/:id/substeps/:stepId — Uppdatera delsteg (strukturella uppgifter)
-
-RAPPORTERING
-  POST   /api/mobile/orders/:id/notes       — Lägg till anteckning
-  POST   /api/mobile/orders/:id/deviations  — Rapportera avvikelse (typ, beskrivning, GPS, foton)
-  POST   /api/mobile/orders/:id/materials   — Logga materialförbrukning
-  POST   /api/mobile/orders/:id/signature   — Spara kundsignatur (base64)
-  POST   /api/mobile/orders/:id/inspections — Spara inspektionsresultat
-
-GPS & POSITION
-  POST   /api/mobile/gps            — Skicka GPS-position (lat, lng, accuracy, speed)
-  POST   /api/mobile/position       — Alternativ positionsendpoint
-
-ARBETSPASS (Snöret)
-  POST   /api/mobile/work-sessions/start      — Starta arbetspass (check-in)
-  POST   /api/mobile/work-sessions/:id/stop   — Avsluta arbetspass (check-out)
-  POST   /api/mobile/work-sessions/:id/pause  — Pausa arbetspass
-  POST   /api/mobile/work-sessions/:id/resume — Återuppta arbetspass
-  GET    /api/mobile/work-sessions/active      — Hämta aktivt arbetspass
-  POST   /api/mobile/work-sessions/:id/entries — Skapa tidspost
-
-AI-FUNKTIONER
-  POST   /api/mobile/ai/chat           — AI-chatt (fråga om schema, kunder, m.m.)
-  POST   /api/mobile/ai/transcribe     — Röst-till-text (Whisper)
-  POST   /api/mobile/ai/analyze-image  — AI-bildanalys (skicka base64-bild)
-
-SYNKRONISERING
-  POST   /api/mobile/sync          — Bulk-synk av offline-köade händelser
-  GET    /api/mobile/sync/status   — Synkstatus
-
-ÖVRIGA
-  GET    /api/mobile/summary       — Daglig sammanfattning (ordrar, avvikelser, tid)
-  GET    /api/mobile/weather       — Väderdata (lat/lng)
-  GET    /api/mobile/articles      — Artikellista
-  GET    /api/mobile/orders/:id/checklist — Checklista för order
-  GET    /api/mobile/notifications  — Notifieringar
-  PATCH  /api/mobile/notifications/:id/read — Markera som läst
-  PATCH  /api/mobile/notifications/read-all — Markera alla som lästa
-  GET    /api/mobile/notifications/count    — Olästa antal
-  GET    /api/mobile/route-feedback/mine    — Mina ruttbetyg
-  POST   /api/mobile/route-feedback         — Betygsätt dagens rutt
-  GET    /api/mobile/terminology            — Tenant-specifik terminologi
-
-FOTOUPPLADDING
-  POST   /api/field-worker/tasks/:id/upload-photo — Presigned URL-baserad fotouppladding
-
-
-APPENS STRUKTUR & SIDOR
-========================
-
-1. INLOGGNINGSSKÄRM
-   - PIN-inloggning (4-6 siffror) — snabb för chaufförer
-   - Alternativt: e-post + PIN
-   - Spara token lokalt, auto-login vid återbesök
-   - Tenant-branding (logotyp, färger) om tillgängligt
-
-2. HEMSKÄRM (Dashboard)
-   - Välkomstmeddelande med namn
-   - Dagens datum och väder
-   - Snabbstatistik: antal ordrar idag, klara, kvar
-   - Aktivt arbetspass-indikator (check-in status)
-   - Check-in/check-out-knapp (stort, tydligt)
-   - Olästa notifieringar-badge
-
-3. ORDERLISTA (Dagens rutt)
-   - Lista med dagens ordrar sorterade i ruttordning
-   - Varje kort visar: ordernummer, adress, ordertyp, status
-   - Färgkodad status (ej påbörjad / pågående / klar / avvikelse)
-   - Pull-to-refresh
-   - Filtrering: alla / ej startade / pågående / klara
-   - Klickbar → orderdetalj
-
-4. ORDERDETALJ
-   - Fullständig orderinfo: kund, objekt, adress, artiklar
-   - Planerade meddelanden från planerare (prominent visning)
-   - Uppgiftsberoenden: "Gör A innan B"
-   - Delsteg/checklista med avprickningsfunktion
-   - Navigera-knapp → öppnar extern navigeringsapp
-   - Stora tydliga actionknappar:
-     a) "Starta" → sätter status till pågående
-     b) "Rapportera avvikelse" → avvikelserapport
-     c) "Logga material" → materialformulär
-     d) "Fota" → kamera för dokumentation
-     e) "Anteckning" → fritext-notering
-     f) "Signatur" → kundsignatur
-     g) "Inspektion" → inspektionsformulär
-     h) "Klar" → sätter status till utförd
-
-5. AVVIKELSERAPPORT
-   - Typ: blockerad åtkomst / skadat objekt / fel artikel / övrigt
-   - Beskrivning (fritext, eller röst-till-text via AI)
-   - Fotodokumentation (kamera)
-   - GPS-position bifogas automatiskt
-
-6. MATERIALLOGGNING
-   - Välj artikel från lista (sökbar)
-   - Ange antal/mängd
-   - Valfri kommentar
-
-7. SIGNATURINSAMLING
-   - Rityta för kundens signatur
-   - Spara som base64
-   - Koppling till aktuell order
-
-8. INSPEKTIONSFORMULÄR
-   - Dynamisk checklista baserad på ordertyp
-   - Status per inspektionspunkt: OK / Varning / Underkänd
-   - Kommentar och foto per punkt
-
-9. RUTTBETYG (efter dagens sista order)
-   - 1-5 betyg på dagens rutt
-   - Orsakskategorier: för lång / för kort / logisk / ologisk / bra
-   - Fritext-kommentar
-
-10. ARBETSPASS (Snöret)
-    - Check-in med GPS-position och klockslag
-    - Paus/återuppta
-    - Check-out
-    - Visa dagens arbetstid löpande
-    - Tidsposter per order (automatisk eller manuell)
-
-11. AI-ASSISTENT
-    - Chattvy för att fråga om schema, kunder, objekt
-    - Röstinmatning (hold-to-talk → transkribering)
-    - Fotoanalys: "Vad är fel med detta?"
-
-12. NOTIFIERINGAR
-    - Pushnotifikationer för nya ordrar, schemaändringar, meddelanden
-    - In-app notifieringslista
-    - Badge-räknare
-
-13. PROFIL & INSTÄLLNINGAR
-    - Visa namn, roll, kontaktinfo
-    - Språkval (sv/no/fi/da/en)
-    - Logga ut
-
-
-OFFLINE-ARKITEKTUR (KRITISKT)
-==============================
-Appen MÅSTE fungera utan internetuppkoppling. Chaufförer kör i områden
-med dålig täckning (skogar, tunnlar, landsbygd).
-
-Princip: Offline-first
-  1. Vid start: synka ner dagens ordrar, artiklar, terminologi till lokal DB
-  2. Alla statusändringar, avvikelser, material, signaturer sparas lokalt först
-  3. Bakgrundssynk skickar köade ändringar till servern när nät finns
-  4. Konflikter: server wins (planeraren har sista ordet)
-  5. Synkstatus-indikator synlig för chauffören (grön/gul/röd)
-
-Offline-kö:
-  Varje händelse sparas som en post i lokal kö med:
-  - clientId (UUID genererad lokalt)
-  - type: "status_update" | "deviation" | "material" | "gps" | "note" |
-          "signature" | "inspection" | "photo"
-  - payload: JSON med data
-  - timestamp: när det hände
-  - synced: false → true efter lyckad synk
-
-  POST /api/mobile/sync tar emot hela kön som batch.
-
-
-GPS-SPÅRNING
-=============
-  - Bakgrundsspårning var 30:e sekund under aktivt arbetspass
-  - Skicka batch till /api/mobile/gps
-  - Spara lokalt om offline
-  - Visa enkel karta med dagens rutt (valfritt)
-
-
-DESIGN & UX-PRINCIPER
-======================
-  - Stora knappar (minst 48x48dp) — handskar, solljus, stress
-  - Hög kontrast — läsbart utomhus
-  - Minimal text — ikoner och färger kommunicerar
-  - Max 2 klick till huvudåtgärder
-  - Vänsterhandsanpassat (de flesta håller telefon i vänster hand i fordon)
-  - Haptic feedback vid viktiga åtgärder
-  - Ingen horisontell scrollning
-  - Svensk UI som standard, med stöd för norska/finska/danska/engelska
-
-  Traivo-färgpalett:
-  - Deep Ocean Blue: #1B4B6B (primär)
-  - Arctic Ice: #E8F4F8 (bakgrund)
-  - Mountain Gray: #6B7C8C (sekundärtext)
-  - Northern Teal: #4A9B9B (accent/CTA)
-  - Midnight Navy: #2C3E50 (mörka element)
-  - Aurora Green: #7DBFB0 (framgång/klar)
-
-  Statusfärger:
-  - Ej påbörjad: grå
-  - Pågående: blå (#1B4B6B)
-  - Klar: grön (#7DBFB0)
-  - Avvikelse: orange
-  - Blockerad: röd
-
-  Font: Inter (samma som Traivo web)
-
-
-DATAMODELL (lokal)
-==================
-  Resource (inloggad användare):
-    id, name, role, resourceType, email, phone, executionCodes[]
-
-  WorkOrder (order):
-    id, title, orderNumber, status, scheduledDate, scheduledStartTime,
-    estimatedDuration, address, latitude, longitude, customerId,
-    customerName, objectId, objectType, priority, description,
-    articles[], substeps[], dependencies[], plannedNotes,
-    deviations[], materialsUsed[], signature, inspections[]
-
-  Article:
-    id, name, unit, price, category
-
-  OfflineQueueEntry:
-    clientId, type, payload, timestamp, synced, retryCount
-
-  GPSPoint:
-    latitude, longitude, accuracy, speed, timestamp, synced
-
-  WorkSession:
-    id, startTime, endTime, status, pausedAt, totalPauseMinutes
-
-  Notification:
-    id, title, message, type, read, createdAt
-
-  RouteFeedback:
-    orderId, rating, reasons[], comment, date
-
-
-SYNKRONISERINGSFLÖDE
-====================
-  Appstart:
-    1. Kontrollera token → auto-login eller visa inloggning
-    2. GET /api/mobile/me → verifiera resurs
-    3. GET /api/mobile/my-orders → ladda ner dagens ordrar
-    4. GET /api/mobile/articles → ladda ner artikellista
-    5. GET /api/mobile/terminology → ladda ner terminologi
-    6. GET /api/mobile/notifications/count → olästa
-    7. GET /api/mobile/work-sessions/active → aktivt pass
-    8. Starta bakgrundssynk av offline-kö
-
-  Under dagen:
-    - Varje statusändring/avvikelse/material → spara lokalt → köa för synk
-    - GPS var 30s → samla → batch-skicka var 2 min
-    - Pull-to-refresh på orderlista
-    - Push-notifieringar triggar omladdning
-
-  Kvällen:
-    - Ruttbetyg-prompt efter sista ordern
-    - Check-out arbetspass
-    - Slutgiltig synk av all köad data
-
-
-PUSH-NOTIFIERINGAR
-==================
-  Triggas från Traivo-backend via WebSocket/FCM:
-  - Ny order tilldelad
-  - Order omplanerad (resurs/dag ändrad)
-  - Meddelande från planerare
-  - Schemaändring
-  - Systemmeddelande
-
-
-SÄKERHET
-========
-  - Token-baserad auth (24h giltighet, förnyas vid aktiv användning)
-  - PIN-inloggning (4-6 siffror, kopplad till resurs i backend)
-  - Inga känsliga data cachade i klartext
-  - GPS-data skickas enbart under aktivt arbetspass
-  - Automatisk utloggning efter 24h inaktivitet
-  - Certificate pinning (rekommenderat för produktion)
-
-
-TESTFALL (minimum)
-==================
-  1. Inloggning med PIN → visa orderlista
-  2. Starta order → status ändras till pågående
-  3. Rapportera avvikelse med foto → synkas till backend
-  4. Logga material → synkas till backend
-  5. Samla signatur → synkas till backend
-  6. Offline: gör statusändring → stäng av nät → slå på nät → verifirera synk
-  7. GPS-spårning: starta arbetspass → verifiera positioner i backend
-  8. Ruttbetyg: betygsätt → verifiera i backend
-  9. Push: omplaner order i Traivo → notifikation i appen
-  10. AI-chatt: ställ fråga → få svar
-
-
-MILSTOLPAR
-==========
-  M1 — Grundflöde (2 veckor)
-    Inloggning, orderlista, orderdetalj, statusändring, offline-kö
-
-  M2 — Rapportering (1 vecka)
-    Avvikelser, material, signatur, inspektion, foto
-
-  M3 — Arbetspass & GPS (1 vecka)
-    Check-in/out, GPS-spårning, tidsloggning
-
-  M4 — AI & Notifieringar (1 vecka)
-    AI-chatt, röstinmatning, push-notifikationer
-
-  M5 — Polish & Release (1 vecka)
-    Ruttbetyg, offline-robusthet, UX-polish, testning, app store-submission
+# UPPDRAG: Gör Traivo Go 100 % kompatibel med Traivo One
+
+> **Hur du använder filen:** Kopiera hela innehållet nedan och klistra in det som en
+> prompt i Traivo Go-projektet. Den är förankrad i Traivo Ones faktiska mobil-API
+> (`server/routes/mobile/*`), auth-modellen och v2-ordershapen. Källrapporter:
+> `docs/traivo-go-api-match-report.md`, `docs/traivo-go-integration-rapport.md`,
+> `docs/traivo-go-v2-handover.md`, `docs/api/MOBILE_API.md`.
+
+---
+
+Du arbetar i **Traivo Go** (den fristående mobil-fältappen). Målet är att Go ska vara
+**100 % sammankopplad och i synk med backend Traivo One**. **Traivo One är sanningskälla**
+— Go ska anpassa sig efter dess faktiska mobil-API, inte tvärtom. Implementera allt nedan.
+Ändra inget som står som "RÖR EJ".
+
+## 0. Grundregler (auth, versionering, tenant)
+- All mobiltrafik går **enbart** mot `/api/mobile/*`. Vanliga `/api/*` (cookie-auth) fungerar **inte** med bearer-token → 401.
+- **Versionering – RÖR EJ:** appen skriver redan om `/api/mobile/X` → `/api/v1/mobile/X`. Backend strippar `/api/v1` och routar internt. Detta är korrekt, ändra inget.
+- **Auth:** `POST /api/mobile/login` med antingen `{ email, pin }` eller `{ username, password }` (PIN = 4–6 siffror). Svar innehåller `token`. Skicka `Authorization: Bearer <token>` på **alla** anrop. Token gäller **24 h**.
+- **Tenant härleds server-side** från den inloggade resursen. Skicka **aldrig** tenant-id från klienten.
+
+## 1. Detta matchar redan — RÖR EJ
+Inloggning (`login`/`logout`/`me`), `push-token` (POST/DELETE), `status`, `my-profiles`, WS-token, ordrar (`my-orders`, `orders/:id`, `PATCH orders/:id/status`, `v2/orders/:id`), offline-sync (`POST /api/mobile/sync`, `GET /api/mobile/sync/status`), arbetspass (`work-sessions/*`), störnings-triggers, akutjobb (`jobs/urgent/*`), AI (`ai/chat`, `ai/transcribe`, `ai/analyze-image`), team, aviseringar, GPS (`position`), weather/distance/articles/break-config/route/route-feedback. **Ändra inget av detta.**
+
+## 2. Åtta fixar för 100 % API-match — GÖR DESSA
+
+**Kategori A – rena namnbyten i appen (enradare):**
+1. `GET /api/mobile/app/config` → **`app-config`** (`useAppConfig.ts`).
+2. `GET/PATCH /api/mobile/user/preferences` → **`preferences`** (GET/PUT/PATCH, 3 ställen i `usePreferences.ts`). Svaret är **inkapslat**: läs `data.preferences` (ej platt). Tillåtna PATCH-fält: `darkMode` (bool), `fontSize` (enum), `pushCategories` (objekt) m.fl.
+3. `GET /api/mobile/notifications/unread-count` → **`notifications/count`** (2 ställen i `useNotifications.ts`, inkl. queryKey). Läs **`data.unreadCount`**.
+
+**Kategori B – peka om appen (rekommenderat) eller bygg i backend:**
+4. **GPS-batch:** ingen `position/batch` finns. Skicka batchen via befintlig sync (`POST /api/mobile/sync` med `actionType:"gps"`) **eller** loopa `POST /api/mobile/position` (`useGpsTracking.ts`).
+5. **Ruttoptimering:** byt async-jobb + polling till **synkron `GET /api/mobile/route-optimized`** (`useRouteOptimization.ts`).
+6. **Röstkommando:** använd `POST /api/mobile/ai/transcribe` (+ `ai/chat`) i stället för `ai/voice-command` (`useVoiceCommands.ts`).
+7. **AI-stream:** falla tillbaka till `POST /api/mobile/ai/chat` (ingen stream-variant finns).
+8. **Ruttmetrik:** ingen `route-metrics/today`. Använd `GET /api/mobile/statistics/summary` och/eller `GET /api/mobile/route-feedback/mine`.
+
+## 3. Order v2 — adoptera (frozen / BOM / beroenden)
+Använd **`GET /api/mobile/v2/orders/:id`** (fall tillbaka till v1 vid 4xx/5xx):
+- **`frozen`:** när `isFrozen=true` → visa låsikon + använd `totalPrice` (räkna inte från rader). Material-/foto-tillägg är OK men visa **"påverkar inte fakturasumma — frusen WO"**.
+- **`bomChecklist`:** materialkälla per strukturartikel. Visa `totalRequired` (det upplösta antalet), **aldrig formeln**. Behandla v1:s `subSteps` som **legacy**.
+- **`dependencyStatus` + `canStart` + `blockedBy`:** när `canStart=false` → **disabla "Starta jobb"**, visa "Väntar på: `<orderTitle>`" (länk till föregångaren). Tillåt ändå **"På väg"** och navigation.
+
+## 4. Nya artikel-fält (LIVE på `articles[]` i v1 + v2) — bygg fält-rapportering
+- **`files[]`** `{name,url,type}` – instruktioner/PDF, visa som bilagor.
+- **`reportingType`** (`antal|status|foto|fotogalleri|text|null`) – styr inmatningen vid utförande.
+- **`reportingMetadataField`** – vart värdet skrivs (metadata-nyckel). Se metadata-fallgropar §8.
+- **`shouldBeReturned`** (bool) – trigga "ta med tillbaka / pant"-moment.
+- **`productionTimeMinutes` / `productionTimeSource`** (`resource|list|article`) – effektiv produktionstid.
+- **Föruppgifter:** `isPreTask`, `parentWorkOrderId`, `dependencyOffsetMinutes` (t.ex. −2880 = 2 dygn före). Markera tydligt (badge) och koppla visuellt till huvuduppgiften.
+
+## 5. Säkerhet — obligatoriskt
+- **Endast `/api/mobile/*`.** Anropa **aldrig** webb-rutterna `/api/checklist*`, `/api/quick-action` eller `/api/ai/*` (de är nu planner/admin-låsta). Använd mobil-varianterna: `GET|POST /api/mobile/orders/:id/checklist`, `POST /api/mobile/quick-action`, `POST /api/mobile/ai/*`.
+- Skicka aldrig tenant från klienten; lita på serverns resursbindning.
+
+## 6. UX-semantik som MÅSTE stämma med Traivo One
+- **"Utförd ≠ fakturerad":** en klar order kan vara `held`/bromsad/samlingsfaktura och ännu inte fakturerad. Visa aldrig "fakturerad" bara för att jobbet är utfört.
+- **Fryst pris/mottagare:** fält-tillägg ändrar inte fakturasumman — kommunicera det i UI.
+
+## 7. Design- & ergonomi-paritet (samma känsla som Traivo One)
+- **Palett (Traivo):** Deep Ocean Blue `#1B4B6B`, Arctic Ice `#E8F4F8`, Mountain Gray `#6B7C8C`, Northern Teal `#4A9B9B`, Midnight Navy `#2C3E50`, Aurora Green `#7DBFB0`. **Font:** Inter. Språk: **svenska**.
+- **Ljust + mörkt läge** med en **lätt åtkomlig läge-knapp i appens header** (måne/sol). Valet ska sparas.
+- **Ingen ren vit (`#FFF`) på stora ytor** i ljust läge — använd lugn off-white (mindre glare). I mörkt läge: nära-svart blå-tonad bakgrund + **mjuk off-white text** (ej ren vit).
+- **Status alltid med både färg OCH text** (färgblindhet).
+- **Kritisk info läsbar:** order-ID och tidsfönster i tillräcklig storlek (undvik ~10px för viktigt innehåll — sol/skakande hytt). Respektera systemets textskalning.
+- **Batteri:** undvik konstant high-accuracy GPS var 15:e sekund — använd adaptiv takt (sakta vid stillastående/lågt batteri) + batterivarning för 10-timmarspass.
+- **Komprimera foton före uppladdning** (spara batteri/data; servern avvisar för stora filer).
+
+## 8. Metadata-fallgropar (om Go läser/skriver metadata)
+- **Två parallella system** (engelskt `metadataDefinitions`/`objectMetadata` vs svenskt `metadataKatalog`/`metadataVarden`) — **inte** synkade. Kolla vilket en endpoint träffar.
+- **`metod`** `system|tjanst|utforande` är **read-only** (auto). Writeback vid utförande måste sättas med rätt `metod`.
+- **Sammansatta fält** (`fält.underfält`) grupperas till **ett** JSON-fält — behandla som objekt.
+- Artiklar kopplar metadata **via NAMN, inte id** — exakt namn-matchning (`antal` ≠ `antal_matavfall`).
+
+## 9. Klart-definition (Definition of Done)
+- [ ] De 8 avvikelserna i §2 åtgärdade.
+- [ ] `GET /api/mobile/v2/orders/:id` i bruk med fallback till v1.
+- [ ] Start-knappen gateas på `canStart`; föruppgifter visas.
+- [ ] Inga webb-rutter (`/api/checklist*`, `/api/quick-action`, `/api/ai/*`) anropas.
+- [ ] Bearer-auth + `/api/v1`-prefix orört och fungerar.
+- [ ] Design-paritet: Traivo-palett, Inter, ljust/mörkt med läge-knapp, off-white ytor, status med färg+text.
+- [ ] "Utförd ≠ fakturerad" och "fryst pris" kommuniceras korrekt i UI.

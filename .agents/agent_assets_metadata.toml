@@ -162,3 +162,9 @@ id = "wbY3zgjefqtYjJi-J6Kcj"
 uri = "file://docs/kinab-simulering-arbetsflode.md"
 type = "text"
 title = "KINAB – Steg-för-steg simulering av arbetsflöde"
+
+[[outputs]]
+id = "P0mlx-ri0VMzi6Eupvsbq"
+uri = "file://docs/api/TRAIVO_GO_PROMPT.md"
+type = "text"
+title = "Traivo Go-prompt — 100 % match med Traivo One"
