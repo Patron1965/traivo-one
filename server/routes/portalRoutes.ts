@@ -8,7 +8,7 @@ import { getTenantIdWithFallback } from "../tenant-middleware";
 import { asyncHandler } from "../asyncHandler";
 import { AppError, NotFoundError, ValidationError, UnauthorizedError, ForbiddenError, ConflictError } from "../errors";
 import { requireAdmin, requireRole } from "../tenant-middleware";
-import { insertPortalMessageSchema, insertSelfBookingSchema, insertVisitConfirmationSchema, insertTechnicianRatingSchema, insertQrCodeLinkSchema, insertSelfBookingSlotSchema, type InsertObject, objectMetadata, taskMetadataUpdates } from "@shared/schema";
+import { insertPortalMessageSchema, insertSelfBookingSchema, insertVisitConfirmationSchema, insertTechnicianRatingSchema, insertQrCodeLinkSchema, insertSelfBookingSlotSchema, insertCustomerNotificationSettingsSchema, type InsertObject, objectMetadata, taskMetadataUpdates } from "@shared/schema";
 import { getObjectWithAllMetadata, writeArticleMetadataOnObject } from "../metadata-queries";
 import { notificationService } from "../notifications";
 import { sendEmail } from "../replit_integrations/resend";
@@ -1273,11 +1273,17 @@ app.put("/api/portal/notification-settings", asyncHandler(async (req, res) => {
     const session = await requirePortalAuth(req, res);
     if (!session) return;
 
-    const updates = req.body;
+    const parsed = insertCustomerNotificationSettingsSchema
+      .omit({ tenantId: true, customerId: true })
+      .safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json(formatZodError(parsed.error));
+    }
+
     const settings = await storage.upsertCustomerNotificationSettings({
+      ...parsed.data,
       tenantId: session.tenantId!,
       customerId: session.customerId!,
-      ...updates,
     });
 
     res.json(settings);

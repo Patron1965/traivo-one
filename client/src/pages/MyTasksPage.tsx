@@ -52,6 +52,8 @@ import { ObjectImagesGallery } from "@/components/ObjectImagesGallery";
 import { OnboardingGuide } from "@/components/OnboardingGuide";
 import { useLanguage } from "@/hooks/use-language";
 import { enUS as enLocale } from "date-fns/locale";
+import { useAuth } from "@/hooks/use-auth";
+import { isPlannerRole } from "@/lib/role-config";
 
 interface AIMessage {
   id: string;
@@ -565,6 +567,8 @@ function TodaysOrdersList({
 }
 
 export default function MyTasksPage() {
+  const { user } = useAuth();
+  const isPlanner = isPlannerRole(user?.role);
   const [aiPanelOpen, setAiPanelOpen] = useState(false);
   const [selectedObject, setSelectedObject] = useState<ServiceObject | null>(null);
   const [objectDialogOpen, setObjectDialogOpen] = useState(false);
@@ -784,8 +788,8 @@ export default function MyTasksPage() {
         {/* Recent Changes */}
         {!ordersLoading && <RecentChanges orders={orders} />}
 
-        {/* Proactive AI Tips - smaller */}
-        <ProactiveTips />
+        {/* Proactive AI Tips - smaller (planner+ only; backend kräver requirePlanner) */}
+        {isPlanner && <ProactiveTips />}
 
       <AIAssistantPanel 
         isOpen={aiPanelOpen} 

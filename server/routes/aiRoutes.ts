@@ -613,10 +613,10 @@ const handlePredictiveMaintenance = async (req: any, res: any) => {
     res.status(500).json({ error: "Kunde inte generera prediktioner" });
   }
 };
-app.get("/api/ai/predictive-maintenance", isAuthenticated, asyncHandler(handlePredictiveMaintenance));
-app.post("/api/ai/predictive-maintenance", isAuthenticated, asyncHandler(handlePredictiveMaintenance));
+app.get("/api/ai/predictive-maintenance", requirePlanner, asyncHandler(handlePredictiveMaintenance));
+app.post("/api/ai/predictive-maintenance", requirePlanner, asyncHandler(handlePredictiveMaintenance));
 
-app.post("/api/ai/service-patterns", isAuthenticated, asyncHandler(async (req, res) => {
+app.post("/api/ai/service-patterns", requirePlanner, asyncHandler(async (req, res) => {
     const guard = await aiBudgetGuard(req, res);
     if (guard.blocked) return;
     const tenantId = guard.tenantId;
@@ -745,7 +745,7 @@ app.post("/api/ai/service-patterns", isAuthenticated, asyncHandler(async (req, r
 
 // AI Proactive Tips - background anomaly analysis for proactive suggestions
 // OPTIMIZED: Uses efficient SQL COUNT queries instead of fetching all records
-app.get("/api/ai/proactive-tips", isAuthenticated, asyncHandler(async (req, res) => {
+app.get("/api/ai/proactive-tips", requirePlanner, asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     
     // Use optimized count queries - much faster than fetching all orders
@@ -990,7 +990,7 @@ app.get("/api/ai/planning-analysis", requirePlanner, asyncHandler(async (req, re
 }));
 
 // AI KPIs endpoint - get planning KPIs for dashboard/analysis
-app.get("/api/ai/kpis", asyncHandler(async (req, res) => {
+app.get("/api/ai/kpis", requirePlanner, asyncHandler(async (req, res) => {
     const { calculatePlanningKPIs } = await import("../ai-planner");
     const tenantId = getTenantIdWithFallback(req);
     
@@ -1006,7 +1006,7 @@ app.get("/api/ai/kpis", asyncHandler(async (req, res) => {
 }));
 
 // AI Explain Anomaly - get AI explanation for a specific anomaly
-app.post("/api/ai/explain-anomaly", asyncHandler(async (req, res) => {
+app.post("/api/ai/explain-anomaly", requirePlanner, asyncHandler(async (req, res) => {
     const { explainAnomaly } = await import("../ai-planner");
     const { anomalyType, context } = req.body;
     
@@ -1137,7 +1137,7 @@ app.post("/api/ai/auto-schedule", requirePlanner, asyncHandler(async (req, res) 
 }));
 
 // Route optimization per day
-app.post("/api/ai/optimize-routes", asyncHandler(async (req, res) => {
+app.post("/api/ai/optimize-routes", requirePlanner, asyncHandler(async (req, res) => {
     const { optimizeDayRoutes } = await import("../route-optimizer");
     const { date } = req.body;
     
@@ -1610,7 +1610,7 @@ app.post("/api/ai/auto-schedule/apply", requirePlanner, asyncHandler(async (req,
 }));
 
 // Workload analysis - detect imbalances
-app.post("/api/ai/workload-analysis", asyncHandler(async (req, res) => {
+app.post("/api/ai/workload-analysis", requirePlanner, asyncHandler(async (req, res) => {
     const { analyzeWorkloadImbalances } = await import("../ai-planner");
     const { weekStart, weekEnd } = req.body;
     
@@ -2420,7 +2420,7 @@ app.post("/api/ai/suggest-placement", isAuthenticated, asyncHandler(async (req: 
     });
 }));
 
-app.post("/api/ai/resource-competency-check", isAuthenticated, asyncHandler(async (req: Request, res: Response) => {
+app.post("/api/ai/resource-competency-check", requirePlanner, asyncHandler(async (req: Request, res: Response) => {
     const schema = z.object({
       resourceId: z.string(),
       articleIds: z.array(z.string()),
@@ -2476,7 +2476,7 @@ app.post("/api/ai/resource-competency-check", isAuthenticated, asyncHandler(asyn
     });
 }));
 
-app.post("/api/ai/suggest-resource-for-new-order", isAuthenticated, asyncHandler(async (req: Request, res: Response) => {
+app.post("/api/ai/suggest-resource-for-new-order", requirePlanner, asyncHandler(async (req: Request, res: Response) => {
     const schema = z.object({
       objectId: z.string(),
       articleIds: z.array(z.string()).optional().default([]),
@@ -2650,7 +2650,7 @@ app.post("/api/ai/suggest-resource-for-new-order", isAuthenticated, asyncHandler
     res.json({ suggestions: suggestions.slice(0, 3) });
 }));
 
-app.post("/api/ai/auto-distribute-today", isAuthenticated, asyncHandler(async (req: Request, res: Response) => {
+app.post("/api/ai/auto-distribute-today", requirePlanner, asyncHandler(async (req: Request, res: Response) => {
     const tenantId = getTenantIdWithFallback(req);
     const today = new Date().toISOString().split("T")[0];
 
