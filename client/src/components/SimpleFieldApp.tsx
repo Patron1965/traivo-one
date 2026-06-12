@@ -11,7 +11,7 @@ import {
   Key, DoorOpen, ListChecks, CircleDot, Circle, Mail, Coffee, MessageSquare, ChevronRight,
   User, CloudSun, Pause, SkipForward, Send, Flag, Thermometer, Wind, Download, Share,
   Lock, Unlock, ClipboardCheck, Wrench, UserX, AlarmClock, Car, Database, FileText, ListTodo, Eye, EyeOff, Settings, Network, Plus,
-  Search, Route, Users, Warehouse, ChevronDown, Package, Hash
+  Search, Route, Users, Warehouse, ChevronDown, Package, Hash, Moon, Sun
 } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
@@ -21,6 +21,7 @@ import { sv } from "date-fns/locale";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useLocalizedObjectName } from "@/lib/object-name";
 import { useToast } from "@/hooks/use-toast";
+import { useTheme } from "@/hooks/use-theme";
 import { useObjectsByIds } from "@/hooks/useObjectSearch";
 import { useNotifications, type Notification } from "@/hooks/useNotifications";
 import { useOfflineSupport } from "@/hooks/useOfflineSupport";
@@ -264,6 +265,7 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
   const [impossiblePhotoDragOver, setImpossiblePhotoDragOver] = useState(false);
   const [showMyReportsPanel, setShowMyReportsPanel] = useState(false);
   const [showSettingsPanel, setShowSettingsPanel] = useState(false);
+  const { theme, toggleTheme } = useTheme();
 
   const { data: myResource } = useQuery<Resource>({
     queryKey: ["/api/resources", resourceId],
@@ -1619,13 +1621,13 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
                   </div>
                   <div className="grid grid-cols-2 gap-3">
                     {(selectedJob.objectAccessCode || accessInfo.gateCode) && (
-                      <div className="text-center p-2 bg-white dark:bg-background rounded border">
+                      <div className="text-center p-2 bg-card dark:bg-background rounded border">
                         <p className="text-[10px] text-muted-foreground uppercase">Portkod</p>
                         <p className="text-2xl font-mono font-bold">{selectedJob.objectAccessCode || accessInfo.gateCode}</p>
                       </div>
                     )}
                     {selectedJob.objectKeyNumber && (
-                      <div className="text-center p-2 bg-white dark:bg-background rounded border">
+                      <div className="text-center p-2 bg-card dark:bg-background rounded border">
                         <p className="text-[10px] text-muted-foreground uppercase flex items-center justify-center gap-1">
                           <Key className="h-3 w-3" />
                           Nyckel
@@ -1776,7 +1778,7 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
                     </div>
 
                     {article.fetchedValue !== null && (
-                      <div className="flex items-center justify-between bg-white dark:bg-background rounded border p-2">
+                      <div className="flex items-center justify-between bg-card dark:bg-background rounded border p-2">
                         <span className="text-xs text-muted-foreground">{article.fetchMetadataLabel}</span>
                         <span className="text-sm font-medium">{article.fetchedValue}</span>
                       </div>
@@ -1966,13 +1968,13 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   {(selectedJob.objectAccessCode || accessInfo.gateCode) && (
-                    <div className="text-center p-2 bg-white dark:bg-background rounded border">
+                    <div className="text-center p-2 bg-card dark:bg-background rounded border">
                       <p className="text-[10px] text-muted-foreground uppercase">Portkod</p>
                       <p className="text-2xl font-mono font-bold">{selectedJob.objectAccessCode || accessInfo.gateCode}</p>
                     </div>
                   )}
                   {selectedJob.objectKeyNumber && (
-                    <div className="text-center p-2 bg-white dark:bg-background rounded border">
+                    <div className="text-center p-2 bg-card dark:bg-background rounded border">
                       <p className="text-[10px] text-muted-foreground uppercase flex items-center justify-center gap-1">
                         <Key className="h-3 w-3" />
                         Nyckel
@@ -2920,6 +2922,16 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
                 <Settings className={`h-4 w-4 ${showSettingsPanel ? "text-primary" : "text-muted-foreground"}`} />
               </Button>
             )}
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-8 px-2 gap-1"
+              onClick={toggleTheme}
+              data-testid="button-toggle-theme"
+              aria-label={theme === "light" ? "Byt till mörkt läge" : "Byt till ljust läge"}
+            >
+              {theme === "light" ? <Moon className="h-4 w-4 text-muted-foreground" /> : <Sun className="h-4 w-4 text-muted-foreground" />}
+            </Button>
             <Button 
               variant="ghost" 
               size="icon"
