@@ -735,12 +735,12 @@ export default function MyTasksPage() {
         </div>
 
         {/* Dagens jobb - huvudfokus */}
-        <Card className="mb-6 border-l-4 border-l-[#1B4B6B] dark:border-l-[#4A9B9B]">
+        <Card className="mb-6 border-l-4 border-l-primary/70 dark:border-l-chart-2/80">
           <CardHeader className="flex flex-row items-center justify-between gap-4 pb-4">
             <div>
               <CardTitle className="flex items-center gap-2">
-                <div className="p-1.5 rounded-lg bg-[#1B4B6B]/10 dark:bg-[#4A9B9B]/20">
-                  <Calendar className="h-4 w-4 text-[#1B4B6B] dark:text-[#4A9B9B]" />
+                <div className="p-1.5 rounded-lg bg-primary/10 dark:bg-chart-2/20">
+                  <Calendar className="h-4 w-4 text-primary dark:text-chart-2" />
                 </div>
                 {tl("page.today.todays-jobs")}
               </CardTitle>
