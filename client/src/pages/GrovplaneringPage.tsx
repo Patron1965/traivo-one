@@ -632,7 +632,7 @@ export default function GrovplaneringPage() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {[20, 50, 100].map((n) => (
+                  {[10, 20, 50, 100].map((n) => (
                     <SelectItem key={n} value={String(n)}>
                       {n}/sida
                     </SelectItem>
