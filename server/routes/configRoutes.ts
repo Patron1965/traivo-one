@@ -99,6 +99,12 @@ app.post("/api/articles", requireAdmin, asyncHandler(async (req, res) => {
         throw new ValidationError("Ersättningsartikeln hittades inte i denna tenant");
       }
     }
+    if (data.defaultSupplierId) {
+      const supplier = await storage.getSupplier(data.defaultSupplierId, tenantId);
+      if (!supplier) {
+        throw new ValidationError("Leverantören hittades inte i denna tenant");
+      }
+    }
     // Task #837: Fortnox-koppling. Frontend skickar `fortnoxArticleNumber` vid sidan
     // av artikeldatan när användaren valt en artikel ur Fortnox-registret. Kopplingen
     // lagras i fortnox_mappings (entityType="article") och är det Fortnox-export
@@ -149,6 +155,12 @@ app.patch("/api/articles/:id", requireAdmin, asyncHandler(async (req, res) => {
       const repl = await storage.getArticle(updateData.replacementArticleId);
       if (!verifyTenantOwnership(repl, tenantId)) {
         throw new ValidationError("Ersättningsartikeln hittades inte i denna tenant");
+      }
+    }
+    if (updateData.defaultSupplierId) {
+      const supplier = await storage.getSupplier(updateData.defaultSupplierId, tenantId);
+      if (!supplier) {
+        throw new ValidationError("Leverantören hittades inte i denna tenant");
       }
     }
     // Task #837: Fortnox-koppling. `fortnoxArticleNumber` skickas bara med när

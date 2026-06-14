@@ -46,6 +46,7 @@ const ProcurementsPage = lazy(() => import("@/pages/ProcurementsPage"));
 const OptimizationPrepPage = lazy(() => import("@/pages/OptimizationPrepPage"));
 const LoginPage = lazy(() => import("@/pages/LoginPage"));
 const ArticlesPage = lazy(() => import("@/pages/ArticlesPage"));
+const ArticleFormPage = lazy(() => import("@/pages/ArticleFormPage"));
 const PriceListsPage = lazy(() => import("@/pages/PriceListsPage"));
 const OrderStockPage = lazy(() => import("@/pages/OrderStockPage"));
 const VehiclesPage = lazy(() => import("@/pages/VehiclesPage"));
@@ -178,6 +179,8 @@ function Router() {
         <Route path="/work-orders/:id">{() => <ProtectedRoute component={WorkOrderDetailPage} path="/work-orders" />}</Route>
         <Route path="/resources">{() => <ProtectedRoute component={ResourcesPage} path="/resources" />}</Route>
         <Route path="/procurements">{() => <ProtectedRoute component={ProcurementsPage} path="/procurements" />}</Route>
+        <Route path="/articles/new">{() => <ProtectedRoute component={ArticleFormPage} path="/articles" />}</Route>
+        <Route path="/articles/:id/edit">{() => <ProtectedRoute component={ArticleFormPage} path="/articles" />}</Route>
         <Route path="/articles">{() => <ProtectedRoute component={ArticlesPage} path="/articles" />}</Route>
         <Route path="/price-lists">{() => <ProtectedRoute component={PriceListsPage} path="/price-lists" />}</Route>
         <Route path="/order-stock">{() => <ProtectedRoute component={OrderStockPage} path="/order-stock" />}</Route>

@@ -733,6 +733,27 @@ export const articles = pgTable("articles", {
   // Task #834: uppladdad extern info-fil (säkerhetsdatablad/produktblad) via Object Storage,
   // lagras som /objects/...-path. Komplement till externInfoUrl (länk).
   externInfoFileUrl: text("extern_info_file_url"),
+  // === "Ny artikel"-layoutspec: nya artikelkonfigurationsfält ===
+  // Expand-contract: alla nullable/default → befintlig data + integrationer oförändrade.
+  // Pris & Ekonomi (öre för prisfält, min för tider):
+  purchasePrice: integer("purchase_price"),       // Inköpspris (öre)
+  standardCost: integer("standard_cost"),         // Standardkostnad (öre)
+  materialCost: integer("material_cost"),          // Materialkostnad (öre)
+  markupPercent: real("markup_percent"),           // Påslag (%)
+  chargeModel: text("charge_model"),               // Debiteringsmodell: per_styck/per_timme/fast/per_meter/per_kvm
+  travelTime: integer("travel_time"),              // Restid (min)
+  // Lager & Inköp:
+  defaultSupplierId: varchar("default_supplier_id").references((): any => suppliers.id, { onDelete: "set null" }),
+  reorderPoint: integer("reorder_point"),          // Beställningspunkt (st)
+  safetyStock: integer("safety_stock"),            // Säkerhetslager (st)
+  minOrderQuantity: integer("min_order_quantity"), // Minsta orderantal (st)
+  // Lagerplatser — array av {location, balance, minLevel, reorderPoint}. Saldo är readonly/beräknat.
+  stockLocations: jsonb("stock_locations").default([]),
+  // Informationsinhämtning (sektion 9) — array av {type, required, metadataField}
+  informationRequirements: jsonb("information_requirements").default([]),
+  // Utförarkategori (sektion 10):
+  performerCategory: text("performer_category"),
+  competencyRequirements: text("competency_requirements").array().default([]),
   unit: text("unit").default("st"),
   status: text("status").default("active").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
@@ -1589,11 +1610,35 @@ export const associationConditionSchema = z.discriminatedUnion("source", [
 ]);
 export type AssociationCondition = z.infer<typeof associationConditionSchema>;
 
+// "Ny artikel"-layoutspec: rad-/kort-scheman för jsonb-fälten på articles.
+export const articleFileSchema = z.object({
+  name: z.string().trim().min(1),
+  url: z.string().trim().min(1),
+  size: z.number().nullable().optional(),
+});
+export const articleStockLocationSchema = z.object({
+  location: z.string().trim().min(1, "Lagerplats krävs"),
+  balance: z.number().nullable().optional(),
+  minLevel: z.number().nullable().optional(),
+  reorderPoint: z.number().nullable().optional(),
+});
+export const articleInformationRequirementSchema = z.object({
+  type: z.string().trim().min(1),
+  required: z.boolean().default(false),
+  metadataField: z.string().nullable().optional(),
+});
+
 export const insertArticleSchema = createInsertSchema(articles).omit({ id: true, createdAt: true }).extend({
   // Task #834: hård gräns 50 tecken på artikelnamn (validering speglas i frontend-räknaren).
   name: z.string().trim().min(1, "Namn krävs").max(50, "Namnet får vara högst 50 tecken"),
   // Task #835: validera regelarrayen vid skrivning.
   associationRules: z.array(associationConditionSchema).optional(),
+  // "Ny artikel"-layoutspec: jsonb-arrayer + valfri FK.
+  files: z.array(articleFileSchema).optional(),
+  stockLocations: z.array(articleStockLocationSchema).optional(),
+  informationRequirements: z.array(articleInformationRequirementSchema).optional(),
+  competencyRequirements: z.array(z.string()).optional(),
+  defaultSupplierId: z.preprocess((v) => (typeof v === "string" && v.trim() === "" ? null : v), z.string().nullable().optional()),
   // Valfria FK-kolumner: frontend skickar "" när inget valts. Tom sträng bryter
   // FK-constraints (articles_replaces/replacement_article_id_articles_id_fk → 23503
   // "Key (...)=() is not present"). Tvinga "" → null vid valideringsgränsen så att
