@@ -1,0 +1,792 @@
+Traivo — Funktionell Specifikation: Artikelsystemet
+Version: 1.0
+Datum: 2026-06-15
+Målgrupp: Replit-utvecklare
+Källa: Skärmdumpar från artikelvyn + sessionstranskript (session_2026-06-15T11-10.json)
+
+1. EXECUTIVE SUMMARY
+1.1 Vad är artikelsystemet i Traivo
+Artikelsystemet är den centrala modulen i Traivo för att definiera, konfigurera och hantera alla typer av artiklar (tjänster, produkter, material) som används i operativ verksamhet. Systemet hanterar hela livscykeln från artikelupplägg (integrerat med Fortnox) till prissättning, lagerhantering, planeringslogik, strukturartiklar (BOM — Bill of Materials), automatisk association via metadata-villkor, antalsberäkningar och informationsinsamling i fält.
+
+1.2 Syfte och målgrupper
+Målgrupp	Användning
+Administratör/Back-office	Skapar och konfigurerar artiklar, definierar BOM-strukturer, sätter priser och associationsvillkor
+Fältarbetare	Konsumerar artikelinformation, rapporterar antal, uppdaterar metadata vid utförande
+Ekonomi/Controller	Övervakar priser, marginaler, Fortnox-synk
+Systemintegratör	Kopplar Fortnox, metadata-katalog, lager
+1.3 Övergripande arkitektur
+┌─────────────────────────────────────────────────┐
+│                  FORTNOX (ERP)                  │
+│   Artikelnummer · Beskrivning · Enhet · Priser  │
+└──────────────────────┬──────────────────────────┘
+                       │ Sök & Synk
+┌──────────────────────▼──────────────────────────┐
+│              TRAIVO ARTIKELMODUL                 │
+│                                                 │
+│  ┌──────────┐ ┌──────────┐ ┌────────────────┐  │
+│  │Grunddata │ │Pris &    │ │Strukturartikel │  │
+│  │          │ │Ekonomi   │ │(BOM)           │  │
+│  ├──────────┤ ├──────────┤ ├────────────────┤  │
+│  │Fördjupad │ │Planerings│ │Fasthaknings-   │  │
+│  │info      │ │logik     │ │logik           │  │
+│  ├──────────┤ ├──────────┤ ├────────────────┤  │
+│  │Lager &   │ │Antals-   │ │Info & Metadata │  │
+│  │Inköp     │ │logik     │ │                │  │
+│  └──────────┘ └──────────┘ └────────────────┘  │
+│                                                 │
+│  ┌────────────────────────────────────────────┐ │
+│  │          Utförarkategori                   │ │
+│  └────────────────────────────────────────────┘ │
+└─────────────────────────────────────────────────┘
+         │                        │
+         ▼                        ▼
+   Metadata-katalog         Ordersystem
+Arbetsflöde: Artiklar skapas först i Fortnox → söks upp i Traivo via artikelnummer/beskrivning → konfigureras i Traivos utökade artikelvy → används i ordrar och fältarbete.
+
+2. FULLSTÄNDIG FUNKTIONSÖVERSIKT PER SEKTION
+2.1 Grunddata
+Accordion-header: ⊕ Grunddata ○ 0/4
+Progress indicator: 0/4 (fyra required/trackade fält)
+
+Fält
+#	Fältnamn	UI-typ	Datatyp	Required	Validering	Placeholder / Hjälptext
+1	Artikelnummer	Search input (autocomplete)	string	✅ (markerat med *)	Unikt per organisation. Hämtas från Fortnox eller fritext.	"Sök i Fortnox eller skriv fritext"
+2	Namn	Text input	string	✅ (markerat med *)	Max 50 tecken. Character counter visas.	"Kärltömning 240L" (exempelvärde) · Hjälptext: "Visningsnamn på artikeln." · Counter: 0/50
+3	Status	Dropdown select	enum	Nej	Defaultvärde: Aktiv	Alternativ: Aktiv, Inaktiv (antaget)
+4	Enhet	Text input (read-only från Fortnox)	string	Nej	Synkad från Fortnox	Visat värde: "st"
+5	Artikeltyp	Dropdown select	enum (sidoregister)	Nej	Värden från sidoregistret Artikeltyper	Visat värde: "Tjänst". Andra typer: OM-produkter, MRO-produkter, Aviseringar etc.
+6	Kundbeskrivning	Textarea (resizable)	string	Nej	Character counter (ingen explicit maxgräns synlig)	"Beskrivning som kan visas för kund (fakturor, följesedlar)..." · Counter: 0 tecken
+7	Intern beskrivning	Textarea (resizable)	string	Nej	Character counter	"Intern beskrivning för administration (visas aldrig för kund)..." · Counter: 0 tecken
+Fortnox-integration
+Sökfält: Artikelnummer fungerar som ett autocomplete-sökfält som söker mot Fortnox API.
+Söklogik: Ska kunna söka på både artikelnummer och beskrivning (krav från sessionen).
+Synkade fält: Vid val av Fortnox-artikel populeras Artikelnummer, Namn, Enhet automatiskt.
+Fritext fallback: Användaren kan också skriva fritext om artikeln inte finns i Fortnox.
+Affärslogik (från sessionen)
+Kundbeskrivning visas på fakturor och officiell dokumentation — endast denna (ej den interna).
+Intern beskrivning är en utförandebeskrivning för fältarbetare. Den kombineras med övrig info internt men syns aldrig externt.
+Artikeltyp kräver ett sidoregister (separat CRUD-vy) för att hantera artikeltyper.
+2.2 Fördjupad artikelinfo
+Accordion-header: 📄 Fördjupad artikelinfo ○ 0/4
+Progress indicator: 0/4
+
+Fält
+#	Fältnamn	UI-typ	Datatyp	Required	Validering	Placeholder / Hjälptext
+1	Filer	Drag-drop zone + click-to-upload	File[]	Nej	Max 20 MB per fil. Stödda format: PDF, bild (PNG/JPG)	"Klicka för att välja filer (max 20 MB per fil)"
+2	Extern info — länk	URL input	string (URL)	Nej	Måste vara valid URL (https://)	"https://..."
+3	Länk-beskrivning	Textarea	string	Nej	Visas under URL-fältet	"Beskrivning av den externa länken (t.ex. produktblad, säkerhetsdatablad)..."
+4	Eller ladda upp fil (PDF, bild)	File input (native browser)	File	Nej	PDF eller bildformat	"Välj fil  Ingen fil har valts"
+5	Leverantörsnummer	Tag input (text + Enter/+)	string[]	Nej	Flera tillåtna. Lägg till genom att skriva + Enter eller klicka +	"Lägg till leverantörsnummer och tryck Enter" · Hjälptext: "Artikelns nummer hos olika leverantörer (valfritt, flera tillåtna)."
+UI-beteende
+Fil-upload zone: Drag-and-drop-zon med ikon (upload-ikon). Klickbar för filäknappsval.
+Dubbel upload-möjlighet: Det finns BÅDE en drag-drop-zon ("Filer") OCH en separat filväljare ("Eller ladda upp fil"). Enligt sessionen upplevs detta som duplicerad funktionalitet — bör utredas/konsolideras.
+Leverantörsnummer: Dynamisk tag-lista. +-knapp till höger. Stödjer flera leverantörsnummer per artikel.
+Kända problem (från sessionen)
+Duplicerad fil-upload-funktionalitet bör konsolideras till en enda zon.
+Leverantörsnummer saknar koppling till specifik leverantör — framtida förbättring att kunna välja vilken leverantör som "äger" varje leverantörsnummer.
+2.3 Lager & Inköp
+Accordion-header: 🏠 Lager & Inköp ○ 0/6
+Progress indicator: 0/6
+
+Fält
+#	Fältnamn	UI-typ	Datatyp	Required	Validering	Placeholder / Hjälptext
+1	Lagerplatser	Dynamisk tabell	WarehouseLocation[]	Nej	Initialt tomt: "Inga lagerplatser angivna."	Knapp: "+ Lägg till lagerplats"
+2	Standardleverantör	Dropdown select	Supplier | null	Nej	Defaultvärde: "Ingen"	Dropdown med leverantörslista
+3	Leveranstid (dagar)	Number input (spinner)	integer | null	Nej	≥ 0, heltal, enhet: dagar	Placeholder: "—"
+4	Beställningspunkt	Number input	number | null	Nej	≥ 0	Placeholder: "—"
+5	Säkerhetslager	Number input	number | null	Nej	≥ 0	Placeholder: "—"
+6	Minsta orderantal	Number input	number | null	Nej	≥ 0	Placeholder: "—"
+Dynamisk tabell: Lagerplatser
+Startar tom med meddelande "Inga lagerplatser angivna."
+"+ Lägg till lagerplats"-knapp lägger till en rad
+Varje rad innehåller: Lagerplatsnamn, Lagersaldo (antaget)
+Rader kan tas bort
+Affärslogik (från sessionen)
+Det finns en oklar koppling mellan Standardleverantör och leverantörens artikelnummer — systemet bör visa leverantörens artikelnummer vid val av standardleverantör (framtida krav).
+2.4 Pris & Ekonomi
+Accordion-header: $ Pris & Ekonomi ○ 0/8
+Progress indicator: 0/8
+
+Fält
+#	Fältnamn	UI-typ	Datatyp	Enhet	Required	Default
+1	Listpris (kr)	Number input	decimal(10,2)	kr (SEK)	Nej	0.00
+2	Inköpspris (kr)	Number input	decimal(10,2)	kr	Nej	0.00
+3	Standardkostnad (kr)	Number input	decimal(10,2)	kr	Nej	0.00
+4	Materialkostnad (kr)	Number input	decimal(10,2)	kr	Nej	0.00
+5	Internkostnad (kr)	Number input	decimal(10,2)	kr	Nej	0.00
+6	Påslag (%)	Number input	decimal(5,2)	%	Nej	— (tom)
+7	Debiteringsmodell	Dropdown select	enum	—	Nej	"—" (tom). Alternativ: "Per styck" etc.
+8	Produktionstid (min)	Number input	integer	minuter	Nej	15 (exempelvärde)
+9	Restid (min)	Number input	integer	minuter	—	⚠️ SKALL TAS BORT (beslut från sessionen)
+Real-time beräkning: Marginal per enhet
+┌────────────────────────────────────────────────────────┐
+│  Marginal per enhet                          +0,00 kr  │
+│                                                        │
+│  Marginal per enhet = Listpris – (Inköpspris +         │
+│                       Materialkostnad).                 │
+└────────────────────────────────────────────────────────┘
+Formel:
+
+marginal_per_enhet = listpris - (inköpspris + materialkostnad)
+UI-beteende:
+
+Marginalrutan visas som en highlighted bar (grön/gul/röd beroende på värde).
+Beräkningen sker i real-time vid ändring av valfritt ingångsvärde.
+Formeln visas som hjälptext under rutan: "Marginal per enhet = Listpris – (Inköpspris + Materialkostnad)."
+Formatering: +0,00 kr med plustecken för positiva värden.
+Affärslogik (från sessionen)
+Restid (min) ska permanent tas bort — artikeln kan inte veta restid (den beror på uppdrag/rutt).
+Det finns en öppen fråga om hur Materialkostnad, Internkostnad och Påslag samverkar med de övriga prisfälten — detta behöver klargöras för fullständig implementation.
+Debiteringsmodell "Per styck" är godkänd.
+2.5 Planeringslogik
+Accordion-header: ⚙️ Planeringslogik ○ 0/2
+Progress indicator: 0/2
+
+Fält
+#	Fältnamn	UI-typ	Datatyp	Required	Placeholder / Hjälptext
+1	Offsettid — Enhet	Dropdown select	enum	Nej	Alternativ: "Minuter", "Dagar"
+2	Offsettid — Värde	Number input	integer	Nej	Default: 0
+3	Typ	Radio buttons (3 val)	enum	Nej	Se nedan
+Radio buttons: Typ
+Val	Label	Internt värde	Beskrivning
+○	Före huvudjobb (negativ)	before / negativt offsetvärde	Uppgiften utförs FÖRE huvudjobbet
+●	Samtidigt (0)	simultaneous / 0	Uppgiften utförs SAMTIDIGT som huvudjobbet
+○	Efter huvudjobb (positiv)	after / positivt offsetvärde	Uppgiften utförs EFTER huvudjobbet
+Hjälptext under radioknapparna: "Styr när uppgiften utförs relativt huvudjobbet. Sparas som 0 min."
+
+Affärslogik
+Lagring: Offsettid sparas som ett numeriskt minutvärde:
+Före → negativt värde (t.ex. -30)
+Samtidigt → 0
+Efter → positivt värde (t.ex. +60)
+Om enhet = Dagar, konvertera till minuter vid lagring (dagar × 24 × 60) eller lagra som separat enhet+värde-par.
+Känt problem (från sessionen)
+Om användaren väljer "Samtidigt (0)" finns det en logisk fråga: om offsettid ska vara 0 och typen är "samtidigt", vad händer om användaren ändå anger ett värde? Rekommendation: När Samtidigt väljs, disabla värde-fältet och sätt det till 0.
+2.6 Strukturartikel (BOM — Bill of Materials)
+Accordion-header: ⊜ Strukturartikel (BOM) ○ 0/1
+Progress indicator: 0/1
+
+Fält
+#	Fältnamn	UI-typ	Datatyp	Required	Beskrivning
+1	Strukturartikel	Checkbox	boolean	Nej	"Strukturartikel — artikeln består av flera underartiklar (BOM). Varje underartikel blir en delkomponent/deluppgift."
+2	Kan användas som komponent	Checkbox	boolean	Nej	"Kan användas som komponent i strukturartiklar."
+Villkorligt innehåll (när checkbox 1 är ikryssad)
+När Strukturartikel aktiveras, expanderas sektionen med:
+
+Komponentlista (dynamisk tabell)
+Knapp: "+ Lägg till komponent"
+Varje rad: Artikel-sök (autocomplete), Antal, Ta bort-knapp
+Artikelsök hämtar från befintliga artiklar i systemet
+Underartiklar visas som lista med artikelnummer + namn
+Affärslogik
+En artikel kan vara både en strukturartikel (har underartiklar) och markeras som komponent (kan ingå i andra BOM:ar).
+Cirkularitetskontroll: Systemet MÅSTE förhindra cirkulära BOM-referenser (A → B → C → A).
+Enligt sessionen: att lägga till komponenter och välja artiklar fungerar korrekt.
+2.7 Fasthakningslogik (Automatisk association)
+Accordion-header: 🔗 Fasthakningslogik ○ 0/1 (uppdateras till ✅ 1/1 vid tillagda villkor)
+Progress indicator: 0/1
+
+Beskrivningstext
+"Haka fast artikeln på objekt vars metadata uppfyller ALLA villkor (OCH-logik)"
+
+Villkorslista
+Initialt: "Inga villkor. Artikeln hakar inte fast automatiskt via metadata."
+
+#	Fältnamn	UI-typ	Datatyp	Beskrivning
+1	Metadatafält	Dropdown select	string	Label: "Välj fält". Listar tillgängliga metadatafält. Exempel: "ANT — Antal"
+2	Operator	Dropdown select	enum	Label: "Lika med". Alternativ: "Lika med", ev. "Större än", "Mindre än", "Innehåller"
+3	Värde	Text input	string	Placeholder: "t.ex. Matavfall, 240"
+4	Ta bort	Ikon-knapp (🗑️)	—	Röd ta bort-ikon till höger om raden
+Knapp: "+ Lägg till villkor" — lägger till en ny villkorsrad.
+
+Testa association
+Separat panel under villkorslistan:
+
+#	Fältnamn	UI-typ	Datatyp	Beskrivning
+1	Fält	Dropdown select	string	Samma metadatafältlista som villkoren. Exempel: "ANT — Antal"
+2	Operator	Dropdown select	enum	"Lika med"
+3	Värde	Text input	string	Testvärde. Exempel: "10"
+4	Testa association	Button	—	Kör testfunktionen. Ikon: 📋 (dokument-ikon)
+Testfunktionens beteende:
+
+Skapar en testfråga mot backend med angivna villkor
+Returnerar objekt som matchar villkoren
+Kräver potentiellt ett objekturval/klusterval (diskuterat men oklart om det ska vara med)
+Geografisk position
+#	Fältnamn	UI-typ	Datatyp	Beskrivning
+1	Ej beroende av objektets geografiska position	Checkbox	boolean	"Kryssa i för artiklar som inte behöver geopositionering (t.ex. administrativa eller centralt utförda poster)."
+Affärslogik
+OCH-logik (AND): Alla villkor måste uppfyllas för att artikeln ska "haka fast" på ett objekt.
+Villkor baseras på objektets metadata-värden.
+Testfunktionen är en bonus-feature — det är oklart om den ska inkluderas i MVP.
+2.8 Antalslogik
+Accordion-header: ≡ Antalslogik ○ 0/2
+Progress indicator: 0/2
+
+Fält
+#	Fältnamn	UI-typ	Datatyp	Required	Beskrivning
+1	Kvantitetsläge	Dropdown select	enum	Nej	Alternativ: "Per styck — multipliceras med objektets antal", ev. "Fast antal", "Manuellt"
+2	Antal-behörighet i fält	Checkbox	boolean	Nej	"Fältarbetare får ändra antal vid utförande"
+3	Begränsningstyp	Dropdown select	enum	Nej	Alternativ: "Obegränsad", ev. andra
+4	Max antal per adress	Number input (med label)	integer | null	Nej	Placeholder: "Obegränsat" + label "Ingen begränsning". Hjälptext: "Hur många gånger artikeln får beställas på samma adress. Lämna tomt för obegränsat."
+Affärslogik (KRITISK — från sessionen)
+Metadatafält-koppling saknas: Antalslogiken bygger på att hämta antal från ett metadatafält. Det MÅSTE finnas en dropdown/väljare för att välja vilket metadatafält som beskriver antalet (t.ex. "Antal hjul", "Antal kärl" etc.).
+⚠️ KÄNT FEL: Denna metadatafält-väljare saknas i nuvarande UI och måste läggas till.
+Kvantitetsberäkning:
+om kvantitetsläge == "Per styck — multipliceras med objektets antal":
+    artikel_antal = objektets_metadata[valt_metadatafält] × fast_multipel
+2.9 Informationsinhämtning & Metadata
+Accordion-header: 📋 Informationsinhämtning & Metadata ○ 0/4
+Progress indicator: 0/4
+
+Fält
+#	Fältnamn	UI-typ	Datatyp	Required	Beskrivning
+1	Hämta metadata	Dropdown select	MetadataType | null	Nej	Default: "Ingen". Hjälptext: "Metadata som visas för utföraren vid start"
+2	Lämna metadata	Dropdown select	MetadataType | null	Nej	Default: "Ingen". Hjälptext: "Metadata som skrivs tillbaka efter utförande"
+3	Hämta etikett (visa för fältarbetare)	Dropdown select	MetadataLabel | null	Nej	Default: "Ingen"
+4	Visningsformat	Dropdown select	enum	Nej	Default: "Fritext". Andra alternativ möjliga.
+5	Fältarbetare kan uppdatera metadata	Checkbox	boolean	Nej	Okryssad som default
+6	Blindartikel (informationsbärare)	Checkbox + info-ikon (?)	boolean	Nej	Okryssad som default. Tooltip förklarar konceptet.
+7	Förvalt metadatafält (Hakar fast på)	Dropdown select	MetadataField | null	Nej	Default: "—" (tom). Hjälptext: "Föreslås automatiskt som 'Hakar fast på'-koppling när artikeln läggs till i ett orderkoncept."
+8	Informationskrav	Dynamisk lista	InformationRequirement[]	Nej	Initialt: "Inga informationskrav angivna." Knapp: "+ Lägg till informationskrav"
+Blindartikel-koncept (från sessionen)
+En blindartikel (informationsbärare) är en artikel som inte utförs fysiskt utan bär metadata som visas under huvudartikeln. Exempel:
+
+Visa foto på en behållare
+Visa storlek på ett kärl
+Visa annan beskrivande information
+Metadatafälten kopplade till blindartikeln visas som en lista under huvudartikeln vid utförande.
+
+Dynamisk lista: Informationskrav
+Startar tom
+"+ Lägg till informationskrav" knapp
+Varje rad definierar ett krav på vilken information som ska samlas in vid utförande
+2.10 Utförarkategori
+Accordion-header: 👥 Utförarkategori ○ 0/2
+Progress indicator: 0/2
+
+Fält
+#	Fältnamn	UI-typ	Datatyp	Required	Placeholder / Hjälptext
+1	Utförarkategori	Text input (fritext, bör bli dropdown med sidoregister)	string	Nej	Placeholder: "t.ex. Chaufför, Tekniker, Besiktningsman". Hjälptext: "Vilken kategori av utförare som normalt utför artikeln."
+2	Kompetenskrav	Tag input (text + Enter/+)	string[]	Nej	Placeholder: "Lägg till kompetenskrav och tryck Enter". +-knapp (grön cirkel) till höger
+Affärslogik (från sessionen)
+Utförarkategori bör kopplas till ett sidoregister (enkel lista med ikoner).
+Exempel på utförarkategorier: "Service och reparationer", "Chaufför", "Tekniker", "Besiktningsman"
+Kompetenskrav är fristående tags, t.ex. "Svetsning", "Kranbil", "Elteknik"
+Vid val av utförarkategori bör kompetensprofilen följa med som beskrivning.
+Utrustningsbehov (t.ex. kranbil) hanteras manuellt i första versionen.
+3. COMMON UI COMPONENTS & PATTERNS
+3.1 Accordion/Collapsible Panels
+Varje sektion är en collapsible panel med:
+
+┌─────────────────────────────────────────────────────────────┐
+│ [Ikon] Sektionsnamn  [○ / ✅]  N/M         [▲/▼]  [📌]   │
+└─────────────────────────────────────────────────────────────┘
+Element	Beskrivning
+Ikon	Sektionsspecifik ikon (⊕, 📄, 🏠, $, ⚙️, ⊜, 🔗, ≡, 📋, 👥)
+Progress circle	○ (ofylld) → ✅ (ifylld/grön) beroende på completion
+Progress counter	N/M format — t.ex. 0/4, 1/1, 0/8
+Expand/collapse	Chevron-ikon (▲/▼)
+Pin-ikon	📌 ikon längst till höger — troligen för att "fästa" sektionen
+Progress counters per sektion (från skärmdumpar):
+
+Sektion	Counter
+Grunddata	0/4
+Fördjupad artikelinfo	0/4
+Lager & Inköp	0/6
+Pris & Ekonomi	0/8
+Planeringslogik	0/2
+Strukturartikel (BOM)	0/1
+Fasthakningslogik	0/1
+Antalslogik	0/2
+Informationsinhämtning & Metadata	0/4
+Utförarkategori	0/2
+3.2 Icon-system
+Varje sektion har en unik ikon i headern. Ikonerna används internt i dagsläget.
+
+3.3 UI-komponenter
+Komponent	Användning	Beteende
+Dropdown select	Artikeltyp, Status, Leverantör, Enhet, Operator etc.	Standard select med chevron. Placeholder i dimmed text.
+Textarea med character counter	Kundbeskrivning, Intern beskrivning	Resizable. Counter visas under textarea: "X tecken" eller "X/50"
+Number input med enhet	Prisfält, Tider, Antal	Enhet visas i label t.ex. "Listpris (kr)", "Produktionstid (min)"
+Number input med spinner	Leveranstid	Upp/ner-pilar i inputfältet
+Checkbox	Strukturartikel, Blindartikel, Geo-position etc.	Standard checkbox med label-text
+Radio buttons	Planeringslogik Typ	Vertikalt stackade med descriptions
+Tag input	Leverantörsnummer, Kompetenskrav	Text input + Enter eller +-knapp. Tags visas som chips.
+Dynamisk tabell	Lagerplatser, BOM-komponenter, Informationskrav	Tom-state med meddelande. "+ Lägg till X"-knapp. Rader med ta bort-knapp.
+Search input (autocomplete)	Artikelnummer (Fortnox)	Söker mot extern datakälla. Visar matchningar i dropdown.
+File upload zone	Filer i Fördjupad info	Drag-drop + click. Max 20 MB. Visar filnamn efter upload.
+Real-time calculation	Marginal per enhet	Highlighted bar, uppdateras vid input-ändring
+3.4 Design Theme
+Mörkt tema (dark mode): Mörk bakgrund (#1a1a2e-ish), ljus text
+Input-fält: Mörk bakgrund med subtil border, ljus text
+Fokus/active state: Grön border (synlig i skärmdumparna)
+Required markers: Röd asterisk (*) efter fältnamnet
+Placeholder text: Dimmed/grå text
+Hjälptext: Liten, grå text under fältet
+4. DATA MODEL & RELATIONSHIPS
+4.1 Artikelschema (Article)
+typescript
+Copy
+interface Article {
+  // === Grunddata ===
+  id: string;                          // UUID, auto-generated
+  organizationId: string;              // FK → Organization
+  artikelnummer: string;               // UNIQUE per organizationId. Synkad från Fortnox.
+  namn: string;                        // Max 50 tecken. Required.
+  status: 'aktiv' | 'inaktiv';        // Default: 'aktiv'
+  enhet: string;                       // Från Fortnox, t.ex. "st"
+  artikeltyp: string | null;          // FK → ArticleType (sidoregister)
+  kundbeskrivning: string | null;      // Visas externt (fakturor)
+  internBeskrivning: string | null;    // Visas internt (utförare)
+
+  // === Fördjupad info ===
+  filer: ArticleFile[];                // Uppladdade filer
+  externLank: string | null;           // URL
+  externLankBeskrivning: string | null;
+  uppladdadFil: ArticleFile | null;    // Separat fil-upload
+  leverantorsnummer: string[];         // Array av leverantörsnummer
+
+  // === Lager & Inköp ===
+  lagerplatser: WarehouseLocation[];
+  standardleverantor: string | null;   // FK → Supplier
+  leveranstidDagar: number | null;
+  bestallningspunkt: number | null;
+  sakerhetslager: number | null;
+  minstaOrderantal: number | null;
+
+  // === Pris & Ekonomi ===
+  listprisKr: number;                  // Default: 0.00
+  inkopsprisKr: number;                // Default: 0.00
+  standardkostnadKr: number;           // Default: 0.00
+  materialkostnadKr: number;           // Default: 0.00
+  internkostnadKr: number;             // Default: 0.00
+  paslagProcent: number | null;        // Procent
+  debiteringsmodell: string | null;    // t.ex. "per_styck"
+  produktionstidMin: number | null;    // Minuter
+  // restidMin: BORTTAGEN
+
+  // === Planeringslogik ===
+  offsettidEnhet: 'minuter' | 'dagar'; // Default: 'minuter'
+  offsettidVarde: number;              // Default: 0
+  offsettidTyp: 'before' | 'simultaneous' | 'after'; // Default: 'simultaneous'
+
+  // === Strukturartikel (BOM) ===
+  isStrukturartikel: boolean;          // Default: false
+  kanAnvandasSomKomponent: boolean;    // Default: false
+  bomKomponenter: BomComponent[];      // Underartiklar
+
+  // === Fasthakningslogik ===
+  fasthakningsvillkor: AssociationCondition[];
+  ejBeroendAvGeoPosition: boolean;     // Default: false
+
+  // === Antalslogik ===
+  kvantitetslage: string | null;       // t.ex. "per_styck_multiplicera"
+  faltarbetareKanAndraAntal: boolean;  // Default: false
+  begransningstyp: string;             // Default: "obegransad"
+  maxAntalPerAdress: number | null;    // null = obegränsat
+  antalsMetadatafalt: string | null;   // FK → MetadataField — KRITISKT, saknas i UI
+
+  // === Informationsinhämtning & Metadata ===
+  hamtaMetadata: string | null;        // FK → MetadataType
+  lamnaMetadata: string | null;        // FK → MetadataType
+  hamtaEtikett: string | null;
+  visningsformat: string;              // Default: "fritext"
+  faltarbetareKanUppdateraMetadata: boolean;
+  isBlindArtikel: boolean;             // Default: false
+  forvaltMetadatafalt: string | null;  // FK → MetadataField
+  informationskrav: InformationRequirement[];
+
+  // === Utförarkategori ===
+  utforarkategori: string | null;      // FK → ExecutorCategory (sidoregister)
+  kompetenskrav: string[];             // Array av kompetensnamn
+
+  // === System ===
+  createdAt: DateTime;
+  updatedAt: DateTime;
+  createdBy: string;                   // FK → User
+  fortnoxSynced: boolean;
+}
+4.2 Relaterade entiteter
+typescript
+Copy
+interface ArticleFile {
+  id: string;
+  articleId: string;
+  filename: string;
+  mimeType: string;          // "application/pdf", "image/png", "image/jpeg"
+  sizeBytes: number;         // Max 20 MB = 20_971_520
+  url: string;               // Storage URL
+  uploadedAt: DateTime;
+}
+
+interface WarehouseLocation {
+  id: string;
+  articleId: string;
+  locationName: string;
+  currentStock: number;      // Lagersaldo
+}
+
+interface BomComponent {
+  id: string;
+  parentArticleId: string;   // Strukturartikeln
+  childArticleId: string;    // Komponenten
+  quantity: number;           // Antal av denna komponent
+  sortOrder: number;
+}
+
+interface AssociationCondition {
+  id: string;
+  articleId: string;
+  metadataField: string;     // T.ex. "ANT" (Antal)
+  operator: 'equals' | 'greater_than' | 'less_than' | 'contains';
+  value: string;
+  sortOrder: number;
+}
+
+interface InformationRequirement {
+  id: string;
+  articleId: string;
+  fieldName: string;
+  fieldType: string;
+  isRequired: boolean;
+  sortOrder: number;
+}
+
+// --- Sidoregister ---
+
+interface ArticleType {
+  id: string;
+  organizationId: string;
+  name: string;              // T.ex. "OM-produkter", "MRO-produkter", "Aviseringar"
+  icon: string | null;
+  sortOrder: number;
+}
+
+interface ExecutorCategory {
+  id: string;
+  organizationId: string;
+  name: string;              // T.ex. "Service och reparationer", "Chaufför"
+  icon: string | null;
+  competenceProfile: string | null; // Beskrivning som följer med
+  sortOrder: number;
+}
+4.3 Relationsdiagram
+Article ──1:N──► ArticleFile
+Article ──1:N──► WarehouseLocation
+Article ──1:N──► BomComponent (som parent)
+Article ◄──N:1── BomComponent (som child)
+Article ──1:N──► AssociationCondition
+Article ──1:N──► InformationRequirement
+Article ──N:1──► ArticleType
+Article ──N:1──► ExecutorCategory
+Article ──N:1──► Supplier (standardleverantör)
+Article ──N:M──► MetadataField (hämta/lämna/förvalt)
+5. BUSINESS LOGIC & CALCULATIONS
+5.1 Marginalberäkning
+python
+Copy
+def berakna_marginal(article):
+    """Real-time beräkning vid varje fältändring"""
+    marginal = article.listpris_kr - (article.inkopspris_kr + article.materialkostnad_kr)
+    return marginal  # Formateras som "+X,XX kr" eller "-X,XX kr"
+Uppdateras vid ändring av listprisKr, inkopsprisKr, eller materialkostnadKr.
+Negativ marginal bör visuellt indikeras (röd/varning).
+5.2 Offsettid-beräkning
+python
+Copy
+def berakna_offset_minuter(enhet, varde, typ):
+    """Konverterar offsettid till minuter relativt huvudjobb"""
+    minuter = varde if enhet == 'minuter' else varde * 24 * 60
+    
+    if typ == 'before':
+        return -minuter
+    elif typ == 'simultaneous':
+        return 0  # Ignorerar värde
+    elif typ == 'after':
+        return +minuter
+5.3 Antalsberäkning
+python
+Copy
+def berakna_antal(article, objekt_metadata):
+    """Beräknar artikelantal baserat på kvantitetsläge"""
+    if article.kvantitetslage == 'per_styck_multiplicera':
+        metadata_varde = objekt_metadata.get(article.antals_metadatafalt, 1)
+        return metadata_varde  # × eventuell multipel
+    elif article.kvantitetslage == 'fast':
+        return article.fast_antal
+    else:
+        return 1  # Default
+5.4 Fasthakningslogik (Association matching)
+python
+Copy
+def matchar_villkor(article, objekt):
+    """Kontrollerar om ett objekt matchar artikelns fasthakningsvillkor (AND-logik)"""
+    if not article.fasthakningsvillkor:
+        return False  # Inga villkor = ingen automatisk association
+    
+    for villkor in article.fasthakningsvillkor:
+        objekt_varde = objekt.metadata.get(villkor.metadata_field)
+        
+        if villkor.operator == 'equals' and str(objekt_varde) != str(villkor.value):
+            return False
+        # ... övriga operatorer
+    
+    return True  # Alla villkor uppfyllda
+5.5 BOM-cirkularitetskontroll
+python
+Copy
+def kontrollera_cirkularitet(parent_id, child_id, visited=None):
+    """Förhindrar cirkulära BOM-referenser"""
+    if visited is None:
+        visited = set()
+    
+    if child_id == parent_id:
+        raise ValidationError("Cirkulär BOM-referens upptäckt")
+    
+    if child_id in visited:
+        return  # Redan kontrollerad
+    
+    visited.add(child_id)
+    
+    child_article = get_article(child_id)
+    for komponent in child_article.bom_komponenter:
+        kontrollera_cirkularitet(parent_id, komponent.child_article_id, visited)
+6. INTEGRATION POINTS
+6.1 Fortnox (ERP)
+Integration	Beskrivning	Riktning
+Artikelsök	Sök på artikelnummer + beskrivning i Fortnox	Traivo → Fortnox (läs)
+Artikeldata-synk	Hämta artikelnummer, namn, enhet, priser	Fortnox → Traivo
+Artikelaktivering	Artiklar skapas FÖRST i Fortnox	Manuell process
+Prissynk	Listpris, Inköpspris kan synkas	Tvåvägs (TBD)
+Flöde:
+
+Användare skapar artikel i Fortnox
+I Traivo: söker på artikelnummer/beskrivning i sökfältet
+Väljer rätt artikel → fält populeras automatiskt
+Konfigurerar Traivo-specifika fält (BOM, fasthakningslogik etc.)
+6.2 Metadata-katalogen
+Hämta metadata → visas för fältarbetare vid start av uppgift
+Lämna metadata → skrivs tillbaka av fältarbetare efter utförande
+Metadatafält i fasthakningslogik → villkor baserade på objektmetadata
+Antalslogik → hämtar antal från metadatafält
+6.3 Sidoregister
+Register	Används i	CRUD-krav
+Artikeltyper	Grunddata → Artikeltyp-dropdown	Ja, egen admin-vy
+Utförarkategorier	Utförarkategori-dropdown	Ja, egen admin-vy
+Leverantörer	Standardleverantör-dropdown	Ja (ev. från Fortnox)
+Metadatatyper	Definierade under artikeltyperna	Ja
+6.4 Ordersystem
+Artikeltyp mappas mot ordertyper
+BOM-strukturer expanderas vid orderläggning
+Fasthakningslogik avgör automatisk association i orderkoncept
+7. VALIDATION & ERROR HANDLING
+7.1 Required fields (markerade med *)
+Fält	Constraint
+Artikelnummer	Required, UNIQUE per organisation
+Namn	Required, max 50 tecken
+7.2 Format validation
+Fält	Regel
+Extern länk	Valid URL (börjar med https://)
+Prisfält	Numeriskt, ≥ 0, max 2 decimaler
+Leveranstid	Heltal, ≥ 0
+Fil-upload	Max 20 MB per fil. Tillåtna MIME: application/pdf, image/*
+Produktionstid	Heltal, ≥ 0
+Max antal per adress	Heltal, ≥ 1 eller null (obegränsat)
+7.3 Unique constraints
+Constraint	Scope
+artikelnummer	Per organizationId
+BOM-komponent	Samma child-artikel kan inte läggas till två gånger i samma parent
+7.4 Business rule validation
+Regel	Beskrivning
+BOM-cirkularitet	Förhindra A → B → A eller djupare cykler
+BOM-self-reference	En artikel kan inte vara sin egen komponent
+BOM-eligibility	Bara artiklar med kanAnvandasSomKomponent = true kan läggas till som BOM-komponenter
+Offsettid + Samtidigt	Om typ = simultaneous, tvinga värde = 0
+Fasthakningsvillkor	Minst ett villkor krävs för att progressen ska räknas
+Restid	Fältet ska vara borttaget — validera att det inte sparas
+7.5 Error display
+Inline validation errors under respektive fält
+Required-fält som inte är ifyllda vid save → markeras med röd border + felmeddelande
+Toast/snackbar för server-side errors
+8. USER EXPERIENCE REQUIREMENTS
+8.1 Progress indicators
+Varje accordion-sektion har en N/M progress counter.
+N = antal ifyllda fält, M = totalt antal "trackade" fält i sektionen.
+Cirkel-ikon ändras från ○ (ofylld) till ✅ (grön check) vid komplett sektion.
+Total progress kan beräknas som summan av alla sektioners progress.
+8.2 Real-time feedback
+Marginalberäkning: Uppdateras direkt vid input-ändring (debounce ~300ms rekommenderat).
+Character counter: Uppdateras vid varje tangenttryckning.
+Fortnox-sök: Autocomplete-dropdown efter ~300ms debounce.
+8.3 Character counters
+Fält	Format
+Namn	X/50 (under fältet, högerställd)
+Kundbeskrivning	X tecken (under fältet, högerställd)
+Intern beskrivning	X tecken (under fältet, högerställd)
+8.4 Hjälptexter och placeholders
+Alla fält har antingen:
+
+Placeholder (dimmed text i fältet), t.ex. "Sök i Fortnox eller skriv fritext"
+Hjälptext (grå text under fältet), t.ex. "Visningsnamn på artikeln."
+Eller båda
+8.5 Test-funktioner
+Testa association i Fasthakningslogik — kör en testfråga mot backend.
+Framtida: möjlighet att välja kluster/objekt vid test.
+9. TECHNICAL IMPLEMENTATION NOTES
+9.1 State management
+Formuläret har 10 sektioner med totalt ~40+ fält.
+Rekommendation: Använd ett centralt state object (t.ex. React useReducer eller form-library som react-hook-form).
+Varje sektion behöver inte vara lazy-loaded men bör ha kontrollerad expand/collapse-state.
+9.2 Form state shape (förslag)
+typescript
+Copy
+interface ArticleFormState {
+  isDirty: boolean;
+  isSubmitting: boolean;
+  sections: {
+    grunddata: { expanded: boolean; progress: [number, number] };
+    fordjupadInfo: { expanded: boolean; progress: [number, number] };
+    lagerInkop: { expanded: boolean; progress: [number, number] };
+    prisEkonomi: { expanded: boolean; progress: [number, number] };
+    planeringslogik: { expanded: boolean; progress: [number, number] };
+    strukturartikel: { expanded: boolean; progress: [number, number] };
+    fasthakningslogik: { expanded: boolean; progress: [number, number] };
+    antalslogik: { expanded: boolean; progress: [number, number] };
+    informationshamtning: { expanded: boolean; progress: [number, number] };
+    utforarkategori: { expanded: boolean; progress: [number, number] };
+  };
+  values: Article;          // Artikeldata
+  errors: Partial<Record<keyof Article, string>>;
+  touched: Partial<Record<keyof Article, boolean>>;
+}
+9.3 Optimistic updates vs server validation
+Client-side: Inline validation (required, format, max length) — omedelbar feedback.
+Server-side: Unique constraints (artikelnummer), BOM-cirkularitet, Fortnox-synk.
+Save-strategi: Hela formuläret sparas vid explicit "Spara"-åtgärd (ej auto-save per sektion).
+9.4 File upload handling
+1. Användaren dropar/väljer fil
+2. Client validerar: filstorlek ≤ 20 MB, tillåten MIME-typ
+3. POST till upload-endpoint (multipart/form-data)
+4. Server returnerar { fileId, url, filename }
+5. fileId lagras i artikelns filer-array
+6. Visa filnamn + ta bort-knapp i UI
+9.5 Dynamic form fields
+Följande fält har dynamiskt antal rader:
+
+Lagerplatser: CRUD-tabell
+BOM-komponenter: CRUD-tabell med artikelsök
+Fasthakningsvillkor: CRUD-lista med tre fält per rad
+Leverantörsnummer: Tag-lista
+Kompetenskrav: Tag-lista
+Informationskrav: CRUD-lista
+Mönster: Tom-state meddelande → "+ Lägg till X" knapp → ny rad → fyll i → möjlighet att ta bort.
+
+9.6 LocalStorage / Draft saving
+Ej explicit synligt i skärmdumpar, men rekommenderas för att förhindra dataförlust:
+
+Spara form state till localStorage med debounce (~2s).
+Key: article_draft_{articleId} eller article_draft_new.
+Rensa vid lyckad save.
+10. TESTING CONSIDERATIONS
+10.1 Unit tests
+Test	Beskrivning
+marginalBerakning	Verifiera formel: listpris - (inkopspris + materialkostnad)
+offsettidKonvertering	Minuter/dagar × typ → slutvärde
+antalsBerakning	Kvantitetsläge + metadatavärde → slutantal
+cirkularitetsKontroll	BOM A→B→C→A ska blockas
+fasthakningsMatch	AND-logik över N villkor
+progressCounter	Korrekt N/M per sektion baserat på ifyllda fält
+characterCounter	Korrekt teckenräkning för textfält
+10.2 Integration tests
+Test	Beskrivning
+Fortnox-sök	Sök på artikelnummer → returnerar match → populerar fält
+Fortnox-sök (beskrivning)	Sök på beskrivning → returnerar match
+Fortnox-sök (ingen match)	Tom sökning → fritext-fallback
+Fil-upload	Upload 20 MB PDF → success. Upload 21 MB → reject
+Leverantör-koppling	Välj standardleverantör → korrekt data
+10.3 UI / E2E tests
+Test	Beskrivning
+Accordion expand/collapse	Klicka på header → expanderar/kollapsar korrekt
+Progress update	Fyll i fält → progress counter uppdateras
+Real-time marginal	Ändra listpris → marginal uppdateras direkt
+Dynamisk tabell	Lägg till lagerplats → rad visas → ta bort → rad försvinner
+BOM-komponent add	Kryssa Strukturartikel → Lägg till komponent → Sök artikel → Välj → Komponent visas
+Tag input	Skriv kompetenskrav + Enter → tag visas → klicka X → tag tas bort
+Checkbox conditional	Kryssa Strukturartikel → BOM-panel expanderas
+Radio buttons	Välj Före/Samtidigt/Efter → korrekt state
+10.4 Edge cases
+Edge case	Förväntat beteende
+Tom BOM (Strukturartikel utan komponenter)	Tillåt spara men visa varning
+Cirkulär BOM-referens	Blockera med felmeddelande
+Artikel refererar sig själv som BOM	Blockera
+Fil > 20 MB	Visa felmeddelande, blocka upload
+Alla prisfält = 0	Marginal = 0,00 kr (tillåt)
+Negativ marginal	Visa med minus-tecken, ev. röd färg
+Max antal per adress = 0	Blockera (min = 1 eller null)
+Artikelnummer som redan finns	Visa "Artikelnummer redan upptaget"
+Fortnox offline/timeout	Visa felmeddelande, tillåt fritext
+11. FUTURE ENHANCEMENTS
+Baserat på sessionens diskussioner och öppna frågor:
+
+11.1 Bekräftade framtida behov
+Feature	Prioritet	Källa
+Excel-export av artikellistor med all information	Hög	Session (explicit nämnt)
+Excel-import av artiklar	Hög	Session (explicit nämnt)
+Leverantörsnummer per leverantör	Medium	Session — koppling saknas idag
+Metadatafält-väljare i Antalslogik	Kritisk (buggfix)	Session — saknas i UI
+Restid borttagen	Kritisk (buggfix)	Session — ska bort
+Sidoregister för Artikeltyper	Medium	Session
+Sidoregister för Utförarkategorier	Medium	Session
+11.2 Diskuterade men inte beslutade
+Feature	Beskrivning
+Testa Association med klusterval	Möjlighet att välja objekt/kluster vid test av fasthakningslogik
+Konsolidering av fil-upload	Slå ihop drag-drop-zon och separat filväljare till en komponent
+Offsettid "Samtidigt" + värde	Behöver logisk klarhet — vad händer om värde ≠ 0 och typ = Samtidigt?
+Prisfält-interaktion	Hur Materialkostnad, Internkostnad, Påslag samverkar med Listpris/Inköpspris/Standardkostnad
+11.3 Framtida visioner
+Feature	Beskrivning
+Versionhistorik	Spåra alla ändringar på en artikel med audit trail
+Bulk edit	Redigera flera artiklar samtidigt
+Artikel-templates	Skapa mallar för snabb artikeluppläggning
+Kompetensprofil-auto	Vid val av utförarkategori → kompetensprofil följer automatiskt
+Utrustningskoppling	Koppla utförarkategori till utrustningskrav (t.ex. kranbil)
+APPENDIX A: Sektions-header progress mapping
+Sektion                           Counter    Trackade fält
+─────────────────────────────────────────────────────────────
+Grunddata                         0/4        Artikelnummer, Namn, Status(?), Artikeltyp(?)
+Fördjupad artikelinfo             0/4        Filer, Extern länk, Fil-upload, Leverantörsnummer
+Lager & Inköp                     0/6        Lagerplatser, Standardleverantör, Leveranstid,
+                                             Beställningspunkt, Säkerhetslager, Minsta orderantal
+Pris & Ekonomi                    0/8        Listpris, Inköpspris, Standardkostnad,
+                                             Materialkostnad, Internkostnad, Påslag,
+                                             Debiteringsmodell, Produktionstid
+Planeringslogik                   0/2        Offsettid (enhet+värde), Typ
+Strukturartikel (BOM)             0/1        Strukturartikel-checkbox
+Fasthakningslogik                 0/1        Villkor (≥1 tillagt)
+Antalslogik                       0/2        Kvantitetsläge, Begränsningstyp
+Informationsinhämtning & Metadata 0/4        Hämta metadata, Lämna metadata,
+                                             Hämta etikett, Visningsformat
+Utförarkategori                   0/2        Utförarkategori, Kompetenskrav
+APPENDIX B: Beslut från sessionen
+#	Beslut	Status
+1	Kundbeskrivning visas på fakturor, INTE intern beskrivning	✅ Beslut
+2	Restid (min) ska tas bort från Pris & Ekonomi	✅ Beslut
+3	Debiteringsmodell "Per styck" godkänd	✅ Beslut
+4	Produktionstid i minuter korrekt	✅ Beslut
+5	Offsettid kan vara Minuter eller Dagar	✅ Beslut
+6	Fasthakningslogik: OCH-logik (AND) för alla villkor	✅ Beslut
+7	Artiklar skapas först i Fortnox, sedan söks i Traivo	✅ Beslut
+8	Artikeltyp behöver sidoregister	✅ Beslut
+9	Utförarkategori behöver sidoregister	✅ Beslut
+10	Export/import i Excel-format krävs	✅ Beslut
+APPENDIX C: Kända buggar/brister att åtgärda
+#	Brist	Sektion	Allvar
+1	Restid (min) kvar i UI — ska bort	Pris & Ekonomi	Kritisk
+2	Metadatafält-väljare saknas i Antalslogik	Antalslogik	Kritisk
+3	Dubbel fil-upload (drag-drop + separat filväljare)	Fördjupad info	Medium
+4	Leverantörsnummer saknar koppling till specifik leverantör	Fördjupad info	Låg (framtida)
+5	Standardleverantör visar inte leverantörens artikelnummer	Lager & Inköp	Låg (framtida)
+6	Offsettid "Samtidigt" — oklart beteende om värde ≠ 0	Planeringslogik	Medium
+Dokument genererat: 2026-06-15
+Baserat på: 12 skärmdumpar + sessionstranskript med stakeholders
