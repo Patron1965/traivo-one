@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { 
-  FileText, Download, Calendar, MapPin, Users, Truck, Package, 
+  FileText, Download, Calendar, Users, Truck, Package, 
   ClipboardList, BarChart3, Smartphone, Upload, Settings, 
   Clock, Key, Building2, Layers, DollarSign, RefreshCw, Shield,
   WifiOff, Palette, Briefcase, MessageSquare, Leaf, Bell, Bot,
@@ -25,21 +25,9 @@ interface FeatureSection {
 }
 
 // Uppdatera detta datum när funktionslistan nedan ändras.
-const LAST_UPDATED = new Date(2026, 5, 3);
+const LAST_UPDATED = new Date(2026, 5, 15);
 
 const systemFeatures: FeatureSection[] = [
-  {
-    title: "Kluster - Kärnkoncept",
-    icon: MapPin,
-    features: [
-      { name: "Geografiska kluster", description: "Navet i verksamheten - organiserar alla entiteter geografiskt" },
-      { name: "Kartvisualisering", description: "Interaktiv karta med klusterområden och SLA-färgkodning" },
-      { name: "Snöret", description: "Visualiserar flödet: Objekt → Abonnemang → Ordrar → Utförda → Fakturerade" },
-      { name: "SLA-nivåer", description: "Standard, Premium, Enterprise med olika servicekrav" },
-      { name: "Team-tilldelning", description: "Primärt ansvarigt team per kluster" },
-      { name: "Cachad statistik", description: "Objektantal, aktiva ordrar, månadsvärde, snitt ställtid" },
-    ]
-  },
   {
     title: "Planering & Schemaläggning",
     icon: Calendar,
@@ -63,6 +51,11 @@ const systemFeatures: FeatureSection[] = [
       { name: "Tillgångsinformation", description: "Öppet, kod, nyckel/bricka, personligt möte med detaljerad info" },
       { name: "Kärlhantering", description: "K1 (standard), K2 (pant), K3 (matavfall), K4 (övrigt)" },
       { name: "Ställtidsstatistik", description: "Historik och genomsnitt per objekt" },
+      { name: "Avancerad filtrering", description: "Filtrera objektlistan på stad, kund/kommun, nivå, ställtid och överordnat objekt" },
+      { name: "Rapporterade objekt", description: "Snabbfilter för objekt med aktiva avvikelser eller felanmälningar" },
+      { name: "Bulkåtgärder", description: "Markera flera objekt och ändra status, sätt nivå, flytta till förälder, geokoda, exportera eller ta bort" },
+      { name: "Exportera allt", description: "Exportera alla filtrerade objekt till två CSV-filer — objektlista och radbaserad metadatalista" },
+      { name: "Klickbar navigation", description: "Klickbara kund- och förälderlänkar i listan för snabb filtrering och navigering" },
     ]
   },
   {
