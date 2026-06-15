@@ -545,7 +545,12 @@ app.get("/api/objects", asyncHandler(async (req, res) => {
   const interim = req.query.interim as string || undefined;
   const issue = req.query.issue as string || undefined;
   const clusterIdFilter = req.query.clusterId as string || undefined;
-  const hasFilters = objectType || hierarchyLevel || accessType || interim || issue || clusterIdFilter;
+  const cityParam = req.query.city as string || undefined;
+  const cities = cityParam ? cityParam.split(",").map(c => c.trim()).filter(Boolean) : undefined;
+  const hasSetupTime = req.query.hasSetupTime === "true";
+  const hasParent = req.query.hasParent === "true";
+  const reported = req.query.reported === "true";
+  const hasFilters = objectType || hierarchyLevel || accessType || interim || issue || clusterIdFilter || (cities && cities.length > 0) || hasSetupTime || hasParent || reported;
   const paginated = req.query.paginated === "true";
 
   // Task #552 (A): Berika listsvar med composed displayName så att alla konsumenter
@@ -563,7 +568,7 @@ app.get("/api/objects", asyncHandler(async (req, res) => {
   };
 
   if (paginated || req.query.limit || req.query.offset || req.query.search || req.query.customerId || noCluster || hasFilters) {
-    const filters = hasFilters ? { objectType, hierarchyLevel, accessType, isInterimObject: interim === "true" ? true : interim === "false" ? false : undefined, issue, clusterId: clusterIdFilter } : undefined;
+    const filters = hasFilters ? { objectType, hierarchyLevel, accessType, isInterimObject: interim === "true" ? true : interim === "false" ? false : undefined, issue, clusterId: clusterIdFilter, cities, hasSetupTime: hasSetupTime || undefined, hasParent: hasParent || undefined, reported: reported || undefined } : undefined;
     const result = await storage.getObjectsPaginated(tenantId, limit, offset, search, customerIds, filters);
     const enriched = await enrichWithDisplayName(result.objects as Array<Record<string, unknown>>);
 
@@ -1017,6 +1022,9 @@ app.patch("/api/objects/:id", asyncHandler(async (req, res) => {
       const parent = await storage.getObject(newParentId);
       if (!verifyTenantOwnership(parent, tenantId)) {
         throw new NotFoundError("Förälderobjekt");
+      }
+      if (await storage.wouldCreateObjectCycle(tenantId, req.params.id, newParentId)) {
+        throw new ValidationError("Du kan inte flytta ett objekt till ett av sina egna underordnade objekt (skulle skapa en cykel).");
       }
     }
   }

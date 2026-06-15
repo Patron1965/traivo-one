@@ -462,7 +462,8 @@ export interface IStorage {
   
   /** Föredragen API: hämtar samtliga objekt för en tenant. */
   getObjects(tenantId: string): Promise<ServiceObject[]>;
-  getObjectsPaginated(tenantId: string, limit: number, offset: number, search?: string, customerIds?: string[], filters?: { objectType?: string; hierarchyLevel?: string; accessType?: string; isInterimObject?: boolean; issue?: string; clusterId?: string }): Promise<{ objects: ServiceObject[]; total: number }>;
+  getObjectsPaginated(tenantId: string, limit: number, offset: number, search?: string, customerIds?: string[], filters?: { objectType?: string; hierarchyLevel?: string; accessType?: string; isInterimObject?: boolean; issue?: string; clusterId?: string; cities?: string[]; hasSetupTime?: boolean; hasParent?: boolean; reported?: boolean }): Promise<{ objects: ServiceObject[]; total: number }>;
+  getDistinctCities(tenantId: string): Promise<string[]>;
   getObjectsByIds(tenantId: string, ids: string[]): Promise<ServiceObject[]>;
   getObjectsWithIssues(tenantId: string, options?: { issueType?: string; status?: string; customerId?: string; limit?: number }): Promise<{
     totalObjectsWithIssues: number;
@@ -1206,6 +1207,7 @@ export interface IStorage {
   removeObjectParent(id: string, objectId?: string): Promise<void>;
   setPrimaryParent(objectId: string, parentId: string, tenantId: string): Promise<ObjectParent | undefined>;
   moveObject(objectId: string, newParentId: string | null, tenantId: string): Promise<ServiceObject | undefined>;
+  wouldCreateObjectCycle(tenantId: string, objectId: string, candidateParentId: string | null): Promise<boolean>;
 
   // Resource Profiles (Utföranderoller)
   getResourceProfiles(tenantId: string): Promise<ResourceProfile[]>;
@@ -2393,7 +2395,7 @@ export class DatabaseStorage implements IStorage {
     return db.select(objectColumnsWithPrimaryCustomer()).from(objects).where(and(eq(objects.tenantId, tenantId), isNull(objects.deletedAt)));
   }
 
-  async getObjectsPaginated(tenantId: string, limit: number, offset: number, search?: string, customerIds?: string[], filters?: { objectType?: string; hierarchyLevel?: string; accessType?: string; isInterimObject?: boolean; issue?: string; clusterId?: string }): Promise<{ objects: ServiceObject[]; total: number }> {
+  async getObjectsPaginated(tenantId: string, limit: number, offset: number, search?: string, customerIds?: string[], filters?: { objectType?: string; hierarchyLevel?: string; accessType?: string; isInterimObject?: boolean; issue?: string; clusterId?: string; cities?: string[]; hasSetupTime?: boolean; hasParent?: boolean; reported?: boolean }): Promise<{ objects: ServiceObject[]; total: number }> {
     const { sql, count, inArray } = await import("drizzle-orm");
     
     let whereConditions = and(eq(objects.tenantId, tenantId), isNull(objects.deletedAt));
@@ -2424,6 +2426,28 @@ export class DatabaseStorage implements IStorage {
 
     if (filters?.clusterId) {
       whereConditions = and(whereConditions, eq(objects.clusterId, filters.clusterId));
+    }
+
+    if (filters?.cities && filters.cities.length > 0) {
+      whereConditions = and(whereConditions, inArray(objects.city, filters.cities));
+    }
+
+    if (filters?.hasSetupTime) {
+      whereConditions = and(whereConditions, sql`${objects.avgSetupTime} > 0`);
+    }
+
+    if (filters?.hasParent) {
+      whereConditions = and(whereConditions, sql`${objects.parentId} IS NOT NULL`);
+    }
+
+    // Aktiva avvikelser/incidenter: objekt med minst en öppen rapport i någon av de
+    // tre rapport-tabellerna. Tenant-scopas i varje subquery (defense-in-depth).
+    if (filters?.reported) {
+      whereConditions = and(whereConditions, sql`(
+        EXISTS (SELECT 1 FROM deviation_reports dr WHERE dr.object_id = ${objects.id} AND dr.tenant_id = ${tenantId} AND dr.status NOT IN ('resolved', 'cancelled'))
+        OR EXISTS (SELECT 1 FROM public_issue_reports pir WHERE pir.object_id = ${objects.id} AND pir.tenant_id = ${tenantId} AND pir.status IN ('new', 'reviewed'))
+        OR EXISTS (SELECT 1 FROM customer_issue_reports cir WHERE cir.object_id = ${objects.id} AND cir.tenant_id = ${tenantId} AND cir.status IN ('open', 'in_progress'))
+      )`);
     }
 
     if (filters?.issue) {
@@ -2462,6 +2486,17 @@ export class DatabaseStorage implements IStorage {
       .offset(offset);
     
     return { objects: objectsList, total };
+  }
+
+  async getDistinctCities(tenantId: string): Promise<string[]> {
+    const rows = await db
+      .selectDistinct({ city: objects.city })
+      .from(objects)
+      .where(and(eq(objects.tenantId, tenantId), isNull(objects.deletedAt)));
+    return rows
+      .map(r => (r.city || "").trim())
+      .filter(c => c.length > 0)
+      .sort((a, b) => a.localeCompare(b, "sv", { sensitivity: "base" }));
   }
 
   async getObjectsByIds(tenantId: string, ids: string[]): Promise<ServiceObject[]> {
@@ -9554,14 +9589,35 @@ export class DatabaseStorage implements IStorage {
     return updated || undefined;
   }
 
-  // Task #713: flytta ett objekt till en ny förälder (eller rotnivå = null).
-  // Repekar objects.parentId OCH den primära object_parents-raden. Barnobjekt
-  // följer med automatiskt (deras parentId pekar oförändrat på det flyttade
-  // objektet). Cykel-/ägarskapskontroll görs i route:n innan anrop; här hålls
-  // tenant_id i alla predikat (defense-in-depth) + en själv-förälder-spärr.
+  // Returnerar true om det skulle skapa en cykel att sätta objectId:s förälder till
+  // candidateParentId. En cykel uppstår om candidateParentId är objectId självt eller
+  // en ättling till objectId (dvs objectId finns i candidateParentId:s primära
+  // förälder-kedja). Vandrar uppåt via objects.parentId (primärkedjan) med en
+  // visited-vakt så pre-existerande korrupt data inte ger oändlig loop.
+  async wouldCreateObjectCycle(tenantId: string, objectId: string, candidateParentId: string | null): Promise<boolean> {
+    if (!candidateParentId) return false;
+    if (candidateParentId === objectId) return true;
+    const visited = new Set<string>();
+    let current: string | null = candidateParentId;
+    while (current) {
+      if (current === objectId) return true;
+      if (visited.has(current)) break;
+      visited.add(current);
+      const [row] = await db
+        .select({ parentId: objects.parentId })
+        .from(objects)
+        .where(and(eq(objects.id, current), eq(objects.tenantId, tenantId)));
+      current = row?.parentId ?? null;
+    }
+    return false;
+  }
+
   async moveObject(objectId: string, newParentId: string | null, tenantId: string): Promise<ServiceObject | undefined> {
     if (newParentId && newParentId === objectId) {
       throw new Error("Ett objekt kan inte bli sin egen förälder.");
+    }
+    if (await this.wouldCreateObjectCycle(tenantId, objectId, newParentId)) {
+      throw new Error("Du kan inte flytta ett objekt till ett av sina egna underordnade objekt (skulle skapa en cykel).");
     }
     const [obj] = await db.select().from(objects)
       .where(and(eq(objects.id, objectId), eq(objects.tenantId, tenantId)));

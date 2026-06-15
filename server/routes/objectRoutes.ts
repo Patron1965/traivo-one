@@ -561,6 +561,12 @@ app.get("/api/objects/missing-city-count", asyncHandler(async (req, res) => {
   });
 }));
 
+app.get("/api/objects/distinct-cities", asyncHandler(async (req, res) => {
+  const tenantId = getTenantIdWithFallback(req);
+  const cities = await storage.getDistinctCities(tenantId);
+  res.json(cities);
+}));
+
 app.post("/api/objects/batch-fill-city/preview", asyncHandler(async (req, res) => {
   const tenantId = getTenantIdWithFallback(req);
   const allObjects = await storage.getObjects(tenantId);

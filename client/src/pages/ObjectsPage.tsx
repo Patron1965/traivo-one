@@ -28,10 +28,12 @@ import {
   Search, Plus, Filter, Loader2, ChevronRight, ChevronLeft, Building2, MapPin, Trash2, 
   Map as MapIcon, List, Copy, Upload, Clock, Key, Keyboard, Users, DoorOpen,
   Check, X, FileSpreadsheet, Download, BarChart3, MoreHorizontal, AlertTriangle, AlertCircle, ChevronDown, ChevronUp, XCircle,
-  Image, GitFork, Link2, Globe, ShieldAlert, ShieldCheck, ShieldX, Package, Info, Camera, Layers, FileUp, Pyramid,
+  Image, GitFork, Link2, Globe, ShieldAlert, ShieldCheck, ShieldX, Package, Info, Camera, FileUp, Pyramid,
   ArrowUp, ArrowDown, ArrowUpDown, Network, Pencil, FolderPlus, Archive, Columns3
 } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription,
   AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
@@ -51,7 +53,6 @@ import { ObjectInheritedMetadataPanel } from "@/components/ObjectInheritedMetada
 import { ObjectSystemGeneratedPanel } from "@/components/ObjectSystemGeneratedPanel";
 import { useLocalizedObjectName } from "@/lib/object-name";
 import { ObjectApplicableArticlesPanel } from "@/components/ObjectApplicableArticlesPanel";
-import { ObjectContactsDialog } from "@/components/ObjectContactsPanel";
 import { ObjectImagesDialog } from "@/components/ObjectImagesGallery";
 import { AddressSearch } from "@/components/AddressSearch";
 import { CustomerCombobox, CustomerMultiCombobox, useCustomerLookup } from "@/components/CustomerCombobox";
@@ -194,6 +195,14 @@ export default function ObjectsPage() {
   const removeCustomerFilter = (id: string) => { setCustomerFilter(customerFilter.filter(c => c !== id)); };
   const setHierarchyFilter = (v: string) => { setHierarchyFilterRaw(v); setCurrentPage(0); };
   const setClusterFilter = (v: string) => { setClusterFilterRaw(v); setCurrentPage(0); };
+  const [cityFilter, setCityFilterRaw] = useState<string[]>([]);
+  const setCityFilter = (v: string[]) => { setCityFilterRaw(v); setCurrentPage(0); };
+  const [hasSetupTimeFilter, setHasSetupTimeFilterRaw] = useState(false);
+  const setHasSetupTimeFilter = (v: boolean) => { setHasSetupTimeFilterRaw(v); setCurrentPage(0); };
+  const [hasParentFilter, setHasParentFilterRaw] = useState(false);
+  const setHasParentFilter = (v: boolean) => { setHasParentFilterRaw(v); setCurrentPage(0); };
+  const [reportedFilter, setReportedFilterRaw] = useState(false);
+  const setReportedFilter = (v: boolean) => { setReportedFilterRaw(v); setCurrentPage(0); };
   const [interimFilter, setInterimFilter] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const toggleSelected = useCallback((id: string) => {
@@ -201,6 +210,12 @@ export default function ObjectsPage() {
   }, []);
   const [bulkStatusDialogOpen, setBulkStatusDialogOpen] = useState(false);
   const [bulkNewStatus, setBulkNewStatus] = useState("active");
+  const [isExporting, setIsExporting] = useState(false);
+  const [bulkBusy, setBulkBusy] = useState(false);
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+  const [bulkParentDialogOpen, setBulkParentDialogOpen] = useState(false);
+  const [bulkNewParentId, setBulkNewParentId] = useState<string | null>(null);
+  const [bulkNewLevel, setBulkNewLevel] = useState("fastighet");
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [servicePatternDialog, setServicePatternDialog] = useState<{ open: boolean; loading: boolean; data?: { summary: string; patterns: { label: string; value: string }[]; anomalies: { objectId: string; objectName: string; reason: string }[] } }>({ open: false, loading: false });
@@ -283,7 +298,7 @@ export default function ObjectsPage() {
   }, []);
 
   const { data: objectsData, isLoading, isError: objectsIsError, error: objectsError, refetch: objectsRefetch } = useQuery<{ objects: ServiceObject[]; total: number }>({
-    queryKey: ["/api/objects", "paginated", currentPage, debouncedSearch, customerFilter, typeFilter, accessFilter, hierarchyFilter, clusterFilter, interimFilter, issueFilter],
+    queryKey: ["/api/objects", "paginated", currentPage, debouncedSearch, customerFilter, typeFilter, accessFilter, hierarchyFilter, clusterFilter, cityFilter, hasSetupTimeFilter, hasParentFilter, reportedFilter, interimFilter, issueFilter],
     queryFn: async () => {
       const params = new URLSearchParams({
         limit: PAGE_SIZE.toString(),
@@ -306,6 +321,18 @@ export default function ObjectsPage() {
       }
       if (clusterFilter !== "all") {
         params.append("clusterId", clusterFilter);
+      }
+      if (cityFilter.length > 0) {
+        params.append("city", cityFilter.join(","));
+      }
+      if (hasSetupTimeFilter) {
+        params.append("hasSetupTime", "true");
+      }
+      if (hasParentFilter) {
+        params.append("hasParent", "true");
+      }
+      if (reportedFilter) {
+        params.append("reported", "true");
       }
       if (interimFilter) {
         params.append("interim", "true");
@@ -330,6 +357,27 @@ export default function ObjectsPage() {
     staleTime: 30000,
   });
   const interimCount = interimCountData?.total || 0;
+
+  const { data: reportedCountData } = useQuery<{ total: number }>({
+    queryKey: ["/api/objects", "reported-count"],
+    queryFn: async () => {
+      const res = await fetch("/api/objects?limit=0&offset=0&reported=true", { credentials: "include" });
+      if (!res.ok) throw new Error("Failed");
+      return res.json();
+    },
+    staleTime: 30000,
+  });
+  const reportedCount = reportedCountData?.total || 0;
+
+  const { data: distinctCities = [] } = useQuery<string[]>({
+    queryKey: ["/api/objects/distinct-cities"],
+    queryFn: async () => {
+      const res = await fetch("/api/objects/distinct-cities", { credentials: "include" });
+      if (!res.ok) throw new Error("Failed");
+      return res.json();
+    },
+    staleTime: 60000,
+  });
 
   const { data: missingCityData, refetch: refetchMissingCity } = useQuery<{
     totalMissingCity: number;
@@ -372,19 +420,6 @@ export default function ObjectsPage() {
   }, [objects, customerFilter]);
 
   const customerNameMap = useCustomerLookup(visibleCustomerIds);
-
-  const { data: clustersList = [] } = useQuery<Array<{ id: string; name: string; cachedObjectCount: number }>>({
-    queryKey: ["/api/clusters"],
-    staleTime: 60000,
-  });
-
-  const clusterMap = useMemo(() => {
-    const m = new Map<string, string>();
-    for (const c of clustersList) {
-      m.set(c.id, c.name);
-    }
-    return m;
-  }, [clustersList]);
 
 
   const { data: batchGeoPreview, refetch: refetchPreview } = useQuery<{
@@ -679,7 +714,7 @@ export default function ObjectsPage() {
   const topLevelObjects = useMemo(() => objects.filter(obj => !obj.parentId), [objects]);
 
   type SortField = "name" | "level" | "children" | "city" | "customer";
-  const [sortConfig, setSortConfig] = useState<{ field: SortField; direction: "asc" | "desc" }>({ field: "name", direction: "asc" });
+  const [sortConfig, setSortConfig] = useState<{ field: SortField; direction: "asc" | "desc" }>({ field: "level", direction: "asc" });
 
   const hierarchyOrder: Record<string, number> = { koncern: 1, brf: 2, fastighet: 3, rum: 4, karl: 5 };
 
@@ -882,9 +917,13 @@ export default function ObjectsPage() {
     accessFilter !== "all" ? 1 : 0,
     customerFilter.length > 0 ? 1 : 0,
     hierarchyFilter !== "all" ? 1 : 0,
-    clusterFilter !== "all" ? 1 : 0,
+    cityFilter.length > 0 ? 1 : 0,
+    hasSetupTimeFilter ? 1 : 0,
+    hasParentFilter ? 1 : 0,
+    reportedFilter ? 1 : 0,
+    interimFilter ? 1 : 0,
     issueFilter ? 1 : 0,
-  ].reduce((a, b) => a + b, 0), [typeFilter, accessFilter, customerFilter, hierarchyFilter, clusterFilter, issueFilter]);
+  ].reduce((a, b) => a + b, 0), [typeFilter, accessFilter, customerFilter, hierarchyFilter, cityFilter, hasSetupTimeFilter, hasParentFilter, reportedFilter, interimFilter, issueFilter]);
 
   const quickStats = useMemo(() => {
     const typeCounts: Record<string, number> = {};
@@ -916,6 +955,11 @@ export default function ObjectsPage() {
     setCustomerFilter([]);
     setHierarchyFilter("all");
     setClusterFilter("all");
+    setCityFilter([]);
+    setHasSetupTimeFilter(false);
+    setHasParentFilter(false);
+    setReportedFilter(false);
+    setInterimFilter(false);
     setIssueFilter(null);
     window.history.replaceState({}, "", window.location.pathname);
   };
@@ -1239,39 +1283,201 @@ export default function ObjectsPage() {
     setCsvData("");
   };
 
-  const exportCSV = () => {
-    const metaHeaders = selectedMetadataFields.map(f => f.namn);
-    const headers = [
-      "Namn", "Visningsnamn", "Objektnummer", "Typ", "Adress", "Stad", "Tillgång", "Kod",
-      "Överordnat objekt", "Antal underordnade (denna sida)",
-      ...metaHeaders,
-    ];
-    const rows = filteredObjects.map(obj => {
-      const childCount = (childrenMap.get(obj.id) || []).length;
-      const base = [
-        obj.name,
-        (obj as any).displayName ?? obj.name,
-        obj.objectNumber || "",
-        objectTypeLabels[obj.objectType] || obj.objectType,
-        obj.address || "",
-        obj.city || "",
-        accessTypeLabels[obj.accessType || "open"]?.label || obj.accessType,
-        obj.accessCode || "",
-        obj.parentId ? (objectNameById.get(obj.parentId) ?? "") : "",
-        String(childCount),
-      ];
-      const metaCells = selectedMetadataFields.map(f => metadataValues[obj.id]?.[f.id] ?? "");
-      return [...base, ...metaCells];
-    });
-    const csv = [headers, ...rows].map(row => row.map(sanitizeCSVCell).join(",")).join("\n");
-    const blob = new Blob([csv], { type: "text/csv" });
+  const buildObjectFilterParams = useCallback((limit: number, offset: number): URLSearchParams => {
+    const params = new URLSearchParams({ limit: limit.toString(), offset: offset.toString() });
+    if (debouncedSearch) params.append("search", debouncedSearch);
+    if (customerFilter.length > 0) params.append("customerId", customerFilter.join(","));
+    if (typeFilter !== "all") params.append("objectType", typeFilter);
+    if (accessFilter !== "all") params.append("accessType", accessFilter);
+    if (hierarchyFilter !== "all") params.append("hierarchyLevel", hierarchyFilter);
+    if (clusterFilter !== "all") params.append("clusterId", clusterFilter);
+    if (cityFilter.length > 0) params.append("city", cityFilter.join(","));
+    if (hasSetupTimeFilter) params.append("hasSetupTime", "true");
+    if (hasParentFilter) params.append("hasParent", "true");
+    if (reportedFilter) params.append("reported", "true");
+    if (interimFilter) params.append("interim", "true");
+    if (issueFilter) params.append("issue", issueFilter);
+    return params;
+  }, [debouncedSearch, customerFilter, typeFilter, accessFilter, hierarchyFilter, clusterFilter, cityFilter, hasSetupTimeFilter, hasParentFilter, reportedFilter, interimFilter, issueFilter]);
+
+  const downloadCSV = (filename: string, rows: (string | number)[][]) => {
+    const csv = rows.map(row => row.map(sanitizeCSVCell).join(",")).join("\n");
+    const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = "objekt_export.csv";
+    a.download = filename;
     a.click();
     URL.revokeObjectURL(url);
-    toast({ title: "Export klar", description: `${filteredObjects.length} objekt exporterade` });
+  };
+
+  const exportCSV = async () => {
+    if (isExporting) return;
+    setIsExporting(true);
+    try {
+      const params = buildObjectFilterParams(100000, 0);
+      const res = await fetch(`/api/objects?${params.toString()}`, { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch objects");
+      const data: { objects: ServiceObject[] } = await res.json();
+      const allObjects = data.objects ?? [];
+
+      const nameById = new Map<string, string>();
+      for (const o of allObjects) nameById.set(o.id, (o as any).displayName || o.name);
+
+      const objektHeaders = [
+        "Objektnummer", "Namn", "Visningsnamn", "Typ", "Status", "Adress", "Stad",
+        "Tillgång", "Kod", "Ställtid (min)", "Överordnat objektnummer", "Överordnat objekt",
+      ];
+      const objektRows: (string | number)[][] = allObjects.map(obj => {
+        const parent = obj.parentId ? allObjects.find(o => o.id === obj.parentId) : undefined;
+        return [
+          obj.objectNumber || "",
+          obj.name,
+          (obj as any).displayName ?? obj.name,
+          objectTypeLabels[obj.objectType] || obj.objectType,
+          obj.status || "",
+          obj.address || "",
+          obj.city || "",
+          accessTypeLabels[obj.accessType || "open"]?.label || obj.accessType || "",
+          obj.accessCode || "",
+          (obj as any).avgSetupTime ?? "",
+          parent?.objectNumber || "",
+          obj.parentId ? (nameById.get(obj.parentId) ?? "") : "",
+        ];
+      });
+      downloadCSV("objektlista.csv", [objektHeaders, ...objektRows]);
+
+      const allKatalogIds = metadataCatalog.map(t => t.id);
+      const katalogNameById = new Map(metadataCatalog.map(t => [t.id, t.namn]));
+      const metaRows: (string | number)[][] = [["Objektnummer", "Objektnamn", "Metadatafält", "Värde"]];
+      if (allKatalogIds.length > 0 && allObjects.length > 0) {
+        const allIds = allObjects.map(o => o.id);
+        const CHUNK = 200;
+        for (let i = 0; i < allIds.length; i += CHUNK) {
+          const chunk = allIds.slice(i, i + CHUNK);
+          const mRes = await apiRequest("POST", "/api/metadata/objects/values-batch", {
+            objectIds: chunk,
+            katalogIds: allKatalogIds,
+          });
+          const mData: { values: Record<string, Record<string, string>> } = await mRes.json();
+          for (const objId of chunk) {
+            const obj = allObjects.find(o => o.id === objId);
+            const objValues = mData.values?.[objId] ?? {};
+            for (const katalogId of allKatalogIds) {
+              const val = objValues[katalogId];
+              if (val === undefined || val === null || val === "") continue;
+              metaRows.push([
+                obj?.objectNumber || "",
+                obj ? ((obj as any).displayName ?? obj.name) : "",
+                katalogNameById.get(katalogId) || katalogId,
+                val,
+              ]);
+            }
+          }
+        }
+      }
+      downloadCSV("metadatalista.csv", metaRows);
+
+      toast({ title: "Export klar", description: `${allObjects.length} objekt exporterade i 2 filer (objektlista + metadatalista)` });
+    } catch (err) {
+      toast({ title: "Export misslyckades", description: err instanceof Error ? err.message : "Okänt fel", variant: "destructive" });
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  const exportSelectedCSV = () => {
+    const selected = objects.filter(o => selectedIds.has(o.id));
+    if (selected.length === 0) return;
+    const headers = [
+      "Objektnummer", "Namn", "Visningsnamn", "Typ", "Status", "Adress", "Stad",
+      "Tillgång", "Kod", "Ställtid (min)", "Överordnat objekt",
+    ];
+    const rows: (string | number)[][] = selected.map(obj => [
+      obj.objectNumber || "",
+      obj.name,
+      (obj as any).displayName ?? obj.name,
+      objectTypeLabels[obj.objectType] || obj.objectType,
+      obj.status || "",
+      obj.address || "",
+      obj.city || "",
+      accessTypeLabels[obj.accessType || "open"]?.label || obj.accessType || "",
+      obj.accessCode || "",
+      (obj as any).avgSetupTime ?? "",
+      obj.parentId ? (objectNameById.get(obj.parentId) ?? "") : "",
+    ]);
+    downloadCSV("markerade_objekt.csv", [headers, ...rows]);
+    toast({ title: "Export klar", description: `${selected.length} markerade objekt exporterade` });
+  };
+
+  const runBulkUpdate = async (payload: Record<string, unknown>, successMsg: (n: number) => string) => {
+    if (bulkBusy) return;
+    setBulkBusy(true);
+    const ids = Array.from(selectedIds);
+    let updated = 0;
+    let failed = 0;
+    for (const id of ids) {
+      try {
+        await apiRequest("PATCH", `/api/objects/${id}`, payload);
+        updated++;
+      } catch {
+        failed++;
+      }
+    }
+    queryClient.invalidateQueries({ queryKey: ["/api/objects"], exact: false });
+    setSelectedIds(new Set());
+    setBulkBusy(false);
+    toast({
+      title: failed > 0 ? "Klart med varningar" : "Klart",
+      description: `${successMsg(updated)}${failed > 0 ? `, ${failed} misslyckades` : ""}`,
+      variant: failed > 0 ? "destructive" : undefined,
+    });
+  };
+
+  const runBulkGeocode = async () => {
+    if (bulkBusy) return;
+    setBulkBusy(true);
+    try {
+      const res = await apiRequest("POST", "/api/objects/batch-geocode", { objectIds: Array.from(selectedIds) });
+      const data: { geocoded: number; updated: number } = await res.json();
+      queryClient.invalidateQueries({ queryKey: ["/api/objects"], exact: false });
+      toast({ title: "Geokodning klar", description: `${data.updated} objekt uppdaterade (${data.geocoded} geokodade)` });
+    } catch (err) {
+      toast({ title: "Geokodning misslyckades", description: err instanceof Error ? err.message : "Okänt fel", variant: "destructive" });
+    } finally {
+      setBulkBusy(false);
+    }
+  };
+
+  const runBulkParentMove = async () => {
+    await runBulkUpdate({ parentId: bulkNewParentId }, (n) => `${n} objekt flyttade`);
+    setBulkParentDialogOpen(false);
+    setBulkNewParentId(null);
+  };
+
+  const runBulkDelete = async () => {
+    if (bulkBusy) return;
+    setBulkBusy(true);
+    const ids = Array.from(selectedIds);
+    let deleted = 0;
+    let failed = 0;
+    for (const id of ids) {
+      try {
+        await apiRequest("DELETE", `/api/objects/${id}`);
+        deleted++;
+      } catch {
+        failed++;
+      }
+    }
+    queryClient.invalidateQueries({ queryKey: ["/api/objects"], exact: false });
+    setSelectedIds(new Set());
+    setBulkBusy(false);
+    setBulkDeleteOpen(false);
+    toast({
+      title: failed > 0 ? "Borttagning klar med varningar" : "Borttagning klar",
+      description: `${deleted} objekt borttagna${failed > 0 ? `, ${failed} misslyckades` : ""}`,
+      variant: failed > 0 ? "destructive" : undefined,
+    });
   };
 
 
@@ -1471,30 +1677,19 @@ export default function ObjectsPage() {
                   <TooltipContent>Stad saknas</TooltipContent>
                 </Tooltip>
               )}
-              {obj.clusterId && clusterMap.get(obj.clusterId) && (
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <span
-                      className="flex items-center gap-1 cursor-pointer text-chart-2 hover:underline"
-                      onClick={(e) => { e.stopPropagation(); navigate(`/clusters/${obj.clusterId}`); }}
-                      data-testid={`link-cluster-${obj.id}`}
-                    >
-                      <Layers className="h-3 w-3" />
-                      {clusterMap.get(obj.clusterId)}
-                    </span>
-                  </TooltipTrigger>
-                  <TooltipContent>Kluster — klicka för att visa</TooltipContent>
-                </Tooltip>
-              )}
               {level === 0 && customerName && (
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <span className="flex items-center gap-1 cursor-help text-foreground/70">
+                    <span
+                      className="flex items-center gap-1 cursor-pointer text-foreground/70 hover:text-foreground hover:underline"
+                      onClick={(e) => { e.stopPropagation(); if (obj.customerId) addCustomerFilter(obj.customerId); }}
+                      data-testid={`link-customer-${obj.id}`}
+                    >
                       <Building2 className="h-3 w-3" />
                       {customerName}
                     </span>
                   </TooltipTrigger>
-                  <TooltipContent>Kund</TooltipContent>
+                  <TooltipContent>Kommun / Kund — klicka för att filtrera</TooltipContent>
                 </Tooltip>
               )}
               {(obj.containerCount || 0) > 0 && (
@@ -1514,12 +1709,16 @@ export default function ObjectsPage() {
               {level === 0 && obj.parentId && (
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <span className="flex items-center gap-1 cursor-help text-foreground/70" data-testid={`text-parent-${obj.id}`}>
+                    <span
+                      className="flex items-center gap-1 cursor-pointer text-foreground/70 hover:text-foreground hover:underline"
+                      onClick={(e) => { e.stopPropagation(); navigate(`/objects/${obj.parentId}`); }}
+                      data-testid={`link-parent-${obj.id}`}
+                    >
                       <GitFork className="h-3 w-3" />
                       Under {objectNameById.get(obj.parentId) ?? "överordnat objekt"}
                     </span>
                   </TooltipTrigger>
-                  <TooltipContent>Överordnat objekt</TooltipContent>
+                  <TooltipContent>Överordnat objekt — klicka för att öppna</TooltipContent>
                 </Tooltip>
               )}
               {hasChildren && (
@@ -1599,7 +1798,6 @@ export default function ObjectsPage() {
                   </Tooltip>
                 )}
                 <ObjectMetadataPanel object={obj} />
-                <ObjectContactsDialog object={obj} />
                 <DropdownMenu modal={false}>
                   <DropdownMenuTrigger asChild>
                     <Button size="icon" variant="ghost" onClick={(e) => e.stopPropagation()} data-testid={`button-more-actions-${obj.id}`}>
@@ -1771,9 +1969,9 @@ export default function ObjectsPage() {
             </Badge>
           )}
         </Button>
-        <Button variant="outline" onClick={exportCSV} data-testid="button-export">
-          <Download className="h-4 w-4 mr-2" />
-          Exportera
+        <Button variant="outline" onClick={exportCSV} disabled={isExporting} data-testid="button-export">
+          {isExporting ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Download className="h-4 w-4 mr-2" />}
+          {isExporting ? "Exporterar…" : "Exportera allt"}
         </Button>
         <Button size="lg" onClick={() => setCreateDialogOpen(true)} data-testid="button-add-object">
           <Plus className="h-4 w-4 mr-2" />
@@ -1836,17 +2034,17 @@ export default function ObjectsPage() {
               </Button>
               <div className="flex items-center gap-1">
                 <Button
-                  variant={interimFilter ? "default" : "outline"}
+                  variant={reportedFilter ? "default" : "outline"}
                   size="sm"
-                  onClick={() => { setInterimFilter(!interimFilter); setCurrentPage(0); }}
+                  onClick={() => setReportedFilter(!reportedFilter)}
                   className="gap-2"
-                  data-testid="button-interim-filter"
+                  data-testid="button-reported-filter"
                 >
-                  <ShieldAlert className="h-4 w-4" />
+                  <AlertTriangle className="h-4 w-4" />
                   Rapporterade objekt
-                  {interimCount > 0 && (
-                    <Badge variant={interimFilter ? "outline" : "destructive"} className="h-5 min-w-[20px] p-0 flex items-center justify-center text-xs rounded-full">
-                      {interimCount}
+                  {reportedCount > 0 && (
+                    <Badge variant={reportedFilter ? "outline" : "destructive"} className="h-5 min-w-[20px] p-0 flex items-center justify-center text-xs rounded-full">
+                      {reportedCount}
                     </Badge>
                   )}
                 </Button>
@@ -1855,12 +2053,12 @@ export default function ObjectsPage() {
                     <Info className="h-4 w-4 text-muted-foreground cursor-help" data-testid="info-rapporterade-objekt" />
                   </TooltipTrigger>
                   <TooltipContent>
-                    <p className="max-w-xs text-sm">Objekt som skapats via extern felanmälan (QR-kod) och ännu inte verifierats av en administratör.</p>
+                    <p className="max-w-xs text-sm">Objekt med minst en aktiv avvikelse eller felanmälan (öppen kund- eller fältrapport). Overifierade QR-objekt filtreras separat i filterpanelen.</p>
                   </TooltipContent>
                 </Tooltip>
               </div>
-              {(activeFilterCount > 0 || interimFilter) && (
-                <Button variant="ghost" size="sm" onClick={() => { clearAllFilters(); setInterimFilter(false); }} className="gap-1 text-muted-foreground" data-testid="button-clear-filters">
+              {activeFilterCount > 0 && (
+                <Button variant="ghost" size="sm" onClick={clearAllFilters} className="gap-1 text-muted-foreground" data-testid="button-clear-filters">
                   <XCircle className="h-4 w-4" />
                   Rensa filter
                 </Button>
@@ -1893,10 +2091,33 @@ export default function ObjectsPage() {
                   <X className="h-3 w-3" />
                 </Badge>
               )}
-              {clusterFilter !== "all" && (
-                <Badge variant="secondary" className="gap-1 cursor-pointer" onClick={() => setClusterFilter("all")} data-testid="badge-filter-cluster">
-                  <Layers className="h-3 w-3" />
-                  {clusterMap.get(clusterFilter) || clusterFilter}
+              {cityFilter.map(city => (
+                <Badge key={city} variant="secondary" className="gap-1 cursor-pointer" onClick={() => setCityFilter(cityFilter.filter(c => c !== city))} data-testid={`badge-filter-city-${city}`}>
+                  Stad: {city}
+                  <X className="h-3 w-3" />
+                </Badge>
+              ))}
+              {hasSetupTimeFilter && (
+                <Badge variant="secondary" className="gap-1 cursor-pointer" onClick={() => setHasSetupTimeFilter(false)} data-testid="badge-filter-has-setup-time">
+                  Har ställtid
+                  <X className="h-3 w-3" />
+                </Badge>
+              )}
+              {hasParentFilter && (
+                <Badge variant="secondary" className="gap-1 cursor-pointer" onClick={() => setHasParentFilter(false)} data-testid="badge-filter-has-parent">
+                  Har överordnat
+                  <X className="h-3 w-3" />
+                </Badge>
+              )}
+              {reportedFilter && (
+                <Badge variant="secondary" className="gap-1 cursor-pointer" onClick={() => setReportedFilter(false)} data-testid="badge-filter-reported">
+                  Rapporterade objekt
+                  <X className="h-3 w-3" />
+                </Badge>
+              )}
+              {interimFilter && (
+                <Badge variant="secondary" className="gap-1 cursor-pointer" onClick={() => setInterimFilter(false)} data-testid="badge-filter-interim">
+                  Overifierade (QR)
                   <X className="h-3 w-3" />
                 </Badge>
               )}
@@ -1932,10 +2153,79 @@ export default function ObjectsPage() {
                 selected={customerFilter}
                 onAdd={addCustomerFilter}
                 onRemoveAll={() => setCustomerFilter([])}
-                placeholder="Filtrera kund"
+                placeholder="Filtrera kommun / kund"
                 className="w-[180px]"
                 testId="select-customer-filter"
               />
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button variant="outline" className="w-[180px] justify-between font-normal" data-testid="button-city-filter">
+                    <span className="truncate">
+                      {cityFilter.length === 0 ? "Filtrera stad" : `${cityFilter.length} stad${cityFilter.length === 1 ? "" : "er"} valda`}
+                    </span>
+                    <ChevronDown className="h-4 w-4 opacity-50 shrink-0" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-[240px] p-0" align="start">
+                  <Command>
+                    <CommandInput placeholder="Sök stad..." data-testid="input-city-search" />
+                    <CommandList>
+                      <CommandEmpty>Ingen stad hittades.</CommandEmpty>
+                      <CommandGroup>
+                        {distinctCities.map(city => {
+                          const checked = cityFilter.includes(city);
+                          return (
+                            <CommandItem
+                              key={city}
+                              value={city}
+                              onSelect={() => {
+                                setCityFilter(checked ? cityFilter.filter(c => c !== city) : [...cityFilter, city]);
+                              }}
+                              data-testid={`option-city-${city}`}
+                            >
+                              <Checkbox checked={checked} className="mr-2" />
+                              {city}
+                            </CommandItem>
+                          );
+                        })}
+                      </CommandGroup>
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              </Popover>
+            </div>
+            <div className="flex items-center gap-6 flex-wrap">
+              <label className="flex items-center gap-2 text-sm cursor-pointer" data-testid="checkbox-has-setup-time-label">
+                <Checkbox
+                  checked={hasSetupTimeFilter}
+                  onCheckedChange={(v) => setHasSetupTimeFilter(v === true)}
+                  data-testid="checkbox-has-setup-time"
+                />
+                Har ställtid
+              </label>
+              <label className="flex items-center gap-2 text-sm cursor-pointer" data-testid="checkbox-has-parent-label">
+                <Checkbox
+                  checked={hasParentFilter}
+                  onCheckedChange={(v) => setHasParentFilter(v === true)}
+                  data-testid="checkbox-has-parent"
+                />
+                Har överordnat objekt
+              </label>
+              <label className="flex items-center gap-2 text-sm cursor-pointer" data-testid="checkbox-interim-label">
+                <Checkbox
+                  checked={interimFilter}
+                  onCheckedChange={(v) => { setInterimFilter(v === true); setCurrentPage(0); }}
+                  data-testid="checkbox-interim"
+                />
+                <span className="flex items-center gap-1">
+                  Overifierade (QR)
+                  {interimCount > 0 && (
+                    <Badge variant="outline" className="h-5 min-w-[20px] p-0 flex items-center justify-center text-xs rounded-full">
+                      {interimCount}
+                    </Badge>
+                  )}
+                </span>
+              </label>
             </div>
           </CardContent>
         )}
@@ -1965,7 +2255,7 @@ export default function ObjectsPage() {
             onClearSelection={() => setSelectedIds(new Set())}
           >
             <Select value={bulkNewStatus} onValueChange={setBulkNewStatus}>
-              <SelectTrigger className="w-[140px] h-8" data-testid="select-bulk-status">
+              <SelectTrigger className="w-[130px] h-8" data-testid="select-bulk-status">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -1976,23 +2266,58 @@ export default function ObjectsPage() {
             </Select>
             <Button
               size="sm"
-              onClick={async () => {
-                const ids = Array.from(selectedIds);
-                let updated = 0;
-                for (const id of ids) {
-                  try {
-                    await apiRequest("PATCH", `/api/objects/${id}`, { status: bulkNewStatus });
-                    updated++;
-                  } catch {}
-                }
-                queryClient.invalidateQueries({ queryKey: ["/api/objects"] });
-                setSelectedIds(new Set());
-                toast({ title: "Statusändring klar", description: `${updated} objekt uppdaterade till ${bulkNewStatus}` });
-              }}
+              disabled={bulkBusy}
+              onClick={() => runBulkUpdate({ status: bulkNewStatus }, (n) => `${n} objekt uppdaterade till ${bulkNewStatus}`)}
               data-testid="button-bulk-change-status"
             >
               Ändra status
             </Button>
+            <Select value={bulkNewLevel} onValueChange={setBulkNewLevel}>
+              <SelectTrigger className="w-[130px] h-8" data-testid="select-bulk-level">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {Object.entries(hierarchyLevelLabels).map(([key, cfg]) => (
+                  <SelectItem key={key} value={key}>{cfg.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={bulkBusy}
+              onClick={() => runBulkUpdate({ hierarchyLevel: bulkNewLevel }, (n) => `${n} objekt satta till nivå ${hierarchyLevelLabels[bulkNewLevel]?.label || bulkNewLevel}`)}
+              data-testid="button-bulk-change-level"
+            >
+              Sätt nivå
+            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button size="sm" variant="outline" disabled={bulkBusy} data-testid="button-bulk-more">
+                  {bulkBusy ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <MoreHorizontal className="h-4 w-4 mr-1" />}
+                  Fler åtgärder
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={runBulkGeocode} data-testid="menu-bulk-geocode">
+                  <MapPin className="h-4 w-4 mr-2" />
+                  Geokoda markerade
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setBulkParentDialogOpen(true)} data-testid="menu-bulk-move-parent">
+                  <FolderPlus className="h-4 w-4 mr-2" />
+                  Flytta till förälder…
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={exportSelectedCSV} data-testid="menu-bulk-export">
+                  <Download className="h-4 w-4 mr-2" />
+                  Exportera markerade
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={() => setBulkDeleteOpen(true)} className="text-destructive focus:text-destructive" data-testid="menu-bulk-delete">
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  Ta bort markerade
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </BulkActionBar>
           <div className="border rounded-md bg-card">
             {filteredTopLevel.length > 0 && (
@@ -2001,35 +2326,35 @@ export default function ObjectsPage() {
                 <div className="w-4 shrink-0" />
                 <button
                   onClick={() => toggleSort("name")}
-                  className="flex-1 min-w-0 flex items-center gap-1 hover:text-foreground text-left"
+                  className={`flex-1 min-w-0 flex items-center gap-1 hover:text-foreground text-left ${sortConfig.field === "name" ? "text-primary font-semibold" : ""}`}
                   data-testid="button-sort-name"
                 >
                   Namn <SortIcon field="name" />
                 </button>
                 <button
                   onClick={() => toggleSort("level")}
-                  className="hidden sm:flex items-center gap-1 hover:text-foreground w-24 shrink-0"
+                  className={`hidden sm:flex items-center gap-1 hover:text-foreground w-24 shrink-0 ${sortConfig.field === "level" ? "text-primary font-semibold" : ""}`}
                   data-testid="button-sort-level"
                 >
                   Nivå <SortIcon field="level" />
                 </button>
                 <button
                   onClick={() => toggleSort("city")}
-                  className="hidden md:flex items-center gap-1 hover:text-foreground w-32 shrink-0"
+                  className={`hidden md:flex items-center gap-1 hover:text-foreground w-32 shrink-0 ${sortConfig.field === "city" ? "text-primary font-semibold" : ""}`}
                   data-testid="button-sort-city"
                 >
                   Stad <SortIcon field="city" />
                 </button>
                 <button
                   onClick={() => toggleSort("customer")}
-                  className="hidden lg:flex items-center gap-1 hover:text-foreground w-40 shrink-0"
+                  className={`hidden lg:flex items-center gap-1 hover:text-foreground w-40 shrink-0 ${sortConfig.field === "customer" ? "text-primary font-semibold" : ""}`}
                   data-testid="button-sort-customer"
                 >
                   Kund <SortIcon field="customer" />
                 </button>
                 <button
                   onClick={() => toggleSort("children")}
-                  className="flex items-center gap-1 hover:text-foreground w-20 shrink-0 justify-end"
+                  className={`flex items-center gap-1 hover:text-foreground w-20 shrink-0 justify-end ${sortConfig.field === "children" ? "text-primary font-semibold" : ""}`}
                   data-testid="button-sort-children"
                 >
                   Antal <SortIcon field="children" />
@@ -2038,7 +2363,7 @@ export default function ObjectsPage() {
             )}
             {filteredTopLevel.length > 0 ? (
               filteredTopLevel.map(obj => renderObjectTree(obj))
-            ) : totalObjects === 0 && !debouncedSearch && typeFilter === "all" && accessFilter === "all" && customerFilter.length === 0 && hierarchyFilter === "all" && !interimFilter ? (
+            ) : totalObjects === 0 && !debouncedSearch && typeFilter === "all" && accessFilter === "all" && customerFilter.length === 0 && hierarchyFilter === "all" && !interimFilter && cityFilter.length === 0 && !hasSetupTimeFilter && !hasParentFilter && !reportedFilter ? (
               <div className="text-center py-16 px-6">
                 <div className="mx-auto w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mb-4">
                   <Package className="h-8 w-8 text-primary" />
@@ -2060,7 +2385,13 @@ export default function ObjectsPage() {
               </div>
             ) : (
               <div className="text-center py-12">
-                <p className="text-muted-foreground">Inga {t("object_plural").toLowerCase()} hittades med aktuella filter</p>
+                <p className="text-muted-foreground mb-4">Inga {t("object_plural").toLowerCase()} hittades med aktuella filter</p>
+                {activeFilterCount > 0 && (
+                  <Button variant="outline" size="sm" onClick={clearAllFilters} className="gap-1" data-testid="button-empty-clear-filters">
+                    <XCircle className="h-4 w-4" />
+                    Rensa filter
+                  </Button>
+                )}
               </div>
             )}
           </div>
@@ -2717,6 +3048,84 @@ Fastighet A,FAST-100,fastighet,Storgatan 1,Stockholm,code,1234"
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <AlertDialog open={bulkDeleteOpen} onOpenChange={(open) => { if (!bulkBusy) setBulkDeleteOpen(open); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Ta bort {selectedIds.size} markerade objekt?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Detta tar bort {selectedIds.size} markerade objekt. Objekt med underordnade objekt kan misslyckas. Åtgärden kan inte ångras.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={bulkBusy} data-testid="button-cancel-bulk-delete">Avbryt</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={bulkBusy}
+              onClick={(e) => { e.preventDefault(); runBulkDelete(); }}
+              data-testid="button-confirm-bulk-delete"
+            >
+              {bulkBusy ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Trash2 className="h-4 w-4 mr-2" />}
+              Ta bort markerade
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <Dialog open={bulkParentDialogOpen} onOpenChange={(open) => { if (!bulkBusy) { setBulkParentDialogOpen(open); if (!open) setBulkNewParentId(null); } }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Flytta {selectedIds.size} objekt</DialogTitle>
+            <DialogDescription>
+              Välj nytt överordnat objekt. Markerade objekt flyttas och ärver adress från den nya föräldern. Välj "Toppnivå" för att ta bort föräldern.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-2">
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button variant="outline" className="w-full justify-between font-normal" data-testid="button-bulk-parent-select">
+                  <span className="truncate">
+                    {bulkNewParentId === null ? "Toppnivå (ingen förälder)" : (objectNameById.get(bulkNewParentId) ?? "Valt objekt")}
+                  </span>
+                  <ChevronDown className="h-4 w-4 opacity-50 shrink-0" />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-[360px] p-0" align="start">
+                <Command>
+                  <CommandInput placeholder="Sök objekt…" data-testid="input-bulk-parent-search" />
+                  <CommandList>
+                    <CommandEmpty>Inget objekt hittades.</CommandEmpty>
+                    <CommandGroup>
+                      <CommandItem value="__top__" onSelect={() => setBulkNewParentId(null)} data-testid="option-bulk-parent-top">
+                        <Check className={`mr-2 h-4 w-4 ${bulkNewParentId === null ? "opacity-100" : "opacity-0"}`} />
+                        Toppnivå (ingen förälder)
+                      </CommandItem>
+                      {objects.filter(o => !selectedIds.has(o.id)).map(o => (
+                        <CommandItem
+                          key={o.id}
+                          value={`${(o as any).displayName || o.name} ${o.objectNumber || ""}`}
+                          onSelect={() => setBulkNewParentId(o.id)}
+                          data-testid={`option-bulk-parent-${o.id}`}
+                        >
+                          <Check className={`mr-2 h-4 w-4 ${bulkNewParentId === o.id ? "opacity-100" : "opacity-0"}`} />
+                          <span className="truncate">{(o as any).displayName || o.name}{o.objectNumber ? ` (${o.objectNumber})` : ""}</span>
+                        </CommandItem>
+                      ))}
+                    </CommandGroup>
+                  </CommandList>
+                </Command>
+              </PopoverContent>
+            </Popover>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" disabled={bulkBusy} onClick={() => setBulkParentDialogOpen(false)} data-testid="button-cancel-bulk-parent">Avbryt</Button>
+            <Button disabled={bulkBusy} onClick={runBulkParentMove} data-testid="button-confirm-bulk-parent">
+              {bulkBusy ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <FolderPlus className="h-4 w-4 mr-2" />}
+              Flytta
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={batchGeoOpen} onOpenChange={(v) => { if (!batchGeoRunning) { setBatchGeoOpen(v); setBatchGeoShowMap(false); } }}>
         <DialogContent className={(batchGeoShowMap || (exploreData?.objects?.length ?? 0) > 0) ? "max-w-5xl max-h-[90vh] overflow-y-auto" : "max-w-2xl"}>
