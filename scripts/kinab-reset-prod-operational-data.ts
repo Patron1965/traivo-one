@@ -110,7 +110,19 @@ async function main() {
   console.log(`Mode: ${DRY_RUN ? "DRY-RUN (ROLLBACK, ingen radering persisteras)" : "SKARP RADERING (COMMIT)"}`);
   console.log("=".repeat(64));
 
-  const client = await prodPool.connect();
+  let client: pg.PoolClient;
+  try {
+    client = await prodPool.connect();
+  } catch (err) {
+    console.error("\nFEL: kunde inte ansluta till PROD_DATABASE_URL.", err);
+    console.error(
+      "Kontrollera att värdet är en POSTGRES-anslutningssträng " +
+        "(postgres://user:lösen@host:5432/dbnamn), inte app-URL:en.",
+    );
+    await prodPool.end().catch(() => {});
+    process.exit(1);
+  }
+
   let committed = false;
   let totalRows = 0;
 
