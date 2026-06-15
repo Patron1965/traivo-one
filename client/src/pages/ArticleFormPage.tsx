@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, useEffect } from "react";
+import { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import { useLocation, useParams } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
@@ -53,7 +53,11 @@ import {
   Upload,
   Beaker,
   CheckCircle2,
+  Pin,
+  Circle,
+  Keyboard,
 } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 
 // Fallback om registret ännu inte hunnit laddas (eller är tomt). Riktiga
 // alternativ hämtas per-tenant från /api/article-types (Task #834).
@@ -254,46 +258,370 @@ const emptyFormData: ArticleFormData = {
   competencyRequirements: [],
 };
 
+// ── Hybrid-layout: sektionsdefinitioner & completeness ──────────────────────
+type SectionStat = { filled: number; total: number };
+type SectionStatus = "complete" | "partial" | "empty";
+
+const ARTICLE_SECTIONS: { id: string; title: string; icon: LucideIcon }[] = [
+  { id: "grunddata", title: "Grunddata", icon: Package },
+  { id: "fordjupad-info", title: "Fördjupad artikelinfo", icon: FileText },
+  { id: "lager-inkop", title: "Lager & Inköp", icon: Warehouse },
+  { id: "pris-ekonomi", title: "Pris & Ekonomi", icon: DollarSign },
+  { id: "planeringslogik", title: "Planeringslogik", icon: CalendarClock },
+  { id: "struktur", title: "Strukturartikel (BOM)", icon: Layers },
+  { id: "fasthakning", title: "Fasthakningslogik", icon: LinkIcon },
+  { id: "antalslogik", title: "Antalslogik", icon: ListChecks },
+  { id: "metadata", title: "Information & Metadata", icon: Database },
+  { id: "utforarkategori", title: "Utförarkategori", icon: Users },
+];
+
+function sectionStatus(stat?: SectionStat): SectionStatus {
+  if (!stat || stat.filled === 0) return "empty";
+  if (stat.filled >= stat.total) return "complete";
+  return "partial";
+}
+
+function countFilled(values: boolean[]): SectionStat {
+  return { filled: values.filter(Boolean).length, total: values.length };
+}
+
+// Räknar nyckelfält per sektion (approximation av ifyllnadsgrad, inte 1:1 med
+// varje renderat fält) för badge + status-ikon i navigeringen.
+function getSectionStats(
+  fd: ArticleFormData,
+  componentDraft: ComponentDraft[],
+): Record<string, SectionStat> {
+  const assocCount = fd.associationRules.filter((c) => c.source === "metadata").length;
+  return {
+    grunddata: countFilled([
+      fd.articleNumber.trim() !== "",
+      fd.name.trim() !== "",
+      fd.description.trim() !== "",
+      fd.internalDescription.trim() !== "",
+    ]),
+    "fordjupad-info": countFilled([
+      fd.files.length > 0,
+      fd.externInfoUrl.trim() !== "",
+      fd.externInfoDescription.trim() !== "",
+      fd.supplierNumbers.length > 0,
+    ]),
+    "lager-inkop": countFilled([
+      fd.stockLocations.length > 0,
+      fd.defaultSupplierId.trim() !== "",
+      fd.reorderPoint != null,
+      fd.safetyStock != null,
+      fd.minOrderQuantity != null,
+      fd.leadTimeDays != null,
+    ]),
+    "pris-ekonomi": countFilled([
+      fd.listPrice > 0,
+      fd.cost > 0,
+      fd.purchasePrice > 0,
+      fd.standardCost > 0,
+      fd.materialCost > 0,
+      fd.markupPercent != null,
+      fd.chargeModel.trim() !== "",
+      fd.travelTime != null,
+    ]),
+    planeringslogik: countFilled([fd.offsetMinutes !== 0, fd.groupSize > 1]),
+    struktur: { filled: componentDraft.length > 0 ? 1 : 0, total: 1 },
+    fasthakning: { filled: assocCount > 0 ? 1 : 0, total: 1 },
+    antalslogik: countFilled([
+      fd.quantityMode !== "per_styck",
+      fd.operatorCanUpdateQuantity,
+    ]),
+    metadata: countFilled([
+      fd.fetchMetadataLabel.trim() !== "" || fd.fetchMetadataCode.trim() !== "",
+      fd.leaveMetadataCode.trim() !== "",
+      fd.canUpdateMetadata,
+      fd.informationRequirements.length > 0,
+    ]),
+    utforarkategori: countFilled([
+      fd.performerCategory.trim() !== "",
+      fd.competencyRequirements.length > 0,
+    ]),
+  };
+}
+
+function SectionStatusIcon({
+  status,
+  className = "",
+}: {
+  status: SectionStatus;
+  className?: string;
+}) {
+  if (status === "complete")
+    return <CheckCircle2 className={`h-4 w-4 text-chart-2 ${className}`} aria-hidden="true" />;
+  if (status === "partial")
+    return <AlertTriangle className={`h-4 w-4 text-warning ${className}`} aria-hidden="true" />;
+  return <Circle className={`h-4 w-4 text-muted-foreground ${className}`} aria-hidden="true" />;
+}
+
+function statusBadgeTone(status: SectionStatus): string {
+  if (status === "complete") return "bg-chart-2/15 text-chart-2";
+  if (status === "partial") return "bg-warning/15 text-warning";
+  return "bg-muted text-muted-foreground";
+}
+
+function FieldCountBadge({
+  stat,
+  status,
+  testId,
+}: {
+  stat?: SectionStat;
+  status: SectionStatus;
+  testId?: string;
+}) {
+  if (!stat) return null;
+  return (
+    <span
+      className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ${statusBadgeTone(status)}`}
+      data-testid={testId}
+    >
+      {stat.filled}/{stat.total}
+    </span>
+  );
+}
+
+function statusText(status: SectionStatus): string {
+  if (status === "complete") return "komplett";
+  if (status === "partial") return "delvis ifylld";
+  return "tom";
+}
+
+function QuickNav({
+  sections,
+  stats,
+  pinnedSections,
+  activeSection,
+  onSectionClick,
+  onExpandAll,
+  onCollapseAll,
+}: {
+  sections: { id: string; title: string; icon: LucideIcon }[];
+  stats: Record<string, SectionStat>;
+  pinnedSections: string[];
+  activeSection: string;
+  onSectionClick: (id: string) => void;
+  onExpandAll: () => void;
+  onCollapseAll: () => void;
+}) {
+  return (
+    <nav
+      aria-label="Artikelsektioner navigation"
+      data-testid="nav-article-sections"
+      className="sticky top-0 z-30 hidden max-h-[calc(100vh-3.5rem)] shrink-0 basis-[clamp(15rem,16vw,20rem)] self-start overflow-y-auto border-r bg-muted/30 px-3 py-4 lg:block"
+    >
+      <div className="mb-3 flex items-center justify-between px-1">
+        <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          Sektioner
+        </span>
+        <div className="flex items-center gap-1">
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-7 px-2 text-xs"
+            onClick={onExpandAll}
+            data-testid="button-expand-all"
+            title="Expandera alla (E)"
+          >
+            Alla
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-7 px-2 text-xs"
+            onClick={onCollapseAll}
+            data-testid="button-collapse-all"
+            title="Kollapsa alla (C)"
+          >
+            Dölj
+          </Button>
+        </div>
+      </div>
+      <ul role="list" className="space-y-1">
+        {sections.map((s) => {
+          const stat = stats[s.id];
+          const status = sectionStatus(stat);
+          const isActive = activeSection === s.id;
+          const isPinned = pinnedSections.includes(s.id);
+          const Icon = s.icon;
+          const borderTone = isActive
+            ? "border-l-primary"
+            : status === "complete"
+              ? "border-l-chart-2"
+              : status === "partial"
+                ? "border-l-warning"
+                : "border-l-border";
+          return (
+            <li key={s.id}>
+              <button
+                type="button"
+                onClick={() => onSectionClick(s.id)}
+                aria-current={isActive ? "true" : undefined}
+                aria-label={`${s.title}, ${statusText(status)}${stat ? `, ${stat.filled} av ${stat.total} fält` : ""}`}
+                data-testid={`nav-section-${s.id}`}
+                className={`flex w-full items-center gap-2 rounded-md border-l-[3px] ${borderTone} px-2.5 py-2 text-left text-sm transition-colors hover-elevate ${isActive ? "bg-accent font-semibold text-accent-foreground" : "text-foreground"}`}
+              >
+                <Icon className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+                {isPinned && <Pin className="h-3 w-3 shrink-0 text-primary" aria-hidden="true" />}
+                <span className="min-w-0 flex-1 truncate">{s.title}</span>
+                {stat && (
+                  <span
+                    className={`shrink-0 rounded-full px-1.5 py-0.5 text-[11px] font-semibold ${statusBadgeTone(status)}`}
+                    data-testid={`nav-badge-${s.id}`}
+                  >
+                    {stat.filled}/{stat.total}
+                  </span>
+                )}
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+      <details className="mt-4 rounded-md border bg-card px-2 py-1.5 text-xs text-muted-foreground">
+        <summary
+          className="flex cursor-pointer items-center gap-1.5 font-medium"
+          data-testid="button-shortcuts-help"
+        >
+          <Keyboard className="h-3.5 w-3.5" aria-hidden="true" /> Kortkommandon
+        </summary>
+        <dl className="mt-2 space-y-1">
+          <div className="flex items-center justify-between gap-2">
+            <dt>Hoppa till 1–9</dt>
+            <dd className="font-mono">⌘/Ctrl + 1–9</dd>
+          </div>
+          <div className="flex items-center justify-between gap-2">
+            <dt>Navigera</dt>
+            <dd className="font-mono">↑ ↓</dd>
+          </div>
+          <div className="flex items-center justify-between gap-2">
+            <dt>Expandera/kollapsa</dt>
+            <dd className="font-mono">Space</dd>
+          </div>
+          <div className="flex items-center justify-between gap-2">
+            <dt>Expandera alla</dt>
+            <dd className="font-mono">E</dd>
+          </div>
+          <div className="flex items-center justify-between gap-2">
+            <dt>Kollapsa alla</dt>
+            <dd className="font-mono">C</dd>
+          </div>
+        </dl>
+      </details>
+    </nav>
+  );
+}
+
 function FormSection({
+  id,
   title,
   icon,
   description,
-  defaultOpen = false,
   testId,
+  alwaysExpanded = false,
+  expanded = false,
+  onToggle,
+  pinned = false,
+  onPin,
+  stat,
+  registerRef,
   children,
 }: {
+  id: string;
   title: string;
   icon?: React.ReactNode;
   description?: string;
-  defaultOpen?: boolean;
   testId?: string;
+  alwaysExpanded?: boolean;
+  expanded?: boolean;
+  onToggle?: () => void;
+  pinned?: boolean;
+  onPin?: () => void;
+  stat?: SectionStat;
+  registerRef?: (el: HTMLElement | null) => void;
   children: React.ReactNode;
 }) {
-  const [open, setOpen] = useState(defaultOpen);
+  const isOpen = alwaysExpanded || expanded;
+  const status = sectionStatus(stat);
+  const headingId = `${id}-heading`;
+  const contentId = `${id}-content`;
   return (
-    <Card>
-      <Collapsible open={open} onOpenChange={setOpen}>
-        <CollapsibleTrigger asChild>
-          <button
-            type="button"
-            className="flex w-full items-center justify-between gap-2 px-4 py-3 text-left hover-elevate rounded-md"
-            data-testid={testId}
-          >
-            <span className="flex items-center gap-2 text-sm font-semibold">
-              {icon}
-              {title}
-            </span>
-            <ChevronDown
-              className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform ${open ? "rotate-180" : ""}`}
-            />
-          </button>
-        </CollapsibleTrigger>
-        <CollapsibleContent className="px-4 pb-4 pt-1">
-          {description && <p className="mb-3 text-xs text-muted-foreground">{description}</p>}
-          <div className="space-y-4">{children}</div>
-        </CollapsibleContent>
-      </Collapsible>
-    </Card>
+    <section
+      id={id}
+      data-section-id={id}
+      ref={registerRef}
+      aria-labelledby={headingId}
+      className={`scroll-mt-4 ${alwaysExpanded ? "rounded-lg border-2 border-primary/40 bg-muted/20" : ""}`}
+    >
+      <Card className={alwaysExpanded ? "border-0 bg-transparent shadow-none" : undefined}>
+        <Collapsible open={isOpen} onOpenChange={alwaysExpanded ? undefined : onToggle}>
+          <div id={headingId} className="flex items-center gap-1 pr-2">
+            {alwaysExpanded ? (
+              <div className="flex flex-1 items-center gap-2 px-4 py-3">
+                {icon}
+                <span className="text-sm font-semibold">{title}</span>
+                <SectionStatusIcon status={status} />
+                <FieldCountBadge stat={stat} status={status} testId={`badge-${id}`} />
+              </div>
+            ) : (
+              <CollapsibleTrigger asChild>
+                <button
+                  type="button"
+                  data-testid={testId}
+                  aria-expanded={isOpen}
+                  aria-controls={contentId}
+                  className="flex flex-1 items-center gap-2 rounded-md px-4 py-3 text-left hover-elevate"
+                >
+                  {icon}
+                  <span className="text-sm font-semibold">{title}</span>
+                  {pinned && <Pin className="h-3.5 w-3.5 text-primary" aria-hidden="true" />}
+                  <SectionStatusIcon status={status} />
+                  <FieldCountBadge stat={stat} status={status} testId={`badge-${id}`} />
+                  <ChevronDown
+                    className={`ml-auto h-4 w-4 shrink-0 text-muted-foreground transition-transform ${isOpen ? "rotate-180" : ""}`}
+                  />
+                </button>
+              </CollapsibleTrigger>
+            )}
+            {!alwaysExpanded && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 shrink-0"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onPin?.();
+                }}
+                aria-pressed={pinned}
+                data-testid={`button-pin-${id}`}
+                title={pinned ? "Avpinna sektion" : "Pinna sektion"}
+              >
+                <Pin
+                  className={`h-4 w-4 ${pinned ? "fill-current text-primary" : "text-muted-foreground"}`}
+                  aria-hidden="true"
+                />
+                <span className="sr-only">{pinned ? "Avpinna sektion" : "Pinna sektion"}</span>
+              </Button>
+            )}
+          </div>
+          {alwaysExpanded ? (
+            <div id={contentId} className="px-4 pb-4 pt-1">
+              {description && <p className="mb-3 text-xs text-muted-foreground">{description}</p>}
+              <div className="space-y-4">{children}</div>
+            </div>
+          ) : (
+            <CollapsibleContent id={contentId} className="px-4 pb-4 pt-1">
+              {description && <p className="mb-3 text-xs text-muted-foreground">{description}</p>}
+              <div className="space-y-4">{children}</div>
+            </CollapsibleContent>
+          )}
+        </Collapsible>
+      </Card>
+    </section>
   );
 }
 
@@ -328,6 +656,225 @@ export default function ArticleFormPage() {
   const [assocTestLoading, setAssocTestLoading] = useState(false);
   // Create-läge initieras direkt; redigeringsläge initieras när artikeln hämtats.
   const [initialized, setInitialized] = useState(!isEditMode);
+
+  // ── Hybrid-layout: sektionsnavigering, expand/pin & persistence ──────────
+  const layoutStorageKey = `traivo_article_${id ?? "new"}_layout_prefs`;
+  const allSectionIds = useMemo(() => ARTICLE_SECTIONS.map((s) => s.id), []);
+  const [expandedSections, setExpandedSections] = useState<string[]>(["grunddata"]);
+  const [pinnedSections, setPinnedSections] = useState<string[]>([]);
+  const [activeSection, setActiveSection] = useState<string>("grunddata");
+  const [srAnnouncement, setSrAnnouncement] = useState("");
+  const sectionRefs = useRef<Record<string, HTMLElement | null>>({});
+  const scrollContainerRef = useRef<HTMLFormElement | null>(null);
+
+  const sectionStats = useMemo(
+    () => getSectionStats(formData, componentDraft),
+    [formData, componentDraft],
+  );
+
+  const orderedNavSections = useMemo(() => {
+    const grund = ARTICLE_SECTIONS.filter((s) => s.id === "grunddata");
+    const pinned = pinnedSections
+      .filter((pid) => pid !== "grunddata")
+      .map((pid) => ARTICLE_SECTIONS.find((s) => s.id === pid))
+      .filter((s): s is (typeof ARTICLE_SECTIONS)[number] => Boolean(s));
+    const rest = ARTICLE_SECTIONS.filter(
+      (s) => s.id !== "grunddata" && !pinnedSections.includes(s.id),
+    );
+    return [...grund, ...pinned, ...rest];
+  }, [pinnedSections]);
+
+  // Ladda sparade preferenser (per artikel, 7 dagars TTL).
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem(layoutStorageKey);
+      if (!stored) return;
+      const prefs = JSON.parse(stored) as {
+        expandedSections?: string[];
+        pinnedSections?: string[];
+        timestamp?: number;
+      };
+      if (!prefs.timestamp || Date.now() - prefs.timestamp > 7 * 24 * 60 * 60 * 1000) return;
+      const pinned = (prefs.pinnedSections ?? [])
+        .filter((s) => allSectionIds.includes(s) && s !== "grunddata")
+        .slice(0, 3);
+      const expanded = (prefs.expandedSections ?? []).filter((s) => allSectionIds.includes(s));
+      setPinnedSections(pinned);
+      setExpandedSections(Array.from(new Set(["grunddata", ...expanded, ...pinned])));
+    } catch (e) {
+      console.error("Kunde inte läsa layout-preferenser:", e);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [layoutStorageKey]);
+
+  // Spara preferenser vid ändring.
+  useEffect(() => {
+    try {
+      localStorage.setItem(
+        layoutStorageKey,
+        JSON.stringify({
+          expandedSections: expandedSections.filter((s) => s !== "grunddata"),
+          pinnedSections,
+          timestamp: Date.now(),
+        }),
+      );
+    } catch {
+      /* localStorage kan vara otillgängligt – ignorera */
+    }
+  }, [expandedSections, pinnedSections, layoutStorageKey]);
+
+  const toggleSection = useCallback((sectionId: string) => {
+    if (sectionId === "grunddata") return;
+    setExpandedSections((prev) => {
+      const isOpen = prev.includes(sectionId);
+      setSrAnnouncement(
+        `${ARTICLE_SECTIONS.find((s) => s.id === sectionId)?.title ?? "Sektion"} ${isOpen ? "kollapsad" : "expanderad"}`,
+      );
+      return isOpen ? prev.filter((s) => s !== sectionId) : [...prev, sectionId];
+    });
+  }, []);
+
+  const togglePin = useCallback(
+    (sectionId: string) => {
+      if (sectionId === "grunddata") return;
+      setPinnedSections((prev) => {
+        const isPinned = prev.includes(sectionId);
+        if (!isPinned && prev.length >= 3) {
+          toast({
+            title: "Max 3 sektioner kan pinnas",
+            description: "Avpinna en sektion innan du pinnar en ny.",
+            variant: "destructive",
+          });
+          return prev;
+        }
+        if (!isPinned) {
+          setExpandedSections((e) => (e.includes(sectionId) ? e : [...e, sectionId]));
+        }
+        return isPinned ? prev.filter((s) => s !== sectionId) : [...prev, sectionId];
+      });
+    },
+    [toast],
+  );
+
+  const handleSectionClick = useCallback((sectionId: string) => {
+    if (sectionId !== "grunddata") {
+      setExpandedSections((prev) => (prev.includes(sectionId) ? prev : [...prev, sectionId]));
+    }
+    setActiveSection(sectionId);
+    window.setTimeout(() => {
+      sectionRefs.current[sectionId]?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 120);
+  }, []);
+
+  const expandAllSections = useCallback(() => {
+    setExpandedSections(allSectionIds);
+    setSrAnnouncement("Alla sektioner expanderade");
+  }, [allSectionIds]);
+
+  const collapseAllSections = useCallback(() => {
+    setExpandedSections(Array.from(new Set(["grunddata", ...pinnedSections])));
+    setSrAnnouncement("Sektioner kollapsade");
+  }, [pinnedSections]);
+
+  // IntersectionObserver → uppdatera aktiv sektion vid scroll.
+  useEffect(() => {
+    const els = allSectionIds
+      .map((sid) => sectionRefs.current[sid])
+      .filter((el): el is HTMLElement => Boolean(el));
+    if (els.length === 0) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        let maxRatio = 0;
+        let activeId: string | null = null;
+        entries.forEach((entry) => {
+          if (entry.isIntersecting && entry.intersectionRatio > maxRatio) {
+            maxRatio = entry.intersectionRatio;
+            activeId = entry.target.getAttribute("data-section-id");
+          }
+        });
+        if (activeId && maxRatio > 0.2) setActiveSection(activeId);
+      },
+      {
+        root: scrollContainerRef.current ?? null,
+        rootMargin: "0px 0px -55% 0px",
+        threshold: [0, 0.2, 0.5, 1],
+      },
+    );
+    els.forEach((el) => observer.observe(el));
+    return () => observer.disconnect();
+  }, [allSectionIds, initialized]);
+
+  // Tangentbordsgenvägar för sektionsnavigering.
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      const tag = target?.tagName;
+      const isFormField =
+        tag === "INPUT" ||
+        tag === "TEXTAREA" ||
+        tag === "SELECT" ||
+        Boolean(target?.isContentEditable);
+      if (isFormField) return;
+      const isCmd = e.metaKey || e.ctrlKey;
+      if (isCmd && e.key >= "1" && e.key <= "9") {
+        e.preventDefault();
+        const idx = Number.parseInt(e.key, 10) - 1;
+        if (allSectionIds[idx]) handleSectionClick(allSectionIds[idx]);
+        return;
+      }
+      if (isCmd) return;
+      // Stör inte inbyggd tangentbordsnavigering i sammansatta kontroller
+      // (Select, dropdown, combobox, popover, meny, dialog).
+      const inComposite = Boolean(
+        target?.closest(
+          '[role="menu"],[role="menuitem"],[role="listbox"],[role="option"],[role="combobox"],[role="dialog"],[data-radix-popper-content-wrapper]',
+        ),
+      );
+      if (inComposite) return;
+      const isButtonish = tag === "BUTTON" || tag === "A";
+      if (e.key === " ") {
+        if (isButtonish) return;
+        e.preventDefault();
+        toggleSection(activeSection);
+      } else if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+        e.preventDefault();
+        const i = allSectionIds.indexOf(activeSection);
+        const next =
+          e.key === "ArrowDown"
+            ? Math.min(i + 1, allSectionIds.length - 1)
+            : Math.max(i - 1, 0);
+        handleSectionClick(allSectionIds[next]);
+      } else if (e.key === "e" || e.key === "E") {
+        expandAllSections();
+      } else if (e.key === "c" || e.key === "C") {
+        collapseAllSections();
+      }
+    };
+    document.addEventListener("keydown", handler);
+    return () => document.removeEventListener("keydown", handler);
+  }, [
+    activeSection,
+    allSectionIds,
+    handleSectionClick,
+    toggleSection,
+    expandAllSections,
+    collapseAllSections,
+  ]);
+
+  const sectionProps = useCallback(
+    (sid: string) => ({
+      id: sid,
+      expanded: expandedSections.includes(sid),
+      onToggle: () => toggleSection(sid),
+      pinned: pinnedSections.includes(sid),
+      onPin: () => togglePin(sid),
+      stat: sectionStats[sid],
+      registerRef: (el: HTMLElement | null) => {
+        sectionRefs.current[sid] = el;
+      },
+    }),
+    [expandedSections, pinnedSections, sectionStats, toggleSection, togglePin],
+  );
 
   const computeOffsetMinutes = (
     unit: "minutes" | "days",
@@ -807,10 +1354,34 @@ export default function ArticleFormPage() {
         </div>
       </header>
 
-      <form id="article-form" onSubmit={handleSubmit} className="flex-1 overflow-auto">
-        <div className="mx-auto max-w-3xl space-y-4 p-6">
+      <form
+        id="article-form"
+        ref={scrollContainerRef}
+        onSubmit={handleSubmit}
+        className="flex-1 overflow-auto"
+      >
+        <div
+          aria-live="polite"
+          aria-atomic="true"
+          className="sr-only"
+          data-testid="text-sr-announcement"
+        >
+          {srAnnouncement}
+        </div>
+        <div className="flex w-full items-start">
+          <QuickNav
+            sections={orderedNavSections}
+            stats={sectionStats}
+            pinnedSections={pinnedSections}
+            activeSection={activeSection}
+            onSectionClick={handleSectionClick}
+            onExpandAll={expandAllSections}
+            onCollapseAll={collapseAllSections}
+          />
+          <div className="min-w-0 flex-1">
+            <div className="mx-auto w-full max-w-[1400px] space-y-6 p-4 sm:p-6 lg:px-8">
           {/* 1. Grunddata */}
-          <FormSection title="Grunddata" icon={<Package className="h-4 w-4" />} defaultOpen testId="section-grunddata">
+          <FormSection title="Grunddata" icon={<Package className="h-4 w-4" />} alwaysExpanded testId="section-grunddata" {...sectionProps("grunddata")}>
             <div className="space-y-2">
               <Label htmlFor="articleNumber">
                 Artikelnummer <span className="text-destructive">*</span>
@@ -998,7 +1569,7 @@ export default function ArticleFormPage() {
           </FormSection>
 
           {/* 2. Fördjupad artikelinfo */}
-          <FormSection title="Fördjupad artikelinfo" icon={<FileText className="h-4 w-4" />} testId="section-fordjupad-info">
+          <FormSection title="Fördjupad artikelinfo" icon={<FileText className="h-4 w-4" />} testId="section-fordjupad-info" {...sectionProps("fordjupad-info")}>
             <div className="space-y-2">
               <Label>Filer</Label>
               <label
@@ -1187,7 +1758,7 @@ export default function ArticleFormPage() {
           </FormSection>
 
           {/* 3. Lager & Inköp */}
-          <FormSection title="Lager & Inköp" icon={<Warehouse className="h-4 w-4" />} testId="section-lager-inkop">
+          <FormSection title="Lager & Inköp" icon={<Warehouse className="h-4 w-4" />} testId="section-lager-inkop" {...sectionProps("lager-inkop")}>
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <Label>Lagerplatser</Label>
@@ -1359,7 +1930,7 @@ export default function ArticleFormPage() {
           </FormSection>
 
           {/* 4. Pris & Ekonomi */}
-          <FormSection title="Pris & Ekonomi" icon={<DollarSign className="h-4 w-4" />} testId="section-pris-ekonomi">
+          <FormSection title="Pris & Ekonomi" icon={<DollarSign className="h-4 w-4" />} testId="section-pris-ekonomi" {...sectionProps("pris-ekonomi")}>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
               <div className="space-y-2">
                 <Label htmlFor="listPrice">Listpris (kr)</Label>
@@ -1528,7 +2099,7 @@ export default function ArticleFormPage() {
           </FormSection>
 
           {/* 5. Planeringslogik */}
-          <FormSection title="Planeringslogik" icon={<CalendarClock className="h-4 w-4" />} testId="section-planeringslogik">
+          <FormSection title="Planeringslogik" icon={<CalendarClock className="h-4 w-4" />} testId="section-planeringslogik" {...sectionProps("planeringslogik")}>
             <div className="space-y-3">
               <Label>Offsettid</Label>
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -1645,7 +2216,7 @@ export default function ArticleFormPage() {
           </FormSection>
 
           {/* 6. Strukturartikel (BOM) */}
-          <FormSection title="Strukturartikel (BOM)" icon={<Layers className="h-4 w-4" />} testId="section-struktur">
+          <FormSection title="Strukturartikel (BOM)" icon={<Layers className="h-4 w-4" />} testId="section-struktur" {...sectionProps("struktur")}>
             <label className="flex cursor-pointer items-start gap-2 text-sm">
               <input
                 type="checkbox"
@@ -1780,6 +2351,7 @@ export default function ArticleFormPage() {
             icon={<LinkIcon className="h-4 w-4" />}
             description="Haka fast artikeln på objekt vars metadata uppfyller ALLA villkor (OCH-logik)"
             testId="section-fasthakning"
+            {...sectionProps("fasthakning")}
           >
             <div className="space-y-3">
               {metadataConditions.length === 0 && (
@@ -1950,7 +2522,7 @@ export default function ArticleFormPage() {
           </FormSection>
 
           {/* 8. Antalslogik */}
-          <FormSection title="Antalslogik" icon={<ListChecks className="h-4 w-4" />} testId="section-antalslogik">
+          <FormSection title="Antalslogik" icon={<ListChecks className="h-4 w-4" />} testId="section-antalslogik" {...sectionProps("antalslogik")}>
             <div className="space-y-2">
               <Label htmlFor="quantityMode">Kvantitetsläge</Label>
               <Select value={formData.quantityMode} onValueChange={(value) => setFormData({ ...formData, quantityMode: value })}>
@@ -2102,6 +2674,7 @@ export default function ArticleFormPage() {
             icon={<Database className="h-4 w-4" />}
             description="Koppla artikeln till metadata som hämtas/lämnas vid utförande"
             testId="section-metadata"
+            {...sectionProps("metadata")}
           >
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="space-y-2">
@@ -2417,7 +2990,7 @@ export default function ArticleFormPage() {
           </FormSection>
 
           {/* 10. Utförarkategori */}
-          <FormSection title="Utförarkategori" icon={<Users className="h-4 w-4" />} testId="section-utforarkategori">
+          <FormSection title="Utförarkategori" icon={<Users className="h-4 w-4" />} testId="section-utforarkategori" {...sectionProps("utforarkategori")}>
             <div className="space-y-2">
               <Label htmlFor="performerCategory">Utförarkategori</Label>
               <Input
@@ -2491,6 +3064,8 @@ export default function ArticleFormPage() {
               )}
             </div>
           </FormSection>
+            </div>
+          </div>
         </div>
       </form>
     </div>
