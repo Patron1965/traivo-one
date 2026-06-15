@@ -28,7 +28,7 @@
 
 import { db } from "../server/db";
 import { sql } from "drizzle-orm";
-import { buildResetPhases, DEMO_RESOURCE_IDS } from "./kinab-reset-phases";
+import { buildResetPhases, buildPreDeleteUpdates } from "./kinab-reset-phases";
 
 const TENANT = "kinab";
 const args = process.argv.slice(2);
@@ -37,7 +37,7 @@ const confirmToken = confirmIdx >= 0 ? args[confirmIdx + 1] : null;
 const DRY_RUN = confirmToken !== "RENSA-KINAB";
 
 const PHASES = buildResetPhases(TENANT);
-const demoIdList = DEMO_RESOURCE_IDS.map((id) => `'${id}'`).join(",");
+const PRE_DELETE_UPDATES = buildPreDeleteUpdates(TENANT);
 
 async function tableExists(name: string): Promise<boolean> {
   const r: any = await db.execute(
@@ -82,6 +82,18 @@ async function main() {
 
   await snapshot("Före (nuläge)");
 
+  // Pre-delete: nollställ dingande FK-pekare från behållen config (teams/users)
+  // till rader som raderas nedan (FK NO ACTION → ingen auto-null).
+  console.log(`\n--- Pre-delete: nollställ dingande FK-pekare (behållen config) ---`);
+  for (const upd of PRE_DELETE_UPDATES) {
+    if (DRY_RUN) {
+      console.log(`  · ${upd.label} (skulle nollställas)`);
+    } else {
+      const r: any = await db.execute(sql.raw(upd.sql));
+      console.log(`  ✓ ${upd.label} — ${r.rowCount ?? 0} nollställda`);
+    }
+  }
+
   let totalRows = 0;
 
   for (const phase of PHASES) {
@@ -105,23 +117,6 @@ async function main() {
         totalRows += deleted;
       }
     }
-  }
-
-  // Nolla dingande users.resource_id-pekare till demo-resurserna (UPDATE, inte DELETE).
-  console.log(`\n--- Extra: nolla users.resource_id för demo-resurser ---`);
-  const userMatch: any = await db.execute(
-    sql.raw(`SELECT COUNT(*)::int AS n FROM "users" WHERE resource_id IN (${demoIdList})`),
-  );
-  const userN = Number((userMatch.rows ?? userMatch)[0]?.n ?? 0);
-  if (userN === 0) {
-    console.log(`  · users.resource_id                       0`);
-  } else if (DRY_RUN) {
-    console.log(`  · users.resource_id                       ${userN} (skulle nollställas)`);
-  } else {
-    const r: any = await db.execute(
-      sql.raw(`UPDATE "users" SET resource_id = NULL WHERE resource_id IN (${demoIdList})`),
-    );
-    console.log(`  ✓ users.resource_id                       ${r.rowCount ?? 0} nollställda`);
   }
 
   if (DRY_RUN) {

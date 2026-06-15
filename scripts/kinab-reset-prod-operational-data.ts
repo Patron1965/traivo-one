@@ -29,7 +29,7 @@
  */
 
 import pg from "pg";
-import { buildResetPhases, DEMO_RESOURCE_IDS } from "./kinab-reset-phases";
+import { buildResetPhases, buildPreDeleteUpdates } from "./kinab-reset-phases";
 
 const { Pool } = pg;
 
@@ -67,7 +67,7 @@ function maskHost(url: string): string {
 const prodPool = new Pool({ connectionString: process.env.PROD_DATABASE_URL });
 
 const PHASES = buildResetPhases(TENANT);
-const demoIdList = DEMO_RESOURCE_IDS.map((id) => `'${id}'`).join(",");
+const PRE_DELETE_UPDATES = buildPreDeleteUpdates(TENANT);
 
 // ----------------------------- helpers ------------------------------
 
@@ -77,11 +77,6 @@ async function tableExists(client: pg.PoolClient, name: string): Promise<boolean
     [name],
   );
   return (r.rowCount ?? 0) > 0;
-}
-
-async function count(client: pg.PoolClient, table: string, where: string): Promise<number> {
-  const r = await client.query(`SELECT COUNT(*)::int AS n FROM "${table}" WHERE ${where}`);
-  return Number(r.rows[0]?.n ?? 0);
 }
 
 async function del(client: pg.PoolClient, table: string, where: string): Promise<number> {
@@ -131,6 +126,16 @@ async function main() {
 
     await snapshot(client, "Före (nuläge i prod)");
 
+    // Pre-delete: nollställ dingande FK-pekare från BEHÅLLEN config (teams/users)
+    // till rader som raderas nedan. Krävs då dessa FK är NO ACTION (ingen auto-null).
+    console.log(`\n--- Pre-delete: nollställ dingande FK-pekare (behållen config) ---`);
+    for (const upd of PRE_DELETE_UPDATES) {
+      const r = await client.query(upd.sql);
+      const mark = DRY_RUN ? "·" : "✓";
+      const verb = DRY_RUN ? "(skulle nollställas)" : "nollställda";
+      console.log(`  ${mark} ${upd.label.padEnd(46)} ${(r.rowCount ?? 0).toString().padStart(5)} ${verb}`);
+    }
+
     for (const phase of PHASES) {
       console.log(`\n--- ${phase.name} ---`);
       for (const [table, where] of phase.tables) {
@@ -138,41 +143,20 @@ async function main() {
           console.log(`  · ${table.padEnd(40)} (saknas — hoppar över)`);
           continue;
         }
-        if (DRY_RUN) {
-          const n = await count(client, table, where);
-          if (n === 0) {
-            console.log(`  · ${table.padEnd(40)} 0`);
-          } else {
-            console.log(`  · ${table.padEnd(40)} ${n.toString().padStart(7)} (skulle raderas)`);
-            totalRows += n;
-          }
+        // Kör ALLTID den verkliga DELETE inom transaktionen. Skillnaden mellan
+        // dry-run och skarp är ENBART COMMIT (skarp) vs ROLLBACK (dry-run) i
+        // slutet — så dry-run validerar hela kaskaden (FK-ordning, leftover=0)
+        // på riktigt utan att persistera något.
+        const deleted = await del(client, table, where);
+        if (deleted === 0) {
+          console.log(`  · ${table.padEnd(40)} 0`);
         } else {
-          const deleted = await del(client, table, where);
-          if (deleted === 0) {
-            console.log(`  · ${table.padEnd(40)} 0`);
-          } else {
-            console.log(`  ✓ ${table.padEnd(40)} ${deleted.toString().padStart(7)} raderade`);
-            totalRows += deleted;
-          }
+          const verb = DRY_RUN ? "(skulle raderas)" : "raderade";
+          const mark = DRY_RUN ? "·" : "✓";
+          console.log(`  ${mark} ${table.padEnd(40)} ${deleted.toString().padStart(7)} ${verb}`);
+          totalRows += deleted;
         }
       }
-    }
-
-    // Nolla dingande users.resource_id-pekare till demo-resurser (UPDATE).
-    console.log(`\n--- Extra: nolla users.resource_id för demo-resurser ---`);
-    const userMatch = await client.query(
-      `SELECT COUNT(*)::int AS n FROM "users" WHERE resource_id IN (${demoIdList})`,
-    );
-    const userN = Number(userMatch.rows[0]?.n ?? 0);
-    if (userN === 0) {
-      console.log(`  · users.resource_id                       0`);
-    } else if (DRY_RUN) {
-      console.log(`  · users.resource_id                       ${userN} (skulle nollställas)`);
-    } else {
-      const r = await client.query(
-        `UPDATE "users" SET resource_id = NULL WHERE resource_id IN (${demoIdList})`,
-      );
-      console.log(`  ✓ users.resource_id                       ${r.rowCount ?? 0} nollställda`);
     }
 
     // Post-radering-verifiering (inom transaktionen): allt operativt kinab-data
@@ -186,11 +170,19 @@ async function main() {
     `, [TENANT]);
     const lo = leftover.rows[0];
     console.log(`  Kvar efter radering: customers=${lo.customers}, objects=${lo.objects}, work_orders=${lo.work_orders}`);
-    if (!DRY_RUN && (lo.customers > 0 || lo.objects > 0 || lo.work_orders > 0)) {
-      throw new Error(
-        `Post-radering-verifiering MISSLYCKADES: kinab-data kvar ` +
-          `(customers=${lo.customers}, objects=${lo.objects}, work_orders=${lo.work_orders}). Tvångs-rollback.`,
-      );
+    const leftoverExists = lo.customers > 0 || lo.objects > 0 || lo.work_orders > 0;
+    if (leftoverExists) {
+      if (DRY_RUN) {
+        console.log(
+          `  ⚠ VARNING: kinab-data kvar efter simulerad radering — raderingsscopet är ` +
+            `ofullständigt. Fixa scopet i kinab-reset-phases.ts INNAN skarp körning. (rullas tillbaka nu)`,
+        );
+      } else {
+        throw new Error(
+          `Post-radering-verifiering MISSLYCKADES: kinab-data kvar ` +
+            `(customers=${lo.customers}, objects=${lo.objects}, work_orders=${lo.work_orders}). Tvångs-rollback.`,
+        );
+      }
     }
 
     await snapshot(client, DRY_RUN ? "Skulle bli (simulerat)" : "Efter (resultat i prod)");
@@ -198,7 +190,7 @@ async function main() {
     if (DRY_RUN) {
       await client.query("ROLLBACK");
       console.log("\n" + "=".repeat(64));
-      console.log(`DRY-RUN klar (ROLLBACK). Skulle ha raderat ~${totalRows} rader för tenant '${TENANT}'.`);
+      console.log(`DRY-RUN klar (ROLLBACK, inget persisterat). Verklig kaskad körd & återställd: ${totalRows} rader skulle raderas för tenant '${TENANT}'.`);
       console.log("För skarp körning:");
       console.log("  PROD_DATABASE_URL=... CONFIRM=YES_RESET_PROD \\");
       console.log("    npx tsx scripts/kinab-reset-prod-operational-data.ts --confirm RENSA-KINAB-PROD");

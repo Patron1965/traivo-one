@@ -37,6 +37,9 @@ export function buildResetPhases(tenant: string): ResetPhase[] {
     {
       name: "Fas A: Barn till work_orders",
       tables: [
+        // Måste raderas FÖRE deviation_reports (FK linked_deviation_id → deviation_reports, NO ACTION).
+        ["customer_change_requests", `tenant_id = '${tenant}'`],
+        ["public_issue_reports", `tenant_id = '${tenant}'`],
         ["order_checklist_items", `work_order_id IN (SELECT id FROM work_orders WHERE tenant_id = '${tenant}')`],
         ["work_order_lines", `tenant_id = '${tenant}'`],
         ["work_order_objects", `tenant_id = '${tenant}'`],
@@ -81,18 +84,27 @@ export function buildResetPhases(tenant: string): ResetPhase[] {
         ["object_time_restrictions", `tenant_id = '${tenant}'`],
         ["object_parents", `tenant_id = '${tenant}'`],
         ["metadata_historik", `tenant_id = '${tenant}'`],
+        ["assignment_articles", `assignment_id IN (SELECT id FROM assignments WHERE tenant_id = '${tenant}')`],
         ["assignments", `tenant_id = '${tenant}'`],
+        ["iot_signals", `tenant_id = '${tenant}'`],
         ["iot_devices", `tenant_id = '${tenant}'`],
         ["predictive_forecasts", `tenant_id = '${tenant}'`],
         ["qr_code_links", `tenant_id = '${tenant}'`],
-        ["public_issue_reports", `tenant_id = '${tenant}'`],
         ["self_bookings", `tenant_id = '${tenant}'`],
         ["subscription_changes", `tenant_id = '${tenant}'`],
         ["subscriptions", `tenant_id = '${tenant}'`],
-        ["customer_change_requests", `tenant_id = '${tenant}'`],
         ["customer_issue_reports", `tenant_id = '${tenant}'`],
         ["annual_goals", `tenant_id = '${tenant}'`],
         ["planning_parameters", `tenant_id = '${tenant}'`],
+        // Orderkoncept (operativa tjänste-definitioner) — raderas EFTER assignments
+        // (FK assignments.order_concept_id) men FÖRE clusters/price_lists (Fas E).
+        // CASCADE-barn (order_concept_articles, *_configurations, delivery_schedules)
+        // försvinner automatiskt; concept_filters/invoice_rules/order_concept_run_logs
+        // är NO ACTION och måste raderas explicit först.
+        ["concept_filters", `order_concept_id IN (SELECT id FROM order_concepts WHERE tenant_id = '${tenant}')`],
+        ["invoice_rules", `order_concept_id IN (SELECT id FROM order_concepts WHERE tenant_id = '${tenant}')`],
+        ["order_concept_run_logs", `order_concept_id IN (SELECT id FROM order_concepts WHERE tenant_id = '${tenant}')`],
+        ["order_concepts", `tenant_id = '${tenant}'`],
       ],
     },
     {
@@ -105,6 +117,12 @@ export function buildResetPhases(tenant: string): ResetPhase[] {
     {
       name: "Fas E: Barn till customers (utöver det som redan rensats)",
       tables: [
+        // Kund-barn med hård FK → customers/invoice_recipients. Raderas FÖRE customers (Fas F).
+        // invoice_consolidation_policies FÖRE invoice_recipients (FK invoice_recipient_id, NO ACTION).
+        ["invoice_consolidation_policies", `tenant_id = '${tenant}'`],
+        ["invoice_recipients", `tenant_id = '${tenant}'`],
+        ["customer_import_mappings", `tenant_id = '${tenant}'`],
+        ["import_sessions", `tenant_id = '${tenant}'`],
         ["clusters", `tenant_id = '${tenant}'`],
         ["customer_invoices", `tenant_id = '${tenant}'`],
         ["customer_notification_settings", `tenant_id = '${tenant}'`],
@@ -115,6 +133,7 @@ export function buildResetPhases(tenant: string): ResetPhase[] {
         ["manual_invoice_lines", `tenant_id = '${tenant}'`],
         ["portal_messages", `tenant_id = '${tenant}'`],
         ["portal_users", `tenant_id = '${tenant}'`],
+        ["price_list_articles", `price_list_id IN (SELECT id FROM price_lists WHERE tenant_id = '${tenant}' AND customer_id IS NOT NULL)`],
         ["price_lists", `tenant_id = '${tenant}' AND customer_id IS NOT NULL`],
         ["procurements", `tenant_id = '${tenant}'`],
         ["technician_ratings", `tenant_id = '${tenant}'`],
@@ -162,6 +181,32 @@ export function buildResetPhases(tenant: string): ResetPhase[] {
           )`,
         ],
       ],
+    },
+  ];
+}
+
+/**
+ * Nollställer dingande FK-pekare FRÅN behållen config (teams, users) till rader
+ * som raderas i faserna. Måste köras FÖRE fas-DELETE:erna eftersom dessa FK är
+ * NO ACTION (ingen auto-null sker). teams/users BEHÅLLS — bara pekarna nollas:
+ *   - teams.cluster_id  → clusters som raderas i Fas E
+ *   - teams.leader_id   → demo-resurser som raderas i Fas H
+ *   - users.resource_id → demo-resurser som raderas i Fas H
+ */
+export function buildPreDeleteUpdates(tenant: string): Array<{ label: string; sql: string }> {
+  const demoIds = DEMO_RESOURCE_IDS.map((id) => `'${id}'`).join(",");
+  return [
+    {
+      label: "teams.cluster_id (→ raderade kluster)",
+      sql: `UPDATE "teams" SET cluster_id = NULL WHERE tenant_id = '${tenant}' AND cluster_id IS NOT NULL`,
+    },
+    {
+      label: "teams.leader_id (→ demo-resurser)",
+      sql: `UPDATE "teams" SET leader_id = NULL WHERE tenant_id = '${tenant}' AND leader_id IN (${demoIds})`,
+    },
+    {
+      label: "users.resource_id (→ demo-resurser)",
+      sql: `UPDATE "users" SET resource_id = NULL WHERE resource_id IN (${demoIds})`,
     },
   ];
 }
