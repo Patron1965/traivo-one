@@ -191,3 +191,184 @@ describe("Å1 - dynamisk uppdatering av framtida ogjorda uppgifter (matches_fiel
     expect(completed[0].totalPrice).toBe(UNIT_PRICE);
   });
 });
+
+// per_styck (spec-standardläget) ska vara metadata-kapabelt på samma sätt som
+// legacy matches_field: med valt metadatafält räknas antalet om till objektets
+// värde, utan valt fält faller det tillbaka på basantalet (bakåtkompatibelt).
+describe("Å1 - per_styck metadata-kapabelt + bakåtkompatibel fallback", () => {
+  let psTenant: string;
+  let psCreatedTenant = false;
+  let psCustomerId: string;
+  let psObjectId: string;
+  let psKatalogId: string;
+  let psVardeId: string;
+  let psArticleWithFieldId: string;
+  let psArticleNoFieldId: string;
+  let psPlannedWithFieldId: string;
+  let psPlannedNoFieldId: string;
+
+  beforeAll(async () => {
+    const tenantId = `mdprop-ps-test-${Date.now()}`;
+    const [tenant] = await db
+      .insert(tenants)
+      .values({ id: tenantId, name: "Metadata Propagation PS Tenant" })
+      .onConflictDoNothing()
+      .returning();
+    psTenant = tenant?.id ?? tenantId;
+    psCreatedTenant = !!tenant;
+
+    const [customer] = await db
+      .insert(customers)
+      .values({ tenantId: psTenant, name: "PS Testkund" })
+      .returning();
+    psCustomerId = customer.id;
+
+    const [object] = await db
+      .insert(objects)
+      .values({
+        tenantId: psTenant,
+        customerId: psCustomerId,
+        name: "PS Testobjekt",
+        objectType: "fastighet",
+      })
+      .returning();
+    psObjectId = object.id;
+
+    const [katalog] = await db
+      .insert(metadataKatalog)
+      .values({
+        tenantId: psTenant,
+        namn: METADATA_FIELD,
+        datatyp: "integer",
+      })
+      .returning();
+    psKatalogId = katalog.id;
+
+    const [varde] = await db
+      .insert(metadataVarden)
+      .values({
+        tenantId: psTenant,
+        objektId: psObjectId,
+        metadataKatalogId: psKatalogId,
+        vardeInteger: METADATA_VALUE,
+      })
+      .returning();
+    psVardeId = varde.id;
+
+    const [articleWithField] = await db
+      .insert(articles)
+      .values({
+        tenantId: psTenant,
+        articleNumber: `PS-FIELD-${Date.now()}`,
+        name: "PS Artikel med fält",
+        articleType: "tjanst",
+        quantityMode: "per_styck",
+        quantityMetadataField: METADATA_FIELD,
+      })
+      .returning();
+    psArticleWithFieldId = articleWithField.id;
+
+    const [articleNoField] = await db
+      .insert(articles)
+      .values({
+        tenantId: psTenant,
+        articleNumber: `PS-NOFIELD-${Date.now()}`,
+        name: "PS Artikel utan fält",
+        articleType: "tjanst",
+        quantityMode: "per_styck",
+      })
+      .returning();
+    psArticleNoFieldId = articleNoField.id;
+
+    const plannedWithField = await storage.createAssignment({
+      tenantId: psTenant,
+      objectId: psObjectId,
+      title: "PS uppgift med fält",
+      status: "planned",
+      quantity: 1,
+    });
+    psPlannedWithFieldId = plannedWithField.id;
+
+    const plannedNoField = await storage.createAssignment({
+      tenantId: psTenant,
+      objectId: psObjectId,
+      title: "PS uppgift utan fält",
+      status: "planned",
+      quantity: 1,
+    });
+    psPlannedNoFieldId = plannedNoField.id;
+
+    await storage.createAssignmentArticle({
+      assignmentId: psPlannedWithFieldId,
+      articleId: psArticleWithFieldId,
+      quantity: 1,
+      unitPrice: UNIT_PRICE,
+      totalPrice: UNIT_PRICE,
+      unitCost: UNIT_COST,
+      totalCost: UNIT_COST,
+      unitTime: UNIT_TIME,
+      totalTime: UNIT_TIME,
+    });
+
+    await storage.createAssignmentArticle({
+      assignmentId: psPlannedNoFieldId,
+      articleId: psArticleNoFieldId,
+      quantity: 1,
+      unitPrice: UNIT_PRICE,
+      totalPrice: UNIT_PRICE,
+      unitCost: UNIT_COST,
+      totalCost: UNIT_COST,
+      unitTime: UNIT_TIME,
+      totalTime: UNIT_TIME,
+    });
+  });
+
+  afterAll(async () => {
+    const assignmentIds = [psPlannedWithFieldId, psPlannedNoFieldId].filter(Boolean);
+    await db
+      .delete(assignmentArticles)
+      .where(inArray(assignmentArticles.assignmentId, assignmentIds))
+      .catch(() => {});
+    if (assignmentIds.length) {
+      await db.delete(assignments).where(inArray(assignments.id, assignmentIds)).catch(() => {});
+    }
+    if (psVardeId) {
+      await db.delete(metadataVarden).where(eq(metadataVarden.id, psVardeId)).catch(() => {});
+    }
+    if (psKatalogId) {
+      await db.delete(metadataKatalog).where(eq(metadataKatalog.id, psKatalogId)).catch(() => {});
+    }
+    const articleIds = [psArticleWithFieldId, psArticleNoFieldId].filter(Boolean);
+    if (articleIds.length) {
+      await db.delete(articles).where(inArray(articles.id, articleIds)).catch(() => {});
+    }
+    if (psObjectId) {
+      await db.delete(objects).where(eq(objects.id, psObjectId)).catch(() => {});
+    }
+    if (psCustomerId) {
+      await db.delete(customers).where(eq(customers.id, psCustomerId)).catch(() => {});
+    }
+    if (psCreatedTenant && psTenant) {
+      await db.delete(tenants).where(eq(tenants.id, psTenant)).catch(() => {});
+    }
+  });
+
+  it("per_styck med metadatafält räknas om till objektets metadatavärde", async () => {
+    const before = await storage.getAssignmentArticles(psPlannedWithFieldId);
+    expect(before[0].quantity).toBe(1);
+
+    await runMetadataChangeJobNow(psTenant, [psObjectId]);
+
+    const after = await storage.getAssignmentArticles(psPlannedWithFieldId);
+    expect(after[0].quantity).toBe(METADATA_VALUE);
+    expect(after[0].totalPrice).toBe(UNIT_PRICE * METADATA_VALUE);
+    expect(after[0].totalCost).toBe(UNIT_COST * METADATA_VALUE);
+    expect(after[0].totalTime).toBe(UNIT_TIME * METADATA_VALUE);
+  });
+
+  it("per_styck utan metadatafält lämnas på basantal (bakåtkompatibelt)", async () => {
+    const after = await storage.getAssignmentArticles(psPlannedNoFieldId);
+    expect(after[0].quantity).toBe(1);
+    expect(after[0].totalPrice).toBe(UNIT_PRICE);
+  });
+});

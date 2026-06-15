@@ -56,6 +56,7 @@ import {
   Pin,
   Circle,
   Keyboard,
+  Info,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
@@ -325,7 +326,7 @@ function getSectionStats(
     struktur: { filled: componentDraft.length > 0 ? 1 : 0, total: 1 },
     fasthakning: { filled: assocCount > 0 ? 1 : 0, total: 1 },
     antalslogik: countFilled([
-      fd.quantityMode !== "per_styck",
+      fd.quantityMode !== "per_styck" || fd.quantityMetadataField.trim() !== "",
       fd.operatorCanUpdateQuantity,
     ]),
     metadata: countFilled([
@@ -1086,6 +1087,7 @@ export default function ArticleFormPage() {
       quantityMode:
         article.quantityMode === "use_object_quantity" ||
         article.quantityMode === "configurable" ||
+        article.quantityMode === "matches_field" ||
         !article.quantityMode
           ? "per_styck"
           : article.quantityMode,
@@ -2482,10 +2484,9 @@ export default function ArticleFormPage() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="per_styck">Per styck — multipliceras med objektets antal</SelectItem>
+                  <SelectItem value="per_styck">Per styck — objektets antal, ev. från metadatafält</SelectItem>
                   <SelectItem value="single_per_task">En per uppdrag (alltid 1)</SelectItem>
                   <SelectItem value="group">Grupp — fast multipel (gruppstorlek)</SelectItem>
-                  <SelectItem value="matches_field">Matchar metadatafält — antal från objektets metadata</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -2506,8 +2507,8 @@ export default function ArticleFormPage() {
               </div>
             )}
 
-            {formData.quantityMode === "matches_field" && (
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2" data-testid="field-matches-field">
+            {(formData.quantityMode === "per_styck" || formData.quantityMode === "matches_field") && (
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2" data-testid="field-quantity-metadata">
                 <div className="space-y-2">
                   <Label htmlFor="quantityMetadataField" className="text-sm">
                     Metadatafält (antal)
@@ -2543,10 +2544,10 @@ export default function ArticleFormPage() {
                 </div>
               </div>
             )}
-            {formData.quantityMode === "matches_field" && !formData.quantityMetadataField && (
-              <p className="flex items-start gap-1 text-xs text-warning" data-testid="warning-matches-field-missing">
-                <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-                <span>Välj ett metadatafält — annars faller antalet tillbaka på objektets standardantal.</span>
+            {(formData.quantityMode === "per_styck" || formData.quantityMode === "matches_field") && !formData.quantityMetadataField && (
+              <p className="flex items-start gap-1 text-xs text-muted-foreground" data-testid="hint-quantity-metadata-optional">
+                <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                <span>Valfritt: välj ett metadatafält så hämtas antalet automatiskt från objektet (t.ex. "Antal hjul", "Antal kärl"). Lämna tomt för att använda objektets standardantal.</span>
               </p>
             )}
 

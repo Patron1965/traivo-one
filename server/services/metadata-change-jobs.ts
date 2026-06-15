@@ -14,7 +14,7 @@ import { db } from "../db";
 import { workOrders, assignments } from "@shared/schema";
 import { and, eq, inArray, isNull, notInArray } from "drizzle-orm";
 import { storage } from "../storage";
-import { computeArticleQuantity, metadataValueToNumber } from "../article-quantity";
+import { computeArticleQuantity, metadataValueToNumber, usesQuantityMetadata } from "../article-quantity";
 
 // Alla icke-finaliserade WO-statusar — exkluderar bara invoiced/cancelled/completed.
 // Recalc får alltså träffa även in_progress/ongoing/on_hold etc. så att pågående
@@ -99,7 +99,7 @@ async function runMetadataChangeJob(tenantId: string, objectIds: string[]): Prom
 }
 
 // Räknar om antal + cachade totaler för icke-finaliserade assignments vars artikel
-// använder quantityMode='matches_field', när objektets metadatavärde ändrats.
+// använder ett metadata-drivet quantityMode (per_styck/matches_field), när objektets metadatavärde ändrats.
 // Speglar expansionens kvantitetslogik (server/routes/fortnoxRoutes.ts): nytt antal
 // via computeArticleQuantity med objektets aktuella (ärvningsmedvetna) metadatavärde,
 // och totaler skalas om från redan lagrade enhetspriser/-tider. Completed/cancelled
@@ -142,13 +142,13 @@ async function propagateTaskQuantities(tenantId: string, objectIds: string[]): P
       const article = await storage.getArticle(aa.articleId);
       let qty = aa.quantity ?? 1;
 
-      if (article && article.quantityMode === "matches_field" && article.quantityMetadataField) {
+      if (article && usesQuantityMetadata(article.quantityMode) && article.quantityMetadataField) {
         let mv: number | null = null;
         try {
           const md = await getArticleMetadataForObject(a.objectId, article.quantityMetadataField, tenantId);
           mv = metadataValueToNumber(md?.value);
         } catch (e) {
-          console.error("[metadata-change-jobs] matches_field resolve failed:", e);
+          console.error("[metadata-change-jobs] metadata-qty resolve failed:", e);
         }
         const newQty = computeArticleQuantity({
           quantityMode: article.quantityMode,

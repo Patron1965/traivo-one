@@ -10,7 +10,7 @@ import { NotFoundError, ValidationError, ForbiddenError, describeFortnoxMappingC
 import { objects, workOrders, articles, customers, fortnoxMappings, objectContacts, importBatches, objectMetadata, metadataDefinitions, type InsertWorkOrder } from "@shared/schema";
 import { getISOWeek } from "./helpers";
 import { triggerGeocodeIfMissing } from "../services/geocoding";
-import { computeArticleQuantity, metadataValueToNumber } from "../article-quantity";
+import { computeArticleQuantity, metadataValueToNumber, usesQuantityMetadata } from "../article-quantity";
 import { getArticleMetadataForObject } from "../metadata-queries";
 
 async function verifyObjectTenant(objectId: string, tenantId: string): Promise<boolean> {
@@ -1911,12 +1911,12 @@ app.post("/api/order-concepts/:id/execute", asyncHandler(async (req, res) => {
         quantity = Number(objWithMeta.metadata[concept.crossPollinationField]) || 1;
       }
       // Honorera den länkade artikelns quantityMode ovanpå ev. cross-pollination-bas:
-      // single_per_task→1, per_styck→bas, group→groupSize, matches_field→objektets metadatavärde.
-      // matches_field upplöses ärvningsmedvetet via getArticleMetadataForObject (samma
+      // single_per_task→1, group→groupSize, per_styck/matches_field→objektets metadatavärde (annars bas).
+      // Metadata-drivna lägen upplöses ärvningsmedvetet via getArticleMetadataForObject (samma
       // resolver som manuella orderrader) — objekten här saknar populerad .metadata.
       if (linkedArticle) {
         let mv: number | null = null;
-        if (linkedArticle.quantityMode === "matches_field" && linkedArticle.quantityMetadataField) {
+        if (usesQuantityMetadata(linkedArticle.quantityMode) && linkedArticle.quantityMetadataField) {
           try {
             const md = await getArticleMetadataForObject(obj.id, linkedArticle.quantityMetadataField, tenantId);
             mv = metadataValueToNumber(md?.value);

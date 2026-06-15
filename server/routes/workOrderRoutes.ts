@@ -38,7 +38,7 @@ async function computeOutsidePreferredWindow(
   };
 }
 import { getArticleMetadataForObject, writeArticleMetadataOnObject, writeSystemMetadataOnObject, findMissingRequiredLeaveMetadata } from "../metadata-queries";
-import { computeArticleQuantity, metadataValueToNumber } from "../article-quantity";
+import { computeArticleQuantity, metadataValueToNumber, usesQuantityMetadata } from "../article-quantity";
 
 // Hämtar de artikelfält som styr orderradens kvantitet + utgått→ersättning.
 async function loadOrderArticle(tenantId: string, articleId: string) {
@@ -74,7 +74,7 @@ async function resolveEffectiveOrderArticle(tenantId: string, articleId: string)
 }
 
 // Räknar ut orderradens effektiva kvantitet utifrån artikelns quantityMode. För
-// 'matches_field' upplöses objektets metadatavärde via den ärvningsmedvetna resolvern.
+// Metadata-drivna lägen (per_styck/matches_field) upplöser objektets metadatavärde via den ärvningsmedvetna resolvern.
 async function resolveOrderLineQuantity(
   tenantId: string,
   row: Awaited<ReturnType<typeof loadOrderArticle>>,
@@ -82,7 +82,7 @@ async function resolveOrderLineQuantity(
   objectId: string | null | undefined,
 ): Promise<number> {
   let metadataValue: number | null = null;
-  if (row?.quantityMode === "matches_field" && row.quantityMetadataField && objectId) {
+  if (usesQuantityMetadata(row?.quantityMode) && row?.quantityMetadataField && objectId) {
     try {
       const md = await getArticleMetadataForObject(objectId, row.quantityMetadataField, tenantId);
       metadataValue = metadataValueToNumber(md?.value);
