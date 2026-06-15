@@ -175,7 +175,6 @@ interface ArticleFormData {
   materialCost: number;
   markupPercent: number | null;
   chargeModel: string;
-  travelTime: number | null;
   informationRequirements: InformationRequirement[];
   performerCategory: string;
   competencyRequirements: string[];
@@ -252,7 +251,6 @@ const emptyFormData: ArticleFormData = {
   materialCost: 0,
   markupPercent: null,
   chargeModel: "",
-  travelTime: null,
   informationRequirements: [],
   performerCategory: "",
   competencyRequirements: [],
@@ -321,7 +319,7 @@ function getSectionStats(
       fd.materialCost > 0,
       fd.markupPercent != null,
       fd.chargeModel.trim() !== "",
-      fd.travelTime != null,
+      fd.productionTime > 0,
     ]),
     planeringslogik: countFilled([fd.offsetMinutes !== 0, fd.groupSize > 1]),
     struktur: { filled: componentDraft.length > 0 ? 1 : 0, total: 1 },
@@ -932,17 +930,6 @@ export default function ArticleFormPage() {
     queryKey: ["/api/suppliers"],
   });
 
-  // Task #834: filuppladdning för extern info (säkerhetsdatablad m.m.).
-  const { uploadFile: uploadExternFile, isUploading: externFileUploading } = useUpload({
-    onSuccess: (res) => {
-      setFormData((prev) => ({ ...prev, externInfoFileUrl: res.objectPath }));
-      toast({ title: "Fil uppladdad", description: "Den externa filen har sparats." });
-    },
-    onError: (err) => {
-      toast({ title: "Uppladdning misslyckades", description: err.message, variant: "destructive" });
-    },
-  });
-
   // Fördjupad artikelinfo (sektion 2): flera filer.
   const { uploadFile: uploadArticleFile, isUploading: filesUploading } = useUpload({
     onSuccess: (res) => {
@@ -1132,7 +1119,6 @@ export default function ArticleFormPage() {
       materialCost: (article as any).materialCost ?? 0,
       markupPercent: (article as any).markupPercent ?? null,
       chargeModel: (article as any).chargeModel || "",
-      travelTime: (article as any).travelTime ?? null,
       informationRequirements: Array.isArray((article as any).informationRequirements)
         ? ((article as any).informationRequirements as InformationRequirement[])
         : [],
@@ -1272,7 +1258,7 @@ export default function ArticleFormPage() {
       toast({ title: "Artikelnummer används redan", description: "Välj ett unikt artikelnummer innan du sparar.", variant: "destructive" });
       return;
     }
-    if (externFileUploading || filesUploading) {
+    if (filesUploading) {
       toast({ title: "Vänta på uppladdning", description: "En fil laddas fortfarande upp.", variant: "destructive" });
       return;
     }
@@ -1651,11 +1637,9 @@ export default function ArticleFormPage() {
                 rows={2}
                 data-testid="input-extern-info-description"
               />
-              <div className="pt-1 space-y-2">
-                <Label htmlFor="input-extern-info-file" className="text-sm">
-                  Eller ladda upp fil (PDF, bild)
-                </Label>
-                {formData.externInfoFileUrl ? (
+              {formData.externInfoFileUrl && (
+                <div className="pt-1 space-y-1">
+                  <Label className="text-sm">Bifogad fil</Label>
                   <div className="flex items-center justify-between rounded-md border px-3 py-2 text-sm" data-testid="row-extern-info-file">
                     <a
                       href={formData.externInfoFileUrl}
@@ -1665,7 +1649,7 @@ export default function ArticleFormPage() {
                       data-testid="link-extern-info-file"
                     >
                       <FileText className="h-4 w-4 shrink-0" />
-                      <span className="truncate">Öppna uppladdad fil</span>
+                      <span className="truncate">Öppna bifogad fil</span>
                     </a>
                     <button
                       type="button"
@@ -1677,26 +1661,8 @@ export default function ArticleFormPage() {
                       <X className="h-4 w-4" />
                     </button>
                   </div>
-                ) : (
-                  <Input
-                    id="input-extern-info-file"
-                    type="file"
-                    accept="application/pdf,image/*"
-                    disabled={externFileUploading}
-                    onChange={(e) => {
-                      const file = e.target.files?.[0];
-                      if (file) uploadExternFile(file);
-                      e.target.value = "";
-                    }}
-                    data-testid="input-extern-info-file"
-                  />
-                )}
-                {externFileUploading && (
-                  <p className="flex items-center gap-1 text-xs text-muted-foreground">
-                    <Loader2 className="h-3 w-3 animate-spin" /> Laddar upp...
-                  </p>
-                )}
-              </div>
+                </div>
+              )}
             </div>
 
             <div className="space-y-2">
@@ -2064,21 +2030,6 @@ export default function ArticleFormPage() {
                   />
                 </div>
               )}
-              <div className="space-y-2">
-                <Label htmlFor="travelTime">Restid (min)</Label>
-                <Input
-                  id="travelTime"
-                  type="number"
-                  min="0"
-                  value={formData.travelTime ?? ""}
-                  placeholder="—"
-                  onChange={(e) => {
-                    const raw = e.target.value.trim();
-                    setFormData({ ...formData, travelTime: raw === "" ? null : Math.max(0, parseInt(raw, 10) || 0) });
-                  }}
-                  data-testid="input-travel-time"
-                />
-              </div>
             </div>
 
             <div
@@ -2167,7 +2118,8 @@ export default function ArticleFormPage() {
                         checked={offsetType === opt.value}
                         onChange={() => {
                           setOffsetType(opt.value);
-                          setFormData((prev) => ({ ...prev, offsetMinutes: computeOffsetMinutes(offsetUnit, opt.value, offsetValueInput) }));
+                          if (opt.value === "same") setOffsetValueInput("0");
+                          setFormData((prev) => ({ ...prev, offsetMinutes: computeOffsetMinutes(offsetUnit, opt.value, opt.value === "same" ? "0" : offsetValueInput) }));
                         }}
                         data-testid={`radio-offset-type-${opt.value}`}
                       />
