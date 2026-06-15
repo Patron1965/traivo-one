@@ -38,7 +38,7 @@ async function computeOutsidePreferredWindow(
   };
 }
 import { getArticleMetadataForObject, writeArticleMetadataOnObject, writeSystemMetadataOnObject, findMissingRequiredLeaveMetadata } from "../metadata-queries";
-import { computeArticleQuantity, metadataValueToNumber, usesQuantityMetadata } from "../article-quantity";
+import { resolveEffectiveArticleQuantity } from "../article-quantity-resolver";
 
 // Hämtar de artikelfält som styr orderradens kvantitet + utgått→ersättning.
 async function loadOrderArticle(tenantId: string, articleId: string) {
@@ -51,6 +51,7 @@ async function loadOrderArticle(tenantId: string, articleId: string) {
       quantityMode: articles.quantityMode,
       groupSize: articles.groupSize,
       quantityMetadataField: articles.quantityMetadataField,
+      quantityFormula: articles.quantityFormula,
     })
     .from(articles)
     .where(and(eq(articles.id, articleId), eq(articles.tenantId, tenantId)));
@@ -73,29 +74,16 @@ async function resolveEffectiveOrderArticle(tenantId: string, articleId: string)
   return { row, effectiveId: row.id };
 }
 
-// Räknar ut orderradens effektiva kvantitet utifrån artikelns quantityMode. För
-// Metadata-drivna lägen (per_styck/matches_field) upplöser objektets metadatavärde via den ärvningsmedvetna resolvern.
+// Räknar ut orderradens effektiva kvantitet utifrån artikelns quantityMode. Metadata-
+// drivna lägen (per_styck/matches_field) och formel-läget upplöses ärvningsmedvetet
+// per objekt via den centrala resolvern (server/article-quantity-resolver.ts).
 async function resolveOrderLineQuantity(
   tenantId: string,
   row: Awaited<ReturnType<typeof loadOrderArticle>>,
   baseQuantity: number,
   objectId: string | null | undefined,
 ): Promise<number> {
-  let metadataValue: number | null = null;
-  if (usesQuantityMetadata(row?.quantityMode) && row?.quantityMetadataField && objectId) {
-    try {
-      const md = await getArticleMetadataForObject(objectId, row.quantityMetadataField, tenantId);
-      metadataValue = metadataValueToNumber(md?.value);
-    } catch (e) {
-      console.error("[quantity matches_field] resolve failed:", e);
-    }
-  }
-  return computeArticleQuantity({
-    quantityMode: row?.quantityMode,
-    baseQuantity,
-    groupSize: row?.groupSize,
-    metadataValue,
-  });
+  return resolveEffectiveArticleQuantity({ tenantId, article: row, baseQuantity, objectId });
 }
 
 /**
@@ -2032,6 +2020,22 @@ app.patch("/api/work-order-lines/:id", asyncHandler(async (req, res) => {
   const quantityChanging =
     Object.prototype.hasOwnProperty.call(updateData, "quantity") &&
     Number(updateData.quantity) !== Number(existingLine.quantity);
+
+  // Antalslogik: lås antal-ändring när ordern gått in i faktura-livscykeln. Ett
+  // ändrat antal efter att fakturaunderlaget fryssatts/skickats skulle ge fel
+  // fakturerat belopp. Köstatus 'held'/'pending'/'consolidated'/'exported' eller en
+  // satt consolidationInvoiceId blockerar. (frozen_*-fält används medvetet inte som
+  // primär spärr — de är snapshot/back-compat-fält utanför kö-livscykeln.)
+  if (quantityChanging) {
+    const lockedQueueStates = new Set(["held", "pending", "consolidated", "exported"]);
+    const queueState = workOrder?.invoiceQueueState ?? undefined;
+    if ((queueState && lockedQueueStates.has(queueState)) || workOrder?.consolidationInvoiceId) {
+      throw new ConflictError(
+        "Antalet kan inte ändras — arbetsordern är låst för fakturering. Släpp eller återöppna faktureringen innan antalet justeras.",
+      );
+    }
+  }
+
   const actorRole = (req as any).tenantRole as string | undefined;
   const isPlanningRole = actorRole === "owner" || actorRole === "admin" || actorRole === "planner";
   let quantityArticle: typeof articles.$inferSelect | undefined;
@@ -2046,6 +2050,39 @@ app.patch("/api/work-order-lines/:id", asyncHandler(async (req, res) => {
 
   const line = await storage.updateWorkOrderLine(req.params.id, updateData);
   if (!line) throw new NotFoundError("Orderrad");
+
+  // Antalslogik: revisionsspår för antal-ändringar vid utförande. Sparar ursprungligt
+  // och nytt antal, utförare (autentiserad användare + roll) och tidsstämpel
+  // (createdAt). Loggas högljutt vid fel men fäller inte uppdateringen som redan
+  // lyckats. Körs före den best-effort metadata-återskrivningen nedan.
+  if (quantityChanging) {
+    try {
+      await storage.createAuditLog({
+        tenantId,
+        userId: getRequestUserId(req),
+        action: "work_order_line.quantity_changed",
+        resourceType: "work_order_line",
+        resourceId: line.id,
+        changes: {
+          quantity: {
+            from: Number(existingLine.quantity),
+            to: Number(line.quantity ?? updateData.quantity),
+          },
+        },
+        metadata: {
+          workOrderId: existingLine.workOrderId,
+          articleId: existingLine.articleId ?? null,
+          tenantRole: actorRole ?? null,
+          executionContext: !isPlanningRole,
+          source: "web",
+        },
+        ipAddress: req.ip ?? null,
+        userAgent: req.get?.("user-agent") ?? null,
+      });
+    } catch (auditErr) {
+      console.error(`[kap5-quantity-audit] Misslyckades skriva antal-ändrings-audit för orderrad ${line.id}:`, auditErr);
+    }
+  }
 
   // Kap 5 (master-spec): fri metadata-uppdatering. När antalet ändrats och artikeln
   // har free_metadata_update + ett kopplat kvantitets-metadatafält skrivs det nya

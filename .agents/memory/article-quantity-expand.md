@@ -45,6 +45,21 @@ which is inheritance-aware and matches on `katalog.namn`.
 `fieldKey` (English system), so reading `obj.metadata?.[field]` silently returns nothing and
 the quantity collapses to base. Always resolve per-object via the helper.
 
+## "formula" is the third Antalskälla; execution edits are lifecycle-locked + audited
+`articles.quantityFormula` drives mode `formula`: `usesQuantityFormula(mode)` true → resolve
+via `parseFormula` refs → `getArticleMetadataForObject` per ref → `evaluateFormula`, then
+`computeArticleQuantity` (positive result wins, else falls back to base). DB-aware glue lives
+in `resolveEffectiveArticleQuantity` (`server/article-quantity-resolver.ts`); hard syntax/ref
+validation happens at article save, soft fallback at execution so dispatch/export never break.
+
+Quantity edits to a work-order line at execution are **blocked once the WO enters the invoice
+lifecycle** — `invoiceQueueState` ∈ {held,pending,consolidated,exported} OR
+`consolidationInvoiceId` set → 409 ConflictError. **Why:** changing qty after the invoice basis
+is frozen/sent would mis-bill. **The `frozen_*` snapshot fields are deliberately NOT the lock**
+— they are back-compat/snapshot fields outside the queue lifecycle; gate on the queue state.
+Every successful exec qty change writes audit action `work_order_line.quantity_changed`
+(from/to, performer+role, WO/article ids) best-effort-but-loud, BEFORE the metadata writeback.
+
 ## utgått → ersättning auto-swap
 When an order references an `utgått` article with `replacementArticleId`, swap to the
 replacement before computing price + quantity. Traverse the chain with a **visited-set cycle

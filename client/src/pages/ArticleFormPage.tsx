@@ -148,6 +148,7 @@ interface ArticleFormData {
   operatorCanUpdateQuantity: boolean;
   freeMetadataUpdate: boolean;
   quantityMetadataField: string;
+  quantityFormula: string;
   quantityUnit: string;
   groupSize: number;
   offsetMinutes: number;
@@ -221,11 +222,12 @@ const emptyFormData: ArticleFormData = {
   showPreviousValue: false,
   isInfoCarrier: false,
   limitationType: "unlimited",
-  quantityMode: "per_styck",
+  quantityMode: "group",
   operatorCanUpdateQuantity: false,
   freeMetadataUpdate: false,
   quantityMetadataField: "",
-  quantityUnit: "",
+  quantityFormula: "",
+  quantityUnit: "st",
   groupSize: 1,
   offsetMinutes: 0,
   leadTimeDays: null,
@@ -326,7 +328,11 @@ function getSectionStats(
     struktur: { filled: componentDraft.length > 0 ? 1 : 0, total: 1 },
     fasthakning: { filled: assocCount > 0 ? 1 : 0, total: 1 },
     antalslogik: countFilled([
-      fd.quantityMode !== "per_styck" || fd.quantityMetadataField.trim() !== "",
+      fd.quantityMode === "formula"
+        ? fd.quantityFormula.trim() !== ""
+        : fd.quantityMode === "per_styck" || fd.quantityMode === "matches_field"
+          ? fd.quantityMetadataField.trim() !== ""
+          : fd.groupSize > 0,
       fd.operatorCanUpdateQuantity,
     ]),
     metadata: countFilled([
@@ -1094,6 +1100,7 @@ export default function ArticleFormPage() {
       operatorCanUpdateQuantity: (article as any).operatorCanUpdateQuantity ?? false,
       freeMetadataUpdate: (article as any).freeMetadataUpdate ?? false,
       quantityMetadataField: article.quantityMetadataField || "",
+      quantityFormula: (article as any).quantityFormula || "",
       quantityUnit: article.quantityUnit || "",
       groupSize: article.groupSize ?? 1,
       offsetMinutes: article.offsetMinutes ?? 0,
@@ -1249,6 +1256,23 @@ export default function ArticleFormPage() {
 
   const isSaving = createMutation.isPending || updateMutation.isPending;
 
+  // Antalslogik: "Antalskälla" är UI-radion som mappar mot artikelns quantityMode.
+  // Fast antal -> group (antalet = groupSize), Metadatafält -> per_styck (legacy
+  // matches_field renderas som Metadatafält), Formel -> formula. Härleds från
+  // quantityMode så att inget separat state behöver hållas i synk.
+  const antalskalla: "fast" | "metadata" | "formel" =
+    formData.quantityMode === "formula"
+      ? "formel"
+      : formData.quantityMode === "per_styck" || formData.quantityMode === "matches_field"
+        ? "metadata"
+        : "fast";
+  const setAntalskalla = (val: "fast" | "metadata" | "formel") => {
+    setFormData((prev) => ({
+      ...prev,
+      quantityMode: val === "formel" ? "formula" : val === "metadata" ? "per_styck" : "group",
+    }));
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -1283,6 +1307,21 @@ export default function ArticleFormPage() {
     payload.competencyRequirements = formData.competencyRequirements.filter((c) => (c || "").trim() !== "");
     if (fortnoxLinkTouched) {
       payload.fortnoxArticleNumber = fortnoxArticleNumber;
+    }
+    // Antalslogik: persistera bara fältet som hör till vald Antalskälla.
+    if (formData.quantityMode === "formula") {
+      const f = formData.quantityFormula.trim();
+      if (!f) {
+        toast({ title: "Formel saknas", description: "Ange en formel för antalet, t.ex. [Antal kärl] * 2.", variant: "destructive" });
+        return;
+      }
+      (payload as any).quantityFormula = f;
+      payload.quantityMetadataField = "";
+    } else {
+      (payload as any).quantityFormula = null;
+      if (formData.quantityMode === "group" || formData.quantityMode === "single_per_task") {
+        payload.quantityMetadataField = "";
+      }
     }
     if (isEditMode && id) {
       updateMutation.mutate({ id, data: payload });
@@ -2215,7 +2254,7 @@ export default function ArticleFormPage() {
                   </Button>
                 </div>
 
-                {formData.quantityMode !== "per_styck" && componentDraft.some((d) => d.quantityMode === "fixed") && (
+                {(formData.quantityMode === "per_styck" || formData.quantityMode === "matches_field" || formData.quantityMode === "formula") && componentDraft.some((d) => d.quantityMode === "fixed") && (
                   <p className="text-xs text-warning" data-testid="warning-quantity-base">
                     Huvudartikeln skalar antal via metadata, men en eller flera komponenter har fast antal — dessa följer inte
                     huvudartikelns antal.
@@ -2477,79 +2516,137 @@ export default function ArticleFormPage() {
 
           {/* 8. Antalslogik */}
           <FormSection title="Antalslogik" icon={<ListChecks className="h-4 w-4" />} testId="section-antalslogik" {...sectionProps("antalslogik")}>
-            <div className="space-y-2">
-              <Label htmlFor="quantityMode">Kvantitetsläge</Label>
-              <Select value={formData.quantityMode} onValueChange={(value) => setFormData({ ...formData, quantityMode: value })}>
-                <SelectTrigger id="quantityMode" data-testid="select-quantity-mode">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="per_styck">Per styck — objektets antal, ev. från metadatafält</SelectItem>
-                  <SelectItem value="single_per_task">En per uppdrag (alltid 1)</SelectItem>
-                  <SelectItem value="group">Grupp — fast multipel (gruppstorlek)</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            {formData.quantityMode === "group" && (
-              <div className="space-y-2" data-testid="field-group-size">
-                <Label htmlFor="groupSize" className="text-sm">
-                  Gruppstorlek
-                </Label>
-                <Input
-                  id="groupSize"
-                  type="number"
-                  min="1"
-                  value={formData.groupSize}
-                  onChange={(e) => setFormData({ ...formData, groupSize: Math.max(1, parseInt(e.target.value) || 1) })}
-                  data-testid="input-group-size"
-                />
-              </div>
-            )}
-
-            {(formData.quantityMode === "per_styck" || formData.quantityMode === "matches_field") && (
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2" data-testid="field-quantity-metadata">
-                <div className="space-y-2">
-                  <Label htmlFor="quantityMetadataField" className="text-sm">
-                    Metadatafält (antal)
-                  </Label>
-                  <Select
-                    value={formData.quantityMetadataField || "_none"}
-                    onValueChange={(v) => setFormData({ ...formData, quantityMetadataField: v === "_none" ? "" : v })}
-                  >
-                    <SelectTrigger id="quantityMetadataField" data-testid="select-quantity-metadata-field">
-                      <SelectValue placeholder="Välj metadatafält" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="_none">Välj metadatafält</SelectItem>
-                      {metadataTypes.map((t) => (
-                        <SelectItem key={t.id} value={t.namn}>
-                          {t.namn} ({t.datatyp})
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="quantityUnit" className="text-sm">
-                    Enhet (valfritt)
-                  </Label>
-                  <Input
-                    id="quantityUnit"
-                    value={formData.quantityUnit}
-                    onChange={(e) => setFormData({ ...formData, quantityUnit: e.target.value })}
-                    placeholder="t.ex. m², kg, st"
-                    data-testid="input-quantity-unit"
+            <div className="space-y-3">
+              <Label>Antalskälla</Label>
+              <div className="space-y-2" role="radiogroup" aria-label="Antalskälla">
+                {/* Fast antal -> quantityMode 'group' (antalet = groupSize) */}
+                <label className="flex cursor-pointer items-start gap-2" data-testid="radio-antalskalla-fast">
+                  <input
+                    type="radio"
+                    name="antalskalla"
+                    className="mt-1"
+                    checked={antalskalla === "fast"}
+                    onChange={() => setAntalskalla("fast")}
+                    data-testid="input-antalskalla-fast"
                   />
-                </div>
+                  <div className="space-y-0.5">
+                    <span className="text-sm font-medium">Fast antal</span>
+                    <p className="text-xs text-muted-foreground">Ett fast antal per uppdrag.</p>
+                  </div>
+                </label>
+                {antalskalla === "fast" && (
+                  <div className="ml-6 grid grid-cols-1 gap-4 sm:grid-cols-2" data-testid="field-fast-quantity">
+                    <div className="space-y-2">
+                      <Label htmlFor="groupSize" className="text-sm">
+                        Antal
+                      </Label>
+                      <Input
+                        id="groupSize"
+                        type="number"
+                        min="1"
+                        value={formData.groupSize}
+                        onChange={(e) => setFormData({ ...formData, groupSize: Math.max(1, parseInt(e.target.value) || 1) })}
+                        data-testid="input-group-size"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="quantityUnit" className="text-sm">
+                        Enhet
+                      </Label>
+                      <Input
+                        id="quantityUnit"
+                        value={formData.quantityUnit}
+                        onChange={(e) => setFormData({ ...formData, quantityUnit: e.target.value })}
+                        placeholder="t.ex. st, m², kg"
+                        data-testid="input-quantity-unit"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {/* Metadatafält -> quantityMode 'per_styck' (objektets metadatavärde) */}
+                <label className="flex cursor-pointer items-start gap-2" data-testid="radio-antalskalla-metadata">
+                  <input
+                    type="radio"
+                    name="antalskalla"
+                    className="mt-1"
+                    checked={antalskalla === "metadata"}
+                    onChange={() => setAntalskalla("metadata")}
+                    data-testid="input-antalskalla-metadata"
+                  />
+                  <div className="space-y-0.5">
+                    <span className="text-sm font-medium">Metadatafält</span>
+                    <p className="text-xs text-muted-foreground">Hämta antalet från ett av objektets metadatafält.</p>
+                  </div>
+                </label>
+                {antalskalla === "metadata" && (
+                  <div className="ml-6 space-y-2" data-testid="field-quantity-metadata">
+                    <Label htmlFor="quantityMetadataField" className="text-sm">
+                      Välj metadatafält
+                    </Label>
+                    <Select
+                      value={formData.quantityMetadataField || "_none"}
+                      onValueChange={(v) => setFormData({ ...formData, quantityMetadataField: v === "_none" ? "" : v })}
+                    >
+                      <SelectTrigger id="quantityMetadataField" data-testid="select-quantity-metadata-field">
+                        <SelectValue placeholder="Välj metadatafält" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="_none">Välj metadatafält</SelectItem>
+                        {metadataTypes.map((t) => (
+                          <SelectItem key={t.id} value={t.namn}>
+                            {t.namn} ({t.datatyp})
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    {!formData.quantityMetadataField && (
+                      <p className="flex items-start gap-1 text-xs text-muted-foreground" data-testid="hint-quantity-metadata-optional">
+                        <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                        <span>Lämna tomt för att använda objektets standardantal.</span>
+                      </p>
+                    )}
+                  </div>
+                )}
+
+                {/* Formel -> quantityMode 'formula' (beräknat från metadatafält) */}
+                <label className="flex cursor-pointer items-start gap-2" data-testid="radio-antalskalla-formel">
+                  <input
+                    type="radio"
+                    name="antalskalla"
+                    className="mt-1"
+                    checked={antalskalla === "formel"}
+                    onChange={() => setAntalskalla("formel")}
+                    data-testid="input-antalskalla-formel"
+                  />
+                  <div className="space-y-0.5">
+                    <span className="text-sm font-medium">Formel</span>
+                    <p className="text-xs text-muted-foreground">Räkna ut antalet från metadatafält, t.ex. [Antal kärl] * 2.</p>
+                  </div>
+                </label>
+                {antalskalla === "formel" && (
+                  <div className="ml-6 space-y-2" data-testid="field-quantity-formula">
+                    <Label htmlFor="quantityFormula" className="text-sm">
+                      Formel
+                    </Label>
+                    <Input
+                      id="quantityFormula"
+                      value={formData.quantityFormula}
+                      onChange={(e) => setFormData({ ...formData, quantityFormula: e.target.value })}
+                      placeholder="[Antal kärl] * 2"
+                      data-testid="input-quantity-formula"
+                    />
+                    <p className="flex items-start gap-1 text-xs text-muted-foreground" data-testid="hint-quantity-formula">
+                      <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                      <span>
+                        Skriv metadatafält inom hakparenteser och kombinera med + - * / och parenteser. Tillgängliga fält:{" "}
+                        {metadataTypes.length > 0 ? metadataTypes.map((t) => t.namn).join(", ") : "inga metadatafält ännu"}.
+                      </span>
+                    </p>
+                  </div>
+                )}
               </div>
-            )}
-            {(formData.quantityMode === "per_styck" || formData.quantityMode === "matches_field") && !formData.quantityMetadataField && (
-              <p className="flex items-start gap-1 text-xs text-muted-foreground" data-testid="hint-quantity-metadata-optional">
-                <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-                <span>Valfritt: välj ett metadatafält så hämtas antalet automatiskt från objektet (t.ex. "Antal hjul", "Antal kärl"). Lämna tomt för att använda objektets standardantal.</span>
-              </p>
-            )}
+            </div>
 
             <div className="space-y-3 border-t pt-3">
               <p className="text-sm font-medium">Antal-behörighet i fält</p>
@@ -2576,7 +2673,7 @@ export default function ArticleFormPage() {
                   {formData.freeMetadataUpdate && !formData.quantityMetadataField && (
                     <p className="flex items-start gap-1 text-xs text-warning" data-testid="warning-free-metadata-no-field">
                       <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-                      <span>Inget metadatafält valt — välj kvantitetsläget "Matchar metadatafält" och ett fält.</span>
+                      <span>Inget metadatafält valt — välj Antalskällan "Metadatafält" och ett fält för att kunna skriva tillbaka antalet.</span>
                     </p>
                   )}
                 </>

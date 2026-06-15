@@ -14,7 +14,7 @@ import { db } from "../db";
 import { workOrders, assignments } from "@shared/schema";
 import { and, eq, inArray, isNull, notInArray } from "drizzle-orm";
 import { storage } from "../storage";
-import { computeArticleQuantity, metadataValueToNumber, usesQuantityMetadata } from "../article-quantity";
+import { usesQuantityMetadata, usesQuantityFormula } from "../article-quantity";
 
 // Alla icke-finaliserade WO-statusar — exkluderar bara invoiced/cancelled/completed.
 // Recalc får alltså träffa även in_progress/ongoing/on_hold etc. så att pågående
@@ -122,9 +122,9 @@ async function propagateTaskQuantities(tenantId: string, objectIds: string[]): P
     ));
   if (rows.length === 0) return 0;
 
-  // Ärvningsmedveten resolver — dynamisk import för att undvika cirkulärt toppimport
-  // (metadata-queries laddar i sin tur denna modul lazy).
-  const { getArticleMetadataForObject } = await import("../metadata-queries");
+  // Ärvningsmedveten kvantitetsresolver — dynamisk import för att undvika cirkulärt
+  // toppimport (resolvern -> metadata-queries, som i sin tur laddar denna modul lazy).
+  const { resolveEffectiveArticleQuantity } = await import("../article-quantity-resolver");
 
   let updatedCount = 0;
 
@@ -142,19 +142,16 @@ async function propagateTaskQuantities(tenantId: string, objectIds: string[]): P
       const article = await storage.getArticle(aa.articleId);
       let qty = aa.quantity ?? 1;
 
-      if (article && usesQuantityMetadata(article.quantityMode) && article.quantityMetadataField) {
-        let mv: number | null = null;
-        try {
-          const md = await getArticleMetadataForObject(a.objectId, article.quantityMetadataField, tenantId);
-          mv = metadataValueToNumber(md?.value);
-        } catch (e) {
-          console.error("[metadata-change-jobs] metadata-qty resolve failed:", e);
-        }
-        const newQty = computeArticleQuantity({
-          quantityMode: article.quantityMode,
+      if (
+        article &&
+        ((usesQuantityMetadata(article.quantityMode) && article.quantityMetadataField) ||
+          (usesQuantityFormula(article.quantityMode) && article.quantityFormula))
+      ) {
+        const newQty = await resolveEffectiveArticleQuantity({
+          tenantId,
+          article,
           baseQuantity: 1,
-          groupSize: article.groupSize,
-          metadataValue: mv,
+          objectId: a.objectId,
         });
         if (newQty !== (aa.quantity ?? 1)) {
           const unitPrice = aa.unitPrice ?? 0;

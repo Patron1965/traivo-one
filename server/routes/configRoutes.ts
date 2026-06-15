@@ -11,6 +11,38 @@ import { insertArticleSchema, insertArticleTypeDefinitionSchema, insertArticleCo
 import { getISOWeek, getStartOfISOWeek } from "./helpers";
 import { notificationService } from "../notifications";
 import { TASK_TYPE_KEYS, TASK_TYPE_LABELS } from "../grovplanering-grid";
+import { parseFormula } from "../metadata-formula";
+import { getAllMetadataTypes } from "../metadata-queries";
+
+// Validerar artikelns antals-formel (Antalskälla "Formel") vid spara. Kastar
+// ValidationError (400, svenska) vid syntaxfel, tom formel, eller referens till ett
+// metadatafält som inte finns i tenantens katalog. Saknade VÄRDEN vid utförande
+// hanteras mjukt i resolvern (server/article-quantity-resolver.ts) — här fångas bara
+// fel som går att upptäcka redan vid konfigurering.
+async function validateQuantityFormulaOrThrow(formula: string | null | undefined, tenantId: string): Promise<void> {
+  const trimmed = (formula ?? "").trim();
+  if (!trimmed) {
+    throw new ValidationError("Formel saknas. Ange en formel, t.ex. [Antal kärl] * 2.");
+  }
+  let refs: string[];
+  try {
+    ({ refs } = parseFormula(trimmed));
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "Ogiltig formel.";
+    throw new ValidationError(`Ogiltig formel: ${msg}`);
+  }
+  if (refs.length === 0) {
+    throw new ValidationError("Formeln måste referera minst ett metadatafält, t.ex. [Antal kärl] * 2.");
+  }
+  const types = await getAllMetadataTypes(tenantId);
+  const known = new Set(types.map((t) => t.namn));
+  const unknown = refs.filter((r) => !known.has(r));
+  if (unknown.length > 0) {
+    throw new ValidationError(
+      `Okänt metadatafält i formeln: ${unknown.map((u) => `"${u}"`).join(", ")}. Kontrollera att fältnamnet matchar ett befintligt metadatafält exakt.`,
+    );
+  }
+}
 
 export async function registerConfigRoutes(app: Express) {
 // ============== ARTICLES ==============
@@ -87,6 +119,9 @@ app.get("/api/articles/:id", asyncHandler(async (req, res) => {
 app.post("/api/articles", requireAdmin, asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const data = insertArticleSchema.parse({ ...req.body, tenantId });
+    if (data.quantityMode === "formula") {
+      await validateQuantityFormulaOrThrow(data.quantityFormula, tenantId);
+    }
     if (data.articleNumber && data.articleNumber.trim()) {
       const dup = await storage.getArticleByNumber(tenantId, data.articleNumber);
       if (dup) {
@@ -142,6 +177,12 @@ app.patch("/api/articles/:id", requireAdmin, asyncHandler(async (req, res) => {
       return res.status(400).json(formatZodError(parseResult.error));
     }
     const { tenantId: _t, id: _id, createdAt: _c, deletedAt: _d, ...updateData } = parseResult.data as any;
+    // Validera formeln när den sparade artikeln blir/förblir formel-läge.
+    const effectiveQuantityMode = updateData.quantityMode ?? existing?.quantityMode;
+    if (effectiveQuantityMode === "formula") {
+      const effectiveFormula = updateData.quantityFormula ?? existing?.quantityFormula ?? "";
+      await validateQuantityFormulaOrThrow(effectiveFormula, tenantId);
+    }
     if (typeof updateData.articleNumber === "string" && updateData.articleNumber.trim()) {
       const dup = await storage.getArticleByNumber(tenantId, updateData.articleNumber, req.params.id);
       if (dup) {

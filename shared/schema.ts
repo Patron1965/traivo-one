@@ -722,6 +722,12 @@ export const articles = pgTable("articles", {
   quantityMetadataField: text("quantity_metadata_field"),
   quantityUnit: text("quantity_unit"),
   groupSize: integer("group_size"),
+  // Antalskälla "Formel" (Mats Antalslogik): aritmetiskt uttryck som refererar
+  // objektets metadatafält via hakparenteser, t.ex. "[Antal kärl] * 2". Endast
+  // aktivt när quantityMode = 'formula'. Upplöses ärvningsmedvetet per objekt i
+  // callers (parseFormula -> getArticleMetadataForObject -> evaluateFormula, se
+  // server/article-quantity-resolver.ts). Expand-contract: nullable, default null.
+  quantityFormula: text("quantity_formula"),
   // Session 08-28: leverantörsnummer (flera möjliga, förhindrar parallellköp)
   supplierNumbers: text("supplier_numbers").array().default([]),
   // Session 08-28: utgått artikel pekar framåt på sin ersättare (forward self-FK).

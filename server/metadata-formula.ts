@@ -6,6 +6,9 @@
 // ALDRIG godtycklig kod (ingen `eval`/`Function`). Endast:
 //   - tal (heltal och decimaler, punkt som decimaltecken)
 //   - identifierare (refererar syskonfält inom samma familj via deras `namn`)
+//   - hakparentes-referenser för namn med mellanslag/specialtecken, t.ex.
+//     "[Antal kärl] * 2" (samma semantik som en identifierare; tillåter fältnamn
+//     som inte är giltiga bara-identifierare)
 //   - de fyra räknesätten: + - * /
 //   - parenteser
 //   - unärt minus (t.ex. "-bredd")
@@ -54,6 +57,23 @@ function tokenize(formula: string): Token[] {
     if (c === ")") {
       tokens.push({ kind: "rparen" });
       i++;
+      continue;
+    }
+    // Hakparentes-referens: "[Antal kärl]" — fångar namn med mellanslag eller
+    // andra tecken som inte är giltiga i en bar identifierare. Innehållet trimmas
+    // och behandlas som ett vanligt fältnamn (ident-token).
+    if (c === "[") {
+      let j = i + 1;
+      while (j < n && formula[j] !== "]") j++;
+      if (j >= n) {
+        throw new Error("Saknad höger-hakparentes (]) i formel.");
+      }
+      const name = formula.slice(i + 1, j).trim();
+      if (name === "") {
+        throw new Error("Tomt fältnamn inom hakparenteser i formel.");
+      }
+      tokens.push({ kind: "ident", value: name });
+      i = j + 1;
       continue;
     }
     if (c >= "0" && c <= "9") {

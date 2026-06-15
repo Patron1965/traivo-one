@@ -12,6 +12,9 @@ export type ArticleQuantityInput = {
   groupSize?: number | null;
   // Upplöst numeriskt metadatavärde för metadata-drivna lägen (null = inget värde hittat).
   metadataValue?: number | null;
+  // Upplöst resultat av artikelns quantityFormula (läge 'formula'). null = formel
+  // saknas eller kunde inte beräknas (då faller beräkningen tillbaka på baseQuantity).
+  formulaValue?: number | null;
 };
 
 /**
@@ -23,6 +26,16 @@ export type ArticleQuantityInput = {
  */
 export function usesQuantityMetadata(mode: string | null | undefined): boolean {
   return mode === "per_styck" || mode === "matches_field";
+}
+
+/**
+ * True för kvantitetsläget 'formula' (Antalskälla "Formel"). Antalet beräknas ur
+ * artikelns quantityFormula som refererar objektets metadatafält. Callers använder
+ * denna för att avgöra om formeln ska upplösas (parseFormula -> metadatavärden ->
+ * evaluateFormula) innan computeArticleQuantity anropas.
+ */
+export function usesQuantityFormula(mode: string | null | undefined): boolean {
+  return mode === "formula";
 }
 
 /** Tolkar ett metadatavärde (sträng/nummer) till ett tal, annars null. */
@@ -53,7 +66,7 @@ export function metadataValueToNumber(v: unknown): number | null {
  * 'matches_field' behålls som alias för redan sparade rader.
  */
 export function computeArticleQuantity(input: ArticleQuantityInput): number {
-  const { quantityMode, baseQuantity, groupSize, metadataValue } = input;
+  const { quantityMode, baseQuantity, groupSize, metadataValue, formulaValue } = input;
   const base =
     Number.isFinite(baseQuantity) && baseQuantity > 0 ? Math.round(baseQuantity) : 1;
   switch (quantityMode) {
@@ -67,6 +80,16 @@ export function computeArticleQuantity(input: ArticleQuantityInput): number {
     case "matches_field": {
       if (metadataValue != null && Number.isFinite(metadataValue) && metadataValue > 0) {
         return Math.round(metadataValue);
+      }
+      return base;
+    }
+    case "formula": {
+      // formulaValue är det redan upplösta formelresultatet (callers gör all DB-
+      // uppslagning + evaluateFormula). Positivt resultat styr antalet; annars
+      // (formel saknas/fel/<=0) faller vi tillbaka på baseQuantity. Denna funktion
+      // hämtar ALDRIG metadata eller utvärderar strängar själv.
+      if (formulaValue != null && Number.isFinite(formulaValue) && formulaValue > 0) {
+        return Math.round(formulaValue);
       }
       return base;
     }

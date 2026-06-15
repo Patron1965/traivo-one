@@ -46,7 +46,8 @@ if command -v psql >/dev/null 2>&1 && [ -n "$DATABASE_URL" ]; then
            migrations/0083_object_hierarchy_cycle_guard.sql \
            migrations/0084_tenant_index_completion.sql \
            migrations/0085_task_types.sql \
-           migrations/0086_article_layout_spec_fields.sql; do
+           migrations/0086_article_layout_spec_fields.sql \
+           migrations/0087_article_quantity_formula.sql; do
     if [ -f "$f" ]; then
       echo "[post-merge] Applying $f"
       psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f "$f"
