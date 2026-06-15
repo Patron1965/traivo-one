@@ -2,6 +2,11 @@
  * scripts/kinab-reset-operational-data.ts
  *
  * Rensar operativt kunddata för tenant 'kinab' inför pilotstart.
+ * Kör mot DEV-databasen (DATABASE_URL via server/db).
+ * För PROD: använd scripts/kinab-reset-prod-operational-data.ts.
+ *
+ * Raderingsscopet (faser A–H) definieras i scripts/kinab-reset-phases.ts och
+ * delas med prod-skriptet — ändra scopet där, aldrig här.
  *
  * BEHÅLLER (config/master):
  *   - tenants, users, user_tenant_roles
@@ -23,6 +28,7 @@
 
 import { db } from "../server/db";
 import { sql } from "drizzle-orm";
+import { buildResetPhases, DEMO_RESOURCE_IDS } from "./kinab-reset-phases";
 
 const TENANT = "kinab";
 const args = process.argv.slice(2);
@@ -30,163 +36,8 @@ const confirmIdx = args.indexOf("--confirm");
 const confirmToken = confirmIdx >= 0 ? args[confirmIdx + 1] : null;
 const DRY_RUN = confirmToken !== "RENSA-KINAB";
 
-// Tabeller som ska tömmas i ordning (FK-säker ordning).
-// Format: [tabellnamn, where-clause]
-//   - om tabellen har tenant_id används det
-//   - annars används parent-FK till en redan rensad tabell (work_orders/objects)
-const PHASES: Array<{ name: string; tables: Array<[string, string]> }> = [
-  {
-    name: "Fas A: Barn till work_orders",
-    tables: [
-      ["order_checklist_items", `work_order_id IN (SELECT id FROM work_orders WHERE tenant_id = '${TENANT}')`],
-      ["work_order_lines", `tenant_id = '${TENANT}'`],
-      ["work_order_objects", `tenant_id = '${TENANT}'`],
-      ["work_order_dependencies", `tenant_id = '${TENANT}'`],
-      ["task_dependencies", `tenant_id = '${TENANT}'`],
-      ["task_dependency_instances", `tenant_id = '${TENANT}'`],
-      ["task_desired_timewindows", `tenant_id = '${TENANT}'`],
-      ["task_information", `tenant_id = '${TENANT}'`],
-      ["task_metadata_updates", `tenant_id = '${TENANT}'`],
-      ["work_entries", `tenant_id = '${TENANT}'`],
-      ["protocols", `tenant_id = '${TENANT}'`],
-      ["deviation_reports", `tenant_id = '${TENANT}'`],
-      ["environmental_data", `tenant_id = '${TENANT}'`],
-      ["inspection_metadata", `tenant_id = '${TENANT}'`],
-      ["invoice_recalculation_log", `tenant_id = '${TENANT}'`],
-      ["urgent_job_assignments", `tenant_id = '${TENANT}'`],
-      ["setup_time_logs", `tenant_id = '${TENANT}'`],
-      ["ml_feature_snapshots", `tenant_id = '${TENANT}'`],
-      ["metadata_varden", `tenant_id = '${TENANT}'`],
-      ["eta_notifications", `tenant_id = '${TENANT}'`],
-      ["visit_confirmations", `tenant_id = '${TENANT}'`],
-      ["customer_communications", `tenant_id = '${TENANT}'`],
-      ["customer_booking_requests", `tenant_id = '${TENANT}'`],
-      ["fortnox_invoice_exports", `tenant_id = '${TENANT}'`],
-      ["fortnox_contract_suggestions", `tenant_id = '${TENANT}'`],
-    ],
-  },
-  {
-    name: "Fas B: work_orders",
-    tables: [
-      ["work_orders", `tenant_id = '${TENANT}'`],
-    ],
-  },
-  {
-    name: "Fas C: Barn till objects (utöver det som redan rensats)",
-    tables: [
-      ["order_concept_objects", `object_id IN (SELECT id FROM objects WHERE tenant_id = '${TENANT}')`],
-      ["portal_user_object_scopes", `object_id IN (SELECT id FROM objects WHERE tenant_id = '${TENANT}')`],
-      ["object_contacts", `tenant_id = '${TENANT}'`],
-      ["object_images", `tenant_id = '${TENANT}'`],
-      ["object_metadata", `tenant_id = '${TENANT}'`],
-      ["object_articles", `tenant_id = '${TENANT}'`],
-      ["object_payers", `tenant_id = '${TENANT}'`],
-      ["object_time_restrictions", `tenant_id = '${TENANT}'`],
-      ["object_parents", `tenant_id = '${TENANT}'`],
-      ["metadata_historik", `tenant_id = '${TENANT}'`],
-      ["assignments", `tenant_id = '${TENANT}'`],
-      ["iot_devices", `tenant_id = '${TENANT}'`],
-      ["predictive_forecasts", `tenant_id = '${TENANT}'`],
-      ["qr_code_links", `tenant_id = '${TENANT}'`],
-      ["public_issue_reports", `tenant_id = '${TENANT}'`],
-      ["self_bookings", `tenant_id = '${TENANT}'`],
-      ["subscription_changes", `tenant_id = '${TENANT}'`],
-      ["subscriptions", `tenant_id = '${TENANT}'`],
-      ["customer_change_requests", `tenant_id = '${TENANT}'`],
-      ["customer_issue_reports", `tenant_id = '${TENANT}'`],
-      ["annual_goals", `tenant_id = '${TENANT}'`],
-      ["planning_parameters", `tenant_id = '${TENANT}'`],
-    ],
-  },
-  {
-    name: "Fas D: objects",
-    tables: [
-      ["objects", `tenant_id = '${TENANT}' AND parent_id IS NOT NULL`],
-      ["objects", `tenant_id = '${TENANT}'`],
-    ],
-  },
-  {
-    name: "Fas E: Barn till customers (utöver det som redan rensats)",
-    tables: [
-      ["clusters", `tenant_id = '${TENANT}'`],
-      ["customer_invoices", `tenant_id = '${TENANT}'`],
-      ["customer_notification_settings", `tenant_id = '${TENANT}'`],
-      ["customer_portal_messages", `tenant_id = '${TENANT}'`],
-      ["customer_portal_sessions", `tenant_id = '${TENANT}'`],
-      ["customer_portal_tokens", `tenant_id = '${TENANT}'`],
-      ["customer_service_contracts", `tenant_id = '${TENANT}'`],
-      ["manual_invoice_lines", `tenant_id = '${TENANT}'`],
-      ["portal_messages", `tenant_id = '${TENANT}'`],
-      ["portal_users", `tenant_id = '${TENANT}'`],
-      ["price_lists", `tenant_id = '${TENANT}' AND customer_id IS NOT NULL`],
-      ["procurements", `tenant_id = '${TENANT}'`],
-      ["technician_ratings", `tenant_id = '${TENANT}'`],
-    ],
-  },
-  {
-    name: "Fas F: customers",
-    tables: [
-      ["customers", `tenant_id = '${TENANT}'`],
-    ],
-  },
-  {
-    name: "Fas G: Övrigt operativt skräp",
-    tables: [
-      ["import_batches", `tenant_id = '${TENANT}'`],
-      ["notifications", `tenant_id = '${TENANT}'`],
-    ],
-  },
-  {
-    // Demo-resurser och demo-kluster som annars återskapas av seedDatabase()
-    // när NODE_ENV != production eller ENABLE_DEMO_SEED=true.
-    // Föräldralösa Fortnox-mappningar (orphan refs till borttagna kunder/artiklar/resurser)
-    // städas också bort. Giltiga entity_types (costcenter/project) lämnas i fred.
-    //
-    // OBS (Task #468): Den strukturella lösningen för Fortnox-mapping-orphans är nu
-    // (a) hooks i `storage.deleteCustomer/deleteArticle/deleteResource` som tar bort
-    // mappningen direkt vid UI-radering, och (b) `fortnoxMappingCleanupScheduler` som
-    // kör `storage.cleanupOrphanFortnoxMappings()` dagligen (kan triggas manuellt via
-    // `POST /api/admin/fortnox-mappings/cleanup`). Fortnox-delen av Fas H är därmed
-    // dokumenterad sista-utväg/safety-net för katastrof-reset, inte primär kanal.
-    //
-    // Resource-FK-säkerhet: vi rensar konfig-tabeller som refererar res-tomas/res-anna
-    // INNAN vi raderar själva resursraderna (operativa tabeller har redan rensats av Fas A-G).
-    name: "Fas H: Demo-rester + föräldralösa mappningar",
-    tables: [
-      // FK-cleanup: alla tabeller som refererar resources(id) och inte redan rensats av Fas A-G.
-      ["team_members", `resource_id IN ('res-tomas','res-anna')`],
-      ["resource_articles", `resource_id IN ('res-tomas','res-anna')`],
-      ["resource_vehicles", `resource_id IN ('res-tomas','res-anna')`],
-      ["resource_equipment", `resource_id IN ('res-tomas','res-anna')`],
-      ["resource_availability", `resource_id IN ('res-tomas','res-anna')`],
-      ["resource_positions", `resource_id IN ('res-tomas','res-anna')`],
-      ["resource_profile_assignments", `resource_id IN ('res-tomas','res-anna')`],
-      ["push_tokens", `resource_id IN ('res-tomas','res-anna')`],
-      ["mobile_user_preferences", `resource_id IN ('res-tomas','res-anna')`],
-      ["recurring_slot_patterns", `resource_id IN ('res-tomas','res-anna')`],
-      ["equipment_bookings", `resource_id IN ('res-tomas','res-anna')`],
-      ["work_sessions", `resource_id IN ('res-tomas','res-anna')`],
-      ["time_logs", `resource_id IN ('res-tomas','res-anna')`],
-      ["self_booking_slots", `resource_id IN ('res-tomas','res-anna')`],
-      // OBS: users.resource_id nollställs separat i main() (UPDATE, inte DELETE)
-      // för att inte råka radera riktiga användarkonton.
-      // Själva demo-resurserna.
-      ["resources", `tenant_id = '${TENANT}' AND id IN ('res-tomas','res-anna')`],
-      // Demo-kluster (seed-skapade har prefix cluster-telge-* / cluster-kommun).
-      ["clusters", `tenant_id = '${TENANT}' AND (id LIKE 'cluster-telge-%' OR id = 'cluster-kommun')`],
-      // Föräldralösa Fortnox-mappningar — endast för entity-types vi faktiskt
-      // mappar mot tenant-tabeller (customer/article/resource). Lämna costcenter/project orörda.
-      [
-        "fortnox_mappings",
-        `tenant_id = '${TENANT}' AND (
-          (entity_type = 'customer' AND unicorn_id NOT IN (SELECT id FROM customers WHERE tenant_id = '${TENANT}')) OR
-          (entity_type = 'article'  AND unicorn_id NOT IN (SELECT id FROM articles  WHERE tenant_id = '${TENANT}')) OR
-          (entity_type = 'resource' AND unicorn_id NOT IN (SELECT id FROM resources WHERE tenant_id = '${TENANT}'))
-        )`,
-      ],
-    ],
-  },
-];
+const PHASES = buildResetPhases(TENANT);
+const demoIdList = DEMO_RESOURCE_IDS.map((id) => `'${id}'`).join(",");
 
 async function tableExists(name: string): Promise<boolean> {
   const r: any = await db.execute(
@@ -259,7 +110,7 @@ async function main() {
   // Nolla dingande users.resource_id-pekare till demo-resurserna (UPDATE, inte DELETE).
   console.log(`\n--- Extra: nolla users.resource_id för demo-resurser ---`);
   const userMatch: any = await db.execute(
-    sql.raw(`SELECT COUNT(*)::int AS n FROM "users" WHERE resource_id IN ('res-tomas','res-anna')`),
+    sql.raw(`SELECT COUNT(*)::int AS n FROM "users" WHERE resource_id IN (${demoIdList})`),
   );
   const userN = Number((userMatch.rows ?? userMatch)[0]?.n ?? 0);
   if (userN === 0) {
@@ -268,7 +119,7 @@ async function main() {
     console.log(`  · users.resource_id                       ${userN} (skulle nollställas)`);
   } else {
     const r: any = await db.execute(
-      sql.raw(`UPDATE "users" SET resource_id = NULL WHERE resource_id IN ('res-tomas','res-anna')`),
+      sql.raw(`UPDATE "users" SET resource_id = NULL WHERE resource_id IN (${demoIdList})`),
     );
     console.log(`  ✓ users.resource_id                       ${r.rowCount ?? 0} nollställda`);
   }
