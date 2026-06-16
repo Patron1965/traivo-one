@@ -21,6 +21,7 @@ import OpenAI from "openai";
 import {
   resolveTargetObjects,
   filterObjectsByConditions,
+  evaluateConditionsForObject,
   resolveConceptMatchingObjects,
   deriveConceptTargets,
 } from "../services/order-concept-targeting";
@@ -1925,6 +1926,61 @@ app.post("/api/order-concepts/condition-preview", asyncHandler(async (req, res) 
         objectNumber: o.objectNumber ?? null,
         address: o.address ?? null,
       })),
+    });
+}));
+
+// Steg 4: Villkorstest mot ETT enskilt objekt. Visar per-villkor pass/fail med
+// objektets faktiska metadatavärde + om objektet ingår i de valda grenarna.
+// Använder samma resolver (resolveTargetObjects) och matchesFilter
+// (via evaluateConditionsForObject) som förhandsvisning/expansion, så resultatet
+// är konsekvent med "X av Y matchar" och med vad expansionen faktiskt skapar.
+app.post("/api/order-concepts/condition-test", asyncHandler(async (req, res) => {
+    const tenantId = getTenantIdWithFallback(req);
+    const schema = z.object({
+      objectId: z.string().min(1),
+      // ADR v3: objectIds = valda gren-ROT-objekt-id:n. clusterIds = legacy.
+      // Skickas in för scope-kontroll ("ingår objektet i vald inpekning?").
+      objectIds: z.array(z.string()).default([]),
+      clusterIds: z.array(z.string()).default([]),
+      filters: z.array(z.object({
+        metadataKey: z.string(),
+        operator: z.string(),
+        filterValue: z.any().optional(),
+      })).default([]),
+    });
+    const parsed = schema.safeParse(req.body);
+    if (!parsed.success) throw new ValidationError(formatZodError(parsed.error).error);
+    const { objectId, objectIds, clusterIds, filters } = parsed.data;
+
+    // Tenant-scopad uppslagning (storage.getObject är INTE tenant-filtrerad).
+    const object = await storage.getObject(objectId);
+    if (!object || object.tenantId !== tenantId || object.deletedAt) {
+      throw new NotFoundError("Objektet hittades inte");
+    }
+
+    // Ingår objektet i de valda grenarna? Resolvas bara när targeting angetts —
+    // annars är scope-frågan inte tillämplig (null). Samma resolver som preview.
+    let inTargetScope: boolean | null = null;
+    if (objectIds.length > 0 || clusterIds.length > 0) {
+      const targets = await resolveTargetObjects({ tenantId, objectIds, clusterIds });
+      inTargetScope = targets.some((o) => o.id === objectId);
+    }
+
+    // Strippar tomma metadatanycklar (precis som klientens förhandsvisning).
+    const activeFilters = filters.filter((f) => f.metadataKey);
+    const { matched, results } = await evaluateConditionsForObject(tenantId, object, activeFilters);
+
+    res.json({
+      objectId,
+      objectName: object.name,
+      objectNumber: object.objectNumber ?? null,
+      address: object.address ?? null,
+      matched,
+      inTargetScope,
+      // Skulle objektet faktiskt expanderas? Kräver BÅDE scope OCH villkorsmatch
+      // (när targeting saknas avgör enbart villkoren).
+      wouldExpand: inTargetScope === null ? matched : inTargetScope && matched,
+      results,
     });
 }));
 

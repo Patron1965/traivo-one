@@ -119,19 +119,17 @@ export async function resolveTargetObjects(
 }
 
 /**
- * Bygger metadata-karta (fieldKey → värde) i en batch och returnerar de objekt
- * som matchar ALLA filter. Objektets baskolumner används som fallback-nycklar
- * (t.ex. objectType) när metadatanyckeln saknas. Tom filterlista = alla objekt.
+ * Bygger metadata-karta (objectId → {fieldKey → värde}) i en batch. Värdet tas
+ * från valueJson om satt, annars value (text). Samma uppbyggnad används av både
+ * bulk-filtreringen och enskild-objekt-testet så de aldrig kan driva isär.
  */
-export async function filterObjectsByConditions(
+async function buildObjectMetadataMap(
   tenantId: string,
-  objectsList: ServiceObject[],
-  filters: ConditionFilterInput[],
-): Promise<ServiceObject[]> {
-  if (filters.length === 0) return objectsList;
-  if (objectsList.length === 0) return [];
+  objectIds: string[],
+): Promise<Map<string, Record<string, unknown>>> {
+  const metaByObject = new Map<string, Record<string, unknown>>();
+  if (objectIds.length === 0) return metaByObject;
 
-  const objectIds = objectsList.map((o) => o.id);
   const defs = await db
     .select()
     .from(metadataDefinitions)
@@ -142,7 +140,6 @@ export async function filterObjectsByConditions(
     .from(objectMetadata)
     .where(and(eq(objectMetadata.tenantId, tenantId), inArray(objectMetadata.objectId, objectIds)));
 
-  const metaByObject = new Map<string, Record<string, unknown>>();
   for (const row of rows) {
     const key = defKey.get(row.definitionId);
     if (!key) continue;
@@ -150,14 +147,79 @@ export async function filterObjectsByConditions(
     map[key] = (row as any).valueJson ?? (row as any).value;
     metaByObject.set(row.objectId, map);
   }
+  return metaByObject;
+}
+
+/**
+ * Värde-upplösning för ETT villkor mot ETT objekt: metadatanyckeln först,
+ * annars objektets baskolumn (t.ex. objectType) som fallback. Enda källan så att
+ * bulk-filtrering och enskilt test resolvar identiskt värde.
+ */
+function resolveConditionValue(
+  obj: ServiceObject,
+  meta: Record<string, unknown>,
+  metadataKey: string,
+): unknown {
+  return metadataKey in meta ? meta[metadataKey] : (obj as any)[metadataKey];
+}
+
+/**
+ * Returnerar de objekt som matchar ALLA filter. Objektets baskolumner används
+ * som fallback-nycklar (t.ex. objectType) när metadatanyckeln saknas. Tom
+ * filterlista = alla objekt.
+ */
+export async function filterObjectsByConditions(
+  tenantId: string,
+  objectsList: ServiceObject[],
+  filters: ConditionFilterInput[],
+): Promise<ServiceObject[]> {
+  if (filters.length === 0) return objectsList;
+  if (objectsList.length === 0) return [];
+
+  const metaByObject = await buildObjectMetadataMap(tenantId, objectsList.map((o) => o.id));
 
   return objectsList.filter((obj) => {
     const meta = metaByObject.get(obj.id) ?? {};
-    return filters.every((f) => {
-      const value = f.metadataKey in meta ? meta[f.metadataKey] : (obj as any)[f.metadataKey];
-      return matchesFilter(value, f.operator, f.filterValue);
-    });
+    return filters.every((f) =>
+      matchesFilter(resolveConditionValue(obj, meta, f.metadataKey), f.operator, f.filterValue),
+    );
   });
+}
+
+export type ConditionEvalResult = {
+  metadataKey: string;
+  operator: string;
+  filterValue: unknown;
+  /** Objektets faktiska (upplösta) värde för fältet — för felsökning i UI. */
+  actualValue: unknown;
+  passed: boolean;
+};
+
+/**
+ * Utvärderar filtren mot ETT objekt och returnerar per-villkor pass/fail samt
+ * objektets faktiska värde. Använder EXAKT samma värde-upplösning
+ * (resolveConditionValue) och matchesFilter som bulk-förhandsvisning/expansion,
+ * så ett enskilt test alltid stämmer överens med "X av Y matchar". Tom
+ * filterlista ⇒ matched=true (alla objekt i grenen inkluderas).
+ */
+export async function evaluateConditionsForObject(
+  tenantId: string,
+  object: ServiceObject,
+  filters: ConditionFilterInput[],
+): Promise<{ matched: boolean; results: ConditionEvalResult[] }> {
+  const metaByObject = await buildObjectMetadataMap(tenantId, [object.id]);
+  const meta = metaByObject.get(object.id) ?? {};
+  const results: ConditionEvalResult[] = filters.map((f) => {
+    const actualValue = resolveConditionValue(object, meta, f.metadataKey);
+    return {
+      metadataKey: f.metadataKey,
+      operator: f.operator,
+      filterValue: f.filterValue,
+      actualValue,
+      passed: matchesFilter(actualValue, f.operator, f.filterValue),
+    };
+  });
+  return { matched: results.every((r) => r.passed), results };
 }
 
 /**
