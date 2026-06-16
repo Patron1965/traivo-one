@@ -49,7 +49,8 @@ if command -v psql >/dev/null 2>&1 && [ -n "$DATABASE_URL" ]; then
            migrations/0086_article_layout_spec_fields.sql \
            migrations/0087_article_quantity_formula.sql \
            migrations/0088_import_sessions_customer_nullable.sql \
-           migrations/0089_objects_customer_nullable.sql; do
+           migrations/0089_objects_customer_nullable.sql \
+           migrations/0090_reversible_import_actions.sql; do
     if [ -f "$f" ]; then
       echo "[post-merge] Applying $f"
       psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f "$f"

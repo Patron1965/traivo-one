@@ -5,6 +5,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { ImportUndoButton } from "@/components/import/ImportUndoButton";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -30,6 +31,7 @@ import {
 } from "@/components/ui/table";
 import {
   AlertCircle,
+  AlertTriangle,
   CheckCircle2,
   FileUp,
   Layers,
@@ -87,9 +89,16 @@ interface ValidatedRow {
   status: "valid" | "warning" | "invalid";
   issues: RowIssue[];
 }
+interface DuplicateWarning {
+  name: string;
+  address: string | null;
+  rowNumbers: number[];
+  existing: Array<{ id: string; objectNumber: string | null; name: string; address: string | null }>;
+}
 interface ValidationResponse {
   summary: { total_rows: number; valid: number; warning: number; invalid: number } | null;
   rows: ValidatedRow[];
+  duplicateWarnings?: DuplicateWarning[];
 }
 
 interface ExecuteResponse {
@@ -640,6 +649,44 @@ export function ObjectImportV2Flow() {
             )}
             {validation?.summary && (
               <>
+                {validation.duplicateWarnings && validation.duplicateWarnings.length > 0 && (
+                  <div
+                    className="space-y-2 rounded-md border border-warning/40 bg-warning/10 p-3 text-sm"
+                    data-testid="banner-duplicate-warnings"
+                  >
+                    <div className="flex items-start gap-2">
+                      <AlertTriangle className="h-5 w-5 shrink-0 mt-0.5 text-warning" />
+                      <div className="space-y-1">
+                        <p className="font-medium text-foreground">
+                          Möjliga dubbletter — samma namn och adress finns redan
+                        </p>
+                        <p className="text-muted-foreground">
+                          {validation.duplicateWarnings.length} rad(er) matchar befintliga aktiva
+                          objekt. Berörda rader är flaggade nedan — överväg att arkivera eller slå
+                          ihop dubbletter i efterhand.
+                        </p>
+                      </div>
+                    </div>
+                    <ul className="ml-7 list-disc space-y-1 text-muted-foreground">
+                      {validation.duplicateWarnings.map((w, i) => (
+                        <li key={`${w.name}-${i}`} data-testid={`duplicate-warning-${i}`}>
+                          <span className="text-foreground">{w.name}</span>
+                          {w.address ? ` · ${w.address}` : ""} — rad {w.rowNumbers.join(", ")} (finns
+                          som {w.existing.map((e) => e.objectNumber ?? e.name).join(", ")})
+                        </li>
+                      ))}
+                    </ul>
+                    <a
+                      href="/objects/duplicates"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="ml-7 inline-block font-medium text-primary underline-offset-2 hover:underline"
+                      data-testid="link-duplicate-management"
+                    >
+                      Öppna dubbletthantering →
+                    </a>
+                  </div>
+                )}
                 <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
                   <div className="rounded-md border border-border p-3" data-testid="summary-total">
                     <p className="text-2xl font-semibold">{validation.summary.total_rows}</p>
@@ -815,6 +862,7 @@ export function ObjectImportV2Flow() {
                   Hierarki: {result.hierarchy.root_objects} rotobjekt, {result.hierarchy.total_levels} nivåer,{" "}
                   {result.hierarchy.total_objects} objekt totalt.
                 </div>
+                <ImportUndoButton />
                 <Button onClick={resetFlow} data-testid="button-new-import">
                   Ny import
                 </Button>

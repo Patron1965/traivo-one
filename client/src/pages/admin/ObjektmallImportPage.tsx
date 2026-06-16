@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Separator } from "@/components/ui/separator";
+import { Checkbox } from "@/components/ui/checkbox";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import {
@@ -51,6 +52,7 @@ interface MetadataChange {
   value: string;
   status: MetadataWriteStatus;
   allowDuplicates: boolean;
+  fromValue: string | null;
 }
 interface CompositeChange {
   prefix: string;
@@ -59,6 +61,7 @@ interface CompositeChange {
   subfields: Array<{ key: string; value: string }>;
   status: MetadataWriteStatus;
   allowDuplicates: boolean;
+  fromValue: string | null;
 }
 interface CompositeColumn {
   prefix: string;
@@ -89,6 +92,18 @@ interface ImportSheetReport {
   errors: Array<{ row: number; messages: string[] }>;
   actions: ActionRow[];
 }
+interface OverwriteItem {
+  row: number;
+  refName: string;
+  label: string;
+  from: string;
+  to: string;
+}
+interface OverwriteSummary {
+  count: number;
+  signature: string;
+  items: OverwriteItem[];
+}
 interface ImportReport {
   import: ImportSheetReport;
   metadataColumns: string[];
@@ -96,6 +111,7 @@ interface ImportReport {
   warnings: string[];
   hasBlockingErrors: boolean;
   interimListFlag: boolean;
+  overwriteSummary: OverwriteSummary;
 }
 interface PreviewResponse {
   ok: boolean;
@@ -150,6 +166,26 @@ const META_STATUS_META: Record<MetadataWriteStatus, { label: string; className: 
   unchanged: { label: "Oförändrad", className: "bg-muted text-muted-foreground" },
 };
 
+// Feature 3: rendera ett sammansatt (punktnotation) tidigare värde i samma
+// "key=value; ..."-format som det nya värdet, så att diffen blir symmetrisk.
+// Faller tillbaka till råvärdet om det inte är ett tolkbart JSON-objekt.
+function formatOverwriteFrom(item: OverwriteItem): string {
+  if (!item.from) return "";
+  if (item.refName.endsWith(".*")) {
+    try {
+      const parsed = JSON.parse(item.from);
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+        return Object.entries(parsed)
+          .map(([k, v]) => `${k}=${v}`)
+          .join("; ");
+      }
+    } catch {
+      // inte JSON — visa råvärdet
+    }
+  }
+  return item.from;
+}
+
 export default function ObjektmallImportPage() {
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -157,6 +193,9 @@ export default function ObjektmallImportPage() {
   const [preview, setPreview] = useState<PreviewResponse | null>(null);
   const [commitResult, setCommitResult] = useState<CommitResponse | null>(null);
   const [expandedRows, setExpandedRows] = useState<Record<string, boolean>>({});
+  // Feature 3 (Bekräfta överskrivning): användarens uttryckliga bekräftelse att
+  // befintliga metadatavärden får skrivas över vid skarp import.
+  const [confirmOverwrites, setConfirmOverwrites] = useState(false);
   const toggleRow = (key: string) =>
     setExpandedRows((prev) => ({ ...prev, [key]: !prev[key] }));
 
@@ -213,6 +252,13 @@ export default function ObjektmallImportPage() {
     mutationFn: async (file) => {
       const fd = new FormData();
       fd.append("file", file);
+      // Feature 3: skicka med bekräftelse + signatur ENDAST när användaren
+      // uttryckligen kryssat i bekräftelsen (defense-in-depth utöver disabled-knappen).
+      const summary = preview?.report.overwriteSummary;
+      if (summary && summary.count > 0 && confirmOverwrites) {
+        fd.append("confirmMetadataOverwrites", "true");
+        fd.append("confirmedOverwriteSignature", summary.signature);
+      }
       const res = await fetch("/api/admin/objektmall/commit", {
         method: "POST",
         body: fd,
@@ -220,6 +266,12 @@ export default function ObjektmallImportPage() {
       });
       const json = await res.json().catch(() => ({}));
       if (!res.ok || !json.ok) {
+        // Inaktuell bekräftelse: DB ändrades sedan torrkörningen. Tvinga en ny
+        // torrkörning så att användaren ser den uppdaterade diffen och signaturen.
+        if (json.staleConfirmation && selectedFile) {
+          setConfirmOverwrites(false);
+          previewMutation.mutate(selectedFile);
+        }
         throw new Error(json.message || json.error || `HTTP ${res.status}`);
       }
       return json as CommitResponse;
@@ -245,6 +297,7 @@ export default function ObjektmallImportPage() {
     setSelectedFile(f);
     setPreview(null);
     setCommitResult(null);
+    setConfirmOverwrites(false);
     previewMutation.mutate(f);
   }
 
@@ -252,6 +305,7 @@ export default function ObjektmallImportPage() {
     setSelectedFile(null);
     setPreview(null);
     setCommitResult(null);
+    setConfirmOverwrites(false);
   }
 
   const sheet = preview?.report.import;
@@ -829,6 +883,76 @@ export default function ObjektmallImportPage() {
 
             <Separator />
 
+            {/* Feature 3: Bekräfta överskrivning av befintliga metadatavärden */}
+            {!commitResult && preview.report.overwriteSummary.count > 0 && (
+              <Alert
+                variant="default"
+                className="border-warning/50 bg-warning/10"
+                data-testid="alert-overwrite-confirm"
+              >
+                <AlertTriangle className="h-4 w-4 text-warning" />
+                <AlertTitle data-testid="text-overwrite-count">
+                  {preview.report.overwriteSummary.count} befintliga metadatavärden skrivs över
+                </AlertTitle>
+                <AlertDescription>
+                  <p className="text-sm text-muted-foreground mb-2">
+                    Den skarpa importen ersätter värden som redan finns på objekten. Granska
+                    ändringarna nedan och bekräfta innan du kör importen.
+                  </p>
+                  <div className="rounded-md border bg-background">
+                    <ScrollArea className="max-h-64">
+                      <Table density="compact">
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead className="w-16">Rad</TableHead>
+                            <TableHead>Fält</TableHead>
+                            <TableHead>Tidigare värde</TableHead>
+                            <TableHead>Nytt värde</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {preview.report.overwriteSummary.items.map((item, idx) => (
+                            <TableRow
+                              key={`${item.row}-${item.refName}-${idx}`}
+                              data-testid={`row-overwrite-${item.row}-${idx}`}
+                            >
+                              <TableCell className="font-mono text-xs">{item.row}</TableCell>
+                              <TableCell className="text-xs">
+                                <div className="font-medium text-foreground">{item.label}</div>
+                                <div className="text-muted-foreground font-mono">{item.refName}</div>
+                              </TableCell>
+                              <TableCell className="text-xs">
+                                <span className="text-muted-foreground line-through whitespace-pre-wrap break-words">
+                                  {formatOverwriteFrom(item) || "—"}
+                                </span>
+                              </TableCell>
+                              <TableCell className="text-xs">
+                                <span className="inline-flex items-start gap-1 text-foreground">
+                                  <ArrowRight className="h-3 w-3 mt-0.5 shrink-0 text-warning" />
+                                  <span className="whitespace-pre-wrap break-words">{item.to || "—"}</span>
+                                </span>
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </ScrollArea>
+                  </div>
+                  <label
+                    className="mt-3 flex items-center gap-2 text-sm font-medium cursor-pointer"
+                    data-testid="label-confirm-overwrites"
+                  >
+                    <Checkbox
+                      checked={confirmOverwrites}
+                      onCheckedChange={(v) => setConfirmOverwrites(v === true)}
+                      data-testid="checkbox-confirm-overwrites"
+                    />
+                    Jag bekräftar att dessa {preview.report.overwriteSummary.count} värden ska skrivas över
+                  </label>
+                </AlertDescription>
+              </Alert>
+            )}
+
             <div className="flex items-center gap-2 flex-wrap">
               <Button
                 variant="default"
@@ -836,7 +960,8 @@ export default function ObjektmallImportPage() {
                   preview.report.hasBlockingErrors ||
                   !selectedFile ||
                   commitMutation.isPending ||
-                  !!commitResult
+                  !!commitResult ||
+                  (preview.report.overwriteSummary.count > 0 && !confirmOverwrites)
                 }
                 onClick={() => selectedFile && commitMutation.mutate(selectedFile)}
                 data-testid="button-commit"
@@ -853,6 +978,13 @@ export default function ObjektmallImportPage() {
                   Skarp import blockerad — fixa fel ovan först.
                 </span>
               )}
+              {!preview.report.hasBlockingErrors &&
+                preview.report.overwriteSummary.count > 0 &&
+                !confirmOverwrites && (
+                  <span className="text-xs text-warning" data-testid="text-overwrite-blocked">
+                    Bekräfta överskrivningen ovan för att köra importen.
+                  </span>
+                )}
               {commitResult && (
                 <Badge variant="default" className="bg-chart-2 text-white">
                   <CheckCircle2 className="h-3 w-3 mr-1" />

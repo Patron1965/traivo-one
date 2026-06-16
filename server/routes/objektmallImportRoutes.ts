@@ -26,6 +26,7 @@
 import type { Express } from "express";
 import multer from "multer";
 import ExcelJS from "exceljs";
+import { createHash } from "node:crypto";
 import { z } from "zod";
 import { and, eq, or, sql, desc, inArray, isNull } from "drizzle-orm";
 import { asyncHandler } from "../asyncHandler";
@@ -884,6 +885,9 @@ type MetadataChange = {
   value: string; // rådata-värdet
   status: ImportMetadataWriteStatus; // create | replace | add | unchanged
   allowDuplicates: boolean;
+  // Feature 3 (Bekräfta överskrivning): tidigare visningsvärde när status ===
+  // "replace" (värdet som kommer att skrivas över). null i övriga fall.
+  fromValue: string | null;
 };
 
 // Task #633: per-rad-status för ett sammansatt metadatavärde i förhandsvisningen.
@@ -895,6 +899,9 @@ type CompositeChange = {
   subfields: Array<{ key: string; value: string }>; // ifyllda underfält i kolumnordning
   status: ImportMetadataWriteStatus; // create | replace | add | unchanged
   allowDuplicates: boolean;
+  // Feature 3 (Bekräfta överskrivning): tidigare visningsvärde när status ===
+  // "replace" (värdet som kommer att skrivas över). null i övriga fall.
+  fromValue: string | null;
 };
 
 // Per-rad upplöst åtgärd som commit-steget återanvänder utan att räkna om.
@@ -1005,6 +1012,24 @@ interface ImportSheetReport {
   }>;
 }
 
+// Feature 3 (Bekräfta överskrivning): en post per metadatavärde som kommer att
+// SKRIVAS ÖVER (status "replace") vid skarp import.
+interface OverwriteItem {
+  row: number; // radnummer i mallen
+  refName: string; // metadata-kolumnens referensnamn (sammansatt: "prefix.*")
+  label: string; // katalog.namn
+  from: string; // tidigare visningsvärde (skrivs över)
+  to: string; // nytt värde
+}
+// Sammanställning av alla överskrivningar + en deterministisk signatur. Commit
+// avvisar en bekräftelse vars signatur inte matchar den om-validerade (DB hann
+// ändras mellan torrkörning och skarp import → inaktuell bekräftelse).
+interface OverwriteSummary {
+  count: number;
+  signature: string;
+  items: OverwriteItem[];
+}
+
 interface ValidationReport {
   import: ImportSheetReport;
   metadataColumns: string[];
@@ -1012,6 +1037,23 @@ interface ValidationReport {
   warnings: string[];
   hasBlockingErrors: boolean;
   interimListFlag: boolean;
+  // Feature 3: alla metadatavärden som skrivs över vid skarp import.
+  overwriteSummary: OverwriteSummary;
+}
+
+// Deterministisk signatur över överskrivningarna (sorterad på rad + referens).
+// Tom lista ⇒ tom signatur. Måste beräknas identiskt i torrkörning och commit.
+function buildOverwriteSummary(items: OverwriteItem[]): OverwriteSummary {
+  const sorted = [...items].sort(
+    (a, b) => a.row - b.row || a.refName.localeCompare(b.refName),
+  );
+  const signature =
+    sorted.length === 0
+      ? ""
+      : createHash("sha256")
+          .update(sorted.map((i) => `${i.row}|${i.refName}|${i.from}|${i.to}`).join("\n"))
+          .digest("hex");
+  return { count: sorted.length, signature, items: sorted };
 }
 
 function parseBool(v: string | undefined): boolean {
@@ -1624,6 +1666,7 @@ async function validateAll(
         value,
         status,
         allowDuplicates: kat.allowDuplicates ?? false,
+        fromValue: status === "replace" ? existingForObj[0] ?? null : null,
       });
     }
     // Task #633: validera och statusbedöm sammansatta fält (punktnotation). Varje
@@ -1661,6 +1704,7 @@ async function validateAll(
         subfields,
         status,
         allowDuplicates: kat.allowDuplicates ?? false,
+        fromValue: status === "replace" ? existingForObj[0] ?? null : null,
       });
     }
     // Ogiltiga metadata-värden ska blockera raden från commit.
@@ -1696,6 +1740,9 @@ async function validateAll(
   // 7. Bygg rapport.
   const errors: Array<{ row: number; messages: string[] }> = [];
   const actions: ImportSheetReport["actions"] = [];
+  // Feature 3: samla ALLA överskrivningar (även för rader bortom 500-taket på
+  // `actions`) så att räkningen och signaturen är fullständiga.
+  const overwriteItems: OverwriteItem[] = [];
   let toCreate = 0;
   let toUpdate = 0;
   let toRepoint = 0;
@@ -1712,6 +1759,29 @@ async function validateAll(
     if (res.action === "create") toCreate++;
     else if (res.action === "repoint") toRepoint++;
     else toUpdate++;
+
+    for (const mc of res.metadataChanges) {
+      if (mc.status === "replace") {
+        overwriteItems.push({
+          row: row.rowNumber,
+          refName: mc.refName,
+          label: mc.label,
+          from: mc.fromValue ?? "",
+          to: mc.value,
+        });
+      }
+    }
+    for (const cc of res.compositeChanges) {
+      if (cc.status === "replace") {
+        overwriteItems.push({
+          row: row.rowNumber,
+          refName: `${cc.prefix}.*`,
+          label: cc.label,
+          from: cc.fromValue ?? "",
+          to: cc.subfields.map((s) => `${s.key}=${s.value}`).join("; "),
+        });
+      }
+    }
 
     if (actions.length < 500) {
       const detail =
@@ -1753,6 +1823,7 @@ async function validateAll(
     warnings,
     hasBlockingErrors: errorRows > 0,
     interimListFlag,
+    overwriteSummary: buildOverwriteSummary(overwriteItems),
   };
 
   return { report, rows: valRows, metaResolution, compositeResolution };
@@ -1761,6 +1832,20 @@ async function validateAll(
 // ============================================================
 // Commit
 // ============================================================
+
+// Feature 3 (Bekräfta överskrivning): kastas inifrån commit-transaktionen om ett
+// metadatavärde som ska skrivas över inte längre matchar det användaren bekräftade
+// (DB ändrades mellan torrkörning och skarp import). Aborterar hela importen och
+// översätts till 409 staleConfirmation i route-lagret.
+class OverwriteStaleError extends Error {
+  constructor() {
+    super(
+      "Underlaget har ändrats sedan torrkörningen. Kör en ny torrkörning och bekräfta överskrivningen igen.",
+    );
+    this.name = "OverwriteStaleError";
+  }
+}
+
 async function commitImport(
   tenantId: string,
   userId: string | null,
@@ -1830,12 +1915,49 @@ async function commitImport(
     // objekt enligt post-it-modellen (§6.12): Ersättande (allowDuplicates=false)
     // uppdaterar + arkiverar gammalt värde i historiken; Kompletterande
     // (allowDuplicates=true) lägger till parallellt. Identiska värden = oförändrat.
+    // Feature 3: TOCTOU-skydd. Läs om nuvarande visningsvärden för (objekt,
+    // katalog) INNE i transaktionen med radlås (FOR UPDATE), och verifiera att
+    // värdet som ska skrivas över fortfarande matchar det användaren bekräftade
+    // i torrkörningen. Om någon hunnit ändra värdet sedan dess avbryts hela
+    // importen (rullas tillbaka) och route-lagret svarar 409 staleConfirmation.
+    async function assertOverwriteStillConfirmed(
+      objId: string,
+      katId: string,
+      confirmedFrom: string | null,
+    ): Promise<void> {
+      const rows = await tx
+        .select()
+        .from(metadataVarden)
+        .where(
+          and(
+            eq(metadataVarden.tenantId, tenantId),
+            eq(metadataVarden.objektId, objId),
+            eq(metadataVarden.metadataKatalogId, katId),
+          ),
+        )
+        .for("update");
+      const current: string[] = [];
+      for (const ev of rows) {
+        const dv = getDisplayValue(ev);
+        if (dv !== null) current.push(dv);
+      }
+      // "replace" har enkelvärdes-semantik (allowDuplicates=false). Bekräftelsen
+      // gäller exakt ett befintligt värde; allt annat = underlaget har ändrats.
+      if (current.length !== 1 || current[0] !== confirmedFrom) {
+        throw new OverwriteStaleError();
+      }
+    }
+
     async function writeRowMetadata(objId: string, res: RowResolution): Promise<void> {
       for (const [refName, rawVal] of Object.entries(res.metadata)) {
         const value = (rawVal ?? "").trim();
         if (!value) continue;
         const resn = metaResolution.get(refName);
         if (!resn || resn.kind !== "definition") continue; // known/unknown skrivs ej här
+        const change = res.metadataChanges.find((c) => c.refName === refName);
+        if (change?.status === "replace") {
+          await assertOverwriteStillConfirmed(objId, resn.katalog.id, change.fromValue);
+        }
         const status = await writeImportedMetadataValue(tx, {
           tenantId,
           objektId: objId,
@@ -1855,6 +1977,10 @@ async function commitImport(
         if (Object.keys(obj).length === 0) continue; // inga ifyllda underfält
         const resn = compositeResolution.get(prefix);
         if (!resn || resn.kind !== "definition") continue; // okänt prefix skrivs ej här
+        const change = res.compositeChanges.find((c) => c.prefix === prefix);
+        if (change?.status === "replace") {
+          await assertOverwriteStillConfirmed(objId, resn.katalog.id, change.fromValue);
+        }
         const status = await writeImportedMetadataValue(tx, {
           tenantId,
           objektId: objId,
@@ -2119,7 +2245,58 @@ export function registerObjektmallImportRoutes(app: Express): void {
         });
       }
 
-      const result = await commitImport(tenantId, userId, file.originalname, validation);
+      // Feature 3 (Bekräfta överskrivning): blockera skarp import som skriver över
+      // befintliga metadatavärden tills användaren uttryckligen bekräftat. Commit
+      // om-validerar mot aktuell DB; en bekräftelse vars signatur inte matchar den
+      // nyberäknade (DB hann ändras sedan torrkörningen) avvisas som inaktuell.
+      const overwrite = validation.report.overwriteSummary;
+      if (overwrite.count > 0) {
+        const confirmOverwrites =
+          parseBool(String((req.body as any)?.confirmMetadataOverwrites ?? ""));
+        const confirmedSignature = String((req.body as any)?.confirmedOverwriteSignature ?? "");
+        if (!confirmOverwrites) {
+          return res.status(409).json({
+            ok: false,
+            needsOverwriteConfirmation: true,
+            fileName: file.originalname,
+            overwriteSummary: overwrite,
+            report: validation.report,
+            message: `${overwrite.count} befintliga metadatavärden kommer att skrivas över. Bekräfta överskrivningen innan importen körs.`,
+          });
+        }
+        if (confirmedSignature !== overwrite.signature) {
+          return res.status(409).json({
+            ok: false,
+            needsOverwriteConfirmation: true,
+            staleConfirmation: true,
+            fileName: file.originalname,
+            overwriteSummary: overwrite,
+            report: validation.report,
+            message:
+              "Underlaget har ändrats sedan torrkörningen. Kör en ny torrkörning och bekräfta överskrivningen igen.",
+          });
+        }
+      }
+
+      let result: Awaited<ReturnType<typeof commitImport>>;
+      try {
+        result = await commitImport(tenantId, userId, file.originalname, validation);
+      } catch (e) {
+        // Feature 3: TOCTOU-skydd inifrån transaktionen — värdet ändrades mellan
+        // torrkörning och skriv. Hela importen rullades tillbaka; be om ny torrkörning.
+        if (e instanceof OverwriteStaleError) {
+          return res.status(409).json({
+            ok: false,
+            needsOverwriteConfirmation: true,
+            staleConfirmation: true,
+            fileName: file.originalname,
+            overwriteSummary: overwrite,
+            report: validation.report,
+            message: e.message,
+          });
+        }
+        throw e;
+      }
       res.json({
         ok: true,
         fileName: file.originalname,

@@ -4463,6 +4463,8 @@ export const metadataHistorik = pgTable("metadata_historik", {
   andradAv: varchar("andrad_av", { length: 100 }),
   andradVid: timestamp("andrad_vid").defaultNow().notNull(),
   andringsMetod: varchar("andrings_metod", { length: 50 }),
+  // Ångra-funktion: spårbarhet till import-batchen (icke-auktoritativ; import_actions är källan).
+  importBatchId: varchar("import_batch_id"),
 }, (table) => [
   index("idx_metadata_historik_varden").on(table.metadataVardenId),
   index("idx_metadata_historik_objekt").on(table.objektId),
@@ -5760,6 +5762,13 @@ export const importBatches = pgTable("import_batches", {
   scorecardSummary: jsonb("scorecard_summary"),
   metadata: jsonb("metadata").default({}),
   sessionId: varchar("session_id"),
+  // Ångra-funktion (Task #930+): vilket importflöde batchen kom från och om den
+  // fortfarande går att rulla tillbaka. Additivt/expand-contract — nullable/default.
+  sourceFlow: varchar("source_flow", { length: 32 }),
+  undoStatus: varchar("undo_status", { length: 16 }).default("reversible"),
+  undoExpiresAt: timestamp("undo_expires_at"),
+  undoneAt: timestamp("undone_at"),
+  undoneBy: varchar("undone_by"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (table) => [
   index("idx_import_batches_tenant").on(table.tenantId),
@@ -5770,6 +5779,43 @@ export const importBatches = pgTable("import_batches", {
 export const insertImportBatchSchema = createInsertSchema(importBatches).omit({ id: true, createdAt: true });
 export type InsertImportBatch = z.infer<typeof insertImportBatchSchema>;
 export type ImportBatch = typeof importBatches.$inferSelect;
+
+// ============================================
+// Reversible import actions (Ångra-funktion) — per-entitet before/after-snapshot
+// så att en hel import-batch eller massuppdatering kan rullas tillbaka i ett klick.
+// Additivt/expand-contract. Auktoritativ källa för undo: objects.import_batch_id
+// + metadata_historik räcker inte för uppdateringar/repoint utan snapshot.
+// ============================================
+export const importActions = pgTable("import_actions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
+  batchId: varchar("batch_id").notNull(),
+  sessionId: varchar("session_id"),
+  // wizard | objects-v2 | metadata-job
+  sourceFlow: varchar("source_flow", { length: 32 }).notNull(),
+  rowNumber: integer("row_number"),
+  // create_object | update_object | metadata_write
+  actionType: varchar("action_type", { length: 32 }).notNull(),
+  // object | metadata_varden
+  entityType: varchar("entity_type", { length: 32 }).notNull(),
+  entityId: varchar("entity_id"),
+  beforeJson: jsonb("before_json"),
+  afterJson: jsonb("after_json"),
+  // applied | undone | blocked
+  status: varchar("status", { length: 16 }).default("applied").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  undoneAt: timestamp("undone_at"),
+  undoneBy: varchar("undone_by"),
+  undoError: text("undo_error"),
+}, (table) => [
+  index("idx_import_actions_tenant").on(table.tenantId),
+  index("idx_import_actions_batch").on(table.batchId),
+  index("idx_import_actions_tenant_status").on(table.tenantId, table.status),
+]);
+
+export const insertImportActionSchema = createInsertSchema(importActions).omit({ id: true, createdAt: true });
+export type InsertImportAction = z.infer<typeof insertImportActionSchema>;
+export type ImportAction = typeof importActions.$inferSelect;
 
 // ============================================
 // Import Sessions — wizard-bunden interim → objectId-mapping (task #578)

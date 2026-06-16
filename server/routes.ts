@@ -770,6 +770,9 @@ export async function registerRoutes(
   // Import 2.0: session-baserat 5-stegsflöde (Upload → Preview → Map → Validate → Build)
   const { registerObjectImportV2Routes } = await import("./routes/objectImportV2Routes");
   registerObjectImportV2Routes(app);
+  // Ångra-funktion: rulla tillbaka senaste ångringsbara import-batchen (requireAdmin)
+  const { registerImportUndoRoutes } = await import("./routes/importUndoRoutes");
+  registerImportUndoRoutes(app);
   const { registerOrderTypeMetadataRoutes } = await import("./routes/orderTypeMetadataRoutes");
   registerOrderTypeMetadataRoutes(app);
   await registerOnboardingRoutes(app);

@@ -19,14 +19,19 @@ import { NotFoundError, ValidationError } from "../errors";
 import { getTenantIdWithFallback } from "../tenant-middleware";
 import { formatZodError, verifyTenantOwnership } from "./helpers";
 import { db } from "../db";
-import { importBatches, importSessions, objects } from "@shared/schema";
+import { importActions, importBatches, importSessions, objects } from "@shared/schema";
 import { storage } from "../storage";
+import { IMPORT_UNDO_WINDOW_MS, type ObjectSnapshot } from "../services/import-undo";
 import {
   getAllMetadataTypes,
   writeObjectImportMetadataBatch,
   type ImportMetadataBatchField,
 } from "../metadata-queries";
 import { groupMetadataForWrite } from "../services/object-import-core";
+import {
+  findImportDuplicateWarnings,
+  type ImportDuplicateWarning,
+} from "../services/object-duplicates";
 
 type StepNumber = 1 | 2 | 3;
 
@@ -93,6 +98,11 @@ interface PreviewItem {
   interim: string | null;
   resolvedParentName?: string | null;
   inheritedAddress?: boolean;
+  // Feature 2: effektiv adress (egen eller ärvd från förälder) — används för
+  // dubblettkontroll mot befintliga objekt. Skickas ej till klienten i UI.
+  effectiveAddress?: string | null;
+  // Feature 2: objektnummer på raden (om angivet) för självträff-filtrering.
+  objectNumber?: string | null;
 }
 
 // Sammanfattning av rader vars interim-ID redan committats i ett TIDIGARE steg
@@ -386,12 +396,18 @@ async function validateRows(
       };
     }
 
+    // Effektiv adress = egen adress, annars ärvd från förälder (samma logik som
+    // commit använder för att skapa objektet). Driver dubblettkontrollen.
+    const effectiveAddress =
+      row.address ?? (row.parentInterim ? localMap[row.parentInterim]?.address ?? null : null);
     preview.push({
       index: row.index,
       name: row.name,
       interim: row.interim,
       resolvedParentName: parentName,
       inheritedAddress: inherited,
+      effectiveAddress,
+      objectNumber: row.objectNumber,
     });
   }
 
@@ -486,6 +502,17 @@ export function registerImportWizardRoutes(app: Express): void {
       }
       const interimMap = (session.interimMap as InterimMap) ?? {};
       const result = await validateRows(step, parsed.data.rows, interimMap);
+      // Feature 2: dubblettvarning — flagga rader vars namn+adress krockar med
+      // BEFINTLIGA aktiva objekt i tenanten. Rent informativt; blockerar ej commit.
+      const duplicateWarnings: ImportDuplicateWarning[] = await findImportDuplicateWarnings(
+        tenantId,
+        result.preview.map((p) => ({
+          rowNumber: p.index,
+          name: p.name,
+          address: p.effectiveAddress ?? null,
+          selfObjectNumbers: [p.objectNumber],
+        })),
+      );
       res.json({
         dryRun: true,
         step,
@@ -495,6 +522,7 @@ export function registerImportWizardRoutes(app: Express): void {
         reimport: result.reimport,
         errors: result.errors,
         preview: result.preview,
+        duplicateWarnings,
       });
     }),
   );
@@ -580,6 +608,8 @@ export function registerImportWizardRoutes(app: Express): void {
           }
 
           const createdIds: string[] = [];
+          // Ångra-funktion: per-objekt snapshot för import_actions-stämpling.
+          const createdActions: { id: string; after: ObjectSnapshot }[] = [];
           const metadataIntents: MetadataIntent[] = [];
 
           // Prestanda: bygg objekt i "vågor" efter förälder-beroende och gör
@@ -641,6 +671,19 @@ export function registerImportWizardRoutes(app: Express): void {
             // id:na (oberoende av DB-svarsordning).
             for (const p of planned) {
               createdIds.push(p.id);
+              createdActions.push({
+                id: p.id,
+                after: {
+                  name: p.row.name,
+                  parentId: p.parentObjectId,
+                  address: p.finalAddress,
+                  city: p.finalCity,
+                  postalCode: p.finalPostal,
+                  latitude: null,
+                  longitude: null,
+                  objectType: step === 3 ? "karl" : step === 2 ? "fastighet" : "omrade",
+                },
+              });
               if (p.row.metadata) {
                 metadataIntents.push({
                   objectId: p.id,
@@ -694,7 +737,31 @@ export function registerImportWizardRoutes(app: Express): void {
             updated: 0,
             errors: 0,
             metadata: { wizardStep: step } as any,
+            // Ångra-funktion: markera batchen som ångringsbar inom fönstret.
+            sourceFlow: "wizard",
+            undoExpiresAt: new Date(Date.now() + IMPORT_UNDO_WINDOW_MS),
           } as any);
+
+          // Ångra-funktion: stämpla en create_object-åtgärd per skapat objekt
+          // (wizard skapar ENDAST objekt). Undo soft-deletear dem; metadata hänger
+          // på objektet och döljs automatiskt — spåras därför inte separat här.
+          if (createdActions.length > 0) {
+            const actionRows = createdActions.map((a) => ({
+              tenantId,
+              batchId,
+              sessionId: session.id,
+              sourceFlow: "wizard",
+              actionType: "create_object",
+              entityType: "object",
+              entityId: a.id,
+              beforeJson: null,
+              afterJson: a.after as any,
+              status: "applied",
+            }));
+            for (let i = 0; i < actionRows.length; i += 500) {
+              await tx.insert(importActions).values(actionRows.slice(i, i + 500) as any);
+            }
+          }
 
           const createdCounts: Record<string, number> = {
             ...((session.createdCounts as Record<string, number>) ?? {}),

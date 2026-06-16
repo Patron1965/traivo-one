@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiRequest, queryClient, versionedUrl } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { ImportUndoButton } from "@/components/import/ImportUndoButton";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -53,6 +54,13 @@ interface ReimportSummary {
   total: number;
 }
 
+interface DuplicateWarning {
+  name: string;
+  address: string | null;
+  rowNumbers: number[];
+  existing: Array<{ id: string; objectNumber: string | null; name: string; address: string | null }>;
+}
+
 interface PreviewResponse {
   dryRun: true;
   step: StepNum;
@@ -62,6 +70,7 @@ interface PreviewResponse {
   reimport?: ReimportSummary;
   errors: Array<{ index: number; message: string }>;
   preview: PreviewItem[];
+  duplicateWarnings?: DuplicateWarning[];
 }
 
 interface CommitResponse {
@@ -476,6 +485,7 @@ function StepEditor({ step, locked, onCommitDone, sessionId }: StepEditorProps) 
             reimport: body.reimport,
             errors: body.errors,
             preview: body.preview,
+            duplicateWarnings: body.duplicateWarnings ?? [],
           });
         }
         throw new Error(summary);
@@ -760,6 +770,44 @@ function StepEditor({ step, locked, onCommitDone, sessionId }: StepEditorProps) 
               för det här steget.
             </p>
           </div>
+        </div>
+      )}
+
+      {preview?.duplicateWarnings && preview.duplicateWarnings.length > 0 && (
+        <div
+          className="space-y-2 rounded-md border border-warning/40 bg-warning/10 p-3 text-sm"
+          data-testid={`banner-duplicate-warnings-${step}`}
+        >
+          <div className="flex items-start gap-2">
+            <AlertTriangle className="h-5 w-5 shrink-0 mt-0.5 text-warning" />
+            <div className="space-y-1">
+              <p className="font-medium text-foreground">
+                Möjliga dubbletter — samma namn och adress finns redan
+              </p>
+              <p className="text-muted-foreground">
+                {preview.duplicateWarnings.length} rad(er) matchar befintliga aktiva objekt. Importen
+                skapar nya objekt — överväg att arkivera eller slå ihop dubbletter i efterhand.
+              </p>
+            </div>
+          </div>
+          <ul className="ml-7 list-disc space-y-1 text-muted-foreground">
+            {preview.duplicateWarnings.map((w, i) => (
+              <li key={`${w.name}-${i}`} data-testid={`duplicate-warning-${step}-${i}`}>
+                <span className="text-foreground">{w.name}</span>
+                {w.address ? ` · ${w.address}` : ""} — rad {w.rowNumbers.join(", ")} (finns som{" "}
+                {w.existing.map((e) => e.objectNumber ?? e.name).join(", ")})
+              </li>
+            ))}
+          </ul>
+          <a
+            href="/objects/duplicates"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="ml-7 inline-block font-medium text-primary underline-offset-2 hover:underline"
+            data-testid={`link-duplicate-management-${step}`}
+          >
+            Öppna dubbletthantering →
+          </a>
         </div>
       )}
 
@@ -1049,6 +1097,8 @@ export function ImportWizardFlow() {
           </CardContent>
         </Card>
       )}
+
+      <ImportUndoButton />
     </div>
   );
 }

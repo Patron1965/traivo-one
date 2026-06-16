@@ -46,6 +46,7 @@
 - [Veckoplanering-vyn (Bilaga C)](veckoplanering-page.md) — `/veckoplanering` = alias för `/veckoplan`; 9:e time_category frontend-only; "Automatisk veckoplanering" = bara recompute (ej auto-placering).
 - [tsc baseline noise](tsc-baseline-noise.md) — repo har stabilt brus av pre-existing tsc-fel; bara NYA fel i rörda filer räknas; kör tsc synkront (bg-loggar i /tmp/.local rullas tillbaka mellan bash-anrop).
 - [Objekt repoint cykel-vakt](object-repoint-cycle-guard.md) — repoint/move av objekt-förälder måste avvisa ättling-mål (cykel), ej bara själv-förälder; använd storage.wouldCreateObjectCycle i route OCH moveObject.
+- [Reversibel import / Ångra](import-undo-reversibility.md) — stämpla import_actions FÖRE mutationen; best-effort metadata-batchskrivaren får ej tx-wrappas (per-rad-fallback dör i avbruten PG-tx) → pre-stamp+finalize+baseline-recovery.
 - [Import-wizard reimport-klassning](import-wizard-reimport-classification.md) — wizardens "redan inlagd"-räkning exkluderar by-design rader som failar Zod först (rot-rad utan förälder); kolla original interimMap ej localMap.
 - [Bulk INSERT…RETURNING ordning](bulk-insert-returning-order.md) — fler-rads-INSERT garanterar ej RETURNING-ordning; pre-generera id (randomUUID) och zip:a inte positionellt mot DB-svaret vid bulk-create.
 - [apiRequest kastar på non-2xx](apirequest-throws-on-nonok.md) — `if(!res.ok)` efter apiRequest() är dead code (throwIfResNotOk kastar först); för strukturerad 400-body (errors/preview) använd rå fetch(versionedUrl) + servern måste skicka läsbart `message`.

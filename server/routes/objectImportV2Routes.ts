@@ -25,6 +25,8 @@ import { getTenantIdWithFallback, requireAdmin } from "../tenant-middleware";
 import { db } from "../db";
 import {
   customers,
+  importActions,
+  importBatches,
   metadataKatalog,
   metadataVarden,
   objectImportRows,
@@ -37,6 +39,11 @@ import {
 import { storage } from "../storage";
 import { ensureClusterForCustomer } from "../auto-cluster";
 import { writeObjectImportMetadataBatch } from "../metadata-queries";
+import {
+  IMPORT_UNDO_WINDOW_MS,
+  objectSnapshotColumns,
+  type ObjectSnapshot,
+} from "../services/import-undo";
 import {
   buildColumns,
   buildCompositeObject,
@@ -54,6 +61,10 @@ import {
   FIELD_CATALOG,
   FieldDefinition,
 } from "@shared/object-import-spec";
+import {
+  findImportDuplicateWarnings,
+  type ImportDuplicateWarning,
+} from "../services/object-duplicates";
 import { OBJEKTMALL_INTERIM_PREFIX } from "@shared/objektmall-template";
 
 function getUserId(req: Request): string | null {
@@ -353,6 +364,45 @@ export function registerObjectImportV2Routes(app: Express): void {
         }
       }
 
+      // Feature 2: dubblettvarning — flagga rader vars namn+adress krockar med
+      // BEFINTLIGA aktiva objekt. Endast icke-blockerade rader (ej "invalid").
+      // Adressen byggs precis som vid execute (buildKnownFields) så varningen
+      // jämför mot exakt det värde som skulle skrivas till objects.address.
+      // Självträff på system-/externt nummer (raden uppdaterar objektet) filtreras
+      // bort i findImportDuplicateWarnings. Rent informativt; blockerar ej import.
+      const dupCandidates = resolved
+        .filter((r) => byRow.get(r.rowNumber)?.status !== "invalid")
+        .map((r) => {
+          const addr = buildCompositeObject(r.composite.address ?? {});
+          const street = [addr.street, addr.street_number].filter(Boolean).join(" ").trim();
+          const effectiveAddress = (r.fields["address.full"] ?? street) || null;
+          return {
+            rowNumber: r.rowNumber,
+            name: (r.fields.name ?? "").trim(),
+            address: effectiveAddress,
+            selfObjectNumbers: [r.fields.system_id, r.fields.external_id],
+          };
+        });
+      const duplicateWarnings: ImportDuplicateWarning[] = await findImportDuplicateWarnings(
+        tenantId,
+        dupCandidates,
+      );
+      // Lägg in en per-rad-varning (severity "warning") så varje berörd rad
+      // flaggas inline i valideringstabellen (samma rendering som övriga issues).
+      const dupRows = new Set<number>();
+      for (const w of duplicateWarnings) for (const rn of w.rowNumbers) dupRows.add(rn);
+      for (const rn of Array.from(dupRows)) {
+        const row = byRow.get(rn);
+        if (!row) continue;
+        row.issues.push({
+          field: "name",
+          message:
+            "Möjlig dubblett: ett aktivt objekt med samma namn och adress finns redan. Överväg arkivering eller öppna dubbletthantering.",
+          severity: "warning",
+        });
+        if (row.status === "valid") row.status = "warning";
+      }
+
       const rows = Array.from(byRow.values());
       const summary = {
         total_rows: rows.length,
@@ -360,7 +410,7 @@ export function registerObjectImportV2Routes(app: Express): void {
         warning: rows.filter((r) => r.status === "warning").length,
         invalid: rows.filter((r) => r.status === "invalid").length,
       };
-      const validation = { summary, rows };
+      const validation = { summary, rows, duplicateWarnings };
 
       // §6.1 ImportRow: persistera per-rad-livscykel (pending → valid/invalid).
       // Skriv om hela radmängden för sessionen (delete + bulk-insert) så att
@@ -560,6 +610,10 @@ export function registerObjectImportV2Routes(app: Express): void {
       if (claimed.length === 0) {
         throw new ConflictError("Import pågår redan för den här sessionen.");
       }
+
+      // Ångra-funktion: stabilt batch-id för hela körningen. Stämplas på skapade
+      // objekt (importBatchId) och i import_actions så undo kan rulla tillbaka.
+      const batchId = `objects-v2-${req.params.id.slice(0, 8)}-${Date.now()}`;
 
       // §6.2 steg 5 körs som bakgrundsjobb: svara 202 direkt och låt klienten
       // polla GET /:id/status tills completed/failed och hämta sedan /:id/result.
@@ -786,7 +840,14 @@ export function registerObjectImportV2Routes(app: Express): void {
         // är under avveckling). Säkerställ en primär betalare på resolverad kund.
         // En redan befintlig primär payer (manuellt satt / annan kund) lämnas
         // orörd — vi klampar aldrig över en existerande kundkoppling vid re-import.
-        const ensurePrimaryPayer = async (objectId: string, custId: string, isNew = false) => {
+        // Returnerar den NYSKAPADE payer-radens id (annars null). Ångra-funktionen
+        // stämplar id:t på create_object-åtgärden så undo kan radera exakt den raden
+        // (och blockera om en betalare kopplats efter importen).
+        const ensurePrimaryPayer = async (
+          objectId: string,
+          custId: string,
+          isNew = false,
+        ): Promise<string | null> => {
           if (!isNew) {
             const existing = await db
               .select({ id: objectPayers.id })
@@ -798,20 +859,25 @@ export function registerObjectImportV2Routes(app: Express): void {
                   eq(objectPayers.tenantId, tenantId),
                 ),
               );
-            if (existing[0]) return;
+            if (existing[0]) return null;
           }
           try {
-            await db.insert(objectPayers).values({
-              tenantId,
-              objectId,
-              customerId: custId,
-              payerType: "primary",
-              isPrimary: true,
-              sharePercent: 100,
-              priority: 1,
-            });
+            const [ins] = await db
+              .insert(objectPayers)
+              .values({
+                tenantId,
+                objectId,
+                customerId: custId,
+                payerType: "primary",
+                isPrimary: true,
+                sharePercent: 100,
+                priority: 1,
+              })
+              .returning({ id: objectPayers.id });
+            return ins?.id ?? null;
           } catch {
             // Best-effort kund-koppling — fäll aldrig hela importen p.g.a. payer.
+            return null;
           }
         };
 
@@ -883,6 +949,44 @@ export function registerObjectImportV2Routes(app: Express): void {
           });
         };
 
+        // Ångra-funktion: snapshot av metadata_varden-id:n för ett objekt (för
+        // att diffa vilka rader en uppdatering skapade → metadata_write-undo).
+        const metadataIdsFor = async (objektId: string): Promise<Set<string>> => {
+          const rows = await db
+            .select({ id: metadataVarden.id })
+            .from(metadataVarden)
+            .where(and(eq(metadataVarden.objektId, objektId), eq(metadataVarden.tenantId, tenantId)));
+          return new Set(rows.map((r) => r.id));
+        };
+
+        // Ångra-funktion: persistera batch + åtgärder INKREMENTELLT (per rad), inte
+        // i en klump efter loopen — så ett avbrott mitt i en stor import ändå lämnar
+        // de redan utförda raderna ångringsbara. Batch-raden skapas lat vid första
+        // åtgärden (tomma batchar undviks) och dess räknare uppdateras efter loopen.
+        let batchPersisted = false;
+        const stampAction = async (action: Record<string, unknown>): Promise<string> => {
+          if (!batchPersisted) {
+            await db.insert(importBatches).values({
+              tenantId,
+              batchId,
+              sessionId: req.params.id,
+              totalRows: resolved.length,
+              created: 0,
+              updated: 0,
+              errors: 0,
+              sourceFlow: "objects-v2",
+              undoExpiresAt: new Date(Date.now() + IMPORT_UNDO_WINDOW_MS),
+              metadata: { importV2: true } as any,
+            } as any);
+            batchPersisted = true;
+          }
+          const [ins] = await db
+            .insert(importActions)
+            .values(action as any)
+            .returning({ id: importActions.id });
+          return ins.id;
+        };
+
         let processed = 0;
         for (const item of ordered) {
           try {
@@ -930,6 +1034,13 @@ export function registerObjectImportV2Routes(app: Express): void {
               const updateData: Record<string, unknown> = { ...(known as any) };
               if (row.fields.name) updateData.name = row.fields.name;
               if (parentId) updateData.parentId = parentId;
+              // Ångra-funktion: snapshot:a objektets tillstånd FÖRE uppdateringen
+              // (before) — undo återställer endast om nuvarande state == after.
+              const [preSnapshot] = await db
+                .select(objectSnapshotColumns)
+                .from(objects)
+                .where(and(eq(objects.id, targetId), eq(objects.tenantId, tenantId)));
+              const metaIdsBefore = await metadataIdsFor(targetId);
               // RETURNING ger objektets effektiva förälder efter uppdateringen
               // (= nysatt parentId, annars bevarad DB-förälder). Den används som
               // nivå-lås-frö i metadata-batchen så låskontrollen bevaras exakt
@@ -940,9 +1051,69 @@ export function registerObjectImportV2Routes(app: Express): void {
                 .where(and(eq(objects.id, targetId), eq(objects.tenantId, tenantId)))
                 .returning({ parentId: objects.parentId });
               const effectiveParentId = updatedRow?.parentId ?? parentId ?? null;
+              // Ångra-funktion: stämpla update_object DIREKT efter scalar-UPDATE:n och
+              // FÖRE de sekundära best-effort-stegen (parent/payer/metadata). Då blir
+              // skalär-ändringen alltid ångringsbar även om ett senare steg kastar
+              // (raden markeras då invalid men mutationen är ändå registrerad).
+              if (preSnapshot) {
+                const k = known as any;
+                const afterSnapshot: ObjectSnapshot = {
+                  name: row.fields.name || preSnapshot.name,
+                  parentId: effectiveParentId,
+                  address: k.address ?? preSnapshot.address,
+                  city: k.city ?? preSnapshot.city,
+                  postalCode: k.postalCode ?? preSnapshot.postalCode,
+                  latitude: k.latitude ?? preSnapshot.latitude,
+                  longitude: k.longitude ?? preSnapshot.longitude,
+                  objectType: k.objectType ?? preSnapshot.objectType,
+                };
+                await stampAction({
+                  tenantId,
+                  batchId,
+                  sessionId: req.params.id,
+                  sourceFlow: "objects-v2",
+                  rowNumber: item.row.rowNumber ?? null,
+                  actionType: "update_object",
+                  entityType: "object",
+                  entityId: targetId,
+                  beforeJson: preSnapshot as any,
+                  afterJson: afterSnapshot as any,
+                  status: "applied",
+                });
+              }
               await syncPrimaryParent(targetId, parentId);
               await ensurePrimaryPayer(targetId, rowCustomerId);
+              // Ångra-funktion (atomicitet): vi kan INTE göra metadata-skrivningen och
+              // dess undo-stämpel atomiska i en db.transaction — writeObjectImportMetadataBatch
+              // har best-effort per-rad-fallback (ett constraint-fel → row-by-row retry),
+              // vilket en omslutande PG-transaktion skulle bryta (avbruten tx avvisar alla
+              // följande satser). Istället PRE-stämplar vi metadata_write FÖRE skrivningen
+              // med en baslinje (befintliga metadata-id:n) och afterJson.ids=null (= ej
+              // finaliserad). Då kan ingen lyckad metadata-skrivning slutföras utan en
+              // åtgärds-rad. Efter skrivningen FINALISERAR vi ids exakt via en diff. Om
+              // processen kraschar i fönstret mellan skrivning och finalisering återställer
+              // undo via baslinjen (radera objektets nuvarande metadata som inte fanns vid
+              // importtillfället). writeObjectImportMetadataBatch lämnas helt orörd.
+              const metaActionId = await stampAction({
+                tenantId,
+                batchId,
+                sessionId: req.params.id,
+                sourceFlow: "objects-v2",
+                rowNumber: item.row.rowNumber ?? null,
+                actionType: "metadata_write",
+                entityType: "metadata_varden",
+                entityId: targetId,
+                beforeJson: { baseline: Array.from(metaIdsBefore) } as any,
+                afterJson: { ids: null } as any,
+                status: "applied",
+              });
               await writeRowMetadata(targetId, row, false, effectiveParentId);
+              const metaIdsAfter = await metadataIdsFor(targetId);
+              const newMetaIds = Array.from(metaIdsAfter).filter((x) => !metaIdsBefore.has(x));
+              await db
+                .update(importActions)
+                .set({ afterJson: { ids: newMetaIds } as any })
+                .where(and(eq(importActions.id, metaActionId), eq(importActions.tenantId, tenantId)));
               customerByObjectId.set(targetId, rowCustomerId);
               if (item.interimId && item.kind === "primary") interimToObjectId.set(item.interimId, targetId);
               if (row.fields.system_id) objectNumberToId.set(row.fields.system_id, targetId);
@@ -963,11 +1134,44 @@ export function registerObjectImportV2Routes(app: Express): void {
                 clusterId: rowClusterId,
                 parentId: parentId ?? null,
                 name: row.fields.name || "Namnlöst objekt",
+                // Ångra-funktion: koppla objektet till batchen för spårbarhet.
+                importBatchId: batchId,
                 ...(interimObjectNumber ? { objectNumber: interimObjectNumber } : {}),
                 ...(known as any),
               } as any);
               await syncPrimaryParent(createdObj.id, parentId, true);
-              await ensurePrimaryPayer(createdObj.id, rowCustomerId, true);
+              const createdPayerId = await ensurePrimaryPayer(createdObj.id, rowCustomerId, true);
+              // Ångra-funktion: stämpla create_object DIREKT efter att objektet + payer
+              // skapats och FÖRE writeRowMetadata (det mest fel-benägna steget). Då är
+              // objektet alltid ångringsbart (undo soft-deletear det och metadata göms
+              // automatiskt med objektet) även om metadata-skrivningen kastar.
+              {
+                const k = known as any;
+                const afterSnapshot: ObjectSnapshot = {
+                  name: row.fields.name || "Namnlöst objekt",
+                  parentId: parentId ?? null,
+                  address: k.address ?? null,
+                  city: k.city ?? null,
+                  postalCode: k.postalCode ?? null,
+                  latitude: k.latitude ?? null,
+                  longitude: k.longitude ?? null,
+                  objectType: k.objectType ?? "omrade",
+                };
+                await stampAction({
+                  tenantId,
+                  batchId,
+                  sessionId: req.params.id,
+                  sourceFlow: "objects-v2",
+                  rowNumber: item.row.rowNumber ?? null,
+                  actionType: "create_object",
+                  entityType: "object",
+                  entityId: createdObj.id,
+                  beforeJson: null,
+                  // payerIds = den payer-rad importen skapade (för selektiv undo).
+                  afterJson: { ...afterSnapshot, payerIds: createdPayerId ? [createdPayerId] : [] } as any,
+                  status: "applied",
+                });
+              }
               await writeRowMetadata(createdObj.id, row, true, parentId);
               customerByObjectId.set(createdObj.id, rowCustomerId);
               if (item.interimId && item.kind === "primary") interimToObjectId.set(item.interimId, createdObj.id);
@@ -989,6 +1193,16 @@ export function registerObjectImportV2Routes(app: Express): void {
                 .where(and(eq(objectImportSessions.id, req.params.id), eq(objectImportSessions.tenantId, tenantId)));
             }
           }
+        }
+
+        // Ångra-funktion: uppdatera batch-räknarna med slutgiltiga summor (raderna
+        // stämplades redan inkrementellt via stampAction under loopen, så batchen är
+        // ångringsbar även om importen avbröts mitt i).
+        if (batchPersisted) {
+          await db
+            .update(importBatches)
+            .set({ created, updated, errors })
+            .where(and(eq(importBatches.batchId, batchId), eq(importBatches.tenantId, tenantId)));
         }
 
         const totalLevels = depthByObjectId.size ? Math.max(...Array.from(depthByObjectId.values())) + 1 : 0;
