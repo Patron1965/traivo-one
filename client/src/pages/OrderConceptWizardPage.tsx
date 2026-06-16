@@ -124,7 +124,7 @@ export default function OrderConceptWizardPage() {
   const [billingFrequency, setBillingFrequency] = useState<string | null>(null);
   const [subscriptionStartDate, setSubscriptionStartDate] = useState("");
   // Step 4
-  const [targetClusterIds, setTargetClusterIds] = useState<Set<string>>(new Set());
+  const [targetObjectIds, setTargetObjectIds] = useState<Set<string>>(new Set());
   const [filters, setFilters] = useState<ConditionFilter[]>([]);
   // Step 5
   const [deliveryTimeType, setDeliveryTimeType] = useState("");
@@ -180,7 +180,7 @@ export default function OrderConceptWizardPage() {
     setMonthlyFee(wizardData.monthlyFee != null ? Number(wizardData.monthlyFee) : null);
     setBillingFrequency(wizardData.billingFrequency || null);
     setSubscriptionStartDate(toDateInput(wizardData.deliveryStart));
-    setTargetClusterIds(new Set(Array.isArray(wizardData.targetClusterIds) ? wizardData.targetClusterIds : []));
+    setTargetObjectIds(new Set(Array.isArray(wizardData.targetObjectIds) ? wizardData.targetObjectIds : []));
     setFilters((wizardData.filters || []).map((f: any) => ({
       metadataKey: f.metadataKey, operator: f.operator, filterValue: f.filterValue,
     })));
@@ -222,7 +222,7 @@ export default function OrderConceptWizardPage() {
         if (!invoiceLevel || !invoiceModel) return "warning";
         return "complete";
       case 4:
-        if (targetClusterIds.size === 0) return "warning";
+        if (targetObjectIds.size === 0) return "warning";
         return "complete";
       case 6:
         if (conceptArticles.length === 0) return "warning";
@@ -230,7 +230,7 @@ export default function OrderConceptWizardPage() {
       default:
         return "complete";
     }
-  }, [currentStep, conceptName, customerMode, selectedCustomerId, invoiceLevel, invoiceModel, targetClusterIds, conceptArticles]);
+  }, [currentStep, conceptName, customerMode, selectedCustomerId, invoiceLevel, invoiceModel, targetObjectIds, conceptArticles]);
 
   const validateCurrentStep = useCallback(async (): Promise<string | null> => {
     const fields = stepFieldsToValidate[currentStep];
@@ -247,14 +247,14 @@ export default function OrderConceptWizardPage() {
         if (customerMode === "HARDCODED" && !selectedCustomerId) return "Välj en kund eller byt till metadata-läge.";
         break;
       case 4:
-        if (targetClusterIds.size === 0) return "Välj minst ett kluster.";
+        if (targetObjectIds.size === 0) return "Välj minst ett objekt eller en gren.";
         break;
       case 6:
         if (conceptArticles.length === 0) return "Lägg till minst en uppgift/artikel.";
         break;
     }
     return null;
-  }, [currentStep, form, conceptName, customerMode, selectedCustomerId, targetClusterIds, conceptArticles]);
+  }, [currentStep, form, conceptName, customerMode, selectedCustomerId, targetObjectIds, conceptArticles]);
 
   const buildConceptPatch = useCallback((nextStep: number) => ({
     currentStep: nextStep,
@@ -288,7 +288,7 @@ export default function OrderConceptWizardPage() {
     deliveryStart: invoiceModel === "subscription" ? toIsoOrNull(subscriptionStartDate) : undefined,
     invoiceConsolidation,
     departmentMetadataField: invoiceConsolidation === "department" ? (departmentMetadataField || null) : null,
-    targetClusterIds: Array.from(targetClusterIds),
+    targetObjectIds: Array.from(targetObjectIds),
     deliveryTimeType: deliveryTimeType || null,
     timeWindows: deliveryTimeType === "time_window" ? timeWindows : [],
     intervalStartDate: deliveryTimeType === "interval" ? toIsoOrNull(intervalStartDate) : null,
@@ -302,7 +302,7 @@ export default function OrderConceptWizardPage() {
     totalValue,
     totalCost,
     estimatedHours,
-  }), [conceptName, customerMode, selectedCustomerId, customerMetadataField, priceListId, priceModel, fixedPriceKronor, customerReference, customerLabel, invoiceLevel, invoiceModel, invoicePeriod, invoiceLock, invoiceBrake, invoiceMethod, subscriptionAdjustmentDate, monthlyFee, billingFrequency, subscriptionStartDate, invoiceConsolidation, departmentMetadataField, targetClusterIds, deliveryTimeType, timeWindows, intervalStartDate, intervalEndDate, intervalFrequencyDays, intervalFlexDays, deliveryRestrictions, conceptArticles, totalValue, totalCost, estimatedHours]);
+  }), [conceptName, customerMode, selectedCustomerId, customerMetadataField, priceListId, priceModel, fixedPriceKronor, customerReference, customerLabel, invoiceLevel, invoiceModel, invoicePeriod, invoiceLock, invoiceBrake, invoiceMethod, subscriptionAdjustmentDate, monthlyFee, billingFrequency, subscriptionStartDate, invoiceConsolidation, departmentMetadataField, targetObjectIds, deliveryTimeType, timeWindows, intervalStartDate, intervalEndDate, intervalFrequencyDays, intervalFlexDays, deliveryRestrictions, conceptArticles, totalValue, totalCost, estimatedHours]);
 
   const createConceptMutation = useMutation({
     mutationFn: async () => {
@@ -412,8 +412,8 @@ export default function OrderConceptWizardPage() {
     }
   }, [conceptId, currentStep, conceptName, createConceptMutation, saveStepMutation, toast]);
 
-  const toggleCluster = useCallback((id: string) => {
-    setTargetClusterIds(prev => {
+  const toggleObject = useCallback((id: string) => {
+    setTargetObjectIds(prev => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id); else next.add(id);
       return next;
@@ -676,7 +676,7 @@ export default function OrderConceptWizardPage() {
                 monthlyFee={monthlyFee}
                 billingFrequency={billingFrequency}
                 subscriptionStartDate={subscriptionStartDate}
-                objectCount={targetClusterIds.size}
+                objectCount={targetObjectIds.size}
                 onUpdate={(data) => {
                   if (data.invoiceLevel !== undefined) form.setValue("invoiceLevel", data.invoiceLevel || "", { shouldValidate: true });
                   if (data.invoiceModel !== undefined) form.setValue("invoiceModel", data.invoiceModel || "", { shouldValidate: true });
@@ -697,8 +697,8 @@ export default function OrderConceptWizardPage() {
 
             {currentStep === 4 && (
               <Step4Inspection
-                targetClusterIds={targetClusterIds}
-                onToggleCluster={toggleCluster}
+                targetObjectIds={targetObjectIds}
+                onToggleObject={toggleObject}
                 filters={filters}
                 onFiltersChange={(f) => { setFilters(f); setHasUnsavedWork(true); }}
               />
@@ -753,7 +753,7 @@ export default function OrderConceptWizardPage() {
         <div className="hidden xl:block border-l p-4 overflow-y-auto">
           <WizardSidebar
             concept={null}
-            objectCount={targetClusterIds.size}
+            objectCount={targetObjectIds.size}
             articleCount={conceptArticles.length}
             totalValue={totalValue}
             totalCost={totalCost}

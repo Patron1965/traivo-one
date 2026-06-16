@@ -1,13 +1,11 @@
-import { useMemo, useState } from "react";
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
-import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Plus, Filter, Eye, Loader2, Layers } from "lucide-react";
-import type { Cluster, MetadataDefinition } from "@shared/schema";
+import type { MetadataDefinition } from "@shared/schema";
 import {
   ConditionFilterRow,
   type ConditionFilter,
@@ -23,32 +21,27 @@ interface PreviewResult {
 }
 
 interface Step4Props {
-  targetClusterIds: Set<string>;
-  onToggleCluster: (id: string) => void;
+  /** ADR v3: valda gren-ROT-objekt-id:n. Hela grenen (underobjekt) följer med. */
+  targetObjectIds: Set<string>;
+  onToggleObject: (id: string) => void;
   filters: ConditionFilter[];
   onFiltersChange: (filters: ConditionFilter[]) => void;
 }
 
 export default function Step4Inspection({
-  targetClusterIds,
-  onToggleCluster,
+  targetObjectIds,
+  onToggleObject,
   filters,
   onFiltersChange,
 }: Step4Props) {
-  const { data: clusters = [] } = useQuery<Cluster[]>({ queryKey: ["/api/clusters"] });
   const { data: definitions = [] } = useQuery<MetadataDefinition[]>({
     queryKey: ["/api/metadata-definitions"],
   });
 
-  const clusterColors = useMemo(
-    () => new Map(clusters.map((c) => [c.id, c.color ?? "#888"])),
-    [clusters],
-  );
-
   const previewMutation = useMutation<PreviewResult>({
     mutationFn: async () => {
       const res = await apiRequest("POST", "/api/order-concepts/condition-preview", {
-        clusterIds: Array.from(targetClusterIds),
+        objectIds: Array.from(targetObjectIds),
         filters: filters.filter((f) => f.metadataKey),
       });
       return res.json();
@@ -67,25 +60,26 @@ export default function Step4Inspection({
   return (
     <div className="space-y-6" data-testid="step4-inspection">
 
-      {/* ── Filhierarki ─────────────────────────────────────────────────────── */}
+      {/* ── Objekthierarki ─────────────────────────────────────────────────────── */}
       <div>
         <h3 className="text-sm font-medium mb-3 flex items-center gap-2">
           <Layers className="h-4 w-4" />
-          Filhierarki{" "}
+          Objekthierarki{" "}
           <Badge variant="secondary" className="text-xs">
-            {targetClusterIds.size} valda kluster
+            {targetObjectIds.size} valda grenar
           </Badge>
         </h3>
         <p className="text-xs text-muted-foreground mb-3">
-          Navigera hierarkin och välj kluster att inkludera. Klicka på ett objekt eller bocka i
-          rutan vid ett objekt för att välja hela dess kluster.
+          Navigera hierarkin och välj objekt eller grenar att inkludera. Klicka på ett objekt
+          eller bocka i rutan för att välja det och hela dess underträd. Underobjekt som följer
+          med markeras "via förälder".
         </p>
 
-        {/* Same tree view as ClusterTreeExplorer (arbetsbilden) */}
+        {/* Objekt/gren-selektion (ADR v3) — ersätter kluster-targeting.
+            objectSelectionMode härleds internt från selectedObjectIds + onToggleObject. */}
         <ObjectHierarchyTree
-          selectedClusterIds={targetClusterIds}
-          onToggleCluster={onToggleCluster}
-          clusterColors={clusterColors}
+          selectedObjectIds={targetObjectIds}
+          onToggleObject={onToggleObject}
           height={360}
         />
       </div>
@@ -107,7 +101,7 @@ export default function Step4Inspection({
         </div>
         {filters.length === 0 ? (
           <p className="text-sm text-muted-foreground">
-            Inga villkor — alla objekt i valda kluster inkluderas.
+            Inga villkor — alla objekt i valda grenar inkluderas.
           </p>
         ) : (
           <div className="space-y-2">
@@ -135,7 +129,7 @@ export default function Step4Inspection({
             <Button
               variant="outline"
               size="sm"
-              disabled={targetClusterIds.size === 0 || previewMutation.isPending}
+              disabled={targetObjectIds.size === 0 || previewMutation.isPending}
               onClick={() => previewMutation.mutate()}
               data-testid="button-preview-conditions"
             >
@@ -175,7 +169,8 @@ export default function Step4Inspection({
             </>
           ) : (
             <p className="text-muted-foreground">
-              Välj kluster och tryck Förhandsvisa för att se hur många konkreta objekt som matchar.
+              Välj objekt eller grenar och tryck Förhandsvisa för att se hur många konkreta objekt
+              som matchar.
             </p>
           )}
         </CardContent>

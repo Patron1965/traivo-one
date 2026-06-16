@@ -166,7 +166,7 @@ function SetupTimeCard({ geo }: { geo: GeoSpread }) {
   if (!geo.hasCenterData) {
     return (
       <div className="text-sm text-muted-foreground italic">
-        Koordinater saknas för valda kluster — ställtid kan ej beräknas.
+        Koordinater saknas för valda grenar — ställtid kan ej beräknas.
       </div>
     );
   }
@@ -187,8 +187,8 @@ function SetupTimeCard({ geo }: { geo: GeoSpread }) {
         )}
       </div>
       <p className="text-xs text-muted-foreground">
-        Uppskattning baserad på geografisk spridning mellan {geo.clusterCount} kluster
-        {geo.clusterCount === 1 ? "" : "s"} centerpunkter. Märkt som estimat.
+        Uppskattning baserad på geografisk spridning mellan {geo.clusterCount} centerpunkter
+        {geo.clusterCount === 1 ? "" : " (en per gren)"}. Märkt som estimat.
       </p>
     </div>
   );
@@ -454,7 +454,7 @@ export default function Step7ReviewSave({
                 <span className="text-muted-foreground">objekt totalt</span>
                 {summary.clusterSummaries.length > 0 && (
                   <span className="text-muted-foreground">
-                    ({summary.clusterSummaries.length} kluster)
+                    ({summary.clusterSummaries.length} grenar)
                   </span>
                 )}
               </div>
@@ -463,7 +463,7 @@ export default function Step7ReviewSave({
                   <ClusterBlock key={cs.clusterId} cluster={cs} />
                 ))}
                 {summary.clusterSummaries.length === 0 && (
-                  <p className="text-sm text-muted-foreground italic">Inga kluster valda</p>
+                  <p className="text-sm text-muted-foreground italic">Inga grenar valda</p>
                 )}
               </div>
             </>

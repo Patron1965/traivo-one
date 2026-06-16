@@ -3,7 +3,7 @@
  * ClusterTreeExplorer's trädvy (arbetsbilden). Används av Step4Inspection i
  * selektionsläge (clusterId-väljaren) och kan återanvändas på fler ställen.
  */
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { List, type RowComponentProps } from "react-window";
 import {
@@ -125,6 +125,13 @@ interface ObjectHierarchyTreeProps {
   onToggleCluster?: (clusterId: string) => void;
   /** Map from clusterId → color hex for color dots in selection mode. */
   clusterColors?: Map<string, string>;
+  /**
+   * Objekt/gren-selektionsläge (ADR v3): ange dessa för att aktivera
+   * objekt/gren-väljaren (Step 4). När ett objekt väljs inkluderas hela dess
+   * gren (alla underobjekt) implicit. Ömsesidigt uteslutande med cluster-läget.
+   */
+  selectedObjectIds?: Set<string>;
+  onToggleObject?: (objectId: string) => void;
   /** Height of the virtual list in pixels. Default 400. */
   height?: number;
   /** Called when a non-selection row is clicked (normal explore mode). */
@@ -143,14 +150,20 @@ export function ObjectHierarchyTree({
   selectedClusterIds,
   onToggleCluster,
   clusterColors,
+  selectedObjectIds,
+  onToggleObject,
   height = 400,
   onNodeClick,
   enableScopeModes = false,
 }: ObjectHierarchyTreeProps) {
   const selectionMode = !!selectedClusterIds && !!onToggleCluster;
+  const objectSelectionMode = !!selectedObjectIds && !!onToggleObject;
 
   const [searchInput, setSearchInput] = useState("");
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  // När ett filter är aktivt auto-expanderas träffvägar. collapsedOverride låter
+  // användaren kollapsa enskilda grenar ÄVEN under filter (fixar sök↔kollaps-låset).
+  const [collapsedOverride, setCollapsedOverride] = useState<Set<string>>(new Set());
   const [scope, setScope] = useState<TreeScope>("all");
   const topMode = enableScopeModes && scope === "top";
 
@@ -199,6 +212,27 @@ export function ObjectHierarchyTree({
     return m;
   }, [nodes]);
 
+  // ADR v3 objekt/gren-läge: alla ÄTTLINGAR till valda gren-rötter inkluderas
+  // implicit (de följer med automatiskt). Mängden EXKLUDERAR själva rötterna —
+  // de räknas som explicit valda. Härleds via primär parent_id-kedjan i trädet.
+  const implicitIncludedIds = useMemo(() => {
+    const result = new Set<string>();
+    if (!objectSelectionMode || !selectedObjectIds || selectedObjectIds.size === 0) {
+      return result;
+    }
+    const stack = Array.from(selectedObjectIds);
+    while (stack.length > 0) {
+      const id = stack.pop()!;
+      for (const kid of childrenByParent.get(id) ?? []) {
+        if (!result.has(kid.id)) {
+          result.add(kid.id);
+          stack.push(kid.id);
+        }
+      }
+    }
+    return result;
+  }, [objectSelectionMode, selectedObjectIds, childrenByParent]);
+
   const tokens = useMemo(() => parseSearch(searchInput), [searchInput]);
 
   const filterActive = tokens.length > 0;
@@ -240,7 +274,12 @@ export function ObjectHierarchyTree({
     const walk = (node: TreeNode, depth: number) => {
       const kids = (childrenByParent.get(node.id) ?? []).filter((c) => visibleIds.has(c.id));
       const hasChildren = kids.length > 0;
-      const isOpen = filterActive ? true : expanded.has(node.id);
+      // Under filter auto-expanderas träffvägar, men respektera grenar som
+      // användaren uttryckligen kollapsat (collapsedOverride). Utan filter styr
+      // expanded helt.
+      const isOpen = filterActive
+        ? !collapsedOverride.has(node.id)
+        : expanded.has(node.id);
       rows.push({ node, depth, hasChildren, isOpen });
       if (hasChildren && isOpen) {
         for (const k of kids) walk(k, depth + 1);
@@ -248,24 +287,51 @@ export function ObjectHierarchyTree({
     };
     for (const r of roots) if (visibleIds.has(r.id)) walk(r, 0);
     return rows;
-  }, [roots, childrenByParent, visibleIds, expanded, filterActive]);
+  }, [roots, childrenByParent, visibleIds, expanded, collapsedOverride, filterActive]);
+
+  // Rensa per-gren-kollaps när filtret släpps så det inte läcker in i nästa sökning.
+  useEffect(() => {
+    if (!filterActive && collapsedOverride.size > 0) setCollapsedOverride(new Set());
+  }, [filterActive, collapsedOverride.size]);
 
   const toggleNode = useCallback((id: string) => {
+    if (filterActive) {
+      // Under filter togglar vi collapsedOverride (default = öppet/auto-expanderat).
+      setCollapsedOverride((prev) => {
+        const next = new Set(prev);
+        if (next.has(id)) next.delete(id);
+        else next.add(id);
+        return next;
+      });
+      return;
+    }
     setExpanded((prev) => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
       else next.add(id);
       return next;
     });
-  }, []);
+  }, [filterActive]);
 
   const expandAll = useCallback(() => {
+    if (filterActive) {
+      setCollapsedOverride(new Set());
+      return;
+    }
     const all = new Set<string>();
     for (const n of nodes) if ((childrenByParent.get(n.id)?.length ?? 0) > 0) all.add(n.id);
     setExpanded(all);
-  }, [nodes, childrenByParent]);
+  }, [filterActive, nodes, childrenByParent]);
 
-  const collapseAll = useCallback(() => setExpanded(new Set()), []);
+  const collapseAll = useCallback(() => {
+    if (filterActive) {
+      const all = new Set<string>();
+      for (const n of nodes) if ((childrenByParent.get(n.id)?.length ?? 0) > 0) all.add(n.id);
+      setCollapsedOverride(all);
+      return;
+    }
+    setExpanded(new Set());
+  }, [filterActive, nodes, childrenByParent]);
 
   const TreeRow = useCallback(
     ({ index, style }: RowComponentProps) => {
@@ -280,13 +346,23 @@ export function ObjectHierarchyTree({
       const clusterSelected = selectionMode && node.clusterId
         ? selectedClusterIds!.has(node.clusterId)
         : false;
+      // Objekt/gren-läge: explicit vald gren-rot vs. implicit medföljande ättling.
+      const objectSelected = objectSelectionMode ? selectedObjectIds!.has(node.id) : false;
+      const objectImplicit = objectSelectionMode
+        ? implicitIncludedIds.has(node.id) && !objectSelected
+        : false;
+      const rowHighlight = clusterSelected || objectSelected
+        ? "bg-accent/40"
+        : objectImplicit
+          ? "bg-accent/15"
+          : "";
 
       return (
         <div
           style={style}
           className={`flex items-center gap-1 border-b border-border/40 pr-2 hover-elevate ${
             filterActive && !isMatch ? "opacity-60" : ""
-          } ${clusterSelected ? "bg-accent/40" : ""}`}
+          } ${rowHighlight}`}
           data-testid={`tree-row-${node.id}`}
         >
           <div style={{ width: depth * 16 }} className="shrink-0" />
@@ -306,7 +382,7 @@ export function ObjectHierarchyTree({
             <div className="shrink-0 h-6 w-6" />
           )}
 
-          {/* Selection mode: cluster checkbox + color dot */}
+          {/* Cluster-selektion: kryssruta (legacy back-compat) */}
           {selectionMode && node.clusterId && (
             <Checkbox
               checked={clusterSelected}
@@ -314,6 +390,19 @@ export function ObjectHierarchyTree({
               className="shrink-0"
               data-testid={`checkbox-cluster-node-${node.id}`}
               aria-label={`Välj kluster för ${node.name}`}
+            />
+          )}
+
+          {/* Objekt/gren-selektion: kryssruta. Implicit-medföljande ättlingar
+              visas ikryssade men låsta (de styrs av sin valda förälder). */}
+          {objectSelectionMode && (
+            <Checkbox
+              checked={objectSelected || objectImplicit}
+              disabled={objectImplicit}
+              onCheckedChange={() => onToggleObject!(node.id)}
+              className="shrink-0"
+              data-testid={`checkbox-object-node-${node.id}`}
+              aria-label={`Välj objekt/gren ${node.name}`}
             />
           )}
 
@@ -329,15 +418,31 @@ export function ObjectHierarchyTree({
           {/* Node content — identical layout to ClusterTreeExplorer */}
           <button
             type="button"
-            onClick={() =>
-              selectionMode && node.clusterId
-                ? onToggleCluster!(node.clusterId)
-                : onNodeClick?.(node)
-            }
+            onClick={() => {
+              if (objectSelectionMode) {
+                // Implicit-medföljande ättlingar går ej att av-/välja enskilt.
+                if (!objectImplicit) onToggleObject!(node.id);
+                return;
+              }
+              if (selectionMode && node.clusterId) {
+                onToggleCluster!(node.clusterId);
+                return;
+              }
+              onNodeClick?.(node);
+            }}
             className="flex-1 min-w-0 flex items-center gap-2 text-left py-1"
             data-testid={`button-open-object-${node.id}`}
           >
             <span className="truncate text-sm font-medium">{node.name}</span>
+            {objectImplicit && (
+              <Badge
+                variant="outline"
+                className="text-xs font-normal shrink-0 text-muted-foreground"
+                data-testid={`badge-inherited-${node.id}`}
+              >
+                via förälder
+              </Badge>
+            )}
             {desc > 0 && (
               <Badge
                 variant="secondary"
@@ -380,6 +485,10 @@ export function ObjectHierarchyTree({
       selectedClusterIds,
       onToggleCluster,
       clusterColors,
+      objectSelectionMode,
+      selectedObjectIds,
+      onToggleObject,
+      implicitIncludedIds,
     ],
   );
 
@@ -441,7 +550,7 @@ export function ObjectHierarchyTree({
             variant="outline"
             size="sm"
             onClick={expandAll}
-            disabled={filterActive || topMode}
+            disabled={topMode}
             data-testid="button-expand-all"
           >
             <UnfoldVertical className="h-4 w-4 mr-1" />
@@ -451,7 +560,7 @@ export function ObjectHierarchyTree({
             variant="outline"
             size="sm"
             onClick={collapseAll}
-            disabled={filterActive || topMode}
+            disabled={topMode}
             data-testid="button-collapse-all"
           >
             <FoldVertical className="h-4 w-4 mr-1" />

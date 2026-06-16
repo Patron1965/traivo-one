@@ -2910,6 +2910,11 @@ export const orderConcepts = pgTable("order_concepts", {
   departmentMetadataField: text("department_metadata_field"), // metadatafält för per-avdelning-sampackning
   // Steg 4 — flera inpekningsgrenar (targetClusterId behålls för bakåtkomp/primär gren)
   targetClusterIds: text("target_cluster_ids").array(),
+  // Steg 4 (ADR v3) — objekt-/gren-inpekning: lagrar valda gren-ROT-objekt-id:n.
+  // Upplöses live till subträd via getObjectSubtreeIds (primär parent_id-kedja,
+  // tenant-scopat). Föredras framför targetClusterIds när satt; nullable för
+  // expand-contract (legacy kluster-koncept saknar detta fält).
+  targetObjectIds: text("target_object_ids").array(),
   // Steg 5 — leveranstid (tidsfönster eller intervall) + restriktioner
   deliveryTimeType: text("delivery_time_type"), // 'time_window' | 'interval'
   timeWindows: jsonb("time_windows"), // [{ months:[1..12], weekdays:[0..6], timeFrom, timeTo }]

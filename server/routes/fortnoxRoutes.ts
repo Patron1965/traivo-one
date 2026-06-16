@@ -13,6 +13,11 @@ import { getOrderConceptMethod } from "@shared/order-concept-method";
 import { triggerGeocodeIfMissing } from "../services/geocoding";
 import { resolveEffectiveArticleQuantity } from "../article-quantity-resolver";
 import { getArticleMetadataForObject } from "../metadata-queries";
+import {
+  resolveTargetObjects,
+  filterObjectsByConditions,
+  resolveConceptMatchingObjects,
+} from "../services/order-concept-targeting";
 
 async function verifyObjectTenant(objectId: string, tenantId: string): Promise<boolean> {
   try {
@@ -1949,77 +1954,22 @@ app.post("/api/order-concepts/:id/execute", asyncHandler(async (req, res) => {
     }
 
     const filters = await storage.getConceptFilters(concept.id);
+    const filterInputs = filters.map((f: any) => ({
+      metadataKey: f.metadataKey,
+      operator: f.operator,
+      filterValue: f.filterValue,
+    }));
 
-    // Get all objects in the selected cluster branches (multi-cluster, Session 9B)
-    // med bakåtkompatibel fallback till legacy targetClusterId.
-    const targetClusterIds: string[] = Array.isArray((concept as any).targetClusterIds) && (concept as any).targetClusterIds.length > 0
-      ? (concept as any).targetClusterIds
-      : (concept.targetClusterId ? [concept.targetClusterId] : []);
-
-    let targetObjects: ServiceObject[] = [];
-    if (targetClusterIds.length > 0) {
-      const objectMap = new Map<string, ServiceObject>();
-      for (const clusterId of targetClusterIds) {
-        const clusterObjects = await storage.getClusterObjects(clusterId);
-        for (const obj of clusterObjects) {
-          if (verifyTenantOwnership(obj, tenantId)) objectMap.set(obj.id, obj);
-        }
-      }
-      targetObjects = Array.from(objectMap.values());
-    } else {
-      targetObjects = await storage.getObjects(tenantId);
-    }
-
-    // Bygg metadata-karta (fieldKey -> värde) i en batch så villkorsfiltren matchar
-    // faktiska metadatavärden (getClusterObjects returnerar råa objekt utan metadata).
-    const metaByObject = new Map<string, Record<string, unknown>>();
-    if (filters.length > 0 && targetObjects.length > 0) {
-      const objectIds = targetObjects.map(o => o.id);
-      const defs = await db.select().from(metadataDefinitions)
-        .where(and(eq(metadataDefinitions.tenantId, tenantId), isNull(metadataDefinitions.deletedAt)));
-      const defKey = new Map(defs.map(d => [d.id, d.fieldKey]));
-      const rows = await db.select().from(objectMetadata)
-        .where(and(eq(objectMetadata.tenantId, tenantId), inArray(objectMetadata.objectId, objectIds)));
-      for (const row of rows) {
-        const key = defKey.get(row.definitionId);
-        if (!key) continue;
-        const map = metaByObject.get(row.objectId) ?? {};
-        map[key] = row.valueJson ?? row.value;
-        metaByObject.set(row.objectId, map);
-      }
-    }
-
-    // Apply filters to find matching objects
-    const matchingObjects = targetObjects.filter(obj => {
-      const meta = metaByObject.get(obj.id) ?? {};
-      return filters.every(filter => {
-        const metadataValue = filter.metadataKey in meta ? meta[filter.metadataKey] : (obj as any)[filter.metadataKey];
-        const filterValue = filter.filterValue;
-        
-        switch (filter.operator) {
-          case "equals":
-            return String(metadataValue ?? "") === String(filterValue ?? "");
-          case "not_equals":
-            return String(metadataValue ?? "") !== String(filterValue ?? "");
-          case "contains":
-            return String(metadataValue || "").toLowerCase().includes(String(filterValue ?? "").toLowerCase());
-          case "starts_with":
-            return String(metadataValue || "").toLowerCase().startsWith(String(filterValue ?? "").toLowerCase());
-          case "greater_than":
-            return Number(metadataValue) > Number(filterValue);
-          case "less_than":
-            return Number(metadataValue) < Number(filterValue);
-          case "in_list":
-            return Array.isArray(filterValue) && filterValue.map(String).includes(String(metadataValue));
-          case "exists":
-            return metadataValue !== undefined && metadataValue !== null && metadataValue !== "";
-          case "not_exists":
-            return metadataValue === undefined || metadataValue === null || metadataValue === "";
-          default:
-            return true;
-        }
-      });
-    });
+    // Resolva målobjekt (gren-subträd via target_object_ids → legacy kluster →
+    // alla tenant-objekt) och applicera villkoren via den delade modulen så att
+    // execute matchar förhandsvisning (condition-preview) IDENTISKT — samma
+    // operator-switch, samma batch-laddade metadata. ADR v3, Session 9B.
+    const { targetObjects, matchingObjects } = await resolveConceptMatchingObjects(
+      tenantId,
+      concept as any,
+      filterInputs,
+      { fallbackAllObjects: true },
+    );
 
     // Generate assignments for each matching object
     const createdAssignments = [];
@@ -2402,31 +2352,19 @@ app.post("/api/order-concepts/:id/preview", asyncHandler(async (req, res) => {
     }
 
     const filters = await storage.getConceptFilters(concept.id);
-    
-    let targetObjects: ServiceObject[] = [];
-    if (concept.targetClusterId) {
-      targetObjects = await storage.getClusterObjects(concept.targetClusterId);
-    } else {
-      targetObjects = await storage.getObjects(tenantId);
-    }
-
-    const matchingObjects = targetObjects.filter(obj => {
-      return filters.every(filter => {
-        const objWithMeta = obj as typeof obj & { metadata?: Record<string, unknown> };
-        const metadataValue = objWithMeta.metadata?.[filter.metadataKey];
-        const filterValue = filter.filterValue;
-        switch (filter.operator) {
-          case "equals": return metadataValue === filterValue;
-          case "not_equals": return metadataValue !== filterValue;
-          case "contains": return String(metadataValue || "").includes(String(filterValue));
-          case "greater_than": return Number(metadataValue) > Number(filterValue);
-          case "less_than": return Number(metadataValue) < Number(filterValue);
-          case "exists": return metadataValue !== undefined && metadataValue !== null;
-          case "not_exists": return metadataValue === undefined || metadataValue === null;
-          default: return true;
-        }
-      });
-    });
+    const filterInputs = filters.map((f: any) => ({
+      metadataKey: f.metadataKey,
+      operator: f.operator,
+      filterValue: f.filterValue,
+    }));
+    // Resolva mål (gren-subträd via target_object_ids → legacy kluster → alla)
+    // + matcha villkoren via delad modul, identiskt med execute/condition-preview.
+    const { matchingObjects } = await resolveConceptMatchingObjects(
+      tenantId,
+      concept as any,
+      filterInputs,
+      { fallbackAllObjects: true },
+    );
 
     let linkedArticle: Awaited<ReturnType<typeof storage.getArticle>> | undefined = undefined;
     let linkedPrice = { price: 0, cost: 0, productionMinutes: 0 };
@@ -2534,30 +2472,19 @@ app.post("/api/order-concepts/:id/run-rolling", asyncHandler(async (req, res) =>
     }
 
     const filters = await storage.getConceptFilters(concept.id);
-    let targetObjects: ServiceObject[] = [];
-    if (concept.targetClusterId) {
-      targetObjects = await storage.getClusterObjects(concept.targetClusterId);
-    } else {
-      targetObjects = await storage.getObjects(tenantId);
-    }
-
-    const matchingObjects = targetObjects.filter(obj => {
-      return filters.every(filter => {
-        const objWithMeta = obj as typeof obj & { metadata?: Record<string, unknown> };
-        const metadataValue = objWithMeta.metadata?.[filter.metadataKey];
-        const filterValue = filter.filterValue;
-        switch (filter.operator) {
-          case "equals": return metadataValue === filterValue;
-          case "not_equals": return metadataValue !== filterValue;
-          case "contains": return String(metadataValue || "").includes(String(filterValue));
-          case "greater_than": return Number(metadataValue) > Number(filterValue);
-          case "less_than": return Number(metadataValue) < Number(filterValue);
-          case "exists": return metadataValue !== undefined && metadataValue !== null;
-          case "not_exists": return metadataValue === undefined || metadataValue === null;
-          default: return true;
-        }
-      });
-    });
+    const filterInputs = filters.map((f: any) => ({
+      metadataKey: f.metadataKey,
+      operator: f.operator,
+      filterValue: f.filterValue,
+    }));
+    // Resolva mål (gren-subträd via target_object_ids → legacy kluster → alla)
+    // + matcha villkoren via delad modul, identiskt med execute/condition-preview.
+    const { matchingObjects } = await resolveConceptMatchingObjects(
+      tenantId,
+      concept as any,
+      filterInputs,
+      { fallbackAllObjects: true },
+    );
 
     let linkedArticle: Awaited<ReturnType<typeof storage.getArticle>> | undefined = undefined;
     let linkedPrice = { price: 0, cost: 0, productionMinutes: 0 };
@@ -2615,26 +2542,19 @@ app.get("/api/order-concepts/:id/subscription-calc", asyncHandler(async (req, re
     }
 
     const filters = await storage.getConceptFilters(concept.id);
-    let targetObjects: ServiceObject[] = [];
-    if (concept.targetClusterId) {
-      targetObjects = await storage.getClusterObjects(concept.targetClusterId);
-    } else {
-      targetObjects = await storage.getObjects(tenantId);
-    }
-
-    const matchingObjects = targetObjects.filter(obj => {
-      return filters.every(filter => {
-        const objWithMeta = obj as typeof obj & { metadata?: Record<string, unknown> };
-        const metadataValue = objWithMeta.metadata?.[filter.metadataKey];
-        const filterValue = filter.filterValue;
-        switch (filter.operator) {
-          case "equals": return metadataValue === filterValue;
-          case "not_equals": return metadataValue !== filterValue;
-          case "exists": return metadataValue !== undefined && metadataValue !== null;
-          default: return true;
-        }
-      });
-    });
+    const filterInputs = filters.map((f: any) => ({
+      metadataKey: f.metadataKey,
+      operator: f.operator,
+      filterValue: f.filterValue,
+    }));
+    // Resolva mål (gren-subträd via target_object_ids → legacy kluster → alla)
+    // + matcha villkoren via delad modul, identiskt med execute/condition-preview.
+    const { matchingObjects } = await resolveConceptMatchingObjects(
+      tenantId,
+      concept as any,
+      filterInputs,
+      { fallbackAllObjects: true },
+    );
 
     const perObject = matchingObjects.map(obj => {
       const objWithMeta = obj as typeof obj & { metadata?: Record<string, unknown> };
@@ -2702,26 +2622,19 @@ app.post("/api/order-concepts/:id/detect-changes", asyncHandler(async (req, res)
     }
 
     const filters = await storage.getConceptFilters(concept.id);
-    let targetObjects: ServiceObject[] = [];
-    if (concept.targetClusterId) {
-      targetObjects = await storage.getClusterObjects(concept.targetClusterId);
-    } else {
-      targetObjects = await storage.getObjects(tenantId);
-    }
-
-    const matchingObjects = targetObjects.filter(obj => {
-      return filters.every(filter => {
-        const objWithMeta = obj as typeof obj & { metadata?: Record<string, unknown> };
-        const metadataValue = objWithMeta.metadata?.[filter.metadataKey];
-        const filterValue = filter.filterValue;
-        switch (filter.operator) {
-          case "equals": return metadataValue === filterValue;
-          case "not_equals": return metadataValue !== filterValue;
-          case "exists": return metadataValue !== undefined && metadataValue !== null;
-          default: return true;
-        }
-      });
-    });
+    const filterInputs = filters.map((f: any) => ({
+      metadataKey: f.metadataKey,
+      operator: f.operator,
+      filterValue: f.filterValue,
+    }));
+    // Resolva mål (gren-subträd via target_object_ids → legacy kluster → alla)
+    // + matcha villkoren via delad modul, identiskt med execute/condition-preview.
+    const { matchingObjects } = await resolveConceptMatchingObjects(
+      tenantId,
+      concept as any,
+      filterInputs,
+      { fallbackAllObjects: true },
+    );
 
     const existingAssignments = await storage.getAssignments(tenantId, {});
     const conceptAssignments = existingAssignments.filter(a => a.orderConceptId === concept.id);

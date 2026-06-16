@@ -18,28 +18,21 @@ import {
   type LeadTimeItem,
 } from "../services/time-warnings";
 import OpenAI from "openai";
+import {
+  resolveTargetObjects,
+  filterObjectsByConditions,
+  resolveConceptMatchingObjects,
+  deriveConceptTargets,
+} from "../services/order-concept-targeting";
 
 const openaiClient = new OpenAI({
   apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
   baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
 });
 
-// Delad operator-matchning för villkorsfilter (steg 4). Återanvänds av
-// förhandsvisning och execute så preview och faktisk körning matchar identiskt.
-function matchesFilter(metadataValue: unknown, operator: string, filterValue: unknown): boolean {
-  switch (operator) {
-    case "equals": return String(metadataValue ?? "") === String(filterValue ?? "");
-    case "not_equals": return String(metadataValue ?? "") !== String(filterValue ?? "");
-    case "contains": return String(metadataValue ?? "").toLowerCase().includes(String(filterValue ?? "").toLowerCase());
-    case "starts_with": return String(metadataValue ?? "").toLowerCase().startsWith(String(filterValue ?? "").toLowerCase());
-    case "greater_than": return Number(metadataValue) > Number(filterValue);
-    case "less_than": return Number(metadataValue) < Number(filterValue);
-    case "in_list": return Array.isArray(filterValue) && filterValue.map(String).includes(String(metadataValue));
-    case "exists": return metadataValue !== undefined && metadataValue !== null && metadataValue !== "";
-    case "not_exists": return metadataValue === undefined || metadataValue === null || metadataValue === "";
-    default: return true;
-  }
-}
+// Inpekning (vilka objekt/grenar ett koncept pekar in) + operator-matchning för
+// villkorsfilter lever i ../services/order-concept-targeting så förhandsvisning,
+// execute och alla körnings-/beräkningsvägar matchar IDENTISKT (ADR v3, steg 4).
 
 export async function registerOrderConceptRoutes(app: Express) {
 // ============================================
@@ -849,27 +842,20 @@ app.post("/api/order-concepts/:id/rerun", asyncHandler(async (req, res) => {
     const details: any[] = [];
 
     const filters = await storage.getConceptFilters(concept.id);
-    let targetObjects: ServiceObject[] = [];
-    if (concept.targetClusterId) {
-      targetObjects = await storage.getClusterObjects(concept.targetClusterId);
-    } else {
-      targetObjects = await storage.getObjects(tenantId);
-    }
-
-    const matchingObjects = targetObjects.filter(obj => {
-      if (filters.length === 0) return true;
-      return filters.every(filter => {
-        const objWithMeta = obj as typeof obj & { metadata?: Record<string, unknown> };
-        const metadataValue = objWithMeta.metadata?.[filter.metadataKey];
-        const filterValue = filter.filterValue;
-        switch (filter.operator) {
-          case "equals": return metadataValue === filterValue;
-          case "not_equals": return metadataValue !== filterValue;
-          case "exists": return metadataValue !== undefined && metadataValue !== null;
-          default: return true;
-        }
-      });
-    });
+    const filterInputs = filters.map((f: any) => ({
+      metadataKey: f.metadataKey,
+      operator: f.operator,
+      filterValue: f.filterValue,
+    }));
+    // Resolva mål (gren-subträd → legacy kluster → alla) och matcha via delad
+    // modul — batch-laddar metadata (tidigare inline-switch matchade aldrig
+    // metadata-filter eftersom obj.metadata saknas i detta flöde).
+    const { matchingObjects } = await resolveConceptMatchingObjects(
+      tenantId,
+      concept as any,
+      filterInputs,
+      { fallbackAllObjects: true },
+    );
 
     const existingAssignments = await storage.getAssignments(tenantId, {});
     const conceptAssignments = existingAssignments.filter(a => a.orderConceptId === concept.id);
@@ -1910,6 +1896,9 @@ app.get("/api/order-concepts/price-lists/for-customer/:customerId", asyncHandler
 app.post("/api/order-concepts/condition-preview", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const schema = z.object({
+      // ADR v3: objectIds = valda gren-ROT-objekt-id:n (föredras). clusterIds
+      // behålls för bakåtkompatibilitet (legacy kluster-koncept).
+      objectIds: z.array(z.string()).default([]),
       clusterIds: z.array(z.string()).default([]),
       filters: z.array(z.object({
         metadataKey: z.string(),
@@ -1919,46 +1908,13 @@ app.post("/api/order-concepts/condition-preview", asyncHandler(async (req, res) 
     });
     const parsed = schema.safeParse(req.body);
     if (!parsed.success) throw new ValidationError(formatZodError(parsed.error).error);
-    const { clusterIds, filters } = parsed.data;
+    const { objectIds, clusterIds, filters } = parsed.data;
 
-    // Samla objekt från valda kluster (dedupe).
-    const objectMap = new Map<string, any>();
-    for (const clusterId of clusterIds) {
-      const clusterObjects = await storage.getClusterObjects(clusterId);
-      for (const obj of clusterObjects) {
-        if (verifyTenantOwnership(obj, tenantId)) objectMap.set(obj.id, obj);
-      }
-    }
-    const objectList = Array.from(objectMap.values());
+    // Resolva målobjekten (gren-subträd ELLER legacy kluster) och applicera
+    // villkoren via den delade modulen — identiskt med execute.
+    const objectList = await resolveTargetObjects({ tenantId, objectIds, clusterIds });
     const total = objectList.length;
-
-    // Bygg metadata-karta (fieldKey -> värde) i en batch om filter finns.
-    const metaByObject = new Map<string, Record<string, unknown>>();
-    if (filters.length > 0 && total > 0) {
-      const objectIds = objectList.map(o => o.id);
-      const defs = await db.select().from(metadataDefinitions)
-        .where(and(eq(metadataDefinitions.tenantId, tenantId), isNull(metadataDefinitions.deletedAt)));
-      const defKey = new Map(defs.map(d => [d.id, d.fieldKey]));
-      const rows = await db.select().from(objectMetadata)
-        .where(and(eq(objectMetadata.tenantId, tenantId), inArray(objectMetadata.objectId, objectIds)));
-      for (const row of rows) {
-        const key = defKey.get(row.definitionId);
-        if (!key) continue;
-        const map = metaByObject.get(row.objectId) ?? {};
-        map[key] = row.valueJson ?? row.value;
-        metaByObject.set(row.objectId, map);
-      }
-    }
-
-    const matchedObjects = objectList.filter(obj => {
-      if (filters.length === 0) return true;
-      const meta = metaByObject.get(obj.id) ?? {};
-      // Inkludera även objektets baskolumner som möjliga nycklar.
-      return filters.every(f => {
-        const value = f.metadataKey in meta ? meta[f.metadataKey] : (obj as any)[f.metadataKey];
-        return matchesFilter(value, f.operator, f.filterValue);
-      });
-    });
+    const matchedObjects = await filterObjectsByConditions(tenantId, objectList, filters);
 
     res.json({
       total,
@@ -2044,67 +2000,88 @@ app.get("/api/order-concepts/:id/review-summary", asyncHandler(async (req, res) 
     };
   });
 
-  // --- Kluster med matchade objekt ---
-  const targetClusterIds: string[] = Array.isArray((concept as any).targetClusterIds)
-    ? (concept as any).targetClusterIds
-    : (concept as any).targetClusterId ? [(concept as any).targetClusterId] : [];
+  // --- Inpekade grenar/kluster med matchade objekt ---
+  // ADR v3: objekt-/gren-inpekning föredras; legacy kluster är fallback.
+  const { objectIds: targetObjectIds, clusterIds: targetClusterIds } = deriveConceptTargets(concept as any);
 
   const conceptFiltersRows = await storage.getConceptFilters(concept.id);
+  const conceptFilterInputs = conceptFiltersRows.map((f: any) => ({
+    metadataKey: f.metadataKey,
+    operator: f.operator,
+    filterValue: f.filterValue,
+  }));
 
+  // En sammanfattnings-"grupp" per inpekad gren-rot resp. kluster. clusterId/
+  // clusterName behålls som fältnamn för bakåtkomp med Step7-frontend (visas
+  // som "grenar" i objekt-läge).
   const clusterSummaries: any[] = [];
   let totalMatchedObjects = 0;
   const clusterCenters: Array<{ lat: number; lng: number }> = [];
 
-  for (const clusterId of targetClusterIds) {
-    const cluster = await storage.getCluster(clusterId);
-    if (!cluster || (cluster as any).tenantId !== tenantId) continue;
+  const pushCenterFromObjects = (objs: any[]) => {
+    const coords = objs
+      .map((o) => ({ lat: Number(o.latitude), lng: Number(o.longitude) }))
+      .filter((c) => Number.isFinite(c.lat) && Number.isFinite(c.lng) && (c.lat !== 0 || c.lng !== 0));
+    if (coords.length === 0) return;
+    clusterCenters.push({
+      lat: coords.reduce((s, c) => s + c.lat, 0) / coords.length,
+      lng: coords.reduce((s, c) => s + c.lng, 0) / coords.length,
+    });
+  };
 
-    const centerLat = (cluster as any).centerLatitude;
-    const centerLng = (cluster as any).centerLongitude;
-    if (centerLat && centerLng) {
-      clusterCenters.push({ lat: centerLat, lng: centerLng });
-    }
+  if (targetObjectIds.length > 0) {
+    // Objekt-/gren-inpekning: en sammanfattning per vald gren-rot (subträd).
+    const allObjects = await storage.getObjects(tenantId);
+    const byId = new Map(allObjects.map((o) => [o.id, o]));
+    for (const rootId of targetObjectIds) {
+      const root = byId.get(rootId);
+      if (!root) continue; // rot borttagen eller utanför tenant
+      const branchObjects = await resolveTargetObjects({ tenantId, objectIds: [rootId] });
+      const matchedObjects = await filterObjectsByConditions(tenantId, branchObjects, conceptFilterInputs);
 
-    const clusterObjects = await storage.getClusterObjects(clusterId);
-    const tenantObjects = clusterObjects.filter((o: any) => o.tenantId === tenantId);
-
-    let matchedObjects: any[] = tenantObjects;
-    if (conceptFiltersRows.length > 0 && tenantObjects.length > 0) {
-      const objectIds = tenantObjects.map((o: any) => o.id);
-      const defs = await db.select().from(metadataDefinitions)
-        .where(and(eq(metadataDefinitions.tenantId, tenantId), isNull(metadataDefinitions.deletedAt)));
-      const defKey = new Map(defs.map(d => [d.id, d.fieldKey]));
-      const rows = await db.select().from(objectMetadata)
-        .where(and(eq(objectMetadata.tenantId, tenantId), inArray(objectMetadata.objectId, objectIds)));
-      const metaByObject = new Map<string, Record<string, unknown>>();
-      for (const row of rows) {
-        const key = defKey.get(row.definitionId);
-        if (!key) continue;
-        const map = metaByObject.get(row.objectId) ?? {};
-        map[key] = (row as any).valueJson ?? (row as any).value;
-        metaByObject.set(row.objectId, map);
-      }
-      matchedObjects = tenantObjects.filter((obj: any) => {
-        const meta = metaByObject.get(obj.id) ?? {};
-        return conceptFiltersRows.every((f: any) => {
-          const value = f.metadataKey in meta ? meta[f.metadataKey] : obj[f.metadataKey];
-          return matchesFilter(value, f.operator, f.filterValue);
-        });
+      pushCenterFromObjects(matchedObjects.length > 0 ? matchedObjects : branchObjects);
+      totalMatchedObjects += matchedObjects.length;
+      clusterSummaries.push({
+        clusterId: rootId,
+        clusterName: (root as any).name ?? rootId,
+        totalObjects: branchObjects.length,
+        matchedObjects: matchedObjects.length,
+        samples: matchedObjects.slice(0, 8).map((o: any) => ({
+          id: o.id,
+          name: o.name,
+          address: o.address ?? null,
+        })),
       });
     }
+  } else {
+    // Legacy kluster-inpekning (bakåtkomp, oförändrat beteende).
+    for (const clusterId of targetClusterIds) {
+      const cluster = await storage.getCluster(clusterId);
+      if (!cluster || (cluster as any).tenantId !== tenantId) continue;
 
-    totalMatchedObjects += matchedObjects.length;
-    clusterSummaries.push({
-      clusterId,
-      clusterName: (cluster as any).name,
-      totalObjects: tenantObjects.length,
-      matchedObjects: matchedObjects.length,
-      samples: matchedObjects.slice(0, 8).map((o: any) => ({
-        id: o.id,
-        name: o.name,
-        address: o.address ?? null,
-      })),
-    });
+      const centerLat = (cluster as any).centerLatitude;
+      const centerLng = (cluster as any).centerLongitude;
+      if (centerLat && centerLng) {
+        clusterCenters.push({ lat: centerLat, lng: centerLng });
+      }
+
+      const clusterObjects = await storage.getClusterObjects(clusterId);
+      const tenantObjects = clusterObjects.filter((o: any) => o.tenantId === tenantId);
+      const matchedObjects = await filterObjectsByConditions(tenantId, tenantObjects as any, conceptFilterInputs);
+
+      totalMatchedObjects += matchedObjects.length;
+      clusterSummaries.push({
+        clusterId,
+        clusterName: (cluster as any).name,
+        totalObjects: tenantObjects.length,
+        matchedObjects: matchedObjects.length,
+        samples: matchedObjects.slice(0, 8).map((o: any) => ({
+          id: o.id,
+          name: o.name,
+          address: o.address ?? null,
+        })),
+      });
+    }
   }
 
   // --- Geografisk spridning & ställtidsestimering ---
@@ -2135,7 +2112,7 @@ app.get("/api/order-concepts/:id/review-summary", asyncHandler(async (req, res) 
   } else if (clusterCenters.length === 1) {
     spreadKm = 0;
     setupTimeMinutes = 15;
-    setupTimeLabel = "Enstaka kluster (ca 15 min)";
+    setupTimeLabel = "Enstaka punkt (ca 15 min)";
   }
 
   // --- Schema ---
@@ -2547,48 +2524,19 @@ app.post("/api/order-concepts/:id/detect-changes", asyncHandler(async (req, res)
     if (!concept) throw new NotFoundError("Orderkoncept hittades inte");
 
     const filters = await storage.getConceptFilters(concept.id);
-    const targetClusterIds: string[] = Array.isArray((concept as any).targetClusterIds) && (concept as any).targetClusterIds.length > 0
-        ? (concept as any).targetClusterIds
-        : (concept.targetClusterId ? [concept.targetClusterId] : []);
-
-    let candidateObjects: any[] = [];
-    if (targetClusterIds.length > 0) {
-        const objectMap = new Map<string, any>();
-        for (const clusterId of targetClusterIds) {
-            const clusterObjects = await storage.getClusterObjects(clusterId);
-            for (const obj of clusterObjects) {
-                if (verifyTenantOwnership(obj, tenantId)) objectMap.set(obj.id, obj);
-            }
-        }
-        candidateObjects = Array.from(objectMap.values());
-    } else {
-        candidateObjects = await storage.getObjects(tenantId);
-    }
-
-    const metaByObject = new Map<string, Record<string, unknown>>();
-    if (filters.length > 0 && candidateObjects.length > 0) {
-        const objectIds = candidateObjects.map((o: any) => o.id);
-        const defs = await db.select().from(metadataDefinitions)
-            .where(and(eq(metadataDefinitions.tenantId, tenantId), isNull(metadataDefinitions.deletedAt)));
-        const defKey = new Map(defs.map(d => [d.id, d.fieldKey]));
-        const rows = await db.select().from(objectMetadata)
-            .where(and(eq(objectMetadata.tenantId, tenantId), inArray(objectMetadata.objectId, objectIds)));
-        for (const row of rows) {
-            const key = defKey.get(row.definitionId);
-            if (!key) continue;
-            const map = metaByObject.get(row.objectId) ?? {};
-            map[key] = row.valueJson ?? row.value;
-            metaByObject.set(row.objectId, map);
-        }
-    }
-
-    const nowMatchingObjects = candidateObjects.filter((obj: any) => {
-        const meta = metaByObject.get(obj.id) ?? {};
-        return filters.every(f => {
-            const value = f.metadataKey in meta ? meta[f.metadataKey] : (obj as any)[f.metadataKey];
-            return matchesFilter(value, f.operator, f.filterValue);
-        });
-    });
+    const filterInputs = filters.map((f: any) => ({
+        metadataKey: f.metadataKey,
+        operator: f.operator,
+        filterValue: f.filterValue,
+    }));
+    // Resolva mål (gren-subträd → legacy kluster → alla) + matcha via delad
+    // modul, identiskt med execute/preview.
+    const { matchingObjects: nowMatchingObjects } = await resolveConceptMatchingObjects(
+        tenantId,
+        concept as any,
+        filterInputs,
+        { fallbackAllObjects: true },
+    );
 
     const currentObjectRows = await storage.getOrderConceptObjects(concept.id);
     const currentObjectIds = new Set(currentObjectRows.map((r: any) => r.objectId));
