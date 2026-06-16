@@ -42,3 +42,22 @@ lämnar skrivaren orörd.
 **How to apply:** Vid nya reversibla import-mutationer — stämpla före mutationen;
 för metadata som måste diffas i efterhand, använd pre-stamp+finalize istället för
 att stämpla efter skrivningen.
+
+## Regel 3: Livscykel-fält (aktivstatus-import) stämplas VILLKORLIGT
+`active_status`-import kan arkivera/återställa objekt i en update-batch. Arkiv-
+tillståndet (`deletedAt`/`archivedBy`/`archivedReason`) läggs i `beforeJson`/
+`afterJson` ENDAST för rader som faktiskt ändrar livscykel. Tre undo-konsumenter
+måste därför gate:a på `Object.prototype.hasOwnProperty.call(json, "deletedAt")`
+i lockstep:
+- `snapshotMatches` jämför arkiv-status som NÄRVARO (null vs ej-null), ej exakt
+  tidsstämpel (robust mot tz/precisions-drift).
+- `update_object`-undo-grenen måste (a) selektera arkiv-kolumnerna och (b) släppa
+  `isNull(deletedAt)`-filtret när actionen är livscykel-stämplad — annars går undo
+  av en arkivering inte att utföra (objektet hittas inte).
+- `restoreScalarSet` återställer arkiv-fälten (null ⇒ aktivt, tidsstämpel ⇒ åter-arkiverat).
+
+Legacy update_object-actions saknar nyckeln → exakt oförändrat beteende.
+**Why:** slutar en av de tre gate:a likadant bryts antingen bakåtkompatibiliteten
+(legacy rör arkiv-fält) eller undo-av-arkivering (objektet filtreras bort av
+`isNull(deletedAt)`). Arkivering sätter ALDRIG `objects.status` — `deletedAt` är
+enda markören (samma beslut som `object-archive.ts`).

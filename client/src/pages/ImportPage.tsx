@@ -31,6 +31,7 @@ import { ImportHealthOverview } from "@/components/ImportHealthOverview";
 import ImportColumnMapper from "@/components/ImportColumnMapper";
 import CustomerFastighetslistaImport from "@/components/CustomerFastighetslistaImport";
 import { ImportEntryChooser, type ImportMode } from "@/components/import/ImportEntryChooser";
+import { ImportDestinationChooser } from "@/components/import/ImportDestinationChooser";
 import { ChildObjectImportFlow } from "@/components/import/ChildObjectImportFlow";
 import { ImportWizardFlow } from "@/components/import/ImportWizardFlow";
 import { ObjectImportV2Flow } from "@/components/import/ObjectImportV2Flow";
@@ -2136,6 +2137,23 @@ export default function ImportPage() {
     if (importMode) localStorage.setItem(MODE_STORAGE_KEY, importMode);
   }, [importMode]);
 
+  // Enad ingångsväljare: "Importera ny data" är den enda ingången som stannar kvar
+  // på /import (de andra två korten navigerar till /objektmall-import respektive
+  // /import-templates). När section === "new-data" visas läges-väljaren + verktygen.
+  const SECTION_STORAGE_KEY = "traivo-import-section";
+  const [section, setSection] = useState<"new-data" | null>(() => {
+    if (urlMode === "migration" || urlMode === "ongoing" || urlMode === "wizard") return "new-data";
+    if (urlTab) return "new-data";
+    const savedMode = typeof window !== "undefined" ? localStorage.getItem(MODE_STORAGE_KEY) : null;
+    if (savedMode === "migration" || savedMode === "ongoing" || savedMode === "wizard") return "new-data";
+    const savedSection = typeof window !== "undefined" ? localStorage.getItem(SECTION_STORAGE_KEY) : null;
+    return savedSection === "new-data" ? "new-data" : null;
+  });
+  useEffect(() => {
+    if (section) localStorage.setItem(SECTION_STORAGE_KEY, section);
+    else localStorage.removeItem(SECTION_STORAGE_KEY);
+  }, [section]);
+
   type ActiveTab =
     | "modus" | "enrich" | "manual" | "fortnox" | "mapped"
     | "customerlist" | "children" | "payers" | "recipients" | "diff"
@@ -3033,8 +3051,16 @@ export default function ImportPage() {
       <PageTabs tabs={IMPORT_TABS} />
       <PageHeader icon={Upload} title={tl("page.import.title")} description={tl("page.import.description")} testId="text-import-title" />
 
-      <ImportEntryChooser value={importMode} onChange={setImportMode} />
+      <ImportDestinationChooser
+        active={section === "new-data"}
+        onSelectNewData={() => setSection("new-data")}
+      />
 
+      {section === "new-data" && (
+        <ImportEntryChooser value={importMode} onChange={setImportMode} />
+      )}
+
+      {section === "new-data" && (
       <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as ActiveTab)}>
         <TabsList className="flex w-full flex-wrap h-auto justify-start gap-1">
           {(importMode === null || importMode === "migration") && (
@@ -5065,6 +5091,7 @@ export default function ImportPage() {
           <DataQualityDashboard />
         </TabsContent>
       </Tabs>
+      )}
 
       <AlertDialog open={!!undoBatchId} onOpenChange={(open) => { if (!open) setUndoBatchId(null); }}>
         <AlertDialogContent>

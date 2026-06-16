@@ -55,9 +55,9 @@ export function ImportEntryChooser({ value, onChange }: Props) {
     <Card data-testid="card-import-entry-chooser">
       <CardContent className="pt-6 space-y-3">
         <div>
-          <h2 className="text-base font-semibold">Vad vill du göra?</h2>
+          <h2 className="text-base font-semibold">Vilken typ av import?</h2>
           <p className="text-sm text-muted-foreground">
-            Välj ingång — verktygen nedanför filtreras därefter.
+            Välj typ — verktygen nedanför filtreras därefter.
           </p>
         </div>
         <div className="grid gap-3 md:grid-cols-3">

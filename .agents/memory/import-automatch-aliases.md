@@ -6,12 +6,9 @@ description: Why real customer import headers fail auto-mapping and how to fix i
 # Import auto-match aliases (shared/object-import-spec.ts)
 
 Real-world Swedish customer headers often land *just under* the fuzzy-match threshold
-(0.8) used by `autoMatchColumn` (server/services/object-import-core.ts), so they
-silently fall through to manual mapping — a known mis-map trap users hit.
-
-Measured similarity vs the intended alias key: `intrumnummer` ≈ 0.79 vs
-`interimsnummer`; `överordnat objekt` ≈ 0.24 vs `interimföräldranummer`. Plain
-headers like Postadress / Postnr / Ort / Namn / Titel / Telefon scored 0 (no match).
+used by `autoMatchColumn`, so they silently fall through to manual mapping — a known
+mis-map trap. Typos one char off the alias and plain headers (Postadress/Postnr/Ort/
+Titel) commonly score below threshold or zero.
 
 **Rule:** fix by adding explicit lowercase aliases to `KNOWN_FIELDS` /
 `ADDRESS_PATTERNS` / `CONTACT_PATTERNS`, NOT by lowering the 0.8 threshold.
