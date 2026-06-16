@@ -7,8 +7,9 @@ import { formatZodError, verifyTenantOwnership, DEFAULT_TENANT_ID, ensureResourc
 import { getTenantIdWithFallback } from "../tenant-middleware";
 import { asyncHandler } from "../asyncHandler";
 import { NotFoundError, ValidationError, ForbiddenError, describeFortnoxMappingConflict } from "../errors";
-import { objects, workOrders, articles, customers, fortnoxMappings, objectContacts, importBatches, objectMetadata, metadataDefinitions, type InsertWorkOrder } from "@shared/schema";
-import { getISOWeek } from "./helpers";
+import { objects, workOrders, articles, customers, fortnoxMappings, objectContacts, importBatches, objectMetadata, metadataDefinitions, assignments, type InsertWorkOrder } from "@shared/schema";
+import { getISOWeek, getDateFromWeekdayInMonth } from "./helpers";
+import { getOrderConceptMethod } from "@shared/order-concept-method";
 import { triggerGeocodeIfMissing } from "../services/geocoding";
 import { resolveEffectiveArticleQuantity } from "../article-quantity-resolver";
 import { getArticleMetadataForObject } from "../metadata-queries";
@@ -20,6 +21,177 @@ async function verifyObjectTenant(objectId: string, tenantId: string): Promise<b
   } catch {
     return false;
   }
+}
+
+// Task #934: dela-bar generator för SCHEMA-metodens (schedule) återkommande
+// jobb. Används av både /execute (method === "schedule") och /run-rolling så att
+// de två vägarna inte divergerar. Dateserien byggs antingen från ett
+// leveransschema (delivery_schedule: månad/veckonummer/veckodag) ELLER från ett
+// återkommande intervall (interval_start_date + interval_frequency_days, kapat
+// av interval_end_date eller rolling_months). Idempotent: hoppar över (objekt,
+// datum)-par som redan har en assignment för konceptet, så att en omkörning inte
+// dubblerar redan genererade tillfällen.
+type ScheduleDateTarget = { date: Date; windowStart?: string; windowEnd?: string };
+
+function buildScheduleDateTargets(concept: any): ScheduleDateTarget[] | null {
+  const now = new Date();
+  const months = concept.rollingMonths || 3;
+  const targets: ScheduleDateTarget[] = [];
+
+  const schedule = Array.isArray(concept.deliverySchedule)
+    ? (concept.deliverySchedule as Array<{ month: number; weekNumber: number; weekday: number; timeWindowStart?: string; timeWindowEnd?: string }>)
+    : [];
+
+  if (schedule.length > 0) {
+    for (let m = 0; m < months; m++) {
+      const targetMonth = new Date(now.getFullYear(), now.getMonth() + m, 1);
+      for (const entry of schedule) {
+        if (entry.month && entry.month !== targetMonth.getMonth() + 1) continue;
+        const date = getDateFromWeekdayInMonth(targetMonth.getFullYear(), targetMonth.getMonth(), entry.weekNumber, entry.weekday);
+        if (!date || date < now) continue;
+        targets.push({ date, windowStart: entry.timeWindowStart, windowEnd: entry.timeWindowEnd });
+      }
+    }
+    return targets;
+  }
+
+  if (concept.intervalStartDate && concept.intervalFrequencyDays && Number(concept.intervalFrequencyDays) > 0) {
+    const start = new Date(concept.intervalStartDate);
+    const freqDays = Number(concept.intervalFrequencyDays);
+    const end = concept.intervalEndDate
+      ? new Date(concept.intervalEndDate)
+      : new Date(now.getFullYear(), now.getMonth() + months, now.getDate());
+    let cursor = new Date(start);
+    let guard = 0;
+    while (cursor <= end && guard < 366) {
+      if (cursor >= now) targets.push({ date: new Date(cursor) });
+      cursor = new Date(cursor.getTime() + freqDays * 86_400_000);
+      guard++;
+    }
+    return targets;
+  }
+
+  return null; // varken leveransschema eller intervall konfigurerat
+}
+
+async function generateScheduleAssignments(opts: {
+  concept: any;
+  tenantId: string;
+  userId: string | undefined;
+  matchingObjects: ServiceObject[];
+  linkedArticle: Awaited<ReturnType<typeof storage.getArticle>> | undefined;
+  linkedArticleId: string | null;
+  linkedPrice: { price: number; cost: number; productionMinutes: number };
+}): Promise<{ created: any[]; datesGenerated: number; skipped: number } | null> {
+  const { concept, tenantId, userId, matchingObjects, linkedArticle, linkedArticleId, linkedPrice } = opts;
+
+  const targets = buildScheduleDateTargets(concept);
+  if (targets === null) return null;
+
+  // Idempotens: läs in befintliga (objekt|datum)-par för konceptet.
+  const dateKey = (d: Date | string | null | undefined): string => {
+    if (!d) return "";
+    const dd = typeof d === "string" ? new Date(d) : d;
+    return Number.isNaN(dd.getTime()) ? "" : dd.toISOString().split("T")[0];
+  };
+  const existing = await db
+    .select({ objectId: assignments.objectId, scheduledDate: assignments.scheduledDate })
+    .from(assignments)
+    .where(and(eq(assignments.tenantId, tenantId), eq(assignments.orderConceptId, concept.id)));
+  const seenKeys = new Set(existing.map((e) => `${e.objectId}|${dateKey(e.scheduledDate as any)}`));
+
+  const created: any[] = [];
+  let skipped = 0;
+  for (const t of targets) {
+    const dayStr = t.date.toISOString().split("T")[0];
+    for (const obj of matchingObjects) {
+      const key = `${obj.id}|${dayStr}`;
+      if (seenKeys.has(key)) {
+        skipped++;
+        continue;
+      }
+      seenKeys.add(key); // skydda mot dubbletter inom samma körning
+
+      const objWithMeta = obj as typeof obj & { metadata?: Record<string, unknown> };
+      let quantity = 1;
+      if (concept.crossPollinationField && objWithMeta.metadata?.[concept.crossPollinationField]) {
+        quantity = Number(objWithMeta.metadata[concept.crossPollinationField]) || 1;
+      }
+      if (linkedArticle) {
+        quantity = await resolveEffectiveArticleQuantity({
+          tenantId,
+          article: linkedArticle,
+          baseQuantity: quantity,
+          objectId: obj.id,
+        });
+      }
+
+      const estimatedDuration = linkedPrice.productionMinutes * quantity || 60;
+      const totalValue = linkedPrice.price * quantity;
+      const totalCost = linkedPrice.cost * quantity;
+
+      const assignment = await storage.createAssignment({
+        tenantId,
+        orderConceptId: concept.id,
+        objectId: obj.id,
+        clusterId: obj.clusterId || undefined,
+        title: concept.name,
+        description: concept.description || undefined,
+        status: "not_planned",
+        priority: concept.priority || "normal",
+        scheduledDate: t.date,
+        plannedWindowStart: t.windowStart ? new Date(`${dayStr}T${t.windowStart}:00`) : undefined,
+        plannedWindowEnd: t.windowEnd ? new Date(`${dayStr}T${t.windowEnd}:00`) : undefined,
+        quantity,
+        address: obj.address || undefined,
+        latitude: obj.latitude || undefined,
+        longitude: obj.longitude || undefined,
+        creationMethod: "automatic",
+        createdBy: userId,
+        estimatedDuration,
+        cachedValue: totalValue,
+        cachedCost: totalCost,
+      });
+
+      if (linkedArticle && linkedArticleId) {
+        await storage.createAssignmentArticle({
+          assignmentId: assignment.id,
+          articleId: linkedArticleId,
+          quantity,
+          unitPrice: linkedPrice.price,
+          totalPrice: totalValue,
+          unitCost: linkedPrice.cost,
+          totalCost,
+          unitTime: linkedPrice.productionMinutes,
+          totalTime: estimatedDuration,
+          sequenceOrder: 1,
+          status: "pending",
+        });
+      }
+
+      created.push(assignment);
+    }
+  }
+
+  return { created, datesGenerated: targets.length, skipped };
+}
+
+// Task #934: ABONNEMANGETS (subscription) nästa fakturadatum. Respekterar
+// startdatum (framtida start ⇒ första körning = startdatum) och avancerar i steg
+// om billingFrequency/invoicePeriod tills datumet ligger strikt efter "now".
+// billingFrequency (monthly/quarterly/yearly) har företräde; annars används
+// invoicePeriod (quarterly ⇒ 3 mån) med månadssteg som default.
+function computeSubscriptionNextRun(start: Date, period: string, freq: string, now: Date): Date {
+  if (start > now) return new Date(start);
+  const stepMonths =
+    freq === "yearly" ? 12 : freq === "quarterly" ? 3 : period === "quarterly" ? 3 : 1;
+  const next = new Date(start);
+  let guard = 0;
+  while (next <= now && guard < 600) {
+    next.setMonth(next.getMonth() + stepMonths);
+    guard++;
+  }
+  return next;
 }
 
 // Task #911: leveransdatum tolkas i Europe/Stockholm. Ett datum-only-värde
@@ -1679,7 +1851,8 @@ app.patch("/api/order-concepts/:id", asyncHandler(async (req, res) => {
     }
 
     // Session 9B — timestamp-kolumner kräver Date-objekt (inte ISO-sträng) i drizzle .set().
-    for (const dateField of ["subscriptionAdjustmentDate", "intervalStartDate", "intervalEndDate"] as const) {
+    // Task #934: deliveryStart (abonnemangets startdatum) coerce:as på samma sätt.
+    for (const dateField of ["subscriptionAdjustmentDate", "intervalStartDate", "intervalEndDate", "deliveryStart"] as const) {
       const v = (req.body as Record<string, unknown>)[dateField];
       if (typeof v === "string" && v.trim()) {
         const parsed = new Date(v);
@@ -1903,6 +2076,91 @@ app.post("/api/order-concepts/:id/execute", asyncHandler(async (req, res) => {
       }
     }
 
+    // Task #934: De tre faktureringsmetoderna exekveras distinkt. invoiceModel
+    // (med fallback till legacy scenario) avgör vägen — inte längre alltid
+    // engångs-avrop. Avrop faller igenom till engångsloopen nedan; Schema
+    // genererar återkommande jobb; Abonnemang skapar inga engångsjobb utan
+    // aktiverar abonnemanget (nästa fakturadatum + summor).
+    const conceptMethod = getOrderConceptMethod(concept);
+
+    if (conceptMethod === "subscription") {
+      if (!concept.monthlyFee || concept.monthlyFee <= 0) {
+        throw new ValidationError("Abonnemang kräver en månadsavgift. Ange en avgift i steg 3 (Fakturering) innan du aktiverar abonnemanget.");
+      }
+      const startDate = concept.deliveryStart ? new Date(concept.deliveryStart) : new Date();
+      const period = (concept.invoicePeriod as string) || "monthly";
+      const freq = (concept.billingFrequency as string) || "monthly";
+      const nextRun = computeSubscriptionNextRun(startDate, period, freq, new Date());
+
+      let totalUnits = 0;
+      for (const obj of matchingObjects) {
+        const objWithMeta = obj as typeof obj & { metadata?: Record<string, unknown> };
+        if (concept.subscriptionMetadataField && objWithMeta.metadata?.[concept.subscriptionMetadataField]) {
+          totalUnits += Number(objWithMeta.metadata[concept.subscriptionMetadataField]) || 1;
+        } else {
+          totalUnits += 1;
+        }
+      }
+      const monthlyTotal = totalUnits * (concept.monthlyFee || 0);
+      const stepMonths = freq === "yearly" ? 12 : freq === "quarterly" ? 3 : period === "quarterly" ? 3 : 1;
+      const perInvoiceTotal = monthlyTotal * stepMonths;
+
+      await storage.updateOrderConcept(concept.id, tenantId, {
+        lastRunDate: new Date(),
+        nextRunDate: nextRun,
+      });
+
+      return res.json({
+        success: true,
+        method: "subscription",
+        message: `Abonnemang aktiverat för ${matchingObjects.length} objekt (${totalUnits} enheter). Nästa fakturering ${nextRun.toISOString().split("T")[0]}.`,
+        objectsMatched: matchingObjects.length,
+        assignmentsCreated: 0,
+        subscription: {
+          totalUnits,
+          monthlyTotal,
+          perInvoiceTotal,
+          quarterlyTotal: monthlyTotal * 3,
+          yearlyTotal: monthlyTotal * 12,
+          billingFrequency: freq,
+          invoicePeriod: period,
+          startDate: startDate.toISOString(),
+          nextRunDate: nextRun.toISOString(),
+        },
+      });
+    }
+
+    if (conceptMethod === "schedule") {
+      const scheduleResult = await generateScheduleAssignments({
+        concept,
+        tenantId,
+        userId,
+        matchingObjects,
+        linkedArticle,
+        linkedArticleId,
+        linkedPrice,
+      });
+      if (scheduleResult === null) {
+        throw new ValidationError("Schema-konceptet saknar leveransschema eller intervall. Konfigurera ett leveransschema (månad/vecka/veckodag) eller ett återkommande intervall (startdatum + frekvens i dagar) i steg 5 innan du kör konceptet.");
+      }
+      await storage.updateOrderConcept(concept.id, tenantId, {
+        lastRunDate: new Date(),
+        nextRunDate: new Date(new Date().getFullYear(), new Date().getMonth() + (concept.rollingMonths || 3), 1),
+      });
+      return res.json({
+        success: true,
+        method: "schedule",
+        message: `Genererade ${scheduleResult.created.length} schemalagda uppgifter (${scheduleResult.datesGenerated} tillfällen) för ${matchingObjects.length} objekt` +
+          (scheduleResult.skipped > 0 ? ` (${scheduleResult.skipped} hoppades över — fanns redan)` : "") + ".",
+        assignmentsCreated: scheduleResult.created.length,
+        objectsMatched: matchingObjects.length,
+        datesGenerated: scheduleResult.datesGenerated,
+        skipped: scheduleResult.skipped,
+        assignments: scheduleResult.created,
+      });
+    }
+
+    // call_off (Avrop, default): engångsexpansion — en uppgift per matchande objekt nu.
     for (const obj of matchingObjects) {
       // Cross-pollination: multiply by metadata field if specified
       const objWithMeta = obj as typeof obj & { metadata?: Record<string, unknown> };
@@ -2203,9 +2461,13 @@ app.post("/api/order-concepts/:id/preview", asyncHandler(async (req, res) => {
       };
     });
 
-    // Generate rolling schedule preview if scenario is "schema"
+    // Task #934: förhandsvisning grenar på faktureringsmetoden (invoiceModel med
+    // fallback till scenario) — inte längre enbart legacy-scenario.
+    const previewMethod = getOrderConceptMethod(concept);
+
+    // Generate rolling schedule preview if method is "schedule"
     let schedulePreview: Array<{ date: string; objectCount: number }> = [];
-    if (concept.scenario === "schema" && concept.deliverySchedule) {
+    if (previewMethod === "schedule" && concept.deliverySchedule) {
       const schedule = concept.deliverySchedule as Array<{ month: number; weekNumber: number; weekday: number; timeWindowStart?: string; timeWindowEnd?: string }>;
       const months = concept.rollingMonths || 3;
       const now = new Date();
@@ -2225,9 +2487,9 @@ app.post("/api/order-concepts/:id/preview", asyncHandler(async (req, res) => {
       schedulePreview.sort((a, b) => a.date.localeCompare(b.date));
     }
 
-    // Subscription calculation for "abonnemang" scenario
+    // Subscription calculation for "subscription" method
     let subscriptionCalc: { totalUnits: number; monthlyTotal: number; yearlyTotal: number } | undefined;
-    if (concept.scenario === "abonnemang" && concept.monthlyFee) {
+    if (previewMethod === "subscription" && concept.monthlyFee) {
       let totalUnits = 0;
       for (const obj of matchingObjects) {
         const objWithMeta = obj as typeof obj & { metadata?: Record<string, unknown> };
@@ -2263,8 +2525,12 @@ app.post("/api/order-concepts/:id/run-rolling", asyncHandler(async (req, res) =>
       throw new NotFoundError("Orderkoncept hittades inte");
     }
 
-    if (concept.scenario !== "schema" || !concept.deliverySchedule) {
-      throw new ValidationError("Konceptet har inget leveransschema");
+    // Task #934: grena på faktureringsmetoden (invoiceModel m. fallback scenario).
+    // run-rolling är SCHEMA-metodens dedikerade endpoint och delar nu generator
+    // med /execute (method === "schedule") så att de inte divergerar; intervall-
+    // konfigurerade scheman (utan delivery_schedule) stöds därmed också.
+    if (getOrderConceptMethod(concept) !== "schedule") {
+      throw new ValidationError("Konceptet är inte ett schema-koncept (faktureringsmetod Schema krävs).");
     }
 
     const filters = await storage.getConceptFilters(concept.id);
@@ -2309,71 +2575,19 @@ app.post("/api/order-concepts/:id/run-rolling", asyncHandler(async (req, res) =>
       }
     }
 
-    const schedule = concept.deliverySchedule as Array<{ month: number; weekNumber: number; weekday: number; timeWindowStart?: string; timeWindowEnd?: string }>;
     const months = concept.rollingMonths || 3;
     const now = new Date();
-    const createdAssignments = [];
-
-    for (let m = 0; m < months; m++) {
-      const targetMonth = new Date(now.getFullYear(), now.getMonth() + m, 1);
-      for (const entry of schedule) {
-        if (entry.month && entry.month !== targetMonth.getMonth() + 1) continue;
-        const date = getDateFromWeekdayInMonth(targetMonth.getFullYear(), targetMonth.getMonth(), entry.weekNumber, entry.weekday);
-        if (!date || date < now) continue;
-
-        for (const obj of matchingObjects) {
-          const objWithMeta = obj as typeof obj & { metadata?: Record<string, unknown> };
-          let quantity = 1;
-          if (concept.crossPollinationField && objWithMeta.metadata?.[concept.crossPollinationField]) {
-            quantity = Number(objWithMeta.metadata[concept.crossPollinationField]) || 1;
-          }
-
-          const estimatedDuration = linkedPrice.productionMinutes * quantity || 60;
-          const totalValue = linkedPrice.price * quantity;
-          const totalCost = linkedPrice.cost * quantity;
-
-          const assignment = await storage.createAssignment({
-            tenantId,
-            orderConceptId: concept.id,
-            objectId: obj.id,
-            clusterId: obj.clusterId || undefined,
-            title: concept.name,
-            description: concept.description || undefined,
-            status: "not_planned",
-            priority: concept.priority || "normal",
-            scheduledDate: date,
-            plannedWindowStart: entry.timeWindowStart ? new Date(`${date.toISOString().split('T')[0]}T${entry.timeWindowStart}:00`) : undefined,
-            plannedWindowEnd: entry.timeWindowEnd ? new Date(`${date.toISOString().split('T')[0]}T${entry.timeWindowEnd}:00`) : undefined,
-            quantity,
-            address: obj.address || undefined,
-            latitude: obj.latitude || undefined,
-            longitude: obj.longitude || undefined,
-            creationMethod: "automatic",
-            createdBy: userId,
-            estimatedDuration,
-            cachedValue: totalValue,
-            cachedCost: totalCost,
-          });
-
-          if (linkedArticle && concept.articleId) {
-            await storage.createAssignmentArticle({
-              assignmentId: assignment.id,
-              articleId: concept.articleId,
-              quantity,
-              unitPrice: linkedPrice.price,
-              totalPrice: totalValue,
-              unitCost: linkedPrice.cost,
-              totalCost,
-              unitTime: linkedPrice.productionMinutes,
-              totalTime: estimatedDuration,
-              sequenceOrder: 1,
-              status: "pending"
-            });
-          }
-
-          createdAssignments.push(assignment);
-        }
-      }
+    const rollingResult = await generateScheduleAssignments({
+      concept,
+      tenantId,
+      userId,
+      matchingObjects,
+      linkedArticle,
+      linkedArticleId: concept.articleId ?? null,
+      linkedPrice,
+    });
+    if (rollingResult === null) {
+      throw new ValidationError("Konceptet saknar leveransschema eller intervall. Konfigurera ett leveransschema (månad/vecka/veckodag) eller ett återkommande intervall (startdatum + frekvens i dagar) innan du kör.");
     }
 
     await storage.updateOrderConcept(concept.id, tenantId, {
@@ -2383,9 +2597,11 @@ app.post("/api/order-concepts/:id/run-rolling", asyncHandler(async (req, res) =>
 
     res.json({
       success: true,
-      message: `Genererade ${createdAssignments.length} uppgifter för ${months} månader framåt`,
-      assignmentsCreated: createdAssignments.length,
+      message: `Genererade ${rollingResult.created.length} uppgifter för ${months} månader framåt` +
+        (rollingResult.skipped > 0 ? ` (${rollingResult.skipped} hoppades över — fanns redan)` : ""),
+      assignmentsCreated: rollingResult.created.length,
       objectsMatched: matchingObjects.length,
+      skipped: rollingResult.skipped,
     });
 }));
 
@@ -2481,7 +2697,7 @@ app.post("/api/order-concepts/:id/detect-changes", asyncHandler(async (req, res)
     const tenantId = getTenantIdWithFallback(req);
     const rawConcept = await storage.getOrderConcept(req.params.id);
     const concept = verifyTenantOwnership(rawConcept, tenantId);
-    if (!concept || concept.scenario !== "abonnemang") {
+    if (!concept || getOrderConceptMethod(concept) !== "subscription") {
       throw new ValidationError("Konceptet är inte ett abonnemang");
     }
 

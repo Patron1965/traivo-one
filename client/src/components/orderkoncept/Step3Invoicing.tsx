@@ -23,6 +23,9 @@ interface Step3State {
   subscriptionAdjustmentDate: string;
   invoiceConsolidation: string;
   departmentMetadataField: string | null;
+  monthlyFee: number | null;
+  billingFrequency: string | null;
+  subscriptionStartDate: string;
 }
 
 interface Step3Props extends Step3State {
@@ -37,6 +40,20 @@ const CONSOLIDATION_OPTIONS: { value: string; label: string }[] = [
   { value: "department", label: "Per avdelning (metadatafält)" },
 ];
 
+const BILLING_FREQUENCY_OPTIONS: { value: string; label: string }[] = [
+  { value: "monthly", label: "Månadsvis" },
+  { value: "quarterly", label: "Kvartalsvis" },
+  { value: "yearly", label: "Årsvis" },
+];
+
+// Task #934: kort förklaring per faktureringsmetod så att de tre alternativen
+// blir tydligt åtskilda för operatören.
+const INVOICE_MODEL_HELP: Record<InvoiceModel, string> = {
+  call_off: "Avrop: engångsexpansion — en uppgift skapas per matchande objekt när konceptet körs.",
+  schedule: "Schema: återkommande uppgifter genereras automatiskt enligt leveransschema eller intervall (konfigureras i steg 5).",
+  subscription: "Abonnemang: löpande fakturering med fast månadsavgift per enhet — inga engångsuppgifter skapas.",
+};
+
 export default function Step3Invoicing({
   invoiceLevel,
   invoiceModel,
@@ -46,6 +63,9 @@ export default function Step3Invoicing({
   subscriptionAdjustmentDate,
   invoiceConsolidation,
   departmentMetadataField,
+  monthlyFee,
+  billingFrequency,
+  subscriptionStartDate,
   onUpdate,
 }: Step3Props) {
   const { data: definitions = [] } = useQuery<MetadataDefinition[]>({
@@ -85,13 +105,7 @@ export default function Step3Invoicing({
           <h3 className="text-sm font-medium mb-3">Faktureringsmetod</h3>
           <RadioGroup
             value={invoiceModel || ""}
-            onValueChange={(v) => {
-              const model = v as InvoiceModel;
-              onUpdate({
-                invoiceModel: model,
-                ...(model === "subscription" ? { invoicePeriod: null } : {}),
-              });
-            }}
+            onValueChange={(v) => onUpdate({ invoiceModel: v as InvoiceModel })}
             className="space-y-2"
           >
             {INVOICE_MODELS.map((model) => (
@@ -101,22 +115,82 @@ export default function Step3Invoicing({
               </div>
             ))}
           </RadioGroup>
+          {invoiceModel && (
+            <p className="text-xs text-muted-foreground mt-2" data-testid="text-invoice-model-help">
+              {INVOICE_MODEL_HELP[invoiceModel]}
+            </p>
+          )}
         </div>
 
         {isSubscription && (
-          <div>
-            <Label htmlFor="adjustment-date" className="text-sm mb-1 block">
-              Årligt justeringsdatum (valfritt)
-            </Label>
-            <Input
-              id="adjustment-date"
-              type="date"
-              value={subscriptionAdjustmentDate}
-              onChange={(e) => onUpdate({ subscriptionAdjustmentDate: e.target.value })}
-              className="max-w-xs"
-              data-testid="input-subscription-adjustment-date"
-            />
-            <p className="text-xs text-muted-foreground mt-1">Tomt = löpande utan fast justering.</p>
+          <div className="space-y-4 rounded-md border border-border p-3" data-testid="block-subscription-config">
+            <h3 className="text-sm font-medium">Abonnemang</h3>
+            <div>
+              <Label htmlFor="subscription-monthly-fee" className="text-sm mb-1 block">
+                Månadsavgift per enhet (kr)
+              </Label>
+              <Input
+                id="subscription-monthly-fee"
+                type="number"
+                min={0}
+                step="0.01"
+                value={monthlyFee ?? ""}
+                onChange={(e) => onUpdate({ monthlyFee: e.target.value === "" ? null : Number(e.target.value) })}
+                className="max-w-xs"
+                placeholder="0"
+                data-testid="input-subscription-monthly-fee"
+              />
+              <p className="text-xs text-muted-foreground mt-1">
+                Fast avgift per enhet och månad. Krävs för att aktivera abonnemanget.
+              </p>
+            </div>
+            <div>
+              <Label htmlFor="subscription-billing-frequency" className="text-sm mb-1 block">
+                Faktureringsfrekvens
+              </Label>
+              <Select
+                value={billingFrequency || "monthly"}
+                onValueChange={(v) => onUpdate({ billingFrequency: v })}
+              >
+                <SelectTrigger id="subscription-billing-frequency" className="max-w-xs" data-testid="select-subscription-billing-frequency">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {BILLING_FREQUENCY_OPTIONS.map((o) => (
+                    <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground mt-1">Hur ofta abonnemanget faktureras.</p>
+            </div>
+            <div>
+              <Label htmlFor="subscription-start-date" className="text-sm mb-1 block">
+                Startdatum (valfritt)
+              </Label>
+              <Input
+                id="subscription-start-date"
+                type="date"
+                value={subscriptionStartDate}
+                onChange={(e) => onUpdate({ subscriptionStartDate: e.target.value })}
+                className="max-w-xs"
+                data-testid="input-subscription-start-date"
+              />
+              <p className="text-xs text-muted-foreground mt-1">Tomt = abonnemanget startar direkt vid aktivering.</p>
+            </div>
+            <div>
+              <Label htmlFor="adjustment-date" className="text-sm mb-1 block">
+                Årligt justeringsdatum (valfritt)
+              </Label>
+              <Input
+                id="adjustment-date"
+                type="date"
+                value={subscriptionAdjustmentDate}
+                onChange={(e) => onUpdate({ subscriptionAdjustmentDate: e.target.value })}
+                className="max-w-xs"
+                data-testid="input-subscription-adjustment-date"
+              />
+              <p className="text-xs text-muted-foreground mt-1">Tomt = löpande utan fast justering.</p>
+            </div>
           </div>
         )}
 

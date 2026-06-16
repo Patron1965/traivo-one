@@ -52,3 +52,4 @@
 - [Bulk INSERT…RETURNING ordning](bulk-insert-returning-order.md) — fler-rads-INSERT garanterar ej RETURNING-ordning; pre-generera id (randomUUID) och zip:a inte positionellt mot DB-svaret vid bulk-create.
 - [apiRequest kastar på non-2xx](apirequest-throws-on-nonok.md) — `if(!res.ok)` efter apiRequest() är dead code (throwIfResNotOk kastar först); för strukturerad 400-body (errors/preview) använd rå fetch(versionedUrl) + servern måste skicka läsbart `message`.
 - [Import-wizard metadata write timing](import-wizard-metadata.md) — wizard-metadata skrivs EFTER objekt-tx commit (batch-helper kräver committade rader via recursive CTE); best-effort, ingen lazy-create.
+- [Orderkoncept faktureringsmetoder](order-concept-invoice-methods.md) — invoiceModel kanonisk (gren via getOrderConceptMethod); PATCH bor i fortnoxRoutes (date-coerce timestamps); abonnemang har INGEN billing-scheduler (nextRunDate konsumeras aldrig).

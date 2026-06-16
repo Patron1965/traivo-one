@@ -10,6 +10,7 @@ import { asyncHandler } from "../asyncHandler";
 import { NotFoundError, ValidationError, ForbiddenError } from "../errors";
 import { objects, workOrders, customerCommunications, objectContacts, orderConceptArticles, orderConceptObjects, articleObjectMappings, conceptFilters, priceLists, objectMetadata, metadataDefinitions, deliverySchedules, assignments as assignmentsTable, articles, type InsertOrderConceptArticle } from "@shared/schema";
 import { getISOWeek, getStartOfISOWeek, getDateFromWeekdayInMonth } from "./helpers";
+import { getOrderConceptMethod } from "@shared/order-concept-method";
 import {
   resolveTimeWarningThresholds,
   computeLeadTimeWarnings,
@@ -375,13 +376,18 @@ app.post("/api/order-concepts/:id/validate", asyncHandler(async (req, res) => {
     if (conceptArticles.length === 0) errors.push({ code: "NO_ARTICLES", message: "Inga artiklar valda" });
     if (!concept.invoiceLevel) warnings.push({ code: "NO_INVOICE_LEVEL", message: "Faktureringsnivå ej vald" });
 
-    if (concept.deliveryModel === "schedule") {
+    // Task #934: validera per faktureringsmetod (invoiceModel m. fallback scenario).
+    const validateMethod = getOrderConceptMethod(concept);
+    if (validateMethod === "schedule") {
       const schedules = await storage.getDeliverySchedules(concept.id);
-      if (schedules.length === 0) warnings.push({ code: "NO_SCHEDULES", message: "Inga leveransscheman definierade" });
+      const hasInterval = !!concept.intervalStartDate && !!concept.intervalFrequencyDays && Number(concept.intervalFrequencyDays) > 0;
+      if (schedules.length === 0 && !hasInterval) {
+        warnings.push({ code: "NO_SCHEDULES", message: "Inget leveransschema eller intervall definierat" });
+      }
     }
 
-    if (concept.deliveryModel === "subscription" && !concept.monthlyFeeCalc) {
-      warnings.push({ code: "NO_MONTHLY_FEE", message: "Månadsavgift ej beräknad" });
+    if (validateMethod === "subscription" && !concept.monthlyFee) {
+      warnings.push({ code: "NO_MONTHLY_FEE", message: "Månadsavgift saknas" });
     }
 
     // ADR v3 §2.3 (Task #556): Konfliktvarning för fakturamottagare.
@@ -904,7 +910,7 @@ app.post("/api/order-concepts/:id/rerun", asyncHandler(async (req, res) => {
       }
     }
 
-    if (concept.scenario === "schema" && concept.deliverySchedule) {
+    if (getOrderConceptMethod(concept) === "schedule" && concept.deliverySchedule) {
       const schedule = concept.deliverySchedule as any[];
       const now = new Date();
       const futureDate = new Date();
@@ -2272,7 +2278,7 @@ app.get("/api/order-concepts/:id/export-pdf", asyncHandler(async (req, res) => {
     kv("Villkorsfilter", String(filters.length), 1);
     y += 10;
     kv("Artiklar/uppgifter", String(conceptArticles.length), 0);
-    kv("Leveransmodell", concept.deliveryModel || "—", 1);
+    kv("Faktureringsmetod", { call_off: "Avrop", schedule: "Schema", subscription: "Abonnemang" }[getOrderConceptMethod(concept)], 1);
     y += 10;
     kv("Beräknat ordervärde", `${storedTotalValue.toLocaleString("sv-SE")} kr`, 0);
     kv("Beräknad kostnad", `${storedTotalCost.toLocaleString("sv-SE")} kr`, 1);
@@ -2511,9 +2517,9 @@ app.get("/api/order-concepts/:id/simulate", asyncHandler(async (req, res) => {
             const schedule = concept.deliverySchedule as any[];
             const monthEntries = schedule.filter((s: any) => s.month === 0 || s.month === month);
             jobCount = monthEntries.length * objectCount;
-        } else if (concept.scenario === "schema" && concept.intervalDays && concept.intervalDays > 0) {
+        } else if (getOrderConceptMethod(concept) === "schedule" && concept.intervalDays && concept.intervalDays > 0) {
             jobCount = Math.ceil(daysInMonth / concept.intervalDays) * objectCount;
-        } else if (concept.scenario === "abonnemang") {
+        } else if (getOrderConceptMethod(concept) === "subscription") {
             jobCount = objectCount;
         }
 

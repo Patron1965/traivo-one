@@ -20,6 +20,7 @@ import type {
   InvoiceLevel, InvoiceModel, InvoicePeriod,
   CustomerMode, TaskCategory,
 } from "@shared/schema";
+import { INVOICE_MODEL_TO_SCENARIO } from "@shared/order-concept-method";
 import Step1NameCustomer from "@/components/orderkoncept/Step1NameCustomer";
 import Step2PriceReference from "@/components/orderkoncept/Step2PriceReference";
 import Step3Invoicing from "@/components/orderkoncept/Step3Invoicing";
@@ -118,6 +119,10 @@ export default function OrderConceptWizardPage() {
   const [subscriptionAdjustmentDate, setSubscriptionAdjustmentDate] = useState("");
   const [invoiceConsolidation, setInvoiceConsolidation] = useState("per_job");
   const [departmentMetadataField, setDepartmentMetadataField] = useState<string | null>(null);
+  // Step 3 — abonnemang (Task #934)
+  const [monthlyFee, setMonthlyFee] = useState<number | null>(null);
+  const [billingFrequency, setBillingFrequency] = useState<string | null>(null);
+  const [subscriptionStartDate, setSubscriptionStartDate] = useState("");
   // Step 4
   const [targetClusterIds, setTargetClusterIds] = useState<Set<string>>(new Set());
   const [filters, setFilters] = useState<ConditionFilter[]>([]);
@@ -172,6 +177,9 @@ export default function OrderConceptWizardPage() {
     setSubscriptionAdjustmentDate(toDateInput(wizardData.subscriptionAdjustmentDate));
     setInvoiceConsolidation(wizardData.invoiceConsolidation || "per_job");
     setDepartmentMetadataField(wizardData.departmentMetadataField || null);
+    setMonthlyFee(wizardData.monthlyFee != null ? Number(wizardData.monthlyFee) : null);
+    setBillingFrequency(wizardData.billingFrequency || null);
+    setSubscriptionStartDate(toDateInput(wizardData.deliveryStart));
     setTargetClusterIds(new Set(Array.isArray(wizardData.targetClusterIds) ? wizardData.targetClusterIds : []));
     setFilters((wizardData.filters || []).map((f: any) => ({
       metadataKey: f.metadataKey, operator: f.operator, filterValue: f.filterValue,
@@ -262,11 +270,22 @@ export default function OrderConceptWizardPage() {
     customerLabel: customerLabel || null,
     invoiceLevel: invoiceLevel || null,
     invoiceModel: invoiceModel || null,
+    // Task #934: write-through så att legacy-`scenario` (NOT NULL) och
+    // `deliveryModel` hålls i synk med vald faktureringsmetod. Båda blir
+    // `undefined` (och utelämnas av JSON.stringify) när invoiceModel saknas, så
+    // att den hårdkodade scenario:"avrop" från create-steget bevaras.
+    scenario: invoiceModel ? INVOICE_MODEL_TO_SCENARIO[invoiceModel] : undefined,
+    deliveryModel: invoiceModel || undefined,
     invoicePeriod,
     invoiceLock,
     invoiceBrake,
     invoiceMethod: invoiceMethod || null,
     subscriptionAdjustmentDate: toIsoOrNull(subscriptionAdjustmentDate),
+    // Abonnemangs-fält skrivs bara när metoden är abonnemang; annars utelämnas de
+    // (undefined) så befintliga värden inte nollställs vid metodbyte.
+    monthlyFee: invoiceModel === "subscription" ? (monthlyFee ?? null) : undefined,
+    billingFrequency: invoiceModel === "subscription" ? (billingFrequency || "monthly") : undefined,
+    deliveryStart: invoiceModel === "subscription" ? toIsoOrNull(subscriptionStartDate) : undefined,
     invoiceConsolidation,
     departmentMetadataField: invoiceConsolidation === "department" ? (departmentMetadataField || null) : null,
     targetClusterIds: Array.from(targetClusterIds),
@@ -283,7 +302,7 @@ export default function OrderConceptWizardPage() {
     totalValue,
     totalCost,
     estimatedHours,
-  }), [conceptName, customerMode, selectedCustomerId, customerMetadataField, priceListId, priceModel, fixedPriceKronor, customerReference, customerLabel, invoiceLevel, invoiceModel, invoicePeriod, invoiceLock, invoiceBrake, invoiceMethod, subscriptionAdjustmentDate, invoiceConsolidation, departmentMetadataField, targetClusterIds, deliveryTimeType, timeWindows, intervalStartDate, intervalEndDate, intervalFrequencyDays, intervalFlexDays, deliveryRestrictions, conceptArticles, totalValue, totalCost, estimatedHours]);
+  }), [conceptName, customerMode, selectedCustomerId, customerMetadataField, priceListId, priceModel, fixedPriceKronor, customerReference, customerLabel, invoiceLevel, invoiceModel, invoicePeriod, invoiceLock, invoiceBrake, invoiceMethod, subscriptionAdjustmentDate, monthlyFee, billingFrequency, subscriptionStartDate, invoiceConsolidation, departmentMetadataField, targetClusterIds, deliveryTimeType, timeWindows, intervalStartDate, intervalEndDate, intervalFrequencyDays, intervalFlexDays, deliveryRestrictions, conceptArticles, totalValue, totalCost, estimatedHours]);
 
   const createConceptMutation = useMutation({
     mutationFn: async () => {
@@ -654,6 +673,9 @@ export default function OrderConceptWizardPage() {
                 subscriptionAdjustmentDate={subscriptionAdjustmentDate}
                 invoiceConsolidation={invoiceConsolidation}
                 departmentMetadataField={departmentMetadataField}
+                monthlyFee={monthlyFee}
+                billingFrequency={billingFrequency}
+                subscriptionStartDate={subscriptionStartDate}
                 objectCount={targetClusterIds.size}
                 onUpdate={(data) => {
                   if (data.invoiceLevel !== undefined) form.setValue("invoiceLevel", data.invoiceLevel || "", { shouldValidate: true });
@@ -665,6 +687,9 @@ export default function OrderConceptWizardPage() {
                   if (data.subscriptionAdjustmentDate !== undefined) setSubscriptionAdjustmentDate(data.subscriptionAdjustmentDate);
                   if (data.invoiceConsolidation !== undefined) setInvoiceConsolidation(data.invoiceConsolidation);
                   if (data.departmentMetadataField !== undefined) setDepartmentMetadataField(data.departmentMetadataField);
+                  if (data.monthlyFee !== undefined) setMonthlyFee(data.monthlyFee);
+                  if (data.billingFrequency !== undefined) setBillingFrequency(data.billingFrequency);
+                  if (data.subscriptionStartDate !== undefined) setSubscriptionStartDate(data.subscriptionStartDate);
                   setHasUnsavedWork(true);
                 }}
               />
