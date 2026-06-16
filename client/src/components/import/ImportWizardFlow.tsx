@@ -320,11 +320,14 @@ function StepEditor({ step, locked, onCommitDone, sessionId }: StepEditorProps) 
   const { toast } = useToast();
   const tplKey = STEP_TEMPLATES[step];
   const tpl = IMPORT_TEMPLATES[tplKey];
-  const templateColumns = useMemo(() => tpl.columns.map(c => c.name), [tpl]);
   const fields = useMemo<StepField[]>(
-    () => tpl.columns.map(c => ({ name: c.name, label: FIELD_LABELS[c.name] ?? c.name, required: c.required })),
+    () => tpl.columns.map(c => ({ name: c.name, label: c.label ?? FIELD_LABELS[c.name] ?? c.name, required: c.required })),
     [tpl],
   );
+  // Visningsetiketter (svenska) — används i kolumn-hinten och som positionell
+  // fallback när inkommande data saknar rubrikrad. Auto-mappningen matchar både
+  // etikett och internt fältnamn, så detta påverkar inte träffsäkerheten.
+  const templateColumns = useMemo(() => fields.map(f => f.label), [fields]);
 
   const metaTypesQuery = useQuery<{ types: MetaType[] }>({
     queryKey: ["/api/import/wizard/metadata-types"],

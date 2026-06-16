@@ -32,18 +32,21 @@ async function buildTemplateWorkbook(def: ImportTemplateDefinition): Promise<Buf
 
   // Dataflik
   const sheet = wb.addWorksheet(def.sheetName);
-  sheet.columns = def.columns.map((c) => ({
-    header: c.name,
-    key: c.name,
-    width: Math.min(Math.max(c.name.length + 4, 14), 40),
-  }));
+  sheet.columns = def.columns.map((c) => {
+    const headerLabel = c.label ?? c.name;
+    return {
+      header: headerLabel,
+      key: c.name,
+      width: Math.min(Math.max(headerLabel.length + 4, 14), 40),
+    };
+  });
 
   // Rubrikrad: obligatoriska kolumner i fet stil + färgad bakgrund (warning)
   const headerRow = sheet.getRow(1);
   headerRow.height = 22;
   def.columns.forEach((c, idx) => {
     const cell = headerRow.getCell(idx + 1);
-    cell.value = c.name;
+    cell.value = c.label ?? c.name;
     cell.font = { bold: true, color: { argb: "FF1B4B6B" } };
     cell.alignment = { vertical: "middle", horizontal: "left", wrapText: true };
     cell.fill = {
@@ -110,7 +113,7 @@ async function buildTemplateWorkbook(def: ImportTemplateDefinition): Promise<Buf
     cell.alignment = { vertical: "middle" };
   });
   for (const c of def.columns) {
-    const row = readme.addRow([c.name, c.required ? "Ja" : "Nej", c.description, c.example ?? ""]);
+    const row = readme.addRow([c.label ?? c.name, c.required ? "Ja" : "Nej", c.description, c.example ?? ""]);
     row.alignment = { wrapText: true, vertical: "top" };
     if (c.required) {
       row.getCell(1).font = { bold: true };
