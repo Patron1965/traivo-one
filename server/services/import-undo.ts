@@ -43,6 +43,13 @@ export type ObjectSnapshot = {
   latitude: number | null;
   longitude: number | null;
   objectType: string | null;
+  // Livscykel-fält (aktivstatus-import). VALFRIA: de stämplas bara på
+  // update_object-actions som faktiskt arkiverar/återställer ett objekt. Äldre
+  // (redan stämplade) actions saknar nycklarna och ska bete sig exakt som förr —
+  // därför jämförs/återställs de endast när `beforeJson`/`afterJson` äger fältet.
+  deletedAt?: string | Date | null;
+  archivedBy?: string | null;
+  archivedReason?: string | null;
 };
 
 // Drizzle-select för en ObjectSnapshot (property-namn → kolumner).
@@ -88,6 +95,15 @@ function snapshotMatches(current: ObjectSnapshot, after: any): boolean {
       if (!Number.isNaN(an) && !Number.isNaN(bn) && Math.abs(an - bn) < 1e-6) continue;
     }
     return false;
+  }
+  // Livscykel-aware drift-skydd: ENDAST om afterJson äger `deletedAt` (= en
+  // aktivstatus-stämplad action). Jämför arkiv-tillstånd som närvaro (null vs
+  // ej-null) istället för exakt tidsstämpel — robust mot tz/precisions-drift.
+  // Äldre actions saknar nyckeln → hoppas över (bakåtkompatibelt).
+  if (Object.prototype.hasOwnProperty.call(after, "deletedAt")) {
+    const curArchived = (current as any).deletedAt != null;
+    const afterArchived = after.deletedAt != null;
+    if (curArchived !== afterArchived) return false;
   }
   return true;
 }
@@ -261,7 +277,7 @@ function restoreScalarSet(before: any): Record<string, unknown> {
   };
   const toStr = (v: unknown): string | null =>
     v === null || v === undefined || v === "" ? null : String(v);
-  return {
+  const out: Record<string, unknown> = {
     name: b.name ?? null,
     parentId: toStr(b.parentId),
     address: toStr(b.address),
@@ -272,6 +288,16 @@ function restoreScalarSet(before: any): Record<string, unknown> {
     // object_type är NOT NULL — fall tillbaka på "omrade" om snapshot saknar typ.
     objectType: toStr(b.objectType) ?? "omrade",
   };
+  // Livscykel-återställning: ENDAST om before-snapshot äger `deletedAt` (= en
+  // aktivstatus-stämplad action). Då återställs arkiv-tillståndet exakt: null ⇒
+  // aktivt, tidsstämpel ⇒ åter-arkiverat. Äldre (legacy) update_object-actions
+  // saknar nyckeln → arkiv-fälten rörs ALDRIG (oförändrat beteende).
+  if (Object.prototype.hasOwnProperty.call(b, "deletedAt")) {
+    out.deletedAt = b.deletedAt == null ? null : new Date(b.deletedAt as any);
+    out.archivedBy = (b.archivedBy ?? null) as string | null;
+    out.archivedReason = (b.archivedReason ?? null) as string | null;
+  }
+  return out;
 }
 
 // Återställ primär-förälder-spegeln (object_parents.isPrimary) till `parentId`.
@@ -473,10 +499,31 @@ export async function undoImportBatch(args: {
             await markBlocked(action, "Saknar entityId.");
             continue;
           }
+          // Livscykel-aware ENDAST om afterJson äger `deletedAt` (aktivstatus-
+          // stämplad action). Då måste vi (a) kunna hitta även ARKIVERADE objekt
+          // (annars går undo av en arkivering inte att utföra) och (b) läsa
+          // arkiv-kolumnerna för drift-jämförelsen. Legacy-actions behåller exakt
+          // gammalt beteende: bara aktiva objekt, bara skalär-kolumnerna.
+          const lifecycleAware = Object.prototype.hasOwnProperty.call(
+            (action.afterJson ?? {}) as any,
+            "deletedAt",
+          );
+          const selectCols = lifecycleAware
+            ? {
+                ...objectSnapshotColumns,
+                deletedAt: objects.deletedAt,
+                archivedBy: objects.archivedBy,
+                archivedReason: objects.archivedReason,
+              }
+            : objectSnapshotColumns;
           const [current] = await tx
-            .select(objectSnapshotColumns)
+            .select(selectCols)
             .from(objects)
-            .where(and(eq(objects.id, id), eq(objects.tenantId, tenantId), isNull(objects.deletedAt)));
+            .where(
+              lifecycleAware
+                ? and(eq(objects.id, id), eq(objects.tenantId, tenantId))
+                : and(eq(objects.id, id), eq(objects.tenantId, tenantId), isNull(objects.deletedAt)),
+            );
           if (!current) {
             await markBlocked(action, "Objektet finns inte längre — kan inte återställas.");
             continue;

@@ -1949,10 +1949,32 @@ export default function ObjectsPage() {
             </Badge>
           )}
         </Button>
-        <Button variant="outline" onClick={exportCSV} disabled={isExporting} data-testid="button-export">
-          {isExporting ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Download className="h-4 w-4 mr-2" />}
-          {isExporting ? "Exporterar…" : "Exportera allt"}
-        </Button>
+        <DropdownMenu modal={false}>
+          <DropdownMenuTrigger asChild>
+            <Button variant="outline" disabled={isExporting} data-testid="button-export">
+              {isExporting ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Download className="h-4 w-4 mr-2" />}
+              {isExporting ? "Exporterar…" : "Exportera"}
+              <ChevronDown className="h-4 w-4 ml-2" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-80">
+            <DropdownMenuItem onClick={exportCSV} data-testid="menu-export-csv-report">
+              <FileSpreadsheet className="h-4 w-4 mr-2 mt-0.5 shrink-0" />
+              <div className="flex flex-col">
+                <span>Rapport (CSV)</span>
+                <span className="text-xs text-muted-foreground">För analys i Excel – kan inte läsas tillbaka in</span>
+              </div>
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={() => navigate("/objektmall-import")} data-testid="menu-export-excel-roundtrip">
+              <Download className="h-4 w-4 mr-2 mt-0.5 shrink-0" />
+              <div className="flex flex-col">
+                <span>För återimport (Excel)</span>
+                <span className="text-xs text-muted-foreground">Redigera och läs tillbaka – uppdaterar befintliga objekt via objektmallen</span>
+              </div>
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
         <Button size="lg" onClick={() => setCreateDialogOpen(true)} data-testid="button-add-object">
           <Plus className="h-4 w-4 mr-2" />
           Skapa {t("object_singular").toLowerCase()}

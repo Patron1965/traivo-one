@@ -56,6 +56,10 @@ export const KNOWN_FIELDS: Record<string, string> = {
   leveransadress: "address.full",
   "delivery latitude": "position.lat",
   "delivery longitude": "position.lng",
+  // Aktivstatus → arkivera/återställ objekt vid import.
+  aktivstatus: "active_status",
+  status: "active_status",
+  aktiv: "active_status",
 };
 
 // §6.3 — adress-punktnotation → sammansatt address-objekt.
@@ -107,6 +111,7 @@ export const FIELD_RULES: Record<string, { type: ValidatorType; required: boolea
   "contact.title": { type: "text", required: false },
   "contact.phone": { type: "phone", required: false },
   "contact.email": { type: "email", required: false },
+  active_status: { type: "text", required: false },
 };
 
 // §4.1 / §6.6 — fält-katalog för "Matcha data"-dialogen, grupperad per kategori.
@@ -120,6 +125,7 @@ export const FIELD_CATALOG: FieldDefinition[] = [
   { key: "external_id", label: "externt_id", description: "Kundens egna referensnummer", category: "standard", type: "text_id", required: false },
   { key: "customer_name", label: "Kund (namn)", description: "Koppla raden till en kund via kundens namn", category: "standard", type: "text", required: false },
   { key: "customer_ref", label: "Kund (kundnummer)", description: "Koppla raden till en kund via kundnummer/org.nr", category: "standard", type: "text", required: false },
+  { key: "active_status", label: "Aktivstatus", description: "aktiv = aktivt objekt, arkiverad = arkivera (soft-delete)", category: "standard", type: "text", required: false },
   { key: "__empty", label: "__EMPTY (ignorera)", description: "Ignorera kolumnen", category: "standard", type: "text", required: false },
   // Adressfält
   { key: "address.full", label: "Leveransadress", description: "Fullständig adress", category: "address", type: "text", required: false },
@@ -149,6 +155,30 @@ export const ALL_KNOWN_KEYS: string[] = Array.from(
 /** Normaliserar en rubrik för matchning (trim + lowercase). */
 export function normalizeHeader(header: string): string {
   return (header ?? "").trim().toLowerCase();
+}
+
+// Aktivstatus-värden som tolkas som "aktiv" respektive "arkiverad".
+const ACTIVE_STATUS_ACTIVE = new Set([
+  "aktiv", "aktivt", "active", "ja", "yes", "true", "1",
+]);
+const ACTIVE_STATUS_ARCHIVED = new Set([
+  "arkiverad", "arkiverat", "archived", "inaktiv", "inaktivt", "nej", "no", "false", "0",
+]);
+
+/**
+ * Tolkar ett aktivstatus-cellvärde till en livscykel-avsikt.
+ * "active" ⇒ objektet ska vara aktivt (återställ om arkiverat).
+ * "archived" ⇒ objektet ska arkiveras (soft-delete).
+ * null ⇒ tomt eller okänt värde (ingen åtgärd).
+ * Delas av klient (förhandsvisning) och server (validate + execute).
+ */
+export function parseActiveStatus(raw: string | null | undefined): "active" | "archived" | null {
+  if (raw == null) return null;
+  const v = String(raw).trim().toLowerCase();
+  if (v === "") return null;
+  if (ACTIVE_STATUS_ACTIVE.has(v)) return "active";
+  if (ACTIVE_STATUS_ARCHIVED.has(v)) return "archived";
+  return null;
 }
 
 export interface ColumnMapping {

@@ -60,7 +60,9 @@ import {
   ColumnMappings,
   FIELD_CATALOG,
   FieldDefinition,
+  parseActiveStatus,
 } from "@shared/object-import-spec";
+import { archivePreflight } from "../services/object-archive";
 import {
   findImportDuplicateWarnings,
   type ImportDuplicateWarning,
@@ -401,6 +403,102 @@ export function registerObjectImportV2Routes(app: Express): void {
           severity: "warning",
         });
         if (row.status === "valid") row.status = "warning";
+      }
+
+      // Feature 3: aktivstatus-förhandsvisning. Visa per rad om importen kommer
+      // att arkivera eller återställa objektet. Arkivering flaggas alltid (den är
+      // konsekvensbärande). Återställning flaggas ENDAST när det matchade objektet
+      // faktiskt är arkiverat just nu — annars vore varje "aktiv"-rad en falsk
+      // varning på en normal fil. Okänt värde flaggas så användaren ser att det
+      // ignoreras. Auktoritativ blockering (aktiva underobjekt) sker i execute.
+      const activeRows = resolved.filter(
+        (r) => parseActiveStatus(r.fields.active_status) === "active",
+      );
+      const archivedSystem = new Set<string>();
+      const archivedInterim = new Set<string>();
+      const archivedExternal = new Set<string>();
+      if (activeRows.length) {
+        const sysIds = Array.from(
+          new Set(activeRows.map((r) => r.fields.system_id).filter(Boolean) as string[]),
+        );
+        const intIds = Array.from(
+          new Set(activeRows.map((r) => r.fields.interim_id).filter(Boolean) as string[]),
+        );
+        const extIds = Array.from(
+          new Set(activeRows.map((r) => r.fields.external_id).filter(Boolean) as string[]),
+        );
+        const numberLookup = [...sysIds, ...intIds.map((i) => OBJEKTMALL_INTERIM_PREFIX + i)];
+        if (numberLookup.length) {
+          const rowsA = await db
+            .select({ objectNumber: objects.objectNumber, deletedAt: objects.deletedAt })
+            .from(objects)
+            .where(and(eq(objects.tenantId, tenantId), inArray(objects.objectNumber, numberLookup)));
+          for (const r of rowsA) {
+            if (!r.objectNumber || r.deletedAt == null) continue;
+            if (r.objectNumber.startsWith(OBJEKTMALL_INTERIM_PREFIX)) {
+              archivedInterim.add(r.objectNumber.slice(OBJEKTMALL_INTERIM_PREFIX.length));
+            } else {
+              archivedSystem.add(r.objectNumber);
+            }
+          }
+        }
+        if (extIds.length) {
+          const [extKatalog] = await db
+            .select({ id: metadataKatalog.id })
+            .from(metadataKatalog)
+            .where(and(eq(metadataKatalog.tenantId, tenantId), eq(metadataKatalog.namn, "externt_id")));
+          if (extKatalog) {
+            const rowsE = await db
+              .select({ varde: metadataVarden.vardeString, deletedAt: objects.deletedAt })
+              .from(metadataVarden)
+              .innerJoin(objects, eq(objects.id, metadataVarden.objektId))
+              .where(
+                and(
+                  eq(metadataVarden.tenantId, tenantId),
+                  eq(metadataVarden.metadataKatalogId, extKatalog.id),
+                  inArray(metadataVarden.vardeString, extIds),
+                ),
+              );
+            for (const r of rowsE) if (r.varde && r.deletedAt != null) archivedExternal.add(r.varde);
+          }
+        }
+      }
+      for (const r of resolved) {
+        const raw = r.fields.active_status;
+        if (!raw || !raw.trim()) continue;
+        const row = byRow.get(r.rowNumber);
+        if (!row || row.status === "invalid") continue;
+        const st = parseActiveStatus(raw);
+        if (!st) {
+          row.issues.push({
+            field: "active_status",
+            message: `Okänt aktivstatus-värde "${raw}" — ignoreras (objektets status ändras inte).`,
+            severity: "warning",
+          });
+          if (row.status === "valid") row.status = "warning";
+          continue;
+        }
+        if (st === "archived") {
+          row.issues.push({
+            field: "active_status",
+            message: 'Aktivstatus "arkiverad": objektet arkiveras (soft-delete) vid import.',
+            severity: "warning",
+          });
+          if (row.status === "valid") row.status = "warning";
+        } else {
+          const isArchivedNow =
+            (!!r.fields.system_id && archivedSystem.has(r.fields.system_id)) ||
+            (!!r.fields.interim_id && archivedInterim.has(r.fields.interim_id)) ||
+            (!!r.fields.external_id && archivedExternal.has(r.fields.external_id));
+          if (isArchivedNow) {
+            row.issues.push({
+              field: "active_status",
+              message: 'Aktivstatus "aktiv": arkiverat objekt återställs vid import.',
+              severity: "warning",
+            });
+            if (row.status === "valid") row.status = "warning";
+          }
+        }
       }
 
       const rows = Array.from(byRow.values());
@@ -993,6 +1091,10 @@ export function registerObjectImportV2Routes(app: Express): void {
             const row = item.row;
             const parentId = resolveParentId(item);
             const known = buildKnownFields(row);
+            // Aktivstatus-import: "arkiverad" ⇒ arkivera (soft-delete),
+            // "aktiv" ⇒ återställ. null = ingen aktivstatus-kolumn / okänt värde
+            // ⇒ ingen livscykel-åtgärd (objektets nuvarande tillstånd bevaras).
+            const activeStatus = parseActiveStatus(row.fields.active_status);
 
             // Resolvera radens kund: eget värde → förälderns kund → standardkund.
             const rowCustomerId =
@@ -1041,6 +1143,61 @@ export function registerObjectImportV2Routes(app: Express): void {
                 .from(objects)
                 .where(and(eq(objects.id, targetId), eq(objects.tenantId, tenantId)));
               const metaIdsBefore = await metadataIdsFor(targetId);
+              // Aktivstatus-livscykel: arkivera/återställ som DEL av samma UPDATE
+              // (atomiskt med skalär-ändringarna). Arkiv-fälten hämtas separat —
+              // objectSnapshotColumns är de 8 skalär-fälten (oförändrat snapshot-
+              // format för vanliga uppdateringar). Vid arkivering av ett AKTIVT
+              // objekt körs preflight FÖRST: hård-blockare (aktiva underobjekt)
+              // kastar per-rad (ingen tyst kaskad). Idempotent: redan arkiverad +
+              // "arkiverad" = no-op; redan aktiv + "aktiv" = no-op.
+              type LifecycleState = {
+                deletedAt: Date | null;
+                archivedBy: string | null;
+                archivedReason: string | null;
+              };
+              let lifecycleBefore: LifecycleState | null = null;
+              let lifecycleAfter: LifecycleState | null = null;
+              if (activeStatus) {
+                const [lc] = await db
+                  .select({
+                    deletedAt: objects.deletedAt,
+                    archivedBy: objects.archivedBy,
+                    archivedReason: objects.archivedReason,
+                  })
+                  .from(objects)
+                  .where(and(eq(objects.id, targetId), eq(objects.tenantId, tenantId)));
+                lifecycleBefore = {
+                  deletedAt: lc?.deletedAt ?? null,
+                  archivedBy: lc?.archivedBy ?? null,
+                  archivedReason: lc?.archivedReason ?? null,
+                };
+                const currentlyArchived = lifecycleBefore.deletedAt != null;
+                if (activeStatus === "archived" && !currentlyArchived) {
+                  const pre = await archivePreflight(targetId, tenantId);
+                  const hardBlockers = pre.blockers.filter((b) => !/redan arkiverat/i.test(b));
+                  if (hardBlockers.length > 0) {
+                    throw new Error(`Kan inte arkivera objektet: ${hardBlockers.join("; ")}`);
+                  }
+                  updateData.deletedAt = new Date();
+                  updateData.archivedBy = userId ?? null;
+                  updateData.archivedReason = "Import: aktivstatus=arkiverad";
+                } else if (activeStatus === "active" && currentlyArchived) {
+                  updateData.deletedAt = null;
+                  updateData.archivedBy = null;
+                  updateData.archivedReason = null;
+                }
+                lifecycleAfter = {
+                  deletedAt: (Object.prototype.hasOwnProperty.call(updateData, "deletedAt")
+                    ? updateData.deletedAt
+                    : lifecycleBefore.deletedAt) as Date | null,
+                  archivedBy: (Object.prototype.hasOwnProperty.call(updateData, "archivedBy")
+                    ? updateData.archivedBy
+                    : lifecycleBefore.archivedBy) as string | null,
+                  archivedReason: (Object.prototype.hasOwnProperty.call(updateData, "archivedReason")
+                    ? updateData.archivedReason
+                    : lifecycleBefore.archivedReason) as string | null,
+                };
+              }
               // RETURNING ger objektets effektiva förälder efter uppdateringen
               // (= nysatt parentId, annars bevarad DB-förälder). Den används som
               // nivå-lås-frö i metadata-batchen så låskontrollen bevaras exakt
@@ -1067,6 +1224,28 @@ export function registerObjectImportV2Routes(app: Express): void {
                   longitude: k.longitude ?? preSnapshot.longitude,
                   objectType: k.objectType ?? preSnapshot.objectType,
                 };
+                // Aktivstatus-rader: stämpla med arkiv-fälten i BÅDA snapshots så
+                // undo blir livscykel-aware (jämför + återställer arkiv-tillstånd).
+                // Vanliga rader stämplas exakt som förr (legacy, 8 fält) — då rör
+                // undo aldrig arkiv-fälten.
+                const beforeJson: any =
+                  activeStatus && lifecycleBefore
+                    ? {
+                        ...preSnapshot,
+                        deletedAt: lifecycleBefore.deletedAt,
+                        archivedBy: lifecycleBefore.archivedBy,
+                        archivedReason: lifecycleBefore.archivedReason,
+                      }
+                    : preSnapshot;
+                const afterJson: any =
+                  activeStatus && lifecycleAfter
+                    ? {
+                        ...afterSnapshot,
+                        deletedAt: lifecycleAfter.deletedAt,
+                        archivedBy: lifecycleAfter.archivedBy,
+                        archivedReason: lifecycleAfter.archivedReason,
+                      }
+                    : afterSnapshot;
                 await stampAction({
                   tenantId,
                   batchId,
@@ -1076,8 +1255,8 @@ export function registerObjectImportV2Routes(app: Express): void {
                   actionType: "update_object",
                   entityType: "object",
                   entityId: targetId,
-                  beforeJson: preSnapshot as any,
-                  afterJson: afterSnapshot as any,
+                  beforeJson,
+                  afterJson,
                   status: "applied",
                 });
               }
@@ -1171,6 +1350,21 @@ export function registerObjectImportV2Routes(app: Express): void {
                   afterJson: { ...afterSnapshot, payerIds: createdPayerId ? [createdPayerId] : [] } as any,
                   status: "applied",
                 });
+              }
+              // Aktivstatus=arkiverad på en NY rad: skapa objektet aktivt (ovan) och
+              // arkivera det direkt (soft-delete). Ingen preflight behövs — ett nyss
+              // skapat objekt har inga aktiva underobjekt/ordrar. create_object-undo
+              // soft-deletear redan objektet, så åter-arkiveringen är idempotent och
+              // kräver ingen extra undo-stämpel. ("aktiv" = standard, ingen åtgärd.)
+              if (activeStatus === "archived") {
+                await db
+                  .update(objects)
+                  .set({
+                    deletedAt: new Date(),
+                    archivedBy: userId ?? null,
+                    archivedReason: "Import: aktivstatus=arkiverad",
+                  })
+                  .where(and(eq(objects.id, createdObj.id), eq(objects.tenantId, tenantId)));
               }
               await writeRowMetadata(createdObj.id, row, true, parentId);
               customerByObjectId.set(createdObj.id, rowCustomerId);
