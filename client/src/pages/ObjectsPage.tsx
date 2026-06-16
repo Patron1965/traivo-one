@@ -760,8 +760,8 @@ export default function ObjectsPage() {
           break;
         }
         case "customer": {
-          const ac = customerNameMap.get(a.customerId) || "";
-          const bc = customerNameMap.get(b.customerId) || "";
+          const ac = customerNameMap.get(a.customerId ?? "") || "";
+          const bc = customerNameMap.get(b.customerId ?? "") || "";
           cmp = ac.localeCompare(bc, "sv", { sensitivity: "base" });
           break;
         }
@@ -1501,7 +1501,7 @@ export default function ObjectsPage() {
     const children = getChildren(obj.id);
     const isExpanded = expandedAreas.has(obj.id);
     const hasChildren = children.length > 0;
-    const customerName = customerMap.get(obj.customerId) || "";
+    const customerName = customerMap.get(obj.customerId ?? "") || "";
     const AccessIcon = accessTypeLabels[obj.accessType || "open"]?.icon || DoorOpen;
     const isEditing = editingObject?.id === obj.id;
 

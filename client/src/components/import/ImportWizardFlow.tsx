@@ -7,14 +7,10 @@ import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
-import { Check, ChevronsUpDown, Eye, FileUp, ListOrdered, Lock, RefreshCw, Upload } from "lucide-react";
+import { Eye, FileUp, ListOrdered, Lock, RefreshCw, Upload } from "lucide-react";
 import Papa from "papaparse";
-import type { Customer } from "@shared/schema";
 import { ImportRowPreview } from "@/components/import/ImportRowPreview";
 import { DownloadTemplateButton } from "@/components/DownloadTemplateButton";
 import { IMPORT_TEMPLATES, type ImportTemplateKey } from "@shared/import-templates";
@@ -24,7 +20,7 @@ type StepNum = 1 | 2 | 3;
 interface SessionDTO {
   id: string;
   tenantId: string;
-  customerId: string;
+  customerId?: string | null;
   status: "in_progress" | "completed" | "abandoned";
   stepCompleted: number;
   interimMap: Record<string, { objectId: string; step: number; name: string }>;
@@ -359,15 +355,7 @@ export function ImportWizardFlow() {
       return null;
     }
   });
-  const [customerId, setCustomerId] = useState<string>("");
-  const [customerPickerOpen, setCustomerPickerOpen] = useState(false);
   const [activeStep, setActiveStep] = useState<StepNum>(1);
-
-  const customersQuery = useQuery<Customer[]>({ queryKey: ["/api/customers"] });
-  const customer = useMemo(
-    () => customersQuery.data?.find(c => c.id === customerId) || null,
-    [customersQuery.data, customerId],
-  );
 
   const sessionQuery = useQuery<SessionDTO>({
     queryKey: ["/api/import/wizard/sessions", sessionId],
@@ -388,8 +376,7 @@ export function ImportWizardFlow() {
 
   const createMut = useMutation({
     mutationFn: async () => {
-      if (!customerId) throw new Error("Välj en kund först");
-      const res = await apiRequest("POST", "/api/import/wizard/sessions", { customerId });
+      const res = await apiRequest("POST", "/api/import/wizard/sessions", {});
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
         throw new Error(body?.message ?? "Kunde inte skapa session");
@@ -429,58 +416,21 @@ export function ImportWizardFlow() {
             <ListOrdered className="h-4 w-4" /> Starta tre-stegs import-wizard
           </CardTitle>
           <CardDescription>
-            Guidat onboarding för en kund: Organisation → Butiker → Fysiska objekt.
+            Guidat onboarding: Organisation → Butiker → Fysiska objekt.
             Interimnummer (t.ex. ORG-1) kopplar stegen så du kan referera tidigare rader.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="space-y-1">
-            <Label>Kund</Label>
-            <Popover open={customerPickerOpen} onOpenChange={setCustomerPickerOpen}>
-              <PopoverTrigger asChild>
-                <Button
-                  variant="outline"
-                  role="combobox"
-                  className="w-full justify-between"
-                  data-testid="button-wizard-select-customer"
-                >
-                  {customer ? (
-                    <span className="truncate">{customer.name}</span>
-                  ) : (
-                    <span className="text-muted-foreground">Välj kund...</span>
-                  )}
-                  <ChevronsUpDown className="ml-2 h-4 w-4 opacity-50" />
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
-                <Command>
-                  <CommandInput placeholder="Sök kund..." />
-                  <CommandList>
-                    <CommandEmpty>Ingen kund hittades.</CommandEmpty>
-                    <CommandGroup>
-                      {(customersQuery.data || []).slice(0, 200).map(c => (
-                        <CommandItem
-                          key={c.id}
-                          value={c.name}
-                          onSelect={() => {
-                            setCustomerId(c.id);
-                            setCustomerPickerOpen(false);
-                          }}
-                          data-testid={`option-wizard-customer-${c.id}`}
-                        >
-                          <Check className={`mr-2 h-4 w-4 ${customerId === c.id ? "opacity-100" : "opacity-0"}`} />
-                          <span className="truncate">{c.name}</span>
-                        </CommandItem>
-                      ))}
-                    </CommandGroup>
-                  </CommandList>
-                </Command>
-              </PopoverContent>
-            </Popover>
-          </div>
+          <p
+            className="text-sm text-muted-foreground rounded-md border bg-muted/40 p-3"
+            data-testid="text-wizard-customer-agnostic"
+          >
+            Wizard importerar objekt oberoende av kund. Objekten skapas neutrala och
+            kopplas till kund senare via orderkoncept.
+          </p>
           <Button
             onClick={() => createMut.mutate()}
-            disabled={!customerId || createMut.isPending}
+            disabled={createMut.isPending}
             data-testid="button-wizard-create-session"
           >
             Starta wizard

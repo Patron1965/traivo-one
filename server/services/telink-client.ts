@@ -378,7 +378,7 @@ interface MatchableObject {
   id: string;
   name: string;
   objectNumber: string | null;
-  customerId: string;
+  customerId: string | null;
 }
 
 async function loadMatchableObjects(tenantId: string): Promise<MatchableObject[]> {
@@ -635,7 +635,7 @@ async function applyContactToObject(args: {
       // Endast ärende vid byte (oldName != null) — inte vid första-gången-import
       // av en kontakt som aldrig funnits.
       if (oldName) {
-        await createContactChangeIssue({
+        issueCreated = await createContactChangeIssue({
           tenantId,
           obj,
           oldName,
@@ -643,7 +643,6 @@ async function applyContactToObject(args: {
           contact,
           batchId,
         });
-        issueCreated = true;
       }
     }
   }
@@ -676,8 +675,10 @@ async function createContactChangeIssue(args: {
   newName: string;
   contact: TelinkContactRecord;
   batchId: string;
-}): Promise<void> {
+}): Promise<boolean> {
   const { tenantId, obj, oldName, newName, contact, batchId } = args;
+  // Kund-neutralt objekt (ADR v3) saknar kund att registrera ärendet på — hoppa över.
+  if (!obj.customerId) return false;
   const lines: string[] = [];
   lines.push(`Ny kontakt enligt Telink: ${newName} (tidigare ${oldName}).`);
   if (contact.role) lines.push(`Roll: ${contact.role}`);
@@ -696,6 +697,7 @@ async function createContactChangeIssue(args: {
     description: lines.join("\n"),
     customerContact: newName,
   });
+  return true;
 }
 
 async function logBatch(

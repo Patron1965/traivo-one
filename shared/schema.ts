@@ -133,7 +133,11 @@ export type ObjectHierarchyLevel = typeof OBJECT_HIERARCHY_LEVELS[number];
 export const objects = pgTable("objects", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
-  customerId: varchar("customer_id").references(() => customers.id).notNull(),
+  // ADR v3: objekt är kund-neutrala. `customer_id` är legacy ("under
+  // avveckling") — auktoritativ kundkoppling sker via `object_payers` /
+  // `work_orders.customer_id`. Nullable (expand-contract) så kund-agnostiska
+  // importer (3-stegs import-wizard) kan skapa objekt utan kundbindning.
+  customerId: varchar("customer_id").references(() => customers.id),
   // Kluster som objektet tillhör - kundbaserad hierarki
   clusterId: varchar("cluster_id"),
   parentId: varchar("parent_id").references((): any => objects.id),
@@ -5777,7 +5781,9 @@ export type ImportBatch = typeof importBatches.$inferSelect;
 export const importSessions = pgTable("import_sessions", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
-  customerId: varchar("customer_id").references(() => customers.id).notNull(),
+  // Task #925: kund-agnostisk wizard (ADR v3). Kolumnen behålls (expand-contract)
+  // men är nullable — objekt skapas neutrala och kopplas till kund via orderkoncept.
+  customerId: varchar("customer_id").references(() => customers.id),
   status: text("status").default("in_progress").notNull(),
   stepCompleted: integer("step_completed").default(0).notNull(),
   interimMap: jsonb("interim_map").default({}).notNull(),

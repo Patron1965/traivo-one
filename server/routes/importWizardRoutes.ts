@@ -1,6 +1,6 @@
 // Task #578: Tre-stegs import-wizard.
 // Endpoints för guidat onboarding-flöde:
-//   POST   /api/import/wizard/sessions                       skapa session (kräver customerId)
+//   POST   /api/import/wizard/sessions                       skapa session (kund-agnostisk)
 //   GET    /api/import/wizard/sessions/:id                   hämta session-state
 //   POST   /api/import/wizard/sessions/:id/preview           dry-run validering per steg
 //   POST   /api/import/wizard/sessions/:id/commit            commit steg (skapar objects)
@@ -18,7 +18,7 @@ import { NotFoundError, ValidationError } from "../errors";
 import { getTenantIdWithFallback } from "../tenant-middleware";
 import { formatZodError, verifyTenantOwnership } from "./helpers";
 import { db } from "../db";
-import { customers, importBatches, importSessions, objects } from "@shared/schema";
+import { importBatches, importSessions, objects } from "@shared/schema";
 import { storage } from "../storage";
 
 type StepNumber = 1 | 2 | 3;
@@ -243,23 +243,15 @@ export function registerImportWizardRoutes(app: Express): void {
     "/api/import/wizard/sessions",
     asyncHandler(async (req, res) => {
       const tenantId = getTenantIdWithFallback(req);
-      const schema = z.object({ customerId: z.string().min(1) });
-      const parsed = schema.safeParse(req.body);
-      if (!parsed.success) throw new ValidationError(formatZodError(parsed.error).error);
 
-      // Verifiera att kunden tillhör tenant
-      const [cust] = await db
-        .select()
-        .from(customers)
-        .where(and(eq(customers.id, parsed.data.customerId), eq(customers.tenantId, tenantId)));
-      if (!cust) throw new NotFoundError("Kund");
-
+      // Wizard är kund-agnostisk (ADR v3): objekt skapas neutrala och kopplas
+      // till kund senare via orderkoncept (object_payers / work_orders.customer_id).
+      // Ingen customerId krävs eller lagras.
       const userId = (req as any).user?.claims?.sub ?? (req as any).user?.id ?? null;
       const [session] = await db
         .insert(importSessions)
         .values({
           tenantId,
-          customerId: parsed.data.customerId,
           createdBy: userId,
         })
         .returning();
@@ -412,7 +404,6 @@ export function registerImportWizardRoutes(app: Express): void {
               .insert(objects)
               .values({
                 tenantId,
-                customerId: session.customerId,
                 parentId: parentObjectId,
                 name: row.name,
                 objectNumber: row.objectNumber ?? null,
@@ -447,7 +438,7 @@ export function registerImportWizardRoutes(app: Express): void {
             created: createdIds.length,
             updated: 0,
             errors: 0,
-            metadata: { wizardStep: step, customerId: session.customerId } as any,
+            metadata: { wizardStep: step } as any,
           } as any);
 
           const createdCounts: Record<string, number> = {
