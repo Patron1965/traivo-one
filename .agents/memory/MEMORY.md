@@ -12,6 +12,7 @@
 - [Computed metadata fields](computed-metadata-fields.md) — derive-on-read fält måste både blockera writes OCH strippa lagrade rader vid läsning, annars överskuggas/förorenas formeln.
 - [WO-metadata edit + query-key encoding](wo-metadata-edit-and-query-encoding.md) — WO-metadata POST insertar alltid (edit=POST-före-DELETE); default react-query-fetchern URL-kodar ej key-segment (fri sträng → custom queryFn med encodeURIComponent).
 - [Importmall-headers ↔ import-matchning](import-template-headers.md) — genererade Excel-mall-headers måste härledas med samma regel (`deriveMetadataDotKey ?? namn`) som `buildMetadataTypeLookup` matchar mot vid import, annars matchar inte kolumnerna.
+- [Import auto-match aliases](import-automatch-aliases.md) — kundrubriker hamnar strax under 0.8-fuzzy (intrumnummer≈0.79); fixa via alias i KNOWN_FIELDS/ADDRESS/CONTACT, sänk ALDRIG tröskeln; alias-a aldrig bara "namn" (objektnamns-kolumn → fälla).
 - [Metadata kundlås read-paths](metadata-customer-lock.md) — kundlåsta katalogfält måste filtreras på ALLA objekt-vända läsningar (objekt-scoped endpoint, server-härledd kund), ej bara admin /types.
 - [wouter useParams outside Route](wouter-direct-render-params.md) — pages rendered via App.tsx `location.startsWith` branches get `{}` from useParams; parse the param from the pathname instead.
 - [Public endpoint tenant token](public-endpoint-tenant-token.md) — `/api/public/*` får aldrig ta rå tenant-slug (enumeration); resolva tenant server-side via QR-code eller HMAC-signed token (`server/dynamic-qr-token.ts`).

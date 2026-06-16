@@ -38,6 +38,11 @@ export const KNOWN_FIELDS: Record<string, string> = {
   interimsnummer: "interim_id",
   interimföräldranummer: "interim_parent_id",
   interimforaldranummer: "interim_parent_id",
+  // Klartext-/stavningsvarianter i riktiga kundfiler som annars fastnar strax
+  // under fuzzy-tröskeln 0.8 (t.ex. "intrumnummer" ≈ 0.79, "överordnat objekt" ≈ 0.24).
+  intrumnummer: "interim_id",
+  "överordnat objekt": "interim_parent_id",
+  "överordnat": "interim_parent_id",
   __empty: "__empty",
   externt_id: "external_id",
   extern_id: "external_id",
@@ -59,6 +64,11 @@ export const ADDRESS_PATTERNS: Record<string, string> = {
   "adress.gatunummer": "address.street_number",
   "adress.postnummer": "address.postal_code",
   "adress.ort": "address.city",
+  // Vanliga klartext-rubriker (ej punktnotation) i kundfiler.
+  postadress: "address.street",
+  postnr: "address.postal_code",
+  postnummer: "address.postal_code",
+  ort: "address.city",
 };
 
 // §6.3 — kontakt-punktnotation → sammansatt contact-objekt.
@@ -70,6 +80,10 @@ export const CONTACT_PATTERNS: Record<string, string> = {
   "kontaktperson.e-post": "contact.email",
   "e-post": "contact.email",
   epost: "contact.email",
+  // Vanliga klartext-rubriker i kundfiler. "namn" utelämnas medvetet — det är
+  // objektnamns-kolumnen i de flesta filer, så auto-koppling till kontakt vore en fälla.
+  titel: "contact.title",
+  telefon: "contact.phone",
 };
 
 // §6.4 — valideringsregler per fält.
