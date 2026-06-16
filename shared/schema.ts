@@ -749,6 +749,10 @@ export const articles = pgTable("articles", {
   purchasePrice: integer("purchase_price"),       // Inköpspris (öre)
   standardCost: integer("standard_cost"),         // Standardkostnad (öre)
   materialCost: integer("material_cost"),          // Materialkostnad (öre)
+  // GAP-104 / Task #938: prisuppbyggnad. Självkostnad = inköp + frakt + lager.
+  // Expand-contract: nullable så befintliga rader + integrationer (Mobile/VRP/Fortnox) är oförändrade.
+  freightCost: integer("freight_cost"),            // Fraktkostnad (öre)
+  warehouseCost: integer("warehouse_cost"),        // Lagerkostnad (öre)
   markupPercent: real("markup_percent"),           // Påslag (%)
   chargeModel: text("charge_model"),               // Debiteringsmodell: per_styck/per_timme/fast/per_meter/per_kvm
   travelTime: integer("travel_time"),              // Restid (min)

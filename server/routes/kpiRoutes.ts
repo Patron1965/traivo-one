@@ -231,7 +231,8 @@ app.get("/api/kpis/article-margins", requireAdmin, asyncHandler(async (req, res)
         articleId: workOrderLines.articleId,
         articleNumber: articles.articleNumber,
         name: articles.name,
-        unitCost: articles.cost,
+        // Självkostnad (inköp + frakt + lager) när någon komponent satts, annars legacy internkostnad. GAP-104 / Task #938.
+        unitCost: sql<number>`CASE WHEN ${articles.purchasePrice} IS NOT NULL OR ${articles.freightCost} IS NOT NULL OR ${articles.warehouseCost} IS NOT NULL THEN COALESCE(${articles.purchasePrice}, 0) + COALESCE(${articles.freightCost}, 0) + COALESCE(${articles.warehouseCost}, 0) ELSE ${articles.cost} END`,
         listPrice: articles.listPrice,
         totalRevenue: sql<string>`COALESCE(SUM(${workOrderLines.quantity} * COALESCE(${workOrderLines.resolvedPrice}, 0)), 0)::bigint`,
         totalCost: sql<string>`COALESCE(SUM(${workOrderLines.quantity} * COALESCE(${workOrderLines.resolvedCost}, 0)), 0)::bigint`,
@@ -246,7 +247,7 @@ app.get("/api/kpis/article-margins", requireAdmin, asyncHandler(async (req, res)
         sql`${workOrders.deletedAt} IS NULL`,
         sql`${workOrderLines.isOptional} IS NOT TRUE`,
       ))
-      .groupBy(workOrderLines.articleId, articles.articleNumber, articles.name, articles.cost, articles.listPrice)
+      .groupBy(workOrderLines.articleId, articles.articleNumber, articles.name, articles.cost, articles.purchasePrice, articles.freightCost, articles.warehouseCost, articles.listPrice)
       .orderBy(desc(sql`SUM(${workOrderLines.quantity} * COALESCE(${workOrderLines.resolvedPrice}, 0))`))
       .limit(limit);
 

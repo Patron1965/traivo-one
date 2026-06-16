@@ -15,6 +15,13 @@ export async function runIdempotentMigrations(): Promise<void> {
   await db.execute(sql`
     ALTER TABLE order_concepts ADD COLUMN IF NOT EXISTS interval_flex_days integer;
   `);
+  // GAP-104 / Task #938: prisuppbyggnad — fraktkostnad + lagerkostnad på artiklar.
+  await db.execute(sql`
+    ALTER TABLE articles ADD COLUMN IF NOT EXISTS freight_cost integer;
+  `);
+  await db.execute(sql`
+    ALTER TABLE articles ADD COLUMN IF NOT EXISTS warehouse_cost integer;
+  `);
 }
 
 export async function fixInitialOwnerRole(): Promise<void> {

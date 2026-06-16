@@ -6,6 +6,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { useUpload } from "@/hooks/use-upload";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { formatSekFromOre } from "@/lib/format";
+import { computeArticlePricing } from "@shared/article-pricing";
 import type {
   Article,
   MetadataDefinition,
@@ -175,6 +176,8 @@ interface ArticleFormData {
   purchasePrice: number;
   standardCost: number;
   materialCost: number;
+  freightCost: number;
+  warehouseCost: number;
   markupPercent: number | null;
   chargeModel: string;
   informationRequirements: InformationRequirement[];
@@ -252,6 +255,8 @@ const emptyFormData: ArticleFormData = {
   purchasePrice: 0,
   standardCost: 0,
   materialCost: 0,
+  freightCost: 0,
+  warehouseCost: 0,
   markupPercent: null,
   chargeModel: "",
   informationRequirements: [],
@@ -320,6 +325,8 @@ function getSectionStats(
       fd.purchasePrice > 0,
       fd.standardCost > 0,
       fd.materialCost > 0,
+      fd.freightCost > 0,
+      fd.warehouseCost > 0,
       fd.markupPercent != null,
       fd.chargeModel.trim() !== "",
       fd.productionTime > 0,
@@ -1126,6 +1133,8 @@ export default function ArticleFormPage() {
       purchasePrice: (article as any).purchasePrice ?? 0,
       standardCost: (article as any).standardCost ?? 0,
       materialCost: (article as any).materialCost ?? 0,
+      freightCost: (article as any).freightCost ?? 0,
+      warehouseCost: (article as any).warehouseCost ?? 0,
       markupPercent: (article as any).markupPercent ?? null,
       chargeModel: (article as any).chargeModel || "",
       informationRequirements: Array.isArray((article as any).informationRequirements)
@@ -1330,7 +1339,14 @@ export default function ArticleFormPage() {
     }
   };
 
-  const marginOre = (formData.listPrice || 0) - ((formData.purchasePrice || 0) + (formData.materialCost || 0));
+  const pricing = computeArticlePricing({
+    purchasePrice: formData.purchasePrice || 0,
+    freightCost: formData.freightCost || 0,
+    warehouseCost: formData.warehouseCost || 0,
+    markupPercent: formData.markupPercent,
+    listPrice: formData.listPrice || 0,
+  });
+  const marginOre = pricing.marginPerUnitOre;
   const marginPositive = marginOre >= 0;
 
   // Redigeringsläge: visa laddnings-/feltillstånd tills artikeln hämtats.
@@ -2003,6 +2019,38 @@ export default function ArticleFormPage() {
                   data-testid="input-material-cost"
                 />
               </div>
+              <div className="space-y-2">
+                <Label htmlFor="freightCost">Fraktkostnad (kr)</Label>
+                <Input
+                  id="freightCost"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={formData.freightCost ? (formData.freightCost / 100).toString() : ""}
+                  placeholder="0.00"
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    setFormData({ ...formData, freightCost: v === "" ? 0 : Math.round(parseFloat(v) * 100) || 0 });
+                  }}
+                  data-testid="input-freight-cost"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="warehouseCost">Lagerkostnad (kr)</Label>
+                <Input
+                  id="warehouseCost"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={formData.warehouseCost ? (formData.warehouseCost / 100).toString() : ""}
+                  placeholder="0.00"
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    setFormData({ ...formData, warehouseCost: v === "" ? 0 : Math.round(parseFloat(v) * 100) || 0 });
+                  }}
+                  data-testid="input-warehouse-cost"
+                />
+              </div>
               {isAdmin && (
                 <div className="space-y-2">
                   <Label htmlFor="cost">Internkostnad (kr)</Label>
@@ -2073,6 +2121,26 @@ export default function ArticleFormPage() {
               )}
             </div>
 
+            <div className="space-y-2 rounded-md border bg-muted/40 px-3 py-3 text-sm" data-testid="panel-price-buildup">
+              <div className="flex items-center justify-between">
+                <span className="text-muted-foreground">Självkostnad (inköp + frakt + lager)</span>
+                <span className="font-mono" data-testid="text-article-self-cost">
+                  {formatSekFromOre(pricing.selfCostOre, { decimals: true })}
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-muted-foreground">Beräknat listpris (självkostnad × påslag)</span>
+                <span className="font-mono" data-testid="text-article-computed-list-price">
+                  {formatSekFromOre(pricing.computedListPriceOre, { decimals: true })}
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-muted-foreground">Marginal</span>
+                <span className="font-mono" data-testid="text-article-margin-percent">
+                  {pricing.marginPercent != null ? `${pricing.marginPercent.toFixed(1)} %` : "–"}
+                </span>
+              </div>
+            </div>
             <div
               className={`flex items-center justify-between rounded-md border px-3 py-2 text-sm ${
                 marginPositive
@@ -2087,7 +2155,10 @@ export default function ArticleFormPage() {
                 {formatSekFromOre(marginOre, { decimals: true })}
               </span>
             </div>
-            <p className="text-xs text-muted-foreground">Marginal per enhet = Listpris − (Inköpspris + Materialkostnad).</p>
+            <p className="text-xs text-muted-foreground">
+              Självkostnad = Inköpspris + Fraktkostnad + Lagerkostnad. Beräknat listpris = Självkostnad × (1 + Påslag%).
+              Marginal beräknas mot satt listpris om det finns, annars mot beräknat listpris.
+            </p>
           </FormSection>
 
           {/* 5. Planeringslogik */}
