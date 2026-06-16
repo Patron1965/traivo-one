@@ -356,7 +356,14 @@ app.get("/api/mobile/orders/:id", isMobileAuthenticated, asyncHandler(async (req
 app.patch("/api/mobile/orders/:id/status", isMobileAuthenticated, asyncHandler(async (req: MobileAuthenticatedRequest, res: Response) => {
     const orderId = req.params.id;
     const resourceId = req.mobileResourceId;
-    const { status, notes, actualDuration: bodyActualDuration, enRouteAt: bodyEnRouteAt, impossibleReason } = req.body;
+    const {
+      status, notes, actualDuration: bodyActualDuration, enRouteAt: bodyEnRouteAt, impossibleReason,
+      // Task #941: fångad bil/utrustning + deltagare vid klarmarkering.
+      completedVehicleId: bodyCompletedVehicleId,
+      completedEquipmentId: bodyCompletedEquipmentId,
+      vehicleRegNo: bodyVehicleRegNo,
+      participantIds: bodyParticipantIds,
+    } = req.body;
     
     const order = await storage.getWorkOrder(orderId);
     
@@ -420,6 +427,30 @@ app.patch("/api/mobile/orders/:id/status", isMobileAuthenticated, asyncHandler(a
         updateData.actualDuration = bodyActualDuration;
       } else if (order.onSiteAt) {
         updateData.actualDuration = Math.round((Date.now() - new Date(order.onSiteAt).getTime()) / 60000);
+      }
+      // Task #941: fånga vilken bil/utrustning och vilka utförare som användes så
+      // att kostnadsställe/projektkod kan härledas automatiskt till Fortnox-exporten.
+      // Allt valfritt — utelämnade fält lämnas orörda (back-compat).
+      if (bodyCompletedVehicleId !== undefined) {
+        updateData.completedVehicleId = bodyCompletedVehicleId || null;
+      }
+      if (bodyCompletedEquipmentId !== undefined) {
+        updateData.completedEquipmentId = bodyCompletedEquipmentId || null;
+      }
+      if (bodyVehicleRegNo !== undefined) {
+        updateData.completedVehicleRegNo = bodyVehicleRegNo || null;
+      }
+      if (bodyParticipantIds !== undefined) {
+        const participantIds = Array.isArray(bodyParticipantIds)
+          ? bodyParticipantIds.filter((id: unknown): id is string => typeof id === "string" && id.length > 0)
+          : [];
+        // Fall tillbaka på den utförande resursen om inga deltagare skickades.
+        updateData.completedParticipantIds = participantIds.length > 0
+          ? participantIds
+          : (resourceId ? [resourceId] : null);
+      } else if (resourceId) {
+        // Ingen deltagarlista skickad: registrera åtminstone den inloggade utföraren.
+        updateData.completedParticipantIds = [resourceId];
       }
     } else if (status === 'impossible') {
       updateData.orderStatus = 'avbruten';

@@ -18,6 +18,7 @@ import {
   filterObjectsByConditions,
   resolveConceptMatchingObjects,
 } from "../services/order-concept-targeting";
+import { deriveFortnoxCodesForWorkOrder } from "../services/fortnox-code-derivation";
 
 async function verifyObjectTenant(objectId: string, tenantId: string): Promise<boolean> {
   try {
@@ -480,12 +481,27 @@ app.post("/api/fortnox/exports", asyncHandler(async (req, res) => {
     }
 
     const tenantId = getTenantIdWithFallback(req);
+
+    // Task #941: härled kostnadsställe/projektkod automatiskt från den bil/utrustning
+    // och de utförare som fångats vid klarmarkering. Manuell override har företräde:
+    // härled bara när värdet saknas i begäran.
+    let resolvedCostCenter: string | null = costCenter || null;
+    let resolvedProject: string | null = project || null;
+    if (!resolvedCostCenter || !resolvedProject) {
+      const wo = await storage.getWorkOrder(workOrderId);
+      if (wo && wo.tenantId === tenantId) {
+        const derived = await deriveFortnoxCodesForWorkOrder(tenantId, wo);
+        if (!resolvedCostCenter) resolvedCostCenter = derived.costCenter;
+        if (!resolvedProject) resolvedProject = derived.project;
+      }
+    }
+
     const invoiceExport = await storage.createFortnoxInvoiceExport({
       tenantId,
       workOrderId,
       payerId: payerId || null,
-      costCenter: costCenter || null,
-      project: project || null,
+      costCenter: resolvedCostCenter,
+      project: resolvedProject,
       status: "pending"
     });
     res.status(201).json(invoiceExport);

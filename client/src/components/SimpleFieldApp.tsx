@@ -15,7 +15,7 @@ import {
 } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
-import type { Resource } from "@shared/schema";
+import type { Resource, Vehicle } from "@shared/schema";
 import { startOfDay, endOfDay, format } from "date-fns";
 import { sv } from "date-fns/locale";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -228,6 +228,8 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
   const [showSignaturePanel, setShowSignaturePanel] = useState(false);
   const [currentSignature, setCurrentSignature] = useState<string | null>(null);
   const [materials, setMaterials] = useState<MaterialItem[]>([]);
+  const [completedVehicleId, setCompletedVehicleId] = useState<string | null>(null);
+  const [completedParticipantIds, setCompletedParticipantIds] = useState<string[]>([]);
   const [showImpossibleDialog, setShowImpossibleDialog] = useState(false);
   const [selectedImpossibleReason, setSelectedImpossibleReason] = useState<string | null>(null);
   const [impossibleReasonText, setImpossibleReasonText] = useState("");
@@ -270,6 +272,14 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
   const { data: myResource } = useQuery<Resource>({
     queryKey: ["/api/resources", resourceId],
     enabled: !!resourceId && showSettingsPanel,
+  });
+
+  const { data: vehicles = [] } = useQuery<Vehicle[]>({
+    queryKey: ["/api/vehicles"],
+  });
+
+  const { data: allResources = [] } = useQuery<Resource[]>({
+    queryKey: ["/api/resources"],
   });
 
   const updateResourcePrefsMutation = useMutation({
@@ -799,11 +809,19 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
         materials: materials.length > 0 ? materials : (existingMetadata.materials || []),
       };
       
+      const selectedVehicle = completedVehicleId ? vehicles.find(v => v.id === completedVehicleId) : undefined;
+      const participantIds = completedParticipantIds.length > 0
+        ? completedParticipantIds
+        : (resourceId ? [resourceId] : []);
+
       await apiRequest("PATCH", `/api/work-orders/${id}`, {
         orderStatus: "utford",
         completedAt: new Date().toISOString(),
         actualDuration: elapsed,
         metadata: updatedMetadata,
+        completedVehicleId: completedVehicleId,
+        completedVehicleRegNo: selectedVehicle?.registrationNumber ?? null,
+        completedParticipantIds: participantIds.length > 0 ? participantIds : null,
       });
 
       if (job) {
@@ -872,6 +890,8 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
       setShowSignaturePanel(false);
       setCurrentSignature(null);
       setMaterials([]);
+      setCompletedVehicleId(null);
+      setCompletedParticipantIds([]);
       setJobNote("");
       setShowCompletedDialog(true);
     },
@@ -1083,6 +1103,8 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
     setShowProblemPanel(false);
     setMaterials([]);
     setCurrentSignature(null);
+    setCompletedVehicleId(null);
+    setCompletedParticipantIds([]);
   };
 
   const handleStartJob = () => {
@@ -2725,6 +2747,71 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
               materials={materials}
               onMaterialsChange={setMaterials}
             />
+          )}
+
+          {!focusMode && jobStarted && (
+            <Card data-testid="card-completed-resources">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-sm flex items-center gap-2">
+                  <Car className="h-4 w-4" />
+                  Bil & deltagare
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-muted-foreground">Använt fordon</Label>
+                  <Select
+                    value={completedVehicleId ?? "none"}
+                    onValueChange={(v) => setCompletedVehicleId(v === "none" ? null : v)}
+                  >
+                    <SelectTrigger data-testid="select-completed-vehicle">
+                      <SelectValue placeholder="Välj fordon" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">Inget fordon</SelectItem>
+                      {vehicles.map((v) => (
+                        <SelectItem key={v.id} value={v.id} data-testid={`option-vehicle-${v.id}`}>
+                          {v.name} ({v.registrationNumber})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-muted-foreground flex items-center gap-1.5">
+                    <Users className="h-3.5 w-3.5" />
+                    Deltagare
+                  </Label>
+                  <div className="flex flex-wrap gap-2">
+                    {allResources.map((r) => {
+                      const selected = completedParticipantIds.includes(r.id);
+                      return (
+                        <Button
+                          key={r.id}
+                          type="button"
+                          size="sm"
+                          variant={selected ? "default" : "outline"}
+                          className="h-8"
+                          onClick={() =>
+                            setCompletedParticipantIds((prev) =>
+                              prev.includes(r.id) ? prev.filter((id) => id !== r.id) : [...prev, r.id],
+                            )
+                          }
+                          data-testid={`button-participant-${r.id}`}
+                        >
+                          {r.name}
+                        </Button>
+                      );
+                    })}
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    {completedParticipantIds.length === 0
+                      ? "Inga valda – du läggs till automatiskt vid klarmarkering."
+                      : `${completedParticipantIds.length} valda`}
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
           )}
 
           {!focusMode && accessInfo.specialInstructions && (

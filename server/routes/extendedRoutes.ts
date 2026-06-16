@@ -14,6 +14,7 @@ import { sendEmail } from "../replit_integrations/resend";
 import { requireAdmin, requirePlanner } from "../tenant-middleware";
 import { hashPassword } from "../password";
 import { getArticleMetadataForObject, writeArticleMetadataOnObject, createMetadata, getAllMetadataTypes, writeSystemMetadataOnObject } from "../metadata-queries";
+import { deriveFortnoxCodesForWorkOrder } from "../services/fortnox-code-derivation";
 import { signDynamicQrToken, verifyDynamicQrToken, verifyObjectQrToken } from "../dynamic-qr-token";
 import { checkPublicReportRateLimit, getClientKeyForRequest } from "../public-report-rate-limit";
 import { RateLimitError } from "../errors";
@@ -2046,13 +2047,27 @@ app.post("/api/invoice-preview/export-to-fortnox", asyncHandler(async (req, res)
             }
           }
 
+          // Task #941: manuell override (headerMetadata) har företräde; härled
+          // kostnadsställe/projektkod från fångad bil/utrustning + deltagare som
+          // fallback för work-order-rader.
+          let lineCostCenter: string | null = invoice.headerMetadata?.kostnadsställe || null;
+          let lineProject: string | null = invoice.headerMetadata?.projekt || null;
+          if (!isManualLine && (!lineCostCenter || !lineProject)) {
+            const woForCodes = await storage.getWorkOrder(line.workOrderId);
+            if (woForCodes && woForCodes.tenantId === tenantId) {
+              const derived = await deriveFortnoxCodesForWorkOrder(tenantId, woForCodes);
+              if (!lineCostCenter) lineCostCenter = derived.costCenter;
+              if (!lineProject) lineProject = derived.project;
+            }
+          }
+
           const invoiceExport = await storage.createFortnoxInvoiceExport({
             tenantId,
             workOrderId: isManualLine ? null : line.workOrderId,
             status: "pending",
             totalAmount: Math.round(line.total || 0),
-            costCenter: invoice.headerMetadata?.kostnadsställe || null,
-            project: invoice.headerMetadata?.projekt || null,
+            costCenter: lineCostCenter,
+            project: lineProject,
             sourceType: isManualLine ? "manual" : "work_order",
             sourceId: isManualLine ? manualLineId : line.workOrderId,
             customerId: invoice.customerId || null,

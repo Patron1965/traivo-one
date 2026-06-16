@@ -378,6 +378,18 @@ export const workOrders = pgTable("work_orders", {
   impossibleAt: timestamp("impossible_at"),           // När markerad som omöjlig
   impossibleBy: varchar("impossible_by").references(() => resources.id), // Vem markerade
   impossiblePhotoUrl: text("impossible_photo_url"),   // Bild som bevis
+  // === Task #941 (GAP-202): Fångad bil/utrustning + deltagare vid klarmarkering ===
+  // Sätts vid klarmarkering i fält så att kostnadsställe (bilens/utrustningens
+  // costCenter) och projektkod (utförarens projectCode) kan härledas automatiskt
+  // till Fortnox-exporten. Alla nullable (expand-contract) — befintliga WO utan
+  // fångad data exporteras som idag. Manuell override på exporten kvarstår.
+  completedVehicleId: varchar("completed_vehicle_id").references((): any => vehicles.id, { onDelete: "set null" }),
+  completedEquipmentId: varchar("completed_equipment_id").references((): any => equipment.id, { onDelete: "set null" }),
+  // Registreringsnummer som rapporterats från fält (back-compat/visning även om
+  // ingen fordonspost matchar reg.nr).
+  completedVehicleRegNo: text("completed_vehicle_reg_no"),
+  // Resurs-id:n för de utförare (team/personer) som faktiskt utförde uppgiften.
+  completedParticipantIds: text("completed_participant_ids").array(),
   // ============================================
   // UTÖKADE METADATAFÄLT (Fas 1B)
   // ============================================
