@@ -1,0 +1,668 @@
+=================================================================
+TRAIVO IMPORT-WIZARD 2.0 — IMPLEMENTATION BRIEF
+=================================================================
+Version: 2026-06-16
+Källa: UI-skärmdump + Session-data + Förtydligad spec
+Målgrupp: Replit-utvecklare
+Format: Copy-pasteable implementation guide
+
+-----------------------------------------------------------------
+1. ÖVERSIKT
+-----------------------------------------------------------------
+En session-baserad, 3-stegs wizard för hierarkisk objektimport:
+
+  Steg 1: Organisation  →  Steg 2: Butiker  →  Steg 3: Fysiska objekt
+
+Varje steg:
+  • Ladda upp Excel/CSV ELLER klistra in data
+  • Mappa kolumner mot systemfält + metadatafält
+  • Förhandsgranska matchning
+  • Validera + Commit
+  • INR → Systemnummer-mappning sparas i session
+
+⚠️  VIKTIGT: INGET kundval! Objekt skapas oberoende av kund.
+    Kundrelation hanteras senare i orderkonceptet.
+
+-----------------------------------------------------------------
+2. UI-STRUKTUR (FRÅN SKÄRMDUMP)
+-----------------------------------------------------------------
+
+┌─────────────────────────────────────────────────────────────┐
+│  Tre-stegs import-wizard                                     │
+│  Session 18a022e0 • Pågående              [Avbryt session]   │
+├─────────────────────────────────────────────────────────────┤
+│  [Steg 1: Organisation] [Steg 2: Butiker] [Steg 3: Fysiska  │
+│   objekt]                              [Skapa del ▼]         │
+├─────────────────────────────────────────────────────────────┤
+│                                                              │
+│  1. Organisation                   2. Butiker    3. Fysiska  │
+│  ═══════════════                                    objekt   │
+│                                                              │
+│  Kolumner: internId, name, hierarchyLevel,                   │
+│            parentInternId, address, city, postalCode         │
+│                                                              │
+│  ┌──────────────────┬───────────────────────────────────┐   │
+│  │                  │                                   │   │
+│  │   Klistra in     │      CSV/Excel-fil                │   │
+│  │                  │                                   │   │
+│  │                  │  ┌─────────────────────────────┐  │   │
+│  │                  │  │ Välj fil...                 │  │   │
+│  │                  │  │ (CSV eller Excel)           │  │   │
+│  │                  │  └─────────────────────────────┘  │   │
+│  │                  │                                   │   │
+│  └──────────────────┴───────────────────────────────────┘   │
+│                                                              │
+│  [Förhandsvisa]  [Commit steg 1]                             │
+│                                                              │
+│  ↓ Ladda ner mall (Wizard steg 1 — Organisation)             │
+│                                                              │
+└─────────────────────────────────────────────────────────────┘
+
+-----------------------------------------------------------------
+3. SYSTEMFÄLT (5 ST) — FRÅN SESSION-DATA
+-----------------------------------------------------------------
+
+Varje steg använder dessa systemfält (markera visuellt, t.ex. färg):
+
+┌───┬────────────────────────┬──────────────┬──────────────────┐
+│ # │ Systemfält             │ Syfte        │ Exempel          │
+├───┼────────────────────────┼──────────────┼──────────────────┤
+│ 1 │ Systemgenererat        │ Uppdatering  │ 1001, 1002       │
+│   │ objektnummer           │ (ej import)  │ (läs-only)       │
+├───┼────────────────────────┼──────────────┼──────────────────┤
+│ 2 │ Namn                   │ Objektnamn   │ "Axfood HK"      │
+├───┼────────────────────────┼──────────────┼──────────────────┤
+│ 3 │ Interimnummer (INR)    │ Tillfälligt  │ ORG-1, BUT-1     │
+│   │                        │ ID för ny    │                  │
+│   │                        │ intankning   │                  │
+├───┼────────────────────────┼──────────────┼──────────────────┤
+│ 4 │ Interimnummer för      │ Referens via │ ORG-2            │
+│   │ hänvisning (Parent INR)│ INR          │ (från steg 1)    │
+├───┼────────────────────────┼──────────────┼──────────────────┤
+│ 5 │ Systemgenererat nummer │ Referens via │ 1002             │
+│   │ för hänvisning         │ befintligt   │ (redan i system) │
+│   │ (Parent SysNr)         │ objekt       │                  │
+└───┴────────────────────────┴──────────────┴──────────────────┘
+
+⚙️  LOGIK:
+    • Fält 1: Kan INTE importeras, endast läsas för uppdatering
+    • Fält 2: Kan uppdateras via import
+    • Fält 3: Obligatoriskt vid NY intankning (används för mappning)
+    • Fält 4: Referens till INR från SAMMA import eller tidigare steg
+    • Fält 5: Referens till systemnummer från TIDIGARE import/manuell
+
+-----------------------------------------------------------------
+4. METADATAFÄLT
+-----------------------------------------------------------------
+
+Övriga Excel-kolumner mappas mot metadatafält:
+
+Excel-kolumn          →   Metadatafält (dropdown)
+────────────────────      ─────────────────────────
+"Gatuadress"          →   metadata:adress_gata
+"Postnummer"          →   metadata:adress_postnummer
+"Stad"                →   metadata:adress_stad
+"Kontaktperson"       →   metadata:kontakt_namn
+"E-post"              →   metadata:kontakt_epost
+"Telefon"             →   metadata:kontakt_telefon
+...etc
+
+🎯 MATCHNINGSLISTA:
+   • Presentera ALLA kolumner från Excel rad 1 (headers)
+   • För varje: dropdown med systemfält + metadatafält
+   • Auto-match om kolumnnamn liknar fältnamn
+   • Visa 3-4 rader dynamiskt under för bekräftelse
+
+-----------------------------------------------------------------
+5. WORKFLOW — PER STEG
+-----------------------------------------------------------------
+
+Varje steg (1, 2, 3) följer samma sub-process:
+
+┌─────────────────────────────────────────────────────────────┐
+│  STEG X: [Organisation / Butiker / Fysiska objekt]           │
+│                                                              │
+│  1️⃣  LADDA FIL                                              │
+│     • Upload CSV/Excel ELLER klistra in text                 │
+│     • Parse: Läs rad 1 för headers                           │
+│                                                              │
+│  2️⃣  MAPPA KOLUMNER                                         │
+│     • Visa alla headers från Excel                           │
+│     • För varje: dropdown (systemfält + metadatafält)        │
+│     • Dynamisk preview: 3-4 rader visas direkt               │
+│                                                              │
+│  3️⃣  FÖRHANDSVISA (Optional extra steg)                     │
+│     • Klicka "Förhandsvisa"                                  │
+│     • Visa tabell med mappat resultat                        │
+│     • Bläddra genom hela beståndet (pagination)              │
+│                                                              │
+│  4️⃣  VALIDERA                                               │
+│     • INR unikt inom filen                                   │
+│     • Namn obligatoriskt                                     │
+│     • Parent-referenser giltiga (Steg 2 & 3):                │
+│       - Finns INR i tidigare steg-mappning?                  │
+│       - Finns Systemnummer i databas?                        │
+│     • Cirkelreferens-check                                   │
+│     • Visa FEL innan import tillåts                          │
+│                                                              │
+│  5️⃣  COMMIT                                                 │
+│     • Klicka "Commit steg X"                                 │
+│     • För varje rad:                                         │
+│       a) Lösa parent (INR → SysNr)                           │
+│       b) Skapa objekt i databas                              │
+│       c) Spara INR → SysNr i session-mappning                │
+│     • Progress bar om >100 rader                             │
+│                                                              │
+│  6️⃣  RESULTAT                                               │
+│     • "✅ X objekt importerade"                              │
+│     • Visa INR-mappning (för debug)                          │
+│     • Aktivera nästa steg                                    │
+│                                                              │
+└─────────────────────────────────────────────────────────────┘
+
+-----------------------------------------------------------------
+6. STEG-DEFINITIONER & KOLUMNER
+-----------------------------------------------------------------
+
+┌─────────────────────────────────────────────────────────────┐
+│  STEG 1: ORGANISATION                                        │
+├─────────────────────────────────────────────────────────────┤
+│  Syfte: Importera toppnivå-objekt (huvudkontor, regioner)    │
+│                                                              │
+│  Obligatoriska kolumner:                                     │
+│    • INR             (String)  — T.ex. ORG-1, ORG-2          │
+│    • Namn            (String)  — T.ex. "Axfood Huvudkontor"  │
+│                                                              │
+│  Valfria kolumner (metadata):                                │
+│    • address, city, postalCode, hierarchyLevel, ...          │
+│                                                              │
+│  Parent: Tillåts EJ (ignoreras om angiven)                   │
+└─────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────┐
+│  STEG 2: BUTIKER                                             │
+├─────────────────────────────────────────────────────────────┤
+│  Syfte: Importera butiker/filialer under organisationer      │
+│                                                              │
+│  Obligatoriska kolumner:                                     │
+│    • INR             (String)  — T.ex. BUT-1, BUT-2          │
+│    • Namn            (String)  — T.ex. "Willys Malmö"        │
+│    • Parent (INR)    (String)  — Referens till ORG-X         │
+│                                                              │
+│  Valfria kolumner (metadata):                                │
+│    • address, city, postalCode, hierarchyLevel, ...          │
+│                                                              │
+│  Validering:                                                 │
+│    ✓ Parent (INR) MÅSTE finnas i Steg 1-mappning             │
+└─────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────┐
+│  STEG 3: FYSISKA OBJEKT                                      │
+├─────────────────────────────────────────────────────────────┤
+│  Syfte: Importera serviceobjekt (containrar, maskiner, etc.) │
+│                                                              │
+│  Obligatoriska kolumner:                                     │
+│    • Namn            (String)  — T.ex. "Kärltömning 240L"    │
+│    • Parent (INR)    (String)  — Referens till BUT-X/ORG-X   │
+│                                                              │
+│  Valfria kolumner:                                           │
+│    • INR             (String)  — Endast om refereras vidare  │
+│    • objectType, metadata...                                 │
+│                                                              │
+│  Validering:                                                 │
+│    ✓ Parent MÅSTE finnas i Steg 1 eller 2-mappning          │
+└─────────────────────────────────────────────────────────────┘
+
+-----------------------------------------------------------------
+7. INTERNUMMER-MAPPNING (INR)
+-----------------------------------------------------------------
+
+KONCEPT:
+  Användaren tilldelar mänskligt läsbara, temporära nummer för att
+  bygga hierarki. Systemet mappar dessa till systemnummer efter
+  varje commit.
+
+EXEMPEL-FLÖDE:
+
+Steg 1 — Import:
+  ┌────────┬───────────────────────┐
+  │ INR    │ Namn                  │
+  ├────────┼───────────────────────┤
+  │ ORG-1  │ Axfood Huvudkontor    │
+  │ ORG-2  │ Region Syd            │
+  └────────┴───────────────────────┘
+
+Steg 1 — Efter Commit:
+  Session-mappning:
+  {
+    "ORG-1": 1001,
+    "ORG-2": 1002
+  }
+
+Steg 2 — Import:
+  ┌────────┬───────────────────────┬──────────┐
+  │ INR    │ Namn                  │ Parent   │
+  ├────────┼───────────────────────┼──────────┤
+  │ BUT-1  │ Willys Malmö          │ ORG-2    │ ← Referens!
+  │ BUT-2  │ Willys Lund           │ ORG-2    │
+  └────────┴───────────────────────┴──────────┘
+
+Steg 2 — Vid Commit:
+  • Läs Parent "ORG-2"
+  • Slå upp i mappning → 1002
+  • Skapa objekt med ParentNr: 1002
+  • Nytt systemnummer: 1010
+  • Uppdatera mappning: "BUT-1": 1010
+
+Steg 2 — Efter Commit:
+  Session-mappning:
+  {
+    "ORG-1": 1001,
+    "ORG-2": 1002,
+    "BUT-1": 1010,
+    "BUT-2": 1011
+  }
+
+Steg 3 — Import:
+  ┌────────┬───────────────────────┬──────────┐
+  │ INR    │ Namn                  │ Parent   │
+  ├────────┼───────────────────────┼──────────┤
+  │ OBJ-1  │ Kärltömning 240L      │ BUT-1    │ ← Referens Steg 2
+  │ OBJ-2  │ Regional kärltömning  │ ORG-2    │ ← Referens Steg 1 (OK!)
+  └────────┴───────────────────────┴──────────┘
+
+Steg 3 — Vid Commit:
+  • OBJ-1: Parent "BUT-1" → 1010 → ParentNr: 1010 ✅
+  • OBJ-2: Parent "ORG-2" → 1002 → ParentNr: 1002 ✅
+
+-----------------------------------------------------------------
+8. VALIDERING — ERROR TYPES
+-----------------------------------------------------------------
+
+┌────────────────────────┬──────────────────────────────────────┐
+│ Error Type             │ Beskrivning                          │
+├────────────────────────┼──────────────────────────────────────┤
+│ DUPLICATE_INR          │ INR används flera gånger i filen     │
+│ MISSING_REQUIRED       │ Namn eller INR saknas                │
+│ PARENT_NOT_FOUND       │ Parent-INR finns ej i mappning       │
+│ CIRCULAR_REFERENCE     │ A → B → A                            │
+│ INVALID_SYSTEM_NUMBER  │ Angivet systemnummer finns ej i DB   │
+│ INVALID_FORMAT         │ Fel filformat (ej CSV/Excel)         │
+│ MISSING_COLUMN         │ Obligatorisk kolumn saknas           │
+│ TOO_MANY_ROWS          │ >10 000 rader (optional limit)       │
+└────────────────────────┴──────────────────────────────────────┘
+
+ERROR DISPLAY:
+  • Visa alla fel INNAN import tillåts
+  • Highlight felade rader i preview-tabell (röd bakgrund)
+  • Tooltip med felmeddelande
+  • Nedladdningsbar error-log (CSV)
+
+EXEMPEL:
+  ❌ Rad 5: Parent "ORG-99" finns inte i steg 1-mappning
+  ❌ Rad 12: INR "BUT-1" används redan på rad 3
+  ❌ Rad 23: Namn är obligatoriskt men saknas
+
+-----------------------------------------------------------------
+9. SESSION MANAGEMENT
+-----------------------------------------------------------------
+
+SESSION STATE:
+
+interface WizardSession {
+  sessionId: string;              // "18a022e0"
+  createdAt: Date;
+  status: "active" | "completed" | "aborted";
+  currentStep: 1 | 2 | 3;
+  
+  // INR → Systemnummer mappning (växer för varje steg)
+  inrMapping: Record<string, number>;
+  
+  // Resultat per steg
+  step1Result?: {
+    imported: number;
+    timestamp: Date;
+    objects: Array<{ inr: string; systemNr: number; name: string }>;
+  };
+  step2Result?: { ... };
+  step3Result?: { ... };
+}
+
+SESSION LIFECYCLE:
+  1. Start wizard → Skapa session (POST /api/import/wizard/start)
+  2. Efter varje commit → Uppdatera session
+  3. Efter steg 3 → Markera "completed"
+  4. Timeout: 30 min inaktivitet → Auto-cleanup
+  5. "Avbryt session" → Markera "aborted", rensa inte data (data finns kvar i DB)
+
+STORAGE:
+  • Redis (recommended): Fast, TTL-stöd
+  • Database table: Mer persistent, kräver cleanup-job
+
+-----------------------------------------------------------------
+10. API ENDPOINTS (FÖRSLAG)
+-----------------------------------------------------------------
+
+POST   /api/import/wizard/start
+  Response: { sessionId: string }
+
+POST   /api/import/wizard/:sessionId/step/:stepNumber/upload
+  Body: FormData { file: File }
+  Response: { 
+    fileId: string, 
+    headers: string[],
+    previewRows: Row[] 
+  }
+
+POST   /api/import/wizard/:sessionId/step/:stepNumber/paste
+  Body: { data: string }  // CSV format
+  Response: { 
+    headers: string[],
+    previewRows: Row[] 
+  }
+
+POST   /api/import/wizard/:sessionId/step/:stepNumber/map-columns
+  Body: { 
+    mapping: Array<{ 
+      fileHeader: string, 
+      systemField: "intriumNummer" | "namn" | "intriumForaldranummer" | null,
+      metadataField: string | null 
+    }> 
+  }
+  Response: { 
+    preview: Row[],  // Med mappade fält
+    validation: {
+      isValid: boolean,
+      errors: Array<{ row: number, field: string, message: string }>
+    }
+  }
+
+POST   /api/import/wizard/:sessionId/step/:stepNumber/commit
+  Response: { 
+    success: boolean,
+    imported: number,
+    inrMapping: Record<string, number>,
+    errors?: Array<...>
+  }
+
+GET    /api/import/wizard/:sessionId/status
+  Response: WizardSession
+
+DELETE /api/import/wizard/:sessionId
+  Response: { success: boolean }
+
+GET    /api/import/wizard/template/:stepNumber
+  Response: Excel file (application/vnd.openxmlformats-officedocument.spreadsheetml.sheet)
+
+-----------------------------------------------------------------
+11. FRONTEND STATE MANAGEMENT
+-----------------------------------------------------------------
+
+interface WizardState {
+  sessionId: string | null;
+  currentStep: 1 | 2 | 3;
+  
+  // Per-step state
+  steps: {
+    1: StepState;
+    2: StepState;
+    3: StepState;
+  };
+}
+
+interface StepState {
+  status: "not_started" | "uploading" | "mapping" | "validating" | "committed";
+  
+  // File
+  file: File | null;
+  pastedData: string | null;
+  
+  // Column mapping
+  headers: string[];
+  columnMapping: ColumnMapping[];
+  
+  // Preview & validation
+  previewRows: Row[];
+  validationErrors: ValidationError[];
+  
+  // Result
+  committed: boolean;
+  importedCount: number;
+  inrMapping: Record<string, number>;
+}
+
+-----------------------------------------------------------------
+12. UI COMPONENTS (REACT EXEMPEL)
+-----------------------------------------------------------------
+
+<ImportWizard>
+  ├─ <WizardHeader 
+  │    sessionId={sessionId}
+  │    onCancel={handleCancel}
+  │  />
+  │
+  ├─ <StepTabs 
+  │    currentStep={currentStep}
+  │    onStepClick={handleStepClick}
+  │    step1Completed={step1Committed}
+  │    step2Completed={step2Committed}
+  │  />
+  │
+  ├─ <StepContent currentStep={currentStep}>
+  │    │
+  │    ├─ <ColumnDisplay columns={stepColumns[currentStep]} />
+  │    │
+  │    ├─ <FileUploadArea 
+  │    │    onFileSelect={handleFileSelect}
+  │    │    onPaste={handlePaste}
+  │    │    acceptedFormats=".csv,.xlsx"
+  │    │  />
+  │    │
+  │    ├─ {file && <ColumnMappingTable 
+  │    │    headers={headers}
+  │    │    systemFields={systemFields}
+  │    │    metadataFields={metadataFields}
+  │    │    onMappingChange={handleMappingChange}
+  │    │  />}
+  │    │
+  │    ├─ {mapped && <PreviewTable 
+  │    │    rows={previewRows}
+  │    │    errors={validationErrors}
+  │    │  />}
+  │    │
+  │    ├─ <ActionButtons>
+  │    │    <Button onClick={handlePreview}>Förhandsvisa</Button>
+  │    │    <Button 
+  │    │      onClick={handleCommit}
+  │    │      disabled={!isValid || isCommitting}
+  │    │    >
+  │    │      Commit steg {currentStep}
+  │    │    </Button>
+  │    │  </ActionButtons>
+  │    │
+  │    └─ <TemplateDownload stepNumber={currentStep} />
+  │
+  └─ {allStepsCommitted && <WizardCompletionSummary 
+       step1Count={step1Result.imported}
+       step2Count={step2Result.imported}
+       step3Count={step3Result.imported}
+       onExportMapping={handleExportMapping}
+       onViewTree={handleViewTree}
+       onClose={handleClose}
+     />}
+</ImportWizard>
+
+-----------------------------------------------------------------
+13. TEMPLATE-FILER (EXEMPEL)
+-----------------------------------------------------------------
+
+Wizard_Steg1_Organisation.xlsx:
+┌─────────┬────────────────────────┬─────────────────┬──────────────┬─────────┬────────┐
+│ INR     │ Namn                   │ hierarchyLevel  │ address      │ city    │ postal │
+├─────────┼────────────────────────┼─────────────────┼──────────────┼─────────┼────────┤
+│ ORG-1   │ Axfood Huvudkontor     │ 1               │ Sveavägen 10 │ Sthlm   │ 11157  │
+│ ORG-2   │ Region Syd             │ 2               │              │ Malmö   │ 21100  │
+└─────────┴────────────────────────┴─────────────────┴──────────────┴─────────┴────────┘
+
+Wizard_Steg2_Butiker.xlsx:
+┌─────────┬────────────────────────┬─────────────┬────────────────┬─────────┬────────┐
+│ INR     │ Namn                   │ parentINR   │ address        │ city    │ postal │
+├─────────┼────────────────────────┼─────────────┼────────────────┼─────────┼────────┤
+│ BUT-1   │ Willys Malmö Centrum   │ ORG-2       │ Södergatan 12  │ Malmö   │ 21123  │
+│ BUT-2   │ Willys Lund            │ ORG-2       │ Bytaregatan 5  │ Lund    │ 22350  │
+└─────────┴────────────────────────┴─────────────┴────────────────┴─────────┴────────┘
+
+Wizard_Steg3_Fysiska_Objekt.xlsx:
+┌─────────┬──────────────────────────┬─────────────┬──────────────┬────────────────┐
+│ INR     │ Namn                     │ parentINR   │ objectType   │ metadata...    │
+├─────────┼──────────────────────────┼─────────────┼──────────────┼────────────────┤
+│ OBJ-1   │ Kärltömning 240L         │ BUT-1       │ Container    │ Tömning: Må    │
+│ OBJ-2   │ Papperskärl              │ BUT-1       │ Container    │ Tömning: Ti    │
+└─────────┴──────────────────────────┴─────────────┴──────────────┴────────────────┘
+
+-----------------------------------------------------------------
+14. TESTING CHECKLIST
+-----------------------------------------------------------------
+
+[ ] Ladda upp valid CSV
+[ ] Ladda upp valid Excel
+[ ] Klistra in CSV-data direkt
+[ ] Auto-mapping av kolumner (om namn matchar)
+[ ] Manuell mappning via dropdown
+[ ] Preview visar korrekt mappade data
+[ ] Validering fångar saknat INR
+[ ] Validering fångar duplicerat INR
+[ ] Validering fångar saknat namn
+[ ] Validering fångar broken parent-references
+[ ] Validering fångar cirkulära referenser
+[ ] Commit skapar objekt i DB
+[ ] INR mappar korrekt till systemnummer
+[ ] Steg 2 kan referera Steg 1 INR
+[ ] Steg 3 kan referera både Steg 1 och 2 INR
+[ ] Steg 3 kan referera direkt till Steg 1 (hoppa över Steg 2)
+[ ] Session-timeout fungerar (30 min)
+[ ] "Avbryt session" rensar session (data kvarstår)
+[ ] Template-nedladdning fungerar för alla steg
+[ ] Stora filer (>1000 rader) hanteras med progress bar
+[ ] Error-meddelanden är tydliga och lokaliserade
+[ ] Export av INR-mappning fungerar
+[ ] Wizard completion-skärm visar korrekta summor
+
+-----------------------------------------------------------------
+15. TEKNISKA NOTES
+-----------------------------------------------------------------
+
+PARSING:
+  • CSV: PapaParse (frontend) eller csv-parse (Node)
+  • Excel: XLSX.js (SheetJS)
+  • Läs första bladet, rad 1 = headers
+
+VALIDERING:
+  • Kör INNAN commit
+  • Returnera alla fel på en gång (ej stoppa vid första)
+  • Highlight felade rader i preview
+
+TRANSACTION HANDLING:
+  • Varje steg-commit i egen DB transaction
+  • Om ett objekt misslyckas: Rollback hela steget
+  • Tidigare steg påverkas EJ (de är redan committade)
+
+CIRCULAR REFERENCE CHECK:
+  Algorithm: DFS från varje objekt, följ parent-chain
+  Om vi når samma objekt igen → cirkel
+
+  function hasCircularReference(
+    inr: string, 
+    data: Row[], 
+    visited: Set<string> = new Set()
+  ): boolean {
+    if (visited.has(inr)) return true;
+    visited.add(inr);
+    
+    const row = data.find(r => r.inr === inr);
+    if (!row || !row.parentINR) return false;
+    
+    return hasCircularReference(row.parentINR, data, visited);
+  }
+
+-----------------------------------------------------------------
+16. PRIORITET & EFFORT
+-----------------------------------------------------------------
+
+MUST-HAVE (P0) — Estimat: 2 veckor:
+  ✓ Session management (API + state)
+  ✓ File upload + parsing (CSV & Excel)
+  ✓ Column mapping UI
+  ✓ Preview-tabell
+  ✓ Basic validation (required fields, INR unikt)
+  ✓ Commit-funktionalitet
+  ✓ INR-mappning och parent-upplösning
+
+SHOULD-HAVE (P1) — Estimat: 1 vecka:
+  ✓ Template-nedladdning
+  ✓ Advanced validation (parent-references, circular)
+  ✓ Error highlighting i preview
+  ✓ Klistra in-funktionalitet
+  ✓ Progress indicator för stora filer
+
+NICE-TO-HAVE (P2) — Estimat: 1 vecka:
+  ✓ Export av INR-mappning
+  ✓ Wizard completion-summary med stats
+  ✓ "Skapa del"-funktionalitet (multipla filer per steg?)
+  ✓ Soft import (data committas först efter Steg 3)
+
+TOTAL ESTIMAT: 3-4 veckor för fullständig implementation
+
+-----------------------------------------------------------------
+17. DEPENDENCIES
+-----------------------------------------------------------------
+
+Backend:
+  • Objektmodell med parent-child-stöd
+  • Metadatafält-system
+  • Session storage (Redis eller DB)
+  • File upload handling (temp storage)
+
+Frontend:
+  • React (eller liknande)
+  • Excel/CSV parsing libraries
+  • Form state management (React Hook Form?)
+  • Table component med virtualisering (för stora dataset)
+
+Database:
+  • Objekt-tabell med parent_id-kolumn
+  • Metadatafält-definition-tabell
+  • Wizard-session-tabell (eller Redis)
+
+-----------------------------------------------------------------
+18. LINKS & REFERENCES
+-----------------------------------------------------------------
+
+Detaljerad spec:
+  /home/ubuntu/Traivo_Import_Wizard_Fortydligad_Spec.md
+  (2104 rader — fullständig teknisk spec med use cases)
+
+Session-data:
+  /home/ubuntu/Uploads/session_2026-06-16T09-24.json
+  (Diskussion om systemfält, matchningslista, validering)
+
+UI-skärmdump:
+  /home/ubuntu/Uploads/Skärmavbild 2026-06-16 kl. 11.14.11.png
+  (Faktisk wizard-interface)
+
+=================================================================
+END OF BRIEF — READY TO COPY TO REPLIT
+=================================================================
+
+NEXT STEPS:
+  1. Skapa DB-schema för wizard_sessions
+  2. Implementera API endpoints (starta med /start och /upload)
+  3. Bygga UI-komponenter (börja med FileUploadArea)
+  4. Implementera column mapping-logik
+  5. Implementera validation-engine
+  6. Implementera commit-funktionalitet
+  7. Testa med real-world data
+
+For questions eller clarifications: Referera till detaljerad spec ⬆️
+
+=================================================================
