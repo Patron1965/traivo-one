@@ -290,3 +290,46 @@ REMOTE_SHA=$(git rev-parse github/main)
 - **Före varje pilot-demo eller release:** Push, så det finns en tydlig "this is what was demoed"-referens.
 
 **Historik:** Tidigare var manuell veckovis push den primära rutinen. Task #534 löste det genom en in-process scheduler (se §10.1) — tripwiren körs alltid före push så samma granskningspunkt finns kvar, men kräver inte längre att en specifik person kommer ihåg det.
+
+### 10.3 Engångsfix — orelaterade historiker före första synken
+
+**Bakgrund:** Lokal `main` (Replit-projektets auktoritativa Traivo-app: `client/`, `server/`, `shared/`, `migrations/`, `optimization-service/` …) och `github/main` (790b5e58 — ett *annat* projekt: "Traivo Go" portat till en pnpm multi-artifact-workspace med `pnpm-workspace.yaml`, `artifacts/`, `lib/`, `.migration-backup/`) har **helt orelaterade historiker** — `git merge-base main github/main` returnerar inget. Endast 7 sökvägar överlappar; av dem skulle `package.json`, `.replit`, `replit.md`, `tsconfig.json` och `.gitignore` ge konflikter vid en rak merge.
+
+**Beslut (Task #931, plattform-ägare):** Strategi **A** — slå ihop båda historikerna så att de 527 github-commitsen bevaras som backup och framtida pushar blir fast-forward (inget `--force`). Den auktoritativa arbetskopian är dock alltid lokal `main` — vi vill *inte* dra in Traivo Go:s filträd ovanpå huvudappen (det skulle bryta `package.json`/`.replit` och därmed den körande appen).
+
+**Korrekt teknik = `-s ours`-merge.** En vanlig `merge --allow-unrelated-histories` skulle försöka kombinera två olika appars filträd (tusentals konflikter + trasig arbetskopia). `-s ours` skapar i stället en merge-commit som *länkar ihop båda historikerna* (alla github-commits blir nåbara och pushbara) men lämnar arbetsträdet exakt som lokal `main` — **noll konflikter, appen orörd.**
+
+> **OBS — körs av plattform-ägaren utanför Replit Agent.** Detta är versionshanterings-kirurgi på den plattform-hanterade `main`-grenen plus en push till extern mirror, och pushen kräver att `GITHUB_MIRROR_TOKEN` är satt (separat task). Replit Agent kör inte git-kommandon mot `main`/mirror — följ stegen nedan manuellt.
+
+```bash
+# 0. Säkerhetsnät: spara nuvarande github-state som lokal gren (räddningsplanka).
+git --no-optional-locks fetch github
+git branch backup-github-main github/main      # pekar på 790b5e58
+
+# 1. Tripwire INNAN merge/push (obligatorisk, samma som §10.2).
+npx tsx scripts/check-mass-deletion.ts --commits 100 --threshold 50
+
+# 2. Länka ihop historikerna utan att röra arbetsträdet.
+#    -s ours = behåll lokal mains filer, ärv github/mains historik som förälder.
+git merge -s ours --allow-unrelated-histories github/main \
+  -m "Merge github/main (Traivo Go workspace) into main — link unrelated histories (Task #931, -s ours, working tree unchanged)"
+
+# 3. Verifiera att INGA filer ändrades och att båda rötterna nu är nåbara.
+git --no-optional-locks status --porcelain        # ska vara tomt (inga ändrade filer)
+git --no-optional-locks rev-list --count main     # ska vara > 3028 (mainhistorik + github + merge-commit)
+git --no-optional-locks merge-base main github/main  # ska nu returnera en SHA (inte längre tomt)
+
+# 4. Push — nu fast-forward, inget --force behövs.
+git push github main
+
+# 5. Slutverifiering: mirror i sync + diff = 0.
+git --no-optional-locks fetch github
+git --no-optional-locks rev-list --count github/main..main   # ska vara 0
+LOCAL_SHA=$(git rev-parse main); REMOTE_SHA=$(git rev-parse github/main)
+[ "$LOCAL_SHA" = "$REMOTE_SHA" ] && echo "OK — mirror i sync ($LOCAL_SHA)" \
+                                 || echo "FEL — divergens! local=$LOCAL_SHA remote=$REMOTE_SHA"
+```
+
+**Efter lyckad engångsfix:** `backup-github-main`-grenen kan tas bort (`git branch -D backup-github-main`) när steg 5 visat OK. Därefter gäller den vanliga schemalagda rutinen i §10.1 igen — alla efterföljande pushar är fast-forward eftersom de orelaterade historikerna nu delar en gemensam merge-commit.
+
+**Om du i stället vill ha Traivo Go:s *filer* i repo:t:** Gör det INTE via denna merge (det blandar två appar i ett träd). Lägg dem i så fall i en egen mapp/branch eller ett separat artifact enligt workspace-strukturen — utanför scope för Task #931.
