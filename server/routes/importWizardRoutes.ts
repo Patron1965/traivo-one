@@ -11,6 +11,7 @@
 // Adress ärvs automatiskt från överordnat objekt om raden saknar adress.
 
 import type { Express } from "express";
+import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { and, eq, sql } from "drizzle-orm";
 import { asyncHandler } from "../asyncHandler";
@@ -157,39 +158,52 @@ async function writeWizardMetadata(
   const katalogByName = new Map(katalogTypes.map((k) => [k.namn, k]));
 
   const unknownKeys = new Set<string>();
-  for (const intent of intents) {
-    const { strings, jsonGroups } = groupMetadataForWrite(intent.metadata);
-    const fields: ImportMetadataBatchField[] = [];
-    for (const s of strings) {
-      if (!katalogByName.has(s.namn)) {
-        unknownKeys.add(s.namn);
-        continue;
-      }
-      fields.push({ namn: s.namn, varde: s.varde });
-    }
-    for (const g of jsonGroups) {
-      if (!katalogByName.has(g.namn)) {
-        unknownKeys.add(g.namn);
-        continue;
-      }
-      fields.push({ namn: g.namn, varde: g.varde });
-    }
-    if (fields.length === 0) continue;
-    try {
-      await writeObjectImportMetadataBatch({
-        tenantId,
-        objektId: intent.objectId,
-        objectParentId: intent.parentObjectId,
-        isNewObject: true,
-        fields,
-        katalogByName,
-        skapadAv,
-      });
-    } catch (err: any) {
-      warnings.push(
-        `Metadata kunde inte skrivas för ett objekt: ${err?.message ?? String(err)}`,
-      );
-    }
+  // Prestanda: skriv metadata för flera objekt parallellt i små grupper i
+  // stället för strikt sekventiellt (en commit av 891 objekt gick annars på
+  // ~100 s, till stor del pga en metadata-skrivning per objekt). Varje anrop är
+  // oberoende (eget objektId, egna pool-anslutningar) och wizard-import sätter
+  // ALDRIG niva_las=TRUE, så nivå-lås-CTE:n kan inte påverkas av syskon i samma
+  // grupp. Begränsad samtidighet håller oss inom pool-storleken (default 10)
+  // med marginal för andra samtidiga requests.
+  const METADATA_CONCURRENCY = 5;
+  for (let i = 0; i < intents.length; i += METADATA_CONCURRENCY) {
+    const chunk = intents.slice(i, i + METADATA_CONCURRENCY);
+    await Promise.all(
+      chunk.map(async (intent) => {
+        const { strings, jsonGroups } = groupMetadataForWrite(intent.metadata);
+        const fields: ImportMetadataBatchField[] = [];
+        for (const s of strings) {
+          if (!katalogByName.has(s.namn)) {
+            unknownKeys.add(s.namn);
+            continue;
+          }
+          fields.push({ namn: s.namn, varde: s.varde });
+        }
+        for (const g of jsonGroups) {
+          if (!katalogByName.has(g.namn)) {
+            unknownKeys.add(g.namn);
+            continue;
+          }
+          fields.push({ namn: g.namn, varde: g.varde });
+        }
+        if (fields.length === 0) return;
+        try {
+          await writeObjectImportMetadataBatch({
+            tenantId,
+            objektId: intent.objectId,
+            objectParentId: intent.parentObjectId,
+            isNewObject: true,
+            fields,
+            katalogByName,
+            skapadAv,
+          });
+        } catch (err: any) {
+          warnings.push(
+            `Metadata kunde inte skrivas för ett objekt: ${err?.message ?? String(err)}`,
+          );
+        }
+      }),
+    );
   }
 
   if (unknownKeys.size > 0) {
@@ -499,63 +513,107 @@ export function registerImportWizardRoutes(app: Express): void {
 
           const createdIds: string[] = [];
           const metadataIntents: MetadataIntent[] = [];
-          for (const row of validation.rows) {
-            let parentObjectId: string | null = null;
-            let inheritedAddress: string | null = null;
-            let inheritedCity: string | null = null;
-            let inheritedPostal: string | null = null;
-            if (row.parentInterim) {
-              const parent = interimMap[row.parentInterim];
-              if (!parent) {
-                throw new ValidationError(
-                  `Förälder försvann under commit (${row.parentInterim})`,
-                );
+
+          // Prestanda: bygg objekt i "vågor" efter förälder-beroende och gör
+          // fler-rads-INSERT i stället för en INSERT per rad. En commit av en
+          // stor lista (t.ex. 891 organisationer) tog annars ~100 s pga 891
+          // sekventiella round-trips i transaktionen. En rad är "redo" när dess
+          // förälder antingen saknas (rot) eller redan finns i interimMap (skapad
+          // i ett tidigare steg eller en tidigare våg). En rad vars förälder
+          // ligger i samma våg skjuts till nästa våg — alltså refererar ingen rad
+          // i en våg ett syskon i samma våg, så självrefererande FK + cykel-
+          // triggern är alltid uppfyllda. validateRows har redan garanterat att
+          // varje förälder förekommer före sitt barn, så loopen terminerar.
+          const INSERT_CHUNK = 500;
+          let remaining = validation.rows;
+          while (remaining.length > 0) {
+            const ready: typeof validation.rows = [];
+            const notReady: typeof validation.rows = [];
+            for (const row of remaining) {
+              if (!row.parentInterim || interimMap[row.parentInterim]) ready.push(row);
+              else notReady.push(row);
+            }
+            if (ready.length === 0) {
+              // Borde aldrig hända (validateRows verifierar förälder-ordning);
+              // skydd mot oändlig loop om en förälder ändå saknas.
+              throw new ValidationError(
+                `Förälder försvann under commit (${notReady.length} rad(er) saknar upplöst förälder)`,
+              );
+            }
+
+            // Pre-generera id per rad (objects.id default = gen_random_uuid())
+            // så att vi INTE behöver lita på att INSERT ... RETURNING bevarar
+            // VALUES-ordningen — id:t hör ihop med raden i samma objekt och
+            // används direkt för interimMap/metadata/createdIds. Det tar bort
+            // varje risk för att fel objekt-id binds till fel rad (hierarki-/
+            // metadata-korruption) vid fler-rads-INSERT.
+            const planned = ready.map((row) => {
+              let parentObjectId: string | null = null;
+              let inheritedAddress: string | null = null;
+              let inheritedCity: string | null = null;
+              let inheritedPostal: string | null = null;
+              if (row.parentInterim) {
+                const parent = interimMap[row.parentInterim]!;
+                parentObjectId = parent.objectId === "<pending>" ? null : parent.objectId;
+                inheritedAddress = parent.address;
+                inheritedCity = parent.city;
+                inheritedPostal = parent.postalCode;
               }
-              parentObjectId = parent.objectId === "<pending>" ? null : parent.objectId;
-              inheritedAddress = parent.address;
-              inheritedCity = parent.city;
-              inheritedPostal = parent.postalCode;
-            }
-
-            const finalAddress = row.address ?? inheritedAddress;
-            const finalCity = row.city ?? inheritedCity;
-            const finalPostal = row.postalCode ?? inheritedPostal;
-
-            const [obj] = await tx
-              .insert(objects)
-              .values({
-                tenantId,
-                parentId: parentObjectId,
-                name: row.name,
-                objectNumber: row.objectNumber ?? null,
-                objectType: step === 3 ? "karl" : step === 2 ? "fastighet" : "omrade",
-                hierarchyLevel: row.hierarchyLevel ?? hierarchyDefaultByStep[step],
-                address: finalAddress,
-                city: finalCity,
-                postalCode: finalPostal,
-                importBatchId: batchId,
-              } as any)
-              .returning();
-            createdIds.push(obj.id);
-
-            if (row.metadata) {
-              metadataIntents.push({
-                objectId: obj.id,
+              return {
+                id: randomUUID(),
+                row,
                 parentObjectId,
-                metadata: row.metadata,
-              });
+                finalAddress: row.address ?? inheritedAddress,
+                finalCity: row.city ?? inheritedCity,
+                finalPostal: row.postalCode ?? inheritedPostal,
+              };
+            });
+
+            // Uppdatera interimMap/metadata/createdIds från de pre-genererade
+            // id:na (oberoende av DB-svarsordning).
+            for (const p of planned) {
+              createdIds.push(p.id);
+              if (p.row.metadata) {
+                metadataIntents.push({
+                  objectId: p.id,
+                  parentObjectId: p.parentObjectId,
+                  metadata: p.row.metadata,
+                });
+              }
+              if (p.row.interim) {
+                interimMap[p.row.interim] = {
+                  objectId: p.id,
+                  step,
+                  name: p.row.name,
+                  address: p.finalAddress,
+                  city: p.finalCity,
+                  postalCode: p.finalPostal,
+                };
+              }
             }
 
-            if (row.interim) {
-              interimMap[row.interim] = {
-                objectId: obj.id,
-                step,
-                name: row.name,
-                address: finalAddress,
-                city: finalCity,
-                postalCode: finalPostal,
-              };
+            // Chunka varje våg så att INSERT-satsen (och parameter-antalet)
+            // håller sig rimlig även för maxlistor.
+            for (let i = 0; i < planned.length; i += INSERT_CHUNK) {
+              const chunk = planned.slice(i, i + INSERT_CHUNK);
+              await tx.insert(objects).values(
+                chunk.map((p) => ({
+                  id: p.id,
+                  tenantId,
+                  parentId: p.parentObjectId,
+                  name: p.row.name,
+                  objectNumber: p.row.objectNumber ?? null,
+                  objectType: step === 3 ? "karl" : step === 2 ? "fastighet" : "omrade",
+                  hierarchyLevel: p.row.hierarchyLevel ?? hierarchyDefaultByStep[step],
+                  address: p.finalAddress,
+                  city: p.finalCity,
+                  postalCode: p.finalPostal,
+                  importBatchId: batchId,
+                })) as any,
+              );
             }
+
+            remaining = notReady;
           }
 
           // Spec: import_batches återanvänds som "lager" för wizard-batchar med session_id-koppling.

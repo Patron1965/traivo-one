@@ -19,7 +19,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { AlertTriangle, Eye, FileUp, ListOrdered, Lock, RefreshCw, Upload, X } from "lucide-react";
+import { AlertTriangle, Eye, FileUp, ListOrdered, Loader2, Lock, RefreshCw, Upload, X } from "lucide-react";
 import Papa from "papaparse";
 import { ImportRowPreview } from "@/components/import/ImportRowPreview";
 import { DownloadTemplateButton } from "@/components/DownloadTemplateButton";
@@ -670,7 +670,11 @@ function StepEditor({ step, locked, onCommitDone, sessionId }: StepEditorProps) 
           disabled={mut.isPending || currentRows.length === 0 || missingRequired.length > 0}
           data-testid={`button-wizard-preview-${step}`}
         >
-          <Eye className="h-4 w-4 mr-2" /> Förhandsvisa
+          {mut.isPending && mut.variables === false ? (
+            <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Förhandsvisar…</>
+          ) : (
+            <><Eye className="h-4 w-4 mr-2" /> Förhandsvisa</>
+          )}
         </Button>
         <Button
           onClick={() => mut.mutate(true)}
@@ -682,9 +686,25 @@ function StepEditor({ step, locked, onCommitDone, sessionId }: StepEditorProps) 
           }
           data-testid={`button-wizard-commit-${step}`}
         >
-          <Upload className="h-4 w-4 mr-2" /> Commit steg {step}
+          {mut.isPending && mut.variables === true ? (
+            <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Importerar…</>
+          ) : (
+            <><Upload className="h-4 w-4 mr-2" /> Commit steg {step}</>
+          )}
         </Button>
       </div>
+
+      {mut.isPending && mut.variables === true && (
+        <div
+          className="flex items-start gap-2 rounded-md border border-border bg-muted/50 p-2 text-xs text-muted-foreground"
+          data-testid={`status-importing-${step}`}
+        >
+          <Loader2 className="h-4 w-4 shrink-0 mt-0.5 animate-spin" />
+          <span>
+            Importerar {currentRows.length} rad(er) — det kan ta en stund för stora listor. Stäng inte fönstret.
+          </span>
+        </div>
+      )}
 
       {preview && (
         <ImportRowPreview
