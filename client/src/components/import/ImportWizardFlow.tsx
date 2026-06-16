@@ -19,7 +19,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { AlertTriangle, Eye, FileUp, ListOrdered, Loader2, Lock, RefreshCw, Upload, X } from "lucide-react";
+import { AlertTriangle, Eye, FileUp, Info, ListOrdered, Loader2, Lock, RefreshCw, Upload, X } from "lucide-react";
 import Papa from "papaparse";
 import { ImportRowPreview } from "@/components/import/ImportRowPreview";
 import { DownloadTemplateButton } from "@/components/DownloadTemplateButton";
@@ -47,12 +47,19 @@ interface PreviewItem {
   inheritedAddress?: boolean;
 }
 
+interface ReimportSummary {
+  alreadyCommitted: number;
+  steps: number[];
+  total: number;
+}
+
 interface PreviewResponse {
   dryRun: true;
   step: StepNum;
   valid: number;
   invalid: number;
   duplicates: number;
+  reimport?: ReimportSummary;
   errors: Array<{ index: number; message: string }>;
   preview: PreviewItem[];
 }
@@ -110,6 +117,21 @@ const STEP_LABELS: Record<StepNum, string> = {
   1: "Organisation",
   2: "Butiker",
   3: "Fysiska objekt",
+};
+
+// Kort vägledning per steg: ett konkret exempel på hur förälder-kolumnen
+// (interim-ID från tidigare steg) länkar ihop nivåerna.
+const STEP_EXAMPLE: Record<StepNum, string> = {
+  1: 'Exempel: rad "ORG-1 — Axfood AB" med tom förälder blir roten. Interim-ID:t ORG-1 återanvänds sedan som förälder i steg 2.',
+  2: 'Exempel: butik "BUT-101 — Willys Solna" med förälder "ORG-1" hamnar under Axfood från steg 1.',
+  3: 'Exempel: "Sopkärl 660L" med förälder "BUT-101" hamnar under Willys Solna från steg 2.',
+};
+
+// Vad varje steg förväntar sig för data — används i återimport-bannern.
+const STEP_DATA_NOUN: Record<StepNum, string> = {
+  1: "organisationsnoder (koncern, region, BRF)",
+  2: "butiker/fastigheter",
+  3: "fysiska objekt (kärl, fettavskiljare, soprum)",
 };
 
 const STORAGE_KEY = "traivo-import-wizard-session";
@@ -451,6 +473,7 @@ function StepEditor({ step, locked, onCommitDone, sessionId }: StepEditorProps) 
             valid: body.valid ?? 0,
             invalid: body.invalid ?? errArr.length,
             duplicates: body.duplicates ?? 0,
+            reimport: body.reimport,
             errors: body.errors,
             preview: body.preview,
           });
@@ -493,6 +516,16 @@ function StepEditor({ step, locked, onCommitDone, sessionId }: StepEditorProps) 
 
   return (
     <div className="space-y-3">
+      <div
+        className="flex items-start gap-2 rounded-md border bg-muted/40 p-3 text-xs text-muted-foreground"
+        data-testid={`text-step-guidance-${step}`}
+      >
+        <Info className="h-4 w-4 shrink-0 mt-0.5 text-foreground" />
+        <div className="space-y-1">
+          <p>{tpl.intro}</p>
+          <p className="text-foreground">{STEP_EXAMPLE[step]}</p>
+        </div>
+      </div>
       <div className="text-xs text-muted-foreground">
         Mall-kolumner (kan döpas om eller utökas med metadata):{" "}
         <code className="px-1 bg-muted rounded">{templateColumns.join(", ")}</code>
@@ -706,12 +739,37 @@ function StepEditor({ step, locked, onCommitDone, sessionId }: StepEditorProps) 
         </div>
       )}
 
+      {preview?.reimport && preview.reimport.alreadyCommitted > 0 && (
+        <div
+          className="flex items-start gap-2 rounded-md border border-warning/40 bg-warning/10 p-3 text-sm"
+          data-testid={`banner-reimport-${step}`}
+        >
+          <AlertTriangle className="h-5 w-5 shrink-0 mt-0.5 text-warning" />
+          <div className="space-y-1">
+            <p className="font-medium text-foreground">
+              Det ser ut som att du importerar data som redan lagts in
+              {preview.reimport.steps.length > 0
+                ? ` i steg ${preview.reimport.steps.join(" och ")}`
+                : ""}
+              .
+            </p>
+            <p className="text-muted-foreground">
+              {preview.reimport.alreadyCommitted} av {preview.reimport.total} rader har ett
+              interim-ID som redan finns i sessionen. Varje steg ska innehålla NY data — steg{" "}
+              {step} förväntar sig {STEP_DATA_NOUN[step]}. Kontrollera att du klistrar in rätt fil
+              för det här steget.
+            </p>
+          </div>
+        </div>
+      )}
+
       {preview && (
         <ImportRowPreview
           valid={preview.valid}
           invalid={preview.invalid}
           duplicates={preview.duplicates}
           errors={preview.errors}
+          groupErrors
           preview={preview.preview.map(p => ({
             name: p.interim
               ? `${p.interim} — ${p.name}${p.resolvedParentName ? ` (under ${p.resolvedParentName})` : ""}${p.inheritedAddress ? " ⤴ ärvd adress" : ""}`
@@ -878,6 +936,7 @@ export function ImportWizardFlow() {
             {steps.map(s => {
               const done = stepCompleted >= s;
               const active = activeStep === s;
+              const created = session.createdCounts?.[`step${s}`] ?? 0;
               return (
                 <Badge
                   key={s}
@@ -885,15 +944,11 @@ export function ImportWizardFlow() {
                   className={done ? "bg-chart-2/20 text-foreground" : ""}
                   data-testid={`badge-wizard-step-${s}`}
                 >
-                  Steg {s}: {STEP_LABELS[s]} {done && "✓"}
+                  Steg {s}: {STEP_LABELS[s]}
+                  {done && ` ✓ — ${created} objekt`}
                 </Badge>
               );
             })}
-            <Badge variant="outline" data-testid="badge-wizard-counts">
-              Skapade: {Object.entries(session.createdCounts ?? {})
-                .map(([k, v]) => `${k.replace("step", "S")}=${v}`)
-                .join(", ") || "–"}
-            </Badge>
           </div>
         </CardContent>
       </Card>

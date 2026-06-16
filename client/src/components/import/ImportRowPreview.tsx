@@ -17,8 +17,48 @@ export interface ImportRowPreviewProps {
   preview: ImportRowPreviewItem[];
   duplicates?: number;
   previewLimit?: number;
+  /**
+   * När satt grupperas likadana fel (t.ex. hundratals "Interim-ID … finns
+   * redan") till EN rad med antal + exempel på radnummer, i stället för att
+   * upprepas rad för rad. Opt-in så att övriga import-flöden är oförändrade.
+   */
+  groupErrors?: boolean;
   testId?: string;
   className?: string;
+}
+
+interface ErrorGroup {
+  template: string;
+  original: string;
+  rows: number[];
+}
+
+// Normalisera ett felmeddelande till en gruppnyckel: ta bort interim-ID i citat
+// och radnummer så att N likadana fel slås ihop till en rad.
+function normalizeErrorKey(message: string): string {
+  return message
+    .replace(/"[^"]*"/g, '"…"')
+    .replace(/\brad \d+\b/gi, "rad N")
+    .trim();
+}
+
+function groupErrorList(errors: ImportRowPreviewError[]): ErrorGroup[] {
+  const groups = new Map<string, ErrorGroup>();
+  for (const e of errors) {
+    const rowNum = e.row ?? (e.index != null ? e.index + 1 : null);
+    const key = normalizeErrorKey(e.message);
+    const existing = groups.get(key);
+    if (existing) {
+      if (rowNum != null) existing.rows.push(rowNum);
+    } else {
+      groups.set(key, {
+        template: key,
+        original: e.message,
+        rows: rowNum != null ? [rowNum] : [],
+      });
+    }
+  }
+  return Array.from(groups.values());
 }
 
 export function ImportRowPreview({
@@ -28,11 +68,13 @@ export function ImportRowPreview({
   preview,
   duplicates,
   previewLimit = 20,
+  groupErrors = false,
   testId = "import-row-preview",
   className,
 }: ImportRowPreviewProps) {
   const visiblePreview = preview.slice(0, previewLimit);
   const remaining = Math.max(0, preview.length - visiblePreview.length);
+  const errorGroups = groupErrors ? groupErrorList(errors) : null;
 
   return (
     <div className={`space-y-2 text-sm ${className ?? ""}`} data-testid={testId}>
@@ -61,15 +103,35 @@ export function ImportRowPreview({
           className="border rounded p-2 bg-destructive/10 max-h-40 overflow-y-auto"
           data-testid={`${testId}-errors`}
         >
-          {errors.map((e, i) => {
-            const rowNum = e.row ?? (e.index != null ? e.index + 1 : null);
-            return (
-              <div key={i} className="text-xs text-destructive">
-                {rowNum != null ? `Rad ${rowNum}: ` : ""}
-                {e.message}
-              </div>
-            );
-          })}
+          {errorGroups
+            ? errorGroups.map((g, i) => {
+                if (g.rows.length <= 1) {
+                  const rowPrefix = g.rows[0] != null ? `Rad ${g.rows[0]}: ` : "";
+                  return (
+                    <div key={i} className="text-xs text-destructive">
+                      {rowPrefix}
+                      {g.original}
+                    </div>
+                  );
+                }
+                const shown = g.rows.slice(0, 5).join(", ");
+                const extra = g.rows.length > 5 ? ` … +${g.rows.length - 5}` : "";
+                return (
+                  <div key={i} className="text-xs text-destructive">
+                    {g.template} — {g.rows.length} rader (rad {shown}
+                    {extra})
+                  </div>
+                );
+              })
+            : errors.map((e, i) => {
+                const rowNum = e.row ?? (e.index != null ? e.index + 1 : null);
+                return (
+                  <div key={i} className="text-xs text-destructive">
+                    {rowNum != null ? `Rad ${rowNum}: ` : ""}
+                    {e.message}
+                  </div>
+                );
+              })}
         </div>
       )}
 

@@ -95,12 +95,53 @@ interface PreviewItem {
   inheritedAddress?: boolean;
 }
 
+// Sammanfattning av rader vars interim-ID redan committats i ett TIDIGARE steg
+// (= användaren återimporterar redan inlagd data, t.ex. samma fil på fel steg).
+// Driver en sammanfattande banner i frontend i stället för N likadana radfel.
+interface ReimportSummary {
+  alreadyCommitted: number; // antal rader som krockar med tidigare committade interim-ID
+  steps: number[]; // vilka tidigare steg de krockande interim-IDna tillhör
+  total: number; // totalt antal inskickade rader (för andelsberäkning i UI)
+}
+
+// Svenska etiketter för wizardens systemfält (speglar FIELD_LABELS i frontend).
+const FIELD_LABELS_SV: Record<string, string> = {
+  interim: "Interim-ID",
+  name: "Namn",
+  parentInterim: "Förälder (interim-ID)",
+  objectNumber: "Objektnummer",
+  hierarchyLevel: "Hierarkinivå",
+  address: "Adress",
+  city: "Ort",
+  postalCode: "Postnummer",
+};
+
+// Översätt ett Zod-fel till ett begripligt svenskt meddelande. Det vanligaste
+// förvirrande felet är saknad förälder på steg 2/3: Zod ger råa
+// "parentInterim: Required", men användaren behöver veta att toppobjekt utan
+// förälder hör hemma i steg 1.
+function describeZodIssue(step: StepNumber, issue: z.ZodIssue): string {
+  const field = String(issue.path[0] ?? "");
+  const label = FIELD_LABELS_SV[field] ?? field;
+  if (field === "parentInterim" && (step === 2 || step === 3)) {
+    return (
+      `Förälder (interim-ID) saknas. Steg ${step} kräver att varje rad pekar på ` +
+      `en förälder från ett tidigare steg via interim-ID. Toppobjekt utan ` +
+      `förälder hör hemma i steg 1 (Organisation).`
+    );
+  }
+  if (issue.code === "too_small") return `${label} saknas eller är tomt`;
+  if (issue.code === "invalid_type") return `${label} saknas`;
+  if (issue.code === "too_big") return `${label} är för långt`;
+  return `${label}: ogiltigt värde`;
+}
+
 function normalizeRow(step: StepNumber, raw: Record<string, any>, index: number): { row?: NormalizedRow; error?: RowError } {
   const schema = step === 1 ? rowSchemaStep1 : step === 2 ? rowSchemaStep2 : rowSchemaStep3;
   const parsed = schema.safeParse(raw);
   if (!parsed.success) {
     const msg = parsed.error.issues
-      .map((i) => `${i.path.join(".")}: ${i.message}`)
+      .map((i) => describeZodIssue(step, i))
       .join("; ");
     return { error: { index, message: msg || "Ogiltig rad" } };
   }
@@ -244,7 +285,7 @@ async function validateRows(
   step: StepNumber,
   rawRows: Array<Record<string, any>>,
   interimMap: InterimMap,
-): Promise<{ rows: NormalizedRow[]; errors: RowError[]; preview: PreviewItem[]; duplicates: number }> {
+): Promise<{ rows: NormalizedRow[]; errors: RowError[]; preview: PreviewItem[]; duplicates: number; reimport: ReimportSummary }> {
   // Spec: parent får referera vilket som helst tidigare commit:at steg (eller
   // samma steg för kedjning inom batch). Steg 2 kan ärva från steg 1; steg 3
   // kan ärva från steg 1 eller steg 2 (interimnummer från steg 1 ska gå att
@@ -270,19 +311,34 @@ async function validateRows(
 
   const preview: PreviewItem[] = [];
   let duplicates = 0;
+  let alreadyCommitted = 0;
+  const alreadyCommittedSteps = new Set<number>();
   const localMap: InterimMap = { ...interimMap };
 
   for (const row of rows) {
     // Unikhet på interim: får inte krocka med sessionens map eller andra rader
     if (row.interim) {
-      if (localMap[row.interim]) {
-        errors.push({ index: row.index, message: `Interim-ID "${row.interim}" finns redan i sessionen` });
+      // Krock med ett interim-ID som committats i ett TIDIGARE steg ⇒ användaren
+      // återimporterar redan inlagd data. Kolla original-`interimMap` (inte
+      // `localMap`, som även innehåller pseudo-rader från samma batch) så att
+      // in-fil-dubbletter klassas separat nedan och driver rätt vägledning.
+      const sessionEntry = interimMap[row.interim];
+      if (sessionEntry) {
+        errors.push({
+          index: row.index,
+          message: `Interim-ID "${row.interim}" lades redan in i steg ${sessionEntry.step}. Det här steget ska innehålla ny data.`,
+        });
         duplicates++;
+        alreadyCommitted++;
+        alreadyCommittedSteps.add(sessionEntry.step);
         continue;
       }
       const prevIdx = seenInterimInBatch.get(row.interim);
       if (prevIdx !== undefined) {
-        errors.push({ index: row.index, message: `Interim-ID "${row.interim}" finns på rad ${prevIdx + 1} också` });
+        errors.push({
+          index: row.index,
+          message: `Interim-ID "${row.interim}" finns redan på rad ${prevIdx + 1} i den här filen.`,
+        });
         duplicates++;
         continue;
       }
@@ -339,7 +395,17 @@ async function validateRows(
     });
   }
 
-  return { rows, errors, preview, duplicates };
+  return {
+    rows,
+    errors,
+    preview,
+    duplicates,
+    reimport: {
+      alreadyCommitted,
+      steps: Array.from(alreadyCommittedSteps).sort((a, b) => a - b),
+      total: rawRows.length,
+    },
+  };
 }
 
 export function registerImportWizardRoutes(app: Express): void {
@@ -426,6 +492,7 @@ export function registerImportWizardRoutes(app: Express): void {
         valid: result.preview.length,
         invalid: result.errors.length,
         duplicates: result.duplicates,
+        reimport: result.reimport,
         errors: result.errors,
         preview: result.preview,
       });
@@ -472,6 +539,7 @@ export function registerImportWizardRoutes(app: Express): void {
           valid: validation.preview.length,
           invalid: validation.errors.length,
           duplicates: validation.duplicates,
+          reimport: validation.reimport,
           errors: validation.errors,
           preview: validation.preview,
           message,
