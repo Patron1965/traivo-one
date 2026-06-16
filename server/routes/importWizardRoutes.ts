@@ -20,6 +20,12 @@ import { formatZodError, verifyTenantOwnership } from "./helpers";
 import { db } from "../db";
 import { importBatches, importSessions, objects } from "@shared/schema";
 import { storage } from "../storage";
+import {
+  getAllMetadataTypes,
+  writeObjectImportMetadataBatch,
+  type ImportMetadataBatchField,
+} from "../metadata-queries";
+import { groupMetadataForWrite } from "../services/object-import-core";
 
 type StepNumber = 1 | 2 | 3;
 
@@ -31,6 +37,7 @@ const rowSchemaStep1 = z.object({
   address: z.string().trim().max(200).optional(),
   city: z.string().trim().max(120).optional(),
   postalCode: z.string().trim().max(20).optional(),
+  metadata: z.record(z.string(), z.string()).optional(),
 });
 
 const rowSchemaStep2 = z.object({
@@ -41,6 +48,7 @@ const rowSchemaStep2 = z.object({
   address: z.string().trim().max(200).optional(),
   city: z.string().trim().max(120).optional(),
   postalCode: z.string().trim().max(20).optional(),
+  metadata: z.record(z.string(), z.string()).optional(),
 });
 
 const rowSchemaStep3 = z.object({
@@ -52,6 +60,7 @@ const rowSchemaStep3 = z.object({
   address: z.string().trim().max(200).optional(),
   city: z.string().trim().max(120).optional(),
   postalCode: z.string().trim().max(20).optional(),
+  metadata: z.record(z.string(), z.string()).optional(),
 });
 
 const stepBodySchema = z.object({
@@ -69,6 +78,7 @@ interface NormalizedRow {
   address: string | null;
   city: string | null;
   postalCode: string | null;
+  metadata: Record<string, string> | null;
 }
 
 interface RowError {
@@ -105,8 +115,89 @@ function normalizeRow(step: StepNumber, raw: Record<string, any>, index: number)
       address: d.address?.trim() || null,
       city: d.city?.trim() || null,
       postalCode: d.postalCode?.trim() || null,
+      metadata: normalizeMetadata(d.metadata),
     },
   };
+}
+
+// Trimma metadata-nycklar/värden och släng tomma. Returnerar null när inget
+// användbart återstår (så commit kan hoppa metadata-skrivningen helt).
+function normalizeMetadata(raw: unknown): Record<string, string> | null {
+  if (!raw || typeof raw !== "object") return null;
+  const out: Record<string, string> = {};
+  for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
+    const key = String(k).trim();
+    const val = v == null ? "" : String(v).trim();
+    if (key && val) out[key] = val;
+  }
+  return Object.keys(out).length ? out : null;
+}
+
+interface MetadataIntent {
+  objectId: string;
+  parentObjectId: string | null;
+  metadata: Record<string, string>;
+}
+
+// Skriver mappad metadata till de nyss skapade objekten. Körs EFTER objekt-
+// transaktionen (se commit-handlern). Tenant-validerar varje nyckel mot
+// metadata_katalog.namn (klienten är bara UX — vi litar aldrig blint på dess
+// nyckelnamn) och skapar ALDRIG nya katalog-rader: okända nycklar hoppas och
+// rapporteras som varningar. Composite-nycklar (`grupp.underfält`) grupperas
+// av groupMetadataForWrite till JSON-fält. Returnerar en lista varningar.
+async function writeWizardMetadata(
+  tenantId: string,
+  intents: MetadataIntent[],
+  skapadAv: string | undefined,
+): Promise<string[]> {
+  if (intents.length === 0) return [];
+  const warnings: string[] = [];
+
+  const katalogTypes = await getAllMetadataTypes(tenantId);
+  const katalogByName = new Map(katalogTypes.map((k) => [k.namn, k]));
+
+  const unknownKeys = new Set<string>();
+  for (const intent of intents) {
+    const { strings, jsonGroups } = groupMetadataForWrite(intent.metadata);
+    const fields: ImportMetadataBatchField[] = [];
+    for (const s of strings) {
+      if (!katalogByName.has(s.namn)) {
+        unknownKeys.add(s.namn);
+        continue;
+      }
+      fields.push({ namn: s.namn, varde: s.varde });
+    }
+    for (const g of jsonGroups) {
+      if (!katalogByName.has(g.namn)) {
+        unknownKeys.add(g.namn);
+        continue;
+      }
+      fields.push({ namn: g.namn, varde: g.varde });
+    }
+    if (fields.length === 0) continue;
+    try {
+      await writeObjectImportMetadataBatch({
+        tenantId,
+        objektId: intent.objectId,
+        objectParentId: intent.parentObjectId,
+        isNewObject: true,
+        fields,
+        katalogByName,
+        skapadAv,
+      });
+    } catch (err: any) {
+      warnings.push(
+        `Metadata kunde inte skrivas för ett objekt: ${err?.message ?? String(err)}`,
+      );
+    }
+  }
+
+  if (unknownKeys.size > 0) {
+    warnings.push(
+      `Okända metadatatyper hoppades över (finns inte i katalogen): ${Array.from(unknownKeys).join(", ")}. Skapa dem under Metadata först.`,
+    );
+  }
+  return warnings;
 }
 
 interface InterimEntry {
@@ -238,6 +329,26 @@ async function validateRows(
 }
 
 export function registerImportWizardRoutes(app: Express): void {
+  // === Metadatatyper (för kolumn-mappning) ==================================
+  // Listar tenantens metadata_katalog-typer så wizardens mappnings-UI kan
+  // erbjuda dem som mål för fria kolumner. Mappning sker mot `namn` (den
+  // stabila nyckel som metadata-skrivningen matchar på).
+  app.get(
+    "/api/import/wizard/metadata-types",
+    asyncHandler(async (req, res) => {
+      const tenantId = getTenantIdWithFallback(req);
+      const types = await getAllMetadataTypes(tenantId);
+      res.set("Cache-Control", "no-cache, must-revalidate");
+      res.json({
+        types: types.map((t) => ({
+          namn: t.namn,
+          beteckning: t.beteckning ?? null,
+          beskrivning: t.beskrivning ?? null,
+        })),
+      });
+    }),
+  );
+
   // === Skapa session ========================================================
   app.post(
     "/api/import/wizard/sessions",
@@ -378,6 +489,7 @@ export function registerImportWizardRoutes(app: Express): void {
           }
 
           const createdIds: string[] = [];
+          const metadataIntents: MetadataIntent[] = [];
           for (const row of validation.rows) {
             let parentObjectId: string | null = null;
             let inheritedAddress: string | null = null;
@@ -416,6 +528,14 @@ export function registerImportWizardRoutes(app: Express): void {
               } as any)
               .returning();
             createdIds.push(obj.id);
+
+            if (row.metadata) {
+              metadataIntents.push({
+                objectId: obj.id,
+                parentObjectId,
+                metadata: row.metadata,
+              });
+            }
 
             if (row.interim) {
               interimMap[row.interim] = {
@@ -468,8 +588,20 @@ export function registerImportWizardRoutes(app: Express): void {
               "Sessionen ändrades under commit. Försök igen.",
             );
           }
-          return { createdIds, updated };
+          return { createdIds, updated, metadataIntents };
         });
+
+        // Metadata skrivs EFTER att objekt-transaktionen committats: helpern
+        // (writeObjectImportMetadataBatch) använder modul-nivå `db` och kör en
+        // rekursiv CTE mot `objects` för nivå-lås — den måste se committade
+        // rader. Skrivningen är best-effort: objekt rullas aldrig tillbaka pga
+        // metadata-fel, varningar returneras istället i `metadataWarnings`.
+        const userId = (req as any).user?.claims?.sub ?? (req as any).user?.id ?? undefined;
+        const metadataWarnings = await writeWizardMetadata(
+          tenantId,
+          result.metadataIntents,
+          userId,
+        );
 
         res.json({
           ok: true,
@@ -478,6 +610,7 @@ export function registerImportWizardRoutes(app: Express): void {
           ids: result.createdIds,
           batchId,
           failures: [],
+          metadataWarnings,
           session: result.updated,
         });
       } catch (err: any) {

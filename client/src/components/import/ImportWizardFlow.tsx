@@ -9,7 +9,17 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Eye, FileUp, ListOrdered, Lock, RefreshCw, Upload } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectLabel,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { AlertTriangle, Eye, FileUp, ListOrdered, Lock, RefreshCw, Upload, X } from "lucide-react";
 import Papa from "papaparse";
 import { ImportRowPreview } from "@/components/import/ImportRowPreview";
 import { DownloadTemplateButton } from "@/components/DownloadTemplateButton";
@@ -54,8 +64,41 @@ interface CommitResponse {
   ids: string[];
   batchId: string;
   failures: Array<{ index: number; message: string }>;
+  metadataWarnings?: string[];
   session: SessionDTO;
 }
+
+interface MetaType {
+  namn: string;
+  beteckning: string | null;
+  beskrivning: string | null;
+}
+
+interface StepField {
+  name: string;
+  label: string;
+  required: boolean;
+}
+
+interface ParsedTable {
+  columns: string[];
+  rows: Array<Record<string, string>>;
+}
+
+// Mappnings-mål per källkolumn: "field:<canonical>", "meta:<katalog.namn>" eller "ignore".
+const IGNORE = "ignore";
+
+// Svenska etiketter för wizardens systemfält (canonical-namn → UI-text).
+const FIELD_LABELS: Record<string, string> = {
+  interim: "Interim-ID",
+  name: "Namn",
+  parentInterim: "Förälder (interim-ID)",
+  objectNumber: "Objektnummer",
+  hierarchyLevel: "Hierarkinivå",
+  address: "Adress",
+  city: "Ort",
+  postalCode: "Postnummer",
+};
 
 const STEP_TEMPLATES: Record<StepNum, ImportTemplateKey> = {
   1: "wizard-organisation",
@@ -71,59 +114,92 @@ const STEP_LABELS: Record<StepNum, string> = {
 
 const STORAGE_KEY = "traivo-import-wizard-session";
 
-function parseRowsFromText(text: string, columns: string[]): Array<Record<string, string>> {
-  const trimmed = text.trim();
-  if (!trimmed) return [];
-  // Försök CSV-header först
-  const firstLine = trimmed.split(/\r?\n/)[0] ?? "";
-  const headerLooksLikeColumns = columns.some(c => firstLine.toLowerCase().includes(c.toLowerCase()));
-  if (headerLooksLikeColumns) {
-    const delim = firstLine.includes("\t") ? "\t" : firstLine.includes(";") ? ";" : ",";
-    const parsed = Papa.parse<Record<string, string>>(trimmed, {
-      header: true,
-      skipEmptyLines: true,
-      delimiter: delim,
-      transformHeader: h => h.trim(),
-    });
-    return (parsed.data || [])
-      .map(r => {
-        const out: Record<string, string> = {};
-        for (const [k, v] of Object.entries(r)) {
-          if (v == null) continue;
-          const str = String(v).trim();
-          if (str !== "") out[k.trim()] = str;
-        }
-        return out;
-      })
-      .filter(r => Object.keys(r).length > 0);
-  }
-  // Annars: kolumn-ordning från template
-  const lines = trimmed.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
-  return lines
-    .map(line => {
-      const cells = line.includes("\t") ? line.split("\t") : line.split(",");
-      const out: Record<string, string> = {};
-      columns.forEach((c, i) => {
-        if (cells[i] != null && cells[i].trim() !== "") out[c] = cells[i].trim();
-      });
-      return out;
-    })
-    .filter(r => Object.keys(r).length > 0);
+// === Parsning + mappning ====================================================
+// Wizardens flexibla mappnings-UI låter användaren peka varje källkolumn mot ett
+// systemfält, en befintlig metadatatyp (metadata_katalog.namn) eller "ignorera".
+// Backend validerar alltid nycklarna mot katalogen — klienten är bara UX.
+
+function normalizeKey(s: string): string {
+  return s.toLowerCase().replace(/[\s_\-().]/g, "");
 }
 
-async function parseFileRows(file: File, columns: string[]): Promise<Array<Record<string, string>>> {
+// Dubbletthuvuden får ett suffix så varje kolumn blir unik (annars skulle två
+// likadana rubriker krocka i mapping-state och en av dem tappas tyst).
+function disambiguateHeaders(headers: string[]): string[] {
+  const seen = new Map<string, number>();
+  return headers.map((h, i) => {
+    const base = (h ?? "").trim() || `Kolumn ${i + 1}`;
+    const n = seen.get(base) ?? 0;
+    seen.set(base, n + 1);
+    return n === 0 ? base : `${base} (${n + 1})`;
+  });
+}
+
+function rowFromCells(columns: string[], cells: Array<string | undefined>): Record<string, string> {
+  const out: Record<string, string> = {};
+  columns.forEach((col, i) => {
+    const v = (cells[i] ?? "").toString().trim();
+    if (v !== "") out[col] = v;
+  });
+  return out;
+}
+
+function parseMatrixFromText(text: string): string[][] {
+  const trimmed = text.trim();
+  if (!trimmed) return [];
+  const firstLine = trimmed.split(/\r?\n/)[0] ?? "";
+  const delim = firstLine.includes("\t") ? "\t" : firstLine.includes(";") ? ";" : ",";
+  const parsed = Papa.parse<string[]>(trimmed, {
+    header: false,
+    skipEmptyLines: true,
+    delimiter: delim,
+  });
+  return (parsed.data || []).filter(r => Array.isArray(r)) as string[][];
+}
+
+// Gissar om matrisens första rad är en rubrikrad: sant om någon cell matchar ett
+// känt mål (systemfält eller metadatatyp). Används bara som DEFAULT — användaren
+// kan alltid tvinga läget via "Första raden är rubrikrad"-växeln i UI:t.
+function detectHeader(matrix: string[][], knownTargets: Set<string>): boolean {
+  if (matrix.length === 0) return false;
+  const firstCells = matrix[0].map(c => (c ?? "").trim());
+  return firstCells.some(c => c !== "" && knownTargets.has(normalizeKey(c)));
+}
+
+// Bygger {columns, rows} från en matris. När `hasHeader` är sant används rad 0 som
+// rubriker; annars positionell fallback till mallens kolumnordning.
+function buildTable(
+  matrix: string[][],
+  templateColumns: string[],
+  hasHeader: boolean,
+): ParsedTable {
+  if (matrix.length === 0) return { columns: [], rows: [] };
+  const headerCells = hasHeader ? matrix[0].map(c => (c ?? "").trim()) : templateColumns;
+  const columns = disambiguateHeaders(headerCells);
+  const dataRows = hasHeader ? matrix.slice(1) : matrix;
+  const rows = dataRows
+    .map(cells => rowFromCells(columns, cells))
+    .filter(r => Object.keys(r).length > 0);
+  return { columns, rows };
+}
+
+async function parseMatrixFromFile(
+  file: File,
+): Promise<{ matrix: string[][]; assumeHeader: boolean }> {
   const name = file.name.toLowerCase();
   const isXlsx = name.endsWith(".xlsx") || name.endsWith(".xls");
   if (!isXlsx) {
+    // CSV/TXT-filer har i praktiken nästan alltid en rubrikrad → anta header
+    // (användaren kan stänga av växeln om filen saknar rubriker).
     const text = await file.text();
-    return parseRowsFromText(text, columns);
+    return { matrix: parseMatrixFromText(text), assumeHeader: true };
   }
   const ExcelJS = (await import("exceljs")).default;
   const buf = await file.arrayBuffer();
   const wb = new ExcelJS.Workbook();
   await wb.xlsx.load(buf);
   const sheet = wb.worksheets[0];
-  if (!sheet) return [];
+  if (!sheet) return { matrix: [], assumeHeader: true };
   const cellToString = (val: unknown): string => {
     if (val == null) return "";
     if (val instanceof Date) return val.toISOString().split("T")[0];
@@ -143,23 +219,100 @@ async function parseFileRows(file: File, columns: string[]): Promise<Array<Recor
     for (let c = 1; c <= colCount; c++) rowData.push(cellToString(row.getCell(c).value));
     aoa.push(rowData);
   });
+  // Behåll rubrikraden (idx 0); droppa mallens [EXEMPEL…]-exempelrader.
   const filtered = aoa.filter((r, idx) => idx === 0 || !(r[0] ?? "").startsWith("[EXEMPEL"));
-  if (filtered.length === 0) return [];
-  const headers = filtered[0].map(h => h.trim());
-  return filtered.slice(1).map(cells => {
-    const out: Record<string, string> = {};
-    headers.forEach((h, i) => {
-      const v = cells[i];
-      if (v != null && String(v).trim() !== "") out[h] = String(v).trim();
-    });
-    return out;
-  }).filter(r => Object.keys(r).length > 0);
+  return { matrix: filtered, assumeHeader: true };
+}
+
+// Föreslår ett mål för en kolumn. Ordning: exakt systemfält → "metadata - X"-prefix
+// → exakt metadatatyp → partiellt systemfält → ignorera.
+function autoMatchTarget(column: string, fields: StepField[], metaTypes: MetaType[]): string {
+  const c = normalizeKey(column);
+  if (!c) return IGNORE;
+  for (const f of fields) {
+    if (normalizeKey(f.name) === c || normalizeKey(f.label) === c) return `field:${f.name}`;
+  }
+  const m = column.match(/^\s*metadata\s*[-:]\s*(.+)$/i);
+  if (m) {
+    const want = normalizeKey(m[1]);
+    const hit = metaTypes.find(
+      t => normalizeKey(t.namn) === want || (t.beteckning != null && normalizeKey(t.beteckning) === want),
+    );
+    if (hit) return `meta:${hit.namn}`;
+  }
+  for (const t of metaTypes) {
+    if (normalizeKey(t.namn) === c || (t.beteckning != null && normalizeKey(t.beteckning) === c)) {
+      return `meta:${t.namn}`;
+    }
+  }
+  for (const f of fields) {
+    const fn = normalizeKey(f.name);
+    if (fn.length >= 4 && (c.includes(fn) || fn.includes(c))) return `field:${f.name}`;
+  }
+  return IGNORE;
+}
+
+// Auto-mappar alla kolumner och säkerställer att två kolumner aldrig pekar på
+// samma systemfält (första vinner; resten faller till ignorera).
+function autoMapColumns(
+  columns: string[],
+  fields: StepField[],
+  metaTypes: MetaType[],
+): Record<string, string> {
+  const mapping: Record<string, string> = {};
+  const usedFields = new Set<string>();
+  for (const col of columns) {
+    let t = autoMatchTarget(col, fields, metaTypes);
+    if (t.startsWith("field:")) {
+      const f = t.slice("field:".length);
+      if (usedFields.has(f)) t = IGNORE;
+      else usedFields.add(f);
+    }
+    mapping[col] = t;
+  }
+  return mapping;
+}
+
+// Omvandlar tolkade rader till backendens kanoniska form {…systemfält, metadata}.
+// Tomma celler hoppas; första värdet vinner vid kollision på samma fält.
+function applyMapping(
+  table: ParsedTable,
+  mapping: Record<string, string>,
+): Array<Record<string, unknown>> {
+  return table.rows
+    .map(r => {
+      const out: Record<string, unknown> = {};
+      const meta: Record<string, string> = {};
+      for (const col of table.columns) {
+        const target = mapping[col] ?? IGNORE;
+        const val = (r[col] ?? "").trim();
+        if (!val) continue;
+        if (target.startsWith("field:")) {
+          const f = target.slice("field:".length);
+          if (!(f in out)) out[f] = val;
+        } else if (target.startsWith("meta:")) {
+          const k = target.slice("meta:".length);
+          if (!(k in meta)) meta[k] = val;
+        }
+      }
+      if (Object.keys(meta).length > 0) out.metadata = meta;
+      return out;
+    })
+    .filter(r => Object.keys(r).length > 0);
+}
+
+function sampleValue(table: ParsedTable, col: string): string {
+  for (const r of table.rows) {
+    const v = r[col];
+    if (v) return v;
+  }
+  return "";
 }
 
 interface StepEditorProps {
   step: StepNum;
   locked: boolean;
-  onCommitDone: () => void;
+  onCommitDone: (metadataWarnings: string[]) => void;
   sessionId: string;
 }
 
@@ -167,17 +320,92 @@ function StepEditor({ step, locked, onCommitDone, sessionId }: StepEditorProps) 
   const { toast } = useToast();
   const tplKey = STEP_TEMPLATES[step];
   const tpl = IMPORT_TEMPLATES[tplKey];
-  const columns = useMemo(() => tpl.columns.map(c => c.name), [tpl]);
+  const templateColumns = useMemo(() => tpl.columns.map(c => c.name), [tpl]);
+  const fields = useMemo<StepField[]>(
+    () => tpl.columns.map(c => ({ name: c.name, label: FIELD_LABELS[c.name] ?? c.name, required: c.required })),
+    [tpl],
+  );
+
+  const metaTypesQuery = useQuery<{ types: MetaType[] }>({
+    queryKey: ["/api/import/wizard/metadata-types"],
+  });
+  const metaTypes = metaTypesQuery.data?.types ?? [];
+
   const [mode, setMode] = useState<"paste" | "file">("paste");
   const [text, setText] = useState("");
-  const [fileRows, setFileRows] = useState<Array<Record<string, string>> | null>(null);
+  const [fileMatrix, setFileMatrix] = useState<string[][] | null>(null);
+  const [fileAssumeHeader, setFileAssumeHeader] = useState(false);
   const [fileName, setFileName] = useState("");
   const [preview, setPreview] = useState<PreviewResponse | null>(null);
+  const [mapping, setMapping] = useState<Record<string, string>>({});
+  // null = använd auto-detektering; true/false = användaren har tvingat läget.
+  const [headerOverride, setHeaderOverride] = useState<boolean | null>(null);
 
-  const currentRows = useMemo(
-    () => (mode === "paste" ? parseRowsFromText(text, columns) : fileRows ?? []),
-    [mode, text, fileRows, columns],
+  // Kända mål för header-detektion: systemfältens namn/etikett + metadatatypernas namn/beteckning.
+  const knownTargets = useMemo(() => {
+    const s = new Set<string>();
+    for (const f of fields) {
+      s.add(normalizeKey(f.name));
+      s.add(normalizeKey(f.label));
+    }
+    for (const t of metaTypes) {
+      s.add(normalizeKey(t.namn));
+      if (t.beteckning) s.add(normalizeKey(t.beteckning));
+    }
+    return s;
+  }, [fields, metaTypes]);
+
+  // Råmatris från källan (paste eller fil). Header-läget avgörs separat så att
+  // en användarväxel kan tvinga det oberoende av auto-detekteringen.
+  const rawMatrix = useMemo<string[][]>(() => {
+    if (mode === "paste") return parseMatrixFromText(text);
+    return fileMatrix ?? [];
+  }, [mode, text, fileMatrix]);
+
+  // Auto-default: filer antar rubrik (fileAssumeHeader), paste detekteras via kända mål.
+  const autoHeader = useMemo(() => {
+    if (mode === "file") return fileMatrix ? fileAssumeHeader : false;
+    return detectHeader(rawMatrix, knownTargets);
+  }, [mode, fileMatrix, fileAssumeHeader, rawMatrix, knownTargets]);
+
+  const hasHeader = headerOverride ?? autoHeader;
+
+  const table = useMemo<ParsedTable>(
+    () => buildTable(rawMatrix, templateColumns, hasHeader),
+    [rawMatrix, templateColumns, hasHeader],
   );
+
+  // Auto-mappa om när kolumnuppsättningen ändras eller metadatatyperna laddats in.
+  const columnsKey = table.columns.join("\u0001");
+  const metaTypesCount = metaTypes.length;
+  useEffect(() => {
+    setMapping(autoMapColumns(table.columns, fields, metaTypes));
+    setPreview(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [columnsKey, metaTypesCount, fields]);
+
+  const currentRows = useMemo(() => applyMapping(table, mapping), [table, mapping]);
+
+  const mappedFieldNames = useMemo(() => {
+    const s = new Set<string>();
+    for (const t of Object.values(mapping)) if (t.startsWith("field:")) s.add(t.slice("field:".length));
+    return s;
+  }, [mapping]);
+  const missingRequired = fields.filter(f => f.required && !mappedFieldNames.has(f.name));
+
+  function setColumnTarget(col: string, target: string) {
+    setMapping(prev => {
+      const next = { ...prev, [col]: target };
+      // Ett systemfält kan bara ta emot EN kolumn — rensa tidigare kolumn med samma mål.
+      if (target.startsWith("field:")) {
+        for (const other of Object.keys(next)) {
+          if (other !== col && next[other] === target) next[other] = IGNORE;
+        }
+      }
+      return next;
+    });
+    setPreview(null);
+  }
 
   const mut = useMutation({
     mutationFn: async (commit: boolean) => {
@@ -212,12 +440,18 @@ function StepEditor({ step, locked, onCommitDone, sessionId }: StepEditorProps) 
         setPreview(r);
         toast({ title: "Förhandsvisning", description: `${r.valid} OK, ${r.invalid} fel.` });
       } else {
-        toast({ title: `Steg ${step} klart`, description: `${r.created} objekt skapade.` });
+        const warnings = r.metadataWarnings ?? [];
+        toast({
+          title: `Steg ${step} klart`,
+          description: warnings.length > 0
+            ? `${r.created} objekt skapade. ${warnings.length} metadata-varning(ar).`
+            : `${r.created} objekt skapade.`,
+        });
         setText("");
-        setFileRows(null);
+        setFileMatrix(null);
         setFileName("");
         setPreview(null);
-        onCommitDone();
+        onCommitDone(warnings);
       }
     },
     onError: (e: any) =>
@@ -236,13 +470,21 @@ function StepEditor({ step, locked, onCommitDone, sessionId }: StepEditorProps) 
   return (
     <div className="space-y-3">
       <div className="text-xs text-muted-foreground">
-        Kolumner: <code className="px-1 bg-muted rounded">{columns.join(", ")}</code>
+        Mall-kolumner (kan döpas om eller utökas med metadata):{" "}
+        <code className="px-1 bg-muted rounded">{templateColumns.join(", ")}</code>
       </div>
       <div className="flex justify-end">
         <DownloadTemplateButton type={tplKey} />
       </div>
 
-      <Tabs value={mode} onValueChange={v => setMode(v as "paste" | "file")}>
+      <Tabs
+        value={mode}
+        onValueChange={v => {
+          setMode(v as "paste" | "file");
+          setHeaderOverride(null);
+          setPreview(null);
+        }}
+      >
         <TabsList className="grid w-full grid-cols-2">
           <TabsTrigger value="paste" data-testid={`tab-wizard-paste-${step}`}>Klistra in</TabsTrigger>
           <TabsTrigger value="file" data-testid={`tab-wizard-file-${step}`}>CSV/Excel-fil</TabsTrigger>
@@ -255,7 +497,7 @@ function StepEditor({ step, locked, onCommitDone, sessionId }: StepEditorProps) 
               setPreview(null);
             }}
             rows={8}
-            placeholder={`En rad per objekt. Klistra in från Excel (Tab-separerat) eller CSV.\nKolumner: ${columns.join(", ")}`}
+            placeholder={`En rad per objekt. Klistra in från Excel (Tab-separerat) eller CSV.\nKolumner kan heta vad som helst — du mappar dem nedan.`}
             className="font-mono text-xs"
             data-testid={`input-wizard-paste-${step}`}
           />
@@ -274,20 +516,24 @@ function StepEditor({ step, locked, onCommitDone, sessionId }: StepEditorProps) 
                 if (!f) return;
                 setFileName(f.name);
                 try {
-                  const rows = await parseFileRows(f, columns);
-                  setFileRows(rows);
+                  const { matrix, assumeHeader } = await parseMatrixFromFile(f);
+                  setFileAssumeHeader(assumeHeader);
+                  setFileMatrix(matrix);
+                  setHeaderOverride(null);
                   setPreview(null);
-                  if (rows.length === 0) {
+                  if (matrix.length === 0) {
                     toast({ title: "Inga giltiga rader", variant: "destructive" });
                   }
                 } catch (err: any) {
-                  setFileRows(null);
+                  setFileMatrix(null);
                   toast({
                     title: "Kunde inte läsa filen",
                     description: err?.message ?? "Filen kunde inte tolkas.",
                     variant: "destructive",
                   });
                 }
+                // Tillåt omval av samma fil.
+                e.target.value = "";
               }}
               data-testid={`input-wizard-file-${step}`}
             />
@@ -298,18 +544,106 @@ function StepEditor({ step, locked, onCommitDone, sessionId }: StepEditorProps) 
             </label>
             {fileName && (
               <div className="mt-2 text-xs text-muted-foreground">
-                {fileName} — {fileRows?.length ?? 0} rad(er) tolkade
+                {fileName} — {currentRows.length} rad(er) tolkade
               </div>
             )}
           </div>
         </TabsContent>
       </Tabs>
 
+      {rawMatrix.length > 0 && (
+        <label
+          className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer select-none"
+          data-testid={`label-has-header-${step}`}
+        >
+          <Checkbox
+            checked={hasHeader}
+            onCheckedChange={c => {
+              setHeaderOverride(c === true);
+              setPreview(null);
+            }}
+            data-testid={`checkbox-has-header-${step}`}
+          />
+          Första raden är rubrikrad (avmarkera om din data saknar rubriker)
+        </label>
+      )}
+
+      {table.columns.length > 0 && (
+        <div className="rounded-lg border" data-testid={`mapping-table-${step}`}>
+          <div className="flex items-center justify-between px-3 py-2 border-b bg-muted/40">
+            <span className="text-xs font-medium">Kolumn-mappning ({table.columns.length} kolumner)</span>
+            <span className="text-xs text-muted-foreground">{currentRows.length} rad(er)</span>
+          </div>
+          <div className="max-h-72 overflow-y-auto">
+            <table className="w-full text-xs">
+              <thead className="sticky top-0 bg-background">
+                <tr className="text-left text-muted-foreground">
+                  <th className="px-3 py-1.5 font-medium">Källkolumn</th>
+                  <th className="px-3 py-1.5 font-medium">Exempel</th>
+                  <th className="px-3 py-1.5 font-medium">Mappas till</th>
+                </tr>
+              </thead>
+              <tbody>
+                {table.columns.map(col => {
+                  const sample = sampleValue(table, col);
+                  return (
+                    <tr key={col} className="border-t" data-testid={`row-mapping-${step}-${col}`}>
+                      <td className="px-3 py-1.5 font-mono align-top">{col}</td>
+                      <td className="px-3 py-1.5 text-muted-foreground align-top max-w-[160px] truncate" title={sample}>
+                        {sample || "—"}
+                      </td>
+                      <td className="px-3 py-1.5">
+                        <Select value={mapping[col] ?? IGNORE} onValueChange={v => setColumnTarget(col, v)}>
+                          <SelectTrigger className="h-7 w-full" data-testid={`select-mapping-${step}-${col}`}>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value={IGNORE}>— Ignorera —</SelectItem>
+                            <SelectGroup>
+                              <SelectLabel>Systemfält</SelectLabel>
+                              {fields.map(f => (
+                                <SelectItem key={f.name} value={`field:${f.name}`}>
+                                  {f.label}{f.required ? " *" : ""}
+                                </SelectItem>
+                              ))}
+                            </SelectGroup>
+                            {metaTypes.length > 0 && (
+                              <SelectGroup>
+                                <SelectLabel>Metadata</SelectLabel>
+                                {metaTypes.map(t => (
+                                  <SelectItem key={t.namn} value={`meta:${t.namn}`}>
+                                    {t.namn}{t.beteckning ? ` (${t.beteckning})` : ""}
+                                  </SelectItem>
+                                ))}
+                              </SelectGroup>
+                            )}
+                          </SelectContent>
+                        </Select>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {missingRequired.length > 0 && table.columns.length > 0 && (
+        <div
+          className="flex items-start gap-2 rounded-md border border-warning/40 bg-warning/10 p-2 text-xs text-foreground"
+          data-testid={`warning-missing-required-${step}`}
+        >
+          <AlertTriangle className="h-4 w-4 text-warning shrink-0 mt-0.5" />
+          <span>Obligatoriska fält saknar mappning: {missingRequired.map(f => f.label).join(", ")}.</span>
+        </div>
+      )}
+
       <div className="flex flex-wrap gap-2">
         <Button
           variant="outline"
           onClick={() => mut.mutate(false)}
-          disabled={mut.isPending || currentRows.length === 0}
+          disabled={mut.isPending || currentRows.length === 0 || missingRequired.length > 0}
           data-testid={`button-wizard-preview-${step}`}
         >
           <Eye className="h-4 w-4 mr-2" /> Förhandsvisa
@@ -319,6 +653,7 @@ function StepEditor({ step, locked, onCommitDone, sessionId }: StepEditorProps) 
           disabled={
             mut.isPending ||
             currentRows.length === 0 ||
+            missingRequired.length > 0 ||
             (preview ? preview.invalid > 0 : false)
           }
           data-testid={`button-wizard-commit-${step}`}
@@ -356,6 +691,7 @@ export function ImportWizardFlow() {
     }
   });
   const [activeStep, setActiveStep] = useState<StepNum>(1);
+  const [metadataWarnings, setMetadataWarnings] = useState<string[]>([]);
 
   const sessionQuery = useQuery<SessionDTO>({
     queryKey: ["/api/import/wizard/sessions", sessionId],
@@ -537,7 +873,8 @@ export function ImportWizardFlow() {
               step={s}
               locked={stepCompleted >= s}
               sessionId={session.id}
-              onCommitDone={() => {
+              onCommitDone={(warnings) => {
+                setMetadataWarnings(warnings);
                 qc.invalidateQueries({ queryKey: ["/api/import/wizard/sessions", sessionId] });
                 queryClient.invalidateQueries({ queryKey: ["/api/objects"] });
               }}
@@ -545,6 +882,39 @@ export function ImportWizardFlow() {
           </TabsContent>
         ))}
       </Tabs>
+
+      {metadataWarnings.length > 0 && (
+        <Card className="border-warning/40" data-testid="card-metadata-warnings">
+          <CardHeader className="pb-2">
+            <div className="flex items-start justify-between gap-2">
+              <CardTitle className="text-sm flex items-center gap-2 text-foreground">
+                <AlertTriangle className="h-4 w-4 text-warning" />
+                Metadata-varningar ({metadataWarnings.length})
+              </CardTitle>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-6 w-6 p-0"
+                onClick={() => setMetadataWarnings([])}
+                data-testid="button-dismiss-metadata-warnings"
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+            <CardDescription>
+              Objekten skapades, men viss metadata kunde inte skrivas. Skapa saknade
+              metadatatyper under Metadata och importera dem igen vid behov.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <ul className="list-disc pl-5 space-y-1 text-xs text-foreground">
+              {metadataWarnings.map((w, i) => (
+                <li key={i} data-testid={`text-metadata-warning-${i}`}>{w}</li>
+              ))}
+            </ul>
+          </CardContent>
+        </Card>
+      )}
 
       {interimEntries.length > 0 && (
         <Card>
