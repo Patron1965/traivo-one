@@ -444,6 +444,14 @@ export function registerImportWizardRoutes(app: Express): void {
       const interimMap: InterimMap = { ...((session.interimMap as InterimMap) ?? {}) };
       const validation = await validateRows(step, parsed.data.rows, interimMap);
       if (validation.errors.length > 0) {
+        // Inkludera ett läsbart `message` så även den generiska klient-
+        // felhanteraren (apiRequest/throwIfResNotOk) visar något åtgärdbart —
+        // annars hamnar man på "400:" utan text. Den strukturerade `errors`-
+        // arrayen + `preview` driver den detaljerade per-rad-panelen.
+        const firstError = validation.errors[0]?.message ?? "";
+        const message =
+          `${validation.errors.length} rad(er) blockerade${firstError ? `: ${firstError}` : ""}. ` +
+          `Förhandsgranska steget för att se alla fel.`;
         return res.status(400).json({
           ok: false,
           step,
@@ -452,6 +460,7 @@ export function registerImportWizardRoutes(app: Express): void {
           duplicates: validation.duplicates,
           errors: validation.errors,
           preview: validation.preview,
+          message,
         });
       }
 

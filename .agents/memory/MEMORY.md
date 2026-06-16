@@ -46,4 +46,5 @@
 - [Veckoplanering-vyn (Bilaga C)](veckoplanering-page.md) — `/veckoplanering` = alias för `/veckoplan`; 9:e time_category frontend-only; "Automatisk veckoplanering" = bara recompute (ej auto-placering).
 - [tsc baseline noise](tsc-baseline-noise.md) — repo har stabilt brus av pre-existing tsc-fel; bara NYA fel i rörda filer räknas; kör tsc synkront (bg-loggar i /tmp/.local rullas tillbaka mellan bash-anrop).
 - [Objekt repoint cykel-vakt](object-repoint-cycle-guard.md) — repoint/move av objekt-förälder måste avvisa ättling-mål (cykel), ej bara själv-förälder; använd storage.wouldCreateObjectCycle i route OCH moveObject.
+- [apiRequest kastar på non-2xx](apirequest-throws-on-nonok.md) — `if(!res.ok)` efter apiRequest() är dead code (throwIfResNotOk kastar först); för strukturerad 400-body (errors/preview) använd rå fetch(versionedUrl) + servern måste skicka läsbart `message`.
 - [Import-wizard metadata write timing](import-wizard-metadata.md) — wizard-metadata skrivs EFTER objekt-tx commit (batch-helper kräver committade rader via recursive CTE); best-effort, ingen lazy-create.

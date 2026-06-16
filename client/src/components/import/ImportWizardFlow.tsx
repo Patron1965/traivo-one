@@ -2,7 +2,7 @@
 // Guidat onboarding-flöde där interimnummer kopplar stegen.
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { apiRequest, queryClient } from "@/lib/queryClient";
+import { apiRequest, queryClient, versionedUrl } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -416,7 +416,17 @@ function StepEditor({ step, locked, onCommitDone, sessionId }: StepEditorProps) 
       const path = commit
         ? `/api/import/wizard/sessions/${sessionId}/commit`
         : `/api/import/wizard/sessions/${sessionId}/preview`;
-      const res = await apiRequest("POST", path, { step, rows: currentRows });
+      // Obs: använd rå fetch (inte apiRequest) eftersom apiRequest kastar på
+      // icke-2xx INNAN vi hinner läsa den strukturerade valideringskroppen
+      // ({errors, preview}). Vid en direkt Commit (utan föregående
+      // förhandsgranskning) vill vi visa per-rad-felen i panelen — inte bara
+      // en intetsägande "400:"-toast.
+      const res = await fetch(versionedUrl(path), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ step, rows: currentRows }),
+        credentials: "include",
+      });
       const body = await res.json().catch(() => ({}));
       if (!res.ok) {
         // Backend kan svara med {errors:[...]} (validering före commit) eller
@@ -431,8 +441,19 @@ function StepEditor({ step, locked, onCommitDone, sessionId }: StepEditorProps) 
         const summary = errArr.length > 0
           ? `${errArr.length} rad(er) blockerade: ${first}`
           : (first ?? (commit ? "Commit misslyckades" : "Förhandsgranskning misslyckades"));
-        if (!commit && Array.isArray(body?.errors)) {
-          setPreview(body as PreviewResponse);
+        // Driv den detaljerade per-rad-panelen oavsett om felet kom från
+        // förhandsgranskning eller commit — så länge servern skickade tillbaka
+        // valideringsdetaljer (errors + preview har samma form i båda svaren).
+        if (Array.isArray(body?.errors) && Array.isArray(body?.preview)) {
+          setPreview({
+            dryRun: true,
+            step: body.step ?? step,
+            valid: body.valid ?? 0,
+            invalid: body.invalid ?? errArr.length,
+            duplicates: body.duplicates ?? 0,
+            errors: body.errors,
+            preview: body.preview,
+          });
         }
         throw new Error(summary);
       }
