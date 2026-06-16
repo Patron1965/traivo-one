@@ -42,7 +42,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { PageHeader } from "@/components/layout/PageHeader";
-import { Search, Layers, Package, ClipboardList, ArrowRight, Users, ChevronLeft, ChevronRight, ArrowUp, ArrowDown, ArrowUpDown, Trash2, ExternalLink, Loader2, Plus } from "lucide-react";
+import { Search, Package, ClipboardList, ArrowRight, Users, ChevronLeft, ChevronRight, ArrowUp, ArrowDown, ArrowUpDown, Trash2, ExternalLink, Loader2, Plus } from "lucide-react";
 import { versionedUrl, apiRequest, queryClient } from "@/lib/queryClient";
 import { QueryState } from "@/components/QueryState";
 import { useAuth } from "@/hooks/use-auth";
@@ -103,7 +103,7 @@ export default function CustomersPage() {
   const [hierarchyFilter, setHierarchyFilter] = useState<string>("all");
   const [rootsOnly, setRootsOnly] = useState<boolean>(false);
 
-  type SortField = "name" | "orgNumber" | "customerNumber" | "city" | "clusters" | "objects" | "activeOrders";
+  type SortField = "name" | "orgNumber" | "customerNumber" | "city" | "objects" | "activeOrders";
   const [sortConfig, setSortConfig] = useState<{ field: SortField; direction: "asc" | "desc" }>({ field: "name", direction: "asc" });
   const toggleSort = (field: SortField) => {
     setSortConfig(prev => prev.field === field
@@ -183,9 +183,6 @@ export default function CustomersPage() {
           break;
         case "city":
           cmp = (a.city || "").localeCompare(b.city || "", "sv", { sensitivity: "base" });
-          break;
-        case "clusters":
-          cmp = (aggMap.get(a.id)?.clusterCount ?? 0) - (aggMap.get(b.id)?.clusterCount ?? 0);
           break;
         case "objects":
           cmp = (aggMap.get(a.id)?.objectCount ?? 0) - (aggMap.get(b.id)?.objectCount ?? 0);
@@ -336,7 +333,7 @@ export default function CustomersPage() {
     <div className="container mx-auto p-4 sm:p-6 space-y-6">
       <PageHeader
         title="Kunder"
-        description="Översikt över alla kunder, deras kluster och objekt"
+        description="Översikt över alla kunder och objekt"
         icon={Users}
       >
         <Button
@@ -348,20 +345,12 @@ export default function CustomersPage() {
         </Button>
       </PageHeader>
 
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
         <Card>
           <CardContent className="p-4">
             <div className="text-xs text-muted-foreground">Kunder</div>
             <div className="text-2xl font-semibold mt-1" data-testid="stat-customer-count">
               {customerCount}
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <div className="text-xs text-muted-foreground">Kluster</div>
-            <div className="text-2xl font-semibold mt-1" data-testid="stat-cluster-total">
-              {totals?.clusterCount ?? 0}
             </div>
           </CardContent>
         </Card>
@@ -462,11 +451,6 @@ export default function CustomersPage() {
                         </button>
                       </TableHead>
                       <TableHead className="text-right">
-                        <button onClick={() => toggleSort("clusters")} className="flex items-center hover:text-foreground ml-auto" data-testid="button-sort-clusters">
-                          Kluster <SortIcon field="clusters" />
-                        </button>
-                      </TableHead>
-                      <TableHead className="text-right">
                         <button onClick={() => toggleSort("objects")} className="flex items-center hover:text-foreground ml-auto" data-testid="button-sort-objects">
                           Objekt <SortIcon field="objects" />
                         </button>
@@ -507,12 +491,6 @@ export default function CustomersPage() {
                             {c.customerNumber || "—"}
                           </TableCell>
                           <TableCell className="text-sm text-muted-foreground">{c.city || "—"}</TableCell>
-                          <TableCell className="text-right">
-                            <Badge variant="outline" className="gap-1" data-testid={`badge-clusters-${c.id}`}>
-                              <Layers className="h-3 w-3" />
-                              {aggReady ? (agg?.clusterCount ?? 0) : "…"}
-                            </Badge>
-                          </TableCell>
                           <TableCell className="text-right">
                             <Badge variant="outline" className="gap-1" data-testid={`badge-objects-${c.id}`}>
                               <Package className="h-3 w-3" />

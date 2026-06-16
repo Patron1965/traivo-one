@@ -222,7 +222,7 @@ export function EnkelUppgiftWizard({
   const [description, setDescription] = useState("");
   const [plannedNotes, setPlannedNotes] = useState("");
 
-  // Steg 6 – snöre-placering (valfri direkt-schemaläggning)
+  // Steg 6 – direkt-schemaläggning (valfri)
   const [placementEnabled, setPlacementEnabled] = useState(false);
   const [placementResource, setPlacementResource] = useState<ResourceOption | null>(null);
   const [placementResourceSearch, setPlacementResourceSearch] = useState("");
@@ -460,7 +460,7 @@ export function EnkelUppgiftWizard({
     setFreeTextLines((prev) => prev.map((l) => (l.id === id ? { ...l, ...patch } : l)));
   const removeFreeText = (id: string) => setFreeTextLines((prev) => prev.filter((l) => l.id !== id));
 
-  // ── Snöre-placering ──────────────────────────────────────────────────
+  // ── Direkt-schemaläggning ────────────────────────────────────────────
   const currentPlacement = useMemo<Placement | null>(() => {
     if (!placementEnabled || !placementResource || !placementDate) return null;
     return {
@@ -571,7 +571,7 @@ export function EnkelUppgiftWizard({
       workOrderId = wo.id;
     }
 
-    // Snöre-placering: schemalägg direkt på vald resurs/dag (best-effort).
+    // Direkt-schemaläggning: schemalägg direkt på vald resurs/dag (best-effort).
     let placementFailed = false;
     if (draft.placement) {
       try {
@@ -602,7 +602,7 @@ export function EnkelUppgiftWizard({
       if (lineFailures > 0 || placementFailed) {
         const parts: string[] = [];
         if (lineFailures > 0) parts.push(`${lineFailures} rad(er) kunde inte läggas till`);
-        if (placementFailed) parts.push("placeringen på snöret misslyckades");
+        if (placementFailed) parts.push("schemaläggningen misslyckades");
         toast({
           title: "Uppgiften skapades med varning",
           description: `${parts.join(" och ")}. Öppna uppgiften och åtgärda manuellt.`,
@@ -611,7 +611,7 @@ export function EnkelUppgiftWizard({
       } else {
         toast({
           title: draft.mode === "tillagg" ? "Uppgift tillagd på order" : "Enkel uppgift skapad",
-          description: draft.placement ? `${derivedTitle} · placerad på snöret` : derivedTitle,
+          description: draft.placement ? `${derivedTitle} · schemalagd` : derivedTitle,
         });
       }
 
@@ -1337,7 +1337,7 @@ export function EnkelUppgiftWizard({
                   ))}
                 </div>
 
-                {/* Snöre-placering: schemalägg direkt på en resurs/dag */}
+                {/* Direkt-schemaläggning: schemalägg direkt på en resurs/dag */}
                 <Separator />
                 <div className="space-y-3">
                   <button
@@ -1349,7 +1349,7 @@ export function EnkelUppgiftWizard({
                     <div className="flex items-center gap-2">
                       <CalendarClock className="h-4 w-4 text-primary shrink-0" />
                       <div className="flex-1 min-w-0">
-                        <div className="font-medium text-sm">Placera på snöret direkt (valfritt)</div>
+                        <div className="font-medium text-sm">Schemalägg direkt (valfritt)</div>
                         <div className="text-xs text-muted-foreground mt-0.5">
                           Schemalägg uppgiften på en resurs i stället för att lägga den bland oplanerade.
                         </div>

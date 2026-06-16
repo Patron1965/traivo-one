@@ -28,7 +28,7 @@ import {
   Search, Plus, Filter, Loader2, ChevronRight, ChevronLeft, Building2, MapPin, Trash2, 
   Map as MapIcon, List, Copy, Upload, Clock, Key, Keyboard, Users, DoorOpen,
   Check, X, FileSpreadsheet, Download, BarChart3, MoreHorizontal, AlertTriangle, AlertCircle, ChevronDown, ChevronUp, XCircle,
-  Image, GitFork, Link2, Globe, ShieldAlert, ShieldCheck, ShieldX, Package, Info, Camera, FileUp, Pyramid,
+  Image, GitFork, Link2, Globe, ShieldAlert, ShieldCheck, ShieldX, Package, Info, Camera, FileUp,
   ArrowUp, ArrowDown, ArrowUpDown, Network, Pencil, FolderPlus, Archive, Columns3
 } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
@@ -231,7 +231,6 @@ export default function ObjectsPage() {
   };
   const [batchGeoOpen, setBatchGeoOpen] = useState(false);
   const [batchGeoCity, setBatchGeoCity] = useState("");
-  const [batchGeoCluster, setBatchGeoCluster] = useState("");
   const [batchGeoLimit, setBatchGeoLimit] = useState(500);
   const [batchGeoRunning, setBatchGeoRunning] = useState(false);
   const [batchGeoResult, setBatchGeoResult] = useState<{ total: number; geocoded: number; updated: number; updatedIds?: string[] } | null>(null);
@@ -430,11 +429,10 @@ export default function ObjectsPage() {
     byCluster: Array<{ clusterId: string; clusterName: string; count: number }>;
     googleAvailable: boolean;
   }>({
-    queryKey: ["/api/objects/batch-geocode/preview", batchGeoCity, batchGeoCluster, batchGeoLimit],
+    queryKey: ["/api/objects/batch-geocode/preview", batchGeoCity, batchGeoLimit],
     queryFn: async () => {
       const body: any = {};
       if (batchGeoCity) body.city = batchGeoCity;
-      if (batchGeoCluster) body.clusterId = batchGeoCluster;
       if (batchGeoLimit > 0) body.limit = batchGeoLimit;
       const res = await fetch("/api/objects/batch-geocode/preview", {
         method: "POST",
@@ -1942,24 +1940,6 @@ export default function ObjectsPage() {
           <Upload className="h-4 w-4 mr-2" />
           Importera CSV
         </Button>
-        <Button
-          variant="outline"
-          onClick={async () => {
-            if (!confirm("Härled hierarkinivåer (Koncern/BRF/Fastighet/Rum/Kärl) från trädstrukturen för alla objekt? Befintliga nivåer skrivs över.")) return;
-            try {
-              const res = await apiRequest("POST", "/api/objects/derive-hierarchy", {});
-              const data = await res.json();
-              toast({ title: "Hierarki uppdaterad", description: `${data.updated} av ${data.scanned} objekt fick ny nivå.` });
-              queryClient.invalidateQueries({ queryKey: ["/api/objects"] });
-            } catch (err: any) {
-              toast({ title: "Fel", description: err?.message ?? "Kunde inte härleda hierarki", variant: "destructive" });
-            }
-          }}
-          data-testid="button-derive-hierarchy"
-        >
-          <Pyramid className="h-4 w-4 mr-2" />
-          Härled hierarki
-        </Button>
         <Button variant="outline" onClick={() => setMetadataColumnsDialogOpen(true)} data-testid="button-metadata-columns">
           <Columns3 className="h-4 w-4 mr-2" />
           Kolumner
@@ -3174,35 +3154,19 @@ Fastighet A,FAST-100,fastighet,Storgatan 1,Stockholm,code,1234"
 
               {!batchGeoResult && (
                 <>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <Label>Filtrera per stad</Label>
-                      <Select value={batchGeoCity || "all"} onValueChange={(v) => setBatchGeoCity(v === "all" ? "" : v)}>
-                        <SelectTrigger data-testid="select-batch-geo-city">
-                          <SelectValue placeholder="Alla städer" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="all">Alla städer</SelectItem>
-                          {batchGeoPreview?.byCity.map(({ city, count }) => (
-                            <SelectItem key={city} value={city}>{city} ({count} st)</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div>
-                      <Label>Filtrera per kluster</Label>
-                      <Select value={batchGeoCluster || "all"} onValueChange={(v) => setBatchGeoCluster(v === "all" ? "" : v)}>
-                        <SelectTrigger data-testid="select-batch-geo-cluster">
-                          <SelectValue placeholder="Alla kluster" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="all">Alla kluster</SelectItem>
-                          {batchGeoPreview?.byCluster.map(({ clusterId, clusterName, count }) => (
-                            <SelectItem key={clusterId} value={clusterId}>{clusterName} ({count} st)</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
+                  <div>
+                    <Label>Filtrera per stad</Label>
+                    <Select value={batchGeoCity || "all"} onValueChange={(v) => setBatchGeoCity(v === "all" ? "" : v)}>
+                      <SelectTrigger data-testid="select-batch-geo-city">
+                        <SelectValue placeholder="Alla städer" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">Alla städer</SelectItem>
+                        {batchGeoPreview?.byCity.map(({ city, count }) => (
+                          <SelectItem key={city} value={city}>{city} ({count} st)</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
 
                   <div>
@@ -3268,7 +3232,6 @@ Fastighet A,FAST-100,fastighet,Storgatan 1,Stockholm,code,1234"
                         try {
                           const body: any = {};
                           if (batchGeoCity) body.city = batchGeoCity;
-                          if (batchGeoCluster) body.clusterId = batchGeoCluster;
                           if (batchGeoLimit > 0) body.limit = batchGeoLimit;
                           const res = await fetch("/api/objects/batch-geocode", {
                             method: "POST",
