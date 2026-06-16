@@ -1,0 +1,20 @@
+Key Topics Discussed
+Förtydligande av “wizarden”.
+Systemets hantering av inläsning av råa eller fulla filer med endast intrin-/artikelnummer.
+Skapande av ny struktur med egna systemnummer baserat på intrin-/artikelnumrens logik.
+Varning för cirkelreferenser, dubbletter eller logiska fel i inlästa filer och hur systemet bör hantera dessa.
+Hantering av oavsiktlig inläsning av samma importfil flera gånger och konsekvenserna av detta.
+Wizardens förmåga att hantera uppdatering av metadatafält, namn och förälder, där filens första kolumn är det systemskapade individnumret och följande kolumner är metadatavärden och namn.
+Systemet måste kunna hantera att det organisatoriska objekt som skapas i “fienden” har ett systemskapat föräldrareferensnummer, medan det själv har ett interimnummer, och att det uppdaterade föräldraskapsnumret på underliggande objekt då använder detta interimnummer.
+Systemets kapacitet att matcha in data i ett kluster av objekt, helt eller delvis, baserat på det systemgenererade numret (t.ex. uppdatera kvadratmeter för ett återvinningsrum med hjälp av det systemgenererade objektnumret).
+Uppdatering av metadatafält (t.ex. ytan) med ett systemgenererat objektnummer i första kolumnen; systemet ska bekräfta överskrivning av befintligt värde och arkivera det gamla värdet som historik.
+Behov av en ‘ångra-knapp’ vid skapande av nya objekt och uppdatering av metadata på befintliga objekt, exempelvis vid massuppdateringar av hämttider för flera kluster.
+Diskussion om ‘ångra-funktionens’ implementering, som liknar Time Capsule i Mac OS eller ångra-funktionen i Excel, för att radera den senaste uppdateringen eller återställa till ursprungligt värde.
+Important Points & Insights
+Systemet ska ersätta intrin-/artikelnummer med generiska systemnummer vid ny strukturskapande.
+Syftet med varningen är att återspegla verkligheten, även om ett objekt kan ha hierarkisk logik. Det skadar inte att systemet upplyser om avvikelser i hierarkisk logik, men det ska vara möjligt att kvittera varningen eller backa för att uppdatera filen.
+Om samma importfil laddas in igen, måste systemet förhindra att nya systemnummer och en parallell objekthierarki skapas för samma sak, då detta leder till stora mängder dubletter.
+Systemet bör föreslå arkivering vid upptäckt av parallella objekt med samma namn och adress.
+Vid uppdatering av metadatafält, ska systemet bekräfta överskrivning av befintliga värden och arkivera de gamla värdena som historik.
+Systemet bör ha en ångra-funktion som är aktiv antingen under en bestämd tid eller under hela inläsningssessionen via wizarden, för att kunna återkalla felaktiga inläsningar eller uppdateringar, särskilt viktigt vid massuppdateringar.
+Enkel implementering av en ‘ångra-funktion’ eller ‘nödutgång’ för att radera den senaste datainläsningen eller återställa data till dess ursprungliga värde, oavsett mängd.
