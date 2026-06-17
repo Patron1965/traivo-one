@@ -80,6 +80,9 @@ const MobileFieldPage = lazy(() => import("@/pages/MobileFieldPage"));
 const ProjectReportPage = lazy(() => import("@/pages/ProjectReportPage"));
 const MetadataSettingsPage = lazy(() => import("@/pages/MetadataSettingsPage"));
 const MetadataDefinitionsPage = lazy(() => import("@/pages/MetadataDefinitionsPage"));
+const MetadataEditorsPage = lazy(() => import("@/pages/MetadataEditorsPage"));
+const MetadataEditorReviewPage = lazy(() => import("@/pages/MetadataEditorReviewPage"));
+const MetadataEditorPublicPage = lazy(() => import("@/pages/MetadataEditorPublicPage"));
 const OrderTypeMetadataPage = lazy(() => import("@/pages/OrderTypeMetadataPage"));
 const FortnoxSettingsPage = lazy(() => import("@/pages/FortnoxSettingsPage"));
 const MyTasksPage = lazy(() => import("@/pages/MyTasksPage"));
@@ -223,6 +226,8 @@ function Router() {
         <Route path="/metadata">{() => <Redirect to="/metadata-settings" />}</Route>
         <Route path="/metadata-settings">{() => <ProtectedRoute component={MetadataSettingsPage} path="/metadata-settings" />}</Route>
         <Route path="/metadata-definitions">{() => <ProtectedRoute component={MetadataDefinitionsPage} path="/metadata-definitions" />}</Route>
+        <Route path="/metadata-editors">{() => <ProtectedRoute component={MetadataEditorsPage} path="/metadata-editors" />}</Route>
+        <Route path="/metadata-granskning">{() => <ProtectedRoute component={MetadataEditorReviewPage} path="/metadata-granskning" />}</Route>
         <Route path="/order-type-metadata">{() => <ProtectedRoute component={OrderTypeMetadataPage} path="/order-type-metadata" />}</Route>
         <Route path="/invoicing">{() => <ProtectedRoute component={InvoicingPage} path="/invoicing" />}</Route>
         <Route path="/fleet">{() => <ProtectedRoute component={FleetManagementPage} path="/fleet" />}</Route>
@@ -375,6 +380,16 @@ function AppContent() {
       <ErrorBoundary>
         <Suspense fallback={<PageLoader />}>
           <PublicFeedbackPage />
+        </Suspense>
+      </ErrorBoundary>
+    );
+  }
+
+  if (location.startsWith("/metadata-form/")) {
+    return (
+      <ErrorBoundary>
+        <Suspense fallback={<PageLoader />}>
+          <MetadataEditorPublicPage />
         </Suspense>
       </ErrorBoundary>
     );

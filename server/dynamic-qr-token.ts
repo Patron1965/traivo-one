@@ -80,3 +80,48 @@ export function verifyObjectQrToken(
     return null;
   }
 }
+
+// Task #956: signerad token för publika metadata-lämnare ("Metadata Editor").
+// Encodar tenant + editor (+ valfritt objekt för objektspecifika lämnare). Egen
+// prefix ("mde:") så tokens inte är utbytbara mot dynqr/objqr. Tenant, editor
+// och objekt härleds alltid server-side från denna token — aldrig från rå id i
+// klienten (ingen enumeration; HMAC-signerad).
+function signMde(payload: string): string {
+  return createHmac("sha256", SECRET).update(`mde:${payload}`).digest("base64url");
+}
+
+export function signMetadataEditorToken(
+  tenantId: string,
+  editorId: string,
+  objectId?: string | null,
+): string {
+  const raw = objectId ? `${tenantId}:${editorId}:${objectId}` : `${tenantId}:${editorId}`;
+  const payload = Buffer.from(raw, "utf8").toString("base64url");
+  return `${payload}.${signMde(payload)}`;
+}
+
+export function verifyMetadataEditorToken(
+  token: string | undefined | null,
+): { tenantId: string; editorId: string; objectId: string | null } | null {
+  if (!token || typeof token !== "string") return null;
+  const parts = token.split(".");
+  if (parts.length !== 2) return null;
+  const [payload, sig] = parts;
+  const expected = signMde(payload);
+  if (sig.length !== expected.length) return null;
+  try {
+    if (!timingSafeEqual(Buffer.from(sig), Buffer.from(expected))) return null;
+  } catch {
+    return null;
+  }
+  try {
+    const decoded = Buffer.from(payload, "base64url").toString("utf8");
+    const segs = decoded.split(":");
+    if (segs.length < 2 || segs.length > 3) return null;
+    const [tenantId, editorId, objectId] = segs;
+    if (!tenantId || !editorId) return null;
+    return { tenantId, editorId, objectId: objectId || null };
+  } catch {
+    return null;
+  }
+}

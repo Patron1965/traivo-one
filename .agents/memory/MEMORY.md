@@ -58,3 +58,4 @@
 - [Orderkoncept kund-härledning](order-concept-customer-resolution.md) — HARDCODED vs FROM_METADATA (svensk katalog-namn, exakt match); validate måste gate:a kund-fel på samma metoder execution pre-passar (subscription undantaget) annars drift.
 - [Utförandekod-/ikonregister](execution-code-register.md) — `/execution-codes`+`/icons` register ≠ gamla `/utforandetyper`; selektorer använder useExecutionCodes-hook (register + fritext back-compat), ej hårdkodad EXECUTION_CODE_OPTIONS.
 - [Fältappen saknar antals-input](field-app-no-quantity-editor.md) — Traivo Go har inget redigerbart antalsfält; antals-flaggor (hideQuantityInApp/operatorCanUpdate) är display-only via metadata-context.
+- [/api/objects dubbel svarsform](api-objects-dual-response-shape.md) — `/api/objects` ger bar array UTAN params men `{objects,total}` när `limit`/`search` skickas; normalisera alltid annars "map is not a function".

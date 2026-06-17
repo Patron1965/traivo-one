@@ -801,6 +801,8 @@ export async function registerRoutes(
   registerOrderConceptRoutes(app);
   registerPortalRoutes(app);
   registerExtendedRoutes(app);
+  const { registerMetadataEditorRoutes } = await import("./routes/metadataEditorRoutes");
+  registerMetadataEditorRoutes(app);
   registerIntegrationsHealthRoutes(app);
   startIntegrationsHealthScheduler();
   registerIoTRoutes(app);

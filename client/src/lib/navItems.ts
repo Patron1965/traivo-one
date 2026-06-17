@@ -129,6 +129,7 @@ export function getPlaneringItems(tl?: (key: string) => string): NavItem[] {
     { title: l("nav.production-control"), url: "/planning-parameters", icon: Settings2, description: l("nav.production-control.desc") },
     { title: l("nav.planner-search-filters"), url: "/planner-search-filters", icon: Sliders, description: l("nav.planner-search-filters.desc") },
     { title: "Utförandetyper", url: "/utforandetyper", icon: ListChecks, description: "Hantera utförandetyper och automatiska förberedelseuppgifter per typ" },
+    { title: "Metadata-granskning", url: "/metadata-granskning", icon: Inbox, description: "Granska och godkänn inlämningar från publika metadata-lämnare" },
   ];
 }
 
@@ -176,6 +177,7 @@ export function getAdminItems(tl?: (key: string) => string): NavItem[] {
   return [
     { title: l("nav.company-settings"), url: "/tenant-config", icon: Settings2, description: l("nav.company-settings.desc") },
     { title: "Metadata", url: "/metadata-settings", icon: Database, description: "Metadatakatalog, definitioner och koppling per ordertyp" },
+    { title: "Metadata-lämnare", url: "/metadata-editors", icon: ClipboardCheck, description: "Bygg publika formulär för insamling av metadata (granskas innan de registreras)" },
     { title: l("nav.user-management"), url: "/user-management", icon: Users, description: l("nav.user-management.desc") },
     { title: l("nav.settings"), url: "/settings", icon: Settings, description: l("nav.settings.desc") },
     { title: l("nav.fortnox"), url: "/fortnox", icon: Receipt, description: l("nav.fortnox.desc") },

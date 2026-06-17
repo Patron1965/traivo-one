@@ -30,6 +30,7 @@ const ADMIN_ONLY_ROUTES = new Set([
   "/restore-dormant-customers",
   "/shadow-comparison",
   "/archive",
+  "/metadata-editors",
 ]);
 
 const PLANNER_ROUTES = new Set([
@@ -86,6 +87,7 @@ const PLANNER_ROUTES = new Set([
   "/checklist-templates",
   "/annual-planning",
   "/enhetsansvarig",
+  "/metadata-granskning",
 ]);
 
 const TECHNICIAN_ROUTES = new Set([

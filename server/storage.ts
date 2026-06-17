@@ -90,6 +90,10 @@ import {
   type DeviationReport, type InsertDeviationReport,
   type QrCodeLink, type InsertQrCodeLink,
   type PublicIssueReport, type InsertPublicIssueReport,
+  type MetadataEditor, type InsertMetadataEditor,
+  type MetadataEditorField, type InsertMetadataEditorField,
+  type MetadataEditorSubmission, type InsertMetadataEditorSubmission,
+  type MetadataEditorSubmissionValue, type InsertMetadataEditorSubmissionValue,
   type CustomerChangeRequest, type InsertCustomerChangeRequest,
   type EnvironmentalData, type InsertEnvironmentalData,
   type VisitConfirmation, type InsertVisitConfirmation,
@@ -147,6 +151,7 @@ import {
   portalUsers, portalUserObjectScopes,
   customerInvoices, customerIssueReports, customerServiceContracts, fortnoxContractSuggestions, customerNotificationSettings,
   protocols, deviationReports, qrCodeLinks, publicIssueReports, customerChangeRequests, environmentalData,
+  metadataEditors, metadataEditorFields, metadataEditorSubmissions, metadataEditorSubmissionValues,
   visitConfirmations, technicianRatings, portalMessages, selfBookingSlots, selfBookings,
   tenantFeatures,
   planningDecisionLog,
@@ -1123,7 +1128,24 @@ export interface IStorage {
   getPublicIssueReport(id: string): Promise<PublicIssueReport | undefined>;
   createPublicIssueReport(report: InsertPublicIssueReport): Promise<PublicIssueReport>;
   updatePublicIssueReport(id: string, tenantId: string, data: Partial<InsertPublicIssueReport>): Promise<PublicIssueReport | undefined>;
-  
+
+  // Metadata Editors ("Metadata Lämnare", Task #956)
+  getMetadataEditors(tenantId: string, options?: { type?: string; isActive?: boolean }): Promise<MetadataEditor[]>;
+  getMetadataEditor(id: string, tenantId: string): Promise<MetadataEditor | undefined>;
+  createMetadataEditor(editor: InsertMetadataEditor): Promise<MetadataEditor>;
+  updateMetadataEditor(id: string, tenantId: string, data: Partial<InsertMetadataEditor>): Promise<MetadataEditor | undefined>;
+  deleteMetadataEditor(id: string, tenantId: string): Promise<void>;
+  getMetadataEditorFields(editorId: string, tenantId: string): Promise<MetadataEditorField[]>;
+  createMetadataEditorField(field: InsertMetadataEditorField): Promise<MetadataEditorField>;
+  replaceMetadataEditorFields(editorId: string, tenantId: string, fields: InsertMetadataEditorField[]): Promise<MetadataEditorField[]>;
+  getMetadataEditorSubmissions(tenantId: string, options?: { editorId?: string; objectId?: string; status?: string }): Promise<MetadataEditorSubmission[]>;
+  getMetadataEditorSubmission(id: string, tenantId: string): Promise<MetadataEditorSubmission | undefined>;
+  createMetadataEditorSubmission(submission: InsertMetadataEditorSubmission): Promise<MetadataEditorSubmission>;
+  updateMetadataEditorSubmission(id: string, tenantId: string, data: Partial<InsertMetadataEditorSubmission>): Promise<MetadataEditorSubmission | undefined>;
+  getMetadataEditorSubmissionValues(submissionId: string, tenantId: string): Promise<MetadataEditorSubmissionValue[]>;
+  createMetadataEditorSubmissionValue(value: InsertMetadataEditorSubmissionValue): Promise<MetadataEditorSubmissionValue>;
+  updateMetadataEditorSubmissionValue(id: string, tenantId: string, data: Partial<InsertMetadataEditorSubmissionValue>): Promise<MetadataEditorSubmissionValue | undefined>;
+
   // Customer Change Requests
   getCustomerChangeRequests(options: { tenantId: string; customerId?: string; objectId?: string; status?: string; category?: string; dateFrom?: string; dateTo?: string; createdByResourceId?: string; limit?: number; offset?: number }): Promise<{ items: CustomerChangeRequest[]; total: number }>;
   getCustomerChangeRequest(id: string): Promise<CustomerChangeRequest | undefined>;
@@ -9190,6 +9212,114 @@ export class DatabaseStorage implements IStorage {
     const [result] = await db.update(publicIssueReports)
       .set(data)
       .where(and(eq(publicIssueReports.id, id), eq(publicIssueReports.tenantId, tenantId)))
+      .returning();
+    return result;
+  }
+
+  // ============================================
+  // METADATA EDITORS ("Metadata Lämnare", Task #956)
+  // ============================================
+
+  async getMetadataEditors(tenantId: string, options?: { type?: string; isActive?: boolean }): Promise<MetadataEditor[]> {
+    const conditions = [eq(metadataEditors.tenantId, tenantId)];
+    if (options?.type) conditions.push(eq(metadataEditors.type, options.type));
+    if (options?.isActive !== undefined) conditions.push(eq(metadataEditors.isActive, options.isActive));
+    return db.select().from(metadataEditors)
+      .where(and(...conditions))
+      .orderBy(desc(metadataEditors.createdAt));
+  }
+
+  async getMetadataEditor(id: string, tenantId: string): Promise<MetadataEditor | undefined> {
+    const [result] = await db.select().from(metadataEditors)
+      .where(and(eq(metadataEditors.id, id), eq(metadataEditors.tenantId, tenantId)));
+    return result;
+  }
+
+  async createMetadataEditor(editor: InsertMetadataEditor): Promise<MetadataEditor> {
+    const [result] = await db.insert(metadataEditors).values(editor).returning();
+    return result;
+  }
+
+  async updateMetadataEditor(id: string, tenantId: string, data: Partial<InsertMetadataEditor>): Promise<MetadataEditor | undefined> {
+    const [result] = await db.update(metadataEditors)
+      .set({ ...data, updatedAt: new Date() })
+      .where(and(eq(metadataEditors.id, id), eq(metadataEditors.tenantId, tenantId)))
+      .returning();
+    return result;
+  }
+
+  async deleteMetadataEditor(id: string, tenantId: string): Promise<void> {
+    await db.delete(metadataEditors)
+      .where(and(eq(metadataEditors.id, id), eq(metadataEditors.tenantId, tenantId)));
+  }
+
+  async getMetadataEditorFields(editorId: string, tenantId: string): Promise<MetadataEditorField[]> {
+    return db.select().from(metadataEditorFields)
+      .where(and(eq(metadataEditorFields.editorId, editorId), eq(metadataEditorFields.tenantId, tenantId)))
+      .orderBy(asc(metadataEditorFields.sortOrder));
+  }
+
+  async createMetadataEditorField(field: InsertMetadataEditorField): Promise<MetadataEditorField> {
+    const [result] = await db.insert(metadataEditorFields).values(field).returning();
+    return result;
+  }
+
+  // Ersätt hela fält-uppsättningen atomiskt (used vid editor-spar). Tenant-scoped
+  // delete säkrar att vi aldrig rör en annan tenants fält.
+  async replaceMetadataEditorFields(editorId: string, tenantId: string, fields: InsertMetadataEditorField[]): Promise<MetadataEditorField[]> {
+    return db.transaction(async (tx) => {
+      await tx.delete(metadataEditorFields)
+        .where(and(eq(metadataEditorFields.editorId, editorId), eq(metadataEditorFields.tenantId, tenantId)));
+      if (fields.length === 0) return [];
+      const rows = fields.map((f) => ({ ...f, editorId, tenantId }));
+      return tx.insert(metadataEditorFields).values(rows).returning();
+    });
+  }
+
+  async getMetadataEditorSubmissions(tenantId: string, options?: { editorId?: string; objectId?: string; status?: string }): Promise<MetadataEditorSubmission[]> {
+    const conditions = [eq(metadataEditorSubmissions.tenantId, tenantId)];
+    if (options?.editorId) conditions.push(eq(metadataEditorSubmissions.editorId, options.editorId));
+    if (options?.objectId) conditions.push(eq(metadataEditorSubmissions.objectId, options.objectId));
+    if (options?.status) conditions.push(eq(metadataEditorSubmissions.status, options.status));
+    return db.select().from(metadataEditorSubmissions)
+      .where(and(...conditions))
+      .orderBy(desc(metadataEditorSubmissions.submittedAt));
+  }
+
+  async getMetadataEditorSubmission(id: string, tenantId: string): Promise<MetadataEditorSubmission | undefined> {
+    const [result] = await db.select().from(metadataEditorSubmissions)
+      .where(and(eq(metadataEditorSubmissions.id, id), eq(metadataEditorSubmissions.tenantId, tenantId)));
+    return result;
+  }
+
+  async createMetadataEditorSubmission(submission: InsertMetadataEditorSubmission): Promise<MetadataEditorSubmission> {
+    const [result] = await db.insert(metadataEditorSubmissions).values(submission).returning();
+    return result;
+  }
+
+  async updateMetadataEditorSubmission(id: string, tenantId: string, data: Partial<InsertMetadataEditorSubmission>): Promise<MetadataEditorSubmission | undefined> {
+    const [result] = await db.update(metadataEditorSubmissions)
+      .set(data)
+      .where(and(eq(metadataEditorSubmissions.id, id), eq(metadataEditorSubmissions.tenantId, tenantId)))
+      .returning();
+    return result;
+  }
+
+  async getMetadataEditorSubmissionValues(submissionId: string, tenantId: string): Promise<MetadataEditorSubmissionValue[]> {
+    return db.select().from(metadataEditorSubmissionValues)
+      .where(and(eq(metadataEditorSubmissionValues.submissionId, submissionId), eq(metadataEditorSubmissionValues.tenantId, tenantId)))
+      .orderBy(asc(metadataEditorSubmissionValues.createdAt));
+  }
+
+  async createMetadataEditorSubmissionValue(value: InsertMetadataEditorSubmissionValue): Promise<MetadataEditorSubmissionValue> {
+    const [result] = await db.insert(metadataEditorSubmissionValues).values(value).returning();
+    return result;
+  }
+
+  async updateMetadataEditorSubmissionValue(id: string, tenantId: string, data: Partial<InsertMetadataEditorSubmissionValue>): Promise<MetadataEditorSubmissionValue | undefined> {
+    const [result] = await db.update(metadataEditorSubmissionValues)
+      .set(data)
+      .where(and(eq(metadataEditorSubmissionValues.id, id), eq(metadataEditorSubmissionValues.tenantId, tenantId)))
       .returning();
     return result;
   }

@@ -5059,6 +5059,165 @@ export const insertPublicIssueReportSchema = createInsertSchema(publicIssueRepor
 export type PublicIssueReport = typeof publicIssueReports.$inferSelect;
 export type InsertPublicIssueReport = z.infer<typeof insertPublicIssueReportSchema>;
 
+// ============================================================================
+// METADATA-EDITOR ("Metadata Lämnare") — publika insamlingsformulär (Task #956)
+// ----------------------------------------------------------------------------
+// Admin bygger konfigurerbara publika formulär som triggas via QR/GPS utan
+// inloggning. Tre typer: objektspecifik (objqr per objekt), GPS-baserad (dynqr
+// tenant-token → välj närliggande objekt) och objektskapande (interim
+// "Rapporterat objekt"). Inlämningar hamnar i en GRANSKNINGSKÖ (pending) och
+// skrivs ALDRIG direkt till objektet — en planerare godkänner/avvisar, och först
+// vid godkännande skrivs värdena via den svenska katalog-vägen (flervärde).
+// ============================================================================
+
+export const METADATA_EDITOR_TYPES = ["object_specific", "gps", "object_creating"] as const;
+export type MetadataEditorType = (typeof METADATA_EDITOR_TYPES)[number];
+
+export const METADATA_EDITOR_FIELD_KINDS = ["rating", "text", "photo"] as const;
+export type MetadataEditorFieldKind = (typeof METADATA_EDITOR_FIELD_KINDS)[number];
+
+export const METADATA_EDITOR_SUBMISSION_STATUSES = ["pending", "approved", "rejected"] as const;
+export type MetadataEditorSubmissionStatus = (typeof METADATA_EDITOR_SUBMISSION_STATUSES)[number];
+
+// Avsändarfält-konfiguration: vilka fält som visas och om de är obligatoriska.
+export const reporterFieldConfigSchema = z.object({
+  shown: z.boolean().default(false),
+  required: z.boolean().default(false),
+});
+export const reporterConfigSchema = z.object({
+  name: reporterFieldConfigSchema,
+  title: reporterFieldConfigSchema,
+  organization: reporterFieldConfigSchema,
+  email: reporterFieldConfigSchema,
+  phone: reporterFieldConfigSchema,
+});
+export type ReporterConfig = z.infer<typeof reporterConfigSchema>;
+
+// Fältkonfiguration per fält-kind (rating-skala, fritext-längd, max foton).
+export const editorFieldConfigSchema = z
+  .object({
+    ratingMin: z.number().int(),
+    ratingMax: z.number().int(),
+    ratingStyle: z.enum(["stars", "numbers"]),
+    maxLength: z.number().int().positive(),
+    multiline: z.boolean(),
+    maxPhotos: z.number().int().positive(),
+  })
+  .partial();
+export type EditorFieldConfig = z.infer<typeof editorFieldConfigSchema>;
+
+export const metadataEditors = pgTable("metadata_editors", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
+  name: varchar("name", { length: 150 }).notNull(),
+  description: text("description"),
+  type: text("type").notNull(), // object_specific | gps | object_creating
+  isActive: boolean("is_active").default(true).notNull(),
+  // Avsändarfält-krav (vilka som visas/krävs) — JSONB (fast form, ingen ordning/FK).
+  reporterConfig: jsonb("reporter_config").$type<ReporterConfig>().notNull(),
+  // Sökradie i meter för GPS-typ (närliggande objekt).
+  nearbyRadiusM: integer("nearby_radius_m").default(300).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  createdBy: varchar("created_by").references(() => users.id, { onDelete: "set null" }),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_metadata_editors_tenant").on(table.tenantId),
+]);
+
+export const metadataEditorFields = pgTable("metadata_editor_fields", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  editorId: varchar("editor_id").references(() => metadataEditors.id, { onDelete: "cascade" }).notNull(),
+  tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
+  sortOrder: integer("sort_order").default(0).notNull(),
+  kind: text("kind").notNull(), // rating | text | photo
+  label: varchar("label", { length: 200 }).notNull(),
+  helpText: text("help_text"),
+  required: boolean("required").default(false).notNull(),
+  // Målfält i metadata-katalogen (skapas ivrigt vid editor-spar om "skapa nytt").
+  metadataKatalogId: varchar("metadata_katalog_id").references(() => metadataKatalog.id, { onDelete: "set null" }),
+  fieldConfig: jsonb("field_config").$type<EditorFieldConfig>(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_metadata_editor_fields_editor").on(table.editorId),
+  index("idx_metadata_editor_fields_tenant").on(table.tenantId),
+]);
+
+export const metadataEditorSubmissions = pgTable("metadata_editor_submissions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  editorId: varchar("editor_id").references(() => metadataEditors.id, { onDelete: "cascade" }).notNull(),
+  tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
+  // Nullable tills objekt valts/skapats; måste vara satt före godkännande.
+  objectId: varchar("object_id").references(() => objects.id),
+  status: text("status").default("pending").notNull(), // pending | approved | rejected
+  // Avsändaruppgifter (krav styrs av reporterConfig vid inlämning).
+  reporterName: text("reporter_name"),
+  reporterTitle: text("reporter_title"),
+  reporterOrganization: text("reporter_organization"),
+  reporterEmail: text("reporter_email"),
+  reporterPhone: text("reporter_phone"),
+  latitude: real("latitude"),
+  longitude: real("longitude"),
+  ipAddress: text("ip_address"),
+  userAgent: text("user_agent"),
+  // True om inlämningen skapade ett interim-objekt (objektskapande editor).
+  createdInterimObject: boolean("created_interim_object").default(false).notNull(),
+  submittedAt: timestamp("submitted_at").defaultNow().notNull(),
+  reviewedBy: varchar("reviewed_by").references(() => users.id, { onDelete: "set null" }),
+  reviewedAt: timestamp("reviewed_at"),
+  reviewNotes: text("review_notes"),
+}, (table) => [
+  index("idx_metadata_editor_submissions_tenant_status").on(table.tenantId, table.status),
+  index("idx_metadata_editor_submissions_editor").on(table.editorId),
+  index("idx_metadata_editor_submissions_object").on(table.objectId),
+]);
+
+export const metadataEditorSubmissionValues = pgTable("metadata_editor_submission_values", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  submissionId: varchar("submission_id").references(() => metadataEditorSubmissions.id, { onDelete: "cascade" }).notNull(),
+  fieldId: varchar("field_id").references(() => metadataEditorFields.id, { onDelete: "set null" }),
+  tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
+  // Snapshot av målfältet vid inlämning (fältet kan ändras senare).
+  metadataKatalogId: varchar("metadata_katalog_id"),
+  // Råvärdet: rating-tal eller fritext lagras i value_json; foto i photo_paths.
+  valueJson: jsonb("value_json"),
+  photoPaths: text("photo_paths").array(),
+  // Sätts efter godkännande → länk till skapad metadata_varden-rad (idempotens).
+  writtenMetadataValueId: varchar("written_metadata_value_id"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_metadata_editor_submission_values_submission").on(table.submissionId),
+  index("idx_metadata_editor_submission_values_tenant").on(table.tenantId),
+]);
+
+export const insertMetadataEditorSchema = createInsertSchema(metadataEditors).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+export type MetadataEditor = typeof metadataEditors.$inferSelect;
+export type InsertMetadataEditor = z.infer<typeof insertMetadataEditorSchema>;
+
+export const insertMetadataEditorFieldSchema = createInsertSchema(metadataEditorFields).omit({
+  id: true,
+  createdAt: true,
+});
+export type MetadataEditorField = typeof metadataEditorFields.$inferSelect;
+export type InsertMetadataEditorField = z.infer<typeof insertMetadataEditorFieldSchema>;
+
+export const insertMetadataEditorSubmissionSchema = createInsertSchema(metadataEditorSubmissions).omit({
+  id: true,
+  submittedAt: true,
+});
+export type MetadataEditorSubmission = typeof metadataEditorSubmissions.$inferSelect;
+export type InsertMetadataEditorSubmission = z.infer<typeof insertMetadataEditorSubmissionSchema>;
+
+export const insertMetadataEditorSubmissionValueSchema = createInsertSchema(metadataEditorSubmissionValues).omit({
+  id: true,
+  createdAt: true,
+});
+export type MetadataEditorSubmissionValue = typeof metadataEditorSubmissionValues.$inferSelect;
+export type InsertMetadataEditorSubmissionValue = z.infer<typeof insertMetadataEditorSubmissionValueSchema>;
+
 export const customerChangeRequests = pgTable("customer_change_requests", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
