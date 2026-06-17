@@ -25,6 +25,10 @@ import {
   resolveConceptMatchingObjects,
   deriveConceptTargets,
 } from "../services/order-concept-targeting";
+import {
+  buildCustomerLookup,
+  resolveConceptCustomerForObject,
+} from "../services/concept-customer-resolver";
 
 const openaiClient = new OpenAI({
   apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
@@ -408,6 +412,67 @@ app.post("/api/order-concepts/:id/validate", asyncHandler(async (req, res) => {
           code: "NO_INVOICE_RECIPIENT",
           message: "Ingen fakturamottagare hittades i kundhierarkin — Fortnox-export faller tillbaka till object_payers/objects.customer_id.",
         });
+      }
+    }
+
+    // Task #937: FROM_METADATA — validera att order-/faktureringskund kan härledas
+    // per objekt INNAN expansion. Vi kör samma resolver som /execute över exakt samma
+    // matchande objekt-mängd (resolveConceptMatchingObjects), så att valideringen speglar
+    // vad körningen kommer att göra. Saknat fält/ovärde/omatchat/tvetydigt = errors
+    // (blockerar expansion); validering muterar aldrig något.
+    // Spegla execution EXAKT: pre-passet körs enbart för icke-subscription
+    // (/execute: runPrePass = conceptMethod !== "subscription"). Subscription-koncept
+    // får därför aldrig blockeras här på kund-härledning. Fältet trimmas — ett
+    // blanksteg-värde räknas som "inget fält valt" (precis som resolverns no_field).
+    if (concept.customerMode === "FROM_METADATA" && validateMethod !== "subscription") {
+      const customerField = concept.customerMetadataField?.trim();
+      if (!customerField) {
+        errors.push({
+          code: "FROM_METADATA_NO_FIELD",
+          message: 'Läget "Från objektets metadata" är valt men inget metadatafält för kund är angivet. Välj fältet i steg 1.',
+        });
+      } else {
+        const filters = await storage.getConceptFilters(concept.id);
+        const filterInputs = filters.map((f: any) => ({
+          metadataKey: f.metadataKey,
+          operator: f.operator,
+          filterValue: f.filterValue,
+        }));
+        const { matchingObjects } = await resolveConceptMatchingObjects(
+          tenantId,
+          concept as any,
+          filterInputs,
+          { fallbackAllObjects: true },
+        );
+        const customers = await storage.getCustomers(tenantId);
+        const lookup = buildCustomerLookup(customers);
+        let missingValue = 0;
+        const unmatched: string[] = [];
+        let ambiguous = 0;
+        for (const obj of matchingObjects) {
+          const r = await resolveConceptCustomerForObject(tenantId, concept, obj.id, lookup);
+          if (r.status === "missing_value") missingValue++;
+          else if (r.status === "unmatched") unmatched.push(r.rawValue);
+          else if (r.status === "ambiguous") ambiguous++;
+        }
+        if (missingValue > 0) {
+          errors.push({
+            code: "FROM_METADATA_MISSING_VALUE",
+            message: `${missingValue} av ${matchingObjects.length} objekt saknar värde i fältet "${customerField}".`,
+          });
+        }
+        if (unmatched.length > 0) {
+          errors.push({
+            code: "FROM_METADATA_UNMATCHED",
+            message: `${unmatched.length} objekt har ett kundvärde som inte matchar någon kund (t.ex. "${unmatched[0]}"). Kontrollera kundnummer/namn.`,
+          });
+        }
+        if (ambiguous > 0) {
+          errors.push({
+            code: "FROM_METADATA_AMBIGUOUS",
+            message: `${ambiguous} objekt matchar flera kunder på namn (tvetydigt). Använd kundnummer eller unika kundnamn.`,
+          });
+        }
       }
     }
 

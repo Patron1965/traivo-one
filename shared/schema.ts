@@ -3081,6 +3081,12 @@ export const assignments = pgTable("assignments", {
   orderConceptId: varchar("order_concept_id").references(() => orderConcepts.id),
   // Objekt som uppgiften gäller
   objectId: varchar("object_id").references(() => objects.id).notNull(),
+  // Task #937: Resolverad order-/faktureringskund för uppgiften, snapshotad vid
+  // orderkoncept-expansion. FROM_METADATA-koncept härleder kund per objekt från ett
+  // metadatafält; HARDCODED stämplar konceptets fasta kund. Nullable (objektlösa/legacy-
+  // rader saknar kund). ADR v3: detta är order-/faktureringskund — INTE objektägarskap
+  // (object_payers).
+  customerId: varchar("customer_id").references(() => customers.id),
   // Kluster för enkel filtrering
   clusterId: varchar("cluster_id").references(() => clusters.id),
   // Tilldelad resurs

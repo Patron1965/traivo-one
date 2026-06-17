@@ -7,7 +7,7 @@ import { formatZodError, verifyTenantOwnership, DEFAULT_TENANT_ID, ensureResourc
 import { getTenantIdWithFallback } from "../tenant-middleware";
 import { asyncHandler } from "../asyncHandler";
 import { NotFoundError, ValidationError, ForbiddenError, describeFortnoxMappingConflict } from "../errors";
-import { objects, workOrders, articles, customers, fortnoxMappings, objectContacts, importBatches, objectMetadata, metadataDefinitions, assignments, type InsertWorkOrder } from "@shared/schema";
+import { objects, workOrders, articles, customers, fortnoxMappings, objectContacts, importBatches, objectMetadata, metadataDefinitions, assignments, type InsertWorkOrder, type ServiceObject } from "@shared/schema";
 import { getISOWeek, getDateFromWeekdayInMonth } from "./helpers";
 import { getOrderConceptMethod } from "@shared/order-concept-method";
 import { triggerGeocodeIfMissing } from "../services/geocoding";
@@ -19,6 +19,10 @@ import {
   resolveConceptMatchingObjects,
 } from "../services/order-concept-targeting";
 import { deriveFortnoxCodesForWorkOrder } from "../services/fortnox-code-derivation";
+import {
+  buildCustomerLookup,
+  resolveConceptCustomerForObject,
+} from "../services/concept-customer-resolver";
 
 async function verifyObjectTenant(objectId: string, tenantId: string): Promise<boolean> {
   try {
@@ -88,8 +92,29 @@ async function generateScheduleAssignments(opts: {
   linkedArticle: Awaited<ReturnType<typeof storage.getArticle>> | undefined;
   linkedArticleId: string | null;
   linkedPrice: { price: number; cost: number; productionMinutes: number };
+  // Task #937: FROM_METADATA — per-objekt kund + pris. customerIdForObject ger
+  // resolverad kund (FROM_METADATA) eller konceptets fasta kund (HARDCODED);
+  // resolvePrice slår upp kund-pris (memo:at av anroparen).
+  isFromMetadata: boolean;
+  customerIdForObject: (objectId: string) => string | null;
+  resolvePrice: (
+    article: Awaited<ReturnType<typeof storage.getArticle>> | undefined,
+    articleId: string | null,
+    customerId: string | null,
+  ) => Promise<{ price: number; cost: number; productionMinutes: number; priceListId: string | null }>;
 }): Promise<{ created: any[]; datesGenerated: number; skipped: number } | null> {
-  const { concept, tenantId, userId, matchingObjects, linkedArticle, linkedArticleId, linkedPrice } = opts;
+  const {
+    concept,
+    tenantId,
+    userId,
+    matchingObjects,
+    linkedArticle,
+    linkedArticleId,
+    linkedPrice,
+    isFromMetadata,
+    customerIdForObject,
+    resolvePrice,
+  } = opts;
 
   const targets = buildScheduleDateTargets(concept);
   if (targets === null) return null;
@@ -132,14 +157,22 @@ async function generateScheduleAssignments(opts: {
         });
       }
 
-      const estimatedDuration = linkedPrice.productionMinutes * quantity || 60;
-      const totalValue = linkedPrice.price * quantity;
-      const totalCost = linkedPrice.cost * quantity;
+      // Task #937: per-objekt kund + pris (FROM_METADATA resolverat; annars konceptets
+      // fasta kund + förberäknat linkedPrice).
+      const effectiveCustomerId = customerIdForObject(obj.id);
+      const objPrice = isFromMetadata
+        ? await resolvePrice(linkedArticle, linkedArticleId, effectiveCustomerId)
+        : linkedPrice;
+
+      const estimatedDuration = objPrice.productionMinutes * quantity || 60;
+      const totalValue = objPrice.price * quantity;
+      const totalCost = objPrice.cost * quantity;
 
       const assignment = await storage.createAssignment({
         tenantId,
         orderConceptId: concept.id,
         objectId: obj.id,
+        customerId: effectiveCustomerId ?? undefined,
         clusterId: obj.clusterId || undefined,
         title: concept.name,
         description: concept.description || undefined,
@@ -164,11 +197,11 @@ async function generateScheduleAssignments(opts: {
           assignmentId: assignment.id,
           articleId: linkedArticleId,
           quantity,
-          unitPrice: linkedPrice.price,
+          unitPrice: objPrice.price,
           totalPrice: totalValue,
-          unitCost: linkedPrice.cost,
+          unitCost: objPrice.cost,
           totalCost,
-          unitTime: linkedPrice.productionMinutes,
+          unitTime: objPrice.productionMinutes,
           totalTime: estimatedDuration,
           sequenceOrder: 1,
           status: "pending",
@@ -180,6 +213,103 @@ async function generateScheduleAssignments(opts: {
   }
 
   return { created, datesGenerated: targets.length, skipped };
+}
+
+type ConceptPriceMemo = { price: number; cost: number; productionMinutes: number; priceListId: string | null };
+
+// Task #937: Bygg per-objekt kund-resolution + pris-memo för konceptexpansion.
+// FROM_METADATA härleder kund per objekt från valt metadatafält (svenska katalogen,
+// via getArticleMetadataForObject) och matchar mot kundregistret; HARDCODED använder
+// konceptets fasta kund. Pre-passet (call_off + schema, EJ abonnemang) kräver att ALLA
+// matchande objekt kan resolvas innan några uppgifter skapas — annars kastas
+// ValidationError så att vi aldrig får partiell expansion. Pris-memo:n återanvänds
+// över både huvud-, för- och schema-uppgifter så samma (artikel|kund) bara slås upp en gång.
+async function prepareConceptCustomerPricing(opts: {
+  concept: any;
+  tenantId: string;
+  matchingObjects: ServiceObject[];
+  runPrePass: boolean;
+}): Promise<{
+  isFromMetadata: boolean;
+  resolvedCustomerByObject: Map<string, string>;
+  customerIdForObject: (objectId: string) => string | null;
+  resolvePrice: (
+    article: Awaited<ReturnType<typeof storage.getArticle>> | undefined,
+    articleId: string | null,
+    customerId: string | null,
+  ) => Promise<ConceptPriceMemo>;
+}> {
+  const { concept, tenantId, matchingObjects, runPrePass } = opts;
+  const isFromMetadata = concept.customerMode === "FROM_METADATA";
+  const resolvedCustomerByObject = new Map<string, string>();
+
+  const priceMemo = new Map<string, ConceptPriceMemo>();
+  const listPriceFor = (a: Awaited<ReturnType<typeof storage.getArticle>> | undefined): ConceptPriceMemo => ({
+    price: a?.listPrice || 0,
+    cost: a?.cost || 0,
+    productionMinutes: a?.productionTime || 0,
+    priceListId: null,
+  });
+  const resolvePrice = async (
+    article: Awaited<ReturnType<typeof storage.getArticle>> | undefined,
+    articleId: string | null,
+    customerId: string | null,
+  ): Promise<ConceptPriceMemo> => {
+    if (!article || !articleId) return { price: 0, cost: 0, productionMinutes: 0, priceListId: null };
+    if (!customerId) return listPriceFor(article);
+    const key = `${articleId}|${customerId}`;
+    const cached = priceMemo.get(key);
+    if (cached) return cached;
+    const info = await storage.resolveArticlePrice(tenantId, articleId, customerId);
+    const result: ConceptPriceMemo = {
+      price: info.price,
+      cost: info.cost,
+      productionMinutes: info.productionMinutes,
+      priceListId: info.priceListId,
+    };
+    priceMemo.set(key, result);
+    return result;
+  };
+  // Kund-id per objekt: FROM_METADATA → resolverat; HARDCODED → konceptets fasta kund.
+  const customerIdForObject = (objectId: string): string | null =>
+    isFromMetadata ? (resolvedCustomerByObject.get(objectId) ?? null) : (concept.customerId ?? null);
+
+  if (isFromMetadata && runPrePass) {
+    // Trimmat — ett blanksteg-värde räknas som "inget fält valt" (matchar resolverns
+    // no_field och valideringens FROM_METADATA_NO_FIELD), så meddelandet blir korrekt.
+    if (!concept.customerMetadataField?.trim()) {
+      throw new ValidationError(
+        'Konceptet använder läget "Från objektets metadata" men inget metadatafält för kund är valt. Välj fältet i steg 1 innan du kör konceptet.',
+      );
+    }
+    const allCustomers = await storage.getCustomers(tenantId);
+    const customerLookup = buildCustomerLookup(allCustomers);
+    const failures: Array<{ status: string; rawValue?: string }> = [];
+    for (const obj of matchingObjects) {
+      const r = await resolveConceptCustomerForObject(tenantId, concept, obj.id, customerLookup);
+      if (r.status === "ok") {
+        resolvedCustomerByObject.set(obj.id, r.customerId);
+      } else {
+        failures.push({ status: r.status, rawValue: (r as { rawValue?: string }).rawValue });
+      }
+    }
+    if (failures.length > 0) {
+      const noValue = failures.filter((f) => f.status === "missing_value").length;
+      const unmatched = failures.filter((f) => f.status === "unmatched");
+      const ambiguous = failures.filter((f) => f.status === "ambiguous").length;
+      const parts: string[] = [];
+      if (noValue > 0) parts.push(`${noValue} objekt saknar värde i fältet "${concept.customerMetadataField}"`);
+      if (unmatched.length > 0) {
+        parts.push(`${unmatched.length} objekt har ett värde som inte matchar någon kund (t.ex. "${unmatched[0].rawValue ?? ""}")`);
+      }
+      if (ambiguous > 0) parts.push(`${ambiguous} objekt matchar flera kunder (tvetydigt namn)`);
+      throw new ValidationError(
+        `Kan inte härleda kund för alla objekt: ${parts.join("; ")}. Inga uppgifter skapades — åtgärda kundkopplingen och kör igen.`,
+      );
+    }
+  }
+
+  return { isFromMetadata, resolvedCustomerByObject, customerIdForObject, resolvePrice };
 }
 
 // Task #934: ABONNEMANGETS (subscription) nästa fakturadatum. Respekterar
@@ -1899,27 +2029,88 @@ app.delete("/api/order-concepts/:id", asyncHandler(async (req, res) => {
     res.status(204).send();
 }));
 
+// Task #937: Förhandskontroll av kund-härledning per objekt för ett orderkoncept.
+// Repurposad från legacy `objects.customer_id` (under avveckling, ADR v3) till samma
+// resolver som /execute använder. Kräver `conceptId` (för customerMode/fält/fast kund);
+// `objectIds` är valfritt — utelämnas det matchas objekt via konceptets filter, identiskt
+// med körningen. HARDCODED rapporterar bara om den fasta kunden saknas/ogiltig.
 app.post("/api/order-concepts/check-customer-metadata", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
-    const { objectIds } = req.body;
-    if (!Array.isArray(objectIds) || objectIds.length === 0) {
-      throw new ValidationError("objectIds krävs");
+    const { conceptId, objectIds } = req.body as { conceptId?: string; objectIds?: string[] };
+    if (!conceptId) {
+      throw new ValidationError("conceptId krävs");
     }
-    const objectsList = await storage.getObjectsByIds(tenantId, objectIds);
-    const customers = await storage.getCustomers(tenantId);
-    const validCustomerIds = new Set(customers.map(c => c.id));
+    const rawConcept = await storage.getOrderConcept(conceptId);
+    const concept = verifyTenantOwnership(rawConcept, tenantId);
+    if (!concept) {
+      throw new NotFoundError("Orderkoncept hittades inte");
+    }
 
-    const missingCustomer: Array<{ id: string; name: string; objectNumber: string | null; customerId: string | null }> = [];
-    const withCustomer: Array<{ id: string; name: string; customerId: string; customerName: string | null }> = [];
+    // Mängden objekt: explicit lista (tenant-filtrerad) eller konceptets matchande objekt.
+    let objectsList: Array<{ id: string; name: string; objectNumber: string | null }>;
+    if (Array.isArray(objectIds) && objectIds.length > 0) {
+      objectsList = await storage.getObjectsByIds(tenantId, objectIds);
+    } else {
+      const filters = await storage.getConceptFilters(concept.id);
+      const filterInputs = filters.map((f: any) => ({
+        metadataKey: f.metadataKey,
+        operator: f.operator,
+        filterValue: f.filterValue,
+      }));
+      const { matchingObjects } = await resolveConceptMatchingObjects(
+        tenantId,
+        concept as any,
+        filterInputs,
+        { fallbackAllObjects: true },
+      );
+      objectsList = matchingObjects.map((o) => ({ id: o.id, name: o.name, objectNumber: o.objectNumber }));
+    }
+
+    const customers = await storage.getCustomers(tenantId);
+    const lookup = buildCustomerLookup(customers);
+
+    const withCustomer: Array<{ id: string; name: string; customerId: string; customerName: string; matchedBy: string }> = [];
+    const missingValue: Array<{ id: string; name: string; objectNumber: string | null }> = [];
+    const unmatched: Array<{ id: string; name: string; objectNumber: string | null; rawValue: string }> = [];
+    const ambiguous: Array<{ id: string; name: string; objectNumber: string | null; rawValue: string; candidateIds: string[] }> = [];
+    let noField = false;
+    let hardcodedMissing = false;
+
     for (const obj of objectsList) {
-      if (!obj.customerId || !validCustomerIds.has(obj.customerId)) {
-        missingCustomer.push({ id: obj.id, name: obj.name, objectNumber: obj.objectNumber, customerId: obj.customerId });
-      } else {
-        const cust = customers.find(c => c.id === obj.customerId);
-        withCustomer.push({ id: obj.id, name: obj.name, customerId: obj.customerId, customerName: cust?.name || null });
+      const r = await resolveConceptCustomerForObject(tenantId, concept, obj.id, lookup);
+      switch (r.status) {
+        case "ok":
+          withCustomer.push({ id: obj.id, name: obj.name, customerId: r.customerId, customerName: r.customerName, matchedBy: r.matchedBy });
+          break;
+        case "missing_value":
+          missingValue.push({ id: obj.id, name: obj.name, objectNumber: obj.objectNumber });
+          break;
+        case "unmatched":
+          unmatched.push({ id: obj.id, name: obj.name, objectNumber: obj.objectNumber, rawValue: r.rawValue });
+          break;
+        case "ambiguous":
+          ambiguous.push({ id: obj.id, name: obj.name, objectNumber: obj.objectNumber, rawValue: r.rawValue, candidateIds: r.candidateIds });
+          break;
+        case "no_field":
+          noField = true;
+          break;
+        case "hardcoded_missing":
+          hardcodedMissing = true;
+          break;
       }
     }
-    res.json({ missingCustomer, withCustomer, total: objectsList.length });
+
+    res.json({
+      customerMode: concept.customerMode ?? "HARDCODED",
+      customerMetadataField: concept.customerMetadataField ?? null,
+      total: objectsList.length,
+      withCustomer,
+      missingValue,
+      unmatched,
+      ambiguous,
+      noField,
+      hardcodedMissing,
+    });
 }));
 
 // Concept Filters
@@ -2049,6 +2240,19 @@ app.post("/api/order-concepts/:id/execute", asyncHandler(async (req, res) => {
     // aktiverar abonnemanget (nästa fakturadatum + summor).
     const conceptMethod = getOrderConceptMethod(concept);
 
+    // Task #937: FROM_METADATA — härled order-/faktureringskund per objekt.
+    // HARDCODED stämplar konceptets fasta kund; FROM_METADATA läser ett metadatafält
+    // (svenska katalogen) på varje objekt och matchar mot kundregistret. Pre-passet körs
+    // för call_off + schema (ej abonnemang, som inte skapar uppgifter) och kastar innan
+    // någon skrivning sker om något objekt inte kan resolvas (ingen partiell expansion).
+    const { isFromMetadata, customerIdForObject, resolvePrice: resolvePriceMemo } =
+      await prepareConceptCustomerPricing({
+        concept,
+        tenantId,
+        matchingObjects,
+        runPrePass: conceptMethod !== "subscription",
+      });
+
     if (conceptMethod === "subscription") {
       if (!concept.monthlyFee || concept.monthlyFee <= 0) {
         throw new ValidationError("Abonnemang kräver en månadsavgift. Ange en avgift i steg 3 (Fakturering) innan du aktiverar abonnemanget.");
@@ -2105,6 +2309,9 @@ app.post("/api/order-concepts/:id/execute", asyncHandler(async (req, res) => {
         linkedArticle,
         linkedArticleId,
         linkedPrice,
+        isFromMetadata,
+        customerIdForObject,
+        resolvePrice: resolvePriceMemo,
       });
       if (scheduleResult === null) {
         throw new ValidationError("Schema-konceptet saknar leveransschema eller intervall. Konfigurera ett leveransschema (månad/vecka/veckodag) eller ett återkommande intervall (startdatum + frekvens i dagar) i steg 5 innan du kör konceptet.");
@@ -2147,15 +2354,23 @@ app.post("/api/order-concepts/:id/execute", asyncHandler(async (req, res) => {
         });
       }
 
+      // Task #937: per-objekt kund + pris. FROM_METADATA använder objektets resolvade
+      // kund (pris via memo så samma kund inte slås upp om och om); HARDCODED använder
+      // konceptets fasta kund + det förberäknade linkedPrice.
+      const effectiveCustomerId = customerIdForObject(obj.id);
+      const objPrice = isFromMetadata
+        ? await resolvePriceMemo(linkedArticle, linkedArticleId, effectiveCustomerId)
+        : linkedPrice;
+
       // Calculate estimated duration from linked article
       let estimatedDuration = 60; // default 60 minutes
       let totalValue = 0;
       let totalCost = 0;
 
       if (linkedArticle) {
-        estimatedDuration = linkedPrice.productionMinutes * quantity;
-        totalValue = linkedPrice.price * quantity;
-        totalCost = linkedPrice.cost * quantity;
+        estimatedDuration = objPrice.productionMinutes * quantity;
+        totalValue = objPrice.price * quantity;
+        totalCost = objPrice.cost * quantity;
       }
 
       // Task #901 (B8): metadatastyrd leveranstid. När konceptet pekar ut ett
@@ -2185,6 +2400,9 @@ app.post("/api/order-concepts/:id/execute", asyncHandler(async (req, res) => {
         tenantId,
         orderConceptId: concept.id,
         objectId: obj.id,
+        // Task #937: snapshota resolverad order-/faktureringskund (FROM_METADATA per objekt,
+        // annars konceptets fasta kund).
+        customerId: effectiveCustomerId ?? undefined,
         clusterId: obj.clusterId || undefined,
         title: concept.name,
         description: concept.description || undefined,
@@ -2209,12 +2427,12 @@ app.post("/api/order-concepts/:id/execute", asyncHandler(async (req, res) => {
           assignmentId: assignment.id,
           articleId: linkedArticleId,
           quantity,
-          unitPrice: linkedPrice.price,
-          totalPrice: linkedPrice.price * quantity,
-          unitCost: linkedPrice.cost,
-          totalCost: linkedPrice.cost * quantity,
-          unitTime: linkedPrice.productionMinutes,
-          totalTime: linkedPrice.productionMinutes * quantity,
+          unitPrice: objPrice.price,
+          totalPrice: objPrice.price * quantity,
+          unitCost: objPrice.cost,
+          totalCost: objPrice.cost * quantity,
+          unitTime: objPrice.productionMinutes,
+          totalTime: objPrice.productionMinutes * quantity,
           sequenceOrder: 1,
           status: "pending"
         });
@@ -2230,7 +2448,14 @@ app.post("/api/order-concepts/:id/execute", asyncHandler(async (req, res) => {
     const conceptArticles = await storage.getOrderConceptArticles(concept.id);
     const adminArticles = conceptArticles.filter(ca => ca.taskCategory && ca.taskCategory !== "field");
     const createdAdminWorkOrders: Array<{ id: string; taskCategory: string; articleId: string }> = [];
-    if (adminArticles.length > 0 && concept.customerId) {
+    // Task #937: administrativa/logistik-artiklar är objektlösa och behöver EN fast
+    // faktureringskund. I FROM_METADATA härleds kund per objekt — det finns ingen enskild
+    // kund att hänga den objektlösa arbetsordern på, så vi hoppar över dem och varnar
+    // (uppfinner aldrig en kund). Out of scope: objektlös admin-gruppering under FROM_METADATA.
+    let adminArticlesSkippedFromMetadata = 0;
+    if (adminArticles.length > 0 && isFromMetadata) {
+      adminArticlesSkippedFromMetadata = adminArticles.length;
+    } else if (adminArticles.length > 0 && concept.customerId) {
       for (const ca of adminArticles) {
         const article = await storage.getArticle(ca.articleId);
         if (!article) continue;
@@ -2283,11 +2508,14 @@ app.post("/api/order-concepts/:id/execute", asyncHandler(async (req, res) => {
               scheduledDate.getTime() + offsetMin * 60_000 - leadDays * 86_400_000,
             );
           }
+          // Task #937: per-objekt kund för pris + snapshot (FROM_METADATA resolverat,
+          // annars konceptets fasta kund). Pris via memo (delas med huvuduppgiften).
+          const preCustomerId = customerIdForObject(obj.id);
           let unitTime = article.productionTime || 30;
           let unitPrice = article.listPrice || 0;
           let unitCost = article.cost || 0;
-          if (concept.customerId) {
-            const info = await storage.resolveArticlePrice(tenantId, ca.articleId, concept.customerId);
+          if (preCustomerId) {
+            const info = await resolvePriceMemo(article, ca.articleId, preCustomerId);
             unitTime = info.productionMinutes || unitTime;
             unitPrice = info.price;
             unitCost = info.cost;
@@ -2296,6 +2524,7 @@ app.post("/api/order-concepts/:id/execute", asyncHandler(async (req, res) => {
             tenantId,
             orderConceptId: concept.id,
             objectId: obj.id,
+            customerId: preCustomerId ?? undefined,
             clusterId: obj.clusterId || undefined,
             title: `${article.name} (föruppgift)`,
             description: concept.description || undefined,
@@ -2345,7 +2574,10 @@ app.post("/api/order-concepts/:id/execute", asyncHandler(async (req, res) => {
       message: `Skapade ${createdAssignments.length} uppgifter från ${matchingObjects.length} matchande objekt` +
         (createdPreTasks.length > 0 ? ` + ${createdPreTasks.length} föruppgifter` : "") +
         (createdAdminWorkOrders.length > 0 ? ` + ${createdAdminWorkOrders.length} administrativa uppgifter` : "") +
-        (concept.deliveryTimeMetadataField ? ` (leveranstid från metadata: ${deliveryTimeFromMetadata}, schemalagd fallback: ${deliveryTimeFallback})` : ""),
+        (concept.deliveryTimeMetadataField ? ` (leveranstid från metadata: ${deliveryTimeFromMetadata}, schemalagd fallback: ${deliveryTimeFallback})` : "") +
+        (adminArticlesSkippedFromMetadata > 0
+          ? `. ${adminArticlesSkippedFromMetadata} administrativa/logistik-artiklar hoppades över — de är objektlösa och kräver en fast kund, men konceptet härleder kund per objekt (läge: Från objektets metadata)`
+          : ""),
       assignmentsCreated: createdAssignments.length,
       objectsMatched: matchingObjects.length,
       deliveryTimeFromMetadata,
@@ -2355,6 +2587,7 @@ app.post("/api/order-concepts/:id/execute", asyncHandler(async (req, res) => {
       preTasks: createdPreTasks,
       adminWorkOrdersCreated: createdAdminWorkOrders.length,
       adminWorkOrders: createdAdminWorkOrders,
+      adminArticlesSkippedFromMetadata,
     });
 }));
 
@@ -2520,6 +2753,15 @@ app.post("/api/order-concepts/:id/run-rolling", asyncHandler(async (req, res) =>
 
     const months = concept.rollingMonths || 3;
     const now = new Date();
+    // Task #937: samma per-objekt kund-resolution + pris-memo som /execute. run-rolling
+    // är alltid schema-metoden ⇒ pre-passet körs (kastar före skrivning om FROM_METADATA
+    // inte kan resolva alla objekt).
+    const { isFromMetadata, customerIdForObject, resolvePrice } = await prepareConceptCustomerPricing({
+      concept,
+      tenantId,
+      matchingObjects,
+      runPrePass: true,
+    });
     const rollingResult = await generateScheduleAssignments({
       concept,
       tenantId,
@@ -2528,6 +2770,9 @@ app.post("/api/order-concepts/:id/run-rolling", asyncHandler(async (req, res) =>
       linkedArticle,
       linkedArticleId: concept.articleId ?? null,
       linkedPrice,
+      isFromMetadata,
+      customerIdForObject,
+      resolvePrice,
     });
     if (rollingResult === null) {
       throw new ValidationError("Konceptet saknar leveransschema eller intervall. Konfigurera ett leveransschema (månad/vecka/veckodag) eller ett återkommande intervall (startdatum + frekvens i dagar) innan du kör.");

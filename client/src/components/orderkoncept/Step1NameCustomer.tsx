@@ -8,7 +8,20 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Search, User, Database, Info } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
-import type { Customer, CustomerMode, MetadataDefinition } from "@shared/schema";
+import type { Customer, CustomerMode } from "@shared/schema";
+
+// Task #937: Kund-metadatafältet pekar mot den SVENSKA metadatakatalogen
+// (metadata_katalog via /api/metadata-labels) — INTE det engelska metadata_definitions.
+// Kund-/kundnummer-fält importeras hit, så det är här de finns. `namn` är värdet som
+// lagras på konceptet (concept.customerMetadataField).
+interface MetadataLabel {
+  id: string;
+  namn: string;
+  beteckning: string | null;
+  area: string | null;
+  datatyp: string | null;
+  isSystem: boolean | null;
+}
 
 interface Step1Props {
   conceptName: string;
@@ -35,8 +48,8 @@ export default function Step1NameCustomer({
 }: Step1Props) {
   const [search, setSearch] = useState("");
 
-  const { data: metadataDefs = [] } = useQuery<MetadataDefinition[]>({
-    queryKey: ["/api/metadata-definitions"],
+  const { data: metadataLabels = [] } = useQuery<MetadataLabel[]>({
+    queryKey: ["/api/metadata-labels"],
   });
 
   const filtered = useMemo(() => {
@@ -174,13 +187,17 @@ export default function Step1NameCustomer({
                     <SelectValue placeholder="Välj metadatafält..." />
                   </SelectTrigger>
                   <SelectContent>
-                    {metadataDefs.length === 0 ? (
+                    {metadataLabels.length === 0 ? (
                       <SelectItem value="__none__" disabled>Inga metadatafält konfigurerade</SelectItem>
                     ) : (
-                      metadataDefs.map((def) => (
-                        <SelectItem key={def.id} value={def.fieldKey} data-testid={`option-metadata-field-${def.fieldKey}`}>
-                          {def.fieldLabel}
-                          <span className="ml-1.5 text-xs text-muted-foreground">({def.fieldKey})</span>
+                      metadataLabels.map((label) => (
+                        <SelectItem key={label.id} value={label.namn} data-testid={`option-metadata-field-${label.id}`}>
+                          {label.namn}
+                          {(label.beteckning || label.area) && (
+                            <span className="ml-1.5 text-xs text-muted-foreground">
+                              ({label.beteckning || label.area})
+                            </span>
+                          )}
                         </SelectItem>
                       ))
                     )}
