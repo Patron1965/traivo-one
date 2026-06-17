@@ -55,6 +55,7 @@ import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { QueryState } from "@/components/QueryState";
+import { PriceListArticlesDialog } from "@/components/PriceListArticlesDialog";
 import type { PriceList, Customer } from "@shared/schema";
 
 const priceListTypeOptions = [
@@ -100,6 +101,13 @@ export default function PriceListsPage() {
   const [indexDialogOpen, setIndexDialogOpen] = useState(false);
   const [priceListForIndex, setPriceListForIndex] = useState<PriceList | null>(null);
   const [indexPercentage, setIndexPercentage] = useState("");
+  const [articlesDialogOpen, setArticlesDialogOpen] = useState(false);
+  const [priceListForArticles, setPriceListForArticles] = useState<PriceList | null>(null);
+
+  const openArticlesDialog = (pl: PriceList) => {
+    setPriceListForArticles(pl);
+    setArticlesDialogOpen(true);
+  };
 
   const openIndexDialog = (pl: PriceList) => {
     setPriceListForIndex(pl);
@@ -331,7 +339,14 @@ export default function PriceListsPage() {
               {filteredPriceLists.map((priceList) => (
                   <TableRow key={priceList.id} data-testid={`row-price-list-${priceList.id}`}>
                     <TableCell>
-                      <div className="font-medium">{priceList.name}</div>
+                      <button
+                        type="button"
+                        onClick={() => openArticlesDialog(priceList)}
+                        className="font-medium text-left text-primary hover:underline"
+                        data-testid={`button-open-price-list-${priceList.id}`}
+                      >
+                        {priceList.name}
+                      </button>
                     </TableCell>
                     <TableCell>
                       <Badge variant="secondary">
@@ -365,6 +380,16 @@ export default function PriceListsPage() {
                             Index {priceList.indexPercentage ?? ""}%
                           </Badge>
                         )}
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => openArticlesDialog(priceList)}
+                          title="Hantera artiklar"
+                          aria-label={`Hantera artiklar i ${priceList.name}`}
+                          data-testid={`button-manage-articles-${priceList.id}`}
+                        >
+                          <ListTree className="h-4 w-4" />
+                        </Button>
                         <Button
                           variant="ghost"
                           size="icon"
@@ -626,6 +651,15 @@ export default function PriceListsPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <PriceListArticlesDialog
+        priceList={priceListForArticles}
+        open={articlesDialogOpen}
+        onOpenChange={(open) => {
+          setArticlesDialogOpen(open);
+          if (!open) setPriceListForArticles(null);
+        }}
+      />
     </div>
   );
 }
