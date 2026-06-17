@@ -67,19 +67,50 @@ async function resolveFormulaValue(
 }
 
 /**
- * Räknar ut den effektiva kvantiteten för en artikelrad mot ett objekt. Slår upp
- * metadata-/formelvärden vid behov och delegerar tolkningen till computeArticleQuantity.
- * Saknat objektId eller ej-objekt-drivet läge -> ingen uppslagning (= legacy-beteende).
+ * Detaljerat resultat av kvantitetsupplösningen. Utöver det slutliga `quantity`
+ * (samma värde som `resolveEffectiveArticleQuantity` returnerar) exponeras de råa
+ * upplösta värdena så att callers kan avgöra ARTIKELTRÄFF: ett metadata-/formel-drivet
+ * läge "träffar" bara när ett positivt råvärde faktiskt hittades. computeArticleQuantity
+ * faller medvetet tillbaka på basantal (>=1) när värdet saknas, så `quantity` ensamt
+ * kan ALDRIG skilja träff från miss — därför detta separata resultat.
  */
-export async function resolveEffectiveArticleQuantity(params: {
+export type DetailedArticleQuantity = {
+  /** Slutlig effektiv kvantitet (computeArticleQuantity-resultat). */
+  quantity: number;
+  /** Råt metadatavärde för per_styck/matches_field (null = inget hittat). */
+  metadataValue: number | null;
+  /** Råt formelresultat för formula (null = saknas/ogiltig). */
+  formulaValue: number | null;
+  /** True när läget hämtar antalet från objektets metadata/formel (och fält/formel är satt). */
+  isMetadataDriven: boolean;
+  /**
+   * True när läget är metadata-drivet men inget positivt råvärde hittades, dvs.
+   * beräkningen föll tillbaka på basantal. För dessa rader är artikeln en MISS.
+   */
+  usedFallback: boolean;
+};
+
+/**
+ * Räknar ut den effektiva kvantiteten OCH rapporterar de råa upplösta värdena +
+ * träff-/miss-status. All DB-uppslagning (metadata/formel) sker här en gång; både
+ * `resolveEffectiveArticleQuantity` och artikelträff-tjänsten bygger på denna så att
+ * antal och träff alltid härleds identiskt. Saknat objektId eller ej-objekt-drivet
+ * läge -> ingen uppslagning (= legacy-beteende, isMetadataDriven=false ⇒ alltid träff).
+ */
+export async function resolveEffectiveArticleQuantityDetailed(params: {
   tenantId: string;
   article: QuantityArticleShape | null | undefined;
   baseQuantity: number;
   objectId: string | null | undefined;
-}): Promise<number> {
+}): Promise<DetailedArticleQuantity> {
   const { tenantId, article, baseQuantity, objectId } = params;
   let metadataValue: number | null = null;
   let formulaValue: number | null = null;
+
+  const metadataDriven =
+    !!article &&
+    ((usesQuantityMetadata(article.quantityMode) && !!article.quantityMetadataField) ||
+      (usesQuantityFormula(article.quantityMode) && !!article.quantityFormula));
 
   if (article && objectId) {
     if (usesQuantityMetadata(article.quantityMode) && article.quantityMetadataField) {
@@ -94,11 +125,36 @@ export async function resolveEffectiveArticleQuantity(params: {
     }
   }
 
-  return computeArticleQuantity({
+  const quantity = computeArticleQuantity({
     quantityMode: article?.quantityMode,
     baseQuantity,
     groupSize: article?.groupSize,
     metadataValue,
     formulaValue,
   });
+
+  // Råvärde som styr träff: metadata-läge → metadataValue, formel-läge → formulaValue.
+  const rawValue = usesQuantityFormula(article?.quantityMode) ? formulaValue : metadataValue;
+  const usedFallback =
+    metadataDriven && !(rawValue != null && Number.isFinite(rawValue) && rawValue > 0);
+
+  return { quantity, metadataValue, formulaValue, isMetadataDriven: metadataDriven, usedFallback };
+}
+
+/**
+ * Räknar ut den effektiva kvantiteten för en artikelrad mot ett objekt. Slår upp
+ * metadata-/formelvärden vid behov och delegerar tolkningen till computeArticleQuantity.
+ * Saknat objektId eller ej-objekt-drivet läge -> ingen uppslagning (= legacy-beteende).
+ *
+ * Tunt skal över `resolveEffectiveArticleQuantityDetailed` (oförändrat beteende för
+ * alla befintliga callers).
+ */
+export async function resolveEffectiveArticleQuantity(params: {
+  tenantId: string;
+  article: QuantityArticleShape | null | undefined;
+  baseQuantity: number;
+  objectId: string | null | undefined;
+}): Promise<number> {
+  const detailed = await resolveEffectiveArticleQuantityDetailed(params);
+  return detailed.quantity;
 }

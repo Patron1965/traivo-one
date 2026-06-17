@@ -29,6 +29,12 @@ import {
   buildCustomerLookup,
   resolveConceptCustomerForObject,
 } from "../services/concept-customer-resolver";
+import {
+  resolveActiveArticle,
+  resolveConceptArticleHits,
+  isFixedPriceConcept,
+  computeObjectValueOre,
+} from "../services/order-concept-article-hits";
 
 const openaiClient = new OpenAI({
   apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
@@ -2140,18 +2146,6 @@ app.get("/api/order-concepts/:id/review-summary", asyncHandler(async (req, res) 
   // som "grenar" i objekt-läge).
   const clusterSummaries: any[] = [];
   let totalMatchedObjects = 0;
-  const clusterCenters: Array<{ lat: number; lng: number }> = [];
-
-  const pushCenterFromObjects = (objs: any[]) => {
-    const coords = objs
-      .map((o) => ({ lat: Number(o.latitude), lng: Number(o.longitude) }))
-      .filter((c) => Number.isFinite(c.lat) && Number.isFinite(c.lng) && (c.lat !== 0 || c.lng !== 0));
-    if (coords.length === 0) return;
-    clusterCenters.push({
-      lat: coords.reduce((s, c) => s + c.lat, 0) / coords.length,
-      lng: coords.reduce((s, c) => s + c.lng, 0) / coords.length,
-    });
-  };
 
   if (targetObjectIds.length > 0) {
     // Objekt-/gren-inpekning: en sammanfattning per vald gren-rot (subträd).
@@ -2163,7 +2157,6 @@ app.get("/api/order-concepts/:id/review-summary", asyncHandler(async (req, res) 
       const branchObjects = await resolveTargetObjects({ tenantId, objectIds: [rootId] });
       const matchedObjects = await filterObjectsByConditions(tenantId, branchObjects, conceptFilterInputs);
 
-      pushCenterFromObjects(matchedObjects.length > 0 ? matchedObjects : branchObjects);
       totalMatchedObjects += matchedObjects.length;
       clusterSummaries.push({
         clusterId: rootId,
@@ -2182,12 +2175,6 @@ app.get("/api/order-concepts/:id/review-summary", asyncHandler(async (req, res) 
     for (const clusterId of targetClusterIds) {
       const cluster = await storage.getCluster(clusterId);
       if (!cluster || (cluster as any).tenantId !== tenantId) continue;
-
-      const centerLat = (cluster as any).centerLatitude;
-      const centerLng = (cluster as any).centerLongitude;
-      if (centerLat && centerLng) {
-        clusterCenters.push({ lat: centerLat, lng: centerLng });
-      }
 
       const clusterObjects = await storage.getClusterObjects(clusterId);
       const tenantObjects = clusterObjects.filter((o: any) => o.tenantId === tenantId);
@@ -2208,37 +2195,6 @@ app.get("/api/order-concepts/:id/review-summary", asyncHandler(async (req, res) 
     }
   }
 
-  // --- Geografisk spridning & ställtidsestimering ---
-  let spreadKm: number | null = null;
-  let setupTimeMinutes: number | null = null;
-  let setupTimeLabel: string | null = null;
-
-  if (clusterCenters.length >= 2) {
-    let maxDist = 0;
-    for (let i = 0; i < clusterCenters.length; i++) {
-      for (let j = i + 1; j < clusterCenters.length; j++) {
-        const R = 6371;
-        const dLat = (clusterCenters[j].lat - clusterCenters[i].lat) * Math.PI / 180;
-        const dLon = (clusterCenters[j].lng - clusterCenters[i].lng) * Math.PI / 180;
-        const a = Math.sin(dLat / 2) ** 2 +
-          Math.cos(clusterCenters[i].lat * Math.PI / 180) *
-          Math.cos(clusterCenters[j].lat * Math.PI / 180) *
-          Math.sin(dLon / 2) ** 2;
-        const d = R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-        if (d > maxDist) maxDist = d;
-      }
-    }
-    spreadKm = Math.round(maxDist * 10) / 10;
-    if (maxDist < 5) { setupTimeMinutes = 15; setupTimeLabel = "Tät (ca 15 min)"; }
-    else if (maxDist < 15) { setupTimeMinutes = 30; setupTimeLabel = "Mellantät (ca 30 min)"; }
-    else if (maxDist < 40) { setupTimeMinutes = 60; setupTimeLabel = "Spridd (ca 1 tim)"; }
-    else { setupTimeMinutes = 120; setupTimeLabel = "Mycket spridd (ca 2 tim)"; }
-  } else if (clusterCenters.length === 1) {
-    spreadKm = 0;
-    setupTimeMinutes = 15;
-    setupTimeLabel = "Enstaka punkt (ca 15 min)";
-  }
-
   // --- Schema ---
   const schedule = {
     type: (concept as any).deliveryTimeType ?? null,
@@ -2250,21 +2206,122 @@ app.get("/api/order-concepts/:id/review-summary", asyncHandler(async (req, res) 
     deliveryRestrictions: (concept as any).deliveryRestrictions ?? null,
   };
 
+  // Task #976: fast pris (priceModel='fixed') slår igenom på totalen — den verkliga
+  // intäkten är fixedPriceAmount × antal träff-objekt (artikelträff), inte BOM-summan.
+  const runningTotalKr = articleLines.reduce((s: number, l: any) => s + l.lineTotalKr, 0);
+  let totalValueKr = runningTotalKr;
+  const fixedPrice = isFixedPriceConcept(concept as any);
+  if (fixedPrice && concept.articleId) {
+    const linkedActive = await resolveActiveArticle(tenantId, await storage.getArticle(concept.articleId));
+    const { matchingObjects: hitMatchObjects } = await resolveConceptMatchingObjects(
+      tenantId,
+      concept as any,
+      conceptFilterInputs,
+      { fallbackAllObjects: true },
+    );
+    const hits = await resolveConceptArticleHits({
+      tenantId,
+      concept: concept as any,
+      linkedArticle: linkedActive,
+      matchingObjects: hitMatchObjects,
+    });
+    totalValueKr = ((concept.fixedPriceAmount ?? 0) * hits.hitCount) / 100;
+  }
+
   res.json({
     clusterSummaries,
     totalMatchedObjects,
     articleLines,
-    totalValueKr: articleLines.reduce((s: number, l: any) => s + l.lineTotalKr, 0),
+    totalValueKr,
     totalCostKr: articleLines.reduce((s: number, l: any) => s + l.costKr, 0),
     totalProductionMinutes: articleLines.reduce((s: number, l: any) => s + l.productionMinutes, 0),
     schedule,
-    geoSpread: {
-      spreadKm,
-      setupTimeMinutes,
-      setupTimeLabel,
-      clusterCount: clusterCenters.length,
-      hasCenterData: clusterCenters.length > 0,
-    },
+    isFixedPrice: fixedPrice,
+    fixedPriceAmountKr: fixedPrice ? (concept.fixedPriceAmount ?? 0) / 100 : null,
+  });
+}));
+
+// Task #976: Resultat av artikelträffar — vilka inpekade objekt den länkade artikeln
+// FAKTISKT träffar (metadata-/formeldrivet antal > 0), per-objekt-värde med konceptets
+// fasta pris och aggregerade totaler. Delad källa med execute/preview/run-rolling via
+// resolveConceptArticleHits. Driver <ArticleHitResult> i wizardens steg 7.
+app.get("/api/order-concepts/:id/article-hit-summary", asyncHandler(async (req, res) => {
+  const tenantId = getTenantIdWithFallback(req);
+  const rawConcept = await storage.getOrderConcept(req.params.id);
+  const concept = verifyTenantOwnership(rawConcept, tenantId);
+  if (!concept) throw new NotFoundError("Orderkoncept hittades inte");
+
+  // Länkad aktiv artikel (utgått→ersättning) + löpande enhetspris (öre).
+  let linkedArticle: Awaited<ReturnType<typeof storage.getArticle>> | undefined = undefined;
+  let unitPriceOre = 0;
+  let articleName: string | null = null;
+  if (concept.articleId) {
+    linkedArticle = await resolveActiveArticle(tenantId, await storage.getArticle(concept.articleId));
+    if (linkedArticle) {
+      articleName = linkedArticle.name;
+      if (concept.customerId) {
+        const info = await storage.resolveArticlePrice(tenantId, linkedArticle.id, concept.customerId);
+        unitPriceOre = info.price;
+      } else {
+        unitPriceOre = linkedArticle.listPrice || 0;
+      }
+    }
+  }
+
+  const filters = await storage.getConceptFilters(concept.id);
+  const filterInputs = filters.map((f: any) => ({
+    metadataKey: f.metadataKey,
+    operator: f.operator,
+    filterValue: f.filterValue,
+  }));
+  const { matchingObjects } = await resolveConceptMatchingObjects(
+    tenantId,
+    concept as any,
+    filterInputs,
+    { fallbackAllObjects: true },
+  );
+
+  const hits = await resolveConceptArticleHits({
+    tenantId,
+    concept: concept as any,
+    linkedArticle,
+    matchingObjects,
+  });
+
+  const fixed = isFixedPriceConcept(concept as any);
+  const rows = hits.rows.map((r) => {
+    const valueOre = r.isHit ? computeObjectValueOre(concept as any, unitPriceOre, r.quantity) : 0;
+    return {
+      objectId: r.objectId,
+      objectName: r.objectName,
+      objectNumber: r.objectNumber,
+      address: r.address,
+      isHit: r.isHit,
+      quantity: r.quantity,
+      metadataValue: r.metadataValue,
+      formulaValue: r.formulaValue,
+      valueOre,
+      valueKr: valueOre / 100,
+    };
+  });
+  const totalValueOre = rows.reduce((s, r) => s + r.valueOre, 0);
+
+  res.json({
+    conceptId: concept.id,
+    articleId: linkedArticle?.id ?? null,
+    articleName,
+    priceModel: concept.priceModel ?? "running",
+    isFixedPrice: fixed,
+    fixedPriceAmountOre: fixed ? (concept.fixedPriceAmount ?? null) : null,
+    unitPriceOre,
+    isMetadataDriven: hits.isMetadataDriven,
+    quantityFieldLabel: hits.quantityFieldLabel,
+    inpekadeCount: hits.inpekadeCount,
+    hitCount: hits.hitCount,
+    missCount: hits.missCount,
+    totalValueOre,
+    totalValueKr: totalValueOre / 100,
+    rows,
   });
 }));
 

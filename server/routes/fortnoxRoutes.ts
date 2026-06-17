@@ -12,6 +12,13 @@ import { getISOWeek, getDateFromWeekdayInMonth } from "./helpers";
 import { getOrderConceptMethod } from "@shared/order-concept-method";
 import { triggerGeocodeIfMissing } from "../services/geocoding";
 import { resolveEffectiveArticleQuantity } from "../article-quantity-resolver";
+import {
+  resolveActiveArticle,
+  resolveConceptArticleHits,
+  isFixedPriceConcept,
+  computeObjectValueOre,
+  type ConceptArticleHits,
+} from "../services/order-concept-article-hits";
 import { getArticleMetadataForObject } from "../metadata-queries";
 import {
   resolveTargetObjects,
@@ -84,6 +91,20 @@ function buildScheduleDateTargets(concept: any): ScheduleDateTarget[] | null {
   return null; // varken leveransschema eller intervall konfigurerat
 }
 
+// Task #976: läsbar träff-/miss-sammanfattning för svenska success-meddelanden.
+// Metadata-driven artikel ⇒ "20 av 60 inpekade objekt (40 saknar pantkärl)"; annars
+// (alla träffar) ⇒ "60 objekt".
+function buildHitSummaryText(hits: ConceptArticleHits | null): string {
+  if (!hits) return "0 objekt";
+  if (!hits.isMetadataDriven || hits.missCount === 0) {
+    return `${hits.hitCount} objekt`;
+  }
+  const missLabel = hits.quantityFieldLabel
+    ? ` (${hits.missCount} saknar ${hits.quantityFieldLabel})`
+    : ` (${hits.missCount} utan träff)`;
+  return `${hits.hitCount} av ${hits.inpekadeCount} inpekade objekt${missLabel}`;
+}
+
 async function generateScheduleAssignments(opts: {
   concept: any;
   tenantId: string;
@@ -102,6 +123,11 @@ async function generateScheduleAssignments(opts: {
     articleId: string | null,
     customerId: string | null,
   ) => Promise<{ price: number; cost: number; productionMinutes: number; priceListId: string | null }>;
+  // Task #976: förupplöst antal per objekt (från artikelträff-tjänsten). matchingObjects
+  // är redan filtrerat till träff-objekt; kartan ger samma antal som träffberäkningen
+  // så schema och resultatvy aldrig divergerar. Saknas den faller vi tillbaka på
+  // resolveEffectiveArticleQuantity (back-compat).
+  quantityByObjectId?: Map<string, number>;
 }): Promise<{ created: any[]; datesGenerated: number; skipped: number } | null> {
   const {
     concept,
@@ -114,6 +140,7 @@ async function generateScheduleAssignments(opts: {
     isFromMetadata,
     customerIdForObject,
     resolvePrice,
+    quantityByObjectId,
   } = opts;
 
   const targets = buildScheduleDateTargets(concept);
@@ -143,18 +170,23 @@ async function generateScheduleAssignments(opts: {
       }
       seenKeys.add(key); // skydda mot dubbletter inom samma körning
 
-      const objWithMeta = obj as typeof obj & { metadata?: Record<string, unknown> };
-      let quantity = 1;
-      if (concept.crossPollinationField && objWithMeta.metadata?.[concept.crossPollinationField]) {
-        quantity = Number(objWithMeta.metadata[concept.crossPollinationField]) || 1;
-      }
-      if (linkedArticle) {
-        quantity = await resolveEffectiveArticleQuantity({
-          tenantId,
-          article: linkedArticle,
-          baseQuantity: quantity,
-          objectId: obj.id,
-        });
+      // Task #976: använd förupplöst antal från artikelträff-tjänsten (samma värde
+      // som träffberäkningen), annars beräkna som tidigare.
+      let quantity = quantityByObjectId?.get(obj.id);
+      if (quantity == null) {
+        const objWithMeta = obj as typeof obj & { metadata?: Record<string, unknown> };
+        quantity = 1;
+        if (concept.crossPollinationField && objWithMeta.metadata?.[concept.crossPollinationField]) {
+          quantity = Number(objWithMeta.metadata[concept.crossPollinationField]) || 1;
+        }
+        if (linkedArticle) {
+          quantity = await resolveEffectiveArticleQuantity({
+            tenantId,
+            article: linkedArticle,
+            baseQuantity: quantity,
+            objectId: obj.id,
+          });
+        }
       }
 
       // Task #937: per-objekt kund + pris (FROM_METADATA resolverat; annars konceptets
@@ -165,8 +197,12 @@ async function generateScheduleAssignments(opts: {
         : linkedPrice;
 
       const estimatedDuration = objPrice.productionMinutes * quantity || 60;
-      const totalValue = objPrice.price * quantity;
+      // Task #976: fast pris (priceModel='fixed') ⇒ fixedPriceAmount per objekt; annars
+      // löpande pris × antal. Kostnad påverkas inte av det fasta försäljningspriset.
+      const totalValue = computeObjectValueOre(concept, objPrice.price, quantity);
       const totalCost = objPrice.cost * quantity;
+      const unitPriceForArticle =
+        isFixedPriceConcept(concept) && quantity > 0 ? Math.round(totalValue / quantity) : objPrice.price;
 
       const assignment = await storage.createAssignment({
         tenantId,
@@ -197,7 +233,7 @@ async function generateScheduleAssignments(opts: {
           assignmentId: assignment.id,
           articleId: linkedArticleId,
           quantity,
-          unitPrice: objPrice.price,
+          unitPrice: unitPriceForArticle,
           totalPrice: totalValue,
           unitCost: objPrice.cost,
           totalCost,
@@ -2198,23 +2234,11 @@ app.post("/api/order-concepts/:id/execute", asyncHandler(async (req, res) => {
     let linkedArticleId: string | null = concept.articleId ?? null;
     let linkedPrice = { price: 0, cost: 0, productionMinutes: 0, priceListId: null as string | null };
     if (concept.articleId) {
-      linkedArticle = await storage.getArticle(concept.articleId);
-      // utgått→ersättning: byt till den aktiva ersättningsartikeln (flera hopp, cykelskydd)
-      // så att Fortnox-körningen använder rätt pris + quantityMode.
-      if (linkedArticle) {
-        const visited = new Set<string>([linkedArticle.id]);
-        while (
-          linkedArticle.status === "utgått" &&
-          linkedArticle.replacementArticleId &&
-          !visited.has(linkedArticle.replacementArticleId)
-        ) {
-          const repl = await storage.getArticle(linkedArticle.replacementArticleId);
-          if (!repl || repl.tenantId !== tenantId) break;
-          visited.add(repl.id);
-          linkedArticle = repl;
-        }
-        linkedArticleId = linkedArticle.id;
-      }
+      // utgått→ersättning + tenant-spärr via delad helper (säkerhetskritiskt: spärrar
+      // även den initiala artikeln, inte bara ersättningarna) — samma källa som
+      // preview/run-rolling/article-hit-summary så Fortnox-körningen aldrig divergerar.
+      linkedArticle = await resolveActiveArticle(tenantId, await storage.getArticle(concept.articleId));
+      linkedArticleId = linkedArticle?.id ?? null;
       if (linkedArticle && concept.customerId) {
         const info = await storage.resolveArticlePrice(tenantId, linkedArticleId!, concept.customerId);
         linkedPrice = {
@@ -2240,16 +2264,34 @@ app.post("/api/order-concepts/:id/execute", asyncHandler(async (req, res) => {
     // aktiverar abonnemanget (nästa fakturadatum + summor).
     const conceptMethod = getOrderConceptMethod(concept);
 
+    // Task #976: artikelträff — avgör för vilka inpekade objekt den länkade artikeln
+    // FAKTISKT träffar (metadata-/formel-drivet antal > 0). Endast träff-objekt ska
+    // expanderas, prissättas och räknas. Beräknas en gång och konsumeras av call_off-
+    // loopen, schema-generatorn och pre-task-loopen. Abonnemang skapar inga uppgifter
+    // och berörs inte. Tjänsten faller tillbaka på "alla träffar" när inget antalsläge
+    // är metadata-drivet (legacy-beteende bevaras).
+    let hits: ConceptArticleHits | null = null;
+    if (conceptMethod !== "subscription") {
+      hits = await resolveConceptArticleHits({
+        tenantId,
+        concept,
+        linkedArticle,
+        matchingObjects,
+      });
+    }
+    const expansionObjects = hits ? hits.hitObjects : matchingObjects;
+
     // Task #937: FROM_METADATA — härled order-/faktureringskund per objekt.
     // HARDCODED stämplar konceptets fasta kund; FROM_METADATA läser ett metadatafält
     // (svenska katalogen) på varje objekt och matchar mot kundregistret. Pre-passet körs
-    // för call_off + schema (ej abonnemang, som inte skapar uppgifter) och kastar innan
-    // någon skrivning sker om något objekt inte kan resolvas (ingen partiell expansion).
+    // för call_off + schema (ej abonnemang, som inte skapar uppgifter) över träff-
+    // objekten (miss-objekt ska aldrig blockera expansionen) och kastar innan någon
+    // skrivning sker om något objekt inte kan resolvas (ingen partiell expansion).
     const { isFromMetadata, customerIdForObject, resolvePrice: resolvePriceMemo } =
       await prepareConceptCustomerPricing({
         concept,
         tenantId,
-        matchingObjects,
+        matchingObjects: expansionObjects,
         runPrePass: conceptMethod !== "subscription",
       });
 
@@ -2305,13 +2347,14 @@ app.post("/api/order-concepts/:id/execute", asyncHandler(async (req, res) => {
         concept,
         tenantId,
         userId,
-        matchingObjects,
+        matchingObjects: expansionObjects,
         linkedArticle,
         linkedArticleId,
         linkedPrice,
         isFromMetadata,
         customerIdForObject,
         resolvePrice: resolvePriceMemo,
+        quantityByObjectId: hits?.quantityByObjectId,
       });
       if (scheduleResult === null) {
         throw new ValidationError("Schema-konceptet saknar leveransschema eller intervall. Konfigurera ett leveransschema (månad/vecka/veckodag) eller ett återkommande intervall (startdatum + frekvens i dagar) i steg 5 innan du kör konceptet.");
@@ -2323,35 +2366,44 @@ app.post("/api/order-concepts/:id/execute", asyncHandler(async (req, res) => {
       return res.json({
         success: true,
         method: "schedule",
-        message: `Genererade ${scheduleResult.created.length} schemalagda uppgifter (${scheduleResult.datesGenerated} tillfällen) för ${matchingObjects.length} objekt` +
+        message: `Genererade ${scheduleResult.created.length} schemalagda uppgifter (${scheduleResult.datesGenerated} tillfällen) för ${buildHitSummaryText(hits)}` +
           (scheduleResult.skipped > 0 ? ` (${scheduleResult.skipped} hoppades över — fanns redan)` : "") + ".",
         assignmentsCreated: scheduleResult.created.length,
         objectsMatched: matchingObjects.length,
+        objectsHit: hits?.hitCount ?? matchingObjects.length,
+        objectsMissed: hits?.missCount ?? 0,
         datesGenerated: scheduleResult.datesGenerated,
         skipped: scheduleResult.skipped,
         assignments: scheduleResult.created,
       });
     }
 
-    // call_off (Avrop, default): engångsexpansion — en uppgift per matchande objekt nu.
-    for (const obj of matchingObjects) {
-      // Cross-pollination: multiply by metadata field if specified
-      const objWithMeta = obj as typeof obj & { metadata?: Record<string, unknown> };
-      let quantity = 1;
-      if (concept.crossPollinationField && objWithMeta.metadata?.[concept.crossPollinationField]) {
-        quantity = Number(objWithMeta.metadata[concept.crossPollinationField]) || 1;
-      }
-      // Honorera den länkade artikelns quantityMode ovanpå ev. cross-pollination-bas:
-      // single_per_task→1, group→groupSize, per_styck/matches_field→objektets metadatavärde (annars bas).
-      // Metadata-drivna lägen upplöses ärvningsmedvetet via getArticleMetadataForObject (samma
-      // resolver som manuella orderrader) — objekten här saknar populerad .metadata.
-      if (linkedArticle) {
-        quantity = await resolveEffectiveArticleQuantity({
-          tenantId,
-          article: linkedArticle,
-          baseQuantity: quantity,
-          objectId: obj.id,
-        });
+    // call_off (Avrop, default): engångsexpansion — en uppgift per TRÄFF-objekt nu.
+    // Task #976: expansionObjects = artikelträff-objekten (miss-objekt utelämnas helt).
+    for (const obj of expansionObjects) {
+      // Task #976: använd förupplöst antal från artikelträff-tjänsten (samma värde som
+      // träffberäkningen → cachedValue/assignmentArticle kan aldrig divergera). Faller
+      // tillbaka på inline-beräkning om kartan saknas (t.ex. inget länkat artikel-id).
+      let quantity = hits?.quantityByObjectId.get(obj.id);
+      if (quantity == null) {
+        // Cross-pollination: multiply by metadata field if specified
+        const objWithMeta = obj as typeof obj & { metadata?: Record<string, unknown> };
+        quantity = 1;
+        if (concept.crossPollinationField && objWithMeta.metadata?.[concept.crossPollinationField]) {
+          quantity = Number(objWithMeta.metadata[concept.crossPollinationField]) || 1;
+        }
+        // Honorera den länkade artikelns quantityMode ovanpå ev. cross-pollination-bas:
+        // single_per_task→1, group→groupSize, per_styck/matches_field→objektets metadatavärde (annars bas).
+        // Metadata-drivna lägen upplöses ärvningsmedvetet via getArticleMetadataForObject (samma
+        // resolver som manuella orderrader) — objekten här saknar populerad .metadata.
+        if (linkedArticle) {
+          quantity = await resolveEffectiveArticleQuantity({
+            tenantId,
+            article: linkedArticle,
+            baseQuantity: quantity,
+            objectId: obj.id,
+          });
+        }
       }
 
       // Task #937: per-objekt kund + pris. FROM_METADATA använder objektets resolvade
@@ -2366,11 +2418,16 @@ app.post("/api/order-concepts/:id/execute", asyncHandler(async (req, res) => {
       let estimatedDuration = 60; // default 60 minutes
       let totalValue = 0;
       let totalCost = 0;
+      // Task #976: fast pris (priceModel='fixed') ⇒ fixedPriceAmount per objekt; annars
+      // löpande pris × antal. Enhetspris på artikelraden härleds från totalen vid fast pris.
+      let unitPriceForArticle = objPrice.price;
 
       if (linkedArticle) {
         estimatedDuration = objPrice.productionMinutes * quantity;
-        totalValue = objPrice.price * quantity;
+        totalValue = computeObjectValueOre(concept, objPrice.price, quantity);
         totalCost = objPrice.cost * quantity;
+        unitPriceForArticle =
+          isFixedPriceConcept(concept) && quantity > 0 ? Math.round(totalValue / quantity) : objPrice.price;
       }
 
       // Task #901 (B8): metadatastyrd leveranstid. När konceptet pekar ut ett
@@ -2427,8 +2484,8 @@ app.post("/api/order-concepts/:id/execute", asyncHandler(async (req, res) => {
           assignmentId: assignment.id,
           articleId: linkedArticleId,
           quantity,
-          unitPrice: objPrice.price,
-          totalPrice: objPrice.price * quantity,
+          unitPrice: unitPriceForArticle,
+          totalPrice: totalValue,
           unitCost: objPrice.cost,
           totalCost: objPrice.cost * quantity,
           unitTime: objPrice.productionMinutes,
@@ -2490,7 +2547,8 @@ app.post("/api/order-concepts/:id/execute", asyncHandler(async (req, res) => {
     const preTaskArticles = conceptArticles.filter(ca => (ca as any).isPreTask === true && (!ca.taskCategory || ca.taskCategory === "field"));
     const createdPreTasks: Array<{ id: string; objectId: string; articleId: string }> = [];
     if (preTaskArticles.length > 0) {
-      for (const obj of matchingObjects) {
+      // Task #976: föruppgifter skapas bara för träff-objekt (inte för miss-objekt).
+      for (const obj of expansionObjects) {
         for (const ca of preTaskArticles) {
           const article = await storage.getArticle(ca.articleId);
           if (!article) continue;
@@ -2571,7 +2629,7 @@ app.post("/api/order-concepts/:id/execute", asyncHandler(async (req, res) => {
 
     res.json({
       success: true,
-      message: `Skapade ${createdAssignments.length} uppgifter från ${matchingObjects.length} matchande objekt` +
+      message: `Skapade ${createdAssignments.length} uppgifter från ${buildHitSummaryText(hits)}` +
         (createdPreTasks.length > 0 ? ` + ${createdPreTasks.length} föruppgifter` : "") +
         (createdAdminWorkOrders.length > 0 ? ` + ${createdAdminWorkOrders.length} administrativa uppgifter` : "") +
         (concept.deliveryTimeMetadataField ? ` (leveranstid från metadata: ${deliveryTimeFromMetadata}, schemalagd fallback: ${deliveryTimeFallback})` : "") +
@@ -2580,6 +2638,8 @@ app.post("/api/order-concepts/:id/execute", asyncHandler(async (req, res) => {
           : ""),
       assignmentsCreated: createdAssignments.length,
       objectsMatched: matchingObjects.length,
+      objectsHit: hits?.hitCount ?? matchingObjects.length,
+      objectsMissed: hits?.missCount ?? 0,
       deliveryTimeFromMetadata,
       deliveryTimeFallback,
       assignments: createdAssignments,
@@ -2618,9 +2678,11 @@ app.post("/api/order-concepts/:id/preview", asyncHandler(async (req, res) => {
     let linkedArticle: Awaited<ReturnType<typeof storage.getArticle>> | undefined = undefined;
     let linkedPrice = { price: 0, cost: 0, productionMinutes: 0 };
     if (concept.articleId) {
-      linkedArticle = await storage.getArticle(concept.articleId);
+      // Task #976: använd den aktiva artikeln (utgått→ersättning) även i preview, så
+      // pris och antalsläge matchar execute.
+      linkedArticle = await resolveActiveArticle(tenantId, await storage.getArticle(concept.articleId));
       if (linkedArticle && concept.customerId) {
-        const info = await storage.resolveArticlePrice(tenantId, concept.articleId, concept.customerId);
+        const info = await storage.resolveArticlePrice(tenantId, linkedArticle.id, concept.customerId);
         linkedPrice = { price: info.price, cost: info.cost, productionMinutes: info.productionMinutes };
       } else if (linkedArticle) {
         linkedPrice = {
@@ -2631,12 +2693,21 @@ app.post("/api/order-concepts/:id/preview", asyncHandler(async (req, res) => {
       }
     }
 
-    const previewItems = matchingObjects.map(obj => {
-      const objWithMeta = obj as typeof obj & { metadata?: Record<string, unknown> };
-      let quantity = 1;
-      if (concept.crossPollinationField && objWithMeta.metadata?.[concept.crossPollinationField]) {
-        quantity = Number(objWithMeta.metadata[concept.crossPollinationField]) || 1;
-      }
+    // Task #934: förhandsvisning grenar på faktureringsmetoden (invoiceModel med
+    // fallback till scenario) — inte längre enbart legacy-scenario.
+    const previewMethod = getOrderConceptMethod(concept);
+
+    // Task #976: artikelträff i preview — visa endast träff-objekt och konceptets fasta
+    // pris. Abonnemang expanderar inga uppgifter ⇒ behåll alla objekt där.
+    const previewHits = await resolveConceptArticleHits({
+      tenantId,
+      concept,
+      linkedArticle,
+      matchingObjects,
+    });
+    const previewObjects = previewMethod === "subscription" ? matchingObjects : previewHits.hitObjects;
+    const previewItems = previewObjects.map(obj => {
+      const quantity = previewHits.quantityByObjectId.get(obj.id) ?? 1;
       return {
         objectId: obj.id,
         objectName: obj.name,
@@ -2644,13 +2715,9 @@ app.post("/api/order-concepts/:id/preview", asyncHandler(async (req, res) => {
         quantity,
         articleName: linkedArticle?.name || "-",
         estimatedDuration: linkedPrice.productionMinutes * quantity,
-        estimatedValue: linkedPrice.price * quantity,
+        estimatedValue: computeObjectValueOre(concept, linkedPrice.price, quantity),
       };
     });
-
-    // Task #934: förhandsvisning grenar på faktureringsmetoden (invoiceModel med
-    // fallback till scenario) — inte längre enbart legacy-scenario.
-    const previewMethod = getOrderConceptMethod(concept);
 
     // Generate rolling schedule preview if method is "schedule"
     let schedulePreview: Array<{ date: string; objectCount: number }> = [];
@@ -2666,7 +2733,7 @@ app.post("/api/order-concepts/:id/preview", asyncHandler(async (req, res) => {
           if (date && date >= now) {
             schedulePreview.push({
               date: date.toISOString().split('T')[0],
-              objectCount: matchingObjects.length,
+              objectCount: previewHits.hitCount,
             });
           }
         }
@@ -2699,6 +2766,11 @@ app.post("/api/order-concepts/:id/preview", asyncHandler(async (req, res) => {
       items: previewItems,
       schedulePreview,
       subscriptionCalc,
+      // Task #976: artikelträff-sammanfattning för förhandsvisningen.
+      objectsHit: previewHits.hitCount,
+      objectsMissed: previewHits.missCount,
+      isMetadataDriven: previewHits.isMetadataDriven,
+      quantityFieldLabel: previewHits.quantityFieldLabel,
     });
 }));
 
@@ -2736,11 +2808,14 @@ app.post("/api/order-concepts/:id/run-rolling", asyncHandler(async (req, res) =>
     );
 
     let linkedArticle: Awaited<ReturnType<typeof storage.getArticle>> | undefined = undefined;
+    let linkedArticleId: string | null = concept.articleId ?? null;
     let linkedPrice = { price: 0, cost: 0, productionMinutes: 0 };
     if (concept.articleId) {
-      linkedArticle = await storage.getArticle(concept.articleId);
+      // Task #976: aktiv artikel (utgått→ersättning) + samma artikelträfflogik som execute.
+      linkedArticle = await resolveActiveArticle(tenantId, await storage.getArticle(concept.articleId));
+      if (linkedArticle) linkedArticleId = linkedArticle.id;
       if (linkedArticle && concept.customerId) {
-        const info = await storage.resolveArticlePrice(tenantId, concept.articleId, concept.customerId);
+        const info = await storage.resolveArticlePrice(tenantId, linkedArticleId!, concept.customerId);
         linkedPrice = { price: info.price, cost: info.cost, productionMinutes: info.productionMinutes };
       } else if (linkedArticle) {
         linkedPrice = {
@@ -2751,28 +2826,37 @@ app.post("/api/order-concepts/:id/run-rolling", asyncHandler(async (req, res) =>
       }
     }
 
+    // Task #976: artikelträff — endast träff-objekt schemaläggs/prissätts.
+    const rollingHits = await resolveConceptArticleHits({
+      tenantId,
+      concept,
+      linkedArticle,
+      matchingObjects,
+    });
+
     const months = concept.rollingMonths || 3;
     const now = new Date();
     // Task #937: samma per-objekt kund-resolution + pris-memo som /execute. run-rolling
     // är alltid schema-metoden ⇒ pre-passet körs (kastar före skrivning om FROM_METADATA
-    // inte kan resolva alla objekt).
+    // inte kan resolva alla objekt). Pre-passet körs över träff-objekten.
     const { isFromMetadata, customerIdForObject, resolvePrice } = await prepareConceptCustomerPricing({
       concept,
       tenantId,
-      matchingObjects,
+      matchingObjects: rollingHits.hitObjects,
       runPrePass: true,
     });
     const rollingResult = await generateScheduleAssignments({
       concept,
       tenantId,
       userId,
-      matchingObjects,
+      matchingObjects: rollingHits.hitObjects,
       linkedArticle,
-      linkedArticleId: concept.articleId ?? null,
+      linkedArticleId,
       linkedPrice,
       isFromMetadata,
       customerIdForObject,
       resolvePrice,
+      quantityByObjectId: rollingHits.quantityByObjectId,
     });
     if (rollingResult === null) {
       throw new ValidationError("Konceptet saknar leveransschema eller intervall. Konfigurera ett leveransschema (månad/vecka/veckodag) eller ett återkommande intervall (startdatum + frekvens i dagar) innan du kör.");
@@ -2785,10 +2869,12 @@ app.post("/api/order-concepts/:id/run-rolling", asyncHandler(async (req, res) =>
 
     res.json({
       success: true,
-      message: `Genererade ${rollingResult.created.length} uppgifter för ${months} månader framåt` +
+      message: `Genererade ${rollingResult.created.length} uppgifter för ${months} månader framåt (${buildHitSummaryText(rollingHits)})` +
         (rollingResult.skipped > 0 ? ` (${rollingResult.skipped} hoppades över — fanns redan)` : ""),
       assignmentsCreated: rollingResult.created.length,
       objectsMatched: matchingObjects.length,
+      objectsHit: rollingHits.hitCount,
+      objectsMissed: rollingHits.missCount,
       skipped: rollingResult.skipped,
     });
 }));

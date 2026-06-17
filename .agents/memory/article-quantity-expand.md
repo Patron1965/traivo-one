@@ -71,3 +71,15 @@ also store the swapped id on the assignment article, not the raw concept.article
 belong to the same tenant (verifyTenantOwnership) — it's a cross-tenant FK vector otherwise.
 Per-tenant article-number uniqueness is enforced app-level only (no DB unique index, by
 design — multi-tenant + avoids breaking existing prod dup data).
+
+**The chain-resolver must tenant-check the INITIAL article, not just the hops.** The shared
+`resolveActiveArticle(tenantId, article)` (`server/services/order-concept-article-hits.ts`) is
+the single source the order-concept hit/economics flow uses (preview, run-rolling, execute,
+`article-hit-summary`). It returns `undefined` when `article.tenantId !== tenantId` BEFORE
+following the utgått→ersättning chain. **Why:** the concept-write path (PATCH
+`/api/order-concepts/:id`) does not validate that `concept.articleId` belongs to the tenant, so
+a tenant could point a concept at a foreign article; the inline chain-followers only guarded the
+replacement hops (`repl.tenantId !== tenantId`), leaving the entry article unchecked → would
+leak foreign article name/price and could expand against it. When migrating any inline
+"prefetch entity + follow chain" block to a helper, the entry entity needs the same tenant gate
+the hops already have — easy to miss.

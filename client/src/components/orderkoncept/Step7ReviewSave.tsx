@@ -12,9 +12,10 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import {
   Save, Copy, PlayCircle, Loader2, CheckCircle2,
-  MapPin, Clock, Package, Calendar, Gauge, ChevronDown, ChevronUp,
+  Package, Calendar,
   BarChart3, TrendingUp, FileDown, AlertCircle
 } from "lucide-react";
+import ArticleHitResult from "./ArticleHitResult";
 
 interface Step7Props {
   conceptId: string | null;
@@ -35,22 +36,6 @@ interface ArticleLine {
   productionMinutes: number;
 }
 
-interface ClusterSummary {
-  clusterId: string;
-  clusterName: string;
-  totalObjects: number;
-  matchedObjects: number;
-  samples: Array<{ id: string; name: string; address: string | null }>;
-}
-
-interface GeoSpread {
-  spreadKm: number | null;
-  setupTimeMinutes: number | null;
-  setupTimeLabel: string | null;
-  clusterCount: number;
-  hasCenterData: boolean;
-}
-
 interface ReviewSchedule {
   type: string | null;
   intervalStartDate: string | null;
@@ -62,14 +47,13 @@ interface ReviewSchedule {
 }
 
 interface ReviewSummary {
-  clusterSummaries: ClusterSummary[];
-  totalMatchedObjects: number;
   articleLines: ArticleLine[];
   totalValueKr: number;
   totalCostKr: number;
   totalProductionMinutes: number;
   schedule: ReviewSchedule;
-  geoSpread: GeoSpread;
+  isFixedPrice?: boolean;
+  fixedPriceAmountKr?: number | null;
 }
 
 interface SimulatePeriod {
@@ -162,87 +146,6 @@ function ScheduleSummary({ schedule }: { schedule: ReviewSchedule }) {
   return <span className="text-muted-foreground text-sm">{schedule.type}</span>;
 }
 
-function SetupTimeCard({ geo }: { geo: GeoSpread }) {
-  if (!geo.hasCenterData) {
-    return (
-      <div className="text-sm text-muted-foreground italic">
-        Koordinater saknas för valda grenar — ställtid kan ej beräknas.
-      </div>
-    );
-  }
-  const label = geo.setupTimeLabel ?? "Okänd";
-  const spread = geo.spreadKm;
-  const isLong = (geo.setupTimeMinutes ?? 0) >= 60;
-  return (
-    <div className="space-y-2">
-      <div className="flex items-center gap-3">
-        <div className={`flex items-center gap-2 text-sm font-medium ${isLong ? "text-warning" : "text-chart-2"}`}>
-          <Gauge className="h-4 w-4" />
-          <span>{label}</span>
-        </div>
-        {spread != null && spread > 0 && (
-          <Badge variant="outline" className="text-xs font-normal text-muted-foreground">
-            {spread.toLocaleString("sv-SE", { maximumFractionDigits: 1 })} km spridning
-          </Badge>
-        )}
-      </div>
-      <p className="text-xs text-muted-foreground">
-        Uppskattning baserad på geografisk spridning mellan {geo.clusterCount} centerpunkter
-        {geo.clusterCount === 1 ? "" : " (en per gren)"}. Märkt som estimat.
-      </p>
-    </div>
-  );
-}
-
-function ClusterBlock({ cluster }: { cluster: ClusterSummary }) {
-  const [expanded, setExpanded] = useState(false);
-  const filtered = cluster.matchedObjects < cluster.totalObjects;
-  return (
-    <div className="border rounded-md p-3 space-y-2">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <MapPin className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-          <span className="text-sm font-medium">{cluster.clusterName}</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="text-sm font-semibold">{cluster.matchedObjects}</span>
-          {filtered && (
-            <span className="text-xs text-muted-foreground">
-              av {cluster.totalObjects} objekt
-            </span>
-          )}
-          {!filtered && (
-            <span className="text-xs text-muted-foreground">objekt</span>
-          )}
-          {cluster.samples.length > 0 && (
-            <button
-              onClick={() => setExpanded(v => !v)}
-              className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-0.5"
-              data-testid={`toggle-cluster-${cluster.clusterId}`}
-            >
-              {expanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
-            </button>
-          )}
-        </div>
-      </div>
-      {expanded && cluster.samples.length > 0 && (
-        <ul className="pl-5 space-y-0.5">
-          {cluster.samples.map(s => (
-            <li key={s.id} className="text-xs text-muted-foreground truncate">
-              {s.name}{s.address ? ` — ${s.address}` : ""}
-            </li>
-          ))}
-          {cluster.matchedObjects > cluster.samples.length && (
-            <li className="text-xs text-muted-foreground italic">
-              …och {cluster.matchedObjects - cluster.samples.length} till
-            </li>
-          )}
-        </ul>
-      )}
-    </div>
-  );
-}
-
 export default function Step7ReviewSave({
   conceptId,
   conceptName,
@@ -328,10 +231,14 @@ export default function Step7ReviewSave({
       const res = await apiRequest("POST", `/api/order-concepts/${conceptId}/execute`, {});
       return res.json();
     },
-    onSuccess: (data: { created?: number; assignmentsCreated?: number }) => {
+    onSuccess: (data: { created?: number; assignmentsCreated?: number; objectsHit?: number; objectsMissed?: number }) => {
       queryClient.invalidateQueries({ queryKey: ["/api/order-concepts"] });
       const n = data?.created ?? data?.assignmentsCreated;
-      toast({ title: "Order skapad", description: n != null ? `${n} uppdrag genererades.` : "Konceptet kördes." });
+      let description = n != null ? `${n} uppdrag genererades.` : "Konceptet kördes.";
+      if (data?.objectsMissed != null && data.objectsMissed > 0) {
+        description += ` ${data.objectsMissed} objekt utan träff hoppades över.`;
+      }
+      toast({ title: "Order skapad", description });
       navigate("/order-concepts");
     },
     onError: (e: Error) => toast({ title: "Kunde inte skapa order", description: e.message, variant: "destructive" }),
@@ -434,46 +341,8 @@ export default function Step7ReviewSave({
         </Card>
       )}
 
-      {/* Matchade objekt per kluster */}
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-sm font-medium flex items-center gap-2">
-            <MapPin className="h-4 w-4" /> Matchade objekt
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-2">
-          {summaryLoading ? (
-            <div className="space-y-2">
-              <Skeleton className="h-12 w-full" />
-              <Skeleton className="h-12 w-full" />
-            </div>
-          ) : summary ? (
-            <>
-              <div className="flex items-center gap-2 text-sm mb-3">
-                <span className="font-semibold text-base">{summary.totalMatchedObjects}</span>
-                <span className="text-muted-foreground">objekt totalt</span>
-                {summary.clusterSummaries.length > 0 && (
-                  <span className="text-muted-foreground">
-                    ({summary.clusterSummaries.length} grenar)
-                  </span>
-                )}
-              </div>
-              <div className="space-y-2">
-                {summary.clusterSummaries.map(cs => (
-                  <ClusterBlock key={cs.clusterId} cluster={cs} />
-                ))}
-                {summary.clusterSummaries.length === 0 && (
-                  <p className="text-sm text-muted-foreground italic">Inga grenar valda</p>
-                )}
-              </div>
-            </>
-          ) : (
-            <p className="text-sm text-muted-foreground italic">
-              Spara konceptet för att se matchade objekt
-            </p>
-          )}
-        </CardContent>
-      </Card>
+      {/* Resultat av artikelträffar — vilka inpekade objekt artikeln faktiskt träffar */}
+      <ArticleHitResult conceptId={conceptId} />
 
       {/* Artiklar & ekonomi */}
       <Card>
@@ -539,27 +408,6 @@ export default function Step7ReviewSave({
             <ScheduleSummary schedule={summary.schedule} />
           ) : (
             <span className="text-sm text-muted-foreground italic">—</span>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Ställtidsestimering */}
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-sm font-medium flex items-center gap-2">
-            <Clock className="h-4 w-4" /> Estimerad ställtid
-            <Badge variant="outline" className="text-xs font-normal ml-auto">uppskattning</Badge>
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          {summaryLoading ? (
-            <Skeleton className="h-10 w-full" />
-          ) : summary ? (
-            <SetupTimeCard geo={summary.geoSpread} />
-          ) : (
-            <p className="text-sm text-muted-foreground italic">
-              Spara konceptet för att se ställtidsuppskattning
-            </p>
           )}
         </CardContent>
       </Card>
