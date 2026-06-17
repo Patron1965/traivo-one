@@ -67,16 +67,6 @@ import {
   type ConditionFilter,
 } from "@/components/orderkoncept/shared/ConditionFilter";
 
-const hierarchyLevelLabels: Record<string, { label: string; color: string }> = {
-  koncern: { label: "Koncern", color: "bg-chart-5/15 text-chart-5 border border-chart-5/30" },
-  brf: { label: "BRF", color: "bg-chart-1/15 text-chart-1 border border-chart-1/30" },
-  fastighet: { label: "Fastighet", color: "bg-chart-2/15 text-chart-2 border border-chart-2/30" },
-  rum: { label: "Rum", color: "bg-chart-3/15 text-chart-3 border border-chart-3/30" },
-  karl: { label: "Kärl", color: "bg-chart-4/15 text-chart-4 border border-chart-4/30" },
-  objekt: { label: "Objekt", color: "bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-200" },
-};
-
-
 const accessTypeLabels: Record<string, { label: string; icon: typeof Key }> = {
   open: { label: "Öppet", icon: DoorOpen },
   code: { label: "Kod", icon: Keyboard },
@@ -153,7 +143,6 @@ export default function ObjectsPage() {
     const c = params.get("customerId") || params.get("customer");
     return c ? [c] : [];
   });
-  const [hierarchyFilter, setHierarchyFilterRaw] = useState("all");
   const [clusterFilter, setClusterFilterRaw] = useState("all");
   const [expandedAreas, setExpandedAreas] = useState<Set<string>>(new Set());
   const [viewMode, setViewMode] = useState<"list" | "map" | "tree">("list");
@@ -184,7 +173,6 @@ export default function ObjectsPage() {
   const setCustomerFilter = (v: string[]) => { setCustomerFilterRaw(v); setCurrentPage(0); };
   const addCustomerFilter = (id: string) => { if (!customerFilter.includes(id)) { setCustomerFilter([...customerFilter, id]); } };
   const removeCustomerFilter = (id: string) => { setCustomerFilter(customerFilter.filter(c => c !== id)); };
-  const setHierarchyFilter = (v: string) => { setHierarchyFilterRaw(v); setCurrentPage(0); };
   const setClusterFilter = (v: string) => { setClusterFilterRaw(v); setCurrentPage(0); };
   const [cityFilter, setCityFilterRaw] = useState<string[]>([]);
   const setCityFilter = (v: string[]) => { setCityFilterRaw(v); setCurrentPage(0); };
@@ -206,7 +194,6 @@ export default function ObjectsPage() {
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
   const [bulkParentDialogOpen, setBulkParentDialogOpen] = useState(false);
   const [bulkNewParentId, setBulkNewParentId] = useState<string | null>(null);
-  const [bulkNewLevel, setBulkNewLevel] = useState("fastighet");
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [servicePatternDialog, setServicePatternDialog] = useState<{ open: boolean; loading: boolean; data?: { summary: string; patterns: { label: string; value: string }[]; anomalies: { objectId: string; objectName: string; reason: string }[] } }>({ open: false, loading: false });
@@ -292,7 +279,7 @@ export default function ObjectsPage() {
   });
 
   const { data: objectsData, isLoading, isError: objectsIsError, error: objectsError, refetch: objectsRefetch } = useQuery<{ objects: ServiceObject[]; total: number }>({
-    queryKey: ["/api/objects", "paginated", currentPage, debouncedSearch, customerFilter, JSON.stringify(activeConditions), accessFilter, hierarchyFilter, clusterFilter, cityFilter, hasSetupTimeFilter, hasParentFilter, reportedFilter, interimFilter, issueFilter],
+    queryKey: ["/api/objects", "paginated", currentPage, debouncedSearch, customerFilter, JSON.stringify(activeConditions), accessFilter, clusterFilter, cityFilter, hasSetupTimeFilter, hasParentFilter, reportedFilter, interimFilter, issueFilter],
     queryFn: async () => {
       const params = new URLSearchParams({
         limit: PAGE_SIZE.toString(),
@@ -309,9 +296,6 @@ export default function ObjectsPage() {
       }
       if (accessFilter !== "all") {
         params.append("accessType", accessFilter);
-      }
-      if (hierarchyFilter !== "all") {
-        params.append("hierarchyLevel", hierarchyFilter);
       }
       if (clusterFilter !== "all") {
         params.append("clusterId", clusterFilter);
@@ -706,10 +690,8 @@ export default function ObjectsPage() {
 
   const topLevelObjects = useMemo(() => objects.filter(obj => !obj.parentId), [objects]);
 
-  type SortField = "name" | "level" | "children" | "city" | "customer";
-  const [sortConfig, setSortConfig] = useState<{ field: SortField; direction: "asc" | "desc" }>({ field: "level", direction: "asc" });
-
-  const hierarchyOrder: Record<string, number> = { koncern: 1, brf: 2, fastighet: 3, rum: 4, karl: 5 };
+  type SortField = "name" | "children" | "city" | "customer";
+  const [sortConfig, setSortConfig] = useState<{ field: SortField; direction: "asc" | "desc" }>({ field: "name", direction: "asc" });
 
   const childrenMap = useMemo(() => {
     const map = new Map<string, ServiceObject[]>();
@@ -736,12 +718,6 @@ export default function ObjectsPage() {
           const an = (a.name || a.objectNumber || "").toString();
           const bn = (b.name || b.objectNumber || "").toString();
           cmp = an.localeCompare(bn, "sv", { numeric: true, sensitivity: "base" });
-          break;
-        }
-        case "level": {
-          const ao = hierarchyOrder[a.hierarchyLevel || ""] ?? 99;
-          const bo = hierarchyOrder[b.hierarchyLevel || ""] ?? 99;
-          cmp = ao - bo;
           break;
         }
         case "children": {
@@ -909,20 +885,18 @@ export default function ObjectsPage() {
     activeConditions.length > 0 ? 1 : 0,
     accessFilter !== "all" ? 1 : 0,
     customerFilter.length > 0 ? 1 : 0,
-    hierarchyFilter !== "all" ? 1 : 0,
     cityFilter.length > 0 ? 1 : 0,
     hasSetupTimeFilter ? 1 : 0,
     hasParentFilter ? 1 : 0,
     reportedFilter ? 1 : 0,
     interimFilter ? 1 : 0,
     issueFilter ? 1 : 0,
-  ].reduce((a, b) => a + b, 0), [activeConditions, accessFilter, customerFilter, hierarchyFilter, cityFilter, hasSetupTimeFilter, hasParentFilter, reportedFilter, interimFilter, issueFilter]);
+  ].reduce((a, b) => a + b, 0), [activeConditions, accessFilter, customerFilter, cityFilter, hasSetupTimeFilter, hasParentFilter, reportedFilter, interimFilter, issueFilter]);
 
   const clearAllFilters = () => {
     setConditionFilters([]);
     setAccessFilter("all");
     setCustomerFilter([]);
-    setHierarchyFilter("all");
     setClusterFilter("all");
     setCityFilter([]);
     setHasSetupTimeFilter(false);
@@ -1257,7 +1231,6 @@ export default function ObjectsPage() {
     if (customerFilter.length > 0) params.append("customerId", customerFilter.join(","));
     if (activeConditions.length > 0) params.append("conditions", JSON.stringify(activeConditions));
     if (accessFilter !== "all") params.append("accessType", accessFilter);
-    if (hierarchyFilter !== "all") params.append("hierarchyLevel", hierarchyFilter);
     if (clusterFilter !== "all") params.append("clusterId", clusterFilter);
     if (cityFilter.length > 0) params.append("city", cityFilter.join(","));
     if (hasSetupTimeFilter) params.append("hasSetupTime", "true");
@@ -1266,7 +1239,7 @@ export default function ObjectsPage() {
     if (interimFilter) params.append("interim", "true");
     if (issueFilter) params.append("issue", issueFilter);
     return params;
-  }, [debouncedSearch, customerFilter, activeConditions, accessFilter, hierarchyFilter, clusterFilter, cityFilter, hasSetupTimeFilter, hasParentFilter, reportedFilter, interimFilter, issueFilter]);
+  }, [debouncedSearch, customerFilter, activeConditions, accessFilter, clusterFilter, cityFilter, hasSetupTimeFilter, hasParentFilter, reportedFilter, interimFilter, issueFilter]);
 
   const downloadCSV = (filename: string, rows: (string | number)[][]) => {
     const csv = rows.map(row => row.map(sanitizeCSVCell).join(",")).join("\n");
@@ -2046,12 +2019,6 @@ export default function ObjectsPage() {
                   <X className="h-3 w-3" />
                 </Badge>
               ))}
-              {hierarchyFilter !== "all" && (
-                <Badge variant="secondary" className="gap-1 cursor-pointer" onClick={() => setHierarchyFilter("all")} data-testid="badge-filter-hierarchy">
-                  Nivå: {hierarchyLevelLabels[hierarchyFilter]?.label || hierarchyFilter}
-                  <X className="h-3 w-3" />
-                </Badge>
-              )}
               {cityFilter.map(city => (
                 <Badge key={city} variant="secondary" className="gap-1 cursor-pointer" onClick={() => setCityFilter(cityFilter.filter(c => c !== city))} data-testid={`badge-filter-city-${city}`}>
                   Stad: {city}
@@ -2237,25 +2204,6 @@ export default function ObjectsPage() {
             >
               Ändra status
             </Button>
-            <Select value={bulkNewLevel} onValueChange={setBulkNewLevel}>
-              <SelectTrigger className="w-[130px] h-8" data-testid="select-bulk-level">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {Object.entries(hierarchyLevelLabels).map(([key, cfg]) => (
-                  <SelectItem key={key} value={key}>{cfg.label}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={bulkBusy}
-              onClick={() => runBulkUpdate({ hierarchyLevel: bulkNewLevel }, (n) => `${n} objekt satta till nivå ${hierarchyLevelLabels[bulkNewLevel]?.label || bulkNewLevel}`)}
-              data-testid="button-bulk-change-level"
-            >
-              Sätt nivå
-            </Button>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button size="sm" variant="outline" disabled={bulkBusy} data-testid="button-bulk-more">
@@ -2297,13 +2245,6 @@ export default function ObjectsPage() {
                   Namn <SortIcon field="name" />
                 </button>
                 <button
-                  onClick={() => toggleSort("level")}
-                  className={`hidden sm:flex items-center gap-1 hover:text-foreground w-24 shrink-0 ${sortConfig.field === "level" ? "text-primary font-semibold" : ""}`}
-                  data-testid="button-sort-level"
-                >
-                  Nivå <SortIcon field="level" />
-                </button>
-                <button
                   onClick={() => toggleSort("city")}
                   className={`hidden md:flex items-center gap-1 hover:text-foreground w-32 shrink-0 ${sortConfig.field === "city" ? "text-primary font-semibold" : ""}`}
                   data-testid="button-sort-city"
@@ -2328,7 +2269,7 @@ export default function ObjectsPage() {
             )}
             {filteredTopLevel.length > 0 ? (
               filteredTopLevel.map(obj => renderObjectTree(obj))
-            ) : totalObjects === 0 && !debouncedSearch && activeConditions.length === 0 && accessFilter === "all" && customerFilter.length === 0 && hierarchyFilter === "all" && !interimFilter && cityFilter.length === 0 && !hasSetupTimeFilter && !hasParentFilter && !reportedFilter ? (
+            ) : totalObjects === 0 && !debouncedSearch && activeConditions.length === 0 && accessFilter === "all" && customerFilter.length === 0 && !interimFilter && cityFilter.length === 0 && !hasSetupTimeFilter && !hasParentFilter && !reportedFilter ? (
               <div className="text-center py-16 px-6">
                 <div className="mx-auto w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mb-4">
                   <Package className="h-8 w-8 text-primary" />
