@@ -1525,11 +1525,6 @@ export default function ObjectsPage() {
                 </TooltipTrigger>
                 <TooltipContent>Visa släktnamn & hierarkisökväg</TooltipContent>
               </Tooltip>
-              {obj.hierarchyLevel && hierarchyLevelLabels[obj.hierarchyLevel] && (
-                <Badge className={`text-xs ${hierarchyLevelLabels[obj.hierarchyLevel].color}`}>
-                  {hierarchyLevelLabels[obj.hierarchyLevel].label}
-                </Badge>
-              )}
               {obj.isInterimObject && (
                 <Tooltip>
                   <TooltipTrigger asChild>
