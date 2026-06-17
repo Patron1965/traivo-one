@@ -869,6 +869,7 @@ function FieldEditor({
 function LinkDialog({ editor, onClose }: { editor: MetadataEditor; onClose: () => void }) {
   const { toast } = useToast();
   const [objectId, setObjectId] = useState<string | null>(null);
+  const [objectName, setObjectName] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [link, setLink] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
@@ -901,6 +902,112 @@ function LinkDialog({ editor, onClose }: { editor: MetadataEditor; onClose: () =
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
+  };
+
+  const printSheet = async () => {
+    if (!link) return;
+    let printUrl = qrDataUrl;
+    try {
+      printUrl = await QRCode.toDataURL(link, {
+        width: 1024,
+        margin: 1,
+        errorCorrectionLevel: "Q",
+      });
+    } catch {
+      printUrl = qrDataUrl;
+    }
+    if (!printUrl) {
+      toast({ title: "Fel", description: "Kunde inte skapa QR-koden.", variant: "destructive" });
+      return;
+    }
+
+    const headingName = needsObject ? objectName ?? editor.name : editor.name;
+    const subName = needsObject && objectName ? editor.name : null;
+    const esc = (s: string) =>
+      s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+
+    const html = `<!DOCTYPE html>
+<html lang="sv">
+<head>
+<meta charset="utf-8" />
+<title>QR-blad — ${esc(headingName)}</title>
+<style>
+  @page { size: A4 portrait; margin: 18mm; }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    color: #1B2A33;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  .sheet {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 24px;
+  }
+  .heading { font-size: 34px; font-weight: 700; margin: 0 0 6px; color: #1B4B6B; }
+  .subheading { font-size: 18px; font-weight: 500; margin: 0 0 4px; color: #4A9B9B; }
+  .org { font-size: 15px; color: #6B7C8C; margin: 0 0 28px; }
+  .qr-wrap {
+    border: 2px solid #E8F4F8;
+    border-radius: 16px;
+    padding: 20px;
+    background: #ffffff;
+  }
+  .qr-wrap img { display: block; width: 320px; height: 320px; }
+  .instruction {
+    margin-top: 30px;
+    max-width: 460px;
+    font-size: 17px;
+    line-height: 1.5;
+    color: #2C3E50;
+  }
+  .instruction .step { font-weight: 600; color: #1B4B6B; }
+  .footer { margin-top: 36px; font-size: 12px; color: #6B7C8C; }
+  @media print { .sheet { min-height: auto; } }
+</style>
+</head>
+<body>
+  <div class="sheet">
+    <h1 class="heading">${esc(headingName)}</h1>
+    ${subName ? `<p class="subheading">${esc(subName)}</p>` : ""}
+    <p class="org">Skanna för att rapportera</p>
+    <div class="qr-wrap">
+      <img src="${printUrl}" alt="QR-kod" />
+    </div>
+    <p class="instruction">
+      <span class="step">Skanna QR-koden</span> med mobilkamerans skanner och fyll i formuläret direkt på plats — ingen inloggning krävs.
+    </p>
+    <p class="footer">Traivo · Sätt upp detta blad väl synligt på objektet.</p>
+  </div>
+  <script>
+    window.addEventListener("load", function () {
+      var img = document.querySelector("img");
+      function go() { window.focus(); window.print(); }
+      if (img && !img.complete) { img.addEventListener("load", go); img.addEventListener("error", go); }
+      else { setTimeout(go, 150); }
+    });
+  </script>
+</body>
+</html>`;
+
+    const win = window.open("", "_blank");
+    if (!win) {
+      toast({
+        title: "Popup blockerad",
+        description: "Tillåt popup-fönster för att skriva ut QR-bladet.",
+        variant: "destructive",
+      });
+      return;
+    }
+    win.document.open();
+    win.document.write(html);
+    win.document.close();
   };
 
   const needsObject = editor.type === "object_specific";
@@ -976,6 +1083,7 @@ function LinkDialog({ editor, onClose }: { editor: MetadataEditor; onClose: () =
                       type="button"
                       onClick={() => {
                         setObjectId(o.id);
+                        setObjectName(o.name);
                         setLink(null);
                       }}
                       className={`w-full text-left rounded-md p-2 text-sm hover-elevate ${
@@ -1040,16 +1148,28 @@ function LinkDialog({ editor, onClose }: { editor: MetadataEditor; onClose: () =
                     <Loader2 className="h-6 w-6 animate-spin" />
                   </div>
                 )}
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={downloadQr}
-                  disabled={!qrDataUrl}
-                  data-testid="button-download-qr"
-                >
-                  <Download className="h-4 w-4 mr-2" />
-                  Ladda ner QR-kod
-                </Button>
+                <div className="flex flex-wrap items-center justify-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={downloadQr}
+                    disabled={!qrDataUrl}
+                    data-testid="button-download-qr"
+                  >
+                    <Download className="h-4 w-4 mr-2" />
+                    Ladda ner QR-kod
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={printSheet}
+                    disabled={!qrDataUrl}
+                    data-testid="button-print-qr-sheet"
+                  >
+                    <Printer className="h-4 w-4 mr-2" />
+                    Skriv ut QR-blad
+                  </Button>
+                </div>
               </div>
 
               <p className="text-xs text-muted-foreground">
