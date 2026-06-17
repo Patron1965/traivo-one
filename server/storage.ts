@@ -178,7 +178,7 @@ import {
   type Disruption, type InsertDisruption,
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, ne, and, or, isNull, isNotNull, desc, gte, lte, lt, sql, inArray, notInArray, getTableColumns, type SQL, type SQLWrapper } from "drizzle-orm";
+import { eq, ne, and, or, isNull, isNotNull, asc, desc, gte, lte, lt, sql, inArray, notInArray, getTableColumns, type SQL, type SQLWrapper } from "drizzle-orm";
 
 type Condition = SQL | SQLWrapper | undefined;
 type DbTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];

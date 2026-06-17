@@ -59,3 +59,4 @@
 - [Utförandekod-/ikonregister](execution-code-register.md) — `/execution-codes`+`/icons` register ≠ gamla `/utforandetyper`; selektorer använder useExecutionCodes-hook (register + fritext back-compat), ej hårdkodad EXECUTION_CODE_OPTIONS.
 - [Fältappen saknar antals-input](field-app-no-quantity-editor.md) — Traivo Go har inget redigerbart antalsfält; antals-flaggor (hideQuantityInApp/operatorCanUpdate) är display-only via metadata-context.
 - [/api/objects dubbel svarsform](api-objects-dual-response-shape.md) — `/api/objects` ger bar array UTAN params men `{objects,total}` när `limit`/`search` skickas; normalisera alltid annars "map is not a function".
+- [Metadata-lämnare publik form](metadata-editor-public-form.md) — GPS-typ hänger på "Söker objekt..." om getCurrentPosition aldrig callbackar (test: sätt geolocation+permission på context FÖRE navigering); approve skriver metadata_varden, reject ej.
