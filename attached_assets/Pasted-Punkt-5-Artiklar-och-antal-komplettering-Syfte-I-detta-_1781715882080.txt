@@ -1,0 +1,170 @@
+Punkt 5 – Artiklar och antal (komplettering)
+Syfte
+I detta steg ska användaren endast välja vilka artiklar som ska ingå i orderkonceptet samt ange ett grundantal.
+Förenkling av formuläret
+Funktioner för:
+fasthakningslogik
+antalslogik
+metadataregler
+ska inte visas eller hanteras i detta formulärsteg.
+Dessa funktioner är redan definierade på artikelnivå och ska hanteras av systemets bakomliggande logik.
+Användaren ska endast ange
+Artikel
+Grundantal
+Exempel:
+Artikel
+Antal
+Kärltvätt 370L
+1
+Dekal montering
+2
+Kontroll av lyftanordning
+1
+
+
+⸻
+
+
+Antalshierarki
+Systemet ska använda följande prioriteringsordning:
+1. Objektets metadatastyrda antal
+Om artikeln är kopplad till ett metadatafält som innehåller ett antal ska detta värde användas.
+Exempel:
+Antal kärl = 12
+Antal meter häck = 45
+Antal m² = 380
+Systemet använder då detta antal.
+2. Antal på orderkonceptet
+Om inget metadatastyrt antal finns används antalet som angivits på orderkonceptet.
+Exempel:
+Kärltvätt = 1 st per objekt
+
+
+⸻
+
+
+Uppdatering vid utförande
+Om artikeln tillåter det ska utföraren kunna:
+justera antal
+korrigera uppmätt mängd
+uppdatera bakomliggande metadatafält
+Exempel:
+Antal kärl ändras från 10 till 12
+Antal meter ändras från 45 till 52
+Antal m² ändras från 380 till 415
+Systemet uppdaterar då även det metadatafält som är kopplat till artikeln.
+
+
+⸻
+
+
+Punkt 6 – Resultat av artikelträffar
+Syfte
+När artiklarna har lagts till i orderkonceptet ska systemet kunna visa resultatet av matchningen mot den objektstruktur som valdes i punkt 3.
+Användaren behöver kunna verifiera att orderkonceptet träffar rätt objekt innan det aktiveras.
+
+
+⸻
+
+
+Systemet ska visa
+Objektnivå
+Per objekt:
+Objektnamn
+Antal skapade uppgifter
+Vilka artiklar som träffat objektet
+Antal enligt artikel-/metadataregler
+Exempel:
+Objekt
+Uppgifter
+Butik A
+3
+Butik B
+5
+Butik C
+2
+
+
+⸻
+
+
+Total sammanställning
+Systemet ska visa:
+Antal objekt som fått träff
+Antal objekt utan träff
+Totalt antal skapade uppgifter
+Totalt ordervärde
+Total produktionstid
+Total restid (om sådan logik finns)
+Eventuell materialåtgång
+Exempel:
+20 objekt träffade
+75 uppgifter skapade
+Ordervärde 20 000 kr
+Produktionstid 18 timmar
+
+
+⸻
+
+
+Punkt 7 – Granska och skapa
+Syfte
+Det sista steget ska fungera som ett kvitto innan orderkonceptet aktiveras.
+Användaren ska tydligt kunna se vad systemet kommer att skapa.
+
+
+⸻
+
+
+Detaljlista
+Systemet ska visa samtliga genererade uppgifter i listform.
+Exempel:
+Objekt
+Uppgift
+Antal
+Butik A
+Kärltvätt
+12
+Butik A
+Kontroll
+1
+Butik B
+Kärltvätt
+8
+
+
+⸻
+
+
+Sammanfattning
+Systemet ska samtidigt visa:
+Antal träffade objekt
+Antal genererade uppgifter
+Totalt ordervärde
+Beräknad produktionstid
+Beräknad materialåtgång
+Eventuell övrig resursförbrukning
+Exempel:
+Orderkonceptet har träffat 20 objekt och genererat 75 uppgifter. Beräknat ordervärde uppgår till 20 000 kr och beräknad produktionstid till 18 timmar.
+
+
+⸻
+
+
+Koppling till grovplanering
+När användaren godkänner granskningen:
+skapas uppgifterna
+uppgifterna skickas till grovplaneringen
+samma sammanfattningsdata ska därefter kunna användas i planeringsvyerna
+Det innebär att användaren redan i granskningssteget får samma övergripande information som senare används vid kapacitetsplanering och schemaläggning.
+
+
+⸻
+
+
+Repeterande orderkoncept
+Orderkonceptet kan vara:
+engångsbaserat
+återkommande
+Vid återkommande orderkoncept ska samma logik användas varje gång en ny generation av uppgifter skapas.
+Den återkommande genereringen hanteras dock som en separat funktion och påverkar inte själva granskningssteget annat än att användaren ska kunna se att orderkonceptet är återkommande.

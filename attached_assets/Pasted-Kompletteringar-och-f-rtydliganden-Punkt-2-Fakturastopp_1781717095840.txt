@@ -1,0 +1,157 @@
+Kompletteringar och förtydliganden
+
+Punkt 2 – Fakturastopp / Samlingsfaktura
+
+Förtydligande av funktion
+
+Begreppet fakturastopp motsvarar en samlingsfaktura-nivå i objektträdet.
+
+Grundprincip:
+
+Utförda och fakturerbara uppgifter färdas uppåt i objektstrukturen.
+Om inget fakturastopp finns fortsätter samtliga fakturerbara uppgifter upp till den kundnivå där orderkonceptet är kopplat.
+Fakturering sker då på kundnivå.
+
+Om ett objekt har ett metadatafält som uppfyller villkoret för fakturastopp:
+
+Uppgifterna stoppas på denna nivå.
+Faktura skapas för denna del av strukturen.
+Fakturan genereras enligt valt faktureringsvillkor:
+Dagligen
+Veckovis
+Månadsvis
+Efter avslutat arbete
+Annan definierad regel
+
+Viktigt förtydligande
+
+Det handlar inte om olika kunder.
+
+Det är fortfarande samma kund genom hela objektstrukturen.
+
+Syftet är istället att möjliggöra uppdelning av fakturor efter exempelvis:
+
+Fastighet
+Område
+Distrikt
+Region
+Kostnadsställe
+Förvaltningsområde
+Butiksgrupp
+Annan organisatorisk nivå
+
+Detta gör fakturorna mer hanterbara för kunden samtidigt som kundrelationen och kundnumret är oförändrat.
+
+⸻
+
+Punkt 3 – Inpekning i objektträd
+
+Öppen fråga besvarad
+
+Det finns idag en funktion eller indikator för:
+
+“Villkorstest”
+
+Denna funktion bedöms vara otydlig och saknar värde i detta steg.
+
+Beslut
+
+Funktionen ska tas bort.
+
+Vad ska visas istället?
+
+I detta steg vill användaren endast:
+
+Peka ut startpunkt i objektträdet.
+Se vilka objekt som omfattas av inpekningen.
+Se antal objekt inom vald gren.
+
+Exempel:
+
+245 objekt i vald struktur.
+37 fastigheter.
+812 underliggande objekt.
+
+Viktigt
+
+I detta steg vet systemet ännu inte:
+
+vilka artiklar som kommer användas,
+vilka metadataregler som kommer träffa,
+vilka uppgifter som kommer genereras.
+
+Det går därför inte att visa:
+
+antal träffar,
+antal uppgifter,
+ordervärde,
+produktionstid.
+
+Den informationen kan först beräknas senare när artiklarna lagts till.
+
+⸻
+
+Punkt 5 – Artiklar
+
+Status
+
+Den föreslagna logiken bedöms som korrekt.
+
+Inga ytterligare kompletteringar eller förändringar identifierades vid genomgången.
+
+Funktionen kan därför betraktas som godkänd i nuvarande utformning.
+
+⸻
+
+Öppna frågor som nu kan betraktas som stängda
+
+Fakturastopp
+
+Beslut:
+
+Fakturastopp är samma sak som samlingsfaktura-nivå.
+Samma kund genom hela trädet.
+Uppdelning sker organisatoriskt, inte kundmässigt.
+
+Villkorstest i objektinpekning
+
+Beslut:
+
+Tas bort.
+Saknar relevant funktion i detta steg.
+
+Visning av träffar i objektinpekning
+
+Beslut:
+
+Visas inte i detta steg.
+Träffar kan först beräknas efter att artiklar lagts till.
+
+Visning vid objektinpekning
+
+Beslut:
+
+Visa endast antal och struktur för berörda objekt.
+Ingen beräkning av uppgifter, tid eller ekonomi.
+
+⸻
+
+Sammanfattning av nuläget
+
+Efter genomgången består flödet nu av:
+
+Grunddata för orderkoncept.
+Fakturering och eventuell samlingsfaktura/fakturastopp.
+Inpekning i objektstruktur.
+Tidsfönster och metadatastyrda tidsrestriktioner.
+Val av artiklar och grundantal.
+Beräkning av träffar och genererade uppgifter.
+Granskning med sammanfattning av:
+antal objekt,
+antal uppgifter,
+ordervärde,
+produktionstid,
+resursåtgång,
+underlag för grovplanering.
+
+Den logiska kedjan är därmed konsekvent: först väljs objekt, därefter artiklar, sedan kan träffar och uppgifter beräknas. Det eliminerar flera av de syftningsfel och oklarheter som fanns i den tidigare beskrivningen.

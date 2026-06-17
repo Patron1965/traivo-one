@@ -1,0 +1,314 @@
+{
+  "sessionId": "b12de5dd0",
+  "exportedAt": "2026-06-17T16:36:14.595Z",
+  "summary": "### Key Topics Discussed\n- Skapande av orderkoncept: diskussion om att konfigurera \"vad\", \"hur\", \"var\" och \"vilka uppgifter\" som ska utföras.\n- Val av kund och prislista\n- Faktureringsnivåer i orderkonceptet\n- Val av objekt för orderkonceptet (inklusive unika objekt och pumpkärl)\n- Tidsfönster för orderkonceptet\n- Intervallinställningar för tidsfönster\n- Inställning av flextid\n- Möjlighet att lägga till restriktioner via metadatafält\n- Villkor för parkeringsförbud med start- och sluttid\n- AI-hjälp för leveranstid\n- Hantering av artikelmetadata för antal och villkor\n- Behov av att se bekräftelse på artikelträffar vid orderbyggande\n- Bekräftelse av inpekning av objekt\n- Antalslogik för artiklar, särskilt för \"tvätt av pumpkärl\" baserat på faktiskt antal på objektet.\n- Granskning av orderkoncept och identifiering av varningar/fel\n- Mismatch mellan inpekade objekt och pantkärl\n- Prisberäkning i orderkonceptet trots fast pris\n- Värdering av den årliga kostnaden\n- Varning angående estimerad ställtid\n- Generering av uppgiftslista baserad på orderkonceptet\n- Inkludering av utförandekod på uppgifter\n- Skapande av order från orderkoncept\n- Navigering till grovplanering för att se de genererade uppgifterna\n- Filtrering och visning av uppgifter baserat på datumintervall i grovplaneringen\n- Begränsningar för uppgiftstyper i \"skorplaneringen\": måste väljas från ett register, inte pre-kryssade listor.\n\n### Decisions Made\n- Kunden Axfood har valts för orderkonceptet.\n- Axfoods prislista har valts och ett fast pris används för enkelhetens skull.\n- Objekten \"Stockholm egenägda\" har valts för orderkonceptet.\n- Flextiden för orderkonceptet har satts till tjugo dagar.\n- Ett villkor för \"parkeringsförbud ett\" har satts till \"måndagar\" med starttid 00:00 och sluttid 12:00.\n- Artikeln \"tvätt av pumpkärl\" har lagts till.\n\n### Action Items\n- Ingen information tillgänglig.\n\n### Important Points & Insights\n- Kunden som valdes tidigare ligger kvar och är markerad som vald.\n- Fakturering kan ske på kundnivå, där fakturan genereras vid den nivå orderkonceptet pekas in.\n- Ett fakturastopp kan sättas med ett villkor baserat på ett metadatafält, vilket samlar fakturan längre ner i strukturen.\n- Det finns inga faktureringsnivåer som \"områdesnivå\" eller \"fastighetsnivå\"; endast kundnivå eller som ett fakturastopp med villkor.\n- Det är möjligt att välja objekt för orderkonceptet genom att navigera i ett träd och markera önskade poster.\n- Förhandsvisning av valda objekt är tillgänglig för att verifiera urvalet.\n- Tidsfönster för orderkonceptet definieras med ett startdatum och klockslag samt ett slutdatum och klockslag. Flera tidsfönster kan läggas till, och kan rulla år från år.\n- Det är möjligt att sätta intervall för tidsfönster, till exempel var fjortonde dag, för att undvika manuell inmatning.\n- Det finns möjlighet att lägga till restriktioner genom att välja ett metadatafält, till exempel \"parkeringsförbud ett\" med värdet \"måndagar\" från 00:00 till 12:00.\n- Informationen om antal och villkor för artiklar styrs av metadatafält som redan är uppsatta på artikeln, och ska inte upprepas i orderkonceptet.\n- Ordern byggs upp genom att först välja objekt, sedan tid och därefter artiklar. Detta kommer att generera en lista av uppgifter.\n- Uppgifterna kommer att kopieras från orderkonceptet och inkludera detaljer som \"tvätt och pantkärl\" per objekt där träffar uppstår.\n- Systemet ska titta på antalet pantkärl på varje identifierat objekt (t.ex. ett eller två) och haka fast där.\n- Det vore fördelaktigt att kunna se artikeln och få bekräftat en träff efter att villkor har applicerats, vilket för närvarande inte är möjligt i det aktuella läget.\n- Bekräftelse av att inpekningen är gjord finns när man går tillbaka till steg nummer fyra.\n- De valda objekten i Stockholm inkluderar 60 unika objekt, varav varje objekt har pumpkärl, vilka artikeln \"tvätt av pumpkärl\" rimligtvis ska haka fast på.\n- Det är möjligt att det kan vara fel på artikeln, så att den inte hakar fast korrekt.\n- Vid antalslogik för artiklar kopplas antalet normalt till objektet och gäller tills jobbet utförs och ett nytt antal konstateras. Antalet som står angivet i orderkonceptet har lägst prioritet.\n- Saknas antalsdata kommer inga träffar att genereras.\n- I granskningssteget (steg 7) visas varningar och kontroller som indikerar potentiella problem, till exempel att inga objekt är valda trots att de har valts, eller att ingen fakturamottagare hittades.\n- Ett orderkoncept för \"Standard Pantkärl\" har skapats.\n- Systemet konstaterar att 61 objekt matchats.\n- Endast cirka en tredjedel av de inpekade objekten har identifierats som pantkärl, trots att de valda objekten i Stockholm specificeras ha pumpkärl.\n- Trots att ett fast pris på 2500 SEK valts, visar orderkonceptet ett totalt årligt värde på 160 SEK, vilket indikerar att systemet inte alltid använder det fasta priset korrekt.\n- En varning om \"estimerad ställtid\" visas, trots att denna information inte är relevant i detta sammanhang.\n- När orderkörningen är klar ska det resultera i en lista med uppgifter (t.ex. 20 stycken) med detaljer som \"tvätt, pantkärl\" per adress och antalet kärl.\n- Utförandekoden, som finns på artikeln, ska följa med uppgifterna.\n- Efter att uppgifterna (20 eller 60) har skapats går processen vidare till grovplaneringen.\n- I grovplaneringen är det möjligt att rensa filter för att visa alla uppgifter.\n- Det går även att titta på uppgifterna med hjälp av ett datumintervall.\n- I den så kallade \"skorplaneringen\" kan uppgiftstyper inte vara förkryssade listor, utan måste väljas från ett register över uppgiftstyper.\n\n### Open Questions/Pending Items\n- Vad funktionen \"villkorstest enskilt objekt\" innebär.\n- Vad AI-hjälpen för leveranstid innebär.\n- Hur användaren kan få bekräftelse på artikelträffar vid orderbyggande.\n- Anledningen till att systemet varnar för \"inga objekt är valda\" och \"ingen fakturamottagare hittades\" trots att dessa har konfigurerats.\n- Varför inte alla inpekade objekt matchas som pantkärl trots förväntan.\n- Varför systemet inte alltid använder det fasta priset för orderkonceptet.\n- Varför en varning för \"estimerad ställtid\" visas när den inte är relevant.\n- Varför systemet genererar 61 uppdrag istället för det förväntade antalet (runt 20).\n- Behovet av ett kvitto eller en bekräftelse på vilka uppdrag som har skapats efter ordergenerering.\n- Behov av en bättre metod för att välja uppgiftstyper i \"skorplaneringen\" från ett register, snarare än genom förkryssade listor.",
+  "conversation": [],
+  "transcripts": [
+    {
+      "text": "Ett, två.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Ja, så är det bra.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Så, och då börjar vi då att skapa orderkonceptet och vi väljer kunden. Och jag valde Axfood. Och jag går tillbaka för att kolla. Och då kan jag se då att, eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Den ligger kvar och den kall-kallas som vald. Eh, sen så väljer jag då en prislista och jag väljer Axfood-prislistan.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och i det fallet så kör jag då med ett fast pris för enkelhetens skull.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och sen har vi då fel här, eh, i steg tre, eh, med faktureringsnivå. Det finns ingenting som heter områdesnivå och fastighetsnivå, utan det finns bara... Antingen så genereras fakturan på kundnivå, eh, i det här fallet då där...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Eh, orderkonceptet pekas in. Så då, då faller fakturan uppåt och hamnar där ordern pekas in. Det andra är ju då att man sätter i-in ett fakturastopp då, och då är det ett villkor som ska stå här då, där man säger att fakturan ska stanna, eh, där ett metadatafält är skilt från eller lika med eller innehåller någonting. Och då, då, då går liksom fakturan nerifrån och samlas upp där.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Sen kommer vi till steg nummer fyra, och det är då vilka objekt som är...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Tänkt att, eh, bli, eh, föremål för den här. Och då kan man ju då gå in i det här trädet och man ser hur många det är. Och jag går in i Stockholm egenägda och ser då att det finns ett antal butiker där.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och jag kryssar i den och den markerar då alla Stockholm e-e-egenägare. Jag går på förhandsvisning och jag ser också att det stämmer. Den har fått träff på de objekten där. Sen finns det något som heter villkorstest enskilt objekt. Eh, ingen aning om vad det är.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Men vi går vidare till steg nummer fem och det är då tidsfönster. Och det normala är ju då att vi skapar ett orderkoncept som då ska, ska då matcha ett visst tidsfönster och, eh, här, eller flera tidsfönster, för man kan lägga till flera, flera tidsfönster här. Eh, och, eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Det är inte mer komplicerat än att tidsfönstret har ett startdatum med klockslag och ett slutdatum med klockslag. Så ett tidsfönster kan börja måndag den 21:a, eh, juni klockan si och så och avslutas, eh, eh, måndagen den 18 augusti klockan 24:00. Då har vi då skapat ett tidsfönster som, som det ska gälla. Är det ett snabbare-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm ...stopp eller vad då, så kan man ju då ringa in tidsfönstret när man kommer överens med leveran-leveransen. Det är bara några timmar eller minuter om man då vill med klockslag där. Så datum och klockslag, år, datum och klockslag.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Jävlar då. Ja, det är fel. Fel av mig. Kanske inte år, men däremot datum och klockslag. Datum och klockslag. För tidsfönstren kan, kan, kan rulla då hela tiden, eh, år från år. Mm. Eh, så just nu så kan jag då inte få till den där. Sen kan jag klicka intervall och här är det ju då väldigt bra att sätta då ett start- och slutdatum och till exempel då var fjortonde dag. Här är det väldigt tjatigt som det är nu då att slå in...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Om vi har då att det ska... För oftast kommer det att vara flera månader då, så då får man sätta sextio dagar där. Och så ska vi se här nu då, då slår vi in att det börjar i dag och det slutar...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Där. Och flextiden här då, det säger vi är tjugo dagar.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Så. Sen finns det möjlighet att lägga till restriktioner här. Och då ska vi då kunna välja ett metadatafält här som innehåller någon form av restriktion då. Eh, det skulle kunna till exempel vara parkeringsförbud ett, skulle kunna vara ett metadatafält här och så står det då måndagar där. Eh- Ja, det är exempel som, som... Ja, och då ska vi kunna lägga... Vi ska välja metadata, eh, fältet.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och vi ska sätta villkoret då är lika med måndagar, till exempel. Och sen så ska vi då ha då en operator här då som talar om vad det då betyder då. Ja. Och då får vi skriva att det är lika med då- Ja ...förbjuden, förbjudet att, att- Ja ...trätta på, på måndagar då eller hur vi nu ska spela till det där. Ri-rimligtvis då så, så bör man kunna sätta då ett intervall här då så att man s-- Om man, om man sätter... För här behöver den ju då ha till exempel det här att det är förbjudet att tvätta måndagar-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm ...00:00 till klockan 12:00. Mm. Eh, sen finns det någon AI-hjälp här för leveranstid. Eh, ingen aning om vad det är.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Nej, men det får gärna, eh, ma-, eh, rätt ut beskriva, eh, ett exempel på, eller lämna det i en övertalning sen. Ja. Ta bort det liksom, så får vi fråga efter eller att Replit naturligtvis förklara vad, vad, vad det är. Sen kommer vi då till artikel då. Och, eh, i det här pant-, eh, fallet så är det då tvätt av pantkärl och sådana objekt vet vi också finns med där, så då lägger vi till då den artikeln. Och när vi har valt den artikeln då, så kommer det då haka fast på...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och antal styrs av. Den här informationen ska inte, jag upprepar då, inte vara här för att det fin-, den upp-, den informationen finns ju, den är redan uppsatt på artikeln. För vi talar om för artikeln vilket metadatafälten ska titta på för att få antalet. Och vi talar om vilket, vilket metadatafälten ska haka fast på utifrån ett villkor som ligger på artikeln. Och vi, vi talar också om för, eh, vigga eventuella andra metadatafält som den är associerad med att den, den kanske ska lämna...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Däremot i det här läget då så skulle det ju vara väldigt bra då att, som det fanns på en annan sida då, att man kan, man kan, man kan få se artikeln då och få bekräftat då om man nu har fått träff då, eh, på det här. Eh, för det vet man ju då inte här för att du, du, grejen är ju då att, att du bygger ju orden med, med, med först objektena som du väljer, sen tiden som du väljer och sen så artiklarna som du väljer. Och",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "här finns ju då en sammanfattning där man då kan se att det är ett objekt, men det är ju då fel för jag tror att det var... Ja, det kan man ju titta här på... Nu ska vi se.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och här ser vi också nu då. Nu, nu har den informationen. Vi gick tillbaka då, tillbaka på det som vi kallar inpekning då, steg nummer fyra. Då hade det ju varit väldigt bra då att sett... Jo, jo, det ligger kvar här. Så att i det här fallet så är det då inpekat.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och i Ekenäke i Stockholm som är 60 unika objekt, varav då...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Varje sånt objekt har då pumpkärl som rimligtvis då den här, eh, det här, det här, det här artikeln ska haka fast på då. Men det kan naturligtvis vara nåt, nåt fel på artikeln, eh, så att den inte hakar, hakar fast då. Men, men så är det. Eh, och så går vi på nästa. Och då har vi... Uppgifter. Ja, och då ser vi ju då att tvätt av pumpkärl är tillagd och det-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. -är ju den som vi var på senast då. Och, och, och den är tillagd står det här.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och, och i det här läget så är det ju inte-- skulle det vara intressant att se liksom hur-- vilken träff den får då. Ja, just det. Mm. Eh, och sen är det någonting konstigt. Tvätt- och pantkärl. Eh, och där står det då...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "En. Eh, det är också då...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Ja, rätt eller fel, va? Men, men, men i det här läget så ska man ju då, som vi har gått igenom en gång tidigare, när det gäller antalslogiken, så är det ju på det sättet då att antingen så är ju artikeln kopplad till ett antal som finns på objektet och då ska ju det gälla ända tills då att den som gör jobbet konstaterar att det är ett nytt antal och lägst prioritet har ju då antalet som står här och här står det ju då en då. Så om det nu, om vi nu-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. Saknar antalsdata då på det där så kommer vi då inte att, att, att få, eh, några träffar. Sen kommer vi då till sju och det är ju då en form av granska kallas den ju då. Och, eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Eh, då kan vi se då att kunden är Axfood och namnet på, på körningen är Standard Pantkärl. Sen kommer det varningar och kontroller. Inga objekt är valda, men vi har ju då valt flera objekt. Ingen fakturamottagare hittades i kundhierarkin. Eh, ja, men det är också fel då, för vi har ju valt då Axfood Sverige här då som, som kund. Eh, så det är dit de ska fakturera då. Sen konstaterar den då att det är 61 matchade objekt då.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Är ju...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Intressant, de är inte matchade. Det är sägs det är inpekade objekt, men det är bara några utav dem, ungefär en tredjedel då, som är pantkärl då. Och sen så ser vi här då att...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Det totala årliga värdet är hundrasextio kronor och det stämmer väl i och för sig då. Men nu valde vi ju då att den här skulle ha ett fast pris på två och ett halvt tusen kronor. Så, så då borde den ju då inte ha använt det priset där. Sen ser vi då att det är var sextonde dag med start och slut. Och sen kommer det då ett helt fel till här då, estimerad ställtid. Det har ingen som helst aning om hur, vilken ställtid det är i det här läget. Utan i det här läget så är det enda som är intressant är att konstatera...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Vem är kund på det konceptet? Vilka leveranstider är det som gäller?",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Eh, vilken prislista är det som gäller? Hur ska faktureringen gå till? Och vilka objekt ska det pekas in på? Och vilken uppgift är det då som ska utföras? Eller vilka uppgifter? Det kan ju vara en hel hop av uppgifter då.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och det den här kommer då att föda fram är ju då en lång lista med uppgifter. Och uppgifterna kommer ju då att ta med sig eller kop-kopiera sig själv då ifrån orderkonceptet som det i det här fallet nu står att det är tvätt, tvätt och pantkärl på varje objekt då som den hittar och får träff. Så ska den då titta på antalet pantkärl som finns på det objektet, om det då är ett eller två eller vad det nu är. Och så ska den då, eh, haka fast där och ta med-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. -och sen så att säga adressen- Mm. -till att göra listan. Så att när hela den här körningen är klar så ska det ju då bli, eh, ja, säg att det nu blir tjugo stycken då uppgifter som ett exempel, där det står då tvätt, pantkärl på den där adressen, eh, tvätt, pantkärl på den där adressen och, och antalet då. Och så ska det komma då på den här grovplaneringens listan då. Och bortsett då från, från antalet och uppgifterna på, på objektet, eh-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. -så ska den ha med sig då vilken utförandekod det är på det där också. Och det finns ju på, på artikeln då.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och ifrån det här läget då så s-s-s-är det då att skapa order då. Och då säger den nu då att en order har skapats och 61 uppdrag genererades. Och det är ju då helt fel för att det är omöjligt att han ska skapa 61 uppdrag, utan möjligtvis runt 20 uppdrag skulle den skapa. Mm. Och, eh, dessutom så vore det ju då kanske bra att man fick ett kvitto på då vilka uppdrag som har kommit upp då, så att man... Annars vet man ju-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. -vilket, som vilket, vad man har gjort här då. Så att man... Det snyggaste vore att få en, en, en, en, eh, i det sista verifieringen eller vad man ska kalla det här nu då, att man får en, ett, ett kvitto på att nu har man... Så att man vet-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. Mm. Mm. -att man skapat de här tjugo eller sextio uppgifterna, det vad det nu är då. Och så får man trycka okej då. Och nästa steg här då är ju då att det går in på planeringen och då kommer det då på något som heter grovplanering då. Och det få läge här då är ju att man ska få upp alla uppgifter. Så rensar man filtret här då så borde man då...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "F-f-få upp alla, alla, alla uppgifter. Eh, sen så ska man då kunna, kunna titta här då på månad...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Eller på datumintervall då, så att man zoomar in och ser då. Om jag väljer datumintervallet nu då, eh, start idag och sen så tar jag då...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och tar några veckor framåt här då, eller månader framåt, och så, eh, filtrerar det här. Då skulle ju då de här sex ånder du hade varit, uppgifter som hade fått träff här, så skulle ju de då ha listats upp här då med, med status och, eh, vilken som är kund, vad det är för en uppgift, uppgiftstyp, önskad leveranstid. Och så skulle jag ju då kunna i nästa läge här då märka för de här och tilldela dem då till ett team då.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Eh, en viktig grej också på den här menyn nu som är den så kallade skorplaneringen är ju då att uppgiftstyper kan inte vara såna här förkryssade eller kryssade listor, utan...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Det, det, det måste vara då... För vi har ju då ett, ett register över olika uppgiftstyper och så. Här behöver man ju då kunna välja- Ja ...på, på kanske ett bättre sätt. För nu har vi ju andra uppgifter än de som är här. Mm.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    }
+  ]
+}

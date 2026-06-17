@@ -1,0 +1,156 @@
+Tillägg och förtydliganden
+
+Punkt 4 – Tidsfönster och metadatastyrda tidsrestriktioner
+
+Huvudtidsfönster (önskad leveransperiod)
+
+Syftet med huvudtidsfönstret är att ange under vilken period uppgifter från orderkonceptet får skapas och planeras.
+
+Användaren ska kunna ange:
+
+Ett eller flera tidsfönster.
+Startdatum och starttid.
+Slutdatum och sluttid.
+
+Tidsfönstret kan omfatta:
+
+Några timmar.
+En eller flera dagar.
+Veckor.
+Månader.
+Hela avtalsperioder.
+
+Exempel:
+
+2026-01-01 kl. 00:00 till 2026-12-31 kl. 23:59.
+2026-06-01 kl. 07:00 till 2026-06-15 kl. 17:00.
+
+Dessa tidsfönster beskriver när kunden önskar att arbetet utförs eller när tjänsten får levereras.
+
+⸻
+
+Metadatastyrda tidsrestriktioner
+
+Utöver huvudtidsfönstret ska systemet kunna hantera ett eller flera villkorsstyrda tidsfönster.
+
+Varje tidsrestriktion består av:
+
+Villkor
+
+Exempel:
+
+Tömningsdag = Onsdag
+Parkeringsförbud = Måndag
+Marknadsdag = Fredag
+Metadatafält X = 10
+
+När villkoret uppfylls aktiveras den aktuella tidsregeln.
+
+⸻
+
+Tidsregel
+
+Regeln ska definieras med:
+
+Veckodag(ar)
+Starttid
+Sluttid
+
+Exempel:
+
+Tisdag 00:00 – Onsdag 15:00
+Torsdag 08:00 – Fredag 17:00
+
+⸻
+
+Typ av tidsregel
+
+Användaren ska kunna välja:
+
+Positivt tidsfönster
+
+Tid som är lämplig att utföra arbetet.
+
+Exempel:
+
+Parkeringsförbud på måndagar gör att området är lättillgängligt.
+Tömning sker på onsdagar vilket gör torsdag–fredag lämpliga för tvätt.
+
+Negativt tidsfönster
+
+Tid som bör undvikas.
+
+Exempel:
+
+Kärlen förväntas vara fulla före tömning.
+Hög trafikbelastning.
+Begränsad framkomlighet.
+
+⸻
+
+Hård eller mjuk restriktion
+
+Varje tidsregel ska kunna klassificeras som:
+
+Hård restriktion
+
+Får inte brytas.
+Planeringsmotorn får inte lägga uppdrag inom tidsfönstret.
+
+Mjuk restriktion
+
+Bör undvikas.
+Planeringsmotorn kan använda tiden om andra alternativ saknas.
+
+⸻
+
+Beskrivning av tidsregel
+
+Varje tidsregel ska kunna innehålla en fri beskrivning.
+
+Exempel:
+
+“Kärlen töms normalt onsdag eftermiddag.”
+“Parkeringsförbud ger god åtkomst för servicefordon.”
+“Marknadsdag med begränsad framkomlighet.”
+
+Syftet är att ge planerare och utförare förståelse för varför restriktionen finns.
+
+Beskrivningen ska kunna visas i planeringsvyer och schemaläggning.
+
+⸻
+
+Punkt 7 – Granskning och repetitionsinformation
+
+Tillägg: Information om genererade uppgifter
+
+När systemet visar resultatet av orderkonceptet ska det tydligt framgå:
+
+Vilket orderkoncept uppgifterna kommer från.
+Om orderkonceptet är återkommande.
+Hur många gånger uppgifterna kommer att genereras.
+Till vilket datum genereringen pågår.
+
+Exempel:
+
+Uppgifterna är genererade från orderkoncept “Tvätt Axfood”.
+
+Repetitionsregel: Var 4:e vecka.
+
+Antal planerade generationer: 5 st.
+
+Giltig till och med: 2027-12-31.
+
+⸻
+
+Syfte
+
+Användaren ska redan i granskningssteget förstå:
+
+omfattningen av orderkonceptet,
+hur många uppgifter som kommer att skapas,
+det ekonomiska värdet,
+resursbehovet,
+samt hur många framtida uppgiftsgenerationer som kommer att skapas genom repetitionsregeln.
+
+Detta ger ett komplett beslutsunderlag innan orderkonceptet aktiveras och skickas vidare till grovplaneringen.
