@@ -28,7 +28,6 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   ROUGH_STATUS_ORDER,
   ROUGH_STATUS_META,
-  TASK_TYPE_OPTIONS,
   weekLabel,
   monthLabel,
   type PeriodMode,
@@ -101,13 +100,17 @@ export function RoughFilterPanel({
   const anchorDate = new Date(value.anchor);
   const [showMore, setShowMore] = useState(false);
 
-  // Uppgiftstyper hämtas från det dynamiska, per-tenant registret. Faller tillbaka
-  // till de statiska standardtyperna tills svaret är inne (eller om registret är tomt).
-  const { data: taskTypeData } = useQuery<TaskTypeOption[]>({
+  // Uppgiftstyper kommer enbart från det per-tenant registret
+  // (/api/reference/task-types). Backend returnerar tenantens egna typer, eller — för
+  // ännu oseedade tenants — de rimliga standardtyperna. Ingen hårdkodad klient-fallback:
+  // en sådan kunde visa typer som inte existerar för tenanten och göra filtret
+  // missvisande (Task #980).
+  const { data: taskTypeData, isLoading: taskTypesLoading } = useQuery<
+    TaskTypeOption[]
+  >({
     queryKey: ["/api/reference/task-types"],
   });
-  const taskTypeOptions: TaskTypeOption[] =
-    taskTypeData && taskTypeData.length > 0 ? taskTypeData : TASK_TYPE_OPTIONS;
+  const taskTypeOptions: TaskTypeOption[] = taskTypeData ?? [];
 
   const toggleArray = <T extends string>(arr: T[], item: T): T[] =>
     arr.includes(item) ? arr.filter((x) => x !== item) : [...arr, item];
@@ -292,23 +295,39 @@ export function RoughFilterPanel({
         <div className="grid gap-5 md:grid-cols-2">
           <div className="space-y-2">
             <Label className="text-xs">Uppgiftstyp</Label>
-            <div className="grid grid-cols-2 gap-2">
-              {taskTypeOptions.map((t) => (
-                <label
-                  key={t.key}
-                  className="flex items-center gap-2 text-sm"
-                  data-testid={`check-tasktype-${t.key}`}
-                >
-                  <Checkbox
-                    checked={value.taskTypes.includes(t.key)}
-                    onCheckedChange={() =>
-                      patch({ taskTypes: toggleArray(value.taskTypes, t.key) })
-                    }
-                  />
-                  {t.label}
-                </label>
-              ))}
-            </div>
+            {taskTypesLoading ? (
+              <p
+                className="text-sm text-muted-foreground"
+                data-testid="text-tasktypes-loading"
+              >
+                Laddar uppgiftstyper…
+              </p>
+            ) : taskTypeOptions.length === 0 ? (
+              <p
+                className="text-sm text-muted-foreground"
+                data-testid="text-tasktypes-empty"
+              >
+                Inga uppgiftstyper i registret.
+              </p>
+            ) : (
+              <div className="grid grid-cols-2 gap-2">
+                {taskTypeOptions.map((t) => (
+                  <label
+                    key={t.key}
+                    className="flex items-center gap-2 text-sm"
+                    data-testid={`check-tasktype-${t.key}`}
+                  >
+                    <Checkbox
+                      checked={value.taskTypes.includes(t.key)}
+                      onCheckedChange={() =>
+                        patch({ taskTypes: toggleArray(value.taskTypes, t.key) })
+                      }
+                    />
+                    {t.label}
+                  </label>
+                ))}
+              </div>
+            )}
           </div>
 
           <div className="space-y-2">

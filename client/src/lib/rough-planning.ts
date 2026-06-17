@@ -111,17 +111,6 @@ export const ROUGH_STATUS_META: Record<
   },
 };
 
-export const TASK_TYPE_OPTIONS: { key: string; label: string }[] = [
-  { key: "bok", label: "BÖK" },
-  { key: "rbk", label: "RBK" },
-  { key: "service", label: "Service" },
-  { key: "driftkontroll", label: "Driftkontroll" },
-  { key: "tvatt", label: "Tvätt" },
-  { key: "besiktning", label: "Besiktning" },
-  { key: "administration", label: "Administration" },
-  { key: "konsultation", label: "Konsultation" },
-];
-
 // ---------------------------------------------------------------------------
 // Format-hjälpare
 // ---------------------------------------------------------------------------
