@@ -1974,10 +1974,19 @@ app.post("/api/order-concepts/condition-preview", asyncHandler(async (req, res) 
     // villkoren via den delade modulen — identiskt med execute.
     const objectList = await resolveTargetObjects({ tenantId, objectIds, clusterIds });
     const total = objectList.length;
+    // Strukturuppdelning för steg 4 (inpekning): hur många av de valda gren-rötterna
+    // som faktiskt upplöstes (stale/borttagna id:n räknas inte) och hur många objekt
+    // som ligger UNDER dem. Beräknas serverside där subträdet redan är upplöst så att
+    // siffran är korrekt även vid nästlade selektioner och inaktuella id:n.
+    const idSet = new Set(objectList.map((o) => o.id));
+    const rootCount = objectIds.filter((id) => idSet.has(id)).length;
+    const descendants = Math.max(0, total - rootCount);
     const matchedObjects = await filterObjectsByConditions(tenantId, objectList, filters);
 
     res.json({
       total,
+      rootCount,
+      descendants,
       matched: matchedObjects.length,
       sample: matchedObjects.slice(0, 50).map(o => ({
         id: o.id,
