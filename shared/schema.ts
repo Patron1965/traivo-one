@@ -700,6 +700,12 @@ export const articles = pgTable("articles", {
   // false (oförändrat beteende).
   operatorCanUpdateQuantity: boolean("operator_can_update_quantity").default(false),
   freeMetadataUpdate: boolean("free_metadata_update").default(false),
+  // GAP-106 (Task #939): dölj antalsinmatningen i fältappen för artiklar med fast/härlett
+  // antal (t.ex. besiktnings-/kontrollartiklar). När true visas inget redigerbart antalsfält
+  // i Traivo Go — det fasta/härledda antalet används automatiskt vid rapportering/klarmarkering.
+  // Expand-contract: default false (oförändrat beteende). Ömsesidigt uteslutande med
+  // operatorCanUpdateQuantity (ett dolt fält kan inte redigeras av operatören).
+  hideQuantityInApp: boolean("hide_quantity_in_app").default(false),
   // Offsettid i minuter (Mats prislista: A100=120, N100=2400). Negativt = före huvudjobbet,
   // 0 = samtidigt, positivt = efter. Används vid expand av orderkoncept för att skapa
   // förberedande work_orders med tidsfönster relativt huvudjobbet (parent_work_order_id).

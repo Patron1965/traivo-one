@@ -150,6 +150,7 @@ interface ArticleFormData {
   quantityMode: string;
   operatorCanUpdateQuantity: boolean;
   freeMetadataUpdate: boolean;
+  hideQuantityInApp: boolean;
   quantityMetadataField: string;
   quantityFormula: string;
   quantityUnit: string;
@@ -231,6 +232,7 @@ const emptyFormData: ArticleFormData = {
   quantityMode: "group",
   operatorCanUpdateQuantity: false,
   freeMetadataUpdate: false,
+  hideQuantityInApp: false,
   quantityMetadataField: "",
   quantityFormula: "",
   quantityUnit: "st",
@@ -1114,6 +1116,7 @@ export default function ArticleFormPage() {
           : article.quantityMode,
       operatorCanUpdateQuantity: (article as any).operatorCanUpdateQuantity ?? false,
       freeMetadataUpdate: (article as any).freeMetadataUpdate ?? false,
+      hideQuantityInApp: (article as any).hideQuantityInApp ?? false,
       quantityMetadataField: article.quantityMetadataField || "",
       quantityFormula: (article as any).quantityFormula || "",
       quantityUnit: article.quantityUnit || "",
@@ -2758,10 +2761,11 @@ export default function ArticleFormPage() {
 
             <div className="space-y-3 border-t pt-3">
               <p className="text-sm font-medium">Antal-behörighet i fält</p>
-              <label className="flex cursor-pointer items-center gap-2">
+              <label className={`flex items-center gap-2 ${formData.hideQuantityInApp ? "cursor-not-allowed opacity-50" : "cursor-pointer"}`}>
                 <input
                   type="checkbox"
                   checked={formData.operatorCanUpdateQuantity}
+                  disabled={formData.hideQuantityInApp}
                   onChange={(e) => setFormData({ ...formData, operatorCanUpdateQuantity: e.target.checked })}
                   data-testid="checkbox-operator-can-update-quantity"
                 />
@@ -2786,6 +2790,21 @@ export default function ArticleFormPage() {
                   )}
                 </>
               )}
+              {/* GAP-106: dölj antalsfältet i fältappen för artiklar med fast/härlett antal.
+                  Ömsesidigt uteslutande med "får ändra antal" — ett dolt fält kan inte redigeras. */}
+              <label className={`flex items-center gap-2 ${formData.operatorCanUpdateQuantity ? "cursor-not-allowed opacity-50" : "cursor-pointer"}`}>
+                <input
+                  type="checkbox"
+                  checked={formData.hideQuantityInApp}
+                  disabled={formData.operatorCanUpdateQuantity}
+                  onChange={(e) => setFormData({ ...formData, hideQuantityInApp: e.target.checked, operatorCanUpdateQuantity: e.target.checked ? false : formData.operatorCanUpdateQuantity })}
+                  data-testid="checkbox-hide-quantity-in-app"
+                />
+                <span className="text-sm">Dölj antalsfältet i appen (fast/härlett antal)</span>
+              </label>
+              <p className="text-xs text-muted-foreground">
+                För artiklar med fast eller härlett antal (t.ex. besiktning/kontroll). Fältarbetaren ser inget redigerbart antalsfält — det fasta antalet används automatiskt vid rapportering.
+              </p>
             </div>
 
             <div className="space-y-2 border-t pt-3">

@@ -760,10 +760,21 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
     dependencyMinutesBefore: number | null;
   }
 
+  interface OrderArticleContext {
+    lineId: string;
+    articleId: string;
+    articleName: string;
+    articleNumber: string | null;
+    quantity: number;
+    quantityUnit: string;
+    quantityMode: string | null;
+    hideQuantityInApp: boolean;
+  }
+
   const [metadataUpdates, setMetadataUpdates] = useState<Record<string, { value: string; status?: string; comment?: string; photo?: string }>>({});
   const [savingMetadata, setSavingMetadata] = useState<string | null>(null);
 
-  const { data: metadataContext } = useQuery<{ articles: MetadataArticleContext[]; dependencyArticles?: DependencyArticleContext[] }>({
+  const { data: metadataContext } = useQuery<{ articles: MetadataArticleContext[]; dependencyArticles?: DependencyArticleContext[]; orderArticles?: OrderArticleContext[] }>({
     queryKey: ["/api/mobile/tasks", selectedJobId, "metadata-context"],
     queryFn: async () => {
       if (!selectedJobId) return { articles: [], dependencyArticles: [] };
@@ -1772,6 +1783,45 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
                 </Card>
               ))}
             </div>
+          )}
+
+          {/* GAP-106: beställda artiklar med antal (read-only). För artiklar med fast/
+              härlett antal (hideQuantityInApp) döljs antalet — det används ändå automatiskt
+              vid klarmarkering. Inget redigerbart antalsfält visas i fältappen. */}
+          {!focusMode && metadataContext?.orderArticles && metadataContext.orderArticles.length > 0 && (
+            <Card className="border-chart-3/20 dark:border-chart-3/80 bg-chart-3/10 dark:bg-chart-3/15" data-testid="panel-order-articles">
+              <CardContent className="py-3 space-y-2">
+                <div className="flex items-center gap-1.5">
+                  <Wrench className="h-4 w-4 text-chart-3" />
+                  <span className="text-xs font-medium text-chart-3">Beställda artiklar</span>
+                </div>
+                <div className="space-y-1.5">
+                  {metadataContext.orderArticles.map(oa => (
+                    <div
+                      key={oa.lineId}
+                      className="flex items-center justify-between gap-2 rounded border bg-card dark:bg-background p-2"
+                      data-testid={`row-order-article-${oa.articleId}`}
+                    >
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium truncate">{oa.articleName}</p>
+                        {oa.articleNumber && (
+                          <p className="text-[11px] text-muted-foreground truncate">{oa.articleNumber}</p>
+                        )}
+                      </div>
+                      {oa.hideQuantityInApp ? (
+                        <span className="shrink-0 text-xs text-muted-foreground" data-testid={`text-quantity-auto-${oa.articleId}`}>
+                          Fast antal
+                        </span>
+                      ) : (
+                        <span className="shrink-0 text-sm font-semibold tabular-nums" data-testid={`text-quantity-${oa.articleId}`}>
+                          {oa.quantity} {oa.quantityUnit}
+                        </span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
           )}
 
           {!focusMode && metadataContext && metadataContext.articles.length > 0 && (

@@ -56,3 +56,4 @@
 - [Orderkoncept objekt/gren-inpekning](order-concept-object-branch-targeting.md) — steg 4 pekar in objekt/grenar via target_object_ids (subträd primär parent_id), ej kluster; delad resolver-modul = enda källan så preview==execute; wizard skriver aldrig targetClusterIds.
 - [Orderkoncept kund-härledning](order-concept-customer-resolution.md) — HARDCODED vs FROM_METADATA (svensk katalog-namn, exakt match); validate måste gate:a kund-fel på samma metoder execution pre-passar (subscription undantaget) annars drift.
 - [Utförandekod-/ikonregister](execution-code-register.md) — `/execution-codes`+`/icons` register ≠ gamla `/utforandetyper`; selektorer använder useExecutionCodes-hook (register + fritext back-compat), ej hårdkodad EXECUTION_CODE_OPTIONS.
+- [Fältappen saknar antals-input](field-app-no-quantity-editor.md) — Traivo Go har inget redigerbart antalsfält; antals-flaggor (hideQuantityInApp/operatorCanUpdate) är display-only via metadata-context.

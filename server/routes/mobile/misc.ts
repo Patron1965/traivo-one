@@ -699,7 +699,7 @@ app.get("/api/mobile/tasks/:id/metadata-context", isMobileAuthenticated, asyncHa
     const order = await storage.getWorkOrder(orderId);
     if (!order) throw new NotFoundError("Order hittades inte");
     if (order.resourceId !== resourceId) throw new ForbiddenError("Ej behörig");
-    if (!order.objectId) return res.json({ articles: [], metadata: [], dependencyArticles: [] });
+    if (!order.objectId) return res.json({ articles: [], metadata: [], dependencyArticles: [], orderArticles: [] });
 
     // Mobil-ytan kringgår tenant-middleware: härled tenant från den ägarskaps-
     // kontrollerade ordern, aldrig från req.tenantId (se replit.md-gotcha).
@@ -803,7 +803,27 @@ app.get("/api/mobile/tasks/:id/metadata-context", isMobileAuthenticated, asyncHa
     }
     const dependencyArticles = Array.from(depMap.values());
 
-    res.json({ articles: result, dependencyArticles });
+    // GAP-106 (Task #939): orderns artikelrader med antal, så fältappen kan visa
+    // beställt antal (read-only). hideQuantityInApp döljer antalet i appen för artiklar
+    // med fast/härlett antal — det fasta antalet används ändå automatiskt vid
+    // rapportering/klarmarkering (line.quantity ändras aldrig av fältarbetaren).
+    const orderArticles = orderLines
+      .filter(line => !!line.articleId)
+      .map(line => {
+        const a = articleById.get(line.articleId!);
+        return {
+          lineId: line.id,
+          articleId: line.articleId!,
+          articleName: a?.name ?? line.description ?? "Artikel",
+          articleNumber: a?.articleNumber ?? null,
+          quantity: line.quantity ?? 1,
+          quantityUnit: a?.quantityUnit || a?.unit || "st",
+          quantityMode: a?.quantityMode ?? null,
+          hideQuantityInApp: a?.hideQuantityInApp ?? false,
+        };
+      });
+
+    res.json({ articles: result, dependencyArticles, orderArticles });
 }));
 
 app.post("/api/mobile/tasks/:id/metadata-update", isMobileAuthenticated, asyncHandler(async (req: MobileAuthenticatedRequest, res: Response) => {
