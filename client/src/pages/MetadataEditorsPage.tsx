@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -40,7 +40,9 @@ import {
   Type,
   Camera,
   Database,
+  Download,
 } from "lucide-react";
+import QRCode from "qrcode";
 import { useToast } from "@/hooks/use-toast";
 
 type EditorType = "object_specific" | "gps" | "object_creating";
@@ -851,6 +853,36 @@ function LinkDialog({ editor, onClose }: { editor: MetadataEditor; onClose: () =
   const [search, setSearch] = useState("");
   const [link, setLink] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!link) {
+      setQrDataUrl(null);
+      return;
+    }
+    let cancelled = false;
+    QRCode.toDataURL(link, { width: 320, margin: 2, errorCorrectionLevel: "M" })
+      .then((url) => {
+        if (!cancelled) setQrDataUrl(url);
+      })
+      .catch(() => {
+        if (!cancelled) setQrDataUrl(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [link]);
+
+  const downloadQr = () => {
+    if (!qrDataUrl) return;
+    const a = document.createElement("a");
+    a.href = qrDataUrl;
+    const safeName = editor.name.replace(/[^a-z0-9]+/gi, "-").replace(/^-+|-+$/g, "").toLowerCase() || "qr";
+    a.download = `qr-${safeName}.png`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  };
 
   const needsObject = editor.type === "object_specific";
 
@@ -975,8 +1007,34 @@ function LinkDialog({ editor, onClose }: { editor: MetadataEditor; onClose: () =
                   {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
                 </Button>
               </div>
+
+              <div className="flex flex-col items-center gap-3 rounded-md border p-4">
+                {qrDataUrl ? (
+                  <img
+                    src={qrDataUrl}
+                    alt={`QR-kod för ${editor.name}`}
+                    className="h-44 w-44 rounded-md bg-white p-2"
+                    data-testid="img-qr-code"
+                  />
+                ) : (
+                  <div className="flex h-44 w-44 items-center justify-center text-muted-foreground">
+                    <Loader2 className="h-6 w-6 animate-spin" />
+                  </div>
+                )}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={downloadQr}
+                  disabled={!qrDataUrl}
+                  data-testid="button-download-qr"
+                >
+                  <Download className="h-4 w-4 mr-2" />
+                  Ladda ner QR-kod
+                </Button>
+              </div>
+
               <p className="text-xs text-muted-foreground">
-                Skapa en QR-kod av denna länk för att sätta upp på objektet.
+                Skanna QR-koden direkt från skärmen eller skriv ut den och sätt upp den på objektet.
               </p>
             </div>
           )}
