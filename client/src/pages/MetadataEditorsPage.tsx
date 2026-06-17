@@ -41,6 +41,9 @@ import {
   Camera,
   Database,
   Download,
+  QrCode,
+  Printer,
+  FileArchive,
 } from "lucide-react";
 import QRCode from "qrcode";
 import { useToast } from "@/hooks/use-toast";
@@ -191,6 +194,7 @@ export default function MetadataEditorsPage() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [linkEditor, setLinkEditor] = useState<MetadataEditor | null>(null);
+  const [batchEditor, setBatchEditor] = useState<MetadataEditor | null>(null);
 
   const { data: editors, isLoading } = useQuery<MetadataEditor[]>({
     queryKey: ["/api/metadata-editors"],
@@ -281,6 +285,17 @@ export default function MetadataEditorsPage() {
                     <Link2 className="h-4 w-4 mr-1.5" />
                     Länk / QR
                   </Button>
+                  {e.type === "object_specific" && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setBatchEditor(e)}
+                      data-testid={`button-batch-qr-${e.id}`}
+                    >
+                      <QrCode className="h-4 w-4 mr-1.5" />
+                      Batch-QR
+                    </Button>
+                  )}
                   <Button
                     variant="outline"
                     size="sm"
@@ -321,6 +336,10 @@ export default function MetadataEditorsPage() {
 
       {linkEditor && (
         <LinkDialog editor={linkEditor} onClose={() => setLinkEditor(null)} />
+      )}
+
+      {batchEditor && (
+        <BatchLinkDialog editor={batchEditor} onClose={() => setBatchEditor(null)} />
       )}
     </div>
   );
@@ -1042,6 +1061,340 @@ function LinkDialog({ editor, onClose }: { editor: MetadataEditor; onClose: () =
 
         <DialogFooter>
           <Button variant="outline" onClick={onClose} data-testid="button-close-link">
+            Stäng
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+interface BatchObject {
+  id: string;
+  name: string;
+  address: string | null;
+}
+interface BatchResult {
+  object: BatchObject;
+  link: string;
+  qrDataUrl: string;
+}
+
+function BatchLinkDialog({ editor, onClose }: { editor: MetadataEditor; onClose: () => void }) {
+  const { toast } = useToast();
+  const [search, setSearch] = useState("");
+  const [selected, setSelected] = useState<Map<string, BatchObject>>(new Map());
+  const [generating, setGenerating] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const [results, setResults] = useState<BatchResult[] | null>(null);
+
+  const { data: objects, isLoading: objectsLoading } = useQuery<BatchObject[]>({
+    queryKey: ["/api/objects", { search, batchLink: editor.id }],
+    queryFn: async () => {
+      const res = await apiRequest(
+        "GET",
+        `/api/objects?limit=50${search ? `&search=${encodeURIComponent(search)}` : ""}`,
+      );
+      const data = await res.json();
+      return Array.isArray(data) ? data : (data?.objects ?? []);
+    },
+  });
+
+  const toggle = (o: BatchObject) => {
+    setResults(null);
+    setSelected((prev) => {
+      const next = new Map(prev);
+      if (next.has(o.id)) next.delete(o.id);
+      else next.set(o.id, o);
+      return next;
+    });
+  };
+
+  const selectAllVisible = () => {
+    setResults(null);
+    setSelected((prev) => {
+      const next = new Map(prev);
+      (objects ?? []).forEach((o) => next.set(o.id, o));
+      return next;
+    });
+  };
+
+  const clearSelection = () => {
+    setResults(null);
+    setSelected(new Map());
+  };
+
+  const safeName = (s: string) =>
+    s.replace(/[^a-z0-9]+/gi, "-").replace(/^-+|-+$/g, "").toLowerCase() || "objekt";
+
+  const generate = async () => {
+    const items = Array.from(selected.values());
+    if (items.length === 0) return;
+    setGenerating(true);
+    setProgress(0);
+    setResults(null);
+    const out: BatchResult[] = [];
+    const failed: string[] = [];
+    for (const obj of items) {
+      try {
+        const res = await apiRequest(
+          "GET",
+          `/api/metadata-editors/${editor.id}/public-link?objectId=${encodeURIComponent(obj.id)}`,
+        );
+        const data = (await res.json()) as { url: string };
+        const link = `${window.location.origin}${data.url}`;
+        const qrDataUrl = await QRCode.toDataURL(link, {
+          width: 320,
+          margin: 2,
+          errorCorrectionLevel: "M",
+        });
+        out.push({ object: obj, link, qrDataUrl });
+      } catch {
+        failed.push(obj.name);
+      }
+      setProgress((p) => p + 1);
+    }
+    setGenerating(false);
+    setResults(out);
+    if (failed.length > 0) {
+      toast({
+        title: "Vissa misslyckades",
+        description: `${out.length} klara, ${failed.length} kunde inte genereras.`,
+        variant: "destructive",
+      });
+    } else {
+      toast({ title: "Klart", description: `${out.length} QR-koder genererade.` });
+    }
+  };
+
+  const downloadZip = async () => {
+    if (!results || results.length === 0) return;
+    const JSZip = (await import("jszip")).default;
+    const zip = new JSZip();
+    const used = new Map<string, number>();
+    for (const r of results) {
+      const base = `qr-${safeName(r.object.name)}`;
+      const count = used.get(base) ?? 0;
+      used.set(base, count + 1);
+      const fileName = count === 0 ? `${base}.png` : `${base}-${count + 1}.png`;
+      const b64 = r.qrDataUrl.split(",")[1];
+      zip.file(fileName, b64, { base64: true });
+    }
+    zip.file(
+      "lankar.csv",
+      "Objekt;Adress;Lank\n" +
+        results
+          .map((r) =>
+            [r.object.name, r.object.address ?? "", r.link]
+              .map((c) => `"${String(c).replace(/"/g, '""')}"`)
+              .join(";"),
+          )
+          .join("\n"),
+    );
+    const blob = await zip.generateAsync({ type: "blob" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `qr-${safeName(editor.name)}.zip`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  const printSheet = () => {
+    if (!results || results.length === 0) return;
+    const win = window.open("", "_blank");
+    if (!win) {
+      toast({
+        title: "Pop-up blockerad",
+        description: "Tillåt pop-up-fönster för att skriva ut bladet.",
+        variant: "destructive",
+      });
+      return;
+    }
+    const esc = (s: string) =>
+      s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    const cards = results
+      .map(
+        (r) => `
+          <div class="card">
+            <img src="${r.qrDataUrl}" alt="QR" />
+            <div class="name">${esc(r.object.name)}</div>
+            ${r.object.address ? `<div class="addr">${esc(r.object.address)}</div>` : ""}
+          </div>`,
+      )
+      .join("");
+    win.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8" />
+      <title>QR-koder — ${esc(editor.name)}</title>
+      <style>
+        * { box-sizing: border-box; }
+        body { font-family: Inter, system-ui, sans-serif; margin: 16px; }
+        h1 { font-size: 16px; margin: 0 0 12px; }
+        .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+        .card { border: 1px solid #ccc; border-radius: 8px; padding: 10px; text-align: center; break-inside: avoid; }
+        .card img { width: 100%; max-width: 200px; height: auto; }
+        .name { font-weight: 600; font-size: 13px; margin-top: 6px; word-break: break-word; }
+        .addr { font-size: 11px; color: #555; margin-top: 2px; word-break: break-word; }
+        @media print { body { margin: 0; } @page { margin: 12mm; } }
+      </style></head><body>
+      <h1>${esc(editor.name)} — ${results.length} QR-koder</h1>
+      <div class="grid">${cards}</div>
+      <script>window.onload = function(){ window.focus(); window.print(); };<\/script>
+      </body></html>`);
+    win.document.close();
+  };
+
+  const selectedCount = selected.size;
+
+  return (
+    <Dialog open onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="max-w-2xl" data-testid="dialog-batch-link">
+        <DialogHeader>
+          <DialogTitle>Batch-QR — {editor.name}</DialogTitle>
+          <DialogDescription>
+            Välj flera objekt och generera länk + QR-kod för var och en. Ladda ner
+            som ZIP eller skriv ut ett samlat blad.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <div className="flex items-center justify-between gap-2">
+              <Label>Objekt</Label>
+              <span className="text-xs text-muted-foreground" data-testid="text-batch-selected-count">
+                {selectedCount} valda
+              </span>
+            </div>
+            <Input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Sök objekt..."
+              data-testid="input-batch-object-search"
+            />
+            <div className="flex gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={selectAllVisible}
+                disabled={(objects ?? []).length === 0}
+                data-testid="button-batch-select-all"
+              >
+                Markera alla i listan
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={clearSelection}
+                disabled={selectedCount === 0}
+                data-testid="button-batch-clear"
+              >
+                Rensa val
+              </Button>
+            </div>
+            <div className="max-h-60 overflow-y-auto space-y-1 rounded-md border p-1">
+              {objectsLoading ? (
+                <div className="flex items-center gap-2 text-sm text-muted-foreground p-2">
+                  <Loader2 className="h-4 w-4 animate-spin" /> Söker...
+                </div>
+              ) : (objects ?? []).length === 0 ? (
+                <p className="text-sm text-muted-foreground p-2">Inga objekt hittades.</p>
+              ) : (
+                (objects ?? []).map((o) => {
+                  const isSel = selected.has(o.id);
+                  return (
+                    <button
+                      key={o.id}
+                      type="button"
+                      onClick={() => toggle(o)}
+                      className={`w-full text-left rounded-md p-2 text-sm hover-elevate flex items-start gap-2 ${
+                        isSel ? "bg-primary/10 border border-primary" : "border border-transparent"
+                      }`}
+                      data-testid={`button-batch-pick-${o.id}`}
+                    >
+                      <span
+                        className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded border ${
+                          isSel ? "bg-primary border-primary text-primary-foreground" : "border-muted-foreground/40"
+                        }`}
+                      >
+                        {isSel && <Check className="h-3 w-3" />}
+                      </span>
+                      <span className="min-w-0">
+                        <span className="flex items-center gap-1.5 font-medium">
+                          <Building2 className="h-3.5 w-3.5 shrink-0" />
+                          {o.name}
+                        </span>
+                        {o.address && (
+                          <span className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
+                            <MapPin className="h-3 w-3 shrink-0" />
+                            {o.address}
+                          </span>
+                        )}
+                      </span>
+                    </button>
+                  );
+                })
+              )}
+            </div>
+          </div>
+
+          <Button
+            onClick={generate}
+            disabled={selectedCount === 0 || generating}
+            data-testid="button-batch-generate"
+          >
+            {generating ? (
+              <>
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                Genererar {progress}/{selectedCount}...
+              </>
+            ) : (
+              <>
+                <QrCode className="h-4 w-4 mr-2" />
+                Generera {selectedCount > 0 ? `(${selectedCount})` : ""}
+              </>
+            )}
+          </Button>
+
+          {results && results.length > 0 && (
+            <div className="space-y-3">
+              <p className="text-sm text-muted-foreground" data-testid="text-batch-result-count">
+                {results.length} QR-koder klara.
+              </p>
+              <div className="flex flex-wrap gap-2">
+                <Button variant="outline" onClick={downloadZip} data-testid="button-batch-zip">
+                  <FileArchive className="h-4 w-4 mr-2" />
+                  Ladda ner ZIP
+                </Button>
+                <Button variant="outline" onClick={printSheet} data-testid="button-batch-print">
+                  <Printer className="h-4 w-4 mr-2" />
+                  Skriv ut blad
+                </Button>
+              </div>
+              <div className="grid grid-cols-3 gap-2 max-h-52 overflow-y-auto rounded-md border p-2 sm:grid-cols-4">
+                {results.map((r) => (
+                  <div
+                    key={r.object.id}
+                    className="flex flex-col items-center gap-1 text-center"
+                    data-testid={`batch-qr-preview-${r.object.id}`}
+                  >
+                    <img
+                      src={r.qrDataUrl}
+                      alt={`QR ${r.object.name}`}
+                      className="h-20 w-20 rounded bg-white p-1"
+                    />
+                    <span className="text-[10px] leading-tight line-clamp-2">{r.object.name}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose} data-testid="button-batch-close">
             Stäng
           </Button>
         </DialogFooter>
