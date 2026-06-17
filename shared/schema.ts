@@ -465,6 +465,18 @@ export const workOrders = pgTable("work_orders", {
   invoiceReadyAt: timestamp("invoice_ready_at"),
   invoiceHeldUntil: timestamp("invoice_held_until"),
   consolidationInvoiceId: varchar("consolidation_invoice_id"),
+  // === Task #970: Metadatastyrd fakturaflödeslogik ("Faktura från toppen") ===
+  // Fryst billing-segment som förfinar konsoliderings-grupperingen ovanpå frozen
+  // recipient/customer. Sätts vid markWorkOrderReadyForInvoice (endast held-WO,
+  // endast när tenanten aktiverat invoiceFlow). NULL = ingen split = exakt dagens
+  // beteende (full back-compat). billingBreakObjectId = närmaste förälder med
+  // Fakturastopp=Ja (lokalt, ej ärvt); billingGroupingValue = värdet på det
+  // konfigurerade grupperingsfältet (t.ex. Förvaltare) vid objektet. segmentKey är
+  // den deterministiska suffix-nyckeln (`b:<id|->|g:<value|->`), NULL när ingen split.
+  billingSegmentKey: text("billing_segment_key"),
+  billingBreakObjectId: varchar("billing_break_object_id"),
+  billingGroupingFieldName: text("billing_grouping_field_name"),
+  billingGroupingValue: text("billing_grouping_value"),
   // === Task #785: Veckoplanering – datafundament (expand-contract, alla nullable) ===
   // Planeringsinput för grov-/veckoplanering. Rapportens generiska `tasks`-fält
   // införs här eftersom Traivos arbetsenhet är work_orders (ingen tasks-tabell).
@@ -507,6 +519,7 @@ export const workOrders = pgTable("work_orders", {
   index("idx_work_orders_customer").on(table.customerId),
   index("idx_work_orders_resource").on(table.resourceId),
   index("idx_work_orders_cluster").on(table.clusterId),
+  index("idx_work_orders_billing_segment").on(table.tenantId, table.billingSegmentKey),
   index("idx_work_orders_tenant_status").on(table.tenantId, table.orderStatus),
   index("idx_work_orders_tenant_date").on(table.tenantId, table.scheduledDate),
   index("idx_work_orders_resource_date").on(table.resourceId, table.scheduledDate),
@@ -4073,6 +4086,13 @@ export const customerInvoices = pgTable("customer_invoices", {
   releasedBy: varchar("released_by"),
   releasedAt: timestamp("released_at"),
   releasedReason: text("released_reason"),
+  // === Task #970: Metadatastyrd fakturaflödeslogik (audit/visning) ===
+  // Speglar den vinnande WO-segmenteringen så att UI/export kan förklara varför
+  // en konsoliderad faktura splittrades. NULL = ingen split (back-compat).
+  billingSegmentKey: text("billing_segment_key"),
+  billingBreakObjectId: varchar("billing_break_object_id"),
+  billingGroupingFieldName: text("billing_grouping_field_name"),
+  billingGroupingValue: text("billing_grouping_value"),
 }, (table) => [
   index("idx_customer_invoices_tenant_state").on(table.tenantId, table.state),
   index("idx_customer_invoices_recipient").on(table.invoiceRecipientId),

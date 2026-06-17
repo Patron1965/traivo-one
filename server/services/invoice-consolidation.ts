@@ -25,6 +25,12 @@ import {
   type InvoiceConsolidationPeriod,
 } from "@shared/schema";
 import { and, eq, gte, isNull, isNotNull, lte, inArray, sql, desc } from "drizzle-orm";
+import {
+  getInvoiceFlowConfig,
+  computeBillingSegmentForObject,
+  EMPTY_SEGMENT,
+  type BillingSegment,
+} from "./invoice-flow-segmentation";
 
 export type ResolvedPolicy = {
   policy: InvoiceConsolidationPolicy | null;
@@ -159,6 +165,11 @@ export async function markWorkOrderReadyForInvoice(
         invoiceQueueState: "pending",
         invoiceReadyAt: now,
         invoiceHeldUntil: null,
+        // immediate konsolideras aldrig — rensa ev. tidigare fryst segment.
+        billingSegmentKey: null,
+        billingBreakObjectId: null,
+        billingGroupingFieldName: null,
+        billingGroupingValue: null,
       })
       .where(and(eq(workOrders.id, workOrderId), eq(workOrders.tenantId, tenantId)));
     return { state: "pending", heldUntil: null, policyId: resolved.policy?.id ?? null };
@@ -170,12 +181,30 @@ export async function markWorkOrderReadyForInvoice(
     resolved.policy?.periodAnchor ?? null,
     resolved.policy?.releaseAtHour ?? null,
   );
+
+  // Task #970: frys metadatastyrt billing-segment vid ready-time (endast held).
+  // Endast aktiverade tenants; fel i metadata-beräkningen får aldrig blockera
+  // faktureringen (degraderar till NULL-segment = dagens beteende).
+  let segment: BillingSegment = EMPTY_SEGMENT;
+  try {
+    const config = await getInvoiceFlowConfig(tenantId);
+    if (config.enabled && wo.objectId) {
+      segment = await computeBillingSegmentForObject(tenantId, wo.objectId, config);
+    }
+  } catch (err) {
+    console.warn(`[invoice-flow] segment-beräkning misslyckades för WO ${workOrderId}:`, err);
+  }
+
   await db
     .update(workOrders)
     .set({
       invoiceQueueState: "held",
       invoiceReadyAt: now,
       invoiceHeldUntil: periodEnd,
+      billingSegmentKey: segment.segmentKey,
+      billingBreakObjectId: segment.breakObjectId,
+      billingGroupingFieldName: segment.groupingFieldName,
+      billingGroupingValue: segment.groupingValue,
     })
     .where(and(eq(workOrders.id, workOrderId), eq(workOrders.tenantId, tenantId)));
   return { state: "held", heldUntil: periodEnd, policyId: resolved.policy?.id ?? null };
@@ -191,6 +220,11 @@ type WoForConsolidation = {
   cachedValue: number | string | null;
   invoiceHeldUntil: Date | null;
   invoiceReadyAt: Date | null;
+  // Task #970: fryst billing-segment (NULL = ingen split = back-compat).
+  billingSegmentKey: string | null;
+  billingBreakObjectId: string | null;
+  billingGroupingFieldName: string | null;
+  billingGroupingValue: string | null;
 };
 
 function woAmount(wo: WoForConsolidation): number {
@@ -251,6 +285,10 @@ export async function runConsolidationForTenant(
       cachedValue: workOrders.cachedValue,
       invoiceHeldUntil: workOrders.invoiceHeldUntil,
       invoiceReadyAt: workOrders.invoiceReadyAt,
+      billingSegmentKey: workOrders.billingSegmentKey,
+      billingBreakObjectId: workOrders.billingBreakObjectId,
+      billingGroupingFieldName: workOrders.billingGroupingFieldName,
+      billingGroupingValue: workOrders.billingGroupingValue,
     })
     .from(workOrders)
     .where(and(...conditions))) as WoForConsolidation[];
@@ -259,17 +297,35 @@ export async function runConsolidationForTenant(
     return { tenantId, groupsProcessed: 0, invoicesCreated: 0, workOrdersConsolidated: 0, invoiceIds: [] };
   }
 
-  // Gruppera per (recipientId || customerId). recipientId vinner när det finns.
-  const groups = new Map<string, { recipientId: string | null; customerId: string | null; wos: WoForConsolidation[] }>();
+  // Gruppera per (recipientId || customerId) + fryst billing-segment (Task #970).
+  // recipientId vinner när det finns. Segment-suffix förfinar grupperingen: NULL
+  // segment ⇒ ingen split (dagens beteende, slås ihop med legacy NULL-fakturor).
+  const groups = new Map<
+    string,
+    {
+      recipientId: string | null;
+      customerId: string | null;
+      segmentKey: string | null;
+      breakObjectId: string | null;
+      groupingFieldName: string | null;
+      groupingValue: string | null;
+      wos: WoForConsolidation[];
+    }
+  >();
   for (const wo of held) {
     if (!wo.customerId && !wo.frozenInvoiceRecipientId) continue;
-    const key = wo.frozenInvoiceRecipientId
+    const baseKey = wo.frozenInvoiceRecipientId
       ? `r:${wo.frozenInvoiceRecipientId}`
       : `c:${wo.customerId}`;
+    const key = wo.billingSegmentKey ? `${baseKey}|${wo.billingSegmentKey}` : baseKey;
     if (!groups.has(key)) {
       groups.set(key, {
         recipientId: wo.frozenInvoiceRecipientId,
         customerId: wo.customerId,
+        segmentKey: wo.billingSegmentKey ?? null,
+        breakObjectId: wo.billingBreakObjectId ?? null,
+        groupingFieldName: wo.billingGroupingFieldName ?? null,
+        groupingValue: wo.billingGroupingValue ?? null,
         wos: [],
       });
     }
@@ -330,6 +386,16 @@ export async function runConsolidationForTenant(
     } else {
       matchConds.push(isNull(customerInvoices.invoiceRecipientId));
       matchConds.push(eq(customerInvoices.customerId, customerId));
+    }
+    // Task #970: additivt merge bara mot SAMMA segment. segmentKey är den
+    // kanoniska segment-identiteten överallt (in-memory-gruppering, denna
+    // cross-run-merge OCH förhandsvisningen) — kodar brytnod + grupperingsvärde.
+    // NULL-segment matchar legacy NULL-fakturor (back-compat); satt segment
+    // matchar exakt sin nyckel.
+    if (group.segmentKey) {
+      matchConds.push(eq(customerInvoices.billingSegmentKey, group.segmentKey));
+    } else {
+      matchConds.push(isNull(customerInvoices.billingSegmentKey));
     }
     // ATOMISK BATCH: invoice upsert + WO state-flip i samma transaktion.
     // Förhindrar att invoice-summan ökas medan WOs förblir 'held' (vilket
@@ -400,6 +466,10 @@ export async function runConsolidationForTenant(
             workOrderIds: woIds,
             state: "consolidated",
             invoiceRecipientId: group.recipientId ?? null,
+            billingSegmentKey: group.segmentKey,
+            billingBreakObjectId: group.breakObjectId,
+            billingGroupingFieldName: group.groupingFieldName,
+            billingGroupingValue: group.groupingValue,
             consolidationPeriodStart: periodStart,
             consolidationPeriodEnd: now,
             releasedBy: opts.force ? opts.releasedBy ?? null : null,

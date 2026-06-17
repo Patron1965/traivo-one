@@ -15,6 +15,8 @@ import {
   customerInvoices,
   invoiceRecipients,
   customers,
+  objects,
+  metadataKatalog,
   insertInvoiceConsolidationPolicySchema,
   INVOICE_CONSOLIDATION_PERIODS,
 } from "@shared/schema";
@@ -22,6 +24,14 @@ import {
   markWorkOrderReadyForInvoice,
   runConsolidationForTenant,
 } from "../services/invoice-consolidation";
+import {
+  getInvoiceFlowConfig,
+  setInvoiceFlowConfig,
+  computeBillingSegmentsForSubtree,
+  EMPTY_SEGMENT,
+  type BillingSegment,
+} from "../services/invoice-flow-segmentation";
+import { inArray } from "drizzle-orm";
 import { exportConsolidatedInvoiceToFortnox } from "../fortnox-client";
 
 const policyInputSchema = insertInvoiceConsolidationPolicySchema
@@ -260,5 +270,178 @@ export function registerInvoiceQueueRoutes(app: Express): void {
       .orderBy(desc(customerInvoices.invoiceDate))
       .limit(200);
     res.json(rows);
+  }));
+
+  // ============================================
+  // Task #970: Metadatastyrd fakturaflödeslogik — config + förhandsvisning
+  // ============================================
+
+  // --- Hämta invoice-flow-config + tillgängliga metadatafält (för dropdowns) ---
+  app.get("/api/invoice-flow/config", requireAdmin, asyncHandler(async (req, res) => {
+    const tenantId = getTenantIdWithFallback(req);
+    const config = await getInvoiceFlowConfig(tenantId);
+    const fields = await db
+      .select({ id: metadataKatalog.id, namn: metadataKatalog.namn, datatyp: metadataKatalog.datatyp })
+      .from(metadataKatalog)
+      .where(and(eq(metadataKatalog.tenantId, tenantId), isNull(metadataKatalog.deletedAt)))
+      .orderBy(metadataKatalog.namn);
+    res.json({ config, availableFields: fields });
+  }));
+
+  // --- Uppdatera invoice-flow-config (skriver tenants.settings.invoiceFlow) ---
+  app.put("/api/invoice-flow/config", requireAdmin, asyncHandler(async (req, res) => {
+    const tenantId = getTenantIdWithFallback(req);
+    const schema = z.object({
+      enabled: z.boolean().optional(),
+      breakFieldName: z.string().trim().min(1).max(100).optional(),
+      // null/"" ⇒ stäng av gruppering; sträng ⇒ använd det fältet.
+      groupingFieldName: z.string().trim().max(100).nullable().optional(),
+    });
+    const parsed = schema.safeParse(req.body ?? {});
+    if (!parsed.success) throw new ValidationError(formatZodError(parsed.error).error);
+    const patch: Record<string, unknown> = {};
+    if (parsed.data.enabled !== undefined) patch.enabled = parsed.data.enabled;
+    if (parsed.data.breakFieldName !== undefined) patch.breakFieldName = parsed.data.breakFieldName;
+    if (parsed.data.groupingFieldName !== undefined) {
+      patch.groupingFieldName = parsed.data.groupingFieldName
+        ? parsed.data.groupingFieldName
+        : null;
+    }
+    const config = await setInvoiceFlowConfig(tenantId, patch);
+    res.json({ config });
+  }));
+
+  // --- Förhandsvisning: hur skulle fakturorna delas upp för ett objektsubträd? ---
+  // Beräknar segment LIVE från aktuell metadata (kan avvika från frusna WO-värden
+  // — det är meningen). Tvingar enabled=true i beräkningen så admin ser effekten
+  // även innan funktionen slås på; svaret innehåller `enabled` för UI-varning.
+  app.get("/api/invoice-flow/preview", requireAdmin, asyncHandler(async (req, res) => {
+    const tenantId = getTenantIdWithFallback(req);
+    const rootObjectId = (req.query.rootObjectId as string) || "";
+    if (!rootObjectId) throw new ValidationError("rootObjectId krävs");
+
+    // Tenant-ownership: roten måste tillhöra denna tenant (aldrig lita på klient-id).
+    const [root] = await db
+      .select({ id: objects.id, name: objects.name })
+      .from(objects)
+      .where(and(eq(objects.id, rootObjectId), eq(objects.tenantId, tenantId), isNull(objects.deletedAt)));
+    if (!root) throw new NotFoundError("Objekt hittades inte");
+
+    const config = await getInvoiceFlowConfig(tenantId);
+    const subtreeIds = await storage.getObjectSubtreeIds(tenantId, rootObjectId);
+    if (subtreeIds.length === 0) {
+      return res.json({ enabled: config.enabled, config, root, groups: [], totalWorkOrders: 0 });
+    }
+
+    // Segment per objekt (LIVE), tvinga enabled så förhandsvisningen alltid visar effekten.
+    const segments = await computeBillingSegmentsForSubtree(
+      tenantId,
+      rootObjectId,
+      { ...config, enabled: true },
+    );
+
+    // Fakturerbara WO i subträdet (oberoende av köstatus → meningsfull även innan
+    // något frysts). Måste ha kund eller frusen mottagare för att kunna fakturera.
+    const wos = await db
+      .select({
+        id: workOrders.id,
+        title: workOrders.title,
+        objectId: workOrders.objectId,
+        customerId: workOrders.customerId,
+        customerName: customers.name,
+        frozenInvoiceRecipientId: workOrders.frozenInvoiceRecipientId,
+        recipientName: invoiceRecipients.recipientName,
+        invoiceQueueState: workOrders.invoiceQueueState,
+        frozenUnitPrice: workOrders.frozenUnitPrice,
+        frozenQuantity: workOrders.frozenQuantity,
+        cachedValue: workOrders.cachedValue,
+      })
+      .from(workOrders)
+      .leftJoin(customers, and(eq(workOrders.customerId, customers.id), eq(customers.tenantId, tenantId)))
+      .leftJoin(
+        invoiceRecipients,
+        and(
+          eq(workOrders.frozenInvoiceRecipientId, invoiceRecipients.id),
+          eq(invoiceRecipients.tenantId, tenantId),
+        ),
+      )
+      .where(and(
+        eq(workOrders.tenantId, tenantId),
+        inArray(workOrders.objectId, subtreeIds),
+        isNull(workOrders.deletedAt),
+      ));
+
+    type PreviewGroup = {
+      key: string;
+      recipientId: string | null;
+      recipientName: string | null;
+      customerId: string | null;
+      customerName: string | null;
+      segmentKey: string | null;
+      breakObjectId: string | null;
+      breakObjectName: string | null;
+      groupingFieldName: string | null;
+      groupingValue: string | null;
+      workOrderCount: number;
+      totalAmount: number;
+    };
+    const groups = new Map<string, PreviewGroup>();
+    let billable = 0;
+    for (const w of wos) {
+      // Endast fakturerbara: måste kunna landa på en faktura (mottagare eller kund).
+      if (!w.frozenInvoiceRecipientId && !w.customerId) continue;
+      billable++;
+      const seg: BillingSegment = segments.get(w.objectId) ?? EMPTY_SEGMENT;
+      const baseKey = w.frozenInvoiceRecipientId
+        ? `r:${w.frozenInvoiceRecipientId}`
+        : `c:${w.customerId ?? "_"}`;
+      const segKey = seg.segmentKey ?? "";
+      const key = `${baseKey}|${segKey}`;
+      if (!groups.has(key)) {
+        groups.set(key, {
+          key,
+          recipientId: w.frozenInvoiceRecipientId,
+          recipientName: w.recipientName ?? null,
+          customerId: w.customerId,
+          customerName: w.customerName ?? null,
+          segmentKey: seg.segmentKey,
+          breakObjectId: seg.breakObjectId,
+          breakObjectName: null,
+          groupingFieldName: seg.groupingFieldName,
+          groupingValue: seg.groupingValue,
+          workOrderCount: 0,
+          totalAmount: 0,
+        });
+      }
+      const g = groups.get(key)!;
+      g.workOrderCount++;
+      const price = Number(w.frozenUnitPrice ?? 0);
+      const qty = Number(w.frozenQuantity ?? 0);
+      const amount = price > 0 && qty > 0 ? Math.round(price * qty) : Math.round(Number(w.cachedValue ?? 0));
+      g.totalAmount += amount;
+    }
+
+    // Slå upp namn på brytpunkts-objekten för läsbar visning.
+    const breakIds = Array.from(
+      new Set(Array.from(groups.values()).map(g => g.breakObjectId).filter((x): x is string => !!x)),
+    );
+    if (breakIds.length > 0) {
+      const breakObjs = await db
+        .select({ id: objects.id, name: objects.name })
+        .from(objects)
+        .where(and(eq(objects.tenantId, tenantId), inArray(objects.id, breakIds)));
+      const nameById = new Map(breakObjs.map(o => [o.id, o.name]));
+      for (const g of groups.values()) {
+        if (g.breakObjectId) g.breakObjectName = nameById.get(g.breakObjectId) ?? null;
+      }
+    }
+
+    res.json({
+      enabled: config.enabled,
+      config,
+      root,
+      groups: Array.from(groups.values()).sort((a, b) => b.totalAmount - a.totalAmount),
+      totalWorkOrders: billable,
+    });
   }));
 }
