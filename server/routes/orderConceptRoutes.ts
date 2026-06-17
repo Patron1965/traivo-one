@@ -372,7 +372,8 @@ app.post("/api/order-concepts/:id/validate", asyncHandler(async (req, res) => {
     if (!concept.name) errors.push({ code: "MISSING_NAME", message: "Namn saknas" });
     if (conceptObjects.length === 0) errors.push({ code: "NO_OBJECTS", message: "Inga objekt valda" });
     if (conceptArticles.length === 0) errors.push({ code: "NO_ARTICLES", message: "Inga artiklar valda" });
-    if (!concept.invoiceLevel) warnings.push({ code: "NO_INVOICE_LEVEL", message: "Faktureringsnivå ej vald" });
+    // Task #974: fakturanivå är inte längre ett operatörsval (alltid kundnivå) — ingen
+    // NO_INVOICE_LEVEL-varning. Ett ev. fakturastopp delar bara upp fakturan organisatoriskt.
 
     // Task #934: validera per faktureringsmetod (invoiceModel m. fallback scenario).
     const validateMethod = getOrderConceptMethod(concept);
@@ -389,28 +390,21 @@ app.post("/api/order-concepts/:id/validate", asyncHandler(async (req, res) => {
     }
 
     // ADR v3 §2.3 (Task #556): Konfliktvarning för fakturamottagare.
-    // Blockerar expansion tills operator väljer (errors), eller varnar om
-    // operator har valt en annan nivå än den resolvern hittar (hint-konflikt).
+    // Task #974: fakturanivå är alltid kundnivå — vi skickar ingen nivå-hint längre,
+    // så ingen falsk hint-konflikt eller "ingen mottagare hittades"-varning. Resolvern
+    // hittar närmaste mottagare i kundhierarkin (Fortnox har dessutom fallback till
+    // object_payers/customers.fortnoxCustomerId). Enda kvarvarande blockeraren är en
+    // äkta samma-prioritet-konflikt mellan explicita mottagare på samma nivå.
     let invoiceRecipient: { recipient: any; sourceCustomerId: string | null; sourceLevel: string | null; conflicts: any[]; hintConflict: boolean; hasConflict: boolean; chain: any[] } | null = null;
     if (concept.customerId) {
       const resolved = await storage.resolveInvoiceRecipient(tenantId, concept.customerId, {
-        hintLevel: (concept.invoiceLevel as any) ?? null,
+        hintLevel: null,
       });
       invoiceRecipient = resolved as any;
       if (resolved.conflicts.length > 1) {
         errors.push({
           code: "INVOICE_RECIPIENT_CONFLICT",
           message: `Flera fakturamottagare har samma prioritet på nivån "${resolved.sourceLevel}" (${resolved.conflicts.length} kandidater). Välj en explicit innan konceptet expanderas.`,
-        });
-      } else if (resolved.hintConflict) {
-        warnings.push({
-          code: "INVOICE_LEVEL_HINT_CONFLICT",
-          message: `Konceptets faktureringsnivå (${concept.invoiceLevel}) matchar inte den vinnande mottagarnivån (${resolved.sourceLevel}). Resolvern använder närmaste nivå i hierarkin.`,
-        });
-      } else if (!resolved.recipient) {
-        warnings.push({
-          code: "NO_INVOICE_RECIPIENT",
-          message: "Ingen fakturamottagare hittades i kundhierarkin — Fortnox-export faller tillbaka till object_payers/objects.customer_id.",
         });
       }
     }

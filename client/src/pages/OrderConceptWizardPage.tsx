@@ -88,7 +88,7 @@ export default function OrderConceptWizardPage() {
 
   const form = useForm<WizardFormValues>({
     resolver: zodResolver(wizardFormSchema),
-    defaultValues: { conceptName: "", invoiceLevel: "", invoiceModel: "" },
+    defaultValues: { conceptName: "", invoiceLevel: "customer", invoiceModel: "" },
     mode: "onTouched",
   });
 
@@ -117,7 +117,7 @@ export default function OrderConceptWizardPage() {
   const [invoiceBrake, setInvoiceBrake] = useState(false);
   const [invoiceMethod, setInvoiceMethod] = useState<string | null>(null);
   const [subscriptionAdjustmentDate, setSubscriptionAdjustmentDate] = useState("");
-  const [invoiceConsolidation, setInvoiceConsolidation] = useState("per_job");
+  const [invoiceConsolidation, setInvoiceConsolidation] = useState("customer");
   const [departmentMetadataField, setDepartmentMetadataField] = useState<string | null>(null);
   // Step 3 — abonnemang (Task #934)
   const [monthlyFee, setMonthlyFee] = useState<number | null>(null);
@@ -168,14 +168,14 @@ export default function OrderConceptWizardPage() {
     setFixedPriceKronor(wizardData.fixedPriceAmount != null ? String(wizardData.fixedPriceAmount / 100) : "");
     setCustomerReference(wizardData.customerReference || "");
     setCustomerLabel(wizardData.customerLabel || "");
-    form.setValue("invoiceLevel", wizardData.invoiceLevel || "");
+    form.setValue("invoiceLevel", wizardData.invoiceLevel || "customer");
     form.setValue("invoiceModel", wizardData.invoiceModel || "");
     setInvoicePeriod(wizardData.invoicePeriod || null);
     setInvoiceLock(wizardData.invoiceLock || false);
     setInvoiceBrake(wizardData.invoiceBrake || false);
     setInvoiceMethod(wizardData.invoiceMethod || null);
     setSubscriptionAdjustmentDate(toDateInput(wizardData.subscriptionAdjustmentDate));
-    setInvoiceConsolidation(wizardData.invoiceConsolidation || "per_job");
+    setInvoiceConsolidation(wizardData.invoiceConsolidation || "customer");
     setDepartmentMetadataField(wizardData.departmentMetadataField || null);
     setMonthlyFee(wizardData.monthlyFee != null ? Number(wizardData.monthlyFee) : null);
     setBillingFrequency(wizardData.billingFrequency || null);
@@ -256,7 +256,15 @@ export default function OrderConceptWizardPage() {
     return null;
   }, [currentStep, form, conceptName, customerMode, selectedCustomerId, targetObjectIds, conceptArticles]);
 
-  const buildConceptPatch = useCallback((nextStep: number) => ({
+  const buildConceptPatch = useCallback((nextStep: number) => {
+    // Task #974: kanonisera fakturastopp vid persistering oavsett legacy-värden i state.
+    // Kundnivå => invoiceConsolidation="customer" + departmentMetadataField=null.
+    // Fakturastopp => giltig frekvens (legacy "department"/övrigt normaliseras till "monthly").
+    const isFakturastopp = invoiceConsolidation !== "customer" && invoiceConsolidation !== "per_job";
+    const normalizedConsolidation = isFakturastopp
+      ? (["daily", "weekly", "monthly", "after_completed"].includes(invoiceConsolidation) ? invoiceConsolidation : "monthly")
+      : "customer";
+    return {
     currentStep: nextStep,
     name: conceptName,
     customerMode,
@@ -268,7 +276,9 @@ export default function OrderConceptWizardPage() {
       ? Math.round(parseFloat(fixedPriceKronor) * 100) : null,
     customerReference: customerReference || null,
     customerLabel: customerLabel || null,
-    invoiceLevel: invoiceLevel || null,
+    // Task #974: fakturanivå är alltid kundnivå (samma kund). Fakturastopp delar
+    // bara upp fakturan organisatoriskt via invoiceConsolidation + departmentMetadataField.
+    invoiceLevel: "customer",
     invoiceModel: invoiceModel || null,
     // Task #934: write-through så att legacy-`scenario` (NOT NULL) och
     // `deliveryModel` hålls i synk med vald faktureringsmetod. Båda blir
@@ -286,8 +296,8 @@ export default function OrderConceptWizardPage() {
     monthlyFee: invoiceModel === "subscription" ? (monthlyFee ?? null) : undefined,
     billingFrequency: invoiceModel === "subscription" ? (billingFrequency || "monthly") : undefined,
     deliveryStart: invoiceModel === "subscription" ? toIsoOrNull(subscriptionStartDate) : undefined,
-    invoiceConsolidation,
-    departmentMetadataField: invoiceConsolidation === "department" ? (departmentMetadataField || null) : null,
+    invoiceConsolidation: normalizedConsolidation,
+    departmentMetadataField: isFakturastopp ? (departmentMetadataField || null) : null,
     targetObjectIds: Array.from(targetObjectIds),
     deliveryTimeType: deliveryTimeType || null,
     timeWindows: deliveryTimeType === "time_window" ? timeWindows : [],
@@ -302,7 +312,8 @@ export default function OrderConceptWizardPage() {
     totalValue,
     totalCost,
     estimatedHours,
-  }), [conceptName, customerMode, selectedCustomerId, customerMetadataField, priceListId, priceModel, fixedPriceKronor, customerReference, customerLabel, invoiceLevel, invoiceModel, invoicePeriod, invoiceLock, invoiceBrake, invoiceMethod, subscriptionAdjustmentDate, monthlyFee, billingFrequency, subscriptionStartDate, invoiceConsolidation, departmentMetadataField, targetObjectIds, deliveryTimeType, timeWindows, intervalStartDate, intervalEndDate, intervalFrequencyDays, intervalFlexDays, deliveryRestrictions, conceptArticles, totalValue, totalCost, estimatedHours]);
+    };
+  }, [conceptName, customerMode, selectedCustomerId, customerMetadataField, priceListId, priceModel, fixedPriceKronor, customerReference, customerLabel, invoiceLevel, invoiceModel, invoicePeriod, invoiceLock, invoiceBrake, invoiceMethod, subscriptionAdjustmentDate, monthlyFee, billingFrequency, subscriptionStartDate, invoiceConsolidation, departmentMetadataField, targetObjectIds, deliveryTimeType, timeWindows, intervalStartDate, intervalEndDate, intervalFrequencyDays, intervalFlexDays, deliveryRestrictions, conceptArticles, totalValue, totalCost, estimatedHours]);
 
   const createConceptMutation = useMutation({
     mutationFn: async () => {
@@ -664,7 +675,6 @@ export default function OrderConceptWizardPage() {
 
             {currentStep === 3 && (
               <Step3Invoicing
-                invoiceLevel={invoiceLevel || null}
                 invoiceModel={invoiceModel || null}
                 invoicePeriod={invoicePeriod}
                 invoiceLock={invoiceLock}
@@ -678,7 +688,6 @@ export default function OrderConceptWizardPage() {
                 subscriptionStartDate={subscriptionStartDate}
                 objectCount={targetObjectIds.size}
                 onUpdate={(data) => {
-                  if (data.invoiceLevel !== undefined) form.setValue("invoiceLevel", data.invoiceLevel || "", { shouldValidate: true });
                   if (data.invoiceModel !== undefined) form.setValue("invoiceModel", data.invoiceModel || "", { shouldValidate: true });
                   if (data.invoicePeriod !== undefined) setInvoicePeriod(data.invoicePeriod);
                   if (data.invoiceLock !== undefined) setInvoiceLock(data.invoiceLock);
