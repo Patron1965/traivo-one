@@ -1,14 +1,12 @@
 import { useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Search, Plus, Trash2, Package, MapPin, Clock } from "lucide-react";
-import type { Article, MetadataDefinition } from "@shared/schema";
+import type { Article } from "@shared/schema";
 import { deriveIsPreTask } from "@/lib/article-pre-task";
-import { MetadataFieldSelect, METADATA_NONE } from "@/components/orderkoncept/shared/ConditionFilter";
 
 export interface ConceptArticleRow {
   id: string;
@@ -40,7 +38,6 @@ export default function Step6Tasks({
   onUpdateArticleField,
 }: Step6Props) {
   const [search, setSearch] = useState("");
-  const { data: definitions = [] } = useQuery<MetadataDefinition[]>({ queryKey: ["/api/metadata-definitions"] });
 
   const filteredArticles = useMemo(() => {
     if (!search) return articles.slice(0, 15);
@@ -143,35 +140,6 @@ export default function Step6Tasks({
                       <Button variant="ghost" size="sm" onClick={() => onRemoveArticle(ca.id)} className="h-8 w-8 p-0 text-destructive hover:text-destructive" data-testid={`button-remove-article-${ca.id}`}>
                         <Trash2 className="h-4 w-4" />
                       </Button>
-                    </div>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pl-1">
-                      <div>
-                        <Label className="text-[11px] text-muted-foreground mb-0.5 block">Hakar fast på (metadata)</Label>
-                        <MetadataFieldSelect
-                          value={ca.metadataAssociation || METADATA_NONE}
-                          onValueChange={(v) => onUpdateArticleField(ca.id, { metadataAssociation: v === METADATA_NONE ? null : v })}
-                          definitions={definitions}
-                          index={0}
-                          allowNone
-                          placeholder="—"
-                          className="h-8 text-xs w-full"
-                          testId={`select-assoc-${ca.id}`}
-                        />
-                      </div>
-                      <div>
-                        <Label className="text-[11px] text-muted-foreground mb-0.5 block">Antal styrs av (metadata)</Label>
-                        <MetadataFieldSelect
-                          value={ca.metadataCorrespondence || METADATA_NONE}
-                          onValueChange={(v) => onUpdateArticleField(ca.id, { metadataCorrespondence: v === METADATA_NONE ? null : v })}
-                          definitions={definitions}
-                          index={1}
-                          allowNone
-                          placeholder="—"
-                          className="h-8 text-xs w-full"
-                          testId={`select-corr-${ca.id}`}
-                        />
-                      </div>
                     </div>
 
                     {autoPreTask && (

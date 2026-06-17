@@ -83,3 +83,16 @@ replacement hops (`repl.tenantId !== tenantId`), leaving the entry article unche
 leak foreign article name/price and could expand against it. When migrating any inline
 "prefetch entity + follow chain" block to a helper, the entry entity needs the same tenant gate
 the hops already have — easy to miss.
+
+## concept_articles.metadataAssociation / metadataCorrespondence are write-only/vestigial
+These two `concept_articles` columns ("Hakar fast på" / "Antal styrs av") are ONLY written by
+the concept-article POST/PATCH handlers in `orderConceptRoutes.ts` (and auto-populated from
+`article.defaultMetadataAssociation` in the wizard) — they are **never read** in
+expansion/preview/targeting. The authoritative sources are the ARTICLE definition: matching
+("fasthakning") = `articles.associationRules` (`server/association-service.ts`, `storage.ts`),
+quantity = `articles.quantityMode`/`quantityMetadataField`/`quantityFormula` (resolved in
+`resolveConceptArticleHits`). The wizard Step 6 (`Step6Tasks.tsx`) deliberately no longer
+exposes editors for these — Step 6 is just add-article + base quantity + pre-task offset.
+**Why:** keep the columns as expand-contract back-compat, but never wire expansion to read
+them; if you need article-to-object matching or metadata-driven quantity, go through the
+article definition, not these fields.
