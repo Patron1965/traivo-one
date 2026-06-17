@@ -76,21 +76,6 @@ const hierarchyLevelLabels: Record<string, { label: string; color: string }> = {
   objekt: { label: "Objekt", color: "bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-200" },
 };
 
-const objectTypeLabels: Record<string, string> = {
-  omrade: "Område",
-  fastighet: "Fastighet",
-  serviceboende: "Serviceboende",
-  rum: "Rum",
-  soprum: "Soprum",
-  kok: "Kök",
-  uj_hushallsavfall: "UJ Hushållsavfall",
-  matafall: "Matavfall",
-  atervinning: "Återvinning",
-  physical: "Fysiskt objekt",
-  organizational: "Organisatoriskt",
-  area: "Yta/område",
-  karl: "Kärl",
-};
 
 const accessTypeLabels: Record<string, { label: string; icon: typeof Key }> = {
   open: { label: "Öppet", icon: DoorOpen },
@@ -257,12 +242,10 @@ export default function ObjectsPage() {
       id: string; name: string; address: string; city: string; postalCode: string;
       latitude: number; longitude: number;
       entranceLatitude: number | null; entranceLongitude: number | null;
-      objectType: string;
     }>;
   } | null>(null);
   const [newObject, setNewObject] = useState({
     name: "",
-    objectType: "fastighet",
     accessType: "open",
     accessCode: "",
     address: "",
@@ -286,7 +269,7 @@ export default function ObjectsPage() {
   const [editObjectOpen, setEditObjectOpen] = useState(false);
   const [editForm, setEditForm] = useState({
     id: "", objectNumber: "" as string | null, parentId: null as string | null,
-    name: "", objectType: "fastighet", accessType: "open", accessCode: "",
+    name: "", accessType: "open", accessCode: "",
     address: "", city: "", postalCode: "",
     latitude: null as number | null, longitude: null as number | null,
   });
@@ -612,7 +595,7 @@ export default function ObjectsPage() {
   }, [createParentId, parentMetadata, createParentName]);
 
   const resetCreateForm = () => {
-    setNewObject({ name: "", objectType: "fastighet", accessType: "open", accessCode: "", address: "", customerId: "", latitude: null, longitude: null, city: "", postalCode: "", entranceLatitude: null, entranceLongitude: null, addressDescriptor: "" });
+    setNewObject({ name: "", accessType: "open", accessCode: "", address: "", customerId: "", latitude: null, longitude: null, city: "", postalCode: "", entranceLatitude: null, entranceLongitude: null, addressDescriptor: "" });
     setCreateParentId(null);
     setCreateParentName("");
     setMetadataFields([]);
@@ -935,30 +918,6 @@ export default function ObjectsPage() {
     issueFilter ? 1 : 0,
   ].reduce((a, b) => a + b, 0), [activeConditions, accessFilter, customerFilter, hierarchyFilter, cityFilter, hasSetupTimeFilter, hasParentFilter, reportedFilter, interimFilter, issueFilter]);
 
-  const quickStats = useMemo(() => {
-    const typeCounts: Record<string, number> = {};
-    let totalSetup = 0;
-    let setupCount = 0;
-    let missingCity = 0;
-    for (const obj of objects) {
-      const label = objectTypeLabels[obj.objectType] || obj.objectType;
-      typeCounts[label] = (typeCounts[label] || 0) + 1;
-      if (obj.avgSetupTime && obj.avgSetupTime > 0) {
-        totalSetup += obj.avgSetupTime;
-        setupCount++;
-      }
-      if (!obj.city || obj.city.trim() === "") missingCity++;
-    }
-    const topTypes = Object.entries(typeCounts)
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 3);
-    return {
-      topTypes,
-      avgSetup: setupCount > 0 ? Math.round(totalSetup / setupCount) : 0,
-      missingCity,
-    };
-  }, [objects]);
-
   const clearAllFilters = () => {
     setConditionFilters([]);
     setAccessFilter("all");
@@ -1027,7 +986,6 @@ export default function ObjectsPage() {
       objectNumber: obj.objectNumber ?? "",
       parentId: obj.parentId ?? null,
       name: obj.name || "",
-      objectType: obj.objectType,
       accessType: obj.accessType || "open",
       accessCode: obj.accessCode || "",
       address: obj.address || "",
@@ -1335,7 +1293,7 @@ export default function ObjectsPage() {
       for (const o of allObjects) nameById.set(o.id, (o as any).displayName || o.name);
 
       const objektHeaders = [
-        "Objektnummer", "Namn", "Visningsnamn", "Typ", "Status", "Adress", "Stad",
+        "Objektnummer", "Namn", "Visningsnamn", "Status", "Adress", "Stad",
         "Tillgång", "Kod", "Ställtid (min)", "Överordnat objektnummer", "Överordnat objekt",
       ];
       const objektRows: (string | number)[][] = allObjects.map(obj => {
@@ -1344,7 +1302,6 @@ export default function ObjectsPage() {
           obj.objectNumber || "",
           obj.name,
           (obj as any).displayName ?? obj.name,
-          objectTypeLabels[obj.objectType] || obj.objectType,
           obj.status || "",
           obj.address || "",
           obj.city || "",
@@ -1400,14 +1357,13 @@ export default function ObjectsPage() {
     const selected = objects.filter(o => selectedIds.has(o.id));
     if (selected.length === 0) return;
     const headers = [
-      "Objektnummer", "Namn", "Visningsnamn", "Typ", "Status", "Adress", "Stad",
+      "Objektnummer", "Namn", "Visningsnamn", "Status", "Adress", "Stad",
       "Tillgång", "Kod", "Ställtid (min)", "Överordnat objekt",
     ];
     const rows: (string | number)[][] = selected.map(obj => [
       obj.objectNumber || "",
       obj.name,
       (obj as any).displayName ?? obj.name,
-      objectTypeLabels[obj.objectType] || obj.objectType,
       obj.status || "",
       obj.address || "",
       obj.city || "",
@@ -2902,29 +2858,16 @@ Fastighet A,FAST-100,fastighet,Storgatan 1,Stockholm,code,1234"
               <p className="text-xs text-muted-foreground mt-1">Byt överordnat objekt för att flytta objektet i hierarkin.</p>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <Label>{t("asset_type")}</Label>
-                <Select value={editForm.objectType} onValueChange={(v) => setEditForm({ ...editForm, objectType: v })}>
-                  <SelectTrigger data-testid="select-edit-object-type"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {Object.entries(objectTypeLabels).map(([value, label]) => (
-                      <SelectItem key={value} value={value}>{label}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label>Tillgångstyp</Label>
-                <Select value={editForm.accessType} onValueChange={(v) => setEditForm({ ...editForm, accessType: v })}>
-                  <SelectTrigger data-testid="select-edit-access-type"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {Object.entries(accessTypeLabels).map(([value, { label }]) => (
-                      <SelectItem key={value} value={value}>{label}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+            <div>
+              <Label>Tillgångstyp</Label>
+              <Select value={editForm.accessType} onValueChange={(v) => setEditForm({ ...editForm, accessType: v })}>
+                <SelectTrigger data-testid="select-edit-access-type"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {Object.entries(accessTypeLabels).map(([value, { label }]) => (
+                    <SelectItem key={value} value={value}>{label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             {(editForm.accessType === "code" || editForm.accessType === "key") && (
               <div>
@@ -3013,7 +2956,6 @@ Fastighet A,FAST-100,fastighet,Storgatan 1,Stockholm,code,1234"
                   data: {
                     name: editForm.name,
                     parentId: editForm.parentId ?? null,
-                    objectType: editForm.objectType,
                     accessType: editForm.accessType,
                     accessCode: editForm.accessCode || undefined,
                     address: editForm.address || undefined,
