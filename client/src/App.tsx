@@ -42,6 +42,8 @@ const ImportPage = lazy(() => import("@/pages/ImportPage"));
 const ObjektmallImportPage = lazy(() => import("@/pages/admin/ObjektmallImportPage"));
 const ImportTemplatesPage = lazy(() => import("@/pages/admin/ImportTemplatesPage"));
 const ArticleTypesPage = lazy(() => import("@/pages/admin/ArticleTypesPage"));
+const ExecutionCodesPage = lazy(() => import("@/pages/admin/ExecutionCodesPage"));
+const IconsPage = lazy(() => import("@/pages/admin/IconsPage"));
 const ProcurementsPage = lazy(() => import("@/pages/ProcurementsPage"));
 const OptimizationPrepPage = lazy(() => import("@/pages/OptimizationPrepPage"));
 const LoginPage = lazy(() => import("@/pages/LoginPage"));
@@ -208,6 +210,8 @@ function Router() {
         <Route path="/objektmall-import">{() => <ProtectedRoute component={ObjektmallImportPage} path="/objektmall-import" />}</Route>
         <Route path="/import-templates">{() => <ProtectedRoute component={ImportTemplatesPage} path="/import-templates" />}</Route>
         <Route path="/article-types">{() => <ProtectedRoute component={ArticleTypesPage} path="/article-types" />}</Route>
+        <Route path="/execution-codes">{() => <ProtectedRoute component={ExecutionCodesPage} path="/execution-codes" />}</Route>
+        <Route path="/icons">{() => <ProtectedRoute component={IconsPage} path="/icons" />}</Route>
         <Route path="/system-overview">{() => <ProtectedRoute component={SystemOverviewPage} path="/system-overview" />}</Route>
         <Route path="/settings">{() => <ProtectedRoute component={SettingsPage} path="/settings" />}</Route>
         <Route path="/system-dashboard">{() => <ProtectedRoute component={SystemDashboardPage} path="/system-dashboard" />}</Route>

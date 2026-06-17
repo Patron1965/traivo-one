@@ -7,7 +7,8 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Link } from "wouter";
 import type { Resource, ResourceProfile, ResourceProfileAssignment } from "@shared/schema";
-import { EXECUTION_CODE_OPTIONS, getProfileIcon } from "./shared-constants";
+import { getProfileIcon } from "./shared-constants";
+import { useExecutionCodes } from "@/hooks/use-execution-codes";
 import { Users, Shield, AlertTriangle, ExternalLink, CheckCircle2, Save, Loader2, Trash2 } from "lucide-react";
 import {
   AlertDialog,
@@ -26,6 +27,8 @@ export function ResourcesExecutionTab() {
   const { data: resources = [], isLoading } = useQuery<Resource[]>({
     queryKey: ["/api/resources"],
   });
+
+  const { options: executionCodeOptions } = useExecutionCodes(resources.flatMap(r => r.executionCodes || []));
 
   const { data: profiles = [] } = useQuery<ResourceProfile[]>({ queryKey: ["/api/resource-profiles"] });
   const { data: rpAssignments = [] } = useQuery<ResourceProfileAssignment[]>({
@@ -233,7 +236,7 @@ export function ResourcesExecutionTab() {
                     </div>
                   </div>
                   <div className="flex flex-wrap gap-2">
-                    {EXECUTION_CODE_OPTIONS.map(opt => {
+                    {executionCodeOptions.map(opt => {
                       const isActive = codes.includes(opt.value);
                       return (
                         <Badge
@@ -244,7 +247,7 @@ export function ResourcesExecutionTab() {
                           data-testid={`badge-code-${resource.id}-${opt.value}`}
                         >
                           {isActive && <CheckCircle2 className="h-3 w-3 mr-1" />}
-                          {opt.label}
+                          {opt.label}{opt.isLegacy ? " (fritext)" : ""}
                         </Badge>
                       );
                     })}

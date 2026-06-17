@@ -11,9 +11,11 @@ import type {
   Article,
   MetadataDefinition,
   ArticleTypeDefinition,
+  IconDefinition,
   AssociationCondition,
   Supplier,
 } from "@shared/schema";
+import { getLucideIconByName } from "@/lib/icon-registry";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -183,6 +185,7 @@ interface ArticleFormData {
   informationRequirements: InformationRequirement[];
   performerCategory: string;
   competencyRequirements: string[];
+  iconKey: string;
 }
 
 interface ComponentDraft {
@@ -262,6 +265,7 @@ const emptyFormData: ArticleFormData = {
   informationRequirements: [],
   performerCategory: "",
   competencyRequirements: [],
+  iconKey: "",
 };
 
 // ── Hybrid-layout: sektionsdefinitioner & completeness ──────────────────────
@@ -930,6 +934,10 @@ export default function ArticleFormPage() {
     [articleTypeDefs],
   );
 
+  const { data: iconDefs = [] } = useQuery<IconDefinition[]>({
+    queryKey: ["/api/icons"],
+  });
+
   const { data: metadataDefinitions = [] } = useQuery<MetadataDefinition[]>({
     queryKey: ["/api/metadata-definitions"],
   });
@@ -1141,6 +1149,7 @@ export default function ArticleFormPage() {
         ? ((article as any).informationRequirements as InformationRequirement[])
         : [],
       performerCategory: (article as any).performerCategory || "",
+      iconKey: (article as any).iconKey || "",
       competencyRequirements: Array.isArray((article as any).competencyRequirements)
         ? ((article as any).competencyRequirements as string[])
         : [],
@@ -1542,6 +1551,34 @@ export default function ArticleFormPage() {
                     ))}
                     {formData.articleType && !articleTypeOptions.some((t) => t.value === formData.articleType) && (
                       <SelectItem value={formData.articleType}>{formData.articleType} (arkiverad)</SelectItem>
+                    )}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="iconKey">Ikon</Label>
+                <Select
+                  value={formData.iconKey || "_none"}
+                  onValueChange={(value) => setFormData({ ...formData, iconKey: value === "_none" ? "" : value })}
+                >
+                  <SelectTrigger id="iconKey" data-testid="select-article-icon">
+                    <SelectValue placeholder="Ingen ikon" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="_none">Ingen ikon</SelectItem>
+                    {iconDefs.map((icon) => {
+                      const IconCmp = getLucideIconByName(icon.lucideName);
+                      return (
+                        <SelectItem key={icon.key} value={icon.key}>
+                          <span className="flex items-center gap-2">
+                            <IconCmp className="h-4 w-4" />
+                            {icon.label}
+                          </span>
+                        </SelectItem>
+                      );
+                    })}
+                    {formData.iconKey && !iconDefs.some((i) => i.key === formData.iconKey) && (
+                      <SelectItem value={formData.iconKey}>{formData.iconKey} (arkiverad)</SelectItem>
                     )}
                   </SelectContent>
                 </Select>

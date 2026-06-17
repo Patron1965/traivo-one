@@ -7,7 +7,7 @@ import { formatZodError, verifyTenantOwnership, DEFAULT_TENANT_ID } from "./help
 import { getTenantIdWithFallback, requireAdmin } from "../tenant-middleware";
 import { asyncHandler } from "../asyncHandler";
 import { AppError, NotFoundError, ValidationError, ForbiddenError, ConflictError } from "../errors";
-import { insertArticleSchema, insertArticleTypeDefinitionSchema, insertArticleComponentSchema, insertPriceListSchema, insertPriceListArticleSchema, insertResourceArticleSchema, insertVehicleSchema, insertEquipmentSchema, insertResourceVehicleSchema, insertResourceEquipmentSchema, insertResourceAvailabilitySchema, insertVehicleScheduleSchema, insertSubscriptionSchema, insertTeamSchema, insertTeamMemberSchema, insertPlanningParameterSchema, insertResourceProfileSchema, insertResourceProfileAssignmentSchema, insertWorkSessionSchema, insertWorkEntrySchema, insertFuelLogSchema, insertMaintenanceLogSchema, workSessions, workEntries, timeLogs, equipmentBookings } from "@shared/schema";
+import { insertArticleSchema, insertArticleTypeDefinitionSchema, insertExecutionCodeDefinitionSchema, insertIconDefinitionSchema, insertArticleComponentSchema, insertPriceListSchema, insertPriceListArticleSchema, insertResourceArticleSchema, insertVehicleSchema, insertEquipmentSchema, insertResourceVehicleSchema, insertResourceEquipmentSchema, insertResourceAvailabilitySchema, insertVehicleScheduleSchema, insertSubscriptionSchema, insertTeamSchema, insertTeamMemberSchema, insertPlanningParameterSchema, insertResourceProfileSchema, insertResourceProfileAssignmentSchema, insertWorkSessionSchema, insertWorkEntrySchema, insertFuelLogSchema, insertMaintenanceLogSchema, workSessions, workEntries, timeLogs, equipmentBookings } from "@shared/schema";
 import { getISOWeek, getStartOfISOWeek } from "./helpers";
 import { notificationService } from "../notifications";
 import { TASK_TYPE_KEYS, TASK_TYPE_LABELS } from "../grovplanering-grid";
@@ -301,6 +301,102 @@ app.delete("/api/article-types/:id", requireAdmin, asyncHandler(async (req, res)
   }
   const usage = await storage.getArticleTypeUsageCount(tenantId, existing.key);
   await storage.archiveArticleTypeDefinition(req.params.id, tenantId);
+  res.json({ archived: true, usage });
+}));
+
+// ============== Task #942: UTFÖRANDEKOD-REGISTER ==============
+app.get("/api/execution-codes", asyncHandler(async (req, res) => {
+  const tenantId = getTenantIdWithFallback(req);
+  // Seed-on-read: säkerställ att tenanten alltid har systemstandarderna (idempotent, insert-only).
+  let list = await storage.getExecutionCodeDefinitions(tenantId);
+  if (list.length === 0) {
+    await storage.seedExecutionCodeDefinitions(tenantId);
+    list = await storage.getExecutionCodeDefinitions(tenantId);
+  }
+  res.json(list);
+}));
+
+app.post("/api/execution-codes", requireAdmin, asyncHandler(async (req, res) => {
+  const tenantId = getTenantIdWithFallback(req);
+  const data = insertExecutionCodeDefinitionSchema.parse({ ...req.body, tenantId, isSystem: false });
+  const existing = await storage.getExecutionCodeDefinitions(tenantId);
+  if (existing.some((t) => t.key === data.key)) {
+    throw new ConflictError(`Utförandekoden med nyckel "${data.key}" finns redan.`);
+  }
+  const created = await storage.createExecutionCodeDefinition(data);
+  res.status(201).json(created);
+}));
+
+app.patch("/api/execution-codes/:id", requireAdmin, asyncHandler(async (req, res) => {
+  const tenantId = getTenantIdWithFallback(req);
+  const existing = await storage.getExecutionCodeDefinition(req.params.id, tenantId);
+  if (!existing) throw new NotFoundError("Utförandekod hittades inte");
+  const patchSchema = insertExecutionCodeDefinitionSchema
+    .partial()
+    .omit({ tenantId: true, key: true, isSystem: true, deletedAt: true });
+  const parsed = patchSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json(formatZodError(parsed.error));
+  const updated = await storage.updateExecutionCodeDefinition(req.params.id, tenantId, parsed.data);
+  res.json(updated);
+}));
+
+// Aldrig hard-delete: koder som används av artiklar/resurser/profiler arkiveras (soft-delete).
+app.delete("/api/execution-codes/:id", requireAdmin, asyncHandler(async (req, res) => {
+  const tenantId = getTenantIdWithFallback(req);
+  const existing = await storage.getExecutionCodeDefinition(req.params.id, tenantId);
+  if (!existing) throw new NotFoundError("Utförandekod hittades inte");
+  if (existing.isSystem) {
+    throw new ConflictError("Systemstandard-utförandekoder kan inte tas bort eller arkiveras.");
+  }
+  const usage = await storage.getExecutionCodeUsageCount(tenantId, existing.key);
+  await storage.archiveExecutionCodeDefinition(req.params.id, tenantId);
+  res.json({ archived: true, usage });
+}));
+
+// ============== Task #942: IKONREGISTER ==============
+app.get("/api/icons", asyncHandler(async (req, res) => {
+  const tenantId = getTenantIdWithFallback(req);
+  let list = await storage.getIconDefinitions(tenantId);
+  if (list.length === 0) {
+    await storage.seedIconDefinitions(tenantId);
+    list = await storage.getIconDefinitions(tenantId);
+  }
+  res.json(list);
+}));
+
+app.post("/api/icons", requireAdmin, asyncHandler(async (req, res) => {
+  const tenantId = getTenantIdWithFallback(req);
+  const data = insertIconDefinitionSchema.parse({ ...req.body, tenantId, isSystem: false });
+  const existing = await storage.getIconDefinitions(tenantId);
+  if (existing.some((t) => t.key === data.key)) {
+    throw new ConflictError(`Ikonen med nyckel "${data.key}" finns redan.`);
+  }
+  const created = await storage.createIconDefinition(data);
+  res.status(201).json(created);
+}));
+
+app.patch("/api/icons/:id", requireAdmin, asyncHandler(async (req, res) => {
+  const tenantId = getTenantIdWithFallback(req);
+  const existing = await storage.getIconDefinition(req.params.id, tenantId);
+  if (!existing) throw new NotFoundError("Ikon hittades inte");
+  const patchSchema = insertIconDefinitionSchema
+    .partial()
+    .omit({ tenantId: true, key: true, isSystem: true, deletedAt: true });
+  const parsed = patchSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json(formatZodError(parsed.error));
+  const updated = await storage.updateIconDefinition(req.params.id, tenantId, parsed.data);
+  res.json(updated);
+}));
+
+app.delete("/api/icons/:id", requireAdmin, asyncHandler(async (req, res) => {
+  const tenantId = getTenantIdWithFallback(req);
+  const existing = await storage.getIconDefinition(req.params.id, tenantId);
+  if (!existing) throw new NotFoundError("Ikon hittades inte");
+  if (existing.isSystem) {
+    throw new ConflictError("Systemstandard-ikoner kan inte tas bort eller arkiveras.");
+  }
+  const usage = await storage.getIconUsageCount(tenantId, existing.key);
+  await storage.archiveIconDefinition(req.params.id, tenantId);
   res.json({ archived: true, usage });
 }));
 

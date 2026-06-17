@@ -9,7 +9,7 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Link } from "wouter";
 import type { Article } from "@shared/schema";
-import { EXECUTION_CODE_OPTIONS } from "./shared-constants";
+import { useExecutionCodes } from "@/hooks/use-execution-codes";
 import { Package, CheckCircle2, AlertTriangle, Tag, ExternalLink, Save, Loader2, Upload, Download } from "lucide-react";
 import { HelpTooltip } from "@/components/ui/help-tooltip";
 
@@ -18,6 +18,8 @@ export function ArticlesExecutionTab() {
   const { data: articles = [], isLoading } = useQuery<Article[]>({
     queryKey: ["/api/articles"],
   });
+
+  const { options: executionCodeOptions } = useExecutionCodes(articles.map(a => a.executionCode));
 
   const [editingCodes, setEditingCodes] = useState<Record<string, string>>({});
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -193,8 +195,8 @@ export function ArticlesExecutionTab() {
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="none">Ingen kod</SelectItem>
-                          {EXECUTION_CODE_OPTIONS.map(opt => (
-                            <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                          {executionCodeOptions.map(opt => (
+                            <SelectItem key={opt.value} value={opt.value}>{opt.label}{opt.isLegacy ? " (fritext)" : ""}</SelectItem>
                           ))}
                         </SelectContent>
                       </Select>

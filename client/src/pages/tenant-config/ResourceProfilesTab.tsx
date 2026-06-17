@@ -11,7 +11,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, Dialog
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import type { Resource, ResourceProfile, ResourceProfileAssignment } from "@shared/schema";
-import { EXECUTION_CODE_OPTIONS, PROFILE_COLORS, PROFILE_ICON_OPTIONS, getProfileIcon, EQUIPMENT_TYPE_OPTIONS } from "./shared-constants";
+import { PROFILE_COLORS, PROFILE_ICON_OPTIONS, getProfileIcon, EQUIPMENT_TYPE_OPTIONS } from "./shared-constants";
+import { useExecutionCodes } from "@/hooks/use-execution-codes";
 import { Plus, Pencil, Trash2, UserPlus, Wrench, CheckCircle2, Loader2 } from "lucide-react";
 import { HelpTooltip } from "@/components/ui/help-tooltip";
 
@@ -37,6 +38,10 @@ export function ResourceProfilesTab() {
   const { data: profiles = [], isLoading } = useQuery<ResourceProfile[]>({
     queryKey: ["/api/resource-profiles"],
   });
+
+  const { options: executionCodeOptions, labelFor: executionCodeLabel } = useExecutionCodes(
+    profiles.flatMap(p => p.executionCodes || [])
+  );
 
   const { data: resources = [] } = useQuery<Resource[]>({
     queryKey: ["/api/resources"],
@@ -250,12 +255,12 @@ export function ResourceProfilesTab() {
                 <div className="space-y-2">
                   <Label>Utförandekoder</Label>
                   <div className="flex flex-wrap gap-2">
-                    {EXECUTION_CODE_OPTIONS.map(opt => {
+                    {executionCodeOptions.map(opt => {
                       const active = formData.executionCodes.includes(opt.value);
                       return (
                         <Badge key={opt.value} variant={active ? "default" : "outline"} className={`cursor-pointer transition-colors ${active ? "" : "opacity-50 hover:opacity-80"}`} onClick={() => toggleCode(opt.value)} data-testid={`badge-profile-code-${opt.value}`}>
                           {active && <CheckCircle2 className="h-3 w-3 mr-1" />}
-                          {opt.label}
+                          {opt.label}{opt.isLegacy ? " (fritext)" : ""}
                         </Badge>
                       );
                     })}
@@ -349,7 +354,7 @@ export function ResourceProfilesTab() {
                           <div>
                             <span className="text-muted-foreground">Koder: </span>
                             {profile.executionCodes!.map(code => {
-                              const label = EXECUTION_CODE_OPTIONS.find(o => o.value === code)?.label || code;
+                              const label = executionCodeLabel(code);
                               return <Badge key={code} variant="outline" className="mr-1">{label}</Badge>;
                             })}
                           </div>

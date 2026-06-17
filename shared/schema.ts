@@ -653,6 +653,9 @@ export const articles = pgTable("articles", {
   isGeoDependent: boolean("is_geo_dependent").default(true),
   // Utförandekod som krävs (t.ex. "kranbil", "tvatt", "sug")
   executionCode: text("execution_code"),
+  // Task #942: Valfri ikon-referens till ikonregistret (icon_definitions.key).
+  // Nullable/fri text för back-compat — pekar inte hårt på en FK.
+  iconKey: text("icon_key"),
   // Metadata-koppling (per Mats spec Funktion 3 & 7)
   fetchMetadataCode: text("fetch_metadata_code"),
   leaveMetadataCode: text("leave_metadata_code"),
@@ -806,6 +809,44 @@ export const articleTypeDefinitions = pgTable("article_type_definitions", {
 }, (table) => [
   index("idx_article_type_defs_tenant").on(table.tenantId),
   uniqueIndex("uq_article_type_defs_tenant_key").on(table.tenantId, table.key),
+]);
+
+// Task #942: Per-tenant register över utförandekoder. `key` är det stabila värde som
+// lagras i artiklar (articles.executionCode), resurser (resources.executionCodes[]) och
+// resursprofiler (resource_profiles.executionCodes[]) — back-compat med befintlig fri text.
+// `label` är den svenska visningstexten. Soft-delete via deletedAt (arkivering); koder som
+// används får aldrig hard-deleteas (befintlig data behåller en giltig referens).
+export const executionCodeDefinitions = pgTable("execution_code_definitions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
+  key: text("key").notNull(),
+  label: text("label").notNull(),
+  sortOrder: integer("sort_order").default(0).notNull(),
+  isSystem: boolean("is_system").default(false).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  deletedAt: timestamp("deleted_at"),
+}, (table) => [
+  index("idx_execution_code_defs_tenant").on(table.tenantId),
+  uniqueIndex("uq_execution_code_defs_tenant_key").on(table.tenantId, table.key),
+]);
+
+// Task #942: Per-tenant ikonregister. Admin lägger upp namngivna ikoner som mappar mot
+// en Lucide-ikon (`lucideName`). Artiklar (articles.iconKey) kan välja en ikon från
+// registret via `key`. Soft-delete via deletedAt; ikoner som används arkiveras.
+export const iconDefinitions = pgTable("icon_definitions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
+  key: text("key").notNull(),
+  label: text("label").notNull(),
+  // Namnet på den Lucide-ikon som ska renderas (t.ex. "truck", "recycle").
+  lucideName: text("lucide_name").default("package").notNull(),
+  sortOrder: integer("sort_order").default(0).notNull(),
+  isSystem: boolean("is_system").default(false).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  deletedAt: timestamp("deleted_at"),
+}, (table) => [
+  index("idx_icon_defs_tenant").on(table.tenantId),
+  uniqueIndex("uq_icon_defs_tenant_key").on(table.tenantId, table.key),
 ]);
 
 // Prislistor - generella, kundunikt eller rabattbrev
@@ -1676,6 +1717,15 @@ export const insertArticleTypeDefinitionSchema = createInsertSchema(articleTypeD
   key: z.string().trim().min(1, "Nyckel krävs").max(50, "Nyckeln får vara högst 50 tecken"),
   label: z.string().trim().min(1, "Visningsnamn krävs").max(80, "Visningsnamnet får vara högst 80 tecken"),
 });
+export const insertExecutionCodeDefinitionSchema = createInsertSchema(executionCodeDefinitions).omit({ id: true, createdAt: true }).extend({
+  key: z.string().trim().min(1, "Nyckel krävs").max(50, "Nyckeln får vara högst 50 tecken"),
+  label: z.string().trim().min(1, "Visningsnamn krävs").max(80, "Visningsnamnet får vara högst 80 tecken"),
+});
+export const insertIconDefinitionSchema = createInsertSchema(iconDefinitions).omit({ id: true, createdAt: true }).extend({
+  key: z.string().trim().min(1, "Nyckel krävs").max(50, "Nyckeln får vara högst 50 tecken"),
+  label: z.string().trim().min(1, "Visningsnamn krävs").max(80, "Visningsnamnet får vara högst 80 tecken"),
+  lucideName: z.string().trim().min(1, "Ikon krävs").max(60, "Ikonnamnet får vara högst 60 tecken"),
+});
 export const insertPriceListSchema = createInsertSchema(priceLists)
   .omit({ id: true, createdAt: true })
   .extend({
@@ -1795,6 +1845,10 @@ export type Article = typeof articles.$inferSelect;
 export type InsertArticle = z.infer<typeof insertArticleSchema>;
 export type ArticleTypeDefinition = typeof articleTypeDefinitions.$inferSelect;
 export type InsertArticleTypeDefinition = z.infer<typeof insertArticleTypeDefinitionSchema>;
+export type ExecutionCodeDefinition = typeof executionCodeDefinitions.$inferSelect;
+export type InsertExecutionCodeDefinition = z.infer<typeof insertExecutionCodeDefinitionSchema>;
+export type IconDefinition = typeof iconDefinitions.$inferSelect;
+export type InsertIconDefinition = z.infer<typeof insertIconDefinitionSchema>;
 
 export const taskMetadataUpdates = pgTable("task_metadata_updates", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),

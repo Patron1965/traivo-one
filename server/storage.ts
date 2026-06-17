@@ -13,6 +13,8 @@ import {
   type Procurement, type InsertProcurement,
   type Article, type InsertArticle,
   type ArticleTypeDefinition, type InsertArticleTypeDefinition,
+  type ExecutionCodeDefinition, type InsertExecutionCodeDefinition,
+  type IconDefinition, type InsertIconDefinition,
   type PriceList, type InsertPriceList,
   type PriceListArticle, type InsertPriceListArticle,
   type ResourceArticle, type InsertResourceArticle,
@@ -121,7 +123,7 @@ import {
   resourceProfiles, resourceProfileAssignments,
   fortnoxConfig, fortnoxMappings, fortnoxInvoiceExports, manualInvoiceLines,
   users, tenants, customers, customerRelationships, objects, resources, workOrders, setupTimeLogs, procurements,
-  articles, articleTypeDefinitions, priceLists, priceListArticles, resourceArticles, workOrderLines, simulationScenarios,
+  articles, articleTypeDefinitions, executionCodeDefinitions, iconDefinitions, priceLists, priceListArticles, resourceArticles, workOrderLines, simulationScenarios,
   vehicles, equipment, resourceVehicles, resourceEquipment, resourceAvailability,
   vehicleSchedule, subscriptions, teams, teamMembers, taskTypes, planningParameters, clusters,
   resourcePositions,
@@ -598,6 +600,24 @@ export interface IStorage {
   archiveArticleTypeDefinition(id: string, tenantId: string): Promise<void>;
   getArticleTypeUsageCount(tenantId: string, key: string): Promise<number>;
   seedArticleTypeDefinitions(tenantId: string): Promise<void>;
+
+  // Execution code registry (Task #942) — per-tenant katalog över utförandekoder
+  getExecutionCodeDefinitions(tenantId: string): Promise<ExecutionCodeDefinition[]>;
+  getExecutionCodeDefinition(id: string, tenantId: string): Promise<ExecutionCodeDefinition | undefined>;
+  createExecutionCodeDefinition(data: InsertExecutionCodeDefinition): Promise<ExecutionCodeDefinition>;
+  updateExecutionCodeDefinition(id: string, tenantId: string, patch: Partial<InsertExecutionCodeDefinition>): Promise<ExecutionCodeDefinition | undefined>;
+  archiveExecutionCodeDefinition(id: string, tenantId: string): Promise<void>;
+  getExecutionCodeUsageCount(tenantId: string, key: string): Promise<number>;
+  seedExecutionCodeDefinitions(tenantId: string): Promise<void>;
+
+  // Icon registry (Task #942) — per-tenant katalog över namngivna ikoner
+  getIconDefinitions(tenantId: string): Promise<IconDefinition[]>;
+  getIconDefinition(id: string, tenantId: string): Promise<IconDefinition | undefined>;
+  createIconDefinition(data: InsertIconDefinition): Promise<IconDefinition>;
+  updateIconDefinition(id: string, tenantId: string, patch: Partial<InsertIconDefinition>): Promise<IconDefinition | undefined>;
+  archiveIconDefinition(id: string, tenantId: string): Promise<void>;
+  getIconUsageCount(tenantId: string, key: string): Promise<number>;
+  seedIconDefinitions(tenantId: string): Promise<void>;
 
   // Object Articles (manual article links)
   getObjectArticles(tenantId: string, objectId: string): Promise<ObjectArticle[]>;
@@ -4785,6 +4805,169 @@ export class DatabaseStorage implements IStorage {
       .filter((t) => !existingKeys.has(t.key));
     if (toInsert.length > 0) {
       await db.insert(articleTypeDefinitions).values(toInsert);
+    }
+  }
+
+  // === Execution code registry (Task #942) ===
+  // Standardkoder speglar de tidigare hårdkodade EXECUTION_CODE_OPTIONS i frontend.
+  private static readonly DEFAULT_EXECUTION_CODES: { key: string; label: string }[] = [
+    { key: "sophamtning", label: "Sophämtning" },
+    { key: "karltomning", label: "Kärltömning" },
+    { key: "matavfall", label: "Matavfall" },
+    { key: "tvatt", label: "Tvätt" },
+    { key: "kranbil", label: "Kranbil" },
+    { key: "sug", label: "Sugbil" },
+    { key: "container", label: "Container" },
+    { key: "atervinning", label: "Återvinning" },
+    { key: "farligt_avfall", label: "Farligt avfall" },
+    { key: "kontroll", label: "Kontroll/inspektion" },
+    { key: "stadning", label: "Städning" },
+    { key: "snorojning", label: "Snöröjning" },
+    { key: "transport", label: "Transport" },
+    { key: "bygg", label: "Bygg/underhåll" },
+  ];
+
+  async getExecutionCodeDefinitions(tenantId: string): Promise<ExecutionCodeDefinition[]> {
+    return db.select().from(executionCodeDefinitions)
+      .where(and(eq(executionCodeDefinitions.tenantId, tenantId), isNull(executionCodeDefinitions.deletedAt)))
+      .orderBy(executionCodeDefinitions.sortOrder, executionCodeDefinitions.label);
+  }
+
+  async getExecutionCodeDefinition(id: string, tenantId: string): Promise<ExecutionCodeDefinition | undefined> {
+    const [row] = await db.select().from(executionCodeDefinitions)
+      .where(and(eq(executionCodeDefinitions.id, id), eq(executionCodeDefinitions.tenantId, tenantId)));
+    return row || undefined;
+  }
+
+  async createExecutionCodeDefinition(data: InsertExecutionCodeDefinition): Promise<ExecutionCodeDefinition> {
+    // Återuppliva en arkiverad kod med samma nyckel istället för att krocka mot
+    // unik-index (tenantId, key).
+    const [existing] = await db.select().from(executionCodeDefinitions)
+      .where(and(eq(executionCodeDefinitions.tenantId, data.tenantId), eq(executionCodeDefinitions.key, data.key)));
+    if (existing) {
+      const [revived] = await db.update(executionCodeDefinitions)
+        .set({ label: data.label, sortOrder: data.sortOrder ?? existing.sortOrder, deletedAt: null })
+        .where(eq(executionCodeDefinitions.id, existing.id))
+        .returning();
+      return revived;
+    }
+    const [row] = await db.insert(executionCodeDefinitions).values(data).returning();
+    return row;
+  }
+
+  async updateExecutionCodeDefinition(id: string, tenantId: string, patch: Partial<InsertExecutionCodeDefinition>): Promise<ExecutionCodeDefinition | undefined> {
+    // `key`/`tenantId` immutable; `isSystem`/`deletedAt` får aldrig muteras via denna väg.
+    const { key: _k, tenantId: _t, isSystem: _s, deletedAt: _d, ...safe } = patch as any;
+    const [row] = await db.update(executionCodeDefinitions)
+      .set(safe)
+      .where(and(eq(executionCodeDefinitions.id, id), eq(executionCodeDefinitions.tenantId, tenantId)))
+      .returning();
+    return row || undefined;
+  }
+
+  async archiveExecutionCodeDefinition(id: string, tenantId: string): Promise<void> {
+    await db.update(executionCodeDefinitions)
+      .set({ deletedAt: new Date() })
+      .where(and(eq(executionCodeDefinitions.id, id), eq(executionCodeDefinitions.tenantId, tenantId)));
+  }
+
+  async getExecutionCodeUsageCount(tenantId: string, key: string): Promise<number> {
+    const { count } = await import("drizzle-orm");
+    // Artiklar med matchande executionCode + resurser/profiler vars executionCodes[] innehåller koden.
+    const [art] = await db.select({ count: count() }).from(articles)
+      .where(and(eq(articles.tenantId, tenantId), eq(articles.executionCode, key), isNull(articles.deletedAt)));
+    const [res] = await db.select({ count: count() }).from(resources)
+      .where(and(eq(resources.tenantId, tenantId), sql`${key} = ANY(${resources.executionCodes})`, isNull(resources.deletedAt)));
+    const [prof] = await db.select({ count: count() }).from(resourceProfiles)
+      .where(and(eq(resourceProfiles.tenantId, tenantId), sql`${key} = ANY(${resourceProfiles.executionCodes})`));
+    return (art?.count || 0) + (res?.count || 0) + (prof?.count || 0);
+  }
+
+  async seedExecutionCodeDefinitions(tenantId: string): Promise<void> {
+    const existing = await db.select({ key: executionCodeDefinitions.key }).from(executionCodeDefinitions)
+      .where(eq(executionCodeDefinitions.tenantId, tenantId));
+    const existingKeys = new Set(existing.map((r) => r.key));
+    const toInsert = DatabaseStorage.DEFAULT_EXECUTION_CODES
+      .map((t, i) => ({ tenantId, key: t.key, label: t.label, sortOrder: i, isSystem: true }))
+      .filter((t) => !existingKeys.has(t.key));
+    if (toInsert.length > 0) {
+      await db.insert(executionCodeDefinitions).values(toInsert);
+    }
+  }
+
+  // === Icon registry (Task #942) ===
+  // Standardikoner speglar de tidigare PROFILE_ICON_OPTIONS i frontend.
+  private static readonly DEFAULT_ICONS: { key: string; label: string; lucideName: string }[] = [
+    { key: "verktyg", label: "Verktyg", lucideName: "wrench" },
+    { key: "lastbil", label: "Lastbil", lucideName: "truck" },
+    { key: "hjalm", label: "Hjälm", lucideName: "hard-hat" },
+    { key: "hammare", label: "Hammare", lucideName: "hammer" },
+    { key: "kugghjul", label: "Kugghjul", lucideName: "cog" },
+    { key: "plats", label: "Plats", lucideName: "map-pin" },
+    { key: "atervinning", label: "Återvinning", lucideName: "recycle" },
+    { key: "sno", label: "Snö", lucideName: "snowflake" },
+    { key: "vatten", label: "Vatten", lucideName: "droplets" },
+    { key: "blixt", label: "Blixt", lucideName: "zap" },
+    { key: "paket", label: "Paket", lucideName: "package" },
+  ];
+
+  async getIconDefinitions(tenantId: string): Promise<IconDefinition[]> {
+    return db.select().from(iconDefinitions)
+      .where(and(eq(iconDefinitions.tenantId, tenantId), isNull(iconDefinitions.deletedAt)))
+      .orderBy(iconDefinitions.sortOrder, iconDefinitions.label);
+  }
+
+  async getIconDefinition(id: string, tenantId: string): Promise<IconDefinition | undefined> {
+    const [row] = await db.select().from(iconDefinitions)
+      .where(and(eq(iconDefinitions.id, id), eq(iconDefinitions.tenantId, tenantId)));
+    return row || undefined;
+  }
+
+  async createIconDefinition(data: InsertIconDefinition): Promise<IconDefinition> {
+    const [existing] = await db.select().from(iconDefinitions)
+      .where(and(eq(iconDefinitions.tenantId, data.tenantId), eq(iconDefinitions.key, data.key)));
+    if (existing) {
+      const [revived] = await db.update(iconDefinitions)
+        .set({ label: data.label, lucideName: data.lucideName ?? existing.lucideName, sortOrder: data.sortOrder ?? existing.sortOrder, deletedAt: null })
+        .where(eq(iconDefinitions.id, existing.id))
+        .returning();
+      return revived;
+    }
+    const [row] = await db.insert(iconDefinitions).values(data).returning();
+    return row;
+  }
+
+  async updateIconDefinition(id: string, tenantId: string, patch: Partial<InsertIconDefinition>): Promise<IconDefinition | undefined> {
+    const { key: _k, tenantId: _t, isSystem: _s, deletedAt: _d, ...safe } = patch as any;
+    const [row] = await db.update(iconDefinitions)
+      .set(safe)
+      .where(and(eq(iconDefinitions.id, id), eq(iconDefinitions.tenantId, tenantId)))
+      .returning();
+    return row || undefined;
+  }
+
+  async archiveIconDefinition(id: string, tenantId: string): Promise<void> {
+    await db.update(iconDefinitions)
+      .set({ deletedAt: new Date() })
+      .where(and(eq(iconDefinitions.id, id), eq(iconDefinitions.tenantId, tenantId)));
+  }
+
+  async getIconUsageCount(tenantId: string, key: string): Promise<number> {
+    const { count } = await import("drizzle-orm");
+    const [row] = await db.select({ count: count() }).from(articles)
+      .where(and(eq(articles.tenantId, tenantId), eq(articles.iconKey, key), isNull(articles.deletedAt)));
+    return row?.count || 0;
+  }
+
+  async seedIconDefinitions(tenantId: string): Promise<void> {
+    const existing = await db.select({ key: iconDefinitions.key }).from(iconDefinitions)
+      .where(eq(iconDefinitions.tenantId, tenantId));
+    const existingKeys = new Set(existing.map((r) => r.key));
+    const toInsert = DatabaseStorage.DEFAULT_ICONS
+      .map((t, i) => ({ tenantId, key: t.key, label: t.label, lucideName: t.lucideName, sortOrder: i, isSystem: true }))
+      .filter((t) => !existingKeys.has(t.key));
+    if (toInsert.length > 0) {
+      await db.insert(iconDefinitions).values(toInsert);
     }
   }
 
