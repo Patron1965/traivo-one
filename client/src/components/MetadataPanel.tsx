@@ -30,6 +30,12 @@ import {
 } from "@/components/ui/tooltip";
 import { useToast } from "@/hooks/use-toast";
 import {
+  isPhotoDatatyp,
+  parseCompositeSubfields,
+  PhotoGalleryView,
+  ContactCardsView,
+} from "@/components/MetadataCatalog";
+import {
   Plus,
   Edit2,
   Trash2,
@@ -304,6 +310,163 @@ export function MetadataPanel({ objectId, readOnly = false }: MetadataPanelProps
   const usedTypeNames = new Set(objectData.metadata.filter(m => m.source === 'local').map(m => m.katalog.namn));
   const availableTypes = metadataTypes?.filter(t => !usedTypeNames.has(t.namn)) || [];
 
+  // Task #971: en vanlig (unik) metadatarad — oförändrad jämfört med tidigare.
+  const renderItemRow = (metadata: MetadataVardenWithKatalog) => {
+    const Icon = getIcon(metadata.katalog.icon);
+    return (
+      <div
+        key={metadata.id}
+        className="flex items-center justify-between p-2 rounded-md border bg-card"
+        data-testid={`metadata-item-${metadata.katalog.namn}`}
+      >
+        <div className="flex items-center gap-2 flex-1 min-w-0">
+          <Icon className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+          <div className="flex flex-col min-w-0">
+            <span className="text-sm font-medium truncate">
+              {metadata.katalog.namn.replace(/_/g, ' ')}
+            </span>
+            <span className="text-sm text-muted-foreground truncate">
+              {formatValue(metadata)}
+            </span>
+          </div>
+        </div>
+        <div className="flex items-center gap-1 flex-shrink-0">
+          {metadata.source === 'inherited' ? (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Badge variant="secondary" className="text-xs">
+                  <ArrowDownToLine className="h-3 w-3 mr-1" />
+                  Ärvd
+                </Badge>
+              </TooltipTrigger>
+              <TooltipContent>
+                Ärvd från: {metadata.fromObject?.namn} (nivå {metadata.fromObject?.level})
+              </TooltipContent>
+            </Tooltip>
+          ) : (
+            <>
+              {metadata.arvsNedat && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Badge variant="outline" className="text-xs">
+                      <ArrowDownToLine className="h-3 w-3" />
+                    </Badge>
+                  </TooltipTrigger>
+                  <TooltipContent>Ärv nedåt till barn</TooltipContent>
+                </Tooltip>
+              )}
+              {metadata.stoppaVidareArvning && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Badge variant="outline" className="text-xs text-chart-4">
+                      <Ban className="h-3 w-3" />
+                    </Badge>
+                  </TooltipTrigger>
+                  <TooltipContent>Stoppar vidare ärvning</TooltipContent>
+                </Tooltip>
+              )}
+              {!readOnly && (
+                <>
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    onClick={() => setEditingMetadata(metadata)}
+                    data-testid={`button-edit-${metadata.katalog.namn}`}
+                  >
+                    <Edit2 className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    onClick={() => deleteMutation.mutate(metadata.id)}
+                    data-testid={`button-delete-${metadata.katalog.namn}`}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </>
+              )}
+            </>
+          )}
+        </div>
+      </div>
+    );
+  };
+
+  // Task #971: en katalog (allowDuplicates) renderas som EN läs-vy — galleri för
+  // foto, kontaktkort för sammansatt json, annars en värdelista. Redigering sker i
+  // den dedikerade objekt-panelen; här är vyn alltid läs-läge.
+  const renderCatalogGroup = (group: MetadataVardenWithKatalog[]) => {
+    const first = group[0];
+    const Icon = getIcon(first.katalog.icon);
+    const datatyp = first.katalog.datatyp;
+    const anyInherited = group.some((g) => g.source === 'inherited');
+    return (
+      <div
+        key={first.metadataKatalogId}
+        className="rounded-md border bg-card p-2 space-y-2"
+        data-testid={`metadata-catalog-${first.katalog.namn}`}
+      >
+        <div className="flex items-center gap-2">
+          <Icon className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+          <span className="text-sm font-medium truncate">
+            {first.katalog.namn.replace(/_/g, ' ')}
+          </span>
+          <Badge
+            variant="secondary"
+            className="text-[10px] px-1.5 py-0"
+            data-testid={`metadata-catalog-count-${first.katalog.namn}`}
+          >
+            {group.length}
+          </Badge>
+          {anyInherited && (
+            <Badge variant="secondary" className="text-xs">
+              <ArrowDownToLine className="h-3 w-3 mr-1" />
+              Ärvd
+            </Badge>
+          )}
+        </div>
+        {isPhotoDatatyp(datatyp) ? (
+          <PhotoGalleryView
+            items={group
+              .map((g) => ({
+                id: g.id,
+                url: g.vardeString ?? '',
+                label: g.katalog.namn,
+                source: g.source,
+              }))
+              .filter((it) => it.url)}
+            testIdBase={`metadata-gallery-${first.katalog.namn}`}
+          />
+        ) : datatyp === 'json' ? (
+          <ContactCardsView
+            cards={group
+              .map((g) => {
+                const subfields = parseCompositeSubfields(g.vardeJson);
+                return subfields ? { id: g.id, subfields, source: g.source } : null;
+              })
+              .filter(
+                (c): c is { id: string; subfields: Array<{ key: string; value: string }>; source: 'local' | 'inherited' } =>
+                  c != null,
+              )}
+            testIdBase={`metadata-cards-${first.katalog.namn}`}
+          />
+        ) : (
+          <div className="space-y-1">
+            {group.map((g) => (
+              <p
+                key={g.id}
+                className="text-sm text-muted-foreground truncate"
+                data-testid={`metadata-value-${g.id}`}
+              >
+                {formatValue(g)}
+              </p>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  };
+
   return (
     <Card>
       <CardHeader className="flex flex-row items-center justify-between gap-2">
@@ -330,96 +493,30 @@ export function MetadataPanel({ objectId, readOnly = false }: MetadataPanelProps
         )}
       </CardHeader>
       <CardContent className="space-y-4">
-        {Object.entries(groupedMetadata).map(([kategori, items]) => (
-          <div key={kategori}>
-            <h4 className="text-sm font-medium text-muted-foreground mb-2">
-              {categoryLabels[kategori] || kategori}
-            </h4>
-            <div className="space-y-2">
-              {items.map((metadata) => {
-                const Icon = getIcon(metadata.katalog.icon);
-                return (
-                  <div
-                    key={metadata.id}
-                    className="flex items-center justify-between p-2 rounded-md border bg-card"
-                    data-testid={`metadata-item-${metadata.katalog.namn}`}
-                  >
-                    <div className="flex items-center gap-2 flex-1 min-w-0">
-                      <Icon className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-                      <div className="flex flex-col min-w-0">
-                        <span className="text-sm font-medium truncate">
-                          {metadata.katalog.namn.replace(/_/g, ' ')}
-                        </span>
-                        <span className="text-sm text-muted-foreground truncate">
-                          {formatValue(metadata)}
-                        </span>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-1 flex-shrink-0">
-                      {metadata.source === 'inherited' ? (
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Badge variant="secondary" className="text-xs">
-                              <ArrowDownToLine className="h-3 w-3 mr-1" />
-                              Ärvd
-                            </Badge>
-                          </TooltipTrigger>
-                          <TooltipContent>
-                            Ärvd från: {metadata.fromObject?.namn} (nivå {metadata.fromObject?.level})
-                          </TooltipContent>
-                        </Tooltip>
-                      ) : (
-                        <>
-                          {metadata.arvsNedat && (
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <Badge variant="outline" className="text-xs">
-                                  <ArrowDownToLine className="h-3 w-3" />
-                                </Badge>
-                              </TooltipTrigger>
-                              <TooltipContent>Ärv nedåt till barn</TooltipContent>
-                            </Tooltip>
-                          )}
-                          {metadata.stoppaVidareArvning && (
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <Badge variant="outline" className="text-xs text-chart-4">
-                                  <Ban className="h-3 w-3" />
-                                </Badge>
-                              </TooltipTrigger>
-                              <TooltipContent>Stoppar vidare ärvning</TooltipContent>
-                            </Tooltip>
-                          )}
-                          {!readOnly && (
-                            <>
-                              <Button
-                                size="icon"
-                                variant="ghost"
-                                onClick={() => setEditingMetadata(metadata)}
-                                data-testid={`button-edit-${metadata.katalog.namn}`}
-                              >
-                                <Edit2 className="h-4 w-4" />
-                              </Button>
-                              <Button
-                                size="icon"
-                                variant="ghost"
-                                onClick={() => deleteMutation.mutate(metadata.id)}
-                                data-testid={`button-delete-${metadata.katalog.namn}`}
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
-                            </>
-                          )}
-                        </>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
+        {Object.entries(groupedMetadata).map(([kategori, items]) => {
+          const uniqueItems = items.filter((m) => (m.katalog as any).allowDuplicates !== true);
+          const groupsMap = new Map<string, MetadataVardenWithKatalog[]>();
+          for (const m of items) {
+            if ((m.katalog as any).allowDuplicates === true) {
+              const k = m.metadataKatalogId;
+              if (!groupsMap.has(k)) groupsMap.set(k, []);
+              groupsMap.get(k)!.push(m);
+            }
+          }
+          const catGroups = Array.from(groupsMap.values());
+          return (
+            <div key={kategori}>
+              <h4 className="text-sm font-medium text-muted-foreground mb-2">
+                {categoryLabels[kategori] || kategori}
+              </h4>
+              <div className="space-y-2">
+                {uniqueItems.map((metadata) => renderItemRow(metadata))}
+                {catGroups.map((group) => renderCatalogGroup(group))}
+              </div>
+              <Separator className="my-4" />
             </div>
-            <Separator className="my-4" />
-          </div>
-        ))}
+          );
+        })}
 
         {objectData.metadata.length === 0 && (
           <div className="text-center text-muted-foreground py-4">

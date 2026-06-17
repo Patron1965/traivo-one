@@ -9,6 +9,12 @@ import { Loader2, Database, ArrowDownToLine, ArrowUpFromLine, CheckCircle2 } fro
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import {
+  isPhotoDatatyp,
+  parseCompositeSubfields,
+  PhotoGalleryView,
+  ContactCardsView,
+} from "@/components/MetadataCatalog";
 
 interface MetadataPreview {
   metadataCode: string;
@@ -93,7 +99,14 @@ export function WorkOrderMetadataPanel({
             <TooltipTrigger asChild>
               <Badge variant="outline" className="gap-0.5 text-[10px] h-4 px-1">
                 <ArrowDownToLine className="h-2.5 w-2.5" />
-                {metadataPreview.fetch.katalogName}: {metadataPreview.fetch.currentValue ?? "—"}
+                {metadataPreview.fetch.katalogName}:{" "}
+                {isPhotoDatatyp(metadataPreview.fetch.datatype)
+                  ? "Bild"
+                  : metadataPreview.fetch.datatype === "json"
+                    ? metadataPreview.fetch.currentValue
+                      ? "Ifyllt"
+                      : "—"
+                    : (metadataPreview.fetch.currentValue ?? "—")}
               </Badge>
             </TooltipTrigger>
             <TooltipContent>Hämtad metadata från objektet</TooltipContent>
@@ -146,17 +159,41 @@ export function WorkOrderMetadataPanel({
               <ArrowDownToLine className="h-3 w-3" />
               Hämta: {metadataPreview.fetch.katalogName}
             </Label>
-            <div className="flex items-center gap-2">
-              <Input
-                value={metadataPreview.fetch.currentValue || ""}
-                readOnly
-                className="h-7 text-xs bg-muted"
-                data-testid={`input-fetch-metadata-${workOrderId}`}
+            {isPhotoDatatyp(metadataPreview.fetch.datatype) && metadataPreview.fetch.currentValue ? (
+              <PhotoGalleryView
+                items={[
+                  {
+                    id: `${workOrderId}-fetch`,
+                    url: metadataPreview.fetch.currentValue,
+                    label: metadataPreview.fetch.katalogName,
+                  },
+                ]}
+                testIdBase={`gallery-fetch-metadata-${workOrderId}`}
               />
-              <Badge variant="secondary" className="text-xs shrink-0">
-                {metadataPreview.fetch.datatype}
-              </Badge>
-            </div>
+            ) : metadataPreview.fetch.datatype === "json" &&
+              parseCompositeSubfields(metadataPreview.fetch.currentValue) ? (
+              <ContactCardsView
+                cards={[
+                  {
+                    id: `${workOrderId}-fetch`,
+                    subfields: parseCompositeSubfields(metadataPreview.fetch.currentValue)!,
+                  },
+                ]}
+                testIdBase={`cards-fetch-metadata-${workOrderId}`}
+              />
+            ) : (
+              <div className="flex items-center gap-2">
+                <Input
+                  value={metadataPreview.fetch.currentValue || ""}
+                  readOnly
+                  className="h-7 text-xs bg-muted"
+                  data-testid={`input-fetch-metadata-${workOrderId}`}
+                />
+                <Badge variant="secondary" className="text-xs shrink-0">
+                  {metadataPreview.fetch.datatype}
+                </Badge>
+              </div>
+            )}
           </div>
         )}
 

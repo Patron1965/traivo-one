@@ -5,6 +5,12 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import {
+  isPhotoDatatyp,
+  parseCompositeSubfields,
+  PhotoGalleryView,
+  ContactCardsView,
+} from "@/components/MetadataCatalog";
 
 interface MetadataEntry {
   id: string;
@@ -64,6 +70,62 @@ export function ObjectInheritedMetadataPanel({ objectId }: Props) {
     () => all.filter((m) => m.source === "local" && m.stoppaVidareArvning === true),
     [all],
   );
+
+  // Task #971: gruppera per katalog så multi-värdes-kataloger (foto/kontakt med
+  // allowDuplicates) visas som ETT galleri/kortset i läs-läge istället för en rad
+  // per värde.
+  const inheritedGroups = useMemo(() => {
+    const map = new Map<string, MetadataEntry[]>();
+    for (const m of inherited) {
+      const k = m.metadataKatalogId;
+      if (!map.has(k)) map.set(k, []);
+      map.get(k)!.push(m);
+    }
+    return Array.from(map.values());
+  }, [inherited]);
+  const blockedGroups = useMemo(() => {
+    const map = new Map<string, MetadataEntry[]>();
+    for (const m of blocked) {
+      const k = m.metadataKatalogId;
+      if (!map.has(k)) map.set(k, []);
+      map.get(k)!.push(m);
+    }
+    return Array.from(map.values());
+  }, [blocked]);
+
+  // Typmedveten läs-rendering: galleri för foto, kontaktkort för sammansatt json,
+  // annars text.
+  const renderValue = (entries: MetadataEntry[], testIdBase: string) => {
+    const datatyp = entries[0]?.katalog?.datatyp ?? null;
+    if (isPhotoDatatyp(datatyp)) {
+      const items = entries
+        .map((e) => ({
+          id: e.id,
+          url: e.vardeString ?? "",
+          label: e.katalog?.namn ?? undefined,
+          source: "inherited" as const,
+        }))
+        .filter((it) => it.url);
+      if (items.length > 0) return <PhotoGalleryView items={items} testIdBase={testIdBase} />;
+    }
+    if (datatyp === "json") {
+      const cards = entries
+        .map((e) => {
+          const subfields = parseCompositeSubfields(e.vardeJson);
+          return subfields ? { id: e.id, subfields, source: "inherited" as const } : null;
+        })
+        .filter(
+          (c): c is { id: string; subfields: Array<{ key: string; value: string }>; source: "inherited" } =>
+            c != null,
+        );
+      if (cards.length > 0) return <ContactCardsView cards={cards} testIdBase={testIdBase} />;
+    }
+    return (
+      <p className="text-sm text-muted-foreground truncate" data-testid={`${testIdBase}-text`}>
+        {entries.map((e) => displayValue(e)).join(", ")}
+      </p>
+    );
+  };
 
   // Blockera ett ärvt fält: materialisera ett lokalt värde (kopia) och sätt
   // stoppaVidareArvning=true så det inte ärvs vidare nedåt till barn. Svenska
@@ -126,56 +188,84 @@ export function ObjectInheritedMetadataPanel({ objectId }: Props) {
 
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2" data-testid="grid-inherited-metadata">
-      {inherited.map((m) => (
-        <div
-          key={m.metadataKatalogId}
-          className="flex items-start justify-between gap-2 rounded-md border p-2"
-          data-testid={`inherited-field-${m.metadataKatalogId}`}
-        >
-          <div className="min-w-0">
-            <p className="text-sm font-medium truncate">{m.katalog?.namn}</p>
-            <p className="text-sm text-muted-foreground truncate">{displayValue(m)}</p>
-            {m.fromObject?.namn && (
-              <Badge variant="secondary" className="mt-1 text-xs">Ärvd från {m.fromObject.namn}</Badge>
-            )}
-          </div>
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            className="shrink-0 text-muted-foreground hover:text-destructive"
-            disabled={blockMutation.isPending}
-            onClick={() => blockMutation.mutate(m)}
-            data-testid={`button-block-inheritance-${m.metadataKatalogId}`}
+      {inheritedGroups.map((group) => {
+        const m = group[0];
+        const datatyp = m.katalog?.datatyp ?? null;
+        const isCatalog = group.length > 1 || isPhotoDatatyp(datatyp) || datatyp === "json";
+        return (
+          <div
+            key={m.metadataKatalogId}
+            className={`flex items-start justify-between gap-2 rounded-md border p-2 ${isCatalog ? "sm:col-span-2" : ""}`}
+            data-testid={`inherited-field-${m.metadataKatalogId}`}
           >
-            <Ban className="h-3.5 w-3.5 mr-1" /> Blockera
-          </Button>
-        </div>
-      ))}
-      {blocked.map((m) => (
-        <div
-          key={m.metadataKatalogId}
-          className="flex items-start justify-between gap-2 rounded-md border border-warning/40 bg-warning/5 p-2"
-          data-testid={`blocked-field-${m.metadataKatalogId}`}
-        >
-          <div className="min-w-0">
-            <p className="text-sm font-medium truncate">{m.katalog?.namn}</p>
-            <p className="text-sm text-muted-foreground truncate">{displayValue(m)}</p>
-            <Badge variant="outline" className="mt-1 text-xs border-warning text-warning">Blockerad nedåt</Badge>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2 flex-wrap">
+                <p className="text-sm font-medium truncate">{m.katalog?.namn}</p>
+                {group.length > 1 && (
+                  <Badge
+                    variant="secondary"
+                    className="text-[10px] px-1.5 py-0"
+                    data-testid={`inherited-count-${m.metadataKatalogId}`}
+                  >
+                    {group.length}
+                  </Badge>
+                )}
+              </div>
+              <div className="mt-1">{renderValue(group, `inherited-value-${m.metadataKatalogId}`)}</div>
+              {m.fromObject?.namn && (
+                <Badge variant="secondary" className="mt-1 text-xs">Ärvd från {m.fromObject.namn}</Badge>
+              )}
+            </div>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="shrink-0 text-muted-foreground hover:text-destructive"
+              disabled={blockMutation.isPending}
+              onClick={() => group.forEach((e) => blockMutation.mutate(e))}
+              data-testid={`button-block-inheritance-${m.metadataKatalogId}`}
+            >
+              <Ban className="h-3.5 w-3.5 mr-1" /> Blockera
+            </Button>
           </div>
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            className="shrink-0 text-muted-foreground"
-            disabled={unblockMutation.isPending}
-            onClick={() => unblockMutation.mutate(m)}
-            data-testid={`button-unblock-inheritance-${m.metadataKatalogId}`}
+        );
+      })}
+      {blockedGroups.map((group) => {
+        const m = group[0];
+        const datatyp = m.katalog?.datatyp ?? null;
+        const isCatalog = group.length > 1 || isPhotoDatatyp(datatyp) || datatyp === "json";
+        return (
+          <div
+            key={m.metadataKatalogId}
+            className={`flex items-start justify-between gap-2 rounded-md border border-warning/40 bg-warning/5 p-2 ${isCatalog ? "sm:col-span-2" : ""}`}
+            data-testid={`blocked-field-${m.metadataKatalogId}`}
           >
-            <Undo2 className="h-3.5 w-3.5 mr-1" /> Tillåt
-          </Button>
-        </div>
-      ))}
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2 flex-wrap">
+                <p className="text-sm font-medium truncate">{m.katalog?.namn}</p>
+                {group.length > 1 && (
+                  <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
+                    {group.length}
+                  </Badge>
+                )}
+              </div>
+              <div className="mt-1">{renderValue(group, `blocked-value-${m.metadataKatalogId}`)}</div>
+              <Badge variant="outline" className="mt-1 text-xs border-warning text-warning">Blockerad nedåt</Badge>
+            </div>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="shrink-0 text-muted-foreground"
+              disabled={unblockMutation.isPending}
+              onClick={() => group.forEach((e) => unblockMutation.mutate(e))}
+              data-testid={`button-unblock-inheritance-${m.metadataKatalogId}`}
+            >
+              <Undo2 className="h-3.5 w-3.5 mr-1" /> Tillåt
+            </Button>
+          </div>
+        );
+      })}
     </div>
   );
 }

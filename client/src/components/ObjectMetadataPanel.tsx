@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
@@ -15,11 +15,19 @@ import {
   Loader2, Database, Lock, Plus, Save, X, History, Edit2, 
   ArrowDown, ExternalLink, Trash2, Image, FileText, MapPin, Clock, Hash, Type, ToggleLeft,
   Share2, ChevronRight, ChevronDown, TreeDeciduous, RotateCcw, Pencil, Calculator, AlertTriangle,
-  Server, Wrench
+  Server, Wrench, Upload
 } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import type { ServiceObject, MetadataKatalog, MetadataHistorik } from "@shared/schema";
 import { useMetadataAreas } from "@/hooks/use-metadata-areas";
+import { useUpload } from "@/hooks/use-upload";
+import {
+  isPhotoDatatyp,
+  parseCompositeSubfields,
+  PhotoGalleryView,
+  ContactCardsView,
+} from "@/components/MetadataCatalog";
 
 interface MetadataEntry {
   id: string;
@@ -120,29 +128,8 @@ function getRawValue(entry: MetadataEntry): any {
   return "";
 }
 
-// Task #633: sammansatta fält lagras som strukturerad JSON (varde_json) — ett platt
-// objekt av { underfält: textvärde }. Returnerar nyckel/värde-paren om värdet är ett
-// sådant objekt, annars null (då faller vi tillbaka till vanlig visning/redigering).
-function parseCompositeSubfields(raw: any): Array<{ key: string; value: string }> | null {
-  if (raw == null) return null;
-  let obj: any = raw;
-  if (typeof raw === "string") {
-    const s = raw.trim();
-    if (!s.startsWith("{")) return null;
-    try {
-      obj = JSON.parse(s);
-    } catch {
-      return null;
-    }
-  }
-  if (typeof obj !== "object" || obj === null || Array.isArray(obj)) return null;
-  const entries = Object.entries(obj);
-  if (entries.length === 0) return null;
-  // Endast platta primitiva värden räknas som sammansatt fält (inga nästlade objekt).
-  if (entries.some(([, v]) => v != null && typeof v === "object")) return null;
-  return entries.map(([key, value]) => ({ key, value: value == null ? "" : String(value) }));
-}
-
+// Task #633/#971: parseCompositeSubfields delas nu med katalog-/galleri-vyerna
+// (se @/components/MetadataCatalog). getCompositeSubfields behåller json-gaten här.
 function getCompositeSubfields(entry: MetadataEntry): Array<{ key: string; value: string }> | null {
   if (entry.katalog.datatyp !== "json") return null;
   if (entry.vardeJson == null) return null;
@@ -778,6 +765,247 @@ function PropagationPreviewDialog({
   );
 }
 
+// Task #971: bild/fil-input med både URL-fält och uppladdningsknapp (useUpload).
+// Värdet (objectPath eller URL) lagras i vardeString precis som tidigare.
+function ImageFileInput({
+  value,
+  onChange,
+  testId,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  testId: string;
+}) {
+  const { toast } = useToast();
+  const inputRef = useRef<HTMLInputElement>(null);
+  const { uploadFile, isUploading } = useUpload();
+
+  return (
+    <div className="flex items-center gap-2">
+      <Input
+        type="text"
+        placeholder="URL till fil eller ladda upp..."
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="h-8"
+        data-testid={testId}
+      />
+      <input
+        ref={inputRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={async (e) => {
+          const file = e.target.files?.[0];
+          if (file) {
+            const res = await uploadFile(file);
+            if (res?.objectPath) onChange(res.objectPath);
+            else toast({ title: "Uppladdning misslyckades", variant: "destructive" });
+          }
+          if (inputRef.current) inputRef.current.value = "";
+        }}
+        data-testid={`${testId}-file`}
+      />
+      <Button
+        type="button"
+        variant="outline"
+        size="icon"
+        className="h-8 w-8 shrink-0"
+        disabled={isUploading}
+        onClick={() => inputRef.current?.click()}
+        data-testid={`${testId}-upload`}
+      >
+        {isUploading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
+      </Button>
+      {value && (
+        <img
+          src={value}
+          alt=""
+          className="h-8 w-8 rounded object-cover border shrink-0"
+          onError={(e) => {
+            (e.currentTarget as HTMLImageElement).style.display = "none";
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+// Task #971: lägg-till-knapp för ett foto-katalogfält. Laddar upp en bild och
+// skapar en ny metadata-rad (delar katalog/objekt med övriga bilder i galleriet).
+function PhotoCatalogAdder({
+  objectId,
+  katalogId,
+  katalogNamn,
+}: {
+  objectId: string;
+  katalogId: string;
+  katalogNamn: string;
+}) {
+  const { toast } = useToast();
+  const inputRef = useRef<HTMLInputElement>(null);
+  const { uploadFile, isUploading } = useUpload();
+  const mutation = useMutation({
+    mutationFn: async (objectPath: string) =>
+      apiRequest("POST", "/api/metadata", {
+        objektId: objectId,
+        metadataTypNamn: katalogNamn,
+        varde: objectPath,
+        arvsNedat: false,
+        metod: "manuell",
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/metadata/objects", objectId] });
+      toast({ title: "Bild tillagd" });
+    },
+    onError: (e: any) =>
+      toast({ title: "Kunde inte lägga till bild", description: e?.message, variant: "destructive" }),
+  });
+  const busy = isUploading || mutation.isPending;
+
+  return (
+    <>
+      <input
+        ref={inputRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={async (e) => {
+          const file = e.target.files?.[0];
+          if (file) {
+            const res = await uploadFile(file);
+            if (res?.objectPath) mutation.mutate(res.objectPath);
+            else toast({ title: "Uppladdning misslyckades", variant: "destructive" });
+          }
+          if (inputRef.current) inputRef.current.value = "";
+        }}
+        data-testid={`input-add-photo-${katalogId}`}
+      />
+      <Button
+        type="button"
+        size="sm"
+        variant="outline"
+        className="h-7 gap-1 shrink-0"
+        disabled={busy}
+        onClick={() => inputRef.current?.click()}
+        data-testid={`button-add-photo-${katalogId}`}
+      >
+        {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
+        Lägg till bild
+      </Button>
+    </>
+  );
+}
+
+// Task #971: lägg-till-dialog för en kontaktkatalog. Seedar underfälts-nycklar
+// från familjens barn-typer (parentMetadataId) eller en befintlig post och skapar
+// en ny json-rad. createMetadata accepterar JSON-sträng direkt (varde_json).
+function ContactCatalogAdder({
+  objectId,
+  katalogId,
+  katalogNamn,
+  templateKeys,
+}: {
+  objectId: string;
+  katalogId: string;
+  katalogNamn: string;
+  templateKeys: string[];
+}) {
+  const { toast } = useToast();
+  const [open, setOpen] = useState(false);
+  const seed = () => JSON.stringify(Object.fromEntries(templateKeys.map((k) => [k, ""])));
+  const [value, setValue] = useState<string>(seed());
+  const hasTemplate = templateKeys.length > 0;
+
+  const mutation = useMutation({
+    mutationFn: async (json: string) =>
+      apiRequest("POST", "/api/metadata", {
+        objektId: objectId,
+        metadataTypNamn: katalogNamn,
+        varde: json,
+        arvsNedat: false,
+        metod: "manuell",
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/metadata/objects", objectId] });
+      toast({ title: "Post tillagd" });
+      setOpen(false);
+    },
+    onError: (e: any) =>
+      toast({ title: "Kunde inte lägga till post", description: e?.message, variant: "destructive" }),
+  });
+
+  const handleSubmit = () => {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(value);
+    } catch {
+      toast({ title: "Ogiltig JSON", variant: "destructive" });
+      return;
+    }
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      toast({ title: "Ogiltigt format", variant: "destructive" });
+      return;
+    }
+    mutation.mutate(value);
+  };
+
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(o) => {
+        setOpen(o);
+        if (o) setValue(seed());
+      }}
+    >
+      <DialogTrigger asChild>
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          className="h-7 gap-1 shrink-0"
+          data-testid={`button-add-contact-${katalogId}`}
+        >
+          <Plus className="h-3.5 w-3.5" /> Lägg till
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle>Lägg till i {katalogNamn}</DialogTitle>
+          <DialogDescription>Fyll i fälten för den nya posten.</DialogDescription>
+        </DialogHeader>
+        <div className="py-2">
+          {hasTemplate ? (
+            <CompositeEditor value={value} onChange={setValue} testIdBase={`composite-add-${katalogId}`} />
+          ) : (
+            <Input
+              value={value}
+              onChange={(e) => setValue(e.target.value)}
+              placeholder='{"namn":"..."}'
+              data-testid={`input-add-contact-json-${katalogId}`}
+            />
+          )}
+        </div>
+        <DialogFooter>
+          <Button
+            type="button"
+            onClick={handleSubmit}
+            disabled={mutation.isPending}
+            data-testid={`button-confirm-add-contact-${katalogId}`}
+          >
+            {mutation.isPending ? (
+              <Loader2 className="h-4 w-4 animate-spin mr-2" />
+            ) : (
+              <Save className="h-4 w-4 mr-2" />
+            )}
+            Spara
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export function ObjectMetadataPanel({ object, trigger }: ObjectMetadataPanelProps) {
   const { toast } = useToast();
   const [open, setOpen] = useState(false);
@@ -792,7 +1020,10 @@ export function ObjectMetadataPanel({ object, trigger }: ObjectMetadataPanelProp
   });
 
   const { data: objectWithMetadata, isLoading } = useQuery<ObjectWithMetadata>({
-    queryKey: [`/api/metadata/objects/${object.id}`],
+    // Task #971: array-segment-nyckel (samma URL via getQueryFn-join) så att alla
+    // mutationers invalidateQueries(['/api/metadata/objects', object.id]) matchar
+    // och galleri/kort/antal uppdateras direkt efter add/remove/edit.
+    queryKey: ['/api/metadata/objects', object.id],
     enabled: open,
   });
 
@@ -982,13 +1213,51 @@ export function ObjectMetadataPanel({ object, trigger }: ObjectMetadataPanelProp
         return <Input type="datetime-local" value={value} onChange={(e) => onChange(e.target.value)} className="h-8" data-testid={testId} />;
       case 'image':
       case 'file':
-        return <Input type="url" placeholder="URL till fil..." value={value} onChange={(e) => onChange(e.target.value)} className="h-8" data-testid={testId} />;
+        return <ImageFileInput value={value} onChange={onChange} testId={testId} />;
       case 'location':
         return <Input placeholder="Lat, Long" value={value} onChange={(e) => onChange(e.target.value)} className="h-8" data-testid={testId} />;
       default:
         return <Input value={value} onChange={(e) => onChange(e.target.value)} className="h-8" data-testid={testId} />;
     }
   }
+
+  // Task #971: öppna lägg-till-dialogen förvald på en viss katalogtyp (generiska
+  // kataloger som varken är foto eller kontakt).
+  const openAddForType = (namn: string) => {
+    setNewMetadata((p) => ({ ...p, metadataTypNamn: namn, varde: "" }));
+    setAddDialogOpen(true);
+  };
+
+  // Task #971: inline-redigerare för ett kontaktkort (sammansatt json) — återanvänder
+  // CompositeEditor + handleSave precis som den vanliga edit-vägen.
+  const renderContactEditor = (entry: MetadataEntry) => (
+    <div className="rounded-md border p-3 space-y-2" data-testid={`contact-edit-${entry.id}`}>
+      <CompositeEditor value={editValue} onChange={setEditValue} testIdBase={`composite-edit-${entry.id}`} />
+      <div className="flex justify-end gap-1">
+        <Button
+          size="sm"
+          variant="ghost"
+          onClick={() => setEditingId(null)}
+          data-testid={`button-cancel-contact-${entry.id}`}
+        >
+          <X className="h-3.5 w-3.5 mr-1" /> Avbryt
+        </Button>
+        <Button
+          size="sm"
+          onClick={() => handleSave(entry)}
+          disabled={updateMutation.isPending}
+          data-testid={`button-save-contact-${entry.id}`}
+        >
+          {updateMutation.isPending ? (
+            <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" />
+          ) : (
+            <Save className="h-3.5 w-3.5 mr-1" />
+          )}
+          Spara
+        </Button>
+      </div>
+    </div>
+  );
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -1038,18 +1307,24 @@ export function ObjectMetadataPanel({ object, trigger }: ObjectMetadataPanelProp
               <p className="text-xs mt-1">Lagg till metadata med knappen nedan</p>
             </div>
           ) : (
-            Object.entries(groupedMetadata).map(([category, entries]) => (
-              <div key={category}>
-                <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
-                  {categoryLabels[category] || category}
-                </h4>
-                <div className="space-y-1.5">
-                  {entries.map((entry) => {
-                    const isEditing = editingId === entry.id;
-                    const DatatypeIcon = DATA_TYPE_ICONS[entry.katalog.datatyp] || Type;
-                    const compositeSubfields = getCompositeSubfields(entry);
+            Object.entries(groupedMetadata).map(([category, entries]) => {
+              const uniqueEntries = entries.filter((e) => (e.katalog as any).allowDuplicates !== true);
+              const groupsMap = new Map<string, { katalogId: string; katalog: any; entries: MetadataEntry[] }>();
+              for (const ge of entries) {
+                if ((ge.katalog as any).allowDuplicates === true) {
+                  const gk = ge.metadataKatalogId;
+                  if (!groupsMap.has(gk)) groupsMap.set(gk, { katalogId: gk, katalog: ge.katalog, entries: [] });
+                  groupsMap.get(gk)!.entries.push(ge);
+                }
+              }
+              const catGroups = Array.from(groupsMap.values());
 
-                    return (
+              const renderEntryCard = (entry: MetadataEntry) => {
+                const isEditing = editingId === entry.id;
+                const DatatypeIcon = DATA_TYPE_ICONS[entry.katalog.datatyp] || Type;
+                const compositeSubfields = getCompositeSubfields(entry);
+
+                return (
                       <Card 
                         key={entry.id} 
                         className={`border-l-4 ${getSourceColor(entry)} ${entry.source === 'inherited' ? 'opacity-85' : ''}`} 
@@ -1238,10 +1513,166 @@ export function ObjectMetadataPanel({ object, trigger }: ObjectMetadataPanelProp
                         </CardContent>
                       </Card>
                     );
-                  })}
-                </div>
-              </div>
-            ))
+              };
+
+              const renderCatalogGroup = (group: { katalogId: string; katalog: any; entries: MetadataEntry[] }) => {
+                const datatyp = group.katalog.datatyp;
+                const isPhoto = isPhotoDatatyp(datatyp);
+                const isContact = datatyp === "json";
+                const GroupIcon = DATA_TYPE_ICONS[datatyp] || Type;
+                const addable = group.katalog.isSystem !== true && (group.katalog as any).arBeraknad !== true;
+                const removingId = deleteMutation.isPending ? ((deleteMutation.variables as string) ?? null) : null;
+                const childKeys = isContact
+                  ? metadataTypes
+                      .filter((t) => (t as any).parentMetadataId === group.katalogId)
+                      .sort(
+                        (a, b) =>
+                          ((a as any).displayNumber ?? a.sortOrder ?? 9999) -
+                          ((b as any).displayNumber ?? b.sortOrder ?? 9999),
+                      )
+                      .map((t) => t.namn)
+                  : [];
+                const existingKeys = isContact
+                  ? (
+                      parseCompositeSubfields(
+                        group.entries.find((e) => getCompositeSubfields(e))?.vardeJson,
+                      ) || []
+                    ).map((s) => s.key)
+                  : [];
+                const templateKeys = childKeys.length > 0 ? childKeys : existingKeys;
+
+                return (
+                  <Card key={group.katalogId} data-testid={`catalog-group-${group.katalogId}`}>
+                    <CardContent className="py-2 px-3 space-y-2">
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <GroupIcon className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                          <span className="text-sm font-medium truncate">{group.katalog.namn}</span>
+                          {group.katalog.beteckning && (
+                            <Badge variant="outline" className="text-[10px] font-mono px-1 py-0 h-4 shrink-0">
+                              {group.katalog.beteckning}
+                            </Badge>
+                          )}
+                          <Badge
+                            variant="secondary"
+                            className="text-[10px] px-1.5 py-0"
+                            data-testid={`catalog-count-${group.katalogId}`}
+                          >
+                            {group.entries.length}
+                          </Badge>
+                        </div>
+                        {addable &&
+                          (isPhoto ? (
+                            <PhotoCatalogAdder
+                              objectId={object.id}
+                              katalogId={group.katalogId}
+                              katalogNamn={group.katalog.namn}
+                            />
+                          ) : isContact ? (
+                            <ContactCatalogAdder
+                              objectId={object.id}
+                              katalogId={group.katalogId}
+                              katalogNamn={group.katalog.namn}
+                              templateKeys={templateKeys}
+                            />
+                          ) : (
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              className="h-7 gap-1 shrink-0"
+                              onClick={() => openAddForType(group.katalog.namn)}
+                              data-testid={`button-add-catalog-${group.katalogId}`}
+                            >
+                              <Plus className="h-3.5 w-3.5" /> Lägg till
+                            </Button>
+                          ))}
+                      </div>
+
+                      {isPhoto ? (
+                        <PhotoGalleryView
+                          items={group.entries
+                            .map((e) => ({
+                              id: e.id,
+                              url: getDisplayValue(e),
+                              label: group.katalog.namn,
+                              source: e.source,
+                              removable: e.source === "local" && !isReadonlyOrigin(e),
+                            }))
+                            .filter((it) => it.url)}
+                          onRemove={(id) => deleteMutation.mutate(id)}
+                          removingId={removingId}
+                          testIdBase={`photo-gallery-${group.katalogId}`}
+                        />
+                      ) : isContact ? (
+                        <div className="space-y-2">
+                          {group.entries.map((e) => {
+                            if (editingId === e.id) return <div key={e.id}>{renderContactEditor(e)}</div>;
+                            const subfields = getCompositeSubfields(e);
+                            if (!subfields) return <div key={e.id}>{renderEntryCard(e)}</div>;
+                            const editable = e.source === "local" && !isReadonlyOrigin(e);
+                            return (
+                              <ContactCardsView
+                                key={e.id}
+                                cards={[{ id: e.id, subfields, source: e.source, editable, removable: editable }]}
+                                onEdit={editable ? () => handleStartEdit(e) : undefined}
+                                onRemove={editable ? (id) => deleteMutation.mutate(id) : undefined}
+                                removingId={removingId}
+                                testIdBase={`contact-${e.id}`}
+                              />
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        <div className="space-y-1.5">{group.entries.map((e) => renderEntryCard(e))}</div>
+                      )}
+                    </CardContent>
+                  </Card>
+                );
+              };
+
+              return (
+                <Collapsible key={category} defaultOpen className="rounded-md border bg-card/40">
+                  <CollapsibleTrigger asChild>
+                    <button
+                      type="button"
+                      className="group flex w-full items-center justify-between px-3 py-2 text-left"
+                      data-testid={`area-toggle-${category}`}
+                    >
+                      <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                        {categoryLabels[category] || category}
+                      </span>
+                      <div className="flex items-center gap-2">
+                        <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
+                          {entries.length}
+                        </Badge>
+                        <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />
+                      </div>
+                    </button>
+                  </CollapsibleTrigger>
+                  <CollapsibleContent className="px-3 pb-3 pt-0 space-y-3">
+                    {uniqueEntries.length > 0 && (
+                      <div className="space-y-1.5">
+                        {catGroups.length > 0 && (
+                          <p className="text-[10px] font-medium text-muted-foreground/70 uppercase tracking-wide">
+                            Unika värden
+                          </p>
+                        )}
+                        {uniqueEntries.map((entry) => renderEntryCard(entry))}
+                      </div>
+                    )}
+                    {catGroups.length > 0 && (
+                      <div className="space-y-3">
+                        <p className="text-[10px] font-medium text-muted-foreground/70 uppercase tracking-wide">
+                          Kataloger
+                        </p>
+                        {catGroups.map((g) => renderCatalogGroup(g))}
+                      </div>
+                    )}
+                  </CollapsibleContent>
+                </Collapsible>
+              );
+            })
           )}
         </div>
 
