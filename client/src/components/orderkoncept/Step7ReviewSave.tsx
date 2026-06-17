@@ -43,6 +43,14 @@ interface ReviewSchedule {
   intervalFrequencyDays: number | null;
   toleranceDays: number;
   timeWindows: Array<{ weekdays: number[]; timeFrom: string; timeTo: string }>;
+  mainDeliveryWindows?: Array<{
+    startDate?: string | null;
+    startTime?: string | null;
+    endDate?: string | null;
+    endTime?: string | null;
+    intervalFrequencyDays?: number | null;
+    intervalFlexDays?: number | null;
+  }>;
   deliveryRestrictions: any;
 }
 
@@ -100,6 +108,42 @@ function fmtMinutes(min: number) {
 }
 
 function ScheduleSummary({ schedule }: { schedule: ReviewSchedule }) {
+  // Task #978: nya huvudtidsfönster (en eller flera datum+tid-perioder) prioriteras.
+  const windows = Array.isArray(schedule.mainDeliveryWindows) ? schedule.mainDeliveryWindows : [];
+  if (windows.length > 0) {
+    return (
+      <div className="space-y-2 text-sm" data-testid="schedule-main-windows">
+        {windows.map((w, i) => {
+          const freq = w.intervalFrequencyDays ?? null;
+          const flex = w.intervalFlexDays ?? 0;
+          return (
+            <div key={i} className="space-y-0.5" data-testid={`schedule-window-${i}`}>
+              <div className="flex items-center gap-2">
+                <Calendar className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                <span>
+                  <span className="font-medium">
+                    {fmtDate(w.startDate ?? null)}{w.startTime ? ` ${w.startTime}` : ""}
+                  </span>
+                  {" → "}
+                  <span className="font-medium">
+                    {fmtDate(w.endDate ?? null)}{w.endTime ? ` ${w.endTime}` : ""}
+                  </span>
+                  {i === 0 && windows.length > 1 && (
+                    <span className="ml-1.5 text-xs text-muted-foreground">(primärt)</span>
+                  )}
+                </span>
+              </div>
+              {freq != null && freq > 0 && (
+                <div className="flex items-center gap-2 text-muted-foreground pl-5 text-xs">
+                  <span>var {freq}:e dag{flex > 0 ? ` (±${flex} dag${flex > 1 ? "ar" : ""})` : ""}</span>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    );
+  }
   if (!schedule.type) {
     return <span className="text-muted-foreground text-sm">Ej konfigurerat</span>;
   }

@@ -2201,8 +2201,11 @@ app.get("/api/order-concepts/:id/review-summary", asyncHandler(async (req, res) 
     intervalStartDate: (concept as any).intervalStartDate ?? null,
     intervalEndDate: (concept as any).intervalEndDate ?? null,
     intervalFrequencyDays: (concept as any).intervalFrequencyDays ?? null,
-    toleranceDays: (concept as any).toleranceDays ?? 0,
+    // Task #978: ± härleds från intervalFlexDays (det wizard faktiskt sparar); legacy
+    // `toleranceDays` behålls enbart som fallback för äldre koncept (fixar "var 16:e dag").
+    toleranceDays: (concept as any).intervalFlexDays ?? (concept as any).toleranceDays ?? 0,
     timeWindows: (concept as any).timeWindows ?? [],
+    mainDeliveryWindows: (concept as any).mainDeliveryWindows ?? [],
     deliveryRestrictions: (concept as any).deliveryRestrictions ?? null,
   };
 

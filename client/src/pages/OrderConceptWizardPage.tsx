@@ -25,7 +25,8 @@ import Step1NameCustomer from "@/components/orderkoncept/Step1NameCustomer";
 import Step2PriceReference from "@/components/orderkoncept/Step2PriceReference";
 import Step3Invoicing from "@/components/orderkoncept/Step3Invoicing";
 import Step4Inspection, { type ConditionFilter } from "@/components/orderkoncept/Step4Inspection";
-import Step5DeliveryTime, { type TimeWindow, type DeliveryRestriction } from "@/components/orderkoncept/Step5DeliveryTime";
+import Step5DeliveryTime from "@/components/orderkoncept/Step5DeliveryTime";
+import { type MainDeliveryWindow, type DeliveryRestriction, normalizeDeliveryRestrictions } from "@shared/delivery-restrictions";
 import Step6Tasks, { type ConceptArticleRow } from "@/components/orderkoncept/Step6Tasks";
 import Step7ReviewSave from "@/components/orderkoncept/Step7ReviewSave";
 import WizardSidebar from "@/components/orderkoncept/WizardSidebar";
@@ -71,6 +72,32 @@ const toDateInput = (v: unknown): string =>
   v ? new Date(v as string).toISOString().split("T")[0] : "";
 const toIsoOrNull = (v: string): string | null =>
   v ? new Date(v).toISOString() : null;
+
+// Task #978: härled legacy interval-fält + persistera hela huvudtidsfönster-arrayen.
+// Endast det PRIMÄRA (första) fönstret med giltigt startdatum + frekvens (>0) driver
+// jobbgenereringen; övriga fönster sparas enbart som planeringsstöd.
+function buildDeliveryWindowPatch(windows: MainDeliveryWindow[]) {
+  const cleaned = windows.map((w) => ({
+    startDate: w.startDate || null,
+    startTime: w.startTime || null,
+    endDate: w.endDate || null,
+    endTime: w.endTime || null,
+    intervalFrequencyDays: w.intervalFrequencyDays ?? null,
+    intervalFlexDays: w.intervalFlexDays ?? null,
+  }));
+  const primary = cleaned[0];
+  const hasPrimaryInterval =
+    !!primary?.startDate && primary.intervalFrequencyDays != null && primary.intervalFrequencyDays > 0;
+  return {
+    mainDeliveryWindows: cleaned,
+    deliveryTimeType: hasPrimaryInterval ? "interval" : null,
+    timeWindows: [] as unknown[],
+    intervalStartDate: primary?.startDate ? toIsoOrNull(primary.startDate) : null,
+    intervalEndDate: primary?.endDate ? toIsoOrNull(primary.endDate) : null,
+    intervalFrequencyDays: hasPrimaryInterval ? primary!.intervalFrequencyDays : null,
+    intervalFlexDays: primary?.intervalFlexDays ?? null,
+  };
+}
 
 export default function OrderConceptWizardPage() {
   const params = useParams<{ id?: string }>();
@@ -126,13 +153,8 @@ export default function OrderConceptWizardPage() {
   // Step 4
   const [targetObjectIds, setTargetObjectIds] = useState<Set<string>>(new Set());
   const [filters, setFilters] = useState<ConditionFilter[]>([]);
-  // Step 5
-  const [deliveryTimeType, setDeliveryTimeType] = useState("");
-  const [timeWindows, setTimeWindows] = useState<TimeWindow[]>([]);
-  const [intervalStartDate, setIntervalStartDate] = useState("");
-  const [intervalEndDate, setIntervalEndDate] = useState("");
-  const [intervalFrequencyDays, setIntervalFrequencyDays] = useState("");
-  const [intervalFlexDays, setIntervalFlexDays] = useState("");
+  // Step 5 (Task #978): huvudtidsfönster + utökade tidsrestriktioner
+  const [mainDeliveryWindows, setMainDeliveryWindows] = useState<MainDeliveryWindow[]>([]);
   const [deliveryRestrictions, setDeliveryRestrictions] = useState<DeliveryRestriction[]>([]);
   // Step 6
   const [conceptArticles, setConceptArticles] = useState<ConceptArticleRow[]>([]);
@@ -184,13 +206,31 @@ export default function OrderConceptWizardPage() {
     setFilters((wizardData.filters || []).map((f: any) => ({
       metadataKey: f.metadataKey, operator: f.operator, filterValue: f.filterValue,
     })));
-    setDeliveryTimeType(wizardData.deliveryTimeType || "");
-    setTimeWindows(Array.isArray(wizardData.timeWindows) ? wizardData.timeWindows : []);
-    setIntervalStartDate(toDateInput(wizardData.intervalStartDate));
-    setIntervalEndDate(toDateInput(wizardData.intervalEndDate));
-    setIntervalFrequencyDays(wizardData.intervalFrequencyDays != null ? String(wizardData.intervalFrequencyDays) : "");
-    setIntervalFlexDays(wizardData.intervalFlexDays != null ? String(wizardData.intervalFlexDays) : "");
-    setDeliveryRestrictions(Array.isArray(wizardData.deliveryRestrictions) ? wizardData.deliveryRestrictions : []);
+    // Task #978: ladda huvudtidsfönster — nya mainDeliveryWindows om de finns, annars
+    // syntetisera ett primärt fönster från legacy interval-fälten (back-compat).
+    const rawWindows = Array.isArray(wizardData.mainDeliveryWindows) ? wizardData.mainDeliveryWindows : [];
+    if (rawWindows.length > 0) {
+      setMainDeliveryWindows(rawWindows.map((w: any) => ({
+        startDate: toDateInput(w.startDate),
+        startTime: w.startTime ?? "",
+        endDate: toDateInput(w.endDate),
+        endTime: w.endTime ?? "",
+        intervalFrequencyDays: w.intervalFrequencyDays != null ? Number(w.intervalFrequencyDays) : null,
+        intervalFlexDays: w.intervalFlexDays != null ? Number(w.intervalFlexDays) : null,
+      })));
+    } else if (wizardData.intervalStartDate || wizardData.intervalFrequencyDays != null) {
+      setMainDeliveryWindows([{
+        startDate: toDateInput(wizardData.intervalStartDate),
+        startTime: "08:00",
+        endDate: toDateInput(wizardData.intervalEndDate),
+        endTime: "16:00",
+        intervalFrequencyDays: wizardData.intervalFrequencyDays != null ? Number(wizardData.intervalFrequencyDays) : null,
+        intervalFlexDays: wizardData.intervalFlexDays != null ? Number(wizardData.intervalFlexDays) : null,
+      }]);
+    } else {
+      setMainDeliveryWindows([]);
+    }
+    setDeliveryRestrictions(normalizeDeliveryRestrictions(wizardData.deliveryRestrictions));
     if (wizardData.conceptArticles) setConceptArticles(wizardData.conceptArticles);
   }, [wizardData, isEditing]);
 
@@ -299,21 +339,16 @@ export default function OrderConceptWizardPage() {
     invoiceConsolidation: normalizedConsolidation,
     departmentMetadataField: isFakturastopp ? (departmentMetadataField || null) : null,
     targetObjectIds: Array.from(targetObjectIds),
-    deliveryTimeType: deliveryTimeType || null,
-    timeWindows: deliveryTimeType === "time_window" ? timeWindows : [],
-    intervalStartDate: deliveryTimeType === "interval" ? toIsoOrNull(intervalStartDate) : null,
-    intervalEndDate: deliveryTimeType === "interval" ? toIsoOrNull(intervalEndDate) : null,
-    intervalFrequencyDays: deliveryTimeType === "interval" && intervalFrequencyDays !== ""
-      ? parseInt(intervalFrequencyDays) : null,
-    intervalFlexDays: deliveryTimeType === "interval" && intervalFlexDays !== ""
-      ? parseInt(intervalFlexDays) : null,
+    // Task #978: spegla det primära huvudtidsfönstret till legacy interval-kolumnerna
+    // (så expansionsmotorn + simuleringen fungerar oförändrat) och spara hela arrayen.
+    ...buildDeliveryWindowPatch(mainDeliveryWindows),
     deliveryRestrictions,
     totalArticles: conceptArticles.length,
     totalValue,
     totalCost,
     estimatedHours,
     };
-  }, [conceptName, customerMode, selectedCustomerId, customerMetadataField, priceListId, priceModel, fixedPriceKronor, customerReference, customerLabel, invoiceLevel, invoiceModel, invoicePeriod, invoiceLock, invoiceBrake, invoiceMethod, subscriptionAdjustmentDate, monthlyFee, billingFrequency, subscriptionStartDate, invoiceConsolidation, departmentMetadataField, targetObjectIds, deliveryTimeType, timeWindows, intervalStartDate, intervalEndDate, intervalFrequencyDays, intervalFlexDays, deliveryRestrictions, conceptArticles, totalValue, totalCost, estimatedHours]);
+  }, [conceptName, customerMode, selectedCustomerId, customerMetadataField, priceListId, priceModel, fixedPriceKronor, customerReference, customerLabel, invoiceLevel, invoiceModel, invoicePeriod, invoiceLock, invoiceBrake, invoiceMethod, subscriptionAdjustmentDate, monthlyFee, billingFrequency, subscriptionStartDate, invoiceConsolidation, departmentMetadataField, targetObjectIds, mainDeliveryWindows, deliveryRestrictions, conceptArticles, totalValue, totalCost, estimatedHours]);
 
   const createConceptMutation = useMutation({
     mutationFn: async () => {
@@ -716,20 +751,10 @@ export default function OrderConceptWizardPage() {
             {currentStep === 5 && (
               <Step5DeliveryTime
                 conceptId={conceptId}
-                deliveryTimeType={deliveryTimeType}
-                timeWindows={timeWindows}
-                intervalStartDate={intervalStartDate}
-                intervalEndDate={intervalEndDate}
-                intervalFrequencyDays={intervalFrequencyDays}
-                intervalFlexDays={intervalFlexDays}
+                mainDeliveryWindows={mainDeliveryWindows}
                 deliveryRestrictions={deliveryRestrictions}
                 onUpdate={(data) => {
-                  if (data.deliveryTimeType !== undefined) setDeliveryTimeType(data.deliveryTimeType);
-                  if (data.timeWindows !== undefined) setTimeWindows(data.timeWindows);
-                  if (data.intervalStartDate !== undefined) setIntervalStartDate(data.intervalStartDate);
-                  if (data.intervalEndDate !== undefined) setIntervalEndDate(data.intervalEndDate);
-                  if (data.intervalFrequencyDays !== undefined) setIntervalFrequencyDays(data.intervalFrequencyDays);
-                  if (data.intervalFlexDays !== undefined) setIntervalFlexDays(data.intervalFlexDays);
+                  if (data.mainDeliveryWindows !== undefined) setMainDeliveryWindows(data.mainDeliveryWindows);
                   if (data.deliveryRestrictions !== undefined) setDeliveryRestrictions(data.deliveryRestrictions);
                   setHasUnsavedWork(true);
                 }}
@@ -752,7 +777,7 @@ export default function OrderConceptWizardPage() {
                 conceptId={conceptId}
                 conceptName={conceptName}
                 customerName={customerMode === "HARDCODED" ? selectedCustomer?.name : undefined}
-                deliveryTimeType={deliveryTimeType}
+                deliveryTimeType={mainDeliveryWindows.some((w) => (w.intervalFrequencyDays ?? 0) > 0) ? "interval" : ""}
                 onBeforeAction={persistCurrent}
               />
             )}

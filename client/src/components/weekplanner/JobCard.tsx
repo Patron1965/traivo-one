@@ -8,6 +8,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { AlertTriangle, Clock, X, Link2, ArrowRight, Key, DoorOpen, UsersRound, MoreVertical, Zap, Info, CalendarClock } from "lucide-react";
 import type { WorkOrderWithObject } from "@shared/schema";
 import { EXECUTION_CODE_LABELS, EXECUTION_CODE_ICONS } from "@shared/schema";
+import type { DeliveryRestrictionNote } from "@shared/delivery-restrictions";
 import {
   executionStatusColors, executionStatusLabels, executionStatusOrder,
   statusBadgeVariant, timeBlockBorders, getJobCategory, priorityDotColors,
@@ -26,6 +27,7 @@ interface JobCardProps {
     dependents: Record<string, Array<{ workOrderId: string }>>;
   } | null;
   timewindowMap: Map<string, Array<{ workOrderId: string; dayOfWeek: string | null; startTime: string | null; endTime: string | null; weekNumber: number | null }>>;
+  restrictionNotesByObject?: Map<string, DeliveryRestrictionNote[]>;
   expandedSubSteps: Record<string, boolean>;
   onJobClick: (jobId: string) => void;
   onUnschedule: (e: { stopPropagation: () => void }, jobId: string) => void;
@@ -38,10 +40,12 @@ interface JobCardProps {
 
 export const JobCard = memo(function JobCard({
   job, compact = false, selectedJob, jobConflicts, dependenciesData,
-  timewindowMap, expandedSubSteps, onJobClick, onUnschedule, onToggleSubStep, onOpenDepChain,
+  timewindowMap, restrictionNotesByObject, expandedSubSteps, onJobClick, onUnschedule, onToggleSubStep, onOpenDepChain,
   selectedJobIds, onToggleSelection, onEscalateUrgent,
 }: JobCardProps) {
   const localizedObjectName = useLocalizedObjectName();
+  const restrictionNotes = (job.objectId && restrictionNotesByObject?.get(job.objectId)) || [];
+  const hasHardRestriction = restrictionNotes.some((n) => n.enforcement === "hard");
   const execStatus = (job as { executionStatus?: string }).executionStatus || "not_planned";
   const execIndex = executionStatusOrder.indexOf(execStatus);
   const execProgress = ((execIndex + 1) / executionStatusOrder.length) * 100;
@@ -196,6 +200,41 @@ export const JobCard = memo(function JobCard({
                   {(job as { deliveryPreferencePriority?: string }).deliveryPreferencePriority === "strict"
                     ? "Planerad tid bryter mot kundens strikta leveransfönster."
                     : "Planerad tid ligger utanför kundens/objektets önskade leveransfönster."}
+                </TooltipContent>
+              </Tooltip>
+            )}
+            {restrictionNotes.length > 0 && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Badge
+                    variant="outline"
+                    className={
+                      hasHardRestriction
+                        ? "text-[9px] h-4 gap-0.5 mt-0.5 bg-destructive/10 text-destructive border-destructive/30 dark:bg-destructive/15 dark:border-destructive/70"
+                        : "text-[9px] h-4 gap-0.5 mt-0.5 bg-warning/10 text-warning border-warning/30 dark:bg-warning/15 dark:border-warning/70"
+                    }
+                    data-testid={`badge-delivery-restriction-${job.id}`}
+                  >
+                    <CalendarClock className="h-2.5 w-2.5" />
+                    Tidsrestriktion{restrictionNotes.length > 1 ? ` (${restrictionNotes.length})` : ""}
+                  </Badge>
+                </TooltipTrigger>
+                <TooltipContent side="right" className="max-w-xs text-xs">
+                  <div className="space-y-1.5">
+                    {restrictionNotes.map((n, i) => (
+                      <div key={i} className="space-y-0.5">
+                        <p className="flex items-center gap-1 font-medium">
+                          {n.enforcement === "hard"
+                            ? <AlertTriangle className="h-3 w-3 text-destructive" />
+                            : <CalendarClock className="h-3 w-3 text-warning" />}
+                          {n.polarity === "positive" ? "Lämplig leveranstid" : "Undvik leveranstid"}
+                          <span className="text-muted-foreground">{n.enforcement === "hard" ? "(hård)" : "(mjuk)"}</span>
+                        </p>
+                        {n.timeRule && <p className="text-muted-foreground">{n.timeRule}</p>}
+                        {n.description && <p>{n.description}</p>}
+                      </div>
+                    ))}
+                  </div>
                 </TooltipContent>
               </Tooltip>
             )}

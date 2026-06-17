@@ -91,7 +91,7 @@ export async function resolveTargetObjects(
  * från valueJson om satt, annars value (text). Samma uppbyggnad används av både
  * bulk-filtreringen och enskild-objekt-testet så de aldrig kan driva isär.
  */
-async function buildObjectMetadataMap(
+export async function buildObjectMetadataMap(
   tenantId: string,
   objectIds: string[],
 ): Promise<Map<string, Record<string, unknown>>> {

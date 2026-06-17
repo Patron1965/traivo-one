@@ -3,6 +3,7 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { format, addDays, startOfWeek, startOfMonth, isSameDay, getDaysInMonth, addMonths, startOfYear, endOfYear, startOfQuarter, endOfQuarter } from "date-fns";
 import { sv } from "date-fns/locale";
 import type { Resource, WorkOrderWithObject, Customer, TaskDependency, Cluster, ObjectTimeRestriction } from "@shared/schema";
+import type { DeliveryRestrictionNote } from "@shared/delivery-restrictions";
 import { RESTRICTION_TYPE_LABELS } from "@shared/schema";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -299,6 +300,9 @@ export function usePlannerData() {
   const scheduledObjectIds = useMemo(() => Array.from(new Set(workOrders.map(wo => wo.objectId).filter(Boolean) as string[])), [workOrders]);
   const { data: timeRestrictions = [] } = useQuery<ObjectTimeRestriction[]>({ queryKey: ["/api/time-restrictions", scheduledObjectIds.join(",")], queryFn: async () => { if (scheduledObjectIds.length === 0) return []; const res = await apiRequest("GET", `/api/time-restrictions?objectIds=${scheduledObjectIds.join(",")}`); return res.json(); }, enabled: scheduledObjectIds.length > 0, staleTime: 120000 });
   const restrictionsByObject = useMemo(() => { const map = new Map<string, ObjectTimeRestriction[]>(); for (const r of timeRestrictions) { if (!map.has(r.objectId)) map.set(r.objectId, []); map.get(r.objectId)!.push(r); } return map; }, [timeRestrictions]);
+  // Task #978 (T004): Live-beräknade leverans-tidsrestriktioner (orderkoncept) per objekt.
+  const { data: deliveryRestrictionNotes = {} } = useQuery<Record<string, DeliveryRestrictionNote[]>>({ queryKey: ["/api/planner/delivery-restrictions", scheduledObjectIds.join(",")], queryFn: async () => { if (scheduledObjectIds.length === 0) return {}; const res = await apiRequest("GET", `/api/planner/delivery-restrictions?objectIds=${scheduledObjectIds.join(",")}`); return res.json(); }, enabled: scheduledObjectIds.length > 0, staleTime: 120000 });
+  const deliveryRestrictionsByObject = useMemo(() => { const map = new Map<string, DeliveryRestrictionNote[]>(); for (const [oid, notes] of Object.entries(deliveryRestrictionNotes)) map.set(oid, notes); return map; }, [deliveryRestrictionNotes]);
 
   const { data: timewindowsData = [] } = useQuery<Array<{ workOrderId: string; dayOfWeek: string | null; startTime: string | null; endTime: string | null; weekNumber: number | null }>>({ queryKey: ["/api/task-timewindows"], staleTime: 120000 });
   const timewindowMap = useMemo(() => { const map = new Map<string, typeof timewindowsData>(); timewindowsData.forEach(tw => { const e = map.get(tw.workOrderId) || []; e.push(tw); map.set(tw.workOrderId, e); }); return map; }, [timewindowsData]);
@@ -1268,7 +1272,7 @@ export function usePlannerData() {
     getCommuteSummary,
     executeTeamSchedule,
     workOrders, workOrdersLoading,
-    dependenciesData, timeRestrictions, restrictionsByObject, timewindowMap,
+    dependenciesData, timeRestrictions, restrictionsByObject, deliveryRestrictionsByObject, timewindowMap,
     weatherByDate,
     unscheduledJobs, unscheduledTotal, accumulatedUnscheduled, hasMoreUnscheduled, loadMoreLoading, loadMoreUnscheduled,
     unscheduledMissingDateCount,

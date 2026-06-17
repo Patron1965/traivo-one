@@ -686,6 +686,7 @@ export function WeekPlanner({ onAddJob, onSelectJob, onSelectedJobIdsChange, sho
     jobConflicts: d.jobConflicts,
     dependenciesData: d.dependenciesData,
     timewindowMap: d.timewindowMap,
+    restrictionNotesByObject: d.deliveryRestrictionsByObject,
     expandedSubSteps: d.expandedSubSteps,
     onJobClick: handleJobClickWithCallback,
     onUnschedule: d.handleUnschedule,
@@ -694,7 +695,7 @@ export function WeekPlanner({ onAddJob, onSelectJob, onSelectedJobIdsChange, sho
     selectedJobIds: d.selectedJobIds,
     onToggleSelection: d.toggleJobSelection,
     onEscalateUrgent: handleEscalateUrgent,
-  }), [d.selectedJob, d.jobConflicts, d.dependenciesData, d.timewindowMap, d.expandedSubSteps, handleJobClickWithCallback, d.handleUnschedule, d.handleToggleSubStep, d.handleOpenDepChain, d.selectedJobIds, d.toggleJobSelection, handleEscalateUrgent]);
+  }), [d.selectedJob, d.jobConflicts, d.dependenciesData, d.timewindowMap, d.deliveryRestrictionsByObject, d.expandedSubSteps, handleJobClickWithCallback, d.handleUnschedule, d.handleToggleSubStep, d.handleOpenDepChain, d.selectedJobIds, d.toggleJobSelection, handleEscalateUrgent]);
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {

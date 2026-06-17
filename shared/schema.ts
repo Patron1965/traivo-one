@@ -3011,7 +3011,19 @@ export const orderConcepts = pgTable("order_concepts", {
   intervalEndDate: timestamp("interval_end_date"),
   intervalFrequencyDays: integer("interval_frequency_days"),
   intervalFlexDays: integer("interval_flex_days"), // ±N dagar flexfönster för ruttoptimering
-  deliveryRestrictions: jsonb("delivery_restrictions"), // [{type:'soft'|'hard', metadataKey, operator, filterValue}]
+  // Task #978: Ett eller flera huvudtidsfönster som datum+tid-perioder. Varje fönster
+  // bär egen frekvens/flextid. Det FÖRSTA fönstret (primärt) speglas dessutom till
+  // legacy interval-kolumnerna ovan så att expansionsmotorn (buildScheduleDateTargets)
+  // + simuleringen fungerar oförändrat. Övriga fönster lagras endast som planeringsstöd.
+  // [{ startDate, startTime, endDate, endTime, intervalFrequencyDays?, intervalFlexDays? }]
+  mainDeliveryWindows: jsonb("main_delivery_windows"),
+  // Task #978: utökad form — villkor (metadatafält) + tidsregel (veckodag+start+slut)
+  // + polaritet (positive=lämplig / negative=undvik) + enforcement (hard/soft) + fri text.
+  // Back-compat: äldre rader har { type:'soft'|'hard', metadataKey, operator, filterValue }
+  // (type mappas till enforcement, polarity defaultar till 'negative').
+  // [{ metadataKey, operator, filterValue, weekdays:[0..6], timeFrom, timeTo,
+  //    polarity:'positive'|'negative', enforcement:'hard'|'soft', description }]
+  deliveryRestrictions: jsonb("delivery_restrictions"),
 
   createdBy: varchar("created_by").references(() => users.id, { onDelete: 'set null' }),
   createdAt: timestamp("created_at").defaultNow().notNull(),

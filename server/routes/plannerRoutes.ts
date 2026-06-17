@@ -12,6 +12,7 @@ import { workSessions, workEntries, equipmentBookings, deviationReports, teamMem
 
 import { notificationService } from "../notifications";
 import { validateSchedule, type ConstraintContext, type ScheduleMove } from "../planning/constraintEngine";
+import { computeDeliveryRestrictionNotesByObject } from "../services/delivery-restriction-notes";
 
 const requirePlannerAccess = requireRole("owner", "admin", "planner");
 
@@ -151,6 +152,20 @@ app.get("/api/planner/drivers/locations", requireTenantWithFallback, requirePlan
       }));
 
     res.json(locations);
+}));
+
+// Task #978 (T004): Live-beräknade leverans-tidsrestriktioner per objekt för
+// planeringsvyn (JobCard/expand-panel). Display-only — rör ingen expansionsmotor.
+app.get("/api/planner/delivery-restrictions", requireTenantWithFallback, requirePlannerAccess, asyncHandler(async (req, res) => {
+    const tenantId = getTenantIdWithFallback(req);
+    const raw = typeof req.query.objectIds === "string" ? req.query.objectIds : "";
+    const objectIds = raw.split(",").map((s) => s.trim()).filter(Boolean);
+    if (objectIds.length === 0) {
+      res.json({});
+      return;
+    }
+    const notes = await computeDeliveryRestrictionNotesByObject(tenantId, objectIds);
+    res.json(notes);
 }));
 
 app.get("/api/planner/orders", requireTenantWithFallback, requirePlannerAccess, asyncHandler(async (req, res) => {
