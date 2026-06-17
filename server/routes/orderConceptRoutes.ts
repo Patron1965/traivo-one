@@ -11,6 +11,7 @@ import { NotFoundError, ValidationError, ForbiddenError } from "../errors";
 import { objects, workOrders, customerCommunications, objectContacts, orderConceptArticles, orderConceptObjects, articleObjectMappings, conceptFilters, priceLists, objectMetadata, metadataDefinitions, deliverySchedules, assignments as assignmentsTable, articles, type InsertOrderConceptArticle } from "@shared/schema";
 import { getISOWeek, getStartOfISOWeek, getDateFromWeekdayInMonth } from "./helpers";
 import { getOrderConceptMethod } from "@shared/order-concept-method";
+import { buildScheduleDateTargets } from "../services/order-concept-schedule";
 import {
   resolveTimeWarningThresholds,
   computeLeadTimeWarnings,
@@ -2209,27 +2210,184 @@ app.get("/api/order-concepts/:id/review-summary", asyncHandler(async (req, res) 
     deliveryRestrictions: (concept as any).deliveryRestrictions ?? null,
   };
 
+  // --- Artikelträffar (delad källa, beräknas EN gång) ---
+  // Task #979: samma upplösning som /article-hit-summary och /execute så att
+  // detaljlistan, sammanfattningen och fasta priset speglar exakt vad expansionen
+  // skapar. Länkad aktiv artikel (utgått→ersättning) + enhetspris (öre).
+  let linkedArticle: Awaited<ReturnType<typeof storage.getArticle>> | undefined = undefined;
+  let unitPriceOre = 0;
+  let linkedArticleName: string | null = null;
+  if (concept.articleId) {
+    linkedArticle = await resolveActiveArticle(tenantId, await storage.getArticle(concept.articleId));
+    if (linkedArticle) {
+      linkedArticleName = linkedArticle.name;
+      if (concept.customerId) {
+        const info = await storage.resolveArticlePrice(tenantId, linkedArticle.id, concept.customerId);
+        unitPriceOre = info.price;
+      } else {
+        unitPriceOre = linkedArticle.listPrice || 0;
+      }
+    }
+  }
+
+  const { matchingObjects: hitMatchObjects } = await resolveConceptMatchingObjects(
+    tenantId,
+    concept as any,
+    conceptFilterInputs,
+    { fallbackAllObjects: true },
+  );
+  const hits = await resolveConceptArticleHits({
+    tenantId,
+    concept: concept as any,
+    linkedArticle,
+    matchingObjects: hitMatchObjects,
+  });
+
   // Task #976: fast pris (priceModel='fixed') slår igenom på totalen — den verkliga
   // intäkten är fixedPriceAmount × antal träff-objekt (artikelträff), inte BOM-summan.
   const runningTotalKr = articleLines.reduce((s: number, l: any) => s + l.lineTotalKr, 0);
-  let totalValueKr = runningTotalKr;
   const fixedPrice = isFixedPriceConcept(concept as any);
-  if (fixedPrice && concept.articleId) {
-    const linkedActive = await resolveActiveArticle(tenantId, await storage.getArticle(concept.articleId));
-    const { matchingObjects: hitMatchObjects } = await resolveConceptMatchingObjects(
-      tenantId,
-      concept as any,
-      conceptFilterInputs,
-      { fallbackAllObjects: true },
-    );
-    const hits = await resolveConceptArticleHits({
-      tenantId,
-      concept: concept as any,
-      linkedArticle: linkedActive,
-      matchingObjects: hitMatchObjects,
-    });
-    totalValueKr = ((concept.fixedPriceAmount ?? 0) * hits.hitCount) / 100;
+  const totalValueKr = fixedPrice && concept.articleId
+    ? ((concept.fixedPriceAmount ?? 0) * hits.hitCount) / 100
+    : runningTotalKr;
+
+  // --- Repetition (Task #979) ---
+  // call_off = engångskörning (avrop), schedule = återkommande, subscription =
+  // abonnemang (fakturering, ingen uppgiftsgenerering). Antal generationer kommer
+  // från den DELADE buildScheduleDateTargets så preview ≡ körning.
+  const method = getOrderConceptMethod(concept as any);
+  const scheduleTargets = method === "schedule" ? buildScheduleDateTargets(concept as any) : null;
+  const generations =
+    method === "schedule" ? (scheduleTargets?.length ?? 0)
+    : method === "call_off" ? 1
+    : null;
+  const generationFactor = generations ?? 1;
+  const frequencyDays = (concept as any).intervalFrequencyDays ?? null;
+  const flexDays = (concept as any).intervalFlexDays ?? 0;
+  let validUntil: string | null = null;
+  if (method === "schedule") {
+    if (scheduleTargets && scheduleTargets.length > 0) {
+      validUntil = scheduleTargets[scheduleTargets.length - 1].date.toISOString();
+    } else if ((concept as any).intervalEndDate) {
+      validUntil = new Date((concept as any).intervalEndDate).toISOString();
+    }
   }
+  const freqLabel = frequencyDays && Number(frequencyDays) > 0
+    ? (Number(frequencyDays) % 7 === 0 ? `Var ${Number(frequencyDays) / 7}:e vecka` : `Var ${frequencyDays}:e dag`)
+    : null;
+  let repetitionLabel: string;
+  if (method === "subscription") {
+    repetitionLabel = "Abonnemang (återkommande fakturering)";
+  } else if (method === "call_off") {
+    repetitionLabel = "Engångskörning (avrop)";
+  } else {
+    const parts: string[] = [];
+    if (freqLabel) parts.push(freqLabel);
+    if (generations != null) parts.push(`${generations} generation${generations === 1 ? "" : "er"}`);
+    if (validUntil) parts.push(`giltig t.o.m. ${new Date(validUntil).toLocaleDateString("sv-SE")}`);
+    repetitionLabel = parts.length > 0 ? parts.join(", ") : "Återkommande schema";
+  }
+  const repetition = {
+    sourceConceptName: concept.name ?? null,
+    method,
+    isRecurring: method !== "call_off",
+    frequencyDays: frequencyDays != null ? Number(frequencyDays) : null,
+    flexDays: Number(flexDays) || 0,
+    generations,
+    validUntil,
+    label: repetitionLabel,
+  };
+
+  // --- Detaljlista (Objekt | Uppgift | Antal) + sammanfattning (Task #979) ---
+  // Fältuppgifter = en assignment per träffobjekt (→ grovplanering). Admin/logistik
+  // + föruppgifter skapas ENBART i avrop-vägen (schema/abonnemang returnerar tidigt
+  // i /execute) — speglas här så listan inte överskattar.
+  const detailRows: Array<{
+    kind: "field" | "pretask" | "admin";
+    objectId: string | null;
+    objectName: string | null;
+    objectNumber: string | null;
+    taskName: string;
+    quantity: number;
+    valueKr: number | null;
+    destination: "grovplanering" | "admin";
+  }> = [];
+
+  const fieldTaskName = linkedArticleName ?? concept.name ?? "Uppgift";
+  let totalFieldQty = 0;
+  for (const r of hits.rows) {
+    if (!r.isHit) continue;
+    const valueOre = computeObjectValueOre(concept as any, unitPriceOre, r.quantity);
+    totalFieldQty += r.quantity;
+    detailRows.push({
+      kind: "field",
+      objectId: r.objectId,
+      objectName: r.objectName,
+      objectNumber: r.objectNumber,
+      taskName: fieldTaskName,
+      quantity: r.quantity,
+      valueKr: valueOre / 100,
+      destination: "grovplanering",
+    });
+  }
+
+  const materialLines: Array<{ name: string; totalQuantity: number; unit: string }> = [];
+  if (linkedArticle) {
+    materialLines.push({
+      name: linkedArticle.name,
+      totalQuantity: totalFieldQty * generationFactor,
+      unit: (linkedArticle as any).unit ?? "st",
+    });
+  }
+
+  let preTaskArticleCount = 0;
+  if (method === "call_off") {
+    for (const ca of conceptArticleRows) {
+      const art: any = articleMap.get(ca.articleId);
+      const cat = (ca as any).taskCategory ?? art?.taskCategory ?? "field";
+      const isPre = (ca as any).isPreTask === true;
+      const qty = ca.quantity ?? 1;
+      if (cat && cat !== "field") {
+        detailRows.push({
+          kind: "admin",
+          objectId: null,
+          objectName: null,
+          objectNumber: null,
+          taskName: `${art?.name ?? "Administrativ uppgift"} (administrativ)`,
+          quantity: qty,
+          valueKr: null,
+          destination: "admin",
+        });
+        materialLines.push({ name: art?.name ?? "Artikel", totalQuantity: qty, unit: art?.unit ?? "st" });
+      } else if (isPre) {
+        preTaskArticleCount++;
+        detailRows.push({
+          kind: "pretask",
+          objectId: null,
+          objectName: null,
+          objectNumber: null,
+          taskName: `${art?.name ?? "Föruppgift"} (föruppgift, per träffobjekt)`,
+          quantity: qty,
+          valueKr: null,
+          destination: "grovplanering",
+        });
+        materialLines.push({ name: art?.name ?? "Artikel", totalQuantity: qty * hits.hitCount, unit: art?.unit ?? "st" });
+      }
+    }
+  }
+
+  const summaryMetrics = {
+    objectsHit: hits.hitCount,
+    objectsMissed: hits.missCount,
+    inpekadeCount: hits.inpekadeCount,
+    // Fältuppgifter som skickas till grovplaneringen (per träffobjekt × generationer).
+    taskCount: hits.hitCount * generationFactor,
+    adminTaskCount: detailRows.filter((d) => d.kind === "admin").length,
+    preTaskCount: preTaskArticleCount * hits.hitCount,
+    // Display-aggregat: länkad artikels produktionstid × träff-antal × generationer.
+    productionMinutesActual: (linkedArticle?.productionTime ?? 0) * totalFieldQty * generationFactor,
+    materialLines,
+  };
 
   res.json({
     clusterSummaries,
@@ -2241,6 +2399,9 @@ app.get("/api/order-concepts/:id/review-summary", asyncHandler(async (req, res) 
     schedule,
     isFixedPrice: fixedPrice,
     fixedPriceAmountKr: fixedPrice ? (concept.fixedPriceAmount ?? 0) / 100 : null,
+    detailRows,
+    summaryMetrics,
+    repetition,
   });
 }));
 

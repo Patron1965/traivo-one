@@ -13,7 +13,8 @@ import { Badge } from "@/components/ui/badge";
 import {
   Save, Copy, PlayCircle, Loader2, CheckCircle2,
   Package, Calendar,
-  BarChart3, TrendingUp, FileDown, AlertCircle
+  BarChart3, TrendingUp, FileDown, AlertCircle,
+  ClipboardList, ListChecks, Repeat
 } from "lucide-react";
 import ArticleHitResult from "./ArticleHitResult";
 
@@ -54,6 +55,45 @@ interface ReviewSchedule {
   deliveryRestrictions: any;
 }
 
+interface DetailRow {
+  kind: "field" | "pretask" | "admin";
+  objectId: string | null;
+  objectName: string | null;
+  objectNumber: string | null;
+  taskName: string;
+  quantity: number;
+  valueKr: number | null;
+  destination: "grovplanering" | "admin";
+}
+
+interface MaterialLine {
+  name: string;
+  totalQuantity: number;
+  unit: string;
+}
+
+interface SummaryMetrics {
+  objectsHit: number;
+  objectsMissed: number;
+  inpekadeCount: number;
+  taskCount: number;
+  adminTaskCount: number;
+  preTaskCount: number;
+  productionMinutesActual: number;
+  materialLines: MaterialLine[];
+}
+
+interface Repetition {
+  sourceConceptName: string | null;
+  method: string;
+  isRecurring: boolean;
+  frequencyDays: number | null;
+  flexDays: number;
+  generations: number | null;
+  validUntil: string | null;
+  label: string;
+}
+
 interface ReviewSummary {
   articleLines: ArticleLine[];
   totalValueKr: number;
@@ -62,6 +102,22 @@ interface ReviewSummary {
   schedule: ReviewSchedule;
   isFixedPrice?: boolean;
   fixedPriceAmountKr?: number | null;
+  detailRows?: DetailRow[];
+  summaryMetrics?: SummaryMetrics;
+  repetition?: Repetition;
+}
+
+interface ExecuteReceipt {
+  created?: number;
+  assignmentsCreated?: number;
+  objectsHit?: number;
+  objectsMissed?: number;
+  preTasksCreated?: number;
+  adminWorkOrdersCreated?: number;
+  datesGenerated?: number;
+  skipped?: number;
+  message?: string;
+  subscription?: unknown;
 }
 
 interface SimulatePeriod {
@@ -105,6 +161,15 @@ function fmtMinutes(min: number) {
   const h = Math.floor(min / 60);
   const m = min % 60;
   return m > 0 ? `${h} tim ${m} min` : `${h} tim`;
+}
+
+function fmtMethod(method: string) {
+  switch (method) {
+    case "call_off": return "Avrop (engångskörning)";
+    case "schedule": return "Schemalagt (återkommande)";
+    case "subscription": return "Abonnemang";
+    default: return method;
+  }
 }
 
 function ScheduleSummary({ schedule }: { schedule: ReviewSchedule }) {
@@ -201,6 +266,7 @@ export default function Step7ReviewSave({
   const [, navigate] = useLocation();
   const [templateName, setTemplateName] = useState("");
   const [pdfLoading, setPdfLoading] = useState(false);
+  const [receipt, setReceipt] = useState<ExecuteReceipt | null>(null);
 
   const { data: summary, isLoading: summaryLoading } = useQuery<ReviewSummary>({
     queryKey: ["/api/order-concepts", conceptId, "review-summary"],
@@ -275,15 +341,17 @@ export default function Step7ReviewSave({
       const res = await apiRequest("POST", `/api/order-concepts/${conceptId}/execute`, {});
       return res.json();
     },
-    onSuccess: (data: { created?: number; assignmentsCreated?: number; objectsHit?: number; objectsMissed?: number }) => {
+    onSuccess: (data: ExecuteReceipt) => {
       queryClient.invalidateQueries({ queryKey: ["/api/order-concepts"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/rough-planning/grid"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/assignments"] });
+      setReceipt(data ?? {});
       const n = data?.created ?? data?.assignmentsCreated;
-      let description = n != null ? `${n} uppdrag genererades.` : "Konceptet kördes.";
+      let description = n != null ? `${n} uppdrag skickade till grovplaneringen.` : "Konceptet kördes.";
       if (data?.objectsMissed != null && data.objectsMissed > 0) {
         description += ` ${data.objectsMissed} objekt utan träff hoppades över.`;
       }
       toast({ title: "Order skapad", description });
-      navigate("/order-concepts");
     },
     onError: (e: Error) => toast({ title: "Kunde inte skapa order", description: e.message, variant: "destructive" }),
   });
@@ -333,10 +401,64 @@ export default function Step7ReviewSave({
     </div>
   );
 
+  const ReceiptStat = ({ label, value, testid }: { label: string; value: number; testid: string }) => (
+    <div className="rounded-lg border bg-background/60 p-2 text-center">
+      <div className="text-lg font-bold tabular-nums" data-testid={testid}>{value.toLocaleString("sv-SE")}</div>
+      <div className="text-xs text-muted-foreground mt-0.5">{label}</div>
+    </div>
+  );
+
   const maxJobCount = simData ? Math.max(...simData.periods.map((p) => p.jobCount), 1) : 1;
 
   return (
     <div className="space-y-5" data-testid="step7-review-save">
+
+      {/* Kvitto efter skapad order (Task #979) */}
+      {receipt && (
+        <Card className="border-chart-2/50 bg-chart-2/5" data-testid="card-receipt">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium flex items-center gap-2">
+              <CheckCircle2 className="h-4 w-4 text-chart-2" /> Order skapad — kvitto
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <p className="text-sm" data-testid="receipt-headline">
+              {receipt.subscription
+                ? "Abonnemanget aktiverades."
+                : `${(receipt.created ?? receipt.assignmentsCreated ?? 0).toLocaleString("sv-SE")} uppdrag genererades och skickades till grovplaneringen.`}
+            </p>
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+              {(receipt.assignmentsCreated ?? receipt.created) != null && (
+                <ReceiptStat label="Uppdrag" value={receipt.assignmentsCreated ?? receipt.created ?? 0} testid="receipt-assignments" />
+              )}
+              {receipt.objectsHit != null && (
+                <ReceiptStat label="Träffade objekt" value={receipt.objectsHit} testid="receipt-objects-hit" />
+              )}
+              {receipt.datesGenerated != null && (
+                <ReceiptStat label="Datum (generationer)" value={receipt.datesGenerated} testid="receipt-dates" />
+              )}
+              {receipt.preTasksCreated != null && receipt.preTasksCreated > 0 && (
+                <ReceiptStat label="Föruppgifter" value={receipt.preTasksCreated} testid="receipt-pretasks" />
+              )}
+              {receipt.adminWorkOrdersCreated != null && receipt.adminWorkOrdersCreated > 0 && (
+                <ReceiptStat label="Administrativa" value={receipt.adminWorkOrdersCreated} testid="receipt-admin" />
+              )}
+              {receipt.objectsMissed != null && receipt.objectsMissed > 0 && (
+                <ReceiptStat label="Utan träff" value={receipt.objectsMissed} testid="receipt-missed" />
+              )}
+            </div>
+            {receipt.message && <p className="text-xs text-muted-foreground" data-testid="receipt-message">{receipt.message}</p>}
+            <div className="flex flex-wrap gap-2 pt-1">
+              <Button onClick={() => navigate("/grovplanering")} data-testid="button-go-rough-planning">
+                Gå till grovplanering
+              </Button>
+              <Button variant="outline" onClick={() => navigate("/order-concepts")} data-testid="button-go-concepts">
+                Till orderkoncept
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Identitet */}
       <Card>
@@ -388,6 +510,103 @@ export default function Step7ReviewSave({
       {/* Resultat av artikelträffar — vilka inpekade objekt artikeln faktiskt träffar */}
       <ArticleHitResult conceptId={conceptId} />
 
+      {/* Sammanfattning (Task #979) */}
+      {summary?.summaryMetrics && (
+        <Card data-testid="card-summary-metrics">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium flex items-center gap-2">
+              <ClipboardList className="h-4 w-4" /> Sammanfattning
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-1">
+            <Row
+              label="Träffade objekt"
+              value={
+                <span data-testid="summary-objects-hit">
+                  {summary.summaryMetrics.objectsHit}
+                  {summary.summaryMetrics.objectsMissed > 0 && (
+                    <span className="text-muted-foreground font-normal">
+                      {" "}av {summary.summaryMetrics.inpekadeCount} inpekade ({summary.summaryMetrics.objectsMissed} utan träff)
+                    </span>
+                  )}
+                </span>
+              }
+            />
+            <Row label="Antal uppgifter" value={<span data-testid="summary-task-count">{summary.summaryMetrics.taskCount.toLocaleString("sv-SE")}</span>} />
+            {summary.summaryMetrics.preTaskCount > 0 && (
+              <Row label="Föruppgifter" value={summary.summaryMetrics.preTaskCount.toLocaleString("sv-SE")} />
+            )}
+            {summary.summaryMetrics.adminTaskCount > 0 && (
+              <Row label="Administrativa uppgifter" value={summary.summaryMetrics.adminTaskCount.toLocaleString("sv-SE")} />
+            )}
+            <Row label="Ordervärde" value={<span className="font-semibold" data-testid="summary-order-value">{fmtKr(summary.totalValueKr)}</span>} />
+            <Row label="Produktionstid" value={<span data-testid="summary-production-time">{fmtMinutes(summary.summaryMetrics.productionMinutesActual)}</span>} />
+            {summary.summaryMetrics.materialLines.length > 0 && (
+              <div className="pt-2">
+                <div className="text-sm text-muted-foreground mb-1">Materialåtgång</div>
+                <div className="space-y-0.5">
+                  {summary.summaryMetrics.materialLines.map((m, i) => (
+                    <div key={i} className="flex justify-between text-sm" data-testid={`material-line-${i}`}>
+                      <span>{m.name}</span>
+                      <span className="font-medium tabular-nums">{m.totalQuantity.toLocaleString("sv-SE")} {m.unit}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Detaljlista — genererade uppgifter (Task #979) */}
+      {summary?.detailRows && summary.detailRows.length > 0 && (
+        <Card data-testid="card-detail-rows">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium flex items-center gap-2">
+              <ListChecks className="h-4 w-4" /> Detaljlista — genererade uppgifter
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-left text-xs text-muted-foreground border-b">
+                    <th className="py-1.5 pr-2 font-medium">Objekt</th>
+                    <th className="py-1.5 px-2 font-medium">Uppgift</th>
+                    <th className="py-1.5 pl-2 font-medium text-right">Antal</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {summary.detailRows.map((d, i) => (
+                    <tr key={i} className="border-b last:border-0" data-testid={`detail-row-${i}`}>
+                      <td className="py-1.5 pr-2">
+                        {d.objectName ? (
+                          <span>
+                            <span className="font-medium">{d.objectName}</span>
+                            {d.objectNumber && <span className="text-xs text-muted-foreground ml-1">({d.objectNumber})</span>}
+                          </span>
+                        ) : (
+                          <span className="text-muted-foreground italic">
+                            {d.kind === "admin" ? "Administrativ" : d.kind === "pretask" ? "Per träffobjekt" : "—"}
+                          </span>
+                        )}
+                      </td>
+                      <td className="py-1.5 px-2">{d.taskName}</td>
+                      <td className="py-1.5 pl-2 text-right tabular-nums">{d.quantity.toLocaleString("sv-SE")}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            {summary.repetition && summary.repetition.generations != null && summary.repetition.generations > 1 && (
+              <p className="text-xs text-muted-foreground mt-2" data-testid="detail-generations-note">
+                Listan visar en generation. Vid körning skapas detta × {summary.repetition.generations} generationer.
+              </p>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
       {/* Artiklar & ekonomi */}
       <Card>
         <CardHeader className="pb-2">
@@ -428,7 +647,7 @@ export default function Step7ReviewSave({
                 <Row label="Beräknad kostnad" value={fmtKr(summary.totalCostKr)} />
                 <Row
                   label="Beräknad arbetstid"
-                  value={fmtMinutes(summary.totalProductionMinutes)}
+                  value={fmtMinutes(summary.summaryMetrics?.productionMinutesActual ?? summary.totalProductionMinutes)}
                 />
               </div>
             </div>
@@ -456,6 +675,38 @@ export default function Step7ReviewSave({
         </CardContent>
       </Card>
 
+      {/* Repetition (Task #979) */}
+      {summary?.repetition && (
+        <Card data-testid="card-repetition">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium flex items-center gap-2">
+              <Repeat className="h-4 w-4" /> Repetition
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-1">
+            <Row label="Källkoncept" value={summary.repetition.sourceConceptName || conceptName || "—"} />
+            <Row label="Metod" value={fmtMethod(summary.repetition.method)} />
+            <Row
+              label="Återkommande"
+              value={
+                <Badge variant={summary.repetition.isRecurring ? "default" : "secondary"} data-testid="repetition-recurring">
+                  {summary.repetition.isRecurring ? "Ja" : "Nej"}
+                </Badge>
+              }
+            />
+            {summary.repetition.generations != null && (
+              <Row label="Antal generationer" value={<span data-testid="repetition-generations">{summary.repetition.generations.toLocaleString("sv-SE")}</span>} />
+            )}
+            {summary.repetition.validUntil && (
+              <Row label="Giltig t.o.m." value={<span data-testid="repetition-valid-until">{fmtDate(summary.repetition.validUntil)}</span>} />
+            )}
+            <div className="pt-1 text-sm" data-testid="repetition-label">
+              <span className="text-muted-foreground">{summary.repetition.label}</span>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Simulering — uppskattade jobb per månad (Fas 4) */}
       <Card data-testid="card-simulation">
         <CardHeader className="pb-2">
@@ -472,7 +723,7 @@ export default function Step7ReviewSave({
             </div>
           ) : !simData || simData.summary.totalJobs === 0 ? (
             <p className="text-sm text-muted-foreground text-center py-4">
-              Inga jobb uppskattade — konfigurera leveranstid (intervall eller tidsfönster) i steg 3.
+              Inga jobb uppskattade — konfigurera leveranstid (intervall eller tidsfönster) i steg 5.
             </p>
           ) : (
             <div className="space-y-4">
@@ -597,14 +848,14 @@ export default function Step7ReviewSave({
       <div className="flex justify-end">
         <Button
           size="lg"
-          disabled={busy || !conceptId}
+          disabled={busy || !conceptId || !!receipt}
           onClick={() => executeMutation.mutate()}
           data-testid="button-create-order"
         >
           {executeMutation.isPending
             ? <Loader2 className="h-4 w-4 mr-2 animate-spin" />
             : <PlayCircle className="h-4 w-4 mr-2" />}
-          Skapa order
+          {receipt ? "Order skapad" : "Skapa order"}
         </Button>
       </div>
     </div>

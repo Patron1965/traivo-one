@@ -9,6 +9,7 @@ import { asyncHandler } from "../asyncHandler";
 import { NotFoundError, ValidationError, ForbiddenError, describeFortnoxMappingConflict } from "../errors";
 import { objects, workOrders, articles, customers, fortnoxMappings, objectContacts, importBatches, objectMetadata, metadataDefinitions, assignments, type InsertWorkOrder, type ServiceObject } from "@shared/schema";
 import { getISOWeek, getDateFromWeekdayInMonth } from "./helpers";
+import { buildScheduleDateTargets } from "../services/order-concept-schedule";
 import { getOrderConceptMethod } from "@shared/order-concept-method";
 import { triggerGeocodeIfMissing } from "../services/geocoding";
 import { resolveEffectiveArticleQuantity } from "../article-quantity-resolver";
@@ -40,56 +41,11 @@ async function verifyObjectTenant(objectId: string, tenantId: string): Promise<b
   }
 }
 
-// Task #934: dela-bar generator för SCHEMA-metodens (schedule) återkommande
-// jobb. Används av både /execute (method === "schedule") och /run-rolling så att
-// de två vägarna inte divergerar. Dateserien byggs antingen från ett
-// leveransschema (delivery_schedule: månad/veckonummer/veckodag) ELLER från ett
-// återkommande intervall (interval_start_date + interval_frequency_days, kapat
-// av interval_end_date eller rolling_months). Idempotent: hoppar över (objekt,
-// datum)-par som redan har en assignment för konceptet, så att en omkörning inte
-// dubblerar redan genererade tillfällen.
-type ScheduleDateTarget = { date: Date; windowStart?: string; windowEnd?: string };
-
-function buildScheduleDateTargets(concept: any): ScheduleDateTarget[] | null {
-  const now = new Date();
-  const months = concept.rollingMonths || 3;
-  const targets: ScheduleDateTarget[] = [];
-
-  const schedule = Array.isArray(concept.deliverySchedule)
-    ? (concept.deliverySchedule as Array<{ month: number; weekNumber: number; weekday: number; timeWindowStart?: string; timeWindowEnd?: string }>)
-    : [];
-
-  if (schedule.length > 0) {
-    for (let m = 0; m < months; m++) {
-      const targetMonth = new Date(now.getFullYear(), now.getMonth() + m, 1);
-      for (const entry of schedule) {
-        if (entry.month && entry.month !== targetMonth.getMonth() + 1) continue;
-        const date = getDateFromWeekdayInMonth(targetMonth.getFullYear(), targetMonth.getMonth(), entry.weekNumber, entry.weekday);
-        if (!date || date < now) continue;
-        targets.push({ date, windowStart: entry.timeWindowStart, windowEnd: entry.timeWindowEnd });
-      }
-    }
-    return targets;
-  }
-
-  if (concept.intervalStartDate && concept.intervalFrequencyDays && Number(concept.intervalFrequencyDays) > 0) {
-    const start = new Date(concept.intervalStartDate);
-    const freqDays = Number(concept.intervalFrequencyDays);
-    const end = concept.intervalEndDate
-      ? new Date(concept.intervalEndDate)
-      : new Date(now.getFullYear(), now.getMonth() + months, now.getDate());
-    let cursor = new Date(start);
-    let guard = 0;
-    while (cursor <= end && guard < 366) {
-      if (cursor >= now) targets.push({ date: new Date(cursor) });
-      cursor = new Date(cursor.getTime() + freqDays * 86_400_000);
-      guard++;
-    }
-    return targets;
-  }
-
-  return null; // varken leveransschema eller intervall konfigurerat
-}
+// Task #934/#979: SCHEMA-metodens (schedule) date-generator lever nu i
+// ../services/order-concept-schedule (delad med /execute, /run-rolling och
+// review-summary så att preview och körning aldrig divergerar). Idempotens
+// (hoppa över redan genererade (objekt|datum)-par) hanteras i
+// generateScheduleAssignments nedan.
 
 // Task #976: läsbar träff-/miss-sammanfattning för svenska success-meddelanden.
 // Metadata-driven artikel ⇒ "20 av 60 inpekade objekt (40 saknar pantkärl)"; annars
