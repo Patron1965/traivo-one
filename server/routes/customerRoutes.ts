@@ -550,6 +550,24 @@ app.get("/api/objects", asyncHandler(async (req, res) => {
   const hasSetupTime = req.query.hasSetupTime === "true";
   const hasParent = req.query.hasParent === "true";
   const reported = req.query.reported === "true";
+
+  // Task #940: standardiserat villkorsfilter (metadatafält + operator + värde).
+  // Körs genom den DELADE `filterObjectsByConditions`/`matchesFilter` så listans
+  // resultat alltid matchar orderkoncept-förhandsvisningen. Ogiltig param ignoreras.
+  let conditions: { metadataKey: string; operator: string; filterValue: unknown }[] = [];
+  const conditionsParam = req.query.conditions as string || undefined;
+  if (conditionsParam) {
+    try {
+      const parsed = JSON.parse(conditionsParam);
+      if (Array.isArray(parsed)) {
+        conditions = parsed
+          .filter((c: any) => c && typeof c.metadataKey === "string" && c.metadataKey.trim() && typeof c.operator === "string")
+          .map((c: any) => ({ metadataKey: c.metadataKey, operator: c.operator, filterValue: c.filterValue }));
+      }
+    } catch { /* ogiltig conditions-param ignoreras */ }
+  }
+  const hasConditions = conditions.length > 0;
+
   const hasFilters = objectType || hierarchyLevel || accessType || interim || issue || clusterIdFilter || (cities && cities.length > 0) || hasSetupTime || hasParent || reported;
   const paginated = req.query.paginated === "true";
 
@@ -567,8 +585,26 @@ app.get("/api/objects", asyncHandler(async (req, res) => {
     }
   };
 
-  if (paginated || req.query.limit || req.query.offset || req.query.search || req.query.customerId || noCluster || hasFilters) {
+  if (paginated || req.query.limit || req.query.offset || req.query.search || req.query.customerId || noCluster || hasFilters || hasConditions) {
     const filters = hasFilters ? { objectType, hierarchyLevel, accessType, isInterimObject: interim === "true" ? true : interim === "false" ? false : undefined, issue, clusterId: clusterIdFilter, cities, hasSetupTime: hasSetupTime || undefined, hasParent: hasParent || undefined, reported: reported || undefined } : undefined;
+
+    if (hasConditions) {
+      // Villkorsfilter: hämta alla bas-filtrerade objekt, kör den DELADE
+      // matchningen (samma som orderkoncept-preview) och paginera i minnet.
+      const base = await storage.getObjectsPaginated(tenantId, 1_000_000, 0, search, customerIds, filters);
+      const { filterObjectsByConditions } = await import("../services/order-concept-targeting");
+      const matched = await filterObjectsByConditions(tenantId, base.objects as any, conditions);
+      const total = matched.length;
+      const page = matched.slice(offset, offset + limit);
+      const enriched = await enrichWithDisplayName(page as unknown as Array<Record<string, unknown>>);
+      if (noCluster) {
+        res.json(enriched.filter(obj => !(obj as any).clusterId));
+      } else {
+        res.json({ objects: enriched, total });
+      }
+      return;
+    }
+
     const result = await storage.getObjectsPaginated(tenantId, limit, offset, search, customerIds, filters);
     const enriched = await enrichWithDisplayName(result.objects as Array<Record<string, unknown>>);
 

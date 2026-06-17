@@ -94,6 +94,8 @@ import { useUpload } from "@/hooks/use-upload";
 import { deriveIsPreTask } from "@/lib/article-pre-task";
 import { QueryState } from "@/components/QueryState";
 import { FortnoxArticleNumberField } from "@/components/articles/FortnoxArticleNumberField";
+import { ConditionFilterList, type ConditionField } from "@/components/orderkoncept/shared/ConditionFilter";
+import { applyConditionFilters, CONDITION_OPERATORS, type ConditionFilter } from "@shared/condition-matching";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { HelpTooltip, PageHelp } from "@/components/ui/help-tooltip";
@@ -340,7 +342,7 @@ export default function ArticlesPage() {
   const isAdmin = user?.role === "admin" || user?.role === "owner";
   const [searchQuery, setSearchQuery] = useState("");
   const [typeFilter, setTypeFilter] = useState<string>("all");
-  const [objectTypeFilter, setObjectTypeFilter] = useState<string>("all");
+  const [conditionFilters, setConditionFilters] = useState<ConditionFilter[]>([]);
   const [hookLevelFilter, setHookLevelFilter] = useState<string>("all");
   const [viewMode, setViewMode] = useState<"list" | "hooks">("list");
   const [testDialogOpen, setTestDialogOpen] = useState(false);
@@ -417,8 +419,34 @@ export default function ArticlesPage() {
   });
 
 
+  // Task #940: villkorsfält för artikellistan = distinkta metadata-labels från
+  // artiklarnas matchningsregler (associationRules, source="metadata") + legacy
+  // associationLabel. Artiklar bär MATCHNINGSREGLER (svensk katalog-label), inte
+  // metadatavärden — därför härleds fälten från reglerna, inte metadatadefinitioner.
+  const articleConditionFields = useMemo<ConditionField[]>(() => {
+    const labels = new Set<string>();
+    for (const a of articles) {
+      for (const r of ((a.associationRules ?? []) as AssociationCondition[])) {
+        if (r.source === "metadata" && r.label) labels.add(r.label);
+      }
+      if (a.associationLabel) labels.add(a.associationLabel);
+    }
+    return Array.from(labels).sort((x, y) => x.localeCompare(y, "sv")).map(l => ({ value: l, label: l }));
+  }, [articles]);
+
+  // Resolverar en artikels regel-värde för en given katalog-label (villkorets metadataKey).
+  const getArticleMatchValue = (article: Article, label: string): unknown => {
+    for (const r of ((article.associationRules ?? []) as AssociationCondition[])) {
+      if (r.source === "metadata" && r.label === label) return r.value ?? "";
+    }
+    if (article.associationLabel === label) return article.associationValue ?? "";
+    return undefined;
+  };
+
+  const activeConditions = useMemo(() => conditionFilters.filter(f => f.metadataKey), [conditionFilters]);
+
   const filteredArticles = useMemo(() => {
-    return articles.filter(article => {
+    const base = articles.filter(article => {
       const matchesSearch = 
         article.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
         article.articleNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -426,17 +454,16 @@ export default function ArticlesPage() {
       
       const matchesType = typeFilter === "all" || article.articleType === typeFilter;
       
-      const matchesObjectType = objectTypeFilter === "all" || 
-        (article.objectTypes && article.objectTypes.includes(objectTypeFilter));
-      
       const matchesHookLevel = hookLevelFilter === "all" || 
         (hookLevelFilter === "none" ? !article.hookLevel : article.hookLevel === hookLevelFilter);
 
       const matchesStatus = showDiscontinued || article.status !== "utgått";
 
-      return matchesSearch && matchesType && matchesObjectType && matchesHookLevel && matchesStatus;
+      return matchesSearch && matchesType && matchesHookLevel && matchesStatus;
     });
-  }, [articles, searchQuery, typeFilter, objectTypeFilter, hookLevelFilter, showDiscontinued]);
+    // Delad matchning (samma som orderkoncept-förhandsvisningen).
+    return applyConditionFilters(base, conditionFilters, getArticleMatchValue);
+  }, [articles, searchQuery, typeFilter, conditionFilters, hookLevelFilter, showDiscontinued]);
 
   const totalPages = Math.max(1, Math.ceil(filteredArticles.length / ITEMS_PER_PAGE));
   const safePage = Math.min(currentPage, totalPages);
@@ -447,7 +474,7 @@ export default function ArticlesPage() {
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchQuery, typeFilter, objectTypeFilter, hookLevelFilter]);
+  }, [searchQuery, typeFilter, conditionFilters, hookLevelFilter]);
 
   useEffect(() => {
     if (currentPage > totalPages) setCurrentPage(totalPages);
@@ -455,13 +482,13 @@ export default function ArticlesPage() {
 
   const activeFilterCount = [
     typeFilter !== "all" ? 1 : 0,
-    objectTypeFilter !== "all" ? 1 : 0,
+    activeConditions.length,
     hookLevelFilter !== "all" ? 1 : 0,
   ].reduce((a, b) => a + b, 0);
 
   const clearAllFilters = () => {
     setTypeFilter("all");
-    setObjectTypeFilter("all");
+    setConditionFilters([]);
     setHookLevelFilter("all");
   };
 
@@ -632,12 +659,14 @@ export default function ArticlesPage() {
                 <X className="h-3 w-3" />
               </Badge>
             )}
-            {objectTypeFilter !== "all" && (
-              <Badge variant="secondary" className="gap-1 cursor-pointer" onClick={() => setObjectTypeFilter("all")} data-testid="badge-filter-object-type">
-                Objekttyp: {objectTypeLabels[objectTypeFilter] || objectTypeFilter}
+            {conditionFilters.map((f, i) => f.metadataKey ? (
+              <Badge key={`cond-${i}`} variant="secondary" className="gap-1 cursor-pointer" onClick={() => setConditionFilters(conditionFilters.filter((_, idx) => idx !== i))} data-testid={`badge-filter-condition-${i}`}>
+                {f.metadataKey}
+                {" "}{(CONDITION_OPERATORS.find(o => o.value === f.operator)?.label ?? f.operator)}
+                {CONDITION_OPERATORS.find(o => o.value === f.operator)?.noValue ? "" : ` ${String(f.filterValue ?? "")}`}
                 <X className="h-3 w-3" />
               </Badge>
-            )}
+            ) : null)}
             {hookLevelFilter !== "all" && (
               <Badge variant="secondary" className="gap-1 cursor-pointer" onClick={() => setHookLevelFilter("all")} data-testid="badge-filter-hook-level">
                 Fasthakning: {hookLevelFilter === "none" ? "Utan fasthakning" : (hookLevelLabels[hookLevelFilter] || hookLevelFilter)}
@@ -666,21 +695,6 @@ export default function ArticlesPage() {
               </Select>
             </div>
             <div className="flex items-center gap-2">
-              <Label className="text-sm whitespace-nowrap">Objekttyp:</Label>
-              <Select value={objectTypeFilter} onValueChange={setObjectTypeFilter}>
-                <SelectTrigger className="w-[180px]" data-testid="select-object-type-filter">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {objectTypeOptions.map(type => (
-                    <SelectItem key={type.value} value={type.value}>
-                      {type.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="flex items-center gap-2">
               <Label className="text-sm whitespace-nowrap">Fasthakning:</Label>
               <Select value={hookLevelFilter} onValueChange={setHookLevelFilter}>
                 <SelectTrigger className="w-[180px]" data-testid="select-hook-level-filter">
@@ -696,6 +710,22 @@ export default function ArticlesPage() {
                   ))}
                 </SelectContent>
               </Select>
+            </div>
+            <div className="w-full space-y-2">
+              <Label className="text-sm flex items-center gap-1.5">
+                <Filter className="h-3.5 w-3.5" /> Villkorsfilter (matchningsregler)
+              </Label>
+              <p className="text-xs text-muted-foreground">
+                Matcha artiklar på deras matchningsregler — samma matchning som orderkoncept-förhandsvisningen.
+              </p>
+              <ConditionFilterList
+                filters={conditionFilters}
+                fields={articleConditionFields}
+                onChange={setConditionFilters}
+                fieldPlaceholder="Matchningsfält"
+                emptyText="Inga villkor — alla artiklar visas."
+                addTestId="button-add-condition-article"
+              />
             </div>
           </div>
         )}

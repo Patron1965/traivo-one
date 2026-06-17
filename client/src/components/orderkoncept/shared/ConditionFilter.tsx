@@ -1,30 +1,55 @@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Trash2 } from "lucide-react";
+import { Plus, Trash2 } from "lucide-react";
 import type { MetadataDefinition } from "@shared/schema";
+// Task #940: operator-semantik + typer lever i @shared/condition-matching (delas
+// med servern). Re-exporteras här så befintliga importörer är oförändrade.
+import {
+  CONDITION_OPERATORS,
+  matchesFilter,
+  applyConditionFilters,
+  operatorNeedsNoValue,
+  type ConditionFilter,
+} from "@shared/condition-matching";
 
-export interface ConditionFilter {
-  metadataKey: string;
-  operator: string;
-  filterValue: unknown;
+export {
+  CONDITION_OPERATORS,
+  matchesFilter,
+  applyConditionFilters,
+  operatorNeedsNoValue,
+};
+export type { ConditionFilter };
+
+/** Generiskt fält-alternativ för matchningskomponenten. */
+export interface ConditionField {
+  value: string;
+  label: string;
 }
 
-export const CONDITION_OPERATORS: { value: string; label: string; noValue?: boolean }[] = [
-  { value: "equals", label: "är lika med" },
-  { value: "not_equals", label: "är inte lika med" },
-  { value: "contains", label: "innehåller" },
-  { value: "starts_with", label: "börjar med" },
-  { value: "greater_than", label: "större än" },
-  { value: "less_than", label: "mindre än" },
-  { value: "exists", label: "finns", noValue: true },
-  { value: "not_exists", label: "saknas", noValue: true },
-];
+export const METADATA_NONE = "__none__";
+
+/** Normaliserar metadatadefinitioner → generiska fältalternativ. */
+function definitionsToFields(definitions: MetadataDefinition[]): ConditionField[] {
+  return definitions.map((d) => ({ value: d.fieldKey, label: d.fieldLabel }));
+}
+
+function resolveFields(
+  fields?: ConditionField[],
+  definitions?: MetadataDefinition[],
+): ConditionField[] {
+  if (fields) return fields;
+  if (definitions) return definitionsToFields(definitions);
+  return [];
+}
 
 interface MetadataFieldSelectProps {
   value: string;
   onValueChange: (v: string) => void;
-  definitions: MetadataDefinition[];
+  /** Generiska fältalternativ. Föredras framför `definitions`. */
+  fields?: ConditionField[];
+  /** Bakåtkompatibel: metadatadefinitioner (mappas till `fields`). */
+  definitions?: MetadataDefinition[];
   index: number;
   placeholder?: string;
   className?: string;
@@ -32,11 +57,10 @@ interface MetadataFieldSelectProps {
   testId?: string;
 }
 
-export const METADATA_NONE = "__none__";
-
 export function MetadataFieldSelect({
   value,
   onValueChange,
+  fields,
   definitions,
   index,
   placeholder = "Metadatafält",
@@ -44,6 +68,7 @@ export function MetadataFieldSelect({
   allowNone = false,
   testId,
 }: MetadataFieldSelectProps) {
+  const resolved = resolveFields(fields, definitions);
   return (
     <Select value={value} onValueChange={onValueChange}>
       <SelectTrigger className={className} data-testid={testId ?? `select-filter-key-${index}`}>
@@ -51,9 +76,9 @@ export function MetadataFieldSelect({
       </SelectTrigger>
       <SelectContent>
         {allowNone && <SelectItem value={METADATA_NONE}>—</SelectItem>}
-        {definitions.map((d) => (
-          <SelectItem key={d.id} value={d.fieldKey}>
-            {d.fieldLabel}
+        {resolved.map((f) => (
+          <SelectItem key={f.value} value={f.value}>
+            {f.label}
           </SelectItem>
         ))}
       </SelectContent>
@@ -64,17 +89,22 @@ export function MetadataFieldSelect({
 interface ConditionFilterRowProps {
   filter: ConditionFilter;
   index: number;
-  definitions: MetadataDefinition[];
+  fields?: ConditionField[];
+  definitions?: MetadataDefinition[];
   onChange: (patch: Partial<ConditionFilter>) => void;
   onRemove: () => void;
+  /** Tillåt fritext för värdet via Input (default). Annars endast operator. */
+  fieldPlaceholder?: string;
 }
 
 export function ConditionFilterRow({
   filter,
   index,
+  fields,
   definitions,
   onChange,
   onRemove,
+  fieldPlaceholder,
 }: ConditionFilterRowProps) {
   const op = CONDITION_OPERATORS.find((o) => o.value === filter.operator);
   return (
@@ -82,8 +112,10 @@ export function ConditionFilterRow({
       <MetadataFieldSelect
         value={filter.metadataKey}
         onValueChange={(v) => onChange({ metadataKey: v })}
+        fields={fields}
         definitions={definitions}
         index={index}
+        placeholder={fieldPlaceholder}
       />
       <Select value={filter.operator} onValueChange={(v) => onChange({ operator: v })}>
         <SelectTrigger className="w-[150px]" data-testid={`select-filter-operator-${index}`}>
@@ -114,6 +146,66 @@ export function ConditionFilterRow({
         data-testid={`button-remove-filter-${index}`}
       >
         <Trash2 className="h-4 w-4" />
+      </Button>
+    </div>
+  );
+}
+
+interface ConditionFilterListProps {
+  filters: ConditionFilter[];
+  fields?: ConditionField[];
+  definitions?: MetadataDefinition[];
+  onChange: (filters: ConditionFilter[]) => void;
+  addLabel?: string;
+  emptyText?: string;
+  fieldPlaceholder?: string;
+  /** testid-prefix för "lägg till"-knappen. */
+  addTestId?: string;
+}
+
+/**
+ * Återanvändbar villkorslista: rader (metadatafält + operator + värde) med
+ * "Lägg till villkor"-knapp, ta-bort per rad och tomt-läge. Används av både
+ * artikel- och objektlistans filter (Task #940).
+ */
+export function ConditionFilterList({
+  filters,
+  fields,
+  definitions,
+  onChange,
+  addLabel = "Lägg till villkor",
+  emptyText = "Inga villkor — alla rader visas.",
+  fieldPlaceholder,
+  addTestId = "button-add-condition",
+}: ConditionFilterListProps) {
+  const addFilter = () =>
+    onChange([...filters, { metadataKey: "", operator: "equals", filterValue: "" }]);
+  const updateFilter = (i: number, patch: Partial<ConditionFilter>) =>
+    onChange(filters.map((f, idx) => (idx === i ? { ...f, ...patch } : f)));
+  const removeFilter = (i: number) => onChange(filters.filter((_, idx) => idx !== i));
+
+  return (
+    <div className="space-y-2" data-testid="condition-filter-list">
+      {filters.length === 0 ? (
+        <p className="text-sm text-muted-foreground">{emptyText}</p>
+      ) : (
+        <div className="space-y-2">
+          {filters.map((f, i) => (
+            <ConditionFilterRow
+              key={i}
+              filter={f}
+              index={i}
+              fields={fields}
+              definitions={definitions}
+              fieldPlaceholder={fieldPlaceholder}
+              onChange={(patch) => updateFilter(i, patch)}
+              onRemove={() => removeFilter(i)}
+            />
+          ))}
+        </div>
+      )}
+      <Button variant="outline" size="sm" onClick={addFilter} data-testid={addTestId}>
+        <Plus className="h-4 w-4 mr-1" /> {addLabel}
       </Button>
     </div>
   );

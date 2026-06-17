@@ -60,7 +60,12 @@ import { GeocodedObjectsMap, ObjectsMapTab } from "@/components/ObjectsMapView";
 import { BulkActionBar } from "@/components/BulkActionBar";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import type { ServiceObject } from "@shared/schema";
+import type { ServiceObject, MetadataDefinition } from "@shared/schema";
+import {
+  ConditionFilterList,
+  CONDITION_OPERATORS,
+  type ConditionFilter,
+} from "@/components/orderkoncept/shared/ConditionFilter";
 
 const hierarchyLevelLabels: Record<string, { label: string; color: string }> = {
   koncern: { label: "Koncern", color: "bg-chart-5/15 text-chart-5 border border-chart-5/30" },
@@ -152,7 +157,7 @@ export default function ObjectsPage() {
   const { t } = useTerminology();
   const localizedObjectName = useLocalizedObjectName();
   const [debouncedSearch, setDebouncedSearch] = useState("");
-  const [typeFilter, setTypeFilterRaw] = useState("all");
+  const [conditionFilters, setConditionFiltersRaw] = useState<ConditionFilter[]>([]);
   const [accessFilter, setAccessFilterRaw] = useState("all");
   const [issueFilter, setIssueFilter] = useState<string | null>(() => {
     const params = new URLSearchParams(window.location.search);
@@ -188,7 +193,8 @@ export default function ObjectsPage() {
   const [modusBusy, setModusBusy] = useState(false);
   const [modusCreateMissingCustomers, setModusCreateMissingCustomers] = useState(false);
   const [currentPage, setCurrentPage] = useState(0);
-  const setTypeFilter = (v: string) => { setTypeFilterRaw(v); setCurrentPage(0); };
+  const setConditionFilters = (v: ConditionFilter[]) => { setConditionFiltersRaw(v); setCurrentPage(0); };
+  const activeConditions = useMemo(() => conditionFilters.filter(f => f.metadataKey), [conditionFilters]);
   const setAccessFilter = (v: string) => { setAccessFilterRaw(v); setCurrentPage(0); };
   const setCustomerFilter = (v: string[]) => { setCustomerFilterRaw(v); setCurrentPage(0); };
   const addCustomerFilter = (id: string) => { if (!customerFilter.includes(id)) { setCustomerFilter([...customerFilter, id]); } };
@@ -296,8 +302,14 @@ export default function ObjectsPage() {
     }
   }, []);
 
+  // Task #940: metadatafält för det standardiserade villkorsfiltret (engelska
+  // metadataDefinitions — samma system som orderkoncept-inpekningen använder).
+  const { data: metadataDefinitions = [] } = useQuery<MetadataDefinition[]>({
+    queryKey: ["/api/metadata-definitions"],
+  });
+
   const { data: objectsData, isLoading, isError: objectsIsError, error: objectsError, refetch: objectsRefetch } = useQuery<{ objects: ServiceObject[]; total: number }>({
-    queryKey: ["/api/objects", "paginated", currentPage, debouncedSearch, customerFilter, typeFilter, accessFilter, hierarchyFilter, clusterFilter, cityFilter, hasSetupTimeFilter, hasParentFilter, reportedFilter, interimFilter, issueFilter],
+    queryKey: ["/api/objects", "paginated", currentPage, debouncedSearch, customerFilter, JSON.stringify(activeConditions), accessFilter, hierarchyFilter, clusterFilter, cityFilter, hasSetupTimeFilter, hasParentFilter, reportedFilter, interimFilter, issueFilter],
     queryFn: async () => {
       const params = new URLSearchParams({
         limit: PAGE_SIZE.toString(),
@@ -309,8 +321,8 @@ export default function ObjectsPage() {
       if (customerFilter.length > 0) {
         params.append("customerId", customerFilter.join(","));
       }
-      if (typeFilter !== "all") {
-        params.append("objectType", typeFilter);
+      if (activeConditions.length > 0) {
+        params.append("conditions", JSON.stringify(activeConditions));
       }
       if (accessFilter !== "all") {
         params.append("accessType", accessFilter);
@@ -911,7 +923,7 @@ export default function ObjectsPage() {
   }, [metadataCatalog, metadataColumnSearch]);
 
   const activeFilterCount = useMemo(() => [
-    typeFilter !== "all" ? 1 : 0,
+    activeConditions.length > 0 ? 1 : 0,
     accessFilter !== "all" ? 1 : 0,
     customerFilter.length > 0 ? 1 : 0,
     hierarchyFilter !== "all" ? 1 : 0,
@@ -921,7 +933,7 @@ export default function ObjectsPage() {
     reportedFilter ? 1 : 0,
     interimFilter ? 1 : 0,
     issueFilter ? 1 : 0,
-  ].reduce((a, b) => a + b, 0), [typeFilter, accessFilter, customerFilter, hierarchyFilter, cityFilter, hasSetupTimeFilter, hasParentFilter, reportedFilter, interimFilter, issueFilter]);
+  ].reduce((a, b) => a + b, 0), [activeConditions, accessFilter, customerFilter, hierarchyFilter, cityFilter, hasSetupTimeFilter, hasParentFilter, reportedFilter, interimFilter, issueFilter]);
 
   const quickStats = useMemo(() => {
     const typeCounts: Record<string, number> = {};
@@ -948,7 +960,7 @@ export default function ObjectsPage() {
   }, [objects]);
 
   const clearAllFilters = () => {
-    setTypeFilter("all");
+    setConditionFilters([]);
     setAccessFilter("all");
     setCustomerFilter([]);
     setHierarchyFilter("all");
@@ -1285,7 +1297,7 @@ export default function ObjectsPage() {
     const params = new URLSearchParams({ limit: limit.toString(), offset: offset.toString() });
     if (debouncedSearch) params.append("search", debouncedSearch);
     if (customerFilter.length > 0) params.append("customerId", customerFilter.join(","));
-    if (typeFilter !== "all") params.append("objectType", typeFilter);
+    if (activeConditions.length > 0) params.append("conditions", JSON.stringify(activeConditions));
     if (accessFilter !== "all") params.append("accessType", accessFilter);
     if (hierarchyFilter !== "all") params.append("hierarchyLevel", hierarchyFilter);
     if (clusterFilter !== "all") params.append("clusterId", clusterFilter);
@@ -1296,7 +1308,7 @@ export default function ObjectsPage() {
     if (interimFilter) params.append("interim", "true");
     if (issueFilter) params.append("issue", issueFilter);
     return params;
-  }, [debouncedSearch, customerFilter, typeFilter, accessFilter, hierarchyFilter, clusterFilter, cityFilter, hasSetupTimeFilter, hasParentFilter, reportedFilter, interimFilter, issueFilter]);
+  }, [debouncedSearch, customerFilter, activeConditions, accessFilter, hierarchyFilter, clusterFilter, cityFilter, hasSetupTimeFilter, hasParentFilter, reportedFilter, interimFilter, issueFilter]);
 
   const downloadCSV = (filename: string, rows: (string | number)[][]) => {
     const csv = rows.map(row => row.map(sanitizeCSVCell).join(",")).join("\n");
@@ -1560,12 +1572,6 @@ export default function ObjectsPage() {
               {obj.hierarchyLevel && hierarchyLevelLabels[obj.hierarchyLevel] && (
                 <Badge className={`text-xs ${hierarchyLevelLabels[obj.hierarchyLevel].color}`}>
                   {hierarchyLevelLabels[obj.hierarchyLevel].label}
-                </Badge>
-              )}
-              {/* Task #848: dölj objekttyp-badgen när den ger samma etikett som hierarkinivån */}
-              {(objectTypeLabels[obj.objectType] || obj.objectType) !== (obj.hierarchyLevel && hierarchyLevelLabels[obj.hierarchyLevel]?.label) && (
-                <Badge variant="secondary" className="text-xs">
-                  {objectTypeLabels[obj.objectType] || obj.objectType}
                 </Badge>
               )}
               {obj.isInterimObject && (
@@ -2069,12 +2075,14 @@ export default function ObjectsPage() {
           </div>
           {activeFilterCount > 0 && (
             <div className="flex items-center gap-2 flex-wrap mt-3">
-              {typeFilter !== "all" && (
-                <Badge variant="secondary" className="gap-1 cursor-pointer" onClick={() => setTypeFilter("all")} data-testid="badge-filter-type">
-                  Typ: {objectTypeLabels[typeFilter] || typeFilter}
+              {conditionFilters.map((f, i) => f.metadataKey ? (
+                <Badge key={`cond-${i}`} variant="secondary" className="gap-1 cursor-pointer" onClick={() => setConditionFilters(conditionFilters.filter((_, idx) => idx !== i))} data-testid={`badge-filter-condition-${i}`}>
+                  {(metadataDefinitions.find(d => d.fieldKey === f.metadataKey)?.fieldLabel ?? f.metadataKey)}
+                  {" "}{(CONDITION_OPERATORS.find(o => o.value === f.operator)?.label ?? f.operator)}
+                  {CONDITION_OPERATORS.find(o => o.value === f.operator)?.noValue ? "" : ` ${String(f.filterValue ?? "")}`}
                   <X className="h-3 w-3" />
                 </Badge>
-              )}
+              ) : null)}
               {accessFilter !== "all" && (
                 <Badge variant="secondary" className="gap-1 cursor-pointer" onClick={() => setAccessFilter("all")} data-testid="badge-filter-access">
                   Tillgång: {accessTypeLabels[accessFilter]?.label || accessFilter}
@@ -2129,17 +2137,6 @@ export default function ObjectsPage() {
         {filtersOpen && (
           <CardContent className="space-y-4 pt-0">
             <div className="flex items-center gap-4 flex-wrap">
-              <Select value={typeFilter} onValueChange={setTypeFilter}>
-                <SelectTrigger className="w-[160px]" data-testid="select-type-filter">
-                  <SelectValue placeholder={t("asset_type")} />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Alla typer</SelectItem>
-                  {Object.entries(objectTypeLabels).map(([key, label]) => (
-                    <SelectItem key={key} value={key}>{label}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
               <Select value={accessFilter} onValueChange={setAccessFilter}>
                 <SelectTrigger className="w-[160px]" data-testid="select-access-filter">
                   <SelectValue placeholder="Tillgångstyp" />
@@ -2228,6 +2225,21 @@ export default function ObjectsPage() {
                   )}
                 </span>
               </label>
+            </div>
+            <div className="space-y-2">
+              <Label className="text-sm flex items-center gap-1.5">
+                <Filter className="h-3.5 w-3.5" /> Villkorsfilter (metadata)
+              </Label>
+              <p className="text-xs text-muted-foreground">
+                Matcha objekt på metadatafält — samma matchning som orderkoncept-förhandsvisningen.
+              </p>
+              <ConditionFilterList
+                filters={conditionFilters}
+                definitions={metadataDefinitions}
+                onChange={setConditionFilters}
+                emptyText="Inga villkor — alla objekt visas."
+                addTestId="button-add-condition-object"
+              />
             </div>
           </CardContent>
         )}
@@ -2365,7 +2377,7 @@ export default function ObjectsPage() {
             )}
             {filteredTopLevel.length > 0 ? (
               filteredTopLevel.map(obj => renderObjectTree(obj))
-            ) : totalObjects === 0 && !debouncedSearch && typeFilter === "all" && accessFilter === "all" && customerFilter.length === 0 && hierarchyFilter === "all" && !interimFilter && cityFilter.length === 0 && !hasSetupTimeFilter && !hasParentFilter && !reportedFilter ? (
+            ) : totalObjects === 0 && !debouncedSearch && activeConditions.length === 0 && accessFilter === "all" && customerFilter.length === 0 && hierarchyFilter === "all" && !interimFilter && cityFilter.length === 0 && !hasSetupTimeFilter && !hasParentFilter && !reportedFilter ? (
               <div className="text-center py-16 px-6">
                 <div className="mx-auto w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mb-4">
                   <Package className="h-8 w-8 text-primary" />

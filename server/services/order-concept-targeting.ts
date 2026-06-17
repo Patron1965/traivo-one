@@ -6,6 +6,11 @@ import {
   objectMetadata,
   type ServiceObject,
 } from "@shared/schema";
+// Task #940: matchesFilter lever nu i @shared/condition-matching (delas av klient
+// och server). Re-exporteras här så befintliga server-importörer är oförändrade.
+import { matchesFilter } from "@shared/condition-matching";
+
+export { matchesFilter };
 
 // ============================================================================
 // Delad inpeknings-/villkorslogik för orderkoncept (steg 4).
@@ -27,43 +32,6 @@ export type ConditionFilterInput = {
   operator: string;
   filterValue?: unknown;
 };
-
-/**
- * Operator-matchning för ETT villkor. Enda källan till sanning — återanvänds av
- * alla inpeknings-/villkorsvägar så preview och execute aldrig kan driva isär.
- */
-export function matchesFilter(
-  metadataValue: unknown,
-  operator: string,
-  filterValue: unknown,
-): boolean {
-  switch (operator) {
-    case "equals":
-      return String(metadataValue ?? "") === String(filterValue ?? "");
-    case "not_equals":
-      return String(metadataValue ?? "") !== String(filterValue ?? "");
-    case "contains":
-      return String(metadataValue ?? "")
-        .toLowerCase()
-        .includes(String(filterValue ?? "").toLowerCase());
-    case "starts_with":
-      return String(metadataValue ?? "")
-        .toLowerCase()
-        .startsWith(String(filterValue ?? "").toLowerCase());
-    case "greater_than":
-      return Number(metadataValue) > Number(filterValue);
-    case "less_than":
-      return Number(metadataValue) < Number(filterValue);
-    case "in_list":
-      return Array.isArray(filterValue) && filterValue.map(String).includes(String(metadataValue));
-    case "exists":
-      return metadataValue !== undefined && metadataValue !== null && metadataValue !== "";
-    case "not_exists":
-      return metadataValue === undefined || metadataValue === null || metadataValue === "";
-    default:
-      return true;
-  }
-}
 
 export type ResolveTargetOptions = {
   tenantId: string;
