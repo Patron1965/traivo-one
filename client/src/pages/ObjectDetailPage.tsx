@@ -9,6 +9,7 @@ import { DeliveryPreferencesEditor } from "@/components/DeliveryPreferencesEdito
 import { ObjectHistoryArchiveTab } from "@/components/ObjectHistoryArchiveTab";
 import { ObjectVignetteSection } from "@/components/ObjectVignetteSection";
 import { ObjectMetadataForm, type MetadataFormEntry, type MetadataFormType } from "@/components/ObjectMetadataForm";
+import { ObjectTemplateMetadataForm, type TemplateMetadataType } from "@/components/ObjectTemplateMetadataForm";
 import { ObjectTimeline } from "@/components/timeline/ObjectTimeline";
 import InvoiceRecipientsCard from "@/components/InvoiceRecipientsCard";
 import ObjectPayersCard from "@/components/ObjectPayersCard";
@@ -38,7 +39,7 @@ import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { useMapConfig } from "@/hooks/use-map-config";
-import type { ServiceObject, WorkOrder, DeliveryPreferences } from "@shared/schema";
+import type { ServiceObject, WorkOrder, DeliveryPreferences, ImportTemplate } from "@shared/schema";
 import { PolylineEditor } from "@/components/PolylineEditor";
 import { objectStatusBadge as statusColors, workOrderStatusBadge as workOrderStatusColors, getCustomerReportStatusBadge } from "@/lib/status-colors";
 import { OBJECT_LOCATION_TYPE_LABELS, objectLocationTypeLabel, objectLocationTypeBadgeClass } from "@/lib/object-location";
@@ -428,6 +429,7 @@ export default function ObjectDetailPage() {
   const [searchInput, setSearchInput] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string>("");
   useEffect(() => {
     const t = setTimeout(() => setSearchQuery(searchInput.trim()), 250);
     return () => clearTimeout(t);
@@ -614,6 +616,18 @@ export default function ObjectDetailPage() {
       return res.json();
     },
     enabled: !!objectId,
+  });
+
+  // Task #998: namngivna importmallar återanvänds som fälturval för mall-styrd
+  // redigering. Endast admin har åtkomst till mall-endpointen.
+  const { data: importTemplates = [] } = useQuery<ImportTemplate[]>({
+    queryKey: ["/api/import-templates"],
+    queryFn: async () => {
+      const res = await fetch(`/api/import-templates`);
+      if (!res.ok) return [];
+      return res.json();
+    },
+    enabled: !!objectId && isAdmin,
   });
 
   const { data: matchingArticles = [] } = useQuery<Array<{
@@ -847,6 +861,21 @@ export default function ObjectDetailPage() {
     },
     onError: (error: Error) => {
       toast({ title: "Kunde inte ta bort metadata", description: error.message, variant: "destructive" });
+    },
+  });
+
+  // Task #998: uppdatera ett befintligt lokalt metadata-värde (PUT). Mall-vyns
+  // inline-redigering använder denna väg för fält som redan har eget värde.
+  const updateMetadataMutation = useMutation({
+    mutationFn: async ({ id, varde }: { id: string; varde: string }) => {
+      await apiRequest("PUT", `/api/metadata/${id}`, { varde, uppdateradAv: metadataActor });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/metadata/objects", objectId] });
+      toast({ title: "Metadata uppdaterad" });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Kunde inte uppdatera metadata", description: error.message, variant: "destructive" });
     },
   });
 
@@ -1737,28 +1766,82 @@ export default function ObjectDetailPage() {
 
         {/* ==================== METADATA ==================== */}
         <TabsContent value="metadata">
-          <ObjectMetadataForm
-            objectId={objectId}
-            entries={metadata as MetadataFormEntry[]}
-            types={metadataTypes as MetadataFormType[]}
-            onAdd={(data) => addMetadataMutation.mutate(data)}
-            isAdding={addMetadataMutation.isPending}
-            onSoftDelete={(katalogId) => softDeleteMetadataMutation.mutate(katalogId)}
-            onRestore={(katalogId) => restoreMetadataMutation.mutate(katalogId)}
-            softDeletePending={softDeleteMetadataMutation.isPending}
-            restorePending={restoreMetadataMutation.isPending}
-            onReorder={(orderedKatalogIds) => reorderMetadataMutation.mutate(orderedKatalogIds)}
-            reorderPending={reorderMetadataMutation.isPending}
-            renderHistoryButton={(entry) =>
+          {(() => {
+            const selectedTemplate = importTemplates.find((t) => t.id === selectedTemplateId);
+            const renderHistory = (entry: MetadataFormEntry) =>
               entry.katalog?.kronologiskVisning ? (
                 <MetadataHistorikButton
                   objectId={objectId}
                   katalogId={entry.metadataKatalogId || ""}
                   katalogNamn={entry.katalog?.namn || ""}
                 />
-              ) : null
-            }
-          />
+              ) : null;
+            return (
+              <div className="space-y-4">
+                {isAdmin && importTemplates.length > 0 && (
+                  <Card>
+                    <CardContent className="flex flex-col gap-2 py-4 sm:flex-row sm:items-center sm:justify-between">
+                      <div className="space-y-0.5">
+                        <p className="text-sm font-medium">Redigera via mall</p>
+                        <p className="text-xs text-muted-foreground">
+                          Välj en namngiven mall för att redigera enbart dess fält. Övriga fält lämnas orörda.
+                        </p>
+                      </div>
+                      <Select
+                        value={selectedTemplateId || "__none__"}
+                        onValueChange={(v) => setSelectedTemplateId(v === "__none__" ? "" : v)}
+                      >
+                        <SelectTrigger className="w-full sm:w-72" data-testid="select-object-template">
+                          <SelectValue placeholder="Ingen mall – alla fält" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="__none__">Ingen mall – alla fält</SelectItem>
+                          {importTemplates.map((t) => (
+                            <SelectItem key={t.id} value={t.id} data-testid={`option-template-${t.id}`}>
+                              {t.name}{Array.isArray(t.fieldIds) ? ` (${t.fieldIds.length} fält)` : ""}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </CardContent>
+                  </Card>
+                )}
+
+                {selectedTemplate ? (
+                  <ObjectTemplateMetadataForm
+                    objectId={objectId}
+                    templateName={selectedTemplate.name}
+                    fieldIds={selectedTemplate.fieldIds ?? []}
+                    entries={metadata as MetadataFormEntry[]}
+                    types={metadataTypes as TemplateMetadataType[]}
+                    onAdd={(data) => addMetadataMutation.mutate(data)}
+                    onUpdate={(data) => updateMetadataMutation.mutate(data)}
+                    isSaving={addMetadataMutation.isPending || updateMetadataMutation.isPending}
+                    onSoftDelete={(katalogId) => softDeleteMetadataMutation.mutate(katalogId)}
+                    onRestore={(katalogId) => restoreMetadataMutation.mutate(katalogId)}
+                    softDeletePending={softDeleteMetadataMutation.isPending}
+                    restorePending={restoreMetadataMutation.isPending}
+                    renderHistoryButton={renderHistory}
+                  />
+                ) : (
+                  <ObjectMetadataForm
+                    objectId={objectId}
+                    entries={metadata as MetadataFormEntry[]}
+                    types={metadataTypes as MetadataFormType[]}
+                    onAdd={(data) => addMetadataMutation.mutate(data)}
+                    isAdding={addMetadataMutation.isPending}
+                    onSoftDelete={(katalogId) => softDeleteMetadataMutation.mutate(katalogId)}
+                    onRestore={(katalogId) => restoreMetadataMutation.mutate(katalogId)}
+                    softDeletePending={softDeleteMetadataMutation.isPending}
+                    restorePending={restoreMetadataMutation.isPending}
+                    onReorder={(orderedKatalogIds) => reorderMetadataMutation.mutate(orderedKatalogIds)}
+                    reorderPending={reorderMetadataMutation.isPending}
+                    renderHistoryButton={renderHistory}
+                  />
+                )}
+              </div>
+            );
+          })()}
         </TabsContent>
 
         {/* ==================== KONTAKTER ==================== */}

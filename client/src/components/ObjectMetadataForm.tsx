@@ -65,15 +65,15 @@ interface MetadataAreaItem {
   sortOrder: number;
 }
 
-const READONLY_METADATA_ORIGINS = new Set(["system", "tjanst", "utforande"]);
-function isReadonlyOrigin(metod?: string | null): boolean {
+export const READONLY_METADATA_ORIGINS = new Set(["system", "tjanst", "utforande"]);
+export function isReadonlyOrigin(metod?: string | null): boolean {
   return !!metod && READONLY_METADATA_ORIGINS.has(metod);
 }
 
 // Datatyper som lagrar en object-storage-sökväg i vardeString.
-const UPLOAD_DATATYPES = new Set(["image", "file"]);
+export const UPLOAD_DATATYPES = new Set(["image", "file"]);
 
-const DATATYPE_META: Record<string, { label: string; icon: typeof Type }> = {
+export const DATATYPE_META: Record<string, { label: string; icon: typeof Type }> = {
   string: { label: "Text", icon: Type },
   code: { label: "Kod", icon: Type },
   integer: { label: "Heltal", icon: Hash },
@@ -103,7 +103,7 @@ function rawDisplayValue(entry: MetadataFormEntry): string | null {
   return null;
 }
 
-function fileNameFromPath(path: string): string {
+export function fileNameFromPath(path: string): string {
   try {
     const clean = path.split("?")[0];
     const seg = clean.split("/").filter(Boolean).pop();
@@ -114,7 +114,7 @@ function fileNameFromPath(path: string): string {
 }
 
 /** Typad värdesvisning för text/tal/bool/datum/json + bild/fil. */
-function MetadataValue({
+export function MetadataValue({
   entry,
   datatyp,
   onPreviewImage,
@@ -518,7 +518,7 @@ export function ObjectMetadataForm({
 
 /** Inline ladda upp/byt-knapp för bild-/filfält. Skapar lokalt värde (POST)
  *  för ärvda fält, uppdaterar befintligt lokalt värde (PUT) annars. */
-function MetadataUploadButton({
+export function MetadataUploadButton({
   objectId,
   entry,
   type,
