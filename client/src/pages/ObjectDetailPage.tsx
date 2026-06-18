@@ -389,6 +389,7 @@ export default function ObjectDetailPage() {
   const objectId = params?.id || "";
   const { user } = useAuth();
   const isAdmin = user?.role === "admin" || user?.role === "owner";
+  const canUseTemplates = isAdmin || user?.role === "planner";
 
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [editSection, setEditSection] = useState<"overview" | "access" | "equipment">("overview");
@@ -619,7 +620,7 @@ export default function ObjectDetailPage() {
   });
 
   // Task #998: namngivna importmallar återanvänds som fälturval för mall-styrd
-  // redigering. Endast admin har åtkomst till mall-endpointen.
+  // redigering. Läs-endpointen är öppen för admin/owner och planner.
   const { data: importTemplates = [] } = useQuery<ImportTemplate[]>({
     queryKey: ["/api/import-templates"],
     queryFn: async () => {
@@ -627,7 +628,7 @@ export default function ObjectDetailPage() {
       if (!res.ok) return [];
       return res.json();
     },
-    enabled: !!objectId && isAdmin,
+    enabled: !!objectId && canUseTemplates,
   });
 
   const { data: matchingArticles = [] } = useQuery<Array<{
@@ -1778,7 +1779,7 @@ export default function ObjectDetailPage() {
               ) : null;
             return (
               <div className="space-y-4">
-                {isAdmin && importTemplates.length > 0 && (
+                {canUseTemplates && importTemplates.length > 0 && (
                   <Card>
                     <CardContent className="flex flex-col gap-2 py-4 sm:flex-row sm:items-center sm:justify-between">
                       <div className="space-y-0.5">

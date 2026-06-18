@@ -31,7 +31,7 @@ import { z } from "zod";
 import { and, eq, or, sql, desc, inArray, isNull } from "drizzle-orm";
 import { asyncHandler } from "../asyncHandler";
 import { NotFoundError, ValidationError, ConflictError } from "../errors";
-import { getTenantIdWithFallback, requireAdmin, requireTenantWithFallback } from "../tenant-middleware";
+import { getTenantIdWithFallback, requireAdmin, requirePlanner, requireTenantWithFallback } from "../tenant-middleware";
 import { db } from "../db";
 import {
   objects,
@@ -2408,11 +2408,11 @@ export function registerObjektmallImportRoutes(app: Express): void {
     return buildObjektmallWorkbook(headers.map((h) => h.header));
   }
 
-  // Lista sparade mallar (tenant-scopad).
+  // Lista sparade mallar (tenant-scopad). Läsning öppen för planner (mall-CRUD förblir admin).
   app.get(
     "/api/import-templates",
     requireTenantWithFallback,
-    requireAdmin,
+    requirePlanner,
     asyncHandler(async (req, res) => {
       const tenantId = getTenantIdWithFallback(req);
       const rows = await db
