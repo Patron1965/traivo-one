@@ -1,0 +1,86 @@
+{
+  "sessionId": "1688028e3e",
+  "exportedAt": "2026-06-18T08:17:10.512Z",
+  "summary": "### Key Topics Discussed\n- Delivery time calculation.\n- Dynamic information processing using object metadata fields.\n- Handling of undesirable delivery times based on metadata.\n- Parking restrictions and their impact on optimal delivery times.\n- Prioritizing time preferences and constraints using hierarchies or weights.\n- AI agent's role in processing multiple time preferences and optimizing scheduling.\n- Definition of hard vs. soft time constraints, with parking prohibitions and emptying dates categorized as soft.\n- Prioritization of route optimization over soft constraints like parking prohibitions.\n\n### Decisions Made\n- The order concept should include desired delivery times, preferred advantageous times, and undesirable times for performing the job, making it easier to manage.\n- Contractual delivery times are considered \"hard\" constraints (legal requirements), while parking prohibitions and emptying dates are \"soft\" recommendations.\n\n### Action Items\n- The AI agent needs to understand that time conditions/packages of times should accompany each task, working actively to find the most optimal time for execution in both rough and fine planning.\n\n### Important Points & Insights\n- Delivery time calculation is difficult due to multiple time alternatives.\n- The system leverages the latest technology and AI to handle this complexity.\n- Metadata fields, such as \"tömningsdag\" (emptying day), can be used to dynamically determine unfavorable times for delivery or service.\n- For example, if \"tömningsdag\" is Thursday, then Wednesday and Thursday are considered unfavorable for a job, making Friday, Monday, and Tuesday better alternatives.\n- Parking prohibitions can be positive (meaning parking is allowed) and should be integrated into the scheduling logic.\n- The optimal time for a job, even with initial constraints like January-February, could be expanded to cover the entire original time window if beneficial.\n- Hierarchies or weights should be used to prioritize different time constraints and preferences (e.g., customer contract dates take precedence over emptying days).\n- \"Tömningsdag\" is a recommendation; while beneficial to follow, it's possible to perform the service on that day, though it might be more challenging due to full conditions.\n- An AI agent should handle up to ten different time preferences to find the most optimal time based on given priorities.\n- Contractual delivery times (e.g., January-February) should have high weighting, making it clear that tasks cannot be performed after the deadline (e.g., last day of February).\n- Route optimization takes precedence: it is economically better to perform a job even with a parking prohibition than to drive past and return later, despite the potential for disruption.\n\n### Open Questions/Pending Items\n- Clarification on how to categorize parking prohibitions (positive vs. negative impact on scheduling).",
+  "conversation": [],
+  "transcripts": [
+    {
+      "text": "Jag har redan en gång. Yes, sir. Jo, eh, det kom fram här nu, eh, det här med leveranstidskalkylering då. Och det här är ju då väldigt svårt, som jag nämnde tidigare, eftersom det finns flera tidsalternativ då. Och eftersom det här systemet är baserat på den senaste tekniken och AI, så har vi kommit fram till då att inriktningen är nog enligt följande då: Att i orderkonceptet så anger man då önsk-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. -önskad leveranstid och man anger önskade fördelaktiga tider om man anger önsk- eller oönskade, eh, tider för att utföra jobbet på enklaste sätt då. Och dessutom då så har man då möjlighet här att förutom det man då i, i, i ord och, och i, i, i tidsangivelser anger i orderkonceptet då, så kan man då peka in ytterligare då infor-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Ja. -information genom att dynamiskt då be att information ifrån objektens metadatafält, ett eller flera då. Så exempel på det är då att vi kan ju ha då ett metadatafält som heter, eh, tömningsdag. Och då kan vi ju då i den här informations, eh, inmatningen här då säga att metadatafältet tömningsdag ska du ta hänsyn till och den informationen är...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Ska vi säga då negativ, eh, i den bemärkelsen att om tömningsdagen är torsdag så är det alltså ofördelaktigt för oss att komma på förmodligen onsdag och torsdag. Mm. Eh, för att göra det här jobbet så är det alltså bättre att komma då på... Om, om tömningsdagen är torsdag så är det bättre att komma på fredag, måndag och tisdag då. Och då behöver vi för, för den här då baserat på den informationen kunna förklara det då i ord. Och om vi då har ett parkeringsförbud och det är då, eh, två alternativ.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Det är parkeringsförbud på, eh, måndag eftermiddag och på torsdag eftermiddag. Ja, då kommer ju då torsdag eftermiddag och krockar med dagen som har någon tömning. Så i praktiken då så blir det då parkeringsförbudet som är ett positivt läge för oss. Eh, parkeringsförbudet betyder att vi kan parkera där. Så då tydliggör man då att det är ett positivt, eh, tidfönster för utförandet och det är då på måndag eftermiddag. Så konklusionen då...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Utan det här caset då för det här enskilda är ju då att vi kan alltså utföra det här jobbet då om det ursprungliga tidsfönstret var januari, februari, så kan vi alltså utföra det bäst då hela januari och februari.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Bäst på måndag eftermiddagar och högst olämpligt då på, eh, fredag för då är det inget parkeringsförbud. Och tanken då med det här, det här är ju ett svårt upp-- En svår uppgift för det kommer ju att bli då krockar. Det är ju då att man får alltså lägga hierarkier eller vikt på de här tiderna. Så att om kunden önskar eller vi har ett avtal att det ska tvättas januari, februari så är ju det, det det absolut viktigaste.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Eh, sen så har vi då, eh, tömningsdagen. Ja, det är bara en rekommendation för oss. Det är bra om vi kan hantera det, men vi kan naturligtvis också åka dit, eh, på torsdag morgon och tvätta det. Det är bara att det kommer att vara jobbigare för oss att göra det då, därför att då är det alldeles fullt i tjälen. Så då kan man alltså poängsätta då, eller vikta kan man säga, de här tidsgrejerna då, eh, eller tidsangivelserna i den här. Och det innebär kon-konkret då så kommer då den här AI-agenten då för tidsoptimeringen då att få en lista då på...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "En eller flera, upp till kanske, ja, i värsta fall kan det vara på tio olika tidsönskemål där då. Och nu kommer jag då till slutklämmen då. Det är att vi måste liksom se... Vi får inte se att den här agenten ska jobba för ålderkonceptet generellt, utan den här måste förstå då att det här tidsvillkoren, det här paketet utav tider, det ska sen åka med varje uppgift då. Så att den här AI-agenten jobbar aktivt då med att ta fram den mest...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. Optimala tiden då för utförande i grovplaneringen och sen finplaneringen då. Och utifrån den här prioriteringen då. Mm. Och det borde då en AI-agent vara fullt kapabel då till att kunna göra. Har vi dessutom viktat det här då så att leveranstidet enligt avtalet eller överenskommelse med kunden att det är i januari, februari, det vill säga, jag får absolut inte göra senare än sista februari. Det är ju...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Det är lag. Medan de andra ligger på en prioritet två då. Eh, det har-- Systemet har ju-- Har föreslagit då tidigare hårda och mjuka då. Och det skulle man ju då kunna tänka sig då att vi inför-- Fortsätter med det begreppet då att den hårda tiden är då avtalsmässig leveranstid. Och sen så har vi då det här parkeringsförbudet och tömningsdatumet som mjuka då. Det är med sagt att de då är rekommendationer. Vi försöker då att komma dit då om det är möjligt då. Mm. Men samtid",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "igt så, så, så måste vi då ha en, en, en-- Ett överenskommelse med det där då att vi kan inte bygga upp det på det här för att då kommer det att ställa till det för produktionen totalt sett då att vi måste åka fram och tillbaka. Ruttoptimeringen är ju att det väger alltså betydligt mycket mer för att konkretisera det, det är då att det är bättre att vi tar-- Om vi åker förbi ett jobb där det är parkeringsförbud, så är det alltså ekonomiskt bättre för företaget att vi stannar och tvättar de här tio tjänerna där och då och stoppar trafiken då med den stress och-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. -det som det kan-- Än att vi då åker förbi där för att sen komma tillbaka dit igen. Mm.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    }
+  ]
+}
