@@ -23,6 +23,13 @@ app.get("/api/resources", asyncHandler(async (req, res) => {
   res.json(resources);
 }));
 
+// Task #991: Enhetlig läsmodell för utförarregistret (personer + fordon/utrustning + team).
+app.get("/api/executor-register", asyncHandler(async (req, res) => {
+  const tenantId = getTenantIdWithFallback(req);
+  const register = await storage.getExecutorRegister(tenantId);
+  res.json(register);
+}));
+
 app.get("/api/resources/active-positions", asyncHandler(async (req, res) => {
   const tenantId = getTenantIdWithFallback(req);
   const resources = await storage.getActiveResourcePositions(tenantId);

@@ -1257,6 +1257,10 @@ export const teams = pgTable("teams", {
   serviceArea: text("service_area").array().default([]),
   // Koppling till projekt i ekonomisystem
   projectCode: text("project_code"),
+  // Kostnadsställe i ekonomisystem (Task #991: enhetligt utförarregister —
+  // kostnadsställe + projekt på team propagerar till genererade uppgifter via
+  // deriveFortnoxCodesForWorkOrder). Expand-contract: nullable, ingen regression.
+  costCenter: text("cost_center"),
   color: text("color").default("#3B82F6"),
   status: text("status").default("active").notNull(),
   profileIds: text("profile_ids").array().default([]),
@@ -7540,3 +7544,49 @@ export const disruptions = pgTable("disruptions", {
 export type Disruption = typeof disruptions.$inferSelect;
 export const insertDisruptionSchema = createInsertSchema(disruptions);
 export type InsertDisruption = z.infer<typeof insertDisruptionSchema>;
+
+// ============================================================================
+// Task #991: Enhetligt utförarregister (läsmodell)
+// En samlad vy där personer, fordon/utrustning och team visas tillsammans, med
+// team som grupperande förälder. Ren läs-/aggregeringsmodell — inga nya tabeller,
+// ingen fysisk sammanslagning. Kostnadsställe + projekt exponeras enhetligt per nod.
+// ============================================================================
+export interface ExecutorRegisterAsset {
+  id: string;
+  name: string;
+  kind: "vehicle" | "equipment";
+  identifier: string | null; // regnr (fordon) / inventarienr (utrustning)
+  costCenter: string | null;
+  status: string | null;
+}
+
+export interface ExecutorRegisterPerson {
+  id: string;
+  name: string;
+  teamRole: string | null; // roll i teamet (medlem/ledare/vikarie) — null om fristående
+  status: string | null;
+  costCenter: string | null;
+  projectCode: string | null;
+  vehicles: ExecutorRegisterAsset[];
+  equipment: ExecutorRegisterAsset[];
+}
+
+export interface ExecutorRegisterTeam {
+  id: string;
+  name: string;
+  color: string | null;
+  status: string | null;
+  costCenter: string | null;
+  projectCode: string | null;
+  members: ExecutorRegisterPerson[];
+  // Aggregerat: fordon/utrustning som teamets medlemmar har kopplade till sig.
+  vehicles: ExecutorRegisterAsset[];
+  equipment: ExecutorRegisterAsset[];
+}
+
+export interface ExecutorRegister {
+  teams: ExecutorRegisterTeam[];
+  standalonePersons: ExecutorRegisterPerson[]; // personer utan team
+  unassignedVehicles: ExecutorRegisterAsset[]; // fordon ej kopplade till någon resurs
+  unassignedEquipment: ExecutorRegisterAsset[]; // utrustning ej kopplad till någon resurs
+}

@@ -36,6 +36,7 @@ const WorkOrderDetailPage = lazy(() => import("@/pages/WorkOrderDetailPage"));
 const ObjectDuplicatesPage = lazy(() => import("@/pages/ObjectDuplicatesPage"));
 const MissingCoordinatesPage = lazy(() => import("@/pages/MissingCoordinatesPage"));
 const ResourcesPage = lazy(() => import("@/pages/ResourcesPage"));
+const ExecutorRegisterPage = lazy(() => import("@/pages/ExecutorRegisterPage"));
 const DashboardPage = lazy(() => import("@/pages/DashboardPage"));
 const SettingsPage = lazy(() => import("@/pages/SettingsPage"));
 const ImportPage = lazy(() => import("@/pages/ImportPage"));
@@ -183,6 +184,7 @@ function Router() {
         <Route path="/objects">{() => <ProtectedRoute component={ObjectsPage} path="/objects" />}</Route>
         <Route path="/work-orders/:id">{() => <ProtectedRoute component={WorkOrderDetailPage} path="/work-orders" />}</Route>
         <Route path="/resources">{() => <ProtectedRoute component={ResourcesPage} path="/resources" />}</Route>
+        <Route path="/utforarregister">{() => <ProtectedRoute component={ExecutorRegisterPage} path="/utforarregister" />}</Route>
         <Route path="/procurements">{() => <ProtectedRoute component={ProcurementsPage} path="/procurements" />}</Route>
         <Route path="/articles/new">{() => <ProtectedRoute component={ArticleFormPage} path="/articles" />}</Route>
         <Route path="/articles/:id/edit">{() => <ProtectedRoute component={ArticleFormPage} path="/articles" />}</Route>

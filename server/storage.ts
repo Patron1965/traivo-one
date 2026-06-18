@@ -176,6 +176,7 @@ import {
   type PreTask, type InsertPreTask,
   type ExecTypePreTaskRule, type InsertExecTypePreTaskRule,
   type Disruption, type InsertDisruption,
+  type ExecutorRegister, type ExecutorRegisterAsset, type ExecutorRegisterPerson, type ExecutorRegisterTeam,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, ne, and, or, isNull, isNotNull, asc, desc, gte, lte, lt, sql, inArray, notInArray, getTableColumns, type SQL, type SQLWrapper } from "drizzle-orm";
@@ -6076,6 +6077,129 @@ export class DatabaseStorage implements IStorage {
 
   async getTeamMembers(teamId: string): Promise<TeamMember[]> {
     return db.select().from(teamMembers).where(eq(teamMembers.teamId, teamId));
+  }
+
+  // Task #991: Enhetlig läsmodell för utförarregistret. Aggregerar (utan att fysiskt
+  // slå ihop tabeller) personer, fordon/utrustning och team till en hierarkisk vy där
+  // team är grupperande förälder. Kostnadsställe + projekt exponeras enhetligt per nod.
+  async getExecutorRegister(tenantId: string): Promise<ExecutorRegister> {
+    const [allResources, allTeams, allMembers, allVehicles, allEquipment] = await Promise.all([
+      this.getResources(tenantId),
+      this.getTeams(tenantId),
+      this.getAllTeamMembers(tenantId),
+      this.getVehicles(tenantId),
+      this.getEquipment(tenantId),
+    ]);
+
+    const resourceIds = allResources.map(r => r.id);
+    const [allResVehicles, allResEquipment] = await Promise.all([
+      this.getResourceVehiclesByResourceIds(resourceIds),
+      resourceIds.length === 0
+        ? Promise.resolve([] as ResourceEquipment[])
+        : db.select().from(resourceEquipment).where(inArray(resourceEquipment.resourceId, resourceIds)),
+    ]);
+
+    const vehicleById = new Map(allVehicles.map(v => [v.id, v]));
+    const equipmentById = new Map(allEquipment.map(e => [e.id, e]));
+
+    const toVehicleAsset = (v: Vehicle): ExecutorRegisterAsset => ({
+      id: v.id,
+      name: v.name,
+      kind: "vehicle",
+      identifier: v.registrationNumber ?? null,
+      costCenter: v.costCenter ?? null,
+      status: v.status ?? null,
+    });
+    const toEquipmentAsset = (e: Equipment): ExecutorRegisterAsset => ({
+      id: e.id,
+      name: e.name,
+      kind: "equipment",
+      identifier: e.inventoryNumber ?? null,
+      costCenter: e.costCenter ?? null,
+      status: e.status ?? null,
+    });
+
+    // Resurs -> kopplade fordon/utrustning
+    const vehiclesByResource = new Map<string, ExecutorRegisterAsset[]>();
+    for (const rv of allResVehicles) {
+      const v = vehicleById.get(rv.vehicleId);
+      if (!v) continue;
+      const arr = vehiclesByResource.get(rv.resourceId) ?? [];
+      arr.push(toVehicleAsset(v));
+      vehiclesByResource.set(rv.resourceId, arr);
+    }
+    const equipmentByResource = new Map<string, ExecutorRegisterAsset[]>();
+    for (const re of allResEquipment) {
+      const e = equipmentById.get(re.equipmentId);
+      if (!e) continue;
+      const arr = equipmentByResource.get(re.resourceId) ?? [];
+      arr.push(toEquipmentAsset(e));
+      equipmentByResource.set(re.resourceId, arr);
+    }
+
+    const resourceById = new Map(allResources.map(r => [r.id, r]));
+    const buildPerson = (resourceId: string, teamRole: string | null): ExecutorRegisterPerson | null => {
+      const r = resourceById.get(resourceId);
+      if (!r) return null;
+      return {
+        id: r.id,
+        name: r.name,
+        teamRole,
+        status: r.status ?? null,
+        costCenter: r.costCenter ?? null,
+        projectCode: r.projectCode ?? null,
+        vehicles: vehiclesByResource.get(r.id) ?? [],
+        equipment: equipmentByResource.get(r.id) ?? [],
+      };
+    };
+
+    // Team -> medlemmar (+ aggregerade fordon/utrustning)
+    const membersByTeam = new Map<string, TeamMember[]>();
+    const assignedResourceIds = new Set<string>();
+    for (const tm of allMembers) {
+      assignedResourceIds.add(tm.resourceId);
+      const arr = membersByTeam.get(tm.teamId) ?? [];
+      arr.push(tm);
+      membersByTeam.set(tm.teamId, arr);
+    }
+
+    const teamsOut: ExecutorRegisterTeam[] = allTeams.map(team => {
+      const members = (membersByTeam.get(team.id) ?? [])
+        .map(tm => buildPerson(tm.resourceId, tm.role ?? null))
+        .filter((p): p is ExecutorRegisterPerson => p !== null);
+
+      // Aggregera medlemmarnas fordon/utrustning (deduplicerat) under teamet.
+      const teamVehicles = new Map<string, ExecutorRegisterAsset>();
+      const teamEquipment = new Map<string, ExecutorRegisterAsset>();
+      for (const m of members) {
+        for (const v of m.vehicles) teamVehicles.set(v.id, v);
+        for (const e of m.equipment) teamEquipment.set(e.id, e);
+      }
+
+      return {
+        id: team.id,
+        name: team.name,
+        color: team.color ?? null,
+        status: team.status ?? null,
+        costCenter: team.costCenter ?? null,
+        projectCode: team.projectCode ?? null,
+        members,
+        vehicles: Array.from(teamVehicles.values()),
+        equipment: Array.from(teamEquipment.values()),
+      };
+    });
+
+    const standalonePersons = allResources
+      .filter(r => !assignedResourceIds.has(r.id))
+      .map(r => buildPerson(r.id, null))
+      .filter((p): p is ExecutorRegisterPerson => p !== null);
+
+    const linkedVehicleIds = new Set(allResVehicles.map(rv => rv.vehicleId));
+    const linkedEquipmentIds = new Set(allResEquipment.map(re => re.equipmentId));
+    const unassignedVehicles = allVehicles.filter(v => !linkedVehicleIds.has(v.id)).map(toVehicleAsset);
+    const unassignedEquipment = allEquipment.filter(e => !linkedEquipmentIds.has(e.id)).map(toEquipmentAsset);
+
+    return { teams: teamsOut, standalonePersons, unassignedVehicles, unassignedEquipment };
   }
 
   async getTeamMember(id: string): Promise<TeamMember | undefined> {

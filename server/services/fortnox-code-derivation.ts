@@ -2,9 +2,13 @@
 // från den bil/utrustning och de utförare som fångats vid klarmarkering.
 //
 // - Kostnadsställe (CostCenter): bilens `costCenter` → utrustningens `costCenter`
-//   → utförande resursens `costCenter`.
+//   → utförande resursens `costCenter` → tilldelat teams `costCenter`.
 // - Projektkod (Project): första fångade deltagarens `projectCode` → den tilldelade
-//   resursens `projectCode`.
+//   resursens `projectCode` → tilldelat teams `projectCode`.
+//
+// Task #991: Team är grupperande förälder i utförarregistret och bär kostnadsställe
+// + projekt som följer med till genererade uppgifter. Teamet konsulteras sist som
+// fallback (efter bil/utrustning/deltagare/resurs) så befintligt beteende bevaras.
 //
 // Allt är best-effort och nullbart: WO utan fångad bil/deltagare ger `{}` och
 // exporteras som idag (ingen regression). Manuell override sker genom att skicka
@@ -30,6 +34,7 @@ export async function deriveFortnoxCodesForWorkOrder(
     WorkOrder,
     | "tenantId"
     | "resourceId"
+    | "teamId"
     | "completedVehicleId"
     | "completedEquipmentId"
     | "completedParticipantIds"
@@ -70,6 +75,17 @@ export async function deriveFortnoxCodesForWorkOrder(
     if (resource && resource.tenantId === tenantId) {
       if (!project && resource.projectCode) project = resource.projectCode;
       if (!costCenter && resource.costCenter) costCenter = resource.costCenter;
+    }
+  }
+
+  // Task #991: Sista fallback — tilldelat team. Team är grupperande förälder och
+  // bär kostnadsställe + projekt som följer med till genererade uppgifter när varken
+  // bil/utrustning, deltagare eller tilldelad resurs har egna koder.
+  if ((!project || !costCenter) && workOrder.teamId) {
+    const team = await storage.getTeam(workOrder.teamId);
+    if (team && team.tenantId === tenantId) {
+      if (!project && team.projectCode) project = team.projectCode;
+      if (!costCenter && team.costCenter) costCenter = team.costCenter;
     }
   }
 
