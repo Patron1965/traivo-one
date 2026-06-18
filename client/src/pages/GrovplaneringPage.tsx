@@ -9,6 +9,7 @@ import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
+  Download,
   Loader2,
   RotateCcw,
   Users,
@@ -308,6 +309,39 @@ export default function GrovplaneringPage() {
 
   const clearSelection = () => setSelected(new Map());
 
+  // Excel-export av den aktuellt filtrerade listan. Speglar samma filter/gruppering
+  // som rutnätet (samma query-params) — servern paginerar inte exporten.
+  const [exporting, setExporting] = useState(false);
+  const exportToExcel = async () => {
+    setExporting(true);
+    try {
+      const p = buildFilterParams(applied, groupBy);
+      const res = await apiRequest(
+        "GET",
+        `/api/rough-planning/export?${p.toString()}`,
+      );
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `traivo-grovplanering-${new Date()
+        .toISOString()
+        .slice(0, 10)}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      toast({
+        title: "Kunde inte exportera",
+        description: err instanceof Error ? err.message : undefined,
+        variant: "destructive",
+      });
+    } finally {
+      setExporting(false);
+    }
+  };
+
   const toggleCollapse = (key: string) =>
     setCollapsed((prev) => {
       const next = new Set(prev);
@@ -516,6 +550,20 @@ export default function GrovplaneringPage() {
             >
               <XCircle className="h-4 w-4" />
               Avmarkera alla
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={exporting || total === 0}
+              onClick={exportToExcel}
+              data-testid="button-export-excel"
+            >
+              {exporting ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Download className="h-4 w-4" />
+              )}
+              Exportera (Excel)
             </Button>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>

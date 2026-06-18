@@ -7,6 +7,7 @@
  *
  * Tenant-ägarskap: tenantId sätts alltid server-side och ingår i WHERE på alla frågor.
  */
+import ExcelJS from "exceljs";
 import { db } from "./db";
 import {
   eq,
@@ -113,6 +114,14 @@ export const TASK_TYPE_KEYS = [
   "administration",
   "konsultation",
 ] as const;
+
+export const ROUGH_STATUS_LABELS: Record<RoughStatus, string> = {
+  otilldelad: "Otilldelad",
+  tilldelad: "Tilldelad",
+  delvis: "Delvis utförd",
+  utford: "Utförd",
+  avviker: "Avviker",
+};
 
 export const TASK_TYPE_LABELS: Record<string, string> = {
   bok: "BÖK",
@@ -628,4 +637,143 @@ export async function revokeRoughAssignments(
     .returning({ id: workOrders.id });
 
   return { updated: result.length, skipped: unique.length - result.length };
+}
+
+// ---------------------------------------------------------------------------
+// Excel-export (pivot-vänlig) — en rad per UPPGIFT över hela den filtrerade
+// mängden. Återanvänder buildOrderedGroups så att exporten speglar EXAKT samma
+// filter/gruppering som rutnätet (samma tenant-scoping, samma uppgiftstyp-/
+// status-filter). Grupp-etiketten skrivs som egen kolumn så att resultatet kan
+// pivoteras direkt i Excel. Återanvänder ExcelJS-mönstret från objektmall-exporten.
+// ---------------------------------------------------------------------------
+
+// Neutralisera formula-injection (memory: csv-export-hardening).
+function safeCell(v: unknown): string {
+  if (v === null || v === undefined) return "";
+  const s = String(v);
+  if (s.length === 0) return s;
+  const first = s.charAt(0);
+  if (
+    first === "=" ||
+    first === "+" ||
+    first === "-" ||
+    first === "@" ||
+    first === "\t" ||
+    first === "\r"
+  ) {
+    return "'" + s;
+  }
+  return s;
+}
+
+function toDateOrNull(iso: string | null): Date | null {
+  if (!iso) return null;
+  const d = new Date(iso);
+  return Number.isFinite(d.getTime()) ? d : null;
+}
+
+// öre → kronor (numeriskt, pivot-vänligt).
+function oreToKronor(ore: number): number {
+  return Math.round(ore) / 100;
+}
+
+interface GrovExportColumn {
+  header: string;
+  width: number;
+  numFmt?: string;
+}
+
+const GROUP_LABEL: Record<GroupBy, string> = {
+  objekt: "Objekt (grupp)",
+  kund: "Kund (grupp)",
+  orderkoncept: "Orderkoncept (grupp)",
+  ingen: "Grupp",
+};
+
+export async function buildGrovplaneringExport(
+  tenantId: string,
+  filters: GridFilters,
+  grouping: GroupBy,
+): Promise<{ buffer: Buffer; truncated: boolean; rowCount: number }> {
+  const { orderedGroups, truncated } = await buildOrderedGroups(
+    tenantId,
+    filters,
+    grouping,
+  );
+
+  const columns: GrovExportColumn[] = [
+    { header: GROUP_LABEL[grouping], width: 28 },
+    { header: "Status", width: 14 },
+    { header: "Kund", width: 26 },
+    { header: "Objekt", width: 28 },
+    { header: "Uppgift", width: 28 },
+    { header: "Uppgiftstyp", width: 16 },
+    { header: "Önskad leverans", width: 16, numFmt: "yyyy-mm-dd" },
+    { header: "Produktionstid (min)", width: 18, numFmt: "0" },
+    { header: "Produktionstid (tim)", width: 18, numFmt: "0.00" },
+    { header: "Team", width: 20 },
+    { header: "Vecka", width: 12 },
+    { header: "Senast utförd", width: 16, numFmt: "yyyy-mm-dd" },
+    { header: "Ordervärde (kr)", width: 16, numFmt: "#,##0.00" },
+    { header: "Kostnad (kr)", width: 16, numFmt: "#,##0.00" },
+  ];
+
+  const wb = new ExcelJS.Workbook();
+  wb.creator = "Traivo";
+  wb.created = new Date();
+  const ws = wb.addWorksheet("Grovplanering");
+  ws.columns = columns.map((c) => ({ header: c.header, width: c.width }));
+
+  // Rubrikrad.
+  const headerRow = ws.getRow(1);
+  headerRow.height = 20;
+  columns.forEach((c, idx) => {
+    const cell = headerRow.getCell(idx + 1);
+    cell.value = c.header;
+    cell.font = { bold: true, color: { argb: "FF1B4B6B" } };
+    cell.alignment = { vertical: "middle", horizontal: "left" };
+    cell.fill = {
+      type: "pattern",
+      pattern: "solid",
+      fgColor: { argb: "FFE8F4F8" },
+    };
+    cell.border = { bottom: { style: "medium", color: { argb: "FF1B4B6B" } } };
+  });
+  ws.views = [{ state: "frozen", ySplit: 1 }];
+
+  let rowCount = 0;
+  for (const g of orderedGroups) {
+    for (const r of g.rows) {
+      const minutes = r.productionMinutes ?? 0;
+      const values: (string | number | Date | null)[] = [
+        safeCell(g.label),
+        ROUGH_STATUS_LABELS[r.status] ?? r.status,
+        safeCell(r.customerName ?? ""),
+        safeCell(r.objectName ?? ""),
+        safeCell(r.title ?? ""),
+        safeCell(r.taskTypeLabel),
+        toDateOrNull(r.desiredDeliveryStart),
+        minutes,
+        Math.round((minutes / 60) * 100) / 100,
+        safeCell(r.teamName ?? ""),
+        safeCell(r.roughPlannedWeek ?? ""),
+        toDateOrNull(r.lastServiceDate),
+        oreToKronor(r.value),
+        oreToKronor(r.cost),
+      ];
+      const row = ws.addRow(values);
+      columns.forEach((c, idx) => {
+        if (c.numFmt) row.getCell(idx + 1).numFmt = c.numFmt;
+      });
+      rowCount += 1;
+    }
+  }
+
+  ws.autoFilter = {
+    from: { row: 1, column: 1 },
+    to: { row: 1, column: columns.length },
+  };
+
+  const buf = await wb.xlsx.writeBuffer();
+  return { buffer: Buffer.from(buf), truncated, rowCount };
 }

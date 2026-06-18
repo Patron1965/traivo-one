@@ -43,6 +43,7 @@ import {
   getGrovplaneringGroupRows,
   getRoughPlanningCities,
   revokeRoughAssignments,
+  buildGrovplaneringExport,
   TASK_TYPE_KEYS,
   type GroupBy,
   type GridFilters,
@@ -254,6 +255,24 @@ export function registerWeeklyPlanRoutes(app: Express) {
       pageParsed.data.limit,
     );
     res.json(result);
+  }));
+
+  // Excel-export av den filtrerade listan (pivot-vänlig, en rad per uppgift).
+  // Återanvänder EXAKT samma parseGridQuery → samma filter/gruppering/tenant-
+  // scoping som rutnätet, så att det exporterade speglar det som visas.
+  app.get("/api/rough-planning/export", ...guard, asyncHandler(async (req, res) => {
+    const tenantId = getTenantIdWithFallback(req);
+    const { groupBy, filters } = parseGridQuery(req.query);
+    const { buffer } = await buildGrovplaneringExport(tenantId, filters, groupBy);
+    const datestamp = new Date().toISOString().slice(0, 10);
+    const fileName = `traivo-grovplanering-${datestamp}.xlsx`;
+    res.setHeader(
+      "Content-Type",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    );
+    res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
+    res.setHeader("Cache-Control", "no-cache, must-revalidate");
+    res.send(buffer);
   }));
 
   // Alla rader i EN grupp över alla sidor (Task #922) — driver "Markera grupp"
