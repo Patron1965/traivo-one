@@ -26,6 +26,7 @@ import { prodHealthCheckScheduler } from "./services/prod-health-check-scheduler
 import { registerProdHealthCheckRoutes } from "./routes/prodHealthCheckRoutes";
 import { githubMirrorScheduler } from "./services/github-mirror-scheduler";
 import { invoiceConsolidationScheduler } from "./services/invoice-consolidation-scheduler";
+import { orderConceptAutoRunScheduler, runDueConceptsForTenant } from "./services/order-concept-auto-runner";
 import { registerInvoiceQueueRoutes } from "./routes/invoiceQueueRoutes";
 import { registerGithubMirrorRoutes } from "./routes/githubMirrorRoutes";
 import { startWeeklyReportScheduler } from "./weekly-report";
@@ -492,6 +493,21 @@ export async function registerRoutes(
     }
   });
 
+  // Task #996: Manuell trigger för auto-körning av abonnemang/schema-koncept.
+  // Tenant-scoped path (requireTenantWithFallback resolverar tenant, requireAdmin
+  // kollar tenant-rollen). Kör samma väg som bakgrundsschemaläggaren men bara för
+  // den inloggades tenant — för verifiering/manuell körning.
+  app.post("/api/order-concepts/auto-run", requireAdmin, async (req: any, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const result = await runDueConceptsForTenant(tenantId, { now: new Date() });
+      res.json({ success: true, result });
+    } catch (error) {
+      console.error("Failed to run order-concept auto-run:", error);
+      res.status(500).json({ error: "Kunde inte köra automatisk koncept-körning" });
+    }
+  });
+
   app.patch("/api/notifications/read-all", async (req, res) => {
     try {
       const userId = req.user?.claims?.sub;
@@ -821,6 +837,9 @@ export async function registerRoutes(
   // Task #558: Fakturakö + konsoliderings-policy
   registerInvoiceQueueRoutes(app);
   invoiceConsolidationScheduler.start();
+
+  // Task #996: Auto-körning av abonnemang/schema-orderkoncept (env-gated)
+  orderConceptAutoRunScheduler.start();
 
   // Task #582: Telink-koppling + auto-ärende vid kontaktbyte
   registerTelinkRoutes(app);

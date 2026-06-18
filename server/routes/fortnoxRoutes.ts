@@ -108,7 +108,7 @@ async function createStockPickupAssignment(opts: {
   });
 }
 
-async function generateScheduleAssignments(opts: {
+export async function generateScheduleAssignments(opts: {
   concept: any;
   tenantId: string;
   userId: string | undefined;
@@ -291,7 +291,7 @@ type ConceptPriceMemo = { price: number; cost: number; productionMinutes: number
 // matchande objekt kan resolvas innan några uppgifter skapas — annars kastas
 // ValidationError så att vi aldrig får partiell expansion. Pris-memo:n återanvänds
 // över både huvud-, för- och schema-uppgifter så samma (artikel|kund) bara slås upp en gång.
-async function prepareConceptCustomerPricing(opts: {
+export async function prepareConceptCustomerPricing(opts: {
   concept: any;
   tenantId: string;
   matchingObjects: ServiceObject[];
@@ -384,7 +384,7 @@ async function prepareConceptCustomerPricing(opts: {
 // om billingFrequency/invoicePeriod tills datumet ligger strikt efter "now".
 // billingFrequency (monthly/quarterly/yearly) har företräde; annars används
 // invoicePeriod (quarterly ⇒ 3 mån) med månadssteg som default.
-function computeSubscriptionNextRun(start: Date, period: string, freq: string, now: Date): Date {
+export function computeSubscriptionNextRun(start: Date, period: string, freq: string, now: Date): Date {
   if (start > now) return new Date(start);
   const stepMonths =
     freq === "yearly" ? 12 : freq === "quarterly" ? 3 : period === "quarterly" ? 3 : 1;

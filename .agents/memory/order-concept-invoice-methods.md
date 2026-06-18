@@ -1,6 +1,6 @@
 ---
 name: Orderkoncept faktureringsmetoder (avrop/schema/abonnemang)
-description: Hur de tre faktureringsmetoderna skiljs åt, var PATCH-handlern bor, och den saknade abonnemangs-billing-pipelinen.
+description: Hur de tre faktureringsmetoderna skiljs åt, var PATCH-handlern bor, och hur abonnemangs-/schema-fakturering körs automatiskt utan dubbelkörning.
 ---
 
 # Orderkoncept: tre faktureringsmetoder
@@ -15,11 +15,11 @@ description: Hur de tre faktureringsmetoderna skiljs åt, var PATCH-handlern bor
 ## PATCH-handlern bor i fortnoxRoutes, inte orderConceptRoutes
 `PATCH /api/order-concepts/:id` registreras i `server/routes/fortnoxRoutes.ts` (inte i `orderConceptRoutes.ts`, som äger de flesta andra koncept-routes). Timestamp-kolumner (`deliveryStart`, `subscriptionAdjustmentDate`, `intervalStartDate`, `intervalEndDate`) måste date-coerce:as från ISO-sträng → `Date` i den handlern innan `updateOrderConcept`, annars vägrar drizzle `.set()` på timestamp-kolumner.
 
-## Abonnemang har INGEN billing-scheduler (viktig lucka)
-`/execute` för subscription "aktiverar" bara abonnemanget: validerar `monthlyFee`, beräknar `nextRunDate` (`computeSubscriptionNextRun`, respekterar `deliveryStart` + `billingFrequency`/`invoicePeriod`) och returnerar summor. Den skapar **noll** assignments/work_orders och **ingen** `customer_invoice`.
+## Manuell `/execute` aktiverar bara — auto-runner är ENDA väg till abonnemangsfaktura
+`/execute` för subscription "aktiverar" bara abonnemanget: validerar `monthlyFee`, beräknar `nextRunDate` (`computeSubscriptionNextRun`, respekterar `deliveryStart` + `billingFrequency`/`invoicePeriod`) och returnerar summor. Den skapar **noll** assignments/work_orders och **ingen** `customer_invoice` — och ska förbli så (manuell execute måste vara oförändrad).
 
-`nextRunDate` skrivs men konsumeras aldrig av någon cron. Samlingsfaktura-flödet (`invoice-consolidation-scheduler` / `invoice-consolidation.ts`) jobbar enbart på `work_orders.invoiceQueueState/invoiceHeldUntil` — och abonnemang skapar inga work_orders. Det finns alltså **ingen väg** från ett aktiverat abonnemang till en faktura idag.
+Den faktiska faktureringen sker i en env-gateadad bakgrundsschemaläggare (`server/services/order-concept-auto-runner.ts`, gate `ORDER_CONCEPT_AUTORUN_ENABLED`). Den plockar koncept där `status=active` + `nextRunDate <= now` och grenar på `getOrderConceptMethod`: subscription skapar en `customer_invoice` per fakturakund (`state="pending"`), schema auto-expanderar via samma `generateScheduleAssignments` som `/execute`, avrop (call_off) körs ALDRIG automatiskt.
 
-**Why:** Task #934 gjorde de tre metoderna distinkta + exponerade abonnemangskonfig, men att faktiskt materialisera abonnemangsfakturor (ny scheduler som läser nextRunDate → skapar customer_invoice → matar consolidation/Fortnox) är ett separat delsystem som inte fanns och låg utanför taskens out-of-scope ("rör ej consolidation-schemaläggaren").
+**Why:** Abonnemangs-/schema-fakturering måste rulla utan manuell handpåläggning, men subscription-fakturalogiken får INTE ligga i den delade `/execute`-grenen — då skulle ett manuellt klick också börja skapa fakturor (regression). Därför lever invoice-creation enbart i auto-runnern.
 
-**How to apply:** Om någon rapporterar "abonnemang fakturerar inte" — det är förväntat tills billing-pipelinen byggs. Bygg en scheduler som plockar koncept där `nextRunDate <= now` och `method === subscription`, skapar fakturaartefakt och avancerar nextRunDate.
+**How to apply — dubbelkörning & atomicitet (kritiskt):** En process-lokal flagga räcker INTE (samtidig manuell trigger, scheduler-överlapp, multi-instans). Varje koncept måste claimas med rad-lås: `SELECT ... FOR UPDATE` på konceptraden inuti en transaktion, re-validera `nextRunDate <= now`, och avancera `nextRunDate` — förloraren ser det framflyttade datumet och hoppar över. Subscription: lägg claim + alla fakturainsert + nextRunDate-avancering i SAMMA transaktion (annars kan en delvis lyckad körning lämna fakturor utan avancerat datum → dubbelfakturering nästa tick). Schema: claim+avancera först i en tx, expandera sen (idempotent); revert nextRunDate om expansionen är felkonfigurerad. **Försenade perioder måste catch-up:as** — iterera och fakturera VARJE missad period en gång (stega `nextRunDate` ett period-steg i taget med guard mot runaway), inte bara en period med ett framhoppat datum. Manuell verifiering: `POST /api/order-concepts/auto-run` (requireAdmin, tenant-scoped). Subscription `customer_invoice` har inga work_orders ⇒ samlingsfaktura-consolidation rör dem inte.
