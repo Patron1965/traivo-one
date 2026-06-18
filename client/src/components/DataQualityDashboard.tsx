@@ -184,7 +184,7 @@ export function DataQualityDashboard() {
       setSelectedMissingIds(new Set());
       setKeptLocalIds(new Set());
       toast({
-        title: "Diff-analys klar",
+        title: "Jämförelse klar",
         description: `${data.notInExportCount.toLocaleString("sv-SE")} kärl saknas i Modus-exporten`,
       });
     },
@@ -670,7 +670,7 @@ export function DataQualityDashboard() {
               ) : (
                 <FileSearch className="h-4 w-4 mr-2" />
               )}
-              Analysera diff
+              Kör jämförelse
             </Button>
           </div>
 

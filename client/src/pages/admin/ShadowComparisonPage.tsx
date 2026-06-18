@@ -159,13 +159,12 @@ export default function ShadowComparisonPage() {
       <div className="flex items-start justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold" data-testid="text-page-title">
-            Kart-leverantör — Shadow-jämförelse
+            Kartleverantör — jämförelse
           </h1>
           <p className="text-muted-foreground mt-1 max-w-2xl">
-            Löpande jämförelse av Google-shadow mot Geoapify-primär. Visar
-            median/p95-avvikelser, shadow-volym och grov kostnadsprojektion
-            innan vi byter primär leverantör. Endast platform-owner ser denna
-            vy.
+            Löpande jämförelse mellan nuvarande och alternativ kartleverantör.
+            Visar avvikelser, volym och en grov kostnadsuppskattning innan vi
+            byter leverantör. Endast plattformsägare ser denna vy.
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -203,7 +202,7 @@ export default function ShadowComparisonPage() {
         <Card>
           <CardContent className="py-8 flex items-center justify-center text-muted-foreground">
             <Loader2 className="h-5 w-5 animate-spin mr-2" />
-            Laddar shadow-data…
+            Laddar jämförelsedata…
           </CardContent>
         </Card>
       )}
@@ -211,7 +210,7 @@ export default function ShadowComparisonPage() {
       {summaryQuery.error && (
         <Alert variant="destructive" data-testid="alert-load-error">
           <AlertTriangle className="h-4 w-4" />
-          <AlertTitle>Kunde inte ladda shadow-rapporten</AlertTitle>
+          <AlertTitle>Kunde inte ladda jämförelserapporten</AlertTitle>
           <AlertDescription>
             {summaryQuery.error instanceof Error
               ? summaryQuery.error.message
@@ -253,7 +252,7 @@ export default function ShadowComparisonPage() {
             <CardContent className="grid gap-4 md:grid-cols-4">
               <Stat label="Totalt rader" value={summary.totalRows.toLocaleString("sv-SE")} testId="stat-total" />
               <Stat
-                label="Sample-rate"
+                label="Urvalsfrekvens"
                 value={
                   summary.sampleRate != null
                     ? `${(summary.sampleRate * 100).toFixed(1)}%`
@@ -262,18 +261,18 @@ export default function ShadowComparisonPage() {
                 testId="stat-sample-rate"
               />
               <Stat
-                label="Primär"
+                label="Nuvarande"
                 value={summary.primaryProviders.join(", ") || "—"}
                 testId="stat-primary"
               />
               <Stat
-                label="Shadow"
+                label="Alternativ"
                 value={summary.shadowProviders.join(", ") || "—"}
                 testId="stat-shadow"
               />
             </CardContent>
             <CardContent className="text-xs text-muted-foreground">
-              Tröskelvärden: shadow-fel &gt; {summary.thresholds.failureRatePct}% ·
+              Tröskelvärden: fel hos alternativ leverantör &gt; {summary.thresholds.failureRatePct}% ·
               |Δ distans| p95 &gt; {summary.thresholds.distanceP95Km} km. Konfigurera via
               env <code>MAP_SHADOW_ERROR_THRESHOLD_PCT</code> /{" "}
               <code>MAP_SHADOW_DISTANCE_P95_KM</code>.
@@ -289,9 +288,9 @@ export default function ShadowComparisonPage() {
           {summary.totalRows === 0 ? (
             <Card>
               <CardContent className="py-8 text-center text-muted-foreground">
-                Inga shadow-rader i fönstret. Säkerställ att{" "}
+                Inga jämförelserader i fönstret. Säkerställ att{" "}
                 <code>MAP_SHADOW_SAMPLE_RATE</code> &gt; 0 och att en
-                shadow-provider är konfigurerad.
+                alternativ leverantör är konfigurerad.
               </CardContent>
             </Card>
           ) : (
@@ -305,7 +304,7 @@ export default function ShadowComparisonPage() {
               ))}
               <p className="text-xs text-muted-foreground">
                 Notera: fel-andels-larm utlöses först när en operation har
-                minst 20 shadow-rader i fönstret — annars är urvalet för litet
+                minst 20 jämförelserader i fönstret — annars är urvalet för litet
                 för att vara meningsfullt och larmen undertrycks.
               </p>
             </>
@@ -360,14 +359,14 @@ function OperationCard({
       <CardContent className="space-y-4">
         <div className="grid gap-3 md:grid-cols-2">
           <div className="text-sm">
-            <p className="font-medium mb-1">Primär latens</p>
+            <p className="font-medium mb-1">Latens (nuvarande)</p>
             <p className="text-muted-foreground">
               median {fmtInt(op.primaryLatency.medianMs)} ms · p95{" "}
               {fmtInt(op.primaryLatency.p95Ms)} ms
             </p>
           </div>
           <div className="text-sm">
-            <p className="font-medium mb-1">Shadow latens</p>
+            <p className="font-medium mb-1">Latens (alternativ)</p>
             <p className="text-muted-foreground">
               median {fmtInt(op.shadowLatency.medianMs)} ms · p95{" "}
               {fmtInt(op.shadowLatency.p95Ms)} ms
@@ -446,16 +445,16 @@ interface ChartSpec {
 const CHART_SPECS: ChartSpec[] = [
   {
     metric: "estimatedCostUsd",
-    title: "Projicerad Google-kostnad",
-    description: "Skattat USD per period (full volym, sample-rate-justerad)",
+    title: "Projicerad kostnad",
+    description: "Skattat USD per period (full volym, justerat för urvalsfrekvens)",
     unit: "$",
     digits: 2,
     testId: "chart-trend-cost",
   },
   {
     metric: "shadowOk",
-    title: "Shadow-volym (lyckade)",
-    description: "Antal lyckade shadow-anrop per period",
+    title: "Volym (lyckade anrop)",
+    description: "Antal lyckade anrop per period",
     unit: "",
     digits: 0,
     testId: "chart-trend-volume",
@@ -463,7 +462,7 @@ const CHART_SPECS: ChartSpec[] = [
   {
     metric: "failureRatePct",
     title: "Fel-andel",
-    description: "Andel shadow-anrop som misslyckades (%)",
+    description: "Andel jämförelseanrop som misslyckades (%)",
     unit: "%",
     digits: 1,
     testId: "chart-trend-failure",
@@ -590,7 +589,7 @@ function ShadowTrendCharts({
           {trend.windowDays} dagar). Linjerna visar respektive operation.
           {trend.sampleRate == null && (
             <>
-              {" "}Sample-rate är inte satt — kostnad antar 100% trafik.
+              {" "}Urvalsfrekvens är inte satt — kostnad antar 100% trafik.
             </>
           )}
         </CardDescription>

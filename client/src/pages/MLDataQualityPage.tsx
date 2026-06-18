@@ -60,9 +60,9 @@ interface ModelsResponse {
 }
 
 const recommendationStyle: Record<QualityReport["goNoGoRecommendation"], { label: string; cls: string; Icon: typeof CheckCircle2 }> = {
-  GO: { label: "GO — redo för Fas 1", cls: "bg-chart-2/15 text-chart-2 border-chart-2/30", Icon: CheckCircle2 },
-  WARN: { label: "VÄNTA — samla mer data", cls: "bg-warning/15 text-warning border-warning/30", Icon: AlertTriangle },
-  NO_GO: { label: "NO GO — för lite data", cls: "bg-destructive/15 text-destructive border-destructive/30", Icon: XCircle },
+  GO: { label: "Klart — redo att aktivera", cls: "bg-chart-2/15 text-chart-2 border-chart-2/30", Icon: CheckCircle2 },
+  WARN: { label: "Vänta — samla mer data", cls: "bg-warning/15 text-warning border-warning/30", Icon: AlertTriangle },
+  NO_GO: { label: "Inte redo — för lite data", cls: "bg-destructive/15 text-destructive border-destructive/30", Icon: XCircle },
 };
 
 export default function MLDataQualityPage() {
@@ -103,14 +103,14 @@ export default function MLDataQualityPage() {
     <div className="container mx-auto p-6 space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold" data-testid="text-page-title">ML datakvalitet</h1>
+          <h1 className="text-3xl font-bold" data-testid="text-page-title">Datakvalitet för tidsberäkning</h1>
           <p className="text-muted-foreground mt-1">
-            Go/no-go-grind för ML duration-prediktion (Fas 0 → Fas 1). Mätfönster: senaste {report.windowDays} dagarna.
+            Visar om datan räcker för att slå på automatisk tidsberäkning. Mätfönster: senaste {report.windowDays} dagarna.
           </p>
         </div>
         <Button onClick={handleRefresh} variant="outline" disabled={isFetching} data-testid="button-refresh">
           {isFetching ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <RefreshCw className="h-4 w-4 mr-2" />}
-          Kör om audit
+          Kör om kontroll
         </Button>
       </div>
 
@@ -137,7 +137,7 @@ export default function MLDataQualityPage() {
       {report.readinessLevel && (
         <Card>
           <CardHeader className="pb-2">
-            <CardDescription>ML readiness-nivå</CardDescription>
+            <CardDescription>Beredskapsnivå</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="flex items-center gap-3">
@@ -150,18 +150,18 @@ export default function MLDataQualityPage() {
                 className="text-base px-3 py-1"
                 data-testid="badge-readiness"
               >
-                {report.readinessLevel === "production_eligible" ? "Production eligible (≥85%)"
-                  : report.readinessLevel === "shadow_only" ? "Shadow only (70–85%)"
-                  : "Not ready (<70%)"}
+                {report.readinessLevel === "production_eligible" ? "Redo för användning (≥85%)"
+                  : report.readinessLevel === "shadow_only" ? "Endast testkörning (70–85%)"
+                  : "Ej redo (<70%)"}
               </Badge>
               {typeof report.globalValidActualRatio === "number" && (
                 <span className="text-sm text-muted-foreground" data-testid="text-valid-ratio">
-                  Global validActualRatio: {(report.globalValidActualRatio * 100).toFixed(1)}%
+                  Andel giltig data: {(report.globalValidActualRatio * 100).toFixed(1)}%
                 </span>
               )}
             </div>
             <p className="text-xs text-muted-foreground mt-2">
-              <strong>Not ready:</strong> ML inaktiv, statisk fallback. <strong>Shadow only:</strong> ML loggar prediktioner men används inte i solver. <strong>Production eligible:</strong> ML kan promoveras till active vid godkänd MAE-grind.
+              <strong>Ej redo:</strong> automatisk tidsberäkning är av — fasta tider används. <strong>Endast testkörning:</strong> systemet beräknar tider i bakgrunden men de används inte i planeringen ännu. <strong>Redo för användning:</strong> automatisk tidsberäkning kan slås på när träffsäkerheten är godkänd.
             </p>
           </CardContent>
         </Card>
@@ -169,23 +169,23 @@ export default function MLDataQualityPage() {
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <Card>
-          <CardHeader className="pb-2"><CardDescription>Utförda WO totalt</CardDescription></CardHeader>
+          <CardHeader className="pb-2"><CardDescription>Utförda ordrar totalt</CardDescription></CardHeader>
           <CardContent>
             <div className="text-3xl font-bold" data-testid="text-total-wo">{report.totalCompletedWO}</div>
             <Badge variant={report.passesVolumeGate ? "default" : "destructive"} className="mt-2">
-              Grind: ≥500 {report.passesVolumeGate ? "✓" : "✗"}
+              Kräver: ≥500 {report.passesVolumeGate ? "✓" : "✗"}
             </Badge>
           </CardContent>
         </Card>
         <Card>
-          <CardHeader className="pb-2"><CardDescription>Pre-optimization snapshots</CardDescription></CardHeader>
+          <CardHeader className="pb-2"><CardDescription>Ögonblicksbilder före optimering</CardDescription></CardHeader>
           <CardContent>
             <div className="text-3xl font-bold" data-testid="text-pre-snapshots">{report.snapshotStats.preOptimization}</div>
             <p className="text-xs text-muted-foreground mt-2">Senaste 7 dagar: {report.snapshotStats.last7Days}</p>
           </CardContent>
         </Card>
         <Card>
-          <CardHeader className="pb-2"><CardDescription>Post-completion snapshots</CardDescription></CardHeader>
+          <CardHeader className="pb-2"><CardDescription>Ögonblicksbilder efter slutförande</CardDescription></CardHeader>
           <CardContent>
             <div className="text-3xl font-bold" data-testid="text-post-snapshots">{report.snapshotStats.postCompletion}</div>
           </CardContent>
@@ -194,20 +194,20 @@ export default function MLDataQualityPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Per tenant</CardTitle>
-          <CardDescription>Datakvalitet per organisation. Grind: ≥70% kompletthet.</CardDescription>
+          <CardTitle>Per organisation</CardTitle>
+          <CardDescription>Datakvalitet per organisation. Kräver: ≥70% komplett data.</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="border-b">
                 <tr className="text-left text-muted-foreground">
-                  <th className="py-2 px-2">Tenant</th>
-                  <th className="py-2 px-2 text-right">WO totalt</th>
-                  <th className="py-2 px-2 text-right">Valid actual (5min–12h)</th>
+                  <th className="py-2 px-2">Organisation</th>
+                  <th className="py-2 px-2 text-right">Ordrar totalt</th>
+                  <th className="py-2 px-2 text-right">Giltig faktisk tid (5min–12h)</th>
                   <th className="py-2 px-2 text-right">Med kod</th>
                   <th className="py-2 px-2 text-right">Med koord</th>
-                  <th className="py-2 px-2 text-right">Med setup-log</th>
+                  <th className="py-2 px-2 text-right">Med tidslogg</th>
                   <th className="py-2 px-2 text-right">Kvalitet</th>
                   <th className="py-2 px-2">Status</th>
                 </tr>
@@ -227,7 +227,7 @@ export default function MLDataQualityPage() {
                     <td className="py-2 px-2 text-right">{(t.qualityScore * 100).toFixed(0)}%</td>
                     <td className="py-2 px-2">
                       <Badge variant={t.passes70Gate ? "default" : "destructive"} data-testid={`badge-status-${t.tenantId}`}>
-                        {t.passes70Gate ? "Passerar" : "Under grind"}
+                        {t.passes70Gate ? "Passerar" : "Under tröskel"}
                       </Badge>
                     </td>
                   </tr>
@@ -241,8 +241,8 @@ export default function MLDataQualityPage() {
       {report.perExecutionCode.length > 0 && (
         <Card>
           <CardHeader>
-            <CardTitle>Per execution code</CardTitle>
-            <CardDescription>Stratifieringsbas för LightGBM. Krav: ≥30 prov per kod.</CardDescription>
+            <CardTitle>Per utförandekod</CardTitle>
+            <CardDescription>Underlag per utförandekod. Krav: ≥30 prov per kod.</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="overflow-x-auto">
@@ -263,7 +263,7 @@ export default function MLDataQualityPage() {
                       <td className="py-2 px-2 text-right">{c.meanActualMin ?? "—"}</td>
                       <td className="py-2 px-2">
                         <Badge variant={c.hasEnoughSamples ? "default" : "outline"}>
-                          {c.hasEnoughSamples ? "Stratifierbar" : "För få prov"}
+                          {c.hasEnoughSamples ? "Tillräckligt underlag" : "För få prov"}
                         </Badge>
                       </td>
                     </tr>
@@ -278,17 +278,17 @@ export default function MLDataQualityPage() {
       {modelsData && (
         <Card>
           <CardHeader>
-            <CardTitle>Modellregister</CardTitle>
+            <CardTitle>Prognosmodeller</CardTitle>
             <CardDescription>
-              ML-prediktion: {modelsData.mlPredictionEnabled
+              Automatisk tidsberäkning: {modelsData.mlPredictionEnabled
                 ? <Badge variant="default">AKTIVERAD</Badge>
-                : <Badge variant="outline">Avstängd (default)</Badge>}
+                : <Badge variant="outline">Avstängd (standard)</Badge>}
             </CardDescription>
           </CardHeader>
           <CardContent>
             {modelsData.models.length === 0 ? (
               <p className="text-sm text-muted-foreground" data-testid="text-no-models">
-                Inga modeller tränade ännu. Vänta på GO från audit ovan, kör sedan <code className="px-1 bg-muted rounded">scripts/train_duration_model.py</code>.
+                Inga modeller tränade ännu. Vänta på "Klart" i kontrollen ovan, kör sedan <code className="px-1 bg-muted rounded">scripts/train_duration_model.py</code>.
               </p>
             ) : (
               <table className="w-full text-sm">

@@ -190,7 +190,7 @@ export default function ArticleComponentsPage() {
     <div className="container mx-auto py-6 space-y-6">
       <PageHeader
         icon={Package}
-        title="Artikelkomponenter (BOM)"
+        title="Artikelkomponenter"
         description="Bryt ner strukturartiklar i sina komponenter — t.ex. TILG100 → TILG201 + TILG202."
       />
 

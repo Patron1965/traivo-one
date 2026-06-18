@@ -105,7 +105,7 @@ const translations: Record<string, Record<Language, string>> = {
   "nav.production-control.desc": { sv: "SLA och tider", en: "SLA and schedules" },
   "nav.planner-search-filters": { sv: "Sparade sökmönster", en: "Saved Search Filters" },
   "nav.planner-search-filters.desc": { sv: "Återanvändbara filter för planeraren", en: "Reusable planner filters" },
-  "nav.article-components": { sv: "Artikelkomponenter (BOM)", en: "Article Components (BOM)" },
+  "nav.article-components": { sv: "Artikelkomponenter", en: "Article Components" },
   "nav.article-components.desc": { sv: "Strukturartiklar och deras komponenter", en: "Structure articles and components" },
   "nav.invoice-recalculation-log": { sv: "Omräkningslogg (faktura)", en: "Invoice Recalculation Log" },
   "nav.invoice-recalculation-log.desc": { sv: "Spårbarhet enligt bokföringslagen", en: "Audit trail per accounting law" },

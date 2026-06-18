@@ -134,8 +134,8 @@ export function getPlaneringItems(tl?: (key: string) => string): NavItem[] {
     { title: l("nav.planner-map"), url: "/planner-map", icon: MapPin, description: l("nav.planner-map.desc"), subSection: "Kartor & rutter" },
     { title: l("nav.historical-map"), url: "/historical-map", icon: History, description: l("nav.historical-map.desc"), subSection: "Kartor & rutter" },
     // Översikt & uppföljning
-    { title: "Kontrollpanel", url: "/control-tower", icon: Gauge, description: "Heatmap med beläggning och SLA-risk", subSection: "Översikt & uppföljning" },
-    { title: "Produktionsledare", url: "/enhetsansvarig", icon: Target, description: "Dagsproduktion, break-even per resurs och avvikelseprocess", subSection: "Översikt & uppföljning" },
+    { title: "Kontrollpanel", url: "/control-tower", icon: Gauge, description: "Värmekarta över beläggning och SLA-risk", subSection: "Översikt & uppföljning" },
+    { title: "Produktionsledare", url: "/enhetsansvarig", icon: Target, description: "Dagsproduktion, lönsamhetsgräns per resurs och avvikelseprocess", subSection: "Översikt & uppföljning" },
     // Långsiktig planering
     { title: l("nav.annual-planning"), url: "/annual-planning", icon: Target, description: l("nav.annual-planning.desc"), subSection: "Långsiktig planering" },
     // Inställningar — uppsättning för planeringen
@@ -207,13 +207,13 @@ export function getAdminItems(tl?: (key: string) => string): NavItem[] {
     { title: l("nav.sms-settings"), url: "/sms-settings", icon: MessageSquare, description: l("nav.sms-settings.desc"), subSection: "Integrationer" },
     // Drift & data
     { title: l("nav.api-costs"), url: "/api-costs", icon: Activity, description: l("nav.api-costs.desc"), subSection: "Drift & data" },
-    { title: "ML datakvalitet", url: "/ml-data-quality", icon: Activity, description: "Go/no-go-grind för ML duration-prediktion (Task #421)", subSection: "Drift & data" },
+    { title: "Datakvalitet för prognoser", url: "/ml-data-quality", icon: Activity, description: "Datakvalitet för automatisk tidsberäkning", subSection: "Drift & data" },
     { title: "Arkiv", url: "/archive", icon: Archive, description: "Arkiverade objekt, ordrar, bilder, kontakter och metadatatyper — sök, filtrera och återställ", subSection: "Drift & data" },
     { title: "Återställ vilande kunder", url: "/restore-dormant-customers", icon: Database, description: "Sök fram en vilande kund och återställ den från dev till prod (platform-owner)", subSection: "Drift & data" },
     // Plattform (owner)
     { title: "Plattform: Användare & GDPR", url: "/platform-admin", icon: UserCheck, description: "Cross-tenant användarvy, GDPR-anonymisering och hård radering (platform-owner)", platformOwnerOnly: true, subSection: "Plattform" },
     { title: "Plattform: Branding & roller", url: "/system-dashboard", icon: Palette, description: l("nav.platform-admin.desc"), subSection: "Plattform" },
-    { title: "Kart-leverantör", url: "/shadow-comparison", icon: Activity, description: "Shadow-jämförelse Google vs Geoapify: avvikelser, volym och kostnad (platform-owner)", platformOwnerOnly: true, subSection: "Plattform" },
+    { title: "Kart-leverantör", url: "/shadow-comparison", icon: Activity, description: "Jämförelse av kartleverantörer: avvikelser, volym och kostnad", platformOwnerOnly: true, subSection: "Plattform" },
     { title: l("nav.system-overview"), url: "/system-overview", icon: FileText, description: l("nav.system-overview.desc"), subSection: "Plattform" },
     // Externt
     { title: "Kundportal extern", url: "/portal", icon: Globe, description: "Öppna den externa kundportalen i ny flik", external: true, subSection: "Externt" },

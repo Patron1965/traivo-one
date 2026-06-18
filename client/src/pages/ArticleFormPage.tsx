@@ -280,7 +280,7 @@ const ARTICLE_SECTIONS: { id: string; title: string; icon: LucideIcon }[] = [
   { id: "lager-inkop", title: "Lager & Inköp", icon: Warehouse },
   { id: "pris-ekonomi", title: "Pris & Ekonomi", icon: DollarSign },
   { id: "planeringslogik", title: "Planeringslogik", icon: CalendarClock },
-  { id: "struktur", title: "Strukturartikel (BOM)", icon: Layers },
+  { id: "struktur", title: "Strukturartikel", icon: Layers },
   { id: "fasthakning", title: "Fasthakningslogik", icon: LinkIcon },
   { id: "antalslogik", title: "Antalslogik", icon: ListChecks },
   { id: "metadata", title: "Information & Metadata", icon: Database },
@@ -2320,7 +2320,7 @@ export default function ArticleFormPage() {
           </FormSection>
 
           {/* 6. Strukturartikel (BOM) */}
-          <FormSection title="Strukturartikel (BOM)" icon={<Layers className="h-4 w-4" />} testId="section-struktur" {...sectionProps("struktur")}>
+          <FormSection title="Strukturartikel" icon={<Layers className="h-4 w-4" />} testId="section-struktur" {...sectionProps("struktur")}>
             <label className="flex cursor-pointer items-start gap-2 text-sm">
               <input
                 type="checkbox"
@@ -2330,7 +2330,7 @@ export default function ArticleFormPage() {
                 data-testid="checkbox-is-structure"
               />
               <span>
-                <strong>Strukturartikel</strong> — artikeln består av flera underartiklar (BOM). Varje underartikel blir en
+                <strong>Strukturartikel</strong> — artikeln består av flera underartiklar. Varje underartikel blir en
                 delkomponent/deluppgift.
               </span>
             </label>

@@ -288,7 +288,7 @@ export function RouteOptimizationPanel({ selectedDate }: RouteOptimizationPanelP
       <CardHeader className="pb-3">
         <CardTitle className="flex items-center gap-2 text-base">
           <Route className="h-5 w-5 text-chart-1" />
-          VRP-ruttoptimering
+          Ruttoptimering
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-3 flex-1 overflow-auto">
@@ -363,13 +363,13 @@ export function RouteOptimizationPanel({ selectedDate }: RouteOptimizationPanelP
                     <SelectItem value="geoapify" data-testid="option-geoapify">
                       <span className="flex items-center gap-1.5">
                         <MapPin className="h-3 w-3" />
-                        Geoapify VRP
+                        Standardoptimering
                       </span>
                     </SelectItem>
                     <SelectItem value="ortools" data-testid="option-ortools">
                       <span className="flex items-center gap-1.5">
                         <Zap className="h-3 w-3" />
-                        OR-Tools (avancerad)
+                        Avancerad optimering
                       </span>
                     </SelectItem>
                   </SelectContent>
@@ -377,7 +377,7 @@ export function RouteOptimizationPanel({ selectedDate }: RouteOptimizationPanelP
                 {solver === "ortools" && ortoolsAvailable === false && (
                   <p className="text-xs text-chart-4 flex items-center gap-1">
                     <AlertTriangle className="h-3 w-3 text-chart-4" />
-                    OR-Tools-tjänsten är offline — fallback till Geoapify
+                    Avancerad optimering är otillgänglig — använder standard
                   </p>
                 )}
               </div>
@@ -443,8 +443,8 @@ export function RouteOptimizationPanel({ selectedDate }: RouteOptimizationPanelP
         {!multiDayMode && !asyncJobId && !isRunning && !vrpResult && (
           <div className="text-center py-6 text-muted-foreground">
             <Route className="h-8 w-8 mx-auto mb-2 opacity-50" />
-            <p className="text-sm">VRP-optimering med constraints</p>
-            <p className="text-xs mt-1">Geoapify Route Planner med tidsfönster, kompetens & beroenden</p>
+            <p className="text-sm">Ruttoptimering med villkor</p>
+            <p className="text-xs mt-1">Optimering med tidsfönster, kompetens & beroenden</p>
           </div>
         )}
 

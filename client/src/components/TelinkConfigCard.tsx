@@ -196,8 +196,8 @@ export function TelinkConfigCard() {
               autoComplete="new-password"
             />
             <p className="text-xs text-muted-foreground">
-              Skickas som <code>Authorization: Bearer ...</code>. Lagras per tenant och visas aldrig
-              tillbaka.
+              Skickas som säkerhetsnyckel i anropet. Lagras säkert och visas aldrig
+              igen.
             </p>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -209,7 +209,7 @@ export function TelinkConfigCard() {
                 onChange={(e) => setForm((p) => ({ ...p, contactNameFieldKey: e.target.value }))}
                 data-testid="input-telink-name-field"
               />
-              <p className="text-xs text-muted-foreground">fieldKey i metadata-definitionen</p>
+              <p className="text-xs text-muted-foreground">Fältets tekniska namn (metadatafält)</p>
             </div>
             <div className="space-y-2">
               <Label htmlFor="telink-phone-field">Metadata-fält för telefon</Label>
