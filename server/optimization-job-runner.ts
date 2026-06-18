@@ -4,6 +4,7 @@ import { eq, and, lt, inArray } from "drizzle-orm";
 import type { VRPOptimizationResult } from "./route-optimizer";
 import type { VRPConstraintOptions } from "./vrp-constraints";
 import type { BreakConfig } from "./route-optimizer";
+import { objectIsRoutable } from "./services/object-location";
 
 const MAX_ATTEMPTS = 2;
 const JOB_TIMEOUT_MS = 5 * 60 * 1000;
@@ -181,8 +182,9 @@ async function executeORToolsJob(jobId: string, input: VRPJobInput): Promise<VRP
   }
 
   const validOrders = filteredOrders.filter(o => {
+    // Task #990: bara ruttbara objekt (pinpoint + giltig koordinat) ska in i VRP.
     const obj = objectMap.get(o.objectId);
-    return obj?.latitude && obj?.longitude;
+    return obj ? objectIsRoutable(obj) : false;
   });
 
   await updateProgress(jobId, 30);

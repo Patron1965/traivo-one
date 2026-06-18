@@ -2,6 +2,7 @@ import type { WorkOrder, Resource, ServiceObject, Cluster } from "@shared/schema
 import { getBatchDistances } from "./distance-matrix-service";
 import type { VRPConstraintOptions } from "./vrp-constraints";
 import { getMapProvider } from "./services/mapProvider";
+import { resolveObjectLocation, objectIsRoutable, isUsableCoord } from "./services/object-location";
 
 export interface RouteStop {
   workOrderId: string;
@@ -49,14 +50,20 @@ interface Coordinates {
 }
 
 function getCoordinates(obj: ServiceObject): Coordinates | null {
-  if (obj.latitude && obj.longitude) {
-    return { lat: obj.latitude, lng: obj.longitude };
+  // Task #990: ruttbar koordinat via central platsupplösning (pinpoint + giltig
+  // huvudkoordinat). Område/ingen-geo ger null.
+  const loc = resolveObjectLocation(obj);
+  if (loc.routable && loc.latitude != null && loc.longitude != null) {
+    return { lat: loc.latitude, lng: loc.longitude };
   }
   return null;
 }
 
 function getNavigationCoordinates(obj: ServiceObject): Coordinates | null {
-  if ((obj as any).entranceLatitude && (obj as any).entranceLongitude) {
+  // Område/ingen-geo navigeras aldrig.
+  if (!objectIsRoutable(obj)) return null;
+  // Navigering föredrar entré-koordinat när den finns, annars huvudkoordinat.
+  if (isUsableCoord((obj as any).entranceLatitude, (obj as any).entranceLongitude)) {
     return { lat: (obj as any).entranceLatitude, lng: (obj as any).entranceLongitude };
   }
   return getCoordinates(obj);
@@ -202,15 +209,18 @@ export async function optimizeResourceDayRoute(
   for (const order of dayOrders) {
     if (!order.objectId) continue;
     const obj = objectMap.get(order.objectId);
-    if (!obj || !obj.latitude || !obj.longitude) continue;
+    // Task #990: hoppa över ej ruttbara objekt (område/ingen-geo/utan koordinat).
+    if (!obj || !objectIsRoutable(obj)) continue;
     
+    // objectIsRoutable garanterar giltig huvudkoordinat ⇒ navCoords är satt.
     const navCoords = getNavigationCoordinates(obj);
+    if (!navCoords) continue;
     stops.push({
       workOrderId: order.id,
       objectId: obj.id,
       objectName: obj.name,
-      latitude: navCoords?.lat || obj.latitude,
-      longitude: navCoords?.lng || obj.longitude,
+      latitude: navCoords.lat,
+      longitude: navCoords.lng,
       estimatedDuration: order.estimatedDuration || 60,
       priority: order.priority || "normal",
     });
@@ -415,11 +425,12 @@ export async function optimizeRoutesVRP(
 
     const obj = objectMap.get(order.objectId);
     if (obj) {
-      const navCoords = getNavigationCoordinates(obj);
-      if (navCoords) {
-        coords = [navCoords.lng, navCoords.lat];
-      } else if (obj.latitude && obj.longitude) {
-        coords = [obj.longitude, obj.latitude];
+      // Task #990: ruttbara objekt (pinpoint + giltig koordinat) routas via nav-koordinat.
+      // Område/ingen-geo objekt hoppas över — falla ALDRIG tillbaka på kluster för ett
+      // befintligt objekt (det skulle gissa fel position).
+      if (objectIsRoutable(obj)) {
+        const navCoords = getNavigationCoordinates(obj);
+        coords = navCoords ? [navCoords.lng, navCoords.lat] : null;
       }
     } else if (order.clusterId) {
       const cluster = clusterMap.get(order.clusterId);

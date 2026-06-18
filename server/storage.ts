@@ -469,7 +469,7 @@ export interface IStorage {
   
   /** Föredragen API: hämtar samtliga objekt för en tenant. */
   getObjects(tenantId: string): Promise<ServiceObject[]>;
-  getObjectsPaginated(tenantId: string, limit: number, offset: number, search?: string, customerIds?: string[], filters?: { objectType?: string; hierarchyLevel?: string; accessType?: string; isInterimObject?: boolean; issue?: string; clusterId?: string; cities?: string[]; hasSetupTime?: boolean; hasParent?: boolean; reported?: boolean }): Promise<{ objects: ServiceObject[]; total: number }>;
+  getObjectsPaginated(tenantId: string, limit: number, offset: number, search?: string, customerIds?: string[], filters?: { objectType?: string; hierarchyLevel?: string; accessType?: string; isInterimObject?: boolean; issue?: string; clusterId?: string; cities?: string[]; hasSetupTime?: boolean; hasParent?: boolean; reported?: boolean; locationType?: string }): Promise<{ objects: ServiceObject[]; total: number }>;
   getDistinctCities(tenantId: string): Promise<string[]>;
   getObjectsByIds(tenantId: string, ids: string[]): Promise<ServiceObject[]>;
   getObjectsWithIssues(tenantId: string, options?: { issueType?: string; status?: string; customerId?: string; limit?: number }): Promise<{
@@ -2437,7 +2437,7 @@ export class DatabaseStorage implements IStorage {
     return db.select(objectColumnsWithPrimaryCustomer()).from(objects).where(and(eq(objects.tenantId, tenantId), isNull(objects.deletedAt)));
   }
 
-  async getObjectsPaginated(tenantId: string, limit: number, offset: number, search?: string, customerIds?: string[], filters?: { objectType?: string; hierarchyLevel?: string; accessType?: string; isInterimObject?: boolean; issue?: string; clusterId?: string; cities?: string[]; hasSetupTime?: boolean; hasParent?: boolean; reported?: boolean }): Promise<{ objects: ServiceObject[]; total: number }> {
+  async getObjectsPaginated(tenantId: string, limit: number, offset: number, search?: string, customerIds?: string[], filters?: { objectType?: string; hierarchyLevel?: string; accessType?: string; isInterimObject?: boolean; issue?: string; clusterId?: string; cities?: string[]; hasSetupTime?: boolean; hasParent?: boolean; reported?: boolean; locationType?: string }): Promise<{ objects: ServiceObject[]; total: number }> {
     const { sql, count, inArray } = await import("drizzle-orm");
     
     let whereConditions = and(eq(objects.tenantId, tenantId), isNull(objects.deletedAt));
@@ -2480,6 +2480,23 @@ export class DatabaseStorage implements IStorage {
 
     if (filters?.hasParent) {
       whereConditions = and(whereConditions, sql`${objects.parentId} IS NOT NULL`);
+    }
+
+    // Task #990: platstyp-filter. Måste spegla resolveEffectiveObjectLocationType
+    // exakt — explicit kolumnvärde vinner, annars härleds typen för legacy-rader
+    // (location_type NULL). "Användbar" koordinat = ej NULL och ej 0.
+    if (filters?.locationType) {
+      const anyUsable = sql`(
+        (${objects.latitude} IS NOT NULL AND ${objects.latitude} <> 0 AND ${objects.longitude} IS NOT NULL AND ${objects.longitude} <> 0)
+        OR (${objects.entranceLatitude} IS NOT NULL AND ${objects.entranceLatitude} <> 0 AND ${objects.entranceLongitude} IS NOT NULL AND ${objects.entranceLongitude} <> 0)
+      )`;
+      if (filters.locationType === "pinpoint") {
+        whereConditions = and(whereConditions, sql`(${objects.locationType} = 'pinpoint' OR (${objects.locationType} IS NULL AND ${anyUsable}))`);
+      } else if (filters.locationType === "area") {
+        whereConditions = and(whereConditions, sql`(${objects.locationType} = 'area' OR (${objects.locationType} IS NULL AND ${objects.polylineData} IS NOT NULL AND NOT ${anyUsable}))`);
+      } else if (filters.locationType === "none") {
+        whereConditions = and(whereConditions, sql`(${objects.locationType} = 'none' OR (${objects.locationType} IS NULL AND ${objects.polylineData} IS NULL AND NOT ${anyUsable}))`);
+      }
     }
 
     // Aktiva avvikelser/incidenter: objekt med minst en öppen rapport i någon av de

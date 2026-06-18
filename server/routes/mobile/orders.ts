@@ -14,8 +14,9 @@ import type { Express } from "express";
   } from "./shared";
   import type { WorkOrder } from "./shared";
   import type { Response } from "express";
-  import { taskDependencies } from "@shared/schema";
+  import { taskDependencies, objects } from "@shared/schema";
   import { articleHasStockLocation, resolveStockLocation } from "../../services/logistics-task-expansion";
+  import { reverseGeocode, buildAddressString } from "../../services/geocoding";
 
   // Löser effektiv produktionstid (minuter) ur redan hämtade listrader.
   // Prioritet: resurs-specifik (giltig) → generisk lista (giltig) → artikelns
@@ -671,6 +672,102 @@ app.post("/api/mobile/orders/:id/return-to-warehouse", isMobileAuthenticated, as
       articleId,
       articleName: article.name,
       stockLocation: article.stockLocation,
+    });
+}));
+
+// Task #990: fält-korrigering av objektets position. Tekniker på plats kan rätta
+// koordinaterna direkt i appen. Mobil-ytan kringgår tenant-middleware — härled
+// tenant ur en TILLDELAD work order för objektet (anti-IDOR), läs aldrig req.tenantId.
+const correctObjectLocationSchema = z.object({
+  latitude: z.number().finite(),
+  longitude: z.number().finite(),
+});
+app.patch("/api/mobile/objects/:id/location", isMobileAuthenticated, asyncHandler(async (req: MobileAuthenticatedRequest, res: Response) => {
+    const objectId = req.params.id;
+    const resourceId = req.mobileResourceId;
+
+    const parsed = correctObjectLocationSchema.safeParse(req.body ?? {});
+    if (!parsed.success) {
+      throw new ValidationError(formatZodError(parsed.error).error);
+    }
+    const { latitude, longitude } = parsed.data;
+    if (latitude === 0 && longitude === 0) {
+      throw new ValidationError("Ogiltig position (0,0)");
+    }
+    if (latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180) {
+      throw new ValidationError("Position utanför giltigt intervall");
+    }
+
+    // Behörighet: teknikern måste ha minst en tilldelad order för objektet.
+    // Den ordern bär tenant-kontexten (mobil-ytan saknar tenant-middleware).
+    const assigned = await db
+      .select({ tenantId: workOrders.tenantId })
+      .from(workOrders)
+      .where(and(
+        eq(workOrders.objectId, objectId),
+        eq(workOrders.resourceId, resourceId),
+      ))
+      .limit(1);
+    if (assigned.length === 0) {
+      throw new ForbiddenError("Ej behörig att ändra objektets position");
+    }
+    const tenantId = assigned[0].tenantId;
+    if (!tenantId) throw new ForbiddenError("Order saknar tenant");
+    // Defense-in-depth: bär mobil-token en tenant måste den matcha.
+    if (req.mobileTenantId && req.mobileTenantId !== tenantId) {
+      throw new ForbiddenError("Ej behörig");
+    }
+
+    // Reverse-geocode best-effort: fyll adress/stad endast om de saknas idag.
+    let geocodeUpdate: { address?: string; city?: string; postalCode?: string } = {};
+    try {
+      const [existing] = await db
+        .select({ address: objects.address, city: objects.city, postalCode: objects.postalCode })
+        .from(objects)
+        .where(and(eq(objects.id, objectId), eq(objects.tenantId, tenantId)))
+        .limit(1);
+      const hasAddress = !!buildAddressString({
+        address: existing?.address ?? null,
+        postalCode: existing?.postalCode ?? null,
+        city: existing?.city ?? null,
+      });
+      if (!hasAddress) {
+        const rev = await reverseGeocode(latitude, longitude, tenantId);
+        if (rev) {
+          if (rev.address && !existing?.address) geocodeUpdate.address = rev.address;
+          if (rev.city && !existing?.city) geocodeUpdate.city = rev.city;
+          if (rev.postalCode && !existing?.postalCode) geocodeUpdate.postalCode = rev.postalCode;
+        }
+      }
+    } catch (err) {
+      console.warn(`[mobile] reverse-geocode misslyckades för objekt ${objectId}:`, err);
+    }
+
+    // Tenant-scopad UPDATE (defense-in-depth) — storage.updateObject saknar
+    // tenant-predikat, så skriv inline med tenant_id i WHERE.
+    const [updated] = await db
+      .update(objects)
+      .set({
+        latitude,
+        longitude,
+        locationType: "pinpoint",
+        ...geocodeUpdate,
+      })
+      .where(and(eq(objects.id, objectId), eq(objects.tenantId, tenantId)))
+      .returning({ id: objects.id, latitude: objects.latitude, longitude: objects.longitude, locationType: objects.locationType });
+    if (!updated) {
+      throw new NotFoundError("Objekt hittades inte");
+    }
+
+    console.log(`[mobile] Objekt ${objectId} position korrigerad till (${latitude}, ${longitude}) av resurs ${resourceId}`);
+
+    res.json({
+      success: true,
+      objectId: updated.id,
+      latitude: updated.latitude,
+      longitude: updated.longitude,
+      locationType: updated.locationType,
+      addressUpdated: Object.keys(geocodeUpdate).length > 0 ? geocodeUpdate : null,
     });
 }));
 

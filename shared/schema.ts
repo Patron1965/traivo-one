@@ -130,6 +130,16 @@ export const OBJECT_HIERARCHY_LEVELS = [
 ] as const;
 export type ObjectHierarchyLevel = typeof OBJECT_HIERARCHY_LEVELS[number];
 
+// Task #990: objektets platsmodell. Platstyp styr hur motor/UI behandlar objektet:
+//  - "pinpoint": exakt koordinat krävs; objektet är ruttbart.
+//  - "area":     område (t.ex. "Söderort"); ev. ungefärlig centroid för kartvisning
+//                men ALDRIG ruttbart (motorn ska inte gissa en exakt punkt).
+//  - "none":     ingen geografi alls.
+// Kolumnen är nullable utan default → legacy-rader (NULL) får effektiv typ härledd i
+// server/services/object-location.ts (koordinat⇒pinpoint, polyline⇒area, annars none).
+export const OBJECT_LOCATION_TYPES = ["pinpoint", "area", "none"] as const;
+export type ObjectLocationType = (typeof OBJECT_LOCATION_TYPES)[number];
+
 export const objects = pgTable("objects", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
@@ -166,6 +176,9 @@ export const objects = pgTable("objects", {
   entranceLongitude: real("entrance_longitude"),
   // Kontextuell adressbeskrivning (t.ex. "Runt hörnet från ICA")
   addressDescriptor: text("address_descriptor"),
+  // Task #990: platstyp (pinpoint/area/none). Nullable utan default → NULL härleds.
+  // Se OBJECT_LOCATION_TYPES ovan och server/services/object-location.ts.
+  locationType: text("location_type"),
   
   // === ÅTKOMSTINFORMATION (kan ärvas) ===
   accessType: text("access_type").default("open"),
@@ -1664,6 +1677,8 @@ export const insertObjectSchema = createInsertSchema(objects).omit({ id: true, c
     deliveryPreferences: deliveryPreferencesSchema.nullish(),
     // Task #634: språkmärkta visningsnamn (lang → namn), aldrig kolumn E.
     nameTranslations: z.record(z.string(), z.string()).nullish(),
+    // Task #990: platstyp — endast giltiga enum-värden (legacy NULL tillåts).
+    locationType: z.enum(OBJECT_LOCATION_TYPES).nullish(),
   });
 export const insertResourceSchema = createInsertSchema(resources).omit({ id: true, createdAt: true });
 export const insertWorkOrderSchema = createInsertSchema(workOrders).omit({ id: true, createdAt: true });

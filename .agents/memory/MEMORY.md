@@ -65,3 +65,4 @@
 - [Faktura-segment kanonisk nyckel](invoice-segment-canonical-key.md) — `billingSegmentKey` är ENDA grupperings-identiteten för fakturakonsolidering; håll den lika i in-memory-gruppering, cross-run-merge OCH preview; lägg aldrig till en dimension i bara en path.
 - [/api/objects dubbel svarsform](api-objects-dual-response-shape.md) — `/api/objects` ger bar array UTAN params men `{objects,total}` när `limit`/`search` skickas; normalisera alltid annars "map is not a function".
 - [Metadata-lämnare publik form](metadata-editor-public-form.md) — GPS-typ hänger på "Söker objekt..." om getCurrentPosition aldrig callbackar (test: sätt geolocation+permission på context FÖRE navigering); approve skriver metadata_varden, reject ej.
+- [Objektets platsmodell](object-location-model.md) — objekt-plats/ruttbarhet bor ENDAST i object-location.ts; entré-koord = pinpoint OCH ruttbar fallback; legacy NULL-typ inferreras för att bevara dagens ruttning.

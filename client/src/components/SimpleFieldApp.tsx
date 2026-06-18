@@ -834,6 +834,59 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
     },
   });
 
+  // Task #990: fält-korrigering av objektets position (tekniker på plats).
+  const [correctingLocation, setCorrectingLocation] = useState(false);
+  const correctLocationMutation = useMutation({
+    mutationFn: async ({ objectId, latitude, longitude }: { objectId: string; latitude: number; longitude: number }) => {
+      const res = await mobileApiCall("PATCH", `/api/mobile/objects/${objectId}/location`, { latitude, longitude });
+      return res.json() as Promise<{ success?: boolean; addressUpdated?: Record<string, string> | null }>;
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/work-orders"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/objects"] });
+      toast({
+        title: "Position korrigerad",
+        description: data?.addressUpdated
+          ? "Objektets koordinater och adress uppdaterades."
+          : "Objektets koordinater uppdaterades.",
+      });
+    },
+    onError: (error) => {
+      toast({
+        title: "Kunde inte korrigera position",
+        description: error instanceof Error ? error.message : "Försök igen",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleCorrectObjectLocation = useCallback((objectId: string) => {
+    if (!navigator.geolocation) {
+      toast({ title: "GPS otillgängligt", description: "Enheten saknar platstjänster.", variant: "destructive" });
+      return;
+    }
+    setCorrectingLocation(true);
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setCorrectingLocation(false);
+        correctLocationMutation.mutate({
+          objectId,
+          latitude: position.coords.latitude,
+          longitude: position.coords.longitude,
+        });
+      },
+      (err) => {
+        setCorrectingLocation(false);
+        toast({
+          title: "Kunde inte hämta position",
+          description: err.message || "Tillåt platsåtkomst och försök igen.",
+          variant: "destructive",
+        });
+      },
+      { enableHighAccuracy: true, maximumAge: 0, timeout: 15000 }
+    );
+  }, [correctLocationMutation, toast]);
+
   const completeJobMutation = useMutation({
     mutationFn: async ({ id, signaturePath }: { id: string; signaturePath?: string }) => {
       const elapsed = Math.ceil(elapsedSeconds / 60);
@@ -1667,6 +1720,37 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
                     <ObjectDisplayNames objectId={selectedJob.objectId} enabled />
                   </div>
                 )}
+              </CardContent>
+            </Card>
+          )}
+
+          {selectedJob.objectId && (
+            <Card data-testid="card-correct-location">
+              <CardContent className="py-3">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <MapPin className="h-4 w-4 text-chart-2 shrink-0" />
+                    <div className="min-w-0">
+                      <p className="text-xs font-medium">Korrigera objektets position</p>
+                      <p className="text-[11px] text-muted-foreground truncate">Sätt exakt position från din nuvarande plats.</p>
+                    </div>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="shrink-0"
+                    disabled={correctingLocation || correctLocationMutation.isPending}
+                    onClick={() => handleCorrectObjectLocation(selectedJob.objectId!)}
+                    data-testid="button-correct-object-location"
+                  >
+                    {(correctingLocation || correctLocationMutation.isPending) ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <MapPin className="h-4 w-4" />
+                    )}
+                    <span className="ml-1">Använd min position</span>
+                  </Button>
+                </div>
               </CardContent>
             </Card>
           )}

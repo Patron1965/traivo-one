@@ -52,6 +52,7 @@ import { ObjectParentCombobox } from "@/components/ObjectParentCombobox";
 import { ObjectInheritedMetadataPanel } from "@/components/ObjectInheritedMetadataPanel";
 import { ObjectSystemGeneratedPanel } from "@/components/ObjectSystemGeneratedPanel";
 import { useLocalizedObjectName } from "@/lib/object-name";
+import { OBJECT_LOCATION_TYPE_LABELS, effectiveObjectLocationType, objectLocationTypeBadgeClass } from "@/lib/object-location";
 import { ObjectApplicableArticlesPanel } from "@/components/ObjectApplicableArticlesPanel";
 import { ObjectImagesDialog } from "@/components/ObjectImagesGallery";
 import { AddressSearch } from "@/components/AddressSearch";
@@ -176,6 +177,9 @@ export default function ObjectsPage() {
   const setClusterFilter = (v: string) => { setClusterFilterRaw(v); setCurrentPage(0); };
   const [cityFilter, setCityFilterRaw] = useState<string[]>([]);
   const setCityFilter = (v: string[]) => { setCityFilterRaw(v); setCurrentPage(0); };
+  // Task #990: platstyp-filter (all/pinpoint/area/none) — server-side.
+  const [locationTypeFilter, setLocationTypeFilterRaw] = useState<string>("all");
+  const setLocationTypeFilter = (v: string) => { setLocationTypeFilterRaw(v); setCurrentPage(0); };
   const [hasSetupTimeFilter, setHasSetupTimeFilterRaw] = useState(false);
   const setHasSetupTimeFilter = (v: boolean) => { setHasSetupTimeFilterRaw(v); setCurrentPage(0); };
   const [hasParentFilter, setHasParentFilterRaw] = useState(false);
@@ -279,7 +283,7 @@ export default function ObjectsPage() {
   });
 
   const { data: objectsData, isLoading, isError: objectsIsError, error: objectsError, refetch: objectsRefetch } = useQuery<{ objects: ServiceObject[]; total: number }>({
-    queryKey: ["/api/objects", "paginated", currentPage, debouncedSearch, customerFilter, JSON.stringify(activeConditions), accessFilter, clusterFilter, cityFilter, hasSetupTimeFilter, hasParentFilter, reportedFilter, interimFilter, issueFilter],
+    queryKey: ["/api/objects", "paginated", currentPage, debouncedSearch, customerFilter, JSON.stringify(activeConditions), accessFilter, clusterFilter, cityFilter, hasSetupTimeFilter, hasParentFilter, reportedFilter, interimFilter, issueFilter, locationTypeFilter],
     queryFn: async () => {
       const params = new URLSearchParams({
         limit: PAGE_SIZE.toString(),
@@ -311,6 +315,9 @@ export default function ObjectsPage() {
       }
       if (reportedFilter) {
         params.append("reported", "true");
+      }
+      if (locationTypeFilter !== "all") {
+        params.append("locationType", locationTypeFilter);
       }
       if (interimFilter) {
         params.append("interim", "true");
@@ -891,7 +898,8 @@ export default function ObjectsPage() {
     reportedFilter ? 1 : 0,
     interimFilter ? 1 : 0,
     issueFilter ? 1 : 0,
-  ].reduce((a, b) => a + b, 0), [activeConditions, accessFilter, customerFilter, cityFilter, hasSetupTimeFilter, hasParentFilter, reportedFilter, interimFilter, issueFilter]);
+    locationTypeFilter !== "all" ? 1 : 0,
+  ].reduce((a, b) => a + b, 0), [activeConditions, accessFilter, customerFilter, cityFilter, hasSetupTimeFilter, hasParentFilter, reportedFilter, interimFilter, issueFilter, locationTypeFilter]);
 
   const clearAllFilters = () => {
     setConditionFilters([]);
@@ -904,6 +912,7 @@ export default function ObjectsPage() {
     setReportedFilter(false);
     setInterimFilter(false);
     setIssueFilter(null);
+    setLocationTypeFilter("all");
     window.history.replaceState({}, "", window.location.pathname);
   };
 
@@ -1238,8 +1247,9 @@ export default function ObjectsPage() {
     if (reportedFilter) params.append("reported", "true");
     if (interimFilter) params.append("interim", "true");
     if (issueFilter) params.append("issue", issueFilter);
+    if (locationTypeFilter !== "all") params.append("locationType", locationTypeFilter);
     return params;
-  }, [debouncedSearch, customerFilter, activeConditions, accessFilter, clusterFilter, cityFilter, hasSetupTimeFilter, hasParentFilter, reportedFilter, interimFilter, issueFilter]);
+  }, [debouncedSearch, customerFilter, activeConditions, accessFilter, clusterFilter, cityFilter, hasSetupTimeFilter, hasParentFilter, reportedFilter, interimFilter, issueFilter, locationTypeFilter]);
 
   const downloadCSV = (filename: string, rows: (string | number)[][]) => {
     const csv = rows.map(row => row.map(sanitizeCSVCell).join(",")).join("\n");
@@ -1580,6 +1590,18 @@ export default function ObjectsPage() {
                   <TooltipContent>Adress</TooltipContent>
                 </Tooltip>
               )}
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Badge
+                    variant="outline"
+                    className={`gap-1 px-1.5 py-0 text-[10px] font-normal cursor-help ${objectLocationTypeBadgeClass(obj as any)}`}
+                    data-testid={`badge-location-type-${obj.id}`}
+                  >
+                    {OBJECT_LOCATION_TYPE_LABELS[effectiveObjectLocationType(obj as any)]}
+                  </Badge>
+                </TooltipTrigger>
+                <TooltipContent>Platstyp för ruttning/karta</TooltipContent>
+              </Tooltip>
               {(obj as any).entranceLatitude && (obj as any).entranceLongitude && (
                 <Tooltip>
                   <TooltipTrigger asChild>
@@ -2025,6 +2047,12 @@ export default function ObjectsPage() {
                   <X className="h-3 w-3" />
                 </Badge>
               ))}
+              {locationTypeFilter !== "all" && (
+                <Badge variant="secondary" className="gap-1 cursor-pointer" onClick={() => setLocationTypeFilter("all")} data-testid="badge-filter-location-type">
+                  Platstyp: {OBJECT_LOCATION_TYPE_LABELS[locationTypeFilter as keyof typeof OBJECT_LOCATION_TYPE_LABELS] ?? locationTypeFilter}
+                  <X className="h-3 w-3" />
+                </Badge>
+              )}
               {hasSetupTimeFilter && (
                 <Badge variant="secondary" className="gap-1 cursor-pointer" onClick={() => setHasSetupTimeFilter(false)} data-testid="badge-filter-has-setup-time">
                   Har ställtid
@@ -2074,6 +2102,17 @@ export default function ObjectsPage() {
                 className="w-[180px]"
                 testId="select-customer-filter"
               />
+              <Select value={locationTypeFilter} onValueChange={setLocationTypeFilter}>
+                <SelectTrigger className="w-[180px]" data-testid="select-location-type-filter">
+                  <SelectValue placeholder="Platstyp" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Alla platstyper</SelectItem>
+                  <SelectItem value="pinpoint">{OBJECT_LOCATION_TYPE_LABELS.pinpoint}</SelectItem>
+                  <SelectItem value="area">{OBJECT_LOCATION_TYPE_LABELS.area}</SelectItem>
+                  <SelectItem value="none">{OBJECT_LOCATION_TYPE_LABELS.none}</SelectItem>
+                </SelectContent>
+              </Select>
               <Popover>
                 <PopoverTrigger asChild>
                   <Button variant="outline" className="w-[180px] justify-between font-normal" data-testid="button-city-filter">

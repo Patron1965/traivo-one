@@ -41,6 +41,7 @@ import { useMapConfig } from "@/hooks/use-map-config";
 import type { ServiceObject, WorkOrder, DeliveryPreferences } from "@shared/schema";
 import { PolylineEditor } from "@/components/PolylineEditor";
 import { objectStatusBadge as statusColors, workOrderStatusBadge as workOrderStatusColors, getCustomerReportStatusBadge } from "@/lib/status-colors";
+import { OBJECT_LOCATION_TYPE_LABELS, objectLocationTypeLabel, objectLocationTypeBadgeClass } from "@/lib/object-location";
 import type { LucideIcon } from "lucide-react";
 
 interface InheritanceSource {
@@ -258,6 +259,9 @@ interface ObjectEditForm {
   serialNumber?: string;
   manufacturer?: string;
   condition?: string;
+  locationType?: string | null;
+  latitude?: number | string | null;
+  longitude?: number | string | null;
 }
 
 const hierarchyLevelLabels: Record<string, { label: string; color: string }> = {
@@ -939,6 +943,9 @@ export default function ObjectDetailPage() {
       serialNumber: resolvedObject.serialNumber || "",
       manufacturer: resolvedObject.manufacturer || "",
       condition: resolvedObject.condition || "",
+      locationType: resolvedObject.locationType || "auto",
+      latitude: resolvedObject.latitude ?? "",
+      longitude: resolvedObject.longitude ?? "",
     });
     setEditDialogOpen(true);
   };
@@ -1359,6 +1366,19 @@ export default function ObjectDetailPage() {
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-1">
+                <div className="flex items-center justify-between py-1.5">
+                  <span className="text-sm text-muted-foreground flex items-center gap-2">
+                    <MapPin className="h-4 w-4" /> Platstyp
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <Badge variant="outline" className={objectLocationTypeBadgeClass(obj)} data-testid="badge-location-type">
+                      {objectLocationTypeLabel(obj)}
+                    </Badge>
+                    {!obj.locationType && (
+                      <span className="text-xs text-muted-foreground" data-testid="text-location-type-derived">(härledd)</span>
+                    )}
+                  </div>
+                </div>
                 <InfoRow label="Adress" value={obj.address} icon={MapPin} />
                 <InfoRow label="Postnummer" value={obj.postalCode} icon={Hash} />
                 <InfoRow label="Stad" value={obj.city} icon={Building2} />
@@ -1408,9 +1428,19 @@ export default function ObjectDetailPage() {
         <TabsContent value="location">
           <Card>
             <CardHeader className="pb-3">
-              <CardTitle className="text-base flex items-center gap-2">
-                <MapPin className="h-4 w-4" /> Plats & Karta
-              </CardTitle>
+              <div className="flex items-center justify-between gap-2">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <MapPin className="h-4 w-4" /> Plats & Karta
+                </CardTitle>
+                <div className="flex items-center gap-2">
+                  <Badge variant="outline" className={objectLocationTypeBadgeClass(obj)} data-testid="badge-location-type-tab">
+                    {objectLocationTypeLabel(obj)}
+                  </Badge>
+                  <Button variant="ghost" size="sm" onClick={() => openEditDialog("overview")} data-testid="button-edit-location">
+                    <Pencil className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
             </CardHeader>
             <CardContent>
               {hasCoordinates ? (
@@ -2488,6 +2518,53 @@ export default function ObjectDetailPage() {
                   </Select>
                 </div>
                 <div className="space-y-2">
+                  <Label>Platstyp</Label>
+                  <Select
+                    value={(editForm.locationType as string) || "auto"}
+                    onValueChange={(v) => setEditForm({ ...editForm, locationType: v })}
+                  >
+                    <SelectTrigger data-testid="select-edit-locationType">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="auto">Automatisk (härled från koordinater)</SelectItem>
+                      <SelectItem value="pinpoint">{OBJECT_LOCATION_TYPE_LABELS.pinpoint}</SelectItem>
+                      <SelectItem value="area">{OBJECT_LOCATION_TYPE_LABELS.area}</SelectItem>
+                      <SelectItem value="none">{OBJECT_LOCATION_TYPE_LABELS.none}</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    Exakt position = ruttbar punkt. Område = visas på karta men ruttas ej.
+                    Ingen geografi = objekt utan plats (t.ex. tjänst/abonnemang).
+                  </p>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-2">
+                    <Label>Latitud</Label>
+                    <Input
+                      type="number"
+                      step="any"
+                      inputMode="decimal"
+                      value={editForm.latitude == null ? "" : String(editForm.latitude)}
+                      onChange={(e) => setEditForm({ ...editForm, latitude: e.target.value })}
+                      placeholder="t.ex. 59.3293"
+                      data-testid="input-edit-latitude"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Longitud</Label>
+                    <Input
+                      type="number"
+                      step="any"
+                      inputMode="decimal"
+                      value={editForm.longitude == null ? "" : String(editForm.longitude)}
+                      onChange={(e) => setEditForm({ ...editForm, longitude: e.target.value })}
+                      placeholder="t.ex. 18.0686"
+                      data-testid="input-edit-longitude"
+                    />
+                  </div>
+                </div>
+                <div className="space-y-2">
                   <Label>Anteckningar</Label>
                   <Textarea
                     value={editForm.notes}
@@ -2614,6 +2691,24 @@ export default function ObjectDetailPage() {
                   payload.objectType = editForm.objectType;
                   payload.status = editForm.status;
                   payload.notes = editForm.notes;
+                  // Task #990: platstyp + position. "auto" ⇒ null (server härleder).
+                  payload.locationType = editForm.locationType === "auto" || !editForm.locationType
+                    ? null
+                    : editForm.locationType;
+                  const rawLat = typeof editForm.latitude === "string" ? editForm.latitude.trim() : editForm.latitude;
+                  const rawLng = typeof editForm.longitude === "string" ? editForm.longitude.trim() : editForm.longitude;
+                  const lat = rawLat === "" || rawLat == null ? null : Number(rawLat);
+                  const lng = rawLng === "" || rawLng == null ? null : Number(rawLng);
+                  if ((lat !== null && !Number.isFinite(lat)) || (lng !== null && !Number.isFinite(lng))) {
+                    toast({ title: "Ogiltiga koordinater", description: "Latitud och longitud måste vara giltiga tal.", variant: "destructive" });
+                    return;
+                  }
+                  if ((lat === null) !== (lng === null)) {
+                    toast({ title: "Ofullständig position", description: "Ange både latitud och longitud, eller lämna båda tomma.", variant: "destructive" });
+                    return;
+                  }
+                  payload.latitude = lat;
+                  payload.longitude = lng;
                 }
                 if (editSection === "access") {
                   payload.accessType = editForm.accessType;

@@ -46,12 +46,20 @@ export interface GeocodeBatchSummary {
 }
 
 export function buildAddressString(obj: Pick<ServiceObject, "address" | "postalCode" | "city">): string | null {
-  if (!obj.address || obj.address.trim() === "") return null;
-  return [obj.address, obj.postalCode, obj.city].filter(Boolean).join(", ");
+  // Task #990: tål stad-only, gatuadress eller postnr — bygg av alla icke-tomma delar.
+  const parts = [obj.address, obj.postalCode, obj.city]
+    .map((p) => (typeof p === "string" ? p.trim() : ""))
+    .filter((p) => p.length > 0);
+  return parts.length > 0 ? parts.join(", ") : null;
 }
 
-export function objectNeedsGeocoding(obj: Pick<ServiceObject, "address" | "latitude" | "longitude">): boolean {
-  if (!obj.address || obj.address.trim() === "") return false;
+export function objectNeedsGeocoding(
+  obj: Pick<ServiceObject, "address" | "city" | "postalCode" | "latitude" | "longitude" | "locationType">,
+): boolean {
+  // Task #990: objekt utan geografi ("none") geokodas aldrig.
+  if (obj.locationType === "none") return false;
+  // Behöver minst en adresskomponent (tål stad-only) och sakna koordinater.
+  if (!buildAddressString(obj)) return false;
   return obj.latitude == null || obj.longitude == null;
 }
 
@@ -71,17 +79,20 @@ export async function geocodeObject(
   options: { useSearchDestinations?: boolean; force?: boolean } = {}
 ): Promise<GeocodeObjectResult> {
   const objectId = obj.id;
+  if (obj.locationType === "none") {
+    return { objectId, status: "skipped", reason: "Location type is none" };
+  }
   if (!options.force && !objectNeedsGeocoding(obj)) {
     return { objectId, status: "skipped", reason: "Already has coordinates or no address" };
-  }
-  if (!obj.address || obj.address.trim() === "") {
-    return { objectId, status: "skipped", reason: "No address" };
   }
 
   const fullAddress = buildAddressString(obj);
   if (!fullAddress) {
     return { objectId, status: "skipped", reason: "No address" };
   }
+  // Task #990: stad-only adress (ingen gatuadress) ger en ungefärlig centroid. Markera
+  // som "area" om platstyp inte satts explicit, så motorn inte ruttar till en gissad punkt.
+  const isCityOnly = !obj.address || obj.address.trim() === "";
 
   try {
     const result = options.useSearchDestinations
@@ -109,6 +120,9 @@ export async function geocodeObject(
     }
     if (result.city && (!obj.city || obj.city.trim() === "")) {
       updateData.city = result.city;
+    }
+    if (isCityOnly && obj.locationType == null) {
+      updateData.locationType = "area";
     }
 
     await storage.updateObject(objectId, updateData);
