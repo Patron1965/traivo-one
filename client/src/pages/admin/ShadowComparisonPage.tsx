@@ -273,7 +273,7 @@ export default function ShadowComparisonPage() {
             </CardContent>
             <CardContent className="text-xs text-muted-foreground">
               Tröskelvärden: fel hos alternativ leverantör &gt; {summary.thresholds.failureRatePct}% ·
-              |Δ distans| p95 &gt; {summary.thresholds.distanceP95Km} km. Konfigurera via
+              avståndsavvikelse (95:e percentilen) &gt; {summary.thresholds.distanceP95Km} km. Konfigurera via
               env <code>MAP_SHADOW_ERROR_THRESHOLD_PCT</code> /{" "}
               <code>MAP_SHADOW_DISTANCE_P95_KM</code>.
             </CardContent>
@@ -359,16 +359,16 @@ function OperationCard({
       <CardContent className="space-y-4">
         <div className="grid gap-3 md:grid-cols-2">
           <div className="text-sm">
-            <p className="font-medium mb-1">Latens (nuvarande)</p>
+            <p className="font-medium mb-1">Svarstid (nuvarande)</p>
             <p className="text-muted-foreground">
-              median {fmtInt(op.primaryLatency.medianMs)} ms · p95{" "}
+              median {fmtInt(op.primaryLatency.medianMs)} ms · 95:e percentilen{" "}
               {fmtInt(op.primaryLatency.p95Ms)} ms
             </p>
           </div>
           <div className="text-sm">
-            <p className="font-medium mb-1">Latens (alternativ)</p>
+            <p className="font-medium mb-1">Svarstid (alternativ)</p>
             <p className="text-muted-foreground">
-              median {fmtInt(op.shadowLatency.medianMs)} ms · p95{" "}
+              median {fmtInt(op.shadowLatency.medianMs)} ms · 95:e percentilen{" "}
               {fmtInt(op.shadowLatency.p95Ms)} ms
             </p>
           </div>
@@ -381,9 +381,9 @@ function OperationCard({
                 <tr>
                   <th className="py-2 pr-4">Delta</th>
                   <th className="py-2 pr-4 text-right">median</th>
-                  <th className="py-2 pr-4 text-right">p95</th>
-                  <th className="py-2 pr-4 text-right">|Δ| median</th>
-                  <th className="py-2 pr-4 text-right">|Δ| p95</th>
+                  <th className="py-2 pr-4 text-right">95:e percentilen</th>
+                  <th className="py-2 pr-4 text-right">abs. median</th>
+                  <th className="py-2 pr-4 text-right">abs. 95:e percentilen</th>
                   <th className="py-2 pr-4 text-right">n</th>
                 </tr>
               </thead>
@@ -469,8 +469,8 @@ const CHART_SPECS: ChartSpec[] = [
   },
   {
     metric: "distanceKmAbsP95",
-    title: "|Δ distans| p95",
-    description: "Avvikelse mot primär leverantör i km (p95)",
+    title: "Avståndsavvikelse (95:e percentilen)",
+    description: "Avvikelse mot nuvarande leverantör i km (95:e percentilen)",
     unit: " km",
     digits: 2,
     testId: "chart-trend-distance",

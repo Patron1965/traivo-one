@@ -103,7 +103,7 @@ export default function MLDataQualityPage() {
     <div className="container mx-auto p-6 space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold" data-testid="text-page-title">Datakvalitet för tidsberäkning</h1>
+          <h1 className="text-3xl font-bold" data-testid="text-page-title">Datakvalitet för prognoser</h1>
           <p className="text-muted-foreground mt-1">
             Visar om datan räcker för att slå på automatisk tidsberäkning. Mätfönster: senaste {report.windowDays} dagarna.
           </p>
