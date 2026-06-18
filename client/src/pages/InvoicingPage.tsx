@@ -55,6 +55,9 @@ interface InvoiceLine {
   total: number;
   completedAt: string | null;
   metadata: Record<string, string>;
+  // Task #1025: raden bär redan objektreferenser (adress m.m.) i description —
+  // undvik då att rendera den separata adress-underraden (dubblett).
+  enriched?: boolean;
 }
 
 interface InvoicePreview {
@@ -645,7 +648,7 @@ export default function InvoicingPage() {
                                       </TableCell>
                                       <TableCell className="text-muted-foreground text-sm hidden md:table-cell">
                                         {line.objectName || "-"}
-                                        {line.objectAddress && (
+                                        {!line.enriched && line.objectAddress && (
                                           <span className="block text-xs">{line.objectAddress}</span>
                                         )}
                                       </TableCell>
@@ -1095,7 +1098,7 @@ export default function InvoicingPage() {
                         {line.workOrderId.startsWith("manual:") && (
                           <Badge variant="outline" className="ml-2 text-xs border-chart-1/30 dark:border-chart-1/70 text-chart-1">Manuell</Badge>
                         )}
-                        {line.objectAddress && <span className="block text-xs text-muted-foreground">{line.objectAddress}</span>}
+                        {!line.enriched && line.objectAddress && <span className="block text-xs text-muted-foreground">{line.objectAddress}</span>}
                       </TableCell>
                       <TableCell className="text-right">{line.quantity}</TableCell>
                       <TableCell className="text-right">{formatCurrency(line.unitPrice)}</TableCell>

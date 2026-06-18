@@ -36,6 +36,10 @@ import {
   isFixedPriceConcept,
   computeObjectValueOre,
 } from "../services/order-concept-article-hits";
+import {
+  resolveObjectInvoiceRefs,
+  formatEnrichedDescription,
+} from "../services/invoice-line-enrichment";
 
 const openaiClient = new OpenAI({
   apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
@@ -748,9 +752,22 @@ app.get("/api/invoice-preview", asyncHandler(async (req, res) => {
             if (orderMeta[key]) lineMetadata[key] = String(orderMeta[key]);
           }
           
+          // Task #1025: spegla exakt den berikade radtext som skickas till
+          // Fortnox. Förhandsvisningen är en per-WO-summering, men referens-
+          // texten byggs med SAMMA delade resolver + formatterare som exporten
+          // så formatet aldrig kan drifta mellan vy och utskick.
+          const refs = await resolveObjectInvoiceRefs(tenantId, order);
+          const enrichedDescription =
+            formatEnrichedDescription(order.title, refs) ?? order.title;
+
           lines.push({
             workOrderId: order.id,
-            description: order.title,
+            description: enrichedDescription,
+            // Dölj den separata adress-underraden ENBART när adressen faktiskt
+            // bakats in i den berikade radtexten (refs.adress kommer från metadata
+            // medan objectAddress kommer från objektets adress-kolumn — de kan
+            // skilja sig, så göm aldrig en adress som inte redan visas).
+            enriched: Boolean(refs.adress),
             objectName: order.objectName,
             objectAddress: order.objectAddress,
             quantity: 1,

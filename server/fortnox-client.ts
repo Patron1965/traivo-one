@@ -1,4 +1,10 @@
 import { storage } from "./storage";
+import {
+  resolveObjectInvoiceRefs,
+  formatEnrichedDescription,
+  buildInvoiceLineBaseText,
+} from "./services/invoice-line-enrichment";
+import { deriveFortnoxCodesForWorkOrder } from "./services/fortnox-code-derivation";
 
 const FORTNOX_API_BASE = "https://api.fortnox.se/3";
 const FORTNOX_AUTH_URL = "https://apps.fortnox.se/oauth-v1/auth";
@@ -106,6 +112,9 @@ interface FortnoxInvoice {
   InvoiceRows: Array<Record<string, unknown>>;
   CostCenter?: string;
   Project?: string;
+  // Task #1025: "Er referens" på fakturahuvudet (Fortnox standardfält, max 50
+  // tecken) — bär kundreferens när radmodellen saknar referensfält.
+  YourReference?: string;
 }
 
 interface FortnoxInvoiceResponse {
@@ -513,6 +522,9 @@ export async function exportWorkOrderToFortnox(
     let totalInvoiced = 0;
     const invoiceNumbers: string[] = [];
 
+    // Task #1025: objektreferenser är WO-nivå (samma för alla payers) — lös en gång.
+    const objectRefs = await resolveObjectInvoiceRefs(tenantId, workOrder);
+
     for (const payer of validPayers) {
       const payerPercentage = payer?.sharePercent || 100;
       let customerFortnoxId: string;
@@ -574,7 +586,10 @@ export async function exportWorkOrderToFortnox(
         if (!line.articleId) {
           invoiceRows.push({
             DeliveredQuantity: quantity,
-            Description: line.description || line.notes || "Fritextrad",
+            Description: formatEnrichedDescription(
+              buildInvoiceLineBaseText(line),
+              objectRefs,
+            ),
             Price: price,
             CostCenter: invoiceExport.costCenter || undefined,
             Project: invoiceExport.project || undefined,
@@ -591,7 +606,10 @@ export async function exportWorkOrderToFortnox(
         invoiceRows.push({
           ArticleNumber: articleMapping.fortnoxId,
           DeliveredQuantity: quantity,
-          Description: line.notes || (useFrozen ? "Fryst pris (audit-snapshot)" : undefined),
+          Description: formatEnrichedDescription(
+            buildInvoiceLineBaseText(line, { useFrozen }),
+            objectRefs,
+          ),
           Price: price,
           CostCenter: invoiceExport.costCenter || undefined,
           Project: invoiceExport.project || undefined,
@@ -605,6 +623,10 @@ export async function exportWorkOrderToFortnox(
         InvoiceRows: invoiceRows,
         CostCenter: invoiceExport.costCenter || undefined,
         Project: invoiceExport.project || undefined,
+        // Task #1025: kundreferens på fakturahuvudet (max 50 tecken).
+        YourReference: objectRefs.kundreferens
+          ? objectRefs.kundreferens.slice(0, 50)
+          : undefined,
       };
 
       try {
@@ -899,12 +921,22 @@ export async function exportConsolidatedInvoiceToFortnox(
     const invoiceRows: Array<Record<string, unknown>> = [];
     // Task #693: samla objekt-koppling per WO för "Senast fakturerad order".
     const invoicedObjects: Array<{ objectId: string; title: string }> = [];
+    // Task #1025: fakturahuvudet bär EN kundreferens — ta första icke-tomma
+    // över de konsoliderade arbetsordrarna (samma helper som enskild export).
+    let consolidatedYourReference: string | undefined;
     for (const woId of woIds) {
       const wo = await storage.getWorkOrder(woId);
       if (!wo || wo.tenantId !== tenantId) continue;
       if (wo.objectId) {
         invoicedObjects.push({ objectId: wo.objectId, title: wo.title ?? "Arbetsorder" });
       }
+      // Task #1025: berika rader med objektreferenser + per-rad kostnadsställe/
+      // projekt (samlingsfakturor saknade dessa). Beräknas en gång per WO.
+      const objectRefs = await resolveObjectInvoiceRefs(tenantId, wo);
+      if (!consolidatedYourReference && objectRefs.kundreferens) {
+        consolidatedYourReference = objectRefs.kundreferens.slice(0, 50);
+      }
+      const derivedCodes = await deriveFortnoxCodesForWorkOrder(tenantId, wo);
       const lines = await storage.getWorkOrderLines(woId);
       if (!lines.length) continue;
       const useFrozen =
@@ -932,10 +964,13 @@ export async function exportConsolidatedInvoiceToFortnox(
         if (!line.articleId) {
           invoiceRows.push({
             DeliveredQuantity: line.quantity,
-            Description: line.description
-              || line.notes
-              || `${wo.title ?? "Arbetsorder"} (${woId.slice(0, 8)})`,
+            Description: formatEnrichedDescription(
+              buildInvoiceLineBaseText(line),
+              objectRefs,
+            ),
             Price: price,
+            CostCenter: derivedCodes.costCenter || undefined,
+            Project: derivedCodes.project || undefined,
           });
           continue;
         }
@@ -948,10 +983,13 @@ export async function exportConsolidatedInvoiceToFortnox(
         invoiceRows.push({
           ArticleNumber: articleMapping.fortnoxId,
           DeliveredQuantity: line.quantity,
-          Description: line.notes
-            || `${wo.title ?? "Arbetsorder"} (${woId.slice(0, 8)})`
-            || (useFrozen ? "Fryst pris (audit-snapshot)" : undefined),
+          Description: formatEnrichedDescription(
+            buildInvoiceLineBaseText(line, { useFrozen }),
+            objectRefs,
+          ),
           Price: price,
+          CostCenter: derivedCodes.costCenter || undefined,
+          Project: derivedCodes.project || undefined,
         });
       }
     }
@@ -962,6 +1000,8 @@ export async function exportConsolidatedInvoiceToFortnox(
     const fortnoxInvoice: FortnoxInvoice = {
       CustomerNumber: customerFortnoxId,
       InvoiceRows: invoiceRows,
+      // Task #1025: kundreferens på fakturahuvudet (max 50 tecken).
+      YourReference: consolidatedYourReference,
     };
 
     const response = await client.createInvoice(fortnoxInvoice);
