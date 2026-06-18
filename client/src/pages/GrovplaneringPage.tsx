@@ -9,6 +9,7 @@ import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
+  Columns3,
   Download,
   Loader2,
   RotateCcw,
@@ -28,6 +29,15 @@ import {
 } from "@/components/ui/select";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -96,6 +106,45 @@ const EMPTY_KPIS: GridKpis = {
   objectCount: 0,
 };
 
+// Exportkolumner (Task #1000) — håll nycklar i synk med
+// GROV_EXPORT_COLUMN_ORDER i server/grovplanering-grid.ts. Standardurvalet =
+// alla kolumner (nuvarande fasta kolumnset).
+type ExportColumnKey =
+  | "group"
+  | "status"
+  | "customer"
+  | "object"
+  | "task"
+  | "taskType"
+  | "desiredDelivery"
+  | "productionMinutes"
+  | "productionHours"
+  | "team"
+  | "week"
+  | "lastService"
+  | "value"
+  | "cost";
+
+const EXPORT_COLUMNS: { key: ExportColumnKey; label: string }[] = [
+  { key: "group", label: "Grupp" },
+  { key: "status", label: "Status" },
+  { key: "customer", label: "Kund" },
+  { key: "object", label: "Objekt" },
+  { key: "task", label: "Uppgift" },
+  { key: "taskType", label: "Uppgiftstyp" },
+  { key: "desiredDelivery", label: "Önskad leverans" },
+  { key: "productionMinutes", label: "Produktionstid (min)" },
+  { key: "productionHours", label: "Produktionstid (tim)" },
+  { key: "team", label: "Team" },
+  { key: "week", label: "Vecka" },
+  { key: "lastService", label: "Senast utförd" },
+  { key: "value", label: "Ordervärde (kr)" },
+  { key: "cost", label: "Kostnad (kr)" },
+];
+
+const ALL_EXPORT_COLUMN_KEYS = EXPORT_COLUMNS.map((c) => c.key);
+const EXPORT_COLUMNS_STORAGE_KEY = "grovplanering.exportColumns.v1";
+
 const GROUP_OPTIONS: { value: GroupBy; label: string }[] = [
   { value: "objekt", label: "Objekt" },
   { value: "kund", label: "Kund" },
@@ -131,6 +180,20 @@ function buildGridUrl(
 
 // Persistens av filter-state över sidladdningar (spec: "Filter-state sparas").
 const FILTER_STORAGE_KEY = "grovplanering.filter.v1";
+
+// Läs sparat exportkolumn-urval; faller tillbaka till alla kolumner.
+function loadExportColumns(): ExportColumnKey[] {
+  try {
+    const raw = localStorage.getItem(EXPORT_COLUMNS_STORAGE_KEY);
+    if (!raw) return [...ALL_EXPORT_COLUMN_KEYS];
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [...ALL_EXPORT_COLUMN_KEYS];
+    const valid = ALL_EXPORT_COLUMN_KEYS.filter((k) => parsed.includes(k));
+    return valid.length ? valid : [...ALL_EXPORT_COLUMN_KEYS];
+  } catch {
+    return [...ALL_EXPORT_COLUMN_KEYS];
+  }
+}
 
 // Härled applicerbart filter från utkastet — delas av applyFilters och
 // återställning vid mount så att de alltid är identiska.
@@ -312,10 +375,38 @@ export default function GrovplaneringPage() {
   // Excel-export av den aktuellt filtrerade listan. Speglar samma filter/gruppering
   // som rutnätet (samma query-params) — servern paginerar inte exporten.
   const [exporting, setExporting] = useState(false);
+  const [columnDialogOpen, setColumnDialogOpen] = useState(false);
+  const [exportColumns, setExportColumns] = useState<ExportColumnKey[]>(
+    () => loadExportColumns(),
+  );
+
+  const toggleExportColumn = (key: ExportColumnKey, checked: boolean) =>
+    setExportColumns((prev) => {
+      const next = checked
+        ? ALL_EXPORT_COLUMN_KEYS.filter((k) => prev.includes(k) || k === key)
+        : prev.filter((k) => k !== key);
+      try {
+        localStorage.setItem(EXPORT_COLUMNS_STORAGE_KEY, JSON.stringify(next));
+      } catch {
+        /* ignore quota/serialisering */
+      }
+      return next;
+    });
+
+  const resetExportColumns = () => {
+    setExportColumns([...ALL_EXPORT_COLUMN_KEYS]);
+    try {
+      localStorage.removeItem(EXPORT_COLUMNS_STORAGE_KEY);
+    } catch {
+      /* ignore */
+    }
+  };
+
   const exportToExcel = async () => {
     setExporting(true);
     try {
       const p = buildFilterParams(applied, groupBy);
+      if (exportColumns.length > 0) p.set("columns", exportColumns.join(","));
       const res = await apiRequest(
         "GET",
         `/api/rough-planning/export?${p.toString()}`,
@@ -554,7 +645,16 @@ export default function GrovplaneringPage() {
             <Button
               size="sm"
               variant="outline"
-              disabled={exporting || total === 0}
+              onClick={() => setColumnDialogOpen(true)}
+              data-testid="button-export-columns"
+            >
+              <Columns3 className="h-4 w-4" />
+              Kolumner ({exportColumns.length})
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={exporting || total === 0 || exportColumns.length === 0}
               onClick={exportToExcel}
               data-testid="button-export-excel"
             >
@@ -794,6 +894,63 @@ export default function GrovplaneringPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <Dialog open={columnDialogOpen} onOpenChange={setColumnDialogOpen}>
+        <DialogContent data-testid="dialog-export-columns">
+          <DialogHeader>
+            <DialogTitle>Kolumner i exporten</DialogTitle>
+            <DialogDescription>
+              Välj vilka kolumner som ska tas med i Excel-filen. Valet sparas
+              till nästa gång.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            {EXPORT_COLUMNS.map((col) => {
+              const checked = exportColumns.includes(col.key);
+              return (
+                <label
+                  key={col.key}
+                  className="flex items-center gap-2 rounded-md border border-border p-2 text-sm hover-elevate cursor-pointer"
+                  data-testid={`row-export-column-${col.key}`}
+                >
+                  <Checkbox
+                    checked={checked}
+                    onCheckedChange={(v) =>
+                      toggleExportColumn(col.key, v === true)
+                    }
+                    data-testid={`checkbox-export-column-${col.key}`}
+                  />
+                  <span>{col.label}</span>
+                </label>
+              );
+            })}
+          </div>
+          {exportColumns.length === 0 && (
+            <p
+              className="text-sm text-destructive"
+              data-testid="text-export-columns-empty"
+            >
+              Välj minst en kolumn för att kunna exportera.
+            </p>
+          )}
+          <DialogFooter className="gap-2 sm:gap-2">
+            <Button
+              variant="ghost"
+              onClick={resetExportColumns}
+              data-testid="button-export-columns-reset"
+            >
+              <RotateCcw className="h-4 w-4" />
+              Återställ alla
+            </Button>
+            <Button
+              onClick={() => setColumnDialogOpen(false)}
+              data-testid="button-export-columns-done"
+            >
+              Klar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -44,6 +44,7 @@ import {
   getRoughPlanningCities,
   revokeRoughAssignments,
   buildGrovplaneringExport,
+  sanitizeGrovExportColumns,
   TASK_TYPE_KEYS,
   type GroupBy,
   type GridFilters,
@@ -263,7 +264,8 @@ export function registerWeeklyPlanRoutes(app: Express) {
   app.get("/api/rough-planning/export", ...guard, asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const { groupBy, filters } = parseGridQuery(req.query);
-    const { buffer } = await buildGrovplaneringExport(tenantId, filters, groupBy);
+    const columns = sanitizeGrovExportColumns(csv(req.query.columns));
+    const { buffer } = await buildGrovplaneringExport(tenantId, filters, groupBy, columns);
     const datestamp = new Date().toISOString().slice(0, 10);
     const fileName = `traivo-grovplanering-${datestamp}.xlsx`;
     res.setHeader(

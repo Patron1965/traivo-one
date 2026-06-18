@@ -677,12 +677,6 @@ function oreToKronor(ore: number): number {
   return Math.round(ore) / 100;
 }
 
-interface GrovExportColumn {
-  header: string;
-  width: number;
-  numFmt?: string;
-}
-
 const GROUP_LABEL: Record<GroupBy, string> = {
   objekt: "Objekt (grupp)",
   kund: "Kund (grupp)",
@@ -690,10 +684,121 @@ const GROUP_LABEL: Record<GroupBy, string> = {
   ingen: "Grupp",
 };
 
+// ---------------------------------------------------------------------------
+// Kolumnregister för exporten (Task #1000). Varje kolumn har en stabil nyckel
+// (skickas av klienten), en etikett (rubrik + kolumnväljare), bredd, valfritt
+// talformat och en värde-extraktor. `group`-kolumnens rubrik beror på
+// grupperingen (GROUP_LABEL). Kolumnordningen i exporten följer alltid
+// GROV_EXPORT_COLUMN_ORDER oavsett i vilken ordning klienten skickar nycklarna.
+// ---------------------------------------------------------------------------
+export type GrovExportColumnKey =
+  | "group"
+  | "status"
+  | "customer"
+  | "object"
+  | "task"
+  | "taskType"
+  | "desiredDelivery"
+  | "productionMinutes"
+  | "productionHours"
+  | "team"
+  | "week"
+  | "lastService"
+  | "value"
+  | "cost";
+
+interface GrovExportColumnDef {
+  key: GrovExportColumnKey;
+  label: string;
+  width: number;
+  numFmt?: string;
+  value: (label: string, r: GridTaskRow) => string | number | Date | null;
+}
+
+const GROV_EXPORT_COLUMN_DEFS: GrovExportColumnDef[] = [
+  { key: "group", label: "Grupp", width: 28, value: (label) => safeCell(label) },
+  {
+    key: "status",
+    label: "Status",
+    width: 14,
+    value: (_l, r) => ROUGH_STATUS_LABELS[r.status] ?? r.status,
+  },
+  { key: "customer", label: "Kund", width: 26, value: (_l, r) => safeCell(r.customerName ?? "") },
+  { key: "object", label: "Objekt", width: 28, value: (_l, r) => safeCell(r.objectName ?? "") },
+  { key: "task", label: "Uppgift", width: 28, value: (_l, r) => safeCell(r.title ?? "") },
+  { key: "taskType", label: "Uppgiftstyp", width: 16, value: (_l, r) => safeCell(r.taskTypeLabel) },
+  {
+    key: "desiredDelivery",
+    label: "Önskad leverans",
+    width: 16,
+    numFmt: "yyyy-mm-dd",
+    value: (_l, r) => toDateOrNull(r.desiredDeliveryStart),
+  },
+  {
+    key: "productionMinutes",
+    label: "Produktionstid (min)",
+    width: 18,
+    numFmt: "0",
+    value: (_l, r) => r.productionMinutes ?? 0,
+  },
+  {
+    key: "productionHours",
+    label: "Produktionstid (tim)",
+    width: 18,
+    numFmt: "0.00",
+    value: (_l, r) => Math.round(((r.productionMinutes ?? 0) / 60) * 100) / 100,
+  },
+  { key: "team", label: "Team", width: 20, value: (_l, r) => safeCell(r.teamName ?? "") },
+  { key: "week", label: "Vecka", width: 12, value: (_l, r) => safeCell(r.roughPlannedWeek ?? "") },
+  {
+    key: "lastService",
+    label: "Senast utförd",
+    width: 16,
+    numFmt: "yyyy-mm-dd",
+    value: (_l, r) => toDateOrNull(r.lastServiceDate),
+  },
+  {
+    key: "value",
+    label: "Ordervärde (kr)",
+    width: 16,
+    numFmt: "#,##0.00",
+    value: (_l, r) => oreToKronor(r.value),
+  },
+  {
+    key: "cost",
+    label: "Kostnad (kr)",
+    width: 16,
+    numFmt: "#,##0.00",
+    value: (_l, r) => oreToKronor(r.cost),
+  },
+];
+
+// Kanonisk kolumnordning (= standardurvalet, nuvarande fasta kolumnset).
+export const GROV_EXPORT_COLUMN_ORDER: GrovExportColumnKey[] =
+  GROV_EXPORT_COLUMN_DEFS.map((c) => c.key);
+
+// Lättviktig kolumnkatalog för klientens kolumnväljare (key + etikett).
+export const GROV_EXPORT_COLUMNS: { key: GrovExportColumnKey; label: string }[] =
+  GROV_EXPORT_COLUMN_DEFS.map((c) => ({ key: c.key, label: c.label }));
+
+const GROV_EXPORT_COLUMN_KEY_SET = new Set<string>(GROV_EXPORT_COLUMN_ORDER);
+
+// Sanera klient-skickade kolumnnycklar: behåll endast kända nycklar, deduplicera
+// och tvinga kanonisk ordning. Tom/ogiltig lista → fullständigt standardurval.
+export function sanitizeGrovExportColumns(
+  keys: string[] | undefined,
+): GrovExportColumnKey[] {
+  if (!keys || keys.length === 0) return [...GROV_EXPORT_COLUMN_ORDER];
+  const requested = new Set(keys.filter((k) => GROV_EXPORT_COLUMN_KEY_SET.has(k)));
+  if (requested.size === 0) return [...GROV_EXPORT_COLUMN_ORDER];
+  return GROV_EXPORT_COLUMN_ORDER.filter((k) => requested.has(k));
+}
+
 export async function buildGrovplaneringExport(
   tenantId: string,
   filters: GridFilters,
   grouping: GroupBy,
+  columnKeys?: GrovExportColumnKey[],
 ): Promise<{ buffer: Buffer; truncated: boolean; rowCount: number }> {
   const { orderedGroups, truncated } = await buildOrderedGroups(
     tenantId,
@@ -701,35 +806,25 @@ export async function buildGrovplaneringExport(
     grouping,
   );
 
-  const columns: GrovExportColumn[] = [
-    { header: GROUP_LABEL[grouping], width: 28 },
-    { header: "Status", width: 14 },
-    { header: "Kund", width: 26 },
-    { header: "Objekt", width: 28 },
-    { header: "Uppgift", width: 28 },
-    { header: "Uppgiftstyp", width: 16 },
-    { header: "Önskad leverans", width: 16, numFmt: "yyyy-mm-dd" },
-    { header: "Produktionstid (min)", width: 18, numFmt: "0" },
-    { header: "Produktionstid (tim)", width: 18, numFmt: "0.00" },
-    { header: "Team", width: 20 },
-    { header: "Vecka", width: 12 },
-    { header: "Senast utförd", width: 16, numFmt: "yyyy-mm-dd" },
-    { header: "Ordervärde (kr)", width: 16, numFmt: "#,##0.00" },
-    { header: "Kostnad (kr)", width: 16, numFmt: "#,##0.00" },
-  ];
+  const selectedKeys = sanitizeGrovExportColumns(columnKeys);
+  const defByKey = new Map(GROV_EXPORT_COLUMN_DEFS.map((c) => [c.key, c]));
+  const columns = selectedKeys.map((k) => defByKey.get(k)!);
+
+  const headerFor = (c: GrovExportColumnDef): string =>
+    c.key === "group" ? GROUP_LABEL[grouping] : c.label;
 
   const wb = new ExcelJS.Workbook();
   wb.creator = "Traivo";
   wb.created = new Date();
   const ws = wb.addWorksheet("Grovplanering");
-  ws.columns = columns.map((c) => ({ header: c.header, width: c.width }));
+  ws.columns = columns.map((c) => ({ header: headerFor(c), width: c.width }));
 
   // Rubrikrad.
   const headerRow = ws.getRow(1);
   headerRow.height = 20;
   columns.forEach((c, idx) => {
     const cell = headerRow.getCell(idx + 1);
-    cell.value = c.header;
+    cell.value = headerFor(c);
     cell.font = { bold: true, color: { argb: "FF1B4B6B" } };
     cell.alignment = { vertical: "middle", horizontal: "left" };
     cell.fill = {
@@ -744,23 +839,7 @@ export async function buildGrovplaneringExport(
   let rowCount = 0;
   for (const g of orderedGroups) {
     for (const r of g.rows) {
-      const minutes = r.productionMinutes ?? 0;
-      const values: (string | number | Date | null)[] = [
-        safeCell(g.label),
-        ROUGH_STATUS_LABELS[r.status] ?? r.status,
-        safeCell(r.customerName ?? ""),
-        safeCell(r.objectName ?? ""),
-        safeCell(r.title ?? ""),
-        safeCell(r.taskTypeLabel),
-        toDateOrNull(r.desiredDeliveryStart),
-        minutes,
-        Math.round((minutes / 60) * 100) / 100,
-        safeCell(r.teamName ?? ""),
-        safeCell(r.roughPlannedWeek ?? ""),
-        toDateOrNull(r.lastServiceDate),
-        oreToKronor(r.value),
-        oreToKronor(r.cost),
-      ];
+      const values = columns.map((c) => c.value(g.label, r));
       const row = ws.addRow(values);
       columns.forEach((c, idx) => {
         if (c.numFmt) row.getCell(idx + 1).numFmt = c.numFmt;
