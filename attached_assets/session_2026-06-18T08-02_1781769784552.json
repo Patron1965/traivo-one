@@ -1,0 +1,320 @@
+{
+  "sessionId": "1608574223",
+  "exportedAt": "2026-06-18T08:02:51.137Z",
+  "summary": "### Key Topics Discussed\n- Traviostatus och arkitekturbäckorapporten kommenterades\n- Orderkoncept Wizalan och dess status. Behov av att tänka om kring processordeningen.\n- Val av kluster före kund i processen. Iterativ förfining av urval baserat på metadata-villkor, där antalet objekt reduceras successivt.\n- Betydelsen av metadata-logik (partikelnivå, filter, planering).\n- Detaljerad beskrivning av metadataobjekt och dess villkor (sant, skilt ifrån, lika med, inte lika med).\n- Användning av objektlogik i orderkonceptet med exempel baserat på kontaktperson kopplad till kluster.\n- Förfining av order för specifika kärl (t ex blå kärl) inom ett kluster genom att applicera metadata-villkor.\n- Hantering av kundval, antingen hårdkodat eller via metadata-villkor för att associera specifika kunder baserat på metadata-värden.\n- Implementering av fakturalogik och dess olika alternativ baserat på kundval, inklusive fakturabroms.\n- Leveranstider och leveransfönster som nästa steg i processen, inklusive start- och slutdatum/tid.\n- Tidslogiken för leveransfönster, inklusive önskade och uppnådda tider.\n- Hantering av önskade leveranstider och publicering av dessa för tidsmotorn.\n- Användning av metadatafält för att specificera önskade leveransdagar, t.ex. \"parkeringsförbud tisdagar och torsdagar\" för att begränsa leveranstider.\n- Skapande av en artikellista som innehåller artikelnummer, artikelbenämning och antal, baserat på tidigare angiven antalslogik.\n- Artiklar läggs till baserat på metadata-logik.\n- Systemet ska summera antalet träffade objekt i realtid i högermarginalen medan uppgifter matas in.\n- Faktureringsmodellen för fast pris eller löpande tid, beroende på jobbets omfattning eller utförda tjänster.\n- Abonnemangsmodellen, som är ett orderkoncept med specificerade start- och slutdatum (t.ex. 2026-06-01 till 2030-06-01), med fast månadsfakturering baserad på estimerat antal uppdrag per år.\n- Hantering av jobb med fasta tidsfönster eller återkommande periodicitet (t.ex. leverans var sextionde dag).\n- Systemstöd för att hantera ändringar i månadsfakturering för abonnemang, inklusive en \"broms\" eller spärr för manuell justering vid specifika datum.\n- Tydliggörande av att metadatafälten, kallade \"familjer\", hanteras av systemet och inkluderar information som kontaktnamn, kontakttitel och telefon.\n- Import av grundläggande systemdata med interimnummer för objekt och deras metadata.\n- Hantering av interimnummersföräldrar i importlistan för att skapa hierarkiska objektrelationer.\n- Process för att exportera objektlistor från ett kluster för att sedan uppdatera metadata för unika objektnummer (t.ex. en butik) och importera tillbaka till systemet.\n- Metadataposter är alltid kopplade till ett objekt, men villkor i metadatafält kan innehålla parametrar för att falla neråt till undervarande objekt.\n- Möjlighet att manuellt uppdatera enskilda objekt och se metadata via datapils wizarden för import av uppgifter.\n- Grovplaneringen ser bra ut.\n- Justering av filter: behöver en mer utvecklad form för att välja utförandetyper baserade på det befintliga utförandetypsregistret, inte genererade av systemet.\n- Filter ska erbjuda logik för att välja enskilda eller flera utförandetyper.\n- Vid rensning av filter ska standardvärdet vara alla uppgifter.\n- Filtrets syfte är att smalna av urvalet baserat på utförandetyp, geografi och tid.\n- Export av listor för analys i Excel med pivottabeller för att summera arbete per kund/månad eller team/månad.\n- Process för att \"tratta ner\" jobb till finplanering, där de detaljeras per dag med rutt- och optimeringsfunktioner.\n- Slutligen ska jobben publiceras mobilt med fokus på säkerhet.\n\n### Decisions Made\n- Processordningen ska ändras till att först välja kluster, sedan kund.\n\n### Action Items\n- Utveckla en tidsmotor som kan hantera och publicera önskade leveranstider som \"dagligen nio till sexton\" och även beakta komplexa metadata-baserade leveransrestriktioner.\n\n### Important Points & Insights\n- Orderkoncept Wizalan fungerade inte som avsett.\n- En grundläggande ändring i processordning föreslås: att välja kluster först, därefter kund.\n- Metadata-logiken är avgörande och kan väljas med ett eller flera metadata-fält.\n- Metadata kopplat till objekt kan användas för att skapa avancerade filter och urval baserat på villkor och operatorer (lika med, inte lika med, etc.).\n- Objektlogiken i orderkonceptet möjliggör specificering av order baserat på metadata, t.ex. ett kluster kopplat till en specifik kontaktperson.\n- Metadata-villkor kan användas för att förfina urval inom ett kluster, till exempel för att endast inkludera specifika typer av kärl.\n- Logiken med positiva eller negativa resultat baserat på metadata-villkor kan tillämpas på både kluster- och kundnivå.\n- Kund kan väljas antingen genom att hårdkoda en specifik kund för hela orderkonceptet eller dynamiskt med metadata-villkor (t.ex. \"om metadata är X, är det kund Y\").\n- Exempel med HSB-föreningar där en central order resulterar i fakturor per fastighet via en fakturabroms.\n- Metadatan i sig själv kan även innehålla kundnumret direkt för urval.\n- Systemet bör summera antalet träffar (objekt) i realtid när orderkonceptet byggs upp och förfinas med nya villkor.\n- Fakturalogiken är direkt kopplad till kundvalet och erbjuder olika alternativ för fakturering.\n- Fakturering kan ske direkt till den valda kunden (poppen) eller med en \"fakturabroms\" som skapar fakturor per distrikt men skickar till den valda kunden.\n- Leveranstider och leveransfönster hanterar datum och tid, från specifika timmar till perioder på månader eller år.\n- Tidslogiken inkluderar uppnådda och önskade tider, där metadata kan styra leveransdagar (t.ex. om tömning är torsdag, önskad leverans är fredag).\n- Önskade leveranstider kan specificeras med tidsintervall, t.ex. dagligen mellan 09:00 och 16:00.\n- Informationen om önskade leveranstider kommer att matas in i en tidsmotor för utvärdering och publicering.\n- Ett metadatafält för \"parkeringsförbud\" i katalogform kan användas för att definiera specifika leveransdagar (t.ex. tisdagar och torsdagar).\n- En artikellista ska skapas med artikelnummer, benämning och antal, baserat på den redan definierade antalslogiken.\n- Artikellistan styrs av metadata-logik för var artiklar ska \"fastna\" (tillämpas).\n- Systemet ska kontinuerligt summera antalet objekt som matchas baserat på de inmatade uppgifterna, och visa detta i högermarginalen.\n- Fakturering kan ske till fast pris eller vara löpande baserat på tid eller antal utförda tjänster. Den löpande faktureringen sker alltid efter utfört arbete.\n- En abonnemangsmodell planeras för orderkoncept som gäller under en definierad tidsperiod. Fakturering för abonnemang ska baseras på estimerat antal uppdrag per år, delat på tolv för månadsfakturering eller fyra för kvartalsfakturering, och genereras oavsett om jobbet är utfört eller inte.\n- Systemet har stöd för att hantera förändringar i månadsfakturering för abonnemang. I normalfallet justeras faktureringen automatiskt när antalet uppdrag ändras, men för vissa avtal kan en spärr användas för att kräva manuellt godkännande av ändringar vid specifika datum.\n- Metadata-familjer, som kontaktinformation eller platsdata (gatunummer), ska hanteras så att val av en \"förälder\" automatiskt inkluderar relaterade \"barn\"-objekt.\n- Vid import av grunddatastruktur kommer interimnummer att användas för objekt och deras metadata. Systemet skapar ett nytt objekt för varje interimnummer.\n- Om en interim-förälder hänvisas till inom samma importlista hanteras relationen automatiskt.\n- Möjligt att exportera en objektlista från ett kluster för att komplettera med metadata (t.ex. adress, kärltyper, kontaktpersoner) och sedan importera listan för att systemet ska känna igen och matcha uppdateringarna via de unika objektnumren.\n- Systemet ska kunna peka in uppdaterad metadata på rätt ställe i objekten och objektens metadatarister.\n- En metadatapost är alltid kopplad till ett objekt, och villkor i metadatafält kan påverka undervarande objekt.\n- En möjlighet att öppna upp enskilda objekt och manuellt uppdatera samt se metadata enligt befintlig mall är önskvärt vid import av uppgifter och skapande av objekt.\n- Filtret behöver en mer utvecklad form för val av utförande-typer.\n- Utförande-typer ska baseras på det befintliga registret, inte systemgenererade typer.\n- Logik för att välja enskilda eller flera utförande-typer behövs.\n- Vid rensning av filtret ska standardvärdet vara alla uppgifter.\n- Filtret smalnar av urvalet baserat på utförandetyp, geografi och tid.\n- Systemet ska möjliggöra export av listor för vidare analys i Excel för att få en överblick över totala volymer och fördelning per kund, månad eller team.\n\n### Open Questions/Pending Items\n- Detaljer kring metadata-logikens implementering och val av fält behöver förtydligas, trots de nya exemplen.\n- Ordningen mellan leveranstid och uppgifter i orderkonceptet bör granskas, även om det inte anses spela så stor roll i nuläget.\n- Vilken typ av mobil och säkerhetslösning som ska användas för att publicera jobben i sista steget.",
+  "conversation": [],
+  "transcripts": [
+    {
+      "text": "Äh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Ja, nu ska Mats, äh, kommentera Traviostatus och arkitekturbäckorapporten. Ja, till att börja med så kan vi konstatera att den här orderkoncept Wizalan inte riktigt blev som den är tänkt då. Äh, och vi har också konstaterat då att vi kanske får tänka på annorlunda sätt här. Äh, det, och det mest grundläggande som leder ut en hel del, det är att vi börjar i rätt ordning. Det för",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "sta är att vi väljer kluster.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och därefter väljer vi kund.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Prislista och så vidare. Det är det jag ska inte säga och så vidare då, men, eh, när vi har vän-- eh, valt så att säga vilket kluster vi ska titta på, så väljer vi sen då baserat på det vilken kund det är. Och här ska jag också då förtydliga det som redan finns i kravspecen är ju då att vi ska ha den här metadata-logiken och jag understryker den då, för den, den finns ju då både partikelnivå och den kan finnas i filter, eh, i planering och så vidare.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. Så det är den där bygget på att, att man väljer ett eller om man så önskar flera metadata-fält i det...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Objekt då som, som man tittar på eller de uppgifter då som är kopplade till det objektet. Där finns ju också metadata. Och sen så väljer man ett, eller sätter man upp ett villkor, det, alltså det, att det ska innehålla något särskilt, att det ska vara sant, att det ska vara skilt ifrån, att det ska vara lika med eller inte lika med. Och med den operatorn så, så, så kan vi ju då skapa ett fantastiskt bra både filter men också urval för, för...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Vad någonting ska bli då. Och när vi då i orderkonceptet använder då, eh, den här objektlogiken så blir det ju då att vi har en sån operator som säger då att vi vill till exempel nu bara titta på de cluster som är kopplat till en kontaktperson som heter Anna. Vi ska skapa en order för det. Eh, ja, då är då villkoret för, för, för klustrets...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "val då. Först så pekar vi på, först så pekar vi på, på, på ett kluster med massor med grenar, men sen så vill vi till exempel bara tvätta de blå kärlen eller annat där. Ja, då kan vi då ha en, ha en, en förfinad metod och där vi lägger upp villkoret då att träffar enbart ska ske under förutsättning att villkoret och fler, ett eller flera med metadatafälten är uppfyllda. Och att vi också då har en operator där som tillåter då att de är lika med eller skilt från och så vidare.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och att resultatet blir då antingen ett positivt resultat eller ett negativt resultat. Det vill säga, eh, vi ska peka in om de här är sanna eller vi ska peka in, inte peka in om de är sanna. Och, eh, samma logik går också då att använda, eh, när vi...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Eh, kommer på kundnivå. Så första steget är ju klustret. Vi tittar på den. Antingen så väljer vi allt eller så kan vi då förfina det här och så välja, välja, välja delar med den här grundlogiken med, med, med, eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Med, med, med ett antal operator då på det sättet. Sen väljer vi kund. Antingen hårdkodar vi för hela orderkonceptet in i en kund eller så sätter vi ett villkor i, med metadata då att, eh, om metadata är lika med det här så ska det vara den här kunden. Om metadata är lika med det här så ska det vara den här kunden. Alternativt att metadatan i sig själv innehåller då kundnumret då. Och...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Eftersom vi nu då väljer redan i första steget klustret då, så blir det ju väldigt bra då om den summerar då vartefter vi bygger den här då, vad vi får träff då. Mm. Så, så har vi, har vi först då i första steget pekat ut då att du, du, du tar en gren eller ett helt kluster med sextio objekt då. Ja, då vet vi ju då att det är sextio objekt. Lägger vi då in ett villkor som förfinar det här ytterligare, ja, då, då, då kanske du då är tjugo ob-ob-objekt kvar då. O",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "ch sen så går vi då in och, och definierar kunden, väljer vi då kund genom att vi väljer en kund. Ja, då är det ju en kund. Väljer vi en metadata-logik så kommer vi då få träff i objektet och så ser vi då att vi kanske får, eh, tio kunder då baserat på, på då det villkor som vi sätter upp. Eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Underkun här så kommer ju också som en, som ett brev på posten då fakturalogiken här då. Och, och, och där har vi ju då några olika alternativ då hur, hur fakturan då ska skickas. I det absolut enklaste fallet så skickas ju fakturan till poppen då, där det pekas in. Alternativt att man har den här fakturabromsen då, att det stannar upp då, eh, på nivå och det skapas alltså fakturor per, per distrikt, men det skickas ändå till den kund som jag valt. Och det mest komplicerade fallet då, eh,",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "då tar jag som ett exempel då, eh, HSB, eh, föreningar då. Då kommer det en order från HSB centralt, men däremot då så ska fakturorna bromsas. Så att det skapas alltså en faktura med ett kundnummer för varje, varje fastighet då. Mm. Och då lägger vi in då ett villkor och säger då att den ska, den ska, den ska hämta då, eh, antingen då ett kundnummer som vi får då lägga in i det här. Alternativt att vi gör ett villkor då och säger att är det...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Är det på det här sättet så ska du då gå till, till den här kunden där vi har ett hårdkodat kundnummer då eller ett dynamiskt kundnummer. Jag vet inte om det där gick fram, men vi kan väl ha början till det. Sen kommer nästa steg då och det är då det här med leveranstider. Så, så först var vi ska jobba, vem som ska betala och sen kommer nästa steg då, eh, när det här ska levereras då. Och, eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Den har vi då gått igenom i ett annan form och den är ju då lite komplicerad, men det, i grunden så är det ju ett leveransfönster då med, med datum och tid och ett slutdatum med tid. Och då vet vi ju liksom att under den här perioden så, så önskade levera-önskas det leverans och det här kan ju också smalas ner liksom till att det bara blir klockan nio imorgon om det är ett akut jobb då. Eller två månader nästa år 2027. Systemet hanterar det lika så. Eh, sen i den här tidslogiken så har vi då det här med...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Uppnångtagna och önskade tider då. Och där kommer också då den här metadatalogiken in då. Så att om det finns ett metadatafält där det-- Som skulle till exempel kunna he-heta då, eh, tömning, to-torsdagar. Mm. Eh, då kan vi alltså utnyttja det metadatafältet i, i en operator där vi säger, eh: \"Om metadatafält tömning är lika med torsdag, då är önskad leveransdag fredag.\" Mm.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och vad må-- Och, och då skriver vi-- Väljer vi fredag manuellt. Men den måste också kunna hantera då att om kunden då har sagt så här att, eh, eh, låt oss säga att vi har en butik som önskar leverans mellan klockan nio och senast klockan, eh, sexton dagligen. Då är det önskad leveranstid. Då, eh, väljer vi då önskad leveranstid.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och då vill vi ju då publicera då dagligen nio till sexton. Mm. Och då, då hämtar vi ju då in den informationen till den här, eh, för den här tidsmotorn då i uppgiften som vi måste utveckla och som får utvärdera det här då. Och, eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Vi kan också ha andra fall då och säga att vi har då parkeringsförbud. Vi har ett metadatafält som heter parkeringsförbud och den är då dessutom av katalogform så att det är parkeringsförbud på tisdagar och på torsdagar. Då ska vi då kunna lägga in då villkoret för en positiv tid att vi vill gärna vara där tisdagar och torsdagar. Sen så blir det ju till senare skede, eh, att vi får ut-- Be systemet att utveckla den här tidsmotorn då som liksom tidsåtgärder.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Sen kommer vi då till, eh, steget och jag sitter och tänker på då vad som är bäst om, om leveranstiden är före uppgifterna eller om uppgifterna ska komma först och sen leveranstiden. Jag tror i det här fallet så spelar det inte så väldigt stor roll. Eh, förmodligen så har kunden önskat en leveranstid i, i början utav åren så att säga. Men vi kommer då till nästa steg då där vi gör den här artikellistan. Och artikellistan vill jag ska då bestå utav artikelnummer, artikel, eh, benämning och antal.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Utifrån den antalslogik som vi har angett tidigare då.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och i det här fallet då så är det bara att lägga dit artiklar för metadatalogiken var artiklarna ska fastna fram finns ju då i artikeln. Och ytterligare då en grej, det som händer här nu när vi, när vi, vartefter vi matar in uppgifter här då, så först får vi ju träff på sextio objekt. Sen så, så får vi då kunden och då, och då är det ju bra att den alltså i högermarginalen som den redan har i systemet summerar hela tiden var den får träff-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. För att nu avslutningsvis då komma till, till då, eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Artikellistan då, där det ändå kommer om, om, om det är rätt valda artiklar och om metadatan är rätt och så kommer ju det ändå att haka fast på, på, på rätt sätt om man nu vill det. Sen ska man ju vara medveten om man, man kan ju också välja att ha en artikel som inte har någon fasthakningslogik. Man kan ju skapa ett sånt orderkoncept också. Mm. Och då kommer det ju liksom att, att bli, oavsett om det, det, det, det, det finns någonting att haka fast på eller inte. Eh, en grej också som jag glömde i tidslogiken-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm ...men som är väldigt avancerad, det är ju då att vi, ja, vi har också faktureringsmodellen där och det kommer väl också på kundnivån om det är då bra två eller, eh, sidatvåor. Men det, men det är ju om det ska faktureras till ett fast pris eller om det ska faktureras på löpande tid. Eh, det, eh, det vill säga efter fakturering då utifrån den tid som, som det blev på jobbet eller det antalet tjänster som utfördes då. Och den logiken finns ju redan. Och så har vi då, eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Eh, löpande blir ju alltid efter fakturering. Och sen har vi den som är i min värld mest kanske då komplicerad och det är ju då det som vi kallar abonnemang då. Där vi då talar om att det här är ett, eh, ett orderkoncept som ska gälla under... Det ska starta den första juni 2026 och avslutas, eh, den första juni 2030 säger vi då. Och vi väljer då att det här är...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Ja.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Ett, ett, ett jobb som ska löpa med antingen fasta tidsfönster eller med återkommande periodicitet och leverans var sextionde dag till exempel då, det vill säga varannan månad. Och sen så väljer vi då att det här ska vara då med en fast månadsfakturering då. Och då ska den ju med samma faktureringslogik som vi har satt upp då, så ska den ju då istället för att skapa fakturan när jobbet är gjort, det-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Ja. Det vill säga, efter fakturering då, så ska den istället för att skapa fakturan estimerat på antalet då och antalet uppdrag per år då, delat då i tolv för månadsfakturering eller delat i fyra då för kvartalsfakturering då. Och då ska den ju alltså skapa fakturan oavsett om jobbet är gjort eller inte. Och den ska basera det på de inneliggande jobbens antal då och-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Ja.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och där är det också viktigt, och det finns ju systemstöd för det då, att man har en, en, en broms eller förändring då, så att- Mm ...i normalläget så ändrar den ju månadsfaktureringen så fort den får reda på att antalet har ändrats. Mm. Men i vissa avtal då så ändrar man inte på det där hela tiden då, utan då har vi en, en spärr då så att man, man får, får så att säga manuellt släppa på, på den- Mm ...vid visst datum då, så att det...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Okej. Ja, det, det var då orderkonceptet. Artiklar här har jag ingenting att säga om. Eh, det verkar väl vara bra. Metadata är, är, är helt okej. Så där som att jag vill tydliggöra då att det här metadatafälten som vi kallar familjer då, eh, att den, den... Systemet förstår hur det fungerar och så. Du har alltså kontakt, kontaktnamn, kontakttitel, kontakt, eh, telefon och att...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Dom, dom är en familj då och åberopar man då modern där då, då, då ska man ju få så att säga barnen med på köpet då. Så, så väljer man att man ska f-fylla i kontakt så kommer allt. Och samma sak gäller ju plats då. Eh, gatunummer och, och så, så vidare. Och det, det, det kan bli samma logik också. Om man gör en kontroll då, så kontroll, lyftorgan och så blir det då krok. Eh, fast länkar, länkage och så vidare då som kommer in på samma. Eh, sen har vi då den här importen.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och visa den då. Och återigen, här vill jag bara förtydliga då att, eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Det här avser ju då import utav grunden i systemet, det vill säga objekten och objektens metadata. Den här behöver inte krånglas till på något vis, utan med den här logiken som vi har tagit fram, de här interimnummer och interimnummersföränder, får systemet en lista med interimnummer. Då är det detsamma för systemet att den skapar ett nytt objekt. Punkt. Slut. Det är bara på det sättet. Ja, ja. Eh, och om den i samma lista hänvisar då till en interimföränder, ja, då-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm ...finns ju föräldern på samma lista och då hanterar den utifrån det. Det andra alternativet då, det är ju då att...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Vi kan skapa en lista med systemnumrena. Och den listan får vi ju då ifrån att vi tankar-- Vi, vi exporterar en objektlista, eh, i ett kluster då. Här måste man ju då kunna välja så man inte nödvändigtvis exporterar allt då. Men vi exporterar en lista då över ett visst antal objekt, till exempel butiker. Och då kommer det ju att stå där, eh, Trivo, eh, objekt-- Unikt objektnummer, eh-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. Ett, två, tre, fyra säger vi för exemplet. Och så står det butik si och så då. Och det vi gör då på den här, det är ju att vi tar den här listan och så har vi då fått, eh, till exempel en uppdatering med butikens adress eller butikens kärntyper eller kontaktpersoner. Och då lägger vi ju bara in den metadatan, eh, jämte så att säga då bredvid då det systemgenererade objektnumret. Och då kommer ju den då, om vi tar en sådan lista, så kommer ju då systemet då i matchnings-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. -koden då att kunna peka in den här uppdaterade datan eller kompletterande datan på rätt ställe i objekten och objektens, observera nu, metadatarister då. Mm. Så att det är register som innehåller all denna metadatan som då är kopplade till...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Objekt. Ett metadatafält är alltid kopplat till ett objekt. Eh, eller felar mig, ett metadatafält, men en metadatapost är alltid kopplad till ett objekt. Sen kan villkoret i metadatafältet, det berörda metadatafältet, innehålla parametrar så att det ska falla neråt.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. Och då får-- Kommer det också till-- Kommer det då till livs för, för undervarande objekt. Men hur som helst, krångla inte till den här importwhissaren, utan det är bara den där filen. Och, eh, sen så har vi då, eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Har ett sånt objekt och struktur, eh, driftsat ett cy-cykelskydd som förhindrar att det hopar. Jag har ingen aning om vad det är, men det enda som jag vill säga då till, till, till, eh, komplement till den här, eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Datapils wizarden för, för import av uppgifter och skapande utav objekt är ju då att det ska finnas en möjlighet då där man kan öppna upp enskilda objekt då och manuellt uppdatera och, och se metadata då enligt den mall som vi har- Mm. Lagt in, men vi har inte riktigt något ändra fram. Eh, sen så har vi då planeringen då och den ser ju riktigt bra ut och då pratar jag i första hand om grovplaneringen här då. Eh, den ser riktigt, riktigt bra ut, men jag skriver filtret här då.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Filtret behöver, eh, justeras. Bland annat då så, så behöver vi ha en mer utvecklad form då där vi, där vi väljer vilka utförandetyper det är. För nu, nu är de utförandetyperna inte baserade på det här utförandetypsregistret som vi har, utan det är något som systemet själv har genererat då. Och sen så bör det ju då vara en logik där man då kan välja enskilda utförandetyper eller flera då och få med i den här listan. En annan viktig bit då är att-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm ...när du rensar filtret, då måste defaultvärde vara att du har alla uppgifter. Ja, just det. Och sen så är mindsetet då med filtret här då att du smalnar av det hära. Du smalnar av det på utförandetyp, du smalnar av det på, på, på, på, eh, geografi, du smalnar av det på tids-, eh, tids-, eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "period då. För att sen då, det hela handlar hela tiden om att tratta ner det, det hela, få en helhetsgrepp över hur mycket det är totalt sett. Eh, naturligtvis så behöver den här listan också kunna exporteras då för att man ska kunna inledningsvis analysera den då i Excel och till exempel ta ut, eh, köra pivottabeller och göra summeringar för hur, hur mycket en viss kund, eh, har att göra en, en viss, eh, en viss månad eller ett visst team har att göra en viss, viss månad och så vidare och vad. Men, men grunden-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm ...den är då att alla jobben finns där, man trattar ner dem, man lägger över dem veckobobist i den så kallade finplaneringen då. Och i finplaneringen då så l-l-- gör man det ännu mer detaljerat och lägger ut då jobben per dag med rutt-och optimering då. Och sista punkten här är då mobil och, och säkerhet. Det blandar jag mig inte i, utan- ...det får vi då se till i, i sista steget här nu att vi kan publicera de här jobben i...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    }
+  ]
+}

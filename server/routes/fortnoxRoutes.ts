@@ -7,7 +7,12 @@ import { formatZodError, verifyTenantOwnership, DEFAULT_TENANT_ID, ensureResourc
 import { getTenantIdWithFallback } from "../tenant-middleware";
 import { asyncHandler } from "../asyncHandler";
 import { NotFoundError, ValidationError, ForbiddenError, describeFortnoxMappingConflict } from "../errors";
-import { objects, workOrders, articles, customers, fortnoxMappings, objectContacts, importBatches, objectMetadata, metadataDefinitions, assignments, type InsertWorkOrder, type ServiceObject } from "@shared/schema";
+import { objects, workOrders, articles, customers, fortnoxMappings, objectContacts, importBatches, objectMetadata, metadataDefinitions, assignments, type InsertWorkOrder, type ServiceObject, type Assignment } from "@shared/schema";
+import {
+  shouldSplitForStockPickup,
+  resolveStockLocation,
+  computePickupDate,
+} from "../services/logistics-task-expansion";
 import { getISOWeek, getDateFromWeekdayInMonth } from "./helpers";
 import { buildScheduleDateTargets } from "../services/order-concept-schedule";
 import { getOrderConceptMethod } from "@shared/order-concept-method";
@@ -61,6 +66,48 @@ function buildHitSummaryText(hits: ConceptArticleHits | null): string {
   return `${hits.hitCount} av ${hits.inpekadeCount} inpekade objekt${missLabel}`;
 }
 
+// Task #989: skapa hämt-uppgiften (assignment) för en varuartikel med lagerplats.
+// Hämtuppgiften ligger på lagerplatsens koordinater och schemaläggs FÖRE
+// leveransuppgiften (ledtid via artikelns dependencyMinutesBefore). Den bär INGEN
+// artikelrad/pris — värdet stannar på leveransuppgiften så fakturering aldrig
+// dubbelräknas. Leveransuppgiften länkas tillbaka via parentAssignmentId.
+async function createStockPickupAssignment(opts: {
+  tenantId: string;
+  concept: any;
+  obj: { id: string; clusterId?: string | null };
+  linkedArticle: any;
+  deliverDate: Date | null | undefined;
+  customerId: string | null;
+  quantity: number;
+  userId: string | undefined;
+}): Promise<Assignment> {
+  const { tenantId, concept, obj, linkedArticle, deliverDate, customerId, quantity, userId } = opts;
+  const stock = resolveStockLocation(linkedArticle);
+  const pickupDate = computePickupDate(deliverDate, linkedArticle);
+  return storage.createAssignment({
+    tenantId,
+    orderConceptId: concept.id,
+    objectId: obj.id,
+    customerId: customerId ?? undefined,
+    clusterId: obj.clusterId || undefined,
+    title: `Hämta: ${linkedArticle.name}`,
+    description: stock.address ? `Hämtas på lagerplats: ${stock.address}` : undefined,
+    status: "not_planned",
+    priority: concept.priority || "normal",
+    scheduledDate: pickupDate,
+    quantity,
+    address: stock.address || undefined,
+    latitude: stock.latitude ?? undefined,
+    longitude: stock.longitude ?? undefined,
+    creationMethod: "automatic",
+    createdBy: userId,
+    estimatedDuration: linkedArticle.productionTime || 30,
+    cachedValue: 0,
+    cachedCost: 0,
+    logisticsRole: "pickup",
+  });
+}
+
 async function generateScheduleAssignments(opts: {
   concept: any;
   tenantId: string;
@@ -109,10 +156,17 @@ async function generateScheduleAssignments(opts: {
     return Number.isNaN(dd.getTime()) ? "" : dd.toISOString().split("T")[0];
   };
   const existing = await db
-    .select({ objectId: assignments.objectId, scheduledDate: assignments.scheduledDate })
+    .select({ objectId: assignments.objectId, scheduledDate: assignments.scheduledDate, logisticsRole: assignments.logisticsRole })
     .from(assignments)
     .where(and(eq(assignments.tenantId, tenantId), eq(assignments.orderConceptId, concept.id)));
-  const seenKeys = new Set(existing.map((e) => `${e.objectId}|${dateKey(e.scheduledDate as any)}`));
+  // Task #989: hämt-uppgifter (logisticsRole='pickup') ligger på lagerplatsens datum
+  // (leverans − ledtid) och får aldrig förgifta idempotens-nycklarna — annars skulle en
+  // hämtdatum-kollision felaktigt hoppa över en legitim leveransuppgift.
+  const seenKeys = new Set(
+    existing
+      .filter((e) => e.logisticsRole !== "pickup")
+      .map((e) => `${e.objectId}|${dateKey(e.scheduledDate as any)}`),
+  );
 
   const created: any[] = [];
   let skipped = 0;
@@ -160,6 +214,25 @@ async function generateScheduleAssignments(opts: {
       const unitPriceForArticle =
         isFixedPriceConcept(concept) && quantity > 0 ? Math.round(totalValue / quantity) : objPrice.price;
 
+      // Task #989: varuartikel med lagerplats ⇒ skapa hämt-uppgiften (lagerplats,
+      // före leverans) först och länka leveransuppgiften tillbaka till den.
+      const splitForStock = shouldSplitForStockPickup(linkedArticle);
+      let pickupAssignmentId: string | undefined;
+      if (splitForStock) {
+        const pickup = await createStockPickupAssignment({
+          tenantId,
+          concept,
+          obj,
+          linkedArticle,
+          deliverDate: t.date,
+          customerId: effectiveCustomerId,
+          quantity,
+          userId,
+        });
+        pickupAssignmentId = pickup.id;
+        created.push(pickup);
+      }
+
       const assignment = await storage.createAssignment({
         tenantId,
         orderConceptId: concept.id,
@@ -182,6 +255,8 @@ async function generateScheduleAssignments(opts: {
         estimatedDuration,
         cachedValue: totalValue,
         cachedCost: totalCost,
+        logisticsRole: splitForStock ? "deliver" : undefined,
+        parentAssignmentId: pickupAssignmentId,
       });
 
       if (linkedArticle && linkedArticleId) {
@@ -1333,7 +1408,12 @@ app.post("/api/work-orders/:workOrderId/generate-pickup-tasks", asyncHandler(asy
     for (const line of lines) {
       if (!line.articleId) continue;
       const article = await storage.getArticle(line.articleId);
-      if (!article || article.articleType !== "beroende") continue;
+      if (!article) continue;
+      // Task #989: generaliserat — utöver beroendeartiklar genererar nu även
+      // varuartiklar med lagerplats en plockuppgift (hämta@lager före leverans).
+      const isBeroende = article.articleType === "beroende";
+      const isStockVara = shouldSplitForStockPickup(article);
+      if (!isBeroende && !isStockVara) continue;
 
       const minutesBefore = article.dependencyMinutesBefore || 120;
       let pickupDate: Date | null = null;
@@ -1380,6 +1460,7 @@ app.post("/api/work-orders/:workOrderId/generate-pickup-tasks", asyncHandler(asy
         executionCode: mainWorkOrder.executionCode || undefined,
         taskLatitude: article.stockLatitude || undefined,
         taskLongitude: article.stockLongitude || undefined,
+        logisticsRole: "pickup",
       });
 
       await storage.createTaskDependency({
@@ -2409,6 +2490,25 @@ app.post("/api/order-concepts/:id/execute", asyncHandler(async (req, res) => {
         }
       }
 
+      // Task #989: varuartikel med lagerplats ⇒ skapa hämt-uppgiften (lagerplats,
+      // schemalagd före leverans) först, länka sedan leveransuppgiften till den.
+      const splitForStock = shouldSplitForStockPickup(linkedArticle);
+      let pickupAssignmentId: string | undefined;
+      if (splitForStock) {
+        const pickup = await createStockPickupAssignment({
+          tenantId,
+          concept,
+          obj,
+          linkedArticle,
+          deliverDate: effectiveScheduledDate,
+          customerId: effectiveCustomerId,
+          quantity,
+          userId,
+        });
+        pickupAssignmentId = pickup.id;
+        createdAssignments.push(pickup);
+      }
+
       const assignment = await storage.createAssignment({
         tenantId,
         orderConceptId: concept.id,
@@ -2430,7 +2530,9 @@ app.post("/api/order-concepts/:id/execute", asyncHandler(async (req, res) => {
         createdBy: userId,
         estimatedDuration,
         cachedValue: totalValue,
-        cachedCost: totalCost
+        cachedCost: totalCost,
+        logisticsRole: splitForStock ? "deliver" : undefined,
+        parentAssignmentId: pickupAssignmentId,
       });
 
       // If an article is linked, create assignment article (kund-pris via resolveArticlePrice).

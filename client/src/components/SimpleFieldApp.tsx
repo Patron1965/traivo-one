@@ -769,6 +769,8 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
     quantityUnit: string;
     quantityMode: string | null;
     hideQuantityInApp: boolean;
+    shouldBeReturned?: boolean;
+    hasStockLocation?: boolean;
   }
 
   const [metadataUpdates, setMetadataUpdates] = useState<Record<string, { value: string; status?: string; comment?: string; photo?: string }>>({});
@@ -805,6 +807,32 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
       setSavingMetadata(null);
     }
   }, [selectedJobId, mobileApiCall, toast]);
+
+  // Task #989: markera artikel "ej utlämnad / ska återtas" ⇒ skapa retur-uppgift till lager.
+  const returnToWarehouseMutation = useMutation({
+    mutationFn: async ({ articleId }: { articleId: string }) => {
+      if (!selectedJobId) throw new Error("Ingen uppgift vald");
+      const res = await mobileApiCall("POST", `/api/mobile/orders/${selectedJobId}/return-to-warehouse`, { articleId });
+      return res.json() as Promise<{ created?: boolean; alreadyExists?: boolean; articleName?: string; stockLocation?: string | null }>;
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/work-orders"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/mobile/tasks", selectedJobId, "metadata-context"] });
+      toast({
+        title: data?.alreadyExists ? "Återtag redan registrerat" : "Återtag skapat",
+        description: data?.articleName
+          ? `${data.articleName} ska återtas till lager${data.stockLocation ? ` (${data.stockLocation})` : ""}`
+          : "Retur-uppgift skapad",
+      });
+    },
+    onError: (error) => {
+      toast({
+        title: "Kunde inte skapa återtag",
+        description: error instanceof Error ? error.message : "Försök igen",
+        variant: "destructive",
+      });
+    },
+  });
 
   const completeJobMutation = useMutation({
     mutationFn: async ({ id, signaturePath }: { id: string; signaturePath?: string }) => {
@@ -1799,23 +1827,49 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
                   {metadataContext.orderArticles.map(oa => (
                     <div
                       key={oa.lineId}
-                      className="flex items-center justify-between gap-2 rounded border bg-card dark:bg-background p-2"
+                      className="rounded border bg-card dark:bg-background p-2 space-y-2"
                       data-testid={`row-order-article-${oa.articleId}`}
                     >
-                      <div className="min-w-0">
-                        <p className="text-sm font-medium truncate">{oa.articleName}</p>
-                        {oa.articleNumber && (
-                          <p className="text-[11px] text-muted-foreground truncate">{oa.articleNumber}</p>
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <p className="text-sm font-medium truncate">{oa.articleName}</p>
+                            {oa.shouldBeReturned && (
+                              <Badge
+                                variant="outline"
+                                className="text-[10px] border-warning text-warning shrink-0"
+                                data-testid={`badge-should-return-${oa.articleId}`}
+                              >
+                                Ska återtas
+                              </Badge>
+                            )}
+                          </div>
+                          {oa.articleNumber && (
+                            <p className="text-[11px] text-muted-foreground truncate">{oa.articleNumber}</p>
+                          )}
+                        </div>
+                        {oa.hideQuantityInApp ? (
+                          <span className="shrink-0 text-xs text-muted-foreground" data-testid={`text-quantity-auto-${oa.articleId}`}>
+                            Fast antal
+                          </span>
+                        ) : (
+                          <span className="shrink-0 text-sm font-semibold tabular-nums" data-testid={`text-quantity-${oa.articleId}`}>
+                            {oa.quantity} {oa.quantityUnit}
+                          </span>
                         )}
                       </div>
-                      {oa.hideQuantityInApp ? (
-                        <span className="shrink-0 text-xs text-muted-foreground" data-testid={`text-quantity-auto-${oa.articleId}`}>
-                          Fast antal
-                        </span>
-                      ) : (
-                        <span className="shrink-0 text-sm font-semibold tabular-nums" data-testid={`text-quantity-${oa.articleId}`}>
-                          {oa.quantity} {oa.quantityUnit}
-                        </span>
+                      {oa.shouldBeReturned && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="w-full h-8 text-xs"
+                          disabled={!oa.hasStockLocation || returnToWarehouseMutation.isPending}
+                          onClick={() => returnToWarehouseMutation.mutate({ articleId: oa.articleId })}
+                          data-testid={`button-return-warehouse-${oa.articleId}`}
+                        >
+                          <Warehouse className="h-3.5 w-3.5 mr-1.5" />
+                          {oa.hasStockLocation ? "Återta till lager" : "Saknar lagerplats"}
+                        </Button>
                       )}
                     </div>
                   ))}

@@ -14,6 +14,8 @@ import type { Express } from "express";
   } from "./shared";
   import type { WorkOrder } from "./shared";
   import type { Response } from "express";
+  import { taskDependencies } from "@shared/schema";
+  import { articleHasStockLocation, resolveStockLocation } from "../../services/logistics-task-expansion";
 
   // Löser effektiv produktionstid (minuter) ur redan hämtade listrader.
   // Prioritet: resurs-specifik (giltig) → generisk lista (giltig) → artikelns
@@ -540,6 +542,135 @@ app.patch("/api/mobile/orders/:id/status", isMobileAuthenticated, asyncHandler(a
       message: `${updatedOrder.title || orderId} — status: ${status}`,
       orderId,
       data: { status, executionStatus: updateData.executionStatus }
+    });
+}));
+
+// Task #989: fältmarkering "ej utlämnad / ska återtas" ⇒ skapa retur-uppgift till lager.
+// Returuppgiften ligger på artikelns lagerplats och beror på källordern (återtag sker
+// EFTER leveransen). Mobil-ytan kringgår tenant-middleware — härled tenant ur ordern,
+// läs aldrig req.tenantId. Idempotent per (källorder, artikel).
+const returnToWarehouseSchema = z.object({
+  articleId: z.string().optional(),
+  reason: z.string().optional(),
+});
+app.post("/api/mobile/orders/:id/return-to-warehouse", isMobileAuthenticated, asyncHandler(async (req: MobileAuthenticatedRequest, res: Response) => {
+    const orderId = req.params.id;
+    const resourceId = req.mobileResourceId;
+
+    const parsed = returnToWarehouseSchema.safeParse(req.body ?? {});
+    if (!parsed.success) {
+      throw new ValidationError(formatZodError(parsed.error));
+    }
+    const { articleId: bodyArticleId, reason } = parsed.data;
+
+    const order = await storage.getWorkOrder(orderId);
+    if (!order) throw new NotFoundError("Order hittades inte");
+    if (order.resourceId !== resourceId) throw new ForbiddenError("Ej behörig");
+
+    const tenantId = order.tenantId;
+    if (!tenantId) throw new ForbiddenError("Order saknar tenant");
+    // Defense-in-depth: bär mobil-token en tenant måste den matcha orderns tenant.
+    if (req.mobileTenantId && req.mobileTenantId !== tenantId) {
+      throw new ForbiddenError("Ej behörig");
+    }
+
+    // Hitta returnerbar artikel: explicit articleId (måste finnas på orderns rader)
+    // annars första raden vars artikel är märkt shouldBeReturned.
+    const lines = await storage.getWorkOrderLines(orderId);
+    const lineArticleIds = new Set(
+      lines.map((l) => l.articleId).filter((v): v is string => !!v),
+    );
+
+    let articleId: string | null = null;
+    if (bodyArticleId) {
+      if (!lineArticleIds.has(bodyArticleId)) {
+        throw new ValidationError("Artikeln finns inte på denna order");
+      }
+      articleId = bodyArticleId;
+    } else {
+      for (const l of lines) {
+        if (!l.articleId) continue;
+        const a = await storage.getArticle(l.articleId);
+        if (a && a.shouldBeReturned) {
+          articleId = l.articleId;
+          break;
+        }
+      }
+    }
+    if (!articleId) {
+      throw new ValidationError("Ingen returnerbar artikel hittades på ordern");
+    }
+
+    const article = await storage.getArticle(articleId);
+    if (!article || article.tenantId !== tenantId) {
+      throw new NotFoundError("Artikel hittades inte");
+    }
+    if (!articleHasStockLocation(article)) {
+      throw new ValidationError("Artikeln saknar lagerplats och kan inte återtas till lager");
+    }
+
+    // Idempotens: en retur-WO per (källorder, artikel). Återanrop returnerar den
+    // befintliga utan dubblett (matchar via task_dependency.structuralArticleId).
+    const existing = await db
+      .select({ id: workOrders.id })
+      .from(workOrders)
+      .innerJoin(taskDependencies, eq(taskDependencies.workOrderId, workOrders.id))
+      .where(and(
+        eq(workOrders.tenantId, tenantId),
+        eq(workOrders.parentWorkOrderId, order.id),
+        eq(workOrders.logisticsRole, "return"),
+        eq(taskDependencies.structuralArticleId, articleId),
+      ))
+      .limit(1);
+    if (existing.length > 0) {
+      if (!order.returnToWarehouse) {
+        await storage.updateWorkOrder(orderId, { returnToWarehouse: true });
+      }
+      return res.json({ created: false, alreadyExists: true, returnWorkOrderId: existing[0].id });
+    }
+
+    const stock = resolveStockLocation(article);
+    const returnWorkOrder = await storage.createWorkOrder({
+      tenantId,
+      customerId: order.customerId,
+      objectId: order.objectId,
+      resourceId: order.resourceId,
+      title: `Återta: ${article.name}`,
+      description: `Återtag till lager${stock.address ? `: ${stock.address}` : ""}.${reason ? ` Orsak: ${reason}` : ""}`,
+      orderType: "service",
+      priority: order.priority,
+      status: "draft",
+      orderStatus: order.resourceId ? "planerad_pre" : "skapad",
+      executionStatus: "not_planned",
+      creationMethod: "automatic",
+      executionCode: order.executionCode || undefined,
+      taskLatitude: article.stockLatitude || undefined,
+      taskLongitude: article.stockLongitude || undefined,
+      logisticsRole: "return",
+      parentWorkOrderId: order.id,
+    });
+
+    // Beroende: returen sker EFTER källordern (deliver). work_orders-lagret är enda
+    // sanningen för beroenden — länka aldrig över till assignments-tabellen.
+    await storage.createTaskDependency({
+      tenantId,
+      workOrderId: returnWorkOrder.id,
+      dependsOnWorkOrderId: order.id,
+      dependencyType: "automatic",
+      structuralArticleId: articleId,
+    });
+
+    // Markör på källordern så fältappen visar "ska återtas".
+    await storage.updateWorkOrder(orderId, { returnToWarehouse: true });
+
+    console.log(`[mobile] Return-to-warehouse WO ${returnWorkOrder.id} skapad för order ${orderId} (artikel ${articleId}) av resurs ${resourceId}`);
+
+    res.json({
+      created: true,
+      returnWorkOrderId: returnWorkOrder.id,
+      articleId,
+      articleName: article.name,
+      stockLocation: article.stockLocation,
     });
 }));
 

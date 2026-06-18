@@ -820,6 +820,10 @@ app.get("/api/mobile/tasks/:id/metadata-context", isMobileAuthenticated, asyncHa
           quantityUnit: a?.quantityUnit || a?.unit || "st",
           quantityMode: a?.quantityMode ?? null,
           hideQuantityInApp: a?.hideQuantityInApp ?? false,
+          // Task #989: markör för fältappen ("ska återtas") + om artikeln kan ruttas
+          // tillbaka till lager (kräver lagerplats med koordinater).
+          shouldBeReturned: a?.shouldBeReturned ?? false,
+          hasStockLocation: !!(a?.stockLocation && a?.stockLatitude != null && a?.stockLongitude != null),
         };
       });
 

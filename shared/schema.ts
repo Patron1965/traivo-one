@@ -435,6 +435,13 @@ export const workOrders = pgTable("work_orders", {
   dependencyAcknowledgedAt: timestamp("dependency_acknowledged_at"),
   dependencyAcknowledgedBy: varchar("dependency_acknowledged_by"),
   dependencyCriticality: text("dependency_criticality"),
+  // Task #989: Logistik-roll på arbetsordern. NULL = vanlig uppgift (oförändrat beteende).
+  // "pickup" = hämta på lagerplats, "deliver" = leverera på objekt, "return" = retur till lager.
+  // Driver fältappens markeringar och retur-/hämtkedjor (parentWorkOrderId + task_dependencies).
+  logisticsRole: text("logistics_role"),
+  // Task #989: Fältmarkering "ej utlämnad / ska återtas". Sätts av operatören i fält och
+  // triggar skapandet av en retur-uppgift tillbaka till artikelns lagerplats. Default false.
+  returnToWarehouse: boolean("return_to_warehouse").default(false),
   // === ADR v3 (F5): Frozen snapshot vid expansion (immutabelt efter sättning) ===
   // Används för per-task-fakturering och retroaktiv omräkning vid metadata-ändring.
   // Befintliga 3 750 WO behåller NULL — fakturas via cachedValue/work_order_lines som idag.
@@ -3173,6 +3180,13 @@ export const assignments = pgTable("assignments", {
   dependencyCriticality: text("dependency_criticality"),
   dependencyAcknowledgedAt: timestamp("dependency_acknowledged_at"),
   dependencyAcknowledgedBy: varchar("dependency_acknowledged_by"),
+  // Task #989: Logistik-roll på uppgiften. NULL = vanlig uppgift (oförändrat beteende).
+  // "pickup" = hämta på lagerplats, "deliver" = leverera på objekt. Vid orderkoncept-expansion
+  // delas en varuartikel med lagerplats i en hämt- + en leverans-uppgift (hämta före leverera).
+  logisticsRole: text("logistics_role"),
+  // Task #989: Länk från leverans-uppgiften till dess hämt-uppgift (hämta måste ske före
+  // leverera). Mjuk länk: om hämt-uppgiften raderas blir fältet null (set null), inte cascade.
+  parentAssignmentId: varchar("parent_assignment_id").references((): any => assignments.id, { onDelete: "set null" }),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   deletedAt: timestamp("deleted_at"),
 }, (table) => [
@@ -3186,6 +3200,7 @@ export const assignments = pgTable("assignments", {
   index("idx_assignments_tenant_scheduled").on(table.tenantId, table.scheduledDate),
   index("idx_assignments_tenant_resource_date").on(table.tenantId, table.resourceId, table.scheduledDate),
   index("idx_assignments_tenant_deleted").on(table.tenantId, table.deletedAt),
+  index("idx_assignments_parent_assignment").on(table.parentAssignmentId),
 ]);
 
 export const insertAssignmentSchema = createInsertSchema(assignments).omit({
