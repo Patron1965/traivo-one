@@ -210,7 +210,7 @@ describe("ObjectTemplateMetadataForm — spara (POST vs PUT)", () => {
     expect((screen.getByTestId("button-template-save-a") as HTMLButtonElement).disabled).toBe(false);
   });
 
-  it("renderar ingen redigerbar input för ärvda värden men erbjuder override-knapp", () => {
+  it("renderar en redigerbar input för ärvda värden med override-knapp (ej Spara)", () => {
     renderForm({
       fieldIds: ["a"],
       types: [type({ id: "a", namn: "Alpha" })],
@@ -218,9 +218,61 @@ describe("ObjectTemplateMetadataForm — spara (POST vs PUT)", () => {
         entry({ id: "e1", metadataKatalogId: "a", source: "inherited", vardeString: "ärvt", inheritedFromName: "Förälder AB" }),
       ],
     });
-    expect(screen.queryByTestId("input-template-value-a")).toBeNull();
+    const input = screen.getByTestId("input-template-value-a") as HTMLInputElement;
+    expect(input).toBeTruthy();
+    // Inmatningsrutan startar tom; det ärvda värdet visas som placeholder.
+    expect(input.value).toBe("");
+    expect(input.placeholder).toContain("ärvt");
     expect(screen.queryByTestId("button-template-save-a")).toBeNull();
     expect(screen.getByTestId("button-template-override-a")).toBeTruthy();
+  });
+
+  it("håller override-knappen inaktiverad tills ett värde fyllts i", () => {
+    renderForm({
+      fieldIds: ["a"],
+      types: [type({ id: "a", namn: "Alpha" })],
+      entries: [
+        entry({ id: "e1", metadataKatalogId: "a", source: "inherited", vardeString: "ärvt", inheritedFromName: "Förälder AB" }),
+      ],
+    });
+    const overrideBtn = screen.getByTestId("button-template-override-a") as HTMLButtonElement;
+    expect(overrideBtn.disabled).toBe(true);
+    fireEvent.change(screen.getByTestId("input-template-value-a"), { target: { value: "eget" } });
+    expect((screen.getByTestId("button-template-override-a") as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it("anropar onAdd med ifyllt värde när ett ärvt fält överskuggas", () => {
+    const onAdd = vi.fn();
+    const onUpdate = vi.fn();
+    renderForm({
+      fieldIds: ["a"],
+      types: [type({ id: "a", namn: "Alpha" })],
+      entries: [
+        entry({ id: "e1", metadataKatalogId: "a", source: "inherited", vardeString: "ärvt", inheritedFromName: "Förälder AB" }),
+      ],
+      onAdd,
+      onUpdate,
+    });
+    fireEvent.change(screen.getByTestId("input-template-value-a"), { target: { value: "eget värde" } });
+    fireEvent.click(screen.getByTestId("button-template-override-a"));
+    expect(onAdd).toHaveBeenCalledTimes(1);
+    expect(onAdd).toHaveBeenCalledWith({ objektId: "obj-1", metadataTypNamn: "Alpha", varde: "eget värde" });
+    expect(onUpdate).not.toHaveBeenCalled();
+  });
+
+  it("låter ett ärvt select-fält överskuggas via override", () => {
+    const onAdd = vi.fn();
+    renderForm({
+      fieldIds: ["a"],
+      types: [type({ id: "a", namn: "Alpha", allowedValues: ["Låg", "Hög"] })],
+      entries: [
+        entry({ id: "e1", metadataKatalogId: "a", source: "inherited", vardeString: "Låg", inheritedFromName: "Förälder AB" }),
+      ],
+      onAdd,
+    });
+    expect(screen.getByTestId("select-template-value-a")).toBeTruthy();
+    const overrideBtn = screen.getByTestId("button-template-override-a") as HTMLButtonElement;
+    expect(overrideBtn.disabled).toBe(true);
   });
 
   it("renderar varken Spara- eller override-knapp för beräknade/systemgenererade fält", () => {

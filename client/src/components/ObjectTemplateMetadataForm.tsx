@@ -110,6 +110,20 @@ function TemplateFieldRow({
 
   const dirty = draft !== initialDraft && draft.trim() !== "";
 
+  // Ärvda (men redigerbara) rader visar en inmatningsruta så planeraren kan
+  // skriva ett eget värde som överskuggar arvet. Det ärvda värdet visas som
+  // placeholder/referens. Endast verkligt read-only-rader (system/beräknat/
+  // uppladdning) renderar fortfarande den statiska MetadataValue.
+  const editable = !readonly && !isUploadField && !isSoftDeleted;
+  const inheritedDisplay = isInherited
+    ? (datatyp === "boolean" && entry?.vardeBoolean != null
+        ? (entry.vardeBoolean ? "Ja" : "Nej")
+        : rawDisplayValue(entry ?? ({} as MetadataFormEntry)) ?? entry?.inheritedValue ?? null)
+    : null;
+  const textPlaceholder = inheritedDisplay != null ? `Ärvt: ${inheritedDisplay}` : "Ange värde";
+  const selectPlaceholder = inheritedDisplay != null ? `Ärvt: ${inheritedDisplay}` : "Välj värde...";
+  const boolPlaceholder = inheritedDisplay != null ? `Ärvt: ${inheritedDisplay}` : "Välj...";
+
   const save = () => {
     if (!dirty) return;
     if (hasLocalValue && entry) {
@@ -146,7 +160,7 @@ function TemplateFieldRow({
 
       {/* Värde-redigering + ursprung + åtgärder */}
       <div className="flex flex-col items-end gap-1.5 shrink-0 w-[55%] max-w-[26rem]">
-        {readonly || isUploadField || isInherited ? (
+        {!editable ? (
           <MetadataValue
             entry={entry ?? ({ id: testKey } as MetadataFormEntry)}
             datatyp={datatyp}
@@ -155,7 +169,7 @@ function TemplateFieldRow({
         ) : hasAllowedValues ? (
           <Select value={draft} onValueChange={setDraft}>
             <SelectTrigger className="h-8 w-full" data-testid={`select-template-value-${testKey}`}>
-              <SelectValue placeholder="Välj värde..." />
+              <SelectValue placeholder={selectPlaceholder} />
             </SelectTrigger>
             <SelectContent>
               {allowedValues!.map((opt) => (
@@ -166,7 +180,7 @@ function TemplateFieldRow({
         ) : datatyp === "boolean" ? (
           <Select value={draft} onValueChange={setDraft}>
             <SelectTrigger className="h-8 w-full" data-testid={`select-template-value-${testKey}`}>
-              <SelectValue placeholder="Välj..." />
+              <SelectValue placeholder={boolPlaceholder} />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="true">Ja</SelectItem>
@@ -179,7 +193,7 @@ function TemplateFieldRow({
             type={datatyp === "datetime" ? "date" : numberInput ? "number" : "text"}
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
-            placeholder="Ange värde"
+            placeholder={textPlaceholder}
             data-testid={`input-template-value-${testKey}`}
           />
         )}
