@@ -275,6 +275,42 @@ describe("ObjectTemplateMetadataForm — spara (POST vs PUT)", () => {
     expect(overrideBtn.disabled).toBe(true);
   });
 
+  it("visar 'Återgå till ärvt värde' (ej papperskorg) för ett överskuggande värde", () => {
+    const onSoftDelete = vi.fn();
+    renderForm({
+      fieldIds: ["a"],
+      types: [type({ id: "a", namn: "Alpha" })],
+      entries: [
+        entry({
+          id: "e1",
+          metadataKatalogId: "a",
+          source: "direct",
+          vardeString: "eget",
+          overridden: true,
+          inheritedValue: "mall",
+          inheritedFromName: "Förälder AB",
+        }),
+      ],
+      onSoftDelete,
+    });
+    expect(screen.queryByTestId("button-template-delete-a")).toBeNull();
+    const revert = screen.getByTestId("button-template-revert-inherited-a");
+    expect(revert.textContent).toContain("Återgå till ärvt värde");
+    fireEvent.click(revert);
+    expect(onSoftDelete).toHaveBeenCalledTimes(1);
+    expect(onSoftDelete).toHaveBeenCalledWith("a");
+  });
+
+  it("visar papperskorgen (ej återgå-åtgärd) för ett eget värde utan ärvt bakgrundsvärde", () => {
+    renderForm({
+      fieldIds: ["a"],
+      types: [type({ id: "a", namn: "Alpha" })],
+      entries: [entry({ id: "e1", metadataKatalogId: "a", source: "direct", vardeString: "mitt" })],
+    });
+    expect(screen.getByTestId("button-template-delete-a")).toBeTruthy();
+    expect(screen.queryByTestId("button-template-revert-inherited-a")).toBeNull();
+  });
+
   it("renderar varken Spara- eller override-knapp för beräknade/systemgenererade fält", () => {
     const { container } = renderForm({
       fieldIds: ["calc", "sys"],

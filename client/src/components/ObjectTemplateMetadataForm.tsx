@@ -98,6 +98,11 @@ function TemplateFieldRow({
     isSoftDeleted && (entry?.inheritedFromName != null || entry?.inheritedValue != null);
   const isInherited = entry?.source === "inherited" || isInheritedRemoval;
   const hasLocalValue = !!entry && entry.source !== "inherited" && !isSoftDeleted && !!entry.id;
+  // Ett eget värde som ligger ovanpå ett ärvt mallvärde (override). Då är "ta
+  // bort" egentligen "återgå till ärvt värde" — vi visar en tydligare åtgärd.
+  const hasInheritedBackground =
+    !!entry && (entry.overridden === true || entry.inheritedValue != null || entry.inheritedFromName != null);
+  const isOverride = hasLocalValue && hasInheritedBackground;
   const readonly = isSystem || isComputed;
   const lastChanged = entry?.lastChangedAt ? new Date(entry.lastChangedAt) : null;
 
@@ -295,18 +300,43 @@ function TemplateFieldRow({
               >
                 <RotateCcw className="h-3.5 w-3.5" />
               </Button>
+            ) : isOverride ? (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 gap-1 px-2 text-xs"
+                    onClick={() => onSoftDelete(entry.metadataKatalogId || "")}
+                    disabled={softDeletePending}
+                    data-testid={`button-template-revert-inherited-${testKey}`}
+                  >
+                    {softDeletePending ? <Loader2 className="h-3 w-3 animate-spin" /> : <RotateCcw className="h-3.5 w-3.5" />}
+                    Återgå till ärvt värde
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  Tar bort det egna värdet så att det ärvda mallvärdet
+                  {entry?.inheritedFromName ? ` från ${entry.inheritedFromName}` : ""} gäller igen.
+                </TooltipContent>
+              </Tooltip>
             ) : hasLocalValue ? (
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-7 w-7 p-0 text-destructive hover:text-destructive"
-                onClick={() => onSoftDelete(entry.metadataKatalogId || "")}
-                disabled={softDeletePending}
-                data-testid={`button-template-delete-${testKey}`}
-                aria-label="Ta bort"
-              >
-                <Trash2 className="h-3.5 w-3.5" />
-              </Button>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 w-7 p-0 text-destructive hover:text-destructive"
+                    onClick={() => onSoftDelete(entry.metadataKatalogId || "")}
+                    disabled={softDeletePending}
+                    data-testid={`button-template-delete-${testKey}`}
+                    aria-label="Ta bort"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Tar bort värdet helt från objektet.</TooltipContent>
+              </Tooltip>
             ) : null
           )}
         </div>
