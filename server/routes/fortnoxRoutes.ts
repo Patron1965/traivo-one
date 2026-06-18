@@ -32,6 +32,7 @@ import {
   resolveConceptMatchingObjects,
 } from "../services/order-concept-targeting";
 import { deriveFortnoxCodesForWorkOrder } from "../services/fortnox-code-derivation";
+import { buildConceptTimeRulePackagesByObject } from "../services/time-rule-package";
 import {
   buildCustomerLookup,
   resolveConceptCustomerForObject,
@@ -168,6 +169,15 @@ export async function generateScheduleAssignments(opts: {
       .map((e) => `${e.objectId}|${dateKey(e.scheduledDate as any)}`),
   );
 
+  // Task #997 (Tidsmotor): frys konceptets viktade tidsregel-paket per objekt en
+  // gång (samma objekt återkommer för varje schemalagt datum). Objekt utan
+  // tillämpliga regler saknas i kartan ⇒ frozenTimeRules=null.
+  const frozenTimeRulesByObject = await buildConceptTimeRulePackagesByObject(
+    tenantId,
+    concept.deliveryRestrictions,
+    matchingObjects.map((o) => o.id),
+  );
+
   const created: any[] = [];
   let skipped = 0;
   for (const t of targets) {
@@ -257,6 +267,8 @@ export async function generateScheduleAssignments(opts: {
         cachedCost: totalCost,
         logisticsRole: splitForStock ? "deliver" : undefined,
         parentAssignmentId: pickupAssignmentId,
+        // Task #997: fryst viktat tidsregel-paket (null om objektet saknar regler).
+        frozenTimeRules: frozenTimeRulesByObject.get(obj.id) ?? null,
       });
 
       if (linkedArticle && linkedArticleId) {
@@ -2318,6 +2330,17 @@ app.post("/api/order-concepts/:id/execute", asyncHandler(async (req, res) => {
     }
     const expansionObjects = hits ? hits.hitObjects : matchingObjects;
 
+    // Task #997 (Tidsmotor): frys konceptets kompletta viktade tidsregel-paket
+    // (hårda + mjuka regler med polaritet + vikt) per objekt vid expansion.
+    // Beräknas en gång för alla träff-objekt och delas av huvuduppgift + föruppgift.
+    // Objekt utan tillämpliga regler saknas i kartan ⇒ frozenTimeRules=null
+    // (dagens fallback oförändrad).
+    const frozenTimeRulesByObject = await buildConceptTimeRulePackagesByObject(
+      tenantId,
+      (concept as any).deliveryRestrictions,
+      expansionObjects.map((o) => o.id),
+    );
+
     // Task #937: FROM_METADATA — härled order-/faktureringskund per objekt.
     // HARDCODED stämplar konceptets fasta kund; FROM_METADATA läser ett metadatafält
     // (svenska katalogen) på varje objekt och matchar mot kundregistret. Pre-passet körs
@@ -2533,6 +2556,8 @@ app.post("/api/order-concepts/:id/execute", asyncHandler(async (req, res) => {
         cachedCost: totalCost,
         logisticsRole: splitForStock ? "deliver" : undefined,
         parentAssignmentId: pickupAssignmentId,
+        // Task #997: fryst viktat tidsregel-paket (null om objektet saknar regler).
+        frozenTimeRules: frozenTimeRulesByObject.get(obj.id) ?? null,
       });
 
       // If an article is linked, create assignment article (kund-pris via resolveArticlePrice).

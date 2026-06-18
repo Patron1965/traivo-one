@@ -18,6 +18,11 @@ export interface DeliveryRestriction {
   timeTo?: string; // "HH:MM"
   polarity: RestrictionPolarity;
   enforcement: RestrictionEnforcement;
+  // Task #997: relativ vikt för MJUKA regler. Styr hur starkt en mjuk
+  // tidspreferens väger mot ruttkostnad i optimeraren (högre = starkare
+  // preferens). Saknas/ogiltigt ⇒ 1 (normaliseras). Hårda regler bär också
+  // fältet men det påverkar inte deras blockerande effekt.
+  weight?: number;
   description?: string;
 }
 
@@ -59,8 +64,19 @@ export function normalizeDeliveryRestriction(raw: any): DeliveryRestriction {
     timeTo: typeof raw?.timeTo === "string" && raw.timeTo ? raw.timeTo : undefined,
     polarity,
     enforcement,
+    weight: normalizeRestrictionWeight(raw?.weight),
     description: typeof raw?.description === "string" ? raw.description : "",
   };
+}
+
+/**
+ * Normaliserar en vikt till ett ändligt positivt tal. Saknas/ogiltigt/≤0 ⇒ 1
+ * (neutral vikt). Delas av normaliseringen och frys-paketsbyggaren så att klient
+ * och server alltid räknar med samma vikt.
+ */
+export function normalizeRestrictionWeight(raw: unknown): number {
+  const n = typeof raw === "number" ? raw : Number(raw);
+  return Number.isFinite(n) && n > 0 ? n : 1;
 }
 
 export function normalizeDeliveryRestrictions(raw: unknown): DeliveryRestriction[] {
@@ -104,6 +120,74 @@ export function toDeliveryRestrictionNote(r: DeliveryRestriction): DeliveryRestr
     enforcement: r.enforcement,
     timeRule: formatRestrictionTimeRule(r),
   };
+}
+
+// ============================================================================
+// Task #997: Frozen tidsregel-paket (fryses per genererad uppgift vid expansion).
+// Hela det viktade tidsregel-paketet (hårda + mjuka regler med polaritet + vikt)
+// snapshotas på uppgiften så att schemaläggning/optimering är reproducerbar även
+// om konceptets restriktioner senare ändras. Mjuka regler matas in i optimeraren
+// som viktad preferens; hårda fortsätter begränsa som idag.
+// ============================================================================
+
+/** En enskild fryst tidsregel (villkor + tidsregel + polaritet + vikt). */
+export interface FrozenTimeRule {
+  metadataKey: string;
+  operator: string;
+  filterValue?: unknown;
+  weekdays: number[]; // 0=Sön … 6=Lör; tom = alla dagar
+  timeFrom?: string; // "HH:MM"
+  timeTo?: string; // "HH:MM"
+  polarity: RestrictionPolarity; // positive=föredra, negative=undvik
+  weight: number; // relativ vikt (mjuka regler); normaliserad ≥ 0 (>0)
+  description?: string;
+}
+
+/**
+ * Det kompletta frysta tidsregel-paketet för EN uppgift. Hårda och mjuka regler
+ * hålls isär så att optimeraren kan behandla dem olika (hård = begränsning,
+ * mjuk = viktad preferens). `version` möjliggör framtida migrering av formatet.
+ */
+export interface FrozenTimeRulePackage {
+  version: 1;
+  frozenAt: string; // ISO-tidsstämpel
+  hard: FrozenTimeRule[];
+  soft: FrozenTimeRule[];
+}
+
+function toFrozenTimeRule(r: DeliveryRestriction): FrozenTimeRule {
+  return {
+    metadataKey: r.metadataKey,
+    operator: r.operator,
+    filterValue: r.filterValue,
+    weekdays: Array.isArray(r.weekdays) ? r.weekdays.slice() : [],
+    timeFrom: r.timeFrom,
+    timeTo: r.timeTo,
+    polarity: r.polarity,
+    weight: normalizeRestrictionWeight(r.weight),
+    description: r.description?.trim() || undefined,
+  };
+}
+
+/**
+ * Bygger ett fryst tidsregel-paket från en lista (redan normaliserade)
+ * restriktioner. Endast meningsfulla regler (isDisplayableRestriction — har en
+ * tidsregel eller fri beskrivning) tas med; rena villkors-/brus-rader utan
+ * tidseffekt utelämnas. Returnerar `null` när inget finns att frysa, så att
+ * anroparen kan lagra NULL och behålla dagens fallback-beteende (schemalagt datum).
+ */
+export function buildFrozenTimeRulePackage(
+  restrictions: DeliveryRestriction[],
+  frozenAt: Date = new Date(),
+): FrozenTimeRulePackage | null {
+  const hard: FrozenTimeRule[] = [];
+  const soft: FrozenTimeRule[] = [];
+  for (const r of restrictions) {
+    if (!isDisplayableRestriction(r)) continue;
+    (r.enforcement === "hard" ? hard : soft).push(toFrozenTimeRule(r));
+  }
+  if (hard.length === 0 && soft.length === 0) return null;
+  return { version: 1, frozenAt: frozenAt.toISOString(), hard, soft };
 }
 
 const WEEKDAY_LABELS_SHORT = ["Sön", "Mån", "Tis", "Ons", "Tor", "Fre", "Lör"];

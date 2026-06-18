@@ -34,6 +34,12 @@ import type {
   Vehicle,
 } from "@shared/schema";
 import { storage } from "./storage";
+import type { FrozenTimeRulePackage } from "@shared/delivery-restrictions";
+import {
+  computeTimeRulePackagesByObject,
+  softPreferenceScore,
+  softPriorityDelta,
+} from "./services/time-rule-package";
 
 export interface VRPConstraintOptions {
   respectTimeWindows?: boolean;
@@ -129,6 +135,7 @@ export async function enrichVRPRequestWithConstraints(
     resourceArticlesAll,
     resourceVehicleLinks,
     slotPreferences,
+    timeRulePackages,
   ] = await Promise.all([
     options.respectTimeWindows !== false && objectIds.length > 0
       ? storage.getObjectTimeRestrictionsByObjectIds(options.tenantId, objectIds)
@@ -151,13 +158,21 @@ export async function enrichVRPRequestWithConstraints(
     options.respectTimeWindows !== false && objectIds.length > 0
       ? loadSlotPreferences(options.tenantId, objectIds)
       : Promise.resolve(new Map<string, SlotPreferenceData[]>()),
+    // Task #997 (Tidsmotor): livehärledda viktade tidsregel-paket per objekt
+    // (mjuka preferenser matas in som prioritetsjustering nedan). Hårda regler
+    // rörs ej här — de hanteras av befintliga tidsfönster-mekanismer.
+    options.respectTimeWindows !== false && objectIds.length > 0
+      ? computeTimeRulePackagesByObject(options.tenantId, objectIds as string[])
+      : Promise.resolve(new Map<string, FrozenTimeRulePackage>()),
   ]);
 
   if (options.respectTimeWindows !== false) {
     applyTimeRestrictions(jobs, workOrders, timeRestrictions, objectMap);
     applyTaskTimewindows(jobs, taskTimewindows);
     applyPreferredTimesAsSoftConstraints(jobs, workOrders, objectMap, slotPreferences);
+    const softRulesApplied = applySoftTimeRulePreferences(jobs, workOrders, timeRulePackages);
     constraintsApplied.push("time_windows");
+    if (softRulesApplied) constraintsApplied.push("soft_time_rules");
   }
 
   if (options.respectSkills !== false) {
@@ -333,6 +348,43 @@ function applyPreferredTimesAsSoftConstraints(
       job.priority = Math.min(100, (job.priority || 50) + boost);
     }
   }
+}
+
+/**
+ * Task #997 (Tidsmotor): matar in MJUKA viktade tidsregler i optimeringen som en
+ * (begränsad) prioritetsjustering. Använder uppgiftens FRYSTA paket
+ * (work_orders.frozenTimeRules) om det finns — annars de livehärledda paketen per
+ * objekt. Veckodagen härleds ur orderns schemalagda datum (0=Sön … 6=Lör);
+ * dagspecifika regler ignoreras när dag saknas. Hårda regler rörs aldrig här.
+ * Returnerar true om någon prioritet justerades.
+ */
+function applySoftTimeRulePreferences(
+  jobs: EnrichedGeoapifyJob[],
+  workOrders: WorkOrder[],
+  packagesByObject: Map<string, FrozenTimeRulePackage>,
+): boolean {
+  let applied = false;
+  for (const job of jobs) {
+    const order = workOrders.find(o => o.id === job.id);
+    if (!order) continue;
+
+    const frozen = (order as Record<string, unknown>).frozenTimeRules as
+      | FrozenTimeRulePackage
+      | null
+      | undefined;
+    const pkg = frozen ?? (order.objectId ? packagesByObject.get(order.objectId) : undefined);
+    if (!pkg || pkg.soft.length === 0) continue;
+
+    const sched = order.scheduledDate ? new Date(order.scheduledDate as any) : null;
+    const weekday = sched && !Number.isNaN(sched.getTime()) ? sched.getDay() : null;
+
+    const delta = softPriorityDelta(softPreferenceScore(pkg, weekday));
+    if (delta === 0) continue;
+
+    job.priority = Math.max(0, Math.min(100, (job.priority || 50) + delta));
+    applied = true;
+  }
+  return applied;
 }
 
 function applySkillConstraints(

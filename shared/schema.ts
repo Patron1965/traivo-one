@@ -2,6 +2,7 @@ import { sql, relations } from "drizzle-orm";
 import { pgTable, text, varchar, integer, serial, timestamp, date, jsonb, boolean, real, doublePrecision, index, unique, uniqueIndex } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
+import type { FrozenTimeRulePackage } from "./delivery-restrictions";
 
 export const tenants = pgTable("tenants", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -525,6 +526,12 @@ export const workOrders = pgTable("work_orders", {
   estimatedTravelMin: integer("estimated_travel_min"),
   // Tillåtet parallell-/samordningsfönster (jsonb, motor-definierat schema).
   parallelWindowJson: jsonb("parallel_window_json"),
+  // === Task #997 (Tidsmotor): Fryst viktat tidsregel-paket ===
+  // Hela paketet (hårda + mjuka regler med polaritet + vikt) snapshotat vid
+  // expansion per objekt. NULL = inga tidsregler gällde objektet → dagens
+  // fallback (schemalagt datum) oförändrad. Mjuka regler matas in i optimeraren
+  // som viktad preferens; hårda fortsätter begränsa som idag.
+  frozenTimeRules: jsonb("frozen_time_rules").$type<FrozenTimeRulePackage>(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   deletedAt: timestamp("deleted_at"),
 }, (table) => [
@@ -3213,6 +3220,11 @@ export const assignments = pgTable("assignments", {
   // Task #989: Länk från leverans-uppgiften till dess hämt-uppgift (hämta måste ske före
   // leverera). Mjuk länk: om hämt-uppgiften raderas blir fältet null (set null), inte cascade.
   parentAssignmentId: varchar("parent_assignment_id").references((): any => assignments.id, { onDelete: "set null" }),
+  // === Task #997 (Tidsmotor): Fryst viktat tidsregel-paket ===
+  // Hela paketet (hårda + mjuka regler med polaritet + vikt) snapshotat vid
+  // orderkoncept-expansion per objekt. NULL = inga tidsregler gällde objektet →
+  // dagens fallback (schemalagt datum) oförändrad.
+  frozenTimeRules: jsonb("frozen_time_rules").$type<FrozenTimeRulePackage>(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   deletedAt: timestamp("deleted_at"),
 }, (table) => [
