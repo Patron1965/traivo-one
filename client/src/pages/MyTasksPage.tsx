@@ -49,7 +49,6 @@ import { Activity, ChevronDown } from "lucide-react";
 import { EmptyState } from "@/components/EmptyState";
 import { ObjectContactsPanel } from "@/components/ObjectContactsPanel";
 import { ObjectImagesGallery } from "@/components/ObjectImagesGallery";
-import { OnboardingGuide } from "@/components/OnboardingGuide";
 import { useLanguage } from "@/hooks/use-language";
 import { enUS as enLocale } from "date-fns/locale";
 import { useAuth } from "@/hooks/use-auth";
@@ -658,8 +657,6 @@ export default function MyTasksPage() {
             </Button>
           </div>
         </div>
-
-        <OnboardingGuide />
 
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4 mb-8">
           {ordersLoading ? (
