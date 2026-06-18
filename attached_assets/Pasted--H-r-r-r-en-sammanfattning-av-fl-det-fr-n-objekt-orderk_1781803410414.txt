@@ -1,0 +1,262 @@
+
+
+Här är är en sammanfattning av flödet från objekt orderkoncept som jag satt och summerade i bilenSammanfattning av logiken för uppgifter, utförande och fakturering
+Systemet bygger på att all verksamhet utgår från ett orderkoncept som definierar vilka tjänster som ska utföras, under vilka villkor de ska utföras och hur de ska faktureras.
+1. Orderkoncept genererar uppgifter
+När ett orderkoncept aktiveras skapas ett eller flera uppgiftspaket. Varje uppgift består av:
+Artikelnummer
+Artikelbeskrivning
+Antal
+Eventuella prisuppgifter
+Faktureringsregler
+Metadata från det objekt uppgiften avser
+Objektets metadata kan exempelvis innehålla:
+Adress
+Fasadnummer
+Kärlnummer
+Fraktion
+Anläggningsinformation
+Kundreferenser
+Kontaktuppgifter
+Övriga objektspecifika uppgifter
+På så sätt får varje uppgift automatiskt den information som krävs för planering, utförande och senare fakturering.
+
+
+⸻
+
+
+2. Uppgiften genomgår planeringsprocessen
+När uppgiften skapats går den genom olika planeringssteg:
+Skapad
+Planerad
+Tilldelad
+Utförs
+Utförd
+Under processen kompletteras uppgiften med ytterligare information:
+Tilldelad utförare
+Utförande team
+Projektnummer
+Kostnadsställe
+Tidsstämplar
+Statushistorik
+Eventuella kompletterande metadata
+All historik sparas på uppgiften så att hela livscykeln kan följas.
+
+
+⸻
+
+
+3. Utförande
+När uppgiften utförs registreras:
+Utförare
+Utförande team
+Datum och tid
+Resultat
+Eventuella avvikelser
+Fotodokumentation
+Förbrukat material
+Kommentarer
+När arbetet är färdigt sätts status till Utförd.
+
+
+⸻
+
+
+4. Fakturakontroll
+Efter utförande går uppgiften vidare till fakturakontroll.
+Systemet kontrollerar då:
+Att uppgiften är godkänd för fakturering
+Att rätt kund kopplats
+Att referenser finns
+Att artikelinformationen är korrekt
+Att kostnadsställe och projektnummer är angivna
+Att eventuella kundkrav är uppfyllda
+Vid behov kompletteras uppgifterna med kundspecifika referenser innan fakturering.
+
+
+⸻
+
+
+5. Fakturaunderlag skapas
+När fakturaunderlag genereras samlar systemet ihop utförda uppgifter enligt den faktureringslogik som finns definierad på orderkonceptet.
+Uppgifter kan exempelvis grupperas efter:
+Kund
+Objekt
+Projekt
+Kostnadsställe
+Fakturaperiod
+Avtal
+Beställningsnummer
+Kundreferens
+
+
+⸻
+
+
+6. Fakturan görs begriplig för kunden
+För varje fakturarad ska systemet inte bara skicka artikelnummer och antal utan även relevanta objektreferenser.
+Exempel på information som bör följa med fakturaraden:
+Fält
+Exempel
+Artikelnummer
+TVÄTT240
+Artikeltext
+Kärltvätt 660 liter
+Antal
+3
+Objekt
+Hemköp Sundsvall
+Adress
+Köpmangatan 12
+Fasadnummer
+F12
+Kärlnummer
+K-104
+Projektnummer
+P24001
+Kostnadsställe
+310
+Utförande datum
+2026-06-18
+Detta gör att kunden direkt kan förstå vad som utförts, var det utförts och varför raden debiteras.
+
+
+⸻
+
+
+Grundprincip
+Hela systemet bygger på att information successivt berikas genom processen:
+Orderkoncept
+→ genererar
+Uppgifter
+→ kopplas till
+Objekt och metadata
+→ planeras
+→ tilldelas utförare
+→ utförs
+→ kvalitetskontrolleras
+→ sammanställs
+→ faktureras
+Varje steg adderar ny information till samma uppgift tills den slutligen blir ett komplett och spårbart fakturaunderlag. På så sätt finns en obruten informationskedja från avtal och orderkoncept hela vägen till utfört arbete och färdig kundfaktura.┌─────────────────────┐
+│    ORDERKONCEPT     │
+└──────────┬──────────┘
+           │
+           │ Genererar
+           ▼
+┌─────────────────────┐
+│   UPPGIFTSPAKET     │
+│                     │
+│ • Artikelnummer     │
+│ • Beskrivning       │
+│ • Antal             │
+└──────────┬──────────┘
+           │
+           │ Hämtar metadata från
+           ▼
+┌───────────────────────────────────────┐
+│               OBJEKT                  │
+│                                       │
+│ • Objektnummer                        │
+│ • Objektnamn                          │
+│ • Adress                              │
+│ • Fasadnummer                         │
+│ • Kärlnummer                          │
+│ • Fraktion                            │
+│ • Kontaktperson                       │
+│ • Kundreferenser                      │
+│ • Övrig metadata                      │
+└──────────┬────────────────────────────┘
+           │
+           │ Skapar arbetsunderlag
+           ▼
+┌─────────────────────┐
+│     PLANERING       │
+└──────────┬──────────┘
+           │
+           ▼
+┌─────────────────────┐
+│       STATUS        │
+│                     │
+│ Skapad              │
+│ Planerad            │
+│ Tilldelad           │
+│ Utförs              │
+│ Utförd              │
+└──────────┬──────────┘
+           │
+           │ Adderar
+           ▼
+┌───────────────────────────────────────┐
+│          UTFÖRANDEINFO                │
+│                                       │
+│ • Utförare                            │
+│ • Team                                │
+│ • Projektnummer                       │
+│ • Kostnadsställe                      │
+│ • Datum/Tid                           │
+│ • Bilder                              │
+│ • Avvikelser                          │
+│ • Kommentarer                         │
+└──────────┬────────────────────────────┘
+           │
+           ▼
+┌─────────────────────┐
+│   FAKTURAKONTROLL   │
+└──────────┬──────────┘
+           │
+           │ Kontroll av
+           │ referenser
+           │ projektnummer
+           │ kostnadsställe
+           ▼
+┌───────────────────────────────────────┐
+│      FAKTURAUNDERLAG                  │
+│                                       │
+│ Samlar uppgifter enligt               │
+│ orderkonceptets regler                │
+└──────────┬────────────────────────────┘
+           │
+           ▼
+┌───────────────────────────────────────┐
+│          KUNDFAKTURA                  │
+│                                       │
+│ Artikelnummer                         │
+│ Artikeltext                           │
+│ Antal                                 │
+│ Projektnummer                         │
+│ Kostnadsställe                        │
+│ Objekt                                │
+│ Adress                                │
+│ Fasadnummer                           │
+│ Kärlnummer                            │
+│ Kundreferens                          │
+│ Utförandedatum                        │
+└───────────────────────────────────────┘
+Informationsflöde
+ORDERKONCEPT
+      │
+      ▼
+UPPGIFT
+      │
+      ▼
+OBJEKTMETADATA
+      │
+      ▼
+PLANERING
+      │
+      ▼
+UTFÖRARE / TEAM
+      │
+      ▼
+UTFÖRANDE
+      │
+      ▼
+FAKTURAKONTROLL
+      │
+      ▼
+FAKTURAUNDERLAG
+      │
+      ▼
+KUNDFAKTURA
+Grundprincipen är att all information samlas på samma uppgift under hela dess livscykel. Varje steg adderar mer information tills uppgiften utvecklats från en planerad tjänst på ett orderkoncept till en fullt spårbar fakturarad hos kunden.
+
