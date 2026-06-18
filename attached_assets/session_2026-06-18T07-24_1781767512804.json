@@ -1,0 +1,470 @@
+{
+  "sessionId": "c625179ab",
+  "exportedAt": "2026-06-18T07:24:53.534Z",
+  "summary": "### Key Topics Discussed\n- Genomgång och förtydligande av register och registerlogik i systemet, inklusive FVERA-poster.\n- Objektregistret som grunden till systemet, med detaljer om statusmarkering och föräldrarelation.\n- Introduktion till metadataregistret och dess koppling till objekt.\n- Metadataregistrets fält, inklusive koppling till objekt, metadatatyp och innehåll.\n- Konkretisering av hur metadatafält som ”kundnummer” och ”antal” används i olika systemkoncept (t.ex. orderkoncept, artiklar).\n- Introduktion till metadatatypsregistret för definition av metadatatyper, inklusive format och valbara alternativ (t.ex. bild, alfanumeriskt, numeriskt, small/medium/large).\n- Egenskaper för metadata i registret: låsning på nivå och flöde nedåt i objekthierarkin.\n- Genomgång av artikelregistret, inklusive grundläggande information som artikelnummer, produktionstid, kostnad, listpris och beskrivning.\n- Detaljer kring artikeltyp (tjänst, vara, administrativ uppgift, reservdel) och dess koppling till ett sidoregister, samt utförandetypens roll.\n- Förtydligande av utförandetypens syfte i artikelregistret, definierad med kod och namn, för att specificera vem som kan utföra en artikel och vilka resurser som krävs.\n- Introduktion till prislistan som ett separat register för kundunika priser och avtalspriser.\n- Genomgång av kundregistret som en spegling av Fortnox kunddata, inklusive möjlighet att lägga till informationsfält.\n- Introduktion till utförarregistret, som består av individuella medarbetare, utrustning (t.ex. fordon), och team.\n- Diskussions om hur team kan struktureras i utförarregistret med en överordnad förälder för personal och utrustning.\n- Utförarregistret speglar inloggningen i utförarregistret/fältappen och inkluderar kostnadsställe och projekt.\n- Introduktion till uppgiftsregistret, vilket är en lista över alla uppgifter som ska utföras.\n- Uppgiftsregistret skapas via ett orderkoncept som pekar mot ett eller flera objekt (som kan bilda kluster).\n- Orderkonceptet definierar även vilken kund uppgiften avser och är ansvarig för fakturering.\n- Skapandet av grunden i orderkonceptet, som är en lista på artiklar som ska utföras.\n- Orderkonceptets funktion att generera en eller flera uppgifter baserat på artiklar.\n- Uppgiftslistans innehåll: artikelnummer, kostnad per styck, tid per styck och pris per styck.\n- Hur en kopplad prislista i orderkonceptet kan överstyra generell prisinformation med kundunika uppgifter (nytt listpris, produktionstid, kostnad).\n- Hantering av leveranstid, geografisk position (lagerplats) för varor från artikel- och orderkonceptregistren.\n- Förståelse för önskad leveranstid/leveransperiod från orderkonceptet, som kan vara komplex för orderkoncept med flera leveranstider.\n- Möjlighet att inkludera specifika tidsramar (önskade eller förbjudna) inom en leveransperiod i orderkonceptet.\n- Informationen om plats hämtas från det objekt som orderkonceptet är kopplat till.\n- Systemets intelligens för att hantera platsdata, inklusive lagerplatser, latitud och longitud.\n- Logik för att plocka varor från lagerplats och leverera till objektets plats.\n- Systemets hantering av utleverans och återtag av artiklar (t.ex. nycklar), inklusive logik för att förstå om en vara inte levererats och automatiskt skapa en uppgift för återlämning till lagerplats.\n- Hantering av varierande platsinformation (stad, gatuadress, koordinater) för objekt och behovet av uppdateringar av utföraren.\n- Uppgifter kan sakna geografisk koppling, medan objekt kan vara geografiskt bundna eller obundna.\n- Objekt kan ha geografisk utbredning i form av en polylinje för att avgränsa ett område istället för en specifik punkt (X- och Y-koordinat).\n\n### Decisions Made\n- None\n\n### Action Items\n- None\n\n### Important Points & Insights\n- Registerlogiken och samverkan mellan register är grundläggande för hela systemet.\n- Objektregistret är centralt och innehåller ett systemgenererat nummer samt en fri beskrivning av objektet.\n- Objektregistret inkluderar en statusmarkering (aktiv/arkiverad) och ett systemfält för att indikera om objektet har en förälder (ingår i ett kluster).\n- Metadata är kopplat till objektet via ett separat metadataregister, som innehåller ett unikt metadatanummer och har en status (aktiva/arkiverade).\n- Metadataregistret innehåller fält för att ange vilket objekt den unika metadatan är kopplad till, metadatatyp (vilken typ av metadata det avser) och själva metadatainnehållet.\n- Vissa metadatatyper är systemgenererade eller nödvändiga för systemets funktion.\n- Metadata kan åberopas på olika ställen i systemet för att ge information, exempelvis ett metadatafält för \"kundnummer\" i orderkonceptet för fakturering, eller \"antal pantkärl\" kopplat till en artikel.\n- Metadatatypsregistret definierar metadatatyperna, till exempel ett fält för \"antal\" som endast accepterar ett enda värde, där ett nytt värde ersätter det gamla.\n- Metadatatypsregistret anger vilket format metadatafältet eller metadaposten ska ha (t.ex. bild, alfanumeriskt, numeriskt) och kan inkludera fördefinierade valalternativ (t.ex. small, medium, large).\n- Metadataregistret, kopplat till objekt, fylls på sekventiellt.\n- För metadatan anges grundläggande saker i registret, som om den ska vara låst på nivå eller om den ska flöda neråt i objekthierarkin. Exempel på metadata som kan flöda neråt i hierarkin inkluderar kontaktuppgifter, adresser, kundnummer eller koder för åtkomst till objektens förvaringsplats.\n- En status- eller kontrollmetadata är ett exempel på metadata som låses på en unik nivå och bara gäller för det specifika objektet, inte för underordnade objekt.\n- Metadatatypsregistret anger vilka typer av metadata som finns i systemet och kan möjligtvis inkludera kundunika metadata.\n- Metadataregistret innehåller den faktiska informationen och är ett sidoregister till objektregistret.\n- Artikelregistret är redan befintligt och väl fungerande i systemet.\n- Artikelregistret innehåller grundläggande information som artikelnummer, produktionstid, kostnad, listpris och beskrivning av artikeln.\n- Artikeltyp definierar om en artikel är en tjänst, vara, administrativ uppgift eller reservdel och korresponderar mot ett sidoregister med olika artikeltyper.\n- Utförandetypen är en viktig post i artikelregistret, definierad med en kod och ett namn, som specificerar vem som kan utföra en artikel och vilka resurser som behövs. Exempel inkluderar administrativ utförande, serviceteam (med svets- och servicebil), eller \"bottenöppnande\" som indikerar behov av kranbil.\n- Prislistan är ett viktigt register i systemet som hanterar kundunika priser och avtalspriser för artiklar. Denna logik finns redan i systemet.\n- Det kan också finnas säsongspriser eller andra prislistor som hanteras separat från artikelregistret.\n- Kundregistret är en spegling av de kunder som finns i Fortnox, och data om kunder hämtas därifrån. Det är inte avsett för manuell uppläggning i Trivo.\n- Det är möjligt att lägga till extra informationsfält eller noteringar för kunder i kundregistret, utöver den information som hämtas från Fortnox.\n- Utförarregistret syftar till att gruppera poster som indivuduella medarbetare (med titel och kontaktuppgifter), utrustning (t.ex. fordon), och team.\n- Samma logik som för personobjekt kan användas för att hantera utrustning i utförarregistret.\n- Team kan skapas i utförarregistret med en överordnad \"förälder\" som inkluderar medlemmar (personer) och hårdvara/produktionsutrustning.\n- Utförarregistret hanterar inloggning för fältappen.\n- Det finns möjlighet att associera ett projektnummer med en person och ett kostnadsställe med en hårdvara inom utförarregistret.\n- Uppgiftsregistret är ett centralt register över alla uppgifter som ska utföras.\n- Artiklar i orderkonceptet har en inbyggd logik för hur de ska kopplas till objekt.\n- Orderkonceptet pekar mot specifika objekt som har den nödvändiga metadata för att artiklarna ska kunna kopplas korrekt.\n- Uppgiftslistan är enkel och består av artikelnummer för uppgiften, samt kostnad, tid och pris per styck från artikelregistret.\n- En kopplad prislista i orderkonceptet kan överstyra generell information från artikelregistret och ge kundunika priser, produktionstider och kostnader.\n- Orderkonceptet hämtar eventuell leveranstid för varor från artikelregistret.\n- Geografisk position (lagerplats) samt \"antal\" från objektets metadataregister hämtas baserat på vilket objekt orderkonceptet är kopplat till.\n- Önskad leveranstid eller leveransperiod för orderkonceptet hämtas från orderkonceptet, vilket kan vara komplext om ett orderkoncept har flera leveranstider.\n- Orderkonceptet har funktionalitet för att definiera mer specifika önskade eller förbjudna tidsramar inom den övergripande leveransperioden. Till exempel, om leveransperioden är hela april, kan man specifiera att jobbet helst utförs torsdag till fredag, eller att det absolut inte får ske på måndagar.\n- Systemet behöver intelligens för att reda ut var en uppgift befinner sig fysiskt (t.ex. gårdsadress, latitud/longitud) och en \"motor\" för att hantera varor på lagerplatser och deras leverans till objektets plats.\n- Systemet bör kunna hantera flöden för utleverans (plocka/hämta, leverera) och återtag av artiklar (t.ex. nycklar).\n- En logik är nödvändig för att spåra om en artikel inte levererats och automatiskt generera en uppgift för att returnera den till dess lagerplats.\n- Uppgiftsregistret identifieras som den absolut viktigaste posten i detta sammanhang.\n- Orderkonceptet beräknar produktionstid och pris för enskilda uppgifter.\n- Den sista posten gällande artikeltyp och utförartyp är den mest komplicerade.\n- Systemet kommer att ha systembärande fält, särskilt för adress eller plats för ett objekt.\n- Platsinformation kan variera (stad, gata, koordinater) och måste kunna uppdateras av utföraren för exakt position.\n- Systemet måste särskilja uppgifter som saknar geografisk koppling från objekt som har eller saknar geografisk koppling.\n- Ett objekt kan även ha en geografisk utbredning (t.ex. ett område i södra Stockholm) som inramas av en polylinje, vilket är ett alternativ till en exakt pinpoint (X- och Y-koordinat). Detta har inte hög prioritet men är en befintlig möjlighet i systemet.\n\n### Open Questions/Pending Items\n- Fortsatt genomgång av övriga register och deras funktioner.\n- Detaljer kring utförarregistrets fulla struktur och innehåll, särskilt gällande team och dess relationer.\n- Smarta frågor och förslag via Replit för hantering av systemgenererade fält.\n",
+  "conversation": [],
+  "transcripts": [
+    {
+      "text": "Då ska vi ju bara igenom den där så att, eh, du förstår den. Ja, nu är det igång. Ja. Nu ska vi gå igenom och göra ytterligare en förtydligande över registren och, eh, registerlogiken, det vill säga hur de här olika registerna samverkar i det här systemet. Och det här är grunden till hela systemet, så här får det inte bara fel. Nej.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Eh, och alla de här registerna som jag kommer att nämna och kommentera nu är ju då viktiga eller behövs. Men det finns några register som är, är grunden i det hela och jag kommer att börja med dem. Grunden till allting är objektregistret som i innehåller då...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Eh, enbart ett systemgenererat nummer och en fri beskrivning av objektet. Och, eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Ett statusmarkering om objektet är aktivt eller arki-arkiverat. Och sen så finns då ett systemfält som talar om, om objektet har en förälder eller inte då, så att den ingår i ett kluster. Så som jag ser så är det där grunden till själva registret. Eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Överobjekten då. Sen kommer det viktigaste då, steg nummer två. Det är då, eh... metadata som är kopplat till det här objektet då. Och det innebär ju då två saker här. Dels finns då ett metadataregister som innehåller metadatan som är kopplat till registret. Och i det fallet då så, i det här registret så finns det ju då, eh... ett unikt...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Metadatanummer antar jag då, eh, registermässigt. Sen så finns det då, eh, en...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "En annan givis är då till, till vilket objekt den unika metadatan är kopplad då. Och sen är det då metadata, eh, typ, alltså vilken typ av metadata avser det här? För bakom den så finns det ju då annan logik som jag strax kommer till. Och sen är det själva då metadatainnehållet då.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och det här metadataregistret är ju då länkat till, eh, ett antal fördefinierade metadatatyper då. Vissa utav de här metadatatyperna är ju då systemgenererande, genererade eller behövs för, för att systemet ska kunna, kunna arbeta. Och det är väl inget svart eller vit på det. Och i princip så kan man ju då, eh, åberopa då på olika ställen i systemet olika metadata för att ge information.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. Eh, och det här blir då ett exempel på det. Om vi har ett metadatafält som vi kallar kund.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Nummer.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och vi, i det metafäl-, datafältet, eh, eh, kopplar då till ett unikt objekt, så kommer ju då det att på det objektet finnas ett, ett, eh, metadatafält som heter kundnummer. Och om vi då vill i orderkonceptet, eh, ropa efter kundnummer för att då så att säga se v-vart då ett enskilt, en enskild uppgift ska faktureras, så kan vi ju då be orderkonceptet titta på metadatafältet-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm ...kundnummer och hämta den informationen därifrån. På samma sätt som att vi kan be en artikel titta på ett metadatafält som vi till exempel säger antal pantkärl eller antal bara i största allmänhet. Och i då den artikel som vi då pekar in emot objektet, så ber vi då, eh, den artikeln att titta på det antal som vi då definierar där.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Eh, så där har vi liksom en liten grundlogik, men för, för hur det fungerar då. Men, men så får jag se det hela då, så finns det då ett metadatatypsregister där vi då definierar de olika metadatatyperna. Och jag kan ju då fortsätta med det. Eh, det kan då vara ett, eh, eh, eh, eh, ett...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "fält som då anger till exempel antal. Och det metadatafältet utifrån den logik som vi redan har i systemet, definierar vi då som ett fält som bara kan vara ett värde, det vill säga inte en katalog utav värden. Och ett nytt värde ersätter så att säga det gamla värdet då. Och registermässigt då så ser ju jag det då som att, eh, det här metadata... registret då som är kopplat till objektena, det fylls ju så att säga då bara på-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. -med FVERA-poster då. Och sen har ju de då hela tiden kopplingen till objektet och har då en status så vida de då är aktiva eller arkiverade eller inte. Vidare då i metadata-typsregister så, så anger vi då vissa grundläggande... Och det här finns ju redan i systemet, så jag går inte in på detaljerna, men jag tar ett antal viktiga exempel. Vi anger då vilket format metadatafältet eller metadataposten ska vara, om det är en bild eller om det är en alfanumeriskt eller om det är, eh-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "eh-eh, numeriskt eller om det är ett valalternativ utav ett antal olika valbara, eh-eh-eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "värden på metadatafältet. Till exempel då small, medium och large skulle kunna vara då ett exempel på ett metadatafält som anger då en storlek. Och vi väljer då att definiera metadatat då som small, medium och large. Och den som matar in metadatan kan bara då-- Det är godkänt bara de tre alternativen då. Eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "I metadata...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Till s-- registret då så anges också då grundläggande saker då som om metadatan ska vara låst på nivå eller om det är en metadata som ska flöda neråt i objektherakyn. Och ett exempel på, eh, då metadata som ska flöda neråt i hierarkin är ju då till exempel en kontaktuppgift eller en, eh, adress då som kanske anges högre upp i hierarkin men faller ner på alla underordnade objekt då. Eh-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. En annan sådan skulle ju va-- Kunna vara det som jag nämnde tidigare. Om vi väljer att ha ett kundnummer, eh, av något skäl i metadatafältet så kan man ju också tänka sig att det är en information som faller neråt i hier-- I hierarkin. Eh, ett metadatafält som anger koden för att komma åt, eh, till exempel det här rummet där objekten finns i, ja, den skulle också kunna då falla neråt. Medan ett metadatafält som-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm ...anger antalet då, det är ju då en, ett metadatafält som låses på nivå. Eh, och, eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. En status eller kontroll metadata är också ett tydligt exempel då på någonting som låses på, på en unik nivå. Det gäller bara just det objektet, inte de undervarande objekten då. Så här har vi då två mycket viktiga bitar. Delen är då metadatatyps, eh, registret som anger vilka typer av metadata som finns i s-systemet. Och här kan man också välja då, eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Vill jag minnas, eh, kundunika metadata, men jag är lite osäker på det. Eh, men där har vi då typen av den logik som ligger kring dem. Sen finns då själva då det här registret då med metadatan, alltså den faktiska, eh, informationen då, som är då ett sidoregister till objektregistret.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Så då har vi gått igenom, eh, tre stycken register, själva objektregistret. Vi har gått igenom register över metadatatyper och vi har gått igenom regi-- Me-- Själva metadatarregistret som är kopplat då till objektregistret, logiskt då. Nästa steg är då det så kallade artikelregistret. Och artikelregistret finns redan i systemet och den är ju relativt väl fungerande då. I artikelregistret-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. Så anger man då grundläggande information då, eh, för a-artikeln då, det vill säga vad den-- Vilket artikelnummer den har, eh, vilket, vilken produktionstid den har, vilken kostnad den har, vilket listpris den har och, eh, naturligtvis en beskrivning av själva artikeln i lite olika former. Det här finns i systemet, eh, och det ser bra ut. Några unika saker då som finns här i, i det som jag vill lyfta fram är då artikeln-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. Artikeltyp. Och artikeltyp definierar då vad artikeln, om det är en tjänst eller om det är en vara eller om det är en administrativ uppgift. Och den korresponderar också då på-- Mot ett sidoregister då. Så det finns ett register över olika artikeltyper och det finns ett register för den sista viktiga posten i ar-- I, i artikeln då. Det är då utförandetyp då. Så att artikeln-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. Kan indelas i, eh, vilken typ de är, om de är en tjänst eller om de är en vara eller om de är, eh... Ja, man, man kan då definiera det bara för att hålla reda på sina artiklar. Om det är en reservdel eller, eller vad, vad det nu är. Så där finns det då en post i artikelregistret så som man i ett senare läge kan adressera och justi-justera dem. Sedan finns det då något som kallas då utförandetyp på artikeln och det definierar då med en kod eller, eh, eh, eh, och, och namn.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. Vem som kan utföra den här typen utav artikel då. Om det krävs då, men är, är, är, är det, är det en artikel som alla kan utföra? Ja, då kan man väl då lämna det blankt då. Men, men grunden är då att varje artikel ska ha en, en utförandetyp då. Till exempel att det är en administrativ utförande, eh, typ. Det vill säga då, då vet man att det är något som görs av administrationen eller det är en artikel som måste utföras av ett serviceteam-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. Då, då, då vet man att det ska utföras av ett team som, som har en svets- och, och, och servicebil. Är det en bottenöppnande behållare så, så är det något utförandetyp bottenöppnande då. Och då be- vet man då att man behöver ha en kranbil och att artikeln senare då ska skickas till, till, till, eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Den utföraren eller den ska tilldelas en sån utförare. Eh, så där har vi artikelregistret. Eh, nästa viktiga register är prislistan då. Och den logiken finns i systemet, eh, och det är ju bara då att för, för, eh, alla artiklar eller, eller för vissa utav artiklarna ska man då kunna tanka in en prislista med kundunika priser då.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Avtalspriser.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Äh, sss-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Man kan också tänka sig att man har, har, har säsongspriser eller, eller ja, det blir en prislista vid sidan om, om artikelregistret då. Äh, och, äh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Det blir en administrativ fråga så att säga då, vad, vad, vad priserna ligger. Men vi har också då kan man säga ett listpris då eller ett standardpris i artikelregistret då. Och logiken här är ju då att en åberopad prislista overridear då det, äh, standardpris som finns på artikeln i artikelregistret då.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Sen har vi ett kundregister då och kundregistret är då bara en spegling utav de kunder som är upplagda i Fortnox och dess kundnummer då som finns i Fortnox. Så det här registret jobbar man inte med det i, eller lägger man inte upp i, i, i Trivo, utan det här registret är alltså bara en spegling. Äh, däremot så kan det ju då finnas en, en möjlighet som jag tror redan finns nu att man då kan ha några informations-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. -fält på kunden här då vid sidan om kundnumret och kundnamnet som kommer ifrån Fortnox då. Äh, man kan göra några noteringar där. Men det är väldigt enkelt. Äh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Sedan har vi då, äh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Ett utförarregister som det finns fragment av i systemet i dag då. Men utförarregistret, om vi kallar det så då, består utav följande poster som då kan grupperas. Det ena är enskilda medarbetare. Äh, så det är alltså namn och äh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och vilken, vilken titel man har då, kontaktuppgifter och, och, och så vidare. Lär vi kunna vara där då. Och sen blir det då äh, utrustning då. Till exempel ett fordon. Den kan ju använda då samma...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Samma logik kan man ju säga då som, som en person. Och sen så finns det då ett team förmodligen i samma register så att man kan alltså, äh, med samma logik som vi har med, med objektregistret och så kan vi, kan vi alltså skapa ett team äh, där vi då säger då att i det här teamet ingår de här personerna och den här hårdvaran eller den här produktionsutrustningen. Äh, det vill säga teamet blir då överordnat förälder eller vad man ska säga. Och sen åker då de andra med då där. I...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Det här registret så är det ju då... Det här kommer ju också spegla då inloggningen i, i utförarregistret eller fälthappen. Äh, det här registret tar också med sig något som kallas då kostnadsställe och projekt.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Äh, så att på... Och, och då har vi det generella är då, men det kan man ju då välja här då hur man, hur man spelar med det här. Men vi, äh, vi har alltså möjlighet att lägga då ett... På en person så kan vi då lägga ett projektnummer och på en hårdvara kan vi då lägga ett kostnadsställe. Så att i det här registret så, så väljer man då de bitarna för de kommer då att följa med till det sista registret då som jag...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Som kanske det absolut viktigaste. Och det är det så kallade uppgiftsregistret. Det vill säga det, det är register eller den lista då, det är, men det är också ett register på alla de uppgifter som ska utföras då.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och det här registret skapas ju då genom att man, eh, upprättar ett orderkoncept som pekas...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "In.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mot en, ett eller flera objekt då som kan då bilda kluster. Och i orderkonceptet då så framgår ju vissa grunder. Bland annat då så väljer man då vilken kund det är.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och man väljer vilka leveransvillkor som finns och man lägger till om det är en kundunik prislista.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och därefter så skapar man då grunden i orderkonceptet som är en lista på artiklar som ska göras. Och i artiklarna framgår ju då en logik över vad de ska haka fast på.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och det innebär ju då att om man då pekar in, äh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "pekar in orderkonceptet emot då ett visst antal objekt som då har den metadata som man då behöver för, för, för att artiklarna ska haka fast. Så kommer ju då körningen utav det hära, äh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "orderkonceptet då att generera då en eller flera uppgifter då baserat på de här artiklarna. Och den uppgiftslistan är ju då avslutningsvis ganska enkel. Den består ju då utav artikelnumret för uppgiften och sen har den ju då med sig ifrån sitt eget artikelregister då kostnaden och tiden per styck och priset per styck då.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Sen så om det då i orderkonceptet finns en kopplad prislista så kan den då få upp kundunik uppdaterad information då som i det här fallet då, eh, över-ride, overridear då, eh, den generella informationen. Så då får, kan den då få ett nyss, nytt listpris och den skulle också kunna få ett ny, ny, ny produktionstid och den skulle kunna få en ny kostnad också då utifrån den aktuella prislista som är, är vald då.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Sedan så hämtar den också då från orderkonceptet eventuell leveranstid, eh, om det är en vara då. Det finns också i artikelregistret om det nu är, nu är, nu är en leveranstid. Den hämtar också utifrån om det är en vara, den geografiska positionen för var, varan är belägen, det vill säga vilken lagerplats det är då.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Sedan från orderkonceptet så hämtar den då önskad leveranstid på leveransen då utav orderkonceptet. Och den är mycket komplicerad för att ett orderkoncept, i den enklaste formen så, så, så, så har man ju bara en leveranstid. Eh, det kan vara måndag nästa vecka eller det kan vara januari, februari, eh, 2027 och då är ju det den önskade leveranstiden eller leveransperioden då. Eh, men",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "det är ju det ordkonceptet då att lägga till, eh, icke önskade leveranstider under huvudleveransperioden, eh, eller önskade leverans-- Mer önskade leveransperioder under leveranstiden. Så till exempel så om, om, om vi har nu en leveransperiod som är hela april, eh, så... Och det är mer fördelaktigt för oss att utföra jobbet torsdag till fredag-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. på vis, så kan vi alltså ha en generell leveranstid som är alltså hela april. Men det är fördelaktigt att vi kommer, eh, torsdag till fredag då. Och vi skulle också kunna ha då en tid som, eh, en icke fördelaktig tid eller en förbudstid där vi säger att vi får absolut inte komma dit på måndagar, eh, av något skäl då. Och då har vi då med den här uppgiften då plockat med oss då, eh, flera tider-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. -uppgifter.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Eh, nästa...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Post som kommer ut ur utföranderegistret är då den geografiska platsen då. Och...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Den första informationen här hämtar den då från, från artikelregistret och den hämtade då leveranstiden från orderkonceptet. Eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Men...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Platsen här nu då, den hämtar den ju då från det objekt som den har träffat på, fått träff på, där den har hakat fast så att säga då. Och från samma, eh, eh, register då, det vill säga objektregistrets, metadataregister och valt metadatafält, hämtar den ju också då antalet.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och här gäller det ju då att hålla, hålla då, då så att säga tungan rätt i mun då. Eh, ja, platsen hämtas då från, från s- eh, ett antal, eh, ja, system, eh, associerade metadatafält då. Det vill säga...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Gårdadress, vart ryvård eller, eh, longitud och latitud då. Så platsen är ju alltså väldigt, väldigt viktig och platsen kan ju också vara då en lagerplats. Så här behöver systemet för att kunna processa, så att säga, uppgiften ha en, en, en liten intelligens som reder ut var är den här uppgiften någonstans. Eh, och när det gäller då, eh, fysiska varor så behöver...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. Systemet i den där, eh, lilla algoritmen då ha en, en, eh, en, en, eh, ett villkor då som, som säger om en, om en vara då finns på en lagerplats så blir ju en del av uppgiften att plocka varan på den lagerplatsen. Och sen måste systemet förstå då att leveransen utav samma varor kommer ju då att vara på objektets plats då. Så där får ju då den här lilla motorn som tittar på var saker finns då konstatera: \"Oj, här har vi en uppgift som finns på två ställen\". Och då måste den ju då-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm ...skapa två stycken uppgifter då. Mm. En för att plocka den då eller hämta den och sen en för, för att, eh, så att säga, s-s-s-- leverera den då. Och på motsvarande sätt blir det ju då om man har en, ett återtag utav en sak då som ska lämnas tillbaka. I visst-- I vissa fall så är det ju, ja, det kan ju vara varor som ska, ska tillbaka, men framför allt så är det i kidnappsvärld då. Eh, det kan vara nycklar som man ska ha med sig. Så logiken behöver liksom då också kunna, kunna ha-hanterar då att om, om bara-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm ...den inte levereras ut så ska ju också systemet förstå då: \"Oj, nu blev det inte levererat den här nyckeln, eh, utan nu är den kvar.\" Och då, då blir ju automatiskt en uppgift när den ska tillbaka till sin lagerplats. Det där borde vara fullt möjligt då att, att få en, en, en liten logik som, som hanterar det där då. Eh, men där har vi kanske den absolut viktigaste posten då i, eh, det vill säga det, det så kallade uppgiftsregistret då. Och med de här posterna här så kan man ju då, eh, utifrån",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "- Mm ...ta lite räkna ut produktionstid för den enskilda uppgiften och man räknar ut pris för den enskilda uppgiften och, och så vid-- och så vidare då. Och jag ser här också att jag har missat en annan väldigt viktig bit då, eh, men den logiken finns ju delvis då på orderkonceptet, va. Men det första som vi väljer på orderkonceptet som skapar uppgiften är ju då vilken kund som ska då betala uppgiften eller rättare sagt, eh, till vilken faktura den här uppgiften skall...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Hamna eller, eller ja, den som adresseras till när den är kvitterad.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Så, då har vi gått igenom det här och det här är ju grunden. Det här måste vi liksom då förstå. Och jag kan väl säga då, några klurigheter är ju det sista när det gäller uppgiften som är kanske den mest komplicerade. Det är liksom, Sam kör ju nu flera register då som skapar en uppgift med information då både från objektet, från artikelregistret, IS-listan, kund, eh, registret, eh, och inte minst metadatarregistret som är kopplat till objektena. Eh-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Sen så kommer det då in, eh, artikeltyp och det kommer in, eh, utförartyp då också på den här. Så den här sista posten är ju den absolut mest komplicerade. Och sen så behöver vi då få smarta frågor från Replit då och förslag hur vi då, eh... Vissa fält blir ju då system.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Eh, bärande, men, men jag, jag tänker framför allt här nu på, på fältet då med adress eller plats för ett objekt då. Men problemet här är ju då att dom uppgifterna kan ju då se olika ut. Eh, ibland kan det vara bara en stad och ibland kan det vara en gataadress och ibland kan det vara koordinater. De här ska också kunna uppdateras utav utföraren då så att man får exakt position. Och sen måste vi också, eh, förstå då att vissa typer av uppgifter har ingen geografisk koppling och vissa typer utav objekt har-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm ...heller ingen geografisk koppling för det, det kan ju vara en avdelning eller ett område då, eh, som, som, eh, kanske bara är i Söderort i till exempel Stockholm och det är då ett område. Och det, ja, det, det, det, det kan ju då finnas i, i, i... Ja, det står södra Stockholm där då, men det är ju ett väldigt diffust geografiskt område då. Eh, och här kan man väl säga, men det har inte hög prioritet, men ett objekt ska också kunna då ha en geografisk-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm ...utbredning. Och jag såg, det finns ju då i systemet så att man alltså ska kunna, eh, som alternativ då till, till då ett objekt som har en pinpoint, alltså finns på en tydlig X- och Y-koordinat, så, så sku-- så kan då ett objekt, till exempel ett område, då inramas av ett, en, en geografisk yta då, polylinje. Och...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    }
+  ]
+}
