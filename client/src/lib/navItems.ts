@@ -143,8 +143,6 @@ export function getPlaneringItems(tl?: (key: string) => string): NavItem[] {
     { title: l("nav.production-control"), url: "/planning-parameters", icon: Settings2, description: l("nav.production-control.desc"), subSection: "Inställningar" },
     { title: l("nav.planner-search-filters"), url: "/planner-search-filters", icon: Sliders, description: l("nav.planner-search-filters.desc"), subSection: "Inställningar" },
     { title: "Utförandetyper", url: "/utforandetyper", icon: ListChecks, description: "Hantera utförandetyper och automatiska förberedelseuppgifter per typ", subSection: "Inställningar" },
-    // Granskning
-    { title: "Metadata-granskning", url: "/metadata-granskning", icon: Inbox, description: "Granska och godkänn inlämningar från publika metadata-lämnare", subSection: "Granskning" },
   ];
 }
 
@@ -203,6 +201,7 @@ export function getAdminItems(tl?: (key: string) => string): NavItem[] {
     // Metadata
     { title: "Metadata", url: "/metadata-settings", icon: Database, description: "Metadatakatalog, definitioner och koppling per ordertyp", subSection: "Metadata" },
     { title: "Metadata-lämnare", url: "/metadata-editors", icon: ClipboardCheck, description: "Bygg publika formulär för insamling av metadata (granskas innan de registreras)", subSection: "Metadata" },
+    { title: "Metadata-granskning", url: "/metadata-granskning", icon: Inbox, description: "Granska och godkänn inlämningar från publika metadata-lämnare", subSection: "Metadata" },
     // Integrationer
     { title: l("nav.fortnox"), url: "/fortnox", icon: Receipt, description: l("nav.fortnox.desc"), subSection: "Integrationer" },
     { title: l("nav.sms-settings"), url: "/sms-settings", icon: MessageSquare, description: l("nav.sms-settings.desc"), subSection: "Integrationer" },
