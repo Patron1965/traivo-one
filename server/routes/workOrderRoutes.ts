@@ -21,6 +21,7 @@ import { generatePreTasksForWorkOrder } from "../planning/weeklyPlanEngine";
 import { notificationService } from "../notifications";
 import { asyncHandler } from "../asyncHandler";
 import { AppError, NotFoundError, ValidationError, ConflictError, ForbiddenError } from "../errors";
+import { deriveFortnoxCodesWithSourceForWorkOrder } from "../services/fortnox-code-derivation";
 
 /** Räknar ut outsidePreferredWindow-flaggan + priority utifrån objektets/kundens
  * effektiva leveranspreferens och plannedWindowStart/End. */
@@ -305,6 +306,24 @@ app.get("/api/work-orders/:id", asyncHandler(async (req, res) => {
     isCancelled: !!verified.deletedAt,
     cancellation,
   });
+}));
+
+// Task #1005: Visa vilket kostnadsställe/projekt en genererad uppgift faktiskt
+// kommer att faktureras mot — och varifrån värdet härleds (bil/utrustning →
+// deltagare → resurs → team). Read-only; återanvänder samma resolutionsordning
+// som Fortnox-exporten så det som visas matchar det som faktiskt fakturerar.
+app.get("/api/work-orders/:id/fortnox-codes", asyncHandler(async (req, res) => {
+  const tenantId = getTenantIdWithFallback(req);
+  let workOrder = await storage.getWorkOrder(req.params.id);
+  if (!workOrder) {
+    const [deleted] = await db.select().from(workOrders).where(eq(workOrders.id, req.params.id));
+    if (deleted) workOrder = deleted;
+  }
+  const verified = verifyTenantOwnership(workOrder, tenantId);
+  if (!verified) throw new NotFoundError("Arbetsorder");
+
+  const derived = await deriveFortnoxCodesWithSourceForWorkOrder(tenantId, verified);
+  res.json(derived);
 }));
 
 // Aktivitetslogg för en arbetsorder: statusbyten, redigeringar, avbeställningar
