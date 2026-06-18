@@ -2987,6 +2987,11 @@ export const orderConcepts = pgTable("order_concepts", {
 
   // === WIZARD 9-STEG (Orderkoncept-Process) ===
   currentStep: integer("current_step").default(1),
+  // Task #995: versionsmarkör för wizardens stegnumrering. 1 = ursprunglig ordning
+  // (Namn&Kund först, Inpekning på 4). >=2 = ny ordning (Inpekning först, Kund eget
+  // steg). Default 1 så befintliga utkast remappas old→new vid laddning; nya/sparade
+  // koncept stämplas alltid med aktuell version.
+  wizardStepVersion: integer("wizard_step_version").default(1),
   customerMode: text("customer_mode").default("HARDCODED").notNull(),
   customerId: varchar("customer_id"),
   // Steg 1 — metadatafält som bär kundidentitet vid FROM_METADATA-läge

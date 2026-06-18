@@ -67,3 +67,4 @@
 - [Metadata-lämnare publik form](metadata-editor-public-form.md) — GPS-typ hänger på "Söker objekt..." om getCurrentPosition aldrig callbackar (test: sätt geolocation+permission på context FÖRE navigering); approve skriver metadata_varden, reject ej.
 - [Objektets platsmodell](object-location-model.md) — objekt-plats/ruttbarhet bor ENDAST i object-location.ts; entré-koord = pinpoint OCH ruttbar fallback; legacy NULL-typ inferreras för att bevara dagens ruttning.
 - [Frozen tidsregel-paket (Tidsmotor)](frozen-time-rules.md) — viktade tidsregler fryses per uppgift vid expansion; HÅRDA regler bara snapshotas (blockerar via befintliga time_windows), bara MJUKA injiceras som prioritetsdelta i VRP.
+- [Orderkoncept-wizard stegordning](order-concept-wizard-step-ordering.md) — stegnr är numeriskt kodat på många ställen (STEPS/validate/status/saveStep/render/header); omordning kräver lockstep + versions-gate:ade utkast (gammal/ny numrering delar 1..N).

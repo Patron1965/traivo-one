@@ -45,11 +45,14 @@ function deriveOffsetMinutes(article: Article): number | null {
   return null;
 }
 
+// Task #995: ny stegordning enligt Mats — objekt/inpekning först, kund som eget
+// steg direkt efter (vald eller härledd ur objektens metadata), sedan pris,
+// fakturering, leveranstid, uppgifter och granska.
 const STEPS = [
-  { num: 1, label: "Namn & Kund" },
-  { num: 2, label: "Pris & Referens" },
-  { num: 3, label: "Fakturering" },
-  { num: 4, label: "Inpekning" },
+  { num: 1, label: "Inpekning" },
+  { num: 2, label: "Kund" },
+  { num: 3, label: "Pris & Referens" },
+  { num: 4, label: "Fakturering" },
   { num: 5, label: "Leveranstid" },
   { num: 6, label: "Uppgifter" },
   { num: 7, label: "Granska" },
@@ -65,7 +68,23 @@ const wizardFormSchema = z.object({
 type WizardFormValues = z.infer<typeof wizardFormSchema>;
 
 const stepFieldsToValidate: Partial<Record<number, (keyof WizardFormValues)[]>> = {
-  3: ["invoiceLevel", "invoiceModel"],
+  4: ["invoiceLevel", "invoiceModel"],
+};
+
+// Task #995: aktuell version av wizardens stegnumrering. Bumpas vid varje omordning.
+// Nya/sparade koncept stämplas med detta värde (wizardStepVersion); utkast med lägre
+// version remappas old→new vid laddning.
+const WIZARD_STEP_VERSION = 2;
+
+// Gammal ordning (version 1): 1=Namn&Kund, 2=Pris&Referens, 3=Fakturering,
+// 4=Inpekning, 5=Leveranstid, 6=Uppgifter, 7=Granska.
+// Ny ordning (version 2): 1=Inpekning, 2=Kund, 3=Pris&Referens, 4=Fakturering,
+// 5=Leveranstid, 6=Uppgifter, 7=Granska.
+const STEP_REMAP_V1_TO_V2: Record<number, number> = { 1: 2, 2: 3, 3: 4, 4: 1, 5: 5, 6: 6, 7: 7 };
+
+const remapSavedStep = (savedStep: number, savedVersion: number | null | undefined): number => {
+  if ((savedVersion ?? 1) >= WIZARD_STEP_VERSION) return savedStep;
+  return STEP_REMAP_V1_TO_V2[savedStep] ?? 1;
 };
 
 const toDateInput = (v: unknown): string =>
@@ -179,11 +198,23 @@ export default function OrderConceptWizardPage() {
     setCustomerMode(wizardData.customerMode || "HARDCODED");
     setSelectedCustomerId(wizardData.customerId || null);
     setCustomerMetadataField(wizardData.customerMetadataField || null);
-    const savedStep = Math.min(wizardData.currentStep || 1, TOTAL_STEPS);
+    // Task #995: remappa utkast sparade med gamla stegnumreringen (wizardStepVersion < 2)
+    // till den nya ordningen så att t.ex. ett utkast i gamla steg 4 (Inpekning) öppnas
+    // i nya steg 1 (Inpekning) — inte nya steg 4 (Fakturering).
+    const rawSavedStep = Math.min(wizardData.currentStep || 1, TOTAL_STEPS);
+    const savedStep = remapSavedStep(rawSavedStep, wizardData.wizardStepVersion);
     setCurrentStep(savedStep);
     if (savedStep > 1) {
       setResumeStep(savedStep);
       setShowResumeBanner(true);
+    }
+    // Migrera raden i DB på plats (lazy): stämpla nya versionen + remappad step så
+    // efterföljande laddningar inte remappar igen.
+    if ((wizardData.wizardStepVersion ?? 1) < WIZARD_STEP_VERSION && conceptId) {
+      apiRequest("PATCH", `/api/order-concepts/${conceptId}`, {
+        currentStep: savedStep,
+        wizardStepVersion: WIZARD_STEP_VERSION,
+      }).catch(() => {});
     }
     setPriceListId(wizardData.priceListId || null);
     setPriceModel(wizardData.priceModel || "running");
@@ -256,13 +287,14 @@ export default function OrderConceptWizardPage() {
     if (stepNum >= currentStep) return "future";
     switch (stepNum) {
       case 1:
-        if (!conceptName || (customerMode === "HARDCODED" && !selectedCustomerId)) return "warning";
+        if (!conceptName || targetObjectIds.size === 0) return "warning";
         return "complete";
-      case 3:
-        if (!invoiceLevel || !invoiceModel) return "warning";
+      case 2:
+        if (customerMode === "HARDCODED" && !selectedCustomerId) return "warning";
+        if (customerMode === "FROM_METADATA" && !customerMetadataField) return "warning";
         return "complete";
       case 4:
-        if (targetObjectIds.size === 0) return "warning";
+        if (!invoiceLevel || !invoiceModel) return "warning";
         return "complete";
       case 6:
         if (conceptArticles.length === 0) return "warning";
@@ -270,7 +302,7 @@ export default function OrderConceptWizardPage() {
       default:
         return "complete";
     }
-  }, [currentStep, conceptName, customerMode, selectedCustomerId, invoiceLevel, invoiceModel, targetObjectIds, conceptArticles]);
+  }, [currentStep, conceptName, customerMode, selectedCustomerId, customerMetadataField, invoiceLevel, invoiceModel, targetObjectIds, conceptArticles]);
 
   const validateCurrentStep = useCallback(async (): Promise<string | null> => {
     const fields = stepFieldsToValidate[currentStep];
@@ -284,17 +316,18 @@ export default function OrderConceptWizardPage() {
     switch (currentStep) {
       case 1:
         if (!conceptName) return "Ange ett namn för orderkonceptet.";
-        if (customerMode === "HARDCODED" && !selectedCustomerId) return "Välj en kund eller byt till metadata-läge.";
-        break;
-      case 4:
         if (targetObjectIds.size === 0) return "Välj minst ett objekt eller en gren.";
+        break;
+      case 2:
+        if (customerMode === "HARDCODED" && !selectedCustomerId) return "Välj en kund eller byt till metadata-läge.";
+        if (customerMode === "FROM_METADATA" && !customerMetadataField) return "Välj metadatafält för kund eller byt till fast kund.";
         break;
       case 6:
         if (conceptArticles.length === 0) return "Lägg till minst en uppgift/artikel.";
         break;
     }
     return null;
-  }, [currentStep, form, conceptName, customerMode, selectedCustomerId, targetObjectIds, conceptArticles]);
+  }, [currentStep, form, conceptName, customerMode, selectedCustomerId, customerMetadataField, targetObjectIds, conceptArticles]);
 
   const buildConceptPatch = useCallback((nextStep: number) => {
     // Task #974: kanonisera fakturastopp vid persistering oavsett legacy-värden i state.
@@ -306,6 +339,7 @@ export default function OrderConceptWizardPage() {
       : "customer";
     return {
     currentStep: nextStep,
+    wizardStepVersion: WIZARD_STEP_VERSION,
     name: conceptName,
     customerMode,
     customerId: customerMode === "HARDCODED" ? selectedCustomerId : null,
@@ -360,6 +394,7 @@ export default function OrderConceptWizardPage() {
         customerMode,
         customerId: customerMode === "HARDCODED" ? selectedCustomerId : null,
         currentStep: 1,
+        wizardStepVersion: WIZARD_STEP_VERSION,
       });
       return res.json();
     },
@@ -375,7 +410,8 @@ export default function OrderConceptWizardPage() {
       if (!cId) return;
       await apiRequest("PATCH", `/api/order-concepts/${cId}`, buildConceptPatch(nextStep ?? step));
 
-      if (step === 4) {
+      if (step === 1) {
+        // Task #995: inpekning är nu första steget — villkorsfilter sparas här.
         // Replace-all filter set
         const existingRes = await fetch(`/api/order-concepts/${cId}/filters`);
         if (existingRes.ok) {
@@ -436,7 +472,7 @@ export default function OrderConceptWizardPage() {
       setCurrentStep(newStep);
       setShowResumeBanner(false);
       if (conceptId) {
-        try { await apiRequest("PATCH", `/api/order-concepts/${conceptId}`, { currentStep: newStep }); } catch {}
+        try { await apiRequest("PATCH", `/api/order-concepts/${conceptId}`, { currentStep: newStep, wizardStepVersion: WIZARD_STEP_VERSION }); } catch {}
       }
     }
   }, [currentStep, conceptId]);
@@ -597,7 +633,7 @@ export default function OrderConceptWizardPage() {
                     }
                     setCurrentStep(step.num);
                     setShowResumeBanner(false);
-                    try { await apiRequest("PATCH", `/api/order-concepts/${conceptId}`, { currentStep: step.num }); } catch {}
+                    try { await apiRequest("PATCH", `/api/order-concepts/${conceptId}`, { currentStep: step.num, wizardStepVersion: WIZARD_STEP_VERSION }); } catch {}
                   }}
                   className={cn(
                     "flex items-center gap-1 px-2 py-1 rounded text-xs transition-colors",
@@ -657,7 +693,7 @@ export default function OrderConceptWizardPage() {
                         setCurrentStep(1);
                         setShowResumeBanner(false);
                         if (conceptId) {
-                          try { await apiRequest("PATCH", `/api/order-concepts/${conceptId}`, { currentStep: 1 }); } catch {}
+                          try { await apiRequest("PATCH", `/api/order-concepts/${conceptId}`, { currentStep: 1, wizardStepVersion: WIZARD_STEP_VERSION }); } catch {}
                         }
                       }}
                       data-testid="button-restart-wizard"
@@ -674,9 +710,16 @@ export default function OrderConceptWizardPage() {
             </h2>
 
             {currentStep === 1 && (
+              <Step4Inspection
+                targetObjectIds={targetObjectIds}
+                onToggleObject={toggleObject}
+                filters={filters}
+                onFiltersChange={(f) => { setFilters(f); setHasUnsavedWork(true); }}
+              />
+            )}
+
+            {currentStep === 2 && (
               <Step1NameCustomer
-                conceptName={conceptName}
-                onConceptNameChange={setConceptName}
                 customers={customers}
                 customerMode={customerMode}
                 onCustomerModeChange={(mode) => {
@@ -689,10 +732,12 @@ export default function OrderConceptWizardPage() {
                 onSelectCustomer={(id) => { setSelectedCustomerId(id); setPriceListId(null); setHasUnsavedWork(true); }}
                 customerMetadataField={customerMetadataField}
                 onCustomerMetadataFieldChange={(f) => { setCustomerMetadataField(f); setHasUnsavedWork(true); }}
+                targetObjectIds={targetObjectIds}
+                filters={filters}
               />
             )}
 
-            {currentStep === 2 && (
+            {currentStep === 3 && (
               <Step2PriceReference
                 customerId={customerMode === "HARDCODED" ? selectedCustomerId : null}
                 priceListId={priceListId}
@@ -708,7 +753,7 @@ export default function OrderConceptWizardPage() {
               />
             )}
 
-            {currentStep === 3 && (
+            {currentStep === 4 && (
               <Step3Invoicing
                 invoiceModel={invoiceModel || null}
                 invoicePeriod={invoicePeriod}
@@ -736,15 +781,6 @@ export default function OrderConceptWizardPage() {
                   if (data.subscriptionStartDate !== undefined) setSubscriptionStartDate(data.subscriptionStartDate);
                   setHasUnsavedWork(true);
                 }}
-              />
-            )}
-
-            {currentStep === 4 && (
-              <Step4Inspection
-                targetObjectIds={targetObjectIds}
-                onToggleObject={toggleObject}
-                filters={filters}
-                onFiltersChange={(f) => { setFilters(f); setHasUnsavedWork(true); }}
               />
             )}
 

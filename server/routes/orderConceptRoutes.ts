@@ -2004,6 +2004,64 @@ app.post("/api/order-concepts/condition-preview", asyncHandler(async (req, res) 
     });
 }));
 
+// Task #995: Förhandsvisa vilka kunder som härleds ur objektens metadata för de valda
+// objekten (kund-steget i wizarden, FROM_METADATA-läge). Använder samma resolver-kedja
+// som /validate och /execute (resolveTargetObjects → filterObjectsByConditions →
+// resolveConceptCustomerForObject) så förhandsvisningen speglar vad körningen gör.
+app.post("/api/order-concepts/customer-preview", asyncHandler(async (req, res) => {
+    const tenantId = getTenantIdWithFallback(req);
+    const schema = z.object({
+      objectIds: z.array(z.string()).default([]),
+      clusterIds: z.array(z.string()).default([]),
+      filters: z.array(z.object({
+        metadataKey: z.string(),
+        operator: z.string(),
+        filterValue: z.any().optional(),
+      })).default([]),
+      customerMetadataField: z.string().min(1),
+    });
+    const parsed = schema.safeParse(req.body);
+    if (!parsed.success) throw new ValidationError(formatZodError(parsed.error).error);
+    const { objectIds, clusterIds, filters, customerMetadataField } = parsed.data;
+
+    const objectList = await resolveTargetObjects({ tenantId, objectIds, clusterIds });
+    const activeFilters = filters.filter((f) => f.metadataKey);
+    const matchedObjects = await filterObjectsByConditions(tenantId, objectList, activeFilters);
+
+    const customers = await storage.getCustomers(tenantId);
+    const lookup = buildCustomerLookup(customers);
+    const conceptLike = { customerMode: "FROM_METADATA", customerMetadataField };
+
+    const resolvedMap = new Map<string, { customerId: string; customerName: string; count: number }>();
+    const unmatchedMap = new Map<string, number>();
+    let missingValue = 0;
+    let ambiguous = 0;
+    for (const obj of matchedObjects) {
+      const r = await resolveConceptCustomerForObject(tenantId, conceptLike, obj.id, lookup);
+      if (r.status === "ok") {
+        const e = resolvedMap.get(r.customerId) ?? { customerId: r.customerId, customerName: r.customerName, count: 0 };
+        e.count++;
+        resolvedMap.set(r.customerId, e);
+      } else if (r.status === "missing_value") {
+        missingValue++;
+      } else if (r.status === "unmatched") {
+        unmatchedMap.set(r.rawValue, (unmatchedMap.get(r.rawValue) ?? 0) + 1);
+      } else if (r.status === "ambiguous") {
+        ambiguous++;
+      }
+    }
+
+    res.json({
+      totalObjects: matchedObjects.length,
+      resolved: Array.from(resolvedMap.values()).sort((a, b) => b.count - a.count),
+      missingValue,
+      unmatched: Array.from(unmatchedMap.entries())
+        .map(([rawValue, count]) => ({ rawValue, count }))
+        .sort((a, b) => b.count - a.count),
+      ambiguous,
+    });
+}));
+
 // Steg 4: Villkorstest mot ETT enskilt objekt. Visar per-villkor pass/fail med
 // objektets faktiska metadatavärde + om objektet ingår i de valda grenarna.
 // Använder samma resolver (resolveTargetObjects) och matchesFilter
