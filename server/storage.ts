@@ -6102,30 +6102,32 @@ export class DatabaseStorage implements IStorage {
     const vehicleById = new Map(allVehicles.map(v => [v.id, v]));
     const equipmentById = new Map(allEquipment.map(e => [e.id, e]));
 
-    const toVehicleAsset = (v: Vehicle): ExecutorRegisterAsset => ({
+    const toVehicleAsset = (v: Vehicle, linkId: string | null = null): ExecutorRegisterAsset => ({
       id: v.id,
       name: v.name,
       kind: "vehicle",
       identifier: v.registrationNumber ?? null,
       costCenter: v.costCenter ?? null,
       status: v.status ?? null,
+      linkId,
     });
-    const toEquipmentAsset = (e: Equipment): ExecutorRegisterAsset => ({
+    const toEquipmentAsset = (e: Equipment, linkId: string | null = null): ExecutorRegisterAsset => ({
       id: e.id,
       name: e.name,
       kind: "equipment",
       identifier: e.inventoryNumber ?? null,
       costCenter: e.costCenter ?? null,
       status: e.status ?? null,
+      linkId,
     });
 
-    // Resurs -> kopplade fordon/utrustning
+    // Resurs -> kopplade fordon/utrustning (linkId = resource_vehicles/-equipment-radens id)
     const vehiclesByResource = new Map<string, ExecutorRegisterAsset[]>();
     for (const rv of allResVehicles) {
       const v = vehicleById.get(rv.vehicleId);
       if (!v) continue;
       const arr = vehiclesByResource.get(rv.resourceId) ?? [];
-      arr.push(toVehicleAsset(v));
+      arr.push(toVehicleAsset(v, rv.id));
       vehiclesByResource.set(rv.resourceId, arr);
     }
     const equipmentByResource = new Map<string, ExecutorRegisterAsset[]>();
@@ -6133,12 +6135,16 @@ export class DatabaseStorage implements IStorage {
       const e = equipmentById.get(re.equipmentId);
       if (!e) continue;
       const arr = equipmentByResource.get(re.resourceId) ?? [];
-      arr.push(toEquipmentAsset(e));
+      arr.push(toEquipmentAsset(e, re.id));
       equipmentByResource.set(re.resourceId, arr);
     }
 
     const resourceById = new Map(allResources.map(r => [r.id, r]));
-    const buildPerson = (resourceId: string, teamRole: string | null): ExecutorRegisterPerson | null => {
+    const buildPerson = (
+      resourceId: string,
+      teamRole: string | null,
+      membershipId: string | null,
+    ): ExecutorRegisterPerson | null => {
       const r = resourceById.get(resourceId);
       if (!r) return null;
       return {
@@ -6148,6 +6154,7 @@ export class DatabaseStorage implements IStorage {
         status: r.status ?? null,
         costCenter: r.costCenter ?? null,
         projectCode: r.projectCode ?? null,
+        membershipId,
         vehicles: vehiclesByResource.get(r.id) ?? [],
         equipment: equipmentByResource.get(r.id) ?? [],
       };
@@ -6165,7 +6172,7 @@ export class DatabaseStorage implements IStorage {
 
     const teamsOut: ExecutorRegisterTeam[] = allTeams.map(team => {
       const members = (membersByTeam.get(team.id) ?? [])
-        .map(tm => buildPerson(tm.resourceId, tm.role ?? null))
+        .map(tm => buildPerson(tm.resourceId, tm.role ?? null, tm.id))
         .filter((p): p is ExecutorRegisterPerson => p !== null);
 
       // Aggregera medlemmarnas fordon/utrustning (deduplicerat) under teamet.
@@ -6191,7 +6198,7 @@ export class DatabaseStorage implements IStorage {
 
     const standalonePersons = allResources
       .filter(r => !assignedResourceIds.has(r.id))
-      .map(r => buildPerson(r.id, null))
+      .map(r => buildPerson(r.id, null, null))
       .filter((p): p is ExecutorRegisterPerson => p !== null);
 
     const linkedVehicleIds = new Set(allResVehicles.map(rv => rv.vehicleId));

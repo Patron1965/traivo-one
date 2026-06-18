@@ -5,6 +5,21 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import {
@@ -19,15 +34,27 @@ import {
   ExternalLink,
   Check,
   X,
+  UserPlus,
+  Plus,
+  Trash2,
 } from "lucide-react";
 import type {
   ExecutorRegister,
   ExecutorRegisterTeam,
   ExecutorRegisterPerson,
   ExecutorRegisterAsset,
+  Resource,
+  Vehicle,
+  Equipment,
 } from "@shared/schema";
 
 const REGISTER_KEY = ["/api/executor-register"];
+
+const ROLE_OPTIONS = [
+  { value: "medlem", label: "Medlem" },
+  { value: "ledare", label: "Ledare" },
+  { value: "vikarie", label: "Vikarie" },
+];
 
 type CodeField = "costCenter" | "projectCode";
 type EntityKind = "team" | "resource" | "vehicle" | "equipment";
@@ -146,8 +173,28 @@ function CodeEditor({ kind, id, field, value, label, disabled }: CodeEditorProps
   );
 }
 
-function AssetRow({ asset }: { asset: ExecutorRegisterAsset }) {
+/**
+ * Fordon/utrustning kopplad till en person. När `allowUnlink` är satt och raden har en
+ * `linkId` (resource_vehicles/resource_equipment) går det att koppla loss kopplingen.
+ */
+function AssetRow({ asset, allowUnlink }: { asset: ExecutorRegisterAsset; allowUnlink?: boolean }) {
+  const { toast } = useToast();
   const Icon = asset.kind === "vehicle" ? Car : Boxes;
+
+  const unlinkMutation = useMutation({
+    mutationFn: async () => {
+      const endpoint = asset.kind === "vehicle" ? "resource-vehicles" : "resource-equipment";
+      await apiRequest("DELETE", `/api/${endpoint}/${asset.linkId}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: REGISTER_KEY });
+      toast({ title: "Koppling borttagen" });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Kunde inte koppla loss", description: err.message, variant: "destructive" });
+    },
+  });
+
   return (
     <div
       className="flex items-center justify-between gap-3 rounded-md border bg-muted/40 px-3 py-2"
@@ -164,18 +211,211 @@ function AssetRow({ asset }: { asset: ExecutorRegisterAsset }) {
           )}
         </div>
       </div>
-      <CodeEditor
-        kind={asset.kind}
-        id={asset.id}
-        field="costCenter"
-        value={asset.costCenter}
-        label="Kostnadsställe"
-      />
+      <div className="flex items-center gap-2 shrink-0">
+        <CodeEditor
+          kind={asset.kind}
+          id={asset.id}
+          field="costCenter"
+          value={asset.costCenter}
+          label="Kostnadsställe"
+        />
+        {allowUnlink && asset.linkId && (
+          <Button
+            size="icon"
+            variant="ghost"
+            className="h-7 w-7 text-muted-foreground"
+            disabled={unlinkMutation.isPending}
+            onClick={() => unlinkMutation.mutate()}
+            title="Koppla loss"
+            data-testid={`button-unlink-asset-${asset.linkId}`}
+          >
+            {unlinkMutation.isPending ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <X className="h-3.5 w-3.5" />
+            )}
+          </Button>
+        )}
+      </div>
     </div>
   );
 }
 
-function PersonRow({ person }: { person: ExecutorRegisterPerson }) {
+/**
+ * Dialog för att koppla ett fordon eller en utrustning till en person. Skriver till
+ * resource_vehicles / resource_equipment via befintliga endpoints.
+ */
+function LinkAssetDialog({
+  person,
+  open,
+  onOpenChange,
+}: {
+  person: ExecutorRegisterPerson;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
+  const { toast } = useToast();
+  const [assetType, setAssetType] = useState<"vehicle" | "equipment">("vehicle");
+  const [pendingAssetId, setPendingAssetId] = useState<string>("");
+
+  const { data: vehicles = [] } = useQuery<Vehicle[]>({
+    queryKey: ["/api/vehicles"],
+    enabled: open,
+  });
+  const { data: equipment = [] } = useQuery<Equipment[]>({
+    queryKey: ["/api/equipment"],
+    enabled: open,
+  });
+
+  const linkedVehicleIds = useMemo(
+    () => new Set(person.vehicles.map(v => v.id)),
+    [person.vehicles],
+  );
+  const linkedEquipmentIds = useMemo(
+    () => new Set(person.equipment.map(e => e.id)),
+    [person.equipment],
+  );
+
+  const reset = () => {
+    setAssetType("vehicle");
+    setPendingAssetId("");
+  };
+
+  const linkMutation = useMutation({
+    mutationFn: async () => {
+      if (assetType === "vehicle") {
+        await apiRequest("POST", `/api/resources/${person.id}/vehicles`, {
+          vehicleId: pendingAssetId,
+        });
+      } else {
+        await apiRequest("POST", `/api/resources/${person.id}/equipment`, {
+          equipmentId: pendingAssetId,
+        });
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: REGISTER_KEY });
+      toast({ title: assetType === "vehicle" ? "Fordon kopplat" : "Utrustning kopplad" });
+      reset();
+      onOpenChange(false);
+    },
+    onError: (err: Error) => {
+      toast({ title: "Kunde inte koppla", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const options = assetType === "vehicle" ? vehicles : equipment;
+  const linkedIds = assetType === "vehicle" ? linkedVehicleIds : linkedEquipmentIds;
+
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={o => {
+        if (!o) reset();
+        onOpenChange(o);
+      }}
+    >
+      <DialogContent data-testid="dialog-link-asset">
+        <DialogHeader>
+          <DialogTitle>Koppla till {person.name}</DialogTitle>
+          <DialogDescription>
+            Välj ett fordon eller en utrustning som ska kopplas till personen.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-4 py-2">
+          <div>
+            <label className="text-sm font-medium mb-1 block">Typ</label>
+            <Select
+              value={assetType}
+              onValueChange={v => {
+                setAssetType(v as "vehicle" | "equipment");
+                setPendingAssetId("");
+              }}
+            >
+              <SelectTrigger data-testid="select-asset-type">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="vehicle">Fordon</SelectItem>
+                <SelectItem value="equipment">Utrustning</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <label className="text-sm font-medium mb-1 block">
+              {assetType === "vehicle" ? "Fordon" : "Utrustning"}
+            </label>
+            <Select value={pendingAssetId} onValueChange={setPendingAssetId}>
+              <SelectTrigger data-testid="select-asset-to-link">
+                <SelectValue placeholder={`Välj ${assetType === "vehicle" ? "fordon" : "utrustning"}...`} />
+              </SelectTrigger>
+              <SelectContent>
+                {options.length === 0 ? (
+                  <div className="px-2 py-1.5 text-sm text-muted-foreground">Inga tillgängliga</div>
+                ) : (
+                  options.map(o => {
+                    const already = linkedIds.has(o.id);
+                    return (
+                      <SelectItem key={o.id} value={o.id} disabled={already}>
+                        <span className="flex items-center gap-2">
+                          {o.name}
+                          {already && (
+                            <span className="text-xs text-muted-foreground">- redan kopplad</span>
+                          )}
+                        </span>
+                      </SelectItem>
+                    );
+                  })
+                )}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+        <DialogFooter>
+          <Button
+            variant="outline"
+            onClick={() => {
+              reset();
+              onOpenChange(false);
+            }}
+            data-testid="button-cancel-link"
+          >
+            Avbryt
+          </Button>
+          <Button
+            onClick={() => {
+              if (!pendingAssetId) return;
+              linkMutation.mutate();
+            }}
+            disabled={!pendingAssetId || linkMutation.isPending}
+            data-testid="button-confirm-link"
+          >
+            {linkMutation.isPending && <Loader2 className="h-4 w-4 mr-1 animate-spin" />}
+            Koppla
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function PersonRow({ person, teamId }: { person: ExecutorRegisterPerson; teamId?: string }) {
+  const { toast } = useToast();
+  const [linkOpen, setLinkOpen] = useState(false);
+
+  const removeFromTeamMutation = useMutation({
+    mutationFn: async () => {
+      await apiRequest("DELETE", `/api/team-member/${person.membershipId}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: REGISTER_KEY });
+      toast({ title: "Person borttagen från team" });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Kunde inte ta bort", description: err.message, variant: "destructive" });
+    },
+  });
+
   return (
     <div className="rounded-md border p-3" data-testid={`row-person-${person.id}`}>
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -202,23 +442,195 @@ function PersonRow({ person }: { person: ExecutorRegisterPerson }) {
         <div className="flex flex-wrap items-center gap-4">
           <CodeEditor kind="resource" id={person.id} field="costCenter" value={person.costCenter} label="Kostnadsställe" />
           <CodeEditor kind="resource" id={person.id} field="projectCode" value={person.projectCode} label="Projekt" />
+          <div className="flex items-center gap-1">
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-7"
+              onClick={() => setLinkOpen(true)}
+              data-testid={`button-link-asset-${person.id}`}
+            >
+              <Plus className="h-3.5 w-3.5 mr-1" />
+              Koppla
+            </Button>
+            {teamId && person.membershipId && (
+              <Button
+                size="icon"
+                variant="ghost"
+                className="h-7 w-7 text-muted-foreground"
+                disabled={removeFromTeamMutation.isPending}
+                onClick={() => removeFromTeamMutation.mutate()}
+                title="Ta bort ur team"
+                data-testid={`button-remove-member-${person.membershipId}`}
+              >
+                {removeFromTeamMutation.isPending ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Trash2 className="h-3.5 w-3.5" />
+                )}
+              </Button>
+            )}
+          </div>
         </div>
       </div>
       {(person.vehicles.length > 0 || person.equipment.length > 0) && (
         <div className="mt-2 grid gap-1.5 pl-9">
           {person.vehicles.map(v => (
-            <AssetRow key={v.id} asset={v} />
+            <AssetRow key={v.linkId ?? v.id} asset={v} allowUnlink />
           ))}
           {person.equipment.map(e => (
-            <AssetRow key={e.id} asset={e} />
+            <AssetRow key={e.linkId ?? e.id} asset={e} allowUnlink />
           ))}
         </div>
       )}
+      <LinkAssetDialog person={person} open={linkOpen} onOpenChange={setLinkOpen} />
     </div>
   );
 }
 
+/**
+ * Dialog för att lägga till en befintlig resurs som medlem i ett team. Skriver till
+ * team_members via befintlig endpoint. Resurser som redan är med i teamet är inaktiva.
+ */
+function AddMemberDialog({
+  team,
+  open,
+  onOpenChange,
+}: {
+  team: ExecutorRegisterTeam;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
+  const { toast } = useToast();
+  const [pendingResourceId, setPendingResourceId] = useState<string>("");
+  const [pendingRole, setPendingRole] = useState<string>("medlem");
+
+  const { data: resources = [] } = useQuery<Resource[]>({
+    queryKey: ["/api/resources"],
+    enabled: open,
+  });
+
+  const memberResourceIds = useMemo(
+    () => new Set(team.members.map(m => m.id)),
+    [team.members],
+  );
+  const activeResources = useMemo(
+    () => resources.filter(r => r.status === "active"),
+    [resources],
+  );
+
+  const reset = () => {
+    setPendingResourceId("");
+    setPendingRole("medlem");
+  };
+
+  const addMemberMutation = useMutation({
+    mutationFn: async () => {
+      await apiRequest("POST", `/api/team-members/${team.id}`, {
+        resourceId: pendingResourceId,
+        role: pendingRole,
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: REGISTER_KEY });
+      toast({ title: "Person tillagd i team" });
+      reset();
+      onOpenChange(false);
+    },
+    onError: (err: Error) => {
+      toast({ title: "Kunde inte lägga till", description: err.message, variant: "destructive" });
+    },
+  });
+
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={o => {
+        if (!o) reset();
+        onOpenChange(o);
+      }}
+    >
+      <DialogContent data-testid="dialog-add-member">
+        <DialogHeader>
+          <DialogTitle>Lägg till person i {team.name}</DialogTitle>
+          <DialogDescription>
+            Välj vilken person som ska tillhöra teamet. En person kan tillhöra flera team.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-4 py-2">
+          <div>
+            <label className="text-sm font-medium mb-1 block">Person</label>
+            <Select value={pendingResourceId} onValueChange={setPendingResourceId}>
+              <SelectTrigger data-testid="select-resource-to-add">
+                <SelectValue placeholder="Välj person..." />
+              </SelectTrigger>
+              <SelectContent>
+                {activeResources.length === 0 ? (
+                  <div className="px-2 py-1.5 text-sm text-muted-foreground">Inga personer</div>
+                ) : (
+                  activeResources.map(r => {
+                    const inThisTeam = memberResourceIds.has(r.id);
+                    return (
+                      <SelectItem key={r.id} value={r.id} disabled={inThisTeam}>
+                        <span className="flex items-center gap-2">
+                          {r.name}
+                          {inThisTeam && (
+                            <span className="text-xs text-muted-foreground">- redan med</span>
+                          )}
+                        </span>
+                      </SelectItem>
+                    );
+                  })
+                )}
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <label className="text-sm font-medium mb-1 block">Roll</label>
+            <Select value={pendingRole} onValueChange={setPendingRole}>
+              <SelectTrigger data-testid="select-role-to-add">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {ROLE_OPTIONS.map(opt => (
+                  <SelectItem key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+        <DialogFooter>
+          <Button
+            variant="outline"
+            onClick={() => {
+              reset();
+              onOpenChange(false);
+            }}
+            data-testid="button-cancel-add"
+          >
+            Avbryt
+          </Button>
+          <Button
+            onClick={() => {
+              if (!pendingResourceId) return;
+              addMemberMutation.mutate();
+            }}
+            disabled={!pendingResourceId || addMemberMutation.isPending}
+            data-testid="button-confirm-add"
+          >
+            {addMemberMutation.isPending && <Loader2 className="h-4 w-4 mr-1 animate-spin" />}
+            Lägg till
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function TeamCard({ team }: { team: ExecutorRegisterTeam }) {
+  const [addOpen, setAddOpen] = useState(false);
   const assetCount = team.vehicles.length + team.equipment.length;
   return (
     <Card data-testid={`card-team-${team.id}`}>
@@ -249,6 +661,16 @@ function TeamCard({ team }: { team: ExecutorRegisterTeam }) {
           <div className="flex flex-wrap items-center gap-4">
             <CodeEditor kind="team" id={team.id} field="costCenter" value={team.costCenter} label="Kostnadsställe" />
             <CodeEditor kind="team" id={team.id} field="projectCode" value={team.projectCode} label="Projekt" />
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-8"
+              onClick={() => setAddOpen(true)}
+              data-testid={`button-add-member-${team.id}`}
+            >
+              <UserPlus className="h-4 w-4 mr-1.5" />
+              Lägg till medlem
+            </Button>
           </div>
         </div>
       </CardHeader>
@@ -256,9 +678,10 @@ function TeamCard({ team }: { team: ExecutorRegisterTeam }) {
         {team.members.length === 0 ? (
           <p className="text-sm text-muted-foreground italic">Inga medlemmar än</p>
         ) : (
-          team.members.map(m => <PersonRow key={m.id} person={m} />)
+          team.members.map(m => <PersonRow key={m.membershipId ?? m.id} person={m} teamId={team.id} />)
         )}
       </CardContent>
+      <AddMemberDialog team={team} open={addOpen} onOpenChange={setAddOpen} />
     </Card>
   );
 }
@@ -323,8 +746,9 @@ export default function ExecutorRegisterPage() {
             Utförarregister
           </h1>
           <p className="text-sm text-muted-foreground mt-1">
-            En samlad vy: personer, fordon/utrustning och team som en enhet. Team är
-            grupperande förälder — kostnadsställe och projekt följer med till genererade uppgifter.
+            En samlad vy: personer, fordon/utrustning och team som en enhet. Lägg till eller ta bort
+            medlemmar och koppla fordon/utrustning direkt här — kostnadsställe och projekt följer med
+            till genererade uppgifter.
           </p>
         </div>
         <div className="flex items-center gap-2">

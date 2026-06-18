@@ -7575,6 +7575,9 @@ export interface ExecutorRegisterAsset {
   identifier: string | null; // regnr (fordon) / inventarienr (utrustning)
   costCenter: string | null;
   status: string | null;
+  // resource_vehicles/resource_equipment-radens id — behövs för att koppla loss från
+  // en person. null för team-aggregat och oanslutna fordon/utrustning.
+  linkId: string | null;
 }
 
 export interface ExecutorRegisterPerson {
@@ -7584,6 +7587,9 @@ export interface ExecutorRegisterPerson {
   status: string | null;
   costCenter: string | null;
   projectCode: string | null;
+  // team_members-radens id för medlemskapet i detta team — behövs för att ta bort
+  // personen ur teamet. null om personen är fristående (utan team).
+  membershipId: string | null;
   vehicles: ExecutorRegisterAsset[];
   equipment: ExecutorRegisterAsset[];
 }
