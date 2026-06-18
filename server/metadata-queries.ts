@@ -7,6 +7,7 @@ import {
   customers,
   articles,
   metadataKatalog, 
+  insertMetadataKatalogSchema,
   metadataKatalogKunder,
   metadataAreas,
   metadataVarden,
@@ -192,6 +193,98 @@ export function coerceMetadataVardeFromRaw(
   return { vardeFields, displayValue };
 }
 
+// ============================================================================
+// KANONISERING AV METADATA-SYSTEMEN (Task #992)
+// ----------------------------------------------------------------------------
+// Det engelska legacy-systemet (metadata_definitions.data_type / object_metadata)
+// använder ett mindre typvokabulär än den svenska katalogen
+// (metadata_katalog.datatyp / metadata_varden). Dessa mappningar används av
+// backfill-migreringen (scripts/backfill-english-metadata-to-swedish.ts) och av
+// kompatibilitets-API:t (/api/metadata-definitions som vy över katalogen) så att
+// en engelsk definition kan speglas mot rätt svensk datatyp och tvärtom.
+// ----------------------------------------------------------------------------
+
+// engelsk data_type → svensk datatyp. Okänd/utelämnad typ → "string" (säkrast:
+// lagrar råvärdet utan coercion-fel).
+export function mapEnglishDataTypeToDatatyp(dataType: string | null | undefined): string {
+  switch ((dataType ?? "").toLowerCase()) {
+    case "number":
+      return "decimal";
+    case "date":
+      return "datetime";
+    case "boolean":
+      return "boolean";
+    case "json":
+      return "json";
+    case "text":
+    default:
+      return "string";
+  }
+}
+
+// Task #992: idempotent installation av en metadatadefinition från ett
+// branschpaket till den kanoniska svenska katalogen (aldrig en ny engelsk
+// metadata_definitions-rad). Nyckel = namn (fieldKey i första hand, annars
+// fieldLabel). Hoppar över om en katalogpost med samma namn redan finns för
+// tenanten (= duplikat-skip, motsvarar paketinstallationens tidigare beteende).
+export async function ensurePackageMetadataKatalog(
+  tenantId: string,
+  meta: {
+    fieldKey?: string | null;
+    fieldLabel?: string | null;
+    dataType?: string | null;
+    propagationType?: string | null;
+    isRequired?: boolean | null;
+  },
+): Promise<{ created: boolean }> {
+  const namn = ((meta.fieldKey ?? "") || (meta.fieldLabel ?? "")).trim();
+  if (!namn) return { created: false };
+  const [existing] = await db
+    .select({ id: metadataKatalog.id })
+    .from(metadataKatalog)
+    .where(and(eq(metadataKatalog.tenantId, tenantId), eq(metadataKatalog.namn, namn)))
+    .limit(1);
+  if (existing) return { created: false };
+  const fieldLabel = (meta.fieldLabel ?? "").trim();
+  const beskrivning = fieldLabel && fieldLabel !== namn ? fieldLabel : null;
+  const data = insertMetadataKatalogSchema.parse({
+    tenantId,
+    namn,
+    beskrivning,
+    datatyp: mapEnglishDataTypeToDatatyp(meta.dataType ?? undefined),
+    standardArvs: (meta.propagationType ?? "falling") !== "fixed",
+    isRequired: meta.isRequired === true,
+    isSystem: false,
+    area: "annat",
+  });
+  (data as Record<string, unknown>).kategori =
+    ((data as Record<string, unknown>).area as string | null | undefined) || "annat";
+  await db.insert(metadataKatalog).values(data).onConflictDoNothing();
+  return { created: true };
+}
+
+// svensk datatyp → engelsk data_type (för kompatibilitets-API:t). Den rikare
+// svenska modellen kollapsar till de fem engelska typerna; integer/decimal →
+// number, datetime → date, json/location → json, övrigt → text.
+export function mapDatatypToEnglishDataType(datatyp: string | null | undefined): string {
+  switch ((datatyp ?? "").toLowerCase()) {
+    case "integer":
+    case "decimal":
+      return "number";
+    case "datetime":
+      return "date";
+    case "boolean":
+      return "boolean";
+    case "json":
+    case "location":
+      return "json";
+    case "string":
+    case "referens":
+    default:
+      return "text";
+  }
+}
+
 // Räkna ut förhandsstatus (skapa/ersätt/lägg till/oförändrad) för ett
 // importerat värde, givet de befintliga lokala visningsvärdena på objektet.
 // Ren funktion utan DB-anrop — används i förhandsgranskningen.
@@ -368,6 +461,104 @@ export async function getMetadataKatalogUsage(
 }
 
 // ============================================================================
+// KOMPATIBILITETS-VY: /api/metadata-definitions som vy över metadata_katalog
+// ----------------------------------------------------------------------------
+// (Task #992) Det engelska metadata_definitions-systemet är nu read-only
+// audit/rollback. Den legacy REST-ytan /api/metadata-definitions serveras
+// istället som en vy över den kanoniska svenska katalogen, så att frontend
+// (ObjectsPage, Articles*, orderkoncept-stegen, MetadataDefinitionsPage,
+// IndustryPackages) fortsätter fungera utan att läsa de tomma engelska
+// tabellerna. Invarianter:
+//   - id === metadata_katalog.id  → PATCH/DELETE/usage opererar direkt på
+//     katalograden (ingen separat identitet → ingen ny drift).
+//   - fieldKey === deriveMetadataDotKey(k) ?? namn  → exakt den nyckel som
+//     villkorsmotorn (getObjectsConditionMetadata) indexerar på, så att
+//     concept_filters.metadata_key fortsätter resolva.
+//   - Beräknade fält (arBeraknad) INKLUDERAS — de är fortfarande giltiga,
+//     valbara definitioner (T002 strippar bara deras *värden* vid matchning).
+// ----------------------------------------------------------------------------
+
+export interface MetadataDefinitionCompat {
+  id: string;
+  tenantId: string;
+  fieldKey: string;
+  fieldLabel: string;
+  dataType: string;
+  propagationType: string;
+  applicableLevels: string[];
+  defaultValue: string | null;
+  validationRules: Record<string, unknown>;
+  isRequired: boolean;
+  sortOrder: number;
+  createdAt: Date;
+  deletedAt: Date | null;
+  replacedByDefinitionId: string | null;
+}
+
+// Speglar en svensk katalograd till den engelska MetadataDefinition-formen som
+// frontend förväntar sig. `byId` används av deriveMetadataDotKey för att hitta
+// förälderns namn (punktnotation för underfält).
+export function katalogToDefinitionCompat(
+  k: MetadataKatalog,
+  byId: Map<string, Pick<MetadataKatalog, "namn">>,
+): MetadataDefinitionCompat {
+  return {
+    id: k.id,
+    tenantId: k.tenantId,
+    fieldKey: deriveMetadataDotKey(k, byId) ?? k.namn,
+    fieldLabel: k.namn,
+    dataType: mapDatatypToEnglishDataType(k.datatyp),
+    propagationType: k.standardArvs ? "falling" : "fixed",
+    applicableLevels: [],
+    defaultValue: null,
+    validationRules: {},
+    isRequired: k.isRequired,
+    sortOrder: k.sortOrder ?? 0,
+    createdAt: k.createdAt,
+    deletedAt: k.deletedAt ?? null,
+    replacedByDefinitionId: null,
+  };
+}
+
+export async function getMetadataDefinitionsCompat(
+  tenantId: string,
+  opts?: { includeDeleted?: boolean },
+): Promise<MetadataDefinitionCompat[]> {
+  const whereExpr = opts?.includeDeleted
+    ? eq(metadataKatalog.tenantId, tenantId)
+    : and(eq(metadataKatalog.tenantId, tenantId), isNull(metadataKatalog.deletedAt));
+  const rows = await db
+    .select()
+    .from(metadataKatalog)
+    .where(whereExpr)
+    .orderBy(metadataKatalog.area, metadataKatalog.sortOrder, metadataKatalog.namn);
+  // byId från samma resultatmängd (inkl. arkiverade när includeDeleted=true) så
+  // att punktnotationsnycklar för underfält förblir stabila även i arkivvyn.
+  const byId = new Map(rows.map((r) => [r.id, r]));
+  return rows.map((r) => katalogToDefinitionCompat(r, byId));
+}
+
+export async function getMetadataDefinitionCompat(
+  tenantId: string,
+  id: string,
+): Promise<MetadataDefinitionCompat | undefined> {
+  const [row] = await db
+    .select()
+    .from(metadataKatalog)
+    .where(and(eq(metadataKatalog.id, id), eq(metadataKatalog.tenantId, tenantId)));
+  if (!row) return undefined;
+  const byId = new Map<string, Pick<MetadataKatalog, "namn">>([[row.id, { namn: row.namn }]]);
+  if (row.parentMetadataId) {
+    const [parent] = await db
+      .select({ id: metadataKatalog.id, namn: metadataKatalog.namn })
+      .from(metadataKatalog)
+      .where(and(eq(metadataKatalog.id, row.parentMetadataId), eq(metadataKatalog.tenantId, tenantId)));
+    if (parent) byId.set(parent.id, { namn: parent.namn });
+  }
+  return katalogToDefinitionCompat(row, byId);
+}
+
+// ============================================================================
 // SAMMANSATTA (JSON) FÄLT — PER-UNDERFÄLT-ARV (Task #644)
 // ----------------------------------------------------------------------------
 // Sammansatta metadatafält (punktnotation `adress.gata`, `kontaktperson.namn`
@@ -434,7 +625,7 @@ export async function getObjectsMetadataValuesForCatalog(
         0 as level,
         ARRAY[]::varchar[] as blocked_katalog_ids
       FROM objects
-      WHERE id = ANY(${objectIds}) AND tenant_id = ${tenantId}
+      WHERE id = ANY(ARRAY[${sql.join(objectIds.map((id) => sql`${id}`), sql`, `)}]) AND tenant_id = ${tenantId}
 
       UNION ALL
 
@@ -484,7 +675,7 @@ export async function getObjectsMetadataValuesForCatalog(
         )
         AND mv.tenant_id = ${tenantId}
         AND mk.tenant_id = ${tenantId}
-        AND mv.metadata_katalog_id = ANY(${katalogIds})
+        AND mv.metadata_katalog_id = ANY(ARRAY[${sql.join(katalogIds.map((id) => sql`${id}`), sql`, `)}])
     )
     SELECT * FROM metadata_with_context
     ORDER BY root_id, metadata_katalog_id, rn
@@ -541,6 +732,73 @@ export async function getObjectsMetadataValuesForCatalog(
   }
 
   return result;
+}
+
+// ============================================================================
+// BATCH: METADATA FÖR VILLKORSMATCHNING (orderkoncept steg 4)
+// Task #992: enda kanoniska källan för "objekt → {nyckel → värde}" som
+// orderkoncept-villkorsmotorn (server/services/order-concept-targeting.ts)
+// matchar mot. Läser SVENSKT (metadata_katalog/metadata_varden) via
+// getObjectsMetadataValuesForCatalog — inkl. ärvda och sammansatta json-fält
+// samt mjuk-radering — och nycklar VARJE värde på katalogens `namn`, dess
+// `beteckning` OCH ev. punktnotation (förälder.barn). Då fortsätter ett sparat
+// concept_filters.metadata_key resolva oavsett vilken av dessa det pekar på
+// (back-fillen matchar fieldKey → namn|beteckning). Beräknade fält
+// (ar_beraknad) utelämnas — de härleds vid läsning och deltog aldrig i
+// villkorsmatchningen (det engelska systemet exponerade dem aldrig).
+// ============================================================================
+
+export async function getObjectsConditionMetadata(
+  tenantId: string,
+  objectIds: string[],
+): Promise<Map<string, Record<string, unknown>>> {
+  const out = new Map<string, Record<string, unknown>>();
+  if (objectIds.length === 0) return out;
+
+  const types = await getAllMetadataTypes(tenantId);
+  const byId = new Map(types.map((t) => [t.id, t]));
+  // Beräknade fält strippas: värdet härleds vid läsning och deltog aldrig i
+  // villkorsmatchningen (det engelska object_metadata saknade formelfält).
+  const matchable = types.filter((t) => !t.arBeraknad);
+  if (matchable.length === 0) return out;
+
+  const valuesByObject = await getObjectsMetadataValuesForCatalog(
+    tenantId,
+    objectIds,
+    matchable.map((t) => t.id),
+  );
+
+  for (const objectId of objectIds) {
+    const values = valuesByObject[objectId];
+    if (!values) continue;
+    const record: Record<string, unknown> = {};
+    // Precedens som buildMetadataTypeLookup: namn → punktnotation → beteckning.
+    // Den MÅSTE appliceras i tre separata pass ÖVER alla fält (inte per fält),
+    // annars kan ett tidigare fälts `beteckning` ockupera en nyckel som ett
+    // senare fälts `namn` behöver — och då resolvar concept_filters.metadata_key
+    // mot fel objektvärde. Pass 1 skriver alla kanoniska `namn` (vinner alltid),
+    // pass 2 fyller bara luckor med punktnotation, pass 3 bara kvarvarande luckor
+    // med `beteckning`.
+    for (const type of matchable) {
+      const value = values[type.id];
+      if (value == null) continue;
+      if (!(type.namn in record)) record[type.namn] = value;
+    }
+    for (const type of matchable) {
+      const value = values[type.id];
+      if (value == null) continue;
+      const dot = deriveMetadataDotKey(type, byId);
+      if (dot && !(dot in record)) record[dot] = value;
+    }
+    for (const type of matchable) {
+      const value = values[type.id];
+      if (value == null) continue;
+      const bet = type.beteckning?.trim();
+      if (bet && !(bet in record)) record[bet] = value;
+    }
+    if (Object.keys(record).length > 0) out.set(objectId, record);
+  }
+  return out;
 }
 
 // ============================================================================

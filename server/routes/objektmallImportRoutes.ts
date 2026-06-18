@@ -36,8 +36,6 @@ import { db } from "../db";
 import {
   objects,
   objectParents,
-  objectMetadata,
-  metadataDefinitions,
   metadataKatalog,
   metadataVarden,
   importBatches,
@@ -51,6 +49,7 @@ import {
   computeImportMetadataStatus,
   writeImportedMetadataValue,
   getDisplayValue,
+  getMetadataDefinitionsCompat,
   resolveTemplateFieldHeaders,
   type ImportMetadataWriteStatus,
 } from "../metadata-queries";
@@ -489,35 +488,29 @@ export async function buildExportWorkbook(
   objs.sort((a, b) => a.depth - b.depth || a.name.localeCompare(b.name, "sv"));
 
   // 2. Per-objekt-metadatavärden + definitioner (för dynamiska kolumner).
-  const defs = await db
-    .select()
-    .from(metadataDefinitions)
-    .where(and(eq(metadataDefinitions.tenantId, tenantId), isNull(metadataDefinitions.deletedAt)))
-    .orderBy(metadataDefinitions.sortOrder);
+  // Task #992: läs från den kanoniska svenska modellen (metadata_katalog via
+  // compat-vyn + metadata_varden) så att exporten round-trippar med importerade
+  // värden. defs[].id === katalog.id === metadata_varden.metadataKatalogId.
+  const defs = await getMetadataDefinitionsCompat(tenantId);
   const defById = new Map(defs.map((d) => [d.id, d]));
 
-  // objectId -> (definitionId -> värde)
+  // objectId -> (katalogId -> värde)
   const valuesByObject = new Map<string, Map<string, string>>();
   if (objs.length > 0) {
     const metaRows = await db
-      .select({
-        objectId: objectMetadata.objectId,
-        definitionId: objectMetadata.definitionId,
-        value: objectMetadata.value,
-        valueJson: objectMetadata.valueJson,
-      })
-      .from(objectMetadata)
-      .where(eq(objectMetadata.tenantId, tenantId));
+      .select()
+      .from(metadataVarden)
+      .where(and(eq(metadataVarden.tenantId, tenantId), eq(metadataVarden.raderad, false)));
     for (const m of metaRows) {
-      if (!defById.has(m.definitionId)) continue;
-      const val = m.value ?? (m.valueJson != null ? JSON.stringify(m.valueJson) : "");
+      if (!m.objektId || !defById.has(m.metadataKatalogId)) continue;
+      const val = getDisplayValue(m);
       if (!val) continue;
-      let inner = valuesByObject.get(m.objectId);
+      let inner = valuesByObject.get(m.objektId);
       if (!inner) {
         inner = new Map();
-        valuesByObject.set(m.objectId, inner);
+        valuesByObject.set(m.objektId, inner);
       }
-      inner.set(m.definitionId, val);
+      inner.set(m.metadataKatalogId, val);
     }
   }
 
@@ -586,7 +579,11 @@ export async function buildExportWorkbook(
   // Import-flik (platt): fasta kolumner A–E + dynamiska metadata-kolumner.
   const ws = wb.addWorksheet(OBJEKTMALL_IMPORT_SHEET_NAME);
   const fixedHeaders = OBJEKTMALL_FIXED_COLUMNS.map((c) => c.header);
-  const metaHeaders = metaDefsWithValues.map((d) => d.fieldLabel);
+  // Task #992: kolumnrubrik = fieldKey (deriveMetadataDotKey ?? namn) — samma
+  // nyckel som den svenska import-matchningen (buildMetadataTypeLookup) resolvar
+  // mot, så att exporterade värden round-trippar vid återimport (inkl. punkt-
+  // notation för sammansatta fält).
+  const metaHeaders = metaDefsWithValues.map((d) => d.fieldKey);
   const allHeaders = [...fixedHeaders, ...metaHeaders];
   ws.columns = allHeaders.map((h) => ({
     header: h,

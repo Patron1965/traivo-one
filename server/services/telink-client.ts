@@ -8,8 +8,8 @@ import net from "node:net";
 import { db } from "../db";
 import {
   objects,
-  metadataDefinitions,
-  objectMetadata,
+  metadataKatalog,
+  metadataVarden,
   importBatches,
   customerIssueReports,
   type ServiceObject,
@@ -17,6 +17,10 @@ import {
 } from "@shared/schema";
 import { and, eq, isNull, inArray } from "drizzle-orm";
 import { storage } from "../storage";
+// Task #992: kanonisk källa = svenska metadata-modellen. Telink-synk skriver
+// via de svenska write-helpers (historik + guards) i stället för den engelska
+// object_metadata-tabellen.
+import { createMetadata, updateMetadata, getDisplayValue } from "../metadata-queries";
 
 export interface TelinkConfig {
   enabled: boolean;
@@ -403,8 +407,12 @@ function indexByObjectNumber(rows: MatchableObject[]): Map<string, MatchableObje
 }
 
 interface FieldDefs {
+  // katalog-id (metadata_katalog.id) för kontakt-namn/-telefon, eller null om typen saknas.
   nameDefId: string | null;
   phoneDefId: string | null;
+  // katalog-namn (metadata_katalog.namn) — krävs av de svenska write-helpers (keyas på namn).
+  nameNamn: string | null;
+  phoneNamn: string | null;
   nameKey: string;
   phoneKey: string;
 }
@@ -412,21 +420,25 @@ interface FieldDefs {
 async function resolveFieldDefs(tenantId: string, config: TelinkConfig): Promise<FieldDefs> {
   const nameKey = config.contactNameFieldKey ?? TELINK_DEFAULTS.contactNameFieldKey;
   const phoneKey = config.contactPhoneFieldKey ?? TELINK_DEFAULTS.contactPhoneFieldKey;
+  // Task #992: slå upp typerna i den svenska katalogen via namn (fältnyckeln
+  // motsvarar metadata_katalog.namn i den konsoliderade modellen).
   const defs = await db
-    .select({ id: metadataDefinitions.id, fieldKey: metadataDefinitions.fieldKey })
-    .from(metadataDefinitions)
+    .select({ id: metadataKatalog.id, namn: metadataKatalog.namn })
+    .from(metadataKatalog)
     .where(
       and(
-        eq(metadataDefinitions.tenantId, tenantId),
-        isNull(metadataDefinitions.deletedAt),
-        inArray(metadataDefinitions.fieldKey, [nameKey, phoneKey]),
+        eq(metadataKatalog.tenantId, tenantId),
+        isNull(metadataKatalog.deletedAt),
+        inArray(metadataKatalog.namn, [nameKey, phoneKey]),
       ),
     );
-  const nameDef = defs.find((d) => d.fieldKey === nameKey) ?? null;
-  const phoneDef = defs.find((d) => d.fieldKey === phoneKey) ?? null;
+  const nameDef = defs.find((d) => d.namn === nameKey) ?? null;
+  const phoneDef = defs.find((d) => d.namn === phoneKey) ?? null;
   return {
     nameDefId: nameDef?.id ?? null,
     phoneDefId: phoneDef?.id ?? null,
+    nameNamn: nameDef?.namn ?? null,
+    phoneNamn: phoneDef?.namn ?? null,
     nameKey,
     phoneKey,
   };
@@ -435,52 +447,48 @@ async function resolveFieldDefs(tenantId: string, config: TelinkConfig): Promise
 async function readCurrentValue(
   tenantId: string,
   objectId: string,
-  definitionId: string,
+  katalogId: string,
 ): Promise<{ rowId: string; value: string | null } | null> {
   // Defense-in-depth: tenantId i WHERE även om objectId redan validerats —
   // matchar konventionen i resten av kodbasen (se MEMORY: multi-tenant
-  // UPDATE predicates).
+  // UPDATE predicates). Task #992: läs EGEN lokal rad i metadata_varden
+  // (arv löses inte här — Telink jämför bara objektets eget värde).
   const [row] = await db
-    .select({ id: objectMetadata.id, value: objectMetadata.value })
-    .from(objectMetadata)
+    .select()
+    .from(metadataVarden)
     .where(
       and(
-        eq(objectMetadata.tenantId, tenantId),
-        eq(objectMetadata.objectId, objectId),
-        eq(objectMetadata.definitionId, definitionId),
+        eq(metadataVarden.tenantId, tenantId),
+        eq(metadataVarden.objektId, objectId),
+        eq(metadataVarden.metadataKatalogId, katalogId),
       ),
     )
     .limit(1);
   if (!row) return null;
-  return { rowId: row.id, value: row.value ?? null };
+  return { rowId: row.id, value: getDisplayValue(row) };
 }
 
 async function writeValue(args: {
   tenantId: string;
   objectId: string;
-  definitionId: string;
+  metadataTypNamn: string;
   value: string;
   existingRowId: string | null;
   userId: string | null;
 }): Promise<void> {
+  // Task #992: skriv via de svenska write-helpers så historik + guards bevaras.
+  // metod='tjanst' markerar ursprunget som extern tjänst (Telink-synk).
+  const actor = args.userId ?? "telink-sync";
   if (args.existingRowId) {
-    await db
-      .update(objectMetadata)
-      .set({ value: args.value, updatedAt: new Date(), updatedBy: args.userId ?? "telink-sync" })
-      .where(
-        and(
-          eq(objectMetadata.id, args.existingRowId),
-          eq(objectMetadata.objectId, args.objectId),
-          eq(objectMetadata.tenantId, args.tenantId),
-        ),
-      );
+    await updateMetadata(args.existingRowId, args.value, args.tenantId, actor, "tjanst");
   } else {
-    await db.insert(objectMetadata).values({
+    await createMetadata({
       tenantId: args.tenantId,
-      objectId: args.objectId,
-      definitionId: args.definitionId,
-      value: args.value,
-      updatedBy: args.userId ?? "telink-sync",
+      objektId: args.objectId,
+      metadataTypNamn: args.metadataTypNamn,
+      varde: args.value,
+      skapadAv: actor,
+      metod: "tjanst",
     });
   }
 }
@@ -626,7 +634,7 @@ async function applyContactToObject(args: {
       await writeValue({
         tenantId,
         objectId: obj.id,
-        definitionId: defs.nameDefId,
+        metadataTypNamn: defs.nameNamn ?? defs.nameKey,
         value: newName,
         existingRowId: current?.rowId ?? null,
         userId,
@@ -656,7 +664,7 @@ async function applyContactToObject(args: {
       await writeValue({
         tenantId,
         objectId: obj.id,
-        definitionId: defs.phoneDefId,
+        metadataTypNamn: defs.phoneNamn ?? defs.phoneKey,
         value: newPhone,
         existingRowId: current?.rowId ?? null,
         userId,

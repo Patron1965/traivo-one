@@ -1,6 +1,6 @@
 ---
 name: Två parallella metadata-system
-description: Traivo har två icke-synkade metadata-modeller (engelsk vs svensk); import skriver den ena, export läser den andra → round-trip-drift.
+description: Traivo har två metadata-modeller (engelsk vs svensk); svenska är nu KANONISK källa för objekt-metadata, engelska är read-only audit/rollback (round-trip-drift löst).
 ---
 
 # Två parallella metadata-system i Traivo
@@ -20,18 +20,36 @@ Det finns TVÅ separata dynamiska metadata-modeller som lever sida vid sida:
 - **Kompletterande** (`allowDuplicates=true`): nytt värde läggs till parallellt
   (INSERT). Identiska värden hoppas över (idempotent re-import).
 
-## Round-trip-drift (VIKTIGT)
-Objektmall-**importen skriver det svenska systemet** (`metadataKatalog/Varden/Historik`),
-men objekt-**exporten läser fortfarande det engelska** (`metadataDefinitions/objectMetadata`).
-En importerad fil som exporteras igen får alltså INTE tillbaka sina metadata-värden.
+## Kanonisk källa = svenska systemet (round-trip-drift LÖST)
+Svenska modellen (`metadataKatalog/Varden/Historik`) är nu ENDA kanoniska källan för
+objekt-metadata. ALLA läsare, skrivare OCH villkorsmotorn (orderkoncept-targeting,
+portal-vy, KPI-CRUD, telink-synk, object-copy, objektmall import OCH export) går mot
+svenska systemet. Engelska tabellerna (`metadataDefinitions/objectMetadata`) är denna
+release READ-ONLY audit/rollback — INGA nya skrivningar (markerade `@deprecated` i
+`shared/schema.ts` + `server/storage.ts`). Inga drops (expand-contract).
 
-**Why:** Importen valdes mot svenska systemet eftersom mall-kolumnernas semantik
-(`allowDuplicates`, `kronologiskVisning`) bara finns där. Export migrerades aldrig.
+- `/api/metadata-definitions` (alla 6 endpoints) serveras som en COMPAT-vy över
+  `metadataKatalog` via `getMetadataDefinitionsCompat`/`katalogToDefinitionCompat`
+  (`id=katalog.id`, `fieldKey=deriveMetadataDotKey ?? namn`, `fieldLabel=namn`).
+  Frontend (ObjectsPage, Articles*, orderkoncept-steg, MetadataDefinitionsPage,
+  IndustryPackages) är oförändrad — den läser fortfarande engelska FORMEN men datan
+  kommer från svenska katalogen.
+- Objektmall-EXPORT round-trippar nu: läser `getMetadataDefinitionsCompat` + `metadataVarden`
+  (`raderad=false`, `objektId`-nyckel via `getDisplayValue`); kolumnrubrik = `fieldKey`
+  (ej `fieldLabel`) så återimport matchar `buildMetadataTypeLookup`.
+- Backfill engelska→svenska: `scripts/backfill-english-metadata-to-swedish.ts` (dry-run
+  default, `--confirm`; registrerad i `scripts/post-merge.sh` så prod backfillas vid merge).
 
-**How to apply:** Innan du rör import/export av metadata — kolla vilket system koden
-faktiskt träffar. Matcha katalog-kolumner mot `metadataKatalog` på `namn` ELLER
-`beteckning` (case-insensitivt). Skriv aldrig logik som antar att de två systemen är
-synkade. En framtida task bör ena dem (eller spegla export mot svenska systemet).
+**Why:** Importen skrev redan svenska (mall-semantiken `allowDuplicates`/`kronologiskVisning`
+finns bara där) men resten läste engelska → en importerad fil tappade sina värden vid
+export/koncept-expansion. Arkitekt-bekräftat: svenska = kanonisk.
+
+**How to apply:** Skriv ALDRIG nytt mot `objectMetadata`/`metadataDefinitions` (insert/update).
+Läs/skriv objekt-metadata via `server/metadata-queries.ts` (`createMetadata`/`updateMetadata`/
+`deleteMetadata`/`writeImportedMetadataValue`/`getObjectsConditionMetadata`). Matcha katalog
+på `namn` ELLER `beteckning` (case-insensitivt). Datatyp-mappning: `mapEnglishDataTypeToDatatyp`
+/`mapDatatypToEnglishDataType`. Behåll computed (`arBeraknad` strippas vid läsning + blockeras
+vid skrivning), kundlås och sammansatta punktnotations-fält fungerande.
 
 ## metadataKatalog-dubbletter: dedup-nyckeln måste vara enhetlig
 Alla skapande-vägar för `metadataKatalog` MÅSTE deduplicera på samma nyckel — annars

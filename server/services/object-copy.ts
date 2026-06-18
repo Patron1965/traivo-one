@@ -2,10 +2,11 @@
 //
 // - Nytt systemnummer (OBJ-NNN) genereras per klon via storage.createObject.
 // - Namnet behålls (eller överstyrs för rot-kopian).
-// - Metadata medtas från BÅDA metadata-systemen: det svenska (metadata_varden via
-//   copyObjectLocalMetadata) och det engelska (object_metadata — endast EGNA rader
-//   där inheritedFromObjectId IS NULL, så ärvda värden återupplöses on-read från
-//   samma förälder i stället för att frysas).
+// - Metadata medtas från den kanoniska svenska modellen (metadata_varden via
+//   copyObjectLocalMetadata — endast EGNA, icke-ärvda rader; ärvda värden
+//   återupplöses on-read från samma förälder i stället för att frysas).
+//   Task #992: den engelska object_metadata-klonen är borttagen — svenska är
+//   enda källan.
 // - Den primära object_parents-raden backfillas så släktnamn/flerföräldra-vyer
 //   funkar direkt på klonen.
 // - "branch" kopierar hela underträdet i BFS-ordning med id-ommappning så att den
@@ -14,7 +15,7 @@
 // Allt är tenant-scopat (tenant_id i alla predikat). Ägarskap verifieras av
 // route:n innan anrop.
 import { db } from "../db";
-import { objects, objectParents, objectMetadata } from "@shared/schema";
+import { objects, objectParents } from "@shared/schema";
 import { and, eq, isNull } from "drizzle-orm";
 import type { ServiceObject } from "@shared/schema";
 import { storage } from "../storage";
@@ -60,38 +61,7 @@ function buildCloneInsert(
   };
 }
 
-// Kopiera EGNA engelska metadata-rader (object_metadata) till klonen. Ärvda
-// rader hoppas över så att arvet återupplöses från den (samma) föräldern.
-async function copyOwnEnglishMetadata(
-  sourceObjectId: string,
-  targetObjectId: string,
-  tenantId: string,
-): Promise<number> {
-  const rows = await db
-    .select()
-    .from(objectMetadata)
-    .where(and(
-      eq(objectMetadata.objectId, sourceObjectId),
-      eq(objectMetadata.tenantId, tenantId),
-      isNull(objectMetadata.inheritedFromObjectId),
-    ));
-  if (rows.length === 0) return 0;
-  const toInsert = rows.map((r) => ({
-    tenantId,
-    objectId: targetObjectId,
-    definitionId: r.definitionId,
-    value: r.value,
-    valueJson: r.valueJson,
-    breaksInheritance: r.breaksInheritance,
-    validFrom: r.validFrom,
-    validTo: r.validTo,
-    updatedBy: r.updatedBy,
-  }));
-  await db.insert(objectMetadata).values(toInsert);
-  return toInsert.length;
-}
-
-// Kopiera EGEN metadata (båda systemen) till en redan skapad klon. Best-effort:
+// Kopiera EGEN metadata (svenska modellen) till en redan skapad klon. Best-effort:
 // metadata-kopiering är icke-fatal och rapporteras via metadataCopyError. Körs
 // EFTER att objektträdet committats (utanför den atomära transaktionen) så ett
 // metadata-fel aldrig river hela trädet — och så att ett fel i ett katalog-fält
@@ -105,7 +75,6 @@ async function copyMetadataForClone(
   let metaError: string | null = null;
   try {
     metaCount += await copyObjectLocalMetadata(src.id, cloneId, tenantId);
-    metaCount += await copyOwnEnglishMetadata(src.id, cloneId, tenantId);
   } catch (err) {
     metaError = err instanceof Error ? err.message : "Okänt fel";
     console.error("Kunde inte kopiera metadata vid objektkopiering:", err);

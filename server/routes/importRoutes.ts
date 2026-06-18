@@ -15,7 +15,7 @@ import ExcelJS from "exceljs";
 import { importJobs, notifyImportProgress } from "./helpers";
 import { triggerGeocodeIfMissing } from "../services/geocoding";
 import { getMapProvider } from "../services/mapProvider";
-import { objects, workOrders, customers, objectMetadata, workOrderLines, metadataKatalog, fortnoxMappings, customerServiceContracts, importBatches, auditLogs, customerImportMappings, type InsertFortnoxContractSuggestion, type InsertWorkOrder } from "@shared/schema";
+import { objects, workOrders, customers, workOrderLines, metadataKatalog, fortnoxMappings, customerServiceContracts, importBatches, auditLogs, customerImportMappings, type InsertFortnoxContractSuggestion, type InsertWorkOrder } from "@shared/schema";
 import { normalizeAddressKey } from "@shared/address-normalize";
 import crypto from "crypto";
 import { createMetadata, updateMetadata, getAllMetadataTypes, seedKarlMetadataTypes, KARL_METADATA_DEFINITIONS, buildMetadataTypeLookup, deriveMetadataDotKey } from "../metadata-queries";
@@ -4087,15 +4087,29 @@ app.get("/api/import/health-stats", asyncHandler(async (req, res) => {
       db.select({ count: sql<number>`count(*)::int` })
         .from(customers)
         .where(and(eq(customers.tenantId, tenantId), isNull(customers.deletedAt))),
+      // Task #992: kvalitetsräkningar mot kanoniska metadata_varden (ej mjuk-
+      // raderade) i stället för engelska object_metadata. "Tomt" = ingen typad
+      // värde-kolumn satt på en aktiv rad.
       db.select({ count: sql<number>`count(*)::int` })
-        .from(objectMetadata)
-        .where(eq(objectMetadata.tenantId, tenantId)),
-      db.select({ count: sql<number>`count(*)::int` })
-        .from(objectMetadata)
+        .from(metadataVarden)
         .where(and(
-          eq(objectMetadata.tenantId, tenantId),
-          sql`(${objectMetadata.value} IS NULL OR ${objectMetadata.value} = '')`,
-          isNull(objectMetadata.valueJson),
+          eq(metadataVarden.tenantId, tenantId),
+          eq(metadataVarden.raderad, false),
+          sql`${metadataVarden.objektId} IS NOT NULL`,
+        )),
+      db.select({ count: sql<number>`count(*)::int` })
+        .from(metadataVarden)
+        .where(and(
+          eq(metadataVarden.tenantId, tenantId),
+          eq(metadataVarden.raderad, false),
+          sql`${metadataVarden.objektId} IS NOT NULL`,
+          sql`(${metadataVarden.vardeString} IS NULL OR ${metadataVarden.vardeString} = '')`,
+          isNull(metadataVarden.vardeInteger),
+          isNull(metadataVarden.vardeDecimal),
+          isNull(metadataVarden.vardeBoolean),
+          isNull(metadataVarden.vardeDatetime),
+          isNull(metadataVarden.vardeJson),
+          isNull(metadataVarden.vardeReferens),
         )),
       db.select({ count: sql<number>`count(*)::int` })
         .from(workOrderLines)

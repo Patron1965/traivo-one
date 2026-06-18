@@ -7,9 +7,9 @@ import { formatZodError, verifyTenantOwnership, DEFAULT_TENANT_ID } from "./help
 import { getTenantIdWithFallback } from "../tenant-middleware";
 import { asyncHandler } from "../asyncHandler";
 import { NotFoundError, ValidationError, ForbiddenError, ConflictError } from "../errors";
-import { validateParentMetadataLink, softDeleteMetadataType } from "../metadata-queries";
+import { validateParentMetadataLink, softDeleteMetadataType, getObjectWithAllMetadata, getDisplayValue, getMetadataKatalogUsage, getMetadataDefinitionsCompat, getMetadataDefinitionCompat, katalogToDefinitionCompat, mapEnglishDataTypeToDatatyp, createMetadata, updateMetadata, deleteMetadata, ensurePackageMetadataKatalog } from "../metadata-queries";
 import { requireAdmin, requirePlanner } from "../tenant-middleware";
-import { objects, workOrders, objectMetadata, apiUsageLogs, apiBudgets, invitations, insertMetadataDefinitionSchema, insertObjectMetadataSchema, insertObjectPayerSchema, metadataKatalog, insertMetadataKatalogSchema, workOrderLines, articles, weeklyReportNotes, weeklyReportActionItemSchema, type WeeklyReportActionItem, objectPayers } from "@shared/schema";
+import { objects, workOrders, objectMetadata, metadataVarden, apiUsageLogs, apiBudgets, invitations, insertMetadataDefinitionSchema, insertObjectMetadataSchema, insertObjectPayerSchema, metadataKatalog, insertMetadataKatalogSchema, workOrderLines, articles, weeklyReportNotes, weeklyReportActionItemSchema, type WeeklyReportActionItem, objectPayers } from "@shared/schema";
 import { getISOWeek, getStartOfISOWeek } from "./helpers";
 import { sendEmail } from "../replit_integrations/resend";
 import { issueMagicLink } from "../replit_integrations/auth/magicLinkAuth";
@@ -1463,19 +1463,9 @@ app.post("/api/system/industry-packages/:id/install", requireAdmin, asyncHandler
     if (metadataData && Array.isArray(metadataData.data)) {
       for (const meta of metadataData.data as any[]) {
         try {
-          await storage.createMetadataDefinition({
-            tenantId,
-            fieldKey: meta.fieldKey,
-            fieldLabel: meta.fieldLabel,
-            dataType: meta.dataType,
-            objectTypes: meta.objectTypes,
-            propagationType: meta.propagationType,
-            isRequired: meta.isRequired,
-            description: meta.description,
-            defaultValue: meta.defaultValue,
-            validationRules: meta.validationRules,
-          });
-          metadataInstalled++;
+          // Task #992: installera till kanonisk svensk katalog (idempotent).
+          const { created } = await ensurePackageMetadataKatalog(tenantId, meta);
+          if (created) metadataInstalled++;
         } catch (err) {
           console.warn(`Skipping duplicate metadata ${meta.fieldKey}:`, err);
         }
@@ -1609,19 +1599,9 @@ app.post("/api/system/onboard-tenant", requireAdmin, asyncHandler(async (req, re
         if (metadataData && Array.isArray(metadataData.data)) {
           for (const meta of metadataData.data as any[]) {
             try {
-              await storage.createMetadataDefinition({
-                tenantId,
-                fieldKey: meta.fieldKey,
-                fieldLabel: meta.fieldLabel,
-                dataType: meta.dataType,
-                objectTypes: meta.objectTypes,
-                propagationType: meta.propagationType,
-                isRequired: meta.isRequired,
-                description: meta.description,
-                defaultValue: meta.defaultValue,
-                validationRules: meta.validationRules,
-              });
-              metadataInstalled++;
+              // Task #992: installera till kanonisk svensk katalog (idempotent).
+              const { created } = await ensurePackageMetadataKatalog(tenantId, meta);
+              if (created) metadataInstalled++;
             } catch (err) {
               console.warn(`Skipping duplicate metadata ${meta.fieldKey}:`, err);
             }
@@ -1900,102 +1880,172 @@ app.post("/api/system/send-project-report", requireAdmin, asyncHandler(async (re
 // ADR v3 §2.4 — soft-delete + referensräkning. Definitioner får aldrig
 // hard-deleteas via API; ändringar av "låsta" fält (fieldKey, dataType,
 // propagationType, applicableLevels) blockeras när definitionen används.
+// Task #992: /api/metadata-definitions serveras nu som en VY över den svenska
+// metadata_katalog (id === katalog.id). De engelska metadata_definitions-
+// tabellerna är read-only audit/rollback — inga nya engelska definitioner
+// skapas här. fieldKey speglar villkorsmotorns nyckel (deriveMetadataDotKey ??
+// namn) så att concept_filters.metadata_key fortsätter resolva.
 app.get("/api/metadata-definitions", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const includeDeleted = req.query.includeDeleted === "true";
-    const definitions = await storage.getMetadataDefinitions(tenantId, { includeDeleted });
+    const definitions = await getMetadataDefinitionsCompat(tenantId, { includeDeleted });
     res.json(definitions);
 }));
 
 app.get("/api/metadata-definitions/:id", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
-    const definition = await storage.getMetadataDefinition(req.params.id);
-    const verified = verifyTenantOwnership(definition, tenantId);
-    if (!verified) throw new NotFoundError("Definition hittades inte");
-    res.json(verified);
+    const definition = await getMetadataDefinitionCompat(tenantId, req.params.id);
+    if (!definition) throw new NotFoundError("Definition hittades inte");
+    res.json(definition);
 }));
 
 app.get("/api/metadata-definitions/:id/usage", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
-    const existing = await storage.getMetadataDefinition(req.params.id);
-    if (!verifyTenantOwnership(existing, tenantId)) {
-      throw new NotFoundError("Definition hittades inte");
-    }
-    const usage = await storage.getMetadataDefinitionUsage(req.params.id);
-    res.json(usage);
+    const definition = await getMetadataDefinitionCompat(tenantId, req.params.id);
+    if (!definition) throw new NotFoundError("Definition hittades inte");
+    // Mappa svensk katalog-usage → den engelska MetadataDefinitionUsage-formen
+    // som frontend förväntar sig (objektvärden + koncept-filter).
+    const usage = await getMetadataKatalogUsage(req.params.id, tenantId);
+    res.json({
+      definitionId: req.params.id,
+      fieldKey: definition.fieldKey,
+      objectValueCount: usage.valueCount,
+      activeConceptCount: usage.conceptFilterCount,
+      futureWorkOrderCount: 0,
+      conceptSnapshotCount: 0,
+      total: usage.total,
+      blockers: { concepts: [] },
+    });
 }));
 
 app.post("/api/metadata-definitions", requireAdmin, asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
-    const data = insertMetadataDefinitionSchema.parse({ ...req.body, tenantId });
-    const definition = await storage.createMetadataDefinition(data);
-    res.status(201).json(definition);
+    // Skapa en svensk katalogpost (aldrig en ny engelsk definition). namn
+    // härleds från fieldKey (identiteten) i första hand, annars fieldLabel.
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const fieldKey = typeof body.fieldKey === "string" ? body.fieldKey.trim() : "";
+    const fieldLabel = typeof body.fieldLabel === "string" ? body.fieldLabel.trim() : "";
+    const namn = fieldKey || fieldLabel;
+    if (!namn) throw new ValidationError("fieldKey eller fieldLabel krävs");
+    const beskrivning = fieldLabel && fieldLabel !== namn ? fieldLabel : null;
+    const data = insertMetadataKatalogSchema.parse({
+      tenantId,
+      namn,
+      beskrivning,
+      datatyp: mapEnglishDataTypeToDatatyp(typeof body.dataType === "string" ? body.dataType : undefined),
+      standardArvs: (typeof body.propagationType === "string" ? body.propagationType : "falling") !== "fixed",
+      isRequired: body.isRequired === true,
+      isSystem: false,
+      area: "annat",
+    });
+    data.kategori = (data.area as string | null | undefined) || "annat";
+    const [label] = await db.insert(metadataKatalog).values(data).returning();
+    const byId = new Map([[label.id, label]]);
+    res.status(201).json(katalogToDefinitionCompat(label, byId));
 }));
-
-// Fält som ändrar definitionens *form* (typ/struktur) — blockerade när
-// definitionen används, eftersom befintliga värden/snapshots skulle
-// tolkas fel om typen ändrades retroaktivt.
-const LOCKED_DEFINITION_FIELDS = ["dataType", "propagationType", "applicableLevels"] as const;
 
 app.patch("/api/metadata-definitions/:id", requireAdmin, asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
-    const existing = await storage.getMetadataDefinition(req.params.id);
-    if (!verifyTenantOwnership(existing, tenantId)) {
-      throw new NotFoundError("Definition hittades inte");
+    // Task #992: redigera den svenska katalograden direkt (id === katalog.id).
+    const [existing] = await db.select().from(metadataKatalog)
+      .where(and(
+        eq(metadataKatalog.id, req.params.id),
+        eq(metadataKatalog.tenantId, tenantId),
+      ));
+    if (!existing) throw new NotFoundError("Definition hittades inte");
+    if (existing.deletedAt) {
+      throw new ConflictError("Definitionen är arkiverad. Återställ den först innan du redigerar.");
     }
-    if (existing!.deletedAt) {
-      throw new ConflictError("Definitionen är arkiverad. Återställ den först (sätt deletedAt=null) innan du redigerar.");
-    }
-    // fieldKey är immutable (ADR v3 §2.4) — använd replacedByDefinitionId vid byte.
+    // fieldKey är immutable (identitet) — ignoreras. Endast en delmängd av de
+    // engelska fälten kan översättas till katalogen (legacy-only fält no-op:as).
     const updateSchema = z.object({
       fieldLabel: z.string().optional(),
       dataType: z.string().optional(),
+      isRequired: z.boolean().optional(),
+      sortOrder: z.number().int().optional(),
       propagationType: z.string().optional(),
       applicableLevels: z.array(z.string()).optional(),
-      isRequired: z.boolean().optional(),
       defaultValue: z.string().nullable().optional(),
-      sortOrder: z.number().int().optional(),
       validationRules: z.record(z.unknown()).optional(),
       replacedByDefinitionId: z.string().nullable().optional(),
     });
-    const updateData = updateSchema.parse(req.body);
+    const parsed = updateSchema.parse(req.body);
 
-    // Tillåt alltid "icke-strukturella" fält. Strukturella ändringar
-    // kräver att inga värden/koncept/framtida WO refererar fältet.
-    const structuralChanges = LOCKED_DEFINITION_FIELDS.filter((f) => {
-      if (!(f in updateData)) return false;
-      const next = (updateData as Record<string, unknown>)[f];
-      const prev = (existing as unknown as Record<string, unknown>)[f];
-      // Jämför som JSON för arrays/primitives — räcker för denna detektion.
-      return JSON.stringify(next) !== JSON.stringify(prev);
-    });
+    const nextNamn = parsed.fieldLabel?.trim();
+    const nextDatatyp = parsed.dataType !== undefined ? mapEnglishDataTypeToDatatyp(parsed.dataType) : undefined;
+    const nextStandardArvs = parsed.propagationType !== undefined ? parsed.propagationType !== "fixed" : undefined;
+    const renamesNamn = nextNamn !== undefined && nextNamn.length > 0 && nextNamn !== existing.namn;
+    const changesDatatyp = nextDatatyp !== undefined && nextDatatyp !== existing.datatyp;
 
-    if (structuralChanges.length > 0) {
-      const usage = await storage.getMetadataDefinitionUsage(req.params.id);
+    // Universalnyckel-skydd: namn (=fieldLabel) och datatyp får INTE ändras när
+    // fältet används (concept_filters.metadata_key + import-headers + snapshots
+    // skulle annars tolkas fel). Samma invariant som /api/metadata/types PUT.
+    if (renamesNamn || changesDatatyp) {
+      const usage = await getMetadataKatalogUsage(req.params.id, tenantId);
       if (usage.total > 0) {
+        const fields = [renamesNamn ? "fieldLabel" : null, changesDatatyp ? "dataType" : null].filter(Boolean).join(", ");
         throw new ConflictError(
-          `Kan inte ändra ${structuralChanges.join(", ")} — definitionen används (${usage.total} referenser). ` +
-          `Skapa en ny definition och migrera värden via replacedByDefinitionId.`
+          `Kan inte ändra ${fields} — fältet används (${usage.total} referenser: ${usage.valueCount} värden, ${usage.conceptFilterCount} koncept-filter). ` +
+          `Skapa ett nytt fält och migrera värden istället.`,
         );
       }
     }
 
-    const definition = await storage.updateMetadataDefinition(req.params.id, updateData);
-    if (!definition) throw new NotFoundError("Definition hittades inte");
+    if (existing.isSystem && (renamesNamn || changesDatatyp || parsed.isRequired !== undefined)) {
+      throw new ForbiddenError("Systemmetadata: skyddade fält kan inte ändras (namn, datatyp, isRequired)");
+    }
+
+    const updateData: Record<string, string | number | boolean | null> = {};
+    if (nextNamn !== undefined && nextNamn.length > 0) updateData.namn = nextNamn;
+    if (nextDatatyp !== undefined) updateData.datatyp = nextDatatyp;
+    if (parsed.isRequired !== undefined) updateData.isRequired = parsed.isRequired;
+    if (parsed.sortOrder !== undefined) updateData.sortOrder = parsed.sortOrder;
+    if (nextStandardArvs !== undefined) updateData.standardArvs = nextStandardArvs;
+
+    if (Object.keys(updateData).length > 0) {
+      await db.update(metadataKatalog)
+        .set(updateData)
+        .where(and(
+          eq(metadataKatalog.id, req.params.id),
+          eq(metadataKatalog.tenantId, tenantId),
+        ));
+    }
+    // Returnera alltid compat-vyn (hämtar förälder för punktnotationsnyckel).
+    const definition = await getMetadataDefinitionCompat(tenantId, req.params.id);
     res.json(definition);
 }));
 
 app.delete("/api/metadata-definitions/:id", requireAdmin, asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
-    const existing = await storage.getMetadataDefinition(req.params.id);
-    if (!verifyTenantOwnership(existing, tenantId)) {
-      throw new NotFoundError("Definition hittades inte");
-    }
-    if (existing!.deletedAt) {
+    // Task #992: soft-delete (arkivera) den svenska katalograden.
+    const [existing] = await db.select().from(metadataKatalog)
+      .where(and(
+        eq(metadataKatalog.id, req.params.id),
+        eq(metadataKatalog.tenantId, tenantId),
+      ));
+    if (!existing) throw new NotFoundError("Definition hittades inte");
+    if (existing.deletedAt) {
       return res.status(204).send();
     }
+    if (existing.isSystem) {
+      throw new ForbiddenError("Systemmetadata kan inte raderas");
+    }
 
-    const usage = await storage.getMetadataDefinitionUsage(req.params.id);
+    // Gruppfält med underfält blockeras (FK skulle annars ge ett rått DB-fel).
+    const children = await db.select({ id: metadataKatalog.id })
+      .from(metadataKatalog)
+      .where(and(
+        eq(metadataKatalog.tenantId, tenantId),
+        eq(metadataKatalog.parentMetadataId, req.params.id),
+      ));
+    if (children.length > 0) {
+      throw new ConflictError(
+        `Kan inte radera — fältet är ett gruppfält med ${children.length} underfält. ` +
+        `Ta bort eller flytta underfälten först.`,
+      );
+    }
+
+    const usage = await getMetadataKatalogUsage(req.params.id, tenantId);
     const confirmUsageRaw = req.query.confirmUsage;
     const confirmUsage = typeof confirmUsageRaw === "string" ? Number(confirmUsageRaw) : NaN;
     const forced = Number.isFinite(confirmUsage);
@@ -2003,8 +2053,17 @@ app.delete("/api/metadata-definitions/:id", requireAdmin, asyncHandler(async (re
     if (usage.total > 0 && !forced) {
       // 409 + strukturerad payload — UI kan visa exakt vad som blockerar.
       throw new ConflictError("metadata_definition_in_use", {
-        message: `Definitionen används på ${usage.total} ställen. Bekräfta med ?confirmUsage=${usage.total} för att soft-deleta ändå.`,
-        usage,
+        message: `Definitionen används på ${usage.total} ställen. Bekräfta med ?confirmUsage=${usage.total} för att arkivera ändå.`,
+        usage: {
+          definitionId: req.params.id,
+          fieldKey: existing.namn,
+          objectValueCount: usage.valueCount,
+          activeConceptCount: usage.conceptFilterCount,
+          futureWorkOrderCount: 0,
+          conceptSnapshotCount: 0,
+          total: usage.total,
+          blockers: { concepts: [] },
+        },
       });
     }
 
@@ -2015,7 +2074,8 @@ app.delete("/api/metadata-definitions/:id", requireAdmin, asyncHandler(async (re
       );
     }
 
-    await storage.deleteMetadataDefinition(req.params.id);
+    const archivedBy = (req as any).session?.user?.id ?? null;
+    await softDeleteMetadataType(tenantId, req.params.id, { archivedBy });
     res.status(204).send();
 }));
 
@@ -2181,7 +2241,23 @@ app.get("/api/objects/:objectId/metadata", asyncHandler(async (req, res) => {
     if (!await verifyObjectTenant(req.params.objectId, tenantId)) {
       throw new ForbiddenError("Åtkomst nekad");
     }
-    const metadata = await storage.getObjectMetadata(req.params.objectId);
+    // Task #992: kanonisk källa = svenska modellen. Returnera kompatibel form
+    // (id/objectId/value/valueJson/breaksInheritance + key=namn) härledd ur
+    // getObjectWithAllMetadata (löser arv + beräknade fält + kundlås).
+    const owm = await getObjectWithAllMetadata(req.params.objectId, tenantId);
+    const metadata = (owm?.metadata ?? []).map((m) => ({
+      id: m.id,
+      objectId: req.params.objectId,
+      tenantId,
+      definitionId: m.metadataKatalogId,
+      key: m.katalog.namn,
+      value: getDisplayValue(m),
+      valueJson: m.vardeJson ?? null,
+      breaksInheritance: m.stoppaVidareArvning ?? false,
+      inheritedFromObjectId: m.source === "inherited" ? (m.fromObject?.id ?? null) : null,
+      createdAt: m.createdAt,
+      updatedAt: m.updatedAt,
+    }));
     res.json(metadata);
 }));
 
@@ -2190,13 +2266,46 @@ app.post("/api/objects/:objectId/metadata", asyncHandler(async (req, res) => {
     if (!await verifyObjectTenant(req.params.objectId, tenantId)) {
       throw new ForbiddenError("Åtkomst nekad");
     }
-    const data = insertObjectMetadataSchema.parse({ 
-      ...req.body, 
-      tenantId,
-      objectId: req.params.objectId 
+    // Task #992: skriv till kanonisk svensk modell. definitionId === katalog.id
+    // (compat-API:t) → lös upp katalog-namn och skapa via createMetadata (guards
+    // för beräknade/system/dropdown/nivå-lås + historik körs där).
+    const bodySchema = z.object({
+      definitionId: z.string(),
+      value: z.string().nullable().optional(),
+      breaksInheritance: z.boolean().optional(),
     });
-    const metadata = await storage.createObjectMetadata(data);
-    res.status(201).json(metadata);
+    const { definitionId, value, breaksInheritance } = bodySchema.parse(req.body);
+    const [katalog] = await db.select({ namn: metadataKatalog.namn })
+      .from(metadataKatalog)
+      .where(and(eq(metadataKatalog.id, definitionId), eq(metadataKatalog.tenantId, tenantId)));
+    if (!katalog) throw new NotFoundError("Metadatatyp hittades inte");
+    const userId = req.user?.claims?.sub;
+    let created = await createMetadata({
+      tenantId,
+      objektId: req.params.objectId,
+      metadataTypNamn: katalog.namn,
+      varde: value ?? null,
+      skapadAv: userId,
+    });
+    if (breaksInheritance !== undefined) {
+      const [row] = await db.update(metadataVarden)
+        .set({ stoppaVidareArvning: breaksInheritance })
+        .where(and(eq(metadataVarden.id, created.id), eq(metadataVarden.tenantId, tenantId)))
+        .returning();
+      if (row) created = row;
+    }
+    res.status(201).json({
+      id: created.id,
+      objectId: req.params.objectId,
+      tenantId,
+      definitionId,
+      key: katalog.namn,
+      value: getDisplayValue(created),
+      valueJson: created.vardeJson ?? null,
+      breaksInheritance: created.stoppaVidareArvning ?? false,
+      createdAt: created.createdAt,
+      updatedAt: created.updatedAt,
+    });
 }));
 
 app.patch("/api/objects/:objectId/metadata/:id", asyncHandler(async (req, res) => {
@@ -2208,11 +2317,42 @@ app.patch("/api/objects/:objectId/metadata/:id", asyncHandler(async (req, res) =
       value: z.string().optional(),
       breaksInheritance: z.boolean().optional(),
     });
-    const updateData = updateSchema.parse(req.body);
-    // Storage method enforces objectId and tenantId match at DB level
-    const metadata = await storage.updateObjectMetadata(req.params.id, req.params.objectId, tenantId, updateData);
-    if (!metadata) throw new NotFoundError("Metadata not found or does not belong to this object");
-    res.json(metadata);
+    const { value, breaksInheritance } = updateSchema.parse(req.body);
+    // Task #992: :id === metadata_varden.id. Verifiera ägarskap (objekt + tenant)
+    // INNAN mutation — updateMetadata kollar bara tenant, inte objektbindning.
+    const [existing] = await db.select().from(metadataVarden)
+      .where(and(
+        eq(metadataVarden.id, req.params.id),
+        eq(metadataVarden.objektId, req.params.objectId),
+        eq(metadataVarden.tenantId, tenantId),
+      ));
+    if (!existing) throw new NotFoundError("Metadata not found or does not belong to this object");
+    const userId = req.user?.claims?.sub;
+    if (value !== undefined) {
+      await updateMetadata(req.params.id, value, tenantId, userId);
+    }
+    if (breaksInheritance !== undefined) {
+      await db.update(metadataVarden)
+        .set({ stoppaVidareArvning: breaksInheritance, uppdateradAv: userId ?? undefined })
+        .where(and(
+          eq(metadataVarden.id, req.params.id),
+          eq(metadataVarden.objektId, req.params.objectId),
+          eq(metadataVarden.tenantId, tenantId),
+        ));
+    }
+    const [updated] = await db.select().from(metadataVarden)
+      .where(and(eq(metadataVarden.id, req.params.id), eq(metadataVarden.tenantId, tenantId)));
+    res.json({
+      id: updated.id,
+      objectId: req.params.objectId,
+      tenantId,
+      definitionId: updated.metadataKatalogId,
+      value: getDisplayValue(updated),
+      valueJson: updated.vardeJson ?? null,
+      breaksInheritance: updated.stoppaVidareArvning ?? false,
+      createdAt: updated.createdAt,
+      updatedAt: updated.updatedAt,
+    });
 }));
 
 app.delete("/api/objects/:objectId/metadata/:id", asyncHandler(async (req, res) => {
@@ -2220,8 +2360,18 @@ app.delete("/api/objects/:objectId/metadata/:id", asyncHandler(async (req, res) 
     if (!await verifyObjectTenant(req.params.objectId, tenantId)) {
       throw new ForbiddenError("Åtkomst nekad");
     }
-    // Storage method enforces objectId and tenantId match at DB level
-    await storage.deleteObjectMetadata(req.params.id, req.params.objectId, tenantId);
+    // Task #992: :id === metadata_varden.id. Verifiera ägarskap (objekt + tenant)
+    // innan radering — deleteMetadata kollar bara tenant. Hård radering men loggar
+    // metadata_historik (X → ∅) så tidslinjen bevaras.
+    const [existing] = await db.select({ id: metadataVarden.id }).from(metadataVarden)
+      .where(and(
+        eq(metadataVarden.id, req.params.id),
+        eq(metadataVarden.objektId, req.params.objectId),
+        eq(metadataVarden.tenantId, tenantId),
+      ));
+    if (!existing) throw new NotFoundError("Metadata not found or does not belong to this object");
+    const userId = req.user?.claims?.sub;
+    await deleteMetadata(req.params.id, tenantId, userId);
     res.status(204).send();
 }));
 
@@ -2854,12 +3004,18 @@ app.post("/api/reports/sales-intelligence", requireAdmin, asyncHandler(async (re
     highVolumeCustomers.sort((a, b) => a.avgValue - b.avgValue);
     inactiveCustomers.sort((a, b) => b.daysSinceLastOrder - a.daysSinceLastOrder);
 
+    // Task #992: räkna objekt med metadata via kanoniska metadata_varden (ej
+    // mjuk-raderade) i stället för engelska object_metadata.
     const objectsWithMetadata = await db.select({
-      objectId: objectMetadata.objectId,
+      objectId: metadataVarden.objektId,
       count: sql<number>`count(*)::int`,
-    }).from(objectMetadata)
-      .where(eq(objectMetadata.tenantId, tenantId))
-      .groupBy(objectMetadata.objectId);
+    }).from(metadataVarden)
+      .where(and(
+        eq(metadataVarden.tenantId, tenantId),
+        eq(metadataVarden.raderad, false),
+        sql`${metadataVarden.objektId} IS NOT NULL`,
+      ))
+      .groupBy(metadataVarden.objektId);
 
     const objectIdsWithMetadata = new Set(objectsWithMetadata.map(r => r.objectId));
     const orderObjectIds = new Set(allOrders.map(o => o.objectId));

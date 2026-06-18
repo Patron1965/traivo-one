@@ -91,3 +91,14 @@ if [ -n "$DATABASE_URL" ]; then
   npx tsx scripts/article-association-parity-check.ts \
     || echo "[post-merge] ⚠⚠ ARTIKEL-ASSOCIATION PARITET: avvikelser upptäckta — se loggen ovan. Blockerar ej, men måste utredas före Fas 3."
 fi
+
+# Task #992: backfilla det avvecklade ENGELSKA metadata-systemet (object_metadata)
+# in i den kanoniska SVENSKA katalogen (metadata_varden) så att import,
+# villkorsfilter, arv och export läser EN källa. Idempotent: skriver aldrig över
+# befintliga svenska värden och hoppar över rader som redan migrerats, så
+# upprepade körningar (varje merge/deploy) är säkra. Icke-blockerande.
+if [ -n "$DATABASE_URL" ]; then
+  echo "[post-merge] Backfilling legacy English metadata into Swedish katalog (Task #992)"
+  npx tsx scripts/backfill-english-metadata-to-swedish.ts --confirm \
+    || echo "[post-merge] ⚠ METADATA-BACKFILL misslyckades — se loggen ovan. Blockerar ej, men måste utredas."
+fi

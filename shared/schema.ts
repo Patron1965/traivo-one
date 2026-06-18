@@ -2588,6 +2588,10 @@ export const METADATA_PROPAGATION_TYPES = [
 export type MetadataPropagationType = typeof METADATA_PROPAGATION_TYPES[number];
 
 // Metadatadefinitioner (vilka fält som kan propagera)
+// @deprecated Task #992: ENGELSKA metadata-modellen är inte längre kanonisk källa.
+// Den svenska modellen (metadata_katalog/metadata_varden/metadata_historik) är nu
+// enda källan för objekt-metadata. Denna tabell behålls denna release ENBART som
+// read-only audit/rollback-källa — inga nya skrivningar sker hit. Ta inte bort (expand-contract).
 export const metadataDefinitions = pgTable("metadata_definitions", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
@@ -2622,6 +2626,9 @@ export const metadataDefinitions = pgTable("metadata_definitions", {
 ]);
 
 // Metadatavärden på objekt
+// @deprecated Task #992: ENGELSKA metadata-värdetabellen är inte längre kanonisk källa.
+// Objekt-metadata läses/skrivs nu via metadata_varden (svensk modell). Behålls denna
+// release ENBART som read-only audit/rollback-källa — inga nya skrivningar. Ta inte bort.
 export const objectMetadata = pgTable("object_metadata", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),

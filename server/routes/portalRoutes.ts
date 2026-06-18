@@ -8,8 +8,8 @@ import { getTenantIdWithFallback } from "../tenant-middleware";
 import { asyncHandler } from "../asyncHandler";
 import { AppError, NotFoundError, ValidationError, UnauthorizedError, ForbiddenError, ConflictError } from "../errors";
 import { requireAdmin, requireRole } from "../tenant-middleware";
-import { insertPortalMessageSchema, insertSelfBookingSchema, insertVisitConfirmationSchema, insertTechnicianRatingSchema, insertQrCodeLinkSchema, insertSelfBookingSlotSchema, insertCustomerNotificationSettingsSchema, type InsertObject, objectMetadata, taskMetadataUpdates } from "@shared/schema";
-import { getObjectWithAllMetadata, writeArticleMetadataOnObject } from "../metadata-queries";
+import { insertPortalMessageSchema, insertSelfBookingSchema, insertVisitConfirmationSchema, insertTechnicianRatingSchema, insertQrCodeLinkSchema, insertSelfBookingSlotSchema, insertCustomerNotificationSettingsSchema, type InsertObject, taskMetadataUpdates } from "@shared/schema";
+import { getObjectWithAllMetadata, writeArticleMetadataOnObject, getDisplayValue } from "../metadata-queries";
 import { notificationService } from "../notifications";
 import { sendEmail } from "../replit_integrations/resend";
 import { isModuleEnabled } from "../feature-flags";
@@ -2364,8 +2364,15 @@ app.get("/api/portal/field/object/:id", asyncHandler(async (req, res) => {
       throw new NotFoundError("Objekt hittades inte");
     }
 
-    const metadata = await db.select().from(objectMetadata)
-      .where(and(eq(objectMetadata.objectId, obj.id), eq(objectMetadata.tenantId, session.tenantId!)));
+    // Task #992: läs objekt-metadata från den kanoniska svenska modellen
+    // (metadata_katalog/metadata_varden) i stället för avvecklade object_metadata.
+    // getObjectWithAllMetadata löser arv + beräknade fält + kundlås; portalvyn
+    // visar katalogens namn → upplöst visningsvärde.
+    const owm = await getObjectWithAllMetadata(obj.id, session.tenantId!);
+    const metadata = (owm?.metadata ?? []).map((m) => ({
+      key: m.katalog.namn,
+      value: getDisplayValue(m),
+    }));
 
     const { items: changeRequests } = await storage.getCustomerChangeRequests({
       tenantId: session.tenantId!,
@@ -2399,7 +2406,7 @@ app.get("/api/portal/field/object/:id", asyncHandler(async (req, res) => {
       longitude: obj.longitude,
       accessCode: obj.accessCode,
       notes: obj.notes,
-      metadata: metadata.map(m => ({ key: m.key, value: m.value })),
+      metadata,
       recentVisits: objectOrders,
       changeRequests: changeRequests.map(cr => ({
         id: cr.id,

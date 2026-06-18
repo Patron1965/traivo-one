@@ -1,11 +1,9 @@
-import { and, eq, inArray, isNull } from "drizzle-orm";
-import { db } from "../db";
 import { storage } from "../storage";
-import {
-  metadataDefinitions,
-  objectMetadata,
-  type ServiceObject,
-} from "@shared/schema";
+// Task #992: villkorsmotorn läser metadata KANONISKT från det svenska systemet
+// (metadata_katalog/metadata_varden) via denna batch-helper i stället för det
+// avvecklade engelska metadata_definitions/object_metadata.
+import { getObjectsConditionMetadata } from "../metadata-queries";
+import { type ServiceObject } from "@shared/schema";
 // Task #940: matchesFilter lever nu i @shared/condition-matching (delas av klient
 // och server). Re-exporteras här så befintliga server-importörer är oförändrade.
 import { matchesFilter } from "@shared/condition-matching";
@@ -87,35 +85,19 @@ export async function resolveTargetObjects(
 }
 
 /**
- * Bygger metadata-karta (objectId → {fieldKey → värde}) i en batch. Värdet tas
- * från valueJson om satt, annars value (text). Samma uppbyggnad används av både
- * bulk-filtreringen och enskild-objekt-testet så de aldrig kan driva isär.
+ * Bygger metadata-karta (objectId → {nyckel → värde}) i en batch. Task #992:
+ * läser KANONISKT från det svenska systemet (metadata_katalog/metadata_varden,
+ * inkl. arv + sammansatta json-fält) via getObjectsConditionMetadata. Varje
+ * värde nycklas på katalogens `namn`, dess `beteckning` och ev. punktnotation
+ * så att ett sparat concept_filters.metadata_key fortsätter resolva. Tunn
+ * wrapper kvar för stabil export (bulk-filtrering, enskilt test och
+ * delivery-restriction-notes delar exakt samma karta).
  */
 export async function buildObjectMetadataMap(
   tenantId: string,
   objectIds: string[],
 ): Promise<Map<string, Record<string, unknown>>> {
-  const metaByObject = new Map<string, Record<string, unknown>>();
-  if (objectIds.length === 0) return metaByObject;
-
-  const defs = await db
-    .select()
-    .from(metadataDefinitions)
-    .where(and(eq(metadataDefinitions.tenantId, tenantId), isNull(metadataDefinitions.deletedAt)));
-  const defKey = new Map(defs.map((d) => [d.id, d.fieldKey]));
-  const rows = await db
-    .select()
-    .from(objectMetadata)
-    .where(and(eq(objectMetadata.tenantId, tenantId), inArray(objectMetadata.objectId, objectIds)));
-
-  for (const row of rows) {
-    const key = defKey.get(row.definitionId);
-    if (!key) continue;
-    const map = metaByObject.get(row.objectId) ?? {};
-    map[key] = (row as any).valueJson ?? (row as any).value;
-    metaByObject.set(row.objectId, map);
-  }
-  return metaByObject;
+  return getObjectsConditionMetadata(tenantId, objectIds);
 }
 
 /**

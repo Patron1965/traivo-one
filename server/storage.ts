@@ -6557,6 +6557,11 @@ export class DatabaseStorage implements IStorage {
     return definition || undefined;
   }
 
+  /**
+   * @deprecated Task #992: skriv aldrig nya engelska metadatadefinitioner. Använd
+   * de svenska typ-helpers (metadata_katalog) via server/metadata-queries.ts. Metoden
+   * behålls denna release endast för audit/rollback och anropas inte i nya flöden.
+   */
   async createMetadataDefinition(definition: InsertMetadataDefinition): Promise<MetadataDefinition> {
     const [result] = await db.insert(metadataDefinitions).values(definition).returning();
     return result;
@@ -6701,6 +6706,12 @@ export class DatabaseStorage implements IStorage {
     return result || undefined;
   }
 
+  /**
+   * @deprecated Task #992: skriv aldrig nya engelska metadatavärden. Objekt-metadata
+   * skrivs nu via de svenska write-helpers (metadata_varden + historik) i
+   * server/metadata-queries.ts (createMetadata/updateMetadata/writeImportedMetadataValue).
+   * Metoden behålls denna release endast för audit/rollback och anropas inte i nya flöden.
+   */
   async createObjectMetadata(metadata: InsertObjectMetadata): Promise<ObjectMetadata> {
     const [result] = await db.insert(objectMetadata).values(metadata).returning();
     return result;
