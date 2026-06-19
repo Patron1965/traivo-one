@@ -8,7 +8,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { DeliveryPreferencesEditor } from "@/components/DeliveryPreferencesEditor";
 import { ObjectHistoryArchiveTab } from "@/components/ObjectHistoryArchiveTab";
 import { ObjectVignetteSection } from "@/components/ObjectVignetteSection";
-import { ObjectMetadataForm, type MetadataFormEntry, type MetadataFormType } from "@/components/ObjectMetadataForm";
+import { ObjectMetadataForm, type MetadataFormEntry, type MetadataFormType, type MetadataRelatedParent, type MetadataRelatedChild } from "@/components/ObjectMetadataForm";
 import { ObjectTemplateMetadataForm, type TemplateMetadataType } from "@/components/ObjectTemplateMetadataForm";
 import { ObjectTimeline } from "@/components/timeline/ObjectTimeline";
 import InvoiceRecipientsCard from "@/components/InvoiceRecipientsCard";
@@ -235,6 +235,8 @@ interface ParentRelation {
   childId?: string;
   childName?: string;
   relationType?: string;
+  isPrimary?: boolean;
+  relationContext?: string | null;
 }
 
 interface CustomerSummary {
@@ -1001,6 +1003,31 @@ export default function ObjectDetailPage() {
 
   const obj = resolvedObject;
   const inheritanceSources: InheritanceSource[] = obj.inheritanceSources || [];
+
+  // Task #1031: släktträd i 360-översikten. Namn slås upp ur redan hämtade
+  // ancestors/descendants (täcker primär förälder + barn alltid); alternativa
+  // föräldrar faller tillbaka på id-fragment om de saknas i kedjorna.
+  const relationNameById = new Map<string, string>();
+  for (const a of ancestors) relationNameById.set(a.id, a.name || a.objectNumber || a.id.slice(0, 8));
+  for (const d of descendants) relationNameById.set(d.id, d.name || d.objectNumber || d.id.slice(0, 8));
+  relationNameById.set(obj.id, obj.name || obj.objectNumber || obj.id.slice(0, 8));
+  // objects.parentId speglar alltid den primära föräldern.
+  const relatedParents: MetadataRelatedParent[] = parentRelations
+    .filter((p): p is ParentRelation & { parentId: string } => !!p.parentId)
+    .map((p) => ({
+      id: p.parentId,
+      name: relationNameById.get(p.parentId) || p.parentName || `Objekt ${p.parentId.slice(0, 8)}`,
+      isPrimary: p.isPrimary ?? p.parentId === obj.parentId,
+      relationContext: p.relationContext ?? null,
+    }));
+  const relatedChildren: MetadataRelatedChild[] = descendants
+    .filter((d) => d.parentId === objectId)
+    .map((d) => ({
+      id: d.id,
+      name: d.name || d.objectNumber || d.id.slice(0, 8),
+      objectType: d.objectType ?? null,
+      hierarchyLevel: d.hierarchyLevel ?? null,
+    }));
 
   // Task #863: objektet som flytt-dialogen avser — sidans objekt eller ett barn
   // i grenträdet (hämtas från descendants-listan).
@@ -1851,9 +1878,12 @@ export default function ObjectDetailPage() {
                     }
                     contacts={contacts}
                     tasks={objectAssignments}
+                    parents={relatedParents}
+                    children={relatedChildren}
                     imagesCount={images.length}
                     issueReportsCount={issueReports.length}
                     onNavigateToTab={setActiveTab}
+                    onNavigateToObject={(id) => navigate(`/objects/${id}`)}
                   />
                 )}
               </div>

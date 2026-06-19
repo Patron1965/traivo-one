@@ -16,6 +16,7 @@ import {
   Link as LinkIcon, Plus, Loader2, ArrowUp, ArrowDown, Type, Hash, ToggleLeft,
   Calendar, Braces, MapPin, FileIcon, Eye, Layers, Server, Tag, AlignLeft,
   SlidersHorizontal, Users, ClipboardList, AlertTriangle, LayoutGrid, ChevronRight,
+  Star, GitFork, Network,
 } from "lucide-react";
 
 // Strukturellt kompatibla shapes (matchar ObjectDetailPage). Hålls medvetet
@@ -83,6 +84,20 @@ export interface MetadataRelatedTask {
   title: string;
   status?: string | null;
   scheduledDate?: string | null;
+}
+
+export interface MetadataRelatedParent {
+  id: string;
+  name: string;
+  isPrimary: boolean;
+  relationContext?: string | null;
+}
+
+export interface MetadataRelatedChild {
+  id: string;
+  name: string;
+  objectType?: string | null;
+  hierarchyLevel?: string | null;
 }
 
 interface MetadataAreaItem {
@@ -402,18 +417,29 @@ function MetadataNavItem({
 export function MetadataRelatedSummary({
   contacts = [],
   tasks = [],
+  parents = [],
+  children = [],
   imagesCount = 0,
   issueReportsCount = 0,
   onNavigateToTab,
+  onNavigateToObject,
 }: {
   contacts?: MetadataRelatedContact[];
   tasks?: MetadataRelatedTask[];
+  parents?: MetadataRelatedParent[];
+  children?: MetadataRelatedChild[];
   imagesCount?: number;
   issueReportsCount?: number;
   onNavigateToTab?: (tab: string) => void;
+  onNavigateToObject?: (objectId: string) => void;
 }) {
   const topContacts = contacts.slice(0, 3);
   const topTasks = tasks.slice(0, 3);
+  // Primär förälder först — arv av metadata sker alltid från den primära.
+  const sortedParents = parents
+    .slice()
+    .sort((a, b) => (a.isPrimary === b.isPrimary ? 0 : a.isPrimary ? -1 : 1));
+  const topChildren = children.slice(0, 5);
 
   const tiles: { icon: typeof Type; label: string; value: number; tab: string; testid: string }[] = [
     { icon: Users, label: "Kontakter", value: contacts.length, tab: "contacts", testid: "stat-contacts" },
@@ -450,6 +476,70 @@ export function MetadataRelatedSummary({
             );
           })}
         </div>
+
+        {(sortedParents.length > 0 || children.length > 0) && (
+          <div className="space-y-3" data-testid="summary-relations">
+            {sortedParents.length > 0 && (
+              <div className="space-y-1.5">
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground flex items-center gap-1.5">
+                  <GitFork className="h-3 w-3" /> Föräldrar
+                </p>
+                <div className="space-y-1.5">
+                  {sortedParents.map((p) => (
+                    <button
+                      key={p.id}
+                      type="button"
+                      onClick={() => onNavigateToObject?.(p.id)}
+                      disabled={!onNavigateToObject}
+                      data-testid={`summary-parent-${p.id}`}
+                      className={`flex w-full items-center justify-between gap-3 rounded-md border px-3 py-1.5 text-left hover-elevate disabled:cursor-default ${
+                        p.isPrimary ? "border-chart-3/50 bg-chart-3/10" : ""
+                      }`}
+                    >
+                      <span className="flex min-w-0 items-center gap-2">
+                        <span className="truncate text-sm font-medium">{p.name}</span>
+                        {p.isPrimary && (
+                          <Badge variant="outline" className="shrink-0 gap-1 border-chart-3/50 text-[10px] text-chart-3">
+                            <Star className="h-2.5 w-2.5" /> Primär
+                          </Badge>
+                        )}
+                      </span>
+                      {onNavigateToObject && <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {children.length > 0 && (
+              <div className="space-y-1.5">
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground flex items-center gap-1.5">
+                  <Network className="h-3 w-3" /> Barnobjekt ({children.length})
+                </p>
+                <div className="space-y-1.5">
+                  {topChildren.map((c) => (
+                    <button
+                      key={c.id}
+                      type="button"
+                      onClick={() => onNavigateToObject?.(c.id)}
+                      disabled={!onNavigateToObject}
+                      data-testid={`summary-child-${c.id}`}
+                      className="flex w-full items-center justify-between gap-3 rounded-md border px-3 py-1.5 text-left hover-elevate disabled:cursor-default"
+                    >
+                      <span className="min-w-0 truncate text-sm font-medium">{c.name}</span>
+                      {onNavigateToObject && <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />}
+                    </button>
+                  ))}
+                  {children.length > topChildren.length && (
+                    <p className="px-1 text-xs text-muted-foreground" data-testid="text-more-children">
+                      +{children.length - topChildren.length} till barnobjekt
+                    </p>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
 
         {topContacts.length > 0 && (
           <div className="space-y-2">
@@ -558,9 +648,12 @@ export function ObjectMetadataForm({
   systemFacts,
   contacts,
   tasks,
+  parents,
+  children,
   imagesCount,
   issueReportsCount,
   onNavigateToTab,
+  onNavigateToObject,
 }: {
   objectId: string;
   entries: MetadataFormEntry[];
@@ -577,9 +670,12 @@ export function ObjectMetadataForm({
   systemFacts?: MetadataSystemFacts;
   contacts?: MetadataRelatedContact[];
   tasks?: MetadataRelatedTask[];
+  parents?: MetadataRelatedParent[];
+  children?: MetadataRelatedChild[];
   imagesCount?: number;
   issueReportsCount?: number;
   onNavigateToTab?: (tab: string) => void;
+  onNavigateToObject?: (objectId: string) => void;
 }) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -703,6 +799,8 @@ export function ObjectMetadataForm({
   const hasRelated =
     (contacts?.length ?? 0) > 0 ||
     (tasks?.length ?? 0) > 0 ||
+    (parents?.length ?? 0) > 0 ||
+    (children?.length ?? 0) > 0 ||
     (imagesCount ?? 0) > 0 ||
     (issueReportsCount ?? 0) > 0;
   const showRelatedQuickLinks = !!onNavigateToTab;
@@ -983,9 +1081,12 @@ export function ObjectMetadataForm({
           <MetadataRelatedSummary
             contacts={contacts}
             tasks={tasks}
+            parents={parents}
+            children={children}
             imagesCount={imagesCount}
             issueReportsCount={issueReportsCount}
             onNavigateToTab={onNavigateToTab}
+            onNavigateToObject={onNavigateToObject}
           />
         )}
 
