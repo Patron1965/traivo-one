@@ -1838,6 +1838,22 @@ export default function ObjectDetailPage() {
                     onReorder={(orderedKatalogIds) => reorderMetadataMutation.mutate(orderedKatalogIds)}
                     reorderPending={reorderMetadataMutation.isPending}
                     renderHistoryButton={renderHistory}
+                    systemFacts={
+                      obj
+                        ? {
+                            objectNumber: obj.objectNumber,
+                            createdAt: obj.createdAt,
+                            status: obj.status,
+                            importBatchId: obj.importBatchId,
+                            hierarchyDepth: obj.hierarchyDepth,
+                          }
+                        : undefined
+                    }
+                    contacts={contacts}
+                    tasks={objectAssignments}
+                    imagesCount={images.length}
+                    issueReportsCount={issueReports.length}
+                    onNavigateToTab={setActiveTab}
                   />
                 )}
               </div>
