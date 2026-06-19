@@ -138,6 +138,18 @@ const OBJECT_STATUS_LABELS: Record<string, string> = {
   planned: "Planerad",
 };
 
+const RELATION_CONTEXT_LABELS: Record<string, string> = {
+  primary: "Primär",
+  billing: "Fakturering",
+  operational: "Drift",
+  ownership: "Ägare",
+};
+
+function getRelationContextLabel(ctx?: string | null): string {
+  if (!ctx) return "Primär";
+  return RELATION_CONTEXT_LABELS[ctx] ?? ctx;
+}
+
 function humanizeArea(slug: string): string {
   if (!slug) return "Övrigt";
   return slug.charAt(0).toUpperCase() + slug.slice(1).replace(/[_-]+/g, " ");
@@ -498,9 +510,17 @@ export function MetadataRelatedSummary({
                     >
                       <span className="flex min-w-0 items-center gap-2">
                         <span className="truncate text-sm font-medium">{p.name}</span>
-                        {p.isPrimary && (
+                        {p.isPrimary ? (
                           <Badge variant="outline" className="shrink-0 gap-1 border-chart-3/50 text-[10px] text-chart-3">
                             <Star className="h-2.5 w-2.5" /> Primär
+                          </Badge>
+                        ) : (
+                          <Badge
+                            variant="outline"
+                            className="shrink-0 text-[10px] text-muted-foreground"
+                            data-testid={`badge-parent-context-${p.id}`}
+                          >
+                            {getRelationContextLabel(p.relationContext)}
                           </Badge>
                         )}
                       </span>
