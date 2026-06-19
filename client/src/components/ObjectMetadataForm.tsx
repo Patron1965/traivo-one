@@ -93,6 +93,17 @@ export interface MetadataRelatedParent {
   relationContext?: string | null;
 }
 
+// Task #1032: släktnamn-kedja (rot → förälder) från display-names-endpointen.
+interface RelationDisplayNameChain {
+  parentId: string | null;
+  isPrimary: boolean;
+  path: { id: string; name: string; level: string }[];
+}
+interface RelationDisplayNamesData {
+  primary: string;
+  chains: RelationDisplayNameChain[];
+}
+
 export interface MetadataRelatedChild {
   id: string;
   name: string;
@@ -427,6 +438,7 @@ function MetadataNavItem({
 
 /** Kompakt 360-översikt: relaterade kontakter, uppgifter, bilder och felanmälningar. */
 export function MetadataRelatedSummary({
+  objectId,
   contacts = [],
   tasks = [],
   parents = [],
@@ -436,6 +448,7 @@ export function MetadataRelatedSummary({
   onNavigateToTab,
   onNavigateToObject,
 }: {
+  objectId?: string;
   contacts?: MetadataRelatedContact[];
   tasks?: MetadataRelatedTask[];
   parents?: MetadataRelatedParent[];
@@ -452,6 +465,31 @@ export function MetadataRelatedSummary({
     .slice()
     .sort((a, b) => (a.isPrimary === b.isPrimary ? 0 : a.isPrimary ? -1 : 1));
   const topChildren = children.slice(0, 5);
+
+  // Task #1032: när tenanten slagit på hierarkiska släktnamn (displayNameRules)
+  // visar vi hela "rot → förälder"-kedjan för varje förälder. Vi återanvänder
+  // objektets egna display-names-endpoint: varje chain har en `path` (rot → detta
+  // objekt) och ett `parentId`, så förälderns släktnamn = path utan sista noden.
+  // Samma queryKey som ObjectDisplayNames → react-query dedupar anropet.
+  const { data: displayNamesData } = useQuery<RelationDisplayNamesData>({
+    queryKey: ["/api/objects", objectId, "display-names", ""],
+    queryFn: async () => {
+      const res = await fetch(`/api/objects/${objectId}/display-names`);
+      if (!res.ok) return { primary: "", chains: [] };
+      return res.json();
+    },
+    enabled: !!objectId,
+  });
+  // Rules avstängda ⇒ chains är tom ⇒ vi faller tillbaka till förälderns eget namn.
+  const parentPathById = useMemo(() => {
+    const m = new Map<string, { id: string; name: string }[]>();
+    for (const chain of displayNamesData?.chains ?? []) {
+      if (!chain.parentId) continue;
+      const path = chain.path.slice(0, -1).map((n) => ({ id: n.id, name: n.name }));
+      if (path.length > 0) m.set(chain.parentId, path);
+    }
+    return m;
+  }, [displayNamesData]);
 
   const tiles: { icon: typeof Type; label: string; value: number; tab: string; testid: string }[] = [
     { icon: Users, label: "Kontakter", value: contacts.length, tab: "contacts", testid: "stat-contacts" },
@@ -497,7 +535,9 @@ export function MetadataRelatedSummary({
                   <GitFork className="h-3 w-3" /> Föräldrar
                 </p>
                 <div className="space-y-1.5">
-                  {sortedParents.map((p) => (
+                  {sortedParents.map((p) => {
+                    const path = parentPathById.get(p.id);
+                    return (
                     <button
                       key={p.id}
                       type="button"
@@ -509,7 +549,31 @@ export function MetadataRelatedSummary({
                       }`}
                     >
                       <span className="flex min-w-0 items-center gap-2">
-                        <span className="truncate text-sm font-medium">{p.name}</span>
+                        {path && path.length > 0 ? (
+                          <span
+                            className="flex min-w-0 flex-wrap items-center gap-1"
+                            data-testid={`summary-parent-path-${p.id}`}
+                          >
+                            {path.map((node, idx) => (
+                              <span key={node.id} className="flex items-center gap-1">
+                                <span
+                                  className={`truncate ${
+                                    idx === path.length - 1
+                                      ? "text-sm font-medium text-foreground"
+                                      : "text-xs text-muted-foreground"
+                                  }`}
+                                >
+                                  {node.name || "—"}
+                                </span>
+                                {idx < path.length - 1 && (
+                                  <ChevronRight className="h-3 w-3 shrink-0 text-muted-foreground/60" />
+                                )}
+                              </span>
+                            ))}
+                          </span>
+                        ) : (
+                          <span className="truncate text-sm font-medium">{p.name}</span>
+                        )}
                         {p.isPrimary ? (
                           <Badge variant="outline" className="shrink-0 gap-1 border-chart-3/50 text-[10px] text-chart-3">
                             <Star className="h-2.5 w-2.5" /> Primär
@@ -526,7 +590,8 @@ export function MetadataRelatedSummary({
                       </span>
                       {onNavigateToObject && <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />}
                     </button>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             )}
@@ -1099,6 +1164,7 @@ export function ObjectMetadataForm({
 
         {hasRelated && (
           <MetadataRelatedSummary
+            objectId={objectId}
             contacts={contacts}
             tasks={tasks}
             parents={parents}
