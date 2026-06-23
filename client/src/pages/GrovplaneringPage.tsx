@@ -314,11 +314,20 @@ export default function GrovplaneringPage() {
     data: engineData,
     isLoading: engineLoading,
     isError: engineError,
+    refetch: refetchEngine,
   } = useQuery<EngineResultsResponse>({
     queryKey: ["/api/rough-planning/engine-results"],
     queryFn: async () =>
       (await apiRequest("GET", "/api/rough-planning/engine-results")).json(),
   });
+
+  // Visa färska motorförslag direkt när planeraren öppnar fliken (Task #1042):
+  // hämta om read-modellen vid byte till motor-vyn så körningar gjorda i en annan
+  // flik/session syns — utan att köra om motorn (den förblir on-demand, #1038).
+  const openMotorView = () => {
+    setView("motor");
+    void refetchEngine();
+  };
 
   // Selektion.
   const visibleRows = useMemo(
@@ -606,11 +615,18 @@ export default function GrovplaneringPage() {
       {/* Motorns körkontroll — intill filtret (Task #1039) */}
       <EngineRunControl
         lastRunAt={engineData?.lastRunAt ?? null}
-        onRan={() => setView("motor")}
+        onRan={openMotorView}
       />
 
       {/* Vy-växel: manuell lista vs motorns förslag */}
-      <Tabs value={view} onValueChange={(v) => setView(v as "manuell" | "motor")}>
+      <Tabs
+        value={view}
+        onValueChange={(v) => {
+          const next = v as "manuell" | "motor";
+          if (next === "motor") openMotorView();
+          else setView(next);
+        }}
+      >
         <TabsList data-testid="tabs-grov-view">
           <TabsTrigger value="manuell" data-testid="tab-manuell">
             Manuell lista

@@ -16,7 +16,7 @@
 
 import { db } from "../db";
 import { and, eq, inArray, isNull } from "drizzle-orm";
-import { assignments, objects, customers } from "@shared/schema";
+import { assignments, objects, customers, type SlotTime } from "@shared/schema";
 import { storage } from "../storage";
 import { ENGINE_SOURCE, type SlotType } from "./time-geo-engine";
 
@@ -141,10 +141,31 @@ const EMPTY_SUMMARY: EngineResultsSummary = {
 // ---------------------------------------------------------------------------
 
 export async function getEngineResults(tenantId: string): Promise<EngineResultsResponse> {
-  // Alla aktiva slottider för tenanten (storage filtrerar bort soft-deletade).
+  // IO-skikt: läs registret + uppgiftskontext, delegera monteringen till den rena
+  // assembleEngineResults så läsmodellen kan regressionstestas utan DB (Task #1042).
   const slots = await storage.getSlotTimes(tenantId);
   const engineSlots = slots.filter((s) => s.source === ENGINE_SOURCE);
+  const assignmentIds = Array.from(
+    new Set(
+      engineSlots
+        .filter((s) => s.assignmentId != null)
+        .map((s) => s.assignmentId as string),
+    ),
+  );
+  const context = await loadAssignmentContext(tenantId, assignmentIds);
+  return assembleEngineResults(engineSlots, context);
+}
 
+/**
+ * Ren montering av motorns redan skrivna slot_times-rader till UI-läsmodellen.
+ * Tar emot redan källfiltrerade (source=tidsmotor) slottider samt uppgiftskontext
+ * per assignmentId. Ingen IO här — så clumps/standalone/vald/alternativ kan
+ * verifieras mot exakt den radform motorn skriver (Task #1042).
+ */
+export function assembleEngineResults(
+  engineSlots: SlotTime[],
+  contextById: Map<string, AssignmentContext>,
+): EngineResultsResponse {
   if (engineSlots.length === 0) {
     return {
       hasResults: false,
@@ -183,11 +204,7 @@ export async function getEngineResults(tenantId: string): Promise<EngineResultsR
     byAssignment.set(id, list);
   }
 
-  // Hämta uppgifts-/objekts-/kundkontext för de assignments som har slottider.
-  const assignmentIds = Array.from(byAssignment.keys());
-  const context = await loadAssignmentContext(tenantId, assignmentIds);
-
-  // Bygg EngineTaskResult per assignment.
+  // Bygg EngineTaskResult per assignment (uppgiftskontext injicerad av anroparen).
   const taskById = new Map<string, EngineTaskResult>();
   for (const [assignmentId, rows] of Array.from(byAssignment.entries())) {
     const sorted = [...rows].sort((a, b) => a.rank - b.rank);
@@ -208,7 +225,7 @@ export async function getEngineResults(tenantId: string): Promise<EngineResultsR
     const chosenMeta = (chosenRow?.metadata ?? sorted[0]?.metadata ?? {}) as TaskMeta;
     const chosen = candidates.find((c) => c.status === "vald") ?? null;
     const alternative = candidates.find((c) => c.status === "forslag") ?? null;
-    const ctx = context.get(assignmentId);
+    const ctx = contextById.get(assignmentId);
 
     taskById.set(assignmentId, {
       assignmentId,
@@ -312,7 +329,7 @@ export async function getEngineResults(tenantId: string): Promise<EngineResultsR
 // Uppgiftskontext (titel/objekt/kund/adress) — tenant-scopat.
 // ---------------------------------------------------------------------------
 
-interface AssignmentContext {
+export interface AssignmentContext {
   title: string | null;
   objectId: string | null;
   objectName: string | null;
