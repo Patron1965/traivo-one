@@ -168,3 +168,9 @@ id = "P0mlx-ri0VMzi6Eupvsbq"
 uri = "file://docs/api/TRAIVO_GO_PROMPT.md"
 type = "text"
 title = "Traivo Go-prompt — 100 % match med Traivo One"
+
+[[outputs]]
+id = "ITN5rCg4V3tG2dLnvFhLs"
+uri = "file://docs/traivo-go-integrationshandbok.md"
+type = "text"
+title = "Traivo Go ↔ Traivo One — Integrationshandbok (komplett)"
