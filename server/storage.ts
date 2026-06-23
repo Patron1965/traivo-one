@@ -165,6 +165,7 @@ import {
   weeklyPlans, weeklyPlanTasks, personalTasks, personalTaskSchedules,
   travelTimeEntries, weeklyPlanWarnings, geographicDistricts, districtZones,
   preTasks, execTypePreTaskRules, disruptions,
+  slotTimes, type SlotTime, type InsertSlotTime,
   type WeeklyPlan, type InsertWeeklyPlan,
   type WeeklyPlanTask, type InsertWeeklyPlanTask,
   type PersonalTask, type InsertPersonalTask,
@@ -1362,6 +1363,14 @@ export interface IStorage {
   updateWeeklyPlanWarning(tenantId: string, id: string, data: Partial<InsertWeeklyPlanWarning>): Promise<WeeklyPlanWarning | undefined>;
   deleteWeeklyPlanWarning(tenantId: string, id: string): Promise<void>;
   deleteWeeklyPlanWarningsByPlan(tenantId: string, weeklyPlanId: string): Promise<void>;
+
+  // Task #1037: Slottids-register
+  getSlotTimes(tenantId: string, opts?: { assignmentId?: string; assignmentGroupKey?: string; status?: string }): Promise<SlotTime[]>;
+  getSlotTime(tenantId: string, id: string): Promise<SlotTime | undefined>;
+  createSlotTime(data: InsertSlotTime): Promise<SlotTime>;
+  updateSlotTime(tenantId: string, id: string, data: Partial<InsertSlotTime>): Promise<SlotTime | undefined>;
+  deleteSlotTime(tenantId: string, id: string): Promise<void>;
+
   // Pre-tasks
   getPreTasks(tenantId: string, opts?: { workOrderId?: string; status?: string }): Promise<PreTask[]>;
   getPreTask(tenantId: string, id: string): Promise<PreTask | undefined>;
@@ -10528,6 +10537,38 @@ export class DatabaseStorage implements IStorage {
   async deleteWeeklyPlan(tenantId: string, id: string): Promise<void> {
     await db.update(weeklyPlans).set({ deletedAt: new Date(), updatedAt: new Date() })
       .where(and(eq(weeklyPlans.id, id), eq(weeklyPlans.tenantId, tenantId)));
+  }
+
+  // === Task #1037: Slottids-register ===
+  // Motorns beräknade slottider per uppgift/klumpuppgift. tenant_id i varje
+  // predikat; soft-delete via deletedAt. Storheter (ordervärde/kostnad/
+  // produktionstid) bor på assignments (cachedValue/cachedCost/estimatedDuration).
+  async getSlotTimes(tenantId: string, opts?: { assignmentId?: string; assignmentGroupKey?: string; status?: string }): Promise<SlotTime[]> {
+    const conds: Condition[] = [eq(slotTimes.tenantId, tenantId), isNull(slotTimes.deletedAt)];
+    if (opts?.assignmentId) conds.push(eq(slotTimes.assignmentId, opts.assignmentId));
+    if (opts?.assignmentGroupKey) conds.push(eq(slotTimes.assignmentGroupKey, opts.assignmentGroupKey));
+    if (opts?.status) conds.push(eq(slotTimes.status, opts.status));
+    return db.select().from(slotTimes).where(and(...conds))
+      .orderBy(slotTimes.rank, slotTimes.windowStart);
+  }
+  async getSlotTime(tenantId: string, id: string): Promise<SlotTime | undefined> {
+    const [row] = await db.select().from(slotTimes)
+      .where(and(eq(slotTimes.id, id), eq(slotTimes.tenantId, tenantId), isNull(slotTimes.deletedAt)));
+    return row || undefined;
+  }
+  async createSlotTime(data: InsertSlotTime): Promise<SlotTime> {
+    const [row] = await db.insert(slotTimes).values(data).returning();
+    return row;
+  }
+  async updateSlotTime(tenantId: string, id: string, data: Partial<InsertSlotTime>): Promise<SlotTime | undefined> {
+    const { tenantId: _t, ...patch } = data as Partial<InsertSlotTime>;
+    const [row] = await db.update(slotTimes).set({ ...patch, updatedAt: new Date() })
+      .where(and(eq(slotTimes.id, id), eq(slotTimes.tenantId, tenantId))).returning();
+    return row || undefined;
+  }
+  async deleteSlotTime(tenantId: string, id: string): Promise<void> {
+    await db.update(slotTimes).set({ deletedAt: new Date(), updatedAt: new Date() })
+      .where(and(eq(slotTimes.id, id), eq(slotTimes.tenantId, tenantId)));
   }
 
   // Veckoplan-uppgifter

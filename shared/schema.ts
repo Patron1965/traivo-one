@@ -1,5 +1,5 @@
 import { sql, relations } from "drizzle-orm";
-import { pgTable, text, varchar, integer, serial, timestamp, date, jsonb, boolean, real, doublePrecision, index, unique, uniqueIndex } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, integer, serial, timestamp, date, jsonb, boolean, real, doublePrecision, index, unique, uniqueIndex, check } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 import type { FrozenTimeRulePackage } from "./delivery-restrictions";
@@ -7561,6 +7561,73 @@ export const disruptions = pgTable("disruptions", {
 export type Disruption = typeof disruptions.$inferSelect;
 export const insertDisruptionSchema = createInsertSchema(disruptions);
 export type InsertDisruption = z.infer<typeof insertDisruptionSchema>;
+
+// =====================================================================
+// Task #1037 — Slottids-register (Tids- & geografimotor, datafundament)
+// =====================================================================
+// Registret håller motorns BERÄKNADE slottider (möjliga tidsfönster) per
+// uppgift (assignment) eller per en grupp av uppgifter (klumpuppgift). Flera
+// kandidater kan finnas per uppgift/grupp; motorn (separat task #1038) rankar
+// dem. Allt här är expand-only och additivt: ingen befintlig tabell ändras och
+// inga befintliga flöden (import/VRP/Fortnox/mobil) påverkas.
+//
+// Uppgiftens STORHETER (ordervärde, kostnad, produktionstid) lagras INTE här —
+// de återanvänds från befintliga fält på `assignments`:
+//   ordervärde     = assignments.cachedValue        (öre)
+//   kostnad        = assignments.cachedCost          (öre)
+//   produktionstid = assignments.estimatedDuration   (minuter)
+// med drill-down per artikel i assignment_articles.totalPrice/totalCost/totalTime.
+// Motorn (#1038) summerar dessa vid gruppering till klumpuppgifter.
+//
+// Styrda värdelistor (textkolumner enligt projektkonvention — ej pg-enum):
+//   slot_type:   onskad | kravd | fordelaktig
+//   slot_status: forslag | vald
+//
+// `assignment_group_key` är en opak, tenant-scopead nyckel som låter motorn binda
+// en slottid till en klumpuppgift utan att en grupp-tabell behöver finnas ännu
+// (#1038 äger klumpuppgift-modellen och kan senare lägga till en riktig grupp-
+// tabell + nullbar FK utan att bryta detta register). En rad måste peka på minst
+// en uppgift ELLER en grupp (CHECK).
+// =====================================================================
+export const slotTimes = pgTable("slot_times", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
+  // Uppgiften slottiden gäller (task-nivå). NULL för rena grupp-slottider.
+  assignmentId: varchar("assignment_id").references(() => assignments.id, { onDelete: "cascade" }),
+  // Opak grupp-nyckel för klumpuppgift (grupp-nivå). NULL för rena uppgifts-slottider.
+  assignmentGroupKey: text("assignment_group_key"),
+  // Tidsfönstrets start/slut (motorns kandidat).
+  windowStart: timestamp("window_start").notNull(),
+  windowEnd: timestamp("window_end").notNull(),
+  // slot_type: onskad | kravd | fordelaktig
+  slotType: text("slot_type").notNull(),
+  // slot_status: forslag | vald
+  status: text("status").default("forslag").notNull(),
+  // Rang/ordning bland flera kandidater (motorn sätter; lägre = högre prioritet).
+  rank: integer("rank").default(0).notNull(),
+  // Valfri poäng från motorn (för sortering/förklaring).
+  score: real("score"),
+  // Ursprung, t.ex. "tidsmotor".
+  source: text("source"),
+  // Förklaring/extra (motivering, viktning) — fri jsonb.
+  metadata: jsonb("metadata").default({}),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  deletedAt: timestamp("deleted_at"),
+}, (table) => [
+  index("idx_slot_times_tenant").on(table.tenantId),
+  index("idx_slot_times_tenant_assignment").on(table.tenantId, table.assignmentId),
+  index("idx_slot_times_tenant_group").on(table.tenantId, table.assignmentGroupKey),
+  index("idx_slot_times_tenant_status").on(table.tenantId, table.status),
+  index("idx_slot_times_tenant_window_start").on(table.tenantId, table.windowStart),
+  index("idx_slot_times_tenant_deleted").on(table.tenantId, table.deletedAt),
+  check("chk_slot_times_target", sql`${table.assignmentId} IS NOT NULL OR ${table.assignmentGroupKey} IS NOT NULL`),
+  check("chk_slot_times_window_order", sql`${table.windowEnd} >= ${table.windowStart}`),
+]);
+
+export type SlotTime = typeof slotTimes.$inferSelect;
+export const insertSlotTimeSchema = createInsertSchema(slotTimes).omit({ id: true, createdAt: true, updatedAt: true, deletedAt: true });
+export type InsertSlotTime = z.infer<typeof insertSlotTimeSchema>;
 
 // ============================================================================
 // Task #991: Enhetligt utförarregister (läsmodell)
