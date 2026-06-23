@@ -27,3 +27,23 @@ fresh-/prod-setup vid drift) och (b) som registrerat validation-step `schema-dri
 
 **Why:** Replays-listan i post-merge är källan till sanning för fresh-miljöer;
 db:push är inte tillförlitlig för strukturella adds.
+
+## Contract-migrationer (DROP COLUMN) måste tåla att kolumnen redan är borta
+
+`npm run db:push` kör FÖRST i `scripts/post-merge.sh`, FÖRE raw-migrations-loopen, och
+synkar DB mot `shared/schema.ts`. När ett task TAR BORT en kolumn ur schema.ts hinner
+db:push DROPPA kolumnen innan replay-migrationen körs. En contract-migration som
+refererar den droppade kolumnen (t.ex. `UPDATE ... SET x = old_col` eller
+`WHERE old_col IN (...)`) failar då hårt med `column "..." does not exist` → post-merge
+exit ≠ 0 (sett som exit 3).
+
+**Regel:** Alla backfill-satser i en DROP-COLUMN-migration måste guardas så de blir
+no-op när kolumnen saknas. Använd plpgsql `DO $$ BEGIN IF EXISTS (SELECT 1 FROM
+information_schema.columns WHERE table_name=... AND column_name=...) THEN <UPDATE> END
+IF; END $$;` — inuti en ej-tagen IF-gren planeras aldrig UPDATE:n, så referensen till
+den saknade kolumnen kastar inte. Själva droppen ska vara `DROP COLUMN IF EXISTS`.
+
+**OBS data:** Eftersom db:push droppar FÖRE backfillen i denna ordning hinner backfillen
+aldrig bevara data i post-merge/deploy-flödet — databevarandet måste i praktiken redan
+vara gjort i ett tidigare expand-/dual-write-steg. Backfillen i contract-migrationen är
+bara en best-effort säkerhetsnät för legacy-rader.
