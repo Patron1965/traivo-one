@@ -19,10 +19,11 @@ export interface PlannerActionState {
   scheduledDate: string | null;
   scheduledStartTime: string | null;
   orderStatus: string;
+  roughPlannedWeek?: string | null;
 }
 
 export interface PlannerAction {
-  type: "schedule" | "unschedule" | "team-assign";
+  type: "schedule" | "unschedule" | "team-assign" | "push-to-rough";
   jobId: string;
   previousState: PlannerActionState;
   newState: PlannerActionState;

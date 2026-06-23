@@ -186,6 +186,11 @@ export const RouteMapView = memo(function RouteMapView(props: RouteMapViewProps)
             </>
           )}
         </div>
+        {routeViewResourceId && orderedJobs.length > 1 && (
+          <div className="px-3 py-2 text-[11px] text-muted-foreground border-b bg-muted/30" data-testid="route-reorder-risk-hint">
+            Dra och släpp för att ändra körordning. Manuell omflyttning visar konsekvensen i körsträcka och sker på planerarens egen risk.
+          </div>
+        )}
         <ScrollArea className="flex-1 p-2">
           <SortableContext items={orderedJobs.map(j => j.id)} strategy={verticalListSortingStrategy}>
             <div className="space-y-1" data-testid="route-stop-list">

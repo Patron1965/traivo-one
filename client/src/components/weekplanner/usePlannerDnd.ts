@@ -4,7 +4,26 @@ import { arrayMove } from "@dnd-kit/sortable";
 import { format, isSameDay } from "date-fns";
 import { DAY_START_HOUR, DAY_END_HOUR } from "./types";
 import { playDeliveryWindowAlert } from "@/lib/audio-cues";
+import { haversineDistanceKm } from "@/lib/geo";
 import type { WorkOrderWithObject } from "@shared/schema";
+
+// Total körsträcka (km) längs en stopp-sekvens, beräknad via fågelvägen mellan
+// uppgifternas koordinater (uppgiftsposition före objektposition).
+function routeTotalKm(jobs: WorkOrderWithObject[]): number {
+  let total = 0;
+  for (let i = 0; i < jobs.length - 1; i++) {
+    const a = jobs[i];
+    const b = jobs[i + 1];
+    const aLat = a.taskLatitude ?? a.objectLatitude;
+    const aLng = a.taskLongitude ?? a.objectLongitude;
+    const bLat = b.taskLatitude ?? b.objectLatitude;
+    const bLng = b.taskLongitude ?? b.objectLongitude;
+    if (aLat != null && aLng != null && bLat != null && bLng != null) {
+      total += haversineDistanceKm(aLat, aLng, bLat, bLng);
+    }
+  }
+  return total;
+}
 
 // Drop-zoner i kanten av veckovyn för att hoppa till föregående/nästa vecka mitt i ett drag (F2).
 const WEEK_NAV_PREV_ID = "week-nav-prev";
@@ -32,7 +51,7 @@ interface UsePlannerDndOptions {
   setConflictDialogOpen: (open: boolean) => void;
   executeSchedule: (jobId: string, resourceId: string, dateStr: string, startTime?: string, clusterOverride?: boolean) => void;
   executeTeamSchedule?: (jobId: string, teamId: string, dateStr: string) => void;
-  toast: (opts: { title: string; description?: string }) => void;
+  toast: (opts: { title: string; description?: string; variant?: "default" | "destructive" }) => void;
   selectedJobIds?: Set<string>;
   clearSelection?: () => void;
   setWhatIfPending?: (pending: { jobId: string; jobTitle: string; resourceId: string; scheduledDate: string; scheduledStartTime?: string; clusterOverride?: boolean; bulkJobs?: Array<{ jobId: string; startTime: string }> } | null) => void;
@@ -245,6 +264,11 @@ export function usePlannerDnd({
         const newIdx = routeJobsForView.findIndex(j => j.id === dropId);
         if (oldIdx !== -1 && newIdx !== -1) {
           const newOrder = arrayMove(routeJobsForView, oldIdx, newIdx);
+          // Konsekvens: jämför körsträcka före/efter omflyttningen (planeraren
+          // flyttar på egen risk — ingen ny optimering görs).
+          const kmBefore = routeTotalKm(routeJobsForView);
+          const kmAfter = routeTotalKm(newOrder);
+          const deltaKm = kmAfter - kmBefore;
           setRouteJobOrder(newOrder.map(j => j.id));
           let mins = 8 * 60;
           const ds = format(currentDate, "yyyy-MM-dd");
@@ -252,7 +276,18 @@ export function usePlannerDnd({
             updateWorkOrderMutation.mutate({ id: job.id, resourceId: job.resourceId!, scheduledDate: ds, scheduledStartTime: `${String(Math.floor(mins / 60)).padStart(2, "0")}:${String(mins % 60).padStart(2, "0")}` });
             mins += (job.estimatedDuration || 30) + (idx < newOrder.length - 1 ? 5 : 0);
           });
-          toast({ title: "Körordning uppdaterad", description: `${newOrder.length} stopp har fått ny ordning` });
+          const deltaAbs = Math.abs(deltaKm).toFixed(1).replace(".", ",");
+          const consequence =
+            Math.abs(deltaKm) < 0.05
+              ? "oförändrad körsträcka"
+              : deltaKm > 0
+                ? `+${deltaAbs} km körsträcka`
+                : `−${deltaAbs} km körsträcka`;
+          toast({
+            title: "Körordning uppdaterad",
+            description: `${newOrder.length} stopp har fått ny ordning — ${consequence}. Flytt sker på planerarens egen risk.`,
+            variant: deltaKm > 0.05 ? "destructive" : undefined,
+          });
         }
         return;
       }

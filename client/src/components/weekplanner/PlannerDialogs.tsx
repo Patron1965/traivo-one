@@ -403,6 +403,8 @@ interface AutoFillDialogProps {
   setOverbooking: (v: number) => void;
   geoClustering: boolean;
   setGeoClustering: (v: boolean) => void;
+  planningMode: "balanced" | "delivery_time";
+  setPlanningMode: (v: "balanced" | "delivery_time") => void;
   geoSpread: Record<string, { totalJobs: number; zonesUsed: number; dominantZonePct: number }> | null;
   loading: boolean;
   applying: boolean;
@@ -420,6 +422,7 @@ interface AutoFillDialogProps {
 export const AutoFillDialog = memo(function AutoFillDialog(props: AutoFillDialogProps) {
   const {
     open, onOpenChange, overbooking, setOverbooking, geoClustering, setGeoClustering,
+    planningMode, setPlanningMode,
     geoSpread, loading, applying,
     preview, skipped, diag, resources, viewMode, currentWeekStart, currentDate,
     onPreview, onApply,
@@ -437,6 +440,29 @@ export const AutoFillDialog = memo(function AutoFillDialog(props: AutoFillDialog
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-4 py-2">
+          <div>
+            <label className="text-sm font-medium mb-2 block">Planeringsläge</label>
+            <div className="grid grid-cols-2 gap-2" data-testid="planning-mode-selector">
+              <button
+                type="button"
+                onClick={() => setPlanningMode("balanced")}
+                className={`rounded-lg border p-3 text-left transition-colors ${planningMode === "balanced" ? "border-primary bg-primary/10" : "border-border hover:bg-muted/50"}`}
+                data-testid="planning-mode-balanced"
+              >
+                <span className="text-sm font-medium block">Balanserad</span>
+                <span className="text-xs text-muted-foreground">Prioritet först, sedan körsträcka</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setPlanningMode("delivery_time")}
+                className={`rounded-lg border p-3 text-left transition-colors ${planningMode === "delivery_time" ? "border-primary bg-primary/10" : "border-border hover:bg-muted/50"}`}
+                data-testid="planning-mode-delivery-time"
+              >
+                <span className="text-sm font-medium block">Efter leveranstid</span>
+                <span className="text-xs text-muted-foreground">Önskad/krävd leveranstid styr först</span>
+              </button>
+            </div>
+          </div>
           <div>
             <label className="text-sm font-medium mb-2 block">Överbokningstolerans: {overbooking}%</label>
             <input type="range" min={0} max={50} step={5} value={overbooking} onChange={(e) => setOverbooking(Number(e.target.value))} className="w-full accent-primary" data-testid="slider-overbooking" />

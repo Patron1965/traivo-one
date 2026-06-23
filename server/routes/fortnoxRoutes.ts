@@ -899,6 +899,10 @@ app.delete("/api/work-orders/:workOrderId/timewindows/:id", asyncHandler(async (
 app.post("/api/auto-plan-week", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const { weekStartDate, resourceIds, overbookingPercent = 0, geoClusteringEnabled = true } = req.body;
+    // Planeringsläge: "balanced" (prioritet först) eller "delivery_time"
+    // (önskad/krävd leveranstid som första styrning). Default balanserat.
+    const planningMode: "balanced" | "delivery_time" =
+      req.body.planningMode === "delivery_time" ? "delivery_time" : "balanced";
 
     if (!weekStartDate || !resourceIds || !Array.isArray(resourceIds)) {
       throw new ValidationError("weekStartDate and resourceIds[] required");
@@ -989,7 +993,22 @@ app.post("/api/auto-plan-week", asyncHandler(async (req, res) => {
     }
 
     const priorityOrder: Record<string, number> = { urgent: 0, high: 1, normal: 2, low: 3 };
+    // Leveranstid: krävd deadline (plannedWindowEnd) före önskad start (plannedWindowStart).
+    const deliveryKey = (o: typeof unscheduledOrders[number]): number => {
+      const d = o.plannedWindowEnd ?? o.plannedWindowStart;
+      return d ? new Date(d).getTime() : Number.POSITIVE_INFINITY;
+    };
     const sorted = [...unscheduledOrders].sort((a, b) => {
+      if (planningMode === "delivery_time") {
+        // Leveranstid är första styrning; prioritet bryter lika leveranstid.
+        const dA = deliveryKey(a);
+        const dB = deliveryKey(b);
+        if (dA !== dB) return dA - dB;
+        const pA = priorityOrder[a.priority] ?? 99;
+        const pB = priorityOrder[b.priority] ?? 99;
+        return pA - pB;
+      }
+      // Balanserat (oförändrat): prioritet först, sedan önskad starttid.
       const pA = priorityOrder[a.priority] ?? 99;
       const pB = priorityOrder[b.priority] ?? 99;
       if (pA !== pB) return pA - pB;

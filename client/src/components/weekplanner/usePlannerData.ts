@@ -119,6 +119,7 @@ export function usePlannerData() {
   const [depChainJobId, setDepChainJobId] = useState<string | null>(null);
   const [autoFillOverbooking, setAutoFillOverbooking] = useState(0);
   const [autoFillGeoClustering, setAutoFillGeoClustering] = useState(true);
+  const [autoFillPlanningMode, setAutoFillPlanningMode] = useState<"balanced" | "delivery_time">("balanced");
   const [autoFillGeoSpread, setAutoFillGeoSpread] = useState<Record<string, { totalJobs: number; zonesUsed: number; dominantZonePct: number }> | null>(null);
   const [autoFillLoading, setAutoFillLoading] = useState(false);
   const [autoFillPreview, setAutoFillPreview] = useState<Array<{ workOrderId: string; resourceId: string; scheduledDate: string; scheduledStartTime: string; title: string; address: string; estimatedDuration: number; priority: string }> | null>(null);
@@ -362,9 +363,16 @@ export function usePlannerData() {
   });
 
   const applyActionMutation = useMutation({
-    mutationFn: async ({ jobId, state }: { jobId: string; state: PlannerAction["previousState"] }) => (await apiRequest("PATCH", `/api/work-orders/${jobId}`, { resourceId: state.resourceId, teamId: state.teamId, scheduledDate: state.scheduledDate, scheduledStartTime: state.scheduledStartTime, orderStatus: state.orderStatus })).json() as Promise<WorkOrderWithObject>,
+    mutationFn: async ({ jobId, state }: { jobId: string; state: PlannerAction["previousState"] }) => { const payload: Record<string, unknown> = { resourceId: state.resourceId, teamId: state.teamId, scheduledDate: state.scheduledDate, scheduledStartTime: state.scheduledStartTime, orderStatus: state.orderStatus }; if (state.roughPlannedWeek !== undefined) payload.roughPlannedWeek = state.roughPlannedWeek; return (await apiRequest("PATCH", `/api/work-orders/${jobId}`, payload)).json() as Promise<WorkOrderWithObject>; },
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: workOrdersQueryKey }); queryClient.invalidateQueries({ queryKey: ["/api/work-orders", "unscheduled-paginated"] }); setUnscheduledPage(0); },
     onError: (error: Error) => { toast({ title: "Kunde inte ångra/göra om ändringen", description: error.message, variant: "destructive" }); },
+  });
+
+  const pushToRoughMutation = useMutation({
+    mutationFn: async (id: string) => (await apiRequest("PATCH", `/api/work-orders/${id}`, { resourceId: null, scheduledDate: null, scheduledStartTime: null, roughPlannedWeek: null, orderStatus: "skapad" })).json() as Promise<WorkOrderWithObject>,
+    onMutate: async (id) => { await queryClient.cancelQueries({ queryKey: workOrdersQueryKey }); const prev = queryClient.getQueryData<WorkOrderWithObject[]>(workOrdersQueryKey); queryClient.setQueryData<WorkOrderWithObject[]>(workOrdersQueryKey, old => old?.map(j => j.id === id ? { ...j, resourceId: null, scheduledDate: null, scheduledStartTime: null, roughPlannedWeek: null, orderStatus: "skapad" as const } : j)); return { previousData: prev }; },
+    onSuccess: (updated, id) => { queryClient.setQueryData<WorkOrderWithObject[]>(workOrdersQueryKey, old => old?.map(j => j.id === id ? { ...j, ...updated } : j)); queryClient.invalidateQueries({ queryKey: ["/api/work-orders", "unscheduled-paginated"] }); setUnscheduledPage(0); toast({ title: "Skjutet till grovplanering", description: "Uppgiften är tillbaka i grovplaneringen och kan läggas en annan vecka." }); },
+    onError: (err, _id, ctx) => { if (ctx?.previousData) queryClient.setQueryData(workOrdersQueryKey, ctx.previousData); toast({ title: "Kunde inte skjuta tillbaka uppgiften", description: err instanceof Error ? err.message : "Försök igen", variant: "destructive" }); },
   });
 
   const sendScheduleMutation = useMutation({
@@ -975,6 +983,8 @@ export function usePlannerData() {
 
   const handleUnschedule = useCallback((e: { stopPropagation: () => void }, jobId: string) => { e.stopPropagation(); const job = workOrders.find(j => j.id === jobId); if (job) { const previousTeamId = job.teamId ?? null; addToUndoStack({ type: "unschedule", jobId, previousState: { resourceId: job.resourceId || null, teamId: previousTeamId, scheduledDate: job.scheduledDate ? format(new Date(job.scheduledDate), "yyyy-MM-dd") : null, scheduledStartTime: job.scheduledStartTime || null, orderStatus: job.orderStatus }, newState: { resourceId: null, teamId: previousTeamId, scheduledDate: null, scheduledStartTime: null, orderStatus: "skapad" } }); } unscheduleWorkOrderMutation.mutate(jobId); }, [workOrders, addToUndoStack, unscheduleWorkOrderMutation]);
 
+  const handlePushToRough = useCallback((e: { stopPropagation: () => void }, jobId: string) => { e.stopPropagation(); const job = workOrders.find(j => j.id === jobId); if (job) { addToUndoStack({ type: "push-to-rough", jobId, previousState: { resourceId: job.resourceId || null, teamId: job.teamId ?? null, scheduledDate: job.scheduledDate ? format(new Date(job.scheduledDate), "yyyy-MM-dd") : null, scheduledStartTime: job.scheduledStartTime || null, orderStatus: job.orderStatus, roughPlannedWeek: job.roughPlannedWeek ?? null }, newState: { resourceId: null, teamId: job.teamId ?? null, scheduledDate: null, scheduledStartTime: null, orderStatus: "skapad", roughPlannedWeek: null } }); } pushToRoughMutation.mutate(jobId); }, [workOrders, addToUndoStack, pushToRoughMutation]);
+
   const handleUndo = useCallback(() => { if (undoStack.length === 0) return; const last = undoStack[undoStack.length - 1]; setUndoStack(prev => prev.slice(0, -1)); setRedoStack(prev => [...prev, last]); applyActionMutation.mutate({ jobId: last.jobId, state: last.previousState }); toast({ title: "Ändring ångrad" }); }, [undoStack, applyActionMutation, toast]);
   const handleRedo = useCallback(() => { if (redoStack.length === 0) return; const last = redoStack[redoStack.length - 1]; setRedoStack(prev => prev.slice(0, -1)); setUndoStack(prev => [...prev, last]); applyActionMutation.mutate({ jobId: last.jobId, state: last.newState }); toast({ title: "Ändring återställd" }); }, [redoStack, applyActionMutation, toast]);
 
@@ -1117,7 +1127,7 @@ export function usePlannerData() {
 
   const handleAutoFillPreview = async () => {
     setAutoFillLoading(true); setAutoFillPreview(null);
-    try { const ws = viewMode === "week" ? currentWeekStart : startOfWeek(currentDate, { weekStartsOn: 1 }); const data = await (await apiRequest("POST", "/api/auto-plan-week", { weekStartDate: format(ws, "yyyy-MM-dd"), resourceIds: resources.map(r => r.id), overbookingPercent: autoFillOverbooking, geoClusteringEnabled: autoFillGeoClustering })).json(); setAutoFillPreview(data.assignments || []); setAutoFillSkipped(data.totalSkipped || 0); setAutoFillDiag(data.totalUnscheduled != null ? { totalUnscheduled: data.totalUnscheduled, capacityPerDay: data.capacityPerDay || {}, maxMinutesPerDay: data.maxMinutesPerDay || 480, resourceCount: data.resourceCount || 0, clusterSkipped: data.clusterSkipped || 0 } : null); setAutoFillGeoSpread(data.geoSpreadPerDay || null); } catch (error) { toast({ title: "Kunde inte generera planering", description: error.message, variant: "destructive" }); } finally { setAutoFillLoading(false); }
+    try { const ws = viewMode === "week" ? currentWeekStart : startOfWeek(currentDate, { weekStartsOn: 1 }); const data = await (await apiRequest("POST", "/api/auto-plan-week", { weekStartDate: format(ws, "yyyy-MM-dd"), resourceIds: resources.map(r => r.id), overbookingPercent: autoFillOverbooking, geoClusteringEnabled: autoFillGeoClustering, planningMode: autoFillPlanningMode })).json(); setAutoFillPreview(data.assignments || []); setAutoFillSkipped(data.totalSkipped || 0); setAutoFillDiag(data.totalUnscheduled != null ? { totalUnscheduled: data.totalUnscheduled, capacityPerDay: data.capacityPerDay || {}, maxMinutesPerDay: data.maxMinutesPerDay || 480, resourceCount: data.resourceCount || 0, clusterSkipped: data.clusterSkipped || 0 } : null); setAutoFillGeoSpread(data.geoSpreadPerDay || null); } catch (error) { toast({ title: "Kunde inte generera planering", description: error.message, variant: "destructive" }); } finally { setAutoFillLoading(false); }
   };
 
   const handleAutoFillApply = async () => {
@@ -1256,6 +1266,7 @@ export function usePlannerData() {
     conflictDialogOpen, setConflictDialogOpen, pendingSchedule, setPendingSchedule,
     autoFillDialogOpen, setAutoFillDialogOpen, autoFillOverbooking, setAutoFillOverbooking,
     autoFillGeoClustering, setAutoFillGeoClustering, autoFillGeoSpread,
+    autoFillPlanningMode, setAutoFillPlanningMode,
     autoFillLoading, autoFillPreview, autoFillApplying, autoFillSkipped, autoFillDiag,
     clearDialogOpen, setClearDialogOpen, clearLoading,
     depChainDialogOpen, setDepChainDialogOpen, depChainJobId, depChainData,
@@ -1290,7 +1301,7 @@ export function usePlannerData() {
     updateWorkOrderMutation, assignTeamMutation, unscheduleWorkOrderMutation, sendScheduleMutation,
     navigate, handleViewModeChange, goToToday, goToDay, goToMonth, getHeaderLabel,
     handleJobClick, handleOpenAssignDialog,
-    handleAcceptConflict, handleUnschedule, handleUndo, handleRedo,
+    handleAcceptConflict, handleUnschedule, handlePushToRough, handleUndo, handleRedo,
     handleResourceClick, handleSendSchedule, handleSendScheduleEmail, submitSendSchedule, handleCopyFieldAppLink,
     sendChannelEmail, setSendChannelEmail, sendChannelSms, setSendChannelSms, sendLastResult,
     bulkSendOpen, setBulkSendOpen, bulkSelectedIds, setBulkSelectedIds,

@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { AlertTriangle, Clock, X, Link2, ArrowRight, Key, DoorOpen, UsersRound, MoreVertical, Zap, Info, CalendarClock } from "lucide-react";
+import { AlertTriangle, Clock, X, Link2, ArrowRight, Key, DoorOpen, UsersRound, MoreVertical, Zap, Info, CalendarClock, CalendarX2 } from "lucide-react";
 import type { WorkOrderWithObject } from "@shared/schema";
 import { EXECUTION_CODE_LABELS, EXECUTION_CODE_ICONS } from "@shared/schema";
 import type { DeliveryRestrictionNote } from "@shared/delivery-restrictions";
@@ -31,6 +31,7 @@ interface JobCardProps {
   expandedSubSteps: Record<string, boolean>;
   onJobClick: (jobId: string) => void;
   onUnschedule: (e: { stopPropagation: () => void }, jobId: string) => void;
+  onPushToRough?: (e: { stopPropagation: () => void }, jobId: string) => void;
   onToggleSubStep: (jobId: string) => void;
   onOpenDepChain: (jobId: string) => void;
   selectedJobIds?: Set<string>;
@@ -40,7 +41,7 @@ interface JobCardProps {
 
 export const JobCard = memo(function JobCard({
   job, compact = false, selectedJob, jobConflicts, dependenciesData,
-  timewindowMap, restrictionNotesByObject, expandedSubSteps, onJobClick, onUnschedule, onToggleSubStep, onOpenDepChain,
+  timewindowMap, restrictionNotesByObject, expandedSubSteps, onJobClick, onUnschedule, onPushToRough, onToggleSubStep, onOpenDepChain,
   selectedJobIds, onToggleSelection, onEscalateUrgent,
 }: JobCardProps) {
   const localizedObjectName = useLocalizedObjectName();
@@ -347,6 +348,15 @@ export const JobCard = memo(function JobCard({
                   <X className="h-4 w-4 mr-2" />
                   Ta bort tilldelning
                 </DropdownMenuItem>
+                {onPushToRough && (
+                  <DropdownMenuItem
+                    onClick={(e) => { e.stopPropagation(); onPushToRough(e, job.id); }}
+                    data-testid={`menu-push-to-rough-${job.id}`}
+                  >
+                    <CalendarX2 className="h-4 w-4 mr-2" />
+                    Skjut tillbaka till grovplanering
+                  </DropdownMenuItem>
+                )}
               </DropdownMenuContent>
             </DropdownMenu>
             <Badge variant={statusBadgeVariant[job.status] || "outline"} className="text-[10px]">
