@@ -17,10 +17,10 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
 import type {
   Customer, Article,
-  InvoiceLevel, InvoiceModel, InvoicePeriod,
+  InvoiceLevel, InvoiceModel,
   CustomerMode, TaskCategory,
 } from "@shared/schema";
-import { INVOICE_MODEL_TO_SCENARIO } from "@shared/order-concept-method";
+import { INVOICE_MODEL_TO_SCENARIO, normalizeInvoiceFrequency } from "@shared/order-concept-method";
 import { computeConceptOrderValue } from "@shared/order-concept-value";
 import Step1NameCustomer from "@/components/orderkoncept/Step1NameCustomer";
 import Step2PriceReference from "@/components/orderkoncept/Step2PriceReference";
@@ -160,7 +160,6 @@ export default function OrderConceptWizardPage() {
   const [customerReference, setCustomerReference] = useState("");
   const [customerLabel, setCustomerLabel] = useState("");
   // Step 3
-  const [invoicePeriod, setInvoicePeriod] = useState<InvoicePeriod | null>(null);
   const [invoiceLock, setInvoiceLock] = useState(false);
   const [invoiceBrake, setInvoiceBrake] = useState(false);
   const [invoiceMethod, setInvoiceMethod] = useState<string | null>(null);
@@ -169,7 +168,9 @@ export default function OrderConceptWizardPage() {
   const [departmentMetadataField, setDepartmentMetadataField] = useState<string | null>(null);
   // Step 3 — abonnemang (Task #934)
   const [monthlyFee, setMonthlyFee] = useState<number | null>(null);
-  const [billingFrequency, setBillingFrequency] = useState<string | null>(null);
+  // Task #1056: EN faktureringsfrekvens för hela konceptet (unifierar tidigare
+  // invoicePeriod + billingFrequency). Skrivs till båda DB-kolumnerna vid spar.
+  const [billingFrequency, setBillingFrequency] = useState<string>("monthly");
   const [subscriptionStartDate, setSubscriptionStartDate] = useState("");
   // Step 4
   const [targetObjectIds, setTargetObjectIds] = useState<Set<string>>(new Set());
@@ -226,7 +227,6 @@ export default function OrderConceptWizardPage() {
     setCustomerLabel(wizardData.customerLabel || "");
     form.setValue("invoiceLevel", wizardData.invoiceLevel || "customer");
     form.setValue("invoiceModel", wizardData.invoiceModel || "");
-    setInvoicePeriod(wizardData.invoicePeriod || null);
     setInvoiceLock(wizardData.invoiceLock || false);
     setInvoiceBrake(wizardData.invoiceBrake || false);
     setInvoiceMethod(wizardData.invoiceMethod || null);
@@ -234,7 +234,9 @@ export default function OrderConceptWizardPage() {
     setInvoiceConsolidation(wizardData.invoiceConsolidation || "customer");
     setDepartmentMetadataField(wizardData.departmentMetadataField || null);
     setMonthlyFee(wizardData.monthlyFee != null ? Number(wizardData.monthlyFee) : null);
-    setBillingFrequency(wizardData.billingFrequency || null);
+    // Unifierad frekvens: föredra billingFrequency, fall tillbaka på legacy invoicePeriod;
+    // klampa legacy-värden (daily/weekly) till {monthly,quarterly,yearly}.
+    setBillingFrequency(normalizeInvoiceFrequency(wizardData.billingFrequency ?? wizardData.invoicePeriod));
     setSubscriptionStartDate(toDateInput(wizardData.deliveryStart));
     setTargetObjectIds(new Set(Array.isArray(wizardData.targetObjectIds) ? wizardData.targetObjectIds : []));
     setFilters((wizardData.filters || []).map((f: any) => ({
@@ -420,13 +422,13 @@ export default function OrderConceptWizardPage() {
   }, [currentStep, form, conceptName, customerMode, selectedCustomerId, customerMetadataField, targetObjectIds, conceptArticles]);
 
   const buildConceptPatch = useCallback((nextStep: number) => {
-    // Task #974: kanonisera fakturastopp vid persistering oavsett legacy-värden i state.
+    // Task #974/#1056: kanonisera fakturastopp vid persistering oavsett legacy-värden.
     // Kundnivå => invoiceConsolidation="customer" + departmentMetadataField=null.
-    // Fakturastopp => giltig frekvens (legacy "department"/övrigt normaliseras till "monthly").
+    // Metadatabaserad referens (= fakturastopp) => konsolideringen följer den
+    // unifierade frekvensen (en frekvens för hela konceptet).
+    const freqValue = normalizeInvoiceFrequency(billingFrequency);
     const isFakturastopp = invoiceConsolidation !== "customer" && invoiceConsolidation !== "per_job";
-    const normalizedConsolidation = isFakturastopp
-      ? (["daily", "weekly", "monthly", "after_completed"].includes(invoiceConsolidation) ? invoiceConsolidation : "monthly")
-      : "customer";
+    const normalizedConsolidation = isFakturastopp ? freqValue : "customer";
     return {
     currentStep: nextStep,
     wizardStepVersion: WIZARD_STEP_VERSION,
@@ -451,7 +453,11 @@ export default function OrderConceptWizardPage() {
     // att den hårdkodade scenario:"avrop" från create-steget bevaras.
     scenario: invoiceModel ? INVOICE_MODEL_TO_SCENARIO[invoiceModel] : undefined,
     deliveryModel: invoiceModel || undefined,
-    invoicePeriod,
+    // Task #1056: EN frekvens för hela konceptet skrivs till BÅDA kolumnerna
+    // (invoicePeriod + billingFrequency) så att både schema-/avrops-runtime och
+    // abonnemangs-runtime fortsätter läsa rätt värde (expand-contract).
+    invoicePeriod: freqValue,
+    billingFrequency: freqValue,
     invoiceLock,
     invoiceBrake,
     invoiceMethod: invoiceMethod || null,
@@ -459,7 +465,6 @@ export default function OrderConceptWizardPage() {
     // Abonnemangs-fält skrivs bara när metoden är abonnemang; annars utelämnas de
     // (undefined) så befintliga värden inte nollställs vid metodbyte.
     monthlyFee: invoiceModel === "subscription" ? (monthlyFee ?? null) : undefined,
-    billingFrequency: invoiceModel === "subscription" ? (billingFrequency || "monthly") : undefined,
     deliveryStart: invoiceModel === "subscription" ? toIsoOrNull(subscriptionStartDate) : undefined,
     invoiceConsolidation: normalizedConsolidation,
     departmentMetadataField: isFakturastopp ? (departmentMetadataField || null) : null,
@@ -473,7 +478,7 @@ export default function OrderConceptWizardPage() {
     totalCost,
     estimatedHours,
     };
-  }, [conceptName, customerMode, selectedCustomerId, customerMetadataField, priceListId, priceModel, fixedPriceKronor, customerReference, customerLabel, invoiceLevel, invoiceModel, invoicePeriod, invoiceLock, invoiceBrake, invoiceMethod, subscriptionAdjustmentDate, monthlyFee, billingFrequency, subscriptionStartDate, invoiceConsolidation, departmentMetadataField, targetObjectIds, mainDeliveryWindows, deliveryRestrictions, conceptArticles, totalValue, totalCost, estimatedHours]);
+  }, [conceptName, customerMode, selectedCustomerId, customerMetadataField, priceListId, priceModel, fixedPriceKronor, customerReference, customerLabel, invoiceLevel, invoiceModel, invoiceLock, invoiceBrake, invoiceMethod, subscriptionAdjustmentDate, monthlyFee, billingFrequency, subscriptionStartDate, invoiceConsolidation, departmentMetadataField, targetObjectIds, mainDeliveryWindows, deliveryRestrictions, conceptArticles, totalValue, totalCost, estimatedHours]);
 
   const createConceptMutation = useMutation({
     mutationFn: async () => {
@@ -842,39 +847,34 @@ export default function OrderConceptWizardPage() {
                 onFixedPriceChange={(v) => { setFixedPriceKronor(v); setHasUnsavedWork(true); }}
                 fixedPriceBasis={fixedPriceBasis}
                 onFixedPriceBasisChange={(v) => { setFixedPriceBasis(v); setHasUnsavedWork(true); }}
-                customerReference={customerReference}
-                onCustomerReferenceChange={(v) => { setCustomerReference(v); setHasUnsavedWork(true); }}
-                customerLabel={customerLabel}
-                onCustomerLabelChange={(v) => { setCustomerLabel(v); setHasUnsavedWork(true); }}
               />
             )}
 
             {currentStep === 4 && (
               <Step3Invoicing
                 invoiceModel={invoiceModel || null}
-                invoicePeriod={invoicePeriod}
+                invoiceFrequency={billingFrequency}
                 invoiceLock={invoiceLock}
                 invoiceBrake={invoiceBrake}
-                invoiceMethod={invoiceMethod}
                 subscriptionAdjustmentDate={subscriptionAdjustmentDate}
                 invoiceConsolidation={invoiceConsolidation}
                 departmentMetadataField={departmentMetadataField}
                 monthlyFee={monthlyFee}
-                billingFrequency={billingFrequency}
                 subscriptionStartDate={subscriptionStartDate}
-                objectCount={targetObjectIds.size}
+                customerReference={customerReference}
+                customerLabel={customerLabel}
                 onUpdate={(data) => {
                   if (data.invoiceModel !== undefined) form.setValue("invoiceModel", data.invoiceModel || "", { shouldValidate: true });
-                  if (data.invoicePeriod !== undefined) setInvoicePeriod(data.invoicePeriod);
+                  if (data.invoiceFrequency !== undefined) setBillingFrequency(data.invoiceFrequency || "monthly");
                   if (data.invoiceLock !== undefined) setInvoiceLock(data.invoiceLock);
                   if (data.invoiceBrake !== undefined) setInvoiceBrake(data.invoiceBrake);
-                  if (data.invoiceMethod !== undefined) setInvoiceMethod(data.invoiceMethod);
                   if (data.subscriptionAdjustmentDate !== undefined) setSubscriptionAdjustmentDate(data.subscriptionAdjustmentDate);
                   if (data.invoiceConsolidation !== undefined) setInvoiceConsolidation(data.invoiceConsolidation);
                   if (data.departmentMetadataField !== undefined) setDepartmentMetadataField(data.departmentMetadataField);
                   if (data.monthlyFee !== undefined) setMonthlyFee(data.monthlyFee);
-                  if (data.billingFrequency !== undefined) setBillingFrequency(data.billingFrequency);
                   if (data.subscriptionStartDate !== undefined) setSubscriptionStartDate(data.subscriptionStartDate);
+                  if (data.customerReference !== undefined) setCustomerReference(data.customerReference);
+                  if (data.customerLabel !== undefined) setCustomerLabel(data.customerLabel);
                   setHasUnsavedWork(true);
                 }}
               />

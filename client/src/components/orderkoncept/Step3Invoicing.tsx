@@ -5,138 +5,184 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
+import { type InvoiceModel, type MetadataDefinition } from "@shared/schema";
 import {
-  INVOICE_MODELS, INVOICE_MODEL_LABELS,
-  INVOICE_PERIODS, INVOICE_PERIOD_LABELS,
-  type InvoiceModel, type InvoicePeriod,
-  type MetadataDefinition,
-} from "@shared/schema";
+  UI_INVOICE_METHODS,
+  UI_INVOICE_METHOD_LABELS,
+  INVOICE_FREQUENCIES,
+  INVOICE_FREQUENCY_LABELS,
+  invoiceModelToUiMethod,
+  normalizeInvoiceFrequency,
+  type UiInvoiceMethod,
+} from "@shared/order-concept-method";
 
+// Task #1056: Ihopslagen fakturabild — ALLA fakturafält på EN skärm.
+//  1. Referens (Er referens / Er beteckning) ELLER metadatabaserad referens.
+//  2. Faktureringsmetod — bara TVÅ val: Efterfakturering / Abonnemang.
+//  3. Faktureringsfrekvens — EN gång för hela konceptet (skrivs till både
+//     invoicePeriod och billingFrequency vid spar).
+//  4. En metadatabaserad referens BLIR automatiskt ett fakturastopp (en faktura
+//     per unikt metadatavärde) — samma mekanism, ett ställe.
 interface Step3State {
   invoiceModel: InvoiceModel | null;
-  invoicePeriod: InvoicePeriod | null;
+  invoiceFrequency: string | null;
   invoiceLock: boolean;
   invoiceBrake: boolean;
-  invoiceMethod: string | null;
   subscriptionAdjustmentDate: string;
   invoiceConsolidation: string;
   departmentMetadataField: string | null;
   monthlyFee: number | null;
-  billingFrequency: string | null;
   subscriptionStartDate: string;
+  customerReference: string;
+  customerLabel: string;
 }
 
 interface Step3Props extends Step3State {
-  objectCount: number;
   onUpdate: (data: Partial<Step3State>) => void;
 }
 
-// Task #974: Fakturanivå = bara kundnivå (default) eller fakturastopp. Fakturastoppet
-// är samma kund genom hela trädet — det delar bara upp fakturan organisatoriskt via
-// ett metadatafält (fastighet/område/distrikt/kostnadsställe/butiksgrupp osv). Värdet
-// lagras i de befintliga fälten invoiceConsolidation (= frekvens) + departmentMetadataField
-// (= villkorsfältet), så ingen ny kolumn behövs och samlingsfaktura-logiken återanvänds.
+// Fakturastopp lagras (oförändrat) i de befintliga fälten: invoiceConsolidation
+// (= "customer" på kundnivå, annars frekvens) + departmentMetadataField (= fältet
+// fakturan delas upp på). Ingen ny DB-kolumn behövs.
 const KUNDNIVA = "customer";
-const FAKTURASTOPP_FREQUENCIES = ["daily", "weekly", "monthly", "after_completed"] as const;
-const FAKTURASTOPP_FREQUENCY_OPTIONS: { value: string; label: string }[] = [
-  { value: "daily", label: "Dagligen" },
-  { value: "weekly", label: "Veckovis" },
-  { value: "monthly", label: "Månadsvis" },
-  { value: "after_completed", label: "Efter avslutat arbete" },
-];
 
-const BILLING_FREQUENCY_OPTIONS: { value: string; label: string }[] = [
-  { value: "monthly", label: "Månadsvis" },
-  { value: "quarterly", label: "Kvartalsvis" },
-  { value: "yearly", label: "Årsvis" },
-];
-
-// Task #934: kort förklaring per faktureringsmetod så att de tre alternativen
-// blir tydligt åtskilda för operatören.
-const INVOICE_MODEL_HELP: Record<InvoiceModel, string> = {
-  call_off: "Avrop: engångsexpansion — en uppgift skapas per matchande objekt när konceptet körs.",
-  schedule: "Schema: återkommande uppgifter genereras automatiskt enligt leveransschema eller intervall (konfigureras i steg 5).",
-  subscription: "Abonnemang: löpande fakturering med fast månadsavgift per enhet — inga engångsuppgifter skapas.",
+// Kort förklaring per metod så de två alternativen blir tydligt åtskilda.
+const UI_METHOD_HELP: Record<UiInvoiceMethod, string> = {
+  efterfakturering:
+    "Arbetet faktureras i efterhand enligt vald frekvens — en uppgift skapas per matchande objekt när konceptet körs.",
+  abonnemang:
+    "Löpande fakturering med fast avgift per enhet enligt vald frekvens — inga engångsuppgifter skapas.",
 };
 
 export default function Step3Invoicing({
   invoiceModel,
-  invoicePeriod,
+  invoiceFrequency,
   invoiceLock,
   invoiceBrake,
   subscriptionAdjustmentDate,
   invoiceConsolidation,
   departmentMetadataField,
   monthlyFee,
-  billingFrequency,
   subscriptionStartDate,
+  customerReference,
+  customerLabel,
   onUpdate,
 }: Step3Props) {
   const { data: definitions = [] } = useQuery<MetadataDefinition[]>({
     queryKey: ["/api/metadata-definitions"],
   });
 
-  const isSubscription = invoiceModel === "subscription";
+  const uiMethod = invoiceModelToUiMethod(invoiceModel);
+  const isSubscription = uiMethod === "abonnemang";
 
-  // Fakturastopp är aktivt så snart konsolideringen inte är ren kundnivå. Legacy-värdet
-  // "department" tolkas som fakturastopp (frekvens faller tillbaka på månadsvis).
-  const isFakturastopp =
+  // En metadatabaserad referens = fakturastopp. Detekteras (som tidigare) på att
+  // konsolideringen inte är ren kundnivå.
+  const isMetadataReference =
     invoiceConsolidation !== KUNDNIVA && invoiceConsolidation !== "per_job";
-  const fakturastoppFrequency = (FAKTURASTOPP_FREQUENCIES as readonly string[]).includes(invoiceConsolidation)
-    ? invoiceConsolidation
-    : "monthly";
+  const frequency = normalizeInvoiceFrequency(invoiceFrequency);
+
+  const handleMethodChange = (choice: UiInvoiceMethod) => {
+    if (choice === "abonnemang") {
+      onUpdate({ invoiceModel: "subscription" });
+      return;
+    }
+    // Efterfakturering: nya/övriga koncept → call_off. Bevara legacy "schedule"
+    // (återkommande) så befintliga schemakoncept fortsätter auto-genereras i
+    // runtime — skriv ALDRIG över schedule → call_off vid redigering.
+    onUpdate({ invoiceModel: invoiceModel === "schedule" ? "schedule" : "call_off" });
+  };
+
+  const handleReferenceModeChange = (mode: string) => {
+    if (mode === "metadata") {
+      // Markera fakturastopp genom att sätta konsolideringen till frekvensen.
+      // Fältet väljs i nästa steg; fast-text-referens rensas.
+      onUpdate({ invoiceConsolidation: frequency, customerReference: "", customerLabel: "" });
+    } else {
+      onUpdate({ invoiceConsolidation: KUNDNIVA, departmentMetadataField: null });
+    }
+  };
+
+  const handleFrequencyChange = (v: string) => {
+    // Frekvensen gäller hela konceptet. Håll fakturastoppets konsolidering i synk
+    // när metadatareferens är aktiv.
+    onUpdate({
+      invoiceFrequency: v,
+      ...(isMetadataReference ? { invoiceConsolidation: v } : {}),
+    });
+  };
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6" data-testid="step3-invoicing">
       <div className="space-y-6">
+        {/* 1. Referens */}
         <div>
           <div className="flex items-center gap-2 mb-1">
-            <h3 className="text-sm font-medium">Fakturanivå</h3>
+            <h3 className="text-sm font-medium">Referens</h3>
             <Badge variant="outline" className="text-[10px] px-1.5 py-0 font-normal text-muted-foreground">
-              VAR fakturan stannar
+              VAD som står på fakturan
             </Badge>
           </div>
           <p className="text-xs text-muted-foreground mb-3">
-            Det är samma kund genom hela objektträdet. Välj om hela konceptet faktureras på
-            kundnivå eller om fakturan ska delas upp organisatoriskt via ett fakturastopp.
+            Ange en fast referenstext, eller låt referensen styras av ett metadatafält.
+            En metadatabaserad referens blir automatiskt ett fakturastopp — en faktura
+            per unikt värde.
           </p>
           <RadioGroup
-            value={isFakturastopp ? "fakturastopp" : "kundniva"}
-            onValueChange={(v) => {
-              if (v === "fakturastopp") {
-                onUpdate({ invoiceConsolidation: fakturastoppFrequency });
-              } else {
-                onUpdate({ invoiceConsolidation: KUNDNIVA, departmentMetadataField: null });
-              }
-            }}
+            value={isMetadataReference ? "metadata" : "fast"}
+            onValueChange={handleReferenceModeChange}
             className="space-y-2"
           >
             <div className="flex items-start space-x-2 p-2 rounded-md hover:bg-accent/50">
-              <RadioGroupItem value="kundniva" id="level-kundniva" data-testid="radio-level-kundniva" className="mt-0.5" />
+              <RadioGroupItem value="fast" id="ref-fast" data-testid="radio-reference-fixed" className="mt-0.5" />
               <div>
-                <Label htmlFor="level-kundniva" className="cursor-pointer">Kundnivå</Label>
+                <Label htmlFor="ref-fast" className="cursor-pointer">Fast referens</Label>
                 <p className="text-xs text-muted-foreground">
-                  Konceptet kopplas till kundnoden och alla fakturerbara uppgifter rullar uppåt
-                  till en faktura per kund.
+                  Samma referens på alla fakturor i konceptet.
                 </p>
               </div>
             </div>
             <div className="flex items-start space-x-2 p-2 rounded-md hover:bg-accent/50">
-              <RadioGroupItem value="fakturastopp" id="level-fakturastopp" data-testid="radio-level-fakturastopp" className="mt-0.5" />
+              <RadioGroupItem value="metadata" id="ref-metadata" data-testid="radio-reference-metadata" className="mt-0.5" />
               <div>
-                <Label htmlFor="level-fakturastopp" className="cursor-pointer">Fakturastopp (samlingsfaktura)</Label>
+                <Label htmlFor="ref-metadata" className="cursor-pointer">Metadatabaserad referens (fakturastopp)</Label>
                 <p className="text-xs text-muted-foreground">
-                  Samma kund och kundnummer — fakturan delas bara upp organisatoriskt (t.ex. per
-                  fastighet, område, distrikt, kostnadsställe eller butiksgrupp) via ett metadatafält.
+                  Samma kund och kundnummer — fakturan delas upp organisatoriskt via ett
+                  metadatafält (t.ex. fastighet, område, distrikt, kostnadsställe). En faktura
+                  skapas per unikt värde.
                 </p>
               </div>
             </div>
           </RadioGroup>
 
-          {isFakturastopp && (
-            <div className="space-y-4 rounded-md border border-border p-3 mt-3" data-testid="block-fakturastopp-config">
+          {!isMetadataReference && (
+            <div className="space-y-3 rounded-md border border-border p-3 mt-3" data-testid="block-fixed-reference">
               <div>
-                <Label className="text-sm mb-1 block">Metadatavillkor (var fakturan stoppas)</Label>
+                <Label htmlFor="customer-reference" className="text-sm mb-1 block">Er referens</Label>
+                <Input
+                  id="customer-reference"
+                  value={customerReference}
+                  onChange={(e) => onUpdate({ customerReference: e.target.value })}
+                  placeholder="t.ex. beställarens namn"
+                  data-testid="input-customer-reference"
+                />
+              </div>
+              <div>
+                <Label htmlFor="customer-label" className="text-sm mb-1 block">Er beteckning</Label>
+                <Input
+                  id="customer-label"
+                  value={customerLabel}
+                  onChange={(e) => onUpdate({ customerLabel: e.target.value })}
+                  placeholder="t.ex. projekt-/märkningskod"
+                  data-testid="input-customer-label"
+                />
+              </div>
+            </div>
+          )}
+
+          {isMetadataReference && (
+            <div className="space-y-3 rounded-md border border-border p-3 mt-3" data-testid="block-metadata-reference">
+              <div>
+                <Label className="text-sm mb-1 block">Metadatafält (var fakturan stoppas)</Label>
                 <Select
                   value={departmentMetadataField || ""}
                   onValueChange={(v) => onUpdate({ departmentMetadataField: v })}
@@ -151,64 +197,45 @@ export default function Step3Invoicing({
                   </SelectContent>
                 </Select>
                 <p className="text-xs text-muted-foreground mt-1">
-                  En samlingsfaktura skapas per unikt värde i detta fält.
+                  En separat faktura skapas per unikt värde i detta fält.
                 </p>
                 {!departmentMetadataField && (
                   <p className="text-xs text-warning mt-1" data-testid="text-fakturastopp-field-warning">
-                    Välj ett metadatafält — annars kan samlingsfakturan inte delas upp.
+                    Välj ett metadatafält — annars kan fakturan inte delas upp.
                   </p>
                 )}
-              </div>
-              <div>
-                <Label className="text-sm mb-1 block">Faktureringsregel</Label>
-                <Select
-                  value={fakturastoppFrequency}
-                  onValueChange={(v) => onUpdate({ invoiceConsolidation: v })}
-                >
-                  <SelectTrigger data-testid="select-fakturastopp-frequency">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {FAKTURASTOPP_FREQUENCY_OPTIONS.map((o) => (
-                      <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <p className="text-xs text-muted-foreground mt-1">
-                  Hur ofta samlingsfakturan skapas för varje organisatorisk nivå.
-                </p>
               </div>
             </div>
           )}
         </div>
 
+        {/* 2. Faktureringsmetod */}
         <div>
           <h3 className="text-sm font-medium mb-3">Faktureringsmetod</h3>
           <RadioGroup
-            value={invoiceModel || ""}
-            onValueChange={(v) => onUpdate({ invoiceModel: v as InvoiceModel })}
+            value={uiMethod}
+            onValueChange={(v) => handleMethodChange(v as UiInvoiceMethod)}
             className="space-y-2"
           >
-            {INVOICE_MODELS.map((model) => (
-              <div key={model} className="flex items-center space-x-2 p-2 rounded-md hover:bg-accent/50">
-                <RadioGroupItem value={model} id={`model-${model}`} data-testid={`radio-model-${model}`} />
-                <Label htmlFor={`model-${model}`} className="cursor-pointer">{INVOICE_MODEL_LABELS[model]}</Label>
+            {UI_INVOICE_METHODS.map((method) => (
+              <div key={method} className="flex items-center space-x-2 p-2 rounded-md hover:bg-accent/50">
+                <RadioGroupItem value={method} id={`method-${method}`} data-testid={`radio-method-${method}`} />
+                <Label htmlFor={`method-${method}`} className="cursor-pointer">{UI_INVOICE_METHOD_LABELS[method]}</Label>
               </div>
             ))}
           </RadioGroup>
-          {invoiceModel && (
-            <p className="text-xs text-muted-foreground mt-2" data-testid="text-invoice-model-help">
-              {INVOICE_MODEL_HELP[invoiceModel]}
-            </p>
-          )}
+          <p className="text-xs text-muted-foreground mt-2" data-testid="text-invoice-method-help">
+            {UI_METHOD_HELP[uiMethod]}
+          </p>
         </div>
 
+        {/* 2b. Abonnemangskonfiguration */}
         {isSubscription && (
           <div className="space-y-4 rounded-md border border-border p-3" data-testid="block-subscription-config">
             <h3 className="text-sm font-medium">Abonnemang</h3>
             <div>
               <Label htmlFor="subscription-monthly-fee" className="text-sm mb-1 block">
-                Månadsavgift per enhet (kr)
+                Avgift per enhet (kr)
               </Label>
               <Input
                 id="subscription-monthly-fee"
@@ -222,27 +249,8 @@ export default function Step3Invoicing({
                 data-testid="input-subscription-monthly-fee"
               />
               <p className="text-xs text-muted-foreground mt-1">
-                Fast avgift per enhet och månad. Krävs för att aktivera abonnemanget.
+                Fast avgift per enhet. Krävs för att aktivera abonnemanget. Faktureras enligt vald frekvens.
               </p>
-            </div>
-            <div>
-              <Label htmlFor="subscription-billing-frequency" className="text-sm mb-1 block">
-                Faktureringsfrekvens
-              </Label>
-              <Select
-                value={billingFrequency || "monthly"}
-                onValueChange={(v) => onUpdate({ billingFrequency: v })}
-              >
-                <SelectTrigger id="subscription-billing-frequency" className="max-w-xs" data-testid="select-subscription-billing-frequency">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {BILLING_FREQUENCY_OPTIONS.map((o) => (
-                    <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <p className="text-xs text-muted-foreground mt-1">Hur ofta abonnemanget faktureras.</p>
             </div>
             <div>
               <Label htmlFor="subscription-start-date" className="text-sm mb-1 block">
@@ -275,6 +283,7 @@ export default function Step3Invoicing({
           </div>
         )}
 
+        {/* 4. Faktureringskontroll */}
         <div className="space-y-3">
           <h3 className="text-sm font-medium">Faktureringskontroll</h3>
           <div className="flex items-start space-x-2">
@@ -310,28 +319,25 @@ export default function Step3Invoicing({
         </div>
       </div>
 
+      {/* 3. Faktureringsfrekvens — en gång för hela konceptet */}
       <div className="space-y-6">
-        {!isSubscription && (
-          <div>
-            <h3 className="text-sm font-medium mb-3">Faktureringsperiod</h3>
-            <Select
-              value={invoicePeriod || ""}
-              onValueChange={(v) => onUpdate({ invoicePeriod: v as InvoicePeriod })}
-            >
-              <SelectTrigger data-testid="select-invoice-period">
-                <SelectValue placeholder="Välj period" />
-              </SelectTrigger>
-              <SelectContent>
-                {INVOICE_PERIODS.map((period) => (
-                  <SelectItem key={period} value={period}>{INVOICE_PERIOD_LABELS[period]}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <p className="text-xs text-muted-foreground mt-1">
-              Hur ofta fakturering sker vid Avrop och Schema.
-            </p>
-          </div>
-        )}
+        <div>
+          <h3 className="text-sm font-medium mb-3">Faktureringsfrekvens</h3>
+          <Select value={frequency} onValueChange={handleFrequencyChange}>
+            <SelectTrigger className="max-w-xs" data-testid="select-invoice-frequency">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {INVOICE_FREQUENCIES.map((f) => (
+                <SelectItem key={f} value={f}>{INVOICE_FREQUENCY_LABELS[f]}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <p className="text-xs text-muted-foreground mt-1">
+            Gäller hela konceptet — både efterfakturering och abonnemang faktureras enligt
+            denna frekvens.
+          </p>
+        </div>
       </div>
     </div>
   );

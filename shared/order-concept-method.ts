@@ -41,3 +41,41 @@ export function getOrderConceptMethod(
   }
   return "call_off";
 }
+
+// Task #1056: UI exponerar bara TVÅ faktureringsmetoder — Efterfakturering och
+// Abonnemang. Internt behålls dock alla tre invoiceModel-värden (expand-contract):
+// "schedule" finns kvar i befintliga koncept och fortsätter auto-genereras i
+// runtime, men kan inte längre VÄLJAS i wizarden. "Efterfakturering" mappar mot
+// call_off för nya val; "Abonnemang" mappar mot subscription. Legacy schedule
+// visas under "Efterfakturering" men bevaras vid spar (se Step3Invoicing).
+export const UI_INVOICE_METHODS = ["efterfakturering", "abonnemang"] as const;
+export type UiInvoiceMethod = typeof UI_INVOICE_METHODS[number];
+
+export const UI_INVOICE_METHOD_LABELS: Record<UiInvoiceMethod, string> = {
+  efterfakturering: "Efterfakturering",
+  abonnemang: "Abonnemang",
+};
+
+// Mappar ett internt invoiceModel (call_off/schedule/subscription) till det
+// tvåval-UI:t. Allt utom subscription visas som "Efterfakturering".
+export function invoiceModelToUiMethod(model: string | null | undefined): UiInvoiceMethod {
+  return model === "subscription" ? "abonnemang" : "efterfakturering";
+}
+
+// Task #1056: EN faktureringsfrekvens för hela konceptet (ersätter det tidigare
+// dubbla invoicePeriod + billingFrequency). Värdet skrivs till BÅDA kolumnerna
+// vid spar så att runtime (abonnemangs-/schemamotorn) fortsätter fungera.
+export const INVOICE_FREQUENCIES = ["monthly", "quarterly", "yearly"] as const;
+export type InvoiceFrequency = typeof INVOICE_FREQUENCIES[number];
+
+export const INVOICE_FREQUENCY_LABELS: Record<InvoiceFrequency, string> = {
+  monthly: "Månadsvis",
+  quarterly: "Kvartalsvis",
+  yearly: "Årsvis",
+};
+
+// Klampar godtyckliga/legacy-frekvensvärden (t.ex. invoicePeriod "daily"/"weekly")
+// till det unifierade settet; default "monthly".
+export function normalizeInvoiceFrequency(v: string | null | undefined): InvoiceFrequency {
+  return v === "quarterly" || v === "yearly" ? v : "monthly";
+}

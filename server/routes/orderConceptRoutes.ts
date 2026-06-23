@@ -2740,7 +2740,7 @@ app.get("/api/order-concepts/:id/export-pdf", asyncHandler(async (req, res) => {
     kv("Villkorsfilter", String(filters.length), 1);
     y += 10;
     kv("Artiklar/uppgifter", String(conceptArticles.length), 0);
-    kv("Faktureringsmetod", { call_off: "Avrop", schedule: "Schema", subscription: "Abonnemang" }[getOrderConceptMethod(concept)], 1);
+    kv("Faktureringsmetod", { call_off: "Efterfakturering", schedule: "Efterfakturering (schemalagd)", subscription: "Abonnemang" }[getOrderConceptMethod(concept)], 1);
     y += 10;
     kv("Beräknat ordervärde", `${storedTotalValue.toLocaleString("sv-SE")} kr`, 0);
     kv("Beräknad kostnad", `${storedTotalCost.toLocaleString("sv-SE")} kr`, 1);

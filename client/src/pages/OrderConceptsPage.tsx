@@ -573,13 +573,15 @@ export default function OrderConceptsPage() {
       c.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       c.description?.toLowerCase().includes(searchTerm.toLowerCase());
     if (activeTab === "alla") return matchesSearch;
+    // Task #1056: UI grupperar nu avrop + schema (+ legacy/tomt) under "Efterfakturering".
+    // Abonnemang är fortsatt sin egen kategori.
+    if (activeTab === "efterfakturering") return matchesSearch && (c as any).scenario !== "abonnemang";
     return matchesSearch && (c as any).scenario === activeTab;
   });
 
   const scenarioCounts = {
     alla: concepts.length,
-    avrop: concepts.filter((c) => (c as any).scenario === "avrop" || !(c as any).scenario).length,
-    schema: concepts.filter((c) => (c as any).scenario === "schema").length,
+    efterfakturering: concepts.filter((c) => (c as any).scenario !== "abonnemang").length,
     abonnemang: concepts.filter((c) => (c as any).scenario === "abonnemang").length,
   };
 
@@ -596,35 +598,24 @@ export default function OrderConceptsPage() {
       <PageHeader
         icon={Lightbulb}
         title="Orderkoncept"
-        description="Automatisera ordrar: avrop, schemalagda leveranser och abonnemang"
+        description="Automatisera ordrar: efterfakturering eller abonnemang"
         testId="text-page-title"
       >
         <PageHelp
           title="Orderkoncept"
-          description="Orderkoncept definierar hur arbetsordrar genereras automatiskt. Välj scenario: Avrop (engångsorder), Schema (återkommande med leveransplan) eller Abonnemang (fast månadsavgift med automatisk kalkyl)."
+          description="Orderkoncept definierar hur arbetsordrar genereras automatiskt. Välj faktureringsmetod: Efterfakturering (arbetet faktureras i efterhand enligt vald frekvens) eller Abonnemang (fast avgift per enhet med automatisk kalkyl)."
         />
       </PageHeader>
 
-      <div className="grid grid-cols-3 gap-4">
-        <Card data-testid="stat-avrop">
+      <div className="grid grid-cols-2 gap-4">
+        <Card data-testid="stat-efterfakturering">
           <CardContent className="p-4 flex items-center gap-3">
             <div className="p-2 rounded-lg bg-chart-1/15 dark:bg-chart-1/15">
               <Package className="h-5 w-5 text-chart-1" />
             </div>
             <div>
-              <div className="text-2xl font-bold">{scenarioCounts.avrop}</div>
-              <div className="text-sm text-muted-foreground">Avrop</div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card data-testid="stat-schema">
-          <CardContent className="p-4 flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-chart-2/15 dark:bg-chart-2/15">
-              <Calendar className="h-5 w-5 text-chart-2" />
-            </div>
-            <div>
-              <div className="text-2xl font-bold">{scenarioCounts.schema}</div>
-              <div className="text-sm text-muted-foreground">Schema</div>
+              <div className="text-2xl font-bold">{scenarioCounts.efterfakturering}</div>
+              <div className="text-sm text-muted-foreground">Efterfakturering</div>
             </div>
           </CardContent>
         </Card>
@@ -660,8 +651,7 @@ export default function OrderConceptsPage() {
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList data-testid="tabs-scenario">
           <TabsTrigger value="alla">Alla ({scenarioCounts.alla})</TabsTrigger>
-          <TabsTrigger value="avrop">Avrop ({scenarioCounts.avrop})</TabsTrigger>
-          <TabsTrigger value="schema">Schema ({scenarioCounts.schema})</TabsTrigger>
+          <TabsTrigger value="efterfakturering">Efterfakturering ({scenarioCounts.efterfakturering})</TabsTrigger>
           <TabsTrigger value="abonnemang">Abonnemang ({scenarioCounts.abonnemang})</TabsTrigger>
         </TabsList>
       </Tabs>

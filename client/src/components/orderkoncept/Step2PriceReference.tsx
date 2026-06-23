@@ -34,10 +34,6 @@ interface Step2Props {
   onFixedPriceChange: (v: string) => void;
   fixedPriceBasis: string;
   onFixedPriceBasisChange: (v: string) => void;
-  customerReference: string;
-  onCustomerReferenceChange: (v: string) => void;
-  customerLabel: string;
-  onCustomerLabelChange: (v: string) => void;
 }
 
 const SOURCE_LABELS: Record<string, string> = {
@@ -58,10 +54,6 @@ export default function Step2PriceReference({
   onFixedPriceChange,
   fixedPriceBasis,
   onFixedPriceBasisChange,
-  customerReference,
-  onCustomerReferenceChange,
-  customerLabel,
-  onCustomerLabelChange,
 }: Step2Props) {
   const { data, isLoading } = useQuery<ForCustomerResponse>({
     queryKey: ["/api/order-concepts/price-lists/for-customer", customerId],
@@ -460,37 +452,6 @@ export default function Step2PriceReference({
             </div>
           </div>
         )}
-      </div>
-
-      <div>
-        <h3 className="text-sm font-medium mb-1">Kundens referensinformation</h3>
-        <p className="text-xs text-muted-foreground mb-3">
-          Dessa fält visas på fakturor och arbetsordrar och hjälper kunden att matcha mot sin internredovisning.
-        </p>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-2xl">
-          <div>
-            <Label htmlFor="customer-reference" className="text-sm mb-1 block">Er referens</Label>
-            <Input
-              id="customer-reference"
-              placeholder="t.ex. kontaktperson hos kund"
-              value={customerReference}
-              onChange={(e) => onCustomerReferenceChange(e.target.value)}
-              data-testid="input-customer-reference"
-            />
-            <p className="text-xs text-muted-foreground mt-1">Namn eller befattning på kundens kontaktperson.</p>
-          </div>
-          <div>
-            <Label htmlFor="customer-label" className="text-sm mb-1 block">Er beteckning</Label>
-            <Input
-              id="customer-label"
-              placeholder="t.ex. projektnr eller kostnadsställe"
-              value={customerLabel}
-              onChange={(e) => onCustomerLabelChange(e.target.value)}
-              data-testid="input-customer-label"
-            />
-            <p className="text-xs text-muted-foreground mt-1">Kundens interna märkning, t.ex. ordernummer eller avdelning.</p>
-          </div>
-        </div>
       </div>
     </div>
   );

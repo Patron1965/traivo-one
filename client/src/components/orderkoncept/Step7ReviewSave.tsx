@@ -165,9 +165,11 @@ function fmtMinutes(min: number) {
 }
 
 function fmtMethod(method: string) {
+  // Task #1056: UI har bara två metoder. Legacy "schedule" visas under
+  // "Efterfakturering" men markeras (schemalagd) för tydlighet i sammanfattningen.
   switch (method) {
-    case "call_off": return "Avrop (engångskörning)";
-    case "schedule": return "Schemalagt (återkommande)";
+    case "call_off": return "Efterfakturering";
+    case "schedule": return "Efterfakturering (schemalagd)";
     case "subscription": return "Abonnemang";
     default: return method;
   }
