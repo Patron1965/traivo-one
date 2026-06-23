@@ -37,6 +37,7 @@ import { getOrderConceptMethod } from "@shared/order-concept-method";
 import { storage } from "../storage";
 import { resolveConceptMatchingObjects } from "./order-concept-targeting";
 import { resolveActiveArticle, resolveConceptArticleHits } from "./order-concept-article-hits";
+import { computeConceptSubscriptionFee } from "./order-concept-subscription";
 import {
   computeSubscriptionNextRun,
   generateScheduleAssignments,
@@ -103,16 +104,6 @@ async function runSubscriptionConcept(
   now: Date,
   result: AutoRunResult,
 ): Promise<void> {
-  if (!concept.monthlyFee || concept.monthlyFee <= 0) {
-    // Felaktigt konfigurerat abonnemang — hoppa över men avancera INTE nextRunDate
-    // (så att en åtgärdad avgift kan plockas upp nästa tick utan att perioden tappas).
-    console.warn(
-      `[order-concept-autorun] tenant=${tenantId} concept=${concept.id} saknar månadsavgift — hoppar över`,
-    );
-    result.failures++;
-    return;
-  }
-
   if (concept.customerMode !== "FROM_METADATA" && !concept.customerId) {
     // HARDCODED utan kund kan inte fakturera — hoppa över utan att avancera nextRunDate
     // (annars tyst skippad fakturering tills någon märker att kund saknas).
@@ -145,18 +136,34 @@ async function runSubscriptionConcept(
     runPrePass: isFromMetadata,
   });
 
-  // Gruppera enheter per fakturakund (HARDCODED ⇒ en grupp).
-  const unitsByCustomer = new Map<string, number>();
-  for (const obj of matchingObjects) {
-    const customerId = isFromMetadata ? customerIdForObject(obj.id) : concept.customerId;
-    if (!customerId) continue;
-    const objWithMeta = obj as typeof obj & { metadata?: Record<string, unknown> };
-    let units = 1;
-    if (concept.subscriptionMetadataField && objWithMeta.metadata?.[concept.subscriptionMetadataField]) {
-      units = Number(objWithMeta.metadata[concept.subscriptionMetadataField]) || 1;
-    }
-    unitsByCustomer.set(customerId, (unitsByCustomer.get(customerId) ?? 0) + units);
+  // Task #1057: dynamisk avgift = summan av uppgifternas ordervärde knutna till
+  // objekten (samma kanoniska motor som Granska/sidofältet). Kan inte beräknas
+  // (inget ordervärde) ⇒ hoppa över UTAN att avancera nextRunDate, så ett åtgärdat
+  // koncept (pris/artikel tillagd) plockas upp nästa tick utan att perioden tappas.
+  const fee = await computeConceptSubscriptionFee(tenantId, concept as any, {
+    matchingObjects,
+  });
+  if (!fee.canCompute) {
+    console.warn(
+      `[order-concept-autorun] tenant=${tenantId} concept=${concept.id} kan inte beräkna abonnemangsavgift (inget ordervärde på uppgifterna) — hoppar över`,
+    );
+    result.failures++;
+    return;
   }
+
+  // Fördela ordervärdet per fakturakund (HARDCODED ⇒ en grupp/toppnivå;
+  // FROM_METADATA ⇒ per-objekt-kund = delning på lägre nivåer). perObjectValuesOre är
+  // en exakt heltals-fördelning (största-rest) i objektens ordning ⇒ Σ per kund ===
+  // totalValueOre exakt (inga avrundningstapp över/under den kanoniska avgiften).
+  const valueByCustomerOre = new Map<string, number>();
+  matchingObjects.forEach((obj, i) => {
+    const customerId = isFromMetadata ? customerIdForObject(obj.id) : concept.customerId;
+    if (!customerId) return;
+    valueByCustomerOre.set(
+      customerId,
+      (valueByCustomerOre.get(customerId) ?? 0) + (fee.perObjectValuesOre[i] ?? 0),
+    );
+  });
 
   const period = (concept.invoicePeriod as string) || "monthly";
   const freq = (concept.billingFrequency as string) || "monthly";
@@ -196,8 +203,11 @@ async function runSubscriptionConcept(
     let invoicesCreated = 0;
     for (let pi = 0; pi < periods.length; pi++) {
       const p = periods[pi];
-      for (const [customerId, totalUnits] of Array.from(unitsByCustomer.entries())) {
-        const perInvoiceTotal = totalUnits * (concept.monthlyFee || 0) * stepMonths;
+      for (const [customerId, customerValueOre] of Array.from(valueByCustomerOre.entries())) {
+        // Fakturasummor lagras i KRONOR. customerValueOre är heltals-öre; multiplicera
+        // med antal månader (heltal) FÖRE division med 100 så att resultatet blir exakt
+        // kronor med två decimaler (inga binär-flyt-artefakter).
+        const perInvoiceTotal = (customerValueOre * stepMonths) / 100;
         if (perInvoiceTotal <= 0) continue;
         const invoiceNumber = `SUB-${p.start.getFullYear()}${String(p.start.getMonth() + 1).padStart(2, "0")}${String(p.start.getDate()).padStart(2, "0")}-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
         await tx.insert(customerInvoices).values({
@@ -214,7 +224,7 @@ async function runSubscriptionConcept(
           // Abonnemangsfakturor går inte via samlingsfaktura-konsolideringen (de har
           // inga work_orders); de är direkt redo för Fortnox-export.
           state: "pending",
-          description: `Abonnemang: ${concept.name} (${totalUnits} enheter, ${freq})`,
+          description: `Abonnemang: ${concept.name} (beräknad avgift, ${freq})`,
           consolidationPeriodStart: p.start,
           consolidationPeriodEnd: p.end,
         });

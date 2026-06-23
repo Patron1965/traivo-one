@@ -27,6 +27,7 @@ import {
   type ConceptArticleHits,
 } from "../services/order-concept-article-hits";
 import { getArticleMetadataForObject } from "../metadata-queries";
+import { computeConceptSubscriptionFee } from "../services/order-concept-subscription";
 import {
   resolveTargetObjects,
   filterObjectsByConditions,
@@ -2392,24 +2393,21 @@ app.post("/api/order-concepts/:id/execute", asyncHandler(async (req, res) => {
       });
 
     if (conceptMethod === "subscription") {
-      if (!concept.monthlyFee || concept.monthlyFee <= 0) {
-        throw new ValidationError("Abonnemang kräver en månadsavgift. Ange en avgift i steg 3 (Fakturering) innan du aktiverar abonnemanget.");
+      // Task #1057: dynamisk avgift = summan av uppgifternas ordervärde (kanonisk
+      // ordervärdes-motor). Aktivering kräver att avgiften kan beräknas (ordervärde > 0)
+      // — inte längre ett statiskt månadsavgiftsfält.
+      const fee = await computeConceptSubscriptionFee(tenantId, concept as any, { matchingObjects });
+      if (!fee.canCompute) {
+        throw new ValidationError("Abonnemangsavgiften kan inte beräknas — koppla minst en artikel med pris till konceptets uppgifter innan du aktiverar abonnemanget.");
       }
       const startDate = concept.deliveryStart ? new Date(concept.deliveryStart) : new Date();
       const period = (concept.invoicePeriod as string) || "monthly";
       const freq = (concept.billingFrequency as string) || "monthly";
       const nextRun = computeSubscriptionNextRun(startDate, period, freq, new Date());
 
-      let totalUnits = 0;
-      for (const obj of matchingObjects) {
-        const objWithMeta = obj as typeof obj & { metadata?: Record<string, unknown> };
-        if (concept.subscriptionMetadataField && objWithMeta.metadata?.[concept.subscriptionMetadataField]) {
-          totalUnits += Number(objWithMeta.metadata[concept.subscriptionMetadataField]) || 1;
-        } else {
-          totalUnits += 1;
-        }
-      }
-      const monthlyTotal = totalUnits * (concept.monthlyFee || 0);
+      // Fakturasummor i KRONOR (ordervärdet är öre). monthlyTotal = en periods
+      // ordervärde; perInvoiceTotal skalas med stegmånaderna (kvartal/år).
+      const monthlyTotal = fee.totalValueOre / 100;
       const stepMonths = freq === "yearly" ? 12 : freq === "quarterly" ? 3 : period === "quarterly" ? 3 : 1;
       const perInvoiceTotal = monthlyTotal * stepMonths;
 
@@ -2421,11 +2419,12 @@ app.post("/api/order-concepts/:id/execute", asyncHandler(async (req, res) => {
       return res.json({
         success: true,
         method: "subscription",
-        message: `Abonnemang aktiverat för ${matchingObjects.length} objekt (${totalUnits} enheter). Nästa fakturering ${nextRun.toISOString().split("T")[0]}.`,
+        message: `Abonnemang aktiverat för ${matchingObjects.length} objekt (beräknad avgift ${monthlyTotal.toLocaleString("sv-SE")} kr). Nästa fakturering ${nextRun.toISOString().split("T")[0]}.`,
         objectsMatched: matchingObjects.length,
         assignmentsCreated: 0,
         subscription: {
-          totalUnits,
+          computed: true,
+          matchedObjects: matchingObjects.length,
           monthlyTotal,
           perInvoiceTotal,
           quarterlyTotal: monthlyTotal * 3,
@@ -2873,21 +2872,17 @@ app.post("/api/order-concepts/:id/preview", asyncHandler(async (req, res) => {
     }
 
     // Subscription calculation for "subscription" method
-    let subscriptionCalc: { totalUnits: number; monthlyTotal: number; yearlyTotal: number } | undefined;
-    if (previewMethod === "subscription" && concept.monthlyFee) {
-      let totalUnits = 0;
-      for (const obj of matchingObjects) {
-        const objWithMeta = obj as typeof obj & { metadata?: Record<string, unknown> };
-        if (concept.subscriptionMetadataField && objWithMeta.metadata?.[concept.subscriptionMetadataField]) {
-          totalUnits += Number(objWithMeta.metadata[concept.subscriptionMetadataField]) || 1;
-        } else {
-          totalUnits += 1;
-        }
-      }
+    // Task #1057: avgiften beräknas dynamiskt från uppgifternas ordervärde (kronor),
+    // inte längre från det statiska månadsavgiftsfältet.
+    let subscriptionCalc: { matchedObjects: number; monthlyTotal: number; yearlyTotal: number; computed: boolean } | undefined;
+    if (previewMethod === "subscription") {
+      const fee = await computeConceptSubscriptionFee(tenantId, concept as any, { matchingObjects });
+      const monthlyTotal = fee.totalValueOre / 100;
       subscriptionCalc = {
-        totalUnits,
-        monthlyTotal: totalUnits * concept.monthlyFee,
-        yearlyTotal: totalUnits * concept.monthlyFee * 12,
+        matchedObjects: fee.matchedCount,
+        monthlyTotal,
+        yearlyTotal: monthlyTotal * 12,
+        computed: fee.canCompute,
       };
     }
 
@@ -3034,29 +3029,25 @@ app.get("/api/order-concepts/:id/subscription-calc", asyncHandler(async (req, re
       { fallbackAllObjects: true },
     );
 
-    const perObject = matchingObjects.map(obj => {
-      const objWithMeta = obj as typeof obj & { metadata?: Record<string, unknown> };
-      let units = 1;
-      if (concept.subscriptionMetadataField && objWithMeta.metadata?.[concept.subscriptionMetadataField]) {
-        units = Number(objWithMeta.metadata[concept.subscriptionMetadataField]) || 1;
-      }
-      return {
-        objectId: obj.id,
-        objectName: obj.name,
-        units,
-        monthlyFee: (concept.monthlyFee || 0) * units,
-      };
-    });
+    // Task #1057: dynamisk avgift = ordervärdet per objekt (kronor), jämnt fördelat
+    // från konceptets totala ordervärde. Inget statiskt månadsavgiftsfält längre.
+    const fee = await computeConceptSubscriptionFee(tenantId, concept as any, { matchingObjects });
+    // Exakt per-objekt-fördelning (största-rest) ⇒ Σ per-objekt === totalValueOre.
+    const perObject = matchingObjects.map((obj, i) => ({
+      objectId: obj.id,
+      objectName: obj.name,
+      monthlyFee: (fee.perObjectValuesOre[i] ?? 0) / 100,
+    }));
 
-    const totalUnits = perObject.reduce((sum, p) => sum + p.units, 0);
-    const monthlyTotal = perObject.reduce((sum, p) => sum + p.monthlyFee, 0);
+    const monthlyTotal = fee.totalValueOre / 100;
 
     res.json({
       perObject,
-      totalUnits,
+      matchedObjects: fee.matchedCount,
       monthlyTotal,
       quarterlyTotal: monthlyTotal * 3,
       yearlyTotal: monthlyTotal * 12,
+      computed: fee.canCompute,
       billingFrequency: concept.billingFrequency || "monthly",
       contractLockMonths: concept.contractLockMonths,
     });
@@ -3118,24 +3109,31 @@ app.post("/api/order-concepts/:id/detect-changes", asyncHandler(async (req, res)
     const conceptAssignments = existingAssignments.filter(a => a.orderConceptId === concept.id);
     const assignedObjectIds = new Set(conceptAssignments.map(a => a.objectId));
 
+    // Task #1057: avgiftsdeltat per objekt = dynamiskt beräknad per-objekt-avgift
+    // (kronor), jämnt fördelat från konceptets ordervärde — inte statisk månadsavgift.
+    const fee = await computeConceptSubscriptionFee(tenantId, concept as any, { matchingObjects });
+    // Exakt per-objekt-fördelning (största-rest), nyckel per objekt-id (kronor).
+    const feeKrByObjectId = new Map<string, number>();
+    matchingObjects.forEach((obj, i) => {
+      feeKrByObjectId.set(obj.id, (fee.perObjectValuesOre[i] ?? 0) / 100);
+    });
+    // Borttagna objekt har ingen aktuell fördelning ⇒ använd snitt-avgiften som
+    // delta-uppskattning (detta är en föreslagen ändring, inte en fakturaskrivning).
+    const avgFeeKr = fee.matchedCount > 0 ? fee.totalValueOre / fee.matchedCount / 100 : 0;
+
     const createdChanges = [];
 
     for (const obj of matchingObjects) {
       if (!assignedObjectIds.has(obj.id)) {
-        const objWithMeta = obj as typeof obj & { metadata?: Record<string, unknown> };
-        let units = 1;
-        if (concept.subscriptionMetadataField && objWithMeta.metadata?.[concept.subscriptionMetadataField]) {
-          units = Number(objWithMeta.metadata[concept.subscriptionMetadataField]) || 1;
-        }
-        const monthlyDelta = (concept.monthlyFee || 0) * units;
+        const perObjectFeeKr = feeKrByObjectId.get(obj.id) ?? 0;
         const change = await storage.createSubscriptionChange({
           tenantId,
           orderConceptId: concept.id,
           objectId: obj.id,
           changeType: "new_object",
           previousValue: "0",
-          newValue: String(units),
-          monthlyDelta,
+          newValue: String(perObjectFeeKr),
+          monthlyDelta: perObjectFeeKr,
           approvalStatus: "pending",
         });
         createdChanges.push(change);
@@ -3144,14 +3142,13 @@ app.post("/api/order-concepts/:id/detect-changes", asyncHandler(async (req, res)
 
     for (const objectId of assignedObjectIds) {
       if (!matchingObjects.find(o => o.id === objectId)) {
-        const assignment = conceptAssignments.find(a => a.objectId === objectId);
-        const monthlyDelta = -(concept.monthlyFee || 0) * (assignment?.quantity || 1);
+        const monthlyDelta = -avgFeeKr;
         const change = await storage.createSubscriptionChange({
           tenantId,
           orderConceptId: concept.id,
           objectId,
           changeType: "removed_object",
-          previousValue: String(assignment?.quantity || 1),
+          previousValue: String(avgFeeKr),
           newValue: "0",
           monthlyDelta,
           approvalStatus: "pending",

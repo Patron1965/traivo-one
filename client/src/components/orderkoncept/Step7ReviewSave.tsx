@@ -106,6 +106,8 @@ interface ReviewSummary {
   detailRows?: DetailRow[];
   summaryMetrics?: SummaryMetrics;
   repetition?: Repetition;
+  // Task #1057: dynamiskt beräknad abonnemangsavgift (kronor/period); null för övriga metoder.
+  subscriptionFeeKr?: number | null;
 }
 
 interface ExecuteReceipt {
@@ -543,6 +545,16 @@ export default function Step7ReviewSave({
               <Row label="Administrativa uppgifter" value={summary.summaryMetrics.adminTaskCount.toLocaleString("sv-SE")} />
             )}
             <Row label="Ordervärde" value={<span className="font-semibold" data-testid="summary-order-value">{fmtKr(summary.totalValueKr)}</span>} />
+            {summary.repetition?.method === "subscription" && (
+              <Row
+                label="Abonnemangsavgift (per period)"
+                value={
+                  <span className="font-semibold text-primary" data-testid="summary-subscription-fee">
+                    {fmtKr(summary.subscriptionFeeKr ?? summary.totalValueKr)}
+                  </span>
+                }
+              />
+            )}
             <Row label="Produktionstid" value={<span data-testid="summary-production-time">{fmtMinutes(summary.summaryMetrics.productionMinutesActual)}</span>} />
             {summary.summaryMetrics.materialLines.length > 0 && (
               <div className="pt-2">

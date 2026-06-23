@@ -38,7 +38,16 @@ interface Step3State {
 }
 
 interface Step3Props extends Step3State {
+  conceptId?: string | null;
   onUpdate: (data: Partial<Step3State>) => void;
+}
+
+// Task #1057: dynamiskt beräknad abonnemangsavgift = summan av uppgifternas
+// ordervärde (kronor) knutna till objekten. Ersätter det statiska "Avgift per enhet"-fältet.
+interface SubscriptionCalcResult {
+  monthlyTotal: number;
+  matchedObjects: number;
+  computed: boolean;
 }
 
 // Fakturastopp lagras (oförändrat) i de befintliga fälten: invoiceConsolidation
@@ -51,7 +60,7 @@ const UI_METHOD_HELP: Record<UiInvoiceMethod, string> = {
   efterfakturering:
     "Arbetet faktureras i efterhand enligt vald frekvens — en uppgift skapas per matchande objekt när konceptet körs.",
   abonnemang:
-    "Löpande fakturering med fast avgift per enhet enligt vald frekvens — inga engångsuppgifter skapas.",
+    "Löpande fakturering enligt vald frekvens — avgiften beräknas automatiskt från uppgifternas ordervärde. Inga engångsuppgifter skapas.",
 };
 
 export default function Step3Invoicing({
@@ -66,6 +75,7 @@ export default function Step3Invoicing({
   subscriptionStartDate,
   customerReference,
   customerLabel,
+  conceptId,
   onUpdate,
 }: Step3Props) {
   const { data: definitions = [] } = useQuery<MetadataDefinition[]>({
@@ -74,6 +84,12 @@ export default function Step3Invoicing({
 
   const uiMethod = invoiceModelToUiMethod(invoiceModel);
   const isSubscription = uiMethod === "abonnemang";
+
+  // Task #1057: hämta den dynamiskt beräknade avgiften (ordervärdet) för förhandsvisning.
+  const { data: subscriptionCalc, isLoading: subscriptionCalcLoading } = useQuery<SubscriptionCalcResult>({
+    queryKey: ["/api/order-concepts", conceptId, "subscription-calc"],
+    enabled: isSubscription && !!conceptId,
+  });
 
   // En metadatabaserad referens = fakturastopp. Detekteras (som tidigare) på att
   // konsolideringen inte är ren kundnivå.
@@ -234,22 +250,25 @@ export default function Step3Invoicing({
           <div className="space-y-4 rounded-md border border-border p-3" data-testid="block-subscription-config">
             <h3 className="text-sm font-medium">Abonnemang</h3>
             <div>
-              <Label htmlFor="subscription-monthly-fee" className="text-sm mb-1 block">
-                Avgift per enhet (kr)
+              <Label className="text-sm mb-1 block">
+                Beräknad avgift (kr/period)
               </Label>
-              <Input
-                id="subscription-monthly-fee"
-                type="number"
-                min={0}
-                step="0.01"
-                value={monthlyFee ?? ""}
-                onChange={(e) => onUpdate({ monthlyFee: e.target.value === "" ? null : Number(e.target.value) })}
-                className="max-w-xs"
-                placeholder="0"
-                data-testid="input-subscription-monthly-fee"
-              />
+              <div
+                className="rounded-md border border-border bg-muted px-3 py-2 max-w-xs text-sm font-medium"
+                data-testid="text-subscription-computed-fee"
+              >
+                {!conceptId
+                  ? "Spara konceptet för att beräkna avgiften"
+                  : subscriptionCalcLoading
+                    ? "Beräknar…"
+                    : subscriptionCalc && subscriptionCalc.computed
+                      ? `${subscriptionCalc.monthlyTotal.toLocaleString("sv-SE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} kr`
+                      : "Kan inte beräknas — koppla artikel med pris"}
+              </div>
               <p className="text-xs text-muted-foreground mt-1">
-                Fast avgift per enhet. Krävs för att aktivera abonnemanget. Faktureras enligt vald frekvens.
+                Avgiften beräknas automatiskt som summan av uppgifternas ordervärde knutet
+                till objekten — fördelas per faktureringsnivå. Faktureras enligt vald frekvens.
+                Detaljerad uppdelning visas i steget Granska &amp; spara.
               </p>
             </div>
             <div>

@@ -74,3 +74,4 @@
 - [Objekt-360 metadata-vy](objekt-360-metadata-view.md) — KÄLLA/ARV-badge har 5 kanoniska states; "Systemgenererat"-kortet byggs ENBART från riktiga objekt-kolumner (aldrig fabricerade version/ändrad-av).
 - [Grovplanering motor-vy](grovplanering-engine-results.md) — "Motorns förslag" läser slot_times (source=tidsmotor) via dedikerad endpoint, ej work_order-rutnätet; klump=metadata.kind=clump; demo-DB tom→tom-state krävs.
 - [Orderkoncept fast pris-bas](order-concept-fixed-price-basis.md) — fixed_price_basis (per_object/per_task/per_concept) appliceras via per-WO-divisor (fixedPriceWoDivisor); per_object==per_task utom i schema (occurrences>1).
+- [Dynamisk abonnemangsavgift](order-concept-subscription-fee.md) — abonnemangsavgift beräknas från ordervärde via computeConceptSubscriptionFee (enda källan, alla paths); fördela öre per objekt med största-rest (ej Math.round/count → Σ≠total); öre×perioder÷100; canCompute-gate; statiskt fält behålls (expand-contract).

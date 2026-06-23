@@ -852,6 +852,7 @@ export default function OrderConceptWizardPage() {
 
             {currentStep === 4 && (
               <Step3Invoicing
+                conceptId={conceptId}
                 invoiceModel={invoiceModel || null}
                 invoiceFrequency={billingFrequency}
                 invoiceLock={invoiceLock}

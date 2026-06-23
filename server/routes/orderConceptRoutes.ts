@@ -38,6 +38,7 @@ import {
   computeObjectValueOre,
   fixedPriceWoDivisor,
 } from "../services/order-concept-article-hits";
+import { computeConceptSubscriptionFee } from "../services/order-concept-subscription";
 import {
   resolveObjectInvoiceRefs,
   formatEnrichedDescription,
@@ -414,8 +415,18 @@ app.post("/api/order-concepts/:id/validate", asyncHandler(async (req, res) => {
       }
     }
 
-    if (validateMethod === "subscription" && !concept.monthlyFee) {
-      warnings.push({ code: "NO_MONTHLY_FEE", message: "Månadsavgift saknas" });
+    if (validateMethod === "subscription") {
+      // Task #1057: avgiften beräknas dynamiskt från uppgifternas ordervärde — varna
+      // bara om den inte kan beräknas (inget ordervärde på de matchade objekten).
+      const subFee = await computeConceptSubscriptionFee(tenantId, concept as any, {
+        matchingObjects: validateMatchedObjects as any,
+      });
+      if (!subFee.canCompute) {
+        warnings.push({
+          code: "NO_SUBSCRIPTION_FEE",
+          message: "Abonnemangsavgift kan inte beräknas — koppla minst en artikel med pris till uppgifterna",
+        });
+      }
     }
 
     // ADR v3 §2.3 (Task #556): Konfliktvarning för fakturamottagare.
@@ -2536,6 +2547,9 @@ app.get("/api/order-concepts/:id/review-summary", asyncHandler(async (req, res) 
     detailRows,
     summaryMetrics,
     repetition,
+    // Task #1057: dynamisk abonnemangsavgift = konceptets ordervärde (kronor).
+    // För abonnemang motsvarar avgiften per period totalValueKr; null för övriga metoder.
+    subscriptionFeeKr: method === "subscription" ? totalValueKr : null,
   });
 }));
 

@@ -153,9 +153,11 @@ interface PreviewData {
   }>;
   schedulePreview: Array<{ date: string; objectCount: number }>;
   subscriptionCalc?: {
-    totalUnits: number;
+    // Task #1057: avgiften beräknas dynamiskt från uppgifternas ordervärde.
+    matchedObjects: number;
     monthlyTotal: number;
     yearlyTotal: number;
+    computed: boolean;
   };
 }
 
@@ -1373,18 +1375,23 @@ export default function OrderConceptsPage() {
                   <CardContent>
                     <div className="grid grid-cols-3 gap-4 text-center">
                       <div>
-                        <div className="text-xl font-bold">{previewData.subscriptionCalc.totalUnits}</div>
-                        <div className="text-xs text-muted-foreground">Enheter totalt</div>
+                        <div className="text-xl font-bold">{previewData.subscriptionCalc.matchedObjects}</div>
+                        <div className="text-xs text-muted-foreground">Matchande objekt</div>
                       </div>
                       <div>
                         <div className="text-xl font-bold text-chart-2">{previewData.subscriptionCalc.monthlyTotal.toLocaleString("sv-SE")} kr</div>
-                        <div className="text-xs text-muted-foreground">Månadsintäkt</div>
+                        <div className="text-xs text-muted-foreground">Beräknad avgift (period)</div>
                       </div>
                       <div>
                         <div className="text-xl font-bold text-chart-2">{previewData.subscriptionCalc.yearlyTotal.toLocaleString("sv-SE")} kr</div>
                         <div className="text-xs text-muted-foreground">Årsintäkt</div>
                       </div>
                     </div>
+                    {!previewData.subscriptionCalc.computed && (
+                      <p className="text-xs text-warning mt-2" data-testid="text-subscription-not-computed">
+                        Avgiften kan inte beräknas — koppla minst en artikel med pris till konceptets uppgifter.
+                      </p>
+                    )}
                   </CardContent>
                 </Card>
               )}
