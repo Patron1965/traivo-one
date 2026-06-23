@@ -23,6 +23,7 @@ import {
   resolveConceptArticleHits,
   isFixedPriceConcept,
   computeObjectValueOre,
+  fixedPriceWoDivisor,
   type ConceptArticleHits,
 } from "../services/order-concept-article-hits";
 import { getArticleMetadataForObject } from "../metadata-queries";
@@ -150,6 +151,14 @@ export async function generateScheduleAssignments(opts: {
   const targets = buildScheduleDateTargets(concept);
   if (targets === null) return null;
 
+  // Task #1055: fast pris-delare för EN genererad arbetsorder. Per_object delar det
+  // fasta beloppet jämnt över objektets generationer (datum); per_concept delar över
+  // alla arbetsordrar (objekt × generationer); per_task = 1 (fullt belopp per WO).
+  const fixedDivisor = fixedPriceWoDivisor(concept, {
+    objectCount: matchingObjects.length,
+    occurrences: targets.length,
+  });
+
   // Idempotens: läs in befintliga (objekt|datum)-par för konceptet.
   const dateKey = (d: Date | string | null | undefined): string => {
     if (!d) return "";
@@ -219,7 +228,7 @@ export async function generateScheduleAssignments(opts: {
       const estimatedDuration = objPrice.productionMinutes * quantity || 60;
       // Task #976: fast pris (priceModel='fixed') ⇒ fixedPriceAmount per objekt; annars
       // löpande pris × antal. Kostnad påverkas inte av det fasta försäljningspriset.
-      const totalValue = computeObjectValueOre(concept, objPrice.price, quantity);
+      const totalValue = computeObjectValueOre(concept, objPrice.price, quantity, fixedDivisor);
       const totalCost = objPrice.cost * quantity;
       const unitPriceForArticle =
         isFixedPriceConcept(concept) && quantity > 0 ? Math.round(totalValue / quantity) : objPrice.price;
@@ -2105,6 +2114,14 @@ app.patch("/api/order-concepts/:id", asyncHandler(async (req, res) => {
       throw new ValidationError("customerMode måste vara HARDCODED eller FROM_METADATA");
     }
 
+    // Task #1055: fast pris-bas styr hur det fasta beloppet fördelas vid expansion.
+    if (
+      req.body.fixedPriceBasis != null &&
+      !["per_concept", "per_task", "per_object"].includes(req.body.fixedPriceBasis)
+    ) {
+      throw new ValidationError("fixedPriceBasis måste vara per_concept, per_task eller per_object");
+    }
+
     // Session 9B — timestamp-kolumner kräver Date-objekt (inte ISO-sträng) i drizzle .set().
     // Task #934: deliveryStart (abonnemangets startdatum) coerce:as på samma sätt.
     for (const dateField of ["subscriptionAdjustmentDate", "intervalStartDate", "intervalEndDate", "deliveryStart"] as const) {
@@ -2459,6 +2476,12 @@ app.post("/api/order-concepts/:id/execute", asyncHandler(async (req, res) => {
 
     // call_off (Avrop, default): engångsexpansion — en uppgift per TRÄFF-objekt nu.
     // Task #976: expansionObjects = artikelträff-objekten (miss-objekt utelämnas helt).
+    // Task #1055: en generation (occurrences=1) ⇒ per_object/per_task = fullt belopp;
+    // per_concept fördelar det fasta beloppet jämnt över alla träff-objekt.
+    const callOffFixedDivisor = fixedPriceWoDivisor(concept, {
+      objectCount: expansionObjects.length,
+      occurrences: 1,
+    });
     for (const obj of expansionObjects) {
       // Task #976: använd förupplöst antal från artikelträff-tjänsten (samma värde som
       // träffberäkningen → cachedValue/assignmentArticle kan aldrig divergera). Faller
@@ -2503,7 +2526,7 @@ app.post("/api/order-concepts/:id/execute", asyncHandler(async (req, res) => {
 
       if (linkedArticle) {
         estimatedDuration = objPrice.productionMinutes * quantity;
-        totalValue = computeObjectValueOre(concept, objPrice.price, quantity);
+        totalValue = computeObjectValueOre(concept, objPrice.price, quantity, callOffFixedDivisor);
         totalCost = objPrice.cost * quantity;
         unitPriceForArticle =
           isFixedPriceConcept(concept) && quantity > 0 ? Math.round(totalValue / quantity) : objPrice.price;
@@ -2808,6 +2831,12 @@ app.post("/api/order-concepts/:id/preview", asyncHandler(async (req, res) => {
       matchingObjects,
     });
     const previewObjects = previewMethod === "subscription" ? matchingObjects : previewHits.hitObjects;
+    // Task #1055: förhandsvisningen visar en rad per objekt (en generation) ⇒ per_concept
+    // fördelar det fasta beloppet över objekten; per_object/per_task = fullt belopp.
+    const previewFixedDivisor = fixedPriceWoDivisor(concept, {
+      objectCount: previewObjects.length,
+      occurrences: 1,
+    });
     const previewItems = previewObjects.map(obj => {
       const quantity = previewHits.quantityByObjectId.get(obj.id) ?? 1;
       return {
@@ -2817,7 +2846,7 @@ app.post("/api/order-concepts/:id/preview", asyncHandler(async (req, res) => {
         quantity,
         articleName: linkedArticle?.name || "-",
         estimatedDuration: linkedPrice.productionMinutes * quantity,
-        estimatedValue: computeObjectValueOre(concept, linkedPrice.price, quantity),
+        estimatedValue: computeObjectValueOre(concept, linkedPrice.price, quantity, previewFixedDivisor),
       };
     });
 

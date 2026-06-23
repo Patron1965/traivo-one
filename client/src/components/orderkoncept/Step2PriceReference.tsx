@@ -32,6 +32,8 @@ interface Step2Props {
   onPriceModelChange: (v: string) => void;
   fixedPriceKronor: string;
   onFixedPriceChange: (v: string) => void;
+  fixedPriceBasis: string;
+  onFixedPriceBasisChange: (v: string) => void;
   customerReference: string;
   onCustomerReferenceChange: (v: string) => void;
   customerLabel: string;
@@ -54,6 +56,8 @@ export default function Step2PriceReference({
   onPriceModelChange,
   fixedPriceKronor,
   onFixedPriceChange,
+  fixedPriceBasis,
+  onFixedPriceBasisChange,
   customerReference,
   onCustomerReferenceChange,
   customerLabel,
@@ -407,18 +411,53 @@ export default function Step2PriceReference({
         </RadioGroup>
 
         {priceModel === "fixed" && (
-          <div className="mt-3 max-w-xs ml-9">
-            <Label htmlFor="fixed-price" className="text-sm mb-1 block">Fast pris (kr exkl. moms)</Label>
-            <Input
-              id="fixed-price"
-              type="number"
-              min={0}
-              step="0.01"
-              placeholder="0,00"
-              value={fixedPriceKronor}
-              onChange={(e) => onFixedPriceChange(e.target.value)}
-              data-testid="input-fixed-price"
-            />
+          <div className="mt-3 ml-9 space-y-4">
+            <div className="max-w-xs">
+              <Label htmlFor="fixed-price" className="text-sm mb-1 block">Fast pris (kr exkl. moms)</Label>
+              <Input
+                id="fixed-price"
+                type="number"
+                min={0}
+                step="0.01"
+                placeholder="0,00"
+                value={fixedPriceKronor}
+                onChange={(e) => onFixedPriceChange(e.target.value)}
+                data-testid="input-fixed-price"
+              />
+            </div>
+            <div>
+              <Label className="text-sm mb-1 block">Vad gäller det fasta priset?</Label>
+              <p className="text-xs text-muted-foreground mb-2">
+                Bestämmer hur det fasta beloppet fördelas när konceptet expanderas till arbetsordrar.
+              </p>
+              <RadioGroup
+                value={fixedPriceBasis || "per_object"}
+                onValueChange={onFixedPriceBasisChange}
+                className="gap-1"
+              >
+                <div className="flex items-start space-x-3 p-2 rounded-md border border-transparent hover:bg-accent/50 transition-colors">
+                  <RadioGroupItem value="per_object" id="basis-per-object" data-testid="radio-basis-per-object" className="mt-0.5" />
+                  <div>
+                    <Label htmlFor="basis-per-object" className="cursor-pointer font-medium">Per objekt (träff)</Label>
+                    <p className="text-xs text-muted-foreground">Beloppet debiteras för varje träffat objekt.</p>
+                  </div>
+                </div>
+                <div className="flex items-start space-x-3 p-2 rounded-md border border-transparent hover:bg-accent/50 transition-colors">
+                  <RadioGroupItem value="per_task" id="basis-per-task" data-testid="radio-basis-per-task" className="mt-0.5" />
+                  <div>
+                    <Label htmlFor="basis-per-task" className="cursor-pointer font-medium">Per uppgift</Label>
+                    <p className="text-xs text-muted-foreground">Beloppet debiteras för varje genererad arbetsorder (t.ex. per tillfälle i ett schema).</p>
+                  </div>
+                </div>
+                <div className="flex items-start space-x-3 p-2 rounded-md border border-transparent hover:bg-accent/50 transition-colors">
+                  <RadioGroupItem value="per_concept" id="basis-per-concept" data-testid="radio-basis-per-concept" className="mt-0.5" />
+                  <div>
+                    <Label htmlFor="basis-per-concept" className="cursor-pointer font-medium">Per orderkoncept</Label>
+                    <p className="text-xs text-muted-foreground">Ett fast totalbelopp för hela konceptet, fördelat jämnt över alla arbetsordrar.</p>
+                  </div>
+                </div>
+              </RadioGroup>
+            </div>
           </div>
         )}
       </div>

@@ -25,6 +25,8 @@ type ArticleShape = Awaited<ReturnType<typeof storage.getArticle>>;
 export type HitConceptShape = {
   priceModel?: string | null;
   fixedPriceAmount?: number | null;
+  // Task #1055: bas för fast pris ('per_concept' | 'per_task' | 'per_object').
+  fixedPriceBasis?: string | null;
   crossPollinationField?: string | null;
   articleId?: string | null;
 };
@@ -72,18 +74,49 @@ export function isFixedPriceConcept(concept: HitConceptShape | null | undefined)
 }
 
 /**
- * Per-objekt ordervärde i ÖRE. Fast pris ⇒ konceptets fixedPriceAmount (oberoende av
- * antal); annars löpande pris (öre) × antal. Alla prisfält i konceptflödet är i öre.
+ * Per-arbetsorder/per-objekt ordervärde i ÖRE. Löpande ⇒ pris (öre) × antal.
+ *
+ * Fast pris (Task #1055): det fasta beloppet delas av `fixedDivisor` — antalet
+ * fast pris-enheter som denna rad är en del av:
+ *  - per_object: beloppet gäller per träffat objekt ⇒ divisor = antal genererade
+ *    arbetsordrar för objektet (= 1 i avrop / per visning).
+ *  - per_task: beloppet gäller per genererad arbetsorder ⇒ divisor = 1.
+ *  - per_concept: ett fast totalbelopp för hela konceptet ⇒ divisor = totalt antal
+ *    arbetsordrar (objekt × generationer) så summan blir exakt det fasta beloppet.
+ * Anroparen räknar ut korrekt divisor för sin kontext via `fixedPriceWoDivisor`.
+ * Default divisor = 1 (oförändrat per_object-/per_task-beteende i avrop).
  */
 export function computeObjectValueOre(
   concept: HitConceptShape | null | undefined,
   runningUnitPriceOre: number,
   quantity: number,
+  fixedDivisor: number = 1,
 ): number {
   if (isFixedPriceConcept(concept)) {
-    return concept!.fixedPriceAmount as number;
+    const d = Number.isFinite(fixedDivisor) && fixedDivisor > 0 ? fixedDivisor : 1;
+    return Math.round((concept!.fixedPriceAmount as number) / d);
   }
   return Math.round((runningUnitPriceOre || 0) * (quantity || 0));
+}
+
+/**
+ * Räknar ut delaren (`fixedDivisor`) som `computeObjectValueOre` ska använda för EN
+ * genererad arbetsorder, givet konceptets fast pris-bas och kontextens antal.
+ *  - `objectCount`: antal träff-objekt som får arbetsordrar i körningen.
+ *  - `occurrences`: antal generationer (datum) per objekt (1 i avrop/förhandsvisning).
+ */
+export function fixedPriceWoDivisor(
+  concept: HitConceptShape | null | undefined,
+  opts: { objectCount?: number; occurrences?: number },
+): number {
+  const basis = concept?.fixedPriceBasis === "per_concept" || concept?.fixedPriceBasis === "per_task"
+    ? concept.fixedPriceBasis
+    : "per_object";
+  const objectCount = Math.max(1, Math.trunc(opts.objectCount ?? 1));
+  const occurrences = Math.max(1, Math.trunc(opts.occurrences ?? 1));
+  if (basis === "per_concept") return objectCount * occurrences;
+  if (basis === "per_object") return occurrences;
+  return 1; // per_task
 }
 
 export type ArticleHitRow = {

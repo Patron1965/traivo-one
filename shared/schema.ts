@@ -3055,6 +3055,12 @@ export const orderConcepts = pgTable("order_concepts", {
   priceListId: varchar("price_list_id").references(() => priceLists.id),
   priceModel: text("price_model").default("running"), // 'running' (löpande) | 'fixed' (fast pris)
   fixedPriceAmount: integer("fixed_price_amount"), // öre, gäller när priceModel='fixed'
+  // Task #1055: bas för det fasta priset — styr hur fixedPriceAmount appliceras vid
+  // expansion. 'per_object' (default, dagens beteende — fast pris per träffat objekt),
+  // 'per_task' (fast pris per genererad uppgift/arbetsorder) eller 'per_concept'
+  // (ett fast totalbelopp för hela orderkonceptet, fördelat jämnt). Nullable/default
+  // för expand-contract: äldre koncept utan kolumn tolkas som 'per_object'.
+  fixedPriceBasis: text("fixed_price_basis").default("per_object"), // 'per_concept' | 'per_task' | 'per_object'
   customerReference: text("customer_reference"), // "Er referens"
   customerLabel: text("customer_label"), // "Er beteckning"
   // Steg 3 — faktureringsmodell + abonnemangsregler + sampackning

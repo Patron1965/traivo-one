@@ -36,6 +36,7 @@ import {
   resolveConceptArticleHits,
   isFixedPriceConcept,
   computeObjectValueOre,
+  fixedPriceWoDivisor,
 } from "../services/order-concept-article-hits";
 import {
   resolveObjectInvoiceRefs,
@@ -2360,14 +2361,7 @@ app.get("/api/order-concepts/:id/review-summary", asyncHandler(async (req, res) 
       productionTimeMinutes: art?.productionTime ?? 0,
     };
   });
-  const orderValue = computeConceptOrderValue({
-    matchedCount: totalMatchedObjects,
-    articles: valueArticleInputs,
-    priceModel: (concept as any).priceModel,
-    fixedPriceAmountOre: (concept as any).fixedPriceAmount ?? null,
-  });
   const fixedPrice = isFixedPriceConcept(concept as any);
-  const totalValueKr = orderValue.totalValueOre / 100;
 
   // --- Repetition (Task #979) ---
   // call_off = engångskörning (avrop), schedule = återkommande, subscription =
@@ -2380,6 +2374,21 @@ app.get("/api/order-concepts/:id/review-summary", asyncHandler(async (req, res) 
     : method === "call_off" ? 1
     : null;
   const generationFactor = generations ?? 1;
+
+  // Task #1055: ordervärdet speglar konceptets fast pris-bas. Vid fast pris baseras
+  // totalen på TRÄFF-objekt (hits.hitCount) — inte alla matchade — så Granska
+  // stämmer med detaljlistan och expansion. per_task multiplicerar dessutom med
+  // antalet generationer (hitCount × generationFactor).
+  const orderValue = computeConceptOrderValue({
+    matchedCount: totalMatchedObjects,
+    articles: valueArticleInputs,
+    priceModel: (concept as any).priceModel,
+    fixedPriceAmountOre: (concept as any).fixedPriceAmount ?? null,
+    fixedPriceBasis: (concept as any).fixedPriceBasis ?? null,
+    fixedPriceUnitCount: hits.hitCount,
+    taskCount: hits.hitCount * generationFactor,
+  });
+  const totalValueKr = orderValue.totalValueOre / 100;
   const frequencyDays = (concept as any).intervalFrequencyDays ?? null;
   const flexDays = (concept as any).intervalFlexDays ?? 0;
   let validUntil: string | null = null;
@@ -2432,10 +2441,17 @@ app.get("/api/order-concepts/:id/review-summary", asyncHandler(async (req, res) 
   }> = [];
 
   const fieldTaskName = linkedArticleName ?? concept.name ?? "Uppgift";
+  // Task #1055: detaljlistan visar en rad per träff-objekt (en generation) ⇒
+  // per_concept fördelar det fasta beloppet över träff-objekten; per_object/per_task
+  // = fullt belopp per rad.
+  const detailFixedDivisor = fixedPriceWoDivisor(concept as any, {
+    objectCount: hits.hitCount,
+    occurrences: 1,
+  });
   let totalFieldQty = 0;
   for (const r of hits.rows) {
     if (!r.isHit) continue;
-    const valueOre = computeObjectValueOre(concept as any, unitPriceOre, r.quantity);
+    const valueOre = computeObjectValueOre(concept as any, unitPriceOre, r.quantity, detailFixedDivisor);
     totalFieldQty += r.quantity;
     detailRows.push({
       kind: "field",
@@ -2571,8 +2587,14 @@ app.get("/api/order-concepts/:id/article-hit-summary", asyncHandler(async (req, 
   });
 
   const fixed = isFixedPriceConcept(concept as any);
+  // Task #1055: en rad per träff-objekt (en generation) ⇒ per_concept fördelar fasta
+  // beloppet över träff-objekten; per_object/per_task = fullt belopp.
+  const summaryFixedDivisor = fixedPriceWoDivisor(concept as any, {
+    objectCount: hits.hitCount,
+    occurrences: 1,
+  });
   const rows = hits.rows.map((r) => {
-    const valueOre = r.isHit ? computeObjectValueOre(concept as any, unitPriceOre, r.quantity) : 0;
+    const valueOre = r.isHit ? computeObjectValueOre(concept as any, unitPriceOre, r.quantity, summaryFixedDivisor) : 0;
     return {
       objectId: r.objectId,
       objectName: r.objectName,

@@ -72,3 +72,4 @@
 - [Orderkoncept-wizard stegordning](order-concept-wizard-step-ordering.md) — stegnr är numeriskt kodat på många ställen (STEPS/validate/status/saveStep/render/header); omordning kräver lockstep + versions-gate:ade utkast (gammal/ny numrering delar 1..N).
 - [Objekt-360 metadata-vy](objekt-360-metadata-view.md) — KÄLLA/ARV-badge har 5 kanoniska states; "Systemgenererat"-kortet byggs ENBART från riktiga objekt-kolumner (aldrig fabricerade version/ändrad-av).
 - [Grovplanering motor-vy](grovplanering-engine-results.md) — "Motorns förslag" läser slot_times (source=tidsmotor) via dedikerad endpoint, ej work_order-rutnätet; klump=metadata.kind=clump; demo-DB tom→tom-state krävs.
+- [Orderkoncept fast pris-bas](order-concept-fixed-price-basis.md) — fixed_price_basis (per_object/per_task/per_concept) appliceras via per-WO-divisor (fixedPriceWoDivisor); per_object==per_task utom i schema (occurrences>1).

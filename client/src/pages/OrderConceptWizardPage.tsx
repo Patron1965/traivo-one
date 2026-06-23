@@ -156,6 +156,7 @@ export default function OrderConceptWizardPage() {
   const [priceListId, setPriceListId] = useState<string | null>(null);
   const [priceModel, setPriceModel] = useState<string>("running");
   const [fixedPriceKronor, setFixedPriceKronor] = useState<string>("");
+  const [fixedPriceBasis, setFixedPriceBasis] = useState<string>("per_object");
   const [customerReference, setCustomerReference] = useState("");
   const [customerLabel, setCustomerLabel] = useState("");
   // Step 3
@@ -220,6 +221,7 @@ export default function OrderConceptWizardPage() {
     setPriceListId(wizardData.priceListId || null);
     setPriceModel(wizardData.priceModel || "running");
     setFixedPriceKronor(wizardData.fixedPriceAmount != null ? String(wizardData.fixedPriceAmount / 100) : "");
+    setFixedPriceBasis((wizardData as any).fixedPriceBasis || "per_object");
     setCustomerReference(wizardData.customerReference || "");
     setCustomerLabel(wizardData.customerLabel || "");
     form.setValue("invoiceLevel", wizardData.invoiceLevel || "customer");
@@ -362,8 +364,9 @@ export default function OrderConceptWizardPage() {
       articles: valueArticleInputs,
       priceModel,
       fixedPriceAmountOre: fixedPriceOre,
+      fixedPriceBasis,
     }),
-    [matchedCount, valueArticleInputs, priceModel, fixedPriceOre],
+    [matchedCount, valueArticleInputs, priceModel, fixedPriceOre, fixedPriceBasis],
   );
 
   const totalValue = orderValue.totalValueOre / 100;
@@ -435,6 +438,7 @@ export default function OrderConceptWizardPage() {
     priceModel,
     fixedPriceAmount: priceModel === "fixed" && fixedPriceKronor !== ""
       ? Math.round(parseFloat(fixedPriceKronor) * 100) : null,
+    fixedPriceBasis: priceModel === "fixed" ? (fixedPriceBasis || "per_object") : null,
     customerReference: customerReference || null,
     customerLabel: customerLabel || null,
     // Task #974: fakturanivå är alltid kundnivå (samma kund). Fakturastopp delar
@@ -836,6 +840,8 @@ export default function OrderConceptWizardPage() {
                 onPriceModelChange={(v) => { setPriceModel(v); setHasUnsavedWork(true); }}
                 fixedPriceKronor={fixedPriceKronor}
                 onFixedPriceChange={(v) => { setFixedPriceKronor(v); setHasUnsavedWork(true); }}
+                fixedPriceBasis={fixedPriceBasis}
+                onFixedPriceBasisChange={(v) => { setFixedPriceBasis(v); setHasUnsavedWork(true); }}
                 customerReference={customerReference}
                 onCustomerReferenceChange={(v) => { setCustomerReference(v); setHasUnsavedWork(true); }}
                 customerLabel={customerLabel}
