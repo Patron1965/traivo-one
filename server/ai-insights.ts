@@ -1,6 +1,7 @@
 import OpenAI from "openai";
 import { storage } from "./storage";
 import { trackOpenAIResponse } from "./api-usage-tracker";
+import { isReasoningModel } from "./ai-model-capabilities";
 import { calculatePlanningKPIs } from "./ai-planner";
 
 const openai = new OpenAI({
@@ -90,8 +91,8 @@ Returnera JSON: {"cards": [{"type": "...", "title": "...", "description": "...",
         },
         { role: "user", content: dataContext }
       ],
-      temperature: 0.6,
-      max_tokens: 1200,
+      ...(isReasoningModel(enforcement.model) ? {} : { temperature: 0.6 }),
+      max_completion_tokens: 1200,
       response_format: { type: "json_object" }
     }), { label: "ai-insights" });
 

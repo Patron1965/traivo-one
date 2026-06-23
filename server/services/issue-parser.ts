@@ -1,4 +1,5 @@
 import { withRetry } from "../ai-budget-service";
+import { isReasoningModel } from "../ai-model-capabilities";
 
 export interface StructuredIssue {
   category: string;
@@ -67,8 +68,8 @@ Var konservativ med severity/priority — sätt bara high/critical vid tydlig fa
         { role: "user", content: userContent },
       ],
       response_format: { type: "json_object" },
-      max_tokens: 400,
-      temperature: 0.2,
+      max_completion_tokens: 400,
+      ...(isReasoningModel(model) ? {} : { temperature: 0.2 }),
     }),
     { label: "parse-issue-report" }
   );

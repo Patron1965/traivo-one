@@ -4,6 +4,7 @@ import { fetchWeatherForecast, type WeatherImpact } from "./weather-service";
 import { storage } from "./storage";
 import { buildSystemPrompt, PLANNING_PERSONA_ADDITIONS } from "./ai/persona";
 import { trackOpenAIResponse } from "./api-usage-tracker";
+import { sanitizeChatParams } from "./ai-model-capabilities";
 import { AsyncLocalStorage } from "node:async_hooks";
 
 const aiContext = new AsyncLocalStorage<{ tenantId: string; model: string }>();
@@ -48,7 +49,7 @@ async function callOpenAI(
   let lastError: Error | undefined;
   for (let attempt = 0; attempt < totalAttempts; attempt++) {
     try {
-      return await openai.chat.completions.create(params);
+      return await openai.chat.completions.create(sanitizeChatParams(params));
     } catch (error: unknown) {
       const err = error instanceof Error ? error : new Error(String(error));
       lastError = err;
@@ -453,7 +454,7 @@ export async function generatePlanningSuggestions(
         }
       ],
       temperature: 0.7,
-      max_tokens: 1500,
+      max_completion_tokens: 1500,
       response_format: { type: "json_object" }
     });
 
@@ -493,7 +494,7 @@ export async function explainSuggestion(
         }
       ],
       temperature: 0.5,
-      max_tokens: 300
+      max_completion_tokens: 300
     });
 
     trackOpenAIResponse(response, getContextTenantId());
@@ -1338,7 +1339,7 @@ Svara ENDAST med JSON:
         { role: "user", content: prompt }
       ],
       temperature: 0.3,
-      max_tokens: 600,
+      max_completion_tokens: 600,
       response_format: { type: "json_object" }
     });
     
@@ -2153,7 +2154,7 @@ Svara i JSON-format:
         { role: "user", content: prompt }
       ],
       temperature: 0.7,
-      max_tokens: 500
+      max_completion_tokens: 500
     });
 
     trackOpenAIResponse(response, getContextTenantId());
@@ -2778,7 +2779,7 @@ Om användaren vill göra en ändring (flytta, omplanera), använd suggest_resch
       tools,
       tool_choice: "auto",
       temperature: 0.5,
-      max_tokens: 2000,
+      max_completion_tokens: 2000,
     });
 
     trackOpenAIResponse(response, getContextTenantId());
@@ -2798,7 +2799,7 @@ Om användaren vill göra en ändring (flytta, omplanera), använd suggest_resch
         tools,
         tool_choice: "auto",
         temperature: 0.5,
-        max_tokens: 2000,
+        max_completion_tokens: 2000,
       });
       trackOpenAIResponse(response, getContextTenantId());
       msg = response.choices[0]?.message;
@@ -2916,7 +2917,7 @@ Fyll bara i de fält som är relevanta för frågan. "data" kan vara null om det
         { role: "system", content: systemPrompt },
         { role: "user", content: query }
       ],
-      max_tokens: 1500,
+      max_completion_tokens: 1500,
       temperature: 0.7,
       response_format: { type: "json_object" }
     });
@@ -3070,7 +3071,7 @@ Returnera ALLTID JSON med denna struktur:
         { role: "user", content: instruction }
       ],
       temperature: 0.3,
-      max_tokens: 800,
+      max_completion_tokens: 800,
       response_format: { type: "json_object" }
     });
 
@@ -3137,7 +3138,7 @@ Returnera JSON: {"explanation": "2-3 meningar om planen", "warnings": ["eventuel
         { role: "user", content: summaryText }
       ],
       temperature: 0.5,
-      max_tokens: 500,
+      max_completion_tokens: 500,
       response_format: { type: "json_object" }
     });
 

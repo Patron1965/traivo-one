@@ -9,6 +9,7 @@ import { asyncHandler } from "../asyncHandler";
 import { NotFoundError, ValidationError, ForbiddenError, ConflictError } from "../errors";
 import { validateParentMetadataLink, softDeleteMetadataType, getObjectWithAllMetadata, getDisplayValue, getMetadataKatalogUsage, getMetadataDefinitionsCompat, getMetadataDefinitionCompat, katalogToDefinitionCompat, mapEnglishDataTypeToDatatyp, createMetadata, updateMetadata, deleteMetadata, ensurePackageMetadataKatalog } from "../metadata-queries";
 import { requireAdmin, requirePlanner } from "../tenant-middleware";
+import { isReasoningModel } from "../ai-model-capabilities";
 import { objects, workOrders, objectMetadata, metadataVarden, apiUsageLogs, apiBudgets, invitations, insertMetadataDefinitionSchema, insertObjectMetadataSchema, insertObjectPayerSchema, metadataKatalog, insertMetadataKatalogSchema, workOrderLines, articles, weeklyReportNotes, weeklyReportActionItemSchema, type WeeklyReportActionItem, objectPayers } from "@shared/schema";
 import { getISOWeek, getStartOfISOWeek } from "./helpers";
 import { sendEmail } from "../replit_integrations/resend";
@@ -3111,8 +3112,8 @@ Svara ENBART med valid JSON, ingen annan text.`;
       () => openai.chat.completions.create({
         model: enforcement.model,
         messages: [{ role: "user", content: prompt }],
-        temperature: 0.4,
-        max_tokens: 3000,
+        ...(isReasoningModel(enforcement.model) ? {} : { temperature: 0.4 }),
+        max_completion_tokens: 3000,
       }),
       { totalAttempts: 2, label: "sales-intelligence" }
     );

@@ -2,6 +2,7 @@ import OpenAI from "openai";
 import { sendNotification } from "./unified-notifications";
 import { storage } from "./storage";
 import { trackOpenAIResponse } from "./api-usage-tracker";
+import { isReasoningModel } from "./ai-model-capabilities";
 import { db } from "./db";
 import { customerCommunications, objectContacts } from "@shared/schema";
 import { eq, and, desc, gte, lte } from "drizzle-orm";
@@ -88,8 +89,8 @@ Svara ENDAST med JSON:
         { role: "system", content: "Du skriver kundvänliga sammanfattningar av utfört fältservicearbete på svenska. Svara alltid med JSON." },
         { role: "user", content: prompt }
       ],
-      temperature: 0.5,
-      max_tokens: 400,
+      ...(isReasoningModel(enforcement.model) ? {} : { temperature: 0.5 }),
+      max_completion_tokens: 400,
       response_format: { type: "json_object" },
     }), { label: "ai-communication-summary" });
 

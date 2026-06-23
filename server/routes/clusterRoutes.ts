@@ -8,6 +8,7 @@ import { formatZodError, verifyTenantOwnership, DEFAULT_TENANT_ID } from "./help
 import { getTenantIdWithFallback } from "../tenant-middleware";
 import { asyncHandler } from "../asyncHandler";
 import { NotFoundError, ValidationError, ForbiddenError } from "../errors";
+import { isReasoningModel } from "../ai-model-capabilities";
 import { insertClusterSchema, objects, workOrders, resources, customers, objectPayers, teams, metadataKatalog, metadataVarden } from "@shared/schema";
 
 export async function registerClusterRoutes(app: Express) {
@@ -619,8 +620,8 @@ Formatera dem på en ny rad efter ditt svar, med prefixet "FÖLJDFRÅGOR:" följ
     const response = await withRetry(() => openai.chat.completions.create({
       model: enforcement.model,
       messages: chatMessages,
-      max_tokens: 500,
-      temperature: 0.7,
+      max_completion_tokens: 500,
+      ...(isReasoningModel(enforcement.model) ? {} : { temperature: 0.7 }),
     }), { label: "cluster-chat" });
 
     const { trackOpenAIResponse } = await import("../api-usage-tracker");

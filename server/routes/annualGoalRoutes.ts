@@ -12,6 +12,7 @@ import { storage } from "../storage";
 import { generateScheduleDates, isDateInSeason, convertLegacyPeriodicity } from "../scheduling-utils";
 import OpenAI from "openai";
 import { trackOpenAIResponse } from "../api-usage-tracker";
+import { isReasoningModel } from "../ai-model-capabilities";
 import { invalidateWorkflowCaches } from "../services/dashboardCache";
 
 function buildGoalScopeConditions(
@@ -769,8 +770,8 @@ app.post("/api/annual-planning/ai-distribute", asyncHandler(async (req, res) => 
           content: `Resurskapacitet: ${monthlyCapacityHours.toFixed(0)}h/månad med ${tenantResources.length} resurser.\n\nÅrsmål:\n${JSON.stringify(goalsSummary, null, 2)}\n\nAnalysera: Är fördelningen balanserad? Bör något justeras för att jämna ut arbetsbelastningen?`,
         },
       ],
-      temperature: 0.5,
-      max_tokens: 800,
+      ...(isReasoningModel(enforcement.model) ? {} : { temperature: 0.5 }),
+      max_completion_tokens: 800,
       response_format: { type: "json_object" },
     }), { label: "annual-goal-distribution" });
 

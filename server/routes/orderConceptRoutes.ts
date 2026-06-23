@@ -2182,7 +2182,7 @@ app.post("/api/order-concepts/:id/delivery-ai-help", asyncHandler(async (req, re
 
     const completion = await openaiClient.chat.completions.create({
       model: "gpt-5-mini",
-      max_tokens: 600,
+      max_completion_tokens: 600,
       response_format: { type: "json_object" },
       messages: [
         {

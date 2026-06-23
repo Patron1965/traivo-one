@@ -372,8 +372,7 @@ Svara ENBART med JSON-array av strängar, t.ex. ["Steg 1", "Steg 2"]. Skriv på 
           { role: "system", content: "Du genererar checklistor för fältservicetekniker. Svara alltid med en JSON-array av strängar." },
           { role: "user", content: prompt },
         ],
-        temperature: 0.6,
-        max_tokens: 500,
+        max_completion_tokens: 500,
         response_format: { type: "json_object" },
       });
 

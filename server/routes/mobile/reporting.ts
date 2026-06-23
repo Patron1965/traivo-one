@@ -104,7 +104,7 @@ app.post("/api/mobile/ai/chat", isMobileAuthenticated, asyncHandler(async (req: 
         },
         { role: "user", content: message },
       ],
-      max_tokens: 500,
+      max_completion_tokens: 500,
     }), { label: "mobile-chat" });
 
     const { trackOpenAIResponse } = await import("../../api-usage-tracker");
@@ -178,7 +178,7 @@ app.post("/api/mobile/ai/analyze-image", isMobileAuthenticated, asyncHandler(asy
           ],
         },
       ],
-      max_tokens: 300,
+      max_completion_tokens: 300,
     }), { label: "mobile-analyze-image" });
 
     const { trackOpenAIResponse: trackImg } = await import("../../api-usage-tracker");

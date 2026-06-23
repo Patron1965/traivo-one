@@ -23,6 +23,7 @@ import {
   createAICacheKey,
   invalidateAICache,
 } from "../ai-budget-service";
+import { isReasoningModel } from "../ai-model-capabilities";
 
 async function aiBudgetGuard(req: Request, res: Response, useCase: "planning" | "chat" | "analysis" = "chat"): Promise<{ tenantId: string; tier: string; model: string; blocked: boolean }> {
   const tenantId = getTenantIdWithFallback(req);
@@ -430,8 +431,8 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
         messages,
         tools,
         tool_choice: "auto",
-        max_tokens: 500,
-        temperature: 0.5
+        max_completion_tokens: 500,
+        ...(isReasoningModel(aiModel) ? {} : { temperature: 0.5 }),
       }),
       { label: "field-assistant" }
     );
@@ -464,8 +465,8 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
           messages,
           tools,
           tool_choice: "auto",
-          max_tokens: 500,
-          temperature: 0.5
+          max_completion_tokens: 500,
+          ...(isReasoningModel(aiModel) ? {} : { temperature: 0.5 }),
         }),
         { label: "field-assistant-tool" }
       );
@@ -727,8 +728,8 @@ app.post("/api/ai/service-patterns", requirePlanner, asyncHandler(async (req, re
           { role: "system", content: "Du är en AI-assistent för fältservice-planering i Sverige. Analysera servicemönster och ge en kort sammanfattning på svenska (max 3-4 meningar). Var konkret med siffror." },
           { role: "user", content: `Analysera dessa servicemönster:\n${dataContext}` }
         ],
-        max_tokens: 300,
-        temperature: 0.3,
+        max_completion_tokens: 300,
+        ...(isReasoningModel(guard.model) ? {} : { temperature: 0.3 }),
       }), { label: "service-patterns" });
 
       const { trackOpenAIResponse: trackSPResponse } = await import("../api-usage-tracker");

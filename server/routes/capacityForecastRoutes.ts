@@ -132,8 +132,7 @@ export async function registerCapacityForecastRoutes(app: Express) {
           { role: "system", content: "Du är en erfaren kapacitetsplanerare. Skriv koncist och praktiskt på svenska." },
           { role: "user", content: `Sammanfatta dessa topp-3 åtgärder för en planerare i 3-5 meningar med tydlig prioritering:\n\n${promptLines}` },
         ],
-        temperature: 0.4,
-        max_tokens: 280,
+        max_completion_tokens: 280,
       });
       trackOpenAIResponse(response, tenantId);
       const summary = response.choices[0]?.message?.content?.trim() || "Sammanfattning saknas.";

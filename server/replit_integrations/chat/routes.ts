@@ -77,7 +77,7 @@ export function registerChatRoutes(app: Express): void {
         model: "gpt-5-mini",
         messages: chatMessages,
         stream: true,
-        max_tokens: 2048,
+        max_completion_tokens: 2048,
       });
 
       trackApiUsage({ service: "openai", method: "chat.completions.stream", endpoint: "/v1/chat/completions", model: "gpt-5-mini", units: 1, metadata: { streaming: true } });

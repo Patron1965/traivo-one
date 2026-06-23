@@ -9,6 +9,7 @@ import { ValidationError } from "../errors";
 import { predictiveForecasts, iotSignals, iotDevices, objects, customers, workOrders, tenants } from "@shared/schema";
 import OpenAI from "openai";
 import { trackOpenAIResponse } from "../api-usage-tracker";
+import { isReasoningModel } from "../ai-model-capabilities";
 import { invalidateWorkflowCaches } from "../services/dashboardCache";
 
 const openai = new OpenAI({
@@ -234,8 +235,8 @@ export async function registerPredictiveRoutes(app: Express) {
               content: `Analysera dessa IoT-objekt och deras signalhistorik:\n${JSON.stringify(aiInputs.slice(0, 20), null, 2)}\n\nGe en sammanfattning av m\u00f6nster och rekommendationer.`,
             },
           ],
-          temperature: 0.3,
-          max_tokens: 500,
+          ...(isReasoningModel(enforcement.model) ? {} : { temperature: 0.3 }),
+          max_completion_tokens: 500,
         }), { label: "predictive-maintenance" });
         aiSummary = response.choices[0]?.message?.content || "";
         await trackOpenAIResponse(response, tenantId);
