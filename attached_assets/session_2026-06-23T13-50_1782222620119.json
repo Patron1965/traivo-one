@@ -1,0 +1,134 @@
+{
+  "sessionId": "d59132e16",
+  "exportedAt": "2026-06-23T13:50:12.697Z",
+  "summary": "### Key Topics Discussed\n- Practical checks for address data.\n- Handling missing street address information in object metadata.\n- Jobs that do not require a street address (e.g., customer garage in a large parking lot).\n- Schema for the new delivery register.\n- Connection to how selection time is marked.\n- Weekly scheduling for tasks.\n- System flow for calculating task slot times (e.g., Thursday and Friday, week 29).\n- Sorting task lists by type.\n- Assigning tasks to specific teams and executors (fine planning).\n- Route optimization based on requested/proposed delivery times.\n- Adjusting task scheduling in fine planning (drag and drop) if initial route optimization is inefficient.\n- Hard versus soft time recommendations for task scheduling.\n- Different planning modes in fine planning based on desired delivery times.\n- Planner's decision-making in fine planning regarding task order and potential risks.\n- Visibility of conflicting information (e.g., parking prohibitions, specific delivery times) within the system.\n- Ability to see multiple time slots for tasks.\n- Rescheduling jobs to a later week in rough planning if they cannot be completed in the current week.\n- Location of the refresh button/filter in the rough planning UI.\n- Grouping geographically and time-clustered tasks in rough planning.\n- Collapsing multiple tasks within a single stop (e.g., four recycling rooms in one residential area) for faster workflow and creating a grouping function.\n- Grouping tasks by address (e.g., Storgatan 22) and execution code.\n- System summarization of order value, cost, and production time for each task.\n- System automatically grouping multiple tasks of the same type at the same time and address into a \"cluster task\" with summarized values.\n\n### Decisions Made\n- The planner, potentially with the executor, will decide to reorder tasks in fine planning, accepting any associated risks. The system must display information like parking prohibitions or specific delivery times to support this decision.\n- Jobs that cannot be completed within the current week's schedule can be moved back to rough planning for scheduling in a subsequent week.\n- The refresh button/filter for rough planning will be located in the rough planning UI.\n\n### Important Points & Insights\n- The system should look for street address information in the object's metadata. If unavailable, it won't be able to determine the side (right/left) of the street.\n- The logic must be able to handle cases where a street address is not relevant or available, such as for a customer garage in a large parking lot.\n- The chosen time for a task is not marked directly; instead, tasks are placed on a weekly schedule.\n- The system calculates available slot times for tasks based on geographic location and delivery times, which then supports fine planning and task assignment.\n- Route optimization is the first step, based on requested delivery times.\n- If route optimization indicates inefficiency (e.g., excessive travel), tasks can be moved to different days (e.g., Tuesday) in fine planning using drag and drop.\n- The system provides soft recommendations for task scheduling, which can be overridden during fine planning.\n- Hard recommendations, such as a food store's opening hours (e.g., not before 9 AM and not after 4 PM), must guide fine planning directly due to strict time windows.\n- Fine planning may have different planning modes; the initial mode being planning based on desired or advantageous delivery times for tasks scheduled for the week.\n- Fine planning will summarize the travel route, which will be visible on a map, allowing users to identify and understand seemingly illogical routes (e.g., due to parking restrictions or specific time constraints).\n- The system needs to provide information such as parking prohibitions or specific desired delivery times to the planner and executor to inform decisions about reordering tasks in fine planning.\n- The system should allow users to view multiple available time slots for tasks.\n- If a job cannot be completed within the current week (e.g., due to time constraints like not being able to finish before 4 PM on Thursday), it can be returned to rough planning and rescheduled for the following week. This allows the planner to replace it with another job to optimize the current week.\n- Grouping tasks that are geographically and time-clustered in rough planning would improve efficiency.\n- The UI should support collapsing multiple sub-tasks (e.g., several recycling rooms) into a single logical stop to speed up the workflow.\n- The system can group a handful to 20 tasks, for example, 'roll-out bins', at a specific address like Storgatan 22, based on their execution code.\n- The system has an existing rough capability to sum up the order value, cost, and production time for each task, in addition to location and time.\n- When several tasks of the same type occur at the same time and location, the system will group them into a \"cluster task\" that summarizes the address, total order value, total production time, and total cost, making it clearer for the planner.\n\n### Open Questions/Pending Items\n- How to reduce the number of entities in rough planning (mentioned as a \"nice-to-have\" function).",
+  "conversation": [],
+  "transcripts": [
+    {
+      "text": "Ja, och då har vi några praktiska checkar där under punkten E. Ja, eh, under förutsättning då att gataadressen finns på objektets metadata för adress, ja, då kan den ju titta efter den informationen. Skulle då adressdatan, gataadress, inte finnas med där, ja, då får den ju då... Då vet den inte om det är på höger eller vänster sida då, utan då, då får den hantera det utifrån hur...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Utifrån...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Ja, det beror att det finns en viss position då. Och så kommer det också kunna vara att så det, vissa utav jobben, de behöver ju inte ha en gataadress. Det kan ju vara ett kundbaksgarage på en, en stor parkering och då, då finns ju inte det. Så, så logiken måste kunna hantera det där ändå. Exakt schema för nya leveransregistret då.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Koppling till sen hur valtid markeras. Ja, ja, till, till att börja med så, så tror jag ju då att, eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Eh, den valda tiden, den markeras ju inte, utan det blir ju då att man lägger ut det på en vecko-, eh, då, då, ve-veckoschema då. Och, och då kommer ju den här då, eh, så, så vi ser flödet då. Om systemet har räknat för en given uppgift så har systemet då räknat ut nu då att det finns en, en slottid här nu för att utföra den här uppgiften, säger vi utifrån tidigare exempel, eh, torsdag och fredag, vecka 29, säger vi då. Och det ser planeraren-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. Och, eh, ha-- Listan då med uppgifter är ju sorterade efter typ. Och, och han ser då att, eh, ja, men det går ju jättebra. Ja, då kommer han ju att lägga ut den här, tilldela de här uppgifterna då på ett visst team och en viss utförare då. Och då kommer vi in till nästa steg, det som vi kallar då finplaneringen då. Och, eh, det bästa är ju då att systemet baserat då på de här, den här geografiska platsen och baserat på de här leveranstiderna är ju att systemet då bara lägger ut de här...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Över veckans dagar då. Och sen ruttoptimerar man. Och första steget, nu, nu spårar vi lite granna ut, men vi måste liksom ha det aspekten. Alltså, första stegets ruttoptimering måste ju då bli att den går utifrån de leveranstider...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Som begärs eller är föreslagna då. Om man då konstaterar där då att: \"Nej, men det, det funkar inget bra. Vi får åka liksom x antal kilometer extra nu för att kunna göra det här jobbet på torsdag och fredag.\" Ja, då kommer man ju i finplaneringen att med drag and drop då att dra det här jobbet då till, eh, säger vi tisdag då. Och då behöver man ju då gå in på objektet här då för att se varför skulle vi då göra det på torsdag? Jo, det är därför att vi har en mjuk, eh, rekommendation då att...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "I form av att det är tömning då och då. Men det skulle ju också mycket väl kunna vara en hård rekommendation då som säger... Det här är en livsmedelsbutik som säger då att: \"Nej, men ni, vi är öppna först klockan nio på morgonen och ni får inte komma efter klockan sexton på eftermiddagen för då har vi inte möjlighet.\" Och då är ju det en hård tids... Ett hårt tidsfönster. Och då, då måste ju då för finplaneringen guida i det då. Eh, sen i finplaneringen när vi ändå har svävat ut där så blir det ju då på något vis att finplaneringen...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Kanske har olika planeringslägen. Det första planeringsläget är ju då att du, du planerar utifrån önskad eller fördelaktig eller kräv leveranstid då, utifrån det som du har lagt ut på den veckan. Och då kommer ju den här finplaneringen att summera ihop då en viss färdväg och man kommer ju då att kunna se det här på kartan. Och då kommer man ju att se, men det här är ju jättekonstigt. Ska vi åka såhär? Ja, vi måste tydligen åka så därför att det är ett parkeringsförbud eller det är en viss tid och vi ska hinna det här då.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och i finplaneringen så blir det ju då ett beslut för planeraren att man, och kanske också utföraren då, att man lägger det här i en annan ordning då. Men då får man ju så att säga ta risken själv och systemet måste ju då öppna då informationen så att man ser då att det är ett parkeringsförbud eller det är en önskad leveranstid i butiken då som gör att man kan inte göra det här på onsdag innan, utan det måste göras på torsdagen därför att annars blir det då en tidskonflikt då. Eh, så här har vi ju då liksom valt...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "I de här lägena så, så blir det ju också då att man måste kunna se i systemet då om det finns flera slottider, om vi nu väljer att kalla de här möjliga tidsfönsterna då som slottider då att ja... Och då kan man ju komma i ett läge då man så att säga skjuter tillbaka jobbet då till grovplaneringen för att sen lägga det nästa vecka därför att man hinner inte till exempel utföra ett jobb före klockan fyra på torsdag. Och då kan man ju komma i ett läge då planeraren då tar tillbaka det jobbet och lägger dit ett...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Ja. Annat jobb då för att kunna göra veckan optimerad då.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Sen har du då fråga nummer tre: Var i grobplanerings... eh- UI:et. UI:et, alltså eh, användargränssnittet, ska den sitta? Ja, förmodligen så ska den ju sitta då, eh, uppe i filtret eller i anslutning till filtret då i grobplaneringen. Mm. Så att man har en knapp där när man refreshar då och zo-zoomar in då i det här. Eh, utifrån det här grobplaneringsperspektivet också så kommer det ju då kunna finnas, och det är väl kanske en, en nice-to-have-funktion då, men där man för att minska antalet-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. -uppgifter så, så, så med det här stödet då som blir ju då att tidsmässigt och, och geografiskt hopklumpade uppgifter bör kanske då ha ett, en, en möjlighet i grobplaneringen att man liksom tjofar ihop dem- Mm. -eh, alltså gör dem som en...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Eh, alltså en uppgift som består utav många. Det kan ju vara, eh, ett bostadsområde liksom som den här klassar som ett stopp, men det, det kanske är fyra återvinningsrum. Mm. Mm. Och då bör man ju då i det här UI:t då kunna hantera, alltså kollapsa det här och se jobbet. Det gör ju att det går snabbare då att, att jobba helt enkelt. Mm. Mm. Och att det då...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Skapar en grupperingsfunktion. Mm.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Det kan ju alltifrån en handfull uppgifter till 20 uppgifter då grupperas då till, eh, Storgatan 22, eh, uppgifter av utförandekod.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Rullbara kärl till exempel. Och då, då står det liksom bara adressen och sen så blir det ju då att systemet summerar då ordervärdet. Det har vi inte pratat om här, men bakom, bortsett från, från, från platsen då och tiden, så har ju, har ju då varje uppgift då ett ordervärde och den har en kostnad och den har framför allt det viktigaste över allt då, en, en produktionstid då. Så, så då, då kan ju systemet då summera de storheterna då för respektive uppgift naturligtvis. Det finns redan en grov, grov, eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Planeringen, men att du har en, en och flera uppgifter av samma typ på samma tid och klumpas ihop till en, ja, då döper systemet det till en klumpuppgift med adressen och summerat ordervärde och summerat, summerat produktionstid och, och summerat kostnad också kan ju åka med då på, på en...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. På samma då. Och då blir det ju då väldigt tydligt för planeraren här att sitta och...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    }
+  ]
+}

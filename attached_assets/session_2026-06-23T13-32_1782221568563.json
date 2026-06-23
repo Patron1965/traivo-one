@@ -1,0 +1,92 @@
+{
+  "sessionId": "d221d5699",
+  "exportedAt": "2026-06-23T13:32:37.575Z",
+  "summary": "### Key Topics Discussed\n- Utvärdering och frågor inför byggstart för en ny tjänst eller produkt.\n- Användning av Googles plattform och API för karttjänster, specifikt sidvisning av gatan.\n- Implikationer av gatunumrering (udda/jämna) för karttjänster i Sverige.\n- Frågeställningar kring tidsmotorns funktionalitet och tidsspann för planering.\n- Lagring av information gällande uppgifter, platser, utförandekoder och leveranstider.\n- Hantering av dynamiska och multipla leveranstider.\n- Fordons- och teamberoenden för uppgiftsmotorn och grovplanering.\n- Teamets hantering av tilldelade uppgifter, specifikt veckovisa uppgifter.\n- Anpassningsbara parametrar för ruttoptimering per team, såsom radie för uppgiftsklumpning och gatuberoende (höger/vänster).\n\n### Decisions Made\n- Beslut att använda Googles API för karttjänster, trots att gratisvarianter används idag.\n\n### Important Points & Insights\n- Googles navigation och karttjänster ligger till grund för den kommande lösningen.\n- I Sverige är det 99% sannolikhet att udda gatunummer finns på ena sidan och jämna på den andra.\n- Uppgiftslistan för tidsmotorn kan vara flera år lång, men planeraren arbetar sannolikt inom den närmsta månaden.\n- Tidsmotorn bör kunna köras \"on demand\" och ha en inställbar tidsram, exempelvis en månad framåt, med möjlighet att justera till längre tidsperioder.\n- Planeraren kan sitta och planera för perioder längre fram i tiden, t.ex. oktober även i juni, vilket tidsmotorn behöver kunna hantera.\n- Idealet vore att tidsmotorn arbetar kontinuerligt, men kan behöva begränsas för att spara processorkraft givet en potentiellt mycket lång uppgiftslista.\n- Uppgiften kommer att innehålla plats, utförandekod och leveranstider.\n- Systemet kommer dynamiskt att lägga till leveranstider, antingen som en ny post på uppgiften eller i ett separat register för multipla leveranstider.\n- Tidsmotorn kan konstatera flera (\"fyra eller åtta\") fördelaktiga leveransperioder för en uppgift eller grupp av uppgifter efter körning.\n- Uppgiftsmotorn är avsedd för grovplanering och ska kunna hantera tusentals uppgifter under en mycket lång period.\n- Team kommer att hantera enbart tilldelade uppgifter, veckovis.\n- Det finns potential att anpassa ruttoptimering baserat på teamets användarprofil, inklusive faktorer som hur snabb man är och teamets preferenser för uppgiftsgruppering, t.ex. \"höger-vänster beroende på gator i en radie av 20 meter\" eller \"en radie på 100 meter utan gatuberoende\".\n\n### Open Questions/Pending Items\n- Det finns fortfarande \"funderingar och svar på öppna frågor att reda ut innan bygge\" även om en del diskussioner har ägt rum.\n- Hur långt fram i tiden tidsmotorn ska arbeta är en öppen fråga, beroende på planeringsstrategi och planerarens behov av att styra vilka jobb den ska arbeta med.\n- Var den dynamiska leveranstidsinformationen ska lagras (direkt på uppgiften eller i ett separat register) är en öppen fråga.\n- Ytterligare diskussion behövs angående Fordons- och teamberoenden (fråga fyra) då detta inte har diskuterats i detalj ännu, även om teamperspektiv för uppgiftsklumpning har berörts.",
+  "conversation": [],
+  "transcripts": [
+    {
+      "text": "Ja. Här kommer lite s-- eh, funderingar och svar på öppna frågor att reda ut innan bygge.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Ja, och fråga ett är då sidan av gatan i dag då. Ja, det kommer då, tror vi då, att Googles, eh, eh, navigations... Ja, vi, vi kom... Ja, vi, vi, vi kommer ju att använda Googles plattform och framtidighet och Googles API när det gäller karttjänster. Idag kör vi ju, eh, gratisvarianter utav karttjänster, men, eh, eh, vi kommer med största sannolikhet köra den, eh, API-tjänst som Google har",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "som, eh, innebär också då en kostnad givetvis då. Men annars för att svara på det där så i Sverige så är det då till nittionio procents, eh, sannolikhet på det sättet att udda gatuadress är på den ena sidan av gatan och jämnt gatunummer är på den andra sidan. Så det innebär då att, eh, alla udda nummer är då utifrån det här sättet att se det i en körning och alla, eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Jämn-- Icke udda nummer då är den annan då. Eh, när och var ska tidsmotorn köra? Fråga nummer två. Ja, en annan intressant fråga här är ju också hur långt fram i tiden ska tidsmotorn arbeta då? För att teoretiskt sett den här uppgiftslistan, den kan ju vara flera år lång och rimligtvis då så jobbar ju då planeraren kanske inom den närmsta månaden då. Så att jag, jag tror att man, lite beroende på hur man planerar här och vad-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm ...man planerar så borde man då ha en knapp här i grovplaneringen där man, eh, nummer ett kan köra tidsmotorn- Mm ...on demand så att säga, när man vill, vill räkna om då. Och sen så bör man kunna ställa in då i en liten meny där då, där man, där man säger att tidsmotorn ska jobba kanske en månad framåt då. Men det kan ju också vara som så att man av något skäl vill ha längre tid då, eh, före den här optimeringen och då, eh, ska man då kunna, kunna justera det. Se-sen-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm ...är det också bara på det sättet då att man börjar att göra listan? För det kan ju också vara i ett sånt läge då så att, så att, eh, planeraren sitter... Nu har vi, är vi då, eh, 20 juni här, men planeraren kan ju sitta och planera oktoberkörningen i dag då och då, då behöver han ju liksom då styra så att den här tidsmotorn jobbar med de, de jobb som, som är aktuella på honom då. Så här behöver då systemet då... Eh, det här är ju också... Det bästa vore ju naturligtvis att tidsmotorn jobbar hela tiden-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm ...med alla, men det kanske slöser i med processorkraft och så att man bör begränsa den här då eftersom den här listan är... Kan vara väldigt, väldigt lång då. Eh, sen finns då den här frågan, eh, var ska den här informationen då lagras nånstans då? Och, och som jag ser det då så blir det väl liksom att uppgiften innehåller ju då platsen och utförandekoden och då de här leveranstiderna. Och så systemet får väl i såna fall då lägga på då-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm ...dynamisk leveranstid då baserat på det. Antingen på uppgiften då med, med en ny post där då eller att den har ett, ett register till då med de här leveranstiderna. För det kan ju också vara flera leveranstider då. Så- Mm ...s-s-så när, när uppgiftsmotorn har kört det här så kan den ju konstatera då att det finns, det finns då för, för en viss uppgift eller en grupp av uppgifter då. Så, så har du alltså kanske fyra eller åtta fördelaktiga leveransperioder då-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm ...under huvudleveransperioden då. Och det, det kan ju vara vettigt att lägga dem då i ett, i ett, i ett separat register då.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och det var väl svar på, på fråga tre det här då?",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. Eh, och sen så har vi då fråga fyra då, fordons, eh, beroende då, eller teamets då. Och det, det kan jag tänka mig då att, eh, vi har inte kommit så långt ännu då, men, men, men, eh, eh, till att börja med så... Den här uppgiftsmotorn... Nu, nu tänker vi oss att uppgiftsmotorn jobbar för grovplaneringen som ska kunna hantera massor, tusentals uppgifter under väldigt, väldigt lång tid då. Eh, när man då kommer in i-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm ...teamperspektivet då, det använder vi för teamet och så kommer ju de till att börja med då att enbart han-hanterar tilldelade uppgifter och tilldelade uppgifter veckovis då. Mm. Så där skulle man då kunna tänka sig att, att, att man alltså i sin användarprofil då, eh, tillsammans med kanske annan anpassningsinformation då att man går in. Det kan, det kan ju vara liksom hur, hur snabb man är. Eh, det kan ju finnas andra premisser mot ruttoptimeringen då, eh, så att man kan alltså-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm ...gå in då och, och i ett anpassningsfält eller vad man ska säga- Mm ...då kunna slå in då här och säga att: \"Ja, vi samlar gärna uppgifterna, eh, höger-vänster beroende på gator, eh, i en radie av 20 meter.\" För det passar då det teamet och den, den, den, den typ av körning de kör. Medan en annat team då, de kanske har en radie då på utifrån den körning som de kör, en radie på 100 meter och inte höger- eller vänstergateberoende då. Mm. Och att man då styr det i den r",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "- Mm ...själv för att få-- klumpa ihop jobben i sin användarvid då som, som utförare.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    }
+  ]
+}

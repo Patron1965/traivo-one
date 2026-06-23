@@ -1,0 +1,170 @@
+{
+  "sessionId": "26081b73a",
+  "exportedAt": "2026-06-23T12:57:51.284Z",
+  "summary": "### Key Topics Discussed\n- Grundläggande funktioner i Åre-konceptet, inklusive skapande av uppgifter från order och koppling till geografimotor.\n- Leveranstider och tidsfönster i orderkonceptet, med variationer från dagar till exakta minuter, samt komplexa tidsvillkor.\n- Diskussion om en \"tidsmotor\" och en \"geografisk motor\" för uppgiftslistans hantering.\n- Sortering av uppgiftslistan baserad på önskad/möjlig leveranstid.\n- Koppling mellan tidsmotorn och uppgifters utförandekod.\n- Sammanfogning av uppgifter med samma utförandekod, både tidsmässigt och geografiskt.\n- Gruppering av uppgifter baserat på tidsmässiga och geografiska fördelar för att effektivisera utförarens arbete.\n- Utmaningar med geografisk gruppering, särskilt för uppgifter på motsatta sidor av en gata, men med nyanserad diskussion om effektivitet i sådana fall.\n- Behov av en tidsmässig optimeringsmotor som hanterar komplex tidsinformation.\n- Systemets hantering av kundoberoende uppgiftsgruppering.\n- Hantering av beroendeuppgifter som kräver specifika förberedelser (t.ex. nyckel) för att kunna utföras.\n- Möjligheten att gruppera uppgifter för olika kunder på samma geografiska plats eller i närheten, för att optimera logistiken med en bil som utför flera jobb som resulterar i olika fakturor.\n\n### Important Points & Insights\n- Åre-konceptet genererar en eller flera uppgifter från en order.\n- Uppgifter kan vara geografiskt kopplade till ett objekts plats eller lagerplatser, eller sakna geografisk koppling.\n- Orderkonceptet hanterar önskade leveranstider och parallella tidsfönster som följer med uppgiften från objektet.\n- Varje uppgift kommer att ha en artikel som beskriver vad som ska göras, baserat på en logik, samt en utförandekod som specificerar vem som kan utföra uppgiften.\n- Uppgifterna kommer att ha en eller flera möjliga leveranstider från orderkonceptet/objektet, varierande från flera dagar/veckor/månader till specifika start- och sluttider ner till minuter.\n- Tidsvillkor kan inkludera breda perioder (t.ex. mars och april) samt mer specifika begränsningar (t.ex. ej efter kl. 16, eller endast onsdagar-fredagar baserat på kärltömning).\n- En geografisk position där uppgiften ska utföras är ofta associerad med uppgiften, men inte alltid.\n- Den tidsmässiga motorn bör kunna skapa en första möjlig leveranstid för en eller flera uppgifter med samma tidsinformation och måste arbeta aktivt.\n- Tidsmotorn ska sammanställa komplexa tidsvillkor (önskad leveranstid, dagliga begränsningar, veckodagar) för att sedan föreslå en sammansatt möjlighet.\n- Flera uppgifter kan ha samma tidsvillkor.\n- Uppgiftslistan (to do-listan) sorteras i den ordning som är en önskad eller möjlig leveranstid.\n- Tidsmotorn kommer att spela en avgörande roll för att tilldela leveranstider baserat på kundens önskemål och övriga tidsstyrningar.\n- Om en uppgift flyttas framåt i tiden, ska tidsmotorn aktivt uppdatera dess position i listan.\n- Tidsmotorn behöver också beakta uppgiftens utförandekod.\n- Uppgifter med samma utförandekod kan klumpas ihop tidmässigt och geografiskt för att utföras i anslutning till varandra.\n- Systemets grundläggande syfte är att saker ska göras på rätt tid och på rätt plats.\n- En order kan innehålla uppgifter som ska utföras av olika team, vilket innebär att de har olika utförarekoder och splittas i deluppgifter.\n- Tidsmotorn har i uppgift att analysera tidsinformation och ta hänsyn till utförandekoden.\n- Geografimotorn ska gruppera uppgifter efter tidsmässigt fördelaktiga tider och geografisk närhet efter att orderkonceptet skapat alla uppgifter.\n- Uppgifter med samma utförandekod, samma tidsmässiga villkor och samma gatuadress kan med fördel grupperas till en arbetsorder.\n- Geografisk gruppering kan även ske baserat på longitud- och latitudperspektiv.\n- En för generell radie (t.ex. 30 meter) för geografisk gruppering kan leda till problem om uppgifter på motsatta sidor av en gata klumpas ihop, men det kan i vissa fall vara effektivitetsmässigt fördelaktigt att hantera båda sidorna av en gata samtidigt.\n- Systemet behöver en tidsmässig optimeringsmotor som tar hänsyn till olika tidsinformation för att bestämma en första möjlig leveranstid.\n- Systemet ska klumpa ihop jobb av samma utförandetyp som ligger nära varandra för att effektivisera utförarjobbet.\n- Systemet tar inte hänsyn till kunden vid gruppering av uppgifter; snarare grupperas uppgifter utifrån utförandetyp och geografisk närhet, även om det innebär att uppgifter för olika kunder eller på olika sidor av gatan klumpas ihop, så länge det är effektivt.\n- Beroendeuppgifter, som kräver specifika förberedelser som att hämta nyckel, ska hanteras.\n- Det kan vara realistiskt att två kunder har objekt på samma eller närliggande geografisk plats, vilket möjliggör att samma bil utför flera uppgifter för olika kunder. Dessa uppgifter dokumenteras och genererar sedan olika fakturor.\n\n### Open Questions/Pending Items\n- Det nämndes att det kan finnas alltifrån en enkel, simpel uppgift, men det fullständiga resonemanget kring detta avbröts.\n- Ytterligare diskussion behövs om den \"geografiska motorn\", inklusive justeringar för longitud och latitud, och hur den hanterar komplexa scenarier som uppgifter på olika sidor av en gata för att undvika ologisk gruppering, med beaktande av effektivitetsaspekten för att hantera båda sidorna av en gata.\n- Hur den tidsmässiga motorn hanterar komplexa och aktiva leveranstider för uppgifter, särskilt när uppgifter flyttas och omplaneras.",
+  "conversation": [],
+  "transcripts": [
+    {
+      "text": "Då. Ja, då är vi up and running. Ja, och då ska vi ta och göra en, kan man säga, beskrivning utav, eh, ja, egentligen grunden i det här systemet, hur, hur Åre-konceptet skapar då uppgifter. Grunden i systemet är att vi lägger en order via Åre-konceptet som då föder en eller flera uppgifter, i många fall geografiskt kopplade till, till...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Objektets plats, men inte nödvändigtvis, för det kan finnas då uppgifter som är kopplade till lagerplatser eller inte har någon geografisk koppling då. Eh, och sen har vi dessutom i orderkonceptet då önskan om leveranstider då och flera parallella tidsfönster som uppgiften tar i-- Med sig från objektet då. Så det kan alltså finnas alltifrån en enkel, simpel...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Leveranstid, eh, antingen, eh, flera dagar, veckor och kanske flera månader till då en leveranstid som, som är specificerad på en särskild dag ner till en särskild start- och sluttid och, och timmar och kanske rent utav minuter då. Men sammanfattningsvis då så, så kommer det ju då att skapas uppgifter och alla uppgifter har då förutom då själva artikeln som beskriver vad som ska göras utifrån den logiken.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och då-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm ...den utförandekod som finns då, det vill säga vem som kan utföra uppgiften, så kommer då varje sån här uppgift att ha med sig då ifrån orderkonceptet respektive objektet då en önskad eller flera möjliga eller omöjliga leveranstider. Och det kanske då enklaste då, en geografisk position, eh, i många fall, men inte alla då, där uppgiften ska göras. Och för att kunna hantera-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm ...det här i då den här to-do-listan eller uppgiftslistan, så skulle vi behöva resonera mer räckligt då här om inte den bättigaste lösningen är att skapa, eh, det som jag kallar då en tidsmotor respektive en geografisk motor. Och om vi börjar med den geografiska motorn då, så... Nej, fel. Vi börjar med den tidsmässiga motorn. Om då...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Den tidsmässiga motorn kan då för en uppgift, eh, eller flera uppgifter då med samma tidsinformation skapa en första möjliga leveranstid då. Eh, och det som är lite lurigt med det här är då det är att den här motorn måste liksom jobba aktivt för att om jag tar ett exempel här nu då bara för att måla upp det här, så kan ju alltså för en eller en grupp av uppgifter så",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "kan ju då leveranstiden vara, eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "flera månader. Det kan ju då vara, eh, mars och april som le-- det är tillåten leverans då. Men samtidigt så finns det då uppgifter som säger att jobben kanske inte får utföras efter klockan 16 på dagarna. Eh, men ja, det vill säga, det finns en positiv tid där vi säger då att det kan-- de kan utföras mellan klockan nio på morgonen och 16 på eftermiddagen och under hela januari eller mars och april.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Eh, och sen så kanske det då finns information att det är tömning av kärlen på tisdagar, vilket innebär att vi tycker att det är positivt att vi utför uppdraget på onsdagar och torsdagar och fredagar. Så sammantaget för en uppgift då så, så kommer det då att finnas i det här fallet då tre tids, eh, villkor eller ti-- tre tidsönskemål. Den generella önskan-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. -leveranstiden är, säger vi då, mars, april. Och det önskas då inte tvättas före klockan nio på morgonen och inte efter klockan sexton på eftermiddagen. Och sen så önskas det tvättas to-- o-onsdagar, torsdagar och fredagar baserat på tömningen. Och det den här motorn då, tidsmotorn, ska göra, det är då att den ska sammanställa den där informationen och ge den här eller den här gruppen då-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm ...uppgifter. För det kommer ju att vara uppgifter som har samma, samma, sa-samma tidsvillkor. Eh, kommer ju att kunna finnas fl-flera då som har det. Och sen så ko-- försöka då att föreslå då...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Den första tiden då så att den kan sorteras in då. För grund-grunden i den här u-utförandelistan eller uppgiftslistan, to do-listan med alla uppgifter som ska utföras är att den sorteras i den ordning då det är en önskad då eller möjlig leveranstid då. Så den här motorn behöver liksom då hjälpa till då och, och ge de här då en, en, eh, leveranstid. Och den, den ska ju naturligtvis i första hand då baseras på den önskade leveranstiden från k",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "unden. Och sen så kommer då de här, eh, övriga leverans... tidsstyrningarna till då. Så där har vi den här tidsmotorn. En lurig grej i det då är ju att om den har sorterat in det här nu då, säg den första torsdagen i mars då och, och lagt den i listan. Ja, då ser vi ju då att det är jättebra att kunna göra den första torsdagen i mars. Men om vi då flyttar denna uppgiften och, och, och skjuter den framåt så ska ju den då helst hoppa fram. Alltså att den här motorn då ser: \"Ja, nej, det, det gick inte.\"",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Att göra det här den första torsdagen i mars, utan den blev framskuffad till april då. Och då ska den ju liksom då hoppa fram. Ja. Torsdag, torsdag, fredag, torsdag, fredag, eh, nio till sexton. Hop, hop. Ja. Hop då. Och sen parallellt med den här tidsmotorn. De här grejerna hänger ju då ihop då. Så behöver då den här tidsmotorn också titta då på vilken utförandekod det är på, på uppgiften.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Ja, för att en...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "En uppgift, eller rättare sagt flera uppgifter med samma utförandekod, kommer ju då mest troligt att kunna utföras i anslutning till varandra tidsmässigt, men också geografiskt då. Så de kan man ju då klumpa ihop. Och sen kommer det, grunden i det här systemet är ju att saker ska göras på rätt tid och på rätt plats. Och den sista aspekten i det här är då...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Det första kan jag, tidsboten då som har till uppgift att försöka få ihop då och analysera det här tidsinformationen som finns på uppgiften, eh, och även ta hänsyn till utförandekoden då. Och den nästa di-- bit då är en geografi-motor då. Eh, för att uppgifterna här nu då... På något vis har vi ju en order då som beskriver vad som ska göras. Men den ordern kan ju då utf-- innehålla uppgifter som inte utförs av samma team då, det vill säga de har ju olika utförare.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. Och, eh, så det innebär att de splittas ju då i olika, eh, deluppgifter då. Och det, det är då den här tidsmotorn och nu den här geografi-motorn ska göra är ju att efter då att orderkonceptet har skapat mängder utav uppgifter då, alltifrån en uppgift till hundratals uppgifter då, är ju då att försöka då gruppera de här utifrån tidsmässiga fördelaktiga tider och även klumpa ihop dem geografiskt då. Så den är ju-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm ...geografi-motorn behöver då liksom titta då på... Ett sätt att se det här är ju alla uppgifter då som har samma utförandekod och samma tidsmässiga villkor och som finns på samma gatuadress kan man ju då med fördel gruppera ihop till en arbetsorder då. Mm. Och sen skulle man ju då kunna hårdkoda det här utifrån då ett longitud- och latitudperspektiv då. Så skulle man kunna tänka sig då att, eh, och det här kanske man behöver justera då lite grann, men man skulle kunna tänka sig-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm ...då att alla uppgifter som in-- befinner sig då inom en tjugo till trettio meters radie är då på samma plats och ska då finnas på samma uppgift för utföraren då. Sen kan det ju då ställa till då lite grann, det kan-- För att ibland finns det ju då avfallshjälp på både höger och vänster sida av gatan då. Och, och då kommer man ju in då i, i det här att om du jobbar då på den ena sidan av gatan så är det ju inte säkert att du kan jobba på den andra sidan av gatan då.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. Eh, därför att du kan inte dra kärlen över gatan helt enkelt då. Eh, och, och då skulle ju det där kunna vara då en fråga då. Så det innebär ju då att om vi har en för generell trettio meters radie så kommer det ju då klumpa ihop så att säga jobben som är på andra sidan gatan och du får då en väldigt konstig situation då där du får liksom dra kärlen över där då. Men- Mm ...genom att skapa en sån här geografi... motor då, eh, så, så finns ju då en möjlighet att vi kan klumpa ihop det här. Och för att också då motsäga mig själv då",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "- Mm ...kan det ju faktiskt vara effektivitetsmässigt bra då att ta och kunna tvätta på båda sidorna av gatan när man kör så att säga från öster till väster. Eller, eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Efter den här gatan då. För det kanske går snabbare då än att man kör på vänster sida först och tvättar alla tjänar för att sen vända och köra tillbaka då. För det kan ju vara en liten gata och då går det alldeles utmärkt att rulla över tjälen då på det. Men hur som helst, samman-- Om vi ska sammanfatta det här så behöver systemet här nu ta fram då en, eh, en, en tidsmässig optimeringsmotor som försöker ta hänsyn till de här olika tidsinformationen och, och bestämma då en första...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "tänkbara tidsperiod utifrån då ett större tidsfönster och grupperat då utifrån då utförandekod. Och samtidigt då, antingen i samma motor, det kanske är samma motor som gör det här, så ska den också då ta hänsyn då till att geografin här då, de som en nä-- Jobb som är li-- Av samma utförandetyp och ligger nära varandra, de ska klumpas ihop då av den enkla anledningen att då blir ju det då ett enklare jobb för utföraren.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och här kommer jag upp så en sån här... Bara för att sätta systemet på sin spets då, är ju att systemet tar ju inte hänsyn till, i det här fallet då, vem som är kunden. Utan- Nej. Utan om du har en massa uppgifter här, det är hypotetiskt, så kan du ju liksom ha, eh, kanske en kund på vänster sida av vägen och en kund på höger sida av vägen eller två kunder på samma adress som då har ett antal uppgifter som är tilldelat till den, till den här. Och då väljer systemet att klumpa ihop de här till en-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. Uppgift. Eh, eventuellt och så är det beroendeuppgifter att man måste ha nyckel med sig och så vidare för att komma in. Men det kan ju vara fullt realistiskt då att du har alltså två kunder som har objekt på samma geografiska plats eller adress, eller åtminstone i närheten av varandra. Så det blir alltså samma jobb för bilen. De slutför bara ett visst antal uppgifter och de dokumenteras i systemet och sen så, eh, flödar de vidare i systemet och, och blir då olika fakturor. Medan-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    }
+  ]
+}

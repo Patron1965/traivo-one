@@ -1,0 +1,56 @@
+{
+  "sessionId": "4c1da457d",
+  "exportedAt": "2026-06-23T13:13:53.399Z",
+  "summary": "### Key Topics Discussed\n- Utmaningen att förstå en uppgift.\n- Förbättringar för tydlighet i uppgiftslistan, specifikt gällande tidsmotor och geografisk radie.\n\n### Open Questions/Pending Items\n- Behovet av att lägga till två kompletteringar:\n  - Om tidsmotorn föreslår en utförandetid i uppgiftslistan, behöver det finnas en visuell tydlighet som anger den föreslagna tiden (t.ex. vecka 30, torsdag och fredag), eller ett slutdatum (t.ex. vecka 35).\n  - Det bör finnas en kolumn för förslagen.\n  - Möjlighet att högerklicka för att se hur tidsmotorn har baserat förslaget.\n- Förtydligande gällande 30-metersradien:\n  - Behov av en inställning för radien.\n  - Kopplingen mellan inställningen och vilket team som utför uppgiften behöver adresseras, trots att uppgiftslistan inte vet vilket team som ska utföra uppgiften i nuläget.",
+  "conversation": [],
+  "transcripts": [
+    {
+      "text": "Hallo? Jo, hallo. Ja. Ja, det känns ju som att, eh, uppgiften har uppfattats och utmaningen med det där. Men vi skulle behöva lägga till två stycken kompletteringar här, eh, och det ena är ju då att om den hära...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Motorn då, om det nu är, ja, framför allt tidsmotorn då, föreslår då en utförandetid i, eh, uppgiftslistan då, så behöver den ju liksom... Det behöver ju då finnas en, en tydlighet här visuellt då att det står: \"Den föreslås att den ska göras då, säger vi, eh, vecka 30, eh, torsdag och fredag\", säger vi då, va. Men då bör det ju också då i en kolumn indeed där kunna stå då att den...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Den, den ska kunna utföra... Eller det, det är inte slutdatumet för den, utan den, den kanske kan utföras då, eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Nästa vecka, torsdag och fredag också då. Eller att man då skriver då att det är ett slut, slutdatum vecka 35 eller nåt sånt. Och sen att man får högerklicka då och få fram en dialogruta om man då i vissa fall är nyfiken hur, hur, hur den här... Motorn gör. Ja, ja. Vad, vad motorn har baserat förslaget på då. Eh, sen en annan förtydligande då, det här med, med den här 30-metersradien då. Där tror jag att man måste alltså ha en, en, en inställning då...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Ja, och egentligen skulle den inställningen då hänga ihop vilket, vilket team som utför den här, men eftersom uppgiftslistan inte vet vilket team det är då som ska göra uppgiften i det här läget, så, så är inte det möjligt då. Men, men, men man kanske ska ha en inställning då där man ser att, att, eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Så är det rent sett då så, så, så hanterar den så att säga jobb på höger och vänster sida om vägen som har olika jobb då. Men däremot om man har samma adress eller man kan hitta en lokal adress, till exempel Storgatan 22 då, så att alla jobben som på något vis kan härledas till Storgatan 22 på vänster sida om vägen blir då ett jobb oberoende av kund och, och, och, och, eh... Men, men grupperat efter utförandetyp då. Eh, och sen så säger-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. -vi då att det finns två gat- och byggtre på den andra sidan, ja, då grupperas de som ett jobb. Och att det då är default läge för planeraren. För att i vissa lägen så kommer det ju inte att vara säkert att springa över gatan och vissa s-lägen så är det inte praktiskt möjligt därför att om det är en kranbil, då så kommer ju den då liksom bara kunna jobba på höger sida om, om gatan för man kanske inte har möjlighet att lyfta varorna eller utrustningen över gatan då. Det blir inte säkert.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    }
+  ]
+}
