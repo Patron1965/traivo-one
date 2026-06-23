@@ -62,9 +62,8 @@ export function invoiceModelToUiMethod(model: string | null | undefined): UiInvo
   return model === "subscription" ? "abonnemang" : "efterfakturering";
 }
 
-// Task #1056: EN faktureringsfrekvens för hela konceptet (ersätter det tidigare
-// dubbla invoicePeriod + billingFrequency). Värdet skrivs till BÅDA kolumnerna
-// vid spar så att runtime (abonnemangs-/schemamotorn) fortsätter fungera.
+// Task #1056/#1064: EN faktureringsfrekvens för hela konceptet. Värdet skrivs till
+// EN kolumn (billingFrequency) — invoicePeriod är avvecklad (contract-steget).
 export const INVOICE_FREQUENCIES = ["monthly", "quarterly", "yearly"] as const;
 export type InvoiceFrequency = typeof INVOICE_FREQUENCIES[number];
 

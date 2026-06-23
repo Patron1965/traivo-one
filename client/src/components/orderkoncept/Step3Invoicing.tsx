@@ -19,8 +19,8 @@ import {
 // Task #1056: Ihopslagen fakturabild — ALLA fakturafält på EN skärm.
 //  1. Referens (Er referens / Er beteckning) ELLER metadatabaserad referens.
 //  2. Faktureringsmetod — bara TVÅ val: Efterfakturering / Abonnemang.
-//  3. Faktureringsfrekvens — EN gång för hela konceptet (skrivs till både
-//     invoicePeriod och billingFrequency vid spar).
+//  3. Faktureringsfrekvens — EN gång för hela konceptet (skrivs till EN kolumn,
+//     billingFrequency; invoicePeriod är avvecklad — Task #1064).
 //  4. En metadatabaserad referens BLIR automatiskt ett fakturastopp (en faktura
 //     per unikt metadatavärde) — samma mekanism, ett ställe.
 interface Step3State {

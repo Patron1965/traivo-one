@@ -74,10 +74,10 @@ function emptyResult(): AutoRunResult {
   };
 }
 
-// Stegmånader per faktureringsperiod — samma härledning som /execute:
-// billingFrequency (monthly/quarterly/yearly) har företräde, annars invoicePeriod.
-function stepMonthsFor(period: string, freq: string): number {
-  return freq === "yearly" ? 12 : freq === "quarterly" ? 3 : period === "quarterly" ? 3 : 1;
+// Stegmånader per faktureringsfrekvens — samma härledning som /execute.
+// Task #1064: billingFrequency (monthly/quarterly/yearly) är enda källan.
+function stepMonthsFor(freq: string): number {
+  return freq === "yearly" ? 12 : freq === "quarterly" ? 3 : 1;
 }
 
 async function loadConceptFilterInputs(conceptId: string) {
@@ -167,9 +167,8 @@ async function runSubscriptionConcept(
       isFromMetadata ? customerIdForObject(objId) : concept.customerId,
   });
 
-  const period = (concept.invoicePeriod as string) || "monthly";
   const freq = (concept.billingFrequency as string) || "monthly";
-  const stepMonths = stepMonthsFor(period, freq);
+  const stepMonths = stepMonthsFor(freq);
 
   const outcome = await db.transaction(async (tx) => {
     // CLAIM: lås konceptraden och läs auktoritativt nextRunDate. En samtidig körare

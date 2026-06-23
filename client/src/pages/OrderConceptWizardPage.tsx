@@ -168,8 +168,8 @@ export default function OrderConceptWizardPage() {
   const [departmentMetadataField, setDepartmentMetadataField] = useState<string | null>(null);
   // Step 3 — abonnemang (Task #934)
   const [monthlyFee, setMonthlyFee] = useState<number | null>(null);
-  // Task #1056: EN faktureringsfrekvens för hela konceptet (unifierar tidigare
-  // invoicePeriod + billingFrequency). Skrivs till båda DB-kolumnerna vid spar.
+  // Task #1056/#1064: EN faktureringsfrekvens för hela konceptet. Skrivs till EN
+  // DB-kolumn (billingFrequency) — invoicePeriod är avvecklad (contract-steget).
   const [billingFrequency, setBillingFrequency] = useState<string>("monthly");
   const [subscriptionStartDate, setSubscriptionStartDate] = useState("");
   // Step 4
@@ -234,8 +234,9 @@ export default function OrderConceptWizardPage() {
     setInvoiceConsolidation(wizardData.invoiceConsolidation || "customer");
     setDepartmentMetadataField(wizardData.departmentMetadataField || null);
     setMonthlyFee(wizardData.monthlyFee != null ? Number(wizardData.monthlyFee) : null);
-    // Unifierad frekvens: föredra billingFrequency, fall tillbaka på legacy invoicePeriod;
-    // klampa legacy-värden (daily/weekly) till {monthly,quarterly,yearly}.
+    // Unifierad frekvens: läs billingFrequency (enda källan), men fall tillbaka på
+    // legacy invoicePeriod för ev. äldre osparade utkast; klampa legacy-värden
+    // (daily/weekly) till {monthly,quarterly,yearly}.
     setBillingFrequency(normalizeInvoiceFrequency(wizardData.billingFrequency ?? wizardData.invoicePeriod));
     setSubscriptionStartDate(toDateInput(wizardData.deliveryStart));
     setTargetObjectIds(new Set(Array.isArray(wizardData.targetObjectIds) ? wizardData.targetObjectIds : []));
@@ -453,10 +454,8 @@ export default function OrderConceptWizardPage() {
     // att den hårdkodade scenario:"avrop" från create-steget bevaras.
     scenario: invoiceModel ? INVOICE_MODEL_TO_SCENARIO[invoiceModel] : undefined,
     deliveryModel: invoiceModel || undefined,
-    // Task #1056: EN frekvens för hela konceptet skrivs till BÅDA kolumnerna
-    // (invoicePeriod + billingFrequency) så att både schema-/avrops-runtime och
-    // abonnemangs-runtime fortsätter läsa rätt värde (expand-contract).
-    invoicePeriod: freqValue,
+    // Task #1064: EN frekvens för hela konceptet skrivs till EN kolumn.
+    // invoicePeriod är avvecklad (contract-steget); billingFrequency är enda källan.
     billingFrequency: freqValue,
     invoiceLock,
     invoiceBrake,

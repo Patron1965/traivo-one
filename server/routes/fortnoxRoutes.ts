@@ -492,13 +492,12 @@ async function buildSubscriptionSegmentsPreview(
 
 // Task #934: ABONNEMANGETS (subscription) nästa fakturadatum. Respekterar
 // startdatum (framtida start ⇒ första körning = startdatum) och avancerar i steg
-// om billingFrequency/invoicePeriod tills datumet ligger strikt efter "now".
-// billingFrequency (monthly/quarterly/yearly) har företräde; annars används
-// invoicePeriod (quarterly ⇒ 3 mån) med månadssteg som default.
-export function computeSubscriptionNextRun(start: Date, period: string, freq: string, now: Date): Date {
+// om billingFrequency tills datumet ligger strikt efter "now".
+// Task #1064: billingFrequency (monthly/quarterly/yearly) är enda frekvenskällan.
+export function computeSubscriptionNextRun(start: Date, freq: string, now: Date): Date {
   if (start > now) return new Date(start);
   const stepMonths =
-    freq === "yearly" ? 12 : freq === "quarterly" ? 3 : period === "quarterly" ? 3 : 1;
+    freq === "yearly" ? 12 : freq === "quarterly" ? 3 : 1;
   const next = new Date(start);
   let guard = 0;
   while (next <= now && guard < 600) {
@@ -2490,14 +2489,13 @@ app.post("/api/order-concepts/:id/execute", asyncHandler(async (req, res) => {
         throw new ValidationError("Abonnemangsavgiften kan inte beräknas — koppla minst en artikel med pris till konceptets uppgifter innan du aktiverar abonnemanget.");
       }
       const startDate = concept.deliveryStart ? new Date(concept.deliveryStart) : new Date();
-      const period = (concept.invoicePeriod as string) || "monthly";
       const freq = (concept.billingFrequency as string) || "monthly";
-      const nextRun = computeSubscriptionNextRun(startDate, period, freq, new Date());
+      const nextRun = computeSubscriptionNextRun(startDate, freq, new Date());
 
       // Fakturasummor i KRONOR (ordervärdet är öre). monthlyTotal = en periods
       // ordervärde; perInvoiceTotal skalas med stegmånaderna (kvartal/år).
       const monthlyTotal = fee.totalValueOre / 100;
-      const stepMonths = freq === "yearly" ? 12 : freq === "quarterly" ? 3 : period === "quarterly" ? 3 : 1;
+      const stepMonths = freq === "yearly" ? 12 : freq === "quarterly" ? 3 : 1;
       const perInvoiceTotal = monthlyTotal * stepMonths;
 
       await storage.updateOrderConcept(concept.id, tenantId, {
@@ -2519,7 +2517,6 @@ app.post("/api/order-concepts/:id/execute", asyncHandler(async (req, res) => {
           quarterlyTotal: monthlyTotal * 3,
           yearlyTotal: monthlyTotal * 12,
           billingFrequency: freq,
-          invoicePeriod: period,
           startDate: startDate.toISOString(),
           nextRunDate: nextRun.toISOString(),
         },

@@ -3018,7 +3018,8 @@ export const orderConcepts = pgTable("order_concepts", {
   customerMetadataField: text("customer_metadata_field"),
   invoiceLevel: text("invoice_level"),
   invoiceModel: text("invoice_model"),
-  invoicePeriod: text("invoice_period"),
+  // Task #1064: invoicePeriod (invoice_period) avvecklad — billingFrequency är nu
+  // enda sanningskällan för faktureringsfrekvensen (contract-steg av Task #1056).
   invoiceLock: boolean("invoice_lock").default(false),
   invoiceBrake: boolean("invoice_brake").default(false),
   deliveryModel: text("delivery_model"),
