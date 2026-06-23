@@ -85,7 +85,7 @@ function formatDate(dateStr: string): string {
 
 function DaysUntilBadge({ days }: { days: number }) {
   if (days <= 0) {
-    return <Badge variant="destructive" data-testid="badge-overdue">\u00d6verskriden</Badge>;
+    return <Badge variant="destructive" data-testid="badge-overdue">Överskriden</Badge>;
   }
   if (days <= 7) {
     return <Badge variant="destructive" data-testid="badge-urgent">{days} dagar</Badge>;
@@ -168,7 +168,7 @@ export default function PredictiveMaintenancePage() {
           ) : (
             <Sparkles className="h-4 w-4 mr-2" />
           )}
-          K\u00f6r analys
+          Kör analys
         </Button>
       </PageHeader>
 
@@ -210,7 +210,7 @@ export default function PredictiveMaintenancePage() {
           <CardContent className="py-8 text-center">
             <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4 text-primary" />
             <p className="font-medium">AI analyserar IoT-signalhistorik...</p>
-            <p className="text-sm text-muted-foreground">Ber\u00e4knar optimala serviceintervall per objekt</p>
+            <p className="text-sm text-muted-foreground">Beräknar optimala serviceintervall per objekt</p>
           </CardContent>
         </Card>
       )}
@@ -219,7 +219,7 @@ export default function PredictiveMaintenancePage() {
         <div className="relative flex-1 min-w-[200px]">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
-            placeholder="S\u00f6k objekt eller kund..."
+            placeholder="Sök objekt eller kund..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="pl-9"
@@ -233,7 +233,7 @@ export default function PredictiveMaintenancePage() {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">Alla</SelectItem>
-            <SelectItem value="urgent">Br\u00e5dskande (7d)</SelectItem>
+            <SelectItem value="urgent">Brådskande (7d)</SelectItem>
             <SelectItem value="upcoming">Kommande (30d)</SelectItem>
             <SelectItem value="later">Senare</SelectItem>
           </SelectContent>
@@ -245,9 +245,9 @@ export default function PredictiveMaintenancePage() {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">Alla</SelectItem>
-            <SelectItem value="high">H\u00f6g konfidens</SelectItem>
+            <SelectItem value="high">Hög konfidens</SelectItem>
             <SelectItem value="medium">Medel</SelectItem>
-            <SelectItem value="low">L\u00e5g</SelectItem>
+            <SelectItem value="low">Låg</SelectItem>
           </SelectContent>
         </Select>
       </div>
@@ -261,7 +261,7 @@ export default function PredictiveMaintenancePage() {
           <CardContent className="py-12 text-center text-muted-foreground">
             <Activity className="h-12 w-12 mx-auto mb-4 opacity-50" />
             <p className="font-medium mb-2">Inga prognoser</p>
-            <p className="text-sm">Klicka &quot;K\u00f6r analys&quot; f\u00f6r att analysera IoT-signalhistorik och generera serviceprognoser</p>
+            <p className="text-sm">Klicka &quot;Kör analys&quot; för att analysera IoT-signalhistorik och generera serviceprognoser</p>
           </CardContent>
         </Card>
       ) : (
@@ -271,7 +271,7 @@ export default function PredictiveMaintenancePage() {
               <TableRow>
                 <TableHead>Objekt</TableHead>
                 <TableHead>Enhetstyp</TableHead>
-                <TableHead className="text-center">N\u00e4sta service</TableHead>
+                <TableHead className="text-center">Nästa service</TableHead>
                 <TableHead className="text-center">Tid kvar</TableHead>
                 <TableHead className="text-center">Konfidens</TableHead>
                 <TableHead className="text-center">Intervall</TableHead>
@@ -341,7 +341,7 @@ export default function PredictiveMaintenancePage() {
           <DialogHeader>
             <DialogTitle>Skapa arbetsorder</DialogTitle>
             <DialogDescription>
-              Skapa en arbetsorder fr\u00e5n prediktiv prognos f\u00f6r {createOrderDialog?.objectName}
+              Skapa en arbetsorder från prediktiv prognos för {createOrderDialog?.objectName}
             </DialogDescription>
           </DialogHeader>
           {createOrderDialog && (
