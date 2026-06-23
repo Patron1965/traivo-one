@@ -1,0 +1,332 @@
+{
+  "sessionId": "16cd481f5f",
+  "exportedAt": "2026-06-23T15:45:12.787Z",
+  "summary": "### Key Topics Discussed\n- Detaljering av orderkonceptets objektpekning.\n- Implementering och förtydligande av villkor för att inkludera objekt baserat på metadatafält.\n- Summering av objekt och villkor.\n- Hantering av underobjekt och egenägda objekt.\n- Effekten av villkorsfält på kryssrutor och totalsumma.\n- Dokumentering av nuvarande skärmbild (Bild två).\n- Val av kund baserat på objektets metadata.\n- Skapa systemmetadatafält för kundnummer.\n- Förhandsvisning av träffade kunder baserat på metadata.\n- Prissättning för orderkonceptet (prislista, löpande prissättning, fast pris, abonnemang).\n- Kundens referensinformation på fakturahuvudet, antingen fast eller via metadatafält.\n- Fakturering på butiksnivå baserat på metadata.\n- Funktionen för fakturastopp och dess potentiella ersättning genom automatisk fakturering per butik.\n- Abonnemangshantering och dynamiska månadsavgifter.\n- Hantering av faktureringsfrekvens och sammanslagning av fakturarelaterad information på en bild.\n- Faktureringsmetoder: efterfakturering eller abonnemang.\n- Abonnemangets start- och slutdatum, samt möjlighet till årligt justeringsdatum.\n- Dynamisk justering av månadsfakturan baserat på uppdaterat antal.\n- Två modeller för uppdatering av månadsfakturering för abonnemang: dynamisk eller årlig frysning.\n- Uppdateringsfrekvens för orderkonceptet.\n- Fakturakontroll och fakturalåsning.\n- Fakturabroms/fakturakontroll där fakturan måste attesteras eller kontrolleras innan skickas.\n- Leveranstider och möjligheten att lägga in muntliga villkor i AI-rutan för AI-förslag.\n- Summering av kunder, objekt och ordervärde vid ett enskilt uppdrag eller flera kunder baserat på logiska träffar.\n- Summering av produktionstid och kostnad för att visa lönsamheten.\n- Visning av abonnemangsvillkor med tidsomfång.\n- Klassisk orderläggningsvy för inmatning av artikelnummer eller sökning på artikelbeskrivning för att skapa order/uppgiftslista.\n- Villkor för uppgiftslistan baseras på villkor kopplade till artiklar (t.ex. \"tvätt av pantkärl\" har villkor för \"pantkärl\").\n- Möjlighet att hantera radrabatter i orderperspektivet.\n- Strukturering av uppgifter: Möjlighet att skapa flera separata uppgifter (t.ex., \"tvätt av pantkärl\", \"tvätt av pantmaskinen\", \"tvätt av pantrummet\") med fast pris för varje, för bättre översikt och hantering.\n- Gruppering av uppgifter: Föreslag om att gruppera relaterade uppgifter (t.ex. allt som rör pantkärlstvätt) för att hålla dem åtskilda.\n- Klumppris: Möjlighet att sätta ett klumppris för hela uppgiftspaketet längst ner på varje ruta.\n- Granskningsfunktion: Innehåller namn, varningar, träffade artiklar och antal träffar, samt en detaljlista.\n\n### Decisions Made\n- Orderkonceptet ska pekas mot objekt, antingen i grupp eller enskilt.\n- Villkor för orderkonceptet ska använda metadatafält för inkludering, t.ex. \"metadatafält är lika med Anna\".\n- En bild (Bild två) ska tas av det nuvarande skärmläget för Replit, inkluderat bakgrunden och sammanfattningen. (Redan utförd).\n- Faktureringsmetoden för orderkonceptet ska vara antingen efterfakturering eller abonnemang.\n- Istället för fakturakontroll ska \"fakturalåsning\" placeras med val för när fakturan ska skapas (tillsammans med fakturareferenser).\n\n### Action Items\n- Visa hur man pekar in ett jobb på ett egenägt jobb (Hemköpskedjan). (Hemköpskedjan är ett exempel, inte en definitiv handling)\n- Replit ska reda ut hanteringen gällande priser.\n\n### Important Points & Insights\n- Villkor för orderkonceptet behöver förtydligas för att indikera att något ska inkluderas.\n- Summan av kryssade objekt och villkor ska motsvara de inkluderade objekten i rutan längst till höger (Axfood Sverige, Objekt ett, Artiklar ett).\n- Det finns 56 tänkbara underobjekt i en gren där uppgifter kan kopplas.\n- Villkor kan användas för att begränsa antalet underobjekt, t.ex. till objekt som heter \"Kalle\".\n- Systemet summerar upp ikryssade objekt som ingår i den totala mängden, även för egenägda objekt som \"Hemköp Linköping, Storgatan\".\n- När villkorsfält läggs till, bör kryssrutorna för berörda objekt falla bort och den totala summan ändras dynamiskt.\n- När man väljer kund från objektets metadata, måste systemet skapa ett systemmetadatafält som \"kundnummer\" för att styra vilka kunder som väljs.\n- Det ska finnas en förhandsvisning som summerar upp antalet objekt och kunder som träffats baserat på metadata.\n- En systemmetadatafälttyp för \"kundnummer\" eller \"kundnamn\" behövs för att hantera urvalet av kunder.\n- Viktigt att definiera om prissättningen gäller hela orderkonceptet eller per uppgift.\n- Fasta priser blir rimligtvis baserade per objekt som träffas.\n- Kundens referensinformation på fakturahuvudet kan anges som fast text eller hämtas från metadatafält.\n- Vid pekning på butiker och användning av butiksnummer/butikschef från metadata som referens, kommer varje butik att få en egen faktura automatiskt.\n- Detta system kan fungera som en form av \"fakturastopp\" och eventuellt ersätta den existerande funktionen genom att ge en automatisk fakturauppsamling.\n- Fakturering kan ske på butiksnivå vilket är tydligare än endast kundnivå, speciellt i kombination med referenser från metadata.\n- Abonnemang representerar den mest komplicerade formen av prissättning och kräver en motor för att beräkna ordervärdet per uppgift kopplat till objektet.\n- Månadsavgiften för abonnemang blir dynamisk och kan samlas på toppnivå om fakturan samlas där.\n- Fakturans hierarki kan delas, vilket innebär att månadsavgiften försvinner vid lägre nivåer.\n- Faktureringsfrekvensen bör inte anges på nytt om den redan är definierad på annan plats i systemet (t.ex. månadsfakturering).\n- All fakturarelaterad information, inklusive fakturareferensen, bör slås ihop på en bild för ökad tydlighet.\n- Avrop och schema är inte relevanta för faktureringsmetod.\n- För abonnemang ska en avancerad funktion summera värdet på de uppgifter som är knutna till det.\n- Det är viktigt att notera start- och slutdatum för abonnemanget, alternativt att det är rullande tills vidare.\n- En möjlighet att lägga till ett årligt justeringsdatum för abonnemang är önskvärt.\n- Månadsfakturan för abonnemang ska dynamiskt justeras baserat på det uppdaterade antalet.\n- Det finns två alternativ för månadsfaktureringens uppdatering: dynamisk (ändras vid prislist- eller antalsjustering) eller en årlig frysning baserad på villkoren vid orderkonceptets skapande.\n- Priserna i Replit är felaktiga.\n- En faktura bör inte gå ut innan alla uppgifter är slutförda.\n- Fakturabromsen (fakturakontrollen) bör troligen vara ikryssad hela tiden, vilket innebär att fakturan måste attesteras eller kontrolleras i en särskild byrå innan den skickas.\n- När man lägger in ett muntligt villkor i AI-rutan för leveranstider, kan systemet generera ett förslag som datorn förstår, som man sedan kan kryssa i, alternativt att det uppfattas som ett råd.\n- En summering av det enskilda uppdraget ska visa kundnamn (t.ex. Axfood Sverige).\n- Om flera kunder är valda ska summeringen tydligt ange antalet kunder och objekt, samt summera alla träffar logiskt.\n- Sammanfattningen för både enskilda uppdrag och abonnemang ska visa ordervärde, produktionstid och kostnad för att bedöma lönsamheten.\n- För abonnemang ska sammanfattningen indikera abonnemangsvillkor med en multiplikator (t.ex. \"gånger 8 stycken mellan de här datumen\").\n- Summeringen bör visa antalet träffar, berörda objekt och total summa, inklusive antalet pantkärl per objekt.\n- Produktionstiden är en unik faktor i prissättningen.\n- Fast pris kan sättas på enskilda uppgifter, t.ex. \"tvätt av pantkärl\".\n- En bättre struktur för uppgifter kan erhållas genom att skapa enskilda uppgifter som kan innehålla strukturartiklar (ex. tvätt av locket, tvätt av maskinen) istället för en klumpad uppgift.\n- Möjligt att skapa flera uppgifter med ett \"plus-tecken\" för att behålla en tydlig översikt, liknande hanteringen av tid.\n- Prissättningen för orderkonceptet bör tydligt visa vad som ligger till grund för priset, inklusive hur artiklarna träffar.\n\n### Open Questions/Pending Items\n- Hur ska förhandsvisningen av träffade kunder presenteras (t.ex. som en dialogruta)?\n- Det fasta priset måste förtydligas, troligen per objekt men definieras närmare.\n- Vid abonnemangsbaserad prissättning behöver detaljerna för hur ordervärdet beräknas per uppgift och kopplas till fakturering tydliggöras.\n- Om månadsfaktureringen är dynamisk, behöver man specificera hur ofta orderkonceptet ska uppdateras (t.ex. dagligen eller månadsbasis) och om denna information ska placeras tillsammans med uppdateringsfrekvensen.\n- Frågan om huruvida ett fast pris ska hanteras som ett orderpris eller styckpris behöver redas ut.\n- Det behöver redas ut hur klumppriset för ett uppgiftspaket ska presenteras och implementeras.",
+  "conversation": [],
+  "transcripts": [
+    {
+      "text": "...Pekningen här då och utifrån då, om vi kallar det här då bild två till exempel, så har vi då att vi kryssar för då vil-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Ja. -vilka objekt då i grupp eller enskilt som det här orderkonceptet ska pekas mot då. Och här finns ju, om du klickar på \"lägg till villkor\" där nere.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Äh, så är ju det då villkor finns, det är då-- Behöver förtydligas då att det innebär då att det här-- Att det ska vara med, med då. Eller så, alltså det måste vara...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Det måste alltså vara en, en, en, en operator där då att metadatafält är lika med till exempel anna då. Då innebär det då att de ska vara med, med då. Och då är, är det då viktigt att i den här rutan som är längst till höger då, där det står Axfood Sverige och det står objekt ett och artiklar ett. Där måste du ju då ba-baserat här då på vad man kryssar i och vad man lägger in för villkor så ska ju summan-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. -är då bli den summa som, som man kryssar i. Mm. Eller, eller som, som villkoret ger, ger. Så att om du trycker där på Axfood Sverige nu då ovanför där och så, eh, tryck inte så heller, utan tryck på pilen. Ta bort den där. Ta, ta bort ibockningen och så trycker du på hemköpskedjan. Tryck på inte, inte där eller tryck på pilen och klicka fram hemköpt. Ta bort k-klicket där uppe nu. Så. Och, och sen så säger vi nu då att nu ska vi peka in ett jobb på mitt egenägda. Det är ju då-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm ...femtiosex stycken objekt då som ligger i den grenen. Sen är det också ett fel här. Det står koncern där då, utan det är ju, det är en, det är femtiosex underobjekt ska det ju stå där då. Och, och det innebär ju då att utifrån det här nivå, eller i det här läget då så, så har vi alltså femtiosex tänkbara objekt där och uppgifterna då kan haka fast då. Sen kan vi lägga in då ett villkor där för att begränsa de här femtiosex då. Om vi till exempel bara skulle vilja tvätta objekt som heter Kalle eller något sånt där då.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Så det är ju okej, eh, men det som inte är okej då, det är att den där, eh, inte summerar upp då. Och om du klickar upp då mitt den egen-- genom att trycka på pilen ner, när jag tryckt på pilen, mitt egenägda, ner, ner, ner, så. Då ser vi ju här nu då att nu har ju då, eh, och så kan du klicka upp Storgatan där, Hemköp Linköping, Storgatan. Ta bara en som, ta, ta nån som helst bara och klicka. Nu ser vi ju då att alla de här är ju då ikryssade här och är ju en del utav de här, den totala mängden då.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Men om man då lägger in villkorsfält där då som, som, som blir ju då ett krav för att de ska... Då borde kryssena då liksom falla bort här då och sum-summan där uppe då ändras- Ja. -beroende på vad man lägger ner där. Så, eh, ska du ta en bild på det här nu då? Ja, det...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Du kan inte ta en bild samtidigt som vi spelar in? Jo, det är klart jag kan. Ja, gör det då. Så jag bara kollar så att den här gången... Ja.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och så tar du bilden på, på, på det här då. Så ser Replit då bakgrunden och hela vägen ut till sammantfattningen där då. Så. Då har vi bild två.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Klar då.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Så, vad ska du döpa den? Jag gör det direkt så att man-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Ja, du kan bara skriva en två så räcker det. Ja. Räcker det så bra? Så går vi till nästa steg och det är ju då vilken kund det är. Och här, eh, är ju det gott så långt då. Men däremot om du klickar i objekt, från objektets metadata då. Här måste systemet då skapa ett system metadatafält som då till exempel heter kundnummer då. För här behöver man då välja då...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Eh, ett metadatafält som sen då styr vilka kunder det är. Och med samma logik då som, som, eh, eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Det tidigare då så ska det ju då kanske summeras upp på den här sammanfattningen då att det är visst antal objekt som du har fått träff på. Och om du då väljer metadata där så blir det ju då att du får ett visst antal kunder som du får träff på då. Och rimligtvis då baserat på metadatan här som är, så skulle ju då, om du väljer ett metadatafält här nu som innehåller kundnummer, så borde vi då få en lista under där då på de kunder som den har fått träff på som en dialogruta om förtydligande här då. Och- Ja, du har ju ett förhandsvisning här, va? Här läser du-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Ja, kunde, kunde jag sätta på den då och se vad, vad, vad, om det skulle då kunna bli någonting då. Du måste ha vägledande metadata. Ja, men det är bara för att förtydliga det då. Nu har vi inte en metadata som stöder det här. Men om vi behöver ha alltså en systemmetadata tror jag, där han, där, där vi skapar ett metadatafält som heter kundnummer och sen blir det då ett ku-- Det som han ha-hamnar, hä-hämtar upp här då. Alternativt också då kund, kundnamn då. Och, och sen behöver vi då, om det är nu förhandsvisa, men vi behöver ju liksom se då utifrån det urvalet vad vi har fått träff på. Och så varsågod då, nästa.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Du kan gå över ditt fast kund där borta. Klicka i fast kund. Ja.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Så. Och så väljer du Axfood Sverige.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Så där. Och så tar vi då nästa steg här.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Så. Och nu ska vi då titta på vad, vad vi har för priser då. Och antingen så väljer vi en prislista eller in-- inte väljer vi en prislista. Eller så kan vi ha löpande prissättning och det innebär ju att den räknar ihop det utifrån summan. Med ett fast pris så blir det ju då ett fast pris på-- per träff då. Det, det, det är ju väldigt viktigt här då att, att vi definierar då, är det på hela orderkonceptet eller, eller är det per uppgift eller vad det nu är då.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Som det här avser då. Det är lite så att säga manana nu då. Eh, så att vi bör definiera vad det fasta priset är då. Rimligtvis blir det då per, per...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Per objekt på något vis då som den träffar, men det där måste förtydligas. Sen så har vi då ytterligare tillägg här då, eh, kundens referensinformation. Och antingen så skriver man ju in det då fast här, en fast referens och beteckning, alternativt då att man väljer metadatafält för respektive det hära. Och eftersom att det här är då på fakturahuvudet så kommer det ju då automatiskt att bli på det sättet då att om...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Du väljer de här referensvärdena löpande så blir det ju då en ny faktura för varje typ utav, eller för varje...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Metadata-referens som skapas då. Mm. Så det innebär ju då rent praktiskt om vi pekar in det här på de här butikerna och så skulle vi ha valt då, eh, er referens och er beteckning, till exempel butiksnumret och butikschefen då som referens där utifrån metadatat. Då kommer det liksom för varje butik kommer det då att bli en faktura då- Mm. -automatiskt för det. Så det här, det blir också som ett, en form av fakturastopp då. Mm, ja just det. Och kanske till och med skulle kunna ersätta den funktionen då. För att då får man ju automatiskt en, en, en fakturauppsamling-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. -när man, när man, eh, tänker närmare på den. Mm. Eh, behöver du ta en bild på den där eller? Det har jag gjort. Ja, då fortsätter vi då till nästa här då. Och då har vi då fakturanivå då och det normala är ju då kundnivå. Men här ser vi ju då att vi skulle kunna slå ihop den förra funktionen då, eh, med det som kallas fakturastopp då. För att då blir ju det ändå mycket tydligare att det, när man styr in er referens och eller-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. -eh, fakturarreferens utifrån en metadatavärde, då blir det automatiskt den här- Mm. -stoppnivån.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Så förändrar man hela, hela liksom systemet där då. Eh, backar du tillbaka på fakturering där också då, så, så ser vi där då. Eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Sen har vi då det som kallas abonnemang då, och det är ju den mest komplicerade formen då. Där måste vi ju liksom ha en motor bakom den där som räknar ihop ordervärdet på varje uppgift som är kopplat då till objektet och i förlängningen då en, en faktura som är kopplad till det. Och därför blir-- Utgår ju den här månadsavgiften. Den blir ju då dynamisk då. Antingen så blir ju den på toppnivå om, eh, fakturan samlas på toppen, eller-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. -fakturan delas så att säga i hierarkin då så kommer ju den att bli delad i lägre nivåer då. Så månadsavgift försvinner. Eh, däremot, eh, faktureringsfrekvens, om du-- Är du snäll och går, går så att säga ovanför där. Nu, nu har vi ju redan tidigare angett vilken faktureringsfrekvens vi ska ha. Så rimligtvis så borde man då inte göra det en gång till här, utan har vi angett att det är månadsfakturering, ja, då borde ju det också då gälla här kan man tänka sig då.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. Och det är möjligt att man skulle också få ihop den informationen som var på en bind tidigare då. Så att allt som har med fakturan att göra kan vi slå ihop på en bild. Eh, och även det här med fakturarreferensen då, så att vi, vi, vi har det då. Men, eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Avrop och schema spelar ju då ingen roll, utan faktureringsmetod här är ju då antingen så är det efterfakturering eller så är det abonnemang. Så där kan vi också rensa bort och så säger vi då att det är faktureringsmetod efterfakturering eller abonnemang då. Och den avancerade där blir ju då abonnemanget då där den ska summera värdet på de uppgifter som är knutna till den här. Och sen så blir det ju då att notera där då när start...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Datum för abonnemanget är och när slutdatumet för abonnemanget är alternativt att det är tills vidare då rullande. Och sen så skulle man ju då för ordningens skull då kunna lägga in då ett årligt justeringsdatum här då. Då, eh, för det som är viktigt här, det är då egentligen att kryssa i då att antingen så justeras så att säga månadsfakturan dynamiskt efter det uppdaterade antalet då som, som-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. -den får reda på, antingen genom att man utför det eller att man uppdaterar metadata. Det andra alternativet är ju då att man har en broms här då där man säger att den här månadsfaktureringen uppdateras bara en gång per år baserat på det antal och de prislistor som gäller vid det tillfället då. Ja, just det. Så att går... Och det innebär ju då att man låser den här till det villkor som gällde när man skapade orderkonceptet då.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. Medan om man inte har det läget då, då kommer, kommer liksom, byter vi, ändrar vi styckepriset på en, en tvätt på den prislista som är kopplat till den, ja, då kommer liksom månadsfaktureringen, om allting går rätt, att uppdateras då och ändras antalet. Eller det tillkommer ett objekt där den är inpekad så ändras också antalet då. Det vill säga den är dynamisk då. Eh, sen behöver man då kanske kry... Är den dynamisk så kanske man behöver kryssa i hur ofta orderkonceptet ska...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "uppdateras om den ska göra det en gång i om dan eller om det räcker med att den gör den en gång i månaden. Och det kanske också är smartare att ha det på det här sättet så att istället för att vi, vi, vi, vi så att säga säger att vi, vi anger där hur ofta den ska uppdateras istället för. Ja, just det. Ja.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Vad det gäller, gäller då priserna här då. Men det där kan väl Replit försöka reda ut. Det är i alla fall fel då som det är nu, nu då. Sen har vi fakturakontrollen då och fakturalåsningen då. Det är egentligen inte en fakturakontroll, utan det borde också stå då tills... Det första krysset som heter fakturalåsning borde stå tillsammans med där man väljer när fakturan ska skapas, alltså fakturareferenserna eller, eh, låt oss säga att man, man kryssar i att en faktura",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "passar inte med mindre än att alla uppgifter är slutförda då. Mm.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. På, på, på den, på å-, på den beställning som finns på orderkonceptet. Sen har vi då den där fakturakontrollen som är fakturabroms då, där vi då lägger in att fakturan måste attesteras då eller kontrolleras i en särskild by innan den skickas till, till, till då Fort Knox då. Och, och den kanske då... Ja, den ska väl kanske vara ikryssad hela, hela tiden då.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Eh, men det är ju en skitsak. Ja, då går vi vidare på, på nästa då. Och då hade vi det här med leveranstider och den är ju i, i stort sett perfekt då. Den enda fråga var ju då att när man, om man lägger in ett, ett muntligt villkor för, eh, i AI-rutan där då, då, då borde man alltså kunna få fram ett förslag som datorn förstår då. Och så får man liksom kryssa i det villkoret på samma sätt som... Eller att den skapar en sån där som är ovanför som man vet. Eller att man bara säger att det här är ett råd då.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. Liksom, men det absolut bästa vore ju att man då kan mata in och sen får man ett schema- Mm. Och att det schemat är det som gäller då- Mm. Och att man förstår att det är aktivt då.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Äh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Ja.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Äh, viktigt också här nu för denna sammanfattningen då att om, om det är ett enskilt uppdrag då som bara är en, ett jobb då, så är det ju jättebra då att man visar då att ja, kunden är det hära, Axfood Sverige. Det är... Äh, men, men har du valt då att du får flera kunder så måste ju det stå då kunder, 23 kunder, objekt, 44 objekt, äh, och att den summerar hela tiden då, äh, alla träffar den får utifrån ett logiskt sätt.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och att den summerar ordervärdet, produktionstiden och, och kostnaden då så man ser liksom lönsamheten på hela affären. Och är det då ett abonnemang, då måste ju också sammanfattningen visa då, alltså kanske bara med en, äh, en gånger-tecken då att den är, den här är då gånger åtta stycken mellan de här datumen då. Ja, just det. Utifrån då abonnemangsvillkoret som vi sätter upp där då. Och sen här kommer vi då till uppgifter då och den nämnde vi ju på den som heter bild...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "ett då, men vi kan väl ta om det då och säga då att det här ska då vara en klassisk sån här vy där man då, en orderläggningsvy, där man ska kunna slå in artikelnummer eller söka på artikelbeskrivning och så skapar man då den här ordern kan man väl säga, eller uppgiftslistan då. Och notera här nu då att villkoret för där uppgifterna då ska träffa bygger ju då på villkoret som ligger under artikeln. Så en tvätt av pantkärl får ju då träff enligt villkoren på den artikeln för pantkärl då. Och i det här läget så, så är det ju då intressant att-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm ...summeringen här då att se vad man får för det är ju nu det börjar summera upp då hur många träffar man får, hur många objekt som, som, som blir berörda, hur många, vad summan blir då, hur många pantkärl som finns på varje sån där då.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och här är det också viktigt då att den kan hantera då och tydliggöra då strukturartiklar då som exemplet här då pant-- tvätt av pantkärl består utav, säger vi, tre stycken underordnade uppgifter och så ska det ju liksom stå då där då att det är tvätt utav, utav, ja, locket, tvätt av insidan, tvätt av u- Ja, just det. -utsidan och så där på ett, skulle jag vilja säga, klassiskt, eh, orderkoncept. För det är inget som är unikt för det här systemet att man har strukturartiklar eller det är inget som är unikt hur ordern ser ut.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Det enda som är unikt här möjligtvis då, det är produktionstiden. Men annars a-pris, listpris och kundpris. Och, och, eh, den kanske till och med ska utifrån ett klassiskt orderperspektiv då kunna hantera att man kan ge en, en radrabatt om det skulle vilja vara så här då.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och, eh, frågan är också, eh, för att få en rätsida på det här nu är att det är nog smartare också att ha...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Stycke-- Alltså orderpriset här, eh, eller alltså det fasta priset här då för att...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Det är lättare att tänka att det här är då själva uppgiften. Mm. Och, och då kan vi sätta ett fast pris på tvätt av pantkärlen, så tvätt av locket och de hära för det. Och man skulle också kunna tänka sig då för att få en bättre struktur på det här då, att man kan skapa med samma logik som vi har tidigare, att man trycker ett plus så skapar man en uppgift till. För då blir det redigare. Vi, vi, vi kan alltså skapa en uppgift som vi kallar tvätt av pantkärl och då kan den innehålla strukturartiklar och tvätt av pantmaskinen och tvätt av...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. Pantrummet och så vidare. Och då, då, då, då har du en grupp av uppgifter som hör till det. Och så trycker du då på plus, precis som när vi gör med tiden- Mm. Så kan vi då skapa en, ett upp-, en uppgiftsfokstill. Ja, just det. Det, det blir... Det, det ser likadant ut, det är bara en lång order, men då kan du hålla isär dem. Och kan du då dessutom då få hålla ordning på priserna här så kan du ju då längst ner på varje ruta sätta ett kryss och säga då att du sätter ett klumppris- Mm. För hela uppgiftspaketet. Då blir det mycket, mycket, eh, redigare då.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. Och hur, hur den kommer att träffa. För, för då, då vet du vad du sätter, vad du sätter pris på. Mm. Ja, och så har vi då granska då som en sista då. Och den är väl i, i, i det hela taget ganska okej då. Eh, vi anger vad den heter, den tar upp varningar och den får då visa där det vi träffar för artiklarna. Den visar hur många det har träffats och så blir det någon sorts detaljlista där då. Eh-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    }
+  ]
+}
