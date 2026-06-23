@@ -35,6 +35,10 @@ import type { InsertSlotTime } from "@shared/schema";
 
 /** Default-grupperingsradie (meter) när tenant inte konfigurerat egen i planning_parameters. */
 export const DEFAULT_GROUPING_RADIUS_METERS = 150;
+/** Default: gatusidesberoende PÅ (udda/jämna husnummer hamnar i var sin grupp). */
+export const DEFAULT_STREET_SIDE_GROUPING = true;
+/** Default arbetstakt i procent (100 = normal takt). */
+export const DEFAULT_WORK_PACE_PERCENT = 100;
 /** Default daglig kapacitet (minuter) för den dynamiska om-passningen. */
 export const DEFAULT_DAILY_CAPACITY_MINUTES = 8 * 60;
 /** Max antal assignments som bearbetas per körning (prestandagräns). */
@@ -68,8 +72,15 @@ export interface TimeGeoEngineOptions {
   periodStart: Date;
   /** Periodens/horisontens slut (inklusive). */
   periodEnd: Date;
-  /** Override av grupperingsradie (meter). Annars tenant-konfig → default. */
+  /**
+   * Team vars profil (grupperingsradie, gatusidesberoende, arbetstakt) ska
+   * tillämpas när uppgifterna hanteras på teamnivå. Saknas team → tenant/default.
+   */
+  teamId?: string;
+  /** Override av grupperingsradie (meter). Annars team-profil → tenant-konfig → default. */
   groupingRadiusMeters?: number;
+  /** Override av gatusidesberoende (av/på). Annars team-profil → default (på). */
+  streetSideGrouping?: boolean;
   /** Override av daglig kapacitet (minuter). */
   dailyCapacityMinutes?: number;
   /** Max assignments som bearbetas (prestandagräns). */
@@ -85,6 +96,8 @@ export interface TimeGeoEngineResult {
   periodStart: string;
   periodEnd: string;
   groupingRadiusMeters: number;
+  streetSideGrouping: boolean;
+  workPacePercent: number;
   dailyCapacityMinutes: number;
   processedAssignments: number;
   skippedAssignments: number;
@@ -441,11 +454,16 @@ export interface TaskGroup {
 
 /**
  * Grupperar uppgifter till klumpuppgifter. Identitet = utförandekod + tidsvillkor
- * (timeKey) + härledd adress. Sidesmedveten: udda/jämnt husnummer ger var sin
- * grupp. Saknas gatuadress men finns position → greedy-kluster inom `radiusMeters`.
- * Saknas både adress och position → fristående.
+ * (timeKey) + härledd adress. Sidesmedveten (default): udda/jämnt husnummer ger
+ * var sin grupp. Med `streetSideGrouping=false` (team-profil) slås båda sidor av
+ * samma gata ihop. Saknas gatuadress men finns position → greedy-kluster inom
+ * `radiusMeters`. Saknas både adress och position → fristående.
  */
-export function groupTasks(tasks: GroupableTask[], radiusMeters: number): TaskGroup[] {
+export function groupTasks(
+  tasks: GroupableTask[],
+  radiusMeters: number,
+  streetSideGrouping: boolean = DEFAULT_STREET_SIDE_GROUPING,
+): TaskGroup[] {
   // Partitionera på (utförandekod, tidsvillkor).
   const partitions = new Map<string, GroupableTask[]>();
   for (const t of tasks) {
@@ -480,8 +498,12 @@ export function groupTasks(tasks: GroupableTask[], radiusMeters: number): TaskGr
 
     for (const t of members) {
       const parsed = parseStreetAddress(t.address);
-      if (parsed.street && parsed.parity) {
-        const key = `${pk}||addr:${parsed.street}#${parsed.parity}`;
+      // Med sidesberoende krävs både gata + sida; utan det räcker gatunamnet
+      // (båda sidor av gatan klumpas ihop).
+      if (parsed.street && (streetSideGrouping ? parsed.parity : true)) {
+        const key = streetSideGrouping
+          ? `${pk}||addr:${parsed.street}#${parsed.parity}`
+          : `${pk}||addr:${parsed.street}`;
         addMember(key, "address", t);
       } else if (isUsableCoord(t.latitude, t.longitude)) {
         geoOnly.push(t);
@@ -602,8 +624,22 @@ export async function runTimeGeoEngine(
   const maxCandidates = options.maxCandidatesPerTask ?? DEFAULT_MAX_CANDIDATES_PER_TASK;
   const dailyCapacityMinutes =
     options.dailyCapacityMinutes ?? (await resolveDailyCapacityMinutes(tenantId));
+
+  // Grupperings-/ruttoptimerings-premisser. När ett team är känt tillämpas team-
+  // profilens inställningar (radie, gatusidesberoende, arbetstakt); annars tenant/
+  // default. Explicita options överstyr alltid.
+  const teamConfig = options.teamId
+    ? await resolveTeamGroupingConfig(tenantId, options.teamId)
+    : null;
   const groupingRadiusMeters =
-    options.groupingRadiusMeters ?? (await resolveGroupingRadiusMeters(tenantId));
+    options.groupingRadiusMeters ??
+    teamConfig?.radiusMeters ??
+    (await resolveGroupingRadiusMeters(tenantId));
+  const streetSideGrouping =
+    options.streetSideGrouping ??
+    teamConfig?.streetSideGrouping ??
+    DEFAULT_STREET_SIDE_GROUPING;
+  const workPacePercent = teamConfig?.workPacePercent ?? DEFAULT_WORK_PACE_PERCENT;
 
   // (1) Hämta råa, oplanerade assignments. scheduledDate kan vara null → hämta
   // utan datumfilter och filtrera i minnet (datumfiltret träffar inte null).
@@ -617,7 +653,7 @@ export async function runTimeGeoEngine(
   const skipped = inWindow.length - candidatesPool.length;
 
   if (candidatesPool.length === 0) {
-    return emptyResult(tenantId, periodStart, periodEnd, groupingRadiusMeters, dailyCapacityMinutes);
+    return emptyResult(tenantId, periodStart, periodEnd, groupingRadiusMeters, dailyCapacityMinutes, streetSideGrouping, workPacePercent);
   }
 
   // (2) Härled utförandekod per assignment via assignment_articles → articles.
@@ -691,7 +727,7 @@ export async function runTimeGeoEngine(
       windowEnd: chosen.windowEnd,
     };
   });
-  const groups = groupTasks(groupable, groupingRadiusMeters);
+  const groups = groupTasks(groupable, groupingRadiusMeters, streetSideGrouping);
 
   // Karta uppgift → gruppnyckel (endast för grupper ≥2 = riktiga klumpuppgifter).
   const groupKeyByAssignment = new Map<string, string>();
@@ -784,6 +820,8 @@ export async function runTimeGeoEngine(
     periodStart: periodStart.toISOString(),
     periodEnd: periodEnd.toISOString(),
     groupingRadiusMeters,
+    streetSideGrouping,
+    workPacePercent,
     dailyCapacityMinutes,
     processedAssignments: schedulable.length,
     skippedAssignments: skipped,
@@ -900,6 +938,58 @@ async function resolveDailyCapacityMinutes(_tenantId: string): Promise<number> {
   return DEFAULT_DAILY_CAPACITY_MINUTES;
 }
 
+/** Team-/utförarprofilens grupperings- & ruttoptimerings-premisser. */
+export interface TeamGroupingConfig {
+  /** Grupperingsradie i meter (positionsbaserad klumpning). */
+  radiusMeters: number;
+  /** Gatusidesberoende av/på (udda/jämna husnummer var sin grupp). */
+  streetSideGrouping: boolean;
+  /** Arbetstakt i procent (100 = normal takt). */
+  workPacePercent: number;
+}
+
+/**
+ * Löser upp ett teams grupperings-/ruttpremisser. Team-profilen vinner per fält;
+ * saknat/ogiltigt fält faller tillbaka på tenant-default (radie) respektive
+ * motorns default (gatusidesberoende på, arbetstakt 100%). Team i annan tenant
+ * eller okänt team → ren default.
+ */
+export async function resolveTeamGroupingConfig(
+  tenantId: string,
+  teamId: string,
+): Promise<TeamGroupingConfig> {
+  const tenantRadius = await resolveGroupingRadiusMeters(tenantId);
+  try {
+    const team = await storage.getTeam(teamId);
+    if (team && team.tenantId === tenantId) {
+      const radius =
+        typeof team.groupingRadiusMeters === "number" &&
+        Number.isFinite(team.groupingRadiusMeters) &&
+        team.groupingRadiusMeters > 0
+          ? team.groupingRadiusMeters
+          : tenantRadius;
+      const pace =
+        typeof team.workPacePercent === "number" &&
+        Number.isFinite(team.workPacePercent) &&
+        team.workPacePercent > 0
+          ? team.workPacePercent
+          : DEFAULT_WORK_PACE_PERCENT;
+      return {
+        radiusMeters: radius,
+        streetSideGrouping: team.streetSideGrouping ?? DEFAULT_STREET_SIDE_GROUPING,
+        workPacePercent: pace,
+      };
+    }
+  } catch {
+    /* faller tillbaka på default nedan */
+  }
+  return {
+    radiusMeters: tenantRadius,
+    streetSideGrouping: DEFAULT_STREET_SIDE_GROUPING,
+    workPacePercent: DEFAULT_WORK_PACE_PERCENT,
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Småhjälpare
 // ---------------------------------------------------------------------------
@@ -918,12 +1008,16 @@ function emptyResult(
   periodEnd: Date,
   groupingRadiusMeters: number,
   dailyCapacityMinutes: number,
+  streetSideGrouping: boolean = DEFAULT_STREET_SIDE_GROUPING,
+  workPacePercent: number = DEFAULT_WORK_PACE_PERCENT,
 ): TimeGeoEngineResult {
   return {
     tenantId,
     periodStart: periodStart.toISOString(),
     periodEnd: periodEnd.toISOString(),
     groupingRadiusMeters,
+    streetSideGrouping,
+    workPacePercent,
     dailyCapacityMinutes,
     processedAssignments: 0,
     skippedAssignments: 0,

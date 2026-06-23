@@ -19,6 +19,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import {
@@ -29,6 +31,10 @@ import {
   Search,
   AlertTriangle,
   CheckCircle2,
+  SlidersHorizontal,
+  Ruler,
+  ArrowLeftRight,
+  Gauge,
 } from "lucide-react";
 import type { Resource, Team, TeamMember } from "@shared/schema";
 
@@ -44,6 +50,21 @@ export function TeamMembersTab() {
   const [addDialogTeam, setAddDialogTeam] = useState<Team | null>(null);
   const [pendingResourceId, setPendingResourceId] = useState<string>("");
   const [pendingRole, setPendingRole] = useState<string>("medlem");
+  const [premisesTeam, setPremisesTeam] = useState<Team | null>(null);
+  const [radiusInput, setRadiusInput] = useState<string>("");
+  const [streetSideInput, setStreetSideInput] = useState<boolean>(true);
+  const [workPaceInput, setWorkPaceInput] = useState<string>("");
+
+  const openPremises = (team: Team) => {
+    setPremisesTeam(team);
+    setRadiusInput(
+      team.groupingRadiusMeters != null ? String(team.groupingRadiusMeters) : "",
+    );
+    setStreetSideInput(team.streetSideGrouping ?? true);
+    setWorkPaceInput(
+      team.workPacePercent != null ? String(team.workPacePercent) : "",
+    );
+  };
 
   const { data: teams = [], isLoading: teamsLoading } = useQuery<Team[]>({
     queryKey: ["/api/teams"],
@@ -151,6 +172,64 @@ export function TeamMembersTab() {
       });
     },
   });
+
+  const updatePremisesMutation = useMutation({
+    mutationFn: async (vars: {
+      id: string;
+      groupingRadiusMeters: number | null;
+      streetSideGrouping: boolean;
+      workPacePercent: number | null;
+    }) => {
+      const res = await apiRequest("PATCH", `/api/teams/${vars.id}`, {
+        groupingRadiusMeters: vars.groupingRadiusMeters,
+        streetSideGrouping: vars.streetSideGrouping,
+        workPacePercent: vars.workPacePercent,
+      });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/teams"] });
+      toast({ title: "Premisser sparade" });
+      setPremisesTeam(null);
+    },
+    onError: (err: Error) => {
+      toast({
+        title: "Kunde inte spara premisser",
+        description: err.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  const savePremises = () => {
+    if (!premisesTeam) return;
+    const radiusTrim = radiusInput.trim();
+    const paceTrim = workPaceInput.trim();
+    const radius = radiusTrim === "" ? null : Number(radiusTrim);
+    const pace = paceTrim === "" ? null : Number(paceTrim);
+    if (radius != null && (!Number.isFinite(radius) || radius < 1)) {
+      toast({
+        title: "Ogiltig radie",
+        description: "Ange ett positivt antal meter, eller lämna tomt för standard.",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (pace != null && (!Number.isFinite(pace) || pace < 1)) {
+      toast({
+        title: "Ogiltig arbetstakt",
+        description: "Ange en positiv procent, eller lämna tomt för standard (100%).",
+        variant: "destructive",
+      });
+      return;
+    }
+    updatePremisesMutation.mutate({
+      id: premisesTeam.id,
+      groupingRadiusMeters: radius != null ? Math.round(radius) : null,
+      streetSideGrouping: streetSideInput,
+      workPacePercent: pace != null ? Math.round(pace) : null,
+    });
+  };
 
   if (teamsLoading || resourcesLoading || membersLoading) {
     return (
@@ -299,19 +378,60 @@ export function TeamMembersTab() {
                           </p>
                         </div>
                       </div>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => {
-                          setAddDialogTeam(team);
-                          setPendingResourceId("");
-                          setPendingRole("medlem");
-                        }}
-                        data-testid={`button-add-member-${team.id}`}
+                      <div className="flex items-center gap-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => openPremises(team)}
+                          data-testid={`button-premises-${team.id}`}
+                        >
+                          <SlidersHorizontal className="h-4 w-4 mr-1" />
+                          Premisser
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => {
+                            setAddDialogTeam(team);
+                            setPendingResourceId("");
+                            setPendingRole("medlem");
+                          }}
+                          data-testid={`button-add-member-${team.id}`}
+                        >
+                          <UserPlus className="h-4 w-4 mr-1" />
+                          Lägg till
+                        </Button>
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap gap-2 mb-3">
+                      <span
+                        className="inline-flex items-center gap-1.5 rounded-md bg-muted px-2 py-1 text-xs text-muted-foreground"
+                        data-testid={`text-premise-radius-${team.id}`}
                       >
-                        <UserPlus className="h-4 w-4 mr-1" />
-                        Lägg till
-                      </Button>
+                        <Ruler className="h-3.5 w-3.5 text-chart-4" />
+                        Radie:{" "}
+                        {team.groupingRadiusMeters != null
+                          ? `${team.groupingRadiusMeters} m`
+                          : "Standard"}
+                      </span>
+                      <span
+                        className="inline-flex items-center gap-1.5 rounded-md bg-muted px-2 py-1 text-xs text-muted-foreground"
+                        data-testid={`text-premise-streetside-${team.id}`}
+                      >
+                        <ArrowLeftRight className="h-3.5 w-3.5 text-chart-4" />
+                        Gatusida:{" "}
+                        {(team.streetSideGrouping ?? true) ? "På" : "Av"}
+                      </span>
+                      <span
+                        className="inline-flex items-center gap-1.5 rounded-md bg-muted px-2 py-1 text-xs text-muted-foreground"
+                        data-testid={`text-premise-pace-${team.id}`}
+                      >
+                        <Gauge className="h-3.5 w-3.5 text-chart-4" />
+                        Arbetstakt:{" "}
+                        {team.workPacePercent != null
+                          ? `${team.workPacePercent} %`
+                          : "Standard (100 %)"}
+                      </span>
                     </div>
                     {members.length === 0 ? (
                       <div className="text-sm text-muted-foreground italic py-2">
@@ -470,6 +590,99 @@ export function TeamMembersTab() {
                 <Loader2 className="h-4 w-4 mr-1 animate-spin" />
               )}
               Lägg till
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={!!premisesTeam}
+        onOpenChange={open => {
+          if (!open) setPremisesTeam(null);
+        }}
+      >
+        <DialogContent data-testid="dialog-team-premises">
+          <DialogHeader>
+            <DialogTitle>Premisser för {premisesTeam?.name}</DialogTitle>
+            <DialogDescription>
+              Grupperings- och ruttoptimeringspremisser för teamet. Lämna fält tomt för att
+              använda standardvärdet.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-5 py-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="premise-radius" className="flex items-center gap-1.5">
+                <Ruler className="h-4 w-4 text-chart-4" />
+                Grupperingsradie (meter)
+              </Label>
+              <Input
+                id="premise-radius"
+                type="number"
+                min={1}
+                inputMode="numeric"
+                placeholder="Standard"
+                value={radiusInput}
+                onChange={e => setRadiusInput(e.target.value)}
+                data-testid="input-premise-radius"
+              />
+              <p className="text-xs text-muted-foreground">
+                Hur nära jobb måste ligga för att grupperas ihop. Tomt = tenantens standard.
+              </p>
+            </div>
+            <div className="flex items-start justify-between gap-4">
+              <div className="space-y-1">
+                <Label htmlFor="premise-streetside" className="flex items-center gap-1.5">
+                  <ArrowLeftRight className="h-4 w-4 text-chart-4" />
+                  Gatusidesberoende
+                </Label>
+                <p className="text-xs text-muted-foreground">
+                  På = udda och jämna husnummer grupperas var för sig (var sin sida av gatan).
+                </p>
+              </div>
+              <Switch
+                id="premise-streetside"
+                checked={streetSideInput}
+                onCheckedChange={setStreetSideInput}
+                data-testid="switch-premise-streetside"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="premise-pace" className="flex items-center gap-1.5">
+                <Gauge className="h-4 w-4 text-chart-4" />
+                Arbetstakt (%)
+              </Label>
+              <Input
+                id="premise-pace"
+                type="number"
+                min={1}
+                inputMode="numeric"
+                placeholder="Standard (100)"
+                value={workPaceInput}
+                onChange={e => setWorkPaceInput(e.target.value)}
+                data-testid="input-premise-pace"
+              />
+              <p className="text-xs text-muted-foreground">
+                Relativ arbetstakt jämfört med normal takt. Tomt = standard (100 %).
+              </p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setPremisesTeam(null)}
+              data-testid="button-cancel-premises"
+            >
+              Avbryt
+            </Button>
+            <Button
+              onClick={savePremises}
+              disabled={updatePremisesMutation.isPending}
+              data-testid="button-save-premises"
+            >
+              {updatePremisesMutation.isPending && (
+                <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+              )}
+              Spara
             </Button>
           </DialogFooter>
         </DialogContent>

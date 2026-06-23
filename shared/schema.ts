@@ -1286,6 +1286,15 @@ export const teams = pgTable("teams", {
   restType: text("rest_type").default("none"),
   restLocation: text("rest_location"),
   restUntil: timestamp("rest_until"),
+  // === Task #1041: Team-/utförarprofilens grupperings- & ruttoptimerings-premisser ===
+  // Tillämpas av geo-grupperingen/finplaneringen när teamet är känt; NULL faller
+  // tillbaka på tenant-default (planning_parameters) → motorns default. Expand-only.
+  // Grupperingsradie (meter) för positionsbaserad klumpning. NULL → tenant/default.
+  groupingRadiusMeters: integer("grouping_radius_meters"),
+  // Av/på för gatusidesberoende (udda/jämna husnummer var sin grupp). NULL = på (default).
+  streetSideGrouping: boolean("street_side_grouping"),
+  // Arbetstakt i procent (100 = normal takt). Premiss som finplaneringen konsumerar.
+  workPacePercent: integer("work_pace_percent"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   deletedAt: timestamp("deleted_at"),
 });
@@ -1798,7 +1807,13 @@ export const insertResourceEquipmentSchema = createInsertSchema(resourceEquipmen
 export const insertResourceAvailabilitySchema = createInsertSchema(resourceAvailability).omit({ id: true, createdAt: true });
 export const insertVehicleScheduleSchema = createInsertSchema(vehicleSchedule).omit({ id: true, createdAt: true });
 export const insertSubscriptionSchema = createInsertSchema(subscriptions).omit({ id: true, createdAt: true });
-export const insertTeamSchema = createInsertSchema(teams).omit({ id: true, createdAt: true });
+export const insertTeamSchema = createInsertSchema(teams).omit({ id: true, createdAt: true }).extend({
+  // Task #1041: sanera ruttoptimerings-premisser. nullish() = valfri + null tillåts
+  // (NULL = faller tillbaka på tenant/motor-default).
+  groupingRadiusMeters: z.number().int().min(1).max(100000).nullish(),
+  workPacePercent: z.number().int().min(1).max(1000).nullish(),
+  streetSideGrouping: z.boolean().nullish(),
+});
 export const insertTeamMemberSchema = createInsertSchema(teamMembers).omit({ id: true, createdAt: true });
 export const insertPlanningParameterSchema = createInsertSchema(planningParameters).omit({ id: true, createdAt: true });
 export const insertClusterSchema = createInsertSchema(clusters).omit({ id: true, createdAt: true });
