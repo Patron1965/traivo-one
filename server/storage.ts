@@ -987,6 +987,7 @@ export interface IStorage {
   
   // Assignment Articles
   getAssignmentArticles(assignmentId: string): Promise<AssignmentArticle[]>;
+  getAssignmentArticlesForAssignments(assignmentIds: string[]): Promise<AssignmentArticle[]>;
   createAssignmentArticle(article: InsertAssignmentArticle): Promise<AssignmentArticle>;
   updateAssignmentArticle(id: string, assignmentId: string, data: Partial<InsertAssignmentArticle>): Promise<AssignmentArticle | undefined>;
   deleteAssignmentArticle(id: string, assignmentId: string): Promise<void>;
@@ -1368,8 +1369,11 @@ export interface IStorage {
   getSlotTimes(tenantId: string, opts?: { assignmentId?: string; assignmentGroupKey?: string; status?: string }): Promise<SlotTime[]>;
   getSlotTime(tenantId: string, id: string): Promise<SlotTime | undefined>;
   createSlotTime(data: InsertSlotTime): Promise<SlotTime>;
+  createSlotTimes(rows: InsertSlotTime[]): Promise<number>;
   updateSlotTime(tenantId: string, id: string, data: Partial<InsertSlotTime>): Promise<SlotTime | undefined>;
   deleteSlotTime(tenantId: string, id: string): Promise<void>;
+  clearEngineSlotTimes(tenantId: string, source: string, opts: { assignmentIds?: string[]; windowStart?: Date; windowEnd?: Date }): Promise<number>;
+  getTenantGroupingRadiusMeters(tenantId: string): Promise<number | null>;
 
   // Pre-tasks
   getPreTasks(tenantId: string, opts?: { workOrderId?: string; status?: string }): Promise<PreTask[]>;
@@ -8458,6 +8462,16 @@ export class DatabaseStorage implements IStorage {
       .orderBy(assignmentArticles.sequenceOrder);
   }
 
+  // Bulk-variant för motorer (Task #1038): hämtar artiklar för flera assignments
+  // i en query, sorterade så att första raden per assignment är lägsta
+  // sequenceOrder (för att härleda primär utförandekod).
+  async getAssignmentArticlesForAssignments(assignmentIds: string[]): Promise<AssignmentArticle[]> {
+    if (assignmentIds.length === 0) return [];
+    return db.select().from(assignmentArticles)
+      .where(inArray(assignmentArticles.assignmentId, assignmentIds))
+      .orderBy(assignmentArticles.assignmentId, assignmentArticles.sequenceOrder);
+  }
+
   async createAssignmentArticle(article: InsertAssignmentArticle): Promise<AssignmentArticle> {
     const [result] = await db.insert(assignmentArticles).values(article).returning();
     return result;
@@ -10559,6 +10573,67 @@ export class DatabaseStorage implements IStorage {
   async createSlotTime(data: InsertSlotTime): Promise<SlotTime> {
     const [row] = await db.insert(slotTimes).values(data).returning();
     return row;
+  }
+  // Bulk-insert (Task #1038, tidsmotorn). Chunkar för att hålla nere parameter-
+  // antalet per sats. Returnerar antal skapade rader.
+  async createSlotTimes(rows: InsertSlotTime[]): Promise<number> {
+    if (rows.length === 0) return 0;
+    const CHUNK = 200;
+    let created = 0;
+    for (let i = 0; i < rows.length; i += CHUNK) {
+      const slice = rows.slice(i, i + CHUNK);
+      const inserted = await db.insert(slotTimes).values(slice).returning({ id: slotTimes.id });
+      created += inserted.length;
+    }
+    return created;
+  }
+  // Idempotent rensning av motor-genererade slottider (source-stämplade) inför en
+  // omkörning. Soft-delete: task-rader för de bearbetade uppgifterna OCH grupp-
+  // rader (assignment_id IS NULL) vars fönster ligger i perioden. tenant_id i
+  // varje predikat (defense-in-depth, multi-tenant).
+  async clearEngineSlotTimes(
+    tenantId: string,
+    source: string,
+    opts: { assignmentIds?: string[]; windowStart?: Date; windowEnd?: Date },
+  ): Promise<number> {
+    const stamp = { deletedAt: new Date(), updatedAt: new Date() };
+    let count = 0;
+    if (opts.assignmentIds && opts.assignmentIds.length > 0) {
+      const taskRows = await db.update(slotTimes).set(stamp)
+        .where(and(
+          eq(slotTimes.tenantId, tenantId),
+          eq(slotTimes.source, source),
+          isNull(slotTimes.deletedAt),
+          inArray(slotTimes.assignmentId, opts.assignmentIds),
+        )).returning({ id: slotTimes.id });
+      count += taskRows.length;
+    }
+    if (opts.windowStart && opts.windowEnd) {
+      const groupRows = await db.update(slotTimes).set(stamp)
+        .where(and(
+          eq(slotTimes.tenantId, tenantId),
+          eq(slotTimes.source, source),
+          isNull(slotTimes.deletedAt),
+          isNull(slotTimes.assignmentId),
+          gte(slotTimes.windowStart, opts.windowStart),
+          lte(slotTimes.windowStart, opts.windowEnd),
+        )).returning({ id: slotTimes.id });
+      count += groupRows.length;
+    }
+    return count;
+  }
+  // Tenant-default grupperingsradie (meter) från planning_parameters-raden utan
+  // kund/objekt-scope (customer_id IS NULL AND object_id IS NULL). null = ej satt.
+  async getTenantGroupingRadiusMeters(tenantId: string): Promise<number | null> {
+    const [row] = await db.select({ radius: planningParameters.groupingRadiusMeters })
+      .from(planningParameters)
+      .where(and(
+        eq(planningParameters.tenantId, tenantId),
+        isNull(planningParameters.customerId),
+        isNull(planningParameters.objectId),
+      ))
+      .limit(1);
+    return row?.radius ?? null;
   }
   async updateSlotTime(tenantId: string, id: string, data: Partial<InsertSlotTime>): Promise<SlotTime | undefined> {
     const { tenantId: _t, ...patch } = data as Partial<InsertSlotTime>;

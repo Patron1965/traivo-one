@@ -43,6 +43,7 @@ import { registerConfigRoutes } from "./routes/configRoutes";
 import { registerClusterRoutes } from "./routes/clusterRoutes";
 import { registerAIRoutes } from "./routes/aiRoutes";
 import { registerOptimizationRoutes } from "./routes/optimizationRoutes";
+import { runTimeGeoEngine } from "./services/time-geo-engine";
 import { registerMobileRoutes, registerMobileAliasRoutes } from "./routes/mobile";
 import { registerPlannerRoutes } from "./routes/plannerRoutes";
 import { registerWeeklyPlanRoutes } from "./routes/weeklyPlanRoutes";
@@ -505,6 +506,39 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Failed to run order-concept auto-run:", error);
       res.status(500).json({ error: "Kunde inte köra automatisk koncept-körning" });
+    }
+  });
+
+  // Task #1038: Manuell körning av Tids- & geografimotorn för en vald period/
+  // horisont. requireAdmin (tenant-roll). Ingen UI här (separat nedströms-uppgift)
+  // — detta är den körbara funktionens server-exponering. Default-period = idag
+  // → +14 dagar om body saknar datum.
+  app.post("/api/time-geo-engine/run", requireAdmin, async (req: any, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const body = req.body ?? {};
+      const now = new Date();
+      const periodStart = body.periodStart ? new Date(body.periodStart) : now;
+      const periodEnd = body.periodEnd
+        ? new Date(body.periodEnd)
+        : new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000);
+      if (Number.isNaN(periodStart.getTime()) || Number.isNaN(periodEnd.getTime())) {
+        return res.status(400).json({ error: "Ogiltigt periodStart/periodEnd-datum" });
+      }
+      const result = await runTimeGeoEngine(tenantId, {
+        periodStart,
+        periodEnd,
+        groupingRadiusMeters:
+          typeof body.groupingRadiusMeters === "number" ? body.groupingRadiusMeters : undefined,
+        dailyCapacityMinutes:
+          typeof body.dailyCapacityMinutes === "number" ? body.dailyCapacityMinutes : undefined,
+        maxAssignments: typeof body.maxAssignments === "number" ? body.maxAssignments : undefined,
+        now,
+      });
+      res.json({ success: true, result });
+    } catch (error) {
+      console.error("Failed to run time-geo engine:", error);
+      res.status(500).json({ error: "Kunde inte köra tids- & geografimotorn" });
     }
   });
 

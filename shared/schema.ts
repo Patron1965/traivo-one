@@ -1334,6 +1334,11 @@ export const planningParameters = pgTable("planning_parameters", {
   // Tenant-lokal timme (0–23) då carry-over-notisen ska skickas. Nullable →
   // default 16. Tidszon: Europe/Stockholm (CARRY_OVER_TIMEZONE-env överstyr).
   carryOverNotificationHour: integer("carry_over_notification_hour"),
+  // Task #1038 (Tids- & geografimotorn): konfigurerbar grupperingsradie (meter) för
+  // geo-gruppering av uppgifter utan gatuadress (positionsbaserad fallback). Nullable
+  // → motorn faller tillbaka på DEFAULT_GROUPING_RADIUS_METERS. Tenant-nivå-raden
+  // (customer_id IS NULL AND object_id IS NULL) bär defaulten.
+  groupingRadiusMeters: integer("grouping_radius_meters"),
   notes: text("notes"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
