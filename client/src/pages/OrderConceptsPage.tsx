@@ -8,7 +8,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { OrderFilterBar } from "@/components/orders/OrderFilterBar";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Dialog,
@@ -75,16 +74,10 @@ import {
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
-import type { OrderConcept, Cluster, Article, ConceptFilter, DeliveryScheduleEntry } from "@shared/schema";
+import type { OrderConcept, Cluster, Article, ConceptFilter } from "@shared/schema";
 import { ORDER_CONCEPT_SCENARIO_LABELS, BILLING_FREQUENCY_LABELS } from "@shared/schema";
-import { PageHelp, HelpTooltip } from "@/components/ui/help-tooltip";
+import { PageHelp } from "@/components/ui/help-tooltip";
 import { ChainTracePanel } from "@/components/ChainTracePanel";
-
-const scenarioOptions = [
-  { value: "avrop", label: "Avrop (engång)", desc: "Manuellt eller vid behov", help: "Genererar en enskild order direkt eller vid behov — används för ad hoc-tjänster som inte är schemalagda." },
-  { value: "schema", label: "Schema (leveransplan)", desc: "Återkommande med tidsfönster", help: "Skapar ordrar automatiskt enligt en leveransplan, t.ex. 'första måndagen varje månad' — perfekt för regelbundna besök." },
-  { value: "abonnemang", label: "Abonnemang (fast avgift)", desc: "Fast månadsavgift per enhet", help: "Fast månadsavgift oavsett antal besök. Systemet beräknar kostnaden per enhet baserat på vald frekvens och prislista." },
-];
 
 const priorityOptions = [
   { value: "low", label: "Låg" },
@@ -104,32 +97,6 @@ const filterOperatorOptions = [
   { value: "exists", label: "Finns" },
   { value: "not_exists", label: "Finns inte" },
 ];
-
-const weekdayLabels = ["Sön", "Mån", "Tis", "Ons", "Tor", "Fre", "Lör"];
-const monthLabels = ["Jan", "Feb", "Mar", "Apr", "Maj", "Jun", "Jul", "Aug", "Sep", "Okt", "Nov", "Dec"];
-
-interface FormData {
-  name: string;
-  description: string;
-  targetClusterId: string;
-  articleId: string;
-  crossPollinationField: string;
-  aggregationLevel: string;
-  scenario: string;
-  scheduleType: string;
-  intervalDays: number;
-  priority: string;
-  rollingMonths: number;
-  minDaysBetween: number;
-  washesPerYear: number;
-  pricePerUnit: number;
-  monthlyFee: number;
-  billingFrequency: string;
-  contractLockMonths: number;
-  subscriptionMetadataField: string;
-  deliveryTimeMetadataField: string;
-  deliverySchedule: DeliveryScheduleEntry[];
-}
 
 interface FilterFormData {
   metadataKey: string;
@@ -161,34 +128,9 @@ interface PreviewData {
   };
 }
 
-const defaultForm: FormData = {
-  name: "",
-  description: "",
-  targetClusterId: "",
-  articleId: "",
-  crossPollinationField: "",
-  aggregationLevel: "",
-  scenario: "avrop",
-  scheduleType: "once",
-  intervalDays: 0,
-  priority: "normal",
-  rollingMonths: 3,
-  minDaysBetween: 0,
-  washesPerYear: 0,
-  pricePerUnit: 0,
-  monthlyFee: 0,
-  billingFrequency: "monthly",
-  contractLockMonths: 0,
-  subscriptionMetadataField: "",
-  deliveryTimeMetadataField: "",
-  deliverySchedule: [],
-};
-
 export default function OrderConceptsPage() {
   const [, navigate] = useLocation();
   const [searchTerm, setSearchTerm] = useState("");
-  const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [editingConcept, setEditingConcept] = useState<OrderConcept | null>(null);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [conceptToDelete, setConceptToDelete] = useState<string | null>(null);
   const [executeDialogOpen, setExecuteDialogOpen] = useState(false);
@@ -222,7 +164,6 @@ export default function OrderConceptsPage() {
     priceField: "",
     quantityField: "",
   });
-  const [formData, setFormData] = useState<FormData>({ ...defaultForm });
   const [filterForm, setFilterForm] = useState<FilterFormData>({
     metadataKey: "",
     operator: "equals",
@@ -256,31 +197,6 @@ export default function OrderConceptsPage() {
 
   const previewData = previewMutation.data as PreviewData | undefined;
   const previewLoading = previewMutation.isPending;
-
-  const createMutation = useMutation({
-    mutationFn: (data: Partial<OrderConcept>) => apiRequest("POST", "/api/order-concepts", data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/order-concepts"] });
-      setIsDialogOpen(false);
-      setFormData({ ...defaultForm });
-      toast({ title: "Orderkoncept skapat" });
-    },
-    onError: (error: Error) => {
-      toast({ title: "Kunde inte skapa orderkoncept", description: error.message, variant: "destructive" });
-    },
-  });
-
-  const updateMutation = useMutation({
-    mutationFn: ({ id, data }: { id: string; data: Partial<OrderConcept> }) =>
-      apiRequest("PATCH", `/api/order-concepts/${id}`, data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/order-concepts"] });
-      setIsDialogOpen(false);
-      setEditingConcept(null);
-      setFormData({ ...defaultForm });
-      toast({ title: "Orderkoncept uppdaterat" });
-    },
-  });
 
   const deleteMutation = useMutation({
     mutationFn: (id: string) => apiRequest("DELETE", `/api/order-concepts/${id}`),
@@ -466,89 +382,9 @@ export default function OrderConceptsPage() {
     enabled: !!assignmentsConceptId,
   });
 
-  const handleEdit = (concept: OrderConcept) => {
-    setEditingConcept(concept);
-    const schedule = (concept.deliverySchedule as DeliveryScheduleEntry[] | null) || [];
-    setFormData({
-      name: concept.name,
-      description: concept.description || "",
-      targetClusterId: concept.targetClusterId || "",
-      articleId: concept.articleId || "",
-      crossPollinationField: concept.crossPollinationField || "",
-      aggregationLevel: concept.aggregationLevel || "",
-      scenario: (concept as any).scenario || "avrop",
-      scheduleType: concept.scheduleType,
-      intervalDays: concept.intervalDays || 0,
-      priority: concept.priority || "normal",
-      rollingMonths: (concept as any).rollingMonths || 3,
-      minDaysBetween: (concept as any).minDaysBetween || 0,
-      washesPerYear: (concept as any).washesPerYear || 0,
-      pricePerUnit: (concept as any).pricePerUnit || 0,
-      monthlyFee: (concept as any).monthlyFee || 0,
-      billingFrequency: (concept as any).billingFrequency || "monthly",
-      contractLockMonths: (concept as any).contractLockMonths || 0,
-      subscriptionMetadataField: (concept as any).subscriptionMetadataField || "",
-      deliveryTimeMetadataField: (concept as any).deliveryTimeMetadataField || "",
-      deliverySchedule: schedule,
-    });
-    setIsDialogOpen(true);
-  };
-
-  const handleSubmit = () => {
-    const submitData: any = {
-      name: formData.name,
-      description: formData.description || null,
-      targetClusterId: formData.targetClusterId || null,
-      articleId: formData.articleId || null,
-      crossPollinationField: formData.crossPollinationField || null,
-      aggregationLevel: formData.aggregationLevel || null,
-      scenario: formData.scenario,
-      scheduleType: formData.scenario === "schema" ? "recurring" : formData.scenario === "abonnemang" ? "subscription" : "once",
-      priority: formData.priority,
-      rollingMonths: formData.rollingMonths || 3,
-      minDaysBetween: formData.minDaysBetween || null,
-      deliverySchedule: formData.deliverySchedule.length > 0 ? formData.deliverySchedule : null,
-      washesPerYear: formData.scenario === "abonnemang" ? (formData.washesPerYear || null) : null,
-      pricePerUnit: formData.scenario === "abonnemang" ? (formData.pricePerUnit || null) : null,
-      monthlyFee: formData.scenario === "abonnemang" ? formData.monthlyFee : null,
-      billingFrequency: formData.scenario === "abonnemang" ? formData.billingFrequency : null,
-      contractLockMonths: formData.scenario === "abonnemang" ? (formData.contractLockMonths || null) : null,
-      subscriptionMetadataField: formData.scenario === "abonnemang" ? (formData.subscriptionMetadataField || null) : null,
-      deliveryTimeMetadataField: formData.deliveryTimeMetadataField || null,
-    };
-
-    if (editingConcept) {
-      updateMutation.mutate({ id: editingConcept.id, data: submitData });
-    } else {
-      createMutation.mutate(submitData);
-    }
-  };
-
   const handlePreview = (concept: OrderConcept) => {
     previewMutation.mutate(concept.id);
     setPreviewDialogOpen(true);
-  };
-
-  const handleAddScheduleEntry = () => {
-    setFormData({
-      ...formData,
-      deliverySchedule: [
-        ...formData.deliverySchedule,
-        { month: 0, weekNumber: 1, weekday: 1, timeWindowStart: "08:00", timeWindowEnd: "12:00" },
-      ],
-    });
-  };
-
-  const handleRemoveScheduleEntry = (index: number) => {
-    const updated = [...formData.deliverySchedule];
-    updated.splice(index, 1);
-    setFormData({ ...formData, deliverySchedule: updated });
-  };
-
-  const updateScheduleEntry = (index: number, field: keyof DeliveryScheduleEntry, value: any) => {
-    const updated = [...formData.deliverySchedule];
-    updated[index] = { ...updated[index], [field]: value };
-    setFormData({ ...formData, deliverySchedule: updated });
   };
 
   const handleManageFilters = (conceptId: string) => {
@@ -959,383 +795,6 @@ export default function OrderConceptsPage() {
           </Table>
         </CardContent>
       </Card>
-
-      {/* Create/Edit Dialog */}
-      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>{editingConcept ? "Redigera orderkoncept" : "Skapa orderkoncept"}</DialogTitle>
-            <DialogDescription>
-              Definiera regler för automatisk uppgiftsgenerering
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-5">
-            <div className="space-y-2">
-              <Label>Namn *</Label>
-              <Input
-                value={formData.name}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                placeholder="T.ex. Veckotömning matavfall"
-                data-testid="input-concept-name"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>Beskrivning</Label>
-              <Textarea
-                value={formData.description}
-                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                placeholder="Beskriv vad konceptet gör..."
-                data-testid="input-concept-description"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label>Scenario *</Label>
-              <div className="grid grid-cols-3 gap-3">
-                {scenarioOptions.map((s) => (
-                  <button
-                    key={s.value}
-                    type="button"
-                    onClick={() => setFormData({ ...formData, scenario: s.value })}
-                    className={`p-3 rounded-lg border text-left transition-colors ${
-                      formData.scenario === s.value
-                        ? "border-primary bg-primary/5 ring-1 ring-primary"
-                        : "border-border hover:border-primary/50"
-                    }`}
-                    data-testid={`button-scenario-${s.value}`}
-                  >
-                    <div className="font-medium text-sm">{s.label} <HelpTooltip content={s.help} /></div>
-                    <div className="text-xs text-muted-foreground mt-1">{s.desc}</div>
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Målkluster</Label>
-                <Select
-                  value={formData.targetClusterId || "__none__"}
-                  onValueChange={(v) => setFormData({ ...formData, targetClusterId: v === "__none__" ? "" : v })}
-                >
-                  <SelectTrigger data-testid="select-target-cluster">
-                    <SelectValue placeholder="Alla objekt" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="__none__">Alla objekt</SelectItem>
-                    {clusters.map((c) => (
-                      <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label>Artikel</Label>
-                <Select
-                  value={formData.articleId || "__none__"}
-                  onValueChange={(v) => setFormData({ ...formData, articleId: v === "__none__" ? "" : v })}
-                >
-                  <SelectTrigger data-testid="select-article">
-                    <SelectValue placeholder="Välj artikel" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="__none__">Ingen artikel</SelectItem>
-                    {articlesList.map((a) => (
-                      <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Prioritet</Label>
-                <Select
-                  value={formData.priority}
-                  onValueChange={(v) => setFormData({ ...formData, priority: v })}
-                >
-                  <SelectTrigger data-testid="select-priority">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {priorityOptions.map((p) => (
-                      <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label>Korsbefruktningsfält</Label>
-                <Input
-                  value={formData.crossPollinationField}
-                  onChange={(e) => setFormData({ ...formData, crossPollinationField: e.target.value })}
-                  placeholder="T.ex. antal_karl"
-                  data-testid="input-cross-pollination"
-                />
-              </div>
-            </div>
-
-            {/* Schema-specific fields */}
-            {formData.scenario === "schema" && (
-              <Card className="border-chart-2/20 dark:border-chart-2/80">
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-sm flex items-center gap-2">
-                    <Calendar className="h-4 w-4" />
-                    Leveransschema
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label>Rullande månader</Label>
-                      <Input
-                        type="number"
-                        value={formData.rollingMonths}
-                        onChange={(e) => setFormData({ ...formData, rollingMonths: parseInt(e.target.value) || 3 })}
-                        min={1}
-                        max={12}
-                        data-testid="input-rolling-months"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Min dagar mellan besök</Label>
-                      <Input
-                        type="number"
-                        value={formData.minDaysBetween}
-                        onChange={(e) => setFormData({ ...formData, minDaysBetween: parseInt(e.target.value) || 0 })}
-                        min={0}
-                        data-testid="input-min-days"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <Label>Tidsfönster</Label>
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        onClick={handleAddScheduleEntry}
-                        data-testid="button-add-schedule"
-                      >
-                        <Plus className="h-3 w-3 mr-1" />
-                        Lägg till
-                      </Button>
-                    </div>
-
-                    {formData.deliverySchedule.length === 0 ? (
-                      <p className="text-sm text-muted-foreground text-center py-3">
-                        Inga tidsfönster definierade. Klicka "Lägg till" för att börja.
-                      </p>
-                    ) : (
-                      <div className="space-y-2">
-                        {formData.deliverySchedule.map((entry, idx) => (
-                          <div key={idx} className="flex items-center gap-2 p-2 border rounded-md bg-muted/50">
-                            <Select
-                              value={String(entry.month)}
-                              onValueChange={(v) => updateScheduleEntry(idx, "month", parseInt(v))}
-                            >
-                              <SelectTrigger className="w-24" data-testid={`select-schedule-month-${idx}`}>
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="0">Alla mån</SelectItem>
-                                {monthLabels.map((m, i) => (
-                                  <SelectItem key={i} value={String(i + 1)}>{m}</SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                            <Select
-                              value={String(entry.weekNumber)}
-                              onValueChange={(v) => updateScheduleEntry(idx, "weekNumber", parseInt(v))}
-                            >
-                              <SelectTrigger className="w-20" data-testid={`select-schedule-week-${idx}`}>
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {[1, 2, 3, 4, 5].map((w) => (
-                                  <SelectItem key={w} value={String(w)}>V{w}</SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                            <Select
-                              value={String(entry.weekday)}
-                              onValueChange={(v) => updateScheduleEntry(idx, "weekday", parseInt(v))}
-                            >
-                              <SelectTrigger className="w-20" data-testid={`select-schedule-weekday-${idx}`}>
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {weekdayLabels.map((d, i) => (
-                                  <SelectItem key={i} value={String(i)}>{d}</SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                            <Input
-                              type="time"
-                              value={entry.timeWindowStart || "08:00"}
-                              onChange={(e) => updateScheduleEntry(idx, "timeWindowStart", e.target.value)}
-                              className="w-24"
-                              data-testid={`input-schedule-start-${idx}`}
-                            />
-                            <span className="text-muted-foreground">-</span>
-                            <Input
-                              type="time"
-                              value={entry.timeWindowEnd || "12:00"}
-                              onChange={(e) => updateScheduleEntry(idx, "timeWindowEnd", e.target.value)}
-                              className="w-24"
-                              data-testid={`input-schedule-end-${idx}`}
-                            />
-                            <Button
-                              type="button"
-                              size="icon"
-                              variant="ghost"
-                              onClick={() => handleRemoveScheduleEntry(idx)}
-                              data-testid={`button-remove-schedule-${idx}`}
-                            >
-                              <X className="h-3 w-3" />
-                            </Button>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
-            )}
-
-            {/* Task #901 (B8): metadatastyrd leveranstid (gäller avrop + schema) */}
-            {(formData.scenario === "avrop" || formData.scenario === "schema") && (
-              <Card className="border-chart-4/20 dark:border-chart-4/80">
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-sm flex items-center gap-2">
-                    <Clock className="h-4 w-4" />
-                    Leveranstid från metadata
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-2">
-                  <Label>Metadatafält för leveranstid</Label>
-                  <Input
-                    value={formData.deliveryTimeMetadataField}
-                    onChange={(e) => setFormData({ ...formData, deliveryTimeMetadataField: e.target.value })}
-                    placeholder="T.ex. tömningstid"
-                    data-testid="input-delivery-time-metadata"
-                  />
-                  <p className="text-sm text-muted-foreground">
-                    Ange metadatatypens namn (t.ex. "tömningstid"). Vid körning hämtas leveranstiden
-                    från objektets metadatavärde (datum eller datum + tid). Saknas värdet eller är det
-                    ogiltigt används det schemalagda datumet istället.
-                  </p>
-                </CardContent>
-              </Card>
-            )}
-
-            {/* Abonnemang-specific fields */}
-            {formData.scenario === "abonnemang" && (
-              <Card className="border-chart-5/20 dark:border-chart-5/80">
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-sm flex items-center gap-2">
-                    <CreditCard className="h-4 w-4" />
-                    Abonnemangsinställningar
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label>Månadsavgift per enhet (SEK)</Label>
-                      <Input
-                        type="number"
-                        value={formData.monthlyFee}
-                        onChange={(e) => setFormData({ ...formData, monthlyFee: parseFloat(e.target.value) || 0 })}
-                        min={0}
-                        step={0.01}
-                        data-testid="input-monthly-fee"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Faktureringsfrekvens</Label>
-                      <Select
-                        value={formData.billingFrequency}
-                        onValueChange={(v) => setFormData({ ...formData, billingFrequency: v })}
-                      >
-                        <SelectTrigger data-testid="select-billing-frequency">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="monthly">Månadsvis</SelectItem>
-                          <SelectItem value="quarterly">Kvartalsvis</SelectItem>
-                          <SelectItem value="yearly">Årsvis</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label>Tvättar per år</Label>
-                      <Input
-                        type="number"
-                        value={formData.washesPerYear}
-                        onChange={(e) => setFormData({ ...formData, washesPerYear: parseInt(e.target.value) || 0 })}
-                        min={0}
-                        data-testid="input-washes-per-year"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Pris per enhet (SEK)</Label>
-                      <Input
-                        type="number"
-                        value={formData.pricePerUnit}
-                        onChange={(e) => setFormData({ ...formData, pricePerUnit: parseFloat(e.target.value) || 0 })}
-                        min={0}
-                        step={0.01}
-                        data-testid="input-price-per-unit"
-                      />
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label>Bindningstid (månader)</Label>
-                      <Input
-                        type="number"
-                        value={formData.contractLockMonths}
-                        onChange={(e) => setFormData({ ...formData, contractLockMonths: parseInt(e.target.value) || 0 })}
-                        min={0}
-                        data-testid="input-contract-lock"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Metadatafält för antal</Label>
-                      <Input
-                        value={formData.subscriptionMetadataField}
-                        onChange={(e) => setFormData({ ...formData, subscriptionMetadataField: e.target.value })}
-                        placeholder="T.ex. antal_karl"
-                        data-testid="input-subscription-metadata"
-                      />
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            )}
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
-              Avbryt
-            </Button>
-            <Button
-              onClick={handleSubmit}
-              disabled={!formData.name || createMutation.isPending || updateMutation.isPending}
-              data-testid="button-save-concept"
-            >
-              {createMutation.isPending || updateMutation.isPending ? (
-                <Loader2 className="h-4 w-4 animate-spin mr-2" />
-              ) : null}
-              {editingConcept ? "Spara" : "Skapa"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
       {/* Preview Dialog */}
       <Dialog open={previewDialogOpen} onOpenChange={setPreviewDialogOpen}>
