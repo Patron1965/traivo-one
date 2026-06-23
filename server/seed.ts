@@ -51,6 +51,9 @@ export async function seedDatabase() {
   await seedArticleTypesForAllTenants();
   await backfillArticleQuantityModes();
 
+  // Task #1054: systemfältet "Kundnummer" till alla tenants (insert-only).
+  await backfillKundnummerSystemField();
+
   // Skip seed entirely if any tenant already exists (production / customer setup).
   // Demo seed only runs against a completely empty tenants table.
   const defaultRows = await db
@@ -1054,6 +1057,47 @@ async function seedArticleTypesForAllTenants() {
     }
   }
   if (total > 0) console.log(`Seeded ${total} article type definitions across tenants`);
+}
+
+/**
+ * Task #1054: systemfältet "Kundnummer" (sträng) ska finnas i ALLA tenants så att
+ * det är direkt valbart i orderkoncept-wizardens kund-steg (FROM_METADATA). Speglar
+ * STANDARD_METADATA_DEFINITIONS-posten i metadata-queries.ts, men körs PROAKTIVT
+ * (insert-only) över alla tenants — inte bara lazy per-tenant vid metadata-åtkomst.
+ * Matchar på namn (case-insensitivt, oavsett deletedAt) så att befintliga
+ * "Kundnummer"-rader (inkl. legacy icke-system eller medvetet arkiverade) aldrig
+ * dubbleras eller återuppväcks. isSystem=true blockerar manuell skrivning men
+ * tillåter import (auto-ursprung) — exakt som Butiksnummer/Fakturareferens.
+ */
+async function backfillKundnummerSystemField() {
+  const allTenants = await db.select({ id: tenants.id }).from(tenants);
+  let created = 0;
+  for (const t of allTenants) {
+    const existing = await db.select({ id: metadataKatalog.id })
+      .from(metadataKatalog)
+      .where(and(
+        eq(metadataKatalog.tenantId, t.id),
+        sql`lower(${metadataKatalog.namn}) = 'kundnummer'`,
+      ))
+      .limit(1);
+    if (existing.length > 0) continue;
+    await db.insert(metadataKatalog).values({
+      tenantId: t.id,
+      namn: "Kundnummer",
+      datatyp: "string",
+      arLogisk: true,
+      standardArvs: true,
+      kategori: "grunduppgifter",
+      beskrivning: "Kundens kundnummer — matchas mot kundregistret vid kund-härledning (FROM_METADATA)",
+      sortOrder: 2,
+      icon: "Hash",
+      area: "grunduppgifter",
+      displayNumber: 2,
+      isSystem: true,
+    });
+    created++;
+  }
+  if (created > 0) console.log(`Backfilled "Kundnummer" system field to ${created} tenant(s)`);
 }
 
 /**

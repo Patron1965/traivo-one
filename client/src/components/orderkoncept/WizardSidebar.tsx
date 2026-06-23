@@ -11,6 +11,9 @@ interface WizardSidebarProps {
   totalCost: number;
   estimatedHours: number;
   customerName?: string;
+  /** Task #1054: antal härledda kunder i metadata-läge (null = ej tillämpligt). */
+  derivedCustomerCount?: number | null;
+  derivedCustomersLoading?: boolean;
 }
 
 export default function WizardSidebar({
@@ -21,7 +24,11 @@ export default function WizardSidebar({
   totalCost,
   estimatedHours,
   customerName,
+  derivedCustomerCount,
+  derivedCustomersLoading,
 }: WizardSidebarProps) {
+  const showDerivedCustomers =
+    derivedCustomerCount !== null && derivedCustomerCount !== undefined;
   return (
     <div className="w-72 shrink-0 space-y-4" data-testid="wizard-sidebar">
       <Card>
@@ -33,6 +40,17 @@ export default function WizardSidebar({
             <div className="flex items-center gap-2">
               <Users className="h-4 w-4 text-muted-foreground" />
               <span className="text-sm" data-testid="sidebar-customer">{customerName}</span>
+            </div>
+          )}
+          {showDerivedCustomers && (
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Users className="h-4 w-4 text-muted-foreground" />
+                <span className="text-sm">Kunder</span>
+              </div>
+              <Badge variant="secondary" data-testid="sidebar-derived-customer-count">
+                {derivedCustomersLoading ? "…" : derivedCustomerCount}
+              </Badge>
             </div>
           )}
           <div className="flex items-center justify-between">

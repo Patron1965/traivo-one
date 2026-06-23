@@ -310,6 +310,33 @@ export default function OrderConceptWizardPage() {
     return ids ? new Set(ids) : null;
   }, [activeFilters.length, conditionPreviewQuery.data]);
 
+  // Task #1054: härledda (matchade) kunder för sidofältet. Speglar samma server-
+  // resolver som steg 2:s "Förhandsvisa" (customer-preview) men körs automatiskt så
+  // att sammanfattningen kan visa kundantal analogt med objektantalet — endast i
+  // metadata-läge med valt fält + valda objekt.
+  const customerPreviewEnabled =
+    customerMode === "FROM_METADATA" && !!customerMetadataField && targetObjectIds.size > 0;
+  const derivedCustomersQuery = useQuery<{
+    totalObjects: number;
+    resolved: { customerId: string; customerName: string; count: number }[];
+  }>({
+    queryKey: ["/api/order-concepts/customer-preview", targetIdsKey, activeFilters, customerMetadataField],
+    queryFn: async () => {
+      const res = await apiRequest("POST", "/api/order-concepts/customer-preview", {
+        objectIds: targetIdsKey,
+        filters: activeFilters,
+        customerMetadataField,
+      });
+      return res.json();
+    },
+    enabled: customerPreviewEnabled,
+    placeholderData: keepPreviousData,
+  });
+
+  const derivedCustomerCount = customerPreviewEnabled
+    ? derivedCustomersQuery.data?.resolved.length ?? null
+    : null;
+
   // Kanonisk enhet = öre; konvertera till kronor först vid visning (sidofältet
   // tolkar dessa som kronor). Fast pris i state är kronor → × 100 till öre.
   const fixedPriceOre = priceModel === "fixed" && fixedPriceKronor !== ""
@@ -892,6 +919,8 @@ export default function OrderConceptWizardPage() {
             totalCost={totalCost}
             estimatedHours={estimatedHours}
             customerName={customerMode === "HARDCODED" ? selectedCustomer?.name : undefined}
+            derivedCustomerCount={derivedCustomerCount}
+            derivedCustomersLoading={customerPreviewEnabled && derivedCustomersQuery.isFetching}
           />
         </div>
       </div>

@@ -3407,6 +3407,10 @@ export const STANDARD_METADATA_DEFINITIONS: Array<{
   // === Grunduppgifter ===
   // PDF §7: displayNumber följer 1/3/6/9/12/15/18/21/24 — systemfält Objektnamn = 1000 (alltid sist).
   { namn: 'Kontakt', datatyp: 'string', arLogisk: true, standardArvs: true, kategori: 'grunduppgifter', beskrivning: 'Kontaktperson (namn/telefon/e-post)', sortOrder: 1, icon: 'User', area: 'grunduppgifter', displayNumber: 1 },
+  // Task #1054: systemfält för kundnummer. Värdet populeras via import (auto-ursprung)
+  // — isSystem blockerar manuell skrivning (jfr Butiksnummer/Fakturareferens). Matchas
+  // mot kundregistret (kundnummer först, kundnamn fallback) vid FROM_METADATA-härledning.
+  { namn: 'Kundnummer', datatyp: 'string', arLogisk: true, standardArvs: true, kategori: 'grunduppgifter', beskrivning: 'Kundens kundnummer — matchas mot kundregistret vid kund-härledning (FROM_METADATA)', sortOrder: 2, icon: 'Hash', area: 'grunduppgifter', displayNumber: 2, isSystem: true },
   { namn: 'Vinjetbild', datatyp: 'image', arLogisk: false, standardArvs: false, kategori: 'grunduppgifter', beskrivning: 'Bild som representerar objektet', sortOrder: 3, icon: 'Image', area: 'grunduppgifter', displayNumber: 3 },
 
   // === Produktion ===
