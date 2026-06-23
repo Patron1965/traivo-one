@@ -1,5 +1,5 @@
 import { useState, useCallback, useMemo, useEffect, useRef } from "react";
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { useQuery, useMutation, keepPreviousData } from "@tanstack/react-query";
 import { useParams, useLocation } from "wouter";
 import { z } from "zod";
 import { useForm } from "react-hook-form";
@@ -21,6 +21,7 @@ import type {
   CustomerMode, TaskCategory,
 } from "@shared/schema";
 import { INVOICE_MODEL_TO_SCENARIO } from "@shared/order-concept-method";
+import { computeConceptOrderValue } from "@shared/order-concept-value";
 import Step1NameCustomer from "@/components/orderkoncept/Step1NameCustomer";
 import Step2PriceReference from "@/components/orderkoncept/Step2PriceReference";
 import Step3Invoicing from "@/components/orderkoncept/Step3Invoicing";
@@ -267,21 +268,80 @@ export default function OrderConceptWizardPage() {
 
   const selectedCustomer = customers.find(c => c.id === selectedCustomerId);
 
-  const totalValue = useMemo(() => conceptArticles.reduce((sum, ca) => {
-    const art = articles.find(a => a.id === ca.articleId);
-    const price = ca.unitPrice ?? art?.listPrice ?? 0;
-    return sum + price * (ca.quantity || 1);
-  }, 0), [conceptArticles, articles]);
+  // Task #1052: EN motor för "antal matchande objekt" + "ordervärde". Live-
+  // förhandsvisning av inpekning + villkorsfilter (samma server-resolver som
+  // /execute och Granska) driver BÅDE sidofältet och trädets dimning i steg 1.
+  const targetIdsKey = useMemo(
+    () => Array.from(targetObjectIds).sort(),
+    [targetObjectIds],
+  );
+  const activeFilters = useMemo(
+    () => filters.filter((f) => f.metadataKey && f.metadataKey.trim() !== ""),
+    [filters],
+  );
+  const conditionPreviewQuery = useQuery<{
+    total: number;
+    rootCount: number;
+    descendants: number;
+    matched: number;
+    matchedIds: string[];
+    sample: { id: string; name: string; objectNumber: string | null; address: string | null }[];
+  }>({
+    queryKey: ["/api/order-concepts/condition-preview", targetIdsKey, activeFilters],
+    queryFn: async () => {
+      const res = await apiRequest("POST", "/api/order-concepts/condition-preview", {
+        objectIds: targetIdsKey,
+        filters: activeFilters,
+      });
+      return res.json();
+    },
+    enabled: targetObjectIds.size > 0,
+    placeholderData: keepPreviousData,
+  });
 
-  const totalCost = useMemo(() => conceptArticles.reduce((sum, ca) => {
-    const art = articles.find(a => a.id === ca.articleId);
-    return sum + (art?.cost || 0) * (ca.quantity || 1);
-  }, 0), [conceptArticles, articles]);
+  const matchedCount = targetObjectIds.size === 0
+    ? 0
+    : conditionPreviewQuery.data?.matched ?? 0;
 
-  const estimatedHours = useMemo(() => conceptArticles.reduce((sum, ca) => {
-    const art = articles.find(a => a.id === ca.articleId);
-    return sum + ((art?.productionTime || 0) * (ca.quantity || 1)) / 60;
-  }, 0), [conceptArticles, articles]);
+  // Endast dimma trädet när ett villkorsfilter faktiskt är aktivt (annars ingår allt).
+  const conditionMatchedIds = useMemo<Set<string> | null>(() => {
+    if (activeFilters.length === 0) return null;
+    const ids = conditionPreviewQuery.data?.matchedIds;
+    return ids ? new Set(ids) : null;
+  }, [activeFilters.length, conditionPreviewQuery.data]);
+
+  // Kanonisk enhet = öre; konvertera till kronor först vid visning (sidofältet
+  // tolkar dessa som kronor). Fast pris i state är kronor → × 100 till öre.
+  const fixedPriceOre = priceModel === "fixed" && fixedPriceKronor !== ""
+    ? Math.round(parseFloat(fixedPriceKronor) * 100)
+    : 0;
+
+  const valueArticleInputs = useMemo(
+    () => conceptArticles.map((ca) => {
+      const art = articles.find((a) => a.id === ca.articleId);
+      return {
+        unitPriceOre: ca.unitPrice ?? art?.listPrice ?? 0,
+        quantity: ca.quantity || 1,
+        costOre: art?.cost ?? 0,
+        productionTimeMinutes: art?.productionTime ?? 0,
+      };
+    }),
+    [conceptArticles, articles],
+  );
+
+  const orderValue = useMemo(
+    () => computeConceptOrderValue({
+      matchedCount,
+      articles: valueArticleInputs,
+      priceModel,
+      fixedPriceAmountOre: fixedPriceOre,
+    }),
+    [matchedCount, valueArticleInputs, priceModel, fixedPriceOre],
+  );
+
+  const totalValue = orderValue.totalValueOre / 100;
+  const totalCost = orderValue.totalCostOre / 100;
+  const estimatedHours = orderValue.productionMinutes / 60;
 
   const getStepStatus = useCallback((stepNum: number): "complete" | "warning" | "future" => {
     if (stepNum >= currentStep) return "future";
@@ -715,6 +775,9 @@ export default function OrderConceptWizardPage() {
                 onToggleObject={toggleObject}
                 filters={filters}
                 onFiltersChange={(f) => { setFilters(f); setHasUnsavedWork(true); }}
+                conditionMatchedIds={conditionMatchedIds}
+                preview={conditionPreviewQuery.data ?? null}
+                previewLoading={conditionPreviewQuery.isFetching}
               />
             )}
 
@@ -823,7 +886,7 @@ export default function OrderConceptWizardPage() {
         <div className="hidden xl:block border-l p-4 overflow-y-auto">
           <WizardSidebar
             concept={null}
-            objectCount={targetObjectIds.size}
+            objectCount={matchedCount}
             articleCount={conceptArticles.length}
             totalValue={totalValue}
             totalCost={totalCost}

@@ -142,6 +142,13 @@ interface ObjectHierarchyTreeProps {
    * Step4Inspection visar ingen växling och laddar alltid hela trädet.
    */
   enableScopeModes?: boolean;
+  /**
+   * Task #1052: villkorsfilter-träffmängd (objekt-id:n som matchar steg 1:s
+   * villkor). När den är satt (≠ null) dimmas objekt i de VALDA grenarna som inte
+   * matchar, och deras implicita kryss släcks — så att icke-matchande objekt
+   * "faller bort" visuellt. null = inget villkorsfilter aktivt (allt ingår).
+   */
+  conditionMatchedIds?: Set<string> | null;
 }
 
 type TreeScope = "all" | "top";
@@ -155,6 +162,7 @@ export function ObjectHierarchyTree({
   height = 400,
   onNodeClick,
   enableScopeModes = false,
+  conditionMatchedIds = null,
 }: ObjectHierarchyTreeProps) {
   const selectionMode = !!selectedClusterIds && !!onToggleCluster;
   const objectSelectionMode = !!selectedObjectIds && !!onToggleObject;
@@ -351,6 +359,11 @@ export function ObjectHierarchyTree({
       const objectImplicit = objectSelectionMode
         ? implicitIncludedIds.has(node.id) && !objectSelected
         : false;
+      // Task #1052: villkorsfilter — objekt i vald gren som inte matchar villkoren
+      // "faller bort" (dimmas + implicit kryss släcks). Endast inom selektionen.
+      const conditionMiss = conditionMatchedIds != null
+        && (objectSelected || objectImplicit)
+        && !conditionMatchedIds.has(node.id);
       const rowHighlight = clusterSelected || objectSelected
         ? "bg-accent/40"
         : objectImplicit
@@ -361,7 +374,7 @@ export function ObjectHierarchyTree({
         <div
           style={style}
           className={`flex items-center gap-1 border-b border-border/40 pr-2 hover-elevate ${
-            filterActive && !isMatch ? "opacity-60" : ""
+            (filterActive && !isMatch) || conditionMiss ? "opacity-60" : ""
           } ${rowHighlight}`}
           data-testid={`tree-row-${node.id}`}
         >
@@ -397,7 +410,7 @@ export function ObjectHierarchyTree({
               visas ikryssade men låsta (de styrs av sin valda förälder). */}
           {objectSelectionMode && (
             <Checkbox
-              checked={objectSelected || objectImplicit}
+              checked={objectSelected || (objectImplicit && !conditionMiss)}
               disabled={objectImplicit}
               onCheckedChange={() => onToggleObject!(node.id)}
               className="shrink-0"
@@ -489,6 +502,7 @@ export function ObjectHierarchyTree({
       selectedObjectIds,
       onToggleObject,
       implicitIncludedIds,
+      conditionMatchedIds,
     ],
   );
 

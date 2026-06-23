@@ -11,6 +11,7 @@ import { NotFoundError, ValidationError, ForbiddenError } from "../errors";
 import { objects, workOrders, customerCommunications, objectContacts, orderConceptArticles, orderConceptObjects, articleObjectMappings, conceptFilters, priceLists, objectMetadata, metadataDefinitions, deliverySchedules, assignments as assignmentsTable, articles, type InsertOrderConceptArticle } from "@shared/schema";
 import { getISOWeek, getStartOfISOWeek, getDateFromWeekdayInMonth } from "./helpers";
 import { getOrderConceptMethod } from "@shared/order-concept-method";
+import { computeConceptOrderValue } from "@shared/order-concept-value";
 import { buildScheduleDateTargets } from "../services/order-concept-schedule";
 import {
   resolveTimeWarningThresholds,
@@ -377,11 +378,27 @@ app.post("/api/order-concepts/:id/validate", asyncHandler(async (req, res) => {
     const errors: { code: string; message: string }[] = [];
     const warnings: { code: string; message: string }[] = [];
 
-    const conceptObjects = await storage.getOrderConceptObjects(concept.id);
     const conceptArticles = await storage.getOrderConceptArticles(concept.id);
 
+    // Task #1052: "Inga objekt valda" ska spegla VERKLIGHETEN — antalet objekt som
+    // faktiskt matchar inpekning + villkorsfilter (samma motor som /execute och
+    // sidofältet), inte den avvecklade order_concept_objects-tabellen (tom i ADR v3).
+    // fallbackAllObjects:false ⇒ ingen inpekning = 0 träffar = blockerande fel.
+    const noObjectFilters = await storage.getConceptFilters(concept.id);
+    const noObjectFilterInputs = noObjectFilters.map((f: any) => ({
+      metadataKey: f.metadataKey,
+      operator: f.operator,
+      filterValue: f.filterValue,
+    }));
+    const { matchingObjects: validateMatchedObjects } = await resolveConceptMatchingObjects(
+      tenantId,
+      concept as any,
+      noObjectFilterInputs,
+      { fallbackAllObjects: false },
+    );
+
     if (!concept.name) errors.push({ code: "MISSING_NAME", message: "Namn saknas" });
-    if (conceptObjects.length === 0) errors.push({ code: "NO_OBJECTS", message: "Inga objekt valda" });
+    if (validateMatchedObjects.length === 0) errors.push({ code: "NO_OBJECTS", message: "Inga objekt valda" });
     if (conceptArticles.length === 0) errors.push({ code: "NO_ARTICLES", message: "Inga artiklar valda" });
     // Task #974: fakturanivå är inte längre ett operatörsval (alltid kundnivå) — ingen
     // NO_INVOICE_LEVEL-varning. Ett ev. fakturastopp delar bara upp fakturan organisatoriskt.
@@ -2012,6 +2029,9 @@ app.post("/api/order-concepts/condition-preview", asyncHandler(async (req, res) 
       rootCount,
       descendants,
       matched: matchedObjects.length,
+      // Task #1052: hela träff-mängden (id:n) så klienten kan dimma trädet live i
+      // steg 1. Begränsad av subträdet för de valda grenarna (ej hela tenanten).
+      matchedIds: matchedObjects.map((o) => o.id),
       sample: matchedObjects.slice(0, 50).map(o => ({
         id: o.id,
         name: o.name,
@@ -2221,6 +2241,12 @@ app.get("/api/order-concepts/:id/review-summary", asyncHandler(async (req, res) 
   // clusterName behålls som fältnamn för bakåtkomp med Step7-frontend (visas
   // som "grenar" i objekt-läge).
   const clusterSummaries: any[] = [];
+  // Task #1052: totalMatchedObjects MÅSTE vara den DEDUPLICERADE unionen av
+  // matchade objekt (samma som sidofältet via condition-preview/resolveTargetObjects),
+  // inte en summa per gren. Annars dubbelräknas överlappande val (barn + förfader)
+  // och Granska-värdet divergerar från sidofältet. Per-gren-summorna i
+  // clusterSummaries är enbart informativ nedbrytning.
+  const matchedIdSet = new Set<string>();
   let totalMatchedObjects = 0;
 
   if (targetObjectIds.length > 0) {
@@ -2233,7 +2259,7 @@ app.get("/api/order-concepts/:id/review-summary", asyncHandler(async (req, res) 
       const branchObjects = await resolveTargetObjects({ tenantId, objectIds: [rootId] });
       const matchedObjects = await filterObjectsByConditions(tenantId, branchObjects, conceptFilterInputs);
 
-      totalMatchedObjects += matchedObjects.length;
+      for (const o of matchedObjects) matchedIdSet.add((o as any).id);
       clusterSummaries.push({
         clusterId: rootId,
         clusterName: (root as any).name ?? rootId,
@@ -2256,7 +2282,7 @@ app.get("/api/order-concepts/:id/review-summary", asyncHandler(async (req, res) 
       const tenantObjects = clusterObjects.filter((o: any) => o.tenantId === tenantId);
       const matchedObjects = await filterObjectsByConditions(tenantId, tenantObjects as any, conceptFilterInputs);
 
-      totalMatchedObjects += matchedObjects.length;
+      for (const o of matchedObjects) matchedIdSet.add((o as any).id);
       clusterSummaries.push({
         clusterId,
         clusterName: (cluster as any).name,
@@ -2270,6 +2296,9 @@ app.get("/api/order-concepts/:id/review-summary", asyncHandler(async (req, res) 
       });
     }
   }
+
+  // Deduplicerad union (== sidofältets condition-preview-count) — driver ordervärdet.
+  totalMatchedObjects = matchedIdSet.size;
 
   // --- Schema ---
   const schedule = {
@@ -2318,13 +2347,27 @@ app.get("/api/order-concepts/:id/review-summary", asyncHandler(async (req, res) 
     matchingObjects: hitMatchObjects,
   });
 
-  // Task #976: fast pris (priceModel='fixed') slår igenom på totalen — den verkliga
-  // intäkten är fixedPriceAmount × antal träff-objekt (artikelträff), inte BOM-summan.
-  const runningTotalKr = articleLines.reduce((s: number, l: any) => s + l.lineTotalKr, 0);
+  // Task #1052: ordervärde = per-objekt-värde × antal matchande objekt, via den
+  // DELADE motorn (samma som sidofältet) så Granska och sidofältet alltid är lika.
+  // 0 kr när inget matchar. Fast pris (priceModel='fixed') ⇒ per-objekt = fasta
+  // priset; annars Σ(enhetspris × antal) över artiklarna.
+  const valueArticleInputs = conceptArticleRows.map((ca: any) => {
+    const art: any = articleMap.get(ca.articleId);
+    return {
+      unitPriceOre: ca.unitPrice ?? art?.listPrice ?? 0,
+      quantity: ca.quantity || 1,
+      costOre: art?.cost ?? 0,
+      productionTimeMinutes: art?.productionTime ?? 0,
+    };
+  });
+  const orderValue = computeConceptOrderValue({
+    matchedCount: totalMatchedObjects,
+    articles: valueArticleInputs,
+    priceModel: (concept as any).priceModel,
+    fixedPriceAmountOre: (concept as any).fixedPriceAmount ?? null,
+  });
   const fixedPrice = isFixedPriceConcept(concept as any);
-  const totalValueKr = fixedPrice && concept.articleId
-    ? ((concept.fixedPriceAmount ?? 0) * hits.hitCount) / 100
-    : runningTotalKr;
+  const totalValueKr = orderValue.totalValueOre / 100;
 
   // --- Repetition (Task #979) ---
   // call_off = engångskörning (avrop), schedule = återkommande, subscription =
@@ -2469,8 +2512,8 @@ app.get("/api/order-concepts/:id/review-summary", asyncHandler(async (req, res) 
     totalMatchedObjects,
     articleLines,
     totalValueKr,
-    totalCostKr: articleLines.reduce((s: number, l: any) => s + l.costKr, 0),
-    totalProductionMinutes: articleLines.reduce((s: number, l: any) => s + l.productionMinutes, 0),
+    totalCostKr: orderValue.totalCostOre / 100,
+    totalProductionMinutes: orderValue.productionMinutes,
     schedule,
     isFixedPrice: fixedPrice,
     fixedPriceAmountKr: fixedPrice ? (concept.fixedPriceAmount ?? 0) / 100 : null,

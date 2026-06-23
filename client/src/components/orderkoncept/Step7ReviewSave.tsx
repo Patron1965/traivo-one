@@ -96,6 +96,7 @@ interface Repetition {
 
 interface ReviewSummary {
   articleLines: ArticleLine[];
+  totalMatchedObjects?: number;
   totalValueKr: number;
   totalCostKr: number;
   totalProductionMinutes: number;
@@ -643,6 +644,10 @@ export default function Step7ReviewSave({
               ))}
               <Separator className="my-2" />
               <div className="space-y-0.5 pt-1">
+                <Row
+                  label="Matchade objekt"
+                  value={<span data-testid="summary-economy-matched">{(summary.totalMatchedObjects ?? 0).toLocaleString("sv-SE")}</span>}
+                />
                 <Row label="Totalt ordervärde" value={<span className="text-base font-bold">{fmtKr(summary.totalValueKr)}</span>} />
                 <Row label="Beräknad kostnad" value={fmtKr(summary.totalCostKr)} />
                 <Row

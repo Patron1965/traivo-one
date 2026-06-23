@@ -1,5 +1,4 @@
-import { useMutation, useQuery } from "@tanstack/react-query";
-import { apiRequest } from "@/lib/queryClient";
+import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -14,11 +13,14 @@ import { ObjectHierarchyTree } from "@/components/objectTree/ObjectHierarchyTree
 
 export type { ConditionFilter };
 
-interface PreviewResult {
+export interface PreviewResult {
   total: number;
+  rootCount: number;
   /** Antal objekt som ligger under de valda gren-rötterna (serverberäknat). */
   descendants: number;
   matched: number;
+  /** Hela träff-mängden (id:n) — driver trädets live-dimning. */
+  matchedIds: string[];
   sample: { id: string; name: string; objectNumber: string | null; address: string | null }[];
 }
 
@@ -28,6 +30,14 @@ interface Step4Props {
   onToggleObject: (id: string) => void;
   filters: ConditionFilter[];
   onFiltersChange: (filters: ConditionFilter[]) => void;
+  /**
+   * Task #1052: live-träffmängd från sidans condition-preview. När den är satt
+   * (≠ null) dimmas icke-matchande objekt i trädet och deras kryss släcks.
+   */
+  conditionMatchedIds: Set<string> | null;
+  /** Live-resultat från condition-preview (inpekning + villkor). */
+  preview: PreviewResult | null;
+  previewLoading: boolean;
 }
 
 export default function Step4Inspection({
@@ -35,21 +45,12 @@ export default function Step4Inspection({
   onToggleObject,
   filters,
   onFiltersChange,
+  conditionMatchedIds,
+  preview,
+  previewLoading,
 }: Step4Props) {
   const { data: definitions = [] } = useQuery<MetadataDefinition[]>({
     queryKey: ["/api/metadata-definitions"],
-  });
-
-  // Steg 4 visar bara STRUKTUR (antal objekt i vald gren) — inte artikelträffar,
-  // uppgifter, tid eller ekonomi (det beräknas i ett senare steg). Därför skickas
-  // inga villkor in: `total` = hela subträdet för de valda grenarna.
-  const previewMutation = useMutation<PreviewResult>({
-    mutationFn: async () => {
-      const res = await apiRequest("POST", "/api/order-concepts/condition-preview", {
-        objectIds: Array.from(targetObjectIds),
-      });
-      return res.json();
-    },
   });
 
   const addFilter = () =>
@@ -60,6 +61,8 @@ export default function Step4Inspection({
 
   const removeFilter = (i: number) =>
     onFiltersChange(filters.filter((_, idx) => idx !== i));
+
+  const hasActiveFilters = filters.some((f) => f.metadataKey && f.metadataKey.trim() !== "");
 
   return (
     <div className="space-y-6" data-testid="step4-inspection">
@@ -76,14 +79,16 @@ export default function Step4Inspection({
         <p className="text-xs text-muted-foreground mb-3">
           Navigera hierarkin och välj objekt eller grenar att inkludera. Klicka på ett objekt
           eller bocka i rutan för att välja det och hela dess underträd. Underobjekt som följer
-          med markeras "via förälder".
+          med markeras "via förälder". Lägg till villkor nedan för att smalna av vilka objekt i
+          grenarna som faktiskt träffas — icke-matchande objekt tonas ned här.
         </p>
 
-        {/* Objekt/gren-selektion (ADR v3) — ersätter kluster-targeting.
-            objectSelectionMode härleds internt från selectedObjectIds + onToggleObject. */}
+        {/* Objekt/gren-selektion (ADR v3) — objectSelectionMode härleds internt från
+            selectedObjectIds + onToggleObject. conditionMatchedIds driver live-dimningen. */}
         <ObjectHierarchyTree
           selectedObjectIds={targetObjectIds}
           onToggleObject={onToggleObject}
+          conditionMatchedIds={conditionMatchedIds}
           height={360}
         />
       </div>
@@ -123,44 +128,39 @@ export default function Step4Inspection({
         )}
       </div>
 
-      {/* ── Struktur (antal objekt i vald gren) ────────────────────────────────── */}
+      {/* ── Struktur & villkorsträffar (live) ──────────────────────────────────── */}
       <Card>
         <CardHeader className="pb-2">
-          <CardTitle className="text-sm font-medium flex items-center justify-between">
-            <span className="flex items-center gap-2">
-              <Eye className="h-4 w-4" /> Objekt i vald struktur
-            </span>
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={targetObjectIds.size === 0 || previewMutation.isPending}
-              onClick={() => previewMutation.mutate()}
-              data-testid="button-preview-structure"
-            >
-              {previewMutation.isPending ? (
-                <Loader2 className="h-4 w-4 mr-1 animate-spin" />
-              ) : null}
-              Förhandsvisa
-            </Button>
+          <CardTitle className="text-sm font-medium flex items-center gap-2">
+            <Eye className="h-4 w-4" /> Objekt i vald struktur
+            {previewLoading && (
+              <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" data-testid="loading-structure" />
+            )}
           </CardTitle>
         </CardHeader>
         <CardContent className="text-sm">
-          {previewMutation.data ? (
+          {targetObjectIds.size === 0 ? (
+            <p className="text-muted-foreground">
+              Välj objekt eller grenar i hierarkin för att se hur många objekt som ingår.
+            </p>
+          ) : preview ? (
             <>
               <p className="mb-1" data-testid="text-structure-count">
-                <strong>{previewMutation.data.total}</strong> objekt i vald struktur.
+                <strong data-testid="text-matched-count">{preview.matched}</strong>
+                {hasActiveFilters ? " objekt matchar villkoren" : " objekt"} av{" "}
+                <strong>{preview.total}</strong> i vald struktur.
               </p>
               <p
                 className="mb-2 text-xs text-muted-foreground"
                 data-testid="text-structure-breakdown"
               >
-                {targetObjectIds.size} valda grenar · {previewMutation.data.descendants}{" "}
+                {targetObjectIds.size} valda grenar · {preview.descendants}{" "}
                 underliggande objekt
               </p>
-              {previewMutation.data.sample.length > 0 && (
+              {preview.sample.length > 0 && (
                 <ScrollArea className="h-40 border rounded-md">
                   <div className="divide-y">
-                    {previewMutation.data.sample.map((o) => (
+                    {preview.sample.map((o) => (
                       <div
                         key={o.id}
                         className="px-3 py-1.5 text-xs flex justify-between"
@@ -178,10 +178,7 @@ export default function Step4Inspection({
               )}
             </>
           ) : (
-            <p className="text-muted-foreground">
-              Välj objekt eller grenar och tryck Förhandsvisa för att se hur många objekt som ingår
-              i vald struktur.
-            </p>
+            <p className="text-muted-foreground">Beräknar …</p>
           )}
         </CardContent>
       </Card>
