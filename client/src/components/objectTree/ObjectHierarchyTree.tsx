@@ -462,13 +462,8 @@ export function ObjectHierarchyTree({
                 className="text-xs font-normal shrink-0"
                 data-testid={`badge-count-${node.id}`}
               >
-                {desc}
+                {desc} underobjekt
               </Badge>
-            )}
-            {node.hierarchyLevel && (
-              <span className="text-xs text-muted-foreground shrink-0 hidden sm:inline">
-                {node.hierarchyLevel}
-              </span>
             )}
             {node.customerName && (
               <span className="text-xs text-muted-foreground truncate hidden md:inline">
