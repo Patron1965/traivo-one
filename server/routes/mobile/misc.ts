@@ -367,7 +367,7 @@ ${existingSteps.length > 0 ? `Redan tillagda steg (lägg INTE till dessa igen): 
 Svara ENBART med JSON-array av strängar, t.ex. ["Steg 1", "Steg 2"]. Skriv på svenska. Var konkret och praktisk.`;
 
       const response = await openai.chat.completions.create({
-        model: "gpt-4o-mini",
+        model: "gpt-5-mini",
         messages: [
           { role: "system", content: "Du genererar checklistor för fältservicetekniker. Svara alltid med en JSON-array av strängar." },
           { role: "user", content: prompt },

@@ -127,7 +127,7 @@ export async function registerCapacityForecastRoutes(app: Express) {
 
     try {
       const response = await openai.chat.completions.create({
-        model: "gpt-4o-mini",
+        model: "gpt-5-mini",
         messages: [
           { role: "system", content: "Du är en erfaren kapacitetsplanerare. Skriv koncist och praktiskt på svenska." },
           { role: "user", content: `Sammanfatta dessa topp-3 åtgärder för en planerare i 3-5 meningar med tydlig prioritering:\n\n${promptLines}` },

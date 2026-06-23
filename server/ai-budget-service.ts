@@ -303,7 +303,7 @@ export function resolveAIModel(tier: string, useCase: "planning" | "chat" | "ana
   if (tier === "premium" && (useCase === "planning" || useCase === "analysis")) {
     return "gpt-4o";
   }
-  return "gpt-4o-mini";
+  return "gpt-5-mini";
 }
 
 export async function enforceBudgetAndRateLimit(
@@ -314,12 +314,12 @@ export async function enforceBudgetAndRateLimit(
 
   const budgetCheck = await checkBudgetAndBlock(tenantId);
   if (!budgetCheck.allowed) {
-    return { allowed: false, tier, model: "gpt-4o-mini", errorMessage: budgetCheck.message || "AI-budget överskriden", errorType: "budget" };
+    return { allowed: false, tier, model: "gpt-5-mini", errorMessage: budgetCheck.message || "AI-budget överskriden", errorType: "budget" };
   }
 
   const rateLimitCheck = checkRateLimit(tenantId, tier);
   if (!rateLimitCheck.allowed) {
-    return { allowed: false, tier, model: "gpt-4o-mini", errorMessage: `Maxgräns nådd. Försök igen om ${rateLimitCheck.retryAfterSeconds} sekunder.`, retryAfterSeconds: rateLimitCheck.retryAfterSeconds, errorType: "ratelimit" };
+    return { allowed: false, tier, model: "gpt-5-mini", errorMessage: `Maxgräns nådd. Försök igen om ${rateLimitCheck.retryAfterSeconds} sekunder.`, retryAfterSeconds: rateLimitCheck.retryAfterSeconds, errorType: "ratelimit" };
   }
 
   const model = resolveAIModel(tier, useCase);

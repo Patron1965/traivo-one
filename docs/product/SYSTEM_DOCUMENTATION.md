@@ -737,7 +737,7 @@ Auto-schemaläggning använder Open-Meteo API för 7-dagars väderprognos och ju
 
 ### AI-teknologi
 - **Provider:** OpenAI via Replit AI Integrations
-- **Modeller:** gpt-4o-mini (snabba analyser), gpt-4o (komplexa beslut)
+- **Modeller:** gpt-5-mini (snabba analyser), gpt-4o (komplexa beslut)
 
 ---
 

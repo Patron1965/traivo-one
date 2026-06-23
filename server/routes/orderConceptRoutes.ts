@@ -2149,7 +2149,7 @@ app.post("/api/order-concepts/:id/delivery-ai-help", asyncHandler(async (req, re
     };
 
     const completion = await openaiClient.chat.completions.create({
-      model: "gpt-4o-mini",
+      model: "gpt-5-mini",
       max_tokens: 600,
       response_format: { type: "json_object" },
       messages: [
@@ -2165,7 +2165,7 @@ app.post("/api/order-concepts/:id/delivery-ai-help", asyncHandler(async (req, re
     });
 
     const { trackApiUsage } = await import("../api-usage-tracker");
-    trackApiUsage({ service: "openai", method: "chat.completions.create", endpoint: "/v1/chat/completions", model: "gpt-4o-mini", units: 1, metadata: { feature: "delivery-ai-help" } });
+    trackApiUsage({ service: "openai", method: "chat.completions.create", endpoint: "/v1/chat/completions", model: "gpt-5-mini", units: 1, metadata: { feature: "delivery-ai-help" } });
 
     let result: unknown;
     try {

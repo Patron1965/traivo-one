@@ -23,7 +23,7 @@ function getContextModel(): string {
 // ============================================
 // AI PLANNING SERVICE - MODELLKONFIGURATION
 // ============================================
-// Använder gpt-4o-mini för kostnadseffektivitet
+// Använder gpt-5-mini för kostnadseffektivitet
 // Se server/routes.ts (AI Field Assistant) för fullständig prislista
 // och uppgraderingsmöjligheter
 // ============================================
@@ -33,7 +33,7 @@ const openai = new OpenAI({
   baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
 });
 
-const DEFAULT_AI_MODEL = "gpt-4o-mini";
+const DEFAULT_AI_MODEL = "gpt-5-mini";
 
 async function callOpenAI(
   params: Parameters<typeof openai.chat.completions.create>[0],

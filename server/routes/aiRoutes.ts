@@ -35,7 +35,7 @@ async function aiBudgetGuard(req: Request, res: Response, useCase: "planning" | 
       error: enforcement.errorType === "ratelimit" ? "AI-anropsgräns nådd" : "AI-budget överskriden",
       message: enforcement.errorMessage,
     });
-    return { tenantId, tier: enforcement.tier, model: "gpt-4o-mini", blocked: true };
+    return { tenantId, tier: enforcement.tier, model: "gpt-5-mini", blocked: true };
   }
   return { tenantId, tier: enforcement.tier, model: enforcement.model, blocked: false };
 }
@@ -54,11 +54,11 @@ import("../optimization-job-runner").then(({ startJobCleanupScheduler, resetStal
 // ============================================
 // Conversational AI with full system data access via function calling
 //
-// MODELLVAL (aktuell: gpt-4o-mini - mest kostnadseffektiv)
+// MODELLVAL (aktuell: gpt-5-mini - mest kostnadseffektiv)
 // -------------------------------------------------------
 // | Modell         | Pris/1M in | Pris/1M ut | Användning                    |
 // |----------------|------------|------------|-------------------------------|
-// | gpt-4o-mini    | $0.15      | $0.60      | Standard - enklare frågor     |
+// | gpt-5-mini    | $0.15      | $0.60      | Standard - enklare frågor     |
 // | gpt-4o         | $2.50      | $10.00     | Premium - djupare analys      |
 // | gpt-4o-vision  | $2.50      | $10.00     | Enterprise - bildanalys       |
 // | gpt-4.5        | ~$5.00     | ~$15.00    | Pro - avancerad planering     |
@@ -68,7 +68,7 @@ import("../optimization-job-runner").then(({ startJobCleanupScheduler, resetStal
 // - Enterprise (gpt-4o + vision): Analysera foton av skadade kärl, automatisk rapport
 // - Pro (gpt-4.5): Prediktiv analys, automatisk omplanering vid sjukdom
 //
-// Byt modell genom att ändra "model: gpt-4o-mini" till önskad modell nedan
+// Byt modell genom att ändra "model: gpt-5-mini" till önskad modell nedan
 // ============================================
 app.post("/api/ai/field-assistant", requirePlanner, asyncHandler(async (req, res) => {
     const { question, jobContext, conversationHistory = [] } = req.body;

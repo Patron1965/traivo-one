@@ -3,7 +3,7 @@ import { apiUsageLogs } from "@shared/schema";
 
 const PRICING = {
   openai: {
-    "gpt-4o-mini": { input: 0.00015, output: 0.0006 },
+    "gpt-5-mini": { input: 0.00025, output: 0.002 },
     "gpt-4o": { input: 0.0025, output: 0.01 },
     "dall-e-3": { perImage: 0.04 },
   },
@@ -17,7 +17,7 @@ const PRICING = {
 };
 
 function estimateOpenAICost(model: string, inputTokens: number, outputTokens: number): number {
-  const modelKey = model.includes("gpt-4o-mini") ? "gpt-4o-mini" : model.includes("gpt-4o") ? "gpt-4o" : "gpt-4o-mini";
+  const modelKey = model.includes("gpt-5-mini") ? "gpt-5-mini" : model.includes("gpt-4o") ? "gpt-4o" : "gpt-5-mini";
   const pricing = PRICING.openai[modelKey as keyof typeof PRICING.openai];
   if (!pricing || "perImage" in pricing) return 0;
   return (inputTokens / 1000) * pricing.input + (outputTokens / 1000) * pricing.output;
@@ -90,7 +90,7 @@ export async function trackOpenAIResponse(
 ): Promise<void> {
   if (!response) return;
   const usage = response.usage;
-  const model = response.model || "gpt-4o-mini";
+  const model = response.model || "gpt-5-mini";
   trackApiUsage({
     tenantId,
     service: "openai",

@@ -282,7 +282,7 @@ const doc = new Document({
 
         createSection("5.3 AI-teknologi"),
         createBullet("Provider: OpenAI via Replit AI Integrations"),
-        createBullet("Modeller: gpt-4o-mini for snabba analyser"),
+        createBullet("Modeller: gpt-5-mini for snabba analyser"),
         createBullet("Monster: Kontext-driven prompting med strukturerad JSON-output"),
 
         createSection("6. API-Endpoints (100+ endpoints)", HeadingLevel.HEADING_1),
