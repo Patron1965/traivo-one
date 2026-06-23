@@ -246,12 +246,12 @@ export default function ROIReportPage() {
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold" data-testid="text-page-title">ROI-rapport</h1>
-          <p className="text-muted-foreground text-sm">Avkastningsanalys baserad p\u00e5 faktisk anv\u00e4ndningsdata</p>
+          <p className="text-muted-foreground text-sm">Avkastningsanalys baserad på faktisk användningsdata</p>
         </div>
         <div className="flex items-center gap-3">
           <Select value={selectedCustomerId} onValueChange={setSelectedCustomerId} data-testid="select-customer">
             <SelectTrigger className="w-[240px]" data-testid="select-customer-trigger">
-              <SelectValue placeholder="V\u00e4lj kund..." />
+              <SelectValue placeholder="Välj kund..." />
             </SelectTrigger>
             <SelectContent>
               {(customerList || []).map(c => (
@@ -266,10 +266,10 @@ export default function ROIReportPage() {
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="3">3 m\u00e5nader</SelectItem>
-              <SelectItem value="6">6 m\u00e5nader</SelectItem>
-              <SelectItem value="12">12 m\u00e5nader</SelectItem>
-              <SelectItem value="24">24 m\u00e5nader</SelectItem>
+              <SelectItem value="3">3 månader</SelectItem>
+              <SelectItem value="6">6 månader</SelectItem>
+              <SelectItem value="12">12 månader</SelectItem>
+              <SelectItem value="24">24 månader</SelectItem>
             </SelectContent>
           </Select>
           {roiData && (
@@ -324,8 +324,8 @@ export default function ROIReportPage() {
         <Card>
           <CardContent className="p-12 text-center text-muted-foreground">
             <BarChart3 className="h-12 w-12 mx-auto mb-4 opacity-30" />
-            <p className="text-lg font-medium">V\u00e4lj en kund f\u00f6r att visa ROI-rapport</p>
-            <p className="text-sm mt-1">Rapporten ber\u00e4knas automatiskt fr\u00e5n faktisk anv\u00e4ndningsdata</p>
+            <p className="text-lg font-medium">Välj en kund för att visa ROI-rapport</p>
+            <p className="text-sm mt-1">Rapporten beräknas automatiskt från faktisk användningsdata</p>
           </CardContent>
         </Card>
       )}
@@ -342,7 +342,7 @@ export default function ROIReportPage() {
         <>
           <div className="flex items-center gap-2">
             <h2 className="text-lg font-semibold" data-testid="text-customer-name">{roiData.customer.name}</h2>
-            <Badge variant="secondary" data-testid="badge-period">{roiData.period.months} m\u00e5nader</Badge>
+            <Badge variant="secondary" data-testid="badge-period">{roiData.period.months} månader</Badge>
           </div>
 
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -362,7 +362,7 @@ export default function ROIReportPage() {
               color={s.efficiencyGainPercent > 0 ? "#16a34a" : undefined}
             />
             <KPICard
-              title="St\u00e4lltidsreduktion"
+              title="Ställtidsreduktion"
               value={`${s.setupTimeReductionPercent}%`}
               subtitle={`F\u00f6re: ${s.setupTimeBaseline.firstHalfAvgMinutes} min \u2192 Efter: ${s.setupTimeBaseline.secondHalfAvgMinutes} min`}
               icon={Clock}
@@ -399,7 +399,7 @@ export default function ROIReportPage() {
               trend={s.deviationTrend && s.deviationTrend.secondPeriodAvg < s.deviationTrend.firstPeriodAvg ? "up" : "neutral"}
             />
             <KPICard
-              title="Orderv\u00e4rde"
+              title="Ordervärde"
               value={`${Math.round(s.totalValue / 100).toLocaleString("sv-SE")} kr`}
               subtitle={`Kostnad: ${Math.round(s.totalCost / 100).toLocaleString("sv-SE")} kr`}
               icon={DollarSign}
@@ -421,7 +421,7 @@ export default function ROIReportPage() {
                       <YAxis yAxisId="right" orientation="right" domain={[0, 100]} unit="%" />
                       <Tooltip />
                       <Legend />
-                      <Bar yAxisId="left" dataKey="completedOrders" fill="#4A9B9B" name="Utf\u00f6rda" radius={[4, 4, 0, 0]} />
+                      <Bar yAxisId="left" dataKey="completedOrders" fill="#4A9B9B" name="Utförda" radius={[4, 4, 0, 0]} />
                       <Bar yAxisId="left" dataKey="totalOrders" fill="#E8F4F8" name="Totalt" radius={[4, 4, 0, 0]} />
                       <Line yAxisId="right" type="monotone" dataKey="completionRate" stroke="#1B4B6B" strokeWidth={2} name="Rate %" dot={false} />
                     </BarChart>
@@ -431,7 +431,7 @@ export default function ROIReportPage() {
 
               <Card>
                 <CardHeader className="pb-2">
-                  <CardTitle className="text-sm font-medium">Uppdragstid & St\u00e4lltid (min)</CardTitle>
+                  <CardTitle className="text-sm font-medium">Uppdragstid & Ställtid (min)</CardTitle>
                 </CardHeader>
                 <CardContent>
                   <ResponsiveContainer width="100%" height={250}>
@@ -442,7 +442,7 @@ export default function ROIReportPage() {
                       <Tooltip />
                       <Legend />
                       <Area type="monotone" dataKey="avgDurationMinutes" fill="#7DBFB0" fillOpacity={0.3} stroke="#4A9B9B" strokeWidth={2} name="Uppdragstid" />
-                      <Area type="monotone" dataKey="avgSetupTimeMinutes" fill="#E8F4F8" fillOpacity={0.3} stroke="#6B7C8C" strokeWidth={2} name="St\u00e4lltid" />
+                      <Area type="monotone" dataKey="avgSetupTimeMinutes" fill="#E8F4F8" fillOpacity={0.3} stroke="#6B7C8C" strokeWidth={2} name="Ställtid" />
                     </AreaChart>
                   </ResponsiveContainer>
                 </CardContent>
@@ -450,7 +450,7 @@ export default function ROIReportPage() {
 
               <Card>
                 <CardHeader className="pb-2">
-                  <CardTitle className="text-sm font-medium">Milj\u00f6p\u00e5verkan</CardTitle>
+                  <CardTitle className="text-sm font-medium">Miljöpåverkan</CardTitle>
                 </CardHeader>
                 <CardContent>
                   <ResponsiveContainer width="100%" height={250}>
@@ -461,7 +461,7 @@ export default function ROIReportPage() {
                       <YAxis yAxisId="co2" orientation="right" />
                       <Tooltip />
                       <Legend />
-                      <Line yAxisId="dist" type="monotone" dataKey="totalDistanceKm" stroke="#1B4B6B" strokeWidth={2} name="K\u00f6rstr\u00e4cka (km)" dot={false} />
+                      <Line yAxisId="dist" type="monotone" dataKey="totalDistanceKm" stroke="#1B4B6B" strokeWidth={2} name="Körsträcka (km)" dot={false} />
                       <Line yAxisId="co2" type="monotone" dataKey="totalCo2Kg" stroke="#16a34a" strokeWidth={2} name="CO2 (kg)" dot={false} />
                     </LineChart>
                   </ResponsiveContainer>
@@ -494,7 +494,7 @@ export default function ROIReportPage() {
             <Card>
               <CardContent className="p-8 text-center text-muted-foreground">
                 <Activity className="h-8 w-8 mx-auto mb-3 opacity-30" />
-                <p>F\u00f6r lite data f\u00f6r att visa trenddiagram. Ut\u00f6ka perioden eller v\u00e4nta p\u00e5 mer historisk data.</p>
+                <p>För lite data för att visa trenddiagram. Utöka perioden eller vänta på mer historisk data.</p>
               </CardContent>
             </Card>
           )}

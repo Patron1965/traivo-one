@@ -48,8 +48,8 @@ export default function PortalROIReportPage() {
         <Card className="max-w-md w-full">
           <CardContent className="p-8 text-center">
             <AlertCircle className="h-12 w-12 mx-auto mb-4 text-destructive" />
-            <h2 className="text-lg font-semibold mb-2">Ogiltig l\u00e4nk</h2>
-            <p className="text-muted-foreground text-sm">Denna delningsl\u00e4nk saknar en giltig token.</p>
+            <h2 className="text-lg font-semibold mb-2">Ogiltig länk</h2>
+            <p className="text-muted-foreground text-sm">Denna delningslänk saknar en giltig token.</p>
           </CardContent>
         </Card>
       </div>
@@ -94,7 +94,7 @@ export default function PortalROIReportPage() {
             Traivo ROI-rapport
           </div>
           <h1 className="text-2xl font-bold" data-testid="text-customer-name">{data.customer.name}</h1>
-          <p className="text-muted-foreground text-sm">\u00d6versikt av serviceprestanda</p>
+          <p className="text-muted-foreground text-sm">Översikt av serviceprestanda</p>
         </div>
 
         <div className="grid grid-cols-2 gap-4">
@@ -110,7 +110,7 @@ export default function PortalROIReportPage() {
             <CardContent className="p-5 text-center">
               <CheckCircle2 className="h-6 w-6 mx-auto mb-2 text-chart-2" />
               <p className="text-3xl font-bold">{data.summary.completedOrders}</p>
-              <p className="text-xs text-muted-foreground">Utf\u00f6rda ordrar</p>
+              <p className="text-xs text-muted-foreground">Utförda ordrar</p>
             </CardContent>
           </Card>
 
@@ -143,7 +143,7 @@ export default function PortalROIReportPage() {
             <CardContent className="p-5 text-center">
               <Truck className="h-6 w-6 mx-auto mb-2 text-[#1B4B6B]" />
               <p className="text-3xl font-bold">{data.summary.totalDistanceKm}</p>
-              <p className="text-xs text-muted-foreground">Total k\u00f6rstr\u00e4cka (km)</p>
+              <p className="text-xs text-muted-foreground">Total körsträcka (km)</p>
             </CardContent>
           </Card>
 
@@ -151,7 +151,7 @@ export default function PortalROIReportPage() {
             <CardContent className="p-5 text-center">
               <Leaf className="h-6 w-6 mx-auto mb-2 text-chart-2" />
               <p className="text-3xl font-bold">{data.summary.totalCo2Kg}</p>
-              <p className="text-xs text-muted-foreground">CO2-utsl\u00e4pp (kg)</p>
+              <p className="text-xs text-muted-foreground">CO2-utsläpp (kg)</p>
             </CardContent>
           </Card>
         </div>
