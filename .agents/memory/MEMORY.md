@@ -70,3 +70,4 @@
 - [Frozen tidsregel-paket (Tidsmotor)](frozen-time-rules.md) — viktade tidsregler fryses per uppgift vid expansion; HÅRDA regler bara snapshotas (blockerar via befintliga time_windows), bara MJUKA injiceras som prioritetsdelta i VRP.
 - [Orderkoncept-wizard stegordning](order-concept-wizard-step-ordering.md) — stegnr är numeriskt kodat på många ställen (STEPS/validate/status/saveStep/render/header); omordning kräver lockstep + versions-gate:ade utkast (gammal/ny numrering delar 1..N).
 - [Objekt-360 metadata-vy](objekt-360-metadata-view.md) — KÄLLA/ARV-badge har 5 kanoniska states; "Systemgenererat"-kortet byggs ENBART från riktiga objekt-kolumner (aldrig fabricerade version/ändrad-av).
+- [Grovplanering motor-vy](grovplanering-engine-results.md) — "Motorns förslag" läser slot_times (source=tidsmotor) via dedikerad endpoint, ej work_order-rutnätet; klump=metadata.kind=clump; demo-DB tom→tom-state krävs.

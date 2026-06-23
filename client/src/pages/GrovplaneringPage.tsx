@@ -64,6 +64,10 @@ import {
 } from "@/components/grovplanering/RoughFilterPanel";
 import { RoughGridTable } from "@/components/grovplanering/RoughGridTable";
 import { RoughAssignModal } from "@/components/grovplanering/RoughAssignModal";
+import { EngineRunControl } from "@/components/grovplanering/EngineRunControl";
+import { EngineResultsView } from "@/components/grovplanering/EngineResultsView";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import type { EngineResultsResponse } from "@/lib/engine-results";
 import {
   ROUGH_STATUS_ORDER,
   ROUGH_STATUS_META,
@@ -258,6 +262,7 @@ function pageWindow(current: number, total: number): (number | "ellipsis")[] {
 export default function GrovplaneringPage() {
   const { toast } = useToast();
 
+  const [view, setView] = useState<"manuell" | "motor">("manuell");
   const [groupBy, setGroupBy] = useState<GroupBy>("objekt");
   const [pageSize, setPageSize] = useState(20);
   const [offset, setOffset] = useState(0);
@@ -303,6 +308,17 @@ export default function GrovplaneringPage() {
   const groups: GridGroup[] = data?.groups ?? [];
   const total = data?.pagination.total ?? 0;
   const summary = data?.summary ?? EMPTY_KPIS;
+
+  // Motorns förslag (Task #1039) — läses on-demand, separat från work_order-rutnätet.
+  const {
+    data: engineData,
+    isLoading: engineLoading,
+    isError: engineError,
+  } = useQuery<EngineResultsResponse>({
+    queryKey: ["/api/rough-planning/engine-results"],
+    queryFn: async () =>
+      (await apiRequest("GET", "/api/rough-planning/engine-results")).json(),
+  });
 
   // Selektion.
   const visibleRows = useMemo(
@@ -587,6 +603,64 @@ export default function GrovplaneringPage() {
         isFetching={isFetching}
       />
 
+      {/* Motorns körkontroll — intill filtret (Task #1039) */}
+      <EngineRunControl
+        lastRunAt={engineData?.lastRunAt ?? null}
+        onRan={() => setView("motor")}
+      />
+
+      {/* Vy-växel: manuell lista vs motorns förslag */}
+      <Tabs value={view} onValueChange={(v) => setView(v as "manuell" | "motor")}>
+        <TabsList data-testid="tabs-grov-view">
+          <TabsTrigger value="manuell" data-testid="tab-manuell">
+            Manuell lista
+          </TabsTrigger>
+          <TabsTrigger value="motor" data-testid="tab-motor">
+            Motorns förslag
+            {engineData?.hasResults
+              ? ` (${formatCount(engineData.summary.taskCount)})`
+              : ""}
+          </TabsTrigger>
+        </TabsList>
+      </Tabs>
+
+      {view === "motor" ? (
+        engineLoading ? (
+          <div className="flex items-center justify-center rounded-lg border py-16 text-muted-foreground">
+            <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+            Laddar motorns förslag…
+          </div>
+        ) : engineError ? (
+          <div
+            className="rounded-lg border py-16 text-center text-destructive"
+            data-testid="text-engine-error"
+          >
+            Kunde inte ladda motorns förslag. Försök igen.
+          </div>
+        ) : (
+          <EngineResultsView
+            data={
+              engineData ?? {
+                hasResults: false,
+                lastRunAt: null,
+                periodStart: null,
+                periodEnd: null,
+                summary: {
+                  taskCount: 0,
+                  clumpCount: 0,
+                  standaloneCount: 0,
+                  valueOre: 0,
+                  costOre: 0,
+                  durationMinutes: 0,
+                },
+                clumps: [],
+                standalone: [],
+              }
+            }
+          />
+        )
+      ) : (
+        <>
       {/* Gruppering & Åtgärder */}
       <Card>
         <CardContent className="flex flex-wrap items-center justify-between gap-4 p-3">
@@ -849,6 +923,8 @@ export default function GrovplaneringPage() {
           </span>
         ))}
       </div>
+        </>
+      )}
 
       {/* Tilldela-modal */}
       <RoughAssignModal

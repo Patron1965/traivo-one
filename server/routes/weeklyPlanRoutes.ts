@@ -50,6 +50,7 @@ import {
   type GridFilters,
   type RoughStatus,
 } from "../grovplanering-grid";
+import { getEngineResults } from "../services/engine-results";
 
 const ROUGH_STATUS_KEYS = [
   "otilldelad",
@@ -314,6 +315,15 @@ export function registerWeeklyPlanRoutes(app: Express) {
     const tenantId = getTenantIdWithFallback(req);
     const data = parseBody(revokeSchema, req.body);
     res.json(await revokeRoughAssignments(tenantId, data.workOrderIds));
+  }));
+
+  // Tids- & geografimotorns resultat (Task #1039) — läser slot_times-registret
+  // (skrivet av POST /api/time-geo-engine/run) och monterar klumpuppgifter +
+  // fristående uppgifter med uppgifts-/objekts-/kundkontext. Ren läsväg.
+  app.get("/api/rough-planning/engine-results", ...guard, asyncHandler(async (req, res) => {
+    const tenantId = getTenantIdWithFallback(req);
+    res.setHeader("Cache-Control", "no-cache, must-revalidate");
+    res.json(await getEngineResults(tenantId));
   }));
 
   // ==========================================================================
