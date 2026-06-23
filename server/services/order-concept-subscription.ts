@@ -24,6 +24,7 @@ import {
   resolveConceptArticleHits,
   isFixedPriceConcept,
 } from "./order-concept-article-hits";
+import { getArticleMetadataForObject } from "../metadata-queries";
 
 export interface SubscriptionFeeResult {
   /** Total beräknad abonnemangsavgift för en period (ÖRE, heltal). */
@@ -141,4 +142,123 @@ export async function computeConceptSubscriptionFee(
     hitCount,
     canCompute: totalValueOre > 0,
   };
+}
+
+// ============================================
+// Task #1067: Fakturastopp per kundnivå för abonnemang (runtime-split)
+// ============================================
+// Ett orderkoncept kan konfigureras med ett "fakturastopp" (Step 3 →
+// metadatabaserad referens): SAMMA kund hela vägen, men fakturan delas upp
+// ORGANISATORISKT per unikt värde i ett metadatafält (t.ex. fastighet, område,
+// distrikt, förvaltare). Hittills hade detta ingen runtime-effekt för abonnemang —
+// schemaläggaren skapade alltid EN faktura per fakturakund. Denna helper är ENDA
+// källan för split-grupperingen så att schemaläggaren (exekvering) och
+// förhandsvisningen/Granska alltid grupperar identiskt (preview == execute).
+//
+// Avgiften (perObjectValuesOre) återanvänds OFÖRÄNDRAD från
+// computeConceptSubscriptionFee — denna helper omgrupperar bara redan beräknade
+// per-objekt-belopp; den räknar aldrig om avgiften.
+
+export interface SubscriptionInvoiceGroup {
+  /** Upplöst fakturakund (samma kund för alla segment vid fakturastopp). */
+  customerId: string;
+  /** Stabil segmentnyckel (`fält=normaliserat värde`) eller null = kundnivå (ingen split). */
+  segmentKey: string | null;
+  /** Metadatafältet fakturan delas på (departmentMetadataField), eller null vid kundnivå. */
+  groupingFieldName: string | null;
+  /** Råvärdet (displayValue) för segmentet, eller null vid kundnivå. */
+  groupingValue: string | null;
+  /** Objekt-break finns inte för metadatafält-split (det är WO-flödets modell) ⇒ alltid null. */
+  breakObjectId: string | null;
+  /** Summa per-objekt-ordervärde (ÖRE, heltal) för detta segment. */
+  valueOre: number;
+  /** Objekten som ingår i segmentet. */
+  objectIds: string[];
+}
+
+// Fakturastopp är aktivt när konsolideringen INTE är ren kundnivå (customer/per_job)
+// OCH ett metadatafält att dela på är valt. Samma derivering som klienten
+// (Step3Invoicing) och buildConceptPatch (se order-concept-faktura-niva).
+export function isConceptFakturastopp(concept: any): boolean {
+  const c = String(concept?.invoiceConsolidation ?? "").trim();
+  const field = String(concept?.departmentMetadataField ?? "").trim();
+  return c !== "" && c !== "customer" && c !== "per_job" && field !== "";
+}
+
+function normalizeSegmentValue(s: string): string {
+  return s.trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+// Grupperar den dynamiska abonnemangsavgiften per faktura = (fakturakund) ×
+// (fakturastopp-segment). Utan fakturastopp (eller objekt som saknar värde på
+// split-fältet) degenererar grupperingen till EN grupp per kund = dagens beteende
+// (full back-compat, segmentKey = null).
+export async function groupSubscriptionInvoices(opts: {
+  tenantId: string;
+  concept: any;
+  matchingObjects: Array<{ id: string }>;
+  perObjectValuesOre: number[];
+  customerIdForObject: (objectId: string) => string | null | undefined;
+}): Promise<SubscriptionInvoiceGroup[]> {
+  const { tenantId, concept, matchingObjects, perObjectValuesOre, customerIdForObject } = opts;
+  const fakturastopp = isConceptFakturastopp(concept);
+  const field = fakturastopp ? String(concept.departmentMetadataField).trim() : "";
+
+  // Memoisera metadata-uppslag per objekt (objekt är unika ⇒ mest defensivt).
+  const segmentCache = new Map<string, { segmentKey: string | null; groupingValue: string | null }>();
+
+  const groups = new Map<string, SubscriptionInvoiceGroup>();
+  for (let i = 0; i < matchingObjects.length; i++) {
+    const obj = matchingObjects[i];
+    const customerId = customerIdForObject(obj.id);
+    if (!customerId) continue;
+    const valueOre = perObjectValuesOre[i] ?? 0;
+
+    let segmentKey: string | null = null;
+    let groupingValue: string | null = null;
+
+    if (fakturastopp && field) {
+      let cached = segmentCache.get(obj.id);
+      if (!cached) {
+        cached = { segmentKey: null, groupingValue: null };
+        try {
+          const md = await getArticleMetadataForObject(obj.id, field, tenantId);
+          const raw = md
+            ? md.displayValue?.trim() || (md.value != null ? String(md.value).trim() : "")
+            : "";
+          if (raw) {
+            cached.groupingValue = raw;
+            cached.segmentKey = `${field}=${normalizeSegmentValue(raw)}`;
+          }
+        } catch (e) {
+          console.error(
+            `[order-concept-subscription] fakturastopp metadata-uppslag misslyckades (objekt=${obj.id} fält=${field}):`,
+            e,
+          );
+        }
+        segmentCache.set(obj.id, cached);
+      }
+      segmentKey = cached.segmentKey;
+      groupingValue = cached.groupingValue;
+    }
+
+    const key = segmentKey ? `c:${customerId}|${segmentKey}` : `c:${customerId}`;
+    let g = groups.get(key);
+    if (!g) {
+      g = {
+        customerId,
+        segmentKey,
+        groupingFieldName: segmentKey ? field : null,
+        groupingValue,
+        breakObjectId: null,
+        valueOre: 0,
+        objectIds: [],
+      };
+      groups.set(key, g);
+    }
+    g.valueOre += valueOre;
+    g.objectIds.push(obj.id);
+  }
+
+  return Array.from(groups.values());
 }

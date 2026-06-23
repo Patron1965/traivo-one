@@ -37,7 +37,7 @@ import { getOrderConceptMethod } from "@shared/order-concept-method";
 import { storage } from "../storage";
 import { resolveConceptMatchingObjects } from "./order-concept-targeting";
 import { resolveActiveArticle, resolveConceptArticleHits } from "./order-concept-article-hits";
-import { computeConceptSubscriptionFee } from "./order-concept-subscription";
+import { computeConceptSubscriptionFee, groupSubscriptionInvoices } from "./order-concept-subscription";
 import {
   computeSubscriptionNextRun,
   generateScheduleAssignments,
@@ -151,18 +151,20 @@ async function runSubscriptionConcept(
     return;
   }
 
-  // Fördela ordervärdet per fakturakund (HARDCODED ⇒ en grupp/toppnivå;
-  // FROM_METADATA ⇒ per-objekt-kund = delning på lägre nivåer). perObjectValuesOre är
-  // en exakt heltals-fördelning (största-rest) i objektens ordning ⇒ Σ per kund ===
-  // totalValueOre exakt (inga avrundningstapp över/under den kanoniska avgiften).
-  const valueByCustomerOre = new Map<string, number>();
-  matchingObjects.forEach((obj, i) => {
-    const customerId = isFromMetadata ? customerIdForObject(obj.id) : concept.customerId;
-    if (!customerId) return;
-    valueByCustomerOre.set(
-      customerId,
-      (valueByCustomerOre.get(customerId) ?? 0) + (fee.perObjectValuesOre[i] ?? 0),
-    );
+  // Fördela ordervärdet per FAKTURA = (fakturakund) × (fakturastopp-segment).
+  // HARDCODED ⇒ en kund/toppnivå; FROM_METADATA ⇒ per-objekt-kund = delning på lägre
+  // nivåer. Fakturastopp (Task #1067) delar dessutom upp SAMMA kund organisatoriskt
+  // per unikt metadatavärde (concept.departmentMetadataField). Utan fakturastopp
+  // degenererar grupperingen till en grupp per kund = dagens beteende. perObjectValuesOre
+  // är en exakt heltals-fördelning (största-rest) ⇒ Σ per grupp === totalValueOre exakt.
+  // groupSubscriptionInvoices är ENDA källan så förhandsvisning/Granska grupperar identiskt.
+  const groups = await groupSubscriptionInvoices({
+    tenantId,
+    concept: concept as any,
+    matchingObjects,
+    perObjectValuesOre: fee.perObjectValuesOre,
+    customerIdForObject: (objId) =>
+      isFromMetadata ? customerIdForObject(objId) : concept.customerId,
   });
 
   const period = (concept.invoicePeriod as string) || "monthly";
@@ -203,16 +205,21 @@ async function runSubscriptionConcept(
     let invoicesCreated = 0;
     for (let pi = 0; pi < periods.length; pi++) {
       const p = periods[pi];
-      for (const [customerId, customerValueOre] of Array.from(valueByCustomerOre.entries())) {
-        // Fakturasummor lagras i KRONOR. customerValueOre är heltals-öre; multiplicera
+      for (const g of groups) {
+        // Fakturasummor lagras i KRONOR. g.valueOre är heltals-öre; multiplicera
         // med antal månader (heltal) FÖRE division med 100 så att resultatet blir exakt
         // kronor med två decimaler (inga binär-flyt-artefakter).
-        const perInvoiceTotal = (customerValueOre * stepMonths) / 100;
+        const perInvoiceTotal = (g.valueOre * stepMonths) / 100;
         if (perInvoiceTotal <= 0) continue;
         const invoiceNumber = `SUB-${p.start.getFullYear()}${String(p.start.getMonth() + 1).padStart(2, "0")}${String(p.start.getDate()).padStart(2, "0")}-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
+        // Fakturastopp (Task #1067): segment-suffix på beskrivningen så en split-faktura
+        // tydligt visar vilken organisatorisk nivå den gäller (samma kund för alla segment).
+        const description = g.segmentKey
+          ? `Abonnemang: ${concept.name} – ${g.groupingFieldName}: ${g.groupingValue} (beräknad avgift, ${freq})`
+          : `Abonnemang: ${concept.name} (beräknad avgift, ${freq})`;
         await tx.insert(customerInvoices).values({
           tenantId,
-          customerId,
+          customerId: g.customerId,
           invoiceNumber,
           invoiceDate: now,
           dueDate: new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000),
@@ -224,9 +231,14 @@ async function runSubscriptionConcept(
           // Abonnemangsfakturor går inte via samlingsfaktura-konsolideringen (de har
           // inga work_orders); de är direkt redo för Fortnox-export.
           state: "pending",
-          description: `Abonnemang: ${concept.name} (beräknad avgift, ${freq})`,
+          description,
           consolidationPeriodStart: p.start,
           consolidationPeriodEnd: p.end,
+          // Frozen billing-segment (Task #1067). NULL = kundnivå (dagens beteende).
+          billingSegmentKey: g.segmentKey,
+          billingBreakObjectId: g.breakObjectId,
+          billingGroupingFieldName: g.groupingFieldName,
+          billingGroupingValue: g.groupingValue,
         });
         invoicesCreated++;
       }

@@ -27,7 +27,7 @@ import {
   type ConceptArticleHits,
 } from "../services/order-concept-article-hits";
 import { getArticleMetadataForObject } from "../metadata-queries";
-import { computeConceptSubscriptionFee } from "../services/order-concept-subscription";
+import { computeConceptSubscriptionFee, groupSubscriptionInvoices, isConceptFakturastopp } from "../services/order-concept-subscription";
 import {
   resolveTargetObjects,
   filterObjectsByConditions,
@@ -399,6 +399,95 @@ export async function prepareConceptCustomerPricing(opts: {
   }
 
   return { isFromMetadata, resolvedCustomerByObject, customerIdForObject, resolvePrice };
+}
+
+// Task #1067: bygg en nivå-vy (segment) för abonnemangs-förhandsvisningen så att
+// Granska/sidofältet TYDLIGT visar vilka organisatoriska nivåer fakturan stoppas på
+// (fakturastopp = samma kund, uppdelad per metadatavärde). Använder SAMMA kanoniska
+// grupperare (groupSubscriptionInvoices) som schemaläggaren ⇒ preview == execute.
+// Aggregeras per segment (samma kund hela vägen) för en kompakt lista.
+export interface SubscriptionSegmentPreview {
+  segmentKey: string | null;
+  fieldName: string | null;
+  value: string | null;
+  label: string;
+  monthlyTotal: number;
+  objectCount: number;
+  isStop: boolean;
+}
+
+async function buildSubscriptionSegmentsPreview(
+  tenantId: string,
+  concept: any,
+  matchingObjects: ServiceObject[],
+  fee: { perObjectValuesOre: number[] },
+): Promise<SubscriptionSegmentPreview[]> {
+  const fakturastopp = isConceptFakturastopp(concept);
+  // Kund-upplösningen är best-effort i förhandsvisningen — den får ALDRIG kasta och
+  // dölja nivå-vyn. Sentinel-kund säkerställer att objekt inte tappas om en
+  // FROM_METADATA-kund inte kan härledas (vi aggregerar ändå per segment).
+  let customerIdForObject: (objectId: string) => string | null = () => concept.customerId ?? "preview";
+  try {
+    const pricing = await prepareConceptCustomerPricing({
+      concept,
+      tenantId,
+      matchingObjects,
+      runPrePass: concept.customerMode === "FROM_METADATA",
+    });
+    customerIdForObject = (id) => pricing.customerIdForObject(id) ?? "preview";
+  } catch {
+    customerIdForObject = () => "preview";
+  }
+
+  const groups = await groupSubscriptionInvoices({
+    tenantId,
+    concept,
+    matchingObjects,
+    perObjectValuesOre: fee.perObjectValuesOre,
+    customerIdForObject,
+  });
+
+  // Aggregera per segment i ÖRE (heltal) ⇒ ingen flyt-drift; dela med 100 sist.
+  const segMap = new Map<
+    string,
+    { segmentKey: string | null; fieldName: string | null; value: string | null; valueOre: number; objectCount: number }
+  >();
+  for (const g of groups) {
+    const k = g.segmentKey ?? "__customer__";
+    const existing = segMap.get(k);
+    if (existing) {
+      existing.valueOre += g.valueOre;
+      existing.objectCount += g.objectIds.length;
+    } else {
+      segMap.set(k, {
+        segmentKey: g.segmentKey,
+        fieldName: g.groupingFieldName,
+        value: g.groupingValue,
+        valueOre: g.valueOre,
+        objectCount: g.objectIds.length,
+      });
+    }
+  }
+
+  return Array.from(segMap.values())
+    .map((s) => ({
+      segmentKey: s.segmentKey,
+      fieldName: s.fieldName,
+      value: s.value,
+      label: s.segmentKey
+        ? `${s.fieldName}: ${s.value}`
+        : fakturastopp
+          ? "Utan värde (kundnivå)"
+          : "Kundnivå",
+      monthlyTotal: s.valueOre / 100,
+      objectCount: s.objectCount,
+      isStop: !!s.segmentKey,
+    }))
+    // Stoppade nivåer först (namn-stigande), kundnivå-rest sist.
+    .sort((a, b) => {
+      if (a.isStop !== b.isStop) return a.isStop ? -1 : 1;
+      return a.label.localeCompare(b.label, "sv");
+    });
 }
 
 // Task #934: ABONNEMANGETS (subscription) nästa fakturadatum. Respekterar
@@ -2874,15 +2963,22 @@ app.post("/api/order-concepts/:id/preview", asyncHandler(async (req, res) => {
     // Subscription calculation for "subscription" method
     // Task #1057: avgiften beräknas dynamiskt från uppgifternas ordervärde (kronor),
     // inte längre från det statiska månadsavgiftsfältet.
-    let subscriptionCalc: { matchedObjects: number; monthlyTotal: number; yearlyTotal: number; computed: boolean } | undefined;
+    let subscriptionCalc:
+      | { matchedObjects: number; monthlyTotal: number; yearlyTotal: number; computed: boolean; fakturastopp: boolean; segments: SubscriptionSegmentPreview[] }
+      | undefined;
     if (previewMethod === "subscription") {
       const fee = await computeConceptSubscriptionFee(tenantId, concept as any, { matchingObjects });
       const monthlyTotal = fee.totalValueOre / 100;
+      // Task #1067: nivå-vy (fakturastopp-segment) så förhandsvisningen visar vilka
+      // organisatoriska nivåer fakturan stoppas på (samma kanoniska grupperare som execute).
+      const segments = await buildSubscriptionSegmentsPreview(tenantId, concept as any, matchingObjects, fee);
       subscriptionCalc = {
         matchedObjects: fee.matchedCount,
         monthlyTotal,
         yearlyTotal: monthlyTotal * 12,
         computed: fee.canCompute,
+        fakturastopp: isConceptFakturastopp(concept as any),
+        segments,
       };
     }
 
@@ -3041,6 +3137,11 @@ app.get("/api/order-concepts/:id/subscription-calc", asyncHandler(async (req, re
 
     const monthlyTotal = fee.totalValueOre / 100;
 
+    // Task #1067: nivå-vy (fakturastopp-segment) — visar TYDLIGT vilka organisatoriska
+    // nivåer fakturan stoppas på (samma kund, en faktura per metadatavärde). Samma
+    // kanoniska grupperare (groupSubscriptionInvoices) som schemaläggaren ⇒ preview == execute.
+    const segments = await buildSubscriptionSegmentsPreview(tenantId, concept as any, matchingObjects, fee);
+
     res.json({
       perObject,
       matchedObjects: fee.matchedCount,
@@ -3050,6 +3151,8 @@ app.get("/api/order-concepts/:id/subscription-calc", asyncHandler(async (req, re
       computed: fee.canCompute,
       billingFrequency: concept.billingFrequency || "monthly",
       contractLockMonths: concept.contractLockMonths,
+      fakturastopp: isConceptFakturastopp(concept as any),
+      segments,
     });
 }));
 

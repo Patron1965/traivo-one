@@ -44,10 +44,24 @@ interface Step3Props extends Step3State {
 
 // Task #1057: dynamiskt beräknad abonnemangsavgift = summan av uppgifternas
 // ordervärde (kronor) knutna till objekten. Ersätter det statiska "Avgift per enhet"-fältet.
+// Task #1067: ett fakturastopp delar upp abonnemangsfakturan organisatoriskt (samma
+// kund, en faktura per unikt metadatavärde). `segments` listar nivåerna som stoppas.
+interface SubscriptionSegment {
+  segmentKey: string | null;
+  fieldName: string | null;
+  value: string | null;
+  label: string;
+  monthlyTotal: number;
+  objectCount: number;
+  isStop: boolean;
+}
+
 interface SubscriptionCalcResult {
   monthlyTotal: number;
   matchedObjects: number;
   computed: boolean;
+  fakturastopp?: boolean;
+  segments?: SubscriptionSegment[];
 }
 
 // Fakturastopp lagras (oförändrat) i de befintliga fälten: invoiceConsolidation
@@ -271,6 +285,37 @@ export default function Step3Invoicing({
                 Detaljerad uppdelning visas i steget Granska &amp; spara.
               </p>
             </div>
+            {/* Task #1067: nivå-vy — visar vilka organisatoriska nivåer fakturan stoppas på. */}
+            {isMetadataReference && subscriptionCalc?.computed && (subscriptionCalc.segments?.length ?? 0) > 0 && (
+              <div data-testid="block-subscription-segments">
+                <Label className="text-sm mb-1 block">Fakturastopp — nivåer som delas upp</Label>
+                <p className="text-xs text-muted-foreground mb-2">
+                  Samma kund — en separat faktura skapas per nivå nedan.
+                </p>
+                <div className="space-y-1">
+                  {subscriptionCalc.segments!.map((seg, i) => (
+                    <div
+                      key={seg.segmentKey ?? `customer-${i}`}
+                      className="flex items-center justify-between gap-2 rounded-md border border-border bg-muted/50 px-3 py-1.5 text-sm"
+                      data-testid={`row-subscription-segment-${i}`}
+                    >
+                      <div className="flex items-center gap-2 min-w-0">
+                        {seg.isStop ? (
+                          <Badge variant="secondary" className="text-[10px] px-1.5 py-0 font-normal shrink-0">Stopp</Badge>
+                        ) : (
+                          <Badge variant="outline" className="text-[10px] px-1.5 py-0 font-normal shrink-0">Kundnivå</Badge>
+                        )}
+                        <span className="truncate" data-testid={`text-segment-label-${i}`}>{seg.label}</span>
+                        <span className="text-xs text-muted-foreground shrink-0">({seg.objectCount} obj)</span>
+                      </div>
+                      <span className="font-medium tabular-nums shrink-0" data-testid={`text-segment-amount-${i}`}>
+                        {seg.monthlyTotal.toLocaleString("sv-SE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} kr
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
             <div>
               <Label htmlFor="subscription-start-date" className="text-sm mb-1 block">
                 Startdatum (valfritt)

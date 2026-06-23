@@ -260,6 +260,25 @@ function ScheduleSummary({ schedule }: { schedule: ReviewSchedule }) {
   return <span className="text-muted-foreground text-sm">{schedule.type}</span>;
 }
 
+// Task #1067: fakturastopp-segment (nivåer som delas upp) från subscription-calc.
+interface SubscriptionSegment {
+  segmentKey: string | null;
+  fieldName: string | null;
+  value: string | null;
+  label: string;
+  monthlyTotal: number;
+  objectCount: number;
+  isStop: boolean;
+}
+
+interface SubscriptionCalcResult {
+  monthlyTotal: number;
+  matchedObjects: number;
+  computed: boolean;
+  fakturastopp?: boolean;
+  segments?: SubscriptionSegment[];
+}
+
 export default function Step7ReviewSave({
   conceptId,
   conceptName,
@@ -282,6 +301,20 @@ export default function Step7ReviewSave({
       return res.json();
     },
     enabled: !!conceptId,
+    staleTime: 10_000,
+  });
+
+  // Task #1067: nivå-vy (fakturastopp-segment) för abonnemang — visar TYDLIGT vilka
+  // organisatoriska nivåer fakturan stoppas på. Hämtas bara för abonnemangskoncept.
+  const isSubscriptionConcept = summary?.repetition?.method === "subscription";
+  const { data: subscriptionCalc } = useQuery<SubscriptionCalcResult>({
+    queryKey: ["/api/order-concepts", conceptId, "subscription-calc"],
+    queryFn: async () => {
+      const res = await fetch(`/api/order-concepts/${conceptId}/subscription-calc`);
+      if (!res.ok) throw new Error("Kunde inte ladda abonnemangsberäkning");
+      return res.json();
+    },
+    enabled: !!conceptId && isSubscriptionConcept,
     staleTime: 10_000,
   });
 
@@ -555,6 +588,37 @@ export default function Step7ReviewSave({
                 }
               />
             )}
+            {/* Task #1067: nivå-vy — vilka organisatoriska nivåer fakturan stoppas på. */}
+            {summary.repetition?.method === "subscription" &&
+              subscriptionCalc?.computed &&
+              subscriptionCalc.fakturastopp &&
+              (subscriptionCalc.segments?.length ?? 0) > 0 && (
+                <div className="pt-2" data-testid="summary-subscription-segments">
+                  <div className="text-sm text-muted-foreground mb-1">
+                    Fakturastopp — en faktura per nivå (samma kund)
+                  </div>
+                  <div className="space-y-0.5">
+                    {subscriptionCalc.segments!.map((seg, i) => (
+                      <div
+                        key={seg.segmentKey ?? `customer-${i}`}
+                        className="flex justify-between items-center gap-2 text-sm"
+                        data-testid={`summary-segment-${i}`}
+                      >
+                        <span className="flex items-center gap-2 min-w-0">
+                          {seg.isStop ? (
+                            <Badge variant="secondary" className="text-[10px] px-1.5 py-0 font-normal shrink-0">Stopp</Badge>
+                          ) : (
+                            <Badge variant="outline" className="text-[10px] px-1.5 py-0 font-normal shrink-0">Kundnivå</Badge>
+                          )}
+                          <span className="truncate">{seg.label}</span>
+                          <span className="text-xs text-muted-foreground shrink-0">({seg.objectCount} obj)</span>
+                        </span>
+                        <span className="font-medium tabular-nums shrink-0">{fmtKr(seg.monthlyTotal)}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             <Row label="Produktionstid" value={<span data-testid="summary-production-time">{fmtMinutes(summary.summaryMetrics.productionMinutesActual)}</span>} />
             {summary.summaryMetrics.materialLines.length > 0 && (
               <div className="pt-2">
