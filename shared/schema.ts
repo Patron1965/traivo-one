@@ -7614,6 +7614,11 @@ export const slotTimes = pgTable("slot_times", {
   score: real("score"),
   // Ursprung, t.ex. "tidsmotor".
   source: text("source"),
+  // Planerarens beslut om motorns förslag (Task #1043): NULL = obeslutat,
+  // "accepterad" = förs vidare till finplanering/ruttoptimering, "avvisad" = avfärdat.
+  plannerDecision: text("planner_decision"),
+  decidedAt: timestamp("decided_at"),
+  decidedBy: varchar("decided_by"),
   // Förklaring/extra (motivering, viktning) — fri jsonb.
   metadata: jsonb("metadata").default({}),
   createdAt: timestamp("created_at").defaultNow().notNull(),
@@ -7626,6 +7631,7 @@ export const slotTimes = pgTable("slot_times", {
   index("idx_slot_times_tenant_status").on(table.tenantId, table.status),
   index("idx_slot_times_tenant_window_start").on(table.tenantId, table.windowStart),
   index("idx_slot_times_tenant_deleted").on(table.tenantId, table.deletedAt),
+  index("idx_slot_times_tenant_decision").on(table.tenantId, table.plannerDecision),
   check("chk_slot_times_target", sql`${table.assignmentId} IS NOT NULL OR ${table.assignmentGroupKey} IS NOT NULL`),
   check("chk_slot_times_window_order", sql`${table.windowEnd} >= ${table.windowStart}`),
 ]);

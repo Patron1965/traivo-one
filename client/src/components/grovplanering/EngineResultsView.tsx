@@ -1,13 +1,17 @@
 import { Fragment, useMemo, useState } from "react";
 import {
+  Check,
   ChevronDown,
   ChevronRight,
   ChevronsUpDown,
   Info,
   Layers,
   MapPin,
+  RotateCcw,
   Sparkles,
+  X,
 } from "lucide-react";
+import { useMutation } from "@tanstack/react-query";
 
 import {
   Table,
@@ -34,8 +38,11 @@ import {
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { formatSekFromOre } from "@/lib/format";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 import {
   SLOT_TYPE_META,
+  DECISION_META,
   GROUPING_BASIS_LABEL,
   formatSuggestedTime,
   formatFlexibility,
@@ -44,6 +51,7 @@ import {
   type EngineClumpResult,
   type EngineResultsResponse,
   type EngineTaskResult,
+  type PlannerDecision,
   type SlotType,
 } from "@/lib/engine-results";
 
@@ -58,6 +66,32 @@ function SlotTypeBadge({ slotType }: { slotType: SlotType }) {
   const meta = SLOT_TYPE_META[slotType] ?? SLOT_TYPE_META.onskad;
   return (
     <Badge variant="outline" className={meta.badge} data-testid="badge-slot-type">
+      {meta.label}
+    </Badge>
+  );
+}
+
+function DecisionBadge({
+  decision,
+  testId,
+}: {
+  decision: PlannerDecision | null;
+  testId: string;
+}) {
+  if (!decision) {
+    return (
+      <Badge
+        variant="outline"
+        className="border-dashed text-muted-foreground"
+        data-testid={testId}
+      >
+        Obeslutat
+      </Badge>
+    );
+  }
+  const meta = DECISION_META[decision];
+  return (
+    <Badge variant="outline" className={meta.badge} data-testid={testId}>
       {meta.label}
     </Badge>
   );
@@ -92,11 +126,64 @@ function sortTasks(
   });
 }
 
+type DecisionInput = "accepterad" | "avvisad" | "ingen";
+
+interface DecisionPayload {
+  target: "task" | "clump";
+  decision: DecisionInput;
+  assignmentId?: string;
+  groupKey?: string;
+}
+
 export function EngineResultsView({ data }: EngineResultsViewProps) {
   const [sortKey, setSortKey] = useState<SortKey>("time");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
   const [collapsedClumps, setCollapsedClumps] = useState<Set<string>>(new Set());
   const [explainTask, setExplainTask] = useState<EngineTaskResult | null>(null);
+  const [pendingKey, setPendingKey] = useState<string | null>(null);
+  const { toast } = useToast();
+
+  const decisionMutation = useMutation({
+    mutationFn: async (payload: DecisionPayload) => {
+      const res = await apiRequest(
+        "POST",
+        "/api/rough-planning/engine-results/decision",
+        payload,
+      );
+      return res.json();
+    },
+    onMutate: (payload: DecisionPayload) => {
+      setPendingKey(payload.target === "task" ? payload.assignmentId! : payload.groupKey!);
+    },
+    onSuccess: (_data, payload) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/rough-planning/engine-results"] });
+      const verb =
+        payload.decision === "accepterad"
+          ? "accepterad"
+          : payload.decision === "avvisad"
+            ? "avvisad"
+            : "återställd";
+      toast({
+        title: "Beslut sparat",
+        description:
+          payload.target === "clump"
+            ? `Klumpuppgiftens föreslagna tid ${verb}.`
+            : `Uppgiftens föreslagna tid ${verb}.`,
+      });
+    },
+    onError: () => {
+      toast({
+        title: "Kunde inte spara beslutet",
+        description: "Försök igen.",
+        variant: "destructive",
+      });
+    },
+    onSettled: () => {
+      setPendingKey(null);
+    },
+  });
+
+  const decide = (payload: DecisionPayload) => decisionMutation.mutate(payload);
 
   const toggleSort = (key: SortKey) => {
     if (key === sortKey) {
@@ -158,11 +245,77 @@ export function EngineResultsView({ data }: EngineResultsViewProps) {
     </button>
   );
 
+  const renderDecisionActions = (
+    decision: PlannerDecision | null,
+    rowKey: string,
+    onDecide: (d: DecisionInput) => void,
+    testIdSuffix: string,
+  ) => {
+    const isPending = pendingKey === rowKey && decisionMutation.isPending;
+    return (
+      <div className="flex items-center justify-end gap-1">
+        <Button
+          size="icon"
+          variant="ghost"
+          className={cn(
+            "h-7 w-7",
+            decision === "accepterad" && "bg-chart-2/15 text-chart-2",
+          )}
+          disabled={isPending}
+          onClick={(e) => {
+            e.stopPropagation();
+            onDecide(decision === "accepterad" ? "ingen" : "accepterad");
+          }}
+          title={decision === "accepterad" ? "Ångra acceptans" : "Acceptera förslaget"}
+          data-testid={`button-accept-${testIdSuffix}`}
+        >
+          <Check className="h-4 w-4" />
+        </Button>
+        <Button
+          size="icon"
+          variant="ghost"
+          className={cn(
+            "h-7 w-7",
+            decision === "avvisad" && "bg-destructive/15 text-destructive",
+          )}
+          disabled={isPending}
+          onClick={(e) => {
+            e.stopPropagation();
+            onDecide(decision === "avvisad" ? "ingen" : "avvisad");
+          }}
+          title={decision === "avvisad" ? "Ångra avvisning" : "Avvisa förslaget"}
+          data-testid={`button-reject-${testIdSuffix}`}
+        >
+          <X className="h-4 w-4" />
+        </Button>
+        {decision && (
+          <Button
+            size="icon"
+            variant="ghost"
+            className="h-7 w-7 text-muted-foreground"
+            disabled={isPending}
+            onClick={(e) => {
+              e.stopPropagation();
+              onDecide("ingen");
+            }}
+            title="Återställ (obeslutat)"
+            data-testid={`button-reset-${testIdSuffix}`}
+          >
+            <RotateCcw className="h-4 w-4" />
+          </Button>
+        )}
+      </div>
+    );
+  };
+
   const renderTaskRow = (task: EngineTaskResult, indent = false) => (
     <ContextMenu key={task.assignmentId}>
       <ContextMenuTrigger asChild>
         <TableRow
-          className="cursor-context-menu"
+          className={cn(
+            "cursor-context-menu",
+            task.decision === "avvisad" && "opacity-50",
+          )}
           data-testid={`row-engine-task-${task.assignmentId}`}
         >
           <TableCell className={cn("align-top", indent && "pl-10")}>
@@ -208,6 +361,20 @@ export function EngineResultsView({ data }: EngineResultsViewProps) {
           <TableCell className="align-top text-right tabular-nums">
             {formatSekFromOre(task.valueOre)}
           </TableCell>
+          <TableCell className="align-top">
+            <DecisionBadge
+              decision={task.decision}
+              testId={`badge-decision-${task.assignmentId}`}
+            />
+          </TableCell>
+          <TableCell className="align-top">
+            {renderDecisionActions(
+              task.decision,
+              task.assignmentId,
+              (d) => decide({ target: "task", assignmentId: task.assignmentId, decision: d }),
+              task.assignmentId,
+            )}
+          </TableCell>
           <TableCell className="align-top text-right">
             <Button
               size="icon"
@@ -229,6 +396,32 @@ export function EngineResultsView({ data }: EngineResultsViewProps) {
           <Info className="h-4 w-4" />
           Förklara motorns val
         </ContextMenuItem>
+        <ContextMenuItem
+          onClick={() =>
+            decide({
+              target: "task",
+              assignmentId: task.assignmentId,
+              decision: task.decision === "accepterad" ? "ingen" : "accepterad",
+            })
+          }
+          data-testid={`menuitem-accept-${task.assignmentId}`}
+        >
+          <Check className="h-4 w-4" />
+          {task.decision === "accepterad" ? "Ångra acceptans" : "Acceptera förslaget"}
+        </ContextMenuItem>
+        <ContextMenuItem
+          onClick={() =>
+            decide({
+              target: "task",
+              assignmentId: task.assignmentId,
+              decision: task.decision === "avvisad" ? "ingen" : "avvisad",
+            })
+          }
+          data-testid={`menuitem-reject-${task.assignmentId}`}
+        >
+          <X className="h-4 w-4" />
+          {task.decision === "avvisad" ? "Ångra avvisning" : "Avvisa förslaget"}
+        </ContextMenuItem>
       </ContextMenuContent>
     </ContextMenu>
   );
@@ -238,7 +431,10 @@ export function EngineResultsView({ data }: EngineResultsViewProps) {
     return (
       <Fragment key={clump.groupKey}>
         <TableRow
-          className="bg-muted/40 hover-elevate cursor-pointer"
+          className={cn(
+            "bg-muted/40 hover-elevate cursor-pointer",
+            clump.decision === "avvisad" && "opacity-50",
+          )}
           onClick={() => toggleClump(clump.groupKey)}
           data-testid={`row-engine-clump-${clump.groupKey}`}
         >
@@ -277,6 +473,20 @@ export function EngineResultsView({ data }: EngineResultsViewProps) {
           </TableCell>
           <TableCell className="align-top text-right tabular-nums font-medium">
             {formatSekFromOre(clump.summedValueOre)}
+          </TableCell>
+          <TableCell className="align-top">
+            <DecisionBadge
+              decision={clump.decision}
+              testId={`badge-decision-${clump.groupKey}`}
+            />
+          </TableCell>
+          <TableCell className="align-top">
+            {renderDecisionActions(
+              clump.decision,
+              clump.groupKey,
+              (d) => decide({ target: "clump", groupKey: clump.groupKey, decision: d }),
+              clump.groupKey,
+            )}
           </TableCell>
           <TableCell className="align-top text-right text-xs text-muted-foreground">
             Kostnad {formatSekFromOre(clump.summedCostOre)}
@@ -325,6 +535,8 @@ export function EngineResultsView({ data }: EngineResultsViewProps) {
               <TableHead className="text-right">
                 <SortHeader label="Ordervärde" sk="value" />
               </TableHead>
+              <TableHead>Beslut</TableHead>
+              <TableHead className="text-right">Åtgärd</TableHead>
               <TableHead className="text-right">Motivering</TableHead>
             </TableRow>
           </TableHeader>

@@ -24,6 +24,8 @@ import { ENGINE_SOURCE, type SlotType } from "./time-geo-engine";
 // Publika typer (speglas i client/src/lib/engine-results.ts)
 // ---------------------------------------------------------------------------
 
+export type PlannerDecision = "accepterad" | "avvisad";
+
 export interface EngineSlotCandidate {
   windowStart: string;
   windowEnd: string;
@@ -54,6 +56,10 @@ export interface EngineTaskResult {
   alternative: EngineSlotCandidate | null;
   /** Alla kandidater (sorterade på rank) — driver förklaringsdialogen. */
   candidates: EngineSlotCandidate[];
+  /** Planerarens beslut om motorns förslag (null = obeslutat). */
+  decision: PlannerDecision | null;
+  /** Tidsstämpel för beslutet (ISO) eller null. */
+  decidedAt: string | null;
 }
 
 export interface EngineClumpResult {
@@ -69,6 +75,10 @@ export interface EngineClumpResult {
   windowEnd: string;
   slotType: SlotType;
   members: EngineTaskResult[];
+  /** Planerarens beslut om klumpens förslag (null = obeslutat). */
+  decision: PlannerDecision | null;
+  /** Tidsstämpel för beslutet (ISO) eller null. */
+  decidedAt: string | null;
 }
 
 export interface EngineResultsSummary {
@@ -102,6 +112,10 @@ function toIso(value: Date | string | null | undefined): string | null {
 
 function asSlotType(value: string): SlotType {
   return value === "kravd" || value === "fordelaktig" ? value : "onskad";
+}
+
+function asDecision(value: string | null | undefined): PlannerDecision | null {
+  return value === "accepterad" || value === "avvisad" ? value : null;
 }
 
 interface ClumpMeta {
@@ -227,6 +241,10 @@ export function assembleEngineResults(
     const alternative = candidates.find((c) => c.status === "forslag") ?? null;
     const ctx = contextById.get(assignmentId);
 
+    // Beslutet stämplas på alla rader för uppgiften — läs från den valda (annars första).
+    const decisionRow = chosenRow ?? sorted[0] ?? null;
+    const decision = asDecision(decisionRow?.plannerDecision);
+
     taskById.set(assignmentId, {
       assignmentId,
       title: ctx?.title ?? null,
@@ -243,6 +261,8 @@ export function assembleEngineResults(
       chosen,
       alternative,
       candidates,
+      decision,
+      decidedAt: decision ? toIso(decisionRow?.decidedAt) : null,
     });
   }
 
@@ -268,6 +288,8 @@ export function assembleEngineResults(
     // Adress härleds ur första medlem med adress (klump-raden lagrar ingen adress).
     const address = members.find((m) => m.address)?.address ?? null;
 
+    const decision = asDecision(row.plannerDecision);
+
     clumps.push({
       groupKey,
       executionCode: meta.executionCode ?? "ingen",
@@ -282,6 +304,8 @@ export function assembleEngineResults(
       windowEnd: toIso(row.windowEnd) ?? "",
       slotType: asSlotType(row.slotType),
       members,
+      decision,
+      decidedAt: decision ? toIso(row.decidedAt) : null,
     });
   }
 
@@ -323,6 +347,66 @@ export function assembleEngineResults(
     clumps,
     standalone,
   };
+}
+
+// ---------------------------------------------------------------------------
+// Planerarens beslut (acceptera/avvisa) på motorns förslag (Task #1043).
+// ----------------------------------------------------------------------------
+// Accepterat förslag = "förs vidare" till finplanering/ruttoptimering: beslutet
+// persisteras på slot_times så att nedströmssteget kan läsa den bekräftade
+// mängden (plannerDecision='accepterad'). Avvisade förslag markeras 'avvisad'.
+// "ingen" nollar beslutet (ångra). Klump-beslut stämplar både klump-raden och
+// dess medlems-uppgifter så att vy och nedströmssteg är konsistenta.
+// ---------------------------------------------------------------------------
+
+export type DecisionInput = "accepterad" | "avvisad" | "ingen";
+
+export interface ApplyDecisionResult {
+  updated: number;
+  decision: PlannerDecision | null;
+}
+
+export async function applyEngineDecision(
+  tenantId: string,
+  input: {
+    target: "task" | "clump";
+    assignmentId?: string;
+    groupKey?: string;
+    decision: DecisionInput;
+  },
+  decidedBy: string | null,
+): Promise<ApplyDecisionResult> {
+  const decision: PlannerDecision | null = input.decision === "ingen" ? null : input.decision;
+
+  if (input.target === "task") {
+    if (!input.assignmentId) {
+      return { updated: 0, decision };
+    }
+    const updated = await storage.setSlotTimePlannerDecision(tenantId, {
+      assignmentIds: [input.assignmentId],
+      decision,
+      decidedBy,
+    });
+    return { updated, decision };
+  }
+
+  // Klump: stämpla klump-raden + medlems-uppgifterna (härledda ur klump-radens metadata).
+  if (!input.groupKey) {
+    return { updated: 0, decision };
+  }
+  const groupRows = await storage.getSlotTimes(tenantId, { assignmentGroupKey: input.groupKey });
+  const clumpRow = groupRows.find((r) => r.assignmentId == null && isClumpRow(r.metadata));
+  const memberIds = clumpRow
+    ? ((clumpRow.metadata ?? {}) as ClumpMeta).memberAssignmentIds ?? []
+    : [];
+
+  const updated = await storage.setSlotTimePlannerDecision(tenantId, {
+    assignmentGroupKey: input.groupKey,
+    assignmentIds: Array.isArray(memberIds) && memberIds.length > 0 ? memberIds : undefined,
+    decision,
+    decidedBy,
+  });
+  return { updated, decision };
 }
 
 // ---------------------------------------------------------------------------

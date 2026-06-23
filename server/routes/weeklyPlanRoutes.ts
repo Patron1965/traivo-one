@@ -50,7 +50,7 @@ import {
   type GridFilters,
   type RoughStatus,
 } from "../grovplanering-grid";
-import { getEngineResults } from "../services/engine-results";
+import { getEngineResults, applyEngineDecision } from "../services/engine-results";
 
 const ROUGH_STATUS_KEYS = [
   "otilldelad",
@@ -324,6 +324,40 @@ export function registerWeeklyPlanRoutes(app: Express) {
     const tenantId = getTenantIdWithFallback(req);
     res.setHeader("Cache-Control", "no-cache, must-revalidate");
     res.json(await getEngineResults(tenantId));
+  }));
+
+  // Planerarens beslut om motorns föreslagna tid (Task #1043): acceptera (förs
+  // vidare till finplanering/ruttoptimering), avvisa, eller nolla (ångra). Per
+  // uppgift (target=task + assignmentId) eller per klump (target=clump + groupKey).
+  const engineDecisionSchema = z
+    .object({
+      target: z.enum(["task", "clump"]),
+      decision: z.enum(["accepterad", "avvisad", "ingen"]),
+      assignmentId: z.string().min(1).optional(),
+      groupKey: z.string().min(1).optional(),
+    })
+    .refine((d) => (d.target === "task" ? !!d.assignmentId : !!d.groupKey), {
+      message: "assignmentId krävs för target=task, groupKey för target=clump",
+    });
+
+  app.post("/api/rough-planning/engine-results/decision", ...guard, asyncHandler(async (req, res) => {
+    const tenantId = getTenantIdWithFallback(req);
+    const data = parseBody(engineDecisionSchema, req.body);
+    const decidedBy = (req as any).user?.claims?.sub ?? null;
+    const result = await applyEngineDecision(
+      tenantId,
+      {
+        target: data.target,
+        assignmentId: data.assignmentId,
+        groupKey: data.groupKey,
+        decision: data.decision,
+      },
+      decidedBy,
+    );
+    if (result.updated === 0) {
+      throw new NotFoundError("Motorförslag");
+    }
+    res.json(result);
   }));
 
   // ==========================================================================

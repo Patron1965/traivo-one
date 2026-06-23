@@ -7,6 +7,8 @@ import { getISOWeek, getISOWeekYear } from "date-fns";
 
 export type SlotType = "onskad" | "kravd" | "fordelaktig";
 
+export type PlannerDecision = "accepterad" | "avvisad";
+
 export interface EngineSlotCandidate {
   windowStart: string;
   windowEnd: string;
@@ -33,6 +35,8 @@ export interface EngineTaskResult {
   chosen: EngineSlotCandidate | null;
   alternative: EngineSlotCandidate | null;
   candidates: EngineSlotCandidate[];
+  decision: PlannerDecision | null;
+  decidedAt: string | null;
 }
 
 export interface EngineClumpResult {
@@ -48,6 +52,8 @@ export interface EngineClumpResult {
   windowEnd: string;
   slotType: SlotType;
   members: EngineTaskResult[];
+  decision: PlannerDecision | null;
+  decidedAt: string | null;
 }
 
 export interface EngineResultsSummary {
@@ -90,6 +96,23 @@ export const SLOT_TYPE_META: Record<
     label: "Fördelaktig",
     description: "Mjuk tidsregel — fördelaktig men inte tvingande.",
     badge: "bg-chart-4/15 text-chart-4 border border-chart-4/30",
+  },
+};
+
+// ---------------------------------------------------------------------------
+// Beslut-meta (acceptera/avvisa) — tema-tokens only
+// ---------------------------------------------------------------------------
+export const DECISION_META: Record<
+  PlannerDecision,
+  { label: string; badge: string }
+> = {
+  accepterad: {
+    label: "Accepterad",
+    badge: "bg-chart-2/15 text-chart-2 border border-chart-2/30",
+  },
+  avvisad: {
+    label: "Avvisad",
+    badge: "bg-destructive/15 text-destructive border border-destructive/30",
   },
 };
 

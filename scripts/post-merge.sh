@@ -66,7 +66,8 @@ if command -v psql >/dev/null 2>&1 && [ -n "$DATABASE_URL" ]; then
            migrations/0101_frozen_time_rules.sql \
            migrations/0102_order_concept_wizard_step_version.sql \
            migrations/0103_slot_times.sql \
-           migrations/0104_planning_parameters_grouping_radius.sql; do
+           migrations/0104_planning_parameters_grouping_radius.sql \
+           migrations/0105_slot_times_planner_decision.sql; do
     if [ -f "$f" ]; then
       echo "[post-merge] Applying $f"
       psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f "$f"

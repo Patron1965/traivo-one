@@ -1373,6 +1373,7 @@ export interface IStorage {
   updateSlotTime(tenantId: string, id: string, data: Partial<InsertSlotTime>): Promise<SlotTime | undefined>;
   deleteSlotTime(tenantId: string, id: string): Promise<void>;
   clearEngineSlotTimes(tenantId: string, source: string, opts: { assignmentIds?: string[]; windowStart?: Date; windowEnd?: Date }): Promise<number>;
+  setSlotTimePlannerDecision(tenantId: string, opts: { assignmentIds?: string[]; assignmentGroupKey?: string; decision: string | null; decidedBy: string | null }): Promise<number>;
   getTenantGroupingRadiusMeters(tenantId: string): Promise<number | null>;
 
   // Pre-tasks
@@ -10619,6 +10620,43 @@ export class DatabaseStorage implements IStorage {
           lte(slotTimes.windowStart, opts.windowEnd),
         )).returning({ id: slotTimes.id });
       count += groupRows.length;
+    }
+    return count;
+  }
+  // Planerarens beslut (accepterad/avvisad/null) på motorns slottider (Task #1043).
+  // Stämplar ALLA aktiva tidsmotor-rader för de angivna assignment-id:na och/eller
+  // klump-nyckeln. tenant_id i WHERE = tenant-säkert (defense-in-depth).
+  async setSlotTimePlannerDecision(
+    tenantId: string,
+    opts: { assignmentIds?: string[]; assignmentGroupKey?: string; decision: string | null; decidedBy: string | null },
+  ): Promise<number> {
+    const stamp = {
+      plannerDecision: opts.decision,
+      decidedAt: opts.decision ? new Date() : null,
+      decidedBy: opts.decision ? opts.decidedBy : null,
+      updatedAt: new Date(),
+    };
+    let count = 0;
+    if (opts.assignmentIds && opts.assignmentIds.length > 0) {
+      const rows = await db.update(slotTimes).set(stamp)
+        .where(and(
+          eq(slotTimes.tenantId, tenantId),
+          eq(slotTimes.source, "tidsmotor"),
+          isNull(slotTimes.deletedAt),
+          inArray(slotTimes.assignmentId, opts.assignmentIds),
+        )).returning({ id: slotTimes.id });
+      count += rows.length;
+    }
+    if (opts.assignmentGroupKey) {
+      const rows = await db.update(slotTimes).set(stamp)
+        .where(and(
+          eq(slotTimes.tenantId, tenantId),
+          eq(slotTimes.source, "tidsmotor"),
+          isNull(slotTimes.deletedAt),
+          isNull(slotTimes.assignmentId),
+          eq(slotTimes.assignmentGroupKey, opts.assignmentGroupKey),
+        )).returning({ id: slotTimes.id });
+      count += rows.length;
     }
     return count;
   }
