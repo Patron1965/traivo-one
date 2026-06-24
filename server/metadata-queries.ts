@@ -4117,23 +4117,71 @@ export async function findMissingRequiredLeaveMetadata(
 ): Promise<string[]> {
   const missing: string[] = [];
   const seen = new Set<string>();
+  // Ett obligatoriskt fält uppfylls om värdet skickats med (providedValues) ELLER
+  // redan finns på objektet. Dedupas per kod (namn) så samma fält aldrig dubblas.
+  const checkRequired = async (code: string): Promise<void> => {
+    if (seen.has(code)) return;
+    seen.add(code);
+    const provided = providedValues[code];
+    if (provided !== undefined && String(provided).trim() !== "") return;
+    const existing = await getArticleMetadataForObject(objectId, code, tenantId);
+    if (existing?.value !== undefined && existing?.value !== null && String(existing.value).trim() !== "") return;
+    missing.push(code);
+  };
   for (const line of lines) {
     if (!line.articleId) continue;
     const article = await db.query.articles.findFirst({
       where: and(eq(articles.id, line.articleId), eq(articles.tenantId, tenantId)),
     });
-    if (!article?.leaveMetadataRequired || !article.leaveMetadataCode) continue;
-    const fmt = article.leaveMetadataFormat;
-    // Auto-format fylls i av systemet → aldrig obligatoriskt att fylla i manuellt.
-    if (fmt === "timestamp" || fmt === "boolean_true" || fmt === "counter_increment") continue;
-    const code = article.leaveMetadataCode;
-    if (seen.has(code)) continue;
-    seen.add(code);
-    const provided = providedValues[code];
-    if (provided !== undefined && String(provided).trim() !== "") continue;
-    const existing = await getArticleMetadataForObject(objectId, code, tenantId);
-    if (existing?.value !== undefined && existing?.value !== null && String(existing.value).trim() !== "") continue;
-    missing.push(code);
+    if (!article) continue;
+    // Legacy single-value-vägen (expand-contract: behålls orörd).
+    if (article.leaveMetadataRequired && article.leaveMetadataCode) {
+      const fmt = article.leaveMetadataFormat;
+      // Auto-format fylls i av systemet → aldrig obligatoriskt att fylla i manuellt.
+      if (!(fmt === "timestamp" || fmt === "boolean_true" || fmt === "counter_increment")) {
+        await checkRequired(article.leaveMetadataCode);
+      }
+    }
+    // Ny modell: leaveMetadataFields med required=true kräver ett manuellt värde.
+    const leaveRows = Array.isArray(article.leaveMetadataFields)
+      ? (article.leaveMetadataFields as Array<{ metadataField?: string; required?: boolean }>)
+      : [];
+    for (const row of leaveRows) {
+      if (!row?.required || !row.metadataField) continue;
+      await checkRequired(row.metadataField);
+    }
   }
   return missing;
+}
+
+// Skriv tillbaka medskickade "lämna"-värden för konfigurerade leaveMetadataFields
+// (ny modell). Endast fält som faktiskt finns i artiklarnas konfiguration skrivs —
+// aldrig godtyckliga klient-skickade nycklar. Legacy single-value-writeback
+// (auto-format) hanteras separat i respektive route och lämnas orörd.
+export async function writeProvidedLeaveMetadataFields(
+  lines: Array<{ articleId: string | null }>,
+  objectId: string,
+  tenantId: string,
+  providedValues: Record<string, string>,
+  setBy: string,
+): Promise<void> {
+  if (!providedValues || Object.keys(providedValues).length === 0) return;
+  const written = new Set<string>();
+  for (const line of lines) {
+    if (!line.articleId) continue;
+    const article = await db.query.articles.findFirst({
+      where: and(eq(articles.id, line.articleId), eq(articles.tenantId, tenantId)),
+    });
+    const leaveRows = Array.isArray(article?.leaveMetadataFields)
+      ? (article!.leaveMetadataFields as Array<{ metadataField?: string }>)
+      : [];
+    for (const row of leaveRows) {
+      const field = row?.metadataField;
+      if (!field || written.has(field)) continue;
+      const provided = providedValues[field];
+      if (provided === undefined || String(provided).trim() === "") continue;
+      written.add(field);
+      await writeArticleMetadataOnObject(objectId, field, String(provided), tenantId, setBy);
+    }
+  }
 }

@@ -38,7 +38,7 @@ async function computeOutsidePreferredWindow(
     deliveryPreferencePriority: effective.priority ?? "preferred",
   };
 }
-import { getArticleMetadataForObject, writeArticleMetadataOnObject, writeSystemMetadataOnObject, findMissingRequiredLeaveMetadata } from "../metadata-queries";
+import { getArticleMetadataForObject, writeArticleMetadataOnObject, writeSystemMetadataOnObject, findMissingRequiredLeaveMetadata, writeProvidedLeaveMetadataFields } from "../metadata-queries";
 import { resolveEffectiveArticleQuantity } from "../article-quantity-resolver";
 
 // Hämtar de artikelfält som styr orderradens kvantitet + utgått→ersättning.
@@ -1444,11 +1444,17 @@ app.patch("/api/work-orders/:id", asyncHandler(async (req, res) => {
     (req.body?.leaveMetadataValues && typeof req.body.leaveMetadataValues === "object")
       ? (req.body.leaveMetadataValues as Record<string, string>)
       : {};
-  if (
-    updateData.executionStatus === "completed" &&
-    existingOrder.executionStatus !== "completed" &&
-    existingOrder.objectId
-  ) {
+  // SimpleFieldApp (och andra webb-klienter) signalerar slutförande via
+  // orderStatus="utford" + completedAt — inte executionStatus. Betrakta båda
+  // signalerna som slutförande så att obligatorisk informationslämning och
+  // metadata-återskrivning alltid körs server-side, oavsett vilket fält klienten
+  // använder (kan därmed inte kringgås via direkt API-anrop).
+  const wasCompleted =
+    existingOrder.executionStatus === "completed" || existingOrder.orderStatus === "utford";
+  const nowCompleting =
+    updateData.executionStatus === "completed" || updateData.orderStatus === "utford";
+  const isCompleting = nowCompleting && !wasCompleted;
+  if (isCompleting && existingOrder.objectId) {
     const lines = await storage.getWorkOrderLines(existingOrder.id);
     const missing = await findMissingRequiredLeaveMetadata(lines, existingOrder.objectId, tenantId, providedLeaveValues);
     if (missing.length > 0) {
@@ -1549,9 +1555,10 @@ app.patch("/api/work-orders/:id", asyncHandler(async (req, res) => {
     notificationService.notifyPriorityChanged(workOrder, newResourceId, existingOrder.priority);
   }
 
-  if (updateData.executionStatus === "completed" && existingOrder.executionStatus !== "completed" && workOrder.objectId) {
+  if (isCompleting && workOrder.objectId) {
     try {
       const lines = await storage.getWorkOrderLines(workOrder.id);
+      const legacyWrittenKeys = new Set<string>();
       for (const line of lines) {
         if (line.articleId) {
           const article = await db.query.articles.findFirst({
@@ -1584,10 +1591,25 @@ app.patch("/api/work-orders/:id", asyncHandler(async (req, res) => {
               tenantId,
               `auto:${workOrder.id}`
             );
+            legacyWrittenKeys.add(article.leaveMetadataCode);
             console.log(`[metadata-writeback] Auto-wrote ${article.leaveMetadataCode}=${coercedValue} (format=${article.leaveMetadataFormat || 'default'}) on object ${workOrder.objectId} from work order ${workOrder.id}`);
           }
         }
       }
+      // Ny modell: skriv tillbaka medskickade leave-värden för konfigurerade fält.
+      // Hoppa över nycklar som legacy auto-format redan skrivit, annars kan ett
+      // medskickat värde tyst skriva över legacy timestamp/counter/boolean.
+      const newLeaveValues: Record<string, string> = {};
+      for (const [k, v] of Object.entries(providedLeaveValues)) {
+        if (!legacyWrittenKeys.has(k)) newLeaveValues[k] = v;
+      }
+      await writeProvidedLeaveMetadataFields(
+        lines,
+        workOrder.objectId,
+        tenantId,
+        newLeaveValues,
+        `auto:${workOrder.id}`,
+      );
     } catch (metaErr) {
       console.error("[metadata-writeback] Error during auto-writeback:", metaErr);
     }

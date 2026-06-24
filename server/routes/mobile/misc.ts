@@ -826,7 +826,63 @@ app.get("/api/mobile/tasks/:id/metadata-context", isMobileAuthenticated, asyncHa
         };
       });
 
-    res.json({ articles: result, dependencyArticles, orderArticles });
+    // Ny modell (expand-contract): "Visa och uppdatera metadata" — per orderns
+    // artiklar, med aktuellt värde på objektet. Legacy `articles`-arrayen ovan
+    // lämnas orörd. Härleds via order.tenantId (mobil-ytan kringgår tenant-mw).
+    // work_orders saknar articleId-kolumn (artikel-kopplingen bor på orderraderna);
+    // härled därför artiklar enbart från orderLines.
+    const taskArticleIds = new Set<string>();
+    for (const line of orderLines) if (line.articleId) taskArticleIds.add(line.articleId);
+
+    const showMetadataFields: Array<{
+      articleId: string; articleName: string; metadataField: string;
+      clarification: string | null; canUpdate: boolean;
+      currentValue: string | null; displayValue: string | null;
+    }> = [];
+    const leaveMetadataFields: Array<{
+      articleId: string; articleName: string; metadataField: string;
+      instruction: string | null; required: boolean;
+      currentValue: string | null; displayValue: string | null;
+    }> = [];
+
+    for (const aid of Array.from(taskArticleIds)) {
+      const a = articleById.get(aid);
+      if (!a || a.status !== "active") continue;
+      const showRows = Array.isArray(a.showMetadataFields)
+        ? (a.showMetadataFields as Array<{ metadataField?: string; clarification?: string; canUpdate?: boolean }>)
+        : [];
+      for (const row of showRows) {
+        if (!row?.metadataField) continue;
+        const current = await getArticleMetadataForObject(order.objectId, row.metadataField, tenantId);
+        showMetadataFields.push({
+          articleId: a.id,
+          articleName: a.name,
+          metadataField: row.metadataField,
+          clarification: row.clarification ?? null,
+          canUpdate: !!row.canUpdate,
+          currentValue: current?.value != null ? String(current.value) : null,
+          displayValue: current?.displayValue ?? null,
+        });
+      }
+      const leaveRows = Array.isArray(a.leaveMetadataFields)
+        ? (a.leaveMetadataFields as Array<{ metadataField?: string; instruction?: string; required?: boolean }>)
+        : [];
+      for (const row of leaveRows) {
+        if (!row?.metadataField) continue;
+        const current = await getArticleMetadataForObject(order.objectId, row.metadataField, tenantId);
+        leaveMetadataFields.push({
+          articleId: a.id,
+          articleName: a.name,
+          metadataField: row.metadataField,
+          instruction: row.instruction ?? null,
+          required: !!row.required,
+          currentValue: current?.value != null ? String(current.value) : null,
+          displayValue: current?.displayValue ?? null,
+        });
+      }
+    }
+
+    res.json({ articles: result, dependencyArticles, orderArticles, showMetadataFields, leaveMetadataFields });
 }));
 
 app.post("/api/mobile/tasks/:id/metadata-update", isMobileAuthenticated, asyncHandler(async (req: MobileAuthenticatedRequest, res: Response) => {
@@ -843,18 +899,44 @@ app.post("/api/mobile/tasks/:id/metadata-update", isMobileAuthenticated, asyncHa
     if (order.resourceId !== resourceId) throw new ForbiddenError("Ej behörig");
     if (!order.objectId) throw new ValidationError("Order saknar objekt");
 
-    const tenantId = getTenantIdWithFallback(req);
-    const objectMetadata = await getArticleMetadataForObject(order.objectId, tenantId);
-    let previousValue: string | null = null;
+    // Mobil-ytan kringgår tenant-middleware: härled tenant från den ägarskaps-
+    // kontrollerade ordern (aldrig req.tenantId/fallback).
+    const tenantId = order.tenantId;
 
-    if (objectMetadata) {
-      const match = objectMetadata.find((m: Record<string, unknown>) =>
-        (m.katalog as Record<string, unknown>)?.beteckning === metadataLabel || (m.katalog as Record<string, unknown>)?.namn === metadataLabel
-      );
-      if (match) {
-        previousValue = match.vardeString ?? (match.vardeInteger != null ? String(match.vardeInteger) : null) ?? null;
+    // Authorisering (IDOR-skydd): fältet måste vara konfigurerat som uppdaterbart på
+    // någon av DENNA orders artiklar — annars kan en utförare skriva godtycklig
+    // metadata på objektet via en spoofad metadataLabel.
+    const allArticlesForAuth = await storage.getArticles(tenantId);
+    const articleByIdForAuth = new Map(allArticlesForAuth.map((a) => [a.id, a]));
+    const taskArticleIdsForAuth = new Set<string>();
+    const authOrderLines = await storage.getWorkOrderLines(order.id);
+    for (const l of authOrderLines) if (l.articleId) taskArticleIdsForAuth.add(l.articleId);
+    const isFieldUpdatable = (a: (typeof allArticlesForAuth)[number] | undefined): boolean => {
+      if (!a || a.status !== "active") return false;
+      const showRows = Array.isArray(a.showMetadataFields)
+        ? (a.showMetadataFields as Array<{ metadataField?: string; canUpdate?: boolean }>)
+        : [];
+      if (showRows.some((r) => r?.canUpdate && r.metadataField === metadataLabel)) return true;
+      // Legacy: artikel med canUpdateMetadata + matchande etikett.
+      if (a.canUpdateMetadata && (a.updateMetadataLabel === metadataLabel || a.fetchMetadataLabel === metadataLabel)) return true;
+      return false;
+    };
+    let updateAllowed = false;
+    if (articleId && taskArticleIdsForAuth.has(articleId)) {
+      updateAllowed = isFieldUpdatable(articleByIdForAuth.get(articleId));
+    } else {
+      for (const aid of Array.from(taskArticleIdsForAuth)) {
+        if (isFieldUpdatable(articleByIdForAuth.get(aid))) { updateAllowed = true; break; }
       }
     }
+    if (!updateAllowed) throw new ForbiddenError("Fältet är inte konfigurerat som uppdaterbart för denna order");
+
+    // Tidigare värde (för audit-spår): slå upp aktuellt metadata-värde på objektet
+    // via 3-arg-signaturen (objectId, fält, tenant) som returnerar ett enskilt
+    // värde eller null.
+    const currentMeta = await getArticleMetadataForObject(order.objectId, metadataLabel, tenantId);
+    const previousValue: string | null =
+      currentMeta?.value != null ? String(currentMeta.value) : null;
 
     const effectiveValue = inspectionStatus
       ? JSON.stringify({ status: inspectionStatus, value: newValue, comment: inspectionComment || null, photo: inspectionPhoto || null })

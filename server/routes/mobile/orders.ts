@@ -9,7 +9,7 @@ import type { Express } from "express";
     mapGoCategory, ONE_CATEGORIES, SEVERITY_LEVELS, GO_CATEGORY_MAP, AUTO_LINK_DEVIATION_TYPES,
     notificationService, triggerETANotification,
     OpenAI,
-    getArticleMetadataForObject, writeArticleMetadataOnObject, findMissingRequiredLeaveMetadata,
+    getArticleMetadataForObject, writeArticleMetadataOnObject, findMissingRequiredLeaveMetadata, writeProvidedLeaveMetadataFields,
     handleWorkOrderStatusChange,
   } from "./shared";
   import type { WorkOrder } from "./shared";
@@ -480,6 +480,22 @@ app.patch("/api/mobile/orders/:id/status", isMobileAuthenticated, asyncHandler(a
     const updatedOrder = await storage.updateWorkOrder(orderId, updateData);
     
     console.log(`[mobile] Order ${orderId} status updated to ${status} by resource ${resourceId}`);
+
+    // Ny modell: vid slutförande, skriv tillbaka medskickade "lämna"-värden för
+    // konfigurerade leaveMetadataFields (best-effort; blockerar aldrig statusbytet).
+    const completedObjectId = updatedOrder?.objectId;
+    if ((status === 'utford' || status === 'completed') && completedObjectId && order.tenantId) {
+      try {
+        const providedLeaveValues: Record<string, string> =
+          (req.body?.leaveMetadataValues && typeof req.body.leaveMetadataValues === "object")
+            ? (req.body.leaveMetadataValues as Record<string, string>)
+            : {};
+        const leaveLines = await storage.getWorkOrderLines(orderId);
+        await writeProvidedLeaveMetadataFields(leaveLines, completedObjectId, order.tenantId, providedLeaveValues, `auto:${orderId}`);
+      } catch (metaErr) {
+        console.error("[metadata-writeback] Mobile leave-field writeback failed:", metaErr);
+      }
+    }
     
     const mobileTenantId = order.tenantId;
     if (mobileTenantId) {

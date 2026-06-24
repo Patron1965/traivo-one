@@ -70,7 +70,8 @@ if command -v psql >/dev/null 2>&1 && [ -n "$DATABASE_URL" ]; then
            migrations/0105_slot_times_planner_decision.sql \
            migrations/0105_teams_routing_premises.sql \
            migrations/0106_order_concept_fixed_price_basis.sql \
-           migrations/0107_drop_order_concept_invoice_period.sql; do
+           migrations/0107_drop_order_concept_invoice_period.sql \
+           migrations/0108_article_show_leave_metadata_fields.sql; do
     if [ -f "$f" ]; then
       echo "[post-merge] Applying $f"
       psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f "$f"

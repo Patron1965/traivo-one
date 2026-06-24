@@ -9,7 +9,6 @@ import { formatSekFromOre } from "@/lib/format";
 import { computeArticlePricing } from "@shared/article-pricing";
 import type {
   Article,
-  MetadataDefinition,
   ArticleTypeDefinition,
   IconDefinition,
   AssociationCondition,
@@ -34,7 +33,6 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
-import { HelpTooltip } from "@/components/ui/help-tooltip";
 import { FortnoxArticleNumberField } from "@/components/articles/FortnoxArticleNumberField";
 import {
   Package,
@@ -116,6 +114,18 @@ interface InformationRequirement {
   metadataField?: string | null;
 }
 
+interface ShowMetadataRow {
+  metadataField: string;
+  clarification: string;
+  canUpdate: boolean;
+}
+
+interface LeaveMetadataRow {
+  metadataField: string;
+  instruction: string;
+  required: boolean;
+}
+
 interface ArticleFormData {
   articleNumber: string;
   name: string;
@@ -184,6 +194,8 @@ interface ArticleFormData {
   markupPercent: number | null;
   chargeModel: string;
   informationRequirements: InformationRequirement[];
+  showMetadataFields: ShowMetadataRow[];
+  leaveMetadataFields: LeaveMetadataRow[];
   performerCategory: string;
   competencyRequirements: string[];
   iconKey: string;
@@ -265,6 +277,8 @@ const emptyFormData: ArticleFormData = {
   markupPercent: null,
   chargeModel: "",
   informationRequirements: [],
+  showMetadataFields: [],
+  leaveMetadataFields: [],
   performerCategory: "",
   competencyRequirements: [],
   iconKey: "",
@@ -283,7 +297,7 @@ const ARTICLE_SECTIONS: { id: string; title: string; icon: LucideIcon }[] = [
   { id: "struktur", title: "Strukturartikel", icon: Layers },
   { id: "fasthakning", title: "Fasthakningslogik", icon: LinkIcon },
   { id: "antalslogik", title: "Antalslogik", icon: ListChecks },
-  { id: "metadata", title: "Information & Metadata", icon: Database },
+  { id: "metadata", title: "Visa och uppdatera metadata", icon: Database },
   { id: "utforarkategori", title: "Utförarkategori", icon: Users },
 ];
 
@@ -349,10 +363,8 @@ function getSectionStats(
       fd.operatorCanUpdateQuantity,
     ]),
     metadata: countFilled([
-      fd.fetchMetadataLabel.trim() !== "" || fd.fetchMetadataCode.trim() !== "",
-      fd.leaveMetadataCode.trim() !== "",
-      fd.canUpdateMetadata,
-      fd.informationRequirements.length > 0,
+      fd.showMetadataFields.length > 0,
+      fd.leaveMetadataFields.length > 0,
     ]),
     utforarkategori: countFilled([
       fd.performerCategory.trim() !== "",
@@ -940,10 +952,6 @@ export default function ArticleFormPage() {
     queryKey: ["/api/icons"],
   });
 
-  const { data: metadataDefinitions = [] } = useQuery<MetadataDefinition[]>({
-    queryKey: ["/api/metadata-definitions"],
-  });
-
   const { data: metadataLabels = [] } = useQuery<{ id: string; namn: string; beteckning: string | null; datatyp: string }[]>({
     queryKey: ["/api/metadata-labels"],
     select: (data: any[]) => data.map((d: any) => ({ id: d.id, namn: d.namn, beteckning: d.beteckning, datatyp: d.datatyp })),
@@ -981,44 +989,6 @@ export default function ArticleFormPage() {
       await uploadArticleFile(file);
     }
   };
-
-  // Task #682: varna när en metadatareferens redan är kopplad till en annan ordertyp/artikel.
-  const [metadataLinkWarnings, setMetadataLinkWarnings] = useState<{ fetch: string | null; leave: string | null }>({
-    fetch: null,
-    leave: null,
-  });
-
-  const checkMetadataReferenceUsage = useCallback(
-    async (namn: string, which: "fetch" | "leave") => {
-      if (!namn) {
-        setMetadataLinkWarnings((prev) => ({ ...prev, [which]: null }));
-        return;
-      }
-      const katalog = metadataTypes.find((t) => t.namn === namn);
-      if (!katalog) {
-        setMetadataLinkWarnings((prev) => ({ ...prev, [which]: null }));
-        return;
-      }
-      try {
-        const res = await fetch(`/api/metadata-link-usage/${encodeURIComponent(katalog.id)}`, { credentials: "include" });
-        if (!res.ok) return;
-        const usage = await res.json();
-        const articleUsage = (usage.articles || []).filter((a: any) => a.id !== id);
-        const parts: string[] = [];
-        if (usage.orderTypes?.length) parts.push(`ordertyp(er): ${usage.orderTypes.join(", ")}`);
-        if (articleUsage.length) parts.push(`artikel(ar): ${articleUsage.map((a: any) => a.name).join(", ")}`);
-        setMetadataLinkWarnings((prev) => ({
-          ...prev,
-          [which]: parts.length
-            ? `Referensen "${namn}" används redan av ${parts.join("; ")}. Risk för generiska fältkollisioner — överväg en mer specifik referens.`
-            : null,
-        }));
-      } catch {
-        // best-effort
-      }
-    },
-    [metadataTypes, id],
-  );
 
   const handleTestAssociation = async () => {
     const needsValue = formData.associationOperator !== "has_value";
@@ -1150,6 +1120,12 @@ export default function ArticleFormPage() {
       chargeModel: (article as any).chargeModel || "",
       informationRequirements: Array.isArray((article as any).informationRequirements)
         ? ((article as any).informationRequirements as InformationRequirement[])
+        : [],
+      showMetadataFields: Array.isArray((article as any).showMetadataFields)
+        ? ((article as any).showMetadataFields as ShowMetadataRow[])
+        : [],
+      leaveMetadataFields: Array.isArray((article as any).leaveMetadataFields)
+        ? ((article as any).leaveMetadataFields as LeaveMetadataRow[])
         : [],
       performerCategory: (article as any).performerCategory || "",
       iconKey: (article as any).iconKey || "",
@@ -1325,6 +1301,12 @@ export default function ArticleFormPage() {
     const payload: Partial<ArticleFormData> & { fortnoxArticleNumber?: string | null } = { ...formData };
     payload.stockLocations = formData.stockLocations.filter((r) => (r.location || "").trim() !== "");
     payload.informationRequirements = formData.informationRequirements.filter((r) => (r.type || "").trim() !== "");
+    payload.showMetadataFields = formData.showMetadataFields
+      .filter((r) => (r.metadataField || "").trim() !== "")
+      .map((r) => ({ metadataField: r.metadataField.trim(), clarification: (r.clarification || "").trim(), canUpdate: !!r.canUpdate }));
+    payload.leaveMetadataFields = formData.leaveMetadataFields
+      .filter((r) => (r.metadataField || "").trim() !== "")
+      .map((r) => ({ metadataField: r.metadataField.trim(), instruction: (r.instruction || "").trim(), required: !!r.required }));
     payload.competencyRequirements = formData.competencyRequirements.filter((c) => (c || "").trim() !== "");
     if (fortnoxLinkTouched) {
       payload.fortnoxArticleNumber = fortnoxArticleNumber;
@@ -2845,321 +2827,173 @@ export default function ArticleFormPage() {
             </div>
           </FormSection>
 
-          {/* 9. Informationsinhämtning & Metadata */}
+          {/* 9. Visa och uppdatera metadata */}
           <FormSection
-            title="Informationsinhämtning & Metadata"
+            title="Visa och uppdatera metadata"
             icon={<Database className="h-4 w-4" />}
-            description="Koppla artikeln till metadata som hämtas/lämnas vid utförande"
+            description="Välj vilka metadatafält som visas för utföraren och vilka som ska lämnas/rapporteras vid utförande"
             testId="section-metadata"
             {...sectionProps("metadata")}
           >
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <div className="space-y-2">
-                <Label>Hämta metadata</Label>
-                <Select
-                  value={formData.fetchMetadataCode || "_none"}
-                  onValueChange={(v) => {
-                    const next = v === "_none" ? "" : v;
-                    setFormData({ ...formData, fetchMetadataCode: next });
-                    checkMetadataReferenceUsage(next, "fetch");
-                  }}
-                >
-                  <SelectTrigger data-testid="select-fetch-metadata">
-                    <SelectValue placeholder="Ingen" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="_none">Ingen</SelectItem>
-                    {metadataTypes.map((t) => (
-                      <SelectItem key={t.id} value={t.namn}>
-                        {t.namn}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <p className="text-xs text-muted-foreground">Metadata som visas för utföraren vid start</p>
-                {metadataLinkWarnings.fetch && (
-                  <p className="flex items-start gap-1 text-xs text-warning" data-testid="warning-fetch-metadata-link">
-                    <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-                    <span>{metadataLinkWarnings.fetch}</span>
-                  </p>
-                )}
-              </div>
-              <div className="space-y-2">
-                <Label>Lämna metadata</Label>
-                <Select
-                  value={formData.leaveMetadataCode || "_none"}
-                  onValueChange={(v) => {
-                    const next = v === "_none" ? "" : v;
-                    setFormData({ ...formData, leaveMetadataCode: next });
-                    checkMetadataReferenceUsage(next, "leave");
-                  }}
-                >
-                  <SelectTrigger data-testid="select-leave-metadata">
-                    <SelectValue placeholder="Ingen" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="_none">Ingen</SelectItem>
-                    {metadataTypes.map((t) => (
-                      <SelectItem key={t.id} value={t.namn}>
-                        {t.namn}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <p className="text-xs text-muted-foreground">Metadata som skrivs tillbaka efter utförande</p>
-                {metadataLinkWarnings.leave && (
-                  <p className="flex items-start gap-1 text-xs text-warning" data-testid="warning-leave-metadata-link">
-                    <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-                    <span>{metadataLinkWarnings.leave}</span>
-                  </p>
-                )}
-              </div>
-            </div>
-
-            {formData.leaveMetadataCode && (
-              <div className="space-y-2">
-                <Label>Lämna-format</Label>
-                <Select value={formData.leaveMetadataFormat || "value"} onValueChange={(v) => setFormData({ ...formData, leaveMetadataFormat: v })}>
-                  <SelectTrigger data-testid="select-leave-format">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="value">Värde (direkt input)</SelectItem>
-                    <SelectItem value="timestamp">Tidsstämpel (automatisk)</SelectItem>
-                    <SelectItem value="boolean_true">Flagga: Ja</SelectItem>
-                    <SelectItem value="counter_increment">Räknare: +1</SelectItem>
-                  </SelectContent>
-                </Select>
-                {(formData.leaveMetadataFormat === "value" || formData.leaveMetadataFormat === "") && (
-                  <label className="flex cursor-pointer items-center gap-2 pt-2">
-                    <input
-                      type="checkbox"
-                      checked={formData.leaveMetadataRequired}
-                      onChange={(e) => setFormData({ ...formData, leaveMetadataRequired: e.target.checked })}
-                      data-testid="checkbox-leave-metadata-required"
-                    />
-                    <span className="text-sm">Obligatorisk — kräv värde innan uppgiften kan slutföras</span>
-                  </label>
-                )}
-              </div>
-            )}
-
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <div className="space-y-2">
-                <Label>Hämta etikett (visa för fältarbetare)</Label>
-                <Select
-                  value={formData.fetchMetadataLabel || "_none"}
-                  onValueChange={(v) => setFormData({ ...formData, fetchMetadataLabel: v === "_none" ? "" : v })}
-                >
-                  <SelectTrigger data-testid="select-fetch-metadata-label">
-                    <SelectValue placeholder="Ingen" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="_none">Ingen</SelectItem>
-                    {metadataLabels.map((ml) => (
-                      <SelectItem key={ml.id} value={ml.beteckning || ml.namn}>
-                        {ml.namn}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label>Visningsformat</Label>
-                <Select
-                  value={formData.fetchMetadataLabelFormat || "text"}
-                  onValueChange={(v) => setFormData({ ...formData, fetchMetadataLabelFormat: v })}
-                  disabled={!formData.fetchMetadataLabel}
-                >
-                  <SelectTrigger data-testid="select-fetch-label-format">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="text">Fritext</SelectItem>
-                    <SelectItem value="dropdown">Dropdown</SelectItem>
-                    <SelectItem value="checkbox">Checkbox</SelectItem>
-                    <SelectItem value="number">Nummer</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-
-            <label className="flex cursor-pointer items-center gap-2">
-              <input
-                type="checkbox"
-                checked={formData.canUpdateMetadata}
-                onChange={(e) => setFormData({ ...formData, canUpdateMetadata: e.target.checked })}
-                data-testid="checkbox-can-update-metadata"
-              />
-              <span className="text-sm">Fältarbetare kan uppdatera metadata</span>
-            </label>
-
-            {formData.canUpdateMetadata && (
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <div className="space-y-2">
-                  <Label>Uppdatera etikett</Label>
-                  <Select
-                    value={formData.updateMetadataLabel || "_none"}
-                    onValueChange={(v) => setFormData({ ...formData, updateMetadataLabel: v === "_none" ? "" : v })}
-                  >
-                    <SelectTrigger data-testid="select-update-metadata-label">
-                      <SelectValue placeholder="Ingen" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="_none">Samma som hämta-etikett</SelectItem>
-                      {metadataLabels.map((ml) => (
-                        <SelectItem key={ml.id} value={ml.beteckning || ml.namn}>
-                          {ml.namn}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label>Uppdateringsformat</Label>
-                  <Select value={formData.updateMetadataFormat || "value"} onValueChange={(v) => setFormData({ ...formData, updateMetadataFormat: v })}>
-                    <SelectTrigger data-testid="select-update-format">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="value">Värde (direkt input)</SelectItem>
-                      <SelectItem value="ok_ej_ok">OK / EJ OK</SelectItem>
-                      <SelectItem value="timestamp">Tidsstämpel (automatisk)</SelectItem>
-                      <SelectItem value="counter_increment">Räknare: +1</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-            )}
-
-            {formData.canUpdateMetadata && (
-              <label className="flex cursor-pointer items-center gap-2">
-                <input
-                  type="checkbox"
-                  checked={formData.showPreviousValue}
-                  onChange={(e) => setFormData({ ...formData, showPreviousValue: e.target.checked })}
-                  data-testid="checkbox-show-previous-value"
-                />
-                <span className="text-sm">Visa föregående värde för fältarbetare</span>
-              </label>
-            )}
-
-            <div className="flex items-center gap-2">
-              <label className="flex cursor-pointer items-center gap-2">
-                <input
-                  type="checkbox"
-                  checked={formData.isInfoCarrier}
-                  onChange={(e) => setFormData({ ...formData, isInfoCarrier: e.target.checked })}
-                  data-testid="checkbox-is-info-carrier"
-                />
-                <span className="text-sm">Blindartikel (informationsbärare)</span>
-              </label>
-              <HelpTooltip content="Blindartiklar visas som info-kort i fältappen utan utförande-steg" />
-            </div>
-
+            {/* Visa metadata */}
             <div className="space-y-2">
-              <Label htmlFor="defaultMetadataAssociation">Förvalt metadatafält (Hakar fast på)</Label>
-              <Select
-                value={formData.defaultMetadataAssociation || "__none__"}
-                onValueChange={(v) => setFormData({ ...formData, defaultMetadataAssociation: v === "__none__" ? "" : v })}
-              >
-                <SelectTrigger id="defaultMetadataAssociation" data-testid="select-default-metadata-assoc">
-                  <SelectValue placeholder="—" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__none__">—</SelectItem>
-                  {metadataDefinitions.map((d) => (
-                    <SelectItem key={d.id} value={d.fieldKey}>
-                      {d.fieldLabel}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <p className="text-xs text-muted-foreground">
-                Föreslås automatiskt som "Hakar fast på"-koppling när artikeln läggs till i ett orderkoncept.
-              </p>
-            </div>
-
-            <div className="space-y-2 border-t pt-3">
               <div className="flex items-center justify-between">
-                <Label>Informationskrav</Label>
+                <Label>Visa metadata</Label>
                 <Button
                   type="button"
                   size="sm"
                   variant="outline"
                   onClick={() =>
-                    setFormData({
-                      ...formData,
-                      informationRequirements: [...formData.informationRequirements, { type: "", required: false, metadataField: null }],
-                    })
+                    setFormData((prev) => ({
+                      ...prev,
+                      showMetadataFields: [...prev.showMetadataFields, { metadataField: "", clarification: "", canUpdate: false }],
+                    }))
                   }
-                  data-testid="button-add-information-requirement"
+                  data-testid="button-add-show-metadata"
                 >
-                  <Plus className="mr-1 h-4 w-4" /> Lägg till informationskrav
+                  <Plus className="mr-1 h-4 w-4" /> Lägg till fält
                 </Button>
               </div>
-              {formData.informationRequirements.length === 0 && (
-                <p className="text-xs text-muted-foreground">Inga informationskrav angivna.</p>
+              <p className="text-xs text-muted-foreground">
+                Metadatafält som visas för utföraren vid utförande. Kryssa "Får uppdatera" för att låta fältarbetaren ändra det befintliga värdet.
+              </p>
+              {formData.showMetadataFields.length === 0 && (
+                <p className="text-xs text-muted-foreground" data-testid="text-show-metadata-empty">Inga fält att visa.</p>
               )}
-              {formData.informationRequirements.map((req, idx) => {
-                const patch = (p: Partial<InformationRequirement>) =>
+              {formData.showMetadataFields.map((row, idx) => {
+                const patch = (p: Partial<ShowMetadataRow>) =>
                   setFormData((prev) => ({
                     ...prev,
-                    informationRequirements: prev.informationRequirements.map((r, i) => (i === idx ? { ...r, ...p } : r)),
+                    showMetadataFields: prev.showMetadataFields.map((r, i) => (i === idx ? { ...r, ...p } : r)),
                   }));
                 return (
-                  <div key={idx} className="space-y-2 rounded-md border p-3" data-testid={`row-information-requirement-${idx}`}>
+                  <div key={idx} className="space-y-2 rounded-md border p-3" data-testid={`row-show-metadata-${idx}`}>
                     <div className="flex items-center gap-2">
-                      <Input
-                        value={req.type}
-                        onChange={(e) => patch({ type: e.target.value })}
-                        placeholder="Typ av information (t.ex. foto, mätvärde)"
-                        className="flex-1"
-                        data-testid={`input-information-requirement-type-${idx}`}
-                      />
+                      <Select value={row.metadataField || "_none"} onValueChange={(v) => patch({ metadataField: v === "_none" ? "" : v })}>
+                        <SelectTrigger className="flex-1" data-testid={`select-show-metadata-field-${idx}`}>
+                          <SelectValue placeholder="Välj metadatafält" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="_none">Välj metadatafält</SelectItem>
+                          {metadataTypes.map((t) => (
+                            <SelectItem key={t.id} value={t.namn}>{t.namn}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                       <Button
                         type="button"
                         size="icon"
                         variant="ghost"
                         onClick={() =>
-                          setFormData({
-                            ...formData,
-                            informationRequirements: formData.informationRequirements.filter((_, i) => i !== idx),
-                          })
+                          setFormData((prev) => ({
+                            ...prev,
+                            showMetadataFields: prev.showMetadataFields.filter((_, i) => i !== idx),
+                          }))
                         }
-                        data-testid={`button-remove-information-requirement-${idx}`}
-                        aria-label="Ta bort informationskrav"
+                        data-testid={`button-remove-show-metadata-${idx}`}
+                        aria-label="Ta bort fält"
                       >
                         <Trash2 className="h-4 w-4" />
                       </Button>
                     </div>
-                    <div className="flex flex-wrap items-center gap-3">
-                      <Select
-                        value={req.metadataField || "_none"}
-                        onValueChange={(v) => patch({ metadataField: v === "_none" ? null : v })}
-                      >
-                        <SelectTrigger className="w-64" data-testid={`select-information-requirement-field-${idx}`}>
-                          <SelectValue placeholder="Metadatafält (valfritt)" />
+                    <Input
+                      value={row.clarification}
+                      onChange={(e) => patch({ clarification: e.target.value })}
+                      placeholder="Förklaring för utföraren (valfritt)"
+                      maxLength={120}
+                      data-testid={`input-show-metadata-clarification-${idx}`}
+                    />
+                    <label className="flex cursor-pointer items-center gap-2 text-sm">
+                      <input
+                        type="checkbox"
+                        checked={row.canUpdate}
+                        onChange={(e) => patch({ canUpdate: e.target.checked })}
+                        data-testid={`checkbox-show-metadata-can-update-${idx}`}
+                      />
+                      Fältarbetaren får uppdatera/ersätta befintligt värde
+                    </label>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Lämna metadata */}
+            <div className="space-y-2 border-t pt-3">
+              <div className="flex items-center justify-between">
+                <Label>Lämna metadata</Label>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={() =>
+                    setFormData((prev) => ({
+                      ...prev,
+                      leaveMetadataFields: [...prev.leaveMetadataFields, { metadataField: "", instruction: "", required: false }],
+                    }))
+                  }
+                  data-testid="button-add-leave-metadata"
+                >
+                  <Plus className="mr-1 h-4 w-4" /> Lägg till fält
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Metadatafält som utföraren ska fylla i/rapportera. Kryssa "Obligatorisk" för att kräva ett värde innan uppgiften kan slutföras.
+              </p>
+              {formData.leaveMetadataFields.length === 0 && (
+                <p className="text-xs text-muted-foreground" data-testid="text-leave-metadata-empty">Inga fält att lämna.</p>
+              )}
+              {formData.leaveMetadataFields.map((row, idx) => {
+                const patch = (p: Partial<LeaveMetadataRow>) =>
+                  setFormData((prev) => ({
+                    ...prev,
+                    leaveMetadataFields: prev.leaveMetadataFields.map((r, i) => (i === idx ? { ...r, ...p } : r)),
+                  }));
+                return (
+                  <div key={idx} className="space-y-2 rounded-md border p-3" data-testid={`row-leave-metadata-${idx}`}>
+                    <div className="flex items-center gap-2">
+                      <Select value={row.metadataField || "_none"} onValueChange={(v) => patch({ metadataField: v === "_none" ? "" : v })}>
+                        <SelectTrigger className="flex-1" data-testid={`select-leave-metadata-field-${idx}`}>
+                          <SelectValue placeholder="Välj metadatafält" />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="_none">Inget metadatafält</SelectItem>
+                          <SelectItem value="_none">Välj metadatafält</SelectItem>
                           {metadataTypes.map((t) => (
-                            <SelectItem key={t.id} value={t.namn}>
-                              {t.namn}
-                            </SelectItem>
+                            <SelectItem key={t.id} value={t.namn}>{t.namn}</SelectItem>
                           ))}
                         </SelectContent>
                       </Select>
-                      <label className="flex cursor-pointer items-center gap-1.5 text-sm">
-                        <input
-                          type="checkbox"
-                          checked={req.required}
-                          onChange={(e) => patch({ required: e.target.checked })}
-                          data-testid={`checkbox-information-requirement-required-${idx}`}
-                        />
-                        Obligatorisk
-                      </label>
+                      <Button
+                        type="button"
+                        size="icon"
+                        variant="ghost"
+                        onClick={() =>
+                          setFormData((prev) => ({
+                            ...prev,
+                            leaveMetadataFields: prev.leaveMetadataFields.filter((_, i) => i !== idx),
+                          }))
+                        }
+                        data-testid={`button-remove-leave-metadata-${idx}`}
+                        aria-label="Ta bort fält"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
                     </div>
+                    <Input
+                      value={row.instruction}
+                      onChange={(e) => patch({ instruction: e.target.value })}
+                      placeholder="Instruktion till utföraren (valfritt)"
+                      maxLength={240}
+                      data-testid={`input-leave-metadata-instruction-${idx}`}
+                    />
+                    <label className="flex cursor-pointer items-center gap-2 text-sm">
+                      <input
+                        type="checkbox"
+                        checked={row.required}
+                        onChange={(e) => patch({ required: e.target.checked })}
+                        data-testid={`checkbox-leave-metadata-required-${idx}`}
+                      />
+                      Obligatorisk — kräv värde innan uppgiften kan slutföras
+                    </label>
                   </div>
                 );
               })}

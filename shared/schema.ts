@@ -824,8 +824,16 @@ export const articles = pgTable("articles", {
   minOrderQuantity: integer("min_order_quantity"), // Minsta orderantal (st)
   // Lagerplatser — array av {location, balance, minLevel, reorderPoint}. Saldo är readonly/beräknat.
   stockLocations: jsonb("stock_locations").default([]),
-  // Informationsinhämtning (sektion 9) — array av {type, required, metadataField}
+  // Informationsinhämtning (sektion 9, LEGACY) — array av {type, required, metadataField}.
+  // UI:t ersatt av showMetadataFields/leaveMetadataFields nedan; kolumnen behålls (expand-contract).
   informationRequirements: jsonb("information_requirements").default([]),
+  // Sektion "Visa och uppdatera metadata" — två repeterbara listor (expand-contract; ersätter
+  // INTE legacy single-value-kolumnerna fetch/leaveMetadataCode m.fl. som lämnas orörda):
+  //   showMetadataFields  — metadatafält att VISA för utföraren: {metadataField, clarification?, canUpdate}
+  //   leaveMetadataFields — metadatafält att LÄMNA/rapportera:    {metadataField, instruction?, required}
+  // metadataField = metadata_katalog.namn (svenska katalogen, samma källa som UI:t).
+  showMetadataFields: jsonb("show_metadata_fields").default([]),
+  leaveMetadataFields: jsonb("leave_metadata_fields").default([]),
   // Utförarkategori (sektion 10):
   performerCategory: text("performer_category"),
   competencyRequirements: text("competency_requirements").array().default([]),
@@ -1760,6 +1768,17 @@ export const articleInformationRequirementSchema = z.object({
   required: z.boolean().default(false),
   metadataField: z.string().nullable().optional(),
 });
+// Sektion "Visa och uppdatera metadata": rader i de två repeterbara listorna.
+export const articleShowMetadataFieldSchema = z.object({
+  metadataField: z.string().trim().min(1),
+  clarification: z.string().trim().max(120).optional(),
+  canUpdate: z.boolean().default(false),
+});
+export const articleLeaveMetadataFieldSchema = z.object({
+  metadataField: z.string().trim().min(1),
+  instruction: z.string().trim().max(240).optional(),
+  required: z.boolean().default(false),
+});
 
 export const insertArticleSchema = createInsertSchema(articles).omit({ id: true, createdAt: true }).extend({
   // Task #834: hård gräns 50 tecken på artikelnamn (validering speglas i frontend-räknaren).
@@ -1770,6 +1789,8 @@ export const insertArticleSchema = createInsertSchema(articles).omit({ id: true,
   files: z.array(articleFileSchema).optional(),
   stockLocations: z.array(articleStockLocationSchema).optional(),
   informationRequirements: z.array(articleInformationRequirementSchema).optional(),
+  showMetadataFields: z.array(articleShowMetadataFieldSchema).optional(),
+  leaveMetadataFields: z.array(articleLeaveMetadataFieldSchema).optional(),
   competencyRequirements: z.array(z.string()).optional(),
   defaultSupplierId: z.preprocess((v) => (typeof v === "string" && v.trim() === "" ? null : v), z.string().nullable().optional()),
   // Valfria FK-kolumner: frontend skickar "" när inget valts. Tom sträng bryter

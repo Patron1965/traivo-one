@@ -773,10 +773,34 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
     hasStockLocation?: boolean;
   }
 
+  interface ShowMetadataFieldContext {
+    articleId: string;
+    articleName: string;
+    metadataField: string;
+    clarification: string | null;
+    canUpdate: boolean;
+    currentValue: string | null;
+    displayValue: string | null;
+  }
+
+  interface LeaveMetadataFieldContext {
+    articleId: string;
+    articleName: string;
+    metadataField: string;
+    instruction: string | null;
+    required: boolean;
+    currentValue: string | null;
+    displayValue: string | null;
+  }
+
   const [metadataUpdates, setMetadataUpdates] = useState<Record<string, { value: string; status?: string; comment?: string; photo?: string }>>({});
   const [savingMetadata, setSavingMetadata] = useState<string | null>(null);
+  // Ny modell "Visa och uppdatera metadata": Visa+får uppdatera (live-skriv) resp.
+  // Lämna (samlas in och skickas vid slutförande). Lämna-värden keyas på fältnamn.
+  const [showFieldValues, setShowFieldValues] = useState<Record<string, string>>({});
+  const [leaveFieldValues, setLeaveFieldValues] = useState<Record<string, string>>({});
 
-  const { data: metadataContext } = useQuery<{ articles: MetadataArticleContext[]; dependencyArticles?: DependencyArticleContext[]; orderArticles?: OrderArticleContext[] }>({
+  const { data: metadataContext } = useQuery<{ articles: MetadataArticleContext[]; dependencyArticles?: DependencyArticleContext[]; orderArticles?: OrderArticleContext[]; showMetadataFields?: ShowMetadataFieldContext[]; leaveMetadataFields?: LeaveMetadataFieldContext[] }>({
     queryKey: ["/api/mobile/tasks", selectedJobId, "metadata-context"],
     queryFn: async () => {
       if (!selectedJobId) return { articles: [], dependencyArticles: [] };
@@ -914,6 +938,7 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
         completedVehicleId: completedVehicleId,
         completedVehicleRegNo: selectedVehicle?.registrationNumber ?? null,
         completedParticipantIds: participantIds.length > 0 ? participantIds : null,
+        leaveMetadataValues: leaveFieldValues,
       });
 
       if (job) {
@@ -985,6 +1010,8 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
       setCompletedVehicleId(null);
       setCompletedParticipantIds([]);
       setJobNote("");
+      setLeaveFieldValues({});
+      setShowFieldValues({});
       setShowCompletedDialog(true);
     },
     onSettled: () => {
@@ -1324,6 +1351,20 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
     if (missing.length > 0) {
       setValidationMissingFields(missing);
       setShowValidationModal(true);
+      return;
+    }
+    // Obligatoriska "lämna"-fält måste fyllas i (eller redan finnas på objektet).
+    const missingLeave = (metadataContext?.leaveMetadataFields ?? []).filter(
+      (f) => f.required
+        && !(leaveFieldValues[f.metadataField] && leaveFieldValues[f.metadataField].trim())
+        && !(f.currentValue && f.currentValue.trim()),
+    );
+    if (missingLeave.length > 0) {
+      toast({
+        title: "Obligatorisk information saknas",
+        description: `Fyll i: ${missingLeave.map((f) => f.metadataField).join(", ")}`,
+        variant: "destructive",
+      });
       return;
     }
     completeJobMutation.mutate({
@@ -2163,6 +2204,81 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
                         )}
                       </div>
                     )}
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
+
+          {!focusMode && metadataContext && (((metadataContext.showMetadataFields?.length ?? 0) > 0) || ((metadataContext.leaveMetadataFields?.length ?? 0) > 0)) && (
+            <div className="space-y-2" data-testid="panel-show-leave-metadata">
+              {(metadataContext.showMetadataFields ?? []).map((f) => (
+                <Card key={`show-${f.articleId}-${f.metadataField}`} className="border-chart-2/20 dark:border-chart-2/80 bg-chart-2/10 dark:bg-chart-2/15" data-testid={`card-show-metadata-${f.articleId}-${f.metadataField}`}>
+                  <CardContent className="py-3 space-y-2">
+                    <div className="flex items-center gap-1.5">
+                      <Database className="h-4 w-4 text-chart-2" />
+                      <span className="text-xs font-medium text-chart-2">{f.metadataField}</span>
+                    </div>
+                    {f.clarification && (
+                      <p className="text-xs text-muted-foreground">{f.clarification}</p>
+                    )}
+                    <div className="flex items-center justify-between bg-card dark:bg-background rounded border p-2">
+                      <span className="text-xs text-muted-foreground">Nuvarande värde</span>
+                      <span className="text-sm font-medium" data-testid={`text-show-metadata-value-${f.articleId}-${f.metadataField}`}>{f.displayValue ?? f.currentValue ?? "—"}</span>
+                    </div>
+                    {f.canUpdate && (
+                      <div className="flex gap-2">
+                        <Input
+                          placeholder={`Uppdatera ${f.metadataField}...`}
+                          value={showFieldValues[`${f.articleId}::${f.metadataField}`] ?? ""}
+                          onChange={(e) => setShowFieldValues((prev) => ({ ...prev, [`${f.articleId}::${f.metadataField}`]: e.target.value }))}
+                          className="text-sm h-9"
+                          data-testid={`input-show-metadata-${f.articleId}-${f.metadataField}`}
+                        />
+                        <Button
+                          size="sm"
+                          className="h-9"
+                          disabled={savingMetadata === f.articleId || !showFieldValues[`${f.articleId}::${f.metadataField}`]}
+                          onClick={() => {
+                            const v = showFieldValues[`${f.articleId}::${f.metadataField}`];
+                            if (v) handleMetadataUpdate(f.articleId, f.metadataField, v);
+                          }}
+                          data-testid={`button-save-show-metadata-${f.articleId}-${f.metadataField}`}
+                        >
+                          {savingMetadata === f.articleId ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                        </Button>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              ))}
+
+              {(metadataContext.leaveMetadataFields ?? []).map((f) => (
+                <Card key={`leave-${f.articleId}-${f.metadataField}`} className="border-chart-3/20 dark:border-chart-3/80 bg-chart-3/10 dark:bg-chart-3/15" data-testid={`card-leave-metadata-${f.articleId}-${f.metadataField}`}>
+                  <CardContent className="py-3 space-y-2">
+                    <div className="flex items-center gap-1.5">
+                      <ClipboardCheck className="h-4 w-4 text-chart-3" />
+                      <span className="text-xs font-medium text-chart-3">{f.metadataField}</span>
+                      {f.required && (
+                        <Badge variant="outline" className="text-[10px]" data-testid={`badge-required-${f.articleId}-${f.metadataField}`}>Obligatorisk</Badge>
+                      )}
+                    </div>
+                    {f.instruction && (
+                      <p className="text-xs text-muted-foreground">{f.instruction}</p>
+                    )}
+                    {f.currentValue != null && (
+                      <div className="flex items-center justify-between text-xs text-muted-foreground px-1">
+                        <span>Nuvarande:</span>
+                        <span className="font-mono">{f.displayValue ?? f.currentValue}</span>
+                      </div>
+                    )}
+                    <Input
+                      placeholder={`Ange ${f.metadataField}...`}
+                      value={leaveFieldValues[f.metadataField] ?? ""}
+                      onChange={(e) => setLeaveFieldValues((prev) => ({ ...prev, [f.metadataField]: e.target.value }))}
+                      className="text-sm h-9"
+                      data-testid={`input-leave-metadata-${f.articleId}-${f.metadataField}`}
+                    />
                   </CardContent>
                 </Card>
               ))}

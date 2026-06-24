@@ -13,7 +13,7 @@ import { mapGoCategory, ONE_CATEGORIES, SEVERITY_LEVELS, GO_CATEGORY_MAP, AUTO_L
 import { notificationService } from "../../notifications";
 import { triggerETANotification } from "../../eta-notification-service";
 import OpenAI from "openai";
-import { getArticleMetadataForObject, writeArticleMetadataOnObject, findMissingRequiredLeaveMetadata } from "../../metadata-queries";
+import { getArticleMetadataForObject, writeArticleMetadataOnObject, findMissingRequiredLeaveMetadata, writeProvidedLeaveMetadataFields } from "../../metadata-queries";
 import { handleWorkOrderStatusChange } from "../../ai-communication";
 import { invalidateWorkflowCaches } from "../../services/dashboardCache";
 import { validatePlannerEvent } from "@shared/ws-events";
@@ -287,7 +287,7 @@ export {
   mapGoCategory, ONE_CATEGORIES, SEVERITY_LEVELS, GO_CATEGORY_MAP, AUTO_LINK_DEVIATION_TYPES,
   notificationService, triggerETANotification,
   OpenAI,
-  getArticleMetadataForObject, writeArticleMetadataOnObject, findMissingRequiredLeaveMetadata,
+  getArticleMetadataForObject, writeArticleMetadataOnObject, findMissingRequiredLeaveMetadata, writeProvidedLeaveMetadataFields,
   handleWorkOrderStatusChange,
   invalidateWorkflowCaches,
 };

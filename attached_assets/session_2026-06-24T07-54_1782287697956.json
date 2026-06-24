@@ -1,0 +1,80 @@
+{
+  "sessionId": "d7ff1db0e",
+  "exportedAt": "2026-06-24T07:54:41.529Z",
+  "summary": "### Key Topics Discussed\n- Förtydliganden och kontroller gällande metadata-fält, inklusive hur \"förälder\" relaterar till metadata.\n- Hantering av namn och grupperingar av metadatafält, exempelvis för \"kontakt\".\n- Diskussion om hanteringen av antalsfält och hur de uppdateras mot objekt baserat på orderkoncept.\n\n### Important Points & Insights\n- Det finns fria metadata-fält som användaren skapar.\n- Det finns systemgenererade metadata-fält, till exempel de som anger vilka uppgifter som är kopplade till objektet.\n- Det är oklart om \"förälder\" är ett metadata-fält, men det kan vara det.\n- Objekt har ett nummer, ett namn och kan vara aktiva eller inaktiva.\n- Utöver grundläggande objektinformation kopplas metadata på via ett register.\n- Metadata kan vara i katalogform eller ange status.\n- Viktiga metadata-fält kommer att vara de som kopplar ordrar, uppgifter eller orderkoncept till ett unikt objekt.\n- Metadatafält kan grupperas, till exempel under \"kontakt\" som kan inkludera namn, titel, telefonnummer och e-post. När \"kontakt\" väljs, ska hela gruppen av metadatafält följa med.\n- Hanteringen av dessa grupper behöver belysas närmare.\n- \"Antal\" skulle kunna vara ett systemgenererat metadatafält, men det är också möjligt att definiera det som ett metadatafält direkt på artikeln för att ange antalet. Om inget specifikt metadatafält för antal finns, används antalet från orderkonceptet, vilket sedan uppdateras mot objektet när uppgiften utförs och pushat in i det definierade metadatafältet för antal/storlek på artikeln.\n\n### Open Questions/Pending Items\n- Hur \"förälder\" specifikt relaterar till metadatafält.\n- Hur grupperingar av metadatafält som \"kontakt\" ska hanteras systemmässigt.\n- Behov av en genomgång för att säkerställa att inga felaktigheter uppstår gällande metadatahanteringen.",
+  "conversation": [],
+  "transcripts": [
+    {
+      "text": "Okej. Ja, angående då metadata-fäll så behöver vi ju göra då några förtydliganden och kontroller här då. Och till att börja med då så finns det då, ska vi kalla det då, fria metadata-fält som användaren skapar efter tycke och smak. Eh, sen så kommer det då att vara vissa metadata-fält som är systemgenererade. Eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Till exempel då, eh, metadata-fält som, som, som anger vilka, vilka uppgifter som är kopplade till objektet. Och, eh, det finns, eh, systemfält som...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Eh, kanske anger... Det, det, det finns förälder här nu, och nu är det lite oklart om förälder är ett metadata-fält eller inte, men det kan mycket väl vara ett metadata-fält. Det, det får i såna fall rä-rätt, liksom, så att säga, beställa, bestämma då. För grunden är ju att objektet har ju då ett nummer och ett namn, och, eh, antingen är det aktivt eller så är det inte ak-aktivt då. Sen har du då det här registret så som v-vi ser det då, där man kopplar på mängder med met",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "ada. Mm. Eh, ibland är det metadata och katalogform, och ibland så är det, så att säga, bara en, ett metadata som har en viss status då. Men i vilket fall som helst så kommer det då att bli metadata-fält, framför allt då för vilka ordrar som är, är kopplade eller vilka uppgifter eller vilka orderkoncept som är kopplade till det unika objektet. Och, eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Sedan så har vi också...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Eh, det här med namn och grupperingar utav metadatafält då. Och, och då har vi ju den här klassikern kontakt då. Och kontakt består ju då utav namn, titel, telefonnummer och e-post. Och då är ju... Egentligen då så är ju metadatafälten... Ligger ju under namn, titel, telefonnummer och e-post då, och inte första hand på kontakt då. Och, och då ska ju de här ha-hanteras alltså i, i, i som en grupp då. Så väljer man då kontakt så-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm ...så får man ju då få med sig hela sjoket då.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Ja. Utav, utav, eh, eller hela gruppen eller familjen utav metadatafält då.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Ja, vi behöver liksom genomlysar-lysar det här då. Eh, vi har även... Man skulle kunna tänka sig att antal är ett sånt här system, eh, genererat metadatafält, men å andra sidan så är det dumt att knyta upp ett fält där och det är fullt möjligt att vi på artikeln då väljer ett metadatafält som anger antalet och, och...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Det, det, det behöver inte vara s-så att säga systemgenererat, ett systemkrav. Och logiken också när vi lägger orden då att om det inte finns ett metadatafält, eh, som anger då antalen, eh, antalet eller storleken eller vad det är nu, då, då, då går den ju på det som antalet som man föreslår i, i, i, eh, orderkonceptet. Och sen kommer ju det då att uppdateras mot objektet när uppgiften utförs då med det rätta antalet. Och då får man väl också se det som att när ett rätt antal sk",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "apas, då, då, då, då, då pushar den då in då den, den datan under det definierade metadatafältet då som finns på artikeln för antal eller storlek. Men i det hela taget så ser det ju väldigt bra ut, men, men vi behöver få liksom då en, en stunds i det här så att det inte blir någonting som är, är fel här.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    }
+  ]
+}
