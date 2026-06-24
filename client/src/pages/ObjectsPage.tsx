@@ -28,7 +28,7 @@ import {
   Search, Plus, Filter, Loader2, ChevronRight, ChevronLeft, Building2, MapPin, Trash2, 
   Map as MapIcon, List, Copy, Upload, Clock, Key, Keyboard, Users, DoorOpen,
   Check, X, FileSpreadsheet, Download, BarChart3, MoreHorizontal, AlertTriangle, AlertCircle, ChevronDown, ChevronUp, XCircle,
-  Image, GitFork, Link2, Globe, ShieldAlert, ShieldCheck, ShieldX, Package, Info, Camera,
+  Image, GitFork, Globe, ShieldAlert, ShieldCheck, ShieldX, Package, Info, Camera,
   ArrowUp, ArrowDown, ArrowUpDown, Network, Pencil, FolderPlus, Archive, Columns3
 } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
@@ -45,7 +45,6 @@ import { PageHeader } from "@/components/layout/PageHeader";
 import { QueryState } from "@/components/QueryState";
 import { AICard } from "@/components/AICard";
 import { ObjectMetadataPanel } from "@/components/ObjectMetadataPanel";
-import { ObjectPayersPanel } from "@/components/ObjectPayersPanel";
 import { ObjectParentsPanel } from "@/components/ObjectParentsPanel";
 import { ObjectDisplayNames } from "@/components/ObjectDisplayNames";
 import { ObjectParentCombobox } from "@/components/ObjectParentCombobox";
@@ -53,7 +52,6 @@ import { ObjectInheritedMetadataPanel } from "@/components/ObjectInheritedMetada
 import { ObjectSystemGeneratedPanel } from "@/components/ObjectSystemGeneratedPanel";
 import { useLocalizedObjectName } from "@/lib/object-name";
 import { OBJECT_LOCATION_TYPE_LABELS, effectiveObjectLocationType, objectLocationTypeBadgeClass } from "@/lib/object-location";
-import { ObjectApplicableArticlesPanel } from "@/components/ObjectApplicableArticlesPanel";
 import { ObjectImagesDialog } from "@/components/ObjectImagesGallery";
 import { AddressSearch } from "@/components/AddressSearch";
 import { CustomerCombobox, CustomerMultiCombobox, useCustomerLookup } from "@/components/CustomerCombobox";
@@ -192,7 +190,7 @@ export default function ObjectsPage() {
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [servicePatternDialog, setServicePatternDialog] = useState<{ open: boolean; loading: boolean; data?: { summary: string; patterns: { label: string; value: string }[]; anomalies: { objectId: string; objectName: string; reason: string }[] } }>({ open: false, loading: false });
   const [maintenanceDialog, setMaintenanceDialog] = useState<{ open: boolean; loading: boolean; data?: { overdue: { objectName: string; predictedDate: string; daysUntil: number; confidence: number }[]; upcoming: { objectName: string; predictedDate: string; daysUntil: number; confidence: number }[]; summary: string; totalPredicted: number } }>({ open: false, loading: false });
-  const [overflowPanel, setOverflowPanel] = useState<{ objectId: string; panel: "images" | "payers" | "parents" | "articles" } | null>(null);
+  const [overflowPanel, setOverflowPanel] = useState<{ objectId: string; panel: "images" | "parents" } | null>(null);
   const [expandedDisplayNames, setExpandedDisplayNames] = useState<Set<string>>(new Set());
   const toggleDisplayNames = (id: string) => {
     setExpandedDisplayNames(prev => {
@@ -1550,17 +1548,9 @@ export default function ObjectsPage() {
                       <Image className="h-4 w-4 mr-2" />
                       Bilder
                     </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => setOverflowPanel({ objectId: obj.id, panel: "payers" })} data-testid={`menu-payers-${obj.id}`}>
-                      <Users className="h-4 w-4 mr-2" />
-                      Betalare
-                    </DropdownMenuItem>
                     <DropdownMenuItem onClick={() => setOverflowPanel({ objectId: obj.id, panel: "parents" })} data-testid={`menu-parents-${obj.id}`}>
                       <GitFork className="h-4 w-4 mr-2" />
                       Föräldrar
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => setOverflowPanel({ objectId: obj.id, panel: "articles" })} data-testid={`menu-articles-${obj.id}`}>
-                      <Link2 className="h-4 w-4 mr-2" />
-                      Artiklar & Priser
                     </DropdownMenuItem>
                     {obj.isInterimObject && (
                       <>
@@ -2875,12 +2865,8 @@ export default function ObjectsPage() {
         switch (overflowPanel.panel) {
           case "images":
             return <ObjectImagesDialog object={panelObj} controlled open onOpenChange={(v) => { if (!v) closePanel(); }} />;
-          case "payers":
-            return <ObjectPayersPanel object={panelObj} controlled open onOpenChange={(v) => { if (!v) closePanel(); }} />;
           case "parents":
             return <ObjectParentsPanel object={panelObj} controlled open onOpenChange={(v) => { if (!v) closePanel(); }} />;
-          case "articles":
-            return <ObjectApplicableArticlesPanel object={panelObj} controlled open onOpenChange={(v) => { if (!v) closePanel(); }} />;
           default:
             return null;
         }

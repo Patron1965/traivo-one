@@ -27,6 +27,12 @@ interface ObjectParentRelation {
   createdAt: string;
 }
 
+interface ObjectParentsManagerProps {
+  object: ServiceObject;
+  /** Kör queries bara när panelen faktiskt visas (sheet stängd = false). Default true. */
+  enabled?: boolean;
+}
+
 interface ObjectParentsPanelProps {
   object: ServiceObject;
   controlled?: boolean;
@@ -41,11 +47,15 @@ const RELATION_CONTEXTS = [
   { value: "ownership", label: "Ägare" },
 ];
 
-export function ObjectParentsPanel({ object, controlled, open: controlledOpen, onOpenChange: controlledOnOpenChange }: ObjectParentsPanelProps) {
+/**
+ * Task #1086: multi-förälder + släktnamn integreras direkt i det enhetliga
+ * objektformuläret (ObjectDetailPage → Hierarki-fliken). Tidigare låg detta i en
+ * separat "kryptisk flik" (Sheet). Denna manager renderas inline; Sheet-varianten
+ * (ObjectParentsPanel nedan) finns kvar som tunn wrapper för objektlistans
+ * snabbåtkomst.
+ */
+export function ObjectParentsManager({ object, enabled = true }: ObjectParentsManagerProps) {
   const { toast } = useToast();
-  const [internalOpen, setInternalOpen] = useState(false);
-  const open = controlled ? (controlledOpen ?? false) : internalOpen;
-  const setOpen = controlled ? (controlledOnOpenChange ?? (() => {})) : setInternalOpen;
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [selectedParentId, setSelectedParentId] = useState("");
   const [selectedContext, setSelectedContext] = useState("primary");
@@ -57,7 +67,7 @@ export function ObjectParentsPanel({ object, controlled, open: controlledOpen, o
       if (!res.ok) return [];
       return res.json();
     },
-    enabled: open,
+    enabled,
   });
 
   const { data: allObjects = [] } = useQuery<ServiceObject[]>({
@@ -120,6 +130,148 @@ export function ObjectParentsPanel({ object, controlled, open: controlledOpen, o
   };
 
   return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <h3 className="text-sm font-medium flex items-center gap-2">
+          <GitFork className="h-4 w-4" />
+          Förälder-relationer
+        </h3>
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => setShowAddDialog(true)}
+          data-testid="button-add-parent"
+        >
+          <Plus className="h-3 w-3 mr-1" />
+          Lägg till gren
+        </Button>
+      </div>
+      <p className="text-xs text-muted-foreground -mt-2">
+        Ett objekt kan tillhöra flera grenar. Den primära grenen styr adress- och
+        metadata-arv samt släktnamnets standardkedja.
+      </p>
+
+      {isLoading ? (
+        <p className="text-sm text-muted-foreground">Laddar...</p>
+      ) : parents.length === 0 ? (
+        <p className="text-sm text-muted-foreground" data-testid="text-no-parents">
+          Inga förälder-relationer — detta är ett toppnivåobjekt.
+        </p>
+      ) : (
+        <div className="space-y-2">
+          {parents.map(p => (
+            <div
+              key={p.id}
+              className={`flex items-center justify-between p-3 rounded-lg border ${p.isPrimary ? "border-chart-3/50 bg-chart-3/10 dark:bg-chart-3/15" : ""}`}
+              data-testid={`parent-relation-${p.id}`}
+            >
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-medium">{getObjectName(p.parentId)}</span>
+                  {p.isPrimary && (
+                    <Badge variant="outline" className="text-chart-3 border-chart-3/50 text-xs">
+                      Primär
+                    </Badge>
+                  )}
+                  <Badge variant="secondary" className="text-xs">
+                    {getContextLabel(p.relationContext)}
+                  </Badge>
+                </div>
+              </div>
+              <div className="flex items-center gap-1">
+                {!p.isPrimary && (
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    className="h-7 w-7"
+                    onClick={() => setPrimaryMutation.mutate(p.id)}
+                    title="Gör till primär gren"
+                    data-testid={`button-set-primary-${p.id}`}
+                  >
+                    <StarOff className="h-3 w-3" />
+                  </Button>
+                )}
+                {p.isPrimary && <Star className="h-3 w-3 text-chart-3 mr-1" />}
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className="h-7 w-7 text-destructive"
+                  onClick={() => removeParentMutation.mutate(p.id)}
+                  title="Ta bort gren"
+                  data-testid={`button-remove-parent-${p.id}`}
+                >
+                  <Trash2 className="h-3 w-3" />
+                </Button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div className="space-y-2 pt-2 border-t">
+        <h3 className="text-sm font-medium">Släktnamn</h3>
+        <ObjectDisplayNames objectId={object.id} enabled={enabled} allowSetPrimary />
+      </div>
+
+      <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Lägg till förälder</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label>Förälder-objekt</Label>
+              <Select value={selectedParentId} onValueChange={setSelectedParentId}>
+                <SelectTrigger data-testid="select-parent-object">
+                  <SelectValue placeholder="Välj objekt..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {availableParents.map(o => (
+                    <SelectItem key={o.id} value={o.id}>
+                      {o.name} ({o.hierarchyLevel || o.objectType})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>Relationstyp</Label>
+              <Select value={selectedContext} onValueChange={setSelectedContext}>
+                <SelectTrigger data-testid="select-relation-context">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {RELATION_CONTEXTS.map(c => (
+                    <SelectItem key={c.value} value={c.value}>
+                      {c.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowAddDialog(false)}>Avbryt</Button>
+            <Button
+              onClick={() => addParentMutation.mutate()}
+              disabled={!selectedParentId || addParentMutation.isPending}
+              data-testid="button-confirm-add-parent"
+            >
+              Lägg till
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
+export function ObjectParentsPanel({ object, controlled, open: controlledOpen, onOpenChange: controlledOnOpenChange }: ObjectParentsPanelProps) {
+  const [internalOpen, setInternalOpen] = useState(false);
+  const open = controlled ? (controlledOpen ?? false) : internalOpen;
+  const setOpen = controlled ? (controlledOnOpenChange ?? (() => {})) : setInternalOpen;
+
+  return (
     <Sheet open={open} onOpenChange={setOpen}>
       {!controlled && (
         <SheetTrigger asChild>
@@ -128,7 +280,7 @@ export function ObjectParentsPanel({ object, controlled, open: controlledOpen, o
           </Button>
         </SheetTrigger>
       )}
-      <SheetContent className="w-[400px] sm:w-[450px]">
+      <SheetContent className="w-[400px] sm:w-[450px] overflow-y-auto">
         <SheetHeader>
           <SheetTitle className="flex items-center gap-2">
             <GitFork className="h-5 w-5" />
@@ -136,139 +288,9 @@ export function ObjectParentsPanel({ object, controlled, open: controlledOpen, o
           </SheetTitle>
         </SheetHeader>
 
-        <div className="mt-4 space-y-3">
-          <div className="space-y-2">
-            <h3 className="text-sm font-medium">Släktnamn</h3>
-            <ObjectDisplayNames objectId={object.id} enabled={open} allowSetPrimary />
-          </div>
-
-          {object.parentId && (
-            <div className="p-3 rounded-lg border bg-muted/50">
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <Star className="h-3 w-3 text-chart-3" />
-                <span>Direkt förälder (objects.parentId)</span>
-              </div>
-              <p className="text-sm font-medium mt-1" data-testid="text-direct-parent">
-                {getObjectName(object.parentId)}
-              </p>
-            </div>
-          )}
-
-          <div className="flex items-center justify-between">
-            <h3 className="text-sm font-medium">Flerföräldra-relationer</h3>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => setShowAddDialog(true)}
-              data-testid="button-add-parent"
-            >
-              <Plus className="h-3 w-3 mr-1" />
-              Lägg till
-            </Button>
-          </div>
-
-          {isLoading ? (
-            <p className="text-sm text-muted-foreground">Laddar...</p>
-          ) : parents.length === 0 ? (
-            <p className="text-sm text-muted-foreground">Inga flerföräldra-relationer</p>
-          ) : (
-            <div className="space-y-2">
-              {parents.map(p => (
-                <div
-                  key={p.id}
-                  className={`flex items-center justify-between p-3 rounded-lg border ${p.isPrimary ? "border-chart-3/50 bg-chart-3/10 dark:bg-chart-3/15" : ""}`}
-                  data-testid={`parent-relation-${p.id}`}
-                >
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-medium">{getObjectName(p.parentId)}</span>
-                      {p.isPrimary && (
-                        <Badge variant="outline" className="text-chart-3 border-chart-3/50 text-xs">
-                          Primär
-                        </Badge>
-                      )}
-                      <Badge variant="secondary" className="text-xs">
-                        {getContextLabel(p.relationContext)}
-                      </Badge>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    {!p.isPrimary && (
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        className="h-7 w-7"
-                        onClick={() => setPrimaryMutation.mutate(p.id)}
-                        data-testid={`button-set-primary-${p.id}`}
-                      >
-                        <StarOff className="h-3 w-3" />
-                      </Button>
-                    )}
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      className="h-7 w-7 text-destructive"
-                      onClick={() => removeParentMutation.mutate(p.id)}
-                      data-testid={`button-remove-parent-${p.id}`}
-                    >
-                      <Trash2 className="h-3 w-3" />
-                    </Button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
+        <div className="mt-4">
+          <ObjectParentsManager object={object} enabled={open} />
         </div>
-
-        <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Lägg till förälder</DialogTitle>
-            </DialogHeader>
-            <div className="space-y-4">
-              <div>
-                <Label>Förälder-objekt</Label>
-                <Select value={selectedParentId} onValueChange={setSelectedParentId}>
-                  <SelectTrigger data-testid="select-parent-object">
-                    <SelectValue placeholder="Välj objekt..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {availableParents.map(o => (
-                      <SelectItem key={o.id} value={o.id}>
-                        {o.name} ({o.hierarchyLevel || o.objectType})
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label>Relationstyp</Label>
-                <Select value={selectedContext} onValueChange={setSelectedContext}>
-                  <SelectTrigger data-testid="select-relation-context">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {RELATION_CONTEXTS.map(c => (
-                      <SelectItem key={c.value} value={c.value}>
-                        {c.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setShowAddDialog(false)}>Avbryt</Button>
-              <Button
-                onClick={() => addParentMutation.mutate()}
-                disabled={!selectedParentId || addParentMutation.isPending}
-                data-testid="button-confirm-add-parent"
-              >
-                Lägg till
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
       </SheetContent>
     </Sheet>
   );

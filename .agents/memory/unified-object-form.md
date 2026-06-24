@@ -18,5 +18,7 @@ description: ObjectDetailPage är enda objektytan för create=edit=view; gamla m
 **How to apply:**
 - Create-läget POSTar `/api/objects` FÖRST, sedan loopar metadatavärden via `POST /api/metadata/` (`{objektId, metadataTypNamn, varde}`) — icke-atomiskt med avsikt: skilj "objekt kunde ej skapas" från "metadatafält misslyckades" så användaren inte skapar dubbletter. onSuccess → `navigate(/objects/:id)`.
 - Alla `enabled: !!objectId`-queries i ObjectDetailPage MÅSTE gate:as med `&& !isCreate` (annars fetchar de mot id="new").
-- Multi-förälder + släktnamn hanteras via `ObjectParentsPanel` (egen GitFork-trigger, okontrollerad) i sidhuvudet — inte en separat sida.
+- Multi-förälder + släktnamn hanteras inline via `ObjectParentsManager` (export i `ObjectParentsPanel.tsx`) i Hierarki-fliken — INTE en separat Sheet i sidhuvudet (Task #1086 tog bort det). `ObjectParentsPanel` är numera bara en tunn Sheet-wrapper runt managern för objektlistans snabbåtkomst.
+- Artiklar hör till orderkoncept, INTE objektet: "Matchande artiklar"-fliken och `ObjectApplicableArticlesPanel`-snabbåtkomsten är borttagna från objektytan (Task #1086). Återinför aldrig en artikel-/pris-flik på objektet.
+- "Betalare" (`ObjectPayersCard`/`ObjectPayersPanel`) är borttaget från objektytan; kund härleds via orderkoncept och syns på "Kopplade uppgifter". Ekonomi-fliken har bara `InvoiceRecipientsCard` (fakturamottagare ≠ betalare). `object_payers` behålls tekniskt i backend.
 - Ärvda metadatavärden i create-läget kommer från förälderns metadata (`createInheritedSeeds` → `MetadataFieldBuilder inheritedFields`).

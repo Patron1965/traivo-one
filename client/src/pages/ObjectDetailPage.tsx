@@ -13,9 +13,8 @@ import { ObjectTemplateMetadataForm, type TemplateMetadataType } from "@/compone
 import { ObjectSystemGeneratedPanel } from "@/components/ObjectSystemGeneratedPanel";
 import { ObjectTimeline } from "@/components/timeline/ObjectTimeline";
 import InvoiceRecipientsCard from "@/components/InvoiceRecipientsCard";
-import ObjectPayersCard from "@/components/ObjectPayersCard";
 import { TelinkSyncButton } from "@/components/TelinkSyncButton";
-import { ObjectParentsPanel } from "@/components/ObjectParentsPanel";
+import { ObjectParentsManager } from "@/components/ObjectParentsPanel";
 import { ObjectParentCombobox } from "@/components/ObjectParentCombobox";
 import { MetadataFieldBuilder, type BuilderFieldValue, type InheritedFieldSeed } from "@/components/MetadataFieldBuilder";
 import { useAuth } from "@/hooks/use-auth";
@@ -641,23 +640,6 @@ export default function ObjectDetailPage() {
       return res.json();
     },
     enabled: !!objectId && !isCreate && canUseTemplates,
-  });
-
-  const { data: matchingArticles = [] } = useQuery<Array<{
-    article: { id: string; articleNumber: string; name: string; description?: string; associationLabel: string; associationValue: string; associationOperator: string };
-    matchedLabel: string;
-    matchedValue: string;
-    objectValue: string | null;
-    operator: string;
-    inherited: boolean;
-  }>>({
-    queryKey: ["/api/objects", objectId, "matching-articles"],
-    queryFn: async () => {
-      const res = await fetch(`/api/objects/${objectId}/matching-articles`, { credentials: "include" });
-      if (!res.ok) return [];
-      return res.json();
-    },
-    enabled: !!objectId && !isCreate,
   });
 
   const updateObjectMutation = useMutation({
@@ -1363,8 +1345,6 @@ export default function ObjectDetailPage() {
           </div>
         </div>
         <div className="flex items-center gap-2">
-          {/* Task #1084: multi-förälder + släktnamn hanteras direkt på det enhetliga formuläret. */}
-          <ObjectParentsPanel object={obj as unknown as ServiceObject} />
           {(user?.role === "admin" || user?.role === "owner") && (
             <TelinkSyncButton objectId={obj.id} />
           )}
@@ -1506,10 +1486,6 @@ export default function ObjectDetailPage() {
           </TabsTrigger>
           <TabsTrigger value="ekonomi" data-testid="tab-ekonomi">
             Ekonomi
-          </TabsTrigger>
-          <TabsTrigger value="matching-articles" data-testid="tab-matching-articles">
-            <LinkIcon className="h-3.5 w-3.5 mr-1" />
-            Matchande artiklar {matchingArticles.length > 0 && <Badge variant="secondary" className="ml-1 text-xs">{matchingArticles.length}</Badge>}
           </TabsTrigger>
           <TabsTrigger value="history-archive" data-testid="tab-history-archive">
             Historik & Arkiv
@@ -1904,11 +1880,18 @@ export default function ObjectDetailPage() {
               <Copy className="h-4 w-4 mr-2" /> Kopiera objekt/gren
             </Button>
           </div>
+          {/* Task #1086: multi-förälder + släktnamn integrerat direkt i formuläret
+              (tidigare separat Sheet via header-knappen). */}
+          <Card className="mb-4">
+            <CardContent className="pt-6">
+              <ObjectParentsManager object={obj as unknown as ServiceObject} enabled />
+            </CardContent>
+          </Card>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <Card>
               <CardHeader className="pb-3">
                 <CardTitle className="text-base flex items-center gap-2">
-                  <GitFork className="h-4 w-4" /> Föräldrar
+                  <GitFork className="h-4 w-4" /> Föräldrakedja
                 </CardTitle>
               </CardHeader>
               <CardContent>
@@ -2758,66 +2741,16 @@ export default function ObjectDetailPage() {
 
         {/* ==================== EKONOMI ==================== */}
         <TabsContent value="ekonomi">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            {objectId && (
-              <ObjectPayersCard objectId={objectId} canEdit={isAdmin} />
-            )}
-            {objectId && (
-              <InvoiceRecipientsCard objectId={objectId} />
-            )}
-          </div>
+          {/* Task #1086: "Betalare" borttaget — kund härleds via orderkoncept och
+              visas på fliken "Kopplade uppgifter". Endast fakturamottagare kvar här. */}
+          {objectId && (
+            <InvoiceRecipientsCard objectId={objectId} />
+          )}
           {!isAdmin && (
             <p className="text-xs text-muted-foreground mt-3">
-              Endast administratörer kan ändra betalare och fakturamottagare.
+              Endast administratörer kan ändra fakturamottagare.
             </p>
           )}
-        </TabsContent>
-
-        {/* ==================== MATCHANDE ARTIKLAR ==================== */}
-        <TabsContent value="matching-articles">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-lg">
-                <LinkIcon className="h-4 w-4" /> Matchande artiklar via association
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {matchingArticles.length > 0 ? (
-                <div className="space-y-3">
-                  {matchingArticles.map((match, i) => (
-                    <div key={`${match.article.id}-${i}`} className="flex items-start gap-3 p-3 rounded-md border bg-muted/30">
-                      <Package className="h-5 w-5 mt-0.5 text-primary" />
-                      <div className="flex-1 space-y-1">
-                        <div className="flex items-center gap-2">
-                          <span className="font-medium">{match.article.name}</span>
-                          <Badge variant="outline" className="font-mono text-xs">{match.article.articleNumber}</Badge>
-                        </div>
-                        {match.article.description && (
-                          <p className="text-xs text-muted-foreground">{match.article.description}</p>
-                        )}
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <Badge variant="secondary" className="text-xs">
-                            {match.matchedLabel}
-                          </Badge>
-                          <span className="text-xs text-muted-foreground">
-                            {match.operator === "equals" ? "=" : match.operator === "contains" ? "∋" : match.operator === "starts_with" ? "^" : "≠"}
-                          </span>
-                          <Badge variant="outline" className="font-mono text-xs">{match.matchedValue}</Badge>
-                          <span className="text-xs text-muted-foreground">→</span>
-                          <Badge variant="default" className="font-mono text-xs">{match.objectValue}</Badge>
-                          {match.inherited && (
-                            <Badge variant="secondary" className="text-xs italic">ärvd</Badge>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-sm text-muted-foreground">Inga artiklar matchar detta objekt via association-filter.</p>
-              )}
-            </CardContent>
-          </Card>
         </TabsContent>
 
         <TabsContent value="history-archive">
