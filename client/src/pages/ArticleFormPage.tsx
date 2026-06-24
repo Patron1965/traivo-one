@@ -24,7 +24,9 @@ import { Badge } from "@/components/ui/badge";
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
+  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
@@ -933,9 +935,40 @@ export default function ArticleFormPage() {
     enabled: isEditMode,
   });
 
-  const { data: metadataTypes = [] } = useQuery<{ id: string; namn: string; datatyp: string }[]>({
+  const { data: metadataTypes = [] } = useQuery<{ id: string; namn: string; datatyp: string; parentMetadataId: string | null }[]>({
     queryKey: ["/api/metadata/types"],
   });
+
+  // Grupp-expansion (Alt B): ett katalogfält med barn (t.ex. "Kontakt") kan väljas
+  // som GRUPP — då sparas bara förälderns rad och alla barn inkluderas dynamiskt vid
+  // utförande (lägg till ett barn senare → inkluderas automatiskt). Föräldern bär
+  // aldrig ett eget värde. Här byggs index barn-per-förälder + listan med enskilda
+  // (icke-grupp) fält så att selektorn kan visa både grupper och enskilda fält.
+  const metadataChildrenByParentName = useMemo(() => {
+    const byId = new Map(metadataTypes.map((t) => [t.id, t]));
+    const map = new Map<string, string[]>();
+    for (const t of metadataTypes) {
+      if (!t.parentMetadataId) continue;
+      const parent = byId.get(t.parentMetadataId);
+      if (!parent) continue;
+      const arr = map.get(parent.namn) ?? [];
+      arr.push(t.namn);
+      map.set(parent.namn, arr);
+    }
+    return map;
+  }, [metadataTypes]);
+  const groupParentNames = useMemo(
+    () => new Set(metadataChildrenByParentName.keys()),
+    [metadataChildrenByParentName],
+  );
+  const groupParentTypes = useMemo(
+    () => metadataTypes.filter((t) => groupParentNames.has(t.namn)),
+    [metadataTypes, groupParentNames],
+  );
+  const individualMetadataTypes = useMemo(
+    () => metadataTypes.filter((t) => !groupParentNames.has(t.namn)),
+    [metadataTypes, groupParentNames],
+  );
 
   const { data: articleTypeDefs = [] } = useQuery<ArticleTypeDefinition[]>({
     queryKey: ["/api/article-types"],
@@ -2875,9 +2908,20 @@ export default function ArticleFormPage() {
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="_none">Välj metadatafält</SelectItem>
-                          {metadataTypes.map((t) => (
-                            <SelectItem key={t.id} value={t.namn}>{t.namn}</SelectItem>
-                          ))}
+                          {groupParentTypes.length > 0 && (
+                            <SelectGroup>
+                              <SelectLabel>Grupper (alla underfält)</SelectLabel>
+                              {groupParentTypes.map((t) => (
+                                <SelectItem key={`group-${t.id}`} value={t.namn}>{t.namn} – alla fält</SelectItem>
+                              ))}
+                            </SelectGroup>
+                          )}
+                          <SelectGroup>
+                            <SelectLabel>Enskilda fält</SelectLabel>
+                            {individualMetadataTypes.map((t) => (
+                              <SelectItem key={t.id} value={t.namn}>{t.namn}</SelectItem>
+                            ))}
+                          </SelectGroup>
                         </SelectContent>
                       </Select>
                       <Button
@@ -2896,6 +2940,11 @@ export default function ArticleFormPage() {
                         <Trash2 className="h-4 w-4" />
                       </Button>
                     </div>
+                    {groupParentNames.has(row.metadataField) && (
+                      <div className="rounded-md bg-muted/50 p-2 text-xs text-muted-foreground" data-testid={`preview-show-group-children-${idx}`}>
+                        <span className="font-medium text-foreground">Grupp:</span> inkluderar {(metadataChildrenByParentName.get(row.metadataField) ?? []).join(", ") || "inga underfält ännu"} (uppdateras automatiskt när underfält läggs till).
+                      </div>
+                    )}
                     <Input
                       value={row.clarification}
                       onChange={(e) => patch({ clarification: e.target.value })}
@@ -2957,9 +3006,20 @@ export default function ArticleFormPage() {
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="_none">Välj metadatafält</SelectItem>
-                          {metadataTypes.map((t) => (
-                            <SelectItem key={t.id} value={t.namn}>{t.namn}</SelectItem>
-                          ))}
+                          {groupParentTypes.length > 0 && (
+                            <SelectGroup>
+                              <SelectLabel>Grupper (alla underfält)</SelectLabel>
+                              {groupParentTypes.map((t) => (
+                                <SelectItem key={`group-${t.id}`} value={t.namn}>{t.namn} – alla fält</SelectItem>
+                              ))}
+                            </SelectGroup>
+                          )}
+                          <SelectGroup>
+                            <SelectLabel>Enskilda fält</SelectLabel>
+                            {individualMetadataTypes.map((t) => (
+                              <SelectItem key={t.id} value={t.namn}>{t.namn}</SelectItem>
+                            ))}
+                          </SelectGroup>
                         </SelectContent>
                       </Select>
                       <Button
@@ -2978,6 +3038,11 @@ export default function ArticleFormPage() {
                         <Trash2 className="h-4 w-4" />
                       </Button>
                     </div>
+                    {groupParentNames.has(row.metadataField) && (
+                      <div className="rounded-md bg-muted/50 p-2 text-xs text-muted-foreground" data-testid={`preview-leave-group-children-${idx}`}>
+                        <span className="font-medium text-foreground">Grupp:</span> inkluderar {(metadataChildrenByParentName.get(row.metadataField) ?? []).join(", ") || "inga underfält ännu"} (uppdateras automatiskt när underfält läggs till).
+                      </div>
+                    )}
                     <Input
                       value={row.instruction}
                       onChange={(e) => patch({ instruction: e.target.value })}

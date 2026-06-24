@@ -29,6 +29,18 @@ export function usesQuantityMetadata(mode: string | null | undefined): boolean {
 }
 
 /**
+ * True när artikeln räknas som "aktiv" och får användas i fält-/expansionsflöden.
+ * Artikelstatus-livscykeln är svensk (aktiv → utgående → utgått); legacy-data
+ * (och DB-default) använder engelska "active". Båda måste accepteras så att
+ * artiklar skapade via ArticleFormPage ("aktiv") inte tyst exkluderas från
+ * mobil-metadata/antalsredigering. Utgående/utgått räknas INTE som aktiva.
+ */
+export function isActiveArticleStatus(status: string | null | undefined): boolean {
+  const s = (status ?? "").trim().toLowerCase();
+  return s === "active" || s === "aktiv";
+}
+
+/**
  * True för kvantitetsläget 'formula' (Antalskälla "Formel"). Antalet beräknas ur
  * artikelns quantityFormula som refererar objektets metadatafält. Callers använder
  * denna för att avgöra om formeln ska upplösas (parseFormula -> metadatavärden ->

@@ -11,7 +11,7 @@ import type { Express } from "express";
     OpenAI,
     getArticleMetadataForObject, writeArticleMetadataOnObject,
     getAllMetadataTypes, buildMetadataGroupIndex, expandArticleMetadataRows,
-    usesQuantityMetadata,
+    usesQuantityMetadata, isActiveArticleStatus,
     invalidateWorkflowCaches,
   } from "./shared";
   import type { Request, Response } from "express";
@@ -808,10 +808,26 @@ app.get("/api/mobile/tasks/:id/metadata-context", isMobileAuthenticated, asyncHa
     // beställt antal (read-only). hideQuantityInApp döljer antalet i appen för artiklar
     // med fast/härlett antal — det fasta antalet används ändå automatiskt vid
     // rapportering/klarmarkering (line.quantity ändras aldrig av fältarbetaren).
+    // Redigerbart antal i fält: blockeras helt om ordern redan konsoliderats/
+    // exporterats (samma fakturaintegritets-gate som quantity-update-endpointen).
+    const orderInvoiceLocked =
+      order.invoiceQueueState === "consolidated" ||
+      order.invoiceQueueState === "exported" ||
+      !!order.consolidationInvoiceId;
     const orderArticles = orderLines
       .filter(line => !!line.articleId)
       .map(line => {
         const a = articleById.get(line.articleId!);
+        // editableQuantity speglar EXAKT samma behörighet som quantity-update-
+        // endpointen: antalet styrs av objektets metadata (per_styck/matches_field),
+        // ett fält är valt, artikeln är aktiv, ej dold i appen och ordern ej låst.
+        // Formel-läge och fasta antal är read-only.
+        const editableQuantity =
+          !orderInvoiceLocked &&
+          !!a && isActiveArticleStatus(a.status) &&
+          !a.hideQuantityInApp &&
+          usesQuantityMetadata(a.quantityMode) &&
+          !!a.quantityMetadataField;
         return {
           lineId: line.id,
           articleId: line.articleId!,
@@ -821,6 +837,7 @@ app.get("/api/mobile/tasks/:id/metadata-context", isMobileAuthenticated, asyncHa
           quantityUnit: a?.quantityUnit || a?.unit || "st",
           quantityMode: a?.quantityMode ?? null,
           hideQuantityInApp: a?.hideQuantityInApp ?? false,
+          editableQuantity,
           // Task #989: markör för fältappen ("ska återtas") + om artikeln kan ruttas
           // tillbaka till lager (kräver lagerplats med koordinater).
           shouldBeReturned: a?.shouldBeReturned ?? false,
@@ -857,7 +874,7 @@ app.get("/api/mobile/tasks/:id/metadata-context", isMobileAuthenticated, asyncHa
 
     for (const aid of Array.from(taskArticleIds)) {
       const a = articleById.get(aid);
-      if (!a || a.status !== "active") continue;
+      if (!a || !isActiveArticleStatus(a.status)) continue;
       const showRows = Array.isArray(a.showMetadataFields)
         ? (a.showMetadataFields as Array<{ metadataField?: string; clarification?: string; canUpdate?: boolean }>)
         : [];
@@ -928,7 +945,7 @@ app.post("/api/mobile/tasks/:id/metadata-update", isMobileAuthenticated, asyncHa
     // förälderns — föräldern bär inget värde). Index laddas en gång.
     const authGroupIndex = buildMetadataGroupIndex(await getAllMetadataTypes(tenantId));
     const isFieldUpdatable = (a: (typeof allArticlesForAuth)[number] | undefined): boolean => {
-      if (!a || a.status !== "active") return false;
+      if (!a || !isActiveArticleStatus(a.status)) return false;
       const showRows = Array.isArray(a.showMetadataFields)
         ? (a.showMetadataFields as Array<{ metadataField?: string; canUpdate?: boolean }>)
         : [];
@@ -974,6 +991,90 @@ app.post("/api/mobile/tasks/:id/metadata-update", isMobileAuthenticated, asyncHa
     console.log(`[mobile] Metadata updated: ${metadataLabel} = ${effectiveValue} on object ${order.objectId} by ${resourceId}`);
 
     res.json({ success: true, previousValue, newValue: effectiveValue });
+}));
+
+// Redigerbart antal i fält (Traivo Go): fältarbetaren justerar det faktiska antalet
+// per orderrad. Skriver tillbaka TVÅ ställen: (1) orderraden (work_order_lines.quantity
+// → detta jobb/faktura, med recalc av ordertotaler) och (2) objektets antals-
+// metadatafält (quantityMetadataField → framtida expansioner ärver det nya antalet)
+// + metadata-historik. Endast tillåtet när antalet styrs av objektets metadata
+// (per_styck/matches_field), fältet är valt, artikeln aktiv och inte dold i appen.
+// Formel-läge är read-only. Blockeras om ordern redan konsoliderats/exporterats
+// (fakturaintegritet). Tenant + ägarskap härleds enbart ur den ägda ordern (ingen IDOR).
+app.post("/api/mobile/tasks/:id/quantity-update", isMobileAuthenticated, asyncHandler(async (req: MobileAuthenticatedRequest, res: Response) => {
+    const orderId = req.params.id;
+    const resourceId = req.mobileResourceId;
+    const { lineId, quantity } = req.body ?? {};
+
+    if (!lineId || quantity === undefined || quantity === null) {
+      throw new ValidationError("lineId och quantity krävs");
+    }
+    const qty = Number(quantity);
+    if (!Number.isFinite(qty) || qty < 0) {
+      throw new ValidationError("Ogiltigt antal");
+    }
+    const qtyInt = Math.round(qty);
+
+    const order = await storage.getWorkOrder(orderId);
+    if (!order) throw new NotFoundError("Order hittades inte");
+    if (order.resourceId !== resourceId) throw new ForbiddenError("Ej behörig");
+    if (!order.objectId) throw new ValidationError("Order saknar objekt");
+
+    // Mobil-ytan kringgår tenant-middleware: härled tenant från den ägarskaps-
+    // kontrollerade ordern (aldrig req.tenantId/fallback).
+    const tenantId = order.tenantId;
+
+    // Fakturaintegritet: blockera ändring när ordern redan är konsoliderad/exporterad.
+    if (order.invoiceQueueState === "consolidated" || order.invoiceQueueState === "exported" || order.consolidationInvoiceId) {
+      throw new ForbiddenError("Antalet kan inte ändras — ordern är redan fakturerad eller konsoliderad");
+    }
+
+    // Raden måste tillhöra DENNA order (IDOR-skydd via ägd order, aldrig rå lineId).
+    const lines = await storage.getWorkOrderLines(order.id);
+    const line = lines.find((l) => l.id === lineId);
+    if (!line || !line.articleId) throw new NotFoundError("Orderrad hittades inte");
+
+    // getArticle saknar tenant-param → verifiera tenant explicit efter uppslag.
+    const article = await storage.getArticle(line.articleId);
+    if (!article || article.tenantId !== tenantId || !isActiveArticleStatus(article.status)) {
+      throw new ForbiddenError("Antalet kan inte ändras för denna artikel");
+    }
+    if (article.hideQuantityInApp) {
+      throw new ForbiddenError("Antalet är dolt i appen för denna artikel");
+    }
+    if (!usesQuantityMetadata(article.quantityMode) || !article.quantityMetadataField) {
+      throw new ForbiddenError("Antalet kan endast ändras för artiklar vars antal styrs av objektets metadata");
+    }
+
+    const previousLineQuantity = line.quantity ?? null;
+
+    // Skrivordning (ingen delad DB-transaktion möjlig — både writeArticleMetadataOnObject
+    // och updateWorkOrderLine använder modul-global db utan tx-handle). Skriv objektets
+    // antals-metadatafält FÖRST: den slår upp katalogfältet och kastar rent vid felkonfig
+    // INNAN den fakturakritiska orderraden rörs, så ett metadata-fel aldrig kan lämna
+    // fakturabasens antal ändrat medan anropet returnerar fel. Avbrott efter metadatan men
+    // före orderraden konvergerar vid nytt försök (metadata-skrivningen är värde-idempotent).
+    // metod 'utforande' = fältarbetarens registrering (auto-ursprung i ändringsloggen).
+    await writeArticleMetadataOnObject(order.objectId, article.quantityMetadataField, String(qtyInt), tenantId, resourceId, 'utforande');
+
+    // Writeback orderraden (detta jobb/faktura). Recalc av ordertotaler sker i storage.
+    await storage.updateWorkOrderLine(line.id, { quantity: qtyInt });
+
+    // Audit-spår i samma logg som övrig metadata-uppdatering från fält.
+    await db.insert(taskMetadataUpdates).values({
+      tenantId,
+      workOrderId: orderId,
+      objectId: order.objectId,
+      articleId: article.id,
+      metadataLabel: article.quantityMetadataField,
+      previousValue: previousLineQuantity != null ? String(previousLineQuantity) : null,
+      newValue: String(qtyInt),
+      updatedBy: resourceId,
+    });
+
+    console.log(`[mobile] Quantity updated: line ${line.id} = ${qtyInt} (metadata ${article.quantityMetadataField}) on object ${order.objectId} by ${resourceId}`);
+
+    res.json({ success: true, lineId: line.id, quantity: qtyInt, quantityMetadataField: article.quantityMetadataField });
 }));
 
   // ============================================

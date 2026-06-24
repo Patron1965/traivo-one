@@ -14,7 +14,7 @@ import { notificationService } from "../../notifications";
 import { triggerETANotification } from "../../eta-notification-service";
 import OpenAI from "openai";
 import { getArticleMetadataForObject, writeArticleMetadataOnObject, findMissingRequiredLeaveMetadata, writeProvidedLeaveMetadataFields, getAllMetadataTypes, buildMetadataGroupIndex, expandArticleMetadataRows } from "../../metadata-queries";
-import { usesQuantityMetadata } from "../../article-quantity";
+import { usesQuantityMetadata, isActiveArticleStatus } from "../../article-quantity";
 import { handleWorkOrderStatusChange } from "../../ai-communication";
 import { invalidateWorkflowCaches } from "../../services/dashboardCache";
 import { validatePlannerEvent } from "@shared/ws-events";
@@ -289,7 +289,7 @@ export {
   notificationService, triggerETANotification,
   OpenAI,
   getArticleMetadataForObject, writeArticleMetadataOnObject, findMissingRequiredLeaveMetadata, writeProvidedLeaveMetadataFields, getAllMetadataTypes, buildMetadataGroupIndex, expandArticleMetadataRows,
-  usesQuantityMetadata,
+  usesQuantityMetadata, isActiveArticleStatus,
   handleWorkOrderStatusChange,
   invalidateWorkflowCaches,
 };

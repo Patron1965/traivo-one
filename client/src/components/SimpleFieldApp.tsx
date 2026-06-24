@@ -769,6 +769,7 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
     quantityUnit: string;
     quantityMode: string | null;
     hideQuantityInApp: boolean;
+    editableQuantity?: boolean;
     shouldBeReturned?: boolean;
     hasStockLocation?: boolean;
   }
@@ -777,6 +778,7 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
     articleId: string;
     articleName: string;
     metadataField: string;
+    groupField?: string | null;
     clarification: string | null;
     canUpdate: boolean;
     currentValue: string | null;
@@ -787,6 +789,7 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
     articleId: string;
     articleName: string;
     metadataField: string;
+    groupField?: string | null;
     instruction: string | null;
     required: boolean;
     currentValue: string | null;
@@ -799,6 +802,9 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
   // Lämna (samlas in och skickas vid slutförande). Lämna-värden keyas på fältnamn.
   const [showFieldValues, setShowFieldValues] = useState<Record<string, string>>({});
   const [leaveFieldValues, setLeaveFieldValues] = useState<Record<string, string>>({});
+  // Redigerbart antal per orderrad (keyas på lineId). Tomt = visa serverns antal.
+  const [quantityEdits, setQuantityEdits] = useState<Record<string, string>>({});
+  const [savingQuantityLineId, setSavingQuantityLineId] = useState<string | null>(null);
 
   const { data: metadataContext } = useQuery<{ articles: MetadataArticleContext[]; dependencyArticles?: DependencyArticleContext[]; orderArticles?: OrderArticleContext[]; showMetadataFields?: ShowMetadataFieldContext[]; leaveMetadataFields?: LeaveMetadataFieldContext[] }>({
     queryKey: ["/api/mobile/tasks", selectedJobId, "metadata-context"],
@@ -829,6 +835,30 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
       toast({ title: "Kunde inte spara metadata", description: error instanceof Error ? error.message : "Försök igen", variant: "destructive" });
     } finally {
       setSavingMetadata(null);
+    }
+  }, [selectedJobId, mobileApiCall, toast]);
+
+  // Redigerbart antal i fält: skriver tillbaka BÅDE orderraden och objektets antals-
+  // metadatafält via dedikerad endpoint. Servern återupprättar all behörighet
+  // (per_styck/matches_field, valt fält, aktiv artikel, ej dold, ej fakturalåst).
+  const handleQuantityUpdate = useCallback(async (lineId: string, raw: string) => {
+    if (!selectedJobId) return;
+    const trimmed = (raw ?? "").trim().replace(",", ".");
+    const qty = Number(trimmed);
+    if (trimmed === "" || !Number.isFinite(qty) || qty < 0) {
+      toast({ title: "Ogiltigt antal", description: "Ange ett antal (0 eller mer).", variant: "destructive" });
+      return;
+    }
+    setSavingQuantityLineId(lineId);
+    try {
+      await mobileApiCall("POST", `/api/mobile/tasks/${selectedJobId}/quantity-update`, { lineId, quantity: qty });
+      queryClient.invalidateQueries({ queryKey: ["/api/mobile/tasks", selectedJobId, "metadata-context"] });
+      setQuantityEdits((prev) => { const next = { ...prev }; delete next[lineId]; return next; });
+      toast({ title: "Antal uppdaterat", description: `Nytt antal: ${Math.round(qty)}` });
+    } catch (error) {
+      toast({ title: "Kunde inte uppdatera antal", description: error instanceof Error ? error.message : "Försök igen", variant: "destructive" });
+    } finally {
+      setSavingQuantityLineId(null);
     }
   }, [selectedJobId, mobileApiCall, toast]);
 
@@ -1977,6 +2007,33 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
                           <span className="shrink-0 text-xs text-muted-foreground" data-testid={`text-quantity-auto-${oa.articleId}`}>
                             Fast antal
                           </span>
+                        ) : oa.editableQuantity ? (
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            <Input
+                              type="number"
+                              inputMode="decimal"
+                              min={0}
+                              step="any"
+                              className="h-8 w-16 text-sm text-right tabular-nums"
+                              value={quantityEdits[oa.lineId] ?? String(oa.quantity)}
+                              onChange={(e) => setQuantityEdits((prev) => ({ ...prev, [oa.lineId]: e.target.value }))}
+                              data-testid={`input-quantity-${oa.articleId}`}
+                            />
+                            <span className="text-xs text-muted-foreground">{oa.quantityUnit}</span>
+                            <Button
+                              size="icon"
+                              variant="outline"
+                              className="h-8 w-8 shrink-0"
+                              disabled={
+                                savingQuantityLineId === oa.lineId ||
+                                (quantityEdits[oa.lineId] ?? String(oa.quantity)) === String(oa.quantity)
+                              }
+                              onClick={() => handleQuantityUpdate(oa.lineId, quantityEdits[oa.lineId] ?? String(oa.quantity))}
+                              data-testid={`button-save-quantity-${oa.articleId}`}
+                            >
+                              {savingQuantityLineId === oa.lineId ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                            </Button>
+                          </div>
                         ) : (
                           <span className="shrink-0 text-sm font-semibold tabular-nums" data-testid={`text-quantity-${oa.articleId}`}>
                             {oa.quantity} {oa.quantityUnit}
