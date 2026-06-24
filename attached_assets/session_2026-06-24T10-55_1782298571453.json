@@ -1,0 +1,134 @@
+{
+  "sessionId": "124735a284",
+  "exportedAt": "2026-06-24T10:55:17.043Z",
+  "summary": "### Key Topics Discussed\n- Metadata origination and attributes.\n- Metadata logging and administrator updates.\n- Parent information within object's master data.\n- Grouping of metadata fields, specifically the 'contact' metadata family.\n- Metadata fields for quantity or size in order concepts, and their impact on services.\n- Field app functionality and its interaction with planning data, including the handling of task-specific metadata (e.g., photos, verifications).\n- The likelihood of updating planned vs. actual quantities in the field app.\n\n### Decisions Made\n- It is acceptable to store parent information within the object's master data.\n- When grouping metadata fields, option B is chosen, using 'contact' as an example with fields like name, title, phone, and email.\n\n### Important Points & Insights\n- Metadata can originate from two sources: manual input and system generation.\n- System-generated metadata fields (e.g., linked order concepts for unique objects) will be read-only.\n- Each metadata entry must include creation date and a form of codification.\n- A log should accompany metadata, detailing the creator (operator or system) for deeper insight into individual metadata entries.\n- \"Free\" metadata, created manually to reflect reality, can be updated by system administrators if permitted.\n- Parent information should be stored in the object's master data, including system-generated object number, description, parent, and active status.\n- When metadata fields are grouped, for example, a 'contact' metadata family would consist of name, title, phone number, and email. All fields within such a group must be included when working with or updating the metadata.\n- The parent metadata field itself (e.g., 'contact') will not contain any data; all data content will reside in its subordinate data fields (name, title, phone, email).\n- Metadata fields for quantity or size in order concepts are not hardcoded and can be selected, influencing the number of services performed.\n- The field app must be developed to receive planning data, specifically grouped jobs. When an aggregated job is opened, a long list of tasks appears, which the performer can confirm and modify.\n- The field app will allow for updating the 'number' metadata field if the actual count does not match the planned count.\n- The field app must be able to handle displaying metadata linked to a task or requesting the performer to input metadata, such as a photo or a verification (e.g., OK/not OK).\n- Information will be pushed to the app in groups.\n- There's an estimated 80/20 rule, where 80% of the time, tasks will be completed as planned without updates, but in 20% of cases, an update, such as quantity, might be necessary.\n- Metadata that needs to be submitted in the field app is mandatory for task completion.\n\n### Open Questions/Pending Items\n- The 'Field App' functionality was mentioned, and further discussion is required to detail its development, integration with planning data, and how it will handle the confirmation and modification of job tasks and quantities.",
+  "conversation": [],
+  "transcripts": [
+    {
+      "text": "Ja, då gör vi en inspelning här då för att svara på ett antal frågor som är kopplade till metadata då.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Eh, fråga ett då. Två ursprung för metadata då. Ja, det är ju då, såvitt jag ser, då alldeles rätt. I vissa fall så genererar systemet metadatafält själv.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och, eh, lägger in det på objektet, till exempel då vilket order, vilket orderkoncept då som, som, som är kopplad till unika objektet då. Och, eh, de fältena blir ju också då bara, som jag tolkar det här då, read only för att det innebär ju då bara att man, man kan alltså se på det metadatasystemet.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Skapa det metadatatfältet och vilka uppgifter eller, eller orderkoncept då som har träffats på den här. Och sen, sen en viktig bit som inte nämns här då, men varje metadata-data då, alltså den, den, den datainformation som pekas in, måste ju då ha en svans utav, eh, dels datum när den skapades eller, eller lades in och sen så någon form av kodifiering, om jag inte fel då.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Eh, är det en operatör som skapar den, så, så är det ju bra då att se vilken, vilken användare det var som skapade den. Är det en systemskapad så kan den ju då, då skapa det. Så en, en logg som, som, som följer med som man då kan, eh, fördjupa sig i den enskilda metadatan då. Och sen så de som är då de här, om man säger då de fria metadatan som man då skapar själv för att återspegla verkligheten då, de, de kan ju administratörerna i systemet och om man tillåter det så kan ju-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm ...då utföra det också och uppdatera de fälten. Så det är väl rätt uppfattat det där då med ett litet tillägg då för den här loggen eller vad man ska säga då som jag vet vi har haft uppe tidigare. Fråga två då, objektets kärna v-- och metadata. Och i det fallet nu då så...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Eh, har jag ingenting emot att då föräldrarinformationen, eh, gärna får ligga då i, precis som det är här nu då, i, i, i objektets grunddata då som innehåller det systemgenererade, eh, numret för objektet, en beskrivning och sen så vem som är då förälder till den och, eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Eh, om den är aktiv då eller inte.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Enligt analogi som redan finns, det är helt okej. Och så har vi fråga nummer tre. Eh, det är då när, när, eh, metadatafält grupperas då. Och för att svara på den här då så är det då alternativ B då. Som vi fortsätter med exemplet kontakter då, så, så består ju då kontakt... Metadatafamiljen kontakt består utav namn, titel, eh, telefonnummer och e-post till exempel då. Och väljer man då...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. Att jobba med metadatafältet kontakt då, så ska ju då hela s... eh, hela, hela datamängden, det vill säga all-alla de fyra fälten hänga med då. Och på motsvarande sätt, om man då lägger in då som en uppgift att uppdatera metadatafälten då, eh, i anslutning till en uppgift, ja, då ska ju då alla fyra, eh, fälten antingen visas då eller komma upp för uppdatering då.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Eh, så det är ju tveklöst B då. Och ytterligare en förtydligande då, när det blir en familj utav metadata såhär, så innebär det ju då att i det här fallet kontakt inte har något metadatainnehåll då. Så den är ju då tom eller måste systemmässigt bli tom då. Så allt datainnehåll ligger ju då i de underordnade datafälten då, det vill säga namn, titel, telefon och e-post då. Så, så modern då, kontakt, är ingen, ingen informationsbärare då.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Sen fråga nummer fyra då, eh, den bekräftar ju också då, eh, precis det här med antalet då att ingenting är hårdkodat, utan i orderkonceptet så kan man då välja ett metadatafält, eh, för antal eller storlek då, beroende på vad man då har tankat in på, eh, eh, det här objektet då. Och, eh, det enda som skiljer den då från, från de andra metadatafälten då, det är att det här metadatafältet-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm ...kommer då att bli viktat för det är det som kommer att, att då, eh, styra då till exempel antalet tjänster som utförs då.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och så har vi, eh, fältappen här då.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Ja, och så har vi, ja, precis då, eh, fältappen här då. Det som är viktigt nu då, det är ju att fältappen måste ju då naturligtvis utvecklas då så att det fältappen kommer att ta i f-f-f-- ta emot då ifrån finplaneringen, eh, där uppgifterna är utlagda. Det är ju då de här grupperingarna eller s-s-sammanhopena utav hopklumpade jobbena då. Och när man då öppnar ett hopklumpat jobb då, som företrädesvis är då på en plats och en annan...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Då, eh, så kommer ju alla de här uppgifterna upp i en lång lista då med antalet utav uppgiften som då utföraren då får bekräfta och har möjlighet att ändra då. Så, så i de flesta fall så kommer ju förmodligen då antalet att stam-stämma med verkligheten. Men stämmer inte med verkligheten så måste man då i, i appen kunna ha möjlighet då att uppdatera då, eh, det här metadatafältet som är antal. Och på motsvarande sätt blir det ju då att om man mot en...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Unika uppgiften väljer då att koppla på då antingen att man vill visa metadata, eh, kopplat till uppgiften, eh, eller att man vill då bli-- be utföraren att lägga in metadata kopplat till uppgiften, till exempel ett foto eller, eller att man, eh, gör nån verifiering eller kontrollerar en sak med ett okej eller, eller inte okej då. Då, då måste då den här utförarappen kunna hantera det då. Så att, eh, som jag nämnde tidigare så pushas då så att säga den...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Det här ut till appen i, i grupper då eller, eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Samlade uppgifter av en viss typ per då plats enligt den logik som vi har. Och sen så när man då går in, eh, och utför den här så får man då liksom checka av, eh, uppgift för uppgift och komplettera då med metadata där så krävs då- Mm ...enligt den logiken. Ibland kan det vara frivilligt och ibland så blir det då ett krav att man till exempel då ska lämna in en metadata, en efterbild till exempel då, för att man ska kunna sluta uppgiften då. Sen blir det ju då i utförarappen här då en, en designmässig hur man gör det här då så smidigt som möjligt. Och det-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm ...det är förmodligen en 80/20-regel att åtta fall av tio så kommer det bara vara att trycka okej och så gör man allting. Och sen i två fall av tio så kommer man då behöva gå in för att uppdatera till exempel antalet då. Eh, medan då den metadata som ska lämnas, den, den, den, den måste ju lämnas då för att man ska kunna slutföra uppgiften. Mm.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    }
+  ]
+}

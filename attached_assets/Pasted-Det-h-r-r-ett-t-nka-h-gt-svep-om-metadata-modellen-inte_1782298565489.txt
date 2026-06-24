@@ -1,0 +1,39 @@
+Det här är ett "tänka högt"-svep om metadata-modellen, inte en byggorder — du vill att jag bekräftar hur jag uppfattar det. Låt mig snabbt stämma av tre saker mot nuvarande implementation så jag inte påstår fel, sen speglar jag tillbaka.
+
+
+2 actions
+Bekräftat mot koden — tre saker du nämner finns redan, en är en genuin lucka. Så här uppfattar jag ditt resonemang:
+
+1. Två ursprung för metadata-fält
+Fria fält — skapas av användaren efter behov.
+Systemgenererade fält — read-only, fyllda av systemet: t.ex. vilka uppgifter / ordrar / orderkoncept som är kopplade till det unika objektet, status osv.
+Detta matchar redan dagens modell: varje metadatavärde bär ett ursprung (metod: system / tjänst / utförande = read-only, vs fritt användarsatt). Så skillnaden "fritt vs systemgenererat" finns redan som koncept — det handlar mer om att vi behöver bestämma vilka systemfält som ska finnas och hur de visas.
+
+
+2. Objektets kärna vs metadata — och "förälder"
+Som jag hör dig: objektets kärna är nummer + namn + aktiv/inaktiv. Allt annat kan vara metadata.
+
+➡️ Öppen fråga (din egen): Idag är förälder strukturell (egen tabell object_parents, primär + alternativa föräldrar — driver arv och släktnamn). Den är alltså inte ett metadata-fält idag. Vill du att "förälder" ska exponeras som ett (system)metadata-fält (läsbart i metadata-vyn) men fortsatt drivas av strukturen — eller faktiskt flyttas in i metadata? Det första är litet, det andra är en stor arkitekturändring.
+
+
+3. Grupper / familjer (klassikern "Kontakt")
+Du beskriver: Kontakt = grupp med namn, titel, telefon, e-post, datan ligger på barnen, och väljer man "Kontakt" får man hela familjen.
+
+➡️ Detta finns redan som sammansatta fält med punktnotation (kontakt.namn, kontakt.telefon …) som grupperas till ett JSON-fält. Men det finns två tolkningar:
+
+(A) "Kontakt" = ett fält som internt har delfält (dagens JSON-modell), eller
+(B) "Kontakt" = en väljbar grupp som expanderar till N separata katalogfält när man väljer den.
+➡️ Öppen fråga: Menar du A eller B? Det avgör hur väljaren och lagringen ska byggas.
+
+
+4. Antal / storlek som metadata
+Det du beskriver finns redan implementerat — och precis som du säger ska det inte vara hårdkodat systemfält:
+
+På artikeln pekar man ut ett metadatafält för antal/storlek (quantityMetadataField), läge matches_field.
+Saknas ett sådant fält → ordern använder antalet som orderkonceptet föreslår.
+När uppgiften utförs skrivs det faktiska antalet tillbaka till objektets utpekade antals-/storleksfält.
+➡️ Genuin lucka jag vill flagga: Fältappen (Traivo Go) har idag inget redigerbart antalsfält — antals-flaggorna är display-only. Så frågan blir: var matas "rätta antalet" in vid utförande så att det kan pushas tillbaka? Behöver vi lägga till ett antals-input i appen, eller kommer det faktiska antalet från annat håll (t.ex. signering/protokoll)?
+
+Kort sagt: punkt 1, 3 och 4 finns redan i grunden — det vi behöver är dina beslut på de tre öppna frågorna (förälder som metadata eller ej; grupp-modell A eller B; var antalet matas in i appen). Punkt 2 och "vilka systemfält som ska finnas" är det som mest behöver genomlysas.
+
+Stämmer det här med hur du tänker, eller har jag missuppfattat något?
