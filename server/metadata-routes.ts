@@ -377,7 +377,7 @@ const createMetadataTypeSchema = z.object({
     .nullish()
     .transform((v) => (v == null ? v : v.length > 0 ? v : null)),
   beskrivning: z.string().nullish(),
-  datatyp: z.enum(['string', 'integer', 'decimal', 'boolean', 'datetime', 'json', 'referens', 'image', 'file', 'code', 'location', 'interval']),
+  datatyp: z.enum(['string', 'integer', 'decimal', 'boolean', 'datetime', 'json', 'referens', 'image', 'file', 'code', 'location', 'interval', 'rubrik']),
   referensTabell: z.string().nullish(),
   arLogisk: z.boolean().optional().default(true),
   standardArvs: z.boolean().optional().default(false),
@@ -603,6 +603,27 @@ metadataRouter.post("/types", async (req: Request, res: Response) => {
       }
     }
 
+    // Smart standard: när fältet får en förälder men inget område angetts, ärv
+    // förälderns område. Görs på serversidan så att även import/skript får arvet.
+    if (
+      katalogValues.parentMetadataId &&
+      (!katalogValues.area || String(katalogValues.area).trim() === '')
+    ) {
+      const [parent] = await db
+        .select({ area: metadataKatalog.area })
+        .from(metadataKatalog)
+        .where(
+          and(
+            eq(metadataKatalog.id, katalogValues.parentMetadataId),
+            eq(metadataKatalog.tenantId, tenantId),
+          ),
+        )
+        .limit(1);
+      if (parent?.area) {
+        katalogValues.area = parent.area;
+      }
+    }
+
     const [newType] = await db.insert(metadataKatalog).values({
       tenantId,
       ...katalogValues,
@@ -767,11 +788,50 @@ metadataRouter.put("/types/:id", async (req: Request, res: Response) => {
       }
     }
 
+    // Rubrik/samlingsfält håller aldrig ett eget värde. Att göra om en typ som redan
+    // har sparade värden till "rubrik" skulle stranda dem — blockera det. (Typbytet
+    // tillbaka från rubrik till t.ex. text förblir alltid tillåtet, så rubrik är
+    // fortsatt reversibelt och inte en permanent låsning.)
+    if (validated.datatyp === 'rubrik' && existing.datatyp !== 'rubrik') {
+      const usage = await getMetadataKatalogUsage(id, tenantId);
+      if (usage.valueCount > 0) {
+        return res.status(409).json({
+          error:
+            `Kan inte göra om fältet till ett rubrik-/samlingsfält — det har ` +
+            `${usage.valueCount} sparade värden och ett rubrik-fält saknar eget värde. ` +
+            `Ta bort värdena först, eller skapa en separat rubrik.`,
+          usage,
+        });
+      }
+    }
+
     // Task #674: Område är det enda grupperingsfältet. `kategori` får aldrig
     // skrivas direkt av klienten — härled den alltid från det effektiva området
     // (klientens ev. `kategori` skrivs över; legacy-drift självläker vid varje PUT).
-    const effectiveArea =
+    let effectiveArea =
       katalogValues.area !== undefined ? katalogValues.area : existing.area;
+    // Smart standard: om fältet (efter merge) har en förälder men saknar område,
+    // ärv förälderns område. Persisteras så att arvet gäller även import/skript.
+    const effectiveParentId =
+      validated.parentMetadataId !== undefined
+        ? validated.parentMetadataId
+        : existing.parentMetadataId;
+    if (effectiveParentId && (!effectiveArea || String(effectiveArea).trim() === '')) {
+      const [parent] = await db
+        .select({ area: metadataKatalog.area })
+        .from(metadataKatalog)
+        .where(
+          and(
+            eq(metadataKatalog.id, effectiveParentId),
+            eq(metadataKatalog.tenantId, tenantId),
+          ),
+        )
+        .limit(1);
+      if (parent?.area) {
+        effectiveArea = parent.area;
+        (katalogValues as Record<string, unknown>).area = parent.area;
+      }
+    }
     (katalogValues as Record<string, unknown>).kategori =
       (effectiveArea as string | null) || 'annat';
 

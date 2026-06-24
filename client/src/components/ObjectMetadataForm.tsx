@@ -1356,7 +1356,10 @@ function MetadataAddButton({
   const hasAllowedValues = !!allowedValues && allowedValues.length > 0;
   const isUploadType = UPLOAD_DATATYPES.has(datatyp);
 
-  const sortedTypes = [...metadataTypes].sort((a, b) => {
+  // Rubrik-/samlingsfält håller aldrig ett eget värde (de grupperar bara
+  // underfält) — exkludera dem ur lägg-till-väljaren.
+  const addableTypes = metadataTypes.filter((t) => t.datatyp !== "rubrik");
+  const sortedTypes = [...addableTypes].sort((a, b) => {
     const an = a.displayNumber ?? 9999;
     const bn = b.displayNumber ?? 9999;
     if (an !== bn) return an - bn;
@@ -1402,7 +1405,7 @@ function MetadataAddButton({
           <div className="space-y-4 py-2">
             <div className="space-y-2">
               <Label>Metadatatyp *</Label>
-              {metadataTypes.length > 0 ? (
+              {addableTypes.length > 0 ? (
                 <Select value={selectedType} onValueChange={(v) => { setSelectedType(v); setValue(""); setUploadedName(""); }}>
                   <SelectTrigger data-testid="select-metadata-type">
                     <SelectValue placeholder="Välj typ..." />

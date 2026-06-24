@@ -2132,6 +2132,23 @@ app.post("/api/metadata-labels", requireAdmin, asyncHandler(async (req, res) => 
     if (data.parentMetadataId) {
       const parentError = await validateParentMetadataLink(tenantId, data.parentMetadataId, null);
       if (parentError) throw new ValidationError(parentError);
+      // Smart standard: ärv förälderns område när inget eget område angetts (samma
+      // härledning som POST /api/metadata/types — gäller även denna skriv-yta så att
+      // server-sidan är enhetlig och inte kan kringgås via importer/skript).
+      if (!data.area || String(data.area).trim() === '') {
+        const [parent] = await db
+          .select({ area: metadataKatalog.area })
+          .from(metadataKatalog)
+          .where(and(
+            eq(metadataKatalog.id, data.parentMetadataId),
+            eq(metadataKatalog.tenantId, tenantId),
+          ))
+          .limit(1);
+        if (parent?.area) {
+          data.area = parent.area;
+          data.kategori = parent.area;
+        }
+      }
     }
     const [label] = await db.insert(metadataKatalog).values(data).returning();
     res.status(201).json(label);

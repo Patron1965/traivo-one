@@ -4385,7 +4385,8 @@ export const METADATA_DATA_TYPES = [
   'file',       // Fil (FIL) - URL/filreferens
   'code',       // Kod (KOD) - text, ev. numerisk
   'location',   // Plats (PLATS) - GPS lat/long
-  'interval'    // Tid/Intervall (TID) - t.ex. "var 5:e månad"
+  'interval',   // Tid/Intervall (TID) - t.ex. "var 5:e månad"
+  'rubrik'      // Rubrik/samlingsfält - gruppfält utan eget värde (bara en rubrik som grupperar underfält)
 ] as const;
 export type MetadataDataType = typeof METADATA_DATA_TYPES[number];
 

@@ -130,6 +130,7 @@ const DATATYP_COMMON = [
   { value: 'image', label: 'Bild' },
   { value: 'file', label: 'Fil' },
   { value: 'location', label: 'Plats (GPS)' },
+  { value: 'rubrik', label: 'Rubrik / samlingsfält (utan eget värde)' },
 ];
 
 // Avancerade datatyper — tekniska typer för integrationer/specialfall.
@@ -158,6 +159,7 @@ const DATATYP_HELP: Record<string, string> = {
   referens: 'Pekar mot en annan post, t.ex. en kund eller prislista.',
   code: 'Kort kod eller identifierare.',
   interval: 'Ett tidsspann (från–till).',
+  rubrik: 'En ren rubrik/samlingsfält som grupperar underfält och inte har något eget värde. Du kan ändra till en annan datatyp senare.',
 };
 
 // Äldre poster lagrar ikonnamn i PascalCase ("FileText"); ikonregistret använder
@@ -930,7 +932,16 @@ function MetadataTypeForm({ initialData, onSubmit, isPending, allTypes, customer
         <Label>Överordnat metadata-fält</Label>
         <Select
           value={parentMetadataId || 'none'}
-          onValueChange={(v) => setParentMetadataId(v === 'none' ? '' : v)}
+          onValueChange={(v) => {
+            const next = v === 'none' ? '' : v;
+            setParentMetadataId(next);
+            // Smart standard: ärv område från det överordnade fältet när man väljer
+            // en förälder (fortfarande redigerbart nedan). Backend gör samma härledning.
+            if (next) {
+              const parent = allTypes.find((t) => t.id === next);
+              if (parent?.area) setArea(parent.area);
+            }
+          }}
           disabled={hasChildren}
         >
           <SelectTrigger data-testid="select-type-parent">

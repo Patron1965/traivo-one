@@ -166,6 +166,8 @@ function coerceVardeFields(datatyp: string, raw: string): VardeFields {
     case "interval":
       fields.vardeString = String(v);
       break;
+    case "rubrik":
+      throw new Error(`Rubrik-/samlingsfält kan inte ha ett värde — det grupperar bara underfält.`);
     default:
       throw new Error(`Okänd datatyp: ${datatyp}`);
   }
@@ -1374,6 +1376,12 @@ export async function createMetadata(data: {
     throw new Error(`"${metadataTyp.namn}" är ett systemfält och sätts automatiskt — det kan inte anges manuellt.`);
   }
 
+  // Rubrik/samlingsfält: ett rent gruppfält som bara grupperar underfält och
+  // aldrig håller ett eget värde. Avvisa därför alla värdeskrivningar.
+  if (metadataTyp.datatyp === 'rubrik') {
+    throw new Error(`"${metadataTyp.namn}" är ett rubrik-/samlingsfält och kan inte ha ett eget värde — det grupperar bara underfält.`);
+  }
+
   // PDF §7/§14: dropdown-validering (allowedValues)
   if (metadataTyp.allowedValues && metadataTyp.allowedValues.length > 0) {
     const asString = data.varde === null || data.varde === undefined ? '' : String(data.varde);
@@ -1828,6 +1836,12 @@ export async function updateMetadata(
   }
   if (isReadonlyOrigin(existing.metod) && !isAutomaticOrigin(metod)) {
     throw new Error(`"${metadataTyp.namn}" sattes av ${existing.metod === 'system' ? 'systemet' : 'en tjänst'} och kan inte redigeras manuellt.`);
+  }
+
+  // Rubrik/samlingsfält grupperar bara underfält och håller aldrig ett eget värde —
+  // avvisa värdeskrivning även på uppdateringsvägen (matchar createMetadata).
+  if (metadataTyp.datatyp === 'rubrik') {
+    throw new Error(`"${metadataTyp.namn}" är ett rubrik-/samlingsfält och kan inte ha ett eget värde — det grupperar bara underfält.`);
   }
 
   // PDF §7/§14: dropdown-validering (allowedValues) — gäller även uppdatering
@@ -3859,6 +3873,11 @@ export async function createWorkOrderMetadata(data: {
 
   if (!metadataTyp) {
     throw new Error(`Metadata type "${data.metadataTypNamn}" not found for this tenant`);
+  }
+
+  // Rubrik/samlingsfält grupperar bara underfält och håller aldrig ett eget värde.
+  if (metadataTyp.datatyp === 'rubrik') {
+    throw new Error(`"${metadataTyp.namn}" är ett rubrik-/samlingsfält och kan inte ha ett eget värde — det grupperar bara underfält.`);
   }
 
   const vardeFields: Record<string, string | number | boolean | Date | Record<string, unknown> | null> = {

@@ -1,0 +1,38 @@
+{
+  "sessionId": "7f474bbe7",
+  "exportedAt": "2026-06-24T15:09:45.751Z",
+  "summary": "### Key Topics Discussed\n- Bug identified in metadata administration regarding a deleted contact metadata name.\n- Clarification provided that the issue is a \"bugg\" (referring to a bug), not a minor bug.\n\n### Open Questions/Pending Items\n- Investigate why the deleted contact metadata name still appears in the registry, preventing the creation of a new contact with the same name.",
+  "conversation": [],
+  "transcripts": [
+    {
+      "text": "Ja, hallå?",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mats, jag hittar en liten bög här. Ja, i, eh, metadataadministrationen då, så verkar det som att metadatanamnet kontakt fortfarande ligger kvar i registret, fastän den är raderad. Och följden blir då att när man då ska skapa kontakt igen, så säger den att det inte går att startar-starta den, eller skapa den därför att den inte finns, men den syns inte.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Ja.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Hallå? Vill bara komplettera att det är inte en liten bög, vad heter, utan det är en bögg.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Inte b-b-b, b-u-g-g.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    }
+  ]
+}
