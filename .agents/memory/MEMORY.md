@@ -48,6 +48,7 @@
 - [drizzle-zod timestamp coerce](drizzle-zod-timestamp-coerce.md) — route-schema som skriver timestamp()-kolumn måste `.extend({col: z.coerce.date()})`, annars 400 på varje write (tsc fångar ej).
 - [work_orders dubbla status-kolumner](work-order-dual-status-columns.md) — `status` (livscykel) ≠ `order_status` (Modus); `CREATE INDEX IF NOT EXISTS` matchar på NAMN → samma namn på fel kolumn ger tyst no-op.
 - [Tenant lifecycle DB ops](tenant-lifecycle-db-ops.md) — full-tenant-delete kräver replica-role + NOT EXISTS orphan-sweep (142 NO ACTION FK, 23 join-tabeller utan tenant_id); rename-prune bara säker för leaf-tabeller.
+- [Prod operational reset](prod-operational-reset.md) — kinab-reset-phases.ts = delad scope; dry-run kör verklig FK-kaskad+ROLLBACK (lita på leftover=0); nya NO ACTION-FK till objects/customers/work_orders måste in i faserna; FK-graf via pg_catalog (information_schema tomt på prod-replica).
 - [Veckoplanering-vyn (Bilaga C)](veckoplanering-page.md) — `/veckoplanering` = alias för `/veckoplan`; 9:e time_category frontend-only; "Automatisk veckoplanering" = bara recompute (ej auto-placering).
 - [tsc baseline noise](tsc-baseline-noise.md) — repo har stabilt brus av pre-existing tsc-fel; bara NYA fel i rörda filer räknas; kör tsc synkront (bg-loggar i /tmp/.local rullas tillbaka mellan bash-anrop).
 - [Objekt repoint cykel-vakt](object-repoint-cycle-guard.md) — repoint/move av objekt-förälder måste avvisa ättling-mål (cykel), ej bara själv-förälder; använd storage.wouldCreateObjectCycle i route OCH moveObject.
