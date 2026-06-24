@@ -530,7 +530,6 @@ app.get("/api/objects", asyncHandler(async (req, res) => {
   const customerIds = customerIdParam ? customerIdParam.split(",").filter(id => id.trim()) : undefined;
   const objectType = req.query.objectType as string || undefined;
   const hierarchyLevel = req.query.hierarchyLevel as string || undefined;
-  const accessType = req.query.accessType as string || undefined;
   const ids = req.query.ids as string || undefined;
   const noCluster = req.query.noCluster === "true";
 
@@ -545,10 +544,6 @@ app.get("/api/objects", asyncHandler(async (req, res) => {
   const interim = req.query.interim as string || undefined;
   const issue = req.query.issue as string || undefined;
   const clusterIdFilter = req.query.clusterId as string || undefined;
-  const cityParam = req.query.city as string || undefined;
-  const cities = cityParam ? cityParam.split(",").map(c => c.trim()).filter(Boolean) : undefined;
-  const hasSetupTime = req.query.hasSetupTime === "true";
-  const hasParent = req.query.hasParent === "true";
   const reported = req.query.reported === "true";
   // Task #990: platstyp-filter (pinpoint/area/none). Ogiltig param ignoreras.
   const locationTypeParam = req.query.locationType as string || undefined;
@@ -573,7 +568,7 @@ app.get("/api/objects", asyncHandler(async (req, res) => {
   }
   const hasConditions = conditions.length > 0;
 
-  const hasFilters = objectType || hierarchyLevel || accessType || interim || issue || clusterIdFilter || (cities && cities.length > 0) || hasSetupTime || hasParent || reported || locationType;
+  const hasFilters = objectType || hierarchyLevel || interim || issue || clusterIdFilter || reported || locationType;
   const paginated = req.query.paginated === "true";
 
   // Task #552 (A): Berika listsvar med composed displayName så att alla konsumenter
@@ -591,7 +586,7 @@ app.get("/api/objects", asyncHandler(async (req, res) => {
   };
 
   if (paginated || req.query.limit || req.query.offset || req.query.search || req.query.customerId || noCluster || hasFilters || hasConditions) {
-    const filters = hasFilters ? { objectType, hierarchyLevel, accessType, isInterimObject: interim === "true" ? true : interim === "false" ? false : undefined, issue, clusterId: clusterIdFilter, cities, hasSetupTime: hasSetupTime || undefined, hasParent: hasParent || undefined, reported: reported || undefined, locationType } : undefined;
+    const filters = hasFilters ? { objectType, hierarchyLevel, isInterimObject: interim === "true" ? true : interim === "false" ? false : undefined, issue, clusterId: clusterIdFilter, reported: reported || undefined, locationType } : undefined;
 
     if (hasConditions) {
       // Villkorsfilter: hämta alla bas-filtrerade objekt, kör den DELADE

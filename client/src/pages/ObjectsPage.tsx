@@ -135,7 +135,6 @@ export default function ObjectsPage() {
   const localizedObjectName = useLocalizedObjectName();
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [conditionFilters, setConditionFiltersRaw] = useState<ConditionFilter[]>([]);
-  const [accessFilter, setAccessFilterRaw] = useState("all");
   const [issueFilter, setIssueFilter] = useState<string | null>(() => {
     const params = new URLSearchParams(window.location.search);
     return params.get("issue");
@@ -158,20 +157,13 @@ export default function ObjectsPage() {
   const [currentPage, setCurrentPage] = useState(0);
   const setConditionFilters = (v: ConditionFilter[]) => { setConditionFiltersRaw(v); setCurrentPage(0); };
   const activeConditions = useMemo(() => conditionFilters.filter(f => f.metadataKey), [conditionFilters]);
-  const setAccessFilter = (v: string) => { setAccessFilterRaw(v); setCurrentPage(0); };
   const setCustomerFilter = (v: string[]) => { setCustomerFilterRaw(v); setCurrentPage(0); };
   const addCustomerFilter = (id: string) => { if (!customerFilter.includes(id)) { setCustomerFilter([...customerFilter, id]); } };
   const removeCustomerFilter = (id: string) => { setCustomerFilter(customerFilter.filter(c => c !== id)); };
   const setClusterFilter = (v: string) => { setClusterFilterRaw(v); setCurrentPage(0); };
-  const [cityFilter, setCityFilterRaw] = useState<string[]>([]);
-  const setCityFilter = (v: string[]) => { setCityFilterRaw(v); setCurrentPage(0); };
   // Task #990: platstyp-filter (all/pinpoint/area/none) — server-side.
   const [locationTypeFilter, setLocationTypeFilterRaw] = useState<string>("all");
   const setLocationTypeFilter = (v: string) => { setLocationTypeFilterRaw(v); setCurrentPage(0); };
-  const [hasSetupTimeFilter, setHasSetupTimeFilterRaw] = useState(false);
-  const setHasSetupTimeFilter = (v: boolean) => { setHasSetupTimeFilterRaw(v); setCurrentPage(0); };
-  const [hasParentFilter, setHasParentFilterRaw] = useState(false);
-  const setHasParentFilter = (v: boolean) => { setHasParentFilterRaw(v); setCurrentPage(0); };
   const [reportedFilter, setReportedFilterRaw] = useState(false);
   const setReportedFilter = (v: boolean) => { setReportedFilterRaw(v); setCurrentPage(0); };
   const [interimFilter, setInterimFilter] = useState(false);
@@ -276,7 +268,7 @@ export default function ObjectsPage() {
   });
 
   const { data: objectsData, isLoading, isError: objectsIsError, error: objectsError, refetch: objectsRefetch } = useQuery<{ objects: ServiceObject[]; total: number }>({
-    queryKey: ["/api/objects", "paginated", currentPage, debouncedSearch, customerFilter, JSON.stringify(activeConditions), accessFilter, clusterFilter, cityFilter, hasSetupTimeFilter, hasParentFilter, reportedFilter, interimFilter, issueFilter, locationTypeFilter],
+    queryKey: ["/api/objects", "paginated", currentPage, debouncedSearch, customerFilter, JSON.stringify(activeConditions), clusterFilter, reportedFilter, interimFilter, issueFilter, locationTypeFilter],
     queryFn: async () => {
       const params = new URLSearchParams({
         limit: PAGE_SIZE.toString(),
@@ -291,20 +283,8 @@ export default function ObjectsPage() {
       if (activeConditions.length > 0) {
         params.append("conditions", JSON.stringify(activeConditions));
       }
-      if (accessFilter !== "all") {
-        params.append("accessType", accessFilter);
-      }
       if (clusterFilter !== "all") {
         params.append("clusterId", clusterFilter);
-      }
-      if (cityFilter.length > 0) {
-        params.append("city", cityFilter.join(","));
-      }
-      if (hasSetupTimeFilter) {
-        params.append("hasSetupTime", "true");
-      }
-      if (hasParentFilter) {
-        params.append("hasParent", "true");
       }
       if (reportedFilter) {
         params.append("reported", "true");
@@ -346,16 +326,6 @@ export default function ObjectsPage() {
     staleTime: 30000,
   });
   const reportedCount = reportedCountData?.total || 0;
-
-  const { data: distinctCities = [] } = useQuery<string[]>({
-    queryKey: ["/api/objects/distinct-cities"],
-    queryFn: async () => {
-      const res = await fetch("/api/objects/distinct-cities", { credentials: "include" });
-      if (!res.ok) throw new Error("Failed");
-      return res.json();
-    },
-    staleTime: 60000,
-  });
 
   const { data: missingCityData, refetch: refetchMissingCity } = useQuery<{
     totalMissingCity: number;
@@ -898,25 +868,17 @@ export default function ObjectsPage() {
 
   const activeFilterCount = useMemo(() => [
     activeConditions.length > 0 ? 1 : 0,
-    accessFilter !== "all" ? 1 : 0,
     customerFilter.length > 0 ? 1 : 0,
-    cityFilter.length > 0 ? 1 : 0,
-    hasSetupTimeFilter ? 1 : 0,
-    hasParentFilter ? 1 : 0,
     reportedFilter ? 1 : 0,
     interimFilter ? 1 : 0,
     issueFilter ? 1 : 0,
     locationTypeFilter !== "all" ? 1 : 0,
-  ].reduce((a, b) => a + b, 0), [activeConditions, accessFilter, customerFilter, cityFilter, hasSetupTimeFilter, hasParentFilter, reportedFilter, interimFilter, issueFilter, locationTypeFilter]);
+  ].reduce((a, b) => a + b, 0), [activeConditions, customerFilter, reportedFilter, interimFilter, issueFilter, locationTypeFilter]);
 
   const clearAllFilters = () => {
     setConditionFilters([]);
-    setAccessFilter("all");
     setCustomerFilter([]);
     setClusterFilter("all");
-    setCityFilter([]);
-    setHasSetupTimeFilter(false);
-    setHasParentFilter(false);
     setReportedFilter(false);
     setInterimFilter(false);
     setIssueFilter(null);
@@ -994,17 +956,13 @@ export default function ObjectsPage() {
     if (debouncedSearch) params.append("search", debouncedSearch);
     if (customerFilter.length > 0) params.append("customerId", customerFilter.join(","));
     if (activeConditions.length > 0) params.append("conditions", JSON.stringify(activeConditions));
-    if (accessFilter !== "all") params.append("accessType", accessFilter);
     if (clusterFilter !== "all") params.append("clusterId", clusterFilter);
-    if (cityFilter.length > 0) params.append("city", cityFilter.join(","));
-    if (hasSetupTimeFilter) params.append("hasSetupTime", "true");
-    if (hasParentFilter) params.append("hasParent", "true");
     if (reportedFilter) params.append("reported", "true");
     if (interimFilter) params.append("interim", "true");
     if (issueFilter) params.append("issue", issueFilter);
     if (locationTypeFilter !== "all") params.append("locationType", locationTypeFilter);
     return params;
-  }, [debouncedSearch, customerFilter, activeConditions, accessFilter, clusterFilter, cityFilter, hasSetupTimeFilter, hasParentFilter, reportedFilter, interimFilter, issueFilter, locationTypeFilter]);
+  }, [debouncedSearch, customerFilter, activeConditions, clusterFilter, reportedFilter, interimFilter, issueFilter, locationTypeFilter]);
 
   const downloadCSV = (filename: string, rows: (string | number)[][]) => {
     const csv = rows.map(row => row.map(sanitizeCSVCell).join(",")).join("\n");
@@ -1843,39 +1801,15 @@ export default function ObjectsPage() {
                   <X className="h-3 w-3" />
                 </Badge>
               ) : null)}
-              {accessFilter !== "all" && (
-                <Badge variant="secondary" className="gap-1 cursor-pointer" onClick={() => setAccessFilter("all")} data-testid="badge-filter-access">
-                  Tillgång: {accessTypeLabels[accessFilter]?.label || accessFilter}
-                  <X className="h-3 w-3" />
-                </Badge>
-              )}
               {customerFilter.map(cId => (
                 <Badge key={cId} variant="secondary" className="gap-1 cursor-pointer" onClick={() => removeCustomerFilter(cId)} data-testid={`badge-filter-customer-${cId}`}>
                   {customerNameMap.get(cId) || cId}
                   <X className="h-3 w-3" />
                 </Badge>
               ))}
-              {cityFilter.map(city => (
-                <Badge key={city} variant="secondary" className="gap-1 cursor-pointer" onClick={() => setCityFilter(cityFilter.filter(c => c !== city))} data-testid={`badge-filter-city-${city}`}>
-                  Stad: {city}
-                  <X className="h-3 w-3" />
-                </Badge>
-              ))}
               {locationTypeFilter !== "all" && (
                 <Badge variant="secondary" className="gap-1 cursor-pointer" onClick={() => setLocationTypeFilter("all")} data-testid="badge-filter-location-type">
                   Platstyp: {OBJECT_LOCATION_TYPE_LABELS[locationTypeFilter as keyof typeof OBJECT_LOCATION_TYPE_LABELS] ?? locationTypeFilter}
-                  <X className="h-3 w-3" />
-                </Badge>
-              )}
-              {hasSetupTimeFilter && (
-                <Badge variant="secondary" className="gap-1 cursor-pointer" onClick={() => setHasSetupTimeFilter(false)} data-testid="badge-filter-has-setup-time">
-                  Har ställtid
-                  <X className="h-3 w-3" />
-                </Badge>
-              )}
-              {hasParentFilter && (
-                <Badge variant="secondary" className="gap-1 cursor-pointer" onClick={() => setHasParentFilter(false)} data-testid="badge-filter-has-parent">
-                  Har överordnat
                   <X className="h-3 w-3" />
                 </Badge>
               )}
@@ -1897,17 +1831,6 @@ export default function ObjectsPage() {
         {filtersOpen && (
           <CardContent className="space-y-4 pt-0">
             <div className="flex items-center gap-4 flex-wrap">
-              <Select value={accessFilter} onValueChange={setAccessFilter}>
-                <SelectTrigger className="w-[160px]" data-testid="select-access-filter">
-                  <SelectValue placeholder="Tillgångstyp" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Alla tillgångar</SelectItem>
-                  {Object.entries(accessTypeLabels).map(([key, config]) => (
-                    <SelectItem key={key} value={key}>{config.label}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
               <CustomerMultiCombobox
                 selected={customerFilter}
                 onAdd={addCustomerFilter}
@@ -1927,60 +1850,8 @@ export default function ObjectsPage() {
                   <SelectItem value="none">{OBJECT_LOCATION_TYPE_LABELS.none}</SelectItem>
                 </SelectContent>
               </Select>
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button variant="outline" className="w-[180px] justify-between font-normal" data-testid="button-city-filter">
-                    <span className="truncate">
-                      {cityFilter.length === 0 ? "Filtrera stad" : `${cityFilter.length} stad${cityFilter.length === 1 ? "" : "er"} valda`}
-                    </span>
-                    <ChevronDown className="h-4 w-4 opacity-50 shrink-0" />
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-[240px] p-0" align="start">
-                  <Command>
-                    <CommandInput placeholder="Sök stad..." data-testid="input-city-search" />
-                    <CommandList>
-                      <CommandEmpty>Ingen stad hittades.</CommandEmpty>
-                      <CommandGroup>
-                        {distinctCities.map(city => {
-                          const checked = cityFilter.includes(city);
-                          return (
-                            <CommandItem
-                              key={city}
-                              value={city}
-                              onSelect={() => {
-                                setCityFilter(checked ? cityFilter.filter(c => c !== city) : [...cityFilter, city]);
-                              }}
-                              data-testid={`option-city-${city}`}
-                            >
-                              <Checkbox checked={checked} className="mr-2" />
-                              {city}
-                            </CommandItem>
-                          );
-                        })}
-                      </CommandGroup>
-                    </CommandList>
-                  </Command>
-                </PopoverContent>
-              </Popover>
             </div>
             <div className="flex items-center gap-6 flex-wrap">
-              <label className="flex items-center gap-2 text-sm cursor-pointer" data-testid="checkbox-has-setup-time-label">
-                <Checkbox
-                  checked={hasSetupTimeFilter}
-                  onCheckedChange={(v) => setHasSetupTimeFilter(v === true)}
-                  data-testid="checkbox-has-setup-time"
-                />
-                Har ställtid
-              </label>
-              <label className="flex items-center gap-2 text-sm cursor-pointer" data-testid="checkbox-has-parent-label">
-                <Checkbox
-                  checked={hasParentFilter}
-                  onCheckedChange={(v) => setHasParentFilter(v === true)}
-                  data-testid="checkbox-has-parent"
-                />
-                Har överordnat objekt
-              </label>
               <label className="flex items-center gap-2 text-sm cursor-pointer" data-testid="checkbox-interim-label">
                 <Checkbox
                   checked={interimFilter}
@@ -2122,7 +1993,7 @@ export default function ObjectsPage() {
             )}
             {filteredTopLevel.length > 0 ? (
               filteredTopLevel.map(obj => renderObjectTree(obj))
-            ) : totalObjects === 0 && !debouncedSearch && activeConditions.length === 0 && accessFilter === "all" && customerFilter.length === 0 && !interimFilter && cityFilter.length === 0 && !hasSetupTimeFilter && !hasParentFilter && !reportedFilter ? (
+            ) : totalObjects === 0 && !debouncedSearch && activeConditions.length === 0 && customerFilter.length === 0 && !interimFilter && !reportedFilter ? (
               <div className="text-center py-16 px-6">
                 <div className="mx-auto w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mb-4">
                   <Package className="h-8 w-8 text-primary" />

@@ -471,8 +471,7 @@ export interface IStorage {
   
   /** Föredragen API: hämtar samtliga objekt för en tenant. */
   getObjects(tenantId: string): Promise<ServiceObject[]>;
-  getObjectsPaginated(tenantId: string, limit: number, offset: number, search?: string, customerIds?: string[], filters?: { objectType?: string; hierarchyLevel?: string; accessType?: string; isInterimObject?: boolean; issue?: string; clusterId?: string; cities?: string[]; hasSetupTime?: boolean; hasParent?: boolean; reported?: boolean; locationType?: string }): Promise<{ objects: ServiceObject[]; total: number }>;
-  getDistinctCities(tenantId: string): Promise<string[]>;
+  getObjectsPaginated(tenantId: string, limit: number, offset: number, search?: string, customerIds?: string[], filters?: { objectType?: string; hierarchyLevel?: string; isInterimObject?: boolean; issue?: string; clusterId?: string; reported?: boolean; locationType?: string }): Promise<{ objects: ServiceObject[]; total: number }>;
   getObjectsByIds(tenantId: string, ids: string[]): Promise<ServiceObject[]>;
   getObjectsWithIssues(tenantId: string, options?: { issueType?: string; status?: string; customerId?: string; limit?: number }): Promise<{
     totalObjectsWithIssues: number;
@@ -2452,8 +2451,8 @@ export class DatabaseStorage implements IStorage {
     return db.select(objectColumnsWithPrimaryCustomer()).from(objects).where(and(eq(objects.tenantId, tenantId), isNull(objects.deletedAt)));
   }
 
-  async getObjectsPaginated(tenantId: string, limit: number, offset: number, search?: string, customerIds?: string[], filters?: { objectType?: string; hierarchyLevel?: string; accessType?: string; isInterimObject?: boolean; issue?: string; clusterId?: string; cities?: string[]; hasSetupTime?: boolean; hasParent?: boolean; reported?: boolean; locationType?: string }): Promise<{ objects: ServiceObject[]; total: number }> {
-    const { sql, count, inArray } = await import("drizzle-orm");
+  async getObjectsPaginated(tenantId: string, limit: number, offset: number, search?: string, customerIds?: string[], filters?: { objectType?: string; hierarchyLevel?: string; isInterimObject?: boolean; issue?: string; clusterId?: string; reported?: boolean; locationType?: string }): Promise<{ objects: ServiceObject[]; total: number }> {
+    const { sql, count } = await import("drizzle-orm");
     
     let whereConditions = and(eq(objects.tenantId, tenantId), isNull(objects.deletedAt));
     
@@ -2473,28 +2472,12 @@ export class DatabaseStorage implements IStorage {
       whereConditions = and(whereConditions, eq(objects.hierarchyLevel, filters.hierarchyLevel));
     }
     
-    if (filters?.accessType) {
-      whereConditions = and(whereConditions, eq(objects.accessType, filters.accessType));
-    }
-    
     if (filters?.isInterimObject !== undefined) {
       whereConditions = and(whereConditions, eq(objects.isInterimObject, filters.isInterimObject));
     }
 
     if (filters?.clusterId) {
       whereConditions = and(whereConditions, eq(objects.clusterId, filters.clusterId));
-    }
-
-    if (filters?.cities && filters.cities.length > 0) {
-      whereConditions = and(whereConditions, inArray(objects.city, filters.cities));
-    }
-
-    if (filters?.hasSetupTime) {
-      whereConditions = and(whereConditions, sql`${objects.avgSetupTime} > 0`);
-    }
-
-    if (filters?.hasParent) {
-      whereConditions = and(whereConditions, sql`${objects.parentId} IS NOT NULL`);
     }
 
     // Task #990: platstyp-filter. Måste spegla resolveEffectiveObjectLocationType
@@ -2560,17 +2543,6 @@ export class DatabaseStorage implements IStorage {
       .offset(offset);
     
     return { objects: objectsList, total };
-  }
-
-  async getDistinctCities(tenantId: string): Promise<string[]> {
-    const rows = await db
-      .selectDistinct({ city: objects.city })
-      .from(objects)
-      .where(and(eq(objects.tenantId, tenantId), isNull(objects.deletedAt)));
-    return rows
-      .map(r => (r.city || "").trim())
-      .filter(c => c.length > 0)
-      .sort((a, b) => a.localeCompare(b, "sv", { sensitivity: "base" }));
   }
 
   async getObjectsByIds(tenantId: string, ids: string[]): Promise<ServiceObject[]> {
