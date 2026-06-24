@@ -2,6 +2,7 @@ import { useState, useMemo, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import type { MetadataKatalog } from "@shared/schema";
+import { getOrderTypeLabel } from "@shared/schema";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -334,7 +335,7 @@ export default function OrderTypeMetadataPage() {
                 <SelectContent>
                   {(orderTypes || []).map((ot) => (
                     <SelectItem key={ot} value={ot} data-testid={`option-order-type-${ot}`}>
-                      {ot}
+                      {getOrderTypeLabel(ot)}
                     </SelectItem>
                   ))}
                   <SelectItem value={ALL_ORDER_TYPES_PLACEHOLDER} data-testid="option-order-type-custom">
@@ -359,7 +360,7 @@ export default function OrderTypeMetadataPage() {
           {effectiveOrderType && (
             <div className="text-sm text-muted-foreground" data-testid="text-selected-order-type">
               Redigerar kopplingar för ordertyp:{" "}
-              <Badge variant="secondary">{effectiveOrderType}</Badge>
+              <Badge variant="secondary">{getOrderTypeLabel(effectiveOrderType)}</Badge>
             </div>
           )}
         </CardContent>
@@ -520,7 +521,7 @@ export default function OrderTypeMetadataPage() {
                     <p className="text-sm font-medium">Ordertyper:</p>
                     <ul className="list-disc pl-5 text-sm text-muted-foreground">
                       {pendingLink.usage.orderTypes.map((ot) => (
-                        <li key={ot} data-testid={`usage-order-type-${ot}`}>{ot}</li>
+                        <li key={ot} data-testid={`usage-order-type-${ot}`}>{getOrderTypeLabel(ot)}</li>
                       ))}
                     </ul>
                   </div>

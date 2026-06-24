@@ -6581,6 +6581,26 @@ export const REQUIRED_FIELDS_BY_ORDER_TYPE: Record<string, { field: string; labe
   default: [],
 };
 
+// Svenska visningsetiketter för de kända (statiska) ordertyps-nycklarna ovan.
+// VIKTIGT: nycklarna (service/installation/... ) är de kanoniska fri-sträng-värden
+// som lagras i work_orders.order_type och matchas av REQUIRED_FIELDS_BY_ORDER_TYPE
+// samt order-typ-kopplingar — döp ALDRIG om nycklarna, bara etiketterna. Egna
+// (kund-skapade) ordertyper saknar etikett och visas som sitt råa värde.
+export const ORDER_TYPE_LABELS: Record<string, string> = {
+  default: "Standard",
+  service: "Service",
+  installation: "Installation",
+  inspection: "Besiktning",
+  repair: "Reparation",
+  delivery: "Leverans",
+};
+
+// Returnerar svensk etikett för en ordertyp, annars råvärdet (egen ordertyp).
+export function getOrderTypeLabel(value: string | null | undefined): string {
+  if (!value) return "";
+  return ORDER_TYPE_LABELS[value] ?? value;
+}
+
 // === STATUS MESSAGE TEMPLATES (Statusmeddelanden) ===
 export const statusMessageTemplates = pgTable("status_message_templates", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),

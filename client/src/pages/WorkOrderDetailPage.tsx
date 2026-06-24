@@ -68,6 +68,7 @@ import {
   Receipt,
 } from "lucide-react";
 import type { WorkOrder } from "@shared/schema";
+import { getOrderTypeLabel } from "@shared/schema";
 
 type CancellationInfo = {
   reason?: string | null;
@@ -837,7 +838,7 @@ export default function WorkOrderDetailPage() {
           </CardHeader>
           <CardContent className="space-y-0.5">
             <InfoRow label="Order-ID" value={<span className="font-mono text-xs">{order.id.slice(0, 8)}</span>} />
-            <InfoRow label="Ordertyp" value={order.orderType} />
+            <InfoRow label="Ordertyp" value={getOrderTypeLabel(order.orderType)} />
             <InfoRow label="Schemalagd" value={fmtDate(order.scheduledDate)} icon={Calendar} />
             {order.scheduledStartTime && <InfoRow label="Starttid" value={order.scheduledStartTime} icon={Clock} />}
             <InfoRow label="Beräknad tid" value={order.estimatedDuration ? `${order.estimatedDuration} min` : null} icon={Clock} />

@@ -29,7 +29,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import type { Customer, ServiceObject, Article, PriceList } from "@shared/schema";
-import { ARTICLE_HOOK_LEVEL_LABELS } from "@shared/schema";
+import { ARTICLE_HOOK_LEVEL_LABELS, getOrderTypeLabel } from "@shared/schema";
 import { CoupledFieldInput, type OrderTypeMetadataField } from "./CoupledFieldInput";
 import { BillingCustomerDialog } from "@/components/BillingCustomerDialog";
 
@@ -635,7 +635,7 @@ export function JobModal({ open, onClose, onSubmit }: JobModalProps) {
                   : [formData.orderType, ...orderTypes]
                 ).map((ot) => (
                   <SelectItem key={ot} value={ot} data-testid={`option-order-type-${ot}`}>
-                    {ot}
+                    {getOrderTypeLabel(ot)}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -892,7 +892,7 @@ export function JobModal({ open, onClose, onSubmit }: JobModalProps) {
           ) : coupledFields.length > 0 ? (
             <div className="border rounded-md p-3 space-y-3 bg-muted/20" data-testid="section-coupled-fields">
               <div className="text-xs font-medium text-muted-foreground">
-                Fält för ordertypen "{formData.orderType}"
+                Fält för ordertypen "{getOrderTypeLabel(formData.orderType)}"
               </div>
               {coupledFields.map((field) => {
                 const currentValue = coupledValues[field.id] ?? "";

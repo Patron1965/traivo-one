@@ -23,6 +23,7 @@ import { TaskTimewindowsEditor } from "@/components/TaskTimewindowsEditor";
 import { CancelOrderDialog } from "@/components/orders/CancelOrderDialog";
 import { workOrderStatusBadge } from "@/lib/status-colors";
 import type { WorkOrder, ServiceObject, Customer, Resource, WorkOrderObject, MetadataKatalog, WorkOrderLine, CustomerCommunication } from "@shared/schema";
+import { getOrderTypeLabel } from "@shared/schema";
 import { CoupledFieldInput, type OrderTypeMetadataField } from "./CoupledFieldInput";
 
 interface JobDetailModalProps {
@@ -984,7 +985,7 @@ export function JobDetailModal({ open, onClose, workOrderId, bulkWorkOrderIds = 
               ) : coupledFields.length > 0 ? (
                 <div className="border rounded-md p-3 space-y-3 bg-muted/20" data-testid="section-coupled-fields">
                   <div className="text-xs font-medium text-muted-foreground">
-                    Fält för ordertypen{orderType ? ` "${orderType}"` : ""}
+                    Fält för ordertypen{orderType ? ` "${getOrderTypeLabel(orderType)}"` : ""}
                   </div>
                   {coupledFields.map((field) => {
                     const savedMeta = savedMetaByFieldId.get(field.id);

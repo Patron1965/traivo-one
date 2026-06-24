@@ -1,0 +1,62 @@
+{
+  "sessionId": "6bfdf4c4e",
+  "exportedAt": "2026-06-24T14:41:32.111Z",
+  "summary": "### Key Topics Discussed\n- Feedback regarding the creation of a metadata field\n- Discussion on data types for metadata fields\n- Proposal for a 'list' data type for metadata fields\n\n### Important Points & Insights\n- Direct feedback was provided concerning the metadata field creation.\n- The icon register does not seem to be connected to allow selection from a wider range of curated icons.\n- Available data types previously discussed include text (free text), number (integer), decimal number, status (yes/no), date and time.\n- Unclear data types are JSON, reference (customer or price list), and code.\n- Image data type implies taking a photo to be stored in the metadata field.\n- File data type allows dropping any computer file, including images or other documents.\n- New data types mentioned are GPS coordinates (for 'plats') and time interval.\n- A new suggestion is to include a 'list' data type, where users can define selectable options (e.g., 'helt eller trasigt', 'röd eller blå').\n- The possibility of existing dropdown functionality for fixed values was mentioned, but it was suggested that it should be more prominent when selecting a series number or text.\n\n### Open Questions/Pending Items\n- Clarification on JSON, reference, and code data types.",
+  "conversation": [],
+  "transcripts": [
+    {
+      "text": "Ja.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Ja, här kommer lite direkt feedback, eh, vad det gäller då vid skapandet utav ett metadatafält då.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Eh, nummer ett då så... Det här ikonregistret verkar inte vara kopplat då, för där skulle ju vara praktiskt att kunna välja ett ur ett större urval av, av städat sydda ikoner. Men det var inte det viktigaste, utan det är då datatyp. Och då finns det ju då här text, och det får man ju då avse här, fritext. Antal, det är i heltal, det är alltså då en siffra, ett, två, tre och så vidare. Och så är det decimaltal. Eh, sen så finns det då ett status, ja eller nej.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Datum och tid är väl då datum- eller tidsformat. JSON vet jag inte riktigt vad det är. Referens, kund eller prislista vet jag inte heller riktigt vad det då är för en datatyp. En bild då, det är ju då att man ska uppmanas att ta ett kort och så ska ju då det kortet och den bildfilen läggas in på det här metadatafältet. Och fil då är väl en, en, en funktion där man då kan droppa en, en datorfil då, som ju också kan vara en bild eller det kan vara något annat dokument som man tar där då. Eh, och en kod är ju då en kod för",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "samma- -sång som heltal och plats är väl då GPS-koordinator och tidsinterval är väl någonting. Men det, det jag saknar här, så i ett metadatafält i min värld består ju då antingen utav ett alfanumeriskt värde eller ett numeriskt värde. Eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Eller då ett valbart antal värden då. Så att här skulle du ju då vara smart och kunna så att säga då ha... Eh, det skulle kunna stå då datatyp lista. Och om man då väljer lista så får man då, eh, välja då där det står presentationsnummer nu då, så får man helt enkelt mata in då de alternativ som finns då där. Till exempel hel eller trasig, röd eller blå eller...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Matavfall, restavfall eller vad det nu är då för nåt, nåt, nåt fält som, som då passas, passar in där för att få, få så att säga en logisk ordning på det här. Det var då...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Allt. Det-- Ja, förresten. Ja, det, det finns... Det, det är möjligt att det här finns då, för det finns fasta värden, dropdown. Men då kommer den liksom lite granna längre ner då. Så det är möjligt att den här funktionen då finns. Men det tydligaste vore ju då att den vore i anslutning till när man väljer ma-- eh, att det finns så att man kan välja en serie, serienummer eller serietext då och det blir en drop- dropdown då.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. Tack.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    }
+  ]
+}

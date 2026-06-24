@@ -20,6 +20,7 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useAuth } from "@/hooks/use-auth";
 import { PageHeader } from "@/components/layout/PageHeader";
 import type { WorkOrder, Customer, ServiceObject, Subscription } from "@shared/schema";
+import { getOrderTypeLabel } from "@shared/schema";
 
 function PickupMapFitBounds({ positions }: { positions: [number, number][] }) {
   const map = useMap();
@@ -448,7 +449,7 @@ export default function CustomerPortalPage() {
                             </span>
                             {order.orderType && (
                               <Badge variant="outline" className="text-xs">
-                                {order.orderType === "extra" ? "Extra" : order.orderType === "regular" ? "Ordinarie" : order.orderType}
+                                {order.orderType === "extra" ? "Extra" : order.orderType === "regular" ? "Ordinarie" : getOrderTypeLabel(order.orderType)}
                               </Badge>
                             )}
                           </div>
