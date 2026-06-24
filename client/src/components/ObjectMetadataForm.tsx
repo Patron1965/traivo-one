@@ -491,11 +491,11 @@ export function MetadataRelatedSummary({
     return m;
   }, [displayNamesData]);
 
-  const tiles: { icon: typeof Type; label: string; value: number; tab: string; testid: string }[] = [
+  const tiles: { icon: typeof Type; label: string; value: number; tab?: string; testid: string }[] = [
     { icon: Users, label: "Kontakter", value: contacts.length, tab: "contacts", testid: "stat-contacts" },
-    { icon: ClipboardList, label: "Uppgifter", value: tasks.length, tab: "workorders", testid: "stat-tasks" },
+    { icon: ClipboardList, label: "Uppgifter", value: tasks.length, testid: "stat-tasks" },
     { icon: ImageIcon, label: "Bilder", value: imagesCount, tab: "images", testid: "stat-images" },
-    { icon: AlertTriangle, label: "Felanmälningar", value: issueReportsCount, tab: "kundkontakt", testid: "stat-issues" },
+    { icon: AlertTriangle, label: "Felanmälningar", value: issueReportsCount, testid: "stat-issues" },
   ];
 
   return (
@@ -513,8 +513,8 @@ export function MetadataRelatedSummary({
               <button
                 key={t.testid}
                 type="button"
-                onClick={() => onNavigateToTab?.(t.tab)}
-                disabled={!onNavigateToTab}
+                onClick={() => t.tab && onNavigateToTab?.(t.tab)}
+                disabled={!t.tab || !onNavigateToTab}
                 data-testid={t.testid}
                 className="flex flex-col items-start gap-1 rounded-md border p-3 text-left hover-elevate disabled:cursor-default"
               >
@@ -668,17 +668,6 @@ export function MetadataRelatedSummary({
           <div className="space-y-2">
             <div className="flex items-center justify-between">
               <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Kopplade uppgifter</p>
-              {onNavigateToTab && tasks.length > topTasks.length && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-6 gap-1 px-2 text-xs"
-                  onClick={() => onNavigateToTab("workorders")}
-                  data-testid="link-all-tasks"
-                >
-                  Visa alla <ChevronRight className="h-3 w-3" />
-                </Button>
-              )}
             </div>
             <div className="space-y-1.5">
               {topTasks.map((t) => (
@@ -1128,13 +1117,6 @@ export function ObjectMetadataForm({
                 count={imagesCount ?? 0}
                 onClick={() => onNavigateToTab?.("images")}
                 testid="nav-related-images"
-              />
-              <MetadataNavItem
-                icon={ClipboardList}
-                label="Uppgifter"
-                count={tasks?.length ?? 0}
-                onClick={() => onNavigateToTab?.("workorders")}
-                testid="nav-related-tasks"
               />
             </div>
           </div>
