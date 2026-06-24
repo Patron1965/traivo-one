@@ -10,6 +10,8 @@ import type { Express } from "express";
     notificationService, triggerETANotification,
     OpenAI,
     getArticleMetadataForObject, writeArticleMetadataOnObject,
+    getAllMetadataTypes, buildMetadataGroupIndex, expandArticleMetadataRows,
+    usesQuantityMetadata,
     invalidateWorkflowCaches,
   } from "./shared";
   import type { Request, Response } from "express";
@@ -836,14 +838,22 @@ app.get("/api/mobile/tasks/:id/metadata-context", isMobileAuthenticated, asyncHa
 
     const showMetadataFields: Array<{
       articleId: string; articleName: string; metadataField: string;
+      groupField: string | null;
       clarification: string | null; canUpdate: boolean;
       currentValue: string | null; displayValue: string | null;
     }> = [];
     const leaveMetadataFields: Array<{
       articleId: string; articleName: string; metadataField: string;
+      groupField: string | null;
       instruction: string | null; required: boolean;
       currentValue: string | null; displayValue: string | null;
     }> = [];
+
+    // Grupp-expansion (Alt B): en Visa/Lämna-rad som pekar på en grupp-förälder
+    // (t.ex. "Kontakt") expanderas till sina barn FÖRE värde-uppslag — föräldern
+    // bär aldrig värde. groupField bär förälderns namn så appen kan gruppera barnen
+    // visuellt. Index laddas en gång (mobil-ytan: tenant härleds från ägd order).
+    const groupIndex = buildMetadataGroupIndex(await getAllMetadataTypes(tenantId));
 
     for (const aid of Array.from(taskArticleIds)) {
       const a = articleById.get(aid);
@@ -851,13 +861,14 @@ app.get("/api/mobile/tasks/:id/metadata-context", isMobileAuthenticated, asyncHa
       const showRows = Array.isArray(a.showMetadataFields)
         ? (a.showMetadataFields as Array<{ metadataField?: string; clarification?: string; canUpdate?: boolean }>)
         : [];
-      for (const row of showRows) {
-        if (!row?.metadataField) continue;
+      for (const row of expandArticleMetadataRows(showRows, groupIndex)) {
+        if (!row.metadataField) continue;
         const current = await getArticleMetadataForObject(order.objectId, row.metadataField, tenantId);
         showMetadataFields.push({
           articleId: a.id,
           articleName: a.name,
           metadataField: row.metadataField,
+          groupField: row.groupField ?? null,
           clarification: row.clarification ?? null,
           canUpdate: !!row.canUpdate,
           currentValue: current?.value != null ? String(current.value) : null,
@@ -867,13 +878,14 @@ app.get("/api/mobile/tasks/:id/metadata-context", isMobileAuthenticated, asyncHa
       const leaveRows = Array.isArray(a.leaveMetadataFields)
         ? (a.leaveMetadataFields as Array<{ metadataField?: string; instruction?: string; required?: boolean }>)
         : [];
-      for (const row of leaveRows) {
-        if (!row?.metadataField) continue;
+      for (const row of expandArticleMetadataRows(leaveRows, groupIndex)) {
+        if (!row.metadataField) continue;
         const current = await getArticleMetadataForObject(order.objectId, row.metadataField, tenantId);
         leaveMetadataFields.push({
           articleId: a.id,
           articleName: a.name,
           metadataField: row.metadataField,
+          groupField: row.groupField ?? null,
           instruction: row.instruction ?? null,
           required: !!row.required,
           currentValue: current?.value != null ? String(current.value) : null,
@@ -911,12 +923,16 @@ app.post("/api/mobile/tasks/:id/metadata-update", isMobileAuthenticated, asyncHa
     const taskArticleIdsForAuth = new Set<string>();
     const authOrderLines = await storage.getWorkOrderLines(order.id);
     for (const l of authOrderLines) if (l.articleId) taskArticleIdsForAuth.add(l.articleId);
+    // Grupp-expansion (Alt B): om en show-rad pekar på en grupp-förälder med
+    // canUpdate=true är varje BARN skrivbart (klienten skickar barnets namn, aldrig
+    // förälderns — föräldern bär inget värde). Index laddas en gång.
+    const authGroupIndex = buildMetadataGroupIndex(await getAllMetadataTypes(tenantId));
     const isFieldUpdatable = (a: (typeof allArticlesForAuth)[number] | undefined): boolean => {
       if (!a || a.status !== "active") return false;
       const showRows = Array.isArray(a.showMetadataFields)
         ? (a.showMetadataFields as Array<{ metadataField?: string; canUpdate?: boolean }>)
         : [];
-      if (showRows.some((r) => r?.canUpdate && r.metadataField === metadataLabel)) return true;
+      if (expandArticleMetadataRows(showRows, authGroupIndex).some((r) => r.canUpdate && r.metadataField === metadataLabel)) return true;
       // Legacy: artikel med canUpdateMetadata + matchande etikett.
       if (a.canUpdateMetadata && (a.updateMetadataLabel === metadataLabel || a.fetchMetadataLabel === metadataLabel)) return true;
       return false;

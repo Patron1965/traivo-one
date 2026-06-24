@@ -3353,6 +3353,95 @@ export function buildMetadataTypeLookup(
   return map;
 }
 
+// ============================================================================
+// METADATA-GRUPPER (familjer): expansion grupp-förälder → barn (Alternativ B)
+// ============================================================================
+// En grupp-förälder (t.ex. "Kontakt") är ETT katalogfält med ≥1 barn som pekar på
+// den via parentMetadataId. När en artikels "Visa/Lämna metadata" pekar ut en
+// grupp-förälder ska HELA familjen (alla barn) tas med — både för visning och för
+// "lämna". Föräldern bär ALDRIG ett eget värde (icke informationsbärare); allt
+// läs/skriv/obligatorium sker på barnen. Medlemskapet är DYNAMISKT: nya barn som
+// läggs till i katalogen tas med automatiskt (ingen frysning vid artikel-spara).
+
+export interface MetadataGroupIndex {
+  // Lägsta-vinner-uppslag namn(lower) → katalogtyp.
+  byNameLower: Map<string, MetadataKatalog>;
+  // parentMetadataId → dess (aktiva) barn.
+  childrenByParentId: Map<string, MetadataKatalog[]>;
+}
+
+// Bygger ett index för grupp-expansion från en lista katalogtyper (rena typer,
+// vanligen getAllMetadataTypes(tenantId) som redan filtrerar bort arkiverade).
+export function buildMetadataGroupIndex(types: MetadataKatalog[]): MetadataGroupIndex {
+  const byNameLower = new Map<string, MetadataKatalog>();
+  const childrenByParentId = new Map<string, MetadataKatalog[]>();
+  for (const t of types) {
+    const key = t.namn.toLowerCase();
+    if (!byNameLower.has(key)) byNameLower.set(key, t);
+  }
+  for (const t of types) {
+    if (!t.parentMetadataId) continue;
+    const arr = childrenByParentId.get(t.parentMetadataId) ?? [];
+    arr.push(t);
+    childrenByParentId.set(t.parentMetadataId, arr);
+  }
+  return { byNameLower, childrenByParentId };
+}
+
+// Returnerar barnen för en grupp-förälder (matchad på namn). Tom lista om namnet
+// inte finns eller saknar barn (= bladfält, ingen grupp).
+export function getMetadataGroupChildren(
+  parentNamn: string | null | undefined,
+  index: MetadataGroupIndex,
+): MetadataKatalog[] {
+  if (!parentNamn) return [];
+  const parent = index.byNameLower.get(parentNamn.toLowerCase());
+  if (!parent) return [];
+  return index.childrenByParentId.get(parent.id) ?? [];
+}
+
+// Sant om namnet är en grupp-förälder (har minst ett barn).
+export function isMetadataGroupField(
+  namn: string | null | undefined,
+  index: MetadataGroupIndex,
+): boolean {
+  return getMetadataGroupChildren(namn, index).length > 0;
+}
+
+// Expanderar artikel-metadatarader (Visa/Lämna). En rad vars metadataField är en
+// grupp-förälder ersätts av EN rad per barn (ärver övriga fält: canUpdate/required/
+// clarification/instruction). Bladfält (inkl. okända namn) lämnas orörda. Föräldern
+// släpps alltid ur resultatet → bär aldrig värde. Dedupar på resultatets
+// metadataField (case-insensitivt, första vinner) så ett barn aldrig dubblas även
+// om det valts både direkt och via sin grupp.
+export function expandArticleMetadataRows<T extends { metadataField?: string | null }>(
+  rows: T[] | null | undefined,
+  index: MetadataGroupIndex,
+): Array<Omit<T, "metadataField"> & { metadataField: string; groupField: string | null }> {
+  const out: Array<Omit<T, "metadataField"> & { metadataField: string; groupField: string | null }> = [];
+  if (!Array.isArray(rows)) return out;
+  const seen = new Set<string>();
+  for (const row of rows) {
+    const field = row?.metadataField;
+    if (!field) continue;
+    const children = getMetadataGroupChildren(field, index);
+    if (children.length > 0) {
+      for (const child of children) {
+        const key = child.namn.toLowerCase();
+        if (seen.has(key)) continue;
+        seen.add(key);
+        out.push({ ...(row as object), metadataField: child.namn, groupField: field } as any);
+      }
+    } else {
+      const key = field.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push({ ...(row as object), metadataField: field, groupField: null } as any);
+    }
+  }
+  return out;
+}
+
 // Validerar ett föreslaget överordnat metadata-fält (Task #662). Returnerar ett
 // svenskt felmeddelande om kopplingen är ogiltig, annars null. Tillämpar samma
 // invariant på alla skriv-ytor: ingen självreferens, föräldern måste finnas i
@@ -4117,6 +4206,9 @@ export async function findMissingRequiredLeaveMetadata(
 ): Promise<string[]> {
   const missing: string[] = [];
   const seen = new Set<string>();
+  // Grupp-expansion (Alt B): en leave-rad som pekar på en grupp-förälder expanderas
+  // till sina barn — kravet gäller då varje barnfält. Laddas en gång per anrop.
+  const groupIndex = buildMetadataGroupIndex(await getAllMetadataTypes(tenantId));
   // Ett obligatoriskt fält uppfylls om värdet skickats med (providedValues) ELLER
   // redan finns på objektet. Dedupas per kod (namn) så samma fält aldrig dubblas.
   const checkRequired = async (code: string): Promise<void> => {
@@ -4143,11 +4235,12 @@ export async function findMissingRequiredLeaveMetadata(
       }
     }
     // Ny modell: leaveMetadataFields med required=true kräver ett manuellt värde.
+    // Grupp-förälder expanderas till barn (required ärvs ned till varje barn).
     const leaveRows = Array.isArray(article.leaveMetadataFields)
       ? (article.leaveMetadataFields as Array<{ metadataField?: string; required?: boolean }>)
       : [];
-    for (const row of leaveRows) {
-      if (!row?.required || !row.metadataField) continue;
+    for (const row of expandArticleMetadataRows(leaveRows, groupIndex)) {
+      if (!row.required || !row.metadataField) continue;
       await checkRequired(row.metadataField);
     }
   }
@@ -4167,6 +4260,9 @@ export async function writeProvidedLeaveMetadataFields(
 ): Promise<void> {
   if (!providedValues || Object.keys(providedValues).length === 0) return;
   const written = new Set<string>();
+  // Grupp-expansion (Alt B): en leave-rad som pekar på en grupp-förälder skriver
+  // tillbaka varje barnfält separat (föräldern bär aldrig värde).
+  const groupIndex = buildMetadataGroupIndex(await getAllMetadataTypes(tenantId));
   for (const line of lines) {
     if (!line.articleId) continue;
     const article = await db.query.articles.findFirst({
@@ -4175,8 +4271,8 @@ export async function writeProvidedLeaveMetadataFields(
     const leaveRows = Array.isArray(article?.leaveMetadataFields)
       ? (article!.leaveMetadataFields as Array<{ metadataField?: string }>)
       : [];
-    for (const row of leaveRows) {
-      const field = row?.metadataField;
+    for (const row of expandArticleMetadataRows(leaveRows, groupIndex)) {
+      const field = row.metadataField;
       if (!field || written.has(field)) continue;
       const provided = providedValues[field];
       if (provided === undefined || String(provided).trim() === "") continue;
