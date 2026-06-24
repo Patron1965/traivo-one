@@ -10,6 +10,7 @@ import { ObjectHistoryArchiveTab } from "@/components/ObjectHistoryArchiveTab";
 import { ObjectVignetteSection } from "@/components/ObjectVignetteSection";
 import { ObjectMetadataForm, type MetadataFormEntry, type MetadataFormType, type MetadataRelatedParent, type MetadataRelatedChild } from "@/components/ObjectMetadataForm";
 import { ObjectTemplateMetadataForm, type TemplateMetadataType } from "@/components/ObjectTemplateMetadataForm";
+import { ObjectSystemGeneratedPanel } from "@/components/ObjectSystemGeneratedPanel";
 import { ObjectTimeline } from "@/components/timeline/ObjectTimeline";
 import InvoiceRecipientsCard from "@/components/InvoiceRecipientsCard";
 import ObjectPayersCard from "@/components/ObjectPayersCard";
@@ -2037,6 +2038,20 @@ export default function ObjectDetailPage() {
               ) : null;
             return (
               <div className="space-y-4">
+                {/* Task #1085: Systemgenererad metadata — read-only fält som
+                    härleds live (inpekade orderkoncept, kopplade uppgifter,
+                    adress, position, bilder, felanmälningar, betyg). */}
+                <Card data-testid="card-system-generated-metadata">
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-base flex items-center gap-2">
+                      <Cog className="h-4 w-4" /> Systemgenererad metadata
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <ObjectSystemGeneratedPanel objectId={objectId} />
+                  </CardContent>
+                </Card>
+
                 {canUseTemplates && importTemplates.length > 0 && (
                   <Card>
                     <CardContent className="flex flex-col gap-2 py-4 sm:flex-row sm:items-center sm:justify-between">

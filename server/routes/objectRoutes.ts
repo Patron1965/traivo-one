@@ -25,6 +25,7 @@ import {
   mergeDuplicateObjects,
   DuplicateMergeOwnershipError,
 } from "../services/object-duplicates";
+import { getObjectSystemGeneratedMetadata } from "../services/object-system-metadata";
 
 type ServiceObject = Awaited<ReturnType<typeof storage.getObjects>>[number];
 
@@ -472,6 +473,19 @@ app.get("/api/objects/:id/parents", asyncHandler(async (req, res) => {
   }
   const parents = await storage.getObjectParents(req.params.id);
   res.json(parents);
+}));
+
+// Task #1085: Systemgenererad metadata för objektet — read-only fält som
+// härleds live (inpekade orderkoncept, kopplade uppgifter historik/kommande,
+// adress, geokodad position, bilder, felanmälningar, betyg). Inget fabriceras.
+app.get("/api/objects/:id/system-generated-metadata", asyncHandler(async (req, res) => {
+  const tenantId = getTenantIdWithFallback(req);
+  const existing = await storage.getObject(req.params.id);
+  if (!verifyTenantOwnership(existing, tenantId)) {
+    throw new NotFoundError("Objekt");
+  }
+  const data = await getObjectSystemGeneratedMetadata(tenantId, req.params.id);
+  res.json(data);
 }));
 
 app.post("/api/objects/:id/parents", asyncHandler(async (req, res) => {
