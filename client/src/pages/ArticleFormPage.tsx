@@ -2485,7 +2485,7 @@ export default function ArticleFormPage() {
                           <SelectItem value="_none">Välj fält</SelectItem>
                           {metadataLabels.map((ml) => (
                             <SelectItem key={ml.id} value={ml.beteckning || ml.namn}>
-                              {ml.beteckning ? `${ml.beteckning} — ${ml.namn}` : ml.namn}
+                              {ml.namn}
                             </SelectItem>
                           ))}
                         </SelectContent>
@@ -2552,7 +2552,7 @@ export default function ArticleFormPage() {
                     <SelectItem value="_none">Välj fält</SelectItem>
                     {metadataLabels.map((ml) => (
                       <SelectItem key={ml.id} value={ml.beteckning || ml.namn}>
-                        {ml.beteckning ? `${ml.beteckning} — ${ml.namn}` : ml.namn}
+                        {ml.namn}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -2706,7 +2706,7 @@ export default function ArticleFormPage() {
                         <SelectItem value="_none">Välj metadatafält</SelectItem>
                         {metadataTypes.map((t) => (
                           <SelectItem key={t.id} value={t.namn}>
-                            {t.namn} ({t.datatyp})
+                            {t.namn}
                           </SelectItem>
                         ))}
                       </SelectContent>
@@ -2871,7 +2871,7 @@ export default function ArticleFormPage() {
                     <SelectItem value="_none">Ingen</SelectItem>
                     {metadataTypes.map((t) => (
                       <SelectItem key={t.id} value={t.namn}>
-                        {t.namn} ({t.datatyp})
+                        {t.namn}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -2901,7 +2901,7 @@ export default function ArticleFormPage() {
                     <SelectItem value="_none">Ingen</SelectItem>
                     {metadataTypes.map((t) => (
                       <SelectItem key={t.id} value={t.namn}>
-                        {t.namn} ({t.datatyp})
+                        {t.namn}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -2958,7 +2958,7 @@ export default function ArticleFormPage() {
                     <SelectItem value="_none">Ingen</SelectItem>
                     {metadataLabels.map((ml) => (
                       <SelectItem key={ml.id} value={ml.beteckning || ml.namn}>
-                        {ml.beteckning ? `${ml.beteckning} — ${ml.namn}` : ml.namn}
+                        {ml.namn}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -3009,7 +3009,7 @@ export default function ArticleFormPage() {
                       <SelectItem value="_none">Samma som hämta-etikett</SelectItem>
                       {metadataLabels.map((ml) => (
                         <SelectItem key={ml.id} value={ml.beteckning || ml.namn}>
-                          {ml.beteckning ? `${ml.beteckning} — ${ml.namn}` : ml.namn}
+                          {ml.namn}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -3145,7 +3145,7 @@ export default function ArticleFormPage() {
                           <SelectItem value="_none">Inget metadatafält</SelectItem>
                           {metadataTypes.map((t) => (
                             <SelectItem key={t.id} value={t.namn}>
-                              {t.namn} ({t.datatyp})
+                              {t.namn}
                             </SelectItem>
                           ))}
                         </SelectContent>
