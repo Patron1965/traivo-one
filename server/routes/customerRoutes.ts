@@ -568,7 +568,36 @@ app.get("/api/objects", asyncHandler(async (req, res) => {
   }
   const hasConditions = conditions.length > 0;
 
-  const hasFilters = objectType || hierarchyLevel || interim || issue || clusterIdFilter || reported || locationType;
+  // Task #1083: sök på kopplade uppgifter. Kunden härleds via order/koncept
+  // (work_orders.customer_id) — INTE via objektets primär-payer. Ogiltiga datum
+  // ignoreras (tolereras som "ingen gräns"). Tidsperioden gäller utförd-datum
+  // (completed_at). taskCompletedTo tolkas inklusive hela dygnet om endast datum
+  // skickas (lägg på 23:59:59.999 när tiden saknas).
+  const taskTypeParam = (req.query.taskType as string)?.trim() || undefined;
+  const taskCustomerIdParam = (req.query.taskCustomerId as string)?.trim() || undefined;
+  const parseDateParam = (raw: unknown, endOfDay = false): Date | undefined => {
+    if (typeof raw !== "string" || !raw.trim()) return undefined;
+    const value = raw.trim();
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return undefined;
+    // Rent datum (YYYY-MM-DD) utan tid → sträck till dygnets slut för "till och med".
+    if (endOfDay && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
+      d.setHours(23, 59, 59, 999);
+    }
+    return d;
+  };
+  const taskCompletedFrom = parseDateParam(req.query.taskCompletedFrom);
+  const taskCompletedTo = parseDateParam(req.query.taskCompletedTo, true);
+  const linkedTask = (taskTypeParam || taskCustomerIdParam || taskCompletedFrom || taskCompletedTo)
+    ? {
+        taskType: taskTypeParam,
+        customerId: taskCustomerIdParam,
+        completedFrom: taskCompletedFrom,
+        completedTo: taskCompletedTo,
+      }
+    : undefined;
+
+  const hasFilters = objectType || hierarchyLevel || interim || issue || clusterIdFilter || reported || locationType || linkedTask;
   const paginated = req.query.paginated === "true";
 
   // Task #552 (A): Berika listsvar med composed displayName så att alla konsumenter
@@ -586,7 +615,7 @@ app.get("/api/objects", asyncHandler(async (req, res) => {
   };
 
   if (paginated || req.query.limit || req.query.offset || req.query.search || req.query.customerId || noCluster || hasFilters || hasConditions) {
-    const filters = hasFilters ? { objectType, hierarchyLevel, isInterimObject: interim === "true" ? true : interim === "false" ? false : undefined, issue, clusterId: clusterIdFilter, reported: reported || undefined, locationType } : undefined;
+    const filters = hasFilters ? { objectType, hierarchyLevel, isInterimObject: interim === "true" ? true : interim === "false" ? false : undefined, issue, clusterId: clusterIdFilter, reported: reported || undefined, locationType, linkedTask } : undefined;
 
     if (hasConditions) {
       // Villkorsfilter: hämta alla bas-filtrerade objekt, kör den DELADE

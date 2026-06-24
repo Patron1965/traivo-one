@@ -166,6 +166,16 @@ export default function ObjectsPage() {
   const setLocationTypeFilter = (v: string) => { setLocationTypeFilterRaw(v); setCurrentPage(0); };
   const [reportedFilter, setReportedFilterRaw] = useState(false);
   const setReportedFilter = (v: boolean) => { setReportedFilterRaw(v); setCurrentPage(0); };
+  // Task #1083: sök på kopplade uppgifter (uppgiftstyp / order-kund / utförd tidsperiod).
+  const [taskTypeFilter, setTaskTypeFilterRaw] = useState<string>("all");
+  const setTaskTypeFilter = (v: string) => { setTaskTypeFilterRaw(v); setCurrentPage(0); };
+  const [taskCustomerFilter, setTaskCustomerFilterRaw] = useState<string | null>(null);
+  const setTaskCustomerFilter = (v: string | null) => { setTaskCustomerFilterRaw(v); setCurrentPage(0); };
+  const [taskCompletedFrom, setTaskCompletedFromRaw] = useState<string>("");
+  const setTaskCompletedFrom = (v: string) => { setTaskCompletedFromRaw(v); setCurrentPage(0); };
+  const [taskCompletedTo, setTaskCompletedToRaw] = useState<string>("");
+  const setTaskCompletedTo = (v: string) => { setTaskCompletedToRaw(v); setCurrentPage(0); };
+  const hasLinkedTaskFilter = taskTypeFilter !== "all" || !!taskCustomerFilter || !!taskCompletedFrom || !!taskCompletedTo;
   const [interimFilter, setInterimFilter] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const toggleSelected = useCallback((id: string) => {
@@ -267,8 +277,13 @@ export default function ObjectsPage() {
     queryKey: ["/api/metadata-definitions"],
   });
 
+  // Task #1083: uppgiftstyper för "sök på kopplade uppgifter"-filtret.
+  const { data: taskTypeOptions = [] } = useQuery<{ key: string; label: string }[]>({
+    queryKey: ["/api/reference/task-types"],
+  });
+
   const { data: objectsData, isLoading, isError: objectsIsError, error: objectsError, refetch: objectsRefetch } = useQuery<{ objects: ServiceObject[]; total: number }>({
-    queryKey: ["/api/objects", "paginated", currentPage, debouncedSearch, customerFilter, JSON.stringify(activeConditions), clusterFilter, reportedFilter, interimFilter, issueFilter, locationTypeFilter],
+    queryKey: ["/api/objects", "paginated", currentPage, debouncedSearch, customerFilter, JSON.stringify(activeConditions), clusterFilter, reportedFilter, interimFilter, issueFilter, locationTypeFilter, taskTypeFilter, taskCustomerFilter, taskCompletedFrom, taskCompletedTo],
     queryFn: async () => {
       const params = new URLSearchParams({
         limit: PAGE_SIZE.toString(),
@@ -297,6 +312,18 @@ export default function ObjectsPage() {
       }
       if (issueFilter) {
         params.append("issue", issueFilter);
+      }
+      if (taskTypeFilter !== "all") {
+        params.append("taskType", taskTypeFilter);
+      }
+      if (taskCustomerFilter) {
+        params.append("taskCustomerId", taskCustomerFilter);
+      }
+      if (taskCompletedFrom) {
+        params.append("taskCompletedFrom", taskCompletedFrom);
+      }
+      if (taskCompletedTo) {
+        params.append("taskCompletedTo", taskCompletedTo);
       }
       const res = await fetch(`/api/objects?${params.toString()}`, { credentials: "include" });
       if (!res.ok) throw new Error("Failed to fetch objects");
@@ -873,7 +900,8 @@ export default function ObjectsPage() {
     interimFilter ? 1 : 0,
     issueFilter ? 1 : 0,
     locationTypeFilter !== "all" ? 1 : 0,
-  ].reduce((a, b) => a + b, 0), [activeConditions, customerFilter, reportedFilter, interimFilter, issueFilter, locationTypeFilter]);
+    hasLinkedTaskFilter ? 1 : 0,
+  ].reduce((a, b) => a + b, 0), [activeConditions, customerFilter, reportedFilter, interimFilter, issueFilter, locationTypeFilter, hasLinkedTaskFilter]);
 
   const clearAllFilters = () => {
     setConditionFilters([]);
@@ -883,6 +911,10 @@ export default function ObjectsPage() {
     setInterimFilter(false);
     setIssueFilter(null);
     setLocationTypeFilter("all");
+    setTaskTypeFilter("all");
+    setTaskCustomerFilter(null);
+    setTaskCompletedFrom("");
+    setTaskCompletedTo("");
     window.history.replaceState({}, "", window.location.pathname);
   };
 
@@ -1825,6 +1857,30 @@ export default function ObjectsPage() {
                   <X className="h-3 w-3" />
                 </Badge>
               )}
+              {taskTypeFilter !== "all" && (
+                <Badge variant="secondary" className="gap-1 cursor-pointer" onClick={() => setTaskTypeFilter("all")} data-testid="badge-filter-task-type">
+                  Uppgiftstyp: {taskTypeOptions.find(t => t.key === taskTypeFilter)?.label ?? taskTypeFilter}
+                  <X className="h-3 w-3" />
+                </Badge>
+              )}
+              {taskCustomerFilter && (
+                <Badge variant="secondary" className="gap-1 cursor-pointer" onClick={() => setTaskCustomerFilter(null)} data-testid="badge-filter-task-customer">
+                  Uppgiftskund vald
+                  <X className="h-3 w-3" />
+                </Badge>
+              )}
+              {taskCompletedFrom && (
+                <Badge variant="secondary" className="gap-1 cursor-pointer" onClick={() => setTaskCompletedFrom("")} data-testid="badge-filter-task-from">
+                  Utförd fr.o.m. {taskCompletedFrom}
+                  <X className="h-3 w-3" />
+                </Badge>
+              )}
+              {taskCompletedTo && (
+                <Badge variant="secondary" className="gap-1 cursor-pointer" onClick={() => setTaskCompletedTo("")} data-testid="badge-filter-task-to">
+                  Utförd t.o.m. {taskCompletedTo}
+                  <X className="h-3 w-3" />
+                </Badge>
+              )}
             </div>
           )}
         </CardHeader>
@@ -1882,6 +1938,75 @@ export default function ObjectsPage() {
                 emptyText="Inga villkor — alla objekt visas."
                 addTestId="button-add-condition-object"
               />
+            </div>
+            {/* Task #1083: sök på kopplade uppgifter (uppgiftstyp / kund / utförd tidsperiod). */}
+            <div className="space-y-2">
+              <Label className="text-sm flex items-center gap-1.5">
+                <Clock className="h-3.5 w-3.5" /> Kopplade uppgifter
+              </Label>
+              <p className="text-xs text-muted-foreground">
+                Visa objekt med utförda uppgifter — filtrera på uppgiftstyp, kund (order-/faktureringskund) och utförd tidsperiod.
+              </p>
+              <div className="flex items-end gap-4 flex-wrap">
+                <div className="space-y-1">
+                  <Label className="text-xs text-muted-foreground">Uppgiftstyp</Label>
+                  <Select value={taskTypeFilter} onValueChange={setTaskTypeFilter}>
+                    <SelectTrigger className="w-[180px]" data-testid="select-task-type-filter">
+                      <SelectValue placeholder="Alla uppgiftstyper" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Alla uppgiftstyper</SelectItem>
+                      {taskTypeOptions.map((t) => (
+                        <SelectItem key={t.key} value={t.key} data-testid={`option-task-type-${t.key}`}>
+                          {t.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs text-muted-foreground">Kund</Label>
+                  <CustomerCombobox
+                    value={taskCustomerFilter}
+                    onChange={(id) => setTaskCustomerFilter(id)}
+                    placeholder="Alla kunder"
+                    className="w-[200px]"
+                    testId="select-task-customer-filter"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs text-muted-foreground">Utförd fr.o.m.</Label>
+                  <Input
+                    type="date"
+                    value={taskCompletedFrom}
+                    onChange={(e) => setTaskCompletedFrom(e.target.value)}
+                    className="w-[160px]"
+                    data-testid="input-task-completed-from"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs text-muted-foreground">Utförd t.o.m.</Label>
+                  <Input
+                    type="date"
+                    value={taskCompletedTo}
+                    onChange={(e) => setTaskCompletedTo(e.target.value)}
+                    className="w-[160px]"
+                    data-testid="input-task-completed-to"
+                  />
+                </div>
+                {hasLinkedTaskFilter && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="gap-1 text-muted-foreground"
+                    onClick={() => { setTaskTypeFilter("all"); setTaskCustomerFilter(null); setTaskCompletedFrom(""); setTaskCompletedTo(""); }}
+                    data-testid="button-clear-linked-task-filter"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                    Rensa
+                  </Button>
+                )}
+              </div>
             </div>
           </CardContent>
         )}
