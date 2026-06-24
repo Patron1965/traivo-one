@@ -628,28 +628,29 @@ app.get("/api/objects", asyncHandler(async (req, res) => {
 
 app.get("/api/objects/tree", asyncHandler(async (req, res) => {
   const tenantId = getTenantIdWithFallback(req);
-  const { customerId, search, parentId } = req.query;
+  const { customerId, search, parentId, flat } = req.query;
   const searchStr = typeof search === "string" ? search.trim() : "";
   const customerStr = typeof customerId === "string" && customerId.trim() ? customerId.trim() : null;
+  const flatRequested = flat === "true" || flat === "1";
 
-  // Platt, sökbar lista för "Välj överordnat objekt"-väljaren. Aktiveras när det
-  // finns en fritextsökning ELLER ett kund-förfilter. Kund-förfiltret begränsar
-  // resultatet till kundens primär-payer-objekt (object_payers, ADR v3 — inte
-  // legacy objects.customer_id) så att mycket stora datamängder kan smalnas av;
-  // utan sökterm returneras då hela kundens objektlista. Bakåtkompatibelt:
-  // tidigare anropare skickade bara `search` (utan customerId) och får exakt
-  // samma resultat som förut.
-  if (searchStr.length > 0 || customerStr) {
-    // Defense-in-depth: verifiera att kund-förfiltret pekar på en kund i denna
-    // tenant. Objektsökningen är redan tenant-scopad (objects.tenantId), men en
-    // främmande/ogiltig customerId ska ge tomt resultat — inte tyst falla tillbaka
-    // till osökt scope eller läcka via korrupta object_payers-referenser.
-    if (customerStr) {
-      const customer = await storage.getCustomer(customerStr);
-      if (!verifyTenantOwnership(customer, tenantId)) {
-        return res.json([]);
-      }
+  // Defense-in-depth: verifiera att ett kund-förfilter pekar på en kund i denna
+  // tenant. Objektfrågorna nedan är redan tenant-scopade (objects.tenantId), men en
+  // främmande/ogiltig customerId ska ge tomt resultat — inte tyst falla tillbaka
+  // till osökt scope eller läcka via korrupta object_payers-referenser.
+  if (customerStr) {
+    const customer = await storage.getCustomer(customerStr);
+    if (!verifyTenantOwnership(customer, tenantId)) {
+      return res.json([]);
     }
+  }
+
+  // Platt, sökbar lista för "Välj överordnat objekt"-väljaren. Aktiveras av en
+  // fritextsökning (alla anropare — sök har alltid gett en platt lista) ELLER av en
+  // explicit flat=true tillsammans med ett kund-förfilter (väljarens kund-scope-läge
+  // som listar HELA kundens primär-payer-objekt platt, på alla nivåer). Ett
+  // customerId UTAN flat=true behåller den hierarkiska träd-nivå-vyn (med riktig
+  // childCount) som andra konsumenter förlitar sig på — annars bryts objektträdet.
+  if (searchStr.length > 0 || (flatRequested && customerStr)) {
     const conditions = [
       eq(objects.tenantId, tenantId),
       isNull(objects.deletedAt),
@@ -703,7 +704,7 @@ app.get("/api/objects/tree", asyncHandler(async (req, res) => {
 
   const nodes = await getObjectTreeLevel(tenantId, {
     parentId: typeof parentId === "string" ? parentId : null,
-    customerId: null,
+    customerId: customerStr,
   });
   res.json(nodes);
 }));

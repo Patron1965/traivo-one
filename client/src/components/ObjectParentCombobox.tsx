@@ -95,6 +95,10 @@ export function ObjectParentCombobox({
     queryKey: ["/api/objects/tree", "parent-search", customerId ?? "", debounced],
     queryFn: async () => {
       const params = new URLSearchParams();
+      // Väljaren vill alltid ha en platt, valbar lista (alla nivåer) — inte
+      // träd-nivå-noder. flat=true aktiverar serverns platta gren även för rena
+      // kund-förfilter utan sökterm; customerId utan flat=true ger hierarkisk träd-vy.
+      params.set("flat", "true");
       if (debounced.trim()) params.set("search", debounced.trim());
       if (customerId) params.set("customerId", customerId);
       const res = await fetch(versionedUrl(`/api/objects/tree?${params.toString()}`), { credentials: "include" });

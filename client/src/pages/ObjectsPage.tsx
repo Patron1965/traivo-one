@@ -2796,12 +2796,16 @@ Fastighet A,FAST-100,fastighet,Storgatan 1,Stockholm,code,1234"
           </DialogHeader>
           {(() => {
             const editingFull = objects.find((o) => o.id === editForm.id);
-            const editParentLabel = editForm.parentId
+            const derivedParentLabel = editForm.parentId
               ? (() => {
                   const p = objects.find((o) => o.id === editForm.parentId);
                   return (p as any)?.displayName || p?.name || p?.objectNumber || "";
                 })()
               : "";
+            // Föredra namnet på den parent som valts via väljaren (editParentName)
+            // — även en som hittats via sök/kund-förfilter och saknas i listan —
+            // så att både triggern och Släktnamn-fältet visar samma sak.
+            const editParentLabel = editParentName ?? derivedParentLabel;
             return (
           <div className="space-y-5">
             {/* Fasta systemfält */}
@@ -2832,7 +2836,7 @@ Fastighet A,FAST-100,fastighet,Storgatan 1,Stockholm,code,1234"
               <Label>Överordnat objekt</Label>
               <ObjectParentCombobox
                 value={editForm.parentId}
-                valueLabel={editParentName ?? editParentLabel}
+                valueLabel={editParentLabel}
                 excludeId={editForm.id}
                 onChange={(id, opt) => {
                   setEditForm({ ...editForm, parentId: id });
