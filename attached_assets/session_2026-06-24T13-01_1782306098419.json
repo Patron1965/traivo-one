@@ -1,0 +1,212 @@
+{
+  "sessionId": "15af24c48e",
+  "exportedAt": "2026-06-24T13:01:15.215Z",
+  "summary": "### Key Topics Discussed\n- Test av systemet, specifikt flödesgången för logiska steg.\n- Säkerställa förmågan att skapa objekt och koppla metadata från en fil.\n- Bekräfta förmågan att uppdatera befintliga objekt med ny eller kompletterande metadata via en fil, inklusive att lägga till nya kontaktpersoner.\n- Definiera nödvändiga metadatafält för korrekt matchning (t.ex. kontaktpersoner och antal kärl).\n- Importera kunddata från Fortnox.\n- Nästa steg efter att objekt, kunder och metadata definieras.\n- Upprättande av artiklar, inklusive generella och kundunika artiklar, med möjlighet till justering av pris.\n- Skapande av orderkoncept för specifika uppgifter som kundvagnsgarage, pantkärl och matavfallskärl.\n- Testning av hur olika ordertyper och tidsfönster interagerar med orderkoncepten.\n- Hantering av abonnemang och återkommande tvättar, inklusive intervalldata och tidsfönster över längre perioder (t.ex. fyra år).\n- Strategier för att strukturera orderkoncept för olika typer av återkommande uppdrag (t.ex. matavfallskärl kontra övriga kärl).\n- Hantering av tidsfönster för olika frekvenser av kärltvättar på samma plats.\n- Verifiering att orderkonceptet korrekt genererar uppgifter baserat på objektdata (t.ex. antal kärl).\n- Kontrollera att objektets adress/plats och metadata hämtas korrekt för uppgiften.\n- Säkerställa korrekt hantering av flera överlappande tidsfönster enligt definierad logik.\n- Test av grovplanering baserad på geografi och utförandekod för en lista med uppgifter.\n- Prioritering av uppdrag baserat på restid och geografisk närhet när flera uppgifter är möjlighet.\n- Optimera rutter för att minimera restiden, även när olika kärl töms olika dagar.\n- Överbokning av produktionstimmar i grovplaneringen för att nå uppsatta mål (t.ex. 28 timmar).\n- Finplaneringens automatiska sorteringsfunktion för att fylla veckan med jobb.\n- Bokning av egentid i schemaläggningsfunktionen för att säkerställa korrekt tillgänglighet.\n- Ruttoptimering baserad på var föraren avslutar sin vila och startar nästa pass.\n- Visa den planerade veckan i förarappen, inklusive vägledning till uppgifter i rätt ordning.\n- Hantering av beroendeuppgifter.\n- Funktioner i förarappen för att se, justera metadata, lägga till foton och slutföra uppgifter.\n- Hantering av fakturasperr och sortering av slutförda uppgifter för fakturering baserat på fakturareferens.\n- Specifikation av faktureringsprocessen: sortera utförda uppgifter efter kund och fakturareferens, markera relevanta uppgifter och skicka för fakturering via Fortnox, där varje uppgift blir en rad på fakturan med kunden som fakturamottagare.\n\n### Decisions Made\n- Systemtestet kommer att genomföras med fokus på att följa flödet.\n\n### Action Items\n- Tanka in objekt i systemet, med en begränsad mängd metadata först.\n- Använda butikslistor från Axfood för geografiskt spridda butiker i Sverige.\n- Använda listor från Svenska Bostäder för mer lokala objekt.\n- Testa att komplettera metadata som ett nästa steg efter att objekten är intankade, inklusive att uppdatera med nya kontaktpersoner.\n- Parallellt definiera de metadatafält som behövs för matchningsfunktionen.\n- Sätta upp kunder manuellt initialt om Fortnox API-integration inte är klar.\n- Skapa minst en kundunik prislista kopplad till kunden för en eller flera artiklar när en kund sätts upp manuellt.\n- Sätta upp artiklar som letar efter specifika objekt (t.ex. pantkärl, kundvagnsgarage) för Axfood.\n- Skapa orderkoncept för kundvagnsgarage, pantkärl och matavfallskärl för att generera uppgifter.\n- Testa orderkoncepten i en enkel order för att se hur de skapar uppgifter och hanterar ordervolymen.\n- Testa olika ordertyper och deras reaktion med olika tidsfönster.\n- Lägga upp ett abonnemang och testa systemets förmåga att hantera återkommande tvättjobb med jämna mellanrum.\n- Testa abonnemangshantering för komplexa scenarier som Svenska Bostäder med tvättar som återkommer i specifika tidsfönster under en fyraårsperiod (t.ex. matavfallskärl varannan månad och andra uppdrag för övriga kärl).\n- Testa att tidsfönstren för kärltvättar med olika frekvenser på samma plats blir korrekta.\n- Dubbelkolla att orderkonceptet hämtar korrekt antal uppgifter, t.ex. att tio pantkärl resulterar i tio tvättuppgifter.\n- Testa att uppgifterna hämtar korrekt adress/plats från objektet och den relevanta metadatan.\n- Testa att systemet hanterar flera överlappande tidsfönster korrekt enligt den definierade logiken.\n- Testa grovplaneringsfunktionen för en lista av uppgifter baserad på geografi och utförandekod.\n- Markera jobb i grovplaneringen för att överföra till finplaneringen, med målet att nå cirka 28-30 produktionstimmar per vecka.\n- Testa den automatiska sorteringsfunktionen i finplaneringen för att fylla veckan med de nyligen överförda jobben.\n- Testa schemaläggningsfunktionen där utföraren bokar upp egentid, för att bekräfta att systemet korrekt identifierar tillgänglig tid.\n- Testa att visa den planerade veckan i förarappen och vägledning till uppgifterna i rätt ordning.\n- Testa att uppgifter visas i förarappen och att dessa kan kvitteras.\n- Testa funktioner i förarappen för att justera antal, ändra metadata, lägga till foton och klarmarkera uppgifter.\n- Testa fakturasperrfunktionen och sortering av uppgifter för fakturering baserat på fakturareferens.\n\n### Important Points & Insights\n- Testet kommer att inledas med att tanka in objekt med endast ett begränsat antal metadatauppgifter.\n- Nästa steg är att testa komplettering av metadata, inklusive att lägga till nya metadatafält eller uppdatera befintliga, såsom kontaktuppgifter eller antal kärl.\n- Parallellt med metadatauppdatering ska nödvändiga metadatafält definieras för att säkerställa att information som kontaktpersoner och antal hamnar på rätt ställe.\n- En API-integration med Fortnox för kunddata är önskvärd, men manuell inmatning kan vara nödvändig initialt.\n- Artiklar kan sättas upp som generella eller kundunika, med möjlighet att justera priset baserat på kundspecifik prissättning.\n- Orderkoncepten bör vara högupplösta för att skapa specifika uppgifter, t.ex. per typ av utrustning (kundvagnsgarage, pantkärl, matavfallskärl).\n- Det är viktigt att testa hur orderkoncepten bygger upp ordervolymer och skapar uppgifter vid användning i en enkel order.\n- Systemet måste klara av att hantera återkommande abonnemangstjänster (t.ex. tvättar) med specificerade intervall och tidsfönster, även över längre perioder.\n- För komplexa kunder med olika tvättbehov kan man antingen skapa ett orderkoncept som innehåller flera uppgiftstyper eller separata orderkoncept för varje specifik uppgift (t.ex. ett för matavfallskärl och ett för övriga kärl).\n- Det är viktigt att säkerställa att tidsfönster är korrekta när olika kärltyper på samma plats ska tvättas med olika frekvens (t.ex. vissa en gång per år, andra sex gånger per år).\n- Det mest basala testet är att orderkonceptet genererar rätt antal uppgifter baserat på objektets metadata, till exempel att tio pantkärl ska generera tio tvättuppgifter.\n- Det är viktigt att uppgiften hämtar adressen eller platsen från objektet och eventuell kopplad metadata.\n- Hantering av flera överlappande tidsfönster enligt logiken är en kritisk del.\n- Grovplanering baserad på geografi och utförandekod för listor av uppgifter är nästa teststeg.\n- Systemet ska kunna prioritera och klumpa ihop jobb för att välja det mest fördelaktiga alternativet, primärt baserat på restid och geografisk närhet, även om det innebär att man åker till en plats en annan dag än tömningsdagen för vissa kärl.\n- Grovplaneringen bör möjliggöra sökning av veckor för att uppnå ett mål av exempelvis 28 produktionstimmar.\n- Överbokning av jobbtimmar i grovplaneringen är önskvärt för att optimera kapaciteten.\n- Jobb överförs från grovplanering till finplanering för en given vecka, med en uppskattad volym på 28-30 timmar.\n- Finplaneringen ska ha en automatisk sorteringsknapp för att fylla veckan med de överförda jobben.\n- Schemaläggningsfunktionen där utföraren bokar egentid måste fungera korrekt för att systemet ska kunna förstå när det finns ledig tid för planering.\n- Ruttoptimering ska ta hänsyn till förarens startpunkt (där veckovila/helgvila avslutats) och beräkna optimal rutt för första jobbet och subsequent job som Södertälje.\n- Förarappen ska visa den planerade veckan och ge vägledning till uppgifterna i rätt ordning, även när det är flera uppgifter på samma adress för olika kunder/platser.\n- Hantering av beroendeuppgifter är en viktig funktion, men inte av högsta prioritet just nu.\n- Det viktigaste är att få ut uppgifter på veckan, till förarappen, och kunna kvittera dem.\n- När uppgifterna är i förarappen är det viktigt att kunna justera antal, metadata och lägga till foton, samt att slutföra och klarmarkera uppgiften.\n- Slutförda uppgifter läggs i en kö för fakturering, som kan hantera en fakturasperr. Denna kö sorteras efter fakturareferens, snarare än tid eller geografi, för att gruppera fakturor för samma kund, och varje uppgift blir en rad på fakturan i Fortnox.\n\n### Open Questions/Pending Items\n- Fortnox API-integrationens status och när den kan förväntas vara klar.\n- Hur system ska hantera beroendeuppgifter (ej högsta prioritet).\n- Några specifika ”grejer” som ännu inte är helt definierade gällande faktureringsprocessen.",
+  "conversation": [],
+  "transcripts": [
+    {
+      "text": "Ja, då ska vi gå igenom... Hallå, då ska vi gå igenom, eh, testen utav systemet då. Och det kommer då vara ett antal logiska steg då s-s... för att se flödet. Och det första steget är då, det är att tanka in objekt. Och där kommer vi då att ta fram, eh, vi har Axfood som är en lista på ett antal butiker, geogra-geografiskt spridda med adresser över hela Sverige. Och sedan så har vi då, eh, Svenska Bostäder i stort.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och lite mera lokalt. Eh, i de här listerna så kommer vi i första läget då att tanka in objektena med ett begränsat antal, eh, metadatauppgifter. Sen så nästa steg är att vi då testar att komplettera en metadatauppgift då genom att tanka ut...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Då, eh, objektlistan för till exempel Axfood-butiker i Stockholm, säger vi nu då. Och så går vi då in och lägger till ett metadatafält och, och matchar in den informationen eller skapar ny information på ett metadatafält som redan finns. Och syftet med det då, eh, de här båda stegen, det är ju då att vi ska säkerställa då att nummer ett är att vi kan skapa objekt och hänga på metadata utifrån en fil. Och nummer två är att vi kan tanka ut befintliga objekt för att vid sidan...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Ja. Och då matcha då dem mot en uppdaterad lista. Det kan vara nya kontaktuppgifter eller det kan vara nya antalet kärl eller nya objekt då kopplat till det här. Och då skapar vi alltså en ny fil för intankning då som kompletterar eller förökar då det som redan finns då. Och, och det kan då vara dels att det kommer till ett nytt metadatafält. Eh, säger vi då att, att vi ska tala om, eh, ett metadatafält med tömningstider och sen så ska vi ändra ett befintligt metadatafält med andra.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Tal och så kanske det, eh, ska uppdateras och bli en till kontaktperson då som kommer in då där. Och då ska vi testa att systemet klarar det. Nästa steg är då att vi parallellt med det här naturligtvis då definierar de metadatafält som vi behöver så att när vi, eh, i den här matchningsfunktionen då ska kunna välja rätt metadatafält och så kontaktpersoner kommer på rätt ställe och antal kommer på rätt ställe.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Eh, sen så, eh, skulle vi också då behöva, eh, kontrollera här då att vi kan importera kunddata ifrån, eh, Fortnox då. Eh, men i första skedet här kanske vi får sätta upp kunder manuellt då, eh, och då blir det ju då- Ja, vi måste ju fixa de där API-integrationen först. Ja, och parallellt när vi då sätter upp en kund manuellt så, så ska vi också då skapa åtminstone en kundunik prislista då som vi kopplar till den kunden för en eller flera utav de här artiklarna som vi har, eller?",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Ja, då, då... Och då har vi alltså objekt, vi har kunder och vi har definierat metadata. Nästa steg i det här då blir, eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Nästa steg här, eh, är då att vi, eh, sätter upp ett antal artiklar då som vi definierar då. Så för ax-fot så, så behöver vi då skapa en, eh, en artikel som till exempel letar efter pantkärlen då och kanske kundvagnsgaragerna då. Och sen så sätter vi då ett, eh, ett, eh-- Den kan sättas upp som en ge-generell artikel. Det är också en möjlighet att sätta upp det som en kundunik artikel om vi vill, och vi har möjlighet att justera priset på den utifrån en kundunik prissättning.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. Så det är ju då viktigt att vi, eh, sätter upp en, eh, en artikel som till exempel letar efter pantkärlen då och kanske kundvagnsgaragerna då. Och sen så sätter vi då ett, eh, ett, eh-- Den kan sättas upp som en ge-generell artikel. Det är också en möjlighet att sätta upp det som en kundunik artikel om vi vill, och vi har möjlighet att justera priset på den utifrån en kundunik prissättning. Mm.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Vad är orderkoncepten då för att skapa uppgifter på det här? Och för att göra det då så högupplöst som möjligt, då så skapar vi då ett orderkoncept för till exempel kundvagnsgarage och ett till för pantkärl och kanske för matavfallskärl på svenska bostäder. Och så ska vi då peka in det, eh, antingen på hela klustret och se då att de här hakar fast och att orderkonceptet då byggs upp och att vi får då en, en ordervolym på det vartefter vi då väljer. Och när vi sen kör...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Ja. Orderkonceptet i en enkel order, så ska vi då skapa ett antal uppgifter. Och parallellt när vi då ska-- Kör det här, så behöver vi också då testa de här olika ordertyperna som vi har då. Eh, och det är lite granna hur den reagerar då med olika tidsfönster då.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Eh, som vi, vi, vi, vi lägger in där. Men den mest komplicerade är ju då att lägga upp ett abonnemang och se om systemet då klarar då en tvätt som vi då skapar som ska då återkomma med jämna mellanrum då. Och sen får vi också testa då hur vi lägger upp det här för till exempel familjer-- Eller Svenska Bostäder som är uppe nu. För då har vi alltså vissa tvättar som ska återkomma på vissa tidsfönster under en fyraårsperiod då.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. Eh, det vill säga vissa tvättar ska tvätta bara matavfallskärlen och det ska göras kanske varannan månad. Och sen så har du andra uppdrag då som ska, eh, tvätta övriga kärl då. Och här blir det ju då en, en, en hjälp till självhjälp då eller en lära då hur man gör. Man kan ju naturligtvis skapa ett orderkoncept som håller ihop-- Innehåller flera olika typer utav uppgifter. Men man kan också skapa då ett orderkoncept som, som då blir, eh, matavfallskärlen och sen gör man ett till orderkoncept som är, eh, de andra-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. Kärlen. Och sen så behöver man då hå-- I det här fallet nu då hålla reda på då så att de här tidsfönstren blir rätt då. Så att om vi säger att vissa kärl ska tvättas en gång per år och några andra ska tvättas sex gånger per år, men det är på samma plats då. Så då ska ju de s-- Jobben då har samma tidsfönster då. Mm. Eh, så att de sen då kommer upp på u-uppgiftslistan då, eh, med, med, med rätt information. När vi har gjort det här så blir det också väldigt viktigt att testa nu då att orderkonceptet skapar uppgifter-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. Med rätt information. Det mest basala är ju då att om vi har en uppgift som ska haka, ska haka fast på pantkärl och hämta antalet och så objektet som heter pantkärl, så måste vi då dubbelkolla här då och se att om objektet innehåller tio kärl- Mm. Så ska det ju vara tio uppgifter att tvätta tio kärl då. Mm. Och det sekundära då som den ska hämta med sig, det är att vi måste kolla då att den har hämtat...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Ja. Adressen eller platsen från objektet och att den har hämtat, eh, den metadata som vi har lagt upp på uppgiften som den kanske vill visa då om den finns. Och sen så, eh, kanske det viktigaste utav allt då är att den också ska få med sig då de här tidsfönstrena då som kan vara flera tidsfönster då.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Eh, som överlappar varandra då enligt den logik som vi har. Och när de här då ligger i en lång lista av uppgifter, så ska vi då i nästa steg då under rubriken \"Grovplanering\" då testa baserat då på vilken geografi det här är och hur, eh, n-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och, och vilken utförandekod det är och då, eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Vilken leveranstid då den här, eh, geografi- och datummotorn har klumpat ihop jobben då, så. Så funkar det här rätt i exemplet tidigare då. Så om du har en uppgift att du ska tvätta två matavfallskärl och tio andra kärl under samma tidsperiod och på samma plats och med samma villkor då med parkeringsförbud eller tömningsdatum. Då ska den här motorn då välja ut det som är mest fördelaktigt då. Mm. Och det mest fördelaktiga händer-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. -att du blir då koldrabbad. Det är ju resmässigt då. Mm. Så att...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Vi måste ranka det alltså. Om du har, om du har tio kärl och fem stycken kärl töms på onsdag, vilket innebär att det är bra att komma på torsdag, medan de andra fem kärlen töms på torsdag. Då, då ska vi åka dit på torsdag. Därför att den ligger nära ett annat uppdrag som vi har på torsdag. Kortaste resvägen. Och sen när det här är då i tart, så ska vi då kunna markera för, eh, baserat då på summan utav det här och på, på en, på en geograf",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "il. Så vi kan alltså söka fram en vecka och har vi tur då så får vi ju då en, en vecka som kanske ger då vårt mål som är tjugoåtta produktionstimmar. Eh, men sen ska vi då överboka lite granna här då, så då kanske vi kan hitta något annat jobb då i listan som vi också m-märk-- markerar för och lägger upp, skickar över då på given vecka i finplaneringen då. Och sen när vi går... Då, då, då har vi, då har vi skickat över jobb då, uppskattningsvis då för runt tjugoåtta, trettio timmar som ligger då på finplaneringen.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Nästa steg är då att vi går in i finplaneringen och så ska vi se då om vi med en automatisk sorteringsknapp kan fylla veckan med de här jobben då. Och dessutom så måste vi ju då innan vi gör det, testa av då att schemaläggningsfunktionen där utföraren bokar upp egentid stämmer då så att den vet när det finns tid att lägga in det här. Och går allt då som det ska och det finns fyrtio timmar obokad tid på veckan så kommer ju då de här jobben att sorteras då i, i, i...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Utifrån ruttoptimering då i rätt ordning då. Och avslutar då föraren sin, sin veckovila eller helg vila i Tullinge, då kommer den ju veta att man startar på Tullinge och så har vi kanske lagt ut det första jobbet i Södertälje. Så då kommer den att se då att det är för fem minuters resa till Södertälje och så kommer, kommer då ett jobb komma där och så ruttoptimerar den för att sen då avsluta då. I det fallet så bestämmer man ju då att man inf-- Kör lattvila också i Tullinge då på kvällen och då vet han ja, men då ska jag åka tillbaka till Söd",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "ertälje. Ja, ja, ja. Och då, då är det ju en vecka planerad. Då är det ju en vecka planerad. Då blir nästa steg då att se hur den här veckan har-- Ser ut då i, i, i, eh, förarappen då eller utförarappen. För då ska man ju då kunna gå in på en vecka och så ska man kunna få vägledning då vilken, vilken uppgift du ska åka till då i rätt ordning. Och så ska du kunna å-- Öppna upp uppgiften eller orden eller i klumpen kanske man ska säga då. Så att den kommer ju att säga: \"Åk till Storgatan.\"",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Ja. \"Åk till Storgatan 22, för på Storgatan 22 har du, har du sex stycken uppgifter då.\" Mm. Fördelat på kanske två kunder och två återvinningsrum. Men det vet inte utföraren, utan han ser bara att jag, jag, jag ska dit. Och parallellt också med det här då, när vi då lägger in det, men det är inte högsta prioritet, så måste vi se då hur systemet då ska hantera det som vi kallar beroendeuppgifter då.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. Och med det men, men, men den är inte hög prioritet. Det viktigaste är att vi får ut uppgifterna på veckan och att de ligger på förarappen och att man kan kvittera uppgifterna då. Och när de har kommit ut ur förarappen så blir det ju också viktigt då att man kan se uppgiften, man kan justera antalet, metadatan för antalet. Man kan justera, lägga till foton eller annat för övrig metadata kopplat till uppgiften och berört objekt då. Och att man kan slutföra uppgiften och klarmarkerar den. Det är väl det.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Sen lägger sig då i kö för, eh, fakturering då. Och, och i det läget är ju då uppgiften slutförd och ligger det då den här fakturasperren då som vi pratar om då som man också kan-- Board-konceptet kan lägga in, så kommer ju då den här uppgiften att hamna i en kö då. Mm.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och, och den kön blir ju då-- Är ytterligare en ny sortering- Mm. -för att tidigare har vi då sorterat jobben utifrån tid och geografi. I det här fallet nu blir det då bara att sortera dem utifrån faktura...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Referens. Mm. Så att om Svenska Bostäder vill ha alla fakturor då...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "För ett visst område på en faktura, då, och vi har kryssat i att det liksom, att det inte är delad faktura då eller att det är veckofaktura, då, då måste vi då samla på uppgifterna där då så att vi inte kommer i ett läge då liksom att vi skickar iväg faktura på en uppgift och så kommer det en faktura på morgonen och sen så hittar någon en uppgift till och så skickar man en faktura till.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. Och, och äkta så tror jag, i, i den skala som vi är nu, så är det ju äkta så att, att, att den här, de här uppgifterna som är redo för fakturering, de kan man sortera utifrån kund och fakturarreferens. Och då kommer ju det att ge sig själv då. Så man ser att på den här kunden, nu har jag tjugo uppgifter som är utförda. Mm. Då kan jag markera för dem och så trycker jag skicka vä-faktura. Och då kommer ju varje sån här uppgift då att bli en rad- Mm. I fakturan i Fortnox då- Mm. Med kunden som, eh-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. F-fakturamottagare i toppen då. Och sen så blir det också då en, ja, en grej som vi inte har, som vi... Men det, det, den har vi inte riktigt...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Vi tar den separat. Ja, nej. Ja, det, nej, vi har den delvis med. Men, men det är då... Jag säger så här exakt det. Det är då att om du i fakturareferensen per artikel också behöver ha en me-metadata. Så om du har... Om, om vi leker med tanken att ett visst kundvagnsgarage hos Axfood har ett eget kostnadsställe som metadata. Då ska vi alltså på sam-- Med samma logik som vi har då att vi skickar med metadata för uppgiften när man ska göra",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    }
+  ]
+}
