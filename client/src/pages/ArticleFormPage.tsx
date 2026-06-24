@@ -6,6 +6,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { useUpload } from "@/hooks/use-upload";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { formatSekFromOre } from "@/lib/format";
+import { metadataDisplayName } from "@/lib/metadata-display";
 import { computeArticlePricing } from "@shared/article-pricing";
 import type {
   Article,
@@ -935,7 +936,7 @@ export default function ArticleFormPage() {
     enabled: isEditMode,
   });
 
-  const { data: metadataTypes = [] } = useQuery<{ id: string; namn: string; datatyp: string; parentMetadataId: string | null }[]>({
+  const { data: metadataTypes = [] } = useQuery<{ id: string; namn: string; visningsnamn?: string | null; datatyp: string; parentMetadataId: string | null }[]>({
     queryKey: ["/api/metadata/types"],
   });
 
@@ -985,9 +986,9 @@ export default function ArticleFormPage() {
     queryKey: ["/api/icons"],
   });
 
-  const { data: metadataLabels = [] } = useQuery<{ id: string; namn: string; beteckning: string | null; datatyp: string }[]>({
+  const { data: metadataLabels = [] } = useQuery<{ id: string; namn: string; visningsnamn?: string | null; beteckning: string | null; datatyp: string }[]>({
     queryKey: ["/api/metadata-labels"],
-    select: (data: any[]) => data.map((d: any) => ({ id: d.id, namn: d.namn, beteckning: d.beteckning, datatyp: d.datatyp })),
+    select: (data: any[]) => data.map((d: any) => ({ id: d.id, namn: d.namn, visningsnamn: d.visningsnamn ?? null, beteckning: d.beteckning, datatyp: d.datatyp })),
   });
 
   // Standardleverantör (sektion 3) — GET /api/suppliers.
@@ -2500,7 +2501,7 @@ export default function ArticleFormPage() {
                           <SelectItem value="_none">Välj fält</SelectItem>
                           {metadataLabels.map((ml) => (
                             <SelectItem key={ml.id} value={ml.beteckning || ml.namn}>
-                              {ml.namn}
+                              {metadataDisplayName(ml)}
                             </SelectItem>
                           ))}
                         </SelectContent>
@@ -2567,7 +2568,7 @@ export default function ArticleFormPage() {
                     <SelectItem value="_none">Välj fält</SelectItem>
                     {metadataLabels.map((ml) => (
                       <SelectItem key={ml.id} value={ml.beteckning || ml.namn}>
-                        {ml.namn}
+                        {metadataDisplayName(ml)}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -2721,7 +2722,7 @@ export default function ArticleFormPage() {
                         <SelectItem value="_none">Välj metadatafält</SelectItem>
                         {metadataTypes.map((t) => (
                           <SelectItem key={t.id} value={t.namn}>
-                            {t.namn}
+                            {metadataDisplayName(t)}
                           </SelectItem>
                         ))}
                       </SelectContent>
@@ -2912,14 +2913,14 @@ export default function ArticleFormPage() {
                             <SelectGroup>
                               <SelectLabel>Grupper (alla underfält)</SelectLabel>
                               {groupParentTypes.map((t) => (
-                                <SelectItem key={`group-${t.id}`} value={t.namn}>{t.namn} – alla fält</SelectItem>
+                                <SelectItem key={`group-${t.id}`} value={t.namn}>{metadataDisplayName(t)} – alla fält</SelectItem>
                               ))}
                             </SelectGroup>
                           )}
                           <SelectGroup>
                             <SelectLabel>Enskilda fält</SelectLabel>
                             {individualMetadataTypes.map((t) => (
-                              <SelectItem key={t.id} value={t.namn}>{t.namn}</SelectItem>
+                              <SelectItem key={t.id} value={t.namn}>{metadataDisplayName(t)}</SelectItem>
                             ))}
                           </SelectGroup>
                         </SelectContent>
@@ -3010,14 +3011,14 @@ export default function ArticleFormPage() {
                             <SelectGroup>
                               <SelectLabel>Grupper (alla underfält)</SelectLabel>
                               {groupParentTypes.map((t) => (
-                                <SelectItem key={`group-${t.id}`} value={t.namn}>{t.namn} – alla fält</SelectItem>
+                                <SelectItem key={`group-${t.id}`} value={t.namn}>{metadataDisplayName(t)} – alla fält</SelectItem>
                               ))}
                             </SelectGroup>
                           )}
                           <SelectGroup>
                             <SelectLabel>Enskilda fält</SelectLabel>
                             {individualMetadataTypes.map((t) => (
-                              <SelectItem key={t.id} value={t.namn}>{t.namn}</SelectItem>
+                              <SelectItem key={t.id} value={t.namn}>{metadataDisplayName(t)}</SelectItem>
                             ))}
                           </SelectGroup>
                         </SelectContent>
