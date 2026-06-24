@@ -526,7 +526,11 @@ async function countMetadataChildren(tenantId: string, id: string): Promise<numb
   const children = await db
     .select({ id: metadataKatalog.id })
     .from(metadataKatalog)
-    .where(and(eq(metadataKatalog.tenantId, tenantId), eq(metadataKatalog.parentMetadataId, id)));
+    .where(and(
+      eq(metadataKatalog.tenantId, tenantId),
+      eq(metadataKatalog.parentMetadataId, id),
+      isNull(metadataKatalog.deletedAt),
+    ));
   return children.length;
 }
 

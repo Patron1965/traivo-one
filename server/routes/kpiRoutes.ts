@@ -2033,11 +2033,14 @@ app.delete("/api/metadata-definitions/:id", requireAdmin, asyncHandler(async (re
     }
 
     // Gruppfält med underfält blockeras (FK skulle annars ge ett rått DB-fel).
+    // Endast aktiva (icke-arkiverade) underfält räknas — arkiverade barn ska inte
+    // blockera radering av föräldern.
     const children = await db.select({ id: metadataKatalog.id })
       .from(metadataKatalog)
       .where(and(
         eq(metadataKatalog.tenantId, tenantId),
         eq(metadataKatalog.parentMetadataId, req.params.id),
+        isNull(metadataKatalog.deletedAt),
       ));
     if (children.length > 0) {
       throw new ConflictError(
@@ -2207,11 +2210,13 @@ app.delete("/api/metadata-labels/:id", requireAdmin, asyncHandler(async (req, re
 
     // Task #662: blockera radering av ett gruppfält som har underfält (FK skulle
     // annars ge ett rått DB-fel). Samma invariant som /api/metadata/types DELETE.
+    // Endast aktiva (icke-arkiverade) underfält räknas — arkiverade barn blockerar ej.
     const children = await db.select({ id: metadataKatalog.id })
       .from(metadataKatalog)
       .where(and(
         eq(metadataKatalog.tenantId, tenantId),
-        eq(metadataKatalog.parentMetadataId, req.params.id)
+        eq(metadataKatalog.parentMetadataId, req.params.id),
+        isNull(metadataKatalog.deletedAt),
       ));
     if (children.length > 0) {
       throw new ConflictError(
