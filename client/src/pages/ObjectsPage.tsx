@@ -264,11 +264,9 @@ export default function ObjectsPage() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     if (params.get("create") === "true") {
-      setCreateDialogOpen(true);
-      params.delete("create");
-      const remaining = params.toString();
-      window.history.replaceState({}, "", window.location.pathname + (remaining ? `?${remaining}` : ""));
+      navigate("/objects/new");
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Task #940: metadatafält för det standardiserade villkorsfiltret (engelska
@@ -950,38 +948,17 @@ export default function ObjectsPage() {
     copyObjectMutation.mutate({ id: objectToCopy.id, name: copyName, mode: copyMode });
   };
 
-  // Task #681: öppna skapa-dialogen i barn-läge under valt objekt.
+  // Task #1084: "Lägg till underordnat" öppnar det enhetliga helskärms-
+  // formuläret i skapa-läge med föräldern förifylld.
   const handleAddChild = useCallback((parent: ServiceObject) => {
-    resetCreateForm();
-    setCreateParentId(parent.id);
-    setCreateParentName((parent as any).displayName || parent.name || parent.objectNumber || "");
-    setNewObject((p) => ({
-      ...p,
-      name: "",
-    }));
-    setBuilderKey((k) => k + 1);
-    setCreateDialogOpen(true);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    const parentName = (parent as any).displayName || parent.name || parent.objectNumber || "";
+    navigate(`/objects/new?parentId=${parent.id}&parentName=${encodeURIComponent(parentName)}`);
+  }, [navigate]);
 
-  // Task #681: öppna full-redigeringsdialogen för ett objekt.
+  // Task #1084: "Redigera" leder till det enhetliga helskärmsformuläret.
   const handleEditObject = useCallback((obj: ServiceObject) => {
-    setEditForm({
-      id: obj.id,
-      objectNumber: obj.objectNumber ?? "",
-      parentId: obj.parentId ?? null,
-      name: obj.name || "",
-      accessType: obj.accessType || "open",
-      accessCode: obj.accessCode || "",
-      address: obj.address || "",
-      city: obj.city || "",
-      postalCode: obj.postalCode || "",
-      latitude: obj.latitude ?? null,
-      longitude: obj.longitude ?? null,
-    });
-    setEditParentName(null);
-    setEditObjectOpen(true);
-  }, []);
+    navigate(`/objects/${obj.id}`);
+  }, [navigate]);
 
   const buildObjectFilterParams = useCallback((limit: number, offset: number): URLSearchParams => {
     const params = new URLSearchParams({ limit: limit.toString(), offset: offset.toString() });
@@ -1272,7 +1249,7 @@ export default function ObjectsPage() {
             <div className="flex items-center gap-2 flex-wrap">
               <span
                 className="font-medium text-primary hover:underline cursor-pointer"
-                onClick={(e) => { e.stopPropagation(); setDetailObject(obj); }}
+                onClick={(e) => { e.stopPropagation(); navigate(`/objects/${obj.id}`); }}
                 data-testid={`link-object-detail-${obj.id}`}
               >
                 {(() => {
@@ -1537,7 +1514,19 @@ export default function ObjectsPage() {
                     <TooltipContent><p>Redigera kod</p></TooltipContent>
                   </Tooltip>
                 )}
-                <ObjectMetadataPanel object={obj} />
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      onClick={(e) => { e.stopPropagation(); navigate(`/objects/${obj.id}?tab=metadata`); }}
+                      data-testid={`button-metadata-${obj.id}`}
+                    >
+                      <List className="h-4 w-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent><p>Visa metadata</p></TooltipContent>
+                </Tooltip>
                 <DropdownMenu modal={false}>
                   <DropdownMenuTrigger asChild>
                     <Button size="icon" variant="ghost" onClick={(e) => e.stopPropagation()} data-testid={`button-more-actions-${obj.id}`}>
@@ -1731,7 +1720,7 @@ export default function ObjectsPage() {
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
-        <Button size="lg" onClick={() => setCreateDialogOpen(true)} data-testid="button-add-object">
+        <Button size="lg" onClick={() => navigate("/objects/new")} data-testid="button-add-object">
           <Plus className="h-4 w-4 mr-2" />
           Skapa {t("object_singular").toLowerCase()}
         </Button>
@@ -2128,7 +2117,7 @@ export default function ObjectsPage() {
                   Skapa ditt första {t("object_singular").toLowerCase()} för att komma igång, eller importera befintlig data via CSV.
                 </p>
                 <div className="flex items-center justify-center gap-3">
-                  <Button onClick={() => setCreateDialogOpen(true)} data-testid="button-empty-create-object">
+                  <Button onClick={() => navigate("/objects/new")} data-testid="button-empty-create-object">
                     <Plus className="h-4 w-4 mr-2" />
                     Skapa ditt första {t("object_singular").toLowerCase()}
                   </Button>
@@ -2331,286 +2320,6 @@ export default function ObjectsPage() {
             </span>
             <Button onClick={() => setMetadataColumnsDialogOpen(false)} data-testid="button-close-metadata-columns">
               Klar
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Task #681: in-page detaljpanel */}
-      <ObjectDetailSheet
-        object={detailObject}
-        open={!!detailObject}
-        onOpenChange={(open) => { if (!open) setDetailObject(null); }}
-      />
-
-      {/* Create object dialog */}
-      <Dialog open={createDialogOpen} onOpenChange={(open) => { setCreateDialogOpen(open); if (!open) resetCreateForm(); }}>
-        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>
-              {createParentId ? "Lägg till underordnat objekt" : `Skapa nytt ${t("object_singular").toLowerCase()}`}
-            </DialogTitle>
-            <DialogDescription>
-              {createParentId
-                ? <>Nytt objekt under <span className="font-medium text-foreground">{createParentName}</span>. Ärvda metadatavärden är förifyllda nedan.</>
-                : "Fyll i uppgifterna för det nya objektet."}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div>
-              <Label>Systemnummer</Label>
-              <Input
-                value={nextNumberData?.objectNumber ?? "—"}
-                readOnly
-                disabled
-                className="font-mono bg-muted"
-                data-testid="input-new-object-number"
-              />
-              <p className="text-xs text-muted-foreground mt-1">Genereras automatiskt vid skapande.</p>
-            </div>
-            <div>
-              <Label>Namn</Label>
-              <Input
-                value={newObject.name}
-                onChange={(e) => setNewObject({ ...newObject, name: e.target.value })}
-                placeholder="Objektnamn"
-                data-testid="input-new-object-name"
-              />
-            </div>
-            <div>
-              <Label>Släktnamn</Label>
-              <Input
-                value={createParentName ? `${createParentName} > ${newObject.name || "(nytt objekt)"}` : (newObject.name || "(nytt objekt)")}
-                readOnly
-                disabled
-                className="bg-muted"
-                data-testid="input-new-object-displayname"
-              />
-              <p className="text-xs text-muted-foreground mt-1">Genereras automatiskt från överordnat objekt och namn.</p>
-            </div>
-            <div>
-              <Label>Överordnat objekt</Label>
-              <ObjectParentCombobox
-                value={createParentId}
-                valueLabel={createParentName}
-                onChange={(id, opt) => {
-                  setCreateParentId(id);
-                  setCreateParentName(opt ? (opt.displayName || opt.name) : "");
-                }}
-                className="w-full"
-                testId="select-new-parent"
-              />
-              <p className="text-xs text-muted-foreground mt-1">Sök på namn, adress eller systemnummer. Släktnamnet visas per träff så du kopplar mot rätt gren.</p>
-            </div>
-            <div className="border-t pt-4">
-              <Label className="mb-2 block">Metadata</Label>
-              <p className="text-xs text-muted-foreground mb-3">Objekttyp, adress, kund m.m. läggs till som metadatafält. Ärvda värden från överordnat objekt är förifyllda.</p>
-              <MetadataFieldBuilder
-                key={builderKey}
-                customerId={null}
-                inheritedFields={createParentId ? inheritedSeeds : undefined}
-                onChange={setMetadataFields}
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => { setCreateDialogOpen(false); resetCreateForm(); }}>Avbryt</Button>
-            <Button 
-              onClick={() => createObjectMutation.mutate({
-                data: {
-                  name: newObject.name,
-                  parentId: createParentId || undefined,
-                  // Task #727: Objekttyp/Tillgångstyp/Adress/Kund är inte längre
-                  // formulärfält — de hanteras som metadata. Skicka säkra defaults
-                  // så backend-schemat (objectType/accessType) förblir giltigt.
-                  objectType: "fastighet",
-                  accessType: "open",
-                },
-                metadata: metadataFields,
-              })} 
-              disabled={!newObject.name || createObjectMutation.isPending}
-              data-testid="button-create-object"
-            >
-              {createObjectMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Plus className="h-4 w-4 mr-2" />}
-              Skapa
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Task #681/#727: full-redigeringsdialog */}
-      <Dialog open={editObjectOpen} onOpenChange={setEditObjectOpen}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Redigera objekt</DialogTitle>
-            <DialogDescription>Uppdatera objektets grunduppgifter och metadata.</DialogDescription>
-          </DialogHeader>
-          {(() => {
-            const editingFull = objects.find((o) => o.id === editForm.id);
-            const derivedParentLabel = editForm.parentId
-              ? (() => {
-                  const p = objects.find((o) => o.id === editForm.parentId);
-                  return (p as any)?.displayName || p?.name || p?.objectNumber || "";
-                })()
-              : "";
-            // Föredra namnet på den parent som valts via väljaren (editParentName)
-            // — även en som hittats via sök/kund-förfilter och saknas i listan —
-            // så att både triggern och Släktnamn-fältet visar samma sak.
-            const editParentLabel = editParentName ?? derivedParentLabel;
-            return (
-          <div className="space-y-5">
-            {/* Fasta systemfält */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <Label>Systemnummer</Label>
-                <Input value={editForm.objectNumber || "—"} readOnly disabled data-testid="input-edit-object-number" />
-              </div>
-              <div>
-                <Label>Namn</Label>
-                <Input
-                  value={editForm.name}
-                  onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
-                  data-testid="input-edit-object-name"
-                />
-              </div>
-            </div>
-            <div>
-              <Label>Släktnamn</Label>
-              <Input
-                value={`${editParentLabel ? editParentLabel + " > " : ""}${editForm.name}`}
-                readOnly
-                disabled
-                data-testid="input-edit-display-name"
-              />
-            </div>
-            <div>
-              <Label>Överordnat objekt</Label>
-              <ObjectParentCombobox
-                value={editForm.parentId}
-                valueLabel={editParentLabel}
-                excludeId={editForm.id}
-                onChange={(id, opt) => {
-                  setEditForm({ ...editForm, parentId: id });
-                  setEditParentName(opt ? (opt.displayName || opt.name) : "");
-                }}
-              />
-              <p className="text-xs text-muted-foreground mt-1">Byt överordnat objekt för att flytta objektet i hierarkin.</p>
-            </div>
-
-            <div>
-              <Label>Tillgångstyp</Label>
-              <Select value={editForm.accessType} onValueChange={(v) => setEditForm({ ...editForm, accessType: v })}>
-                <SelectTrigger data-testid="select-edit-access-type"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {Object.entries(accessTypeLabels).map(([value, { label }]) => (
-                    <SelectItem key={value} value={value}>{label}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            {(editForm.accessType === "code" || editForm.accessType === "key") && (
-              <div>
-                <Label>{editForm.accessType === "code" ? "Kod" : "Nyckelnummer"}</Label>
-                <Input
-                  value={editForm.accessCode}
-                  onChange={(e) => setEditForm({ ...editForm, accessCode: e.target.value })}
-                  data-testid="input-edit-access-code"
-                />
-              </div>
-            )}
-            <div>
-              <Label>Adress</Label>
-              <AddressSearch
-                defaultValue={editForm.address}
-                placeholder="Sök gatuadress..."
-                onSelect={(result) => setEditForm({
-                  ...editForm,
-                  address: result.address,
-                  latitude: result.lat,
-                  longitude: result.lon,
-                  city: result.city || editForm.city,
-                  postalCode: result.postalCode || editForm.postalCode,
-                })}
-              />
-            </div>
-
-            {/* Ärvd metadata */}
-            <div className="border-t pt-4">
-              <Label className="text-sm font-semibold">Ärvd metadata</Label>
-              <p className="text-xs text-muted-foreground mb-2">Värden som ärvs från överordnade objekt. Blockera ett fält för att stoppa det från att ärvas vidare nedåt.</p>
-              {editForm.id && <ObjectInheritedMetadataPanel objectId={editForm.id} />}
-            </div>
-
-            {/* Systemgenererad metadata */}
-            <div className="border-t pt-4">
-              <Label className="text-sm font-semibold">Systemgenererad metadata</Label>
-              <p className="text-xs text-muted-foreground mb-2">Data som skapas automatiskt från objektets aktivitet.</p>
-              {editForm.id && <ObjectSystemGeneratedPanel objectId={editForm.id} />}
-            </div>
-
-            {/* Åtgärder */}
-            <div className="border-t pt-4 flex flex-wrap gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                disabled={!editingFull}
-                onClick={() => { if (editingFull) { setEditObjectOpen(false); handleCopyObject(editingFull); } }}
-                data-testid="button-edit-copy-object"
-              >
-                <Copy className="h-4 w-4 mr-1" /> Kopiera
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                disabled={!editingFull}
-                onClick={() => { if (editingFull) { setEditObjectOpen(false); handleAddChild(editingFull); } }}
-                data-testid="button-edit-add-child"
-              >
-                <Plus className="h-4 w-4 mr-1" /> Underordnat
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="text-warning hover:text-warning border-warning/40"
-                disabled={archiveObjectMutation.isPending}
-                onClick={() => archiveObjectMutation.mutate({ id: editForm.id })}
-                data-testid="button-edit-archive-object"
-              >
-                {archiveObjectMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Archive className="h-4 w-4 mr-1" />}
-                Arkivera
-              </Button>
-            </div>
-          </div>
-            );
-          })()}
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setEditObjectOpen(false)}>Avbryt</Button>
-            <Button
-              onClick={() => updateObjectMutation.mutate(
-                {
-                  id: editForm.id,
-                  data: {
-                    name: editForm.name,
-                    parentId: editForm.parentId ?? null,
-                    accessType: editForm.accessType,
-                    accessCode: editForm.accessCode || undefined,
-                    address: editForm.address || undefined,
-                    city: editForm.city || undefined,
-                    postalCode: editForm.postalCode || undefined,
-                    latitude: editForm.latitude ?? undefined,
-                    longitude: editForm.longitude ?? undefined,
-                  },
-                },
-                { onSuccess: () => setEditObjectOpen(false) },
-              )}
-              disabled={!editForm.name || updateObjectMutation.isPending}
-              data-testid="button-save-edit-object"
-            >
-              {updateObjectMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Check className="h-4 w-4 mr-2" />}
-              Spara
             </Button>
           </DialogFooter>
         </DialogContent>

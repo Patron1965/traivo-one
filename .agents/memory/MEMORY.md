@@ -82,3 +82,4 @@
 - [Metadata display vs matchningsnyckel](metadata-display-vs-matching-key.md) — visa fältnamn via metadataDisplayName() (visningsnamn); behåll namn (slug) i value=/lookup/sparning/formel-hints; akta select()-transformer som strippar visningsnamn.
 - [Artikelstatus aktiv vs active](article-active-status-dual-convention.md) — ArticleFormPage sparar svensk "aktiv"; filtrera ALDRIG på `status === "active"` (exkluderar form-artiklar) → använd isActiveArticleStatus().
 - [ObjectsPage filter-fanout](objectspage-filter-state-fanout.md) — objektlistans filter spänner över 8 ställen (state/queryKey/queryFn/buildParams/activeCount/clearAll/chips/panel) + empty-state + server (customerRoutes+getObjectsPaginated); missa ett = tyst halvfel.
+- [Enhetligt objektformulär](unified-object-form.md) — ObjectDetailPage är ENDA objektytan (create=edit=view via isCreate="new"); gamla modaler/sheet borttagna, ObjectsPage redirectar dit; återinför aldrig separata objekt-dialoger.

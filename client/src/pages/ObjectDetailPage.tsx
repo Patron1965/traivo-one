@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from "@tanstack/react-query";
 import { useRoute, useLocation } from "wouter";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -14,6 +14,9 @@ import { ObjectTimeline } from "@/components/timeline/ObjectTimeline";
 import InvoiceRecipientsCard from "@/components/InvoiceRecipientsCard";
 import ObjectPayersCard from "@/components/ObjectPayersCard";
 import { TelinkSyncButton } from "@/components/TelinkSyncButton";
+import { ObjectParentsPanel } from "@/components/ObjectParentsPanel";
+import { ObjectParentCombobox } from "@/components/ObjectParentCombobox";
+import { MetadataFieldBuilder, type BuilderFieldValue, type InheritedFieldSeed } from "@/components/MetadataFieldBuilder";
 import { useAuth } from "@/hooks/use-auth";
 import { Separator } from "@/components/ui/separator";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -24,7 +27,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { apiRequest } from "@/lib/queryClient";
+import { apiRequest, versionedUrl } from "@/lib/queryClient";
 import type { ObjectTimeRestriction } from "@shared/schema";
 import {
   ArrowLeft, Building2, MapPin, Key, Keyboard, Users, DoorOpen,
@@ -389,6 +392,10 @@ export default function ObjectDetailPage() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const objectId = params?.id || "";
+  // Task #1084: enhetligt objektformulär — samma helskärmssida används för
+  // skapa (id === "new"), redigera och visa. I skapa-läge ska inga objekt-
+  // specifika queries köras (det finns inget objekt ännu).
+  const isCreate = objectId === "new";
   const { user } = useAuth();
   const isAdmin = user?.role === "admin" || user?.role === "owner";
   const canUseTemplates = isAdmin || user?.role === "planner";
@@ -399,7 +406,9 @@ export default function ObjectDetailPage() {
   const [imageDialogOpen, setImageDialogOpen] = useState(false);
   const [restrictionDialogOpen, setRestrictionDialogOpen] = useState(false);
   const [workOrderDialogOpen, setWorkOrderDialogOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState("overview");
+  const [activeTab, setActiveTab] = useState(
+    () => new URLSearchParams(window.location.search).get("tab") || "overview",
+  );
   // Task #694: id på den arbetsorder som ska markeras/scrollas fram efter att
   // användaren klickat "Visa arbetsorder" i kortet "Senaste aktivitet".
   const [highlightedWorkOrderId, setHighlightedWorkOrderId] = useState<string | null>(null);
@@ -464,7 +473,7 @@ export default function ObjectDetailPage() {
       if (!res.ok) throw new Error("Failed to fetch object");
       return res.json();
     },
-    enabled: !!objectId,
+    enabled: !!objectId && !isCreate,
   });
 
   const { data: customer } = useQuery<CustomerSummary>({
@@ -502,7 +511,7 @@ export default function ObjectDetailPage() {
       if (!res.ok) return [];
       return res.json();
     },
-    enabled: !!objectId,
+    enabled: !!objectId && !isCreate,
   });
 
   const { data: ancestors = [] } = useQuery<ServiceObject[]>({
@@ -512,7 +521,7 @@ export default function ObjectDetailPage() {
       if (!res.ok) return [];
       return res.json();
     },
-    enabled: !!objectId,
+    enabled: !!objectId && !isCreate,
   });
 
   const { data: workOrders = [] } = useQuery<WorkOrderListItem[]>({
@@ -522,7 +531,7 @@ export default function ObjectDetailPage() {
       if (!res.ok) return [];
       return res.json();
     },
-    enabled: !!objectId,
+    enabled: !!objectId && !isCreate,
   });
 
   // Task #857: planeringslager-uppgifter (assignments) kopplade till objektet,
@@ -534,7 +543,7 @@ export default function ObjectDetailPage() {
       if (!res.ok) return [];
       return res.json();
     },
-    enabled: !!objectId,
+    enabled: !!objectId && !isCreate,
   });
 
   // Task #714: kronologisk lista över felanmälningar (med bläddringsbara foton).
@@ -545,7 +554,7 @@ export default function ObjectDetailPage() {
       if (!res.ok) return [];
       return res.json();
     },
-    enabled: !!objectId,
+    enabled: !!objectId && !isCreate,
   });
 
   // Task #714: server-signerad objekt-bunden QR-token för kundbetyg/feedback.
@@ -556,7 +565,7 @@ export default function ObjectDetailPage() {
       if (!res.ok) return { token: "" };
       return res.json();
     },
-    enabled: !!objectId,
+    enabled: !!objectId && !isCreate,
   });
 
   const { data: metadataResponse } = useQuery<MetadataResponse>({
@@ -566,7 +575,7 @@ export default function ObjectDetailPage() {
       if (!res.ok) return { metadata: [] };
       return res.json();
     },
-    enabled: !!objectId,
+    enabled: !!objectId && !isCreate,
   });
   const metadata: MetadataEntry[] = metadataResponse?.metadata || [];
 
@@ -577,7 +586,7 @@ export default function ObjectDetailPage() {
       if (!res.ok) return [];
       return res.json();
     },
-    enabled: !!objectId,
+    enabled: !!objectId && !isCreate,
   });
 
   const { data: images = [] } = useQuery<ObjectImage[]>({
@@ -587,7 +596,7 @@ export default function ObjectDetailPage() {
       if (!res.ok) return [];
       return res.json();
     },
-    enabled: !!objectId,
+    enabled: !!objectId && !isCreate,
   });
 
   const { data: timeRestrictions = [] } = useQuery<ObjectTimeRestriction[]>({
@@ -597,7 +606,7 @@ export default function ObjectDetailPage() {
       if (!res.ok) return [];
       return res.json();
     },
-    enabled: !!objectId,
+    enabled: !!objectId && !isCreate,
   });
 
   const { data: parentRelations = [] } = useQuery<ParentRelation[]>({
@@ -607,7 +616,7 @@ export default function ObjectDetailPage() {
       if (!res.ok) return [];
       return res.json();
     },
-    enabled: !!objectId,
+    enabled: !!objectId && !isCreate,
   });
 
   // Task #663: objekt-scoped katalog → kundlåsta fält för andra kunder döljs.
@@ -618,7 +627,7 @@ export default function ObjectDetailPage() {
       if (!res.ok) return [];
       return res.json();
     },
-    enabled: !!objectId,
+    enabled: !!objectId && !isCreate,
   });
 
   // Task #998: namngivna importmallar återanvänds som fälturval för mall-styrd
@@ -630,7 +639,7 @@ export default function ObjectDetailPage() {
       if (!res.ok) return [];
       return res.json();
     },
-    enabled: !!objectId && canUseTemplates,
+    enabled: !!objectId && !isCreate && canUseTemplates,
   });
 
   const { data: matchingArticles = [] } = useQuery<Array<{
@@ -647,7 +656,7 @@ export default function ObjectDetailPage() {
       if (!res.ok) return [];
       return res.json();
     },
-    enabled: !!objectId,
+    enabled: !!objectId && !isCreate,
   });
 
   const updateObjectMutation = useMutation({
@@ -982,6 +991,224 @@ export default function ObjectDetailPage() {
     setEditDialogOpen(true);
   };
 
+  // ===========================================================================
+  // Task #1084: SKAPA-LÄGE (id === "new") — samma helskärmsformulär som visa/
+  // redigera. Förälder kan förifyllas via ?parentId / ?parentName (t.ex. från
+  // "Lägg till underordnat"). Alla hooks nedan måste deklareras före de tidiga
+  // returerna (loadingObject / not-found) så React-hook-ordningen är stabil.
+  // ===========================================================================
+  const [createName, setCreateName] = useState("");
+  const [createParentId, setCreateParentId] = useState<string | null>(
+    () => new URLSearchParams(window.location.search).get("parentId"),
+  );
+  const [createParentName, setCreateParentName] = useState<string>(
+    () => new URLSearchParams(window.location.search).get("parentName") || "",
+  );
+  const [createMetadataFields, setCreateMetadataFields] = useState<BuilderFieldValue[]>([]);
+  const [createBuilderKey, setCreateBuilderKey] = useState(0);
+
+  const { data: nextNumberData } = useQuery<{ objectNumber: string }>({
+    queryKey: ["/api/objects/next-number"],
+    queryFn: async () => {
+      const res = await fetch(versionedUrl("/api/objects/next-number"), { credentials: "include" });
+      if (!res.ok) throw new Error("Failed");
+      return res.json();
+    },
+    enabled: isCreate,
+    staleTime: 0,
+  });
+
+  const { data: createParentMetadata } = useQuery<{ metadata: any[] }>({
+    queryKey: ["/api/metadata/objects", createParentId, "create-seed"],
+    queryFn: async () => {
+      const res = await fetch(versionedUrl(`/api/metadata/objects/${createParentId}`), { credentials: "include" });
+      if (!res.ok) throw new Error("Failed");
+      return res.json();
+    },
+    enabled: isCreate && !!createParentId,
+    staleTime: 30000,
+  });
+
+  const createInheritedSeeds = useMemo<InheritedFieldSeed[]>(() => {
+    if (!createParentId || !createParentMetadata?.metadata) return [];
+    const entryValue = (e: any): string => {
+      if (e.vardeString != null) return String(e.vardeString);
+      if (e.vardeInteger != null) return String(e.vardeInteger);
+      if (e.vardeDecimal != null) return String(e.vardeDecimal);
+      if (e.vardeBoolean != null) return e.vardeBoolean ? "true" : "false";
+      if (e.vardeDatetime != null) return String(e.vardeDatetime);
+      if (e.vardeJson != null) return typeof e.vardeJson === "string" ? e.vardeJson : JSON.stringify(e.vardeJson);
+      return "";
+    };
+    return createParentMetadata.metadata
+      .filter((e: any) => e.source !== "computed")
+      .filter((e: any) => (e.source === "local" && e.arvsNedat) || e.source === "inherited")
+      .map((e: any) => ({
+        namn: e.katalog?.namn as string,
+        datatyp: (e.katalog?.datatyp as string) || "text",
+        value: entryValue(e),
+        sourceName: e.fromObject?.namn ?? createParentName,
+        allowedValues: e.katalog?.allowedValues ?? null,
+        area: e.katalog?.area ?? null,
+      }))
+      .filter((s: InheritedFieldSeed) => !!s.namn);
+  }, [createParentId, createParentMetadata, createParentName]);
+
+  const createObjectMutation = useMutation({
+    // Objektet skapas först (1 anrop), därefter skrivs metadatavärden. Inte
+    // atomiskt — vi skiljer på "objektet kunde inte skapas" och "objektet
+    // skapades men metadatafält misslyckades" så användaren inte skapar dubbletter.
+    mutationFn: async (payload: { data: Partial<ServiceObject>; metadata: BuilderFieldValue[] }) => {
+      const res = await apiRequest("POST", "/api/objects", payload.data);
+      const created = await res.json();
+      const metadataErrors: string[] = [];
+      for (const field of payload.metadata) {
+        if (field.varde === "" || field.varde == null) continue;
+        try {
+          await apiRequest("POST", "/api/metadata/", {
+            objektId: created.id,
+            metadataTypNamn: field.namn,
+            varde: field.varde,
+          });
+        } catch (e) {
+          metadataErrors.push(`${field.namn}: ${e instanceof Error ? e.message : "okänt fel"}`);
+        }
+      }
+      return { created, metadataErrors };
+    },
+    onSuccess: ({ created, metadataErrors }) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/objects"], exact: false });
+      queryClient.invalidateQueries({ queryKey: ["/api/objects/next-number"] });
+      if (metadataErrors.length > 0) {
+        toast({
+          title: "Objekt skapat – vissa metadatafält misslyckades",
+          description: `Objektet skapades, men ${metadataErrors.length} fält kunde inte sparas: ${metadataErrors.join("; ")}. Skapa inte objektet igen — komplettera fälten i detaljvyn.`,
+          variant: "destructive",
+        });
+      } else {
+        toast({ title: "Objekt skapat" });
+      }
+      navigate(`/objects/${created.id}`);
+    },
+    onError: (error: Error) => {
+      toast({ title: "Kunde inte skapa objektet", description: error.message, variant: "destructive" });
+    },
+  });
+
+  if (isCreate) {
+    const createDisplayName = createParentName
+      ? `${createParentName} > ${createName || "(nytt objekt)"}`
+      : (createName || "(nytt objekt)");
+    return (
+      <div className="p-4 md:p-6 max-w-3xl mx-auto space-y-6" data-testid="object-create-page">
+        <div className="flex items-center gap-3 flex-wrap">
+          <Button variant="ghost" size="sm" onClick={() => navigate("/objects")} data-testid="button-back-to-objects">
+            <ArrowLeft className="h-4 w-4 mr-1" /> Objekt
+          </Button>
+          <ChevronRight className="h-4 w-4 text-muted-foreground" />
+          <span className="font-semibold text-foreground">
+            {createParentId ? "Lägg till underordnat objekt" : "Skapa nytt objekt"}
+          </span>
+        </div>
+
+        <div>
+          <h1 className="text-2xl font-bold" data-testid="text-create-object-title">
+            {createParentId ? "Lägg till underordnat objekt" : "Skapa nytt objekt"}
+          </h1>
+          <p className="text-muted-foreground mt-1">
+            {createParentId ? (
+              <>Nytt objekt under <span className="font-medium text-foreground">{createParentName}</span>. Ärvda metadatavärden är förifyllda nedan.</>
+            ) : (
+              "Fyll i uppgifterna för det nya objektet. Objekttyp, adress och kund läggs till som metadata."
+            )}
+          </p>
+        </div>
+
+        <Card>
+          <CardContent className="pt-6 space-y-4">
+            <div>
+              <Label>Systemnummer</Label>
+              <Input
+                value={nextNumberData?.objectNumber ?? "—"}
+                readOnly
+                disabled
+                className="font-mono bg-muted"
+                data-testid="input-new-object-number"
+              />
+              <p className="text-xs text-muted-foreground mt-1">Genereras automatiskt vid skapande.</p>
+            </div>
+            <div>
+              <Label>Namn</Label>
+              <Input
+                value={createName}
+                onChange={(e) => setCreateName(e.target.value)}
+                placeholder="Objektnamn"
+                data-testid="input-new-object-name"
+              />
+            </div>
+            <div>
+              <Label>Släktnamn</Label>
+              <Input
+                value={createDisplayName}
+                readOnly
+                disabled
+                className="bg-muted"
+                data-testid="input-new-object-displayname"
+              />
+              <p className="text-xs text-muted-foreground mt-1">Genereras automatiskt från överordnat objekt och namn.</p>
+            </div>
+            <div>
+              <Label>Överordnat objekt</Label>
+              <ObjectParentCombobox
+                value={createParentId}
+                valueLabel={createParentName}
+                onChange={(id, opt) => {
+                  setCreateParentId(id);
+                  setCreateParentName(opt ? (opt.displayName || opt.name) : "");
+                }}
+                className="w-full"
+                testId="select-new-parent"
+              />
+              <p className="text-xs text-muted-foreground mt-1">Sök på namn, adress eller systemnummer. Släktnamnet visas per träff så du kopplar mot rätt gren.</p>
+            </div>
+            <div className="border-t pt-4">
+              <Label className="mb-2 block">Metadata</Label>
+              <p className="text-xs text-muted-foreground mb-3">Objekttyp, adress, kund m.m. läggs till som metadatafält. Ärvda värden från överordnat objekt är förifyllda.</p>
+              <MetadataFieldBuilder
+                key={createBuilderKey}
+                customerId={null}
+                inheritedFields={createParentId ? createInheritedSeeds : undefined}
+                onChange={setCreateMetadataFields}
+              />
+            </div>
+          </CardContent>
+        </Card>
+
+        <div className="flex justify-end gap-2">
+          <Button variant="outline" onClick={() => navigate("/objects")} data-testid="button-cancel-create-object">
+            Avbryt
+          </Button>
+          <Button
+            onClick={() => createObjectMutation.mutate({
+              data: {
+                name: createName,
+                parentId: createParentId || undefined,
+                objectType: "fastighet",
+                accessType: "open",
+              },
+              metadata: createMetadataFields,
+            })}
+            disabled={!createName || createObjectMutation.isPending}
+            data-testid="button-create-object"
+          >
+            {createObjectMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Plus className="h-4 w-4 mr-2" />}
+            Skapa
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
   if (loadingObject) {
     return (
       <div className="flex items-center justify-center h-96" data-testid="loading-object-detail">
@@ -1134,9 +1361,13 @@ export default function ObjectDetailPage() {
             )}
           </div>
         </div>
-        {(user?.role === "admin" || user?.role === "owner") && (
-          <TelinkSyncButton objectId={obj.id} />
-        )}
+        <div className="flex items-center gap-2">
+          {/* Task #1084: multi-förälder + släktnamn hanteras direkt på det enhetliga formuläret. */}
+          <ObjectParentsPanel object={obj as unknown as ServiceObject} />
+          {(user?.role === "admin" || user?.role === "owner") && (
+            <TelinkSyncButton objectId={obj.id} />
+          )}
+        </div>
       </div>
 
       <ObjectVignetteSection objectId={obj.id} />
