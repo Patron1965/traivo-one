@@ -174,3 +174,9 @@ id = "ITN5rCg4V3tG2dLnvFhLs"
 uri = "file://docs/traivo-go-integrationshandbok.md"
 type = "text"
 title = "Traivo Go ↔ Traivo One — Integrationshandbok (komplett)"
+
+[[outputs]]
+id = "Smp7RbZHkg41wH9FBjlWU"
+uri = "file://exports/traivo-testlista-mats.md"
+type = "text"
+title = "Testlista – End-to-end-test Traivo (för Mats)"
