@@ -46,6 +46,9 @@ import {
   getMetadataAreas,
   getMetadataAreaUsage,
   softDeleteMetadataType,
+  restoreMetadataType,
+  listArchivedMetadataTypes,
+  findMetadataTypeByIdentity,
 } from "./metadata-queries";
 import { getTenantIdWithFallback, requireAdmin } from "./tenant-middleware";
 
@@ -543,33 +546,40 @@ metadataRouter.post("/types", async (req: Request, res: Response) => {
 
     const validated = createMetadataTypeSchema.parse(req.body);
 
-    const existing = await db.select({ id: metadataKatalog.id })
-      .from(metadataKatalog)
-      .where(and(
-        eq(metadataKatalog.tenantId, tenantId),
-        eq(metadataKatalog.namn, validated.namn),
-        isNull(metadataKatalog.deletedAt)
-      ))
-      .limit(1);
-
-    if (existing.length > 0) {
+    // Namn/beteckning är per-tenant unika universella nycklar. Matcha
+    // SKIFTLÄGESOKÄNSLIGT (seed dedupar redan via toLowerCase) så att t.ex. "Kontakt"
+    // och "kontakt" inte kan samexistera. En AKTIV kollision ger 409 "finns redan"; en
+    // ARKIVERAD kollision ger ett strukturerat fel som pekar användaren mot återställning
+    // (annars uppstår en osynlig dubblett-återvändsgränd vid återskapande).
+    const activeNamn = await findMetadataTypeByIdentity(tenantId, "namn", validated.namn, { archived: false });
+    if (activeNamn) {
       return res.status(409).json({ error: `Metadatatyp med kod '${validated.namn}' finns redan` });
     }
+    const archivedNamn = await findMetadataTypeByIdentity(tenantId, "namn", validated.namn, { archived: true });
+    if (archivedNamn) {
+      return res.status(409).json({
+        code: "ARCHIVED_METADATA_TYPE_EXISTS",
+        field: "namn",
+        archivedTypeId: archivedNamn.id,
+        error: `En arkiverad metadatatyp "${archivedNamn.namn}" finns redan. Återställ den från arkivet eller välj ett annat namn.`,
+      });
+    }
 
-    // Referensnamnet (beteckning) är en stabil universell nyckel — säkerställ
-    // unikhet per tenant redan vid skapande så import/order/sök inte kopplas fel.
+    // Referensnamnet (beteckning) är en stabil universell nyckel — samma
+    // skiftlägesokänsliga unikhets-/arkivkontroll som för namn ovan.
     if (validated.beteckning) {
-      const existingBeteckning = await db.select({ id: metadataKatalog.id })
-        .from(metadataKatalog)
-        .where(and(
-          eq(metadataKatalog.tenantId, tenantId),
-          eq(metadataKatalog.beteckning, validated.beteckning),
-          isNull(metadataKatalog.deletedAt)
-        ))
-        .limit(1);
-
-      if (existingBeteckning.length > 0) {
+      const activeBet = await findMetadataTypeByIdentity(tenantId, "beteckning", validated.beteckning, { archived: false });
+      if (activeBet) {
         return res.status(409).json({ error: `Metadatatyp med beteckning '${validated.beteckning}' finns redan` });
+      }
+      const archivedBet = await findMetadataTypeByIdentity(tenantId, "beteckning", validated.beteckning, { archived: true });
+      if (archivedBet) {
+        return res.status(409).json({
+          code: "ARCHIVED_METADATA_TYPE_EXISTS",
+          field: "beteckning",
+          archivedTypeId: archivedBet.id,
+          error: `En arkiverad metadatatyp med beteckning "${archivedBet.beteckning}" finns redan. Återställ den från arkivet eller välj en annan beteckning.`,
+        });
       }
     }
 
@@ -697,31 +707,38 @@ metadataRouter.put("/types/:id", async (req: Request, res: Response) => {
 
     // Bekräfta unikhet per tenant innan skrivning (befintliga index respekteras)
     // så en kollision ger ett tydligt svenskt fel istället för dubbletter/DB-krasch.
+    // Matcha SKIFTLÄGESOKÄNSLIGT och kontrollera även ARKIVERADE typer — annars kan
+    // en omdöpning återskapa exakt den "aktiv + arkiverad samma universella nyckel"-
+    // återvändsgränd som create/restore försöker förhindra.
     if (renamesNamn && validated.namn) {
-      const dupNamn = await db.select({ id: metadataKatalog.id })
-        .from(metadataKatalog)
-        .where(and(
-          eq(metadataKatalog.tenantId, tenantId),
-          eq(metadataKatalog.namn, validated.namn),
-          isNull(metadataKatalog.deletedAt),
-        ))
-        .limit(1);
-      if (dupNamn.length > 0 && dupNamn[0].id !== id) {
+      const dupNamn = await findMetadataTypeByIdentity(tenantId, "namn", validated.namn, { archived: false, excludeId: id });
+      if (dupNamn) {
         return res.status(409).json({ error: `Metadatatyp med kod '${validated.namn}' finns redan` });
+      }
+      const archivedNamn = await findMetadataTypeByIdentity(tenantId, "namn", validated.namn, { archived: true, excludeId: id });
+      if (archivedNamn) {
+        return res.status(409).json({
+          code: "ARCHIVED_METADATA_TYPE_EXISTS",
+          field: "namn",
+          archivedTypeId: archivedNamn.id,
+          error: `En arkiverad metadatatyp "${archivedNamn.namn}" finns redan. Återställ den från arkivet eller välj ett annat namn.`,
+        });
       }
     }
 
     if (renamesBeteckning && validated.beteckning) {
-      const dupBeteckning = await db.select({ id: metadataKatalog.id })
-        .from(metadataKatalog)
-        .where(and(
-          eq(metadataKatalog.tenantId, tenantId),
-          eq(metadataKatalog.beteckning, validated.beteckning),
-          isNull(metadataKatalog.deletedAt),
-        ))
-        .limit(1);
-      if (dupBeteckning.length > 0 && dupBeteckning[0].id !== id) {
+      const dupBeteckning = await findMetadataTypeByIdentity(tenantId, "beteckning", validated.beteckning, { archived: false, excludeId: id });
+      if (dupBeteckning) {
         return res.status(409).json({ error: `Metadatatyp med beteckning '${validated.beteckning}' finns redan` });
+      }
+      const archivedBet = await findMetadataTypeByIdentity(tenantId, "beteckning", validated.beteckning, { archived: true, excludeId: id });
+      if (archivedBet) {
+        return res.status(409).json({
+          code: "ARCHIVED_METADATA_TYPE_EXISTS",
+          field: "beteckning",
+          archivedTypeId: archivedBet.id,
+          error: `En arkiverad metadatatyp med beteckning "${archivedBet.beteckning}" finns redan. Återställ den från arkivet eller välj en annan beteckning.`,
+        });
       }
     }
 
@@ -897,6 +914,50 @@ metadataRouter.delete("/types/:id", requireAdmin, async (req: Request, res: Resp
   } catch (error) {
     console.error("Error archiving metadata type:", error);
     res.status(500).json({ error: "Kunde inte arkivera metadatatyp" });
+  }
+});
+
+// Task #716: admin-arkiv för metadatatyper. Listar arkiverade (soft-deletade) typer så
+// att de blir synliga och återställningsbara. Utan denna vy "fastnar" en raderad typ:
+// namnet upptar fortfarande den unika nyckeln men syns ingenstans (osynlig dubblett-
+// återvändsgränd vid återskapande). Måste ligga FÖRE ev. /types/:id-GET (finns ingen i dag).
+metadataRouter.get("/types/archived", requireAdmin, async (req: Request, res: Response) => {
+  try {
+    const tenantId = getTenantIdWithFallback(req);
+    if (!tenantId) {
+      return res.status(401).json({ error: "Ingen tenant hittad" });
+    }
+    const archived = await listArchivedMetadataTypes(tenantId);
+    res.json(archived);
+  } catch (error) {
+    console.error("Error listing archived metadata types:", error);
+    res.status(500).json({ error: "Kunde inte hämta arkiverade metadatatyper" });
+  }
+});
+
+// Task #716: återställ en arkiverad metadatatyp. Blockeras (409) om en AKTIV typ med
+// samma namn/beteckning (skiftlägesokänsligt) redan finns — användaren får då först
+// arkivera/döpa om den aktiva dubbletten.
+metadataRouter.post("/types/:id/restore", requireAdmin, async (req: Request, res: Response) => {
+  try {
+    const tenantId = getTenantIdWithFallback(req);
+    if (!tenantId) {
+      return res.status(401).json({ error: "Ingen tenant hittad" });
+    }
+    const { id } = req.params;
+    const result = await restoreMetadataType(tenantId, id);
+    if (!result.ok) {
+      if (result.reason === "not_found") {
+        return res.status(404).json({ error: "Arkiverad metadatatyp hittades inte" });
+      }
+      return res.status(409).json({
+        error: `Kan inte återställa — en aktiv metadatatyp med samma ${result.conflict} finns redan. Arkivera eller döp om den först.`,
+      });
+    }
+    res.json(result.type);
+  } catch (error) {
+    console.error("Error restoring metadata type:", error);
+    res.status(500).json({ error: "Kunde inte återställa metadatatyp" });
   }
 });
 

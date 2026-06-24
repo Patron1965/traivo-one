@@ -7,7 +7,7 @@ import { formatZodError, verifyTenantOwnership, DEFAULT_TENANT_ID } from "./help
 import { getTenantIdWithFallback } from "../tenant-middleware";
 import { asyncHandler } from "../asyncHandler";
 import { NotFoundError, ValidationError, ForbiddenError, ConflictError } from "../errors";
-import { validateParentMetadataLink, softDeleteMetadataType, getObjectWithAllMetadata, getDisplayValue, getMetadataKatalogUsage, getMetadataDefinitionsCompat, getMetadataDefinitionCompat, katalogToDefinitionCompat, mapEnglishDataTypeToDatatyp, createMetadata, updateMetadata, deleteMetadata, ensurePackageMetadataKatalog } from "../metadata-queries";
+import { validateParentMetadataLink, softDeleteMetadataType, getObjectWithAllMetadata, getDisplayValue, getMetadataKatalogUsage, getMetadataDefinitionsCompat, getMetadataDefinitionCompat, katalogToDefinitionCompat, mapEnglishDataTypeToDatatyp, createMetadata, updateMetadata, deleteMetadata, ensurePackageMetadataKatalog, findMetadataTypeByIdentity } from "../metadata-queries";
 import { requireAdmin, requirePlanner } from "../tenant-middleware";
 import { isReasoningModel } from "../ai-model-capabilities";
 import { objects, workOrders, objectMetadata, metadataVarden, apiUsageLogs, apiBudgets, invitations, insertMetadataDefinitionSchema, insertObjectMetadataSchema, insertObjectPayerSchema, metadataKatalog, insertMetadataKatalogSchema, workOrderLines, articles, weeklyReportNotes, weeklyReportActionItemSchema, type WeeklyReportActionItem, objectPayers } from "@shared/schema";
@@ -2127,6 +2127,34 @@ app.post("/api/metadata-labels", requireAdmin, asyncHandler(async (req, res) => 
     const data = insertMetadataKatalogSchema.parse({ ...req.body, tenantId, isSystem: false });
     // Task #674: Område är grupperingsfältet — håll legacy `kategori` i synk.
     data.kategori = (data.area as string | null | undefined) || 'annat';
+    // Namn/beteckning är per-tenant unika universella nycklar (samma metadata_katalog-
+    // tabell som /api/metadata/types). Matcha SKIFTLÄGESOKÄNSLIGT och kontrollera även
+    // ARKIVERADE typer så att denna skriv-yta inte kan kringgå unikhets-/arkivinvarianten
+    // och återskapa den osynliga dubblett-återvändsgränden.
+    const dupNamn = await findMetadataTypeByIdentity(tenantId, "namn", data.namn, { archived: false });
+    if (dupNamn) {
+      throw new ConflictError(`Metadatatyp med kod '${data.namn}' finns redan`);
+    }
+    const archivedNamn = await findMetadataTypeByIdentity(tenantId, "namn", data.namn, { archived: true });
+    if (archivedNamn) {
+      throw new ConflictError(
+        `En arkiverad metadatatyp "${archivedNamn.namn}" finns redan. Återställ den från arkivet eller välj ett annat namn.`,
+        { code: "ARCHIVED_METADATA_TYPE_EXISTS", field: "namn", archivedTypeId: archivedNamn.id },
+      );
+    }
+    if (data.beteckning) {
+      const dupBet = await findMetadataTypeByIdentity(tenantId, "beteckning", data.beteckning, { archived: false });
+      if (dupBet) {
+        throw new ConflictError(`Metadatatyp med beteckning '${data.beteckning}' finns redan`);
+      }
+      const archivedBet = await findMetadataTypeByIdentity(tenantId, "beteckning", data.beteckning, { archived: true });
+      if (archivedBet) {
+        throw new ConflictError(
+          `En arkiverad metadatatyp med beteckning "${archivedBet.beteckning}" finns redan. Återställ den från arkivet eller välj en annan beteckning.`,
+          { code: "ARCHIVED_METADATA_TYPE_EXISTS", field: "beteckning", archivedTypeId: archivedBet.id },
+        );
+      }
+    }
     // Task #662: validera överordnat metadata-fält även på denna skriv-yta så att
     // en-nivå-invarianten och tenant-isoleringen inte kan kringgås här.
     if (data.parentMetadataId) {
@@ -2201,7 +2229,37 @@ app.patch("/api/metadata-labels/:id", requireAdmin, asyncHandler(async (req, res
     if (updateData.area !== undefined) {
       updateData.kategori = (updateData.area as string | null) || 'annat';
     }
-    
+
+    // Skiftlägesokänslig unikhets-/arkivkontroll vid omdöpning (samma invariant som
+    // /api/metadata/types PUT). excludeId hindrar självkollision; arkiverade träffar
+    // blockeras så denna yta inte kan återskapa "aktiv + arkiverad samma nyckel".
+    if (typeof updateData.namn === "string" && updateData.namn) {
+      const dupNamn = await findMetadataTypeByIdentity(tenantId, "namn", updateData.namn, { archived: false, excludeId: req.params.id });
+      if (dupNamn) {
+        throw new ConflictError(`Metadatatyp med kod '${updateData.namn}' finns redan`);
+      }
+      const archivedNamn = await findMetadataTypeByIdentity(tenantId, "namn", updateData.namn, { archived: true, excludeId: req.params.id });
+      if (archivedNamn) {
+        throw new ConflictError(
+          `En arkiverad metadatatyp "${archivedNamn.namn}" finns redan. Återställ den från arkivet eller välj ett annat namn.`,
+          { code: "ARCHIVED_METADATA_TYPE_EXISTS", field: "namn", archivedTypeId: archivedNamn.id },
+        );
+      }
+    }
+    if (typeof updateData.beteckning === "string" && updateData.beteckning) {
+      const dupBet = await findMetadataTypeByIdentity(tenantId, "beteckning", updateData.beteckning, { archived: false, excludeId: req.params.id });
+      if (dupBet) {
+        throw new ConflictError(`Metadatatyp med beteckning '${updateData.beteckning}' finns redan`);
+      }
+      const archivedBet = await findMetadataTypeByIdentity(tenantId, "beteckning", updateData.beteckning, { archived: true, excludeId: req.params.id });
+      if (archivedBet) {
+        throw new ConflictError(
+          `En arkiverad metadatatyp med beteckning "${archivedBet.beteckning}" finns redan. Återställ den från arkivet eller välj en annan beteckning.`,
+          { code: "ARCHIVED_METADATA_TYPE_EXISTS", field: "beteckning", archivedTypeId: archivedBet.id },
+        );
+      }
+    }
+
     const [updated] = await db.update(metadataKatalog)
       .set(updateData)
       .where(and(

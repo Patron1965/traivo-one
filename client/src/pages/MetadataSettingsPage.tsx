@@ -77,6 +77,7 @@ import {
   Calculator,
   Search,
   X,
+  Archive,
 } from "lucide-react";
 
 import { getLucideIconByName } from "@/lib/icon-registry";
@@ -87,9 +88,11 @@ interface MetadataKatalog {
   id: string;
   tenantId: string;
   namn: string;
+  beteckning: string | null;
   beskrivning: string | null;
   datatyp: string;
   referensTabell: string | null;
+  deletedAt: string | null;
   arLogisk: boolean;
   standardArvs: boolean;
   kategori: string | null;
@@ -259,6 +262,13 @@ export default function MetadataSettingsPage() {
     queryKey: ['/api/metadata/types'],
   });
 
+  // Task #716: arkiverade (soft-deletade) metadatatyper. Synliggörs i en egen sektion
+  // så att de kan återställas — annars upptar namnet fortfarande den unika nyckeln men
+  // syns ingenstans (osynlig återvändsgränd vid återskapande).
+  const { data: archivedTypes } = useQuery<MetadataKatalog[]>({
+    queryKey: ['/api/metadata/types/archived'],
+  });
+
   // Task #675: läs tenantens (redigerbara) områden för gruppering/etiketter.
   const { order: AREA_ORDER, areaLabel } = useMetadataAreas();
 
@@ -310,6 +320,7 @@ export default function MetadataSettingsPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/metadata/types'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/metadata/types/archived'] });
       setAddDialogOpen(false);
       toast({ title: 'Metadatatyp skapad' });
     },
@@ -338,10 +349,28 @@ export default function MetadataSettingsPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/metadata/types'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/metadata/types/archived'] });
       toast({ title: 'Metadatatyp borttagen' });
     },
     onError: (error: Error) => {
       toast({ title: 'Kunde inte ta bort metadatatyp', description: error.message, variant: 'destructive' });
+    },
+  });
+
+  // Task #716: återställ en arkiverad metadatatyp. Servern blockerar (409) om en aktiv
+  // typ med samma namn/beteckning redan finns — meddelandet ber då användaren arkivera
+  // eller döpa om den aktiva dubbletten först.
+  const restoreMutation = useMutation({
+    mutationFn: async (id: string) => {
+      return apiRequest('POST', `/api/metadata/types/${id}/restore`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/metadata/types'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/metadata/types/archived'] });
+      toast({ title: 'Metadatatyp återställd' });
+    },
+    onError: (error: Error) => {
+      toast({ title: 'Kunde inte återställa metadatatyp', description: error.message, variant: 'destructive' });
     },
   });
 
@@ -616,6 +645,74 @@ export default function MetadataSettingsPage() {
               </CardContent>
             </Card>
           ))
+      )}
+
+      {archivedTypes && archivedTypes.length > 0 && (
+        <Card className="mt-4 border-dashed" data-testid="card-archived-types">
+          <CardHeader>
+            <CardTitle className="text-lg flex items-center gap-2">
+              <Archive className="h-5 w-5 text-muted-foreground" />
+              Arkiverade metadatatyper
+            </CardTitle>
+            <CardDescription>
+              Borttagna typer döljs från listorna men kan återställas. Namnet är upptaget tills typen återställs eller döps om.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Namn</TableHead>
+                  <TableHead>Datatyp</TableHead>
+                  <TableHead>Område</TableHead>
+                  <TableHead>Arkiverad</TableHead>
+                  <TableHead className="text-right">Åtgärder</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {archivedTypes.map((type) => (
+                  <TableRow key={type.id} data-testid={`archived-type-row-${type.namn}`}>
+                    <TableCell>
+                      <span className="font-medium" data-testid={`text-archived-name-${type.namn}`}>
+                        {metadataDisplayName(type)}
+                      </span>
+                      {type.beteckning && (
+                        <Badge variant="outline" className="ml-2 text-[10px] font-mono">
+                          {type.beteckning}
+                        </Badge>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant="outline">
+                        {type.allowedValues && type.allowedValues.length > 0
+                          ? 'Lista'
+                          : (datatypOptions.find(d => d.value === type.datatyp)?.label || type.datatyp)}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">
+                      {groupLabel(type.area || 'annat')}
+                    </TableCell>
+                    <TableCell className="text-muted-foreground text-sm tabular-nums">
+                      {type.deletedAt ? new Date(type.deletedAt).toLocaleDateString('sv-SE') : '–'}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => restoreMutation.mutate(type.id)}
+                        disabled={restoreMutation.isPending}
+                        data-testid={`button-restore-type-${type.namn}`}
+                      >
+                        <RefreshCw className="h-4 w-4 mr-1" />
+                        Återställ
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
       )}
 
       <MetadataAreaManagerDialog open={areaManagerOpen} onOpenChange={setAreaManagerOpen} />

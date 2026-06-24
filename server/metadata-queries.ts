@@ -3123,6 +3123,42 @@ export async function softDeleteMetadataType(
   return result.length > 0;
 }
 
+// Skiftlägesokänsligt identitetsuppslag för metadata_katalog. `namn` och (icke-null)
+// `beteckning` är per-tenant unika universella nycklar — matchning måste vara
+// skiftlägesokänslig (seedDefaultMetadataTypes dedupar redan via toLowerCase) så att
+// t.ex. "Kontakt" och "kontakt" inte kan samexistera. Returnerar första matchande raden
+// (eller null) så anropare kan skilja en AKTIV kollision ("finns redan", 409) från en
+// ARKIVERAD kollision (återställ-vägen). `excludeId` används vid omdöpning så att raden
+// inte kolliderar med sig själv.
+export type MetadataIdentityField = "namn" | "beteckning";
+
+export async function findMetadataTypeByIdentity(
+  tenantId: string,
+  field: MetadataIdentityField,
+  value: string,
+  opts: { archived: boolean; excludeId?: string },
+): Promise<Pick<MetadataKatalog, "id" | "namn" | "beteckning" | "datatyp" | "area" | "deletedAt"> | null> {
+  const col = field === "namn" ? metadataKatalog.namn : metadataKatalog.beteckning;
+  const rows = await db
+    .select({
+      id: metadataKatalog.id,
+      namn: metadataKatalog.namn,
+      beteckning: metadataKatalog.beteckning,
+      datatyp: metadataKatalog.datatyp,
+      area: metadataKatalog.area,
+      deletedAt: metadataKatalog.deletedAt,
+    })
+    .from(metadataKatalog)
+    .where(and(
+      eq(metadataKatalog.tenantId, tenantId),
+      sql`lower(${col}) = lower(${value})`,
+      opts.archived ? isNotNull(metadataKatalog.deletedAt) : isNull(metadataKatalog.deletedAt),
+    ))
+    .limit(opts.excludeId ? 10 : 1);
+  const match = rows.find((r) => !opts.excludeId || r.id !== opts.excludeId);
+  return match ?? null;
+}
+
 // Task #716: återställ en arkiverad metadatatyp. Blockerar (returnerar collision) om
 // en AKTIV typ med samma namn/beteckning redan finns — då dessa är universella nycklar.
 export async function restoreMetadataType(
@@ -3140,13 +3176,14 @@ export async function restoreMetadataType(
     .limit(1);
   if (!archived) return { ok: false, reason: "not_found" };
 
-  // Kollision mot aktiv typ med samma namn?
+  // Kollision mot aktiv typ med samma namn? Skiftlägesokänsligt — namnet är en
+  // universell nyckel och "Kontakt"/"kontakt" får inte samexistera.
   const [nameClash] = await db
     .select({ id: metadataKatalog.id })
     .from(metadataKatalog)
     .where(and(
       eq(metadataKatalog.tenantId, tenantId),
-      eq(metadataKatalog.namn, archived.namn),
+      sql`lower(${metadataKatalog.namn}) = lower(${archived.namn})`,
       isNull(metadataKatalog.deletedAt),
     ))
     .limit(1);
@@ -3159,7 +3196,7 @@ export async function restoreMetadataType(
       .from(metadataKatalog)
       .where(and(
         eq(metadataKatalog.tenantId, tenantId),
-        eq(metadataKatalog.beteckning, archived.beteckning),
+        sql`lower(${metadataKatalog.beteckning}) = lower(${archived.beteckning})`,
         isNull(metadataKatalog.deletedAt),
       ))
       .limit(1);
