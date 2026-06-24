@@ -80,6 +80,7 @@ const PAGE_SIZE = 100;
 // Task #859: valbara metadatakolumner i objektlistan persisteras per användare
 // (per webbläsare) via localStorage — "spara enkelt"-nivån i taskspecen.
 const METADATA_COLUMNS_STORAGE_KEY = "traivo:objects:metadataColumns";
+const METADATA_COLUMNS_COLLAPSED_STORAGE_KEY = "traivo:objects:metadataColumnsCollapsed";
 
 // Delmängd av metadataKatalog som klienten behöver för kolumnväljaren.
 type MetadataCatalogType = {
@@ -839,6 +840,21 @@ export default function ObjectsPage() {
       /* localStorage kan saknas/vara full — kolumnvalet är best-effort */
     }
   }, [selectedMetadataColumns]);
+  // Kollaps-läge: dölj/visa metadatakolumnerna i listan utan att rensa valet.
+  const [metadataColumnsCollapsed, setMetadataColumnsCollapsed] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem(METADATA_COLUMNS_COLLAPSED_STORAGE_KEY) === "1";
+    } catch {
+      return false;
+    }
+  });
+  useEffect(() => {
+    try {
+      localStorage.setItem(METADATA_COLUMNS_COLLAPSED_STORAGE_KEY, metadataColumnsCollapsed ? "1" : "0");
+    } catch {
+      /* best-effort */
+    }
+  }, [metadataColumnsCollapsed]);
 
   const { data: metadataCatalog = [] } = useQuery<MetadataCatalogType[]>({
     queryKey: ["/api/metadata/types"],
@@ -1342,27 +1358,72 @@ export default function ObjectsPage() {
     }
   };
 
-  const exportSelectedCSV = () => {
+  // Kolumnexport av markerade objekt i round-trip-format för matchningsimporten
+  // (/import): "Systemnummer" → system_id, "Objektnamn" → name (KNOWN_FIELDS), och
+  // varje vald metadatakolumn som metadata.<namn>. Nyckeln är exakt den som
+  // matchningsimportens fält-katalog (/api/import/objects-v2/fields) exponerar
+  // (metadata.${k.namn}) och som execute resolvar via ensureKatalogRow(namn).
+  // metadata_katalog.namn är unikt per tenant, så även familjefält (med förälder)
+  // matchar rätt katalograd via sitt eget namn — INGEN punktnotation här (dotted
+  // nycklar skulle felaktigt grupperas som json-fält i groupMetadataForWrite).
+  const exportSelectedColumns = async () => {
+    if (isExporting) return;
     const selected = objects.filter(o => selectedIds.has(o.id));
     if (selected.length === 0) return;
-    const headers = [
-      "Objektnummer", "Namn", "Visningsnamn", "Status", "Adress", "Stad",
-      "Tillgång", "Kod", "Ställtid (min)", "Överordnat objekt",
-    ];
-    const rows: (string | number)[][] = selected.map(obj => [
-      obj.objectNumber || "",
-      obj.name,
-      (obj as any).displayName ?? obj.name,
-      obj.status || "",
-      obj.address || "",
-      obj.city || "",
-      accessTypeLabels[obj.accessType || "open"]?.label || obj.accessType || "",
-      obj.accessCode || "",
-      (obj as any).avgSetupTime ?? "",
-      obj.parentId ? (objectNameById.get(obj.parentId) ?? "") : "",
-    ]);
-    downloadCSV("markerade_objekt.csv", [headers, ...rows]);
-    toast({ title: "Export klar", description: `${selected.length} markerade objekt exporterade` });
+    setIsExporting(true);
+    try {
+      const fields = selectedMetadataFields;
+      const katalogIds = fields.map(f => f.id);
+
+      // Hämta senaste värde per (objekt, katalog) — chunkat för att hålla oss inom
+      // values-batch-takten (objectIds ≤ 500, katalogIds ≤ 60). Endpointen
+      // returnerar redan ETT (närmaste/ärvda) värde per katalog, så multivärde-fält
+      // exporteras med endast senaste värdet (ingen radexplosion).
+      const valuesByObj: Record<string, Record<string, string>> = {};
+      if (katalogIds.length > 0) {
+        const OBJ_CHUNK = 200;
+        const KAT_CHUNK = 60;
+        const ids = selected.map(o => o.id);
+        for (let i = 0; i < ids.length; i += OBJ_CHUNK) {
+          const objChunk = ids.slice(i, i + OBJ_CHUNK);
+          for (let j = 0; j < katalogIds.length; j += KAT_CHUNK) {
+            const katChunk = katalogIds.slice(j, j + KAT_CHUNK);
+            const res = await apiRequest("POST", "/api/metadata/objects/values-batch", {
+              objectIds: objChunk,
+              katalogIds: katChunk,
+            });
+            const data: { values: Record<string, Record<string, string>> } = await res.json();
+            for (const [objId, m] of Object.entries(data.values ?? {})) {
+              valuesByObj[objId] = { ...(valuesByObj[objId] ?? {}), ...m };
+            }
+          }
+        }
+      }
+
+      const headers = [
+        "Systemnummer",
+        "Objektnamn",
+        ...fields.map(f => `metadata.${f.namn}`),
+      ];
+      const rows: (string | number)[][] = selected.map(obj => [
+        obj.objectNumber || "",
+        obj.name,
+        ...fields.map(f => valuesByObj[obj.id]?.[f.id] ?? ""),
+      ]);
+      downloadCSV("markerade_objekt.csv", [headers, ...rows]);
+      toast({
+        title: "Export klar",
+        description: `${selected.length} markerade objekt exporterade i kolumnformat – kan läsas tillbaka via matchningsimporten`,
+      });
+    } catch (err) {
+      toast({
+        title: "Export misslyckades",
+        description: err instanceof Error ? err.message : "Okänt fel",
+        variant: "destructive",
+      });
+    } finally {
+      setIsExporting(false);
+    }
   };
 
   const runBulkUpdate = async (payload: Record<string, unknown>, successMsg: (n: number) => string) => {
@@ -1686,7 +1747,7 @@ export default function ObjectsPage() {
             </div>
 
             {/* Task #859: valda metadatakolumner som etikett/värde-chips */}
-            {selectedMetadataFields.length > 0 && (
+            {selectedMetadataFields.length > 0 && !metadataColumnsCollapsed && (
               <div className="flex items-center gap-x-4 gap-y-1 mt-1.5 flex-wrap" data-testid={`metadata-columns-${obj.id}`}>
                 {selectedMetadataFields.map(field => {
                   const value = metadataValues[obj.id]?.[field.id];
@@ -1894,19 +1955,33 @@ export default function ObjectsPage() {
           <Globe className="h-4 w-4 mr-2" />
           Batch-geocodning
         </Button>
-        <Button variant="outline" onClick={() => setImportDialogOpen(true)} data-testid="button-import">
-          <Upload className="h-4 w-4 mr-2" />
-          Importera CSV
-        </Button>
+        <Link href="/import">
+          <Button variant="outline" data-testid="button-import">
+            <Upload className="h-4 w-4 mr-2" />
+            Importera
+          </Button>
+        </Link>
         <Button variant="outline" onClick={() => setMetadataColumnsDialogOpen(true)} data-testid="button-metadata-columns">
           <Columns3 className="h-4 w-4 mr-2" />
-          Kolumner
+          Metadatakolumner
           {selectedMetadataColumns.length > 0 && (
             <Badge variant="secondary" className="ml-2" data-testid="badge-metadata-columns-count">
               {selectedMetadataColumns.length}
             </Badge>
           )}
         </Button>
+        {selectedMetadataColumns.length > 0 && (
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={() => setMetadataColumnsCollapsed(v => !v)}
+            title={metadataColumnsCollapsed ? "Visa metadatakolumner i listan" : "Dölj metadatakolumner i listan"}
+            aria-label={metadataColumnsCollapsed ? "Visa metadatakolumner i listan" : "Dölj metadatakolumner i listan"}
+            data-testid="button-toggle-metadata-columns"
+          >
+            {metadataColumnsCollapsed ? <ChevronDown className="h-4 w-4" /> : <ChevronUp className="h-4 w-4" />}
+          </Button>
+        )}
         <DropdownMenu modal={false}>
           <DropdownMenuTrigger asChild>
             <Button variant="outline" disabled={isExporting} data-testid="button-export">
@@ -2265,9 +2340,9 @@ export default function ObjectsPage() {
                   <FolderPlus className="h-4 w-4 mr-2" />
                   Flytta till förälder…
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={exportSelectedCSV} data-testid="menu-bulk-export">
+                <DropdownMenuItem onClick={exportSelectedColumns} data-testid="menu-bulk-export">
                   <Download className="h-4 w-4 mr-2" />
-                  Exportera markerade
+                  Exportera markerade (för återimport)
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={() => setBulkDeleteOpen(true)} className="text-destructive focus:text-destructive" data-testid="menu-bulk-delete">
