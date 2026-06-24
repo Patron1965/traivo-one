@@ -23,7 +23,9 @@ import {
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
+  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
@@ -73,7 +75,13 @@ import {
   StickyNote,
   Badge as BadgeIcon,
   Calculator,
+  Search,
+  X,
 } from "lucide-react";
+
+import { getLucideIconByName } from "@/lib/icon-registry";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import type { IconDefinition } from "@shared/schema";
 
 interface MetadataKatalog {
   id: string;
@@ -110,54 +118,127 @@ interface CustomerOption {
   parentCustomerId: string | null;
 }
 
-const iconOptions = [
-  { value: 'MapPin', label: 'Kartpinne' },
-  { value: 'Navigation', label: 'Navigation' },
-  { value: 'Grid3x3', label: 'Rutnät' },
-  { value: 'Hash', label: 'Hash' },
-  { value: 'Box', label: 'Box' },
-  { value: 'Building', label: 'Byggnad' },
-  { value: 'FileText', label: 'Dokument' },
-  { value: 'Phone', label: 'Telefon' },
-  { value: 'Mail', label: 'E-post' },
-  { value: 'User', label: 'Användare' },
-  { value: 'Package', label: 'Paket' },
-  { value: 'Clock', label: 'Klocka' },
-  { value: 'Layers', label: 'Lager' },
-  { value: 'Key', label: 'Nyckel' },
-  { value: 'Star', label: 'Stjärna' },
-  { value: 'Image', label: 'Bild' },
-  { value: 'File', label: 'Fil' },
-  { value: 'Tag', label: 'Tagg' },
-  { value: 'Square', label: 'Kvadrat' },
-  { value: 'DollarSign', label: 'Valuta' },
-  { value: 'RefreshCw', label: 'Upprepa' },
-];
-
-const datatypOptions = [
+// Vanliga datatyper — det de flesta fält behöver. "Lista" = fält där användaren
+// väljer bland fasta värden (lagras som textfält + allowedValues).
+const DATATYP_COMMON = [
   { value: 'string', label: 'Text' },
-  { value: 'integer', label: 'Antal (Heltal)' },
+  { value: 'integer', label: 'Antal (heltal)' },
   { value: 'decimal', label: 'Decimaltal' },
+  { value: 'lista', label: 'Lista (välj bland värden)' },
   { value: 'boolean', label: 'Status (Ja/Nej)' },
   { value: 'datetime', label: 'Datum/tid' },
-  { value: 'json', label: 'JSON' },
-  { value: 'referens', label: 'Referens (Kund/Prislista)' },
   { value: 'image', label: 'Bild' },
   { value: 'file', label: 'Fil' },
-  { value: 'code', label: 'Kod' },
   { value: 'location', label: 'Plats (GPS)' },
+];
+
+// Avancerade datatyper — tekniska typer för integrationer/specialfall.
+const DATATYP_ADVANCED = [
+  { value: 'json', label: 'JSON (strukturerad data)' },
+  { value: 'referens', label: 'Referens (Kund/Prislista)' },
+  { value: 'code', label: 'Kod' },
   { value: 'interval', label: 'Tidsintervall' },
 ];
 
-const iconMap: Record<string, any> = {
-  MapPin, Navigation, Grid3x3, Hash, Box, Building, FileText, Phone, Mail, User,
-  Package, Clock, Layers, Key, Star, Image, File, Tag, Square, DollarSign,
-  RefreshCw, ClipboardList, FileSearch, StickyNote, Badge: BadgeIcon,
+// Sammanslagen lista för etikett-uppslag (t.ex. i tabellvyn).
+const datatypOptions = [...DATATYP_COMMON, ...DATATYP_ADVANCED];
+
+// Kort förklaring per datatyp — visas under datatyp-väljaren.
+const DATATYP_HELP: Record<string, string> = {
+  string: 'Fri text.',
+  integer: 'Heltal, t.ex. ett antal.',
+  decimal: 'Tal med decimaler, t.ex. vikt eller volym.',
+  lista: 'Användaren väljer bland fasta värden som du anger nedan.',
+  boolean: 'Ja/Nej-växel.',
+  datetime: 'Datum och/eller tid.',
+  image: 'Uppladdad bild.',
+  file: 'Uppladdad fil.',
+  location: 'Geografisk position (GPS-koordinater).',
+  json: 'Strukturerad data i JSON-format — för avancerade integrationer.',
+  referens: 'Pekar mot en annan post, t.ex. en kund eller prislista.',
+  code: 'Kort kod eller identifierare.',
+  interval: 'Ett tidsspann (från–till).',
 };
 
-function getIcon(iconName: string | null) {
-  if (!iconName || !iconMap[iconName]) return FileText;
-  return iconMap[iconName];
+// Äldre poster lagrar ikonnamn i PascalCase ("FileText"); ikonregistret använder
+// kebab-case ("file-text"). Normalisera så båda renderas korrekt.
+function normalizeIconName(name: string | null | undefined): string {
+  if (!name) return 'package';
+  return name.replace(/([a-z0-9])([A-Z])/g, '$1-$2').toLowerCase();
+}
+
+// Sökbar ikon-väljare kopplad till det centrala ikonregistret (/api/icons).
+function IconPicker({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState('');
+  const { data: iconDefs = [] } = useQuery<IconDefinition[]>({ queryKey: ['/api/icons'] });
+  const normalized = normalizeIconName(value);
+  const SelectedIcon = getLucideIconByName(normalized);
+  const selectedLabel = iconDefs.find((d) => d.lucideName === normalized)?.label;
+  const q = search.trim().toLowerCase();
+  const filtered = q
+    ? iconDefs.filter(
+        (d) => d.label.toLowerCase().includes(q) || d.lucideName.toLowerCase().includes(q),
+      )
+    : iconDefs;
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          type="button"
+          variant="outline"
+          className="w-full justify-start gap-2 font-normal"
+          data-testid="select-type-icon"
+        >
+          <SelectedIcon className="h-4 w-4 shrink-0" />
+          <span className="truncate">{selectedLabel || 'Välj ikon'}</span>
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-72 p-2" align="start">
+        <div className="relative mb-2">
+          <Search className="absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Sök ikon..."
+            className="pl-8"
+            data-testid="input-icon-search"
+          />
+        </div>
+        <div className="max-h-60 overflow-y-auto">
+          {filtered.length === 0 ? (
+            <p className="p-2 text-xs text-muted-foreground" data-testid="text-no-icons">
+              Inga ikoner matchar.
+            </p>
+          ) : (
+            <div className="grid grid-cols-6 gap-1">
+              {filtered.map((d) => {
+                const Icon = getLucideIconByName(d.lucideName);
+                const active = normalized === d.lucideName;
+                return (
+                  <button
+                    type="button"
+                    key={d.id}
+                    title={d.label}
+                    onClick={() => {
+                      onChange(d.lucideName);
+                      setOpen(false);
+                    }}
+                    className={`flex items-center justify-center rounded-md p-2 hover-elevate ${
+                      active ? 'bg-accent text-accent-foreground' : ''
+                    }`}
+                    data-testid={`option-icon-${d.lucideName}`}
+                  >
+                    <Icon className="h-4 w-4" />
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
 }
 
 export default function MetadataSettingsPage() {
@@ -425,7 +506,7 @@ export default function MetadataSettingsPage() {
                   </TableHeader>
                   <TableBody>
                     {buildOrderedRows(types).map(({ type, isChild, dotKey }) => {
-                      const Icon = getIcon(type.icon);
+                      const Icon = getLucideIconByName(normalizeIconName(type.icon));
                       return (
                         <TableRow key={type.id} data-testid={`metadata-type-row-${type.namn}`}>
                           <TableCell className="text-muted-foreground tabular-nums" data-testid={`text-displaynumber-${type.namn}`}>
@@ -480,7 +561,9 @@ export default function MetadataSettingsPage() {
                           </TableCell>
                           <TableCell>
                             <Badge variant="outline">
-                              {datatypOptions.find(d => d.value === type.datatyp)?.label || type.datatyp}
+                              {type.allowedValues && type.allowedValues.length > 0
+                              ? 'Lista'
+                              : (datatypOptions.find(d => d.value === type.datatyp)?.label || type.datatyp)}
                             </Badge>
                             {type.datatyp === 'referens' && type.referensTabell && (
                               <span className="text-xs text-muted-foreground ml-1">
@@ -578,19 +661,38 @@ function MetadataTypeForm({ initialData, onSubmit, isPending, allTypes, customer
   const [namn, setNamn] = useState(initialData?.namn || '');
   const [codeManuallyEdited, setCodeManuallyEdited] = useState(!!initialData);
   const [beskrivning, setBeskrivning] = useState(initialData?.beskrivning || '');
-  const [datatyp, setDatatyp] = useState(initialData?.datatyp || 'string');
+  // "Lista" är en UI-datatyp: fält med fasta värden visas som "Lista" oavsett
+  // vilken bas-datatyp de lagras som (allowedValues != tom ⇒ lista).
+  const initialIsList = (initialData?.allowedValues?.length ?? 0) > 0;
+  const [datatyp, setDatatyp] = useState(
+    initialIsList ? 'lista' : (initialData?.datatyp || 'string'),
+  );
   const [referensTabell, setReferensTabell] = useState(initialData?.referensTabell || '');
   const [arLogisk, setArLogisk] = useState(initialData?.arLogisk ?? true);
   const [standardArvs, setStandardArvs] = useState(initialData?.standardArvs ?? false);
   const [sortOrder, setSortOrder] = useState(initialData?.sortOrder || 0);
-  const [icon, setIcon] = useState(initialData?.icon || 'FileText');
+  const [icon, setIcon] = useState(
+    initialData?.icon ? normalizeIconName(initialData.icon) : 'package',
+  );
   const [area, setArea] = useState(initialData?.area || '');
   const [displayNumber, setDisplayNumber] = useState<string>(
     initialData?.displayNumber != null ? String(initialData.displayNumber) : '',
   );
-  const [allowedValuesText, setAllowedValuesText] = useState(
-    initialData?.allowedValues?.join(', ') || '',
+  const [allowedValuesList, setAllowedValuesList] = useState<string[]>(
+    initialData?.allowedValues && initialData.allowedValues.length > 0
+      ? initialData.allowedValues
+      : [],
   );
+  const addAllowedValue = () => setAllowedValuesList((p) => [...p, '']);
+  const updateAllowedValue = (idx: number, v: string) =>
+    setAllowedValuesList((p) => p.map((x, i) => (i === idx ? v : x)));
+  const removeAllowedValue = (idx: number) =>
+    setAllowedValuesList((p) => p.filter((_, i) => i !== idx));
+  // När man väljer "Lista" och inga värden finns ännu — visa en tom rad direkt.
+  const handleDatatypChange = (v: string) => {
+    setDatatyp(v);
+    if (v === 'lista' && allowedValuesList.length === 0) setAllowedValuesList(['']);
+  };
   const [allowDuplicates, setAllowDuplicates] = useState(initialData?.allowDuplicates ?? false);
   const [kronologiskVisning, setKronologiskVisning] = useState(initialData?.kronologiskVisning ?? false);
   const [parentMetadataId, setParentMetadataId] = useState(initialData?.parentMetadataId || '');
@@ -641,10 +743,13 @@ function MetadataTypeForm({ initialData, onSubmit, isPending, allTypes, customer
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const allowedValues = allowedValuesText
-      .split(',')
+    const isLista = datatyp === 'lista';
+    const allowedValues = allowedValuesList
       .map((v) => v.trim())
       .filter((v) => v.length > 0);
+    // "Lista" lagras som ett textfält (string) med fasta värden — bakåtkompatibelt
+    // med befintliga dropdown-fält och undviker att introducera en ny bas-datatyp.
+    const resolvedDatatyp = isLista ? 'string' : datatyp;
     const parsedDisplayNumber = displayNumber.trim() === '' ? undefined : parseInt(displayNumber, 10);
     onSubmit({
       namn,
@@ -652,8 +757,8 @@ function MetadataTypeForm({ initialData, onSubmit, isPending, allTypes, customer
       // stavning). Tom → null (faller tillbaka till namn). namn förblir oförändrat.
       visningsnamn: displayLabel.trim() || null,
       beskrivning: beskrivning || null,
-      datatyp,
-      referensTabell: datatyp === 'referens' ? referensTabell : null,
+      datatyp: resolvedDatatyp,
+      referensTabell: resolvedDatatyp === 'referens' ? referensTabell : null,
       arLogisk,
       standardArvs,
       // Task #674: Område är det enda grupperingsfältet. Vi behåller `kategori`-
@@ -664,7 +769,7 @@ function MetadataTypeForm({ initialData, onSubmit, isPending, allTypes, customer
       icon,
       area: (area || null) as MetadataKatalog['area'],
       displayNumber: (Number.isFinite(parsedDisplayNumber as number) ? parsedDisplayNumber : null) as MetadataKatalog['displayNumber'],
-      allowedValues: allowedValues.length > 0 ? allowedValues : null,
+      allowedValues: isLista && allowedValues.length > 0 ? allowedValues : null,
       allowDuplicates,
       kronologiskVisning,
       parentMetadataId: parentMetadataId || null,
@@ -700,24 +805,7 @@ function MetadataTypeForm({ initialData, onSubmit, isPending, allTypes, customer
         </div>
         <div>
           <Label>Ikon</Label>
-          <Select value={icon} onValueChange={setIcon}>
-            <SelectTrigger data-testid="select-type-icon">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {iconOptions.map((opt) => {
-                const Icon = iconMap[opt.value];
-                return (
-                  <SelectItem key={opt.value} value={opt.value}>
-                    <div className="flex items-center gap-2">
-                      <Icon className="h-4 w-4" />
-                      {opt.label}
-                    </div>
-                  </SelectItem>
-                );
-              })}
-            </SelectContent>
-          </Select>
+          <IconPicker value={icon} onChange={setIcon} />
         </div>
       </div>
 
@@ -733,19 +821,79 @@ function MetadataTypeForm({ initialData, onSubmit, isPending, allTypes, customer
 
       <div>
         <Label>Datatyp</Label>
-        <Select value={datatyp} onValueChange={setDatatyp}>
+        <Select value={datatyp} onValueChange={handleDatatypChange}>
           <SelectTrigger data-testid="select-type-datatyp">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            {datatypOptions.map((opt) => (
-              <SelectItem key={opt.value} value={opt.value}>
-                {opt.label}
-              </SelectItem>
-            ))}
+            <SelectGroup>
+              <SelectLabel>Vanliga</SelectLabel>
+              {DATATYP_COMMON.map((opt) => (
+                <SelectItem key={opt.value} value={opt.value}>
+                  {opt.label}
+                </SelectItem>
+              ))}
+            </SelectGroup>
+            <SelectGroup>
+              <SelectLabel>Avancerat</SelectLabel>
+              {DATATYP_ADVANCED.map((opt) => (
+                <SelectItem key={opt.value} value={opt.value}>
+                  {opt.label}
+                </SelectItem>
+              ))}
+            </SelectGroup>
           </SelectContent>
         </Select>
+        {DATATYP_HELP[datatyp] && (
+          <p className="text-xs text-muted-foreground mt-1">{DATATYP_HELP[datatyp]}</p>
+        )}
       </div>
+
+      {datatyp === 'lista' && (
+        <div className="space-y-2 rounded-md border p-3" data-testid="section-allowed-values">
+          <div>
+            <Label>Värden i listan</Label>
+            <p className="text-xs text-muted-foreground">
+              Lägg till de val användaren kan välja mellan (t.ex. Hel, Trasig).
+            </p>
+          </div>
+          {allowedValuesList.length === 0 ? (
+            <p className="text-xs text-muted-foreground" data-testid="text-no-allowed-values">
+              Inga värden ännu — lägg till minst ett.
+            </p>
+          ) : (
+            allowedValuesList.map((val, idx) => (
+              <div key={idx} className="flex items-center gap-2">
+                <Input
+                  value={val}
+                  onChange={(e) => updateAllowedValue(idx, e.target.value)}
+                  placeholder={`Värde ${idx + 1}`}
+                  data-testid={`input-allowed-value-${idx}`}
+                />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => removeAllowedValue(idx)}
+                  data-testid={`button-remove-value-${idx}`}
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+            ))
+          )}
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={addAllowedValue}
+            data-testid="button-add-value"
+          >
+            <Plus className="mr-1 h-4 w-4" />
+            Lägg till värde
+          </Button>
+        </div>
+      )}
 
       {datatyp === 'referens' && (
         <div>
@@ -920,17 +1068,6 @@ function MetadataTypeForm({ initialData, onSubmit, isPending, allTypes, customer
             </p>
           </div>
         )}
-      </div>
-
-      <div>
-        <Label>Fasta värden (dropdown)</Label>
-        <Input
-          value={allowedValuesText}
-          onChange={(e) => setAllowedValuesText(e.target.value)}
-          placeholder="T.ex. Liten, Mellan, Stor"
-          data-testid="input-type-allowedvalues"
-        />
-        <p className="text-xs text-muted-foreground mt-1">Kommaseparerade värden. Tomt = fritext.</p>
       </div>
 
       <div className="grid grid-cols-2 gap-4">

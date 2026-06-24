@@ -1,0 +1,38 @@
+{
+  "sessionId": "4181a9ee5",
+  "exportedAt": "2026-06-24T14:51:31.151Z",
+  "summary": "### Key Topics Discussed\n- Justering av metadata vid skapande av familjer, specifikt för \"kontakt\" och \"bovärld\".\n- Automatisk gruppering av underordnade metadatafält.\n- Hantering av överordnade metadatafält utan datainnehåll.\n\n### Important Points & Insights\n- När en familj, exempelvis \"kontakt bovärld\", skapas bör föräldern (samlingsnamnet) inte ha något datainnehåll, men detta är inte möjligt att välja för närvarande.\n- Underordnade fält som e-post, namn, skostorlek och telefonnummer borde automatiskt hamna under samma metadataområde (kontaktinformation) för det nuvarande systemet kräver manuell styrning.\n- Det nuvarande systemet skapar ett namn för ett metadatafält som innehåller fyra datapunkter.\n- Föräldrafältet för kontakt (t.ex. \"kontakt bovärld\") innehåller idag datainnehåll, men bör kunna väljas att inte innehålla något data.\n\n### Open Questions/Pending Items\n- Hur man kan göra det möjligt att föräldern för en familj inte har något datainnehåll.\n- Hur man kan automatisera grupperingen av underordnade metadatafält under rätt metadataområde.\n- Inväntar förslag från Replit om bästa lösningen för att kunna välja \"inget datafält\" för föräldrafältet.\n",
+  "conversation": [],
+  "transcripts": [
+    {
+      "text": "Ja, nu har vi Mats på besök igen. Jo, ytterligare en metadata-småjustering här då att om man skapar en fam-familj, till exempel nu kontakt, eh, bovärld här då. Då, eh, borde det också gå att välja då att föräldern här för... Alltså samlingsnamnet för, för, för kontakter här ska ju då inte ha något datainnehåll då, men det kan man inte välja. Eh, sen de underordnade...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Eh, fälten då i det här fallet e-post, namn, skostorlek och telefonnummer borde ju då automatiskt hamna under samma metadataområde då i det här fallet kontaktinformation. Nu måste man aktivt så att säga styra in dem då så att de hamnar på, på rätt ställe. Och jag ställer väl liksom frågan då, eh, vi har ju skapat det här då så att det här är ett sätt att skapa ett namn på ett metadatafält som tar med sig i det här fallet då fyra data.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Fält, telefon, skostorlek, namn och e-postnummer. Men att huvudet då eller mamman eller föräldern då som är en kontakt här nu då, den, den ska då... Innehåller ju liksom ingenting. Nej.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och då borde man alltså kunna, eh, i logikens namn här, kunna-- Borde man då när man går in då i, i den här så datatyp då, då, då borde man kunna välja då där på samma sätt som man kan välja text, eh, eller, eh, heltal eller decimaltal, så borde man då kunna skriva inget datafält. Ja, just. Ja. Eh, till nåt läge kanske man också vill ha då ett datafält där och då, då kan det ju få vara öppet liksom då. Det är ju... Men... Ja, vi får be Replit komma med.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Förslag hur de bäst löser det.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    }
+  ]
+}
