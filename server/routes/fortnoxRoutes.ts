@@ -416,7 +416,7 @@ export interface SubscriptionSegmentPreview {
   isStop: boolean;
 }
 
-async function buildSubscriptionSegmentsPreview(
+export async function buildSubscriptionSegmentsPreview(
   tenantId: string,
   concept: any,
   matchingObjects: ServiceObject[],
