@@ -1,0 +1,218 @@
+{
+  "sessionId": "20350c75c",
+  "exportedAt": "2026-06-24T07:07:53.842Z",
+  "summary": "### Key Topics Discussed\n- Förtydligande för rätten angående metadatahantering och insamling kopplat till en artikel.\n- Användning av metadata för att filtrera och söka efter specifika attribut i systemet.\n- Metadata som informativ referens för kundhantering och fakturering.\n- Definition av metadatafält: namn, datatyp (bild, fil, alfanumeriskt, siffervärde, valbart alternativ) och villkor för inmating.\n- Metoder för att fylla i metadatafält, inklusive vid import av objektlistor genom matchningsfunktioner kopplade till interimnummer eller systemnummer.\n- Metadatahantering på artikelnivå eller uppgiftsnivå, där syftet är att göra informationen synlig för operatören eller utföraren.\n- Informationsinhämtning och metadatafunktionen som visar bilder eller information från specifika metadatafält vid en uppgift.\n- Design av gränssnittet för att visa metadatafält, där användare kan välja ett eller flera metadatafält att visa.\n- Möjlighet att lägga till nya metadatafält (t.ex. för koder eller status) genom en rullgardinslista för valbara alternativ.\n- En funktion för att kryssa i om fältarbetaren kan uppdatera metadatan, vilket kan fungera som ett villkor.\n- Diskussion kring motsägelsefullheten i funktionen för att uppdatera metadata av fältarbetare, beroende på om metadatan ska visas eller samlas in.\n- Implementering av ett kryss för att göra metadatafält obligatoriska vid insamling, vilket säkerställer att ingen information lämnas utan att de angivna metadatafälten fylls i.\n- Uppdatering av befintlig metadata med möjlighet att kryssa för om fältarbetaren får uppdatera den visade metadatan.\n- Kontroll över om fältarbetare får uppdatera specifika metadatafält, till exempel koder.\n- Möjligheten att lägga till ett förklarande fält som \"Behållartyp\" för att förtydliga metadata som annars bara består av sifferkoder.\n- Standardiserade instruktioner för fältarbetare vid insamling av metadata, till exempel \"kontrollera serienumret och mata in det här\".\n- Benämningen \"Visa och uppdatera metadata\" för informationshämtningsfunktionen.\n- Specifikation av en informationsrad med upp till femtio tecken för förtydligande av metadata.\n- Kravställning för obligatorisk datainsamling via ett kryss, där informationen måste lämnas om krysset är aktivt; annars är det valfritt.\n- En komplett logik för metadatahantering har byggts, inkluderande val av metadatafält att lämna med förklaringsrad, möjlighet att lägga till flera sådana, samt kryss för att ändra befintlig metadata och kryss för obligatorisk inlämning.\n\n### Decisions Made\n- Funktionen för \"blindartikel, informationsbärare\" ska tas bort.\n- Funktionen \"förvalt metadatafält att haka fast på\" ska tas bort.\n\n### Action Items\n- Replit behöver få ett förtydligande angående villkoret för fältarbetarens möjlighet att uppdatera metadatan, då logiken kan vara motsägelsefull beroende på om metadatan ska visas eller samlas in. (This item needs clarification, as the new transcript implies a path forward for this.)\n\n### Important Points & Insights\n- Metadata är kopplat till ett objekt och hanterbart av systemet för sökning och analys, vilket möjliggör sökning efter specifika attribut som \"trasig krok\" eller \"blå soptunnor\" över 200 liter.\n- Känd metadata kan användas som villkor för ytterligare analyser, eller för att peka ut var en artikel ska \"parkera\" eller bli giltig.\n- Metadata kan även vara av informativ karaktär, som en referens för kund (t.ex. kostnadsställe eller fastighetsnummer), vilket kan användas för fakturareferenser.\n- Grundlogiken för metadatafält inkluderar definition av namn, datatyp och inmatningsvillkor.\n- Metadata kan uppdateras vid import av objektlistor, där information i specifika kolumner länkas till objektets interimnummer eller systemnummer.\n- Ett helt nytt metadatafält kan kopplas till en artikel, vilket knyter ihop hur metadata används och hanteras.\n- Funktionen \"informationsinhämtning och metadata\" visar information för operatören vid en uppgift, till exempel ett foto av ett pantkärl från föregående tvätt, baserat på ett visst metadatafält.\n- Denna funktion har två enkla syften: att visa information baserad på ett specifikt metadatafält och att hämta in relevant information.\n- Gränssnittet för att visa metadatafält bör ha en rubrik \"metadatafält att visa\" och tillåta användaren att lägga till ett eller flera metadatafält, även om det normalt endast väljs ett eller ett par intressanta fält på artikelnivå för utföraren.\n- Metadatafält kan visa siffror, texter, filer eller bilder, med länkar som kan öppnas för att se innehållet.\n- Det finns en funktion för att \"lämna nytt metadatafält\" för ett objekt, vilket kan användas för koder eller status, ofta presenterat som en rullgardinslista med valbara alternativ.\n- En funktion för att tillåta fältarbetare att uppdatera metadatan kan läggas till som ett villkor. Om funktionen inte kryssas i, kan metadatan inte uppdateras.\n- Om krysset för uppdatering av metadata av fältarbetaren sätts för en bild av objektet, skulle fältarbetaren kunna ersätta eller uppdatera den visade gamla metadatan.\n- När fältarbetaren bara ska lämna information, som ett antal kontrollpunkter, måste de kunna lämna informationen som en del av uppgiften, oavsett uppdateringskrysset.\n- Ett kryss kan inkluderas för att ange att ett metadatafält som ska lämnas är ett krav, vilket innebär att uppgifter inte kan slutföras utan att dessa obligatoriska fält fylls i.\n- Möjligheten att uppdatera befintlig metadata baseras på ett aktivt val (kryssruta).\n- Specifika metadatafält, som koder, kan låsas från uppdatering av fältarbetare trots att de visas.\n- Metadatafält kan förtydligas, till exempel genom att lägga till ett fält som \"Behållartyp\" bredvid en numerisk kod för att öka förståelsen.\n- Instruktioner kan ges för insamling av metadata, såsom att fältarbetaren ska kontrollera och mata in serienummer.\n- \"Informationshämtning och metadata\"-funktionen kan kallas \"Visa och uppdatera metadata\".\n- Ett förtydligande informationsfält med 50 tecken kan läggas till för metadata.\n- Fältarbetare ska kunna uppdatera metadatafält ifall de upptäcker att informationen inte stämmer eller om de har bättre underlag.\n- Ett kryss ska finnas för att markera ett metadatafält som obligatoriskt vid insamling (kravställt).\n\n### Open Questions/Pending Items\n- Det återstår att döpa om funktionen \"informationshämtning och metadata\".",
+  "conversation": [],
+  "transcripts": [
+    {
+      "text": "Om du håller fram bilden där så att jag får se den. Ja, det va-bara säga att det är",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "det. Eh, ja, eh, då ska vi då göra en förtydligande för rätten här angående metadata...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Hantering och insamling kopplat till en artikel.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och, ah, sammanfattningsvis då kan vi ju då förtydliga att metadata är kopplat till ett objekt och så fort metadata är kopplad till ett objekt så blir ju den då, eh, hanterbar för systemet och man kan på sikt då söka och analysera, till exempel söka vilka objekt som har en trasig krok. Men det är inte det som är det centrala här nu, utan det här är då, eh... Och, ja, och jag skulle säga att på samma sätt som man kan söka metadata för att se om trasig krok,",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "så kan man då använda känd metadata som villkor för till exempel, eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Eh, eh, att en artikel ska fastna, eh, fast eller var, vart orders koncept ska parkera, eh, pekas in eller, eller bli, bli giltigt för då. Eh, så det går ju liksom att då använda där. Man kan alltså ställa frågan då att vi, nu ska vi titta i det här klustret och tvätta blå soptunnor, eh, där metadatafältet färg är lika med blått och de ska vara, eh, mer än, än 200 liter, eh, utifrån storleken som anges i liter då. Och på det viset kan vi då-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm ...skapa ett, ett, ett villkor för, för saker som vi ska göra då. Eh, sen kan även då metadata vara av informativ karaktär då. Så att det kan ju då vara, eh, naturligtvis en bild, men det kan också vara en, en, en referens för kunden, till exempel ett kostnadsställe eller fastighetsnummer då. Och den informationen kommer ju då att bli användbar, eh, i fakturan till exempel då, eh, för att refer-- göra, eh, peka in då, eh, den här fasadnumret som till exempel fakturarreferens då.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. Och grundlogiken i metadatan är ju att varje metadatafält definieras då med ett namn och vilken typ av data det är och vilka villkor den här datan får matas in då. Om det är en bild eller om det är en fil eller om det är ett a-alfanumeriskt värde eller om det är ett siffervärde eller om det är ett valbart alternativ då. Och det gör man när man, mm, definierar metadatafältet då. Eh, och hur få-- fyller man då med metadatafälten? Ja.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Eh, mer information då. Ja, det gör man antingen när man tankar in, eh, objektlistan. Då har man då möjlighet att i, i den här, eh, matchningsfunktionen då, eh, kunna säga då att den information som finns i en viss kolumn och som ligger då, eh, antingen kopplad till ett interimnummer för objektet eller objektets egna systemnummer är, är då länken till då för att man antingen uppdaterar metadatan eller att...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Eller ett helt nytt metadatafält till artikeln. Så där har vi liksom då knyter ihop hur metadata delvis används och hur den kommer in från, från andra håll. Och nu är vi då på metadatahanteringen på artikelnivå eller uppgiftsnivå då. Artikeln kommer ju att skapa en uppgift. Och syftet med hela den, det är ju då att det här ska bli synligt för operatören då eller utföraren. Och då finns det ett fält här som heter informationsinhämtning och metadata. Och den fun",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "gerar. Den har två ganska enkla syften. Om man vid en uppgift, till exempel tvätt av ett pantkärl, vill visa fotot på just det här pantkärlet från föregående tvätt utifrån ett visst metadatafält. Ja, då ska man kunna välja då det metadatafältet för att visa information då. Och man kan väl säga här då, för att sammanfatta det här, den här har alltså två stycken...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Eh, typer. Antingen ett eller flera metadatafält som man då hämtar från objektet under förutsättning att det finns. Och då borde den här, eh, formuläret då vara upplagt då att vi... Det borde vara en rubrik där det står metadatafält att visa. Och så ska man då kunna välja ett metadatafält och så ska man kunna trycka liksom på ett plus och lägga till ett metadatafält till då. Och, och egentligen så finns det väl ingen, eh, ingen begränsning i det här. Men det normala är ju då att man kanske plockar fram en eller",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "ett par metadatafält då som man tycker på den här artikelnivån är intressant för utföraren då att se. Eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och den informationen kan ju vara, vara, vara, vara intressant. Det, det, det kan ju vara ett nyckelnummer till exempel, eller det kan vara en kod eller något sånt där om man använder det här då ihop med en uppgift att låsa upp en dörr. Eh, men det kan ju också vara något annat som vi inte ser nu då. För att när du ska utföra så en, en uppgift så vill du ju ha liksom information. Eh, och, och, och på det här sättet kan man då dela den informationen som du...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "På objektet så det kommer då på, på, på, på listan med uppgifter då i ViiD. Och det andra då, nu har vi, nu har vi då tagit upp metadatafält att visa och det är viktigt då att det, det kan alltså vara en siffra, det kan vara en text, det kan vara, vara en, en fil eller det kan vara en bild då. Eh, då, då, då ska den alltså ta in de, de länkarna där då så att man kan öppna upp det här och, och se. Och det andra typen av, av, eh, metadatakoppling här, det är då metadatafält a.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Lämna. Så har man då, eh, här nu, eh, en, en möjlighet att lämna nytt metadatafält, till exempel för en kod eller, eh, till exempel för status utav det här, det hära, eh, objektet som den är kopplad till. Ja, då kan du alltså lägga till då ett eller flera lämna metadatafält då. Och, och, och de bör liksom se ut på det att det är en, det är alltså en, en sån här rullgardinslista där man kan då välja bland olika...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Datafält. Eh, och så väljer man det och så kan man då trycka på en plusfunktion och så kan man då lägga till ett eller, eller flera då där. Och på den då så ska det också då finnas en, eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "En funktion då där man kryssar i att, eh, utföraren då eller fältarbetaren kan uppdatera metadatan då. Det kan man då lägga in som ett, ett, ett villkor då här. Det blir lite motsägelsefullt då, eh, men, men den kan ju så att säga fortfarande finnas kvar där. Så kryssar man inte i det så kan man då inte uppdatera den här metadatan. Eh, och jag, ja, du Tomas kanske får hjälpa mig lite granna här då för att vi får en... För det blir lite granna då, eh, motsägelsefullt.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Ja, det blir lite motsägelsefullt det här och det får väl Replit då fråga va? För att det är ju en sak att den hämtar och visar metadata. Eh, och det är väl framför allt den metadata då som man ska sätta det krysset då för till om då, eh, det till exempel är en bild där på objektet då. Och om man då s-- kryssar i där så, så skulle man då kunna tolka logiken i det här då som att ja, då, då, då får, eh, utföraren, fältarbetaren som det står här då, ersätta och uppdatera den här visade gamla metadatan då. Medan om du har ett metad",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "ater- Mm. -där man bara ska lämna information, till exempel, eh, ett antal kontrollpunkter då, så, så, eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Eh, eh, eh, det säger sig själv- Ja. -att då måste du ju få lämna det för det är ju, det är ju en del utav din uppgift då. Mm. Eh, sen så finns det en punkt här som heter blindartikel, informationsbärare då. Eh, den tror jag vi för enkelhetens skull ska ta bort. Och vi ska också ta bort det här förvalt metadatafält att haka fast på för att det är inte alls aktuellt här då för att he-hela den här artikeln...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Eh, den kommer ju bara att haka fast på de objekt som den ska haka fast då utifrån det, det villkoret då. Och om vi då har adresserat då metadatafält att visa så kommer den ju att visa dem om de finns på objektet. Och den kommer att, eh, lämna då, eh, metadatafält, eh, om, om, eh, om man då lägger upp såna. Ett kryss som möjligtvis skulle vara då ett, ett, eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Intressant i det här fallet är också att man då har ett kryss där man säger på, för metadatafälten att lämna att det är ett krav då att man ska lämna de här metadatafälten. Så att man kan alltså inte lämna uppgifter med mindre att man hade, att man har då räknat hur många kärl det är eller, eller kollat att, vilken färg det är på väggen eller vad, vad det nu är vi vill samla in för information där då. Men, men den skulle man då kunna, kunna lägga till så. Eh, sen finns det ett plus där som heter informationskrav och du kan trycka på den då. Nu får vi...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Funkar inte den där, men... Jag vet inte vad som är tänkt där, utan...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Ja.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Som sagt var, eh, om jag summerar hela det här nu då. Nu har jag pratat ganska mycket då, men det handlar ju bara om att, att visa befintlig metadata och lägga dit då en, en adressering för att lämna metadata. Och sen så blir det då att den visade metadatan kan man då uppdatera till bättre om man då kryssar för en, en, en, en knapp där man säger då att man får, får uppdatera det. Eh, ett exempel på det skulle ju kunna vara då att det-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm ...den visar en, en kod. Eh, men där tycker vi då inte att den som gör-- Utföraren får inte uppdatera koden, eh, säger vi då av någon anledning. Och då, då, då ska han inte få göra det heller. Eller me-medan om vi då säger att ja, men kan han få reda på en ny kod? Så det står inne i, i rummet. Ja, då, då, då ska han då få göra det. Och ett sista tillägg för det här är ju då att för varje sån här metadatafält som man lägger in, skulle man ju då kunna tänka sig då att man har...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "En, en informationsrad, en, en, en fritextrad som man skriver. Eh, ja, om vi nu kallar in, eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. Menta datafältet då för typ av- Mm. Behållare här då. Ja, då kanske det bara står 21, 65, 30 där då. Och då kan det ju vara bra då att kunna ha ett fri, ett fält där man skriver- Mm. Behållartyp då- Ja, ja, ja. För att göra det lite tydligare då. Ja, just det. Och, och, och för fältena då att lämna metadata då så ska, skulle man ju då kunna liksom skriva en instruktion på mo-motsvarande sätt att, eh, kontrollera serienumret och mata in det här då. Mm.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och det börjar med tre säger vi då. Ja, och då, då får man då en in-instruktion där. Så samma-- Om man sammanfattar den här bilden då så, så består, eller ja, det här informationsinhämt-- Informationshämtning och metadata. Eller jag skulle vilja ka-kalla det då hämta och le-- Visa och uppdatera metadata skulle jag vilja kalla den här. Så blir det då ett, ett område där man då, eh, kan välja ett eller flera ma-- Metadatafält för att visa befintlig metadata under förutsättning att det finns någonting. Och, eh, där ska man då för varje metadatafält-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. Som man väljer kunna ha ett, ett informations... En informationsrad där man har femtio tecken, säger vi då på sig att skriva in vad det är man, vad, vad det är man, man, man visar då som ett förtydligande om man då vill. Och sen det a-- På, på det avsnittet och där den hämtar metadata så ska det finnas då en bock där man kryssar i då om fältarbetaren får uppdatera de här metadatafältena som han har... Upptäcker att metadatan inte stämmer eller att han har en bättre bild, så, så kan han då ersätta den information som finns. Och sen så har vi då en-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. De renade lämna metadata då. Och de är ju bara då ett fält där man då ombeds att till exempel, eh, uppdatera höjden på kärlen eller statusen på, på, på kärlet eller vad vi nu vill samla in där. Och där ska det då finnas ett kryss som säger då att det här är kravställt. Det här måste lämnas om man kryssar i det. Medan om man inte lägger i krysset, då, då kan man lämna om man känner för det då. Och på det viset får vi då liksom full styrning och logik då för att uppdatera-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. Och utifrån den här bilden då så ska då, eh, ens-- Bara det här som ska vara med. Det ska inte finnas nån fasthakningslogik och det ska inte finnas något informationskrav, utan bara val av metadatafält.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Eh, med förklaringsrad, val av metadatafält att lämna med förklaringsrad och så ett plus att man kan lägga till då ett eller flera såna. Och, eh, krysset då att man har rätt att ändra de befintliga och krysset att man har rätt att, eller är tvungen att lämna på dem där det förväntas lämnas. Då har vi byggt en fullständig logik för det här. Precis. Och informationshämtning och metadata ville du döpa om till...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Det sa honom inte.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    }
+  ]
+}
