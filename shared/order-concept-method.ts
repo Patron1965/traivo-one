@@ -78,3 +78,69 @@ export const INVOICE_FREQUENCY_LABELS: Record<InvoiceFrequency, string> = {
 export function normalizeInvoiceFrequency(v: string | null | undefined): InvoiceFrequency {
   return v === "quarterly" || v === "yearly" ? v : "monthly";
 }
+
+// Task #974/#1056/#1065: En metadatabaserad referens (= fakturastopp) känns igen
+// på att konsolideringen INTE är ren kundnivå ("customer"/"per_job"). Samma regel
+// används i Step3Invoicing (isMetadataReference) och i buildConceptPatch vid spar.
+export function isFakturastoppConsolidation(
+  invoiceConsolidation: string | null | undefined,
+): boolean {
+  return invoiceConsolidation !== "customer" && invoiceConsolidation !== "per_job";
+}
+
+export interface InvoicePatchInput {
+  // Accepterar bredare sträng (wizard-state kan vara "") — valideras nedan.
+  invoiceModel: string | null | undefined;
+  billingFrequency: string | null | undefined;
+  invoiceConsolidation: string | null | undefined;
+  departmentMetadataField: string | null | undefined;
+}
+
+export interface InvoicePatchFields {
+  invoiceModel: InvoiceModel | null;
+  // `undefined` => utelämnas av JSON.stringify så hårdkodad create-default bevaras.
+  scenario: ScenarioValue | undefined;
+  deliveryModel: string | undefined;
+  billingFrequency: InvoiceFrequency;
+  invoiceConsolidation: string;
+  departmentMetadataField: string | null;
+}
+
+// Task #1065: Kanoniserar fakturafälten som buildConceptPatch persisterar — en ren,
+// testbar funktion så att "vid spar"-reglerna inte går sönder tyst vid framtida
+// ändringar. Regler:
+//  - Vald frekvens skrivs till BÅDE billingFrequency OCH (vid fakturastopp)
+//    invoiceConsolidation — en frekvens för hela konceptet.
+//  - Ren kundnivå => invoiceConsolidation="customer" + departmentMetadataField=null.
+//  - Legacy `scenario` (NOT NULL) + `deliveryModel` write-through:as från invoiceModel
+//    (undefined när invoiceModel saknas så create-defaulten "avrop" bevaras).
+export function buildInvoicePatch(input: InvoicePatchInput): InvoicePatchFields {
+  const freqValue = normalizeInvoiceFrequency(input.billingFrequency);
+  const isFakturastopp = isFakturastoppConsolidation(input.invoiceConsolidation);
+  const model =
+    input.invoiceModel && (INVOICE_MODELS as readonly string[]).includes(input.invoiceModel)
+      ? (input.invoiceModel as InvoiceModel)
+      : null;
+  return {
+    invoiceModel: model,
+    scenario: model ? INVOICE_MODEL_TO_SCENARIO[model] : undefined,
+    deliveryModel: model || undefined,
+    billingFrequency: freqValue,
+    invoiceConsolidation: isFakturastopp ? freqValue : "customer",
+    departmentMetadataField: isFakturastopp ? (input.departmentMetadataField || null) : null,
+  };
+}
+
+// Task #1056/#1065: Översiktssidans flikar grupperar de tre legacy-scenariovärdena
+// till två: "Efterfakturering" = allt utom abonnemang (avrop, schema OCH tomt/legacy),
+// "Abonnemang" = scenario === "abonnemang". "alla" matchar allt.
+export type ScenarioTab = "alla" | "efterfakturering" | "abonnemang";
+
+export function conceptMatchesScenarioTab(
+  scenario: string | null | undefined,
+  tab: ScenarioTab,
+): boolean {
+  if (tab === "alla") return true;
+  if (tab === "efterfakturering") return scenario !== "abonnemang";
+  return scenario === "abonnemang";
+}

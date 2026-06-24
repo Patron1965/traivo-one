@@ -20,7 +20,7 @@ import type {
   InvoiceLevel, InvoiceModel,
   CustomerMode, TaskCategory,
 } from "@shared/schema";
-import { INVOICE_MODEL_TO_SCENARIO, normalizeInvoiceFrequency } from "@shared/order-concept-method";
+import { normalizeInvoiceFrequency, buildInvoicePatch } from "@shared/order-concept-method";
 import { computeConceptOrderValue } from "@shared/order-concept-value";
 import Step1NameCustomer from "@/components/orderkoncept/Step1NameCustomer";
 import Step2PriceReference from "@/components/orderkoncept/Step2PriceReference";
@@ -427,9 +427,12 @@ export default function OrderConceptWizardPage() {
     // Kundnivå => invoiceConsolidation="customer" + departmentMetadataField=null.
     // Metadatabaserad referens (= fakturastopp) => konsolideringen följer den
     // unifierade frekvensen (en frekvens för hela konceptet).
-    const freqValue = normalizeInvoiceFrequency(billingFrequency);
-    const isFakturastopp = invoiceConsolidation !== "customer" && invoiceConsolidation !== "per_job";
-    const normalizedConsolidation = isFakturastopp ? freqValue : "customer";
+    const invoicePatch = buildInvoicePatch({
+      invoiceModel,
+      billingFrequency,
+      invoiceConsolidation,
+      departmentMetadataField,
+    });
     return {
     currentStep: nextStep,
     wizardStepVersion: WIZARD_STEP_VERSION,
@@ -447,16 +450,16 @@ export default function OrderConceptWizardPage() {
     // Task #974: fakturanivå är alltid kundnivå (samma kund). Fakturastopp delar
     // bara upp fakturan organisatoriskt via invoiceConsolidation + departmentMetadataField.
     invoiceLevel: "customer",
-    invoiceModel: invoiceModel || null,
+    invoiceModel: invoicePatch.invoiceModel,
     // Task #934: write-through så att legacy-`scenario` (NOT NULL) och
     // `deliveryModel` hålls i synk med vald faktureringsmetod. Båda blir
     // `undefined` (och utelämnas av JSON.stringify) när invoiceModel saknas, så
     // att den hårdkodade scenario:"avrop" från create-steget bevaras.
-    scenario: invoiceModel ? INVOICE_MODEL_TO_SCENARIO[invoiceModel] : undefined,
-    deliveryModel: invoiceModel || undefined,
+    scenario: invoicePatch.scenario,
+    deliveryModel: invoicePatch.deliveryModel,
     // Task #1064: EN frekvens för hela konceptet skrivs till EN kolumn.
     // invoicePeriod är avvecklad (contract-steget); billingFrequency är enda källan.
-    billingFrequency: freqValue,
+    billingFrequency: invoicePatch.billingFrequency,
     invoiceLock,
     invoiceBrake,
     invoiceMethod: invoiceMethod || null,
@@ -465,8 +468,8 @@ export default function OrderConceptWizardPage() {
     // (undefined) så befintliga värden inte nollställs vid metodbyte.
     monthlyFee: invoiceModel === "subscription" ? (monthlyFee ?? null) : undefined,
     deliveryStart: invoiceModel === "subscription" ? toIsoOrNull(subscriptionStartDate) : undefined,
-    invoiceConsolidation: normalizedConsolidation,
-    departmentMetadataField: isFakturastopp ? (departmentMetadataField || null) : null,
+    invoiceConsolidation: invoicePatch.invoiceConsolidation,
+    departmentMetadataField: invoicePatch.departmentMetadataField,
     targetObjectIds: Array.from(targetObjectIds),
     // Task #978: spegla det primära huvudtidsfönstret till legacy interval-kolumnerna
     // (så expansionsmotorn + simuleringen fungerar oförändrat) och spara hela arrayen.

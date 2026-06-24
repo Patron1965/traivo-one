@@ -76,6 +76,7 @@ import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import type { OrderConcept, Cluster, Article, ConceptFilter } from "@shared/schema";
 import { ORDER_CONCEPT_SCENARIO_LABELS, BILLING_FREQUENCY_LABELS } from "@shared/schema";
+import { conceptMatchesScenarioTab, type ScenarioTab } from "@shared/order-concept-method";
 import { PageHelp } from "@/components/ui/help-tooltip";
 import { ChainTracePanel } from "@/components/ChainTracePanel";
 
@@ -410,17 +411,16 @@ export default function OrderConceptsPage() {
     const matchesSearch =
       c.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       c.description?.toLowerCase().includes(searchTerm.toLowerCase());
-    if (activeTab === "alla") return matchesSearch;
-    // Task #1056: UI grupperar nu avrop + schema (+ legacy/tomt) under "Efterfakturering".
-    // Abonnemang är fortsatt sin egen kategori.
-    if (activeTab === "efterfakturering") return matchesSearch && (c as any).scenario !== "abonnemang";
-    return matchesSearch && (c as any).scenario === activeTab;
+    // Task #1056/#1065: UI grupperar nu avrop + schema (+ legacy/tomt) under
+    // "Efterfakturering". Abonnemang är fortsatt sin egen kategori. Delad predikat
+    // i shared/order-concept-method.ts så regeln inte går sönder tyst.
+    return matchesSearch && conceptMatchesScenarioTab((c as any).scenario, activeTab as ScenarioTab);
   });
 
   const scenarioCounts = {
     alla: concepts.length,
-    efterfakturering: concepts.filter((c) => (c as any).scenario !== "abonnemang").length,
-    abonnemang: concepts.filter((c) => (c as any).scenario === "abonnemang").length,
+    efterfakturering: concepts.filter((c) => conceptMatchesScenarioTab((c as any).scenario, "efterfakturering")).length,
+    abonnemang: concepts.filter((c) => conceptMatchesScenarioTab((c as any).scenario, "abonnemang")).length,
   };
 
   if (isLoading) {
