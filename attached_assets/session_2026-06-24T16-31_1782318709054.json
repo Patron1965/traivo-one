@@ -1,0 +1,278 @@
+{
+  "sessionId": "110b58f09b",
+  "exportedAt": "2026-06-24T16:31:38.372Z",
+  "summary": "### Key Topics Discussed\n- Uppstädning av objektadministration\n- Import via CSV\n- Kolumnfunktion i presentationen\n- Exportera funktion\n- Definition av objekt (materiella vs. immateriella)\n- Klusterfunktion för objektskoppling\n- Filterfunktion för objektlistning\n- Filtrering baserad på metadata\n- Omprövning av befintliga systemfält som \"ställtid\" och \"överordnat objekt\"\n- Användning av en villkorsmodul baserad på metadata för listning\n- Filtrering basering på kopplade uppgifter\n- Skapande av nytt objekt och tilldelning av systemnummer\n- Fält för objektnamn\n- Val av överordnat objekt och befintlig bugg\n- Behov av sökfunktion för överordnade objekt\n- Begränsning av objektlistan baserad på kund\n- Släktnamnsfunktion för hierarkiska objektkopplingar\n- Manuell tilläggning av metadatafält\n- Redigeringsbild för objektinformation (namn, överordnat objekt, släktskap, metadata)\n- Konsolidering av skapande- och editeringsvyer för objekt\n- Visning av metadatahistorik\n- Flera ingångar för att visa och redigera metadata\n- Möjlighet att lägga till underordnade objekt\n- Kopieringsfunktion för objekt och hela grenar\n- Hantering av \"bilder\" och \"betalare\" som metadatafält\n- Diskussion kring fälten \"Betalare\", \"Förälder\", \"Artiklar och priser\" på objektet.\n- Snabbfunktion för att skapa en enkel order direkt mot ett objekt.\n- \"Rapporterade objekt\" som metadatafunktion.\n- Trädfunktion och kartfunktion för objektvisning.\n- Hantering av systemgenererad och användargenererad metadata, inklusive arv och skapande via rapportfunktioner eller uppgifter.\n- Systemskapat metadatafält för kopplade/inpekade orderkoncept.\n- Systemskapat metadatafält för kopplade uppgifter (historiska och framtida).\n- Systemgenererat metadatafält för adresser.\n\n### Decisions Made\n- Import CSV-funktionen ska utgå eller länkas till den generella importen med matchningsfält.\n- Existensen av systemfält som \"ställtid\" och \"överordnat objekt\" ifrågasätts och bör eventuellt tas bort till förmån för en metadata-baserad lösning.\n- Fältet \"Artiklar och priser\" på objektet ska tas bort, då det inte är aktuellt att koppla dessa direkt till objektet. Artiklar kopplas istället via orderkonceptet.\n\n### Action Items\n- Replit: Förstå behovet av en uppstädning av objektadministrationen.\n\n### Important Points & Insights\n- Funktionen \"kolumner\" är otydlig och dess syfte ifrågasätts. Ett möjligt önskemål är att kunna välja vilka metadata som visas i presentationens lista, fungerande som ett filter för att visa särskilt intressanta metadata som t.ex. foton eller avvikelserapporter.\n- Exportering av objekt bör vara selektiv, med möjlighet att bocka för specifika objekt istället för att exportera alla.\n- Systemet består av både materiella (fysiska) och immateriella (icke-fysiska, organisatoriska) objekt som kopplas till varandra.\n- När flera objekt eller en gren kopplas samman, benämns detta som ett \"kluster\". Kluster skapas inte aktivt utan uppstår när kopplingar görs.\n- Filterfunktionen för objekt ska bygga på en generell systemmodell för metadata, där användare kan lägga till metadatafält, operatorer (lika med, skilt från, innehåller, större än) och flera metadatavillkor för att selektera objekt i listan.\n- Det finns ingen funktion kallad \"tillgångar\" i systemet, trots att det kan förekomma i äldre arv.\n- All data och alla villkor för objekten, inklusive filtrering på till exempel \"kund\" eller \"stad\", bygger på metadatafält som är kopplade till objekten.\n- Det enda som är systemberoende på själva objektet är föräldraskapet, objektets namn, objektnummer och eventuell överordnad förälder. Resten hanteras som metadata.\n- Befintliga fält som \"ställtid\" och \"överordnat objekt\" saknar tydlig funktion i nuvarande system och bör omvärderas.\n- En metadata-baserad villkorsmodul liknande den för artiklar eller order bör användas för att definiera vilka objekt som ska listas.\n- Fält som \"kund\" är metadatafält som kan skapas men har ingen direkt koppling till objektet utan snarare till andra entiteter. En kund är inte direkt kopplad till ett objekt, utan snarare indirekt via uppgifter.\n- En filterfunktion för objekt kan också söka baserat på kopplade uppgifter, där man kan specificera uppgiftstyp, kopplad kund, eller tidsperiod de utfördes. Detta möjliggör att hitta kunder via objektet baserat på utförda uppgifter.\n- Objektadministrationen behöver rensas och städas upp för att bli mer logisk, med fritextsökfält, metadata-baserade villkor och en sökfunktion för kopplade uppgifter.\n- Vid skapande av ett nytt objekt tilldelas det ett systemnummer automatiskt.\n- Det finns en bugg i systemet vid val av överordnat objekt, där listan bara flimrar till.\n- En sökfunktion är nödvändig vid val av överordnat objekt på grund av det potentiellt stora antalet objekt.\n- Det är önskvärt att kunna begränsa visningen av objekt, exempelvis till en specifik kund, för att förenkla navigeringen i fall med många objekt.\n- Funktionen \"släktnamn\" förväntas visa den fullständiga hierarkiska sökvägen för ett objekt (t.ex. \"Stockholms distrikt, butiken Karlaban\"), vilket underlättar navigering i komplexa trädstrukturer.\n- Det är mycket bra att kunna lägga till metadatafält manuellt direkt.\n- Det är viktigt att plus-knappen för att lägga till metadatafält öppnar en större bild för att kunna lägga till flera fält.\n- Redigeringsbilden för objektet bör vara ett stort formulär som inkluderar objektets namn, överordnat objekt, släktskap och kopplad metadata.\n- Flera befintliga sätt att skapa eller editera ett objekt bör konsolideras till en gemensam, större vy för att ge en helhetsbild av det unika objektet. Denna vy bör inkludera metadata, kopplade ordrar och avvikelser under olika flikar.\n- Det finns ingen särskild historik bakom metadata, men varje metadata har ett datum för när det skapades.\n- Det finns ytterligare ett alternativ för att visa samma information, vilket indikerar att det finns för många sätt att komma åt samma vy.\n- Det är möjligt att lägga till metadata via en \"silo\"-ikon, men det vore bättre om detta integrerades i ett fullständigt formulär.\n- Redigering av metadata kan göras via en separat, mindre formulärvy (ca 25% av skärmen).\n- Det är möjligt att lägga till ett underordnat objekt, vilket återigen leder till samma redigeringsverktyg men med det överordnade objektet förvalt.\n- Kopieringsfunktionen bör erbjuda att kopiera en hel gren av objekt.\n- \"Bilder\" och \"Betalare\" är exempel på metadatafält som bör hanteras som del av den större sammanställningen. Fältet \"Betalare\" existerar inte formellt på objektet.\n- Fältet \"Förälder\" (parents) är förvirrande då hela systemet bygger på föräldrar och underordnade. Funktionen för detta fält är oklar.\n- Det kan vara ett framtida behov att skapa en snabbfunktion för att direkt gå från ett unikt objekt till ett orderformulär för att tvinga att skapa en simpel order via kund, leveransdatum, fakturareferenser och artiklar direkt mot objektet.\n- \"Rapporterade objekt\" är en form av metadata.\n- Trädfunktionen och kartfunktionen fungerar som förväntat.\n- Metadata kan vara både systemskapad (t.ex. via arv eller rapportfunktioner) och användargenererad. Systemet kan skapa metadatafält som inte tidigare existerade.\n- Systemskapat metadatafält \"kopplade/inpekade orderkoncept\" bör visa orderkoncept kopplade till objektet.\n- Systemskapat metadatafält \"kopplade uppgifter\" bör visa historiska och framtida uppgifter relaterade till objektet, baserat på tid. Detta informationspaket är detsamma som i grov- och finplaneringen.\n- Ett systemgenererat metadatafält för adresser kan behövas, men alla objekt har inte nödvändigtvis adresser.\n\n### Open Questions/Pending Items\n- Vad är funktionen med \"kolumner\" i objektadministrationen?\n- Hur säkerställs att exportfunktionen endast exporterar valda objekt?\n- Hur bör Replit svara gällande exportfunktionen?\n- Hur bör Replit hantera begreppet \"tillgångar\", då det inte finns i systemet men är ett äldre arv?\n- Rapprit bör tydliggöra att all objektsrelaterad data (förutom systemberoende fält) är metadata och inte blanda äpplen och päron i benämningar eller funktioner.\n- Ska fält som \"ställtid\" och \"överordnat objekt\" tas bort från systemet och ersättas med metadata?\n- Hur ska en metadata-baserad villkorsmodul implementeras för objektlistning?\n- Hur hanteras buggen vid val av överordnat objekt?\n- Hur ska en sökfunktion implementeras för att underlätta valet av överordnat objekt?\n- Hur ska begränsningen av objektlistan baserad på kund implementeras?\n- Bekräftelse att funktionen \"släktnamn\" fungerar som förväntat för att visa hierarkisk sökväg.\n- Hur ska befintliga, inkonsekventa vyer för att skapa och editera objekt konsolideras till en enda enhetlig och omfattande vy?\n- Hur bör metadata-historik presenteras tydligare, trots att det endast är tidstämpeln för skapandedatum som finns?\n- Hur kan de olika sätten att visa och redigera metadata konsolideras till färre och mer intuitiva alternativ?\n- Bör kopieringsfunktionen alltid fråga om en hel gren ska kopieras?\n- Vad är funktionen med fältet \"förälder\" på objektet, givet att systemet redan hanterar hierarkier?\n- Ska den föreslagna snabbfunktionen för att koppla objekt till orderformulär implementeras och hur ska den se ut?\n- Har \"rapporterade objekt\" en egen definition utöver att vara en typ av metadata?\n- Hur ska de systemskapade metadatafälten för \"kopplade/inpekade orderkoncept\" och \"kopplade uppgifter\" implementeras för kollapsbar visning?",
+  "conversation": [],
+  "transcripts": [
+    {
+      "text": "Bildmatsar som tar över dagens event. Hallå? Ja, då är det här en genomgång om uppstädning utav objektadministration då. Och om vi börjar uppifrån, eh, toppen där då så finns det...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Import CSV, den utgår ju då, eh... Eller så ska det vara en länk till den hära andra importen med matchningsfältet då.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Eh, så med i den generella då.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och ser du den, eh, den här som heter kolumner där då? Eh, det är väldigt oklart vad den har för en funktion, va. Men, men det man möjligtvis skulle vilja är ju då att man kan välja ut då i presentationen nedanför då i den här listan då. Att man då visar vissa metadata då i, eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Ja, i de antal kolumner som, som det då finns plats till för då eventuellt att det går att kollapsa på något vis då för att det ska gå plats. Sen har vi då exportera då och den är ju jättebra, men, eh, där skulle man ju då, eh, bara säkerställa eller att Replit svarar då hur det går då. Eh, för att här vill man ju då inte exportera alla objekten då utan, utan, eh, förmodligen är det väl på det viset att man kan då bocka för, eh, objekt då. Och här ska vi också göra en förtydligande.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Så vi är överens om det då att hela systemet består ju då utav objekt som antingen är materiella eller immateriella. Eh, och immateriellt innebär ju att det inte är en fysisk sak och där kanske inte finns på en fysisk plats utan är mer organisatoriskt då. Och sen, eh, men den används för att hålla reda på undervarande objekt då. Och sen har vi de materialistiska objekten då som är någonting, en sotun eller ett återvinningsrum eller gatlyktor. Eh, och de här kopplar man ju då till varandra. Och när de-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm ...är kopplade till varandra så kallar vi det kluster då. Så att flera objekt eller en gren bildar då det som vi kallar ett kluster. Och kluster är ingenting som skapas, utan kluster är någonting som benämns sen eller som blir s-, blir då när man kopplar ihop flera. Så, så, så det blir ju då en gren där då. Eh, går vi vidare ner här då så finns det ett filter och, eh, det här filtret då ska ju bygga på samma-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm ...modell som kommer i hela systemet. Det vill säga att man kan lägga dit, eh, metadata, valt metadatafält och en opera-operator då lika med eller skilt ifrån eller lika med eller innehåller eller större än. Och så kan man då lägga till, eh, flera metadatavillkor. Och på det viset kan man ju då sålla fram då den här listan som blir nedanför då. Sen är det ju naturligtvis, eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Eh, jättebra då att kunna filtrera på kund möjligtvis då. Eh, sen finns det ingenting som heter tillgångar. Det är väldigt viktigt. Av någon anledning så finns det ett arv här där det står tillgångar. Det finns alltså inte riktigt då. Det går att diskutera om det går att filtrera på stad, men visst, eh, det kanske man kan, men samtidigt är ju då stad bara ett metadatafält då. Så att här får vi be Rapprit att blanda inte liksom äpplen och päron här nu, utan all data-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Ja. -och alla villkor för objekten bygger på de här metadatafälten som är kopplade till objekten och inget annat. Och det gäller även adressen. Det enda som är systemberoende, det är ju så att säga föräldraskapet som vi har konstaterat som ligger på själva objektet tillsammans med namnet och, eh, objektnumret och vilken eventuell överordnad förälder som det unika objektet har då. Resten är metadata. Eh, man skulle kunna tänka sig, ja, eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Det här alltså att det finns nåt. Har ställtid? Ja, det är ju absolut ingenting som finns. Har överordnat objekt? Ja, jag vet inte vad man svarar på den där frågan liksom, ja men... För det blir ju så att ta bort hela skiten och lägg istället för till så man kan sätta upp på samma sätt som vi har, eh, när vi, när vi, när vi hakan fast artiklar eller när vi, när vi skapar ordnar att vi kan alltså ha en, en, en, en, en...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "en villkors, eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Modul som, som så att säga talar om då vil-vilka villkor utifrån metadata då som, som, eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "ska, eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "listas i det här, då. Eh, jag sitter och funderar på det här, då, där man har då \"kund\" här, då. För att, ja, det, det är ju då ett metadatafält som inte finns då nödvändigtvis. Vi skulle kunna skapa ett som vi kallar \"kund\", men kunden har ju ingen koppling till objektet direkt, utan kunden är ju kopplad till, eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Eh, ord och konceptet då, eh, som skapar uppgifter som i sin tur är kopplade till objektet. Så det innebär ju liksom att om det finns uppgifter kopplade på objektet så, eh, finns det ju då en ko-kund kopplad där då. Och om man tar bort nu liksom allt det här nu som, som, som finns här som är o-o-ologiskt så att säga då, så skulle man ju då kunna ha en filterfunktion där man kan söka då på, eh, kopplade uppgifter-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm ...så att man kan alltså lägga in och sö-söka till exempel på uppgifter utav en viss typ då, eh, eller, eh, uppgifter som är kopplade till viss kund eller uppgifter som är ut-utförda under en, under en viss tid då. På det viset så kan man ju då, eh, ihop med den övriga metadatan som finns på objektet då leta rätt på en kund då utifrån objektet och säga: \"Ja, men här, här är en kund som, som vi tvättade det hära, eh, och det är den här typen\", och så får man då fram det. Så nog om detta-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm ...rensa och städa upp den här så att den blir logisk, fritextsökfält, men sen villkor utifrån metadata och sen så en, ett, en sökfunktion då för det man kan söka på kopplade uppgifter då, eh, som en liten bonus då möjligtvis där. Sen så sk- kommer vi då in då och då kan vi ju ta den här funktionen då som är den mest centrala, där man då skapar ett objekt då. Och om vi trycker fram den då så blir det, blir då det nya objektet tilldelat ett systemnummer och det är okej.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och sen så, eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Eh, fyller man då i...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Eh, vad det här objektet ska heta för någonting då. Och sen har man möjlighet att välja överordnat objekt. Men här är det en bugg i systemet så när man, när man då ska få fram den här listan på tänkbara överordnade objekt, då, då flimrar det bara till. Och här är det ju också väldigt viktigt då att man måste ha en sökfunktion här då för att här kommer det att bli enormt många objekt att leta på. Och, och, och det bästa vore ju då att man kunde, så att säga, om man, om man håller på och jobbar med en viss...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Eh, kund då som har vissa objekt, så skulle man kunna tänka sig här då att, att, att man enbart får upp de objekt som man har sållat fram. Eh, så att man till exempel går in på... Om man nu står, sitter och jobbar med Axfood då som är ett antal hundra butiker runtom i Sverige då. Så, så sållar man fram, eh, trädet eller objekten då för Axfood. Och det innebär att man begränsar det här. Annars så kommer den att bli, bli jättesvår att leta i, eh, eftersom det kommer att finnas... Ja, teoretiskt sett kan du ju koppla på ett enskilt objekt på...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Vilket som helst utav de hundra tusen soptunnor som, som Ki-Kin-Kin hade tvättat. Eh, sen finns en funktion här som heter släktnamn och förhoppningsvis då så funkar väl den på det sättet då att, att om man då kopplar på den här, om jag tar exemplet då Axfood Sverige och sen är det Hemköpskedjan och sen är det kanske olika distrikt, norra distriktet för Hemköp, så kommer den ju då, om jag då hittar in här och kopplar på den unika butiken då på, eh, Hemköpskedjans distrikt för Stockholm, då så kommer ju släktnamnet att bli Axfood Hemköpskedjan.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. Stockholms distrikt, butiken Karlaban, till exempel då. Och då får man hela, hela släktnamnet där då. Eh, sen är det ju jättebra här att man direkt kan lägga till då metadatafält manuellt.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och, eh, där finns också ett plus. Och här är det ju då väldigt bra om den öppnar upp den här som en större bild då så att man kan plussa på flera metadatafält. Eh, och min tanke här nu då, det är ju att den här editeringsbilden då som består utav objektets namn och, eh, överordnat objekt och slä-släktskap och kopplade underobjekt. Eh, eh, eller inte kopplade underobjekt, men, men kopplad metadata då. Att det blir som ett stort formulär då så att",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "man kan få en helhetsbild över det unika objektet. Och då ryms ju inte det på en sån här liten ruta som är en, en sjättedel av skärmen, utan här är det ju bättre att öppna en, en, en större fönster. Och, eh, samma att skapa ett objekt eller att då klicka på en knapp på objektet för att editera objektet bör ju då komma till samma bild nu. För att nu finns det alltså egentligen då fyra olika sätt som inte riktigt gör samma sak men borde göra samma sak.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Man kan trycka på den gröna knappen och skapa objektet. Då borde man komma in på det helt nya formuläret. Sen så kan man ju då trycka på själva, eh, objektet då och då kommer det in en sidobild här då, eh, som ser ut på sitt vis då. Eh, den är visserligen bra då för att där kan man se metadata under en flik och så sen kan man se kopplade ordrar då, det vill säga en annan typ av metadata under en annan flik. Och så kan man se avvikelser, ytterligare en annan typ av metadata under en annan flik. Och, och sen finns det nån sorts historik då som är helt ologiskt därför att det finns ju liksom inte",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "någon särskild historik, utan bakom varje metadata som kan vara då ett datum eller ett, eller en, en uppgift eller ett, ett foto eller, eller en status så finns det ju då ett datum för när den metadatan skapades då. Så att, eh, den där är liksom inte så jättebra. Sen kan man då k-trycka vidare där för att få fram en fullständig vy då. Och det innebär ju då att vi har alltså ytterligare då ett femte alternativ för att visa samma sak då.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och sen kan man trycka på den här lilla silon som heter metadata ute till höger där och då får man fram en möjlighet där man kan lägga till metadata då. Eh, men, eh, det vore ju mycket bättre att man fick upp det på, på det fullständiga formuläret då. Och så har man då, som jag sa, de tre kni-kni-- Tre prickar ute i kanten då och då kan man trycka på redigera och då får man då upp ytterligare ett, ett, ett litet formulär som är lite större då. Det är ungefär en, en, en-- 25 % av skärmen. Eh, och sen...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Sen så finns det då möjlighet här att lägga till underordnat objekt och då kommer man ju då bara in återigen i samma, i samma, i samma edit-editol, men den plockar med sig då mamman då. Och sen så finns det möjlighet att kopiera.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. Eh, och, eh, om man då kopierar till exempel återvinningsrummet här nu då, och då antar jag att man då får skriva till det att det är återvinning två, eh, rum två. Och det är jättebra om man får frågan om man ska kopiera hela grenen. Det är också jättebra då. Eh, sen finns det några logiska saker här då som heter bilder. Det finns liksom ingenting som heter särskilt bilder, utan det är ju ett metadatafält då som ska finnas på den stora sammanställningen. Och så finns det något som heter betalare då som, som är ytterligare h",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "uvudlogiskt. För att som jag nämnde tidigare då så, så finns det liksom inte direkt någon kund kopplad till ett objekt då, utan det blir ju indirekt uppgifterna då som är kopplade där. Sen är det inget som hindrar att man döper en objektkedja till Axfood eller något sånt där, och då är det också kunden. Men rent formellt så finns det liksom inte någonting som heter beha-- Betalare. Sen finns det något som heter föräldrar. Ja, och, och den fun-- Jag förstår egentligen inte riktigt vad den, vad den, vad den gör då, för att hela, hela systemet här bygger ju på föräldrar och underordnare. Och så finns det något som heter artiklar och priser.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och, eh, den kan man ju ta bort för att, eh, det är ju, det, det, det f-- Det är liksom inte aktuellt här på objektet att lägga till någon artikel eller pris, utan en artikel lägger man till med orderkonceptet. Möjligtvis så skulle vi då få sikt att skapa en, en snabb funktion då, där man alltså kan peka. Och det kanske är det som är syftet med det här, att man kan peka på ett unikt objekt och sen så bara gå direkt in i ett orderformulär då och, och välja bland de tusentals artiklarna och välja bland kunderna och-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Ja ...att så man mer eller mindre går in då på ett, på ett, eh, inte ett orderkoncept av den typen som vi har, utan med ett orderformulär då som börjar längst upp med kund och så, och så fyller man i leveransdatum och så fyller man i, i då, eh, å-- Fakturarreferenser och så fyller man i artiklarna och så trycker man enter och så tvång-- Tvingar man alltså att skapa en, ska vi säga, simpel order direkt mot objektet. Det är kanske det som syftas med den där och då är ju den, den, den, den, den skulle ju då kunna vara, vara bra att ha där.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Så, det är väl då summering. Det finns också en lite sån här udda funktion, rapporterade objekt då längst uppe där då. Återigen, rapporterade objekt är ju då bara en typ utav metadata då. Så att jag tror att man-- Det här som kallas kolumner där, eh, att där kan man då kanske hitta en, ett, ett filter då så att man i den här listan utav objekt då kan, kan välja att titta då på särskilt intressanta metadata. Det skulle kunna vara alltifrån foton till, till avvikelserapporter då.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Eh, men här hoppas vi att Replit har förstått det här och det är alltså en uppstädning. Eh, för övrigt då så, vi pratade om listan. Sen finns den här trädfunktionen och den har vi tittat på förut. Eh, den verkar funka och det finns också en karta då där man kan få ut då de valda objekten utpikade på en karta. Och de funktionerna, eh, har vi tittat på förut och de verkar då fungera alldeles utmärkt då. Eh, jag kan ju passa på att kom-kommentera det också då på en gång här då. Och det är ju att-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm ...det här med vad som är systemskapad metadata och vad som är användargenererad metadata. Eh, och i vissa fall så kommer ju systemet att skapa egen metadata. Dels blir ju det genom arv att det är en metadata som finns på en högre nivå, till exempel adressen, eh, fylls på genom arv ut-ut till de underställda objektena då. Eh, men det är också då såna saker då som om, om vi nu har en, en rapportfunktion på objektet då, eh, som-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm ...rapporterar en avvikelse, ja, då kommer ju den rapport, eh, metadata editorn som vi kallar det, då kommer ju den då att skapa ett metadatafält vare sig det finns eller inte då på objektet. Och på motsvarande sätt så kan ju en uppgift också skapa ett metadatafält som inte det tidigare då är intankat eller manuellt inlagt då i den. Men då skapas ju det då utav uppgiften eller metadata editorn eller då det, genom den fil som man tankar in uppgifterna på. Och det blir precis som också Repli har sagt här då, eh, enbart styrt-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm ...i tidigare då fördefinierade metadatafält. Men dit jag skulle komma här då, det är att Repli bör analysera logiskt systemet då för att se vilka system... metadatafält som kommer att behövas då. Exempelvis så, så, så finns ju det då i, i, i den här. Eh, man har då ordra, systemgenererad metadata, då står det då ordra. Och det innebär ju då att det skulle alltså finnas en, en, en grupp här utav metadatafält då som, som... Nu har vi då bestämt att det inte finns någonting som heter ordra, utan det finns en grupp-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm ...då ord och koncepten som är kopplad till det här objektet. Eh, och sen så finns det då uppgifter som orderkonceptet har genererat. Så här skulle man ju då kunna tänka sig då att det finns ett systemskapat metadatafält som kallas kopplade eller inpekade orderkoncept. Och sen så finns det ett som är, eh, kallas då kopplade uppgifter då. Och sen att man kan kollapsa och gå in då där och se på vilka uppgifter då som ligger mot det här objektet, eh, både historiskt utförda och framtida kommande då baserat-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm ...på då de tidsverk som ligger på de uppgifterna. Så det är ju då samma informationspaket som ska finnas i det som vi kallar grovplaneringen då och även fin, finplaneringen. Och sen skulle man då i samma, eh, andras mening här kunna tänka sig då att det finns ett systemgenererat metadatafält för adresser då som är ju en sån här, eh, grej som, eller detalj som kommer att behövas då. Men då ska man ju tänka på att alla metadata, eh, eller alla objekt inte har adresser då.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Nödvändigtvis då.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och, eh, nu tänker vi också då, jag bara säger det, vi ska inte skapa det, men systemet måste ta höjd då för att nu, nu tänker vi helt, hela tiden på en kartnål, en, en, en, ett objekt som finns på en fysisk plats. Men systemet behöver också geografiskt kunna hantera objekt som är ytor då, baserat på såna här polylinjer som jag tror delvis finns i systemet. Men sammanfattningsvis, eh, försök att skapa en ordning på det här och använd hela skärmen och använd samma, så långt det går nu, samma formul",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "är då som kommer upp för det här. Kanon.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    }
+  ]
+}
