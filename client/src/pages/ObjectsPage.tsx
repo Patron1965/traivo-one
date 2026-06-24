@@ -264,6 +264,11 @@ export default function ObjectsPage() {
     address: "", city: "", postalCode: "",
     latitude: null as number | null, longitude: null as number | null,
   });
+  // Visningsnamn för parent vald via väljaren i redigera-läget. null = härled från
+  // den laddade objektlistan (befintlig parent); sätts när användaren väljer en ny
+  // parent (även en som hittats via sök/kund-förfilter och saknas i listan) så att
+  // triggern visar släktnamnet — samma beteende som skapa-läget.
+  const [editParentName, setEditParentName] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<ServiceObject | null>(null);
 
   useEffect(() => {
@@ -977,6 +982,7 @@ export default function ObjectsPage() {
       latitude: obj.latitude ?? null,
       longitude: obj.longitude ?? null,
     });
+    setEditParentName(null);
     setEditObjectOpen(true);
   }, []);
 
@@ -2826,9 +2832,12 @@ Fastighet A,FAST-100,fastighet,Storgatan 1,Stockholm,code,1234"
               <Label>Överordnat objekt</Label>
               <ObjectParentCombobox
                 value={editForm.parentId}
-                valueLabel={editParentLabel}
+                valueLabel={editParentName ?? editParentLabel}
                 excludeId={editForm.id}
-                onChange={(id) => setEditForm({ ...editForm, parentId: id })}
+                onChange={(id, opt) => {
+                  setEditForm({ ...editForm, parentId: id });
+                  setEditParentName(opt ? (opt.displayName || opt.name) : "");
+                }}
               />
               <p className="text-xs text-muted-foreground mt-1">Byt överordnat objekt för att flytta objektet i hierarkin.</p>
             </div>

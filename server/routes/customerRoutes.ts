@@ -8,7 +8,7 @@ import { asyncHandler } from "../asyncHandler";
 import { NotFoundError, ValidationError } from "../errors";
 import { db } from "../db";
 import { eq, and, isNull, sql, or, inArray } from "drizzle-orm";
-import { primaryPayerCustomerIdSql, getObjectTreeLevel } from "../services/object-customer";
+import { primaryPayerCustomerIdSql, getObjectTreeLevel, objectHasPrimaryCustomerSql } from "../services/object-customer";
 import { ensureClusterAndAssign } from "../auto-cluster";
 import { triggerGeocodeIfMissing } from "../services/geocoding";
 import { copyObjectTree } from "../services/object-copy";
@@ -629,9 +629,43 @@ app.get("/api/objects", asyncHandler(async (req, res) => {
 app.get("/api/objects/tree", asyncHandler(async (req, res) => {
   const tenantId = getTenantIdWithFallback(req);
   const { customerId, search, parentId } = req.query;
+  const searchStr = typeof search === "string" ? search.trim() : "";
+  const customerStr = typeof customerId === "string" && customerId.trim() ? customerId.trim() : null;
 
-  if (search && typeof search === "string" && search.trim().length > 0) {
-    const q = `%${search.trim().toLowerCase()}%`;
+  // Platt, sökbar lista för "Välj överordnat objekt"-väljaren. Aktiveras när det
+  // finns en fritextsökning ELLER ett kund-förfilter. Kund-förfiltret begränsar
+  // resultatet till kundens primär-payer-objekt (object_payers, ADR v3 — inte
+  // legacy objects.customer_id) så att mycket stora datamängder kan smalnas av;
+  // utan sökterm returneras då hela kundens objektlista. Bakåtkompatibelt:
+  // tidigare anropare skickade bara `search` (utan customerId) och får exakt
+  // samma resultat som förut.
+  if (searchStr.length > 0 || customerStr) {
+    // Defense-in-depth: verifiera att kund-förfiltret pekar på en kund i denna
+    // tenant. Objektsökningen är redan tenant-scopad (objects.tenantId), men en
+    // främmande/ogiltig customerId ska ge tomt resultat — inte tyst falla tillbaka
+    // till osökt scope eller läcka via korrupta object_payers-referenser.
+    if (customerStr) {
+      const customer = await storage.getCustomer(customerStr);
+      if (!verifyTenantOwnership(customer, tenantId)) {
+        return res.json([]);
+      }
+    }
+    const conditions = [
+      eq(objects.tenantId, tenantId),
+      isNull(objects.deletedAt),
+    ];
+    if (searchStr.length > 0) {
+      const q = `%${searchStr.toLowerCase()}%`;
+      conditions.push(or(
+        sql`LOWER(${objects.name}) LIKE ${q}`,
+        sql`LOWER(${objects.address}) LIKE ${q}`,
+        sql`LOWER(${objects.objectNumber}) LIKE ${q}`
+      )!);
+    }
+    if (customerStr) {
+      conditions.push(objectHasPrimaryCustomerSql(customerStr));
+    }
+
     const rows = await db
       .select({
         id: objects.id,
@@ -644,18 +678,11 @@ app.get("/api/objects/tree", asyncHandler(async (req, res) => {
       })
       .from(objects)
       .leftJoin(customers, sql`${customers.id} = (SELECT op.customer_id FROM object_payers op WHERE op.object_id = ${objects.id} AND op.is_primary = true LIMIT 1)`)
-      .where(and(
-        eq(objects.tenantId, tenantId),
-        isNull(objects.deletedAt),
-        or(
-          sql`LOWER(${objects.name}) LIKE ${q}`,
-          sql`LOWER(${objects.address}) LIKE ${q}`,
-          sql`LOWER(${objects.objectNumber}) LIKE ${q}`
-        )
-      ))
-      .limit(100);
+      .where(and(...conditions))
+      .orderBy(objects.name)
+      .limit(200);
 
-    // Task #727: berika sökträffar med släktnamn (displayName) så att en sökbar
+    // Task #727: berika träffar med släktnamn (displayName) så att en sökbar
     // "Överordnat objekt"-dropdown kan visa hela hierarki-kedjan per träff och
     // användaren inte kopplar mot fel gren när två objekt har samma namn.
     let displayNameMap = new Map<string, string>();
@@ -676,7 +703,7 @@ app.get("/api/objects/tree", asyncHandler(async (req, res) => {
 
   const nodes = await getObjectTreeLevel(tenantId, {
     parentId: typeof parentId === "string" ? parentId : null,
-    customerId: typeof customerId === "string" ? customerId : null,
+    customerId: null,
   });
   res.json(nodes);
 }));
