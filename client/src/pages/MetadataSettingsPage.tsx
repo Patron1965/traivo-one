@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
+import { metadataDisplayName } from "@/lib/metadata-display";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -434,7 +435,7 @@ export default function MetadataSettingsPage() {
                             <div className={`flex items-center gap-2${isChild ? ' pl-6' : ''}`}>
                               <Icon className="h-4 w-4 text-muted-foreground" />
                               <div>
-                                <span className="font-medium">{type.namn.replace(/_/g, ' ')}</span>
+                                <span className="font-medium" data-testid={`text-typename-${type.namn}`}>{metadataDisplayName(type)}</span>
                                 {dotKey && (
                                   <Badge variant="outline" className="ml-2 text-[10px] font-mono" data-testid={`badge-dotkey-${type.namn}`}>
                                     {dotKey}
@@ -537,7 +538,7 @@ export default function MetadataSettingsPage() {
       <Dialog open={!!editingType} onOpenChange={(open) => !open && setEditingType(null)}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
-            <DialogTitle>Redigera {editingType?.namn.replace(/_/g, ' ')}</DialogTitle>
+            <DialogTitle>Redigera {editingType ? metadataDisplayName(editingType) : ''}</DialogTitle>
           </DialogHeader>
           {editingType && (
             <MetadataTypeForm
@@ -571,7 +572,9 @@ function toSnakeCase(str: string): string {
 }
 
 function MetadataTypeForm({ initialData, onSubmit, isPending, allTypes, customers }: MetadataTypeFormProps) {
-  const [displayLabel, setDisplayLabel] = useState(initialData?.namn?.replace(/_/g, ' ') || '');
+  const [displayLabel, setDisplayLabel] = useState(
+    initialData?.visningsnamn?.trim() || initialData?.namn?.replace(/_/g, ' ') || '',
+  );
   const [namn, setNamn] = useState(initialData?.namn || '');
   const [codeManuallyEdited, setCodeManuallyEdited] = useState(!!initialData);
   const [beskrivning, setBeskrivning] = useState(initialData?.beskrivning || '');
@@ -645,6 +648,9 @@ function MetadataTypeForm({ initialData, onSubmit, isPending, allTypes, customer
     const parsedDisplayNumber = displayNumber.trim() === '' ? undefined : parseInt(displayNumber, 10);
     onSubmit({
       namn,
+      // Visningsnamn = det fritt redigerbara presentationsnamnet (rätt versalisering/
+      // stavning). Tom → null (faller tillbaka till namn). namn förblir oförändrat.
+      visningsnamn: displayLabel.trim() || null,
       beskrivning: beskrivning || null,
       datatyp,
       referensTabell: datatyp === 'referens' ? referensTabell : null,

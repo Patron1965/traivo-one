@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect } from "react";
 import { useLocation } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
+import { metadataDisplayName } from "@/lib/metadata-display";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
@@ -1122,7 +1123,7 @@ export function JobDetailModal({ open, onClose, workOrderId, bulkWorkOrderIds = 
                         <div className="flex items-center gap-3">
                           <Tag className="h-4 w-4 text-muted-foreground" />
                           <div>
-                            <div className="font-medium text-sm">{meta.katalog.namn}</div>
+                            <div className="font-medium text-sm">{metadataDisplayName(meta.katalog)}</div>
                             <div className="text-xs text-muted-foreground">{getMetadataDisplayValue(meta)}</div>
                             {meta.katalog.kategori && (
                               <Badge variant="outline" className="text-xs mt-1">

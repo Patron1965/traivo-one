@@ -506,7 +506,9 @@ export function katalogToDefinitionCompat(
     id: k.id,
     tenantId: k.tenantId,
     fieldKey: deriveMetadataDotKey(k, byId) ?? k.namn,
-    fieldLabel: k.namn,
+    // fieldKey förblir den exakta (skiftlägeskänsliga) matchningsnyckeln. fieldLabel
+    // är ren presentation → visa visningsnamn om satt, annars namn.
+    fieldLabel: k.visningsnamn?.trim() || k.namn,
     dataType: mapDatatypToEnglishDataType(k.datatyp),
     propagationType: k.standardArvs ? "falling" : "fixed",
     applicableLevels: [],
@@ -874,6 +876,7 @@ export async function getObjectWithAllMetadata(
         mv.updated_at,
         mk.id as katalog_id,
         mk.namn as katalog_namn,
+        mk.visningsnamn as katalog_visningsnamn,
         mk.beskrivning as katalog_beskrivning,
         mk.datatyp as katalog_datatyp,
         mk.referens_tabell as katalog_referens_tabell,
@@ -1014,6 +1017,7 @@ export async function getObjectWithAllMetadata(
         id: nearest.katalog_id,
         tenantId: tenantId,
         namn: nearest.katalog_namn,
+        visningsnamn: nearest.katalog_visningsnamn ?? null,
         beskrivning: nearest.katalog_beskrivning,
         datatyp: nearest.katalog_datatyp,
         referensTabell: nearest.katalog_referens_tabell,
@@ -3761,6 +3765,7 @@ export interface WorkOrderMetadataWithKatalog {
   katalog: {
     id: string;
     namn: string;
+    visningsnamn: string | null;
     beskrivning: string | null;
     datatyp: string;
     kategori: string | null;
@@ -3792,6 +3797,7 @@ export async function getWorkOrderMetadata(
       updatedAt: metadataVarden.updatedAt,
       katalogId: metadataKatalog.id,
       katalogNamn: metadataKatalog.namn,
+      katalogVisningsnamn: metadataKatalog.visningsnamn,
       katalogBeskrivning: metadataKatalog.beskrivning,
       katalogDatatyp: metadataKatalog.datatyp,
       katalogKategori: metadataKatalog.kategori,
@@ -3825,6 +3831,7 @@ export async function getWorkOrderMetadata(
     katalog: {
       id: row.katalogId,
       namn: row.katalogNamn,
+      visningsnamn: row.katalogVisningsnamn ?? null,
       beskrivning: row.katalogBeskrivning,
       datatyp: row.katalogDatatyp,
       kategori: row.katalogKategori,

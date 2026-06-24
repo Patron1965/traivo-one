@@ -366,6 +366,16 @@ metadataRouter.patch("/areas/:id", requireAdmin, async (req: Request, res: Respo
 
 const createMetadataTypeSchema = z.object({
   namn: z.string().min(1),
+  // Visningsnamn: fritt redigerbart presentationsnamn (rätt versalisering/stavning).
+  // ENDAST presentation — får ALDRIG användas som matchnings-/lookup-nyckel (det är
+  // `namn`). Tom/blank sträng → null (lagra aldrig ""). undefined bevaras så att
+  // partiella PUT inte rör fältet; explicit null nollställer (faller tillbaka till namn).
+  visningsnamn: z
+    .string()
+    .trim()
+    .max(100)
+    .nullish()
+    .transform((v) => (v == null ? v : v.length > 0 ? v : null)),
   beskrivning: z.string().nullish(),
   datatyp: z.enum(['string', 'integer', 'decimal', 'boolean', 'datetime', 'json', 'referens', 'image', 'file', 'code', 'location', 'interval']),
   referensTabell: z.string().nullish(),

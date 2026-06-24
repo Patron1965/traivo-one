@@ -4404,6 +4404,11 @@ export const metadataKatalog = pgTable("metadata_katalog", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
   namn: varchar("namn", { length: 100 }).notNull(),
+  // Visningsnamn: fritt redigerbart presentationsnamn (rätt versalisering/stavning).
+  // `namn` förblir den IMMUTABLA universella matchningsnyckeln (import/order-koncept/
+  // villkorsfilter/sök, skiftlägeskänslig); `visningsnamn` påverkar ENDAST UI-rendering
+  // och får aldrig användas i matchning/lookup. NULL = visa `namn`. Additivt (expand-contract).
+  visningsnamn: varchar("visningsnamn", { length: 100 }),
   beskrivning: text("beskrivning"),
   datatyp: text("datatyp").notNull(), // string, integer, decimal, boolean, datetime, json, referens
   

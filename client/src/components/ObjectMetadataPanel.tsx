@@ -1,6 +1,7 @@
 import { useState, useMemo, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
+import { metadataDisplayName } from "@/lib/metadata-display";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -1344,7 +1345,7 @@ export function ObjectMetadataPanel({ object, trigger }: ObjectMetadataPanelProp
                                   {(entry.katalog as any).displayNumber}.
                                 </span>
                               )}
-                              <span className="text-sm font-medium truncate">{entry.katalog.namn}</span>
+                              <span className="text-sm font-medium truncate">{metadataDisplayName(entry.katalog)}</span>
                               {entry.katalog.beteckning && (
                                 <Badge variant="outline" className="text-[10px] font-mono px-1 py-0 h-4 shrink-0">
                                   {entry.katalog.beteckning}
@@ -1547,7 +1548,7 @@ export function ObjectMetadataPanel({ object, trigger }: ObjectMetadataPanelProp
                       <div className="flex items-center justify-between gap-2">
                         <div className="flex items-center gap-2 min-w-0">
                           <GroupIcon className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                          <span className="text-sm font-medium truncate">{group.katalog.namn}</span>
+                          <span className="text-sm font-medium truncate">{metadataDisplayName(group.katalog)}</span>
                           {group.katalog.beteckning && (
                             <Badge variant="outline" className="text-[10px] font-mono px-1 py-0 h-4 shrink-0">
                               {group.katalog.beteckning}

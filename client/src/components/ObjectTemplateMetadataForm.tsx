@@ -7,6 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useToast } from "@/hooks/use-toast";
+import { metadataDisplayName } from "@/lib/metadata-display";
 import {
   FileText, Cog, Link as LinkIcon, Calculator, Save, Trash2, RotateCcw, Download, Loader2, Type,
 } from "lucide-react";
@@ -150,7 +151,7 @@ function TemplateFieldRow({
         <div className="flex items-center gap-2">
           <DtIcon className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
           <span className={`text-sm font-medium ${isSoftDeleted ? "line-through" : ""}`}>
-            {type.namn}
+            {metadataDisplayName(type)}
           </span>
         </div>
         <div className="text-xs text-muted-foreground flex items-center gap-2 flex-wrap pl-[1.5rem]">
