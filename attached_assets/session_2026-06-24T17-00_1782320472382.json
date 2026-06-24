@@ -1,0 +1,212 @@
+{
+  "sessionId": "60b238305",
+  "exportedAt": "2026-06-24T17:00:34.054Z",
+  "summary": "### Key Topics Discussed\n- Bug för val av överordnat objekt\n- Behov av förfiltrering på sida\n- Verktygsradens importfunktion\n- Export av valda objekt i kolumnformat\n- Hantering av metadata-fält med flera värden vid export\n- Filterstädning och frisök på objekt\n- Distinction mellan objekt och metadata\n- Koncept för att skapa strukturer/paket\n- Struktur för skapande av uppgifter baserade på ett grundobjekt\n- Integration av kundinformation (Fort Knox-kundnummer) och fakturareferensmärkning med uppgifter\n- Möjlighet att inkludera vald metadata (t.ex. fasadnummer) på faktura radnivå kopplat till uppgifter\n- Uppgiftens logik som fristående informationspaket med artikel, produktionstid, kostnad, försäljningspris och tidsfönster.\n- Mekanism för att gruppera jobb baserat på tid och geografi.\n- Formulär för att hantera all information kring ett objekt, med möjlighet till kollapsfunktion för metadatafält.\n- Hantering av metadatafält med fotofiler och stora mängder data via flikar eller kollapssystem.\n- Vikten av att systemgenererad metadata hanteras av systemet.\n- Definition av adressfält (gatuadress, postnummer, ort) och att dessa är konsekventa för att undvika dubblering.\n- Parallella metadatafält för gatuadress, postnummer och ort.\n- Att adresserna omvandlas till GPS-koordinater vid geokodning.\n- Systemgenererad metadata såsom kopplade ordrar, uppgifter och orderkoncept.\n- Beslutsberoende flikar.\n- Förberedelse för hantering av ytor och polygoner.\n- Relation mellan kund och objekt: systemet hanterar inte en \"betalande kund\" på objektnivå, men immateriella föräldraobjekt kan organisera kundrelaterade enheter (t.ex. Axfood i Sverige). Den fakturerade kunden hanteras av ekonomisystemet.\n- Hur uppgifter exporteras till en faktura styrs av orderkonceptet, antingen genom att låsa en kund på orderkonceptets topp eller genom att orderkonceptet söker efter kunder i objektet baserat på ett metadatafält som innehåller Fort Knox-kundnumret.\n- Förståelse för kopplingen mellan uppgifter, objekt och metadata.\n- Viktigheten av att Replit analyserar den underliggande informationen, metadatafälten och kundrelationerna.\n- Ett informationspaket (t.ex. \"tvätta tio kärl på Storgatan 22, januari, februari 2027, inte på fredagar\") hamnar i grovplaneringen.\n- Möjlighet att sortera informationspaket utifrån geografisk plats och utförandetyp i grovplaneringen.\n- Flödet för uppgifter från grovplanering till finplanering och slutförande, inklusive generering av en fakturakö.\n- Fakturering: Möjlighet att manuellt släppa fakturor till Fortnox, där uppgifter sammanställs per kund eller fakturareferens på huvudnivå och presenteras som fakturaspecifikation på radnivå, inklusive relevant metadata som gatuadress eller referensnummer.\n\n### Decisions Made\n- Importen via verktygsraden ska gå direkt till matchningsimporten.\n\n### Action Items\n- Gå igenom bugg som hindrar korrekt val av överordnat objekt.\n- Implementera förfiltrering på sidan för att begränsa urvalet.\n- Lägg till funktionalitet för att exportera valda objekt i kolumnformat (systemnummer, objektnamn, metadatafält).\n- Utveckla filterstädning och frisöksfunktion för objekt.\n- Rättligt ska skapa metadatafälten för longitud och latitud.\n- Replit behöver förstå logiken för informationspaket och den motor som sammanfattar detta.\n\n### Important Points & Insights\n- Möjlighet att exportera valda objekt i kolumnformat är nödvändigt för att importen ska fungera.\n- Vid export av metadata-fält som tillåter flera värden, bör endast det senast inlagda värdet redovisas för att undvika logiska problem med flera rader. Syftet med exporten är att få en grundfil för uppdatering av enskilda metadatafält via sidosystem eller kundfiler.\n- Logiken för filterstädning ska baseras på metadatan kopplad till de objekt man söker på.\n- Tydliggöra skillnaden mellan objekt och metadata, samt hur 'uppgifter' kopplade som metadata till objekt hanteras.\n- När en grund skapar uppgifter, inkluderas information som objektinformation, antal, adress, Fort Knox-kundnummer och fakturareferensmärkning.\n- Det finns en möjlighet att lägga in specifik metadata, som fasadnummer, på fakturans radnivå, kopplat till uppgifterna.\n- En uppgift ska ses som ett fristående informationspaket som består av en artikel, vägd utifrån produktionstid, kostnad och försäljningspris multiplicerat med antal från orderkonceptet.\n- Uppgiften kan inkludera vald metadata synlig på fakturan och har flera tidsfönster, inklusive ett huvudtidsfönster för hela ordern samt eventuella hårda/mjuka tidsfönster som är gynnsamma eller hindrande.\n- En motor ska kunna sätta poäng på informationspaket och gruppera jobb tidsmässigt och geografiskt för effektiv utförande.\n- Formulär för objektinformation bör ha en kollapsfunktion för att hantera många metadatafält, speciellt för fält som kopplade ordrar som kan bli väldigt stora.\n- Sidan måste kunna hantera differentierade mängder av information, inklusive metadatafält med fotofiler eller stora datamängder, med hjälp av flikar eller kollapssystem.\n- Systemet måste internt hantera systemgenererad metadata.\n- Det är viktigt att adressfält som gatuadress, postnummer och ort definieras parallellt och konsekvent för att undvika att flera uppsättningar av adressfålten skapas.\n- Systemet ska hantera bortskruvade metadatafält för att undvika krockar.\n- Systemet bör ta höjd för all geografisk positionering, inklusive 3D-värld och polygoner, för att undvika mismatch vid systemskapande.\n- Den \"betalande kunden\" hanteras av ekonomisystemet, inte direkt på objektnivå.\n- Uppgifter som exporteras till fakturan styrs av orderkonceptet, vilket kan innebära att en kund låses på orderkonceptets topp eller att systemet söker efter kundnummer i metadatafält för delfakturering per område eller kund.\n- Informationspaketet för en uppgift kopplas till orderkonceptet och innehåller information om vad som ska göras (artikel), var jobbet ska utföras (objektets adress eller lagerplats på artikelnummer) och tidsinformation (specifik timme/dag, eller flera månader med undantag/fördelaktiga tider).\n- Varje informationspaket är i grunden en artikel, det vill säga en tjänst, som antingen utförs en gång eller multiplar av baserat på \"antal\" styrt av metadata.\n- Replit måste analysera metadata, kundrelationer och de olika tidsfönstren för informationspaket, samt hur motorn sammanfattar detta, för att undvika egna tolkningar.\n- Informationspaket, likt \"tvätta tio kärl på Storgatan 22, januari, februari 2027, inte på fredagar\", kommer att användas för grovplanering och kan sorteras geografiskt och baserat på utförandetyp.\n- En \"hopklumpningsmotor\" kan identifiera och gruppera uppgifter som kan utföras samtidigt på samma plats, baserat på värde och produktionstid, för att sedan tilldelas utförare/team i finplaneringen. När uppgifterna är slutförda flyttas de till en fakturakö.\n- Fakturering till kund: Uppgifterna på radnivå kan inkludera metadata som gatuadress och referensnummer för tydlighetens skull.\n\n### Open Questions/Pending Items\n- Hantering av 'uppgiftspaket' och eventuell fakturalogik kopplad till dem, då detta avviker från det enklare konceptet att skapa genom ordet.\n- Hur upplägget för beslutsberoende flikar ska se ut.\n- Behov av att Replit förstår kopplingen och relationen mellan objekt, metadata och uppgifter.\n- Rättigs förståelse för det fullständiga flödet från grovplanering till slutförd uppgift och fakturakö.",
+  "conversation": [],
+  "transcripts": [
+    {
+      "text": "Ja, vi går igenom frågorna här då, eller spåren, spåren här då. Den här buggen väljer överordnad objekt, objekt och fff... Eh, ja, det är viktigt att du... D-d-den funkade ju inte då. Sen behöver du då ha en förfiltrering då i, på den här sidan så man begränsar sig då, och det verkar ju rättigt du har förstått. Spår två då, verktygsraden då, importen ska gå direkt till den här matchningsimporten då. Den finns ju på en, eh, en annan sida, så det är ju väldigt enkelt. Det är bara en länk där då. Eh, också viktigt här då...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Eh, det som inte har kommit med här då, men för att, eh, importen där ska funka så måste det också finnas en möjlighet då att kunna exportera då de valda objekten i kolumnformat då. Så att det står alltså systemnumret för objektet och så står det då, eh, objektets namn och sen så kommer då de påkopplade metadata-fälten då, eh, i, i kolumnform.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och här finns det ju ett litet, så att säga, bryderi då. Hur hanterar Recklyt då om, om ett visst metadata-fält tillåter ett, ett, eh, ja, flera olika metadata-värden då? Eh, en enkel variant i det här sammanhanget då är ju att man bara redovisar den senast inlagda då, för annars så får man ju ett logiskt problem med att det då blir massor med rader då. För syftet med den här exporten är ju att man ska kunna få ut en, en, en grundfil för de valda objekten-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm ...med valda metadata-fält, till exempel då referensnummer som butiksnummer eller adresser så att man ska kunna uppdatera då, eh, ur ett sidosystem eller från en fil från kunden då enskilda metadata-fält då.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Eh, får tre där då. Fil... Filterstädning, fristående. Ja, ta bort all den här gamla skiten och förstå nu liksom att logiken här är metadatan som finns kopplad till, till, till då, eh, de objekt som, som man, de man, som man söker på. Och möjligtvis då så ska det finnas en fri, fri, eh, eh, en, en rad där man kan frisöka då på, på objekten. Och sen så, eh-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. Var det då det här som vi ska vara tydliga med då då att objekten är ju objekten och metadatan är metadatan. Men uppgifter då kopplat som metadata till objektet är ju då något ännu mera då. Och, och de här uppgiftspaketet, jag blir lite så att säga orolig här nu där det kommer fram då här att man har någon sorts fakturalogik där då som då... För att i min värld så är det här otroligt enkelt. Det är ju liksom att genom ordet konceptet så skapar man-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm ...en, eh, en grund som i sin tur då skapar en eller flera uppgifter. Och med varje sån här uppgift så följer ju då det med information då, det vill säga, eh, information om objektet och förutsägelse antal och adress, men också andra, andra uppgifter då. Och ifrån orderkonceptet så följer det då med vilken kund det är då i förlängningen Fort Knox-kundnummer då. Och utifrån orderkonceptets logik följer det också med-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "fakturareferensmärkning och det följer också med, eh, då, eh, en, en form av skrift som vi inte har ändå, men där vi kan alltså lägga in på, eh, order eller, eh, på, på radnivå i fakturan då valda metadata, till exempel fasadnummer eller, eller liknande som kommer invid uppgifterna med enligt samma logik då som, som, som, eh, som vi har på... När vi s... när vi lägger till ma... metadata på en, på en uppgift, då kom...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "...med att allt kan fram synlig och justerbar för utförande på motsvarande sätt så kan vi alltså på en uppgift utifrån fakturaperspektivet att hänga på vald metadata så att den blir synlig på, på fakturan. Eh, det var ett förtydligande och en utvidgning så att Reckli ska förstå logiken då där och logiken kring en uppgift. Och det är också väldigt viktigt att se uppgiften som en fristående informationspaket som består utav en artikel, eh, och den är vägd utifrån produktionstid-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm ...utifrån kostnad och utifrån försäljningspris då gånger då, eh, det antal som, som, eh, orderkonceptet har skapat då. Och, eh, på den här då så också från orderkonceptet då eventuellt skapat utifrån information i metadatafält så finns det då flera tidsfönster då. Det finns ett huvudtidsfönster för hela ordern och det finns då eventuellt flera andra hårda eller mjuka tidsfönster då som är gynnsamma för, eller hindrande då-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "...för, eller för, diga, för produktionen då. Och det här ska ju liksom hängas på det här informationspaketet då. Och sen är det ju då den här, eh, motorn som vi pratar om i groblanderingen då som har en möjlighet att sätta poäng på det här då och försöka gruppera ihop jobb som tidsmässigt går att utföra samtidigt och geografiskt finns på samma plats enligt den logik som vi har nämnt tidigare då. Eh, och sen så var det ju då att slå ihop det här så att det blir en logisk och välfungerande helside-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm ...eh, formulär då för att jobba med all information kring objektet. Och det blir ju då objektets namn överordnat, eh, och, eh, samtidigt då alla metadatafält då som, som naturligtvis kan vara många då. Då kan det ju finnas någon sorts kollapsfunktion för det här då. Och, eh, eh, metadatafälten kan ju också bli väldigt yviga då så att metadatafältet för kopplade ordrar, den kan ju bli jättestor. Det kan ju vara ett objekt som begär och gör arbeten på varje vecka.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och det kan ju också finnas metadatafält som till exempel innehåller fotofiler. Och det kan ju teoretiskt sett vara hundratals filer då som ligger i ett filbibliotek eller bildbibliotek där då. Och då behöver den här, eh, sidan kunna hantera då den här differentierade mängden utav olika typer utav information då med flikar eller, ja, kollapsystem då. Eh, sen så har vi ju då, det kanske inte är så väldigt viktigt, men systemet måste själv tänka igenom då metadatan då som är systemgenererad då. Eh-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. Och, och ur mitt perspektiv, det är möjligt att Rätt lyfter en annan uppfattning om det här då. Men den, den enda, eh, om vi, om vi tar, om vi tar nu till exempel här nu då, eh, geografin och adressen då. Eh, och nu har vi då definierat i systemet som jag, eh, rättigt själv kan se då, så finns det något som heter gatuadress och det finns postnummer och ort då. Och, och då är det ju väldigt viktigt att det är då adressfältet så att Rättigt parallellt hittar på då, eh, ytterligare-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. Att, att, att, att, att, eh, ytterligare meta-- Parallella metadata spår för gatuadress och, och postnummer och ort då. Eh, sen behöver du- Oj då. Då har du min kamera. Sen, sen behöver du rättigt, eh, styra upp då så att eftersom i geokodningen så kommer ju då gatuadresserna omvandlas till GPS-koordinater då. Och där vore ju på sin plats då egentligen att för att ordningen här då att Rättligt skapar de här, eh, metadatafälten då för långt-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. -till och efter typ, eh, och, och, eh, kanske också bortskruvats då så att det inte blir krockar där då. Eh, och det finns ju även annan systemgenererad metadata i form av, eh, då kopplade ordrar eller kopplade uppgifter och kopplade orderkoncept då. Eh, och sen har vi då spår sju här, beslutsbero-beroende flikar. Ja, det hänger ihop med hur vi liksom lägger upp det här då. Och då...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och då kommer vi ju då till...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Vi kommer här till, till... Vi ska fatta tre beslut. Ja, vi kan ta dem s-- efter vi har spelat in och så får han göra om den här. Ja, han får göra om, göra om det här. För, för det, det-- Och vi hade också en framtid där på höjd för, för ytor och, och polygoner där då. Men, men det behöver-- Det är bara att vi förbereder det- Ja ...tills att jag kan hantera det i de här registren då. Och att den egentligen då gör en egen analys då så att när det gäller-- Eftersom geografisk position är ju så central-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm ...för det här systemet så att vi försöker ta höjd för alla, alltså från bot-3D world till polygoner, eh- Ja, alla verk-- alla verktyg vi hittar som till-- tillvaras. Ja, att det gärna systemskapas då så att det inte-- det blir något mismatch här då.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Så också säga då det här med kund, då. Att- Vänta, vänta.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Ja, nu. Ja, så som logiken är i det här systemet, då så på objekt och nivå så hära, så finns det inte om man säger en betalade kund. Sen kan man ju skapa ett immateriellt föräldraobjekt som håller ihop till exempel då Axfood i Sverige. Men Ax... Toppen på, på då det här objektkedjan är inte likställd med en kund, utan det är ett sätt att organisera den här. Och den kund som faktureras då genom ekonomisystemet-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. Och då uppgifter som kommer att exporteras dit då och hamnar på en faktura enligt den logiken. Det styrs utav orderkonceptet då. Antingen genom att man låser en, en, en kund på toppen utav orderkonceptet. Alternativt då att man låter orderkonceptet leta efter kunder i objektet baserat åt, på ett metadatafält då som företrädesvis innehåller då, eh, kundnumret i, i Fort Knox då. Eh, så man får göra ett litet arbete där för att få det, få det då att funka i det fallet att-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm ...man då ska ha, eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Delfakturering per område eller per kund och baserat på den organisationen. Men försök också analysera så att Bläck lite är med på... Vi, vi är ju ganska överens om vad, vad, vilken information objektet har. Vi är väldigt över-överens om vilken information metadatan har och hur metadatan är kopplat till objektet. Vi behöver också förstå nu nästa viktiga byggsten i det här systemet som är då, eh, uppgiften då att uppgiften är naturligtvis kopplat till objektet och den är kopplat-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm ...till orderkonceptet och baserat på de båda kopplingarna då så får den ju med sig information varav då, eh, vad som ska göras. Det vill, det vill säga vilken artikel det är, är en sak. Var platsen finns, eh, för att göra jobbet, det vill säga då adressen som finns på objektet eller lagerplatsen som finns på artikelnumret i ett senare skede då. Och sen så den här tidsinformationen då som kan vara lite granna spretig då. Eh, alltifrån då en-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm ...bestämd timme på en viss dag till flera månader med undantag eller fördelaktiga tider då. Eh, och det här blir ju liksom ett informationspaket då. Och sen kan ju de här respektive informationspaket som är i grunden en, en artikel, det vill säga en tjänst då som antingen utförs en eller multiplar utav det som är antal då som man har styrt in s-- utifrån metadata. Eh, och, eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Eh, ja, det vore intressant. Det, det är bra om, om, om, om Replit liksom a-analyserar det här. Det är grunden är ju den här informationen som jag säger nu då, eh, men då också metadata-fältena och, och du har, eh, ja, k-k-kunden som, som man är inne på här, eh, och det finns då de här olika tidsfönstren och vi har den här motorn då som, som sammanfattar det här då. Så att, eh, ja, det där behöver vi gö-- kanske göra en separat utredning, men det är viktigt att Replit förstår den här logiken då och inte håller på att hitta på några egna...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "System vid sidan av då. För grunden i det här är ju att det här informationspaketet då, till exempel tvätta tio kärl på Storgatan 22, eh, januari, februari 2027, inte på fredagar. Det informationspaketet kommer ju att hamna då i det som vi kallar grovplaneringen. Och så kommer vi att kunna sortera det utifrån geografisk plats och vi kommer att kunna förvä-- just filtrera det eller, eh, eh, eh, sortera det utifrån utförandetyp då, till exempel, eh,",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "rullbara kärl då. Och när vi då filtrerar det här och sorterar det så kommer vi ju då att se att vi har en, en, en, en grupp utav uppgifter där den här hopklumpningsmotorn då kan se att ja, men det här finns det möjlighet att göra samtidigt och dessutom är det på samma plats då. Så då kan den klumpa ihop dem. Och sen så när man då ser summan då, både värdet här och summan av produktionstiden, så kan man då...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "dela ut de här till en utförare, utförare då eller ett utförarteam och då kommer det in då på, på finplaneringen och nästa steg är ju att finplanera det här. Men nu är jag ju utanför den här, men det är viktigt att, att rättigt ser, ser flödet då. Och, och den sista delen i det här flödet som jag inte berört då, det är ju när uppgiften är slutförts då. Den kommer också att nå de här olika statusarna då. Så, så kommer ju den i en, en fakturakö då, där man då får se nu att de här uppgifterna är slutförda.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "De här uppgifterna hör ihop med samma kund eller samma fakturareferens. Och så kommer man då att kunna släppa de här fakturorna inledningsvis manuellt då, eh, och skicka i väg då till, till Fortnox som sen sammanställer då det här, den här och den här kunden, de här och de här fakturareferenserna på huvudnivå. Och sen så blir det då fakturaspecifikation på radnivåer där man säger att artikel si och så, tvätt av tio kärl är utförd och sen så får man då...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Ja. Den här metadata referensen där då så att om man vill ha med gatadressen eller fasadnumret för de här tio kärlarna, ja, då kommer det tvätt av tio kärl, Storgatan 22, eh, m-utifrån metadatafält, eh, gatuadress. Och så står det kanske, eh, referensnummer 2832 som är metadata, eh, kostnadsställe, eh, fastighet på den kunden då. Och då kommer vi då att kunna skapa en faktura som kunden kan läsa och förstå fullt tydligt då. Och så...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Det berättar alltså att det är bara systemet det här då på radnivå.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    }
+  ]
+}
