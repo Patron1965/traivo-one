@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
-import { metadataDisplayName } from "@/lib/metadata-display";
+import { metadataDisplayName, metadataTypeOptionLabel } from "@/lib/metadata-display";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -73,6 +73,7 @@ interface MetadataKatalog {
   id: string;
   tenantId: string;
   namn: string;
+  visningsnamn: string | null;
   beskrivning: string | null;
   datatyp: string;
   referensTabell: string | null;
@@ -80,6 +81,7 @@ interface MetadataKatalog {
   standardArvs: boolean;
   kategori: string | null;
   sortOrder: number;
+  displayNumber: number | null;
   icon: string | null;
   createdAt: string;
 }
@@ -606,15 +608,11 @@ function AddMetadataForm({ availableTypes, onSubmit, isPending }: AddMetadataFor
             <SelectValue placeholder="Välj typ..." />
           </SelectTrigger>
           <SelectContent>
-            {availableTypes.map((type) => {
-              const label = type.namn.replace(/_/g, ' ');
-              const displayLabel = label ? label.charAt(0).toUpperCase() + label.slice(1) : label;
-              return (
+            {availableTypes.map((type) => (
               <SelectItem key={type.id} value={type.id}>
-                {displayLabel}
+                {metadataTypeOptionLabel(type)}
               </SelectItem>
-              );
-            })}
+            ))}
           </SelectContent>
         </Select>
         {selectedType?.beskrivning && (

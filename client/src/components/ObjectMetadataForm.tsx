@@ -11,6 +11,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { useToast } from "@/hooks/use-toast";
 import { useUpload } from "@/hooks/use-upload";
 import { apiRequest } from "@/lib/queryClient";
+import { metadataTypeOptionLabel, METADATA_DATATYPE_LABELS } from "@/lib/metadata-display";
 import {
   FileText, Image as ImageIcon, Upload, Download, Trash2, RotateCcw, Cog,
   Link as LinkIcon, Plus, Loader2, ArrowUp, ArrowDown, Type, Hash, ToggleLeft,
@@ -53,6 +54,7 @@ export interface MetadataFormEntry {
 export interface MetadataFormType {
   id?: string;
   namn: string;
+  visningsnamn?: string | null;
   kategori?: string;
   datatyp?: string;
   allowedValues?: string[] | null;
@@ -127,18 +129,18 @@ export function isReadonlyOrigin(metod?: string | null): boolean {
 export const UPLOAD_DATATYPES = new Set(["image", "file"]);
 
 export const DATATYPE_META: Record<string, { label: string; icon: typeof Type }> = {
-  string: { label: "Text", icon: Type },
-  code: { label: "Kod", icon: Type },
-  integer: { label: "Heltal", icon: Hash },
-  decimal: { label: "Tal", icon: Hash },
-  interval: { label: "Intervall", icon: Hash },
-  boolean: { label: "Ja/Nej", icon: ToggleLeft },
-  datetime: { label: "Datum", icon: Calendar },
-  json: { label: "Struktur", icon: Braces },
-  location: { label: "Plats", icon: MapPin },
-  referens: { label: "Referens", icon: LinkIcon },
-  image: { label: "Bild", icon: ImageIcon },
-  file: { label: "Fil", icon: FileIcon },
+  string: { label: METADATA_DATATYPE_LABELS.string, icon: Type },
+  code: { label: METADATA_DATATYPE_LABELS.code, icon: Type },
+  integer: { label: METADATA_DATATYPE_LABELS.integer, icon: Hash },
+  decimal: { label: METADATA_DATATYPE_LABELS.decimal, icon: Hash },
+  interval: { label: METADATA_DATATYPE_LABELS.interval, icon: Hash },
+  boolean: { label: METADATA_DATATYPE_LABELS.boolean, icon: ToggleLeft },
+  datetime: { label: METADATA_DATATYPE_LABELS.datetime, icon: Calendar },
+  json: { label: METADATA_DATATYPE_LABELS.json, icon: Braces },
+  location: { label: METADATA_DATATYPE_LABELS.location, icon: MapPin },
+  referens: { label: METADATA_DATATYPE_LABELS.referens, icon: LinkIcon },
+  image: { label: METADATA_DATATYPE_LABELS.image, icon: ImageIcon },
+  file: { label: METADATA_DATATYPE_LABELS.file, icon: FileIcon },
 };
 
 const OBJECT_STATUS_LABELS: Record<string, string> = {
@@ -1393,16 +1395,11 @@ function MetadataAddButton({
                     <SelectValue placeholder="Välj typ..." />
                   </SelectTrigger>
                   <SelectContent>
-                    {sortedTypes.map((t) => {
-                      const prefix = t.displayNumber != null ? `${t.displayNumber}. ` : "";
-                      const dtHint = t.datatyp && DATATYPE_META[t.datatyp] ? ` · ${DATATYPE_META[t.datatyp].label.toLowerCase()}` : "";
-                      const displayNamn = t.namn ? t.namn.charAt(0).toUpperCase() + t.namn.slice(1) : t.namn;
-                      return (
-                        <SelectItem key={t.id || t.namn} value={t.namn}>
-                          {prefix}{displayNamn} {t.kategori ? `(${t.kategori})` : ""}{dtHint}
-                        </SelectItem>
-                      );
-                    })}
+                    {sortedTypes.map((t) => (
+                      <SelectItem key={t.id || t.namn} value={t.namn}>
+                        {metadataTypeOptionLabel(t)}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               ) : (
