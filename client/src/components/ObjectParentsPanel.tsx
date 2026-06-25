@@ -143,11 +143,11 @@ export function ObjectParentsManager({ object, enabled = true }: ObjectParentsMa
           data-testid="button-add-parent"
         >
           <Plus className="h-3 w-3 mr-1" />
-          Lägg till gren
+          Lägg till förälder
         </Button>
       </div>
       <p className="text-xs text-muted-foreground -mt-2">
-        Ett objekt kan tillhöra flera grenar. Den primära grenen styr adress- och
+        Ett objekt kan tillhöra flera föräldrar. Den primära föräldern styr adress- och
         metadata-arv samt släktnamnets standardkedja.
       </p>
 
@@ -185,7 +185,7 @@ export function ObjectParentsManager({ object, enabled = true }: ObjectParentsMa
                     variant="ghost"
                     className="h-7 w-7"
                     onClick={() => setPrimaryMutation.mutate(p.id)}
-                    title="Gör till primär gren"
+                    title="Gör till primär förälder"
                     data-testid={`button-set-primary-${p.id}`}
                   >
                     <StarOff className="h-3 w-3" />
@@ -197,7 +197,7 @@ export function ObjectParentsManager({ object, enabled = true }: ObjectParentsMa
                   variant="ghost"
                   className="h-7 w-7 text-destructive"
                   onClick={() => removeParentMutation.mutate(p.id)}
-                  title="Ta bort gren"
+                  title="Ta bort förälder"
                   data-testid={`button-remove-parent-${p.id}`}
                 >
                   <Trash2 className="h-3 w-3" />

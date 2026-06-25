@@ -1,10 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from "@tanstack/react-query";
 import { useRoute, useLocation } from "wouter";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { DeliveryPreferencesEditor } from "@/components/DeliveryPreferencesEditor";
 import { ObjectHistoryArchiveTab } from "@/components/ObjectHistoryArchiveTab";
 import { ObjectVignetteSection } from "@/components/ObjectVignetteSection";
@@ -359,6 +359,14 @@ const defaultIcon = L.icon({
   iconAnchor: [12, 41],
 });
 
+// Task #1128: enkelsidig "Objektöversikt" — sektion-id:n motsvarar de gamla
+// flik-värdena. Ekonomi/arkiv ligger i den hopfällbara "Avancerat"-sektionen,
+// så gamla ?tab=-djuplänkar dit mappas till deep-tools.
+const TAB_TO_SECTION: Record<string, string> = {
+  ekonomi: "deep-tools",
+  "history-archive": "deep-tools",
+};
+
 export default function ObjectDetailPage() {
   const mapConfig = useMapConfig();
   const [, params] = useRoute("/objects/:id");
@@ -379,9 +387,10 @@ export default function ObjectDetailPage() {
   const [contactDialogOpen, setContactDialogOpen] = useState(false);
   const [imageDialogOpen, setImageDialogOpen] = useState(false);
   const [restrictionDialogOpen, setRestrictionDialogOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState(
-    () => new URLSearchParams(window.location.search).get("tab") || "overview",
-  );
+  // Task #1128: flikar ersatta av ankrade sektioner. "Avancerat" (ekonomi/arkiv)
+  // är hopfällt som standard; öppnas automatiskt vid navigering dit.
+  const [deepToolsOpen, setDeepToolsOpen] = useState(false);
+  const didInitialScroll = useRef(false);
 
   const [editForm, setEditForm] = useState<ObjectEditForm>({});
   const [workOrderDialogOpen, setWorkOrderDialogOpen] = useState(false);
@@ -434,6 +443,33 @@ export default function ObjectDetailPage() {
     queryKey: ["/api/customers", resolvedObject?.customerId],
     enabled: !!resolvedObject?.customerId,
   });
+
+  // Task #1128: scrollar till en sektion via dess id. Gamla flik-värden och
+  // ObjectMetadataForm-navigeringen (onNavigateToTab) mappas hit.
+  const scrollToSection = useCallback((key: string) => {
+    const target = TAB_TO_SECTION[key] ?? key;
+    const doScroll = () => {
+      const el = document.getElementById(`object-section-${target}`);
+      if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+    };
+    if (target === "deep-tools") {
+      setDeepToolsOpen(true);
+      window.setTimeout(doScroll, 160);
+    } else {
+      requestAnimationFrame(doScroll);
+    }
+  }, []);
+
+  // Task #1128: bakåtkompatibilitet — gamla ?tab=-djuplänkar scrollar till
+  // motsvarande sektion när objektet laddats.
+  useEffect(() => {
+    if (isCreate || !resolvedObject || didInitialScroll.current) return;
+    const tab = new URLSearchParams(window.location.search).get("tab");
+    if (tab) {
+      didInitialScroll.current = true;
+      scrollToSection(tab);
+    }
+  }, [isCreate, resolvedObject, scrollToSection]);
 
   const customerIdForSearch: string | undefined = resolvedObject?.customerId || undefined;
   const searchHitsQuery = useQuery<Array<{
@@ -1181,6 +1217,8 @@ export default function ObjectDetailPage() {
       objectType: d.objectType ?? null,
       hierarchyLevel: d.hierarchyLevel ?? null,
     }));
+  // Task #1128: primär förälder för header-sammanfattningen.
+  const primaryParent = relatedParents.find((p) => p.isPrimary) ?? relatedParents[0] ?? null;
 
   // Task #863: objektet som flytt-dialogen avser — sidans objekt eller ett barn
   // i grenträdet (hämtas från descendants-listan).
@@ -1285,6 +1323,44 @@ export default function ObjectDetailPage() {
                 {accessTypeLabels[obj.accessType]?.label}
               </Badge>
             )}
+          </div>
+          {/* Task #1128: släktskap direkt i headern — redigerbar förälder + underordnade. */}
+          <div className="flex items-center gap-x-4 gap-y-1 mt-2 flex-wrap text-sm">
+            <div className="flex items-center gap-1.5" data-testid="header-parent-summary">
+              <GitFork className="h-4 w-4 text-muted-foreground shrink-0" />
+              <span className="text-muted-foreground">Förälder:</span>
+              {primaryParent ? (
+                <button
+                  type="button"
+                  onClick={() => navigate(`/objects/${primaryParent.id}`)}
+                  className="font-medium text-foreground hover:underline"
+                  data-testid="link-header-parent"
+                >
+                  {primaryParent.name}
+                </button>
+              ) : (
+                <span className="text-muted-foreground" data-testid="text-header-parent-none">Ingen förälder</span>
+              )}
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-6 w-6 p-0"
+                onClick={() => scrollToSection("hierarchy")}
+                data-testid="button-edit-parent"
+                title="Redigera förälder"
+              >
+                <Pencil className="h-3.5 w-3.5" />
+              </Button>
+            </div>
+            <button
+              type="button"
+              onClick={() => scrollToSection("hierarchy")}
+              className="flex items-center gap-1.5 text-muted-foreground hover:text-foreground"
+              data-testid="link-header-children"
+            >
+              <Layers className="h-4 w-4 shrink-0" />
+              <span>Underordnade ({descendants.length})</span>
+            </button>
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -1394,43 +1470,38 @@ export default function ObjectDetailPage() {
         </div>
       )}
 
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-        <TabsList className="flex-wrap h-auto gap-1" data-testid="object-detail-tabs">
-          <TabsTrigger value="overview" data-testid="tab-overview">Översikt</TabsTrigger>
-          <TabsTrigger value="location" data-testid="tab-location">Plats & Karta</TabsTrigger>
-          <TabsTrigger value="access" data-testid="tab-access">Tillgång</TabsTrigger>
-          <TabsTrigger value="equipment" data-testid="tab-equipment">Utrustning</TabsTrigger>
-          <TabsTrigger value="hierarchy" data-testid="tab-hierarchy">
-            Hierarki {descendants.length > 0 && <Badge variant="secondary" className="ml-1 text-xs">{descendants.length}</Badge>}
-          </TabsTrigger>
-          <TabsTrigger value="metadata" data-testid="tab-metadata">
-            Metadata {metadata.length > 0 && <Badge variant="secondary" className="ml-1 text-xs">{metadata.length}</Badge>}
-          </TabsTrigger>
-          <TabsTrigger value="contacts" data-testid="tab-contacts">
-            Kontakter {contacts.length > 0 && <Badge variant="secondary" className="ml-1 text-xs">{contacts.length}</Badge>}
-          </TabsTrigger>
-          <TabsTrigger value="images" data-testid="tab-images">
-            Bilder {images.length > 0 && <Badge variant="secondary" className="ml-1 text-xs">{images.length}</Badge>}
-          </TabsTrigger>
-          <TabsTrigger value="timeline" data-testid="tab-timeline">
-            Tidslinje
-          </TabsTrigger>
-          <TabsTrigger value="restrictions" data-testid="tab-restrictions">
-            SlotPreference {timeRestrictions.length > 0 && <Badge variant="secondary" className="ml-1 text-xs">{timeRestrictions.length}</Badge>}
-          </TabsTrigger>
-          <TabsTrigger value="delivery-preferences" data-testid="tab-delivery-preferences">
-            Leveranspreferenser
-          </TabsTrigger>
-          <TabsTrigger value="ekonomi" data-testid="tab-ekonomi">
-            Ekonomi
-          </TabsTrigger>
-          <TabsTrigger value="history-archive" data-testid="tab-history-archive">
-            Historik & Arkiv
-          </TabsTrigger>
-        </TabsList>
+      {/* Task #1128: enkelsidig översikt — snabbnavigering ersätter flikraden. */}
+      <nav
+        className="sticky top-0 z-30 -mx-4 md:-mx-6 px-4 md:px-6 flex flex-wrap gap-1 border-b py-3 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80"
+        aria-label="Snabbnavigering"
+        data-testid="object-detail-section-nav"
+      >
+        <Button variant="ghost" size="sm" onClick={() => scrollToSection("overview")} data-testid="nav-overview">Översikt</Button>
+        <Button variant="ghost" size="sm" onClick={() => scrollToSection("location")} data-testid="nav-location">Plats & Karta</Button>
+        <Button variant="ghost" size="sm" onClick={() => scrollToSection("access")} data-testid="nav-access">Tillgång</Button>
+        <Button variant="ghost" size="sm" onClick={() => scrollToSection("equipment")} data-testid="nav-equipment">Utrustning</Button>
+        <Button variant="ghost" size="sm" onClick={() => scrollToSection("hierarchy")} data-testid="nav-hierarchy">
+          Hierarki {descendants.length > 0 && <Badge variant="secondary" className="ml-1 text-xs">{descendants.length}</Badge>}
+        </Button>
+        <Button variant="ghost" size="sm" onClick={() => scrollToSection("metadata")} data-testid="nav-metadata">
+          Metadata {metadata.length > 0 && <Badge variant="secondary" className="ml-1 text-xs">{metadata.length}</Badge>}
+        </Button>
+        <Button variant="ghost" size="sm" onClick={() => scrollToSection("contacts")} data-testid="nav-contacts">
+          Kontakter {contacts.length > 0 && <Badge variant="secondary" className="ml-1 text-xs">{contacts.length}</Badge>}
+        </Button>
+        <Button variant="ghost" size="sm" onClick={() => scrollToSection("images")} data-testid="nav-images">
+          Bilder {images.length > 0 && <Badge variant="secondary" className="ml-1 text-xs">{images.length}</Badge>}
+        </Button>
+        <Button variant="ghost" size="sm" onClick={() => scrollToSection("timeline")} data-testid="nav-timeline">Tidslinje</Button>
+        <Button variant="ghost" size="sm" onClick={() => scrollToSection("restrictions")} data-testid="nav-restrictions">
+          SlotPreference {timeRestrictions.length > 0 && <Badge variant="secondary" className="ml-1 text-xs">{timeRestrictions.length}</Badge>}
+        </Button>
+        <Button variant="ghost" size="sm" onClick={() => scrollToSection("deep-tools")} data-testid="nav-deep-tools">Avancerat</Button>
+      </nav>
 
+      <div className="space-y-8" data-testid="object-detail-sections">
         {/* ==================== ÖVERSIKT ==================== */}
-        <TabsContent value="overview">
+        <section id="object-section-overview" className="space-y-4 scroll-mt-4">
           {/* Task #692: lyft fram systemfälten "Senaste arbetsorder"/"Senaste
               felanmälan" (skrivs read-only av systemet, Task #682) direkt på kortet. */}
           {(() => {
@@ -1552,10 +1623,11 @@ export default function ObjectDetailPage() {
               </CardContent>
             </Card>
 
+            {(customer || obj.lastServiceDate || obj.avgSetupTime) && (
             <Card>
               <CardHeader className="pb-3">
                 <CardTitle className="text-base flex items-center gap-2">
-                  <Users className="h-4 w-4" /> Kund & Kluster
+                  <Users className="h-4 w-4" /> Kund & Service
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-1">
@@ -1566,6 +1638,7 @@ export default function ObjectDetailPage() {
                 <InfoRow label="Genomsnittlig ställtid" value={obj.avgSetupTime ? `${obj.avgSetupTime} min` : null} icon={Timer} />
               </CardContent>
             </Card>
+            )}
 
             <Card>
               <CardHeader className="pb-3">
@@ -1630,10 +1703,10 @@ export default function ObjectDetailPage() {
               </CardContent>
             </Card>
           </div>
-        </TabsContent>
+        </section>
 
         {/* ==================== PLATS & KARTA ==================== */}
-        <TabsContent value="location">
+        <section id="object-section-location" className="space-y-4 scroll-mt-4">
           <Card>
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between gap-2">
@@ -1704,10 +1777,10 @@ export default function ObjectDetailPage() {
           <div className="mt-4">
             <PolylineEditor object={obj as ServiceObject} />
           </div>
-        </TabsContent>
+        </section>
 
         {/* ==================== TILLGÅNG ==================== */}
-        <TabsContent value="access">
+        <section id="object-section-access" className="space-y-4 scroll-mt-4">
           <Card>
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between">
@@ -1749,7 +1822,18 @@ export default function ObjectDetailPage() {
                 const accessInfoData = getInheritanceInfo("accessInfo");
                 const info = obj.resolvedAccessInfo || obj.accessInfo;
                 if (!info) return null;
-                const infoStr = typeof info === "object" ? JSON.stringify(info) : String(info);
+                // Task #1128: rendera aldrig rå JSON/"{}" — bygg läsbar text och dölj tomma objekt.
+                let infoStr: string;
+                if (typeof info === "object") {
+                  const entries = Object.entries(info as Record<string, unknown>)
+                    .filter(([, v]) => v !== null && v !== undefined && v !== "")
+                    .map(([k, v]) => `${k}: ${String(v)}`);
+                  if (entries.length === 0) return null;
+                  infoStr = entries.join(" · ");
+                } else {
+                  infoStr = String(info).trim();
+                  if (infoStr === "" || infoStr === "{}") return null;
+                }
                 return (
                   <InheritedInfoRow
                     label="Övrig tillgångsinformation"
@@ -1762,10 +1846,10 @@ export default function ObjectDetailPage() {
               })()}
             </CardContent>
           </Card>
-        </TabsContent>
+        </section>
 
         {/* ==================== UTRUSTNING ==================== */}
-        <TabsContent value="equipment">
+        <section id="object-section-equipment" className="space-y-4 scroll-mt-4">
           <Card>
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between">
@@ -1801,10 +1885,10 @@ export default function ObjectDetailPage() {
               </div>
             </CardContent>
           </Card>
-        </TabsContent>
+        </section>
 
         {/* ==================== HIERARKI ==================== */}
-        <TabsContent value="hierarchy">
+        <section id="object-section-hierarchy" className="space-y-4 scroll-mt-4">
           <div className="flex flex-wrap items-center gap-2 mb-4">
             <Button
               variant="outline"
@@ -1948,10 +2032,10 @@ export default function ObjectDetailPage() {
               </CardContent>
             </Card>
           </div>
-        </TabsContent>
+        </section>
 
         {/* ==================== METADATA ==================== */}
-        <TabsContent value="metadata">
+        <section id="object-section-metadata" className="space-y-4 scroll-mt-4">
           {(() => {
             const selectedTemplate = importTemplates.find((t) => t.id === selectedTemplateId);
             const renderHistory = (entry: MetadataFormEntry) =>
@@ -2134,17 +2218,32 @@ export default function ObjectDetailPage() {
                     children={relatedChildren}
                     imagesCount={images.length}
                     issueReportsCount={issueReports.length}
-                    onNavigateToTab={setActiveTab}
+                    onNavigateToTab={(t) => scrollToSection(t)}
                     onNavigateToObject={(id) => navigate(`/objects/${id}`)}
                   />
                 )}
               </div>
             );
           })()}
-        </TabsContent>
+        </section>
+
+        {/* ==================== LEVERANSPREFERENSER ==================== */}
+        <section id="object-section-delivery-preferences" className="space-y-4 scroll-mt-4">
+          <DeliveryPreferencesEditor
+            entityKind="object"
+            entityId={obj.id}
+            initial={(obj as { deliveryPreferences?: DeliveryPreferences | null }).deliveryPreferences}
+            invalidateKeys={[["/api/objects", obj.id], ["/api/objects"]]}
+          />
+          {!((obj as { deliveryPreferences?: DeliveryPreferences | null }).deliveryPreferences) && customer && (
+            <p className="text-xs text-muted-foreground mt-3">
+              Inga preferenser för objektet — kundens preferenser används som fallback.
+            </p>
+          )}
+        </section>
 
         {/* ==================== KONTAKTER ==================== */}
-        <TabsContent value="contacts">
+        <section id="object-section-contacts" className="space-y-4 scroll-mt-4">
           <Card>
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between">
@@ -2207,10 +2306,10 @@ export default function ObjectDetailPage() {
               )}
             </CardContent>
           </Card>
-        </TabsContent>
+        </section>
 
         {/* ==================== BILDER ==================== */}
-        <TabsContent value="images">
+        <section id="object-section-images" className="space-y-4 scroll-mt-4">
           <Card>
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between">
@@ -2268,10 +2367,10 @@ export default function ObjectDetailPage() {
               )}
             </CardContent>
           </Card>
-        </TabsContent>
+        </section>
 
         {/* ==================== TIDSLINJE (Task #854 — zoombar år→dag, inkl. underträd) ==================== */}
-        <TabsContent value="timeline">
+        <section id="object-section-timeline" className="space-y-4 scroll-mt-4">
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-base flex items-center gap-2">
@@ -2295,10 +2394,10 @@ export default function ObjectDetailPage() {
               />
             </CardContent>
           </Card>
-        </TabsContent>
+        </section>
 
         {/* ==================== SLOTPREFERENCE ==================== */}
-        <TabsContent value="restrictions">
+        <section id="object-section-restrictions" className="space-y-4 scroll-mt-4">
           <Card>
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between">
@@ -2416,41 +2515,48 @@ export default function ObjectDetailPage() {
               )}
             </CardContent>
           </Card>
-        </TabsContent>
+        </section>
 
-        {/* ==================== LEVERANSPREFERENSER ==================== */}
-        <TabsContent value="delivery-preferences">
-          <DeliveryPreferencesEditor
-            entityKind="object"
-            entityId={obj.id}
-            initial={(obj as { deliveryPreferences?: DeliveryPreferences | null }).deliveryPreferences}
-            invalidateKeys={[["/api/objects", obj.id], ["/api/objects"]]}
-          />
-          {!((obj as { deliveryPreferences?: DeliveryPreferences | null }).deliveryPreferences) && customer && (
-            <p className="text-xs text-muted-foreground mt-3">
-              Inga preferenser för objektet — kundens preferenser används som fallback.
-            </p>
-          )}
-        </TabsContent>
+        {/* ==================== AVANCERADE VERKTYG (hopfällbart) ==================== */}
+        <section id="object-section-deep-tools" className="space-y-4 scroll-mt-4">
+          <Collapsible open={deepToolsOpen} onOpenChange={setDeepToolsOpen}>
+            <CollapsibleTrigger asChild>
+              <Button
+                variant="outline"
+                className="w-full justify-between"
+                data-testid="button-toggle-deep-tools"
+              >
+                <span className="flex items-center gap-2">
+                  <Wrench className="h-4 w-4" /> Avancerade verktyg
+                </span>
+                <ChevronRight className={`h-4 w-4 transition-transform ${deepToolsOpen ? "rotate-90" : ""}`} />
+              </Button>
+            </CollapsibleTrigger>
+            <CollapsibleContent className="space-y-8 pt-6">
+              {/* ==================== EKONOMI ==================== */}
+              <div className="space-y-4">
+                <h2 className="text-lg font-semibold">Ekonomi</h2>
+                {/* Task #1086: "Betalare" borttaget — kund härleds via orderkoncept och
+                    visas på fliken "Kopplade uppgifter". Endast fakturamottagare kvar här. */}
+                {objectId && (
+                  <InvoiceRecipientsCard objectId={objectId} />
+                )}
+                {!isAdmin && (
+                  <p className="text-xs text-muted-foreground mt-3">
+                    Endast administratörer kan ändra fakturamottagare.
+                  </p>
+                )}
+              </div>
 
-        {/* ==================== EKONOMI ==================== */}
-        <TabsContent value="ekonomi">
-          {/* Task #1086: "Betalare" borttaget — kund härleds via orderkoncept och
-              visas på fliken "Kopplade uppgifter". Endast fakturamottagare kvar här. */}
-          {objectId && (
-            <InvoiceRecipientsCard objectId={objectId} />
-          )}
-          {!isAdmin && (
-            <p className="text-xs text-muted-foreground mt-3">
-              Endast administratörer kan ändra fakturamottagare.
-            </p>
-          )}
-        </TabsContent>
-
-        <TabsContent value="history-archive">
-          <ObjectHistoryArchiveTab objectId={objectId} isArchived={!!resolvedObject?.deletedAt} />
-        </TabsContent>
-      </Tabs>
+              {/* ==================== HISTORIK & ARKIV ==================== */}
+              <div className="space-y-4">
+                <h2 className="text-lg font-semibold">Historik &amp; arkiv</h2>
+                <ObjectHistoryArchiveTab objectId={objectId} isArchived={!!resolvedObject?.deletedAt} />
+              </div>
+            </CollapsibleContent>
+          </Collapsible>
+        </section>
+      </div>
 
       {/* ==================== REDIGERA OBJEKT-DIALOG ==================== */}
       <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
