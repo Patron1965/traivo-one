@@ -189,9 +189,12 @@ export function DeliveryPreferencesEditor({
         ) : (
           <div className="flex items-center justify-between gap-2">
             <CardTitle className="text-base">Leveranspreferenser</CardTitle>
-            <Badge variant={prefs.priority === "strict" ? "destructive" : "secondary"}>
-              {prefs.priority === "strict" ? "Hård (måste hålla)" : "Mjuk (önskemål)"}
-            </Badge>
+            <span className="flex items-center gap-1.5">
+              {sourceBadge}
+              <Badge variant={prefs.priority === "strict" ? "destructive" : "secondary"}>
+                {prefs.priority === "strict" ? "Hård (måste hålla)" : "Mjuk (önskemål)"}
+              </Badge>
+            </span>
           </div>
         )}
       </CardHeader>
