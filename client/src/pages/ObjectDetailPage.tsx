@@ -11,7 +11,7 @@ import { ObjectVignetteSection } from "@/components/ObjectVignetteSection";
 import { ObjectMetadataForm, type MetadataFormEntry, type MetadataFormType, type MetadataRelatedParent, type MetadataRelatedChild } from "@/components/ObjectMetadataForm";
 import { ObjectTemplateMetadataForm, type TemplateMetadataType } from "@/components/ObjectTemplateMetadataForm";
 import { ObjectSystemGeneratedPanel } from "@/components/ObjectSystemGeneratedPanel";
-import { ObjectTimeline } from "@/components/timeline/ObjectTimeline";
+import { InfoPackageTree } from "@/components/objects/InfoPackageTree";
 import InvoiceRecipientsCard from "@/components/InvoiceRecipientsCard";
 import { TelinkSyncButton } from "@/components/TelinkSyncButton";
 import { ObjectParentsManager } from "@/components/ObjectParentsPanel";
@@ -1492,7 +1492,7 @@ export default function ObjectDetailPage() {
         <Button variant="ghost" size="sm" onClick={() => scrollToSection("images")} data-testid="nav-images">
           Bilder {images.length > 0 && <Badge variant="secondary" className="ml-1 text-xs">{images.length}</Badge>}
         </Button>
-        <Button variant="ghost" size="sm" onClick={() => scrollToSection("timeline")} data-testid="nav-timeline">Tidslinje</Button>
+        <Button variant="ghost" size="sm" onClick={() => scrollToSection("info-packages")} data-testid="nav-info-packages">Informationspaket</Button>
         <Button variant="ghost" size="sm" onClick={() => scrollToSection("restrictions")} data-testid="nav-restrictions">
           SlotPreference {timeRestrictions.length > 0 && <Badge variant="secondary" className="ml-1 text-xs">{timeRestrictions.length}</Badge>}
         </Button>
@@ -2369,29 +2369,19 @@ export default function ObjectDetailPage() {
           </Card>
         </section>
 
-        {/* ==================== TIDSLINJE (Task #854 — zoombar år→dag, inkl. underträd) ==================== */}
-        <section id="object-section-timeline" className="space-y-4 scroll-mt-4">
+        {/* ==================== INFORMATIONSPAKET-TRÄD (Task #1129 — läsvy, utförda + kommande) ==================== */}
+        <section id="object-section-info-packages" className="space-y-4 scroll-mt-4">
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-base flex items-center gap-2">
-                <Calendar className="h-4 w-4" /> Tidslinje
+                <Package className="h-4 w-4" /> Informationspaket
               </CardTitle>
               <p className="text-xs text-muted-foreground">
-                Schemalagda uppgifter för objektet och alla dess underliggande objekt. Zooma mellan år, kvartal, månad, vecka och dag.
+                Bläddra bland objektets uppgifter — utförda och kommande — med inmatad metadata, foton och faktureringskoppling. Gruppera på objekt, plats, orderreferens eller utförandetid.
               </p>
             </CardHeader>
             <CardContent className="p-0">
-              <ObjectTimeline
-                queryKeyPrefix={["/api/objects", objectId, "timeline"]}
-                fetchTimeline={async (startDate, endDate) => {
-                  const res = await apiRequest(
-                    "GET",
-                    `/api/objects/${objectId}/timeline?startDate=${startDate}&endDate=${endDate}`,
-                  );
-                  return res.json();
-                }}
-                onSelectTask={(taskId) => navigate(`/work-orders/${taskId}`)}
-              />
+              <InfoPackageTree objectId={objectId} />
             </CardContent>
           </Card>
         </section>

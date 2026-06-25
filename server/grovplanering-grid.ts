@@ -158,7 +158,7 @@ export function normalizeTaskType(orderType: string | null | undefined): string 
 // subqueries (se memory: drizzle-correlated-subquery-column-qualification).
 // Precedens: Avviker → Utförd → Delvis utförd → Tilldelad → Otilldelad.
 // ---------------------------------------------------------------------------
-const STATUS_CASE = sql<RoughStatus>`
+export const STATUS_CASE = sql<RoughStatus>`
   CASE
     WHEN "work_orders"."impossible_reason" IS NOT NULL
       OR "work_orders"."order_status" = 'omojlig'

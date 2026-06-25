@@ -30,6 +30,7 @@ import {
   WHAT3WORDS_METADATA_NAME,
 } from "../services/object-system-metadata";
 import { createMetadata, updateMetadata, deleteMetadata } from "../metadata-queries";
+import { getObjectInfoPackageTree } from "../services/object-info-package-tree";
 import { metadataKatalog, metadataVarden } from "@shared/schema";
 import { getMapProvider } from "../services/mapProvider";
 import { isValidWhat3words, normalizeWhat3words, WHAT3WORDS_FORMAT_ERROR } from "@shared/what3words";
@@ -778,6 +779,22 @@ app.get("/api/objects/:id/timeline", asyncHandler(async (req, res) => {
   const orders = await storage.getObjectSubtreeTimeline(tenantId, req.params.id, startDate, endDate);
   res.set("Cache-Control", "no-cache, must-revalidate");
   res.json(orders);
+}));
+
+// Task #1129: Informationspaket-träd. Läsvy över objektets uppgifter — utförda
+// (work_orders) och kommande (assignments) — med varje uppgifts informationspaket
+// (inmatad metadata + foton) och faktureringskoppling. Valfritt subträd via
+// ?includeChildren=true. Tenant-/objektägarskap verifieras innan läsning.
+app.get("/api/objects/:id/info-package-tree", asyncHandler(async (req, res) => {
+  const tenantId = getTenantIdWithFallback(req);
+  const existing = await storage.getObject(req.params.id);
+  if (!verifyTenantOwnership(existing, tenantId)) {
+    throw new NotFoundError("Objekt");
+  }
+  const includeChildren = req.query.includeChildren === "true" || req.query.includeChildren === "1";
+  const result = await getObjectInfoPackageTree(tenantId, req.params.id, includeChildren);
+  res.set("Cache-Control", "no-cache, must-revalidate");
+  res.json(result);
 }));
 
 // Task #681: avvikelser kopplade till objektet — driver detaljpanelens
