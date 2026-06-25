@@ -1,0 +1,128 @@
+{
+  "sessionId": "8ac2bfcbd",
+  "exportedAt": "2026-06-25T10:40:30.025Z",
+  "summary": "### Key Topics Discussed\n- Error identification.\n- The core problem of the order concept, focusing on its purpose to create tasks that are fundamentally articles with attached data.\n- Distinguishing between subscriptions, call-offs, and schedules.\n- Post-billing (after the job is done) versus subscriptions (recurring based on an agreement).\n- Task creation based on an order concept, including desired delivery times.\n- How tasks appear in rough planning with different desired delivery times.\n- Future concept of subscriptions defined over a specific period (e.g., one or more years) and recurring with certain periodicity.\n- Automatic creation of tasks (uppehållspiffar) by Replit or Trivo based on metadata for multiple rounds over time.\n- Side function in Replit or Trivo to summarize order volume for monthly or quarterly invoicing.\n- Invoicing for subscriptions based on annual volume divided by billing frequency (e.g., quarterly or monthly).\n- Requirement for a new invoice template in Replit that specifies the period and objects covered by the wash in accordance with the agreement.\n- Handling of subscription invoices by Replit and their transfer to Fortnox for invoicing.\n- Accounting implications for invoices, specifically coding against a separate article for correct accounting entries (customer receivables).\n- The complexity of handling subscription invoices with special accounting in Replit/Trivo that needs to identify already invoiced tasks to ensure correct billing.\n- Creation of a reconciliation invoice (avräkningsfaktura) from Trivo to Fortnox for completed tasks that are already covered by pre-paid subscriptions.\n- Handling of additional services not covered by a subscription, such as extra containers or room cleaning, which should be billed separately.\n- The concept of a single invoice issued to the customer that combines pre-paid services (zero cost) and additional, separately billed services.\n\n### Decisions Made\n- The current focus has been on post-billing where the invoice is created after the work is performed.\n- The complex issue of subscription invoicing, particularly how invoices from Replit/Trivo will account for tasks already covered by subscription payments, will be postponed to a later stage.\n- Replit should focus on generating invoices that distinguish between pre-paid subscription services (billed at zero cost) and additional services (billed separately) on the same invoice.\n- A separate case will be created to clarify how invoices are generated for scheduled services.\n\n### Action Items\n- Replit needs to develop a new invoice template that includes specific text detailing the scope of services (e.g., \"washes on these objects during this period in accordance with the agreement\").\n- Replit needs to ensure subscription invoices are coded against a separate article for correct accounting in Fortnox.\n\n### Important Points & Insights\n- The primary function of the order concept is to generate tasks that include an article with appended data, specifying \"where\" and \"when\". The type of task is a secondary detail.\n- Replit observes a difference between subscriptions, call-offs, and schedules.\n- Subscriptions typically involve multiple runs based on the agreement.\n- A standard call-off order concept points to a specific run, for example, a wash in June 2026 for specific objects with certain details.\n- If a wash is for September 2026, the planner or order receiver copies the initial concept and changes the desired delivery time from June to September, creating new associated tasks.\n- These tasks will appear identical in rough planning, except for their desired delivery time, and are then grouped together.\n- For future subscriptions, Replit or Trivo should automatically create tasks based on metadata of specified objects, resulting in multiple rounds of tasks for the same object over the subscription period.\n- There should be a function to summarize the order volume for monthly or quarterly invoicing based on the established order mass.\n- Invoicing for subscriptions should be based on the total annual volume, divided by the billing frequency (e.g., four for quarterly, twelve for monthly).\n- Replit will create subscription invoices which will then be sent to Fortnox for actual invoicing.\n- Each invoice issued will be accounted for as a customer receivable in accordance with Swedish accounting law.\n- When a pre-paid subscription task is performed, a reconciliation invoice from Trivo needs to be sent to Fortnox, detailing the completed service and associated accounting entries to balance against the pre-paid amount.\n- The system must recognize when the number of serviced items exceeds the subscription agreement (e.g., 11 containers washed when 10 were pre-paid), prompting additional billing.\n- Additional services, like cleaning a room not part of the subscription, should be added to the customer's invoice as a separate line item, potentially originating from a separate order but appearing on the same final invoice.\n\n### Open Questions/Pending Items\n- The exact implementation details for Replit's new invoice template and the complexity of its integration.\n- Specifics on how the separate article for subscription invoice coding will be defined and managed within Replit/Fortnox.\n- How Replit or Trivo will handle special accounting for subscription invoices to correctly identify which tasks have already been charged under a subscription agreement and ensure accurate billing for any additional charges.\n- Details on the accounting entries (kontering) for the reconciliation invoices that balance out pre-paid subscription amounts against completed work.\n- How invoices for scheduled services will be created and handled.",
+  "conversation": [],
+  "transcripts": [
+    {
+      "text": "Äh, så vi inser att det liksom är fel.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Ja, och nu ska jag bara kommentera då kärnan i problemet då. Och då måste jag tydliggöra här då att, eh, orderkonceptets enda uppgift är egentligen då att skapa uppgifter som i grunden är en artikel med påhängd data då för att kunna utföra. Det mest väsentliga är vart och när då. Men sen kommer det sekundärt vilken typ av uppgifter är och så, så vidare då. Eh, här säger ju då Replit att han ser skillnad på abonnemang och avrop och schemat.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Till att börja med nu så, så har vi två typer här. Det ena är då, eh, efterfakturering, det vill säga fakturan skapas efter att jobbet är utfört.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och det är ju det fokus vi har haft hittills då. Det andra alternativet är abonnemang och det innebär ju då att baserat på abonnemanget då som kommer att bli vanligtvis flera körningar. En, ett a-- En vanlig avrops, eh, orderkoncept kommer ju att vara då att man pekar in och säger nu att här har vi en körning att vi ska köra en tvätt i juni 2026 på de här objektena med de här uppg",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "ifterna. Och sen så skapar man då de uppgifterna som det blir och de tar med sig tiden då som är definierade i, i, i o-- I orderkonceptet. Är det en tvätt till, säger vi då i september 2026, ja, då kopierar ju då, eh, planeraren eller ordemottagaren det första konceptet. Så, så ändrar han då den önskade leveranstiden ifrån juni till september då. Och så skapas ju då de uppgifterna som, som då, eh, hör ihop.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och de hamnar då på grovplaneringen och kommer ju då att se exakt likadana ut sånär som att de har en annan önskad leveranstid. När det gäller ett ske-- Eller ett abonnemang då, då kommer man ju då att alldeles riktigt då jobba...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Utifrån en tänkt framtid. I och början med så kommer ju abonnemanget då att vara definierat i en viss tids... Eh, eh, det, det, det kan vara-- Gälla ett år eller det kan gälla, gälla flera år då. Och sen så är det då återkommande utifrån vissa tidsperioder eller med en viss tidsperiodicitet. Och grejen är ju då att när orderkonceptet skapas här så ska ju då i det fallet Replit då eller Trivo skapa då de uppehåll-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. -pifforna som, som, som, som finns då utifrån den givna informationen på metadatan i de objekt som man har pekat in där på. Och så kommer det ju då att bli kanske fyra eller fem eller åtta omgångar av uppgifter på samma objekt då under den här tidsperioden. Sen så ska det ju då finnas en sidofunktion i Replit eller i, i Trivo då som summerar då de här...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Eh, den här, den här ordermassan då, eh, utifrån det som man då sätter upp här. Och det, det kommer ju då antingen vara en månads- eller kvartalsfakturering. Och då ska den då summera den här tänkta...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Eh, volymen på ett år och så ska den då dela det med fyra eller så dela det med, med, med, med tolv då. Och så ska den då skapa fakturor baserat då på de här jobbena. Och de fakturorna kommer ju då att se...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Snarlika ut då, fast de kommer ju liksom att så... Ah, d-d-där var... Det här vet jag inte liksom riktigt räppligt och det här är mer komplicerat än jag tror vi har kommit fram till nu då. Men Replik måste ju då ha en ny fakturamall där, där, där den då skapar, eh, en text och där det står då att det här avser tvättar på de här objekterna under den här perioden i enlighet med avtalet då eller så. Eh, alternativt att den bara gör kopior utav, utav då, eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Faktura av samma typ som, som det blir då med efterfakturering. Men här har vi ge... Det här har genat för den här frågan har inte varit uppe tidigare då. Nästa grej är då att det som händer här då, det är att då kommer också Replik att skapa de här abonnemangsfakturorna eller ja, abonnemangsfakturorna. Och så kommer ju de då att skickas till Fortnox för fakturering. Och då behöver de kodas mot en separat också artikel här då så att konteringen blir rätt. För det som kommer...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Det som kommer att hända då, det ligger utanför Replik nu det här då och, och Trivo. Men det som kommer att hända är ju att för varje faktura som skickas till kunden så kommer ju den då att konteras mot en kundfodran utifrån svenska bokföringslagen då. Så att när... Om det går ut en faktura i januari på tusen kronor, eh, så kommer då när kunden betalar tusen kronor så kommer det att bokas, bokföras på, på en kundfodran på den som den där kunden har på, på, på leverantören i det här fallet Kinab då. Och så nästa faktura i februari kommer att bli-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. -tusen kronor till. Och sen i april så kommer det att bli tusen kronor till. Och sen så säger vi då att i april så åker vi då dit och tvättar. Då innebär det också då att det kom-- Kommer alltså att komma en, en specialkonterad faktura ifrån Replik eller från Trivo då som går till ekonomisystemet som kommer då att, eh... Och, och jag tror att det här är så pass komplicerat så det här, det här måste vi lägga, lägga åt sidan, eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "För att lösa i ett senare tillfälle med de här, eh, eh, abonnemangen då. För att den faktura då, eller ja, ja, det blir ju en faktura som, som kommer då ifrån, från systemet. Den ska ju då se vilka utav de här uppgifterna är redan fakturerade på abonnemanget avseende antal då och att det stämmer då. Så att om vi står då där enligt mitt exempel i april då, så tvättar vi det här och det här bygger ju då på att, eh, efter t-- Vi, vi ska tvätta var tredje vecka.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Det månaden och, eh, det är, eh, tio kärl för trehundra kronor styck för enkelhetens skull då. Och det var tusen kronor då faktureringen i månaden. Och sen gör vi då första jobbet det året då i april. Då kommer ju då, eh, vi har konstaterat då att ja, vi har fakturerat för tretusen kronor och det kommer att räcka då att betala den här tvätten då av de här tio kärlen för trehundra kronor styck då. Och då kommer ju det då att måsta skapas en avräkningsfaktura ifrån Trivo som skickas då till, eh, Fortna-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. Där det då står att vi har tvättat tio kärl och sen så blir det då en, en kontering där som kommer att komma med där man, där man då balanserar ut det här emot då, eh-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. -det här tillgång och harvande som kunden har. Och visar det sig då att vi har tvättat elva kärl, då måste konceptet känna av det och säga: \"Ja, men vi har fakturerat för elva kärl eller tio kärl, men nu blev det ett elfte kärl.\" Och då, då ko- kommer det att faktureras utöver då, då schemat. Och på samma sätt blir det ju då om, om vi har fakturerat då för tvätt av tio kärl och så kommer man på att nu är, blir det också en rumstvätt då, men den ingår inte i abonnemanget, men man lägger till det. Antingen utföraren eller att det blir en separat beställning på det, en separat uppläggning.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. Och tvätt av rummet, ja, då, då ska ju då den här fakturan som skapas då till kunden då, eh, det ska alltså bli noll kronor fakturerat för, för, för då de tio kärl som är förberettalade på abonnemanget. Och sen så ska det då bli, eh, en, eh, eh, fakturering då för tvätt av rummet, låt oss säga femhundra kronor då, separat då, för, för det var på en separat order, men det hamnar på samma fakturan. Eh, så att mitt förslag här nu, det är att Replit fokuserar på den",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "vala efter faktureringen. Och sen så får vi göra ett separat case där vi reder ut, så att säga, då hur fakturorna, för det, det gäller särskilt fakturorna då, skapas för schema då.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    }
+  ]
+}

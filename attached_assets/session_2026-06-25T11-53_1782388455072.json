@@ -1,0 +1,56 @@
+{
+  "sessionId": "c48c7a0cc",
+  "exportedAt": "2026-06-25T11:54:00.465Z",
+  "summary": "### Key Topics Discussed\n- The presence of a dog during the meeting.\n- Need for information fields for task status.\n- Need for information fields for task assignment to an executor or execution team.\n- Need for logic to handle whether a task is subscription-based, if its value should be included in a monthly invoice, and if it's a scheduled task.\n- Task status progression from creation to invoicing, including handling non-billable or unperformable tasks.\n\n### Decisions Made\n- Task status field will handle various eventualities, even if not fully billed or performed.\n\n### Action Items\n- Minho needs to remove the dog from the meeting area.\n\n### Important Points & Insights\n- Tasks will have different statuses.\n- Task status will move through initial creation, basic planning, detailed planning, and invoicing.\n",
+  "conversation": [],
+  "transcripts": [
+    {
+      "text": "Eh, Minho, du måste få bort hunden härifrån.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Men det måste vara komplett. Så måste vi också ha informationsfält för status på uppgiften. Det saknar vi då. Eh, vi behöver också ha informationsfält för, eh, om uppgiften har blivit tilldelad, eh, till en utförare.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Eller ett utförarteam då. Eh, det blir ju-- Ja, utförarna är ju då ett utförarteam som kan bestå utav, av, av, av flera där. Det sa-- Det saknas, så status där. Sen behöver vi logik för att kunna hantera om det här är en uppgift som är baserad på, eh, ett abonnemang eller inte. Eh, för genom att få dit ett datafält då som definierar om uppgiften är abonnemangsbaserad så kommer, eh, Trivo då och Redbit kunna se...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Om den uppgiften ska faktureras, eh, alltså uppgiftsvärdet ska summeras på en månadsfaktura, faktura enligt en separat motor. Plus att uppgiften i sig själv ska ju då ligga som en vanlig uppgift för då en, eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Senare fakturering enligt då den här modellen. Och då måste den kunna se om det är en schemauppgift eller en, eller om det är en vanlig uppgift. Eftersom det är då trots allt uppgifter.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Något mer? Äh, jag återkommer lite grann till det med statusen va. Men, men uppgiften kommer ju liksom då att inta olika statusar. Dels så är den ju, äh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "När den läggs, skapas så har den ju liksom första steget utav status och sen kommer den hamna i grundplaneringen och sen kommer den att hamna i finplaneringen, eventuellt i flera olika steg. Och sen så kommer den då att gå vidare till faktureringen. Sen behöver då det statusfältet kunna, eventuellt kunna hantera, äh, eventuella eventualiteter då att om den till exempel inte faktureras eller den inte går att genomföra eller den går inte att utföra eller något sånt där så skulle man kunna tänka sig då. Men det är ju trots allt ett statusfält, så att det",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "det, det är ju inte så noga.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    }
+  ]
+}

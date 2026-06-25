@@ -1,0 +1,260 @@
+{
+  "sessionId": "38c587dd7",
+  "exportedAt": "2026-06-25T11:08:27.538Z",
+  "summary": "### Key Topics Discussed\n- Analysis of current code structure and its inability to handle logic efficiently.\n- Prioritization of post-invoicing over subscription invoicing.\n- Understanding of the order concept as a task factory and coordinator for data handling.\n- Detailed analysis of the order concept product, specifically identifying information required for tasks.\n- Definition of a task containing an article with its number and description.\n- Importance of metadata, such as quantity, length, or size, being added to an article.\n- Calculation of an article's value by multiplying its quantity with its unit price (e.g., per piece, per meter, or per hour).\n- Consideration of production time for services and its impact on total time (e.g., 3 minutes per service for 10 items equals 30 minutes).\n- Inclusion of cost as an additional metric for an article.\n- Necessity of an execution code for tasks to determine assignment.\n- Distinction between execution code and article type, where article type is for grouping (e.g., laundry, goods) and execution code is for task assignment.\n- Requirement to attach geographical location (e.g., city, street, GPS coordinates) from the object to the task.\n- Importance of geographical resolution for object location, from high-resolution GPS coordinates to less precise city information.\n- Introduction of time factors within the order concept, including one or more time windows.\n- Definition of a main time window with desired delivery times (start and end times for job completion).\n- Ability to add additional stops or more favorable times based on metadata within the order concept.\n- Discussion of soft time windows (e.g., advantageous days like Thursdays and Fridays) and hard time stops (e.g., prohibited days like Mondays).\n- The role of a time engine in optimizing task scheduling based on time specifications.\n- Handling of time window expiration in gross planning, where tasks are moved to the next available time or generate a warning if all windows are passed, making the article \"red\" or un-deliverable.\n- \"Clustering\" of tasks in gross planning based on location, time, and type to facilitate assignment, focusing on \"what, where, and when\" tasks should be done.\n- Integration of order concept with invoicing: tasks are completed and then combined into one or more invoices.\n- Monthly invoicing results in a parallel track of invoices.\n- Consideration of combined invoicing for fixed monthly billing and additional services, where a zero-value invoice confirms task completion against prepayments, but additional orders result in charges.\n- Dynamic updating is crucial for long-term schedules, including price changes (updated price lists) and changes in the number or type of items/tasks at an object.\n- Invoicing within the order concept: invoices are created for the customer at the top of the cluster with the same invoice references.\n- All tasks created under an order should inherit the invoice reference (e.g., \"Vårtvätten 2026\").\n- Invoicing frequency can be set (e.g., weekly invoicing) or automatically triggered per completed task. There is also an option for invoices to be gathered per object.\n- The order concept can consist of tasks with different execution types, and the customer might not want too many invoices.\n- The system will hold invoicing until all tasks related to different execution types (e.g., cleaning different types of bins) within an order are completed. This solution is considered suitable for larger customers.\n- Invoice references can be replaced by metadata fields like area code, property designation, or cost center, depending on customer preference.\n- Tasks will be marked with attached information such as customer name and property number (e.g., \"Anna Karlsson - fastighetsnummer 123\") instead of a general project number.\n- Invoicing rules: partial invoicing is allowed if permitted, otherwise all tasks must be completed before invoicing. For weekly or monthly collective invoices, the system waits for the invoicing period to end.\n- Date determination for invoicing: RepliQ needs to determine the exact date, with one option being the order concept creation date plus one month.\n- Explanation of \"invoice top level\" as the information in the invoice header.\n- Discussion of how invoicing for a customer like Anna Karlsson, who manages multiple properties, could result in multiple invoices, potentially one per property, with the invoice information needing to be clearly defined at the \"FakturaToppen\" (invoice top level).\n- Introduction of invoice references at the line item level, following the same logic as the metadata available to the executor.\n- Attachment of specific metadata to tasks for each article line, such as \"fasadnummer\" (facade number) and \"färg på soptunnan\" (color of the waste bin), linked to when the task was performed.\n- Logic requirement: If multiple tasks share the same metadata reference from an object, the metadata should not be repeated for each task.\n\n### Decisions Made\n- Postpone work on subscription invoicing to focus on post-invoicing.\n\n### Action Items\n- RepliQ needs to analyze the current code structure to understand why it cannot handle the required logic.\n- Jointly analyze the order concept product to create a list of information that tasks should contain.\n- Summarize the requirements for tasks to ensure Trymo understands them.\n- A \"place engine\" must be created to optimize geographical data based on available information and metadata.\n- RepliQ to define the business rule for invoicing dates, e.g., the date an order concept was created or executed plus one month, or the last day of the current month for monthly invoicing.\n\n### Important Points & Insights\n- The current code structure is inadequate for efficient logic handling.\n- The order concept, whether for subscriptions or single tasks, acts as a task factory and coordinator, ensuring all necessary data is attached to tasks.\n- Tasks will be used in many different ways, requiring careful consideration of the information they contain.\n- A key component of a task is an article, well-defined by its article number and description.\n- Articles will need associated metadata like quantity, length, or size.\n- The value of an article is determined by its quantity multiplied by its unit price or time.\n- Production time and cost are crucial factors to consider for services.\n- The execution code is crucial for task distribution.\n- Article type serves an administrative grouping function and is different from the execution code.\n- Geographical location is a critical piece of information to attach from the object, with varying levels of precision from GPS coordinates to city names.\n- The order concept can include time windows, with a primary window for desired delivery and options to add more stops or optimize times based on metadata.\n- Time windows can be soft (preferred times) or hard (prohibited times).\n- A time engine will use these time specifications to find the most advantageous time for task execution.\n- Expired time windows will cause articles to be marked as undeliverable.\n- Gross planning will utilize a geography-optimization engine to cluster tasks that are geographically close, time-feasible, and of the same type for efficient assignment.\n- An order, as a collective request, becomes an order concept which then splits into numerous tasks, including dependent tasks.\n- Completed tasks are eventually consolidated into invoices, with monthly invoicing creating a separate invoicing stream.\n- For monthly billing, customers will receive a monthly invoice based on the order concept, followed by zero-value confirmation invoices for each task completed, balancing against the prepaid amount. Any additional services not covered by the fixed monthly fee will be itemized and charged on these confirmation invoices. If a customer wishes to incorporate an extra job into the fixed billing, it can be added to the regular invoicing to avoid separate charges.\n- Dynamic updates are essential for long-term schedules, especially concerning administrative price changes and modifications in the number or type of recurring tasks at a specific location.\n- The schema (scheduling) will be addressed in the next step.\n- All tasks generated under an order, stemming from a customer (e.g., Anna Karlsson), must include a specific invoice reference (e.g., project number \"Vårtvätten 2026\").\n- Invoicing can be set to weekly or triggered immediately upon task completion. There is also an option to consolidate invoices \"per object\" to avoid excessive individual invoices.\n- Invoice references on tasks can be replaced by specific metadata fields (e.g., area code, property designation, cost center).\n- Tasks will be marked with detailed property information (e.g., \"fastighetsnummer 123\") rather than a single project reference.\n- Invoicing typically occurs when the job is done or, alternatively, through monthly invoicing. An exception is incorrect eco-invoicing.\n- The invoice top level refers to the information in the invoice header, including customer, reference (e.g., from an invoice recipient), invoice concept, and customer's reference (e.g., Anna Karlsson, Vårtvätten 2026, or property reference via metadata).\n- It is possible to replace customer name (Anna Karlsson) with a metadata reference.\n- The list of completed tasks will become more complex with these metadata changes.\n- Invoice top-level information must be explicitly defined and sorted, especially when a customer (e.g., Anna Karlsson) is responsible for multiple properties, potentially leading to separate invoices per property.\n- Invoice references at the line-item level (radnivå) will use the same metadata logic available to the executor.\n- For each article line, three pieces of information will be associated: when the task was performed, the facade number, and the color of the waste bin.\n- A logic is needed to prevent redundant metadata entries if multiple tasks on an object share the same metadata reference.\n\n### Open Questions/Pending Items\n- Clarify how the cost metric is specifically calculated and applied within the system.",
+  "conversation": [],
+  "transcripts": [
+    {
+      "text": "Nu frifräser jag och tar en variant Ja, du har det i huvudet så, så att det är enklast. Ja. Eh, vi, vi gör så här. För att vi ska lösa det här så behöver vi göra en liten analys och behöver ha hjälp utav, utav RepliQ här nu för att analysera läget. Eh, alltså, så som koden ser ut i dag så kan man väl säga att det är helt fel då, eh, och det kommer inte kunna hantera vår logik på ett effektivt sätt då. Eh, det är också klokt att vi lägger då den här, eh, abonnemangsfaktureringen, eh, åt sidan så länge och fokuserar då på det som är efter fakturering.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Eh, och det som är riktigt uppfattat då, det är att orderkonceptet, oavsett om det då är en, eh, eh, abonnemangsvariant eller att det är ett orderkoncept som, som bara skapar ett svep av uppgifter då kopplat till de objekten, är alldeles riktigt en uppgiftsfabrik och en koordinator som ser till då att all nödvändig data hängs på uppgiften.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och det som är den tunga biten här och för att det här ska fungera nu är att vi tillsammans ska analysera produkten av då orderkonceptet. Och att vi funderar nu och skapar då en, en, en, egentligen en lista då över den information som ska finnas på uppgifterna. Och jag kommer att dra det här nu och så ska-- så får, får vi då se så att... För det är ganska många saker och vissa utav de här uppgifterna kommer ju då handbe-- användas på många olika sätt.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. Och det är viktigt att Trymo då förstår det. Men jag kommer-- Så, så uppgiften är då att, att försöka då att, att sammanfatta det här. Nummer ett då är att uppgiften består utav en artikel.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Ja. Och artikeln är ju väldefinierad då med artikelnummer och beskrivning. Eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Från orderkonceptet eller ifrån metadata så lägger vi då på vikt på den här artikeln. Det vill säga antal eller längd eller storlek eller vad det nu är då. Och den mängden då multiplas mot då artiklens styckepris eller meterpris eller, eller timpris eller vad det, vad det nu, nu kan vara då. Och den multiplas också emot om tjänsten har en...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "...produktionstid. Så tar det tre minuter att utföra en tjänst och det är tio stycken, så tar det då trettio minuter då att utföra tio. Och den har också en storhet till och det är kostnaden då, så den, den adderar den också. Så, eh, där får vi då vikten på artikeln.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Nästa grej som den måste lägga på här är då vilken utförandekod den här har då. Den blir avgörande för att dela ut uppgiften. Icke att förväxlas med en, ytterligare en upp-- en, en kod som finns och det är alltså vilken artikeltyp det är då. Men artikeltyp är någonting helt annat. Det är ett sätt att gruppera artiklar för tvätt, eh, eh, eller artiklar, eh, för varor och så vidare. Då, det, det, det är mer en administrativ, men den, den kan ju f-- den följer ju med också.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Så då naturligtvis utifrån all logik här då kan vara användbar i ett läge som vi inte går in på just nu då. Men utförandekoden är jätteviktig. Sedan så lägger man alltså på ifrån objektet då, eh, den geografiska platsen då. Och den kan ju vara alltifrån en ort till en gata eller en GPS-koordinat. Och här har jag sagt tidigare då att här måste, eh, det skapas en platsmotor som, som så att säga optimerar då det hära utifrån den information och metadata som finns.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. Sen så färdigobjektet och så har man en ko-- GPS-koordinat med hög upplösning så är ju det den hög-- den högsta upplösningen. Har man bara en ort, ja, då har man ju då så att säga bara, bara orten då. Då, då, då, då, då är den ganska grovupplöst då.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Eh, sen har vi då tidsfaktorerna. Utifrån årekonceptet då så kan det då adderas en eller flera tidsfönster då. Det finns ett huvudtidsfönster med den önskade leveranstiden, alltså starttid och en sluttid när jobbet då förväntas eller önskas vara klar. Sen kan man då i orderkonceptet baserat på metadata, eh, lägga in, eh, antingen via metadata eller man har ett lägga till, eh, stopp eller mer fördelaktiga tider. Så om jag tar ett exempel då så...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Så om det då är fördelaktigt att tvätta torsdagar och fredagar så kan man då lägga in en mjuk tidsfönster för det. Medan om det till exempel är förbjudet att tvätta på måndagar därför att då är verksamheten stängd, då kan man då lägga in en hård tidsstopp då som säger att jobbet kan inte utföras på måndagar. Sammanfattningsvis då så, så om vi tar ett praktiskt exempel så kommer ju då den unika uppgiften, en uppgift eller flera uppgifter då, att få med sig denna information.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. Den som säger, eh, till exempel att uppgiften ska utföras i juni. Den får absolut inte utföras på måndagar, eh, men fördelaktigt torsdagar och fredagar. Och då ska vi ju sen då ha en, eh, eller inte sen, utan vi har en tidsmotor som utifrån de här tidsangivelserna då försöker hitta då den mest fördelaktiga tiden då.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "I grobplaneringen och det inne-- kommer ju då vara den första tiden. Men om den första tiden passerar då, ja, då kommer det ju då att bli nästa tid. Och när tidsfönstret har passerat helt, då kommer ju då artikeln att, eh, bli röd eller då måste det bli en varning då att nu har vi, nu har vi, nu har vi passerat då, eh... Måndagar är inte aktuella, men däremot så resten av veckan är aktuell och nu har vi passerat den sista fredagen, säger vi då i den här månaden. Och då måste det bli varning då, för då, då kommer vi inte att kunna leverera den här artikeln därför att den har skjutits utanför tidsfönstret.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Så här har vi tiden och sen har vi då geografin utifrån då den här geografin-motorn eller geografi-optimeringen då. Och i grobplaneringen så blir det ju det där vi kallar hopklumpning då. Då, då kommer den ju att försöka hitta då uppgifter som är på samma plats och möjliga att utföra samma tid och är av samma typ. Då klumpar den ju då ihop dem så att det blir lätt att tilldela. Men då har vi tagit då de bitarna som har med utförandet att göra. Och nu kommer vi då och, eh, och, och det är ju då vad som ska göras, vart det ska göras och när det ska göras.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och vem som ska göra det, det vill säga då ko-- utförandekoden på det här. Och nu kommer vi då in då på det som har med fakturan att göra då. Så utifrån orderkonceptet och så, så, eh, och man kan ju se det här också då som en parentes här att en beställning kommer ju då som en beställ-- eller en, en samlad beställning och blir då ett orderkoncept. Och sen så orderkonceptet splittar ju då upp sig på mängder utav uppgifter och även då beroendeuppgifter som vi inte går in på n-nu här då, men som logiken-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. Kan hantera. Eller artiklar som måste kopplas som är en annan typ av beroendeuppgift då att de måste plockas från ett lager. Sen vart efter då de här uppgifterna slutförs så går de ju sen ihop då till en eller flera fakturor. Och, eh, om det då är en månadsfakturering då så blir det ju då ett parallellt spår av fakturor då. Jag kan väl också understryka då att när det skapas uppgifter på, eh, schema då, det som vi, v-v-vad vi då gör",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "- Mm. -för i och med att, eh, där du har en fast fakturering per månad så kommer det ju då att skapas dubbla omgångar av fakturor. Dels så kommer det då att skapas en faktura för den fasta månadsfaktureringen som baseras då på den uppgiftsmassa som har skapats då på orderkonceptet. Sen så kommer det ju då att skapas en blankfaktura då eller en bekräftelsefaktura då när varje uppgift har utförts då. Så, så först så kommer ju kunden då få sin månadsfaktura. Sen så kommer ju då kunden då att få en, man kan säga-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. -en noll fakturor som bekräftar att uppdraget har utförts. Men det blir noll kronor i botten där för att-- Eller i slutet av fakturan, där för varje tjänst då som har utförts, eh, balanseras mot det förbetalda beloppet då. Men om det då på det objektet eller på den kunden eller på den beställningen skulle vara en tilläggsbeställning som inte ingår då i den fasta månadsfaktureringen, så kommer det ju då på den fakturan att s-stå-- Kunna stå då att ja, det är tvättat tio kärl för det var, eh-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. -tio kilo i alla fall. Men sen om man gjort ett extra jobb, till exempel tillätt av ett rum, och då kommer det då att bli en separat fakturering på det, eh, den fakturan. Sen blir det ju då en annan fråga då om, om kunden då säger: \"Ja, men jag vill också fortsättningsvis tvätta rummet.\" Ja, men vad bra, då lägger vi in det på den fasta faktureringen då så slipper du få den här fakturan. Då kommer du alltid att få noll fakturor eller bekräftelsefakturor då på att det, det, det s-stämmer då. En annan parentes här, nog så viktig då som vi måste nämna, det är ju den dynamiska uppdateringen då. För att ett sånt där schema kan ju pågå-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm ...under lång tid. Och det som kommer att hända där då, det är ju att både priser administrativt kommer att förändras och, eh, höjas med uppdaterade prislistor. Och dessutom är det stor sannolikhet att även, eh, antalet då och uppdragets... Eh, ja, det, det, det kan tillkomma nya typer utav kärl på objekten och det kan tillkomma då förändrat antal. Och då behöver det också då finnas en regel där då så att det här då-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm ...uppdateras. Men nog om det här då med, med, med, eh, det som vi kallar schema då. Det får vi ta i nästa steg då. Eh, om vi fortsätter då med den påhåkade informationen här då, så säger vi ju då i orderkonceptet då att, eh, en faktura... I den enklaste formen så säger vi ju då att, eh, alla fakturor skapas på kunden på toppen utav klustret med samma fakturarreferenser på topp-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm ...med vår. Vi säger att det är Anna Karlsson som har beställt det och det är... Det ska gå på, på ett projektnummer, en, en fakturarreferens som de säger som heter då Vårtvätten 2026. Och det innebär ju då att alla uppgifterna som skapas under...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Det här orderkonceptet och på de inpekade objekterna kommer ju då att vara märkt med Anna Karlsson och referens Vårtvätten 2026 då. Och sen så kryssar vi då i då att, eh, vi ska fakturera det här veckovis. Ja, det innebär ju då att då kommer, eh, fakturan att skapas en gång i veckan då. Eh, har vi inte kryssat i det, ja, då kommer ju fakturan på något vis då att skapas så fort ett, en uppgift är utförd då. Eh, och det kan ju bli lite-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm ...mycket då för då kommer det ju fakturor hela tiden. Så då kan man ju aktivera den här funktionen då att fakturor samlas då per objekt då. Eh, och det innebär ju då att när du har tvättat ett återvinningsrum så blir det en faktura för det. Och när du har tvättat, eh, nästa så kommer det en faktura för det. Sen kan vi också kryssa i då... Det kan ju vara så att det här orderkonceptet består av uppgifter med olika utförandetyp och kunden kanske då inte vill ha för många fakturor. Så då säger kunden att: \"Ja, jag vill, när ni kommer till vår återvinningsplats",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "så vill jag inte ha någon faktura för att ni har tvättat både de rullbara kärlen och de nedgrävda kärlen.\" Ja, då är det två utförandetyper och då kryssar vi i det och det innebär ju då att då håller systemet då på, på, på, på, på fakturreglingen tills alla uppgifter är slutförda då.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Så, så, så då har vi liksom löst då det på, på, på toppnivå och jag kan se då att det skulle funka alldeles utmärkt på en större kund då som Svenska Bostäder till exempel då. Om man säger att, eh, det...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "De kör på det viset och så skapar man ju vecko-fakturor och så kommer det då vecko-fakturor och allt är, är lugnt därvidlag då. Men sen kan det ju vara på det sättet och det är ganska vanligt då att särskilt större kunder kommer att vilja samla fakturorna per projekt eller kostnadsställe. Och det innebär ju då att då får vi att byta ut. Det kan mycket väl vara Anna Karlsson som även beställer dem, men då kommer det inte längre att stå vårtvätten 2026, utan vårtvätten 2026.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Kommer att ersättas utav ett metadatafält som till exempel skulle kunna vara områdeskod eller fastighetsbeteckning eller kostnadsställe för fastighet och beroende på hur kunden vill ha det. Och då kommer då för varje uppgift, i det första fallet, varje uppgift som skapades var ju då märkt med Anna Karlsson och vårtvätten 2026. I det andra alternativet nu så kommer ju då de uppgifter som skapas och bara vä-- Märkta med den påhakade informationen då Anna Karlsson-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och så står det då fastighetsnummer ett, två, tre. Och på nån annan uppgift så står det då fastighetsnummer 2830 och så vidare. Och eftersom att den referensen är på toppnivå på fakturan så kommer ju det då innebära då att alla uppgifter som har då på toppnivå på fakturan, fakturarres-- Referens ett, två, tre ska ju då samlas under var",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "andra då. Mm. Och är det tillåtet då att delfakturera så gör man det. Är det inte tillåtet att delfakturera, det vill säga man ska vänta tills alla uppgifter är utförda, så väntar man tills alla uppgifter är utförda. Är det en samlingsfaktura per vecka eller möjligtvis månad, ja, då väntar man och, och, och släpper då fakturan, eh, mot denna kunden, eh, varje månad då.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och vilket datum det blir då? Ja, det, det, det får väl Repli så att säga själv fundera ut då. Men, men en variant är ju att den tar då det datum som orderkonceptet skapades då eller det utfördes då. Så lägger man på en månad då utifrån där då. Det får bli en affärsmässig regel och sen får vi ändra den om det inte fungerar då. Men det normala är då att det, det kommer att faktureras när jobbet är gjort eller möjligtvis att det blir månadsfakturering då. Eller, eller felaktig ekofakturering. Undantagsvis månadsfakturering då. Och en variant är också att månadsfaktureringen-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm ...att det blir den sista i den innevarande månaden då. Men det får vi fundera på.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Den här informationen nu som kommer till här nu då, tillsammans med, eh, annan faktura... Och det är viktigt här nu att räkneligt förstå då. När jag säger fakturatoppnivå så innebär det alltså det som står på huvudet på fakturan. Eh, det är alltså sam-- Det kan bara vara en faktura. Det är kund, det är, eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Vilken referens som finns hos Tina, den som tog emot fakturan. Det är vilket fakturakoncept den är kopplad emot. Det är kundens referens, det vill säga Anna Karlsson, vår tvätt 2026 eller, eh, då, eh, fastighetsreferens då utifrån metadata-fält. Tanken är också här att man kan byta ut, eh, Anna Karlsson mot en metadata-referens då. Så det innebär ju då att listan med de utförda uppgifterna kommer då bara bli mer komplex då.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Då blir det, behöver det ändå sorteras på, eh, ja, de som... Om det står Anna Karlsson som referens då och hon är förvaltare för vissa fastigheter då, så kommer hon då att få fakturor som hon själv står på. Och sen kommer den eventuellt att kunna vara uppdelad på olika fastighetsreferensnummer då. Så det innebär att Anna Karlsson kanske får tre fastigheter eller tre fakturor för de tre fastigheterna som hon är ansvarig för om man väljer att dela upp det så. Eh, så då har vi det, den biten, eh, på FakturaToppen. Och den här informationen måste ju då vara-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. Definierad så att jag med varje informationspaket med uppgifter. Nästa sak då som kommer med här, det är ju då de fakturarreferenser som är på radnivå då. Så väljer man då att på radnivå utifrån samma logik som utföraren har då där han kan se metadata, så har vi då en...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Metadata, vad, vad det menas med metadata i, i utförandenappen då. Eh, så om vi har en given artikel nu då, K100 säger vi då standardtvätt av, eh, matavfallskärl, så säger vi då att till den här artikeln på fakturan så ska vi då koppla tidskod.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och vi ska koppla, det vill säga när uppgiften var utförd, och sen så ska vi koppla, eh, fasadnummer säger vi, och, eh, färg på soptunnan. Då kommer då de tre uppgifterna då att komma för varje artikelrad.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och sen kommer artikelnumret, och så kommer beskrivningen, och så kommer antalet. Och här har vi också efterfrågat nån logik, så att om vi har flera uppgifter som har samma metadata-referens utifrån objektet, så behöver man ju inte ta om det. Så då kan man ju ett villkor att om det är lika så, så kör man bara om flera styck.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Tack. Eh, så var jag. Och det här vill jag att det ska bli som en diskussion nu då och att vi liksom analyserar tillsammans här då. För det, det finns fler uppgifter i det här paketet tror jag som, som behöver vara med för varje, för att då det här ska kunna sorteras sen upp för återvinning.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    }
+  ]
+}

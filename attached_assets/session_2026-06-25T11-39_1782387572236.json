@@ -1,0 +1,38 @@
+{
+  "sessionId": "15aa7c4561",
+  "exportedAt": "2026-06-25T11:39:23.082Z",
+  "summary": "### Key Topics Discussed\n- Detaljerad översikt av informationspaketet för en uppgift i Replit-systemet.\n- Hur informationen ska användas i ett senare skede, primärt för fakturagruppering och skapande baserat på kundinformation.\n\n### Decisions Made\n- Replit ska sammanställa en översikt över informationspaketet för en uppgift. Detta paket ska innehålla artikelnummer, beskrivning, antal och pris.\n\n### Action Items\n- Replit ska redovisa informationspaketet i tabellform, inklusive data, datakälla och eventuella kommentarer.\n- Skapa en tabell för informationspaketet som ett första steg för att komma överens om dess innehåll och struktur.\n\n### Important Points & Insights\n- Informationspaketet är den viktigaste delen av hela systemet.\n- Informationen kan vara dynamiskt hämtad från metadata, inmatade fält i orderkonceptet eller systemskapad.\n- Viktigt att definiera källan till datan (orderkoncept, metadata, systemgenererat).\n\n### Open Questions/Pending Items\n- Fastställa hur fakturan ska grupperas och skapas baserat på den pålänkade kundinformationen.",
+  "conversation": [],
+  "transcripts": [
+    {
+      "text": "Mm. Ja, eh, det här är en otroligt viktig punkt då som jag och Mats säger här nu då, att Replit måste nu summera då hur det här informationspaketet, för det är det absolut viktigaste i hela, i, i hela systemet. Hur ser det här informationspaketet ut för en uppgift? Att det är ett artikelnummer, att det är en beskrivning och att det är antal och pris och så vidare. Det är vi ju överens om. Sen så kommer ju då de-- den här övriga informationen hit, dit-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. Och viss utav den här informationen är ju dynamiskt hämtad utifrån metadata på objektet och annan information är hämtad ifrån orderkonceptets, eh, inmatade fält och viss information är systemskapad. Och det här behöver Replit redovisa i, i tabellform då med, alltså, vad är det för en data? Vad är källan till datan? Och sen så kan vi också lägga till då en kommentar-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm ...hur den här datan ska användas då primärt i ett senare läge. Och framför allt så handlar ju det då, i det här fallet då, om hur fakturan ska grupperas och skapas då baserat på den kundinformation och så som är, är pålänkad här nu. Så ta fram den här tabellen som ett första steg och att bli överens om den. Och, eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Källan till datan då, om det kommer från orderkonceptet eller om det är metadata eller om det är systemgenererat.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    }
+  ]
+}
