@@ -1368,14 +1368,30 @@ export default function ArticleFormPage() {
   };
 
   const pricing = computeArticlePricing({
+    articleType: formData.articleType,
     purchasePrice: formData.purchasePrice || 0,
+    standardCost: formData.standardCost || 0,
+    materialCost: formData.materialCost || 0,
     freightCost: formData.freightCost || 0,
     warehouseCost: formData.warehouseCost || 0,
     markupPercent: formData.markupPercent,
     listPrice: formData.listPrice || 0,
+    // Internkostnad är admin-only; uteslut den ur den visade självkostnaden för
+    // icke-admins så att summan matchar förklaringstexten och inte avslöjar det
+    // dolda fältet via subtraktion.
+    cost: isAdmin ? (formData.cost || 0) : 0,
   });
   const marginOre = pricing.marginPerUnitOre;
   const marginPositive = marginOre >= 0;
+  // Självkostnadens poster, beskrivet exakt så användaren ser vad som ingår.
+  // Kostnadsbasen styrs av artikeltypen: vara → inköpspris, annars standardkostnad.
+  const selfCostBasisLabel =
+    formData.articleType === "vara" ? "inköpspris" : "standardkostnad";
+  const selfCostParts = [selfCostBasisLabel, "materialkostnad", "fraktkostnad", "lagerkostnad"];
+  if (isAdmin) selfCostParts.push("internkostnad");
+  const selfCostFormula = selfCostParts.join(" + ");
+  const marginReferenceLabel =
+    (formData.listPrice || 0) > 0 ? "satt listpris" : "beräknat listpris";
 
   // Redigeringsläge: visa laddnings-/feltillstånd tills artikeln hämtats.
   if (isEditMode && articleLoading && !initialized) {
@@ -2179,7 +2195,7 @@ export default function ArticleFormPage() {
 
             <div className="space-y-2 rounded-md border bg-muted/40 px-3 py-3 text-sm" data-testid="panel-price-buildup">
               <div className="flex items-center justify-between">
-                <span className="text-muted-foreground">Självkostnad (inköp + frakt + lager)</span>
+                <span className="text-muted-foreground">Självkostnad</span>
                 <span className="font-mono" data-testid="text-article-self-cost">
                   {formatSekFromOre(pricing.selfCostOre, { decimals: true })}
                 </span>
@@ -2191,7 +2207,7 @@ export default function ArticleFormPage() {
                 </span>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-muted-foreground">Marginal</span>
+                <span className="text-muted-foreground">Marginal (mot {marginReferenceLabel})</span>
                 <span className="font-mono" data-testid="text-article-margin-percent">
                   {pricing.marginPercent != null ? `${pricing.marginPercent.toFixed(1)} %` : "–"}
                 </span>
@@ -2211,9 +2227,9 @@ export default function ArticleFormPage() {
                 {formatSekFromOre(marginOre, { decimals: true })}
               </span>
             </div>
-            <p className="text-xs text-muted-foreground">
-              Självkostnad = Inköpspris + Fraktkostnad + Lagerkostnad. Beräknat listpris = Självkostnad × (1 + Påslag%).
-              Marginal beräknas mot satt listpris om det finns, annars mot beräknat listpris.
+            <p className="text-xs text-muted-foreground" data-testid="text-self-cost-explainer">
+              Självkostnad = {selfCostFormula} (kostnadsbas: {formData.articleType === "vara" ? "inköpspris för vara" : "standardkostnad för tjänst"}).
+              Beräknat listpris = självkostnad × (1 + påslag%). Marginal beräknas mot {marginReferenceLabel} (satt listpris om det finns, annars beräknat listpris).
             </p>
           </FormSection>
 

@@ -7,10 +7,15 @@
  *
  * VALUTA: alla prisfält är i ÖRE (samma konvention som articles.listPrice m.fl.).
  *
- *   självkostnad   = inköpspris + fraktkostnad + lagerkostnad
+ *   kostnadsbas       = vara → inköpspris, annars (tjänst m.fl.) → standardkostnad
+ *   självkostnad      = kostnadsbas + materialkostnad + fraktkostnad + lagerkostnad + internkostnad
  *   beräknat listpris = självkostnad × (1 + påslag%/100)
- *   marginal/enhet = referenslistpris − självkostnad
- *   marginal%      = marginal/enhet ÷ referenslistpris × 100
+ *   marginal/enhet    = referenslistpris − självkostnad
+ *   marginal%         = marginal/enhet ÷ referenslistpris × 100
+ *
+ * Kostnadsbasen väljs efter artikeltyp så att samma post aldrig dubbelräknas:
+ * en vara använder inköpspris, en tjänst (eller annan icke-vara) standardkostnad.
+ * Övriga poster (material, frakt, lager, intern) är alltid additiva tillägg.
  *
  * "referenslistpris" = det faktiskt satta listpriset (om > 0), annars det
  * beräknade listpriset. Så att marginalen speglar det pris som faktiskt
@@ -18,24 +23,30 @@
  */
 
 export interface ArticleCostInput {
-  /** Inköpspris (öre). */
+  /** Artikeltyp — styr kostnadsbasen ("vara" → inköpspris, annars standardkostnad). */
+  articleType?: string | null;
+  /** Inköpspris (öre) — kostnadsbas för varor. */
   purchasePrice?: number | null;
-  /** Fraktkostnad (öre). */
+  /** Standardkostnad (öre) — kostnadsbas för tjänster/icke-varor. */
+  standardCost?: number | null;
+  /** Materialkostnad (öre) — additivt tillägg. */
+  materialCost?: number | null;
+  /** Fraktkostnad (öre) — additivt tillägg. */
   freightCost?: number | null;
-  /** Lagerkostnad (öre). */
+  /** Lagerkostnad (öre) — additivt tillägg. */
   warehouseCost?: number | null;
   /** Påslag i procent (t.ex. 25 = 25 %). */
   markupPercent?: number | null;
   /** Faktiskt satt listpris (öre). */
   listPrice?: number | null;
-  /** Legacy internkostnad (öre) — används som fallback när inga kostnadskomponenter är satta. */
+  /** Internkostnad (öre) — additivt tillägg (tidigare legacy fallback-kostnad). */
   cost?: number | null;
 }
 
 export interface ArticlePricing {
-  /** Självkostnad = inköp + frakt + lager (öre). */
+  /** Självkostnad = kostnadsbas + material + frakt + lager + intern (öre). */
   selfCostOre: number;
-  /** True om minst en av inköp/frakt/lager är explicit satt. */
+  /** True om minst en kostnadspost (bas eller tillägg) är explicit satt. */
   hasCostComponents: boolean;
   /** Beräknat listpris = självkostnad × (1 + påslag) (öre). */
   computedListPriceOre: number;
@@ -48,31 +59,51 @@ export interface ArticlePricing {
 }
 
 /**
- * Självkostnad = inköp + frakt + lager (öre). Returnerar 0 om inget är satt.
+ * Kostnadsbas (öre) efter artikeltyp: varor använder inköpspris, övriga
+ * (tjänst/kontroll/felanmälan/beroende) standardkostnad. Säkerställer att
+ * inköpspris och standardkostnad aldrig dubbelräknas för samma artikel.
+ */
+export function resolveCostBasisOre(input: ArticleCostInput): number {
+  if (input.articleType === "vara") {
+    return input.purchasePrice ?? 0;
+  }
+  return input.standardCost ?? 0;
+}
+
+/**
+ * Självkostnad = kostnadsbas (inköp för vara / standardkostnad för tjänst) +
+ * material + frakt + lager + internkostnad (öre). Returnerar 0 om inget är satt.
  */
 export function computeArticleSelfCostOre(input: ArticleCostInput): number {
   return (
-    (input.purchasePrice ?? 0) +
+    resolveCostBasisOre(input) +
+    (input.materialCost ?? 0) +
     (input.freightCost ?? 0) +
-    (input.warehouseCost ?? 0)
+    (input.warehouseCost ?? 0) +
+    (input.cost ?? 0)
   );
 }
 
 /**
- * Kostnadsbas för marginal-/kostnadsuppföljning: nya självkostnaden (inköp +
- * frakt + lager) när minst en komponent är satt, annars fallback till legacy
- * internkostnad (`cost`). Säkerställer att gamla artiklar utan de nya fälten
- * fortsätter att fungera oförändrat.
+ * Kostnadsbas för marginal-/kostnadsuppföljning. Internkostnaden är numera en
+ * additiv del av självkostnaden, så detta är ett alias för
+ * computeArticleSelfCostOre (gamla artiklar som bara har internkostnad satt får
+ * självkostnad = internkostnad och fortsätter därmed fungera oförändrat).
  */
 export function resolveArticleCostBasisOre(input: ArticleCostInput): number {
-  if (
+  return computeArticleSelfCostOre(input);
+}
+
+/** True om minst en kostnadspost (bas eller tillägg) är explicit satt. */
+function hasAnyCostComponent(input: ArticleCostInput): boolean {
+  return (
+    input.standardCost != null ||
     input.purchasePrice != null ||
+    input.materialCost != null ||
     input.freightCost != null ||
-    input.warehouseCost != null
-  ) {
-    return computeArticleSelfCostOre(input);
-  }
-  return input.cost ?? 0;
+    input.warehouseCost != null ||
+    input.cost != null
+  );
 }
 
 /**
@@ -81,10 +112,7 @@ export function resolveArticleCostBasisOre(input: ArticleCostInput): number {
  */
 export function computeArticlePricing(input: ArticleCostInput): ArticlePricing {
   const selfCostOre = computeArticleSelfCostOre(input);
-  const hasCostComponents =
-    input.purchasePrice != null ||
-    input.freightCost != null ||
-    input.warehouseCost != null;
+  const hasCostComponents = hasAnyCostComponent(input);
   const markup = input.markupPercent ?? 0;
   const computedListPriceOre = Math.round(selfCostOre * (1 + markup / 100));
   const setListPrice = input.listPrice ?? 0;
