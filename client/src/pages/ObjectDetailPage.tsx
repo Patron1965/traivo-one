@@ -2222,24 +2222,50 @@ export default function ObjectDetailPage() {
                     onNavigateToObject={(id) => navigate(`/objects/${id}`)}
                   />
                 )}
+
+                {/* Task #1133: Leveranspreferenser visas som ett metadata-likt
+                    fält direkt i metadataområdet (samma visuella språk:
+                    ikon-rubrik, antal-badge, källa/arv-badge). Spara-flödet är
+                    oförändrat — egen endpoint/datamodell. Behåller id:t
+                    "object-section-delivery-preferences" för bakåtkompatibla
+                    djuplänkar. */}
+                {(() => {
+                  const ownPrefs = (obj as { deliveryPreferences?: DeliveryPreferences | null })
+                    .deliveryPreferences;
+                  const sourceBadge = ownPrefs ? (
+                    <Badge variant="secondary" className="text-[10px]" data-testid="badge-delivery-prefs-source">
+                      Egen
+                    </Badge>
+                  ) : customer ? (
+                    <Badge
+                      variant="outline"
+                      className="text-[10px] inline-flex items-center gap-1"
+                      data-testid="badge-delivery-prefs-source"
+                    >
+                      <LinkIcon className="h-3 w-3" /> Ärvd från kund
+                    </Badge>
+                  ) : undefined;
+                  return (
+                    <div id="object-section-delivery-preferences" className="scroll-mt-24">
+                      <DeliveryPreferencesEditor
+                        entityKind="object"
+                        entityId={obj.id}
+                        initial={ownPrefs}
+                        invalidateKeys={[["/api/objects", obj.id], ["/api/objects"]]}
+                        metadataStyle
+                        sourceBadge={sourceBadge}
+                      />
+                      {!ownPrefs && customer && (
+                        <p className="mt-2 text-xs text-muted-foreground">
+                          Inga preferenser för objektet — kundens preferenser används som fallback.
+                        </p>
+                      )}
+                    </div>
+                  );
+                })()}
               </div>
             );
           })()}
-        </section>
-
-        {/* ==================== LEVERANSPREFERENSER ==================== */}
-        <section id="object-section-delivery-preferences" className="space-y-4 scroll-mt-4">
-          <DeliveryPreferencesEditor
-            entityKind="object"
-            entityId={obj.id}
-            initial={(obj as { deliveryPreferences?: DeliveryPreferences | null }).deliveryPreferences}
-            invalidateKeys={[["/api/objects", obj.id], ["/api/objects"]]}
-          />
-          {!((obj as { deliveryPreferences?: DeliveryPreferences | null }).deliveryPreferences) && customer && (
-            <p className="text-xs text-muted-foreground mt-3">
-              Inga preferenser för objektet — kundens preferenser används som fallback.
-            </p>
-          )}
         </section>
 
         {/* ==================== KONTAKTER ==================== */}

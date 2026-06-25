@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -6,7 +6,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Trash2 } from "lucide-react";
+import { Plus, Trash2, Truck } from "lucide-react";
 import { useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -40,6 +40,12 @@ interface DeliveryPreferencesEditorProps {
     method: "PATCH",
     body: { deliveryPreferences: DeliveryPreferences | null },
   ) => Promise<unknown>;
+  /** Rendera med metadata-likt utseende (ikon, områdesrubrik, källa/arv-badge)
+   *  så att kortet smälter in i metadataområdet. Påverkar inte spara-flödet. */
+  metadataStyle?: boolean;
+  /** Källa/arv-badge som visas i metadata-rubriken (t.ex. "Egen" eller
+   *  "Ärvd från kund"). Endast i metadata-läge. */
+  sourceBadge?: ReactNode;
 }
 
 export function DeliveryPreferencesEditor({
@@ -48,6 +54,8 @@ export function DeliveryPreferencesEditor({
   initial,
   invalidateKeys,
   customTransport,
+  metadataStyle = false,
+  sourceBadge,
 }: DeliveryPreferencesEditorProps) {
   const { toast } = useToast();
   const [prefs, setPrefs] = useState<DeliveryPreferences>(
@@ -125,15 +133,38 @@ export function DeliveryPreferencesEditor({
     setPrefs((p) => ({ ...p, blockedDates: p.blockedDates.filter((_, idx) => idx !== i) }));
   };
 
+  const configuredCount =
+    prefs.weeklyWindows.length + prefs.blockedHours.length + prefs.blockedDates.length;
+
   return (
-    <Card data-testid={`delivery-preferences-${entityKind}`}>
-      <CardHeader className="pb-3">
-        <div className="flex items-center justify-between gap-2">
-          <CardTitle className="text-base">Leveranspreferenser</CardTitle>
-          <Badge variant={prefs.priority === "strict" ? "destructive" : "secondary"}>
-            {prefs.priority === "strict" ? "Hård (måste hålla)" : "Mjuk (önskemål)"}
-          </Badge>
-        </div>
+    <Card
+      data-testid={`delivery-preferences-${entityKind}`}
+      className={metadataStyle ? "scroll-mt-24" : undefined}
+    >
+      <CardHeader className={metadataStyle ? "pb-2" : "pb-3"}>
+        {metadataStyle ? (
+          <>
+            <CardTitle className="text-sm font-semibold flex items-center justify-between gap-2">
+              <span className="flex items-center gap-2">
+                <Truck className="h-4 w-4 text-muted-foreground" /> Leveranspreferenser
+              </span>
+              <span className="flex items-center gap-1.5">
+                {sourceBadge}
+                <Badge variant="outline" className="text-[10px]">{configuredCount}</Badge>
+              </span>
+            </CardTitle>
+            <p className="pt-1 text-xs text-muted-foreground">
+              Styr när leverans/besök får ske. Visas som metadata, men sparas separat.
+            </p>
+          </>
+        ) : (
+          <div className="flex items-center justify-between gap-2">
+            <CardTitle className="text-base">Leveranspreferenser</CardTitle>
+            <Badge variant={prefs.priority === "strict" ? "destructive" : "secondary"}>
+              {prefs.priority === "strict" ? "Hård (måste hålla)" : "Mjuk (önskemål)"}
+            </Badge>
+          </div>
+        )}
       </CardHeader>
       <CardContent className="space-y-6">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
