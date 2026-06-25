@@ -606,11 +606,15 @@ function AddMetadataForm({ availableTypes, onSubmit, isPending }: AddMetadataFor
             <SelectValue placeholder="Välj typ..." />
           </SelectTrigger>
           <SelectContent>
-            {availableTypes.map((type) => (
+            {availableTypes.map((type) => {
+              const label = type.namn.replace(/_/g, ' ');
+              const displayLabel = label ? label.charAt(0).toUpperCase() + label.slice(1) : label;
+              return (
               <SelectItem key={type.id} value={type.id}>
-                {type.namn.replace(/_/g, ' ')}
+                {displayLabel}
               </SelectItem>
-            ))}
+              );
+            })}
           </SelectContent>
         </Select>
         {selectedType?.beskrivning && (

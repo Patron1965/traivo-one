@@ -1396,9 +1396,10 @@ function MetadataAddButton({
                     {sortedTypes.map((t) => {
                       const prefix = t.displayNumber != null ? `${t.displayNumber}. ` : "";
                       const dtHint = t.datatyp && DATATYPE_META[t.datatyp] ? ` · ${DATATYPE_META[t.datatyp].label.toLowerCase()}` : "";
+                      const displayNamn = t.namn ? t.namn.charAt(0).toUpperCase() + t.namn.slice(1) : t.namn;
                       return (
                         <SelectItem key={t.id || t.namn} value={t.namn}>
-                          {prefix}{t.namn} {t.kategori ? `(${t.kategori})` : ""}{dtHint}
+                          {prefix}{displayNamn} {t.kategori ? `(${t.kategori})` : ""}{dtHint}
                         </SelectItem>
                       );
                     })}
