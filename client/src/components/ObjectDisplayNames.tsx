@@ -5,10 +5,13 @@
 // Task #634: språkväljare — välj visningsspråk (namn_sv/namn_en/…) med fallback
 // till det interna namnet. Påverkar enbart visningen, aldrig kolumn E.
 import { useState } from "react";
+import { Link } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { ChevronRight, Languages, Network, Star } from "lucide-react";
+import { useAuth } from "@/hooks/use-auth";
+import { isAdminRole } from "@/lib/role-config";
+import { ChevronRight, Languages, Network, Settings, Star } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -81,14 +84,21 @@ export function ObjectDisplayNames({
   objectId,
   enabled = true,
   allowSetPrimary = false,
+  showSettingsLink = false,
 }: {
   objectId: string;
   enabled?: boolean;
   // Task #626: visa "Gör till primär"-åtgärd på alternativa släktnamn. Av som
   // standard (t.ex. i mobilvyn) — slås på i web-vyer där byte är önskvärt.
   allowSetPrimary?: boolean;
+  // Task #1132: när släktnamn är avstängda, visa en direktlänk till
+  // Inställningar → Tenant-konfiguration → Visningsnamn för admin/owner. Av som
+  // standard — slås på i web-vyer (ej mobil, där rutten inte är relevant).
+  showSettingsLink?: boolean;
 }) {
   const { toast } = useToast();
+  const { user } = useAuth();
+  const isAdmin = isAdminRole(user?.role);
   // "" = internt namn (kolumn E); annars vald språkkod.
   const [language, setLanguage] = useState<string>("");
   // Task #669: bekräfta innan primär förälder byts (påverkar metadata-/fält-arv).
@@ -130,10 +140,27 @@ export function ObjectDisplayNames({
     // (2) reglerna är på men objektet saknar förälder → toppnivåobjekt.
     if (data && data.rulesEnabled === false) {
       return (
-        <p className="text-xs text-muted-foreground" data-testid="display-names-disabled">
-          Hierarkiska släktnamn är avstängda för den här organisationen. En administratör
-          kan slå på dem under Inställningar → Tenant-konfiguration → Visningsnamn.
-        </p>
+        <div className="space-y-2" data-testid="display-names-disabled">
+          <p className="text-xs text-muted-foreground">
+            Hierarkiska släktnamn är avstängda för den här organisationen. En administratör
+            kan slå på dem under Inställningar → Tenant-konfiguration → Visningsnamn.
+          </p>
+          {showSettingsLink && isAdmin && (
+            <Button
+              asChild
+              type="button"
+              size="sm"
+              variant="outline"
+              className="h-7 px-2 text-xs"
+              data-testid="link-display-name-settings"
+            >
+              <Link href="/tenant-config?tab=display-names">
+                <Settings className="mr-1 h-3 w-3" />
+                Öppna inställningar
+              </Link>
+            </Button>
+          )}
+        </div>
       );
     }
     return (

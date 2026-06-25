@@ -210,7 +210,7 @@ export function ObjectParentsManager({ object, enabled = true }: ObjectParentsMa
 
       <div className="space-y-2 pt-2 border-t">
         <h3 className="text-sm font-medium">Släktnamn</h3>
-        <ObjectDisplayNames objectId={object.id} enabled={enabled} allowSetPrimary />
+        <ObjectDisplayNames objectId={object.id} enabled={enabled} allowSetPrimary showSettingsLink />
       </div>
 
       <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>
