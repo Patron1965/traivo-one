@@ -341,13 +341,11 @@ app.patch("/api/execution-codes/:id", requireAdmin, asyncHandler(async (req, res
 }));
 
 // Aldrig hard-delete: koder som används av artiklar/resurser/profiler arkiveras (soft-delete).
+// Task #1108: utförandekoder är helt användarhanterade — ingen kod är låst som "systemgenererad".
 app.delete("/api/execution-codes/:id", requireAdmin, asyncHandler(async (req, res) => {
   const tenantId = getTenantIdWithFallback(req);
   const existing = await storage.getExecutionCodeDefinition(req.params.id, tenantId);
   if (!existing) throw new NotFoundError("Utförandekod hittades inte");
-  if (existing.isSystem) {
-    throw new ConflictError("Systemstandard-utförandekoder kan inte tas bort eller arkiveras.");
-  }
   const usage = await storage.getExecutionCodeUsageCount(tenantId, existing.key);
   await storage.archiveExecutionCodeDefinition(req.params.id, tenantId);
   res.json({ archived: true, usage });

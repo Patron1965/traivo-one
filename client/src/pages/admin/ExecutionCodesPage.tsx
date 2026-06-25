@@ -5,7 +5,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
 import {
   Table,
   TableBody,
@@ -201,8 +200,8 @@ export default function ExecutionCodesPage() {
         <CardHeader>
           <CardTitle>Registrerade utförandekoder</CardTitle>
           <CardDescription>
-            Systemstandarder kan döpas om men inte tas bort. Egna koder kan arkiveras; en kod som
-            används arkiveras (soft-delete) så att befintlig data behåller referensen.
+            Utförandekoder kan döpas om och arkiveras. En kod som används arkiveras (soft-delete)
+            så att befintlig data behåller sin referens.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -213,7 +212,6 @@ export default function ExecutionCodesPage() {
                   <TableHead>Visningsnamn</TableHead>
                   <TableHead>Nyckel</TableHead>
                   <TableHead className="w-24 text-right">Sortering</TableHead>
-                  <TableHead className="w-32">Ursprung</TableHead>
                   <TableHead className="w-28 text-right">Åtgärder</TableHead>
                 </TableRow>
               </TableHeader>
@@ -227,13 +225,6 @@ export default function ExecutionCodesPage() {
                         <code className="text-xs text-muted-foreground">{t.key}</code>
                       </TableCell>
                       <TableCell className="text-right tabular-nums">{t.sortOrder}</TableCell>
-                      <TableCell>
-                        {t.isSystem ? (
-                          <Badge variant="secondary" data-testid={`badge-system-${t.key}`}>System</Badge>
-                        ) : (
-                          <Badge variant="outline">Egen</Badge>
-                        )}
-                      </TableCell>
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-1">
                           <Button
@@ -247,8 +238,7 @@ export default function ExecutionCodesPage() {
                           <Button
                             variant="ghost"
                             size="icon"
-                            disabled={t.isSystem}
-                            title={t.isSystem ? "Systemkoder kan inte tas bort" : "Arkivera"}
+                            title="Arkivera"
                             onClick={() => setDeleteTarget(t)}
                             data-testid={`button-delete-${t.key}`}
                           >

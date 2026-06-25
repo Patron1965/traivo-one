@@ -4,6 +4,7 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
 import { useUpload } from "@/hooks/use-upload";
+import { useExecutionCodes } from "@/hooks/use-execution-codes";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { formatSekFromOre } from "@/lib/format";
 import { metadataDisplayName } from "@/lib/metadata-display";
@@ -200,7 +201,6 @@ interface ArticleFormData {
   showMetadataFields: ShowMetadataRow[];
   leaveMetadataFields: LeaveMetadataRow[];
   performerCategory: string;
-  competencyRequirements: string[];
   iconKey: string;
 }
 
@@ -283,7 +283,6 @@ const emptyFormData: ArticleFormData = {
   showMetadataFields: [],
   leaveMetadataFields: [],
   performerCategory: "",
-  competencyRequirements: [],
   iconKey: "",
 };
 
@@ -371,7 +370,6 @@ function getSectionStats(
     ]),
     utforarkategori: countFilled([
       fd.performerCategory.trim() !== "",
-      fd.competencyRequirements.length > 0,
     ]),
   };
 }
@@ -668,12 +666,14 @@ export default function ArticleFormPage() {
   const isEditMode = !!id;
 
   const [formData, setFormData] = useState<ArticleFormData>(emptyFormData);
+  // Task #1108: Utförarkategori väljs från utförandekod-registret med
+  // fritext-bakåtkompatibilitet — befintliga fritextvärden förblir valbara.
+  const { options: executionCodeOptions } = useExecutionCodes([formData.performerCategory]);
   // Task #837: Fortnox-koppling. `fortnoxArticleNumber` skickas bara när
   // `fortnoxLinkTouched` är true så att oförändrad redigering inte raderar kopplingen.
   const [fortnoxArticleNumber, setFortnoxArticleNumber] = useState<string | null>(null);
   const [fortnoxLinkTouched, setFortnoxLinkTouched] = useState(false);
   const [supplierNumberInput, setSupplierNumberInput] = useState("");
-  const [competencyInput, setCompetencyInput] = useState("");
   const [debouncedArticleNumber, setDebouncedArticleNumber] = useState("");
   const [offsetValueInput, setOffsetValueInput] = useState<string>("0");
   const [offsetUnit, setOffsetUnit] = useState<"minutes" | "days">("minutes");
@@ -1163,9 +1163,6 @@ export default function ArticleFormPage() {
         : [],
       performerCategory: (article as any).performerCategory || "",
       iconKey: (article as any).iconKey || "",
-      competencyRequirements: Array.isArray((article as any).competencyRequirements)
-        ? ((article as any).competencyRequirements as string[])
-        : [],
     });
     {
       const om = article.offsetMinutes ?? 0;
@@ -1341,7 +1338,6 @@ export default function ArticleFormPage() {
     payload.leaveMetadataFields = formData.leaveMetadataFields
       .filter((r) => (r.metadataField || "").trim() !== "")
       .map((r) => ({ metadataField: r.metadataField.trim(), instruction: (r.instruction || "").trim(), required: !!r.required }));
-    payload.competencyRequirements = formData.competencyRequirements.filter((c) => (c || "").trim() !== "");
     if (fortnoxLinkTouched) {
       payload.fortnoxArticleNumber = fortnoxArticleNumber;
     }
@@ -3086,75 +3082,25 @@ export default function ArticleFormPage() {
           <FormSection title="Utförarkategori" icon={<Users className="h-4 w-4" />} testId="section-utforarkategori" {...sectionProps("utforarkategori")}>
             <div className="space-y-2">
               <Label htmlFor="performerCategory">Utförarkategori</Label>
-              <Input
-                id="performerCategory"
-                value={formData.performerCategory}
-                onChange={(e) => setFormData({ ...formData, performerCategory: e.target.value })}
-                placeholder="t.ex. Chaufför, Tekniker, Besiktningsman"
-                data-testid="input-performer-category"
-              />
-              <p className="text-xs text-muted-foreground">Vilken kategori av utförare som normalt utför artikeln.</p>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="competencyInput">Kompetenskrav</Label>
-              <div className="flex gap-2">
-                <Input
-                  id="competencyInput"
-                  value={competencyInput}
-                  onChange={(e) => setCompetencyInput(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      e.preventDefault();
-                      const v = competencyInput.trim();
-                      if (v && !formData.competencyRequirements.includes(v)) {
-                        setFormData({ ...formData, competencyRequirements: [...formData.competencyRequirements, v] });
-                      }
-                      setCompetencyInput("");
-                    }
-                  }}
-                  placeholder="Lägg till kompetenskrav och tryck Enter"
-                  data-testid="input-competency-requirement"
-                />
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="icon"
-                  onClick={() => {
-                    const v = competencyInput.trim();
-                    if (v && !formData.competencyRequirements.includes(v)) {
-                      setFormData({ ...formData, competencyRequirements: [...formData.competencyRequirements, v] });
-                    }
-                    setCompetencyInput("");
-                  }}
-                  data-testid="button-add-competency-requirement"
-                >
-                  <Plus className="h-4 w-4" />
-                </Button>
-              </div>
-              {formData.competencyRequirements.length > 0 && (
-                <div className="flex flex-wrap gap-2 pt-1">
-                  {formData.competencyRequirements.map((c, i) => (
-                    <Badge key={`${c}-${i}`} variant="secondary" className="gap-1" data-testid={`badge-competency-${i}`}>
-                      <span className="text-xs">{c}</span>
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setFormData({
-                            ...formData,
-                            competencyRequirements: formData.competencyRequirements.filter((_, idx) => idx !== i),
-                          })
-                        }
-                        className="ml-0.5 hover:text-destructive"
-                        data-testid={`button-remove-competency-${i}`}
-                        aria-label="Ta bort kompetenskrav"
-                      >
-                        <X className="h-3 w-3" />
-                      </button>
-                    </Badge>
+              <Select
+                value={formData.performerCategory || "__none__"}
+                onValueChange={(v) => setFormData({ ...formData, performerCategory: v === "__none__" ? "" : v })}
+              >
+                <SelectTrigger id="performerCategory" data-testid="select-performer-category">
+                  <SelectValue placeholder="Välj utförandekod" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">Ingen</SelectItem>
+                  {executionCodeOptions.map((opt) => (
+                    <SelectItem key={opt.value} value={opt.value} data-testid={`option-performer-category-${opt.value}`}>
+                      {opt.isLegacy ? `${opt.label} (fritext)` : opt.label}
+                    </SelectItem>
                   ))}
-                </div>
-              )}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                Vilken utförandekod (utförartyp) som normalt utför artikeln. Hanteras i utförandekod-registret.
+              </p>
             </div>
           </FormSection>
             </div>

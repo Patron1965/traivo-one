@@ -4926,8 +4926,10 @@ export class DatabaseStorage implements IStorage {
     const existing = await db.select({ key: executionCodeDefinitions.key }).from(executionCodeDefinitions)
       .where(eq(executionCodeDefinitions.tenantId, tenantId));
     const existingKeys = new Set(existing.map((r) => r.key));
+    // Utförandekoder ska vara helt användarhanterade (Task #1108) — systemet sätter
+    // aldrig isSystem självt. Standardkoder seedas som vanliga (raderbara) koder.
     const toInsert = DatabaseStorage.DEFAULT_EXECUTION_CODES
-      .map((t, i) => ({ tenantId, key: t.key, label: t.label, sortOrder: i, isSystem: true }))
+      .map((t, i) => ({ tenantId, key: t.key, label: t.label, sortOrder: i, isSystem: false }))
       .filter((t) => !existingKeys.has(t.key));
     if (toInsert.length > 0) {
       await db.insert(executionCodeDefinitions).values(toInsert);
