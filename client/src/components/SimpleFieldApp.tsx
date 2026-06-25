@@ -15,7 +15,7 @@ import {
 } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
-import type { Resource, Vehicle } from "@shared/schema";
+import type { Resource, Vehicle, Equipment } from "@shared/schema";
 import { startOfDay, endOfDay, format } from "date-fns";
 import { sv } from "date-fns/locale";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -229,6 +229,7 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
   const [currentSignature, setCurrentSignature] = useState<string | null>(null);
   const [materials, setMaterials] = useState<MaterialItem[]>([]);
   const [completedVehicleId, setCompletedVehicleId] = useState<string | null>(null);
+  const [completedEquipmentId, setCompletedEquipmentId] = useState<string | null>(null);
   const [completedParticipantIds, setCompletedParticipantIds] = useState<string[]>([]);
   const [showImpossibleDialog, setShowImpossibleDialog] = useState(false);
   const [selectedImpossibleReason, setSelectedImpossibleReason] = useState<string | null>(null);
@@ -276,6 +277,10 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
 
   const { data: vehicles = [] } = useQuery<Vehicle[]>({
     queryKey: ["/api/vehicles"],
+  });
+
+  const { data: equipment = [] } = useQuery<Equipment[]>({
+    queryKey: ["/api/equipment"],
   });
 
   const { data: allResources = [] } = useQuery<Resource[]>({
@@ -966,6 +971,7 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
         actualDuration: elapsed,
         metadata: updatedMetadata,
         completedVehicleId: completedVehicleId,
+        completedEquipmentId: completedEquipmentId,
         completedVehicleRegNo: selectedVehicle?.registrationNumber ?? null,
         completedParticipantIds: participantIds.length > 0 ? participantIds : null,
         leaveMetadataValues: leaveFieldValues,
@@ -1038,6 +1044,7 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
       setCurrentSignature(null);
       setMaterials([]);
       setCompletedVehicleId(null);
+      setCompletedEquipmentId(null);
       setCompletedParticipantIds([]);
       setJobNote("");
       setLeaveFieldValues({});
@@ -1253,6 +1260,7 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
     setMaterials([]);
     setCurrentSignature(null);
     setCompletedVehicleId(null);
+    setCompletedEquipmentId(null);
     setCompletedParticipantIds([]);
   };
 
@@ -3115,7 +3123,7 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
               <CardHeader className="pb-3">
                 <CardTitle className="text-sm flex items-center gap-2">
                   <Car className="h-4 w-4" />
-                  Bil & deltagare
+                  Bil, utrustning & deltagare
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
@@ -3133,6 +3141,28 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
                       {vehicles.map((v) => (
                         <SelectItem key={v.id} value={v.id} data-testid={`option-vehicle-${v.id}`}>
                           {v.name} ({v.registrationNumber})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-muted-foreground flex items-center gap-1.5">
+                    <Wrench className="h-3.5 w-3.5" />
+                    Använd utrustning
+                  </Label>
+                  <Select
+                    value={completedEquipmentId ?? "none"}
+                    onValueChange={(v) => setCompletedEquipmentId(v === "none" ? null : v)}
+                  >
+                    <SelectTrigger data-testid="select-completed-equipment">
+                      <SelectValue placeholder="Välj utrustning" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">Ingen utrustning</SelectItem>
+                      {equipment.map((e) => (
+                        <SelectItem key={e.id} value={e.id} data-testid={`option-equipment-${e.id}`}>
+                          {e.name}
                         </SelectItem>
                       ))}
                     </SelectContent>
