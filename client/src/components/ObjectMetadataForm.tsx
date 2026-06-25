@@ -406,6 +406,24 @@ export function MetadataSourceLegend() {
   );
 }
 
+/** Task #1138: extra navigeringspost från föräldern (t.ex. leveranspreferenser). */
+export type MetadataExtraNavItem = {
+  key: string;
+  anchorId: string;
+  label: string;
+  count?: number;
+  icon: typeof Type;
+};
+
+/** Task #1138: extra 360-översiktsbricka som scrollar till ett externt ankar. */
+export type MetadataExtraTile = {
+  icon: typeof Type;
+  label: string;
+  value: number;
+  anchorId: string;
+  testid: string;
+};
+
 /** Klickbar navigeringspost i vänsterspalten (område / relaterad yta). */
 function MetadataNavItem({
   icon: Icon,
@@ -449,6 +467,7 @@ export function MetadataRelatedSummary({
   issueReportsCount = 0,
   onNavigateToTab,
   onNavigateToObject,
+  extraTiles = [],
 }: {
   objectId?: string;
   contacts?: MetadataRelatedContact[];
@@ -459,6 +478,7 @@ export function MetadataRelatedSummary({
   issueReportsCount?: number;
   onNavigateToTab?: (tab: string) => void;
   onNavigateToObject?: (objectId: string) => void;
+  extraTiles?: MetadataExtraTile[];
 }) {
   const topContacts = contacts.slice(0, 3);
   const topTasks = tasks.slice(0, 3);
@@ -493,12 +513,25 @@ export function MetadataRelatedSummary({
     return m;
   }, [displayNamesData]);
 
-  const tiles: { icon: typeof Type; label: string; value: number; tab?: string; testid: string }[] = [
+  const tiles: { icon: typeof Type; label: string; value: number; tab?: string; anchorId?: string; testid: string }[] = [
     { icon: Users, label: "Kontakter", value: contacts.length, tab: "contacts", testid: "stat-contacts" },
     { icon: ClipboardList, label: "Uppgifter", value: tasks.length, testid: "stat-tasks" },
     { icon: ImageIcon, label: "Bilder", value: imagesCount, tab: "images", testid: "stat-images" },
     { icon: AlertTriangle, label: "Felanmälningar", value: issueReportsCount, testid: "stat-issues" },
+    // Task #1138: leveranspreferenser m.fl. brickor scrollar till sitt externa ankar.
+    ...extraTiles.map((t) => ({
+      icon: t.icon,
+      label: t.label,
+      value: t.value,
+      anchorId: t.anchorId,
+      testid: t.testid,
+    })),
   ];
+
+  const scrollToAnchor = (id: string) => {
+    const el = typeof document !== "undefined" ? document.getElementById(id) : null;
+    if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
 
   return (
     <Card id="meta-related" className="scroll-mt-24" data-testid="metadata-related-summary">
@@ -511,12 +544,16 @@ export function MetadataRelatedSummary({
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
           {tiles.map((t) => {
             const Icon = t.icon;
+            const canClick = t.anchorId ? true : !!t.tab && !!onNavigateToTab;
             return (
               <button
                 key={t.testid}
                 type="button"
-                onClick={() => t.tab && onNavigateToTab?.(t.tab)}
-                disabled={!t.tab || !onNavigateToTab}
+                onClick={() => {
+                  if (t.anchorId) scrollToAnchor(t.anchorId);
+                  else if (t.tab) onNavigateToTab?.(t.tab);
+                }}
+                disabled={!canClick}
                 data-testid={t.testid}
                 className="flex flex-col items-start gap-1 rounded-md border p-3 text-left hover-elevate disabled:cursor-default"
               >
@@ -730,6 +767,8 @@ export function ObjectMetadataForm({
   issueReportsCount,
   onNavigateToTab,
   onNavigateToObject,
+  extraNavItems = [],
+  extraSummaryTiles = [],
 }: {
   objectId: string;
   entries: MetadataFormEntry[];
@@ -752,6 +791,12 @@ export function ObjectMetadataForm({
   issueReportsCount?: number;
   onNavigateToTab?: (tab: string) => void;
   onNavigateToObject?: (objectId: string) => void;
+  /** Task #1138: extra navigeringsposter (t.ex. leveranspreferenser) som
+   *  renderas i vänsterspaltens områdeslista och scrollar till en ankar-id
+   *  som lever utanför detta komponentträd (i ObjectDetailPage). */
+  extraNavItems?: MetadataExtraNavItem[];
+  /** Task #1138: extra brickor i 360-översikten med samma scroll-beteende. */
+  extraSummaryTiles?: MetadataExtraTile[];
 }) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -878,7 +923,8 @@ export function ObjectMetadataForm({
     (parents?.length ?? 0) > 0 ||
     (children?.length ?? 0) > 0 ||
     (imagesCount ?? 0) > 0 ||
-    (issueReportsCount ?? 0) > 0;
+    (issueReportsCount ?? 0) > 0 ||
+    extraSummaryTiles.length > 0;
   const showRelatedQuickLinks = !!onNavigateToTab;
 
   // Navigeringsposter (vänsterspalt): områden → övrigt-underavsnitt → systemfält.
@@ -896,8 +942,13 @@ export function ObjectMetadataForm({
     if (systemRows.length > 0) {
       out.push({ key: "system", anchorId: "meta-system", label: "Systemgenererat", count: systemRows.length, icon: Server });
     }
+    // Task #1138: extra poster (t.ex. leveranspreferenser) — ankaret lever utanför
+    // detta komponentträd men scrollToAnchor slår upp via document.getElementById.
+    for (const e of extraNavItems) {
+      out.push({ key: e.key, anchorId: e.anchorId, label: e.label, count: e.count ?? 0, icon: e.icon });
+    }
     return out;
-  }, [namedGroups, ovrigtBuckets, systemRows]);
+  }, [namedGroups, ovrigtBuckets, systemRows, extraNavItems]);
 
   const scrollToAnchor = (id: string) => {
     const el = typeof document !== "undefined" ? document.getElementById(id) : null;
@@ -1157,6 +1208,7 @@ export function ObjectMetadataForm({
             issueReportsCount={issueReportsCount}
             onNavigateToTab={onNavigateToTab}
             onNavigateToObject={onNavigateToObject}
+            extraTiles={extraSummaryTiles}
           />
         )}
 

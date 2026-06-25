@@ -8,7 +8,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { DeliveryPreferencesEditor } from "@/components/DeliveryPreferencesEditor";
 import { ObjectHistoryArchiveTab } from "@/components/ObjectHistoryArchiveTab";
 import { ObjectVignetteSection } from "@/components/ObjectVignetteSection";
-import { ObjectMetadataForm, type MetadataFormEntry, type MetadataFormType, type MetadataRelatedParent, type MetadataRelatedChild } from "@/components/ObjectMetadataForm";
+import { ObjectMetadataForm, type MetadataFormEntry, type MetadataFormType, type MetadataRelatedParent, type MetadataRelatedChild, type MetadataExtraNavItem, type MetadataExtraTile } from "@/components/ObjectMetadataForm";
 import { ObjectTemplateMetadataForm, type TemplateMetadataType } from "@/components/ObjectTemplateMetadataForm";
 import { ObjectSystemGeneratedPanel } from "@/components/ObjectSystemGeneratedPanel";
 import { InfoPackageTree } from "@/components/objects/InfoPackageTree";
@@ -1220,6 +1220,37 @@ export default function ObjectDetailPage() {
   // Task #1128: primär förälder för header-sammanfattningen.
   const primaryParent = relatedParents.find((p) => p.isPrimary) ?? relatedParents[0] ?? null;
 
+  // Task #1138: leveranspreferenser ska kännas helt integrerade i metadataområdet.
+  // De renderas som ett eget kort (#object-section-delivery-preferences) men listas
+  // även i vänsterspaltens områdesnavigering och 360-översikten via extra-props.
+  // Antalet speglar kortets badge: konfigurerade regler från objektets EGNA prefs
+  // (ärvda kund-prefs visas bara som fallback i kortet, inte i räknaren).
+  const ownDeliveryPrefs = (obj as { deliveryPreferences?: DeliveryPreferences | null })
+    .deliveryPreferences;
+  const deliveryPrefsCount = ownDeliveryPrefs
+    ? (ownDeliveryPrefs.weeklyWindows?.length ?? 0) +
+      (ownDeliveryPrefs.blockedHours?.length ?? 0) +
+      (ownDeliveryPrefs.blockedDates?.length ?? 0)
+    : 0;
+  const deliveryPrefsNavItems: MetadataExtraNavItem[] = [
+    {
+      key: "delivery-preferences",
+      anchorId: "object-section-delivery-preferences",
+      label: "Leveranspreferenser",
+      count: deliveryPrefsCount,
+      icon: Truck,
+    },
+  ];
+  const deliveryPrefsTiles: MetadataExtraTile[] = [
+    {
+      icon: Truck,
+      label: "Leveranspreferenser",
+      value: deliveryPrefsCount,
+      anchorId: "object-section-delivery-preferences",
+      testid: "stat-delivery-preferences",
+    },
+  ];
+
   // Task #863: objektet som flytt-dialogen avser — sidans objekt eller ett barn
   // i grenträdet (hämtas från descendants-listan).
   const moveTargetObj: { name?: string | null; objectNumber?: string | null } | undefined =
@@ -2220,6 +2251,8 @@ export default function ObjectDetailPage() {
                     issueReportsCount={issueReports.length}
                     onNavigateToTab={(t) => scrollToSection(t)}
                     onNavigateToObject={(id) => navigate(`/objects/${id}`)}
+                    extraNavItems={deliveryPrefsNavItems}
+                    extraSummaryTiles={deliveryPrefsTiles}
                   />
                 )}
 
