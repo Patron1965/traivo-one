@@ -110,6 +110,11 @@ async function createStockPickupAssignment(opts: {
     logisticsRole: "pickup",
     // Task #1110: stämpla artikelns utförandekod på hämt-uppgiften (informationspaket).
     executionCode: linkedArticle?.executionCode ?? undefined,
+    // Task #1124: stämpla informationspaket-natur vid expansion (concept-nivå, gäller
+    // alla uppgifter konceptet skapar). isFixedPrice styr radkollaps vid materialisering;
+    // billingMethod = faktureringstyp (call_off/schedule/subscription) snapshot.
+    isFixedPrice: isFixedPriceConcept(concept),
+    billingMethod: getOrderConceptMethod(concept),
   });
 }
 
@@ -2691,6 +2696,11 @@ app.post("/api/order-concepts/:id/execute", asyncHandler(async (req, res) => {
         executionCode: linkedArticle?.executionCode ?? undefined,
         // Task #997: fryst viktat tidsregel-paket (null om objektet saknar regler).
         frozenTimeRules: frozenTimeRulesByObject.get(obj.id) ?? null,
+        // Task #1124: informationspaket-natur (fast pris + faktureringstyp) snapshotat
+        // vid expansion — bärs vidare till materialiserad faktura-WO. conceptMethod är
+        // "call_off" här (schema/abonnemang har redan returnerat ovan).
+        isFixedPrice: isFixedPriceConcept(concept),
+        billingMethod: conceptMethod,
       });
 
       // If an article is linked, create assignment article (kund-pris via resolveArticlePrice).
@@ -2824,6 +2834,10 @@ app.post("/api/order-concepts/:id/execute", asyncHandler(async (req, res) => {
             dependencyCriticality: article.dependencyCriticality ?? "critical",
             // Task #1110: stämpla artikelns utförandekod även på föruppgiften.
             executionCode: article.executionCode ?? undefined,
+            // Task #1124: informationspaket-natur (fast pris + faktureringstyp) snapshotat
+            // vid expansion (call_off-väg; schema/abonnemang har returnerat ovan).
+            isFixedPrice: isFixedPriceConcept(concept),
+            billingMethod: conceptMethod,
           });
           await storage.createAssignmentArticle({
             assignmentId: preAssignment.id,

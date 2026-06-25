@@ -515,6 +515,17 @@ export const workOrders = pgTable("work_orders", {
   // så Fortnox-exporten läser frysta värden (aldrig omläsning, ingen WO→koncept-länk).
   // NULL = konceptet saknade radkonfig → fallback till 200-tecken-berikad beskrivning.
   frozenInvoiceRowReferences: jsonb("frozen_invoice_row_references"),
+  // === Task #1124 (Grundbeslut #1): Fakturan utgår från den utförda uppgiften ===
+  // En utförd avrops-assignment materialiseras till EN fakturerbar work_order.
+  // sourceAssignmentId + orderConceptId bär konceptkopplingen så referenser/fast
+  // pris/villkor kan frysas och fakturapipelinen (markWorkOrderReadyForInvoice →
+  // konsolidering → Fortnox) återanvänds oförändrad. invoiceSourceType='assignment'
+  // markerar materialiserade rader. frozenIsFixedPrice fryser fast-pris-naturen för
+  // korrekt radkollaps. Allt nullable/default (expand-contract): legacy-WO oförändrade.
+  sourceAssignmentId: varchar("source_assignment_id").references((): any => assignments.id),
+  orderConceptId: varchar("order_concept_id").references((): any => orderConcepts.id),
+  invoiceSourceType: text("invoice_source_type"),
+  frozenIsFixedPrice: boolean("frozen_is_fixed_price").default(false),
   // === Task #785: Veckoplanering – datafundament (expand-contract, alla nullable) ===
   // Planeringsinput för grov-/veckoplanering. Rapportens generiska `tasks`-fält
   // införs här eftersom Traivos arbetsenhet är work_orders (ingen tasks-tabell).
@@ -564,6 +575,10 @@ export const workOrders = pgTable("work_orders", {
   index("idx_work_orders_resource").on(table.resourceId),
   index("idx_work_orders_cluster").on(table.clusterId),
   index("idx_work_orders_billing_segment").on(table.tenantId, table.billingSegmentKey),
+  uniqueIndex("uq_work_orders_source_assignment")
+    .on(table.tenantId, table.sourceAssignmentId)
+    .where(sql`source_assignment_id IS NOT NULL`),
+  index("idx_work_orders_order_concept").on(table.tenantId, table.orderConceptId),
   index("idx_work_orders_tenant_status").on(table.tenantId, table.orderStatus),
   index("idx_work_orders_tenant_date").on(table.tenantId, table.scheduledDate),
   index("idx_work_orders_resource_date").on(table.resourceId, table.scheduledDate),
@@ -3337,6 +3352,16 @@ export const assignments = pgTable("assignments", {
   // orderkoncept-expansion per objekt. NULL = inga tidsregler gällde objektet →
   // dagens fallback (schemalagt datum) oförändrad.
   frozenTimeRules: jsonb("frozen_time_rules").$type<FrozenTimeRulePackage>(),
+  // === Task #1124 (Informationspaket → faktura): stämplat vid orderkoncept-expansion ===
+  // isFixedPrice: fast-pris-natur (snapshot av isFixedPriceConcept) — styr radkollaps
+  // när uppgiften materialiseras till en fakturerbar work_order. billingMethod:
+  // faktureringstyp (call_off/schedule/subscription) snapshot. exceptionStatus:
+  // undantagsstatus (ej_fakturerbar/ej_genomforbar/makulerad); NULL = normal,
+  // fakturerbar — styr om uppgiften materialiseras till faktura. Allt nullable
+  // (expand-contract): legacy-rader är oförändrade.
+  isFixedPrice: boolean("is_fixed_price").default(false),
+  billingMethod: text("billing_method"),
+  exceptionStatus: text("exception_status"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   deletedAt: timestamp("deleted_at"),
 }, (table) => [
