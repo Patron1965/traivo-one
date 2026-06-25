@@ -141,7 +141,6 @@ export default function WeekPlannerPage() {
       <JobModal 
         open={showJobModal}
         onClose={() => setShowJobModal(false)}
-        onSubmit={(data) => console.log("New job created:", data)}
       />
 
       <EnkelUppgiftWizard

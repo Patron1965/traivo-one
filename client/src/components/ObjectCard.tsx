@@ -39,7 +39,7 @@ export function ObjectCard({
   return (
     <Card 
       className="hover-elevate active-elevate-2 cursor-pointer"
-      onClick={() => { onClick?.(); console.log("Object card clicked:", name); }}
+      onClick={onClick}
       data-testid={`object-card-${objectNumber}`}
     >
       <CardContent className="p-4">

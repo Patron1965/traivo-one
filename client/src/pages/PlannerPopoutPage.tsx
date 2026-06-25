@@ -182,7 +182,6 @@ export default function PlannerPopoutPage() {
       <JobModal
         open={showJobModal}
         onClose={() => setShowJobModal(false)}
-        onSubmit={(data) => console.log("New job created:", data)}
       />
 
       <EnkelUppgiftWizard
