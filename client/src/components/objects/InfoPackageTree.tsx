@@ -7,6 +7,7 @@
 // utförandetid. Data hämtas från GET /api/objects/:id/info-package-tree och
 // grupperas på klienten för omedelbar omgruppering utan ny hämtning.
 import { useMemo, useState } from "react";
+import { useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { Card, CardContent } from "@/components/ui/card";
@@ -27,6 +28,7 @@ import {
   CalendarClock,
   CheckCircle2,
   AlertCircle,
+  ExternalLink,
 } from "lucide-react";
 import { formatSekFromOre } from "@/lib/format";
 import { formatHours } from "@/lib/rough-planning";
@@ -143,71 +145,98 @@ function formatDate(iso: string | null): string {
 
 function TaskNodeRow({ node }: { node: InfoPackageNode }) {
   const [open, setOpen] = useState(false);
+  const [, navigate] = useLocation();
   const hasPackage = node.metadata.length > 0 || node.photos.length > 0;
+  // Endast utförda arbetsorder har en detaljvy; kommande assignments saknar sida.
+  const canOpenDetail = node.source === "work_order";
+
+  // Klick på själva raden öppnar arbetsordern (endast utförda work_orders).
+  // Kommande assignments saknar detaljsida, så där fäller raden istället ut paketet.
+  const handleRowClick = () => {
+    if (canOpenDetail) {
+      navigate(`/work-orders/${node.id}`);
+    } else {
+      setOpen((o) => !o);
+    }
+  };
 
   return (
     <div className="border-b last:border-b-0" data-testid={`info-package-node-${node.id}`}>
-      <button
-        type="button"
-        onClick={() => setOpen((o) => !o)}
-        className="w-full flex items-start gap-3 px-3 py-2.5 text-left hover-elevate"
-        data-testid={`button-toggle-node-${node.id}`}
-      >
-        <div className="pt-0.5">
+      <div className="flex items-start gap-1 px-3 py-2.5">
+        <button
+          type="button"
+          onClick={() => setOpen((o) => !o)}
+          className="pt-0.5 shrink-0 rounded-md hover-elevate"
+          title={open ? "Dölj informationspaket" : "Visa informationspaket"}
+          aria-label={open ? "Dölj informationspaket" : "Visa informationspaket"}
+          aria-expanded={open}
+          data-testid={`button-toggle-node-${node.id}`}
+        >
           {open ? (
             <ChevronDown className="h-4 w-4 text-muted-foreground" />
           ) : (
             <ChevronRight className="h-4 w-4 text-muted-foreground" />
           )}
-        </div>
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 flex-wrap">
-            {node.kind === "kommande" ? (
-              <CalendarClock className="h-4 w-4 text-chart-4 shrink-0" />
-            ) : (
-              <CheckCircle2 className="h-4 w-4 text-muted-foreground shrink-0" />
-            )}
-            <span className="font-medium text-sm truncate" data-testid={`text-node-title-${node.id}`}>
-              {node.title || node.taskTypeLabel}
-            </span>
-            <Badge variant="secondary" className="text-xs">
-              {node.statusLabel}
+        </button>
+        <button
+          type="button"
+          onClick={handleRowClick}
+          className="flex-1 min-w-0 flex items-start gap-3 text-left rounded-md hover-elevate"
+          title={canOpenDetail ? "Öppna arbetsorder" : undefined}
+          data-testid={`button-node-${node.id}`}
+        >
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              {node.kind === "kommande" ? (
+                <CalendarClock className="h-4 w-4 text-chart-4 shrink-0" />
+              ) : (
+                <CheckCircle2 className="h-4 w-4 text-muted-foreground shrink-0" />
+              )}
+              <span className="font-medium text-sm truncate" data-testid={`text-node-title-${node.id}`}>
+                {node.title || node.taskTypeLabel}
+              </span>
+              <Badge variant="secondary" className="text-xs">
+                {node.statusLabel}
+              </Badge>
+              {node.executionCode && (
+                <Badge variant="outline" className="text-xs font-mono">
+                  {node.executionCode}
+                </Badge>
+              )}
+              {canOpenDetail && (
+                <ExternalLink className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+              )}
+            </div>
+            <div className="mt-1 flex items-center gap-3 text-xs text-muted-foreground flex-wrap">
+              <span>{node.taskTypeLabel}</span>
+              <span>·</span>
+              <span>{formatDate(node.scheduledDate)}</span>
+              <span>·</span>
+              <span className="inline-flex items-center gap-1">
+                <Clock className="h-3 w-3" /> {formatHours(node.productionMinutes)}
+              </span>
+              <span>·</span>
+              <span>{formatSekFromOre(node.value)}</span>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <Badge
+              variant="outline"
+              className={`text-xs gap-1 ${invoiceBadgeClass(node.invoice.category)}`}
+              data-testid={`badge-invoice-${node.id}`}
+            >
+              <Receipt className="h-3 w-3" />
+              {node.invoice.label}
             </Badge>
-            {node.executionCode && (
-              <Badge variant="outline" className="text-xs font-mono">
-                {node.executionCode}
+            {node.photos.length > 0 && (
+              <Badge variant="secondary" className="text-xs gap-1">
+                <ImageIcon className="h-3 w-3" />
+                {node.photos.length}
               </Badge>
             )}
           </div>
-          <div className="mt-1 flex items-center gap-3 text-xs text-muted-foreground flex-wrap">
-            <span>{node.taskTypeLabel}</span>
-            <span>·</span>
-            <span>{formatDate(node.scheduledDate)}</span>
-            <span>·</span>
-            <span className="inline-flex items-center gap-1">
-              <Clock className="h-3 w-3" /> {formatHours(node.productionMinutes)}
-            </span>
-            <span>·</span>
-            <span>{formatSekFromOre(node.value)}</span>
-          </div>
-        </div>
-        <div className="flex items-center gap-2 shrink-0">
-          <Badge
-            variant="outline"
-            className={`text-xs gap-1 ${invoiceBadgeClass(node.invoice.category)}`}
-            data-testid={`badge-invoice-${node.id}`}
-          >
-            <Receipt className="h-3 w-3" />
-            {node.invoice.label}
-          </Badge>
-          {node.photos.length > 0 && (
-            <Badge variant="secondary" className="text-xs gap-1">
-              <ImageIcon className="h-3 w-3" />
-              {node.photos.length}
-            </Badge>
-          )}
-        </div>
-      </button>
+        </button>
+      </div>
 
       {open && (
         <div className="px-10 pb-4 pt-1 space-y-4" data-testid={`panel-node-${node.id}`}>
@@ -296,6 +325,20 @@ function TaskNodeRow({ node }: { node: InfoPackageNode }) {
             <p className="text-xs text-muted-foreground italic">
               Inget informationspaket registrerat ännu.
             </p>
+          )}
+
+          {canOpenDetail && (
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="h-7 gap-1.5 text-xs"
+              onClick={() => navigate(`/work-orders/${node.id}`)}
+              data-testid={`button-open-work-order-detail-${node.id}`}
+            >
+              <ExternalLink className="h-3.5 w-3.5" />
+              Öppna arbetsorder
+            </Button>
           )}
         </div>
       )}
