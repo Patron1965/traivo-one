@@ -316,3 +316,49 @@ export function formatEnrichedDescription(
 
   return result.length ? result : undefined;
 }
+
+// Task #1124: de fyra frysta huvudreferenserna → Fortnox fakturahuvud-fält.
+// Kanonisk mappning (se invoice-reference-resolver):
+//   ourReference             → OurReference   ("Vår referens")
+//   ourDesignation           → Remarks        ("Vår beteckning"/övrigt)
+//   customerReference        → YourReference  ("Er referens")
+//   customerInvoiceReference → YourOrderNumber("Ert ordernr")
+// Frysta koncept-referenser vinner ALLTID över den objekt-härledda kundreferensen
+// (fallbackYourReference); den senare behålls bara för back-compat när konceptet
+// saknar "Er referens". Fortnox-strängfälten kapas konservativt (50 tecken; Remarks
+// tål mer men hålls kort).
+export interface FortnoxHeaderRefs {
+  OurReference?: string;
+  YourReference?: string;
+  YourOrderNumber?: string;
+  Remarks?: string;
+}
+
+export function buildFortnoxHeaderRefs(input: {
+  ourReference?: string | null;
+  ourDesignation?: string | null;
+  customerReference?: string | null;
+  customerInvoiceReference?: string | null;
+  fallbackYourReference?: string | null;
+}): FortnoxHeaderRefs {
+  const slice50 = (v: string | null | undefined): string | undefined => {
+    const t = (v ?? "").toString().trim();
+    return t ? t.slice(0, 50) : undefined;
+  };
+  const out: FortnoxHeaderRefs = {};
+
+  const our = slice50(input.ourReference);
+  if (our) out.OurReference = our;
+
+  // Er referens: fryst koncept-värde vinner över objekt-härledd kundreferens.
+  const your = slice50(input.customerReference) ?? slice50(input.fallbackYourReference);
+  if (your) out.YourReference = your;
+
+  const yourOrder = slice50(input.customerInvoiceReference);
+  if (yourOrder) out.YourOrderNumber = yourOrder;
+
+  const remarks = (input.ourDesignation ?? "").toString().trim();
+  if (remarks) out.Remarks = remarks.slice(0, 200);
+
+  return out;
+}

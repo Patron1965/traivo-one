@@ -2212,6 +2212,20 @@ app.patch("/api/order-concepts/:id", asyncHandler(async (req, res) => {
       throw new ValidationError("customerMode måste vara HARDCODED eller FROM_METADATA");
     }
 
+    // Task #1124: huvudreferens-lägen (Er referens / Ert ordernr) styr om värdet är
+    // fast eller härleds per objekt ur metadata. Samma kanoniska värden som customerMode.
+    for (const modeField of ["customerReferenceMode", "customerLabelMode"] as const) {
+      const v = (req.body as Record<string, unknown>)[modeField];
+      if (v != null && !["HARDCODED", "FROM_METADATA"].includes(v as string)) {
+        throw new ValidationError(`${modeField} måste vara HARDCODED eller FROM_METADATA`);
+      }
+    }
+
+    // Task #1124: radreferenser = lista av metadata-katalognamn (svensk katalog).
+    if (req.body.invoiceRowReferenceFields != null && !Array.isArray(req.body.invoiceRowReferenceFields)) {
+      throw new ValidationError("invoiceRowReferenceFields måste vara en lista");
+    }
+
     // Task #1055: fast pris-bas styr hur det fasta beloppet fördelas vid expansion.
     if (
       req.body.fixedPriceBasis != null &&

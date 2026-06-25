@@ -181,9 +181,15 @@ export function buildFrozenRowReferences(
 }
 
 // Har konceptet någon radkonfiguration alls? (avgör frozen vs fallback)
+// Radkonfig finns om konceptet har radreferensfält ELLER utförar-fritext aktiverat
+// (default true). Utan denna OR-gren skulle ett koncept med "Inkludera utförarens
+// fritext" PÅ men utan radfält få frozenInvoiceRowReferences = null → buildInfoRows
+// hoppar work_orders.notes → utförarens fritext tappas tyst på vägen till fakturan.
+// Speglar includeExecutorFreetext-defaulten i resolveInvoiceReferencesForObject (?? true).
 export function conceptHasRowConfig(concept: ReferenceConceptLike): boolean {
   const rowFields = (concept.invoiceRowReferenceFields ?? []).filter(
     (n) => typeof n === "string" && n.trim() !== "",
   );
-  return rowFields.length > 0;
+  if (rowFields.length > 0) return true;
+  return concept.includeExecutorFreetext !== false;
 }

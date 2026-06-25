@@ -1,9 +1,13 @@
 import { storage } from "./storage";
 import {
   resolveObjectInvoiceRefs,
-  formatEnrichedDescription,
-  buildInvoiceLineBaseText,
+  buildFortnoxHeaderRefs,
 } from "./services/invoice-line-enrichment";
+import {
+  buildFortnoxLogicalRowsForWorkOrder,
+  collapseFortnoxLogicalRows,
+  type FortnoxLogicalRow,
+} from "./services/fortnox-invoice-row-builder";
 import { deriveFortnoxCodesForWorkOrder } from "./services/fortnox-code-derivation";
 
 const FORTNOX_API_BASE = "https://api.fortnox.se/3";
@@ -115,6 +119,11 @@ interface FortnoxInvoice {
   // Task #1025: "Er referens" på fakturahuvudet (Fortnox standardfält, max 50
   // tecken) — bär kundreferens när radmodellen saknar referensfält.
   YourReference?: string;
+  // Task #1124: frysta koncept-huvudreferenser (informationspaketet från den
+  // utförda uppgiften). Se buildFortnoxHeaderRefs för kanonisk mappning.
+  OurReference?: string;
+  YourOrderNumber?: string;
+  Remarks?: string;
 }
 
 interface FortnoxInvoiceResponse {
@@ -547,86 +556,42 @@ export async function exportWorkOrderToFortnox(
         customerFortnoxId = customerMapping.fortnoxId;
       }
 
-      const invoiceRows = [];
-      // ADR v3 (F6): Anvand frozen-snapshot om WO ar fryst.
-      // frozenUnitPrice ar ett WO-niva-genomsnitt (totalPrice / totalQty),
-      // sa att applicera det per rad ger fel summa. Lasningen: skala varje
-      // rads pris proportionellt sa att fakturasumman exakt matchar
-      // frozenUnitPrice * frozenQuantity (audit-snapshotet) men artikel-
-      // granulariteten bevaras.
-      const useFrozen =
-        (workOrder as any).frozenUnitPrice != null &&
-        (workOrder as any).frozenQuantity != null &&
-        Number((workOrder as any).frozenQuantity) > 0;
-      let scale = 1;
-      if (useFrozen) {
-        const currentTotal = workOrderLines.reduce(
-          (s, l) => s + Number(l.resolvedPrice ?? 0) * Number(l.quantity ?? 1),
-          0
-        );
-        const frozenTotal =
-          Number((workOrder as any).frozenUnitPrice) *
-          Number((workOrder as any).frozenQuantity);
-        scale = currentTotal > 0 ? frozenTotal / currentTotal : 1;
-      }
-      for (const line of workOrderLines) {
-        if (payer?.articleTypes?.length && !payer.articleTypes.includes(line.articleId)) {
-          continue;
-        }
-
-        const quantity = line.quantity * (payerPercentage / 100);
-        const basePrice = Number(line.resolvedPrice ?? 0);
-        const price = useFrozen
-          ? Math.round(basePrice * scale * 100) / 100
-          : (line.resolvedPrice || undefined);
-
-        // Enkel uppgift (Task #736): fritext-/blindgångar-rader saknar artikel.
-        // De exporteras som en beskrivnings-rad utan ArticleNumber (samma mönster
-        // som manuella fakturarader) i stället för att tyst hoppas över.
-        if (!line.articleId) {
-          invoiceRows.push({
-            DeliveredQuantity: quantity,
-            Description: formatEnrichedDescription(
-              buildInvoiceLineBaseText(line),
-              objectRefs,
-            ),
-            Price: price,
-            CostCenter: invoiceExport.costCenter || undefined,
-            Project: invoiceExport.project || undefined,
-          });
-          continue;
-        }
-
-        const articleMapping = await storage.getFortnoxMapping(tenantId, "article", line.articleId);
-        if (!articleMapping) {
-          console.warn(`Article ${line.articleId} not mapped to Fortnox, skipping line`);
-          continue;
-        }
-
-        invoiceRows.push({
-          ArticleNumber: articleMapping.fortnoxId,
-          DeliveredQuantity: quantity,
-          Description: formatEnrichedDescription(
-            buildInvoiceLineBaseText(line, { useFrozen }),
-            objectRefs,
-          ),
-          Price: price,
-          CostCenter: invoiceExport.costCenter || undefined,
-          Project: invoiceExport.project || undefined,
-        });
-      }
+      // Task #1124: bygg fakturarader via den DELADE radbyggaren (parity enskild
+      // ⇄ samlingsfaktura). Frysta koncept-radreferenser blir separata info-rader,
+      // radkollaps summerar identiska rader och fast-pris hålls isär. payer styr
+      // andel (payerPercentage) + artikelfilter (articleTypes).
+      const logicalRows = await buildFortnoxLogicalRowsForWorkOrder({
+        tenantId,
+        workOrder: workOrder as any,
+        lines: workOrderLines,
+        objectRefs,
+        costCenter: invoiceExport.costCenter ?? null,
+        project: invoiceExport.project ?? null,
+        payerPercentage,
+        articleFilter: payer?.articleTypes ?? undefined,
+        resolveArticleNumber: async (articleId) =>
+          (await storage.getFortnoxMapping(tenantId, "article", articleId))?.fortnoxId ?? null,
+      });
+      const invoiceRows = collapseFortnoxLogicalRows(logicalRows);
 
       if (!invoiceRows.length) continue;
+
+      // Task #1124: frysta koncept-huvudreferenser → Fortnox-huvudet. Frusna
+      // värden vinner över objekt-härledd kundreferens (fallback).
+      const headerRefs = buildFortnoxHeaderRefs({
+        ourReference: (workOrder as any).frozenOurReference,
+        ourDesignation: (workOrder as any).frozenOurDesignation,
+        customerReference: (workOrder as any).frozenCustomerReference,
+        customerInvoiceReference: (workOrder as any).frozenCustomerInvoiceReference,
+        fallbackYourReference: objectRefs.kundreferens,
+      });
 
       const fortnoxInvoice: FortnoxInvoice = {
         CustomerNumber: customerFortnoxId,
         InvoiceRows: invoiceRows,
         CostCenter: invoiceExport.costCenter || undefined,
         Project: invoiceExport.project || undefined,
-        // Task #1025: kundreferens på fakturahuvudet (max 50 tecken).
-        YourReference: objectRefs.kundreferens
-          ? objectRefs.kundreferens.slice(0, 50)
-          : undefined,
+        ...headerRefs,
       };
 
       try {
@@ -916,19 +881,43 @@ export async function exportConsolidatedInvoiceToFortnox(
       return { success: false, error: "Fortnox är inte ansluten — auktorisering krävs." };
     }
 
-    // Bygg invoiceRows från alla WOs. Använd samma frozen-skalning som
-    // exportWorkOrderToFortnox så summan blir konsistent.
-    const invoiceRows: Array<Record<string, unknown>> = [];
+    // Bygg invoiceRows från alla WOs via den DELADE radbyggaren. Logiska rader
+    // ackumuleras per WO och kollapsas EN gång efter loopen (parity med enskild
+    // export + radkollaps över hela samlingsfakturan).
+    const allLogicalRows: FortnoxLogicalRow[] = [];
     // Task #693: samla objekt-koppling per WO för "Senast fakturerad order".
     const invoicedObjects: Array<{ objectId: string; title: string }> = [];
     // Task #1025: fakturahuvudet bär EN kundreferens — ta första icke-tomma
     // över de konsoliderade arbetsordrarna (samma helper som enskild export).
     let consolidatedYourReference: string | undefined;
+    // Task #1124: defensiv referens-integritetskontroll. Segment-nyckeln
+    // (composeSegmentKeyWithReferences) garanterar redan att bara arbetsordrar med
+    // identiska frysta huvudreferenser konsolideras ihop — denna vakt fångar en
+    // ev. integritetsbrist innan en felaktig referens skickas till Fortnox.
+    const referenceMismatches: string[] = [];
     for (const woId of woIds) {
       const wo = await storage.getWorkOrder(woId);
       if (!wo || wo.tenantId !== tenantId) continue;
       if (wo.objectId) {
         invoicedObjects.push({ objectId: wo.objectId, title: wo.title ?? "Arbetsorder" });
+      }
+
+      const woRefPairs: Array<[string, string | null | undefined, string | null | undefined]> = [
+        ["Vår referens", invoice.ourReference, (wo as any).frozenOurReference],
+        ["Vår beteckning", invoice.ourDesignation, (wo as any).frozenOurDesignation],
+        ["Er referens", invoice.customerReference, (wo as any).frozenCustomerReference],
+        ["Ert ordernr", invoice.customerInvoiceReference, (wo as any).frozenCustomerInvoiceReference],
+      ];
+      for (const [label, invVal, woVal] of woRefPairs) {
+        const a = (invVal ?? "").toString().trim();
+        const b = (woVal ?? "").toString().trim();
+        // Fail-closed: exakt likhet krävs. "faktura tom / WO ifylld" (och tvärtom)
+        // är också en konflikt — segment-nyckeln ska redan ha hållit isär dem, så
+        // varje avvikelse är en integritetsbrist värd att stoppa. Helt tomma
+        // (legacy utan referenser) förblir OK eftersom ""==="".
+        if (a !== b) {
+          referenceMismatches.push(`${label}: faktura "${a}" ≠ WO ${woId} "${b}"`);
+        }
       }
       // Task #1025: berika rader med objektreferenser + per-rad kostnadsställe/
       // projekt (samlingsfakturor saknade dessa). Beräknas en gång per WO.
@@ -939,69 +928,50 @@ export async function exportConsolidatedInvoiceToFortnox(
       const derivedCodes = await deriveFortnoxCodesForWorkOrder(tenantId, wo);
       const lines = await storage.getWorkOrderLines(woId);
       if (!lines.length) continue;
-      const useFrozen =
-        (wo as any).frozenUnitPrice != null &&
-        (wo as any).frozenQuantity != null &&
-        Number((wo as any).frozenQuantity) > 0;
-      let scale = 1;
-      if (useFrozen) {
-        const currentTotal = lines.reduce(
-          (s, l) => s + Number(l.resolvedPrice ?? 0) * Number(l.quantity ?? 1),
-          0,
-        );
-        const frozenTotal =
-          Number((wo as any).frozenUnitPrice) * Number((wo as any).frozenQuantity);
-        scale = currentTotal > 0 ? frozenTotal / currentTotal : 1;
-      }
-      for (const line of lines) {
-        const basePrice = Number(line.resolvedPrice ?? 0);
-        const price = useFrozen
-          ? Math.round(basePrice * scale * 100) / 100
-          : (line.resolvedPrice || undefined);
-
-        // Enkel uppgift (Task #736): fritext-/blindgångar-rader saknar artikel —
-        // exportera som beskrivnings-rad utan ArticleNumber i stället för att hoppa.
-        if (!line.articleId) {
-          invoiceRows.push({
-            DeliveredQuantity: line.quantity,
-            Description: formatEnrichedDescription(
-              buildInvoiceLineBaseText(line),
-              objectRefs,
-            ),
-            Price: price,
-            CostCenter: derivedCodes.costCenter || undefined,
-            Project: derivedCodes.project || undefined,
-          });
-          continue;
-        }
-
-        const articleMapping = await storage.getFortnoxMapping(tenantId, "article", line.articleId);
-        if (!articleMapping) {
-          console.warn(`[consolidated-export] artikel ${line.articleId} saknar Fortnox-mapping, hoppar`);
-          continue;
-        }
-        invoiceRows.push({
-          ArticleNumber: articleMapping.fortnoxId,
-          DeliveredQuantity: line.quantity,
-          Description: formatEnrichedDescription(
-            buildInvoiceLineBaseText(line, { useFrozen }),
-            objectRefs,
-          ),
-          Price: price,
-          CostCenter: derivedCodes.costCenter || undefined,
-          Project: derivedCodes.project || undefined,
-        });
-      }
+      // Task #1124: ackumulera logiska rader (kollaps körs en gång efter loopen).
+      // Frozen-skalning, fritextrader, info-rader och fast-pris hanteras inuti
+      // radbyggaren — IDENTISKT med enskild export.
+      allLogicalRows.push(
+        ...(await buildFortnoxLogicalRowsForWorkOrder({
+          tenantId,
+          workOrder: wo as any,
+          lines,
+          objectRefs,
+          costCenter: derivedCodes.costCenter ?? null,
+          project: derivedCodes.project ?? null,
+          resolveArticleNumber: async (articleId) =>
+            (await storage.getFortnoxMapping(tenantId, "article", articleId))?.fortnoxId ?? null,
+        })),
+      );
     }
+    if (referenceMismatches.length > 0) {
+      return {
+        success: false,
+        error:
+          "Referens-konflikt i samlingsfaktura (frysta huvudreferenser skiljer mellan arbetsordrar): " +
+          referenceMismatches.join("; "),
+      };
+    }
+    const invoiceRows = collapseFortnoxLogicalRows(allLogicalRows);
     if (!invoiceRows.length) {
       return { success: false, error: "Inga fakturarader kunde byggas från konsoliderade WOs." };
     }
 
+    // Task #1124: frysta koncept-huvudreferenser (persisterade på fakturan från
+    // wos[0]) → Fortnox-huvudet. Frusna värden vinner; objekt-härledd kundreferens
+    // (consolidatedYourReference) är back-compat-fallback för "Er referens".
+    const headerRefs = buildFortnoxHeaderRefs({
+      ourReference: invoice.ourReference,
+      ourDesignation: invoice.ourDesignation,
+      customerReference: invoice.customerReference,
+      customerInvoiceReference: invoice.customerInvoiceReference,
+      fallbackYourReference: consolidatedYourReference,
+    });
+
     const fortnoxInvoice: FortnoxInvoice = {
       CustomerNumber: customerFortnoxId,
       InvoiceRows: invoiceRows,
-      // Task #1025: kundreferens på fakturahuvudet (max 50 tecken).
-      YourReference: consolidatedYourReference,
+      ...headerRefs,
     };
 
     const response = await client.createInvoice(fortnoxInvoice);

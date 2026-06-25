@@ -159,6 +159,14 @@ export default function OrderConceptWizardPage() {
   const [fixedPriceBasis, setFixedPriceBasis] = useState<string>("per_object");
   const [customerReference, setCustomerReference] = useState("");
   const [customerLabel, setCustomerLabel] = useState("");
+  // Task #1124 — fakturareferenser (huvud + rad + utförar-fritext)
+  const [ourReference, setOurReference] = useState("");
+  const [customerReferenceMode, setCustomerReferenceMode] = useState<string>("HARDCODED");
+  const [customerReferenceMetadataField, setCustomerReferenceMetadataField] = useState<string | null>(null);
+  const [customerLabelMode, setCustomerLabelMode] = useState<string>("HARDCODED");
+  const [customerLabelMetadataField, setCustomerLabelMetadataField] = useState<string | null>(null);
+  const [invoiceRowReferenceFields, setInvoiceRowReferenceFields] = useState<string[]>([]);
+  const [includeExecutorFreetext, setIncludeExecutorFreetext] = useState<boolean>(true);
   // Step 3
   const [invoiceLock, setInvoiceLock] = useState(false);
   const [invoiceBrake, setInvoiceBrake] = useState(false);
@@ -225,6 +233,14 @@ export default function OrderConceptWizardPage() {
     setFixedPriceBasis((wizardData as any).fixedPriceBasis || "per_object");
     setCustomerReference(wizardData.customerReference || "");
     setCustomerLabel(wizardData.customerLabel || "");
+    // Task #1124 — fakturareferenser
+    setOurReference(wizardData.ourReference || "");
+    setCustomerReferenceMode(wizardData.customerReferenceMode || "HARDCODED");
+    setCustomerReferenceMetadataField(wizardData.customerReferenceMetadataField || null);
+    setCustomerLabelMode(wizardData.customerLabelMode || "HARDCODED");
+    setCustomerLabelMetadataField(wizardData.customerLabelMetadataField || null);
+    setInvoiceRowReferenceFields(Array.isArray(wizardData.invoiceRowReferenceFields) ? wizardData.invoiceRowReferenceFields : []);
+    setIncludeExecutorFreetext(wizardData.includeExecutorFreetext ?? true);
     form.setValue("invoiceLevel", wizardData.invoiceLevel || "customer");
     form.setValue("invoiceModel", wizardData.invoiceModel || "");
     setInvoiceLock(wizardData.invoiceLock || false);
@@ -447,6 +463,20 @@ export default function OrderConceptWizardPage() {
     fixedPriceBasis: priceModel === "fixed" ? (fixedPriceBasis || "per_object") : null,
     customerReference: customerReference || null,
     customerLabel: customerLabel || null,
+    // Task #1124 — fakturareferenser. Vår referens är alltid fast text. Er referens/
+    // Ert ordernr bär ett läge (HARDCODED|FROM_METADATA) + metadatafält (svensk
+    // katalog-namn). Metadatafältet skrivs bara i FROM_METADATA-läge; annars null så
+    // resolvern faller tillbaka på det fasta värdet. Radreferenser = ordnad lista
+    // katalog-namn, utförar-fritext = boolean.
+    ourReference: ourReference || null,
+    customerReferenceMode,
+    customerReferenceMetadataField:
+      customerReferenceMode === "FROM_METADATA" ? (customerReferenceMetadataField || null) : null,
+    customerLabelMode,
+    customerLabelMetadataField:
+      customerLabelMode === "FROM_METADATA" ? (customerLabelMetadataField || null) : null,
+    invoiceRowReferenceFields,
+    includeExecutorFreetext,
     // Task #974: fakturanivå är alltid kundnivå (samma kund). Fakturastopp delar
     // bara upp fakturan organisatoriskt via invoiceConsolidation + departmentMetadataField.
     invoiceLevel: "customer",
@@ -480,7 +510,7 @@ export default function OrderConceptWizardPage() {
     totalCost,
     estimatedHours,
     };
-  }, [conceptName, customerMode, selectedCustomerId, customerMetadataField, priceListId, priceModel, fixedPriceKronor, customerReference, customerLabel, invoiceLevel, invoiceModel, invoiceLock, invoiceBrake, invoiceMethod, subscriptionAdjustmentDate, monthlyFee, billingFrequency, subscriptionStartDate, invoiceConsolidation, departmentMetadataField, targetObjectIds, mainDeliveryWindows, deliveryRestrictions, conceptArticles, totalValue, totalCost, estimatedHours]);
+  }, [conceptName, customerMode, selectedCustomerId, customerMetadataField, priceListId, priceModel, fixedPriceKronor, customerReference, customerLabel, ourReference, customerReferenceMode, customerReferenceMetadataField, customerLabelMode, customerLabelMetadataField, invoiceRowReferenceFields, includeExecutorFreetext, invoiceLevel, invoiceModel, invoiceLock, invoiceBrake, invoiceMethod, subscriptionAdjustmentDate, monthlyFee, billingFrequency, subscriptionStartDate, invoiceConsolidation, departmentMetadataField, targetObjectIds, mainDeliveryWindows, deliveryRestrictions, conceptArticles, totalValue, totalCost, estimatedHours]);
 
   const createConceptMutation = useMutation({
     mutationFn: async () => {
@@ -866,6 +896,13 @@ export default function OrderConceptWizardPage() {
                 subscriptionStartDate={subscriptionStartDate}
                 customerReference={customerReference}
                 customerLabel={customerLabel}
+                ourReference={ourReference}
+                customerReferenceMode={customerReferenceMode}
+                customerReferenceMetadataField={customerReferenceMetadataField}
+                customerLabelMode={customerLabelMode}
+                customerLabelMetadataField={customerLabelMetadataField}
+                invoiceRowReferenceFields={invoiceRowReferenceFields}
+                includeExecutorFreetext={includeExecutorFreetext}
                 onUpdate={(data) => {
                   if (data.invoiceModel !== undefined) form.setValue("invoiceModel", data.invoiceModel || "", { shouldValidate: true });
                   if (data.invoiceFrequency !== undefined) setBillingFrequency(data.invoiceFrequency || "monthly");
@@ -878,6 +915,13 @@ export default function OrderConceptWizardPage() {
                   if (data.subscriptionStartDate !== undefined) setSubscriptionStartDate(data.subscriptionStartDate);
                   if (data.customerReference !== undefined) setCustomerReference(data.customerReference);
                   if (data.customerLabel !== undefined) setCustomerLabel(data.customerLabel);
+                  if (data.ourReference !== undefined) setOurReference(data.ourReference);
+                  if (data.customerReferenceMode !== undefined) setCustomerReferenceMode(data.customerReferenceMode);
+                  if (data.customerReferenceMetadataField !== undefined) setCustomerReferenceMetadataField(data.customerReferenceMetadataField);
+                  if (data.customerLabelMode !== undefined) setCustomerLabelMode(data.customerLabelMode);
+                  if (data.customerLabelMetadataField !== undefined) setCustomerLabelMetadataField(data.customerLabelMetadataField);
+                  if (data.invoiceRowReferenceFields !== undefined) setInvoiceRowReferenceFields(data.invoiceRowReferenceFields);
+                  if (data.includeExecutorFreetext !== undefined) setIncludeExecutorFreetext(data.includeExecutorFreetext);
                   setHasUnsavedWork(true);
                 }}
               />

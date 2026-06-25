@@ -481,6 +481,25 @@ app.patch("/api/mobile/orders/:id/status", isMobileAuthenticated, asyncHandler(a
     
     console.log(`[mobile] Order ${orderId} status updated to ${status} by resource ${resourceId}`);
 
+    // Task #1124: när en projicerad konceptuppgift-WO klarmarkeras i fält, frys
+    // informationspaketet + pris och lägg WO:n i fakturakön. Best-effort — får
+    // aldrig blockera statusbytet. Tenant härleds ur WO:n (mobil-ytan går utanför
+    // tenant-middleware → läs aldrig req.tenantId här).
+    if (
+      (status === 'utford' || status === 'completed') &&
+      updatedOrder?.sourceAssignmentId &&
+      order.tenantId
+    ) {
+      try {
+        const { finalizeCompletedAssignmentForInvoice } = await import(
+          "../../services/assignment-invoice-materializer"
+        );
+        await finalizeCompletedAssignmentForInvoice(order.tenantId, orderId);
+      } catch (e) {
+        console.error("[assignment-invoice] finalize (mobil) misslyckades:", e);
+      }
+    }
+
     // Ny modell: vid slutförande, skriv tillbaka medskickade "lämna"-värden för
     // konfigurerade leaveMetadataFields (best-effort; blockerar aldrig statusbytet).
     const completedObjectId = updatedOrder?.objectId;

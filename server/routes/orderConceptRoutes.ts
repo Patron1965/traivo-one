@@ -1509,6 +1509,19 @@ app.post("/api/assignments/:id/assign", asyncHandler(async (req, res) => {
       status: scheduledDate ? "planned_fine" : "planned_rough"
     });
 
+    // Task #1124 (Approach B): projicera den schemalagda avrops-uppgiften till ett
+    // riktigt planerar-/fältjobb (work_order) så att den kan utföras och dess
+    // informationspaket sedan följer med till fakturan vid klarmarkering.
+    // Best-effort — får aldrig blockera tilldelningen.
+    try {
+      const { ensureWorkOrderForAssignmentExecution } = await import(
+        "../services/assignment-invoice-materializer"
+      );
+      await ensureWorkOrderForAssignmentExecution(tenantId, req.params.id);
+    } catch (e) {
+      console.error("[assignment-invoice] projektion (assign) misslyckades:", e);
+    }
+
     res.json(updatedAssignment);
 }));
 

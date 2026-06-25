@@ -1631,6 +1631,20 @@ app.patch("/api/work-orders/:id", asyncHandler(async (req, res) => {
     }
   }
 
+  // Task #1124: när en projicerad konceptuppgift-WO klarmarkeras via webben, frys
+  // informationspaketet + pris och lägg WO:n i fakturakön (samma väg som mobil).
+  // Best-effort — får aldrig blockera slutförandet.
+  if (isCompleting && workOrder.sourceAssignmentId) {
+    try {
+      const { finalizeCompletedAssignmentForInvoice } = await import(
+        "../services/assignment-invoice-materializer"
+      );
+      await finalizeCompletedAssignmentForInvoice(tenantId, workOrder.id);
+    } catch (e) {
+      console.error("[assignment-invoice] finalize (webb) misslyckades:", e);
+    }
+  }
+
   const isAssignmentChange = newResourceId !== oldResourceId;
   const isScheduleChange = updateData.scheduledDate !== undefined &&
     existingOrder.scheduledDate?.toISOString().split('T')[0] !== workOrder.scheduledDate?.toISOString().split('T')[0];
