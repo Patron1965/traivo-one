@@ -7,12 +7,12 @@ import {
   batchGeocode,
   isGoogleGeocodingAvailable,
   lookupCityFromPostalCode,
-} from "../google-geocoding";
+} from "../geoapify-geocoding";
 import type { ServiceObject } from "@shared/schema";
 
 // Re-export the lower-level Geoapify/Nominatim primitives so all server-side
 // callers (importRoutes, objectRoutes, mobile) have a single entry point. The
-// raw `server/google-geocoding.ts` module remains the implementation detail
+// raw `server/geoapify-geocoding.ts` module remains the implementation detail
 // for retry/fallback/cache logic; new call-sites should import from here.
 export {
   geocodeAddress,
@@ -27,7 +27,7 @@ export type {
   GeocodingResult,
   SearchDestinationsResult,
   AddressSuggestion,
-} from "../google-geocoding";
+} from "../geoapify-geocoding";
 
 export interface GeocodeObjectResult {
   objectId: string;

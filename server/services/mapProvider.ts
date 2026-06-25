@@ -555,8 +555,13 @@ function fireShadowOp(
 }
 
 // =============================================================================
-// Factory — env-styrd, default geoapify. När GoogleMapProvider implementeras
-// (Task #472, steg 3) lägg till case "google" här.
+// Factory — env-styrd, default geoapify. case "google" finns redan (Fas 1,
+// #472): MAP_PROVIDER=google + GOOGLE_MAPS_API_KEY ger GoogleMapProvider,
+// annars fallback till Geoapify.
+//
+// ENDA KÄLLAN: all rutt-/geokod-/tile-trafik MÅSTE gå via getMapProvider().
+// Återinför aldrig ad-hoc fetch mot api.geoapify.com / OSRM / tile.googleapis
+// i routes/tjänster — lägg nya backends bakom en MapProvider-metod i stället.
 // =============================================================================
 
 let _provider: MapProvider | null = null;

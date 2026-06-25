@@ -32,7 +32,7 @@ import type {
   AddressSuggestion,
   GeocodingResult,
   SearchDestinationsResult,
-} from "../google-geocoding";
+} from "../geoapify-geocoding";
 import type {
   MapProvider,
   ProviderMatrixCell,

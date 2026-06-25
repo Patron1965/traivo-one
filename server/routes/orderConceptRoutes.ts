@@ -1836,7 +1836,7 @@ app.get("/api/work-orders/:workOrderId/communications", asyncHandler(async (req,
 
 app.post("/api/work-orders/:workOrderId/auto-eta-sms", asyncHandler(async (req, res) => {
     const { sendSms, isTwilioConfigured } = await import("../replit_integrations/twilio");
-    const { trackApiUsage } = await import("../api-usage-tracker");
+    const { getMapProvider } = await import("../services/mapProvider");
     const tenantId = getTenantIdWithFallback(req);
     const { workOrderId } = req.params;
     const { technicianLat, technicianLng } = req.body;
@@ -1895,31 +1895,21 @@ app.post("/api/work-orders/:workOrderId/auto-eta-sms", asyncHandler(async (req, 
     }
 
     let etaMinutes: number | null = null;
-    const GEOAPIFY_API_KEY = process.env.GEOAPIFY_API_KEY;
-    if (GEOAPIFY_API_KEY && technicianLat && technicianLng && obj.latitude && obj.longitude) {
+    if (technicianLat && technicianLng && obj.latitude && obj.longitude) {
       try {
-        const waypoints = `${technicianLat},${technicianLng}|${obj.latitude},${obj.longitude}`;
-        const startTime = Date.now();
-        const geoRes = await fetch(
-          `https://api.geoapify.com/v1/routing?waypoints=${waypoints}&mode=drive&apiKey=${GEOAPIFY_API_KEY}`
+        // Rutt via aktiv MapProvider (respekterar MAP_PROVIDER) i stället för ett
+        // hårdkodat Geoapify-anrop. Providern väljer OSRM/Geoapify, cachar och
+        // spårar kostnad själv. null → fallbacken 30 min nedan gäller.
+        const pair = await getMapProvider().routePair(
+          { lat: Number(technicianLat), lng: Number(technicianLng) },
+          { lat: Number(obj.latitude), lng: Number(obj.longitude) },
+          tenantId,
         );
-        trackApiUsage({
-          service: "geoapify",
-          method: "routing",
-          endpoint: "/v1/routing",
-          units: 1,
-          statusCode: geoRes.status,
-          durationMs: Date.now() - startTime,
-        });
-        if (geoRes.ok) {
-          const geoData = await geoRes.json();
-          const props = geoData.features?.[0]?.properties;
-          if (props?.time) {
-            etaMinutes = Math.round(props.time / 60);
-          }
+        if (pair) {
+          etaMinutes = Math.round(pair.durationMinutes);
         }
       } catch (err) {
-        console.error("[auto-eta-sms] Geoapify routing error:", err);
+        console.error("[auto-eta-sms] routePair error:", err);
       }
     }
 
