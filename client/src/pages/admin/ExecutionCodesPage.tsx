@@ -36,15 +36,26 @@ import { useAuth } from "@/hooks/use-auth";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { QueryState } from "@/components/QueryState";
 import { Workflow, Plus, Pencil, Trash2, Loader2, Lock } from "lucide-react";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import type { ExecutionCodeDefinition } from "@shared/schema";
+import { RegistryIcon, useIcons, resolveIconByKey } from "@/lib/icon-registry";
 
 interface ExecutionCodeFormData {
   key: string;
   label: string;
+  iconKey: string;
   sortOrder: number;
 }
 
-const emptyForm: ExecutionCodeFormData = { key: "", label: "", sortOrder: 0 };
+const NO_ICON_VALUE = "_none";
+
+const emptyForm: ExecutionCodeFormData = { key: "", label: "", iconKey: "", sortOrder: 0 };
 
 function slugifyKey(value: string): string {
   return value
@@ -73,12 +84,17 @@ export default function ExecutionCodesPage() {
     queryKey: ["/api/execution-codes"],
   });
 
+  const { data: icons = [] } = useIcons();
+  const sortedIcons = [...icons].sort(
+    (a, b) => a.sortOrder - b.sortOrder || a.label.localeCompare(b.label, "sv"),
+  );
+
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: ["/api/execution-codes"] });
   };
 
   const createMutation = useMutation({
-    mutationFn: async (data: ExecutionCodeFormData) => {
+    mutationFn: async (data: Record<string, unknown>) => {
       const res = await apiRequest("POST", "/api/execution-codes", data);
       return res.json();
     },
@@ -94,7 +110,7 @@ export default function ExecutionCodesPage() {
   });
 
   const updateMutation = useMutation({
-    mutationFn: async ({ id, data }: { id: string; data: Partial<ExecutionCodeFormData> }) => {
+    mutationFn: async ({ id, data }: { id: string; data: Record<string, unknown> }) => {
       const res = await apiRequest("PATCH", `/api/execution-codes/${id}`, data);
       return res.json();
     },
@@ -143,7 +159,7 @@ export default function ExecutionCodesPage() {
 
   const openEdit = (t: ExecutionCodeDefinition) => {
     setEditing(t);
-    setFormData({ key: t.key, label: t.label, sortOrder: t.sortOrder });
+    setFormData({ key: t.key, label: t.label, iconKey: t.iconKey || "", sortOrder: t.sortOrder });
     setKeyTouched(true);
     setDialogOpen(true);
   };
@@ -156,14 +172,15 @@ export default function ExecutionCodesPage() {
       toast({ title: "Visningsnamn krävs", variant: "destructive" });
       return;
     }
+    const iconKey = formData.iconKey.trim() || null;
     if (editing) {
-      updateMutation.mutate({ id: editing.id, data: { label, sortOrder: formData.sortOrder } });
+      updateMutation.mutate({ id: editing.id, data: { label, iconKey, sortOrder: formData.sortOrder } });
     } else {
       if (!key) {
         toast({ title: "Nyckel krävs", variant: "destructive" });
         return;
       }
-      createMutation.mutate({ key, label, sortOrder: formData.sortOrder });
+      createMutation.mutate({ key, label, iconKey, sortOrder: formData.sortOrder });
     }
   };
 
@@ -209,6 +226,7 @@ export default function ExecutionCodesPage() {
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead className="w-16">Ikon</TableHead>
                   <TableHead>Visningsnamn</TableHead>
                   <TableHead>Nyckel</TableHead>
                   <TableHead className="w-24 text-right">Sortering</TableHead>
@@ -218,8 +236,19 @@ export default function ExecutionCodesPage() {
               <TableBody>
                 {[...codes]
                   .sort((a, b) => a.sortOrder - b.sortOrder || a.label.localeCompare(b.label, "sv"))
-                  .map((t) => (
+                  .map((t) => {
+                    const iconDef = resolveIconByKey(icons, t.iconKey);
+                    return (
                     <TableRow key={t.id} data-testid={`row-execution-code-${t.key}`}>
+                      <TableCell>
+                        <div className="w-9 h-9 rounded-md border flex items-center justify-center" data-testid={`preview-execution-code-${t.key}`}>
+                          {iconDef ? (
+                            <RegistryIcon def={iconDef} className="h-4 w-4" />
+                          ) : (
+                            <span className="text-xs text-muted-foreground">—</span>
+                          )}
+                        </div>
+                      </TableCell>
                       <TableCell className="font-medium" data-testid={`text-label-${t.key}`}>{t.label}</TableCell>
                       <TableCell>
                         <code className="text-xs text-muted-foreground">{t.key}</code>
@@ -247,7 +276,8 @@ export default function ExecutionCodesPage() {
                         </div>
                       </TableCell>
                     </TableRow>
-                  ))}
+                    );
+                  })}
               </TableBody>
             </Table>
           </QueryState>
@@ -302,6 +332,34 @@ export default function ExecutionCodesPage() {
                 />
                 <p className="text-xs text-muted-foreground">
                   Stabil identifierare (gemener, inga mellanslag). Kan inte ändras efter att koden skapats.
+                </p>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="iconKey">Ikon</Label>
+                <Select
+                  value={formData.iconKey || NO_ICON_VALUE}
+                  onValueChange={(v) => setFormData((prev) => ({ ...prev, iconKey: v === NO_ICON_VALUE ? "" : v }))}
+                >
+                  <SelectTrigger id="iconKey" data-testid="select-execution-code-icon">
+                    <SelectValue placeholder="Ingen ikon" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={NO_ICON_VALUE}>Ingen ikon</SelectItem>
+                    {sortedIcons.map((icon) => (
+                      <SelectItem key={icon.key} value={icon.key}>
+                        <span className="flex items-center gap-2">
+                          <RegistryIcon def={icon} className="h-4 w-4" />
+                          {icon.label}
+                        </span>
+                      </SelectItem>
+                    ))}
+                    {formData.iconKey && !sortedIcons.some((i) => i.key === formData.iconKey) && (
+                      <SelectItem value={formData.iconKey}>{formData.iconKey} (arkiverad)</SelectItem>
+                    )}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  Visas på jobbkort och i listor. Lämna tom för textbaserad fallback.
                 </p>
               </div>
               <div className="space-y-2">

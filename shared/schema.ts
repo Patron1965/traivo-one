@@ -875,6 +875,10 @@ export const executionCodeDefinitions = pgTable("execution_code_definitions", {
   tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
   key: text("key").notNull(),
   label: text("label").notNull(),
+  // Task #1109: valfri koppling till ikonregistret (iconDefinitions.key). Gör att en
+  // utförandekod visas med samma ikon överallt (planerare, listor) via det centrala
+  // ikonregistret. NULL ⇒ fall tillbaka till textförkortning (EXECUTION_CODE_ICONS).
+  iconKey: text("icon_key"),
   sortOrder: integer("sort_order").default(0).notNull(),
   isSystem: boolean("is_system").default(false).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
@@ -893,7 +897,15 @@ export const iconDefinitions = pgTable("icon_definitions", {
   key: text("key").notNull(),
   label: text("label").notNull(),
   // Namnet på den Lucide-ikon som ska renderas (t.ex. "truck", "recycle").
+  // Används alltid som robust fallback om en egen ikon (symbol/bild) saknas/laddar fel.
   lucideName: text("lucide_name").default("package").notNull(),
+  // Task #1109: egna ikoner utöver Lucide. iconType styr renderingen:
+  //  - "lucide": rendera Lucide-ikonen ovan
+  //  - "emoji": rendera tecknet i `symbol` (emoji eller kort textsymbol)
+  //  - "image": rendera bilden i `imageUrl` (uppladdad via object storage)
+  iconType: text("icon_type").default("lucide").notNull(),
+  symbol: text("symbol"),
+  imageUrl: text("image_url"),
   sortOrder: integer("sort_order").default(0).notNull(),
   isSystem: boolean("is_system").default(false).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
@@ -1811,7 +1823,11 @@ export const insertExecutionCodeDefinitionSchema = createInsertSchema(executionC
 export const insertIconDefinitionSchema = createInsertSchema(iconDefinitions).omit({ id: true, createdAt: true }).extend({
   key: z.string().trim().min(1, "Nyckel krävs").max(50, "Nyckeln får vara högst 50 tecken"),
   label: z.string().trim().min(1, "Visningsnamn krävs").max(80, "Visningsnamnet får vara högst 80 tecken"),
-  lucideName: z.string().trim().min(1, "Ikon krävs").max(60, "Ikonnamnet får vara högst 60 tecken"),
+  // lucideName är alltid fallback och behåller sitt default ("package") om utelämnad.
+  lucideName: z.string().trim().min(1).max(60).optional(),
+  iconType: z.enum(["lucide", "emoji", "image"]).optional(),
+  symbol: z.string().trim().max(16, "Symbolen får vara högst 16 tecken").nullish(),
+  imageUrl: z.string().trim().max(2048).nullish(),
 });
 export const insertPriceListSchema = createInsertSchema(priceLists)
   .omit({ id: true, createdAt: true })

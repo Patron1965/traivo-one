@@ -16,7 +16,7 @@ import type {
   AssociationCondition,
   Supplier,
 } from "@shared/schema";
-import { getLucideIconByName } from "@/lib/icon-registry";
+import { RegistryIcon } from "@/lib/icon-registry";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -1598,11 +1598,10 @@ export default function ArticleFormPage() {
                   <SelectContent>
                     <SelectItem value="_none">Ingen ikon</SelectItem>
                     {iconDefs.map((icon) => {
-                      const IconCmp = getLucideIconByName(icon.lucideName);
                       return (
                         <SelectItem key={icon.key} value={icon.key}>
                           <span className="flex items-center gap-2">
-                            <IconCmp className="h-4 w-4" />
+                            <RegistryIcon def={icon} className="h-4 w-4" />
                             {icon.label}
                           </span>
                         </SelectItem>

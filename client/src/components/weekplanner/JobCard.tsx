@@ -7,8 +7,8 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { AlertTriangle, Clock, X, Link2, ArrowRight, Key, DoorOpen, UsersRound, MoreVertical, Zap, Info, CalendarClock, CalendarX2 } from "lucide-react";
 import type { WorkOrderWithObject } from "@shared/schema";
-import { EXECUTION_CODE_LABELS, EXECUTION_CODE_ICONS } from "@shared/schema";
 import type { DeliveryRestrictionNote } from "@shared/delivery-restrictions";
+import { ExecutionCodeBadge } from "./ExecutionCodeBadge";
 import {
   executionStatusColors, executionStatusLabels, executionStatusOrder,
   statusBadgeVariant, timeBlockBorders, getJobCategory, priorityDotColors,
@@ -97,14 +97,7 @@ export const JobCard = memo(function JobCard({
               </Tooltip>
               <span className="text-xs font-medium truncate">{job.title}</span>
               {job.executionCode && (
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <span className="text-[10px] shrink-0 bg-muted text-muted-foreground px-1 rounded" data-testid={`exec-code-${job.id}`}>
-                      {EXECUTION_CODE_ICONS[job.executionCode] || "KOD"}
-                    </span>
-                  </TooltipTrigger>
-                  <TooltipContent>{EXECUTION_CODE_LABELS[job.executionCode] || job.executionCode}</TooltipContent>
-                </Tooltip>
+                <ExecutionCodeBadge code={job.executionCode} data-testid={`exec-code-${job.id}`} />
               )}
               {(hasDependencies || hasDependents) && (
                 <Tooltip>

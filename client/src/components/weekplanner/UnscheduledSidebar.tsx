@@ -16,6 +16,7 @@ import { priorityDotColors, priorityLabels, priorityBadgeClasses } from "./types
 import type { AssignSlot } from "./usePlannerSync";
 import { DraggableJobCard } from "./DndComponents";
 import { JobCardExpandPanel } from "./JobCardExpandPanel";
+import { ExecutionCodeBadge } from "./ExecutionCodeBadge";
 import { apiRequest } from "@/lib/queryClient";
 import { OrderFilterBar } from "@/components/orders/OrderFilterBar";
 import { CancelOrderDialog } from "@/components/orders/CancelOrderDialog";
@@ -719,9 +720,7 @@ export const UnscheduledSidebar = memo(function UnscheduledSidebar(props: Unsche
                         )}
                         {job.executionCode && (
                           <div className="pl-3.5">
-                            <Badge variant="outline" className="text-[10px] h-4 px-1.5" data-testid={`unscheduled-exec-code-${job.id}`}>
-                              {EXECUTION_CODE_ICONS[job.executionCode] || "KOD"} {EXECUTION_CODE_LABELS[job.executionCode] || job.executionCode}
-                            </Badge>
+                            <ExecutionCodeBadge code={job.executionCode} showLabel data-testid={`unscheduled-exec-code-${job.id}`} />
                           </div>
                         )}
                         {expandedJobs.has(job.id) && (

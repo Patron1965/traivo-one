@@ -36,18 +36,24 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { QueryState } from "@/components/QueryState";
-import { Shapes, Plus, Pencil, Trash2, Loader2, Lock } from "lucide-react";
+import { Shapes, Plus, Pencil, Trash2, Loader2, Lock, Upload, ImageIcon, Smile } from "lucide-react";
 import type { IconDefinition } from "@shared/schema";
-import { ICON_PICKER_OPTIONS, getLucideIconByName, DEFAULT_ICON_NAME } from "@/lib/icon-registry";
+import { ICON_PICKER_OPTIONS, DEFAULT_ICON_NAME, RegistryIcon } from "@/lib/icon-registry";
+import { useUpload } from "@/hooks/use-upload";
+
+type IconType = "lucide" | "emoji" | "image";
 
 interface IconFormData {
   key: string;
   label: string;
   lucideName: string;
+  iconType: IconType;
+  symbol: string;
+  imageUrl: string;
   sortOrder: number;
 }
 
-const emptyForm: IconFormData = { key: "", label: "", lucideName: DEFAULT_ICON_NAME, sortOrder: 0 };
+const emptyForm: IconFormData = { key: "", label: "", lucideName: DEFAULT_ICON_NAME, iconType: "lucide", symbol: "", imageUrl: "", sortOrder: 0 };
 
 function slugifyKey(value: string): string {
   return value
@@ -81,7 +87,7 @@ export default function IconsPage() {
   };
 
   const createMutation = useMutation({
-    mutationFn: async (data: IconFormData) => {
+    mutationFn: async (data: Record<string, unknown>) => {
       const res = await apiRequest("POST", "/api/icons", data);
       return res.json();
     },
@@ -97,7 +103,7 @@ export default function IconsPage() {
   });
 
   const updateMutation = useMutation({
-    mutationFn: async ({ id, data }: { id: string; data: Partial<IconFormData> }) => {
+    mutationFn: async ({ id, data }: { id: string; data: Record<string, unknown> }) => {
       const res = await apiRequest("PATCH", `/api/icons/${id}`, data);
       return res.json();
     },
@@ -124,7 +130,7 @@ export default function IconsPage() {
         title: "Ikon arkiverad",
         description:
           result?.usage && result.usage > 0
-            ? `Ikonen används av ${result.usage} artikel(ar) — den arkiveras men befintliga referenser behålls.`
+            ? `Ikonen används på ${result.usage} ställe(n) — den arkiveras men befintliga referenser behålls.`
             : undefined,
       });
     },
@@ -146,9 +152,33 @@ export default function IconsPage() {
 
   const openEdit = (t: IconDefinition) => {
     setEditing(t);
-    setFormData({ key: t.key, label: t.label, lucideName: t.lucideName || DEFAULT_ICON_NAME, sortOrder: t.sortOrder });
+    setFormData({
+      key: t.key,
+      label: t.label,
+      lucideName: t.lucideName || DEFAULT_ICON_NAME,
+      iconType: (t.iconType as IconType) || "lucide",
+      symbol: t.symbol || "",
+      imageUrl: t.imageUrl || "",
+      sortOrder: t.sortOrder,
+    });
     setKeyTouched(true);
     setDialogOpen(true);
+  };
+
+  const { uploadFile, isUploading } = useUpload({
+    onSuccess: (res) => setFormData((prev) => ({ ...prev, imageUrl: res.objectPath })),
+    onError: (err) => toast({ title: "Uppladdning misslyckades", description: err.message, variant: "destructive" }),
+  });
+
+  const handleImageSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      toast({ title: "Endast bildfiler", description: "Välj en bildfil (PNG, JPG, SVG ...).", variant: "destructive" });
+      return;
+    }
+    await uploadFile(file);
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -159,14 +189,30 @@ export default function IconsPage() {
       toast({ title: "Visningsnamn krävs", variant: "destructive" });
       return;
     }
+    if (formData.iconType === "emoji" && !formData.symbol.trim()) {
+      toast({ title: "Symbol krävs", description: "Ange en emoji eller symbol för den egna ikonen.", variant: "destructive" });
+      return;
+    }
+    if (formData.iconType === "image" && !formData.imageUrl.trim()) {
+      toast({ title: "Bild krävs", description: "Ladda upp en bild för den egna ikonen.", variant: "destructive" });
+      return;
+    }
+    const payload = {
+      label,
+      lucideName: formData.lucideName,
+      iconType: formData.iconType,
+      symbol: formData.iconType === "emoji" ? formData.symbol.trim() : null,
+      imageUrl: formData.iconType === "image" ? formData.imageUrl.trim() : null,
+      sortOrder: formData.sortOrder,
+    };
     if (editing) {
-      updateMutation.mutate({ id: editing.id, data: { label, lucideName: formData.lucideName, sortOrder: formData.sortOrder } });
+      updateMutation.mutate({ id: editing.id, data: payload });
     } else {
       if (!key) {
         toast({ title: "Nyckel krävs", variant: "destructive" });
         return;
       }
-      createMutation.mutate({ key, label, lucideName: formData.lucideName, sortOrder: formData.sortOrder });
+      createMutation.mutate({ key, ...payload });
     }
   };
 
@@ -224,12 +270,11 @@ export default function IconsPage() {
                 {[...icons]
                   .sort((a, b) => a.sortOrder - b.sortOrder || a.label.localeCompare(b.label, "sv"))
                   .map((t) => {
-                    const IconComp = getLucideIconByName(t.lucideName);
                     return (
                       <TableRow key={t.id} data-testid={`row-icon-${t.key}`}>
                         <TableCell>
                           <div className="w-9 h-9 rounded-md border flex items-center justify-center" data-testid={`preview-icon-${t.key}`}>
-                            <IconComp className="h-4 w-4" />
+                            <RegistryIcon def={t} className="h-4 w-4" />
                           </div>
                         </TableCell>
                         <TableCell className="font-medium" data-testid={`text-label-${t.key}`}>{t.label}</TableCell>
@@ -326,26 +371,119 @@ export default function IconsPage() {
                 </p>
               </div>
               <div className="space-y-2">
-                <Label>Ikonbild</Label>
-                <div className="grid grid-cols-8 gap-2 max-h-48 overflow-y-auto p-1">
-                  {ICON_PICKER_OPTIONS.map((opt) => {
-                    const IconComp = opt.Icon;
-                    const selected = formData.lucideName === opt.value;
+                <Label>Ikontyp</Label>
+                <div className="flex gap-2">
+                  {([
+                    { value: "lucide" as IconType, label: "Standard", Icon: Shapes },
+                    { value: "emoji" as IconType, label: "Symbol", Icon: Smile },
+                    { value: "image" as IconType, label: "Bild", Icon: ImageIcon },
+                  ]).map((opt) => {
+                    const TypeIcon = opt.Icon;
+                    const selected = formData.iconType === opt.value;
                     return (
-                      <button
+                      <Button
                         key={opt.value}
                         type="button"
-                        className={`w-9 h-9 rounded-md border-2 flex items-center justify-center transition-all ${selected ? "border-foreground bg-accent" : "border-muted hover:border-muted-foreground"}`}
-                        onClick={() => setFormData((prev) => ({ ...prev, lucideName: opt.value }))}
-                        title={opt.value}
-                        data-testid={`button-pick-icon-${opt.value}`}
+                        variant={selected ? "default" : "outline"}
+                        size="sm"
+                        className="flex-1 gap-2"
+                        onClick={() => setFormData((prev) => ({ ...prev, iconType: opt.value }))}
+                        data-testid={`button-icon-type-${opt.value}`}
                       >
-                        <IconComp className="h-4 w-4" />
-                      </button>
+                        <TypeIcon className="h-4 w-4" />
+                        {opt.label}
+                      </Button>
                     );
                   })}
                 </div>
+                <p className="text-xs text-muted-foreground">
+                  Egna ikoner (symbol/bild) faller tillbaka till standardikonen om de saknas.
+                </p>
               </div>
+
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <Label>Förhandsvisning</Label>
+                  <div className="w-9 h-9 rounded-md border flex items-center justify-center" data-testid="preview-icon-form">
+                    <RegistryIcon def={formData} className="h-5 w-5" />
+                  </div>
+                </div>
+              </div>
+
+              {formData.iconType === "lucide" && (
+                <div className="space-y-2">
+                  <Label>Standardikon</Label>
+                  <div className="grid grid-cols-8 gap-2 max-h-48 overflow-y-auto p-1">
+                    {ICON_PICKER_OPTIONS.map((opt) => {
+                      const IconComp = opt.Icon;
+                      const selected = formData.lucideName === opt.value;
+                      return (
+                        <button
+                          key={opt.value}
+                          type="button"
+                          className={`w-9 h-9 rounded-md border-2 flex items-center justify-center transition-all ${selected ? "border-foreground bg-accent" : "border-muted hover:border-muted-foreground"}`}
+                          onClick={() => setFormData((prev) => ({ ...prev, lucideName: opt.value }))}
+                          title={opt.value}
+                          data-testid={`button-pick-icon-${opt.value}`}
+                        >
+                          <IconComp className="h-4 w-4" />
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {formData.iconType === "emoji" && (
+                <div className="space-y-2">
+                  <Label htmlFor="symbol">Symbol / emoji <span className="text-destructive">*</span></Label>
+                  <Input
+                    id="symbol"
+                    value={formData.symbol}
+                    onChange={(e) => setFormData((prev) => ({ ...prev, symbol: e.target.value }))}
+                    placeholder="t.ex. ♻️ eller A1"
+                    maxLength={16}
+                    className="text-lg"
+                    data-testid="input-icon-symbol"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    En emoji eller kort textsymbol (max 16 tecken).
+                  </p>
+                </div>
+              )}
+
+              {formData.iconType === "image" && (
+                <div className="space-y-2">
+                  <Label>Egen bild <span className="text-destructive">*</span></Label>
+                  <div className="flex items-center gap-3">
+                    <div className="w-12 h-12 rounded-md border flex items-center justify-center bg-muted/40 shrink-0">
+                      <RegistryIcon def={formData} className="h-7 w-7" />
+                    </div>
+                    <div className="space-y-1">
+                      <input
+                        id="icon-image-file"
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={handleImageSelect}
+                        data-testid="input-icon-image-file"
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        disabled={isUploading}
+                        onClick={() => document.getElementById("icon-image-file")?.click()}
+                        data-testid="button-upload-icon-image"
+                      >
+                        {isUploading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Upload className="h-4 w-4 mr-2" />}
+                        {formData.imageUrl ? "Byt bild" : "Ladda upp bild"}
+                      </Button>
+                      <p className="text-xs text-muted-foreground">PNG, JPG eller SVG.</p>
+                    </div>
+                  </div>
+                </div>
+              )}
               <div className="space-y-2">
                 <Label htmlFor="sortOrder">Sorteringsordning</Label>
                 <Input

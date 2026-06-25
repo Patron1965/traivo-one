@@ -69,6 +69,9 @@ import {
   Radio,
   type LucideIcon,
 } from "lucide-react";
+import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import type { IconDefinition } from "@shared/schema";
 
 // Centralt ikonregister (Task #942): mappar Lucide-namn (kebab-case eller PascalCase)
 // till komponenter. Används av ikonregistret (admin) och alla ytor som visar ikoner.
@@ -160,3 +163,77 @@ const ICON_ALIASES = new Set(["trash", "building"]);
 export const ICON_PICKER_OPTIONS: { value: string; Icon: LucideIcon }[] = Object.entries(ICON_MAP)
   .filter(([key]) => !ICON_ALIASES.has(key))
   .map(([value, Icon]) => ({ value, Icon }));
+
+// ============================================
+// CENTRAL IKON-RENDERARE (Task #1109)
+// En enda renderare för alla ikon-typer (lucide/emoji/bild) med robust fallback.
+// Alla ytor som visar en register-ikon ska gå via <RegistryIcon> så att samma
+// entitet visas med samma ikon överallt (planerare, listor, mobil).
+// ============================================
+
+// Minsta gemensamma form som behövs för att rendera en ikon. Tar emot hela
+// IconDefinition eller en partiell form (t.ex. live-byggd preview i admin).
+export type RenderableIcon = Pick<
+  IconDefinition,
+  "iconType" | "lucideName" | "symbol" | "imageUrl" | "label"
+>;
+
+interface RegistryIconProps {
+  def: RenderableIcon | null | undefined;
+  className?: string;
+  // Fallback-Lucide-ikon om `def` saknas helt (t.ex. ingen ikon vald).
+  fallbackLucide?: string;
+  title?: string;
+}
+
+// Renderar en register-ikon. Faller alltid tillbaka snyggt:
+//  - "image" som saknar/laddar fel URL ⇒ Lucide-fallback
+//  - "emoji" utan symbol ⇒ Lucide-fallback
+//  - okänt/utelämnat ⇒ Lucide (lucideName ?? fallbackLucide ?? "package")
+export function RegistryIcon({ def, className = "h-4 w-4", fallbackLucide, title }: RegistryIconProps) {
+  const [imageBroken, setImageBroken] = useState(false);
+  const LucideFallback = getLucideIconByName(def?.lucideName || fallbackLucide || DEFAULT_ICON_NAME);
+
+  if (def?.iconType === "image" && def.imageUrl && !imageBroken) {
+    return (
+      <img
+        src={def.imageUrl}
+        alt={def.label || title || ""}
+        title={title || def.label || undefined}
+        className={`${className} object-contain inline-block`}
+        onError={() => setImageBroken(true)}
+        data-testid="icon-image"
+      />
+    );
+  }
+
+  if (def?.iconType === "emoji" && def.symbol && def.symbol.trim()) {
+    return (
+      <span
+        className={`${className} inline-flex items-center justify-center leading-none`}
+        title={title || def.label || undefined}
+        aria-label={def.label || undefined}
+        role="img"
+        data-testid="icon-symbol"
+      >
+        {def.symbol}
+      </span>
+    );
+  }
+
+  return <LucideFallback className={className} aria-label={title || def?.label || undefined} />;
+}
+
+// React-query-hook som hämtar tenantens ikonregister (delad/cachead query-key).
+export function useIcons() {
+  return useQuery<IconDefinition[]>({ queryKey: ["/api/icons"] });
+}
+
+// Slår upp en ikon-definition på dess `key` i en lista (t.ex. från useIcons()).
+export function resolveIconByKey(
+  defs: IconDefinition[] | undefined,
+  key: string | null | undefined,
+): IconDefinition | undefined {
+  if (!key || !defs) return undefined;
+  return defs.find((d) => d.key === key);
+}

@@ -4969,7 +4969,15 @@ export class DatabaseStorage implements IStorage {
       .where(and(eq(iconDefinitions.tenantId, data.tenantId), eq(iconDefinitions.key, data.key)));
     if (existing) {
       const [revived] = await db.update(iconDefinitions)
-        .set({ label: data.label, lucideName: data.lucideName ?? existing.lucideName, sortOrder: data.sortOrder ?? existing.sortOrder, deletedAt: null })
+        .set({
+          label: data.label,
+          lucideName: data.lucideName ?? existing.lucideName,
+          iconType: data.iconType ?? existing.iconType,
+          symbol: data.symbol ?? existing.symbol,
+          imageUrl: data.imageUrl ?? existing.imageUrl,
+          sortOrder: data.sortOrder ?? existing.sortOrder,
+          deletedAt: null,
+        })
         .where(eq(iconDefinitions.id, existing.id))
         .returning();
       return revived;
@@ -4995,9 +5003,11 @@ export class DatabaseStorage implements IStorage {
 
   async getIconUsageCount(tenantId: string, key: string): Promise<number> {
     const { count } = await import("drizzle-orm");
-    const [row] = await db.select({ count: count() }).from(articles)
+    const [articleRow] = await db.select({ count: count() }).from(articles)
       .where(and(eq(articles.tenantId, tenantId), eq(articles.iconKey, key), isNull(articles.deletedAt)));
-    return row?.count || 0;
+    const [codeRow] = await db.select({ count: count() }).from(executionCodeDefinitions)
+      .where(and(eq(executionCodeDefinitions.tenantId, tenantId), eq(executionCodeDefinitions.iconKey, key), isNull(executionCodeDefinitions.deletedAt)));
+    return (articleRow?.count || 0) + (codeRow?.count || 0);
   }
 
   async seedIconDefinitions(tenantId: string): Promise<void> {
