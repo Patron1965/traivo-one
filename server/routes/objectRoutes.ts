@@ -31,6 +31,8 @@ import {
 } from "../services/object-system-metadata";
 import { createMetadata, updateMetadata, deleteMetadata } from "../metadata-queries";
 import { metadataKatalog, metadataVarden } from "@shared/schema";
+import { getMapProvider } from "../services/mapProvider";
+import { isValidWhat3words, normalizeWhat3words, WHAT3WORDS_FORMAT_ERROR } from "@shared/what3words";
 
 type ServiceObject = Awaited<ReturnType<typeof storage.getObjects>>[number];
 
@@ -507,7 +509,24 @@ app.post("/api/objects/:id/what3words", asyncHandler(async (req, res) => {
   const parsed = z
     .object({ what3words: z.string().trim().max(200).nullable().optional() })
     .parse(req.body);
-  const value = (parsed.what3words ?? "").trim();
+  const value = normalizeWhat3words(parsed.what3words ?? "");
+
+  // Task #1118: validera three-word-formatet innan vi sparar. Tomt värde rensar
+  // fältet och hoppar över valideringen.
+  if (value && !isValidWhat3words(value)) {
+    throw new ValidationError(WHAT3WORDS_FORMAT_ERROR);
+  }
+
+  // Task #1118: resolva adressen till lat/lng via map-provider-abstraktionen om
+  // What3words-API:t är konfigurerat. Resolveringen är frivillig — saknad nyckel
+  // eller en adress som inte hittas blockerar inte sparningen.
+  let resolvedCoordinates: { lat: number; lng: number } | null = null;
+  if (value) {
+    const provider = getMapProvider();
+    if (provider.isWhat3wordsAvailable()) {
+      resolvedCoordinates = await provider.convertWhat3words(value);
+    }
+  }
 
   // Säkerställ katalogposten (idempotent) — en nyligen skapad tenant kanske inte
   // har körts genom backfillWhat3wordsField än.
@@ -566,7 +585,7 @@ app.post("/api/objects/:id/what3words", asyncHandler(async (req, res) => {
   }
 
   const data = await getObjectSystemGeneratedMetadata(tenantId, req.params.id);
-  res.json(data);
+  res.json({ ...data, what3wordsCoordinates: resolvedCoordinates });
 }));
 
 app.post("/api/objects/:id/parents", asyncHandler(async (req, res) => {

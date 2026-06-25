@@ -27,6 +27,10 @@
  *     kostnad/volym kan följas i `api_usage_logs`.
  */
 import { trackApiUsage } from "../api-usage-tracker";
+import {
+  convertWhat3wordsToCoordinates,
+  isWhat3wordsResolutionAvailable,
+} from "./what3words";
 import { getMapTileConfig, type Waypoint, type MapTileConfig, type RouteFetchResult, type RoutingFetchOptions } from "./routing";
 import type {
   AddressSuggestion,
@@ -1198,6 +1202,15 @@ export class GoogleMapProvider implements MapProvider {
       };
     }
     return getMapTileConfig();
+  }
+
+  isWhat3wordsAvailable(): boolean {
+    return isWhat3wordsResolutionAvailable();
+  }
+
+  async convertWhat3words(words: string): Promise<{ lat: number; lng: number } | null> {
+    const result = await convertWhat3wordsToCoordinates(words);
+    return result ? { lat: result.lat, lng: result.lng } : null;
   }
 }
 

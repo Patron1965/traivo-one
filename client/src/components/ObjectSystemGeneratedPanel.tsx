@@ -21,6 +21,11 @@ import { Input } from "@/components/ui/input";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import {
+  isValidWhat3words,
+  normalizeWhat3words,
+  WHAT3WORDS_FORMAT_ERROR,
+} from "@shared/what3words";
 
 // Task #1085: Systemgenererad metadata-vy. Ersätter de gamla
 // "Ordrar/Rating/Felanmälningar"-sektionerna och samlar de systemgenererade
@@ -199,6 +204,11 @@ function What3wordsSection({
   const { toast } = useToast();
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(value ?? "");
+  const [error, setError] = useState<string | null>(null);
+
+  const trimmedDraft = draft.trim();
+  // Task #1118: spegla serverns formatvalidering inline. Tomt = giltigt (rensar).
+  const formatInvalid = trimmedDraft.length > 0 && !isValidWhat3words(trimmedDraft);
 
   const mutation = useMutation({
     mutationFn: async (next: string) => {
@@ -212,16 +222,23 @@ function What3wordsSection({
         queryKey: ["/api/objects", objectId, "system-generated-metadata"],
       });
       setEditing(false);
+      setError(null);
       toast({ title: "What3words sparad" });
     },
     onError: (err: Error) => {
-      toast({
-        title: "Kunde inte spara What3words",
-        description: err.message,
-        variant: "destructive",
-      });
+      setError(err.message || WHAT3WORDS_FORMAT_ERROR);
     },
   });
+
+  const handleSave = () => {
+    const next = trimmedDraft ? normalizeWhat3words(trimmedDraft) : "";
+    if (next && !isValidWhat3words(next)) {
+      setError(WHAT3WORDS_FORMAT_ERROR);
+      return;
+    }
+    setError(null);
+    mutation.mutate(next);
+  };
 
   return (
     <Collapsible defaultOpen={false}>
@@ -237,38 +254,58 @@ function What3wordsSection({
       </CollapsibleTrigger>
       <CollapsibleContent className="px-1 py-2">
         {editing ? (
-          <div className="flex items-center gap-2 px-2 py-1">
-            <Input
-              value={draft}
-              onChange={(e) => setDraft(e.target.value)}
-              placeholder="t.ex. filled.count.soap"
-              className="h-8"
-              data-testid="input-what3words"
-            />
-            <Button
-              size="sm"
-              onClick={() => mutation.mutate(draft.trim())}
-              disabled={mutation.isPending}
-              data-testid="button-save-what3words"
-            >
-              {mutation.isPending ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                "Spara"
-              )}
-            </Button>
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={() => {
-                setDraft(value ?? "");
-                setEditing(false);
-              }}
-              disabled={mutation.isPending}
-              data-testid="button-cancel-what3words"
-            >
-              Avbryt
-            </Button>
+          <div className="px-2 py-1">
+            <div className="flex items-center gap-2">
+              <Input
+                value={draft}
+                onChange={(e) => {
+                  setDraft(e.target.value);
+                  if (error) setError(null);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !formatInvalid && !mutation.isPending) {
+                    handleSave();
+                  }
+                }}
+                placeholder="t.ex. filled.count.soap"
+                className="h-8"
+                aria-invalid={formatInvalid || !!error}
+                data-testid="input-what3words"
+              />
+              <Button
+                size="sm"
+                onClick={handleSave}
+                disabled={mutation.isPending || formatInvalid}
+                data-testid="button-save-what3words"
+              >
+                {mutation.isPending ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  "Spara"
+                )}
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => {
+                  setDraft(value ?? "");
+                  setError(null);
+                  setEditing(false);
+                }}
+                disabled={mutation.isPending}
+                data-testid="button-cancel-what3words"
+              >
+                Avbryt
+              </Button>
+            </div>
+            {(formatInvalid || error) && (
+              <p
+                className="mt-1 text-xs text-destructive"
+                data-testid="error-what3words"
+              >
+                {error ?? WHAT3WORDS_FORMAT_ERROR}
+              </p>
+            )}
           </div>
         ) : (
           <div className="flex items-center justify-between gap-2 px-2 py-1">

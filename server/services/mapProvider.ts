@@ -52,6 +52,10 @@ import {
   type ShadowOperation,
 } from "./shadowComparison";
 import { GoogleMapProvider, isGoogleMapProviderAvailable } from "./googleMapProvider";
+import {
+  convertWhat3wordsToCoordinates,
+  isWhat3wordsResolutionAvailable,
+} from "./what3words";
 
 // =============================================================================
 // Public types — provider-agnostiska. Får INTE läcka Geoapify/Google-specifika
@@ -213,6 +217,16 @@ export interface MapProvider {
 
   // ---- Map tiles ----
   getTileConfig(): MapTileConfig;
+
+  // ---- What3words (Task #1118) ----
+  /** True om What3words-resolvering är konfigurerad (API-nyckel finns). */
+  isWhat3wordsAvailable(): boolean;
+  /**
+   * Resolvar en three-word-adress till lat/lng. Returnerar `null` om nyckel
+   * saknas, adressen inte hittas eller anropet failar. W3W är provider-oberoende
+   * men exponeras här så att rutt/navigation har en enda ingång.
+   */
+  convertWhat3words(words: string): Promise<{ lat: number; lng: number } | null>;
 }
 
 // =============================================================================
@@ -420,6 +434,15 @@ class GeoapifyMapProvider implements MapProvider {
 
   getTileConfig(): MapTileConfig {
     return getMapTileConfig();
+  }
+
+  isWhat3wordsAvailable(): boolean {
+    return isWhat3wordsResolutionAvailable();
+  }
+
+  async convertWhat3words(words: string): Promise<{ lat: number; lng: number } | null> {
+    const result = await convertWhat3wordsToCoordinates(words);
+    return result ? { lat: result.lat, lng: result.lng } : null;
   }
 }
 
