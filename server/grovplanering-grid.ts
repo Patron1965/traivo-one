@@ -50,6 +50,7 @@ export interface GridFilters {
   taskTypes?: string[]; // normaliserade nycklar (se TASK_TYPE_KEYS)
   statuses?: RoughStatus[];
   teamIds?: string[]; // "Fler filter" — filtrera på tilldelat team
+  executionCodes?: string[]; // Task #1110 — filtrera på utförandekod (work_orders.execution_code)
 }
 
 export interface GridKpis {
@@ -70,6 +71,7 @@ export interface GridTaskRow {
   title: string | null;
   taskType: string; // normaliserad nyckel
   taskTypeLabel: string;
+  executionCode: string | null; // Task #1110 — utförandekod (registernyckel/fritext)
   desiredDeliveryStart: string | null;
   desiredDeliveryEnd: string | null;
   productionMinutes: number;
@@ -201,6 +203,9 @@ function buildConditions(tenantId: string, filters: GridFilters): SQL[] {
   if (filters.teamIds && filters.teamIds.length > 0) {
     conditions.push(inArray(workOrders.teamId, filters.teamIds));
   }
+  if (filters.executionCodes && filters.executionCodes.length > 0) {
+    conditions.push(inArray(workOrders.executionCode, filters.executionCodes));
+  }
   if (filters.postalCode) {
     const norm = filters.postalCode.replace(/\s/g, "");
     conditions.push(
@@ -239,6 +244,7 @@ interface RawRow {
   objectName: string | null;
   title: string | null;
   orderType: string | null;
+  executionCode: string | null;
   desiredDeliveryStart: Date | null;
   desiredDeliveryEnd: Date | null;
   productionMinutes: number | null;
@@ -345,6 +351,7 @@ async function buildOrderedGroups(
       objectName: objects.name,
       title: workOrders.title,
       orderType: workOrders.orderType,
+      executionCode: workOrders.executionCode,
       desiredDeliveryStart: workOrders.desiredDeliveryStart,
       desiredDeliveryEnd: workOrders.desiredDeliveryEnd,
       productionMinutes: workOrders.cachedProductionMinutes,
@@ -388,6 +395,7 @@ async function buildOrderedGroups(
       title: r.title,
       taskType,
       taskTypeLabel: TASK_TYPE_LABELS[taskType] ?? "Övrigt",
+      executionCode: r.executionCode ?? null,
       desiredDeliveryStart: toIso(r.desiredDeliveryStart),
       desiredDeliveryEnd: toIso(r.desiredDeliveryEnd),
       productionMinutes: r.productionMinutes ?? 0,
@@ -698,6 +706,7 @@ export type GrovExportColumnKey =
   | "object"
   | "task"
   | "taskType"
+  | "executionCode"
   | "desiredDelivery"
   | "productionMinutes"
   | "productionHours"
@@ -727,6 +736,7 @@ const GROV_EXPORT_COLUMN_DEFS: GrovExportColumnDef[] = [
   { key: "object", label: "Objekt", width: 28, value: (_l, r) => safeCell(r.objectName ?? "") },
   { key: "task", label: "Uppgift", width: 28, value: (_l, r) => safeCell(r.title ?? "") },
   { key: "taskType", label: "Uppgiftstyp", width: 16, value: (_l, r) => safeCell(r.taskTypeLabel) },
+  { key: "executionCode", label: "Utförandekod", width: 18, value: (_l, r) => safeCell(r.executionCode ?? "") },
   {
     key: "desiredDelivery",
     label: "Önskad leverans",

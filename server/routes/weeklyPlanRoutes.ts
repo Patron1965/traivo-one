@@ -218,6 +218,7 @@ export function registerWeeklyPlanRoutes(app: Express) {
     }
     const districtIds = csv(query.districtIds);
     const teamIds = csv(query.teamIds);
+    const executionCodes = csv(query.executionCodes);
     const taskTypes = csv(query.taskTypes).filter((t) =>
       (TASK_TYPE_KEYS as readonly string[]).includes(t),
     );
@@ -228,6 +229,7 @@ export function registerWeeklyPlanRoutes(app: Express) {
     const filters: GridFilters = {
       districtIds: districtIds.length ? districtIds : undefined,
       teamIds: teamIds.length ? teamIds : undefined,
+      executionCodes: executionCodes.length ? executionCodes : undefined,
       postalCode: parsed.data.postalCode || undefined,
       city: parsed.data.city || undefined,
       from: parsed.data.from,

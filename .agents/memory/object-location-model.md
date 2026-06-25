@@ -31,3 +31,13 @@ position" men motorn hoppade över objektet.
 sätter `locationType='pinpoint'` + koordinater (tenant-scoped UPDATE WHERE id+tenantId,
 härled tenant från tilldelad WO — `/api/mobile/*` saknar tenant-middleware). Geokodning
 markerar `area` när den geokodar från stad-only och typen är osatt.
+
+**What3words = SEKUNDÄRT platsfält, INTE i platsmodellen (Task #1110):** What3words
+är användbar (icke-system) metadata i `metadata_katalog` (namn "What3words", geografi/
+string, `isSystem:false`), **aldrig en hård kolumn** och påverkar **aldrig ruttbarhet**.
+Det läses arvs-medvetet i `object-system-metadata.ts` (SystemPositionGroup.what3words via
+`getMetadataValue`) och sätts via `POST /api/objects/:id/what3words` (upsert: säkrar
+katalogposten idempotent, update/create/delete lokal `metadata_varden`-rad, tomt = rensa).
+Backfill: `seed.backfillWhat3wordsField` (insert-only). UI: editerbar sektion i
+`ObjectSystemGeneratedPanel` (annars read-only panel). Lägg aldrig till nya plats-
+"sekundärfält" som hårda kolumner — använd katalog-metadata på samma sätt.

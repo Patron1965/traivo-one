@@ -3286,6 +3286,12 @@ export const assignments = pgTable("assignments", {
   // "pickup" = hämta på lagerplats, "deliver" = leverera på objekt. Vid orderkoncept-expansion
   // delas en varuartikel med lagerplats i en hämt- + en leverans-uppgift (hämta före leverera).
   logisticsRole: text("logistics_role"),
+  // Task #1110 (Informationspaket): Utförandekoden (vem/utförandekategori) stämplas
+  // på uppgiften vid orderkoncept-expansion, kopierad från artikelns executionCode.
+  // Den är grunden för grovplaneringen (sortera/filtrera jobb per utförandekod över en
+  // tidsperiod). Nullable (expand-contract): legacy-rader saknar värdet och faller då
+  // tillbaka på derive-at-read via assignment_articles → articles.executionCode.
+  executionCode: text("execution_code"),
   // Task #989: Länk från leverans-uppgiften till dess hämt-uppgift (hämta måste ske före
   // leverera). Mjuk länk: om hämt-uppgiften raderas blir fältet null (set null), inte cascade.
   parentAssignmentId: varchar("parent_assignment_id").references((): any => assignments.id, { onDelete: "set null" }),

@@ -32,6 +32,7 @@ import {
   deriveConceptTargets,
   evaluateConditionsForObject,
 } from "./order-concept-targeting";
+import { getMetadataValue } from "../metadata-queries";
 
 export type SystemAddressGroup = {
   gatuadress: string | null;
@@ -46,7 +47,14 @@ export type SystemPositionGroup = {
   entranceLongitude: number | null;
   locationType: string | null;
   geocoded: boolean;
+  // Task #1110: What3words är ett SEKUNDÄRT platsfält som backas av användbar
+  // (icke-system) metadata — inte en hårdkodad objekt-kolumn. Läses arvs-medvetet
+  // via metadata-katalogen (namn "What3words").
+  what3words: string | null;
 };
+
+// Task #1110: katalognamnet för det återinförda What3words-platsfältet.
+export const WHAT3WORDS_METADATA_NAME = "What3words";
 
 export type PointedInConcept = {
   id: string;
@@ -321,6 +329,18 @@ export async function getObjectSystemGeneratedMetadata(
     ort: object?.city ?? null,
   };
 
+  // Task #1110: What3words läses arvs-medvetet ur metadata-katalogen (icke-system,
+  // manuellt skrivbart). Saknas fältet/raden returneras null.
+  const what3wordsRaw = await getMetadataValue(
+    objectId,
+    WHAT3WORDS_METADATA_NAME,
+    tenantId,
+  );
+  const what3words =
+    typeof what3wordsRaw === "string" && what3wordsRaw.trim()
+      ? what3wordsRaw.trim()
+      : null;
+
   const position: SystemPositionGroup = {
     latitude: object?.latitude ?? null,
     longitude: object?.longitude ?? null,
@@ -328,6 +348,7 @@ export async function getObjectSystemGeneratedMetadata(
     entranceLongitude: object?.entranceLongitude ?? null,
     locationType: object?.locationType ?? null,
     geocoded: !!(object?.latitude && object?.longitude),
+    what3words,
   };
 
   const [pointedInConcepts, tasksHistory, tasksFuture, imagesRaw, issuesRaw, ratings] =

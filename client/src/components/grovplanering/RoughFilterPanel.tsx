@@ -25,6 +25,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useExecutionCodes } from "@/hooks/use-execution-codes";
 import {
   ROUGH_STATUS_ORDER,
   ROUGH_STATUS_META,
@@ -45,6 +46,7 @@ export interface FilterState {
   rangeTo: string;
   taskTypes: string[];
   statuses: RoughStatus[];
+  executionCodes: string[];
 }
 
 export function createDefaultFilter(): FilterState {
@@ -60,6 +62,7 @@ export function createDefaultFilter(): FilterState {
     rangeTo: "",
     taskTypes: [],
     statuses: [],
+    executionCodes: [],
   };
 }
 
@@ -99,6 +102,10 @@ export function RoughFilterPanel({
   const patch = (p: Partial<FilterState>) => onChange({ ...value, ...p });
   const anchorDate = new Date(value.anchor);
   const [showMore, setShowMore] = useState(false);
+
+  // Task #1110: utförandekoder från registret (+ legacy-värden som redan är valda).
+  const { options: executionCodeOptions, labelFor: executionCodeLabel } =
+    useExecutionCodes(value.executionCodes);
 
   // Uppgiftstyper kommer enbart från det per-tenant registret
   // (/api/reference/task-types). Backend returnerar tenantens egna typer, eller — för
@@ -400,6 +407,60 @@ export function RoughFilterPanel({
                       }
                       className="rounded-sm hover-elevate"
                       aria-label={`Ta bort ${t.name}`}
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </Badge>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="space-y-2">
+            <Label className="text-xs">Utförandekod</Label>
+            <Select
+              value=""
+              onValueChange={(code) =>
+                patch({ executionCodes: [...value.executionCodes, code] })
+              }
+              disabled={executionCodeOptions.every((o) =>
+                value.executionCodes.includes(o.value),
+              )}
+            >
+              <SelectTrigger data-testid="select-execution-code-filter">
+                <SelectValue placeholder="Lägg till utförandekod" />
+              </SelectTrigger>
+              <SelectContent>
+                {executionCodeOptions
+                  .filter((o) => !value.executionCodes.includes(o.value))
+                  .map((o) => (
+                    <SelectItem key={o.value} value={o.value}>
+                      {o.label}
+                    </SelectItem>
+                  ))}
+              </SelectContent>
+            </Select>
+            {value.executionCodes.length > 0 && (
+              <div className="flex flex-wrap gap-1.5 pt-1">
+                {value.executionCodes.map((code) => (
+                  <Badge
+                    key={code}
+                    variant="secondary"
+                    className="gap-1"
+                    data-testid={`tag-execution-code-${code}`}
+                  >
+                    {executionCodeLabel(code)}
+                    <button
+                      type="button"
+                      onClick={() =>
+                        patch({
+                          executionCodes: value.executionCodes.filter(
+                            (x) => x !== code,
+                          ),
+                        })
+                      }
+                      className="rounded-sm hover-elevate"
+                      aria-label={`Ta bort ${executionCodeLabel(code)}`}
                     >
                       <X className="h-3 w-3" />
                     </button>

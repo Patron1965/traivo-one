@@ -25,7 +25,12 @@ import {
   mergeDuplicateObjects,
   DuplicateMergeOwnershipError,
 } from "../services/object-duplicates";
-import { getObjectSystemGeneratedMetadata } from "../services/object-system-metadata";
+import {
+  getObjectSystemGeneratedMetadata,
+  WHAT3WORDS_METADATA_NAME,
+} from "../services/object-system-metadata";
+import { createMetadata, updateMetadata, deleteMetadata } from "../metadata-queries";
+import { metadataKatalog, metadataVarden } from "@shared/schema";
 
 type ServiceObject = Awaited<ReturnType<typeof storage.getObjects>>[number];
 
@@ -484,6 +489,82 @@ app.get("/api/objects/:id/system-generated-metadata", asyncHandler(async (req, r
   if (!verifyTenantOwnership(existing, tenantId)) {
     throw new NotFoundError("Objekt");
   }
+  const data = await getObjectSystemGeneratedMetadata(tenantId, req.params.id);
+  res.json(data);
+}));
+
+// Task #1110: sätt/uppdatera/rensa objektets What3words-platsfält. What3words är
+// ett SEKUNDÄRT platsfält som backas av användbar (icke-system) metadata — inte
+// en hårdkodad kolumn. Tomt värde rensar fältet. Returnerar uppdaterad
+// systemgenererad metadata så att klienten kan rendera om platssektionen.
+app.post("/api/objects/:id/what3words", asyncHandler(async (req, res) => {
+  const tenantId = getTenantIdWithFallback(req);
+  const existing = await storage.getObject(req.params.id);
+  if (!verifyTenantOwnership(existing, tenantId)) {
+    throw new NotFoundError("Objekt");
+  }
+
+  const parsed = z
+    .object({ what3words: z.string().trim().max(200).nullable().optional() })
+    .parse(req.body);
+  const value = (parsed.what3words ?? "").trim();
+
+  // Säkerställ katalogposten (idempotent) — en nyligen skapad tenant kanske inte
+  // har körts genom backfillWhat3wordsField än.
+  let [katalog] = await db
+    .select({ id: metadataKatalog.id })
+    .from(metadataKatalog)
+    .where(and(
+      eq(metadataKatalog.tenantId, tenantId),
+      sql`lower(${metadataKatalog.namn}) = 'what3words'`,
+    ))
+    .limit(1);
+  if (!katalog) {
+    [katalog] = await db
+      .insert(metadataKatalog)
+      .values({
+        tenantId,
+        namn: WHAT3WORDS_METADATA_NAME,
+        datatyp: "string",
+        standardArvs: false,
+        kategori: "geografi",
+        beskrivning: "What3words-adress (tre ord) som kompletterande, exakt platsreferens till objektet",
+        icon: "MapPin",
+        area: "geografi",
+        isSystem: false,
+      })
+      .returning({ id: metadataKatalog.id });
+  }
+
+  // Hitta ev. befintligt LOKALT värde på detta objekt (ej ärvt).
+  const [localRow] = await db
+    .select({ id: metadataVarden.id })
+    .from(metadataVarden)
+    .where(and(
+      eq(metadataVarden.objektId, req.params.id),
+      eq(metadataVarden.metadataKatalogId, katalog.id),
+      eq(metadataVarden.tenantId, tenantId),
+    ))
+    .limit(1);
+
+  const actor = (req as any).user?.claims?.sub ?? "system";
+  if (value) {
+    if (localRow) {
+      await updateMetadata(localRow.id, value, tenantId, actor, "manuell");
+    } else {
+      await createMetadata({
+        tenantId,
+        objektId: req.params.id,
+        metadataTypNamn: WHAT3WORDS_METADATA_NAME,
+        varde: value,
+        skapadAv: actor,
+        metod: "manuell",
+      });
+    }
+  } else if (localRow) {
+    await deleteMetadata(localRow.id, tenantId, actor, "manuell-radering");
+  }
+
   const data = await getObjectSystemGeneratedMetadata(tenantId, req.params.id);
   res.json(data);
 }));

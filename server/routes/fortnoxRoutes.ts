@@ -108,6 +108,8 @@ async function createStockPickupAssignment(opts: {
     cachedValue: 0,
     cachedCost: 0,
     logisticsRole: "pickup",
+    // Task #1110: stämpla artikelns utförandekod på hämt-uppgiften (informationspaket).
+    executionCode: linkedArticle?.executionCode ?? undefined,
   });
 }
 
@@ -277,6 +279,8 @@ export async function generateScheduleAssignments(opts: {
         cachedCost: totalCost,
         logisticsRole: splitForStock ? "deliver" : undefined,
         parentAssignmentId: pickupAssignmentId,
+        // Task #1110: stämpla artikelns utförandekod på uppgiften (informationspaket).
+        executionCode: linkedArticle?.executionCode ?? undefined,
         // Task #997: fryst viktat tidsregel-paket (null om objektet saknar regler).
         frozenTimeRules: frozenTimeRulesByObject.get(obj.id) ?? null,
       });
@@ -2683,6 +2687,8 @@ app.post("/api/order-concepts/:id/execute", asyncHandler(async (req, res) => {
         cachedCost: totalCost,
         logisticsRole: splitForStock ? "deliver" : undefined,
         parentAssignmentId: pickupAssignmentId,
+        // Task #1110: stämpla artikelns utförandekod på uppgiften (informationspaket).
+        executionCode: linkedArticle?.executionCode ?? undefined,
         // Task #997: fryst viktat tidsregel-paket (null om objektet saknar regler).
         frozenTimeRules: frozenTimeRulesByObject.get(obj.id) ?? null,
       });
@@ -2744,6 +2750,9 @@ app.post("/api/order-concepts/:id/execute", asyncHandler(async (req, res) => {
           estimatedDuration: minutes * qty,
           creationMethod: "concept_execute",
           createdBy: userId ?? null,
+          // Task #1110: stämpla artikelns utförandekod även på admin/logistik-WO så
+          // grovplaneringen kan sortera/filtrera även dessa på utförandekod.
+          executionCode: article.executionCode ?? null,
         } as InsertWorkOrder);
         createdAdminWorkOrders.push({ id: wo.id, taskCategory: wo.taskCategory, articleId: ca.articleId });
       }
@@ -2813,6 +2822,8 @@ app.post("/api/order-concepts/:id/execute", asyncHandler(async (req, res) => {
             // (dependencyAcknowledgedAt) före huvuduppgiften, annars varnar systemet.
             requiresAcknowledgment: article.requiresAcknowledgment ?? false,
             dependencyCriticality: article.dependencyCriticality ?? "critical",
+            // Task #1110: stämpla artikelns utförandekod även på föruppgiften.
+            executionCode: article.executionCode ?? undefined,
           });
           await storage.createAssignmentArticle({
             assignmentId: preAssignment.id,

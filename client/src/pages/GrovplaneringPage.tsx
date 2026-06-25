@@ -91,6 +91,7 @@ interface AppliedFilter {
   to?: string;
   taskTypes: string[];
   statuses: RoughStatus[];
+  executionCodes: string[];
 }
 
 const EMPTY_APPLIED: AppliedFilter = {
@@ -100,6 +101,7 @@ const EMPTY_APPLIED: AppliedFilter = {
   city: "",
   taskTypes: [],
   statuses: [],
+  executionCodes: [],
 };
 
 const EMPTY_KPIS: GridKpis = {
@@ -167,6 +169,8 @@ function buildFilterParams(applied: AppliedFilter, groupBy: GroupBy): URLSearchP
   if (applied.to) p.set("to", applied.to);
   if (applied.taskTypes.length) p.set("taskTypes", applied.taskTypes.join(","));
   if (applied.statuses.length) p.set("statuses", applied.statuses.join(","));
+  if (applied.executionCodes.length)
+    p.set("executionCodes", applied.executionCodes.join(","));
   return p;
 }
 
@@ -217,6 +221,7 @@ function deriveApplied(draft: FilterState): AppliedFilter {
     to,
     taskTypes: draft.taskTypes,
     statuses: draft.statuses,
+    executionCodes: draft.executionCodes,
   };
 }
 

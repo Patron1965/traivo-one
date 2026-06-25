@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import {
   ChevronDown,
   ClipboardList,
@@ -8,6 +8,7 @@ import {
   Loader2,
   Cog,
   MapPin,
+  MapPinned,
   Navigation,
   Target,
   CalendarClock,
@@ -15,7 +16,11 @@ import {
 } from "lucide-react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 
 // Task #1085: Systemgenererad metadata-vy. Ersätter de gamla
 // "Ordrar/Rating/Felanmälningar"-sektionerna och samlar de systemgenererade
@@ -35,6 +40,7 @@ interface SystemPositionGroup {
   entranceLongitude: number | null;
   locationType: string | null;
   geocoded: boolean;
+  what3words: string | null;
 }
 interface PointedInConcept {
   id: string;
@@ -181,6 +187,115 @@ function Field({ label, value, testId }: { label: string; value: React.ReactNode
   );
 }
 
+// Task #1110: What3words är ett SEKUNDÄRT, manuellt redigerbart platsfält
+// (icke-system metadata). Egen sektion med inline-editering.
+function What3wordsSection({
+  objectId,
+  value,
+}: {
+  objectId: string;
+  value: string | null;
+}) {
+  const { toast } = useToast();
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(value ?? "");
+
+  const mutation = useMutation({
+    mutationFn: async (next: string) => {
+      const res = await apiRequest("POST", `/api/objects/${objectId}/what3words`, {
+        what3words: next,
+      });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: ["/api/objects", objectId, "system-generated-metadata"],
+      });
+      setEditing(false);
+      toast({ title: "What3words sparad" });
+    },
+    onError: (err: Error) => {
+      toast({
+        title: "Kunde inte spara What3words",
+        description: err.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  return (
+    <Collapsible defaultOpen={false}>
+      <CollapsibleTrigger
+        className="flex w-full items-center justify-between gap-2 rounded-md border px-3 py-2 text-sm hover:bg-accent"
+        data-testid="trigger-system-what3words"
+      >
+        <span className="flex items-center gap-2 font-medium min-w-0">
+          <MapPinned className="h-4 w-4" />
+          <span className="truncate">What3words</span>
+        </span>
+        <ChevronDown className="h-4 w-4" />
+      </CollapsibleTrigger>
+      <CollapsibleContent className="px-1 py-2">
+        {editing ? (
+          <div className="flex items-center gap-2 px-2 py-1">
+            <Input
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              placeholder="t.ex. filled.count.soap"
+              className="h-8"
+              data-testid="input-what3words"
+            />
+            <Button
+              size="sm"
+              onClick={() => mutation.mutate(draft.trim())}
+              disabled={mutation.isPending}
+              data-testid="button-save-what3words"
+            >
+              {mutation.isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                "Spara"
+              )}
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => {
+                setDraft(value ?? "");
+                setEditing(false);
+              }}
+              disabled={mutation.isPending}
+              data-testid="button-cancel-what3words"
+            >
+              Avbryt
+            </Button>
+          </div>
+        ) : (
+          <div className="flex items-center justify-between gap-2 px-2 py-1">
+            <span
+              className="text-sm font-medium break-words"
+              data-testid="text-what3words"
+            >
+              {value ?? "—"}
+            </span>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                setDraft(value ?? "");
+                setEditing(true);
+              }}
+              data-testid="button-edit-what3words"
+            >
+              {value ? "Ändra" : "Lägg till"}
+            </Button>
+          </div>
+        )}
+      </CollapsibleContent>
+    </Collapsible>
+  );
+}
+
 interface Props {
   objectId: string;
 }
@@ -259,6 +374,8 @@ export function ObjectSystemGeneratedPanel({ objectId }: Props) {
           </div>
         )}
       </Section>
+
+      <What3wordsSection objectId={objectId} value={position.what3words} />
 
       <Section
         title="Inpekade orderkoncept"

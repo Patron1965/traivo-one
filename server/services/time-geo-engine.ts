@@ -656,7 +656,9 @@ export async function runTimeGeoEngine(
     return emptyResult(tenantId, periodStart, periodEnd, groupingRadiusMeters, dailyCapacityMinutes, streetSideGrouping, workPacePercent);
   }
 
-  // (2) Härled utförandekod per assignment via assignment_articles → articles.
+  // (2) Utförandekod per assignment. Task #1110: den stämplas numera på själva
+  // uppgiften vid orderkoncept-expansion (a.executionCode). Legacy-rader saknar
+  // värdet → fall tillbaka på derive-at-read via assignment_articles → articles.
   const assignmentIds = candidatesPool.map((a) => a.id);
   const execCodeByAssignment = await deriveExecutionCodes(tenantId, assignmentIds);
 
@@ -686,7 +688,7 @@ export async function runTimeGeoEngine(
     prepared.push({
       id: a.id,
       objectId: a.objectId,
-      executionCode: execCodeByAssignment.get(a.id) ?? "ingen",
+      executionCode: a.executionCode ?? execCodeByAssignment.get(a.id) ?? "ingen",
       address: a.address ?? null,
       latitude: a.latitude ?? null,
       longitude: a.longitude ?? null,

@@ -54,6 +54,9 @@ export async function seedDatabase() {
   // Task #1054: systemfältet "Kundnummer" till alla tenants (insert-only).
   await backfillKundnummerSystemField();
 
+  // Task #1110: "What3words" platsfält till alla tenants (insert-only, icke-system).
+  await backfillWhat3wordsField();
+
   // Skip seed entirely if any tenant already exists (production / customer setup).
   // Demo seed only runs against a completely empty tenants table.
   const defaultRows = await db
@@ -1098,6 +1101,43 @@ async function backfillKundnummerSystemField() {
     created++;
   }
   if (created > 0) console.log(`Backfilled "Kundnummer" system field to ${created} tenant(s)`);
+}
+
+/**
+ * Task #1110: återinför "What3words" som ett SEKUNDÄRT platsfält — men som
+ * användbar (icke-system) metadata, INTE en hårdkodad objekt-kolumn (den gamla
+ * kolumnen droppades i migrations/0038). Seedas insert-only över alla tenants så
+ * att fältet alltid finns att fylla i och visas i objektets platssektion. Till
+ * skillnad från Kundnummer är detta `isSystem: false` (manuellt skrivbart) — det
+ * är en kompletterande adressreferens som fältarbetaren/planeraren anger.
+ * Matchar på namn (case-insensitivt) så att befintliga rader aldrig dubbleras.
+ */
+async function backfillWhat3wordsField() {
+  const allTenants = await db.select({ id: tenants.id }).from(tenants);
+  let created = 0;
+  for (const t of allTenants) {
+    const existing = await db.select({ id: metadataKatalog.id })
+      .from(metadataKatalog)
+      .where(and(
+        eq(metadataKatalog.tenantId, t.id),
+        sql`lower(${metadataKatalog.namn}) = 'what3words'`,
+      ))
+      .limit(1);
+    if (existing.length > 0) continue;
+    await db.insert(metadataKatalog).values({
+      tenantId: t.id,
+      namn: "What3words",
+      datatyp: "string",
+      standardArvs: false,
+      kategori: "geografi",
+      beskrivning: "What3words-adress (tre ord) som kompletterande, exakt platsreferens till objektet",
+      icon: "MapPin",
+      area: "geografi",
+      isSystem: false,
+    });
+    created++;
+  }
+  if (created > 0) console.log(`Backfilled "What3words" field to ${created} tenant(s)`);
 }
 
 /**

@@ -41,6 +41,7 @@ export interface GridTaskRow {
   title: string | null;
   taskType: string;
   taskTypeLabel: string;
+  executionCode: string | null;
   desiredDeliveryStart: string | null;
   desiredDeliveryEnd: string | null;
   productionMinutes: number;
