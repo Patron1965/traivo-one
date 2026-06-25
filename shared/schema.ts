@@ -498,6 +498,23 @@ export const workOrders = pgTable("work_orders", {
   billingBreakObjectId: varchar("billing_break_object_id"),
   billingGroupingFieldName: text("billing_grouping_field_name"),
   billingGroupingValue: text("billing_grouping_value"),
+  // === Frysta fakturareferenser (huvud) ===
+  // Fryses vid markWorkOrderReadyForInvoice tillsammans med billing-segmentet.
+  // Vår referens (OurReference), Vår beteckning/Ordernr (Remarks, härledd konceptnr),
+  // Er referens (YourReference), Er beteckning/Ert ordernr (YourOrderNumber).
+  // NULL = ingen koncept-referens (back-compat → dagens objekt-härledda YourReference).
+  // FROM_METADATA-värdena (frozenCustomerReference/InvoiceReference) ingår i
+  // billingSegmentKey så att olika värden hamnar på olika konsoliderade fakturor.
+  frozenOurReference: text("frozen_our_reference"),
+  frozenOurDesignation: text("frozen_our_designation"),
+  frozenCustomerReference: text("frozen_customer_reference"),
+  frozenCustomerInvoiceReference: text("frozen_customer_invoice_reference"),
+  // Frysta radreferenser (Fortnox-native rader): { rows: [{label, value}],
+  // includeExecutorFreetext }. Resolvas vid skapande (call_off/schedule publish)
+  // från konceptets invoiceRowReferenceFields + objektets metadata och fryses här
+  // så Fortnox-exporten läser frysta värden (aldrig omläsning, ingen WO→koncept-länk).
+  // NULL = konceptet saknade radkonfig → fallback till 200-tecken-berikad beskrivning.
+  frozenInvoiceRowReferences: jsonb("frozen_invoice_row_references"),
   // === Task #785: Veckoplanering – datafundament (expand-contract, alla nullable) ===
   // Planeringsinput för grov-/veckoplanering. Rapportens generiska `tasks`-fält
   // införs här eftersom Traivos arbetsenhet är work_orders (ingen tasks-tabell).
@@ -3099,8 +3116,28 @@ export const orderConcepts = pgTable("order_concepts", {
   // (ett fast totalbelopp för hela orderkonceptet, fördelat jämnt). Nullable/default
   // för expand-contract: äldre koncept utan kolumn tolkas som 'per_object'.
   fixedPriceBasis: text("fixed_price_basis").default("per_object"), // 'per_concept' | 'per_task' | 'per_object'
-  customerReference: text("customer_reference"), // "Er referens"
-  customerLabel: text("customer_label"), // "Er beteckning"
+  customerReference: text("customer_reference"), // "Er referens" (hårdkodat värde när customerReferenceMode=HARDCODED)
+  customerLabel: text("customer_label"), // "Er beteckning"/"Ert ordernr" (hårdkodat värde när customerLabelMode=HARDCODED)
+  // === Fakturareferenser — huvud vs radnivå ===
+  // Huvudreferenser styr fakturagränsen (invoice boundary) och fryses per WO vid
+  // markWorkOrderReadyForInvoice. "Vår referens" (Fortnox OurReference) — konceptnivå,
+  // alltid hårdkodat värde (ingen metadata-variant). "Vår beteckning"/"Ordernr"
+  // (Fortnox Remarks) härleds från konceptets nummer/id och har därför ingen egen kolumn.
+  ourReference: text("our_reference"),
+  // Läge för "Er referens"/"Er beteckning": HARDCODED (använd customerReference/
+  // customerLabel-värdet, konstant för hela konceptet) eller FROM_METADATA (läs
+  // metadata_katalog.namn per objekt, ärvningsmedvetet). Default HARDCODED = dagens
+  // beteende. FROM_METADATA-värden ingår i billing-segmentnyckeln (olika värden ⇒
+  // olika fakturor). Nullable/default för expand-contract.
+  customerReferenceMode: text("customer_reference_mode").default("HARDCODED").notNull(),
+  customerReferenceMetadataField: text("customer_reference_metadata_field"),
+  customerLabelMode: text("customer_label_mode").default("HARDCODED").notNull(),
+  customerLabelMetadataField: text("customer_label_metadata_field"),
+  // Radnivå: ordnad lista av metadata_katalog.namn vars värden renderas som
+  // Fortnox-native info-rader (~50 tecken) per orderrad. NULL/tom = inga info-rader.
+  invoiceRowReferenceFields: text("invoice_row_reference_fields").array(),
+  // Inkludera utförarens fritext (per WO) som egen fakturarad. Default true.
+  includeExecutorFreetext: boolean("include_executor_freetext").default(true),
   // Steg 3 — faktureringsmodell + abonnemangsregler + sampackning
   invoiceMethod: text("invoice_method"), // 'afterwards' | 'scheduled' | 'subscription'
   subscriptionAdjustmentDate: timestamp("subscription_adjustment_date"), // valfritt årligt justeringsdatum (tomt = löpande)
@@ -4233,6 +4270,14 @@ export const customerInvoices = pgTable("customer_invoices", {
   billingBreakObjectId: varchar("billing_break_object_id"),
   billingGroupingFieldName: text("billing_grouping_field_name"),
   billingGroupingValue: text("billing_grouping_value"),
+  // === Frysta fakturareferenser (audit/visning) ===
+  // Speglar den vinnande WO-batchens huvudreferenser. Alla WO i en konsoliderad
+  // faktura delar samma referenser eftersom FROM_METADATA-referenser ingår i
+  // billingSegmentKey (HARDCODED är konstant per koncept). NULL = back-compat.
+  ourReference: text("our_reference"),
+  ourDesignation: text("our_designation"),
+  customerReference: text("customer_reference"),
+  customerInvoiceReference: text("customer_invoice_reference"),
 }, (table) => [
   index("idx_customer_invoices_tenant_state").on(table.tenantId, table.state),
   index("idx_customer_invoices_recipient").on(table.invoiceRecipientId),

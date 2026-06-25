@@ -66,6 +66,45 @@ export function buildSegmentKey(breakObjectId: string | null, groupingValue: str
   return `b:${breakObjectId ?? "-"}|g:${groupingValue == null || groupingValue === "" ? "-" : groupingValue}`;
 }
 
+// Fakturareferenser — huvud vs radnivå: komponera in de FRYSTA huvudreferenserna
+// i segment-nyckeln. Huvudreferenser mappar till Fortnox-huvudfält (OurReference,
+// Remarks, YourReference, YourOrderNumber) och EN faktura kan inte bära
+// motstridiga huvudvärden — alltså måste WO med olika referenser hamna på olika
+// konsoliderade fakturor. Vi lägger ALLTID in icke-tomma frysta referenser:
+// hårdkodade värden är konstanta inom ett koncept (splittrar aldrig internt),
+// medan olika värden (FROM_METADATA eller olika koncept) korrekt splittrar.
+//
+// Detta är den ENDA platsen referens-axeln vävs in i billingSegmentKey. Eftersom
+// konsolideringen (in-memory-gruppering, cross-run-merge, faktura-skapande) läser
+// den FRYSTA billingSegmentKey-kolumnen behöver de ingen egen referens-logik.
+// Objekt-flödets subträd-preview (computeBillingSegmentsForSubtree) är koncept-
+// oberoende och visar bara bryt-/grupperings-axeln — referens-axeln förhandsvisas
+// i koncept-vyn via den delade resolvern.
+export function composeSegmentKeyWithReferences(
+  baseKey: string | null,
+  refs: {
+    ourReference?: string | null;
+    ourDesignation?: string | null;
+    customerReference?: string | null;
+    customerInvoiceReference?: string | null;
+  },
+): string | null {
+  // Skydda nyckelstrukturen: ersätt avgränsare i värdet.
+  const enc = (s: string) => s.replace(/[|:]/g, "/").trim();
+  const parts: string[] = [];
+  const or = refs.ourReference?.trim();
+  const od = refs.ourDesignation?.trim();
+  const yr = refs.customerReference?.trim();
+  const yo = refs.customerInvoiceReference?.trim();
+  if (or) parts.push(`or:${enc(or)}`);
+  if (od) parts.push(`od:${enc(od)}`);
+  if (yr) parts.push(`yr:${enc(yr)}`);
+  if (yo) parts.push(`yo:${enc(yo)}`);
+  if (parts.length === 0) return baseKey;
+  const refKey = parts.join("|");
+  return baseKey ? `${baseKey}|${refKey}` : refKey;
+}
+
 // Läs per-tenant invoiceFlow-config ur tenants.settings.invoiceFlow.
 // Defaults: avstängd, Fakturastopp / Förvaltare. Opt-in per tenant.
 export async function getInvoiceFlowConfig(tenantId: string): Promise<InvoiceFlowConfig> {

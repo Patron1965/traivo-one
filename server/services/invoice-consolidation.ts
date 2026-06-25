@@ -28,6 +28,7 @@ import { and, eq, gte, isNull, isNotNull, lte, inArray, sql, desc } from "drizzl
 import {
   getInvoiceFlowConfig,
   computeBillingSegmentForObject,
+  composeSegmentKeyWithReferences,
   EMPTY_SEGMENT,
   type BillingSegment,
 } from "./invoice-flow-segmentation";
@@ -195,13 +196,23 @@ export async function markWorkOrderReadyForInvoice(
     console.warn(`[invoice-flow] segment-beräkning misslyckades för WO ${workOrderId}:`, err);
   }
 
+  // Fakturareferenser — huvud vs radnivå: väv in WO:ns FRYSTA huvudreferenser
+  // (satta vid skapande) i segment-nyckeln så WO med olika referenser hamnar på
+  // olika konsoliderade fakturor (en faktura kan inte bära motstridiga huvudfält).
+  const billingSegmentKey = composeSegmentKeyWithReferences(segment.segmentKey, {
+    ourReference: wo.frozenOurReference,
+    ourDesignation: wo.frozenOurDesignation,
+    customerReference: wo.frozenCustomerReference,
+    customerInvoiceReference: wo.frozenCustomerInvoiceReference,
+  });
+
   await db
     .update(workOrders)
     .set({
       invoiceQueueState: "held",
       invoiceReadyAt: now,
       invoiceHeldUntil: periodEnd,
-      billingSegmentKey: segment.segmentKey,
+      billingSegmentKey,
       billingBreakObjectId: segment.breakObjectId,
       billingGroupingFieldName: segment.groupingFieldName,
       billingGroupingValue: segment.groupingValue,
@@ -225,6 +236,12 @@ type WoForConsolidation = {
   billingBreakObjectId: string | null;
   billingGroupingFieldName: string | null;
   billingGroupingValue: string | null;
+  // Fakturareferenser — huvud vs radnivå: frysta huvudreferenser (speglas på
+  // konsoliderad faktura). Inom en grupp är de identiska (de ingår i segment-nyckeln).
+  frozenOurReference: string | null;
+  frozenOurDesignation: string | null;
+  frozenCustomerReference: string | null;
+  frozenCustomerInvoiceReference: string | null;
 };
 
 function woAmount(wo: WoForConsolidation): number {
@@ -289,6 +306,10 @@ export async function runConsolidationForTenant(
       billingBreakObjectId: workOrders.billingBreakObjectId,
       billingGroupingFieldName: workOrders.billingGroupingFieldName,
       billingGroupingValue: workOrders.billingGroupingValue,
+      frozenOurReference: workOrders.frozenOurReference,
+      frozenOurDesignation: workOrders.frozenOurDesignation,
+      frozenCustomerReference: workOrders.frozenCustomerReference,
+      frozenCustomerInvoiceReference: workOrders.frozenCustomerInvoiceReference,
     })
     .from(workOrders)
     .where(and(...conditions))) as WoForConsolidation[];
@@ -470,6 +491,12 @@ export async function runConsolidationForTenant(
             billingBreakObjectId: group.breakObjectId,
             billingGroupingFieldName: group.groupingFieldName,
             billingGroupingValue: group.groupingValue,
+            // Fakturareferenser — huvud vs radnivå: spegla frysta huvudreferenser
+            // (identiska inom gruppen, garanterat av segment-nyckeln) för audit/export.
+            ourReference: group.wos[0]?.frozenOurReference ?? null,
+            ourDesignation: group.wos[0]?.frozenOurDesignation ?? null,
+            customerReference: group.wos[0]?.frozenCustomerReference ?? null,
+            customerInvoiceReference: group.wos[0]?.frozenCustomerInvoiceReference ?? null,
             consolidationPeriodStart: periodStart,
             consolidationPeriodEnd: now,
             releasedBy: opts.force ? opts.releasedBy ?? null : null,
