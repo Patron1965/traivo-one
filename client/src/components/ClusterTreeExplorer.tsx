@@ -1,4 +1,5 @@
 import { useState, useMemo, useCallback } from "react";
+import { useLocation } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { List, type RowComponentProps } from "react-window";
 import { MapContainer, TileLayer, Marker, Popup, useMap } from "react-leaflet";
@@ -40,12 +41,10 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { QueryState } from "@/components/QueryState";
-import { ObjectDetailSheet } from "@/components/ObjectDetailSheet";
 import { useToast } from "@/hooks/use-toast";
 import { useMapConfig } from "@/hooks/use-map-config";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { getWorkOrderStatusBadge } from "@/lib/status-colors";
-import type { ServiceObject } from "@shared/schema";
 
 interface TreeNode {
   id: string;
@@ -157,14 +156,13 @@ const dotIcon = L.divIcon({
 export function ClusterTreeExplorer() {
   const { toast } = useToast();
   const mapConfig = useMapConfig();
+  const [, navigate] = useLocation();
   const [searchInput, setSearchInput] = useState("");
   const [customerFilter, setCustomerFilter] = useState<string>("all");
   const [executorFilter, setExecutorFilter] = useState<string>("all");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [subView, setSubView] = useState<"tree" | "map">("tree");
-  const [detailObject, setDetailObject] = useState<TreeNode | null>(null);
-  const [sheetOpen, setSheetOpen] = useState(false);
   const [quickOrderOpen, setQuickOrderOpen] = useState(false);
   const [orderTitle, setOrderTitle] = useState("");
   const [orderType, setOrderType] = useState("service");
@@ -324,9 +322,8 @@ export function ClusterTreeExplorer() {
   }, []);
 
   const openDetail = useCallback((node: TreeNode) => {
-    setDetailObject(node);
-    setSheetOpen(true);
-  }, []);
+    navigate(`/objects/${node.id}`);
+  }, [navigate]);
 
   const quickOrderMutation = useMutation({
     mutationFn: async (payload: { objectIds: string[]; title: string; orderType: string; priority: string }) => {
@@ -605,12 +602,6 @@ export function ClusterTreeExplorer() {
           </p>
         )}
       </QueryState>
-
-      <ObjectDetailSheet
-        object={(detailObject as unknown as ServiceObject) ?? null}
-        open={sheetOpen}
-        onOpenChange={setSheetOpen}
-      />
 
       <Dialog open={quickOrderOpen} onOpenChange={setQuickOrderOpen}>
         <DialogContent>

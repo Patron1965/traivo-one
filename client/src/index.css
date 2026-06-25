@@ -14,7 +14,7 @@
 }
 
 /* Isolera Leafletkartans interna z-index (paneler/kontroller upp till 1000) i en
- * egen stacking-context så att de inte målar ovanpå overlays (t.ex. ObjectDetailSheet
+ * egen stacking-context så att de inte målar ovanpå overlays (t.ex. dialoger/sheets
  * som ligger på z-50). Annars hamnar objektinfo "under" kartan. */
 .leaflet-container {
   isolation: isolate;
