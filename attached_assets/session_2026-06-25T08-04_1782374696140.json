@@ -1,0 +1,248 @@
+{
+  "sessionId": "16551c6843",
+  "exportedAt": "2026-06-25T08:04:16.067Z",
+  "summary": "### Key Topics Discussed\n- Rättningar för artikelupplägg\n- Ikonregister (generellt för hela systemet)\n- Pris och ekonomi (fält för olika kostnadstyper)\n- Utförarkostnader och klassificering\n- Planering och utförarkategorier\n- Artikeltyper (tjänst, vara, kontroll)\n- Utförandekoder och utföranderegister\n- Logiken för utförandekoder och deras koppling till artiklar\n- Detaljerat innehåll för en uppgifts informationspaket\n- Hantering av tidsvillkor (leveranstider, veckodagar, klockslag)\n- Geografisk platsbestämning i uppgifter\n- Fakturainformation och fakturareferenser\n- Delfakturering och samlingsfakturering\n- Hantering av metadata för uppgifter och orderkoncept vid fakturering\n- Logik för placering av fakturareferenser på fakturahuvud vs. radnivå\n- Kostnadsställe och projektkoppling vid artikelkvittens\n- Team- och utrustningshantering för att koppla resurser till utförda artiklar\n- Kostnadsuppföljning och lönsamhetsanalys\n\n### Important Points & Insights\n- Ikonregister: Ikonerna är inte konsekventa på alla ställen. Det finns ett behov av att kunna lägga till egna ikoner (t.ex. för fraktion), men detta har inte hög prioritet. Justeringar av ikoner är enkla men prioriteten är låg.\n- Pris och ekonomi: Listpriset är det försäljningspris som gäller under normala förhållanden. Det finns en annan prislista med högre prioritet som kan ersätta listpriset. För kostnader bör det finnas fält för inköpspris (för varor) eller standardkostnad (för producerade produkter), samt materialkostnad, fraktkostnad, lagerkostnad och internkostnader. Möjligheten att lägga till påslag och se marginal ska finnas. Ett exempel gavs med en standardkostnad på 155 och ett försäljningspris på 250 för en tjänst. Alla dessa kostnader fungerar som poster för att fylla i och beräkna samt dokumentera.\n- Planeringslogiken: Strukturartiklar har inte testats men antas fungera bra.\n- Utförarkostnader: En kod för att klassa olika uppgifter utifrån utförartyp (vem som kan göra det). Syftet med systemet är att hålla reda på vad som jobbas med, metadata och artiklar, för att sedan kunna lägga ihop metadata och artiklar. Replit behöver ta hänsyn till ett befintligt \"utförarregister\" för att sortera uppgifter baserat på utförandekod, vilket används för grovplanering av exempelvis tvätt av rullbara kärl inom ett geografiskt område.\n- Artikeltyper: Ett register finns för artikeltyper som inkluderar tjänst, vara eller kontroll.\n- Utförandekoder: Ett register med utförandekoder finns för klassificering. Syftet med detta register är att matcha en utförandetyp (kompetens, utrustning eller team) som behövs för att utföra en artikel (tjänst eller vara). Kompetenskrav ska inte vara med i utförandekoderna, utan endast kod som relaterar till den typ av utförande som behövs, exempelvis \"RBK\" för rullbara kärl.\n- Utförandekategorier kan skapas för att samla uppgifter som kräver specifika resurser, t.ex. \"en blå bil med en gul flagga\". Systemet ska inte behöva sätta dessa kategorier automatiskt.\n- Uppgiftens informationspaket ska innehålla uppgifter baserade på antal, vikter (produktionstid, kostnad, försäljningspris), information om vem som kan utföra uppgiften, systemets tider (orderkoncept/metadatafångade leveranstider som t.ex. \"januari, torsdagar, ej efter kl 16\"), samt geografisk plats (adress, GPS-koordinater, what3words).\n- Det behövs en tydlig systemlogik för metadatafälten för att undvika oordning. Platsen måste kunna hanteras på metadatanivå och som systemskapade metadatafält, inklusive information som ort, postnummer, gata, longitud och latitud med hög upplösning, samt sekundära källor som what3words.\n- Replit måste säkerställa att informationspaketet med artikeln, alla tillhörande uppgifter, metadata att visa och uppdatera, leveranstider, plats och utförandekod hänger med.\n- Fakturering: Replit behöver hantera fakturainformation kopplad till Fortnox, känna till kunden och hantera fakturareferenser. Det ska finnas stöd för veckosamlingsfaktura, låst samling på objektnivå, delfakturering, eller att vänta tills alla uppgifter från orderkonceptet/objektet är slutförda innan fakturering sker. Informationen som ska faktureras måste följa med den enskilda artikeln.\n- Fakturareferenser: Enligt svensk standard kan två fakturareferenser finnas på fakturan: en huvudreferens/beteckning och en annan på fakturaraden. Dessa fält kan vara styrda av metadata eller inväxlade vid orderkonceptet.\n- När ett informationspaket med uppgifter skickas vidare för fakturering måste det framgå att det ska samlas på en gemensam faktura. Referenser ska skrivas på fakturahuvudet, medan metadatafält som gataadress eller fastighetsbeteckning kan redovisas på radnivå.\n- Det är viktigt med en logik som skiljer på vilka referenser som hamnar på fakturahuvudet (varje ny referens skapar en ny faktura) och vilka som hamnar på radnivå (flera rader på samma faktura med olika referenser som adresser eller återvinningsrum).\n- När en artikel kvittras som slutförd i utförarappen ska kostnadsställe och projekt hakas på artikeln. Kostnadsställe används för att identifiera utrustning/fordon som utfört tjänsten, och projekt för att identifiera team/personer. Exempel på kod för kostnadsställe är ADO2371 för ett fordon, och för projekt \"Christer och kompani\". Alla artiklar som skickas till Fortnox ska få med sig artikelnummer, kundnummer, samt projektnummer (vem som utfört).\n- Det bör vara möjligt att skapa team av en eller flera personer, eventuellt tillsammans med utrustning/fordon, och på teamet notera relevant information.\n- Kostnadsstället kopplas till produktionsutrustning som utfört uppgiften, och Fortnox hanterar konteringen för full kostnadsuppföljning i Replit eller Trivod. Detta ger grunden för att kunna se hur många tjänster en viss produktionsutrustning utfört, eller vilka uppgifter som utförts av ett visst antal personer, vilket är viktigt för vinstdelning.\n- Komplexiteten i specifikationerna för utförandekoder och informationspaket ökar, och Replit behöver analysera och ha koll på detta.\n\n### Action Items\n- Kontrollera logiken för utförandekoder så att de är logiskt uppbyggda och kan väljas samt kopplas till artikeln.\n- Säkerställ att när en uppgift skapas, är det ytterst viktigt att all relevant information och metadata i informationspaketet finns med.\n- Utveckla en systemlogik för metadatafälten relaterade till geografisk plats för att undvika rörighet, och som kan hantera olika platsformat.\n- Utreda hanteringen av metadata för uppgifter, motsvarande hur metadata visas för utförare, vid fakturering på orderkonceptnivå.\n- Replit måste nu säkerställa att en artikel som kvittras som slutförd via utförarappen får ett kostnadsställe (utrustning/fordon) och ett projekt (team/personer) kopplat till sig, vilket sedan skickas med artikeln i API mot Fortnox.\n- Replit ska analysera och säkerställa hanteringen av den ökade komplexiteten för utförandekoder och informationspaket.\n\n### Open Questions/Pending Items\n- Det finns en fundering kring att det inte går att radera poster i registret för utförandekoder.\n- Systemet behöver redas ut kring hur informationspaketet med uppgifter skickas vidare för fakturering, specifikt gällande samlingsfakturering och placering av fakturareferenser (huvud vs. rad).",
+  "conversation": [],
+  "transcripts": [
+    {
+      "text": "Så, då är du kanske med. Bra. Eh, här kommer det då rättningar för artikelupplägget då. Och om vi börjar uppifrån så är första återkopplingen i rättningen, och det gäller också generellt hela systemet. Vi har ett ikonregister. Eh, det här är inte hög prioritet, men det ska man inte vara så svårt på att läsa. Det ska finnas ett ikonregister och där ska man då kunna välja då ikoner för, för-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "För någon alkohol.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Ja, och, eh, vad jag kan se så är det inte riktigt, eh, ja, det är inte samma ikoner på varje ställe. Sen finns det också då ett, ett behov här ut att kunna lägga till egna ikoner, till exempel ikonen för vilken fraktion det är och så då. Men det här har inte hög prioritet, utan vi går direkt ner på pris och ekonomi då. Och där finns ju då olika, eh, fält för olika typer utav kostnader. Och till att börja med, listpriset är ju det som, som, som vi säljer den här för, under förutsättning att det inte är-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. Det finns en annan, en annan listprislista då som, som, som, som ersätter det priset och har en högre prioritet. Men sen har vi då inköpspris och som jag ser det så ska vi alltså kunna skriva dit ett inköpspris. Eh, alternativt då en standardkostnad. Är det en vara? Ja, då är det väl ett inköpspris. Är det en produkt som vi producerar så är det då ett standardpris. I vilket fall som helst så, så ser jag ju då som att alla de här, eh, fältena då, då är det inköpspris, standardkostnad, materialkostnad-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. -och fraktkostnad och lagerkostnad. Ska man kunna skriva dit då olika, eh, kostnader egentligen för att få hem den här varan eller tjänsten då. Och samma gäller ju då internkostnader. Det är ytterligare då något att lägga till då. Sen ska man kunna lägga till då ett påslag och då ska man då få en marginal. Men i det här fallet nu då så har vi en sådan standardkostnad på att producera tjänsten på hundrafemtiofem och vi har ett försäljningspris på tvåhundrafemtio. Och då står det då, ja, i beräkningen då-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm ...hur mycket den där då så, så kommer då inte, eh, eh, då standardkostnaden med. Men sammanfattningsvis, alla de här kostnaderna, inköp, frakt och så vidare, ser jag ju då som, det är ju poster bara där du kan fylla i och så får du hjälp att räkna ut det då och dessutom dokumentera det hela. Eh, planeringslogiken, okej. Eh, vi har inte testat strukturartiklar, men det måste ju, eh, funka bra. Eh, sen har vi då, eh, den sista kategorin då, eh, utförarkostnader.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Då har vi ju då... Det är viktigt här nu att se att det här är alltså bara ett, en kod för oss för att klassa olika uppgifter utifrån utförartyp då, det vill säga vem som kan göra det. Och det är också väldigt viktigt här nu då att Reply förstår att i det här informationspaketet, man säger hela, hela syftet med systemet är att hålla reda på det vi jobbar på, hålla reda på, eh, metadata och hålla reda på artiklar där vi är nu då för att sen lägga ihop metadata och artiklar i, eh-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. -då ett år, ett koncept som producerar en uppgift då, som i sin tur är kopplad då utifrån referensnummer och så vidare till en eventuell beställning som ju bottnar nu i ord i konceptet eller en kund som bo-bottnar i ord i konceptet. Men då också då utifrån då vilken artikel det är, så är det då en utförandekod, eh, som då är grunden i gru-grovplaneringen då att man sorterar efter utförandekoden då till exempel tvätt av rullbara kärl, eh, i ett geografiskt område-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. -då som jag sa i ditt fall. Då kan man då hitta, eh, då de jobb som ska göras där över en bestämd tidsperiod och för att sen skicka över dem i finplaneringen. Så sammanfattningsvis här då under utförarkategori så behöver Replit då ta hänsyn till, eh, det register som vi har som heter utförarkategorier tror jag.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Nej, utförarregister heter det.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Nej, det är ju utförare. Det är, det är alltså utförar...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Kategorier och... Alltså, det är, det är... Eh, eh, vi, vi har ett register som heter alltså, eh, artikeltyper och, och, och det är ju då om det är en tjänst eller om det är en vara eller om det är en kontroll. Men sen har vi då ett register som heter...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Utförandekoder heter det.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och, eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Det finns ett sånt här menyr som heter utförade koder. Och det här-- Syftet med det här registret är ju att matcha då så att säga en utförandetyp, alltså en kompetens eller, eller utrustning eller team då som behövs. Och det innebär ju också då att kompetenskravet ska inte vara med här, utan det ska bara vara att man, för att kunna utföra den här, eh, artikeln då som kan vara en tjänst eller, eh, eh, eh, eller då, eh, även en vara för att kunna leverera den, så ha-- Väljer man då, eh, till exempel RBK då som är rullbara kärl.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Det skulle kunna vara kodet då till, till, till en typ.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och, eh, då ska man kunna uppdatera registret. Nu är jag för övrigt också då som en... Eftersom det här är hoplänkat, nu är jag i utförande...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Registret då, där det står utförandekoder.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och, eh, det jag ser här är att jag kan inte radera...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Jag kan inte radera...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Vissa är utav de här. Och jag ser också att vissa är systemgenererade. Jag kan inte se i det här fallet att Replit eller systemet själv ska på något vis sätta de här. Då är det något logiskt fel, utan det här är bara en flagga som man sätter på. Och, och, och har vi nu då... Har vi en utförarkategori och vi sätter upp en, en, en viss tjänst här som ska utföras med en, med en, med en blå bil och en gul flagga på. Ja, då ska vi kunna skapa den utförande kategorin för att samla alla uppgifter-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. Behöver en blå bil med en gul flagga. Och systemet behöver inte göra det. Så att sammanfattningsvis då, kolla upp logiken i det här. Ko... Så att, så att det här utförande, eh, eh, utförandekoderna då och registrerade utförandekoder är logiskt uppbyggd och att den går att välja här och koppla till, till då artikeln. Och säkerställ också då att i det här informationspaketet, och jag tar det nu då och vi ber om en kontroll då för det, det är att när en uppgift skapas då så är det otroligt viktigt nu att-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm ...att det här blivit hårt förstått att det här inf... Det här paketet då som blir en uppgift ska innehålla själva uppgifter baserat då på det antal som eventuellt är upphämtat från, från, från objektet. Och den ska ha vikter i form av produktionstid, kostnad och försäljnings, eh, pris. Och sen så ska vi då hänga på den här flaggan vem som kan göra den. Och så ska vi hänga på de här tiderna då som systemet har, har antingen via orderkonceptet eller via metadata fångat upp då så att den",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "ska begöras i januari, men enbart på torsdagar och absolut inte efter klockan sexton om man nu lägger in, in då, eh, de villkoren då på, på leveranstider, hårda eller mjuka. Och sen så ska den ju då fånga upp då den geografiska platsen, antingen som adress eller som GPS-koordinater eller what3word. Och här behöver vi då rättligt, som vi också tog upp igår, att ha, ha en systemlogik då för de här metadatafälten då så att det inte blir rörigt.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. Med, med då adresser. Men så som jag ser det hela då så, platsen börjar ju. Det kan ju vara en ort, det kan vara ett postnummer, det kan vara en gata, det kan vara en longitud och latitud, eh, med till väldigt hög upplösning då. Och det kan vara då en, en sekundär källa som what3word då som beskriver, beskriver platsen då. Och det här måste systemet kunna hantera på metadatenivå och systemskapade metadatafält då. Eh, men sammanfattningsvis då, återigen då, så måste Replit tänka på...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Ja. Då att det här informationspaketet med artikeln och alla de här uppgifterna då som hakas på här, eh, måste hänga med. Och förutom de här uppgifterna som, som då mås-- som hakas på med själva utförandet, det är det som är artikeln, vad som ska göras, vilka metadata som ska visas, vilka metadata som ska uppdateras, så har vi då leveranstiderna och platsen och utförandekoden. Och avslutningsvis också så från orderkonceptet, och här tror jag inte Replit riktigt",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "kommer att ha koll på det här, så finns det då, eh, fakturainformation då in i den här. Och den information som Replit har är ju då vilken kund kopplad då till Fortnox som är kopplad till den aktuella uppgiften. Men sen så behövs det också då, eh, kopplas, eh, eventuella fakturareferenser då, eh, som talar om dels om själva tjänsten ska samlas ihop då. Och det görs ju delvis igenom ord-- eh,",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "eller det görs genom, genom årekonceptet om det ska vara veckosamlingsfaktura eller om det ska vara låst och samlas ihop på en viss nivå i, i, i, i mot ett visst objekt. Eller, eh, o-o-om det tillåts delfakturering eller om man ska vänta tills att alla uppgifter från årekonceptet eller objektet är slutförda innan man gör en faktura. Eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Men det som är viktigt här då det är att, att, att, att den här informationen måste gå med den enskilda artikeln då så att det inte blir strul då sen när den ska faktureras. Så är det här en artikel med en tjänst som är kanske en av, eh, fyra tjänster kopplade då till ett visst objekt eller en visst förälder utav objekt eller hur, hur, hur det nu ser ut i den viset, så måste ju då den här vänta och samla ihop de här då, eh, utifrån fakturaperspektivet tills det är, är då klart. Och sen när det är klart-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm ...det är viktigt att man skiljer det. Enligt svensk standard då så ha-- Kan man då ha två stycken fakturarreferenser på faktura. Huvudet är referens och, och beteckningen och sånt där står det. Då är det två stycken logiska fält som finns i, i, eh, i och, och som det är viktigt att ha med här. Antingen är det styrt på metadata eller så är det, eh, invatat på, på, på orderkonceptet. Och, och det andra är ju då att man på fakturarad kan också då lägga in information. Och där...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Blir det då samma logik som, som att man visar metadata på uppgiften för utföraren? Där får vi ha ett motsvarande script som vi lägger upp då så att på orderkonceptet, det här finns inte riktigt, men vi måste reda ut det. Och det är då att när det här informationspaketet med uppgifter då skickas vidare för fakturering, då ska det ju så att säga då framgå att ja, den här ska då samlas på en, på en gemensam faktura tillsammans med andra uppgifter och de här referenserna-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm ...ska skrivas då på fakturahuvudet, alltså i toppen på fakturan. Och där, men däremot på radnivå så ska vi kanske redovisa då metadatafältet för gataadress eller fastighetsbeteckning. Och så att det i praktiken står då till exempel Strandvägen 22, fastighet, eh, Ap-huset 1, eh, och då kärltvättstandard 10 kärl, 180 kronor styck och uppsummerat då. Sen så på raden nedanför så står det då-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm ...eh, Strandvägen 22, fastigheten Ap-huset 1, eh, rumstvätt, 20 kvadratmeter, a pris och så vidare. Och s-s-sen har man då samlat ihop då de där och sen så kommer det då kanske för ett rum och, och, eh, och, eh, kärl på två rader till. Samlande på samma, samma faktura då som går i väg. Jag vet inte om, om, om rättvist förstår den här logiken, men det är ju väldigt-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm ...liksom logiskt då hur det här hänger ihop. Och vi måste liksom få en logik då som nummer ett då skiljer på vad, vilka referenser hamnar på fakturahuvudet. Eh, och om det är metadata så innebär det ju för att va-varje ny referens som skapas på fakturahuvudet blir det då en ny faktura. Och vilka metadata eller fakturarreferenser då pekar vi in på radnivå? Det vill säga, då blir de då flera rader på samma faktura, men med olika referenser, till exempel adresser eller återvinningsrum ett-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm ...återvinnings två, återvinningsrum t-två och så respektive tjänster då, eh, under där. Och den sista grejen som jag ska ta med nu, nu blev det liksom u-utsträvning här, men det är viktigt att Räppligt nu ser till att få ordning på det här. Det är då också att när en artikel kvitteras genom utförarappen då att den är slutförd, då ska det också hakas på, på den här artikeln kostnadsställe och projekt.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "För det är också två stycken datafält som skickas med den här artikeln i API mot Fortnox då. Och i vårt fall då så använder vi kostnadsstället till vilket, vilken utrustning eller vilket fordon som har utfört tjänsten. Och, eh, projektet blir då de människor eller team då som har utfört, eh, uppgiften då. Och här behöver vi då en logik då i när vi",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "där vi, där vi, där vi har då listan på utrustning, det vill säga bilar i vårt fall, men det skulle även kunna vara annan utrustning, och vi har listan på människor, så kommer vi ju då att kunna ta en eller flera människor och skapa ett team, eventuellt tillsammans med, i vårt fall, ett fordon då. Eh, det skulle också kunna vara flera typer av utrustning. Och när man skapar då det här teamet, då ska man då på teamet kunna notera då att det här...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Eh, då kostnadställe, fordon ADO2371 som exempel på ett kostnadställes kod och det är projekt, eh, Christer och kompani då. Och på det viset då så kommer alla artiklar som skickas till Fortnox, eh, ekonomisystemet då att få med sig då artikelnumret från Fortnox, kundnumret till kunden som ska få fakturan, eh, projektnumret, det vill säga vilka som har utfört det.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. Eh, och kostnadstället, vilken produktionsutrustning som har gjort det. Och genom att, eh, då artikeln är upplagd i Fortnox så konteras den också då ekonomiskt på rätt sätt, något som Reklit inte behöver bry sig om. Men det innebär att vi får alltså full kostnadsuppföljning så att vi kan alltså, ja, egentligen både i Replit eller i, i, i Trivod då eller i Fortnox så ka-kan vi alltså slå ut och se hur många tjänster har ett viss, en viss produktionsutrustning utfört eller vilka, vilka, eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "uppgifter har utförts utav, utav ett visst antal personer. Och det här är ju liksom grunden till kostnadsuppföljning och det ger också grunden till vinstdelning då. Så, s-slut på det. Och framför allt, det här hänger ju nu inte i-riktigt ihop med den här, men Replit behöver, eh, dela upp de här olika... Eh, det enklaste här med ikonerna är ju bara liksom att rätta till och det har inte så hög prioritet. Utförandekoden och informationspaketet här, komplexiteten ökar ju i den här specifikationen då. Så analysera det här Replit och se till att ha koll på det.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    }
+  ]
+}
