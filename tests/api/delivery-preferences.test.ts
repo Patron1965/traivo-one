@@ -7,6 +7,7 @@ import { eq, inArray } from "drizzle-orm";
 import type { InsertObject, DeliveryPreferences } from "@shared/schema";
 import { AppError } from "../../server/errors";
 import { registerObjectRoutes } from "../../server/routes/objectRoutes";
+import { registerCustomerRoutes } from "../../server/routes/customerRoutes";
 
 // Task #1143: arvet av leveranspreferenser (objekt → kund → ingen) i
 // storage.resolveDeliveryPreferences är affärskritiskt för planering/VRP men
@@ -305,5 +306,235 @@ describe("GET /api/objects/:id/delivery-preferences — tenant-ägarskap", () =>
     const app = await buildAppForTenant(TENANT_A);
     const res = await getRoute(app, `/api/objects/finns-inte-99999/delivery-preferences`);
     expect(res.status).toBe(404);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Task #1148: SKRIV-vägen — PATCH /api/objects/:id och PATCH /api/customers/:id
+// validerar leveranspreferenser via Zod (insertObjectSchema/insertCustomerSchema
+// → deliveryPreferencesSchema) innan de skrivs till kolumnen. Utan dessa tester
+// kan korrupt data komma in i kolumnen i första hand (resolve-vägens parseSafe är
+// bara sista linjens försvar). Vi verifierar att en giltig payload round-trippar
+// (sparas + kan läsas tillbaka via resolve) och att ogiltiga payloads (fel
+// tid-format, okänd priority, ogiltigt datum) avvisas med 400 UTAN att skriva.
+// ---------------------------------------------------------------------------
+
+async function buildCustomerRoutesApp(tenantId: string): Promise<Express> {
+  const expressMod = await import("express");
+  const expressFn = (expressMod as unknown as { default?: typeof import("express").default }).default
+    ?? (expressMod as unknown as typeof import("express").default);
+  const app = expressFn();
+  app.use(expressFn.json());
+  app.use((req: Request, _res: Response, next: NextFunction) => {
+    (req as unknown as { tenantId: string }).tenantId = tenantId;
+    next();
+  });
+  // registerCustomerRoutes innehåller både PATCH /api/customers/:id och
+  // PATCH /api/objects/:id (skriv-vägen för båda leveranspreferens-ytorna).
+  await registerCustomerRoutes(app);
+  app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
+    if (res.headersSent) return;
+    const status = err instanceof AppError
+      ? err.statusCode
+      : (err as { status?: number; statusCode?: number })?.status
+        ?? (err as { status?: number; statusCode?: number })?.statusCode
+        ?? 500;
+    const message = err instanceof Error ? err.message : "Ett oväntat serverfel uppstod";
+    res.status(status).json({ error: message });
+  });
+  return app;
+}
+
+interface PatchResult {
+  status: number;
+  body: Record<string, unknown>;
+}
+
+async function patchRoute(app: Express, path: string, payload: unknown): Promise<PatchResult> {
+  const http = await import("http");
+  const server = http.createServer(app);
+  await new Promise<void>((resolve) => server.listen(0, resolve));
+  const addr = server.address();
+  if (!addr || typeof addr === "string") throw new Error("Could not allocate test port");
+  try {
+    const res = await fetch(`http://127.0.0.1:${addr.port}${path}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    const text = await res.text();
+    let parsed: Record<string, unknown> = {};
+    try {
+      parsed = JSON.parse(text);
+    } catch {
+      parsed = { raw: text };
+    }
+    return { status: res.status, body: parsed };
+  } finally {
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+  }
+}
+
+const VALID_WRITE_PREFS: DeliveryPreferences = {
+  weeklyWindows: [{ weekday: 2, start: "07:30", end: "11:45" }],
+  blockedHours: [{ start: "12:00", end: "13:00", weekdays: [2] }],
+  blockedDates: ["2026-06-06"],
+  notes: "Sparad via PATCH-vägen",
+  priority: "strict",
+};
+
+describe("PATCH /api/objects/:id — leveranspreferenser skriv-väg", () => {
+  it("sparar en giltig payload som round-trippar via resolve", async () => {
+    const obj = await createObjectWithPrimaryCustomer(TENANT_A, null, {
+      name: `${NS} write-obj-valid`,
+    } as Partial<InsertObject> & Pick<InsertObject, "name">);
+
+    const app = await buildCustomerRoutesApp(TENANT_A);
+    const res = await patchRoute(app, `/api/objects/${obj.id}`, {
+      deliveryPreferences: VALID_WRITE_PREFS,
+    });
+    expect(res.status).toBe(200);
+
+    // Läs tillbaka via resolve — objektets egna prefs ska nu gälla (source=object).
+    const resolved = await storage.resolveDeliveryPreferences(obj.id);
+    expect(resolved.source).toBe("object");
+    expect(resolved.effective.notes).toBe(VALID_WRITE_PREFS.notes);
+    expect(resolved.effective.priority).toBe("strict");
+    expect(resolved.effective.weeklyWindows).toEqual(VALID_WRITE_PREFS.weeklyWindows);
+    expect(resolved.effective.blockedHours).toEqual(VALID_WRITE_PREFS.blockedHours);
+    expect(resolved.effective.blockedDates).toEqual(["2026-06-06"]);
+  });
+
+  it("avvisar fel tid-format (HH:MM) med 400 utan att skriva", async () => {
+    const obj = await createObjectWithPrimaryCustomer(TENANT_A, null, {
+      name: `${NS} write-obj-badtime`,
+    } as Partial<InsertObject> & Pick<InsertObject, "name">);
+
+    const app = await buildCustomerRoutesApp(TENANT_A);
+    const res = await patchRoute(app, `/api/objects/${obj.id}`, {
+      deliveryPreferences: {
+        ...VALID_WRITE_PREFS,
+        weeklyWindows: [{ weekday: 2, start: "7:30", end: "25:00" }],
+      },
+    });
+    expect(res.status).toBe(400);
+
+    // Inget får ha skrivits — kolumnen ska fortfarande vara tom.
+    const [row] = await db
+      .select({ dp: objects.deliveryPreferences })
+      .from(objects)
+      .where(eq(objects.id, obj.id));
+    expect(row.dp).toBeNull();
+  });
+
+  it("avvisar okänd priority med 400 utan att skriva", async () => {
+    const obj = await createObjectWithPrimaryCustomer(TENANT_A, null, {
+      name: `${NS} write-obj-badprio`,
+    } as Partial<InsertObject> & Pick<InsertObject, "name">);
+
+    const app = await buildCustomerRoutesApp(TENANT_A);
+    const res = await patchRoute(app, `/api/objects/${obj.id}`, {
+      deliveryPreferences: { ...VALID_WRITE_PREFS, priority: "kritisk" },
+    });
+    expect(res.status).toBe(400);
+
+    const [row] = await db
+      .select({ dp: objects.deliveryPreferences })
+      .from(objects)
+      .where(eq(objects.id, obj.id));
+    expect(row.dp).toBeNull();
+  });
+
+  it("avvisar ogiltigt blockerat datum (fel format) med 400 utan att skriva", async () => {
+    const obj = await createObjectWithPrimaryCustomer(TENANT_A, null, {
+      name: `${NS} write-obj-baddate`,
+    } as Partial<InsertObject> & Pick<InsertObject, "name">);
+
+    const app = await buildCustomerRoutesApp(TENANT_A);
+    const res = await patchRoute(app, `/api/objects/${obj.id}`, {
+      deliveryPreferences: { ...VALID_WRITE_PREFS, blockedDates: ["24/12-2026"] },
+    });
+    expect(res.status).toBe(400);
+
+    const [row] = await db
+      .select({ dp: objects.deliveryPreferences })
+      .from(objects)
+      .where(eq(objects.id, obj.id));
+    expect(row.dp).toBeNull();
+  });
+});
+
+describe("PATCH /api/customers/:id — leveranspreferenser skriv-väg", () => {
+  let writeCustomerId = "";
+
+  beforeAll(async () => {
+    const c = await storage.createCustomer({
+      tenantId: TENANT_A,
+      name: `${NS} Kund skriv-väg`,
+      customerNumber: `${NS}-W`,
+    });
+    writeCustomerId = c.id;
+  }, 30000);
+
+  it("sparar en giltig payload som round-trippar via resolve (kund-fallback)", async () => {
+    const app = await buildCustomerRoutesApp(TENANT_A);
+    const res = await patchRoute(app, `/api/customers/${writeCustomerId}`, {
+      deliveryPreferences: VALID_WRITE_PREFS,
+    });
+    expect(res.status).toBe(200);
+
+    // Skapa ett objekt utan egna prefs men kopplat till kunden — resolve ska
+    // då ärva kundens nyss sparade prefs (source=customer).
+    const obj = await createObjectWithPrimaryCustomer(TENANT_A, writeCustomerId, {
+      name: `${NS} write-cust-rt`,
+    } as Partial<InsertObject> & Pick<InsertObject, "name">);
+    const resolved = await storage.resolveDeliveryPreferences(obj.id);
+    expect(resolved.source).toBe("customer");
+    expect(resolved.effective.notes).toBe(VALID_WRITE_PREFS.notes);
+    expect(resolved.effective.priority).toBe("strict");
+    expect(resolved.effective.weeklyWindows).toEqual(VALID_WRITE_PREFS.weeklyWindows);
+  });
+
+  it("avvisar fel tid-format med 400 utan att skriva", async () => {
+    const c = await storage.createCustomer({
+      tenantId: TENANT_A,
+      name: `${NS} Kund badtime`,
+      customerNumber: `${NS}-WT`,
+    });
+
+    const app = await buildCustomerRoutesApp(TENANT_A);
+    const res = await patchRoute(app, `/api/customers/${c.id}`, {
+      deliveryPreferences: {
+        ...VALID_WRITE_PREFS,
+        weeklyWindows: [{ weekday: 1, start: "08:00", end: "24:30" }],
+      },
+    });
+    expect(res.status).toBe(400);
+
+    const [row] = await db
+      .select({ dp: customers.deliveryPreferences })
+      .from(customers)
+      .where(eq(customers.id, c.id));
+    expect(row.dp).toBeNull();
+  });
+
+  it("avvisar okänd priority med 400 utan att skriva", async () => {
+    const c = await storage.createCustomer({
+      tenantId: TENANT_A,
+      name: `${NS} Kund badprio`,
+      customerNumber: `${NS}-WP`,
+    });
+
+    const app = await buildCustomerRoutesApp(TENANT_A);
+    const res = await patchRoute(app, `/api/customers/${c.id}`, {
+      deliveryPreferences: { ...VALID_WRITE_PREFS, priority: "akut" },
+    });
+    expect(res.status).toBe(400);
+
+    const [row] = await db
+      .select({ dp: customers.deliveryPreferences })
+      .from(customers)
+      .where(eq(customers.id, c.id));
+    expect(row.dp).toBeNull();
   });
 });
