@@ -1,0 +1,200 @@
+{
+  "sessionId": "87135cfae",
+  "exportedAt": "2026-06-25T08:57:27.067Z",
+  "summary": "### Key Topics Discussed\n- Clarification of cost surcharges, projects, teams, and invoicing.\n- Definition of cost centers and projects for teams and equipment.\n- Invoice references and main paradox level, specifically ER reference and invoice reference.\n- Invoicing strategies and cash flow, including collective invoicing per order concept, per object, or per week.\n- The conflict between immediate invoicing for cash flow and customer preference for fewer invoices/invoicing upon job completion.\n- Technical implementation of invoicing, including API integration with Fortnox and the structure of invoice headers and line items.\n- Our reference (\"vår referens\") on the order concept and invoice.\n- Internal invoicing references for quick lookup of order concepts.\n- Detailed breakdown of required information in the invoice header for both our reference and customer's reference, linked to the order concept.\n- Dynamic reference fields that retrieve metadata from tasks, such as façade numbers, or hardcoded unique order numbers.\n- Handling multiple customer invoice references for the same customer, potentially leading to multiple invoices.\n- Swedish standard for two information fields in invoicing: one for name/department and another for a reference number (order or project number).\n- Free-text invoice lines with a 50-character limit per line, where the performer can describe work done.\n- Fixed invoice line references, similar to performer logic for a specific task, for items like \"standard laundry washing\" (tvätt av standardtvättkärl).\n- Metadata fields for invoice line items, allowing one or more fields per line item.\n- Handling text exceeding the 50-character limit for free-text invoice lines by splitting it into new lines.\n- Combination of metadata fields (e.g., property number) on a single invoice line item.\n- How Trivo sends article numbers (e.g., K100) to the accounting system for auto-coding and tax handling.\n- Trivo's ability to send a 50-character description for article-based invoice lines, similar to free-text lines.\n- Invoice line item details: quantity, unit price, and total sum sent to the accounting system.\n- Fortnox handling the summation for invoices with multiple lines or pages.\n\n### Decisions Made\n- Trivo and Replici need a function to manage performers (already exists).\n- Trivo and Replici need a function to manage equipment (partially exists).\n- Trivo and Replici need a function to assemble a team.\n\n### Action Items\n- Add \"our reference\" field to the order concept.\n- Ensure Trivo can handle free-text lines on invoices.\n- Double-check API integration with Fortnox for correct transmission of article number, description, quantity, and unit price for invoice line items.\n\n### Important Points & Insights\n- When creating a team, it should be possible to define the cost center and project that the team represents.\n- The cost center should automatically follow the equipment.\n- The project should automatically follow the team.\n- These are two information fields: when registering an employee, define their project, and when registering a vehicle, define its cost center.\n- Cost center and project should also be linked to the article.\n- Invoice references can be handled in two ways, with ER reference (e.g., person or property number) and invoice reference (e.g., a sequential number).\n- These references are located at the top of the invoice header/document.\n- If these are hardcoded into the unique order concept, they will automatically apply.\n- All items created within an order concept that will become an invoice will be on the same invoice; the invoice can have multiple line items.\n- The order concept should allow users to choose to wait for invoice creation until all tasks are completed for the entire order concept or per object, or to have a weekly collective invoice for tasks performed during that week.\n- These invoicing strategies are designed to improve cash flow.\n- The fundamental goal of the system is to issue invoices as quickly as possible, although customers often prefer fewer invoices and waiting until work is complete.\n- Replici must understand that there are two fields next to the customer number in the invoice header.\n- Trivo will send an information packet via API to Fortnox (or other accounting systems), including the customer number, to ensure the correct customer is identified for invoicing.\n- The invoice header will automatically include the invoice reference and customer reference (kundens referens), along with the invoice creation date, our reference (\"vår referens\"), and our designation.\n- The field for \"our reference\" on the order concept is customary in Sweden and needs to be added (e.g., the name of the Kinab employee who received the order).\n- The internal invoice designation (vår fakturabetäckning) will be the order concept number to enable quick lookup of the source of an invoice by an administrator.\n- The invoice header requires five pieces of information (excluding date): customer number, our reference, our invoice reference, customer's reference (from order concept), and customer's invoice reference (from order concept).\n- Trivo needs a logic to understand if dynamic customer invoice references (e.g., 22 for some tasks, 23 for others) for the same customer should result in separate invoices.\n- The dynamic invoice reference, e.g., 22, should be grouped under a specific category like 'M', while others are under a different category.\n- The traditional Swedish standard for invoicing includes two separate information fields: one for the ordering entity (person or department who will approve the invoice) and another for a reference number (order or project number).\n- In property-related work, these fields can often be dynamic, pulling information like a person's name, department name, or façade number from a hierarchy like \"Svenska Bostäder\" order.\n- The customer number from Fortnox is crucial for directing the invoice and is the primary identifier.\n- The customer's two reference fields can either be controlled by metadata or be hardcoded for the entire order concept.\n- For KINAB's corresponding two reference fields, one is completely open for manual input (e.g., the KINAB employee responsible for the order).\n- The other KINAB field is system-generated by Trivo, creating the order concept and linking it to tasks and ultimately the invoice.\n- Trivo should be able to deliver free-text lines, up to 50 characters, where the performer can write descriptions of the work done, dynamically linked to a task and reflected on the invoice.\n- Trivo should also manage fixed invoice line references, using a similar logic to how performers are assigned to tasks, for specific articles like \"standard laundry washing\" (tvätt av standardtvättkärl).\n- Metadata fields on invoice line items should be limited to 50 characters, depending on the accounting system.\n- If a description for an invoice line item exceeds 50 characters, it should be split into new lines.\n- Only alphanumeric metadata fields can be handled; images cannot be included.\n- Multiple metadata fields can be combined into a single 50-character invoice line if short enough (e.g., \"22 Stora Boven fyra\").\n- When Trivo sends an article number (e.g., K100) to the accounting system, the system automatically handles accounting, VAT codes, etc.\n- Trivo can also send a 50-character description for article-based invoice lines, similar to how free-text lines are handled.\n- Example of an article description provided: \"tvätt av kärl, standard.\"\n- For each invoice line item, Trivo will send the article number, description, quantity, and unit price. The accounting system will then calculate the total sum for each line.\n- Fortnox will handle the sum calculation for all invoice lines, even across multiple pages.\n\n### Open Questions/Pending Items\n- Next steps for defining the API flow for invoice line items.\n- There should be a function to capture the ordering entity (beställning) for internal reference.\n",
+  "conversation": [],
+  "transcripts": [
+    {
+      "text": "Yes!",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Jo, då ska vi ta och tydliggöra det här med kostnadstillägg och projekt och på team och fak-tu-ra-n då. Eh, om vi börjar då så behöver Trivo då och Replici till att det finns en funktion som kan hantera, eh, utförare, det finns redan. Och sen så hantera utrustning, eh, det finns delvis redan. Och sen en funktion där man då kan sätta ihop ett team bestående utav, av, eh, en-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm ...nära tio personer och, eh, utrustning. Och när man då skapar ett sådant team så ska man då kunna definiera då vilket kostnadsställe respektive projekt det här teamet representerar då. Och, eh, man kan också tänka sig då att det här gör då följer med automatiskt då för kostnadsstället ska följa med utrustningen.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och pros-projektet ska följa med teamet, det vill säga... Och det här är bara två stycken informationsfält. Så man skulle kunna tänka sig då att i, i... När man då lägger upp en medarbetare då här så, så definierar man då vilket, eh, vilket projekt i det som den medarbetaren har. Och när man lägger upp ett fordon så definierar man då vilket, vilket, eh, kostnadsställe i det som den enheten då, eh, har. Det, det, det är egentligen...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Det är egentligen det här du ska läsa. Det, det vi pratar om nu, det är ju alltså fakturareferenser och huvudparadnivå. Ja, ja då kommer jag in på fakturareferenser här. Det här var ju då kostnadsställe och projekt som också ska hakas på artikeln då. Men nästa del i det hela är då hur fakturareferenserna hanteras och då finns det två sätt att hantera det. Det ena sättet är då enligt svensk standard då så finns det någonting som heter då ER-referens och fakturareferens.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och det finns ju då längst upp på fakturahuvudet, själva dokumentet då. Och där fyller man ju då i till exempel, er referens kan ju då vara, eh, en person eller fastighetsnummer och fakturareferens är då ett löpnummer som man då väljer att ha där. Och om detta pekas in i orderkonceptet, antingen hårdkodat då, om man använder det där uttrycket fast inskrivet på det unika orderkonceptet, så kommer ju allt...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Alla uppgifter då som skapas då i det här orderkonceptet som sen kommer att bli en faktura att hamna under då ett, ett sånt, eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Alltså de hamnar i, i samma faktura kan man säga. Sen kan fakturan då flera, flera rader. Eh, sen blir det ju då att man kryssar i på orderkonceptet om man då ska, jag kallar det samlingsfaktura då, att om man, om man då ska vänta med att fakturan skapas tills dess att samtliga uppgifter är utförda totalt på orderkonceptet eller totalt per objekt. Eller att man har nån samlingsfaktura per vecka då, det vill säga de uppgifter som är gjorda över en vecka kreerar då en, en, en faktura för det. Det här handlar ju då också om att få in cash flow.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "I bolaget då. Eh, så grunden för systemet är ju att få iväg en faktura så fort som möjligt. Sen kommer ju kunden hela tiden och bromsar det för han vill ju inte ha alltför många fakturor och han vill ju egentligen vänta med fakturorna tills jobbet är klart. Så det blir ju så att säga ett krigande från två håll då som inte har med Replit eller Trivo att göra då. Men, eh, eh, Replit måste förstå då att, att, eh, det är alltså två stycken fält jämte så att säga kundnumret då som blir fakturahuvudet. Sen nästa steg då är ju det som vi brukar-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. Kalla då fakturarader då. Och API-mässigt då gentemot Fortnox, andra ekonomisystem som kommer att funka på det sättet då att, eh, Trivo skickar via API:t då, jag går igenom hela flödet då för att ha helheten. Trivo skickar ett informationspakit, paket via API:t där den säger att kundnummer si och så berörs utav det här. Och i och med då att han skickar det kundnumret så kommer då, eh, Fortnox då att fånga upp rätt kund och fånga upp rätt, eh-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. -faktura, regelingsmetod då. Så att det behöver inte Rättvita eller Trivo tänka på, utan kundnumret är där. Sen kommer den då att, eh, ladda med jämte då på fakturatoppen, eh, f-fakturarreferens och kundens referens på fakturan då. Så då skriver den in de två fältena där. Och sen så kommer ju naturligtvis då datumet för när fakturan, eh, skapades och, eh, eh, vår referens och vår beteckning också att komma med. Och nu ska jag säga, det här har jag faktiskt-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "-glömt, men jag nämner det ändå då. När vi gör ett orderkoncept så är det ju då praxis då att man då skriver på vår referens. Det är ju den, den hos Kinab som har tagit emot fakturan. Och så har jag, Mats Öberg på Kinab, tagit emot ordern, så är det kutym i Sverige då att då på orderkonceptet... Det här, det här har vi faktiskt glömt bort. Så de här fältena skulle vi behöva då lägga till. Så skriver man då in vår referens, det vill säga jag skriver Mats Öberg och, och, och Lukas skriver Lukas Sjölund då där.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och sen kommer vår fakturabetäckning då. Och i det här fallet så blir det då orderkonceptets nummer. Mm. För att leverantörens fakturariferens då, det vill säga Kinabs fakturariferens, kommer ju då användas om kunden har en fråga om fakturan så säger han: \"Jag har faktura si och så.\" Eh, ja, då kan vi stå fram med själva fakturan och då vet vi ganska mycket. Men det finns också en fakturariferens här, eh, som vi säger då är orderkoncept etthundratjugotvå då.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och då finns ju då en möjlighet att administratören då snabbt kan slå fram orderkonceptet och se hela källan till fakturan då. Så där är två stycken fält som jag hade faktiskt glömt bort då, som är alltså internt och inte livsviktiga. Men naturligtvis så måste ju, måste ju så att systemet ta hand om det. Så det ska finnas ett fält där man sätter upp vår referens på fakturan, det vill säga den som tar emot den på orderkonceptet. Och sen så ska det finnas en funktion då som, som då fångar upp vilken, alltså beställning då är...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Eller, eller, eller i det här fallet då orderkoncept som är kopplad till den här fakturan. Och sen så har vi då motsvarigheten för kunden då. Kundens referens, det vill säga den, är det telefonsamtal så skriver man: \"Det var Anna Karlsson som, som, som lämnade det här.\" Och sen så säger då Anna Karlsson: \"Jag vill ha det här märkt med vårat beställningsnummer tvåhundranittiotre.\" Ja, och då lägger man då in det på då fakturarreferens, kundens fakturarreferens. Sen kommer vi då ner på... Eh, så, så nu, ja, jag sammanfattar då.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Jo, huvudet på fakturan är det alltså totalt sett, om vi bortser från datum då, så är det alltså fem informationer som jag ser. Det är kundnummer, det är vår, eh, referens, det är vår fakturarreferens, det är kundens referens utifrån orderkonceptet då och det är kundens, eh, fakturarreferens utifrån orderkonceptet. Och här är det viktigt att understryka då att om vi nu väljer att för kundens...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Referensfält har dynamiska fält, det vill säga att den hämtar det ifrån uppgiftens metadata, till exempel fasadnummer, så måste det då finnas en logik i Trivo här då som förstår att om kundens fakturarreferens nu för de här uppgifterna heter 22, men för de här andra uppgifterna heter 23, så blir det alltså till samma kund två stycken fakturor då. Så de uppgifterna...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Men den dynamiska fakturarreferensen 22 samlas under M och de andra samlas under den andra då. Och för enkelhetens skull här då så, eller inte enkelhetens skull, för logikens skull då så är, är, är ju även då, då, då kundens andra referens. Alltså, om jag också sammanfattar det här så, så bygger ju då den här gamla svenska standarden på att det finns två stycken informationsfält. Eh, det ena informationsfältet så skriver man upp vanligtvis namnet eller avdelningen på...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "som har beställt. Det vill säga den som kommer att få fakturan och attestera den. Och på det andra fältet då, som är fakturarreferensen, referensnumret, där sätter man då upp ett beställningsnummer eller projektnummer eller vad nu kunden vill ha, så att kunden vet vad han ska styra den här kostnaden. Men det här är ju helt utanför Replit och Trivo, men jag bara orienterar så att vi alla inblandade ska förstå hur det här liksom då används och fungerar. Och i vår f-- eftersom vi jobbar med fastigheter här så kommer ju många gånger det här att kunna bli dynamiskt då.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Så att vi på toppen utav en hierarki nu, till exempel svenska bostäder här, pekar in en order då som sen går in ner då och plockar då, eh, det här personnamnet som är ansvarig för det här eller avdelningsnamnet eller fasadnumret då, eh, och, och plockar in här. Alternativt att vi hårdkodar in då och säger: \"Det här är ett unikt beställningsnummer, men däremot den andra är dynamisk då.\" Eh, det kommer systemet att reda ut då. Och då har vi då, jag säger det igen, vi har-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. Alltså kundnumret som är kanske det viktigaste för dit fakturan ska skickas och det är bara numret från Fortnox. Och sen är det då kundens båda fält som kan då vara styrda på metadata eller vara, inom citationstecken, \"hårdkodad\" på hela orderkonceptet då. Och det är två stycken fält. Och sen har vi då motsvarande två fält för KINABs motsvarande, varav det ena fältet, eh, är helt öppet. Där skriver man alltså normalt sett in den på KINAB som ansvarar för att mata in beställningen. Och i det andra fältet-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm ...är det systemskapat. Där skapar då Trivo, i det här fallet, orderkonceptet då. Så att vi vet vilket orderkoncept som har skapat uppgiften och i förlängning fakturan.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Där har vi de fem fälten i toppen. Sen kommer vi då ner på det som brukar då kallas fakturarader då. Och logiken i Fortnox och andra ekonomisystem är på det sättet att under huvudet här nu på fakturan så kan man alltså skjuta in rader där det normalt brukar vara då ett fält som anger artikelnummer och sen så finns det ett fält för fritext och sen så finns det ett fält för antal och pris då. Och det Replit eller Trivo nu ska leverera här, det är då-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. Äh, fritextrader. Och här har alltså, äh, Trivo möjlighet att leverera in fritextrader rad för rad. Jag tror att det är femtio tecken på, på en sådan rad. Så där kan man ju skriva solen sken och jag plockade bort, äh, skräp här och satte dit ett handtag där och så vidare. Äh, gör utföraren den fritextskrivningen då- Mm. Kopplat till en uppgift. Då kom-- Då, då, då ska den informationen så att säga kladdas in eller vad man ska-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. Ja, då på, på fakturan då. Och sen kommer... Så, så det är liksom frifet-textfält då som finns i de flesta system och som Trivo också bör klara av då. Äh, nästa steg då är fasta fakturaradsreferenser. Och där är då tanken att med samma logik som vi har för utföraren då för en viss uppgift, så säger vi att utföraren ska då utföra en tvätt, en artikel som heter tvätt av standardtvättkärl och det är tio stycken. Och där kan vi ju då ve...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Lägga in och visa ett eller flera metadatafält för information om vi då vill. Om samma logik behöver då finnas även för fakturaraden då, som är ju egentligen samma sak fastän den är i ett annat skede då. Och då ska vi alltså kunna välja in en eller flera rader per fakturarad. Och då pratar jag då i vanlig ordning metadata då. Och här måste det ju då vara en reservation. Det får bara vara ett metadatafält då som är upp till, tror jag, femtio tecken. Det beror på ekonomisystemet.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och är det längre än femtio tecken, då, då får det vara logik då att, eh, då kapar den där och så gör den en, en ny rad då för det om det skulle vara en lång beskrivning. Och naturligtvis så klarar den ju då inte av att ta bilder då, utan då, då, det kan den inte hantera, så då kommer inte det med då. Men alfanumeriska fält och alfanumeriska fält funkar ju då alldeles utmärkt då. Sen kan den ju då kanske eventuellt ha för att inte fakturan ska bli ohemult lång då, så kan man tänka sig att den har en logik då som, som, som lägger ihop då flera-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. -metadatafält. Om det till exempel är då ett fastighetsnummer som står då, det står tjugotvå. Och sen så har vi fastighetsbeteckningen, eh, Stora Boven fyra. Eh, då kan man ju tänka sig att de båda uppgifterna slås ihop då på en rad eftersom att det blir bara då en tio, femton tecken- Mm. -utav femtio då. Och sen när den då har skrivit ut den här texten då, så kommer sen artikeln då, artikelnummer K etthundra. Och då funkar det som så att den sj-- r-r-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "-då är det Drive och skickar då artikelnumret K etthundra och då kommer ekonomisystemet att förstå: \"Jaha, det är den här artikeln. Den ska konteras på det här försäljningskontot och det är den här momskoden och så vidare utifrån ekonomisystemets logik då.\" Däremot så är det då fritt för Drive att då att skicka beskrivningen med samma logik som fritexten är ovan då. Så då har den, vill jag minnas, femte tecken då på att skicka då den beskrivning som vi också har i artikellogiken då. Så säger vi då, eh, en, ja, tvätt av kärl, standard.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och sen så kommer då antal och a-pris och summa då som den också då skickar med här då, eh, och, och skriver, skriver in. Så det, det är då, eh, vad blir det? Fyra fält. Det får vi dubbelkolla nu, nu då med API mot Box då så att det här kom-kommer med på rätt sätt. Men det kommer-- Grunden är ju att den kommer att skriva då artikelnummer, eh, K etthundra säger vi. Den lägger in beskrivningen och sen så säger den att det är tio stycken utav den till ett pris av tvåhundra kronor styck. Och då kommer ju då sen ekonomisystemet själva att...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. Räkna ut då att det blir tvåtusen kronor då. Och sen så kommer det då kanske, eh, en ny artikel med den referensen då på motsvarande sätt, fastighetsbeteckning si och så. Och sen så, eh, nummer och så, och så kommer det då en beteckning och så kommer det en ny artikel då till exempel rumstvätt, K200 rumstvätt, ett stycke rum, ah, femhundra kronor då. Och så plussar den på de femhundra kronorna på, på, på det. Men det gör inte, eh, Trivore ju.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Nej. Det gör sen Fortnox då baserat på den informationen. Och så här ska den ju här då kunna jobba med må-- mängder utav fakturarader då. Mm. Teoretiskt sett så finns det liksom ingen, ingen ytterligare begränsning då, utan när det är en faktura full så börjar det ju då bara med nästa och sen så kommer då ekonomisystemet då f-- summera det här på sista bladet då. Mm.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    }
+  ]
+}
