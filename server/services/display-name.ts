@@ -181,6 +181,10 @@ export type ObjectDisplayNames = {
   translations?: Record<string, string>;
   // Task #634: tillgängliga språk i kedjan (objektets + föräldrarnas), sorterade.
   languages?: string[];
+  // Om tenantens släktnamns-regler (displayNameRules.enabled) är påslagna. När
+  // false beräknas inga kedjor (chains=[]) — UI:t använder detta för att skilja
+  // "avstängt i inställningar" från "saknar förälder".
+  rulesEnabled: boolean;
 };
 
 // Multi-förälder (task #619): bygg ett släktnamn per direkt förälder via
@@ -203,10 +207,10 @@ export async function computeObjectDisplayNames(
   const byId = new Map<string, MinimalObject>(all.map(o => [o.id, toMinimal(o)]));
 
   const start = byId.get(objectId);
-  if (!start) return { primary: "", chains: [], language: lang };
+  if (!start) return { primary: "", chains: [], language: lang, rulesEnabled: r.enabled };
   const selfName = localizedName(start, lang);
   const translations = start.nameTranslations ?? undefined;
-  if (!r.enabled) return { primary: selfName, chains: [], language: lang, translations };
+  if (!r.enabled) return { primary: selfName, chains: [], language: lang, translations, rulesEnabled: false };
 
   // object_parents per barn → relationer.
   const relRows = await db
@@ -298,6 +302,7 @@ export async function computeObjectDisplayNames(
     language: lang,
     translations,
     languages: languages.length ? languages : undefined,
+    rulesEnabled: r.enabled,
   };
 }
 

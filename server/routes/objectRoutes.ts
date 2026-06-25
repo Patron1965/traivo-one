@@ -731,7 +731,12 @@ app.get("/api/objects/:id/ancestors", asyncHandler(async (req, res) => {
   }
   const processor = await createInheritanceProcessor(tenantId);
   const ancestors = await processor.getAncestorChain(req.params.id);
-  res.json(ancestors);
+  // getAncestorChain inkluderar objektet självt sist i kedjan (rot → … → objektet).
+  // Frontend renderar objektet separat, så exkludera det här för att få en ren
+  // förälderkedja (rot → närmaste förälder) — annars listas objektet som sin egen
+  // förälder ("X › X") och toppnivå-objekt får aldrig sin tomma-kedja-vy.
+  const parentChain = ancestors.filter((a) => a.id !== req.params.id);
+  res.json(parentChain);
 }));
 
 app.get("/api/objects/:id/descendants", asyncHandler(async (req, res) => {

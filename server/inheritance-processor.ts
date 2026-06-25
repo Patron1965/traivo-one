@@ -51,10 +51,15 @@ export class InheritanceProcessor {
 
   async getAncestorChain(objectId: string, contextParentId?: string): Promise<ServiceObject[]> {
     const ancestors: ServiceObject[] = [];
+    // Skydd mot självreferens/cykel: ett objekt vars parentId pekar på sig självt
+    // (eller en cyklisk kedja) får aldrig listas som sin egen förälder och får
+    // aldrig orsaka en oändlig loop. `seen` bryter så snart en nod återkommer.
+    const seen = new Set<string>();
     let currentId: string | null = objectId;
     let isFirst = true;
 
-    while (currentId) {
+    while (currentId && !seen.has(currentId)) {
+      seen.add(currentId);
       const [obj] = await db
         .select()
         .from(objects)

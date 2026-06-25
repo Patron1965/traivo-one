@@ -36,6 +36,7 @@ interface ObjectDisplayNamesData {
   language?: string;
   translations?: Record<string, string>;
   languages?: string[];
+  rulesEnabled?: boolean;
 }
 
 const CONTEXT_LABELS: Record<string, string> = {
@@ -124,9 +125,20 @@ export function ObjectDisplayNames({
     return <p className="text-xs text-muted-foreground" data-testid="display-names-loading">Laddar släktnamn…</p>;
   }
   if (!data || data.chains.length === 0) {
+    // Skilj på de två orsakerna så meddelandet blir begripligt:
+    // (1) tenantens släktnamns-regler är avstängda → peka på var de slås på.
+    // (2) reglerna är på men objektet saknar förälder → toppnivåobjekt.
+    if (data && data.rulesEnabled === false) {
+      return (
+        <p className="text-xs text-muted-foreground" data-testid="display-names-disabled">
+          Hierarkiska släktnamn är avstängda för den här organisationen. En administratör
+          kan slå på dem under Inställningar → Tenant-konfiguration → Visningsnamn.
+        </p>
+      );
+    }
     return (
       <p className="text-xs text-muted-foreground" data-testid="display-names-empty">
-        Inget hierarkiskt släktnamn (slå på i tenant-inställningar eller saknar förälder).
+        Objektet saknar förälder — detta är ett toppnivåobjekt.
       </p>
     );
   }
