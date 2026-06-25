@@ -9,7 +9,7 @@
 import { useState, useMemo, useCallback, useEffect, memo } from "react";
 import { useLocation, Link } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { queryClient, apiRequest, versionedUrl } from "@/lib/queryClient";
+import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useTerminology } from "@/hooks/use-terminology";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -38,8 +38,6 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription,
   AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { MetadataFieldBuilder, type BuilderFieldValue, type InheritedFieldSeed } from "@/components/MetadataFieldBuilder";
-import { ObjectDetailSheet } from "@/components/ObjectDetailSheet";
 import { ObjectHierarchyTree } from "@/components/objectTree/ObjectHierarchyTree";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { QueryState } from "@/components/QueryState";
@@ -186,7 +184,6 @@ export default function ObjectsPage() {
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
   const [bulkParentDialogOpen, setBulkParentDialogOpen] = useState(false);
   const [bulkNewParentId, setBulkNewParentId] = useState<string | null>(null);
-  const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [servicePatternDialog, setServicePatternDialog] = useState<{ open: boolean; loading: boolean; data?: { summary: string; patterns: { label: string; value: string }[]; anomalies: { objectId: string; objectName: string; reason: string }[] } }>({ open: false, loading: false });
   const [maintenanceDialog, setMaintenanceDialog] = useState<{ open: boolean; loading: boolean; data?: { overdue: { objectName: string; predictedDate: string; daysUntil: number; confidence: number }[]; upcoming: { objectName: string; predictedDate: string; daysUntil: number; confidence: number }[]; summary: string; totalPredicted: number } }>({ open: false, loading: false });
@@ -223,40 +220,6 @@ export default function ObjectsPage() {
       entranceLatitude: number | null; entranceLongitude: number | null;
     }>;
   } | null>(null);
-  const [newObject, setNewObject] = useState({
-    name: "",
-    accessType: "open",
-    accessCode: "",
-    address: "",
-    customerId: "",
-    latitude: null as number | null,
-    longitude: null as number | null,
-    city: "",
-    postalCode: "",
-    entranceLatitude: null as number | null,
-    entranceLongitude: null as number | null,
-    addressDescriptor: "",
-  });
-  // Task #681: barn-läge för skapa-dialogen + metadata-byggarens utdata.
-  const [createParentId, setCreateParentId] = useState<string | null>(null);
-  const [createParentName, setCreateParentName] = useState<string>("");
-  const [metadataFields, setMetadataFields] = useState<BuilderFieldValue[]>([]);
-  // Task #681: in-page detaljpanel (ersätter navigering bort från listan).
-  const [detailObject, setDetailObject] = useState<ServiceObject | null>(null);
-  const [builderKey, setBuilderKey] = useState(0);
-  // Task #681: full-redigering + radering via radens kontextmeny.
-  const [editObjectOpen, setEditObjectOpen] = useState(false);
-  const [editForm, setEditForm] = useState({
-    id: "", objectNumber: "" as string | null, parentId: null as string | null,
-    name: "", accessType: "open", accessCode: "",
-    address: "", city: "", postalCode: "",
-    latitude: null as number | null, longitude: null as number | null,
-  });
-  // Visningsnamn för parent vald via väljaren i redigera-läget. null = härled från
-  // den laddade objektlistan (befintlig parent); sätts när användaren väljer en ny
-  // parent (även en som hittats via sök/kund-förfilter och saknas i listan) så att
-  // triggern visar släktnamnet — samma beteende som skapa-läget.
-  const [editParentName, setEditParentName] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<ServiceObject | null>(null);
 
   useEffect(() => {
@@ -522,107 +485,6 @@ export default function ObjectsPage() {
     },
   });
 
-  // Task #681: förhandsvisa nästa systemnummer i skapa-dialogen.
-  const { data: nextNumberData } = useQuery<{ objectNumber: string }>({
-    queryKey: ["/api/objects/next-number"],
-    queryFn: async () => {
-      const res = await fetch(versionedUrl("/api/objects/next-number"), { credentials: "include" });
-      if (!res.ok) throw new Error("Failed");
-      return res.json();
-    },
-    enabled: createDialogOpen,
-    staleTime: 0,
-  });
-
-  // Task #681: ärvda metadatavärden från föräldern (barn-läge) → förifyll byggaren.
-  const { data: parentMetadata } = useQuery<{ metadata: any[] }>({
-    queryKey: ["/api/metadata/objects", createParentId],
-    queryFn: async () => {
-      const res = await fetch(versionedUrl(`/api/metadata/objects/${createParentId}`), { credentials: "include" });
-      if (!res.ok) throw new Error("Failed");
-      return res.json();
-    },
-    enabled: !!createParentId && createDialogOpen,
-    staleTime: 30000,
-  });
-
-  const inheritedSeeds = useMemo<InheritedFieldSeed[]>(() => {
-    if (!createParentId || !parentMetadata?.metadata) return [];
-    const entryValue = (e: any): string => {
-      if (e.vardeString != null) return String(e.vardeString);
-      if (e.vardeInteger != null) return String(e.vardeInteger);
-      if (e.vardeDecimal != null) return String(e.vardeDecimal);
-      if (e.vardeBoolean != null) return e.vardeBoolean ? "true" : "false";
-      if (e.vardeDatetime != null) return String(e.vardeDatetime);
-      if (e.vardeJson != null) return typeof e.vardeJson === "string" ? e.vardeJson : JSON.stringify(e.vardeJson);
-      return "";
-    };
-    return parentMetadata.metadata
-      .filter((e: any) => e.source !== "computed")
-      .filter((e: any) => (e.source === "local" && e.arvsNedat) || e.source === "inherited")
-      .map((e: any) => ({
-        namn: e.katalog?.namn as string,
-        datatyp: (e.katalog?.datatyp as string) || "text",
-        value: entryValue(e),
-        sourceName: e.fromObject?.namn ?? createParentName,
-        allowedValues: e.katalog?.allowedValues ?? null,
-        area: e.katalog?.area ?? null,
-      }))
-      .filter((s: InheritedFieldSeed) => !!s.namn);
-  }, [createParentId, parentMetadata, createParentName]);
-
-  const resetCreateForm = () => {
-    setNewObject({ name: "", accessType: "open", accessCode: "", address: "", customerId: "", latitude: null, longitude: null, city: "", postalCode: "", entranceLatitude: null, entranceLongitude: null, addressDescriptor: "" });
-    setCreateParentId(null);
-    setCreateParentName("");
-    setMetadataFields([]);
-    setBuilderKey((k) => k + 1);
-  };
-
-  const createObjectMutation = useMutation({
-    // Task #681: objektet skapas först (1 anrop), därefter skrivs metadatavärden.
-    // Eftersom detta inte är atomiskt (full atomicitet = uppföljning #687) skiljer
-    // vi tydligt på "objektet kunde inte skapas" och "objektet skapades men något
-    // metadatafält misslyckades" — annars riskerar användaren att försöka igen och
-    // skapa ett dubblettobjekt.
-    mutationFn: async (payload: { data: Partial<ServiceObject>; metadata: BuilderFieldValue[] }) => {
-      const res = await apiRequest("POST", "/api/objects", payload.data);
-      const created = await res.json();
-      const metadataErrors: string[] = [];
-      for (const field of payload.metadata) {
-        if (field.varde === "" || field.varde == null) continue;
-        try {
-          await apiRequest("POST", "/api/metadata/", {
-            objektId: created.id,
-            metadataTypNamn: field.namn,
-            varde: field.varde,
-          });
-        } catch (e) {
-          metadataErrors.push(`${field.namn}: ${e instanceof Error ? e.message : "okänt fel"}`);
-        }
-      }
-      return { created, metadataErrors };
-    },
-    onSuccess: ({ metadataErrors }) => {
-      queryClient.invalidateQueries({ queryKey: ["/api/objects"], exact: false });
-      queryClient.invalidateQueries({ queryKey: ["/api/objects/next-number"] });
-      if (metadataErrors.length > 0) {
-        toast({
-          title: "Objekt skapat – vissa metadatafält misslyckades",
-          description: `Objektet skapades, men ${metadataErrors.length} fält kunde inte sparas: ${metadataErrors.join("; ")}. Skapa inte objektet igen — komplettera fälten i detaljvyn.`,
-          variant: "destructive",
-        });
-      } else {
-        toast({ title: "Objekt skapat" });
-      }
-      setCreateDialogOpen(false);
-      resetCreateForm();
-    },
-    onError: (error: Error) => {
-      toast({ title: "Kunde inte skapa objektet", description: error.message, variant: "destructive" });
-    },
-  });
-
   // Task #681: klona objekt via dedikerad server-endpoint (nytt nr + kopierad metadata).
   const copyObjectMutation = useMutation({
     mutationFn: async ({ id, name, mode }: { id: string; name: string; mode: "single" | "branch" }) => {
@@ -660,22 +522,6 @@ export default function ObjectsPage() {
     },
     onError: (error: Error) => {
       toast({ title: "Kunde inte ta bort objektet", description: error.message, variant: "destructive" });
-    },
-  });
-
-  // Task #727: arkivera objekt (livscykel). 409 = blockerat (kräver force).
-  const archiveObjectMutation = useMutation({
-    mutationFn: async ({ id, force }: { id: string; force?: boolean }) => {
-      const res = await apiRequest("POST", `/api/objects/${id}/archive`, force ? { force: true } : {});
-      return res.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/objects"], exact: false });
-      toast({ title: "Objekt arkiverat" });
-      setEditObjectOpen(false);
-    },
-    onError: (error: Error) => {
-      toast({ title: "Kunde inte arkivera objektet", description: error.message, variant: "destructive" });
     },
   });
 
