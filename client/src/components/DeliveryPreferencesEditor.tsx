@@ -46,6 +46,11 @@ interface DeliveryPreferencesEditorProps {
   /** Källa/arv-badge som visas i metadata-rubriken (t.ex. "Egen" eller
    *  "Ärvd från kund"). Endast i metadata-läge. */
   sourceBadge?: ReactNode;
+  /** Task #1139: kundens ärvda fallback-preferenser. Visas (read-only) när
+   *  objektet saknar egna (`initial` är null) så att arv-badgen blir sann.
+   *  Användaren kan klicka "Anpassa för objektet" för att kopiera dem som
+   *  utgångspunkt och spara egna prefs på objektet. */
+  fallback?: DeliveryPreferences | null;
 }
 
 export function DeliveryPreferencesEditor({
@@ -56,15 +61,39 @@ export function DeliveryPreferencesEditor({
   customTransport,
   metadataStyle = false,
   sourceBadge,
+  fallback,
 }: DeliveryPreferencesEditorProps) {
   const { toast } = useToast();
-  const [prefs, setPrefs] = useState<DeliveryPreferences>(
-    initial && typeof initial === "object" ? { ...EMPTY_DELIVERY_PREFERENCES, ...initial } : EMPTY_DELIVERY_PREFERENCES,
+  const hasOwn = !!(initial && typeof initial === "object");
+  const hasFallback = !!(fallback && typeof fallback === "object");
+  // Task #1139: när objektet saknar egna prefs men kunden har fallback visar vi
+  // kundens faktiska värden read-only (arv blir "sant"). Användaren kan klicka
+  // "Anpassa för objektet" för att låsa upp och spara egna prefs.
+  const [prefs, setPrefs] = useState<DeliveryPreferences>(() =>
+    hasOwn
+      ? { ...EMPTY_DELIVERY_PREFERENCES, ...initial }
+      : hasFallback
+        ? { ...EMPTY_DELIVERY_PREFERENCES, ...fallback }
+        : EMPTY_DELIVERY_PREFERENCES,
   );
+  // Read-only-läge gäller endast när vi visar ärvda kund-värden och användaren
+  // ännu inte valt att anpassa dem för objektet.
+  const [inheritedLocked, setInheritedLocked] = useState(!hasOwn && hasFallback);
 
   useEffect(() => {
-    setPrefs(initial && typeof initial === "object" ? { ...EMPTY_DELIVERY_PREFERENCES, ...initial } : EMPTY_DELIVERY_PREFERENCES);
-  }, [initial]);
+    const nextHasOwn = !!(initial && typeof initial === "object");
+    const nextHasFallback = !!(fallback && typeof fallback === "object");
+    setPrefs(
+      nextHasOwn
+        ? { ...EMPTY_DELIVERY_PREFERENCES, ...initial }
+        : nextHasFallback
+          ? { ...EMPTY_DELIVERY_PREFERENCES, ...fallback }
+          : EMPTY_DELIVERY_PREFERENCES,
+    );
+    setInheritedLocked(!nextHasOwn && nextHasFallback);
+  }, [initial, fallback]);
+
+  const readOnly = inheritedLocked;
 
   const endpoint =
     entityKind === "object"
@@ -167,6 +196,20 @@ export function DeliveryPreferencesEditor({
         )}
       </CardHeader>
       <CardContent className="space-y-6">
+        {readOnly && (
+          <div
+            className="rounded-md border border-dashed bg-muted/40 px-3 py-2 text-xs text-muted-foreground"
+            data-testid="banner-inherited-prefs"
+          >
+            Objektet saknar egna leveranspreferenser. Värdena nedan är kundens och
+            används som fallback. Klicka <strong>Anpassa för objektet</strong> för att
+            utgå från dem och spara egna preferenser på objektet.
+          </div>
+        )}
+        <fieldset
+          disabled={readOnly}
+          className="space-y-6 m-0 min-w-0 border-0 p-0 disabled:opacity-70"
+        >
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           <div className="space-y-1">
             <Label>Prioritet</Label>
@@ -266,13 +309,22 @@ export function DeliveryPreferencesEditor({
           ))}
         </div>
 
+        </fieldset>
         <div className="flex items-center gap-2 pt-2 border-t">
+          {readOnly ? (
+            <Button onClick={() => setInheritedLocked(false)} data-testid="button-customize-preferences">
+              Anpassa för objektet
+            </Button>
+          ) : (
+            <>
           <Button onClick={() => saveMutation.mutate(prefs)} disabled={saveMutation.isPending} data-testid="button-save-preferences">
             {saveMutation.isPending ? "Sparar…" : "Spara preferenser"}
           </Button>
           <Button variant="ghost" onClick={() => clearMutation.mutate()} disabled={clearMutation.isPending} data-testid="button-clear-preferences">
             Återställ (använd kundens fallback)
           </Button>
+            </>
+          )}
         </div>
       </CardContent>
     </Card>

@@ -709,6 +709,21 @@ app.get("/api/objects/:id/resolved", asyncHandler(async (req, res) => {
   res.json(objectWithInheritance);
 }));
 
+// Task #1139: effektiva (resolved) leveranspreferenser för objektet. Returnerar
+// objektets egna prefs om satta, annars kundens ärvda fallback (source="customer"),
+// annars tomt (source="none"). Används för att visa kundens faktiska
+// fallback-värden i editorn när objektet saknar egna.
+app.get("/api/objects/:id/delivery-preferences", asyncHandler(async (req, res) => {
+  const tenantId = getTenantIdWithFallback(req);
+  const existing = await storage.getObject(req.params.id);
+  if (!verifyTenantOwnership(existing, tenantId)) {
+    throw new NotFoundError("Objekt");
+  }
+  const resolved = await storage.resolveDeliveryPreferences(req.params.id);
+  res.set("Cache-Control", "no-cache, must-revalidate");
+  res.json(resolved);
+}));
+
 // Task #619: alla släktnamn (ett per förälderkedja via object_parents).
 // Primär kedja först; UI visar den som default och övriga som alternativ.
 app.get("/api/objects/:id/display-names", asyncHandler(async (req, res) => {

@@ -444,6 +444,20 @@ export default function ObjectDetailPage() {
     enabled: !!resolvedObject?.customerId,
   });
 
+  // Task #1139: effektiva leveranspreferenser (objekt → kund-fallback → ingen).
+  // Hämtas endast när objektet saknar egna prefs, för att kunna visa kundens
+  // faktiska ärvda värden read-only i editorn.
+  const objHasOwnDeliveryPrefs = !!(
+    resolvedObject as { deliveryPreferences?: DeliveryPreferences | null } | undefined
+  )?.deliveryPreferences;
+  const { data: resolvedDelivery } = useQuery<{
+    effective: DeliveryPreferences;
+    source: "object" | "customer" | "none";
+  }>({
+    queryKey: ["/api/objects", resolvedObject?.id, "delivery-preferences"],
+    enabled: !!resolvedObject?.id && !objHasOwnDeliveryPrefs,
+  });
+
   // Task #1128: scrollar till en sektion via dess id. Gamla flik-värden och
   // ObjectMetadataForm-navigeringen (onNavigateToTab) mappas hit.
   const scrollToSection = useCallback((key: string) => {
@@ -2265,6 +2279,13 @@ export default function ObjectDetailPage() {
                 {(() => {
                   const ownPrefs = (obj as { deliveryPreferences?: DeliveryPreferences | null })
                     .deliveryPreferences;
+                  // Task #1139: kundens faktiska fallback-värden (ärvda) hämtas
+                  // bara när objektet saknar egna prefs, så att arv-badgen blir
+                  // sann och editorn kan visa dem read-only.
+                  const fallbackPrefs =
+                    !ownPrefs && resolvedDelivery?.source === "customer"
+                      ? resolvedDelivery.effective
+                      : null;
                   const sourceBadge = ownPrefs ? (
                     <Badge variant="secondary" className="text-[10px]" data-testid="badge-delivery-prefs-source">
                       Egen
@@ -2284,11 +2305,12 @@ export default function ObjectDetailPage() {
                         entityKind="object"
                         entityId={obj.id}
                         initial={ownPrefs}
-                        invalidateKeys={[["/api/objects", obj.id], ["/api/objects"]]}
+                        fallback={fallbackPrefs}
+                        invalidateKeys={[["/api/objects", obj.id], ["/api/objects"], ["/api/objects", obj.id, "delivery-preferences"]]}
                         metadataStyle
                         sourceBadge={sourceBadge}
                       />
-                      {!ownPrefs && customer && (
+                      {!ownPrefs && customer && !fallbackPrefs && (
                         <p className="mt-2 text-xs text-muted-foreground">
                           Inga preferenser för objektet — kundens preferenser används som fallback.
                         </p>
