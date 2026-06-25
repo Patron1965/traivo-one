@@ -5,7 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ArrowLeft, Settings, Bell, Mail, Phone, Save, Loader2, CalendarClock } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { ArrowLeft, Settings, Bell, Mail, Phone, Save, Loader2, CalendarClock, Link as LinkIcon } from "lucide-react";
 import { DeliveryPreferencesEditor } from "@/components/DeliveryPreferencesEditor";
 import type { DeliveryPreferences } from "@shared/schema";
 import { useState, useEffect } from "react";
@@ -338,7 +339,10 @@ function PortalObjectDeliveryPrefs({
     queryFn: () => portalFetch("/api/portal/objects"),
     enabled: !!getSessionToken(),
   });
-  const prefsQuery = useQuery<{ deliveryPreferences: DeliveryPreferences | null }>({
+  const prefsQuery = useQuery<{
+    deliveryPreferences: DeliveryPreferences | null;
+    fallback?: DeliveryPreferences | null;
+  }>({
     queryKey: ["/api/portal/objects", selectedId, "delivery-preferences"],
     queryFn: () => portalFetch(`/api/portal/objects/${selectedId}/delivery-preferences`),
     enabled: !!selectedId,
@@ -377,17 +381,41 @@ function PortalObjectDeliveryPrefs({
         {selectedId && prefsQuery.isLoading ? (
           <div className="text-sm text-muted-foreground">Laddar…</div>
         ) : selectedId ? (
-          <DeliveryPreferencesEditor
-            entityKind="portal"
-            initial={prefsQuery.data?.deliveryPreferences ?? null}
-            invalidateKeys={[["/api/portal/objects", selectedId, "delivery-preferences"]]}
-            customTransport={(method, body) =>
-              portalFetch(`/api/portal/objects/${selectedId}/delivery-preferences`, {
-                method,
-                body: JSON.stringify(body),
-              })
-            }
-          />
+          (() => {
+            const ownPrefs = prefsQuery.data?.deliveryPreferences ?? null;
+            // Task #1142: visa kundens faktiska ärvda värden read-only när objektet
+            // saknar egna, så arvet blir tydligt för kunden (samma UX som interna
+            // objektsidan).
+            const fallbackPrefs = !ownPrefs ? prefsQuery.data?.fallback ?? null : null;
+            const sourceBadge = ownPrefs ? (
+              <Badge variant="secondary" className="text-[10px]" data-testid="badge-portal-delivery-prefs-source">
+                Egen
+              </Badge>
+            ) : fallbackPrefs ? (
+              <Badge
+                variant="outline"
+                className="text-[10px] inline-flex items-center gap-1"
+                data-testid="badge-portal-delivery-prefs-source"
+              >
+                <LinkIcon className="h-3 w-3" /> Ärvd från kund
+              </Badge>
+            ) : undefined;
+            return (
+              <DeliveryPreferencesEditor
+                entityKind="portal"
+                initial={ownPrefs}
+                fallback={fallbackPrefs}
+                sourceBadge={sourceBadge}
+                invalidateKeys={[["/api/portal/objects", selectedId, "delivery-preferences"]]}
+                customTransport={(method, body) =>
+                  portalFetch(`/api/portal/objects/${selectedId}/delivery-preferences`, {
+                    method,
+                    body: JSON.stringify(body),
+                  })
+                }
+              />
+            );
+          })()
         ) : null}
       </CardContent>
     </Card>

@@ -8,7 +8,7 @@ import { getTenantIdWithFallback } from "../tenant-middleware";
 import { asyncHandler } from "../asyncHandler";
 import { AppError, NotFoundError, ValidationError, UnauthorizedError, ForbiddenError, ConflictError } from "../errors";
 import { requireAdmin, requireRole } from "../tenant-middleware";
-import { insertPortalMessageSchema, insertSelfBookingSchema, insertVisitConfirmationSchema, insertTechnicianRatingSchema, insertQrCodeLinkSchema, insertSelfBookingSlotSchema, insertCustomerNotificationSettingsSchema, type InsertObject, taskMetadataUpdates } from "@shared/schema";
+import { insertPortalMessageSchema, insertSelfBookingSchema, insertVisitConfirmationSchema, insertTechnicianRatingSchema, insertQrCodeLinkSchema, insertSelfBookingSlotSchema, insertCustomerNotificationSettingsSchema, type InsertObject, type DeliveryPreferences, taskMetadataUpdates } from "@shared/schema";
 import { getObjectWithAllMetadata, writeArticleMetadataOnObject, getDisplayValue } from "../metadata-queries";
 import { notificationService } from "../notifications";
 import { sendEmail } from "../replit_integrations/resend";
@@ -1217,7 +1217,21 @@ app.get("/api/portal/objects/:objectId/delivery-preferences", asyncHandler(async
     if (!obj || !verifyTenantOwnership(obj, session.tenantId!) || !isObjectOwnedByPortalCustomer(obj, session) || !isObjectInScope(session, obj.id)) {
       throw new NotFoundError("Objekt");
     }
-    res.json({ deliveryPreferences: obj.deliveryPreferences ?? null });
+    // Task #1142: när objektet saknar egna prefs exponerar vi kundens faktiska
+    // ärvda värden så portalen kan visa dem read-only (samma UX som interna
+    // objektsidan, Task #1139). Scope-/tenant-säkert: objektet är redan verifierat
+    // ägt av portal-sessionens kund, så fallbacken är sessionens egen kund.
+    let fallback: DeliveryPreferences | null = null;
+    if (!obj.deliveryPreferences && session.customerId) {
+      const customer = await storage.getCustomer(session.customerId);
+      if (customer && verifyTenantOwnership(customer, session.tenantId!)) {
+        const { deliveryPreferencesSchema } = await import("@shared/schema");
+        const parsed = deliveryPreferencesSchema.safeParse(customer.deliveryPreferences);
+        fallback = parsed.success ? parsed.data : null;
+      }
+    }
+    res.set("Cache-Control", "no-cache, must-revalidate");
+    res.json({ deliveryPreferences: obj.deliveryPreferences ?? null, fallback });
 }));
 
 const updatePortalObjectDeliveryPrefsHandler = asyncHandler(async (req: ExpressRequest, res: ExpressResponse) => {
