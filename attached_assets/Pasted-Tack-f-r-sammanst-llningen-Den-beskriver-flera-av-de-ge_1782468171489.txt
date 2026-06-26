@@ -1,0 +1,102 @@
+Tack för sammanställningen. Den beskriver flera av de genomförda förändringarna på ett bra sätt, men det finns en grundläggande arkitekturfråga som behöver förtydligas eftersom beskrivningen riskerar att ge en felaktig bild av systemets informationsmodell.
+
+1. Objektet är den primära informationsbäraren
+
+Systemets kärna är objektet. All information i systemet utgår från objektet och är knuten till ett unikt objekt i objektsträdet.
+
+Metadata (alfanumeriska värden, numeriska värden, filreferenser, bilder m.m.) tillhör alltid ett objekt.
+
+Metadata kan antingen:
+
+vara definierad direkt på objektet, eller
+ärvas från ett överordnat objekt i objektshierarkin.
+
+Det finns ingen arvsmekanism från kunden till objektet.
+
+⸻
+
+2. Kund och objekt är två olika informationsmodeller
+
+I sammanställningen används formuleringen att objektet “ärver kundens värden”. Den formuleringen är inte korrekt.
+
+Kunden äger inte metadata.
+
+Det är istället objektets förälder eller annan överordnad nod i objektträdet som äger den metadata som kan ärvas.
+
+Kunden är en affärsrelation och inte informationskälla för objektets metadata.
+
+⸻
+
+3. Orderkonceptet är länken mellan kund och uppgift
+
+Kundrelationen uppstår först när ett orderkoncept skapas.
+
+Orderkonceptet definierar bland annat:
+
+vilken kund uppgiften avser,
+vilka artiklar eller tjänster som ska utföras,
+leveransregler,
+tidsregler,
+faktureringsregler,
+urval av metadata som ska användas vid utförandet.
+
+Orderkonceptet genererar därefter en eller flera uppgifter.
+
+⸻
+
+4. Uppgiften är ett informationspaket
+
+En uppgift är egentligen ett informationspaket som består av flera delar:
+
+referens till objektet
+referens till orderkonceptet
+kundrelation
+vald artikel eller strukturartikel
+planerad tid
+geografisk information
+faktureringsinformation
+instruktioner
+det metadataurval som behövs för uppdraget.
+
+Planeringsmotorn använder sedan denna information för att avgöra:
+
+när uppgiften ska utföras,
+var den ska utföras,
+hur den ska utföras.
+
+⸻
+
+5. Metadata kan även användas under utförandet
+
+En uppgift kan dessutom innehålla instruktioner som:
+
+visar metadata för utföraren,
+kräver att ny metadata registreras,
+uppdaterar objektets metadata efter utfört arbete,
+lagrar bilder, dokument och andra resultat.
+
+Det innebär att uppgiften både kan konsumera och skapa metadata, men metadata lagras fortfarande på objektet.
+
+⸻
+
+6. Sortering sker utifrån informationspaketen
+
+Eftersom uppgifterna innehåller flera typer av referenser kan de grupperas och filtreras på många olika sätt, exempelvis efter:
+
+objekt,
+kund,
+orderkoncept,
+geografi,
+tid,
+fakturareferens,
+arbetslag,
+status,
+artikel eller tjänst.
+
+Detta är olika vyer av samma informationsmodell – inte separata informationsstrukturer.
+
+⸻
+
+I övrigt ser leveransbeskrivningen bra ut och de genomförda förändringarna verkar ligga i linje med önskad funktionalitet. Däremot bör alla formuleringar som beskriver att objekt “ärver från kunden” ändras. De bör istället beskriva att metadata alltid är objektbunden och ärvs enbart via objektshierarkin, medan kundrelationen uppstår först genom orderkonceptet och de uppgifter som genereras därifrån.
+
+Det är en viktig arkitektonisk princip i Traivo, eftersom den separerar informationsmodellen (objekt och metadata) från affärsmodellen (kund, orderkoncept, uppgifter och fakturering). Den separationen gör modellen generell, skalbar och återanvändbar inom många olika verksamhetsområden.
