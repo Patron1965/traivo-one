@@ -500,7 +500,7 @@ export interface IStorage {
   deleteObject(id: string): Promise<void>;
   resolveDeliveryPreferences(objectId: string): Promise<{
     effective: DeliveryPreferences;
-    source: "object" | "customer" | "none";
+    source: "object" | "none";
   }>;
   
   getResources(tenantId: string): Promise<Resource[]>;
@@ -3123,27 +3123,22 @@ export class DatabaseStorage implements IStorage {
     await db.update(objects).set({ deletedAt: new Date() }).where(eq(objects.id, id));
   }
 
+  // Leveranspreferenser är objekt-EGNA. Det finns ingen arvsmekanism från kunden
+  // till objektet (ADR v3 / objekt-neutralitet) — kund-kopplingen uppstår bara via
+  // orderkonceptet, inte som ett metadata-arv. Returnerar därför objektets egna
+  // prefs (source="object") eller tomt (source="none"), aldrig kundens.
   async resolveDeliveryPreferences(objectId: string): Promise<{
     effective: DeliveryPreferences;
-    source: "object" | "customer" | "none";
+    source: "object" | "none";
   }> {
     const obj = await this.getObject(objectId);
     if (!obj) return { effective: EMPTY_DELIVERY_PREFERENCES, source: "none" };
 
-    const parseSafe = (raw: unknown): DeliveryPreferences | null => {
-      if (!raw || typeof raw !== "object") return null;
-      const parsed = deliveryPreferencesSchema.safeParse(raw);
-      return parsed.success ? parsed.data : null;
-    };
-
-    const objPrefs = parseSafe(obj.deliveryPreferences);
-    if (objPrefs) return { effective: objPrefs, source: "object" };
-
-    if (obj.customerId) {
-      const customer = await this.getCustomer(obj.customerId);
-      const custPrefs = customer ? parseSafe(customer.deliveryPreferences) : null;
-      if (custPrefs) return { effective: custPrefs, source: "customer" };
+    if (!obj.deliveryPreferences || typeof obj.deliveryPreferences !== "object") {
+      return { effective: EMPTY_DELIVERY_PREFERENCES, source: "none" };
     }
+    const parsed = deliveryPreferencesSchema.safeParse(obj.deliveryPreferences);
+    if (parsed.success) return { effective: parsed.data, source: "object" };
 
     return { effective: EMPTY_DELIVERY_PREFERENCES, source: "none" };
   }

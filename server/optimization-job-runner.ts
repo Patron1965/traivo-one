@@ -189,11 +189,11 @@ async function executeORToolsJob(jobId: string, input: VRPJobInput): Promise<VRP
 
   await updateProgress(jobId, 30);
 
-  // Lös effektiva leveranspreferenser (objekt eller kund) per order så att VRP
-  // kan respektera slottider. strict => hård tidsfönster + bonus-prioritet,
+  // Lös effektiva (objekt-egna) leveranspreferenser per order så att VRP kan
+  // respektera slottider. strict => hård tidsfönster + bonus-prioritet,
   // preferred => behåller standard-fönster men flaggas via prioritetsökning.
   const { storage: _storage } = await import("./storage");
-  type ResolvedPref = { effective: import("@shared/schema").DeliveryPreferences; source: "object" | "customer" | "none" };
+  type ResolvedPref = { effective: import("@shared/schema").DeliveryPreferences; source: "object" | "none" };
   const prefsByOrder = new Map<string, ResolvedPref>();
   for (const o of validOrders) {
     if (o.objectId) {

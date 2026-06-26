@@ -5,8 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
-import { ArrowLeft, Settings, Bell, Mail, Phone, Save, Loader2, CalendarClock, Link as LinkIcon } from "lucide-react";
+import { ArrowLeft, Settings, Bell, Mail, Phone, Save, Loader2, CalendarClock } from "lucide-react";
 import { DeliveryPreferencesEditor } from "@/components/DeliveryPreferencesEditor";
 import type { DeliveryPreferences } from "@shared/schema";
 import { useState, useEffect } from "react";
@@ -282,8 +281,8 @@ export default function PortalSettingsPage() {
               Leveranspreferenser
             </CardTitle>
             <CardDescription>
-              Ställ in önskade slottider, blockerade tider och meddelande till föraren.
-              Gäller alla era objekt om inget specifikt anges per objekt.
+              Ställ in era generella leveransönskemål — slottider, blockerade tider och
+              meddelande till föraren. Specifika tider per objekt sätts nedan.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -341,7 +340,6 @@ function PortalObjectDeliveryPrefs({
   });
   const prefsQuery = useQuery<{
     deliveryPreferences: DeliveryPreferences | null;
-    fallback?: DeliveryPreferences | null;
   }>({
     queryKey: ["/api/portal/objects", selectedId, "delivery-preferences"],
     queryFn: () => portalFetch(`/api/portal/objects/${selectedId}/delivery-preferences`),
@@ -356,8 +354,8 @@ function PortalObjectDeliveryPrefs({
           Leveranspreferenser per objekt
         </CardTitle>
         <CardDescription>
-          Sätt specifika slottider och blockerade tider per objekt. Objektets inställningar går
-          före kundens när de finns.
+          Sätt specifika slottider och blockerade tider per objekt. Preferenserna gäller
+          enbart det valda objektet.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -383,29 +381,10 @@ function PortalObjectDeliveryPrefs({
         ) : selectedId ? (
           (() => {
             const ownPrefs = prefsQuery.data?.deliveryPreferences ?? null;
-            // Task #1142: visa kundens faktiska ärvda värden read-only när objektet
-            // saknar egna, så arvet blir tydligt för kunden (samma UX som interna
-            // objektsidan).
-            const fallbackPrefs = !ownPrefs ? prefsQuery.data?.fallback ?? null : null;
-            const sourceBadge = ownPrefs ? (
-              <Badge variant="secondary" className="text-[10px]" data-testid="badge-portal-delivery-prefs-source">
-                Egen
-              </Badge>
-            ) : fallbackPrefs ? (
-              <Badge
-                variant="outline"
-                className="text-[10px] inline-flex items-center gap-1"
-                data-testid="badge-portal-delivery-prefs-source"
-              >
-                <LinkIcon className="h-3 w-3" /> Ärvd från kund
-              </Badge>
-            ) : undefined;
             return (
               <DeliveryPreferencesEditor
                 entityKind="portal"
                 initial={ownPrefs}
-                fallback={fallbackPrefs}
-                sourceBadge={sourceBadge}
                 invalidateKeys={[["/api/portal/objects", selectedId, "delivery-preferences"]]}
                 customTransport={(method, body) =>
                   portalFetch(`/api/portal/objects/${selectedId}/delivery-preferences`, {

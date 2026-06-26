@@ -709,10 +709,9 @@ app.get("/api/objects/:id/resolved", asyncHandler(async (req, res) => {
   res.json(objectWithInheritance);
 }));
 
-// Task #1139: effektiva (resolved) leveranspreferenser för objektet. Returnerar
-// objektets egna prefs om satta, annars kundens ärvda fallback (source="customer"),
-// annars tomt (source="none"). Används för att visa kundens faktiska
-// fallback-värden i editorn när objektet saknar egna.
+// Effektiva (resolved) leveranspreferenser för objektet. Leveranspreferenser är
+// objekt-egna — det finns inget kund-arv (ADR v3). Returnerar objektets egna
+// prefs (source="object") eller tomt (source="none").
 app.get("/api/objects/:id/delivery-preferences", asyncHandler(async (req, res) => {
   const tenantId = getTenantIdWithFallback(req);
   const existing = await storage.getObject(req.params.id);

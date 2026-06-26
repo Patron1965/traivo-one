@@ -2109,7 +2109,7 @@ app.post("/api/ai/suggest-placement", isAuthenticated, asyncHandler(async (req: 
     // Ladda effektiva leveranspreferenser så placering kan respektera slottider.
     const { EMPTY_DELIVERY_PREFERENCES } = await import("@shared/schema");
     type DeliveryPrefs = import("@shared/schema").DeliveryPreferences;
-    type ResolvedPrefs = { effective: DeliveryPrefs; source: "object" | "customer" | "none" };
+    type ResolvedPrefs = { effective: DeliveryPrefs; source: "object" | "none" };
     const deliveryPrefs: ResolvedPrefs = workOrder.objectId
       ? await storage.resolveDeliveryPreferences(workOrder.objectId)
       : { effective: EMPTY_DELIVERY_PREFERENCES, source: "none" };

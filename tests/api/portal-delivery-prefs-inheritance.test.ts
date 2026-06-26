@@ -4,12 +4,12 @@ import { storage } from "../../server/storage";
 import { randomId } from "./helpers";
 import type { InsertObject, DeliveryPreferences } from "@shared/schema";
 
-// Task #1146: regressionsskydd för kundens ärvda leveranspreferenser i portalen
-// (fallback infördes i Task #1142). Endpointen
+// Regressionsskydd för portalens leveranspreferenser per objekt. Leveranspreferenser
+// är objekt-EGNA (ADR v3) — det finns INGET kund-arv. Endpointen
 // GET /api/portal/objects/:objectId/delivery-preferences ska:
-//   - returnera objektets EGNA prefs (ingen fallback) när de finns
-//   - returnera kundens prefs som `fallback` när objektet saknar egna
-//   - ALDRIG läcka fallback för objekt utanför sessionens kund/scope (404)
+//   - returnera objektets EGNA prefs (aldrig någon kund-fallback) när de finns
+//   - returnera { deliveryPreferences: null } (ingen fallback) när objektet saknar egna
+//   - ALDRIG läcka prefs för objekt utanför sessionens kund/scope (404)
 
 const BASE_URL = process.env.TEST_BASE_URL || "http://localhost:5000";
 const TENANT_ID = "default-tenant";
@@ -50,7 +50,7 @@ function mkPrefs(notes: string): DeliveryPreferences {
   } as DeliveryPreferences;
 }
 
-describe("Portal: ärvda leveranspreferenser (fallback) — GET /api/portal/objects/:id/delivery-preferences", () => {
+describe("Portal: objekt-egna leveranspreferenser (inget kund-arv) — GET /api/portal/objects/:id/delivery-preferences", () => {
   // Kund A (sessionens kund): har egna kund-prefs + objekt med/utan egna prefs.
   // Kund B (annan kund): objekt med egna prefs som aldrig får läcka.
   const CUSTOMER_A_PREFS = mkPrefs("Kund A kund-prefs");
@@ -61,7 +61,7 @@ describe("Portal: ärvda leveranspreferenser (fallback) — GET /api/portal/obje
   let customerA: string;
   let customerB: string;
   let objWithOwnPrefs: string; // kund A, har egna prefs
-  let objInheritsPrefs: string; // kund A, saknar egna → ärver kundens
+  let objInheritsPrefs: string; // kund A, saknar egna prefs (ska EJ ärva kundens)
   let objNoPrefsAnywhere: string; // kund A, saknar egna + kund saknar prefs
   let objOutOfScope: string; // kund A, men utanför limited-scope
   let objCustomerB: string; // kund B, helt annan kund
@@ -185,19 +185,19 @@ describe("Portal: ärvda leveranspreferenser (fallback) — GET /api/portal/obje
     expect(status).toBe(200);
     expect(body.deliveryPreferences).toBeTruthy();
     expect(body.deliveryPreferences.notes).toBe(OBJECT_OWN_PREFS.notes);
-    // Fallback ska inte beräknas/returneras när egna prefs finns.
-    expect(body.fallback ?? null).toBeNull();
+    // Fallback-fältet existerar inte längre — endpointen returnerar bara egna prefs.
+    expect(body.fallback).toBeUndefined();
   });
 
-  it("returnerar kundens prefs som fallback när objektet saknar egna", async () => {
+  it("returnerar { deliveryPreferences: null } och INGEN fallback när objektet saknar egna (kunden har prefs)", async () => {
     const { status, body } = await authGet(
       `/api/portal/objects/${objInheritsPrefs}/delivery-preferences`,
       fullAccessToken,
     );
     expect(status).toBe(200);
     expect(body.deliveryPreferences ?? null).toBeNull();
-    expect(body.fallback).toBeTruthy();
-    expect(body.fallback.notes).toBe(CUSTOMER_A_PREFS.notes);
+    // Kundens prefs får ALDRIG läcka in som fallback.
+    expect(body.fallback).toBeUndefined();
   });
 
   it("returnerar varken egna eller fallback när varken objekt eller kund har prefs", async () => {
@@ -232,13 +232,15 @@ describe("Portal: ärvda leveranspreferenser (fallback) — GET /api/portal/obje
     expect(status).toBe(404);
     expect(body?.fallback).toBeUndefined();
 
-    // Sanity: full access (tomt scope) ser samma objekt och får kundens fallback.
+    // Sanity: full access (tomt scope) ser samma objekt — men objektet har inga egna
+    // prefs och det finns ingen kund-fallback, så svaret är { deliveryPreferences: null }.
     const full = await authGet(
       `/api/portal/objects/${objOutOfScope}/delivery-preferences`,
       fullAccessToken,
     );
     expect(full.status).toBe(200);
-    expect(full.body.fallback?.notes).toBe(CUSTOMER_A_PREFS.notes);
+    expect(full.body.deliveryPreferences ?? null).toBeNull();
+    expect(full.body.fallback).toBeUndefined();
   });
 
   it("kräver autentisering (401 utan token)", async () => {

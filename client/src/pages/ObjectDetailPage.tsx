@@ -444,20 +444,6 @@ export default function ObjectDetailPage() {
     enabled: !!resolvedObject?.customerId,
   });
 
-  // Task #1139: effektiva leveranspreferenser (objekt → kund-fallback → ingen).
-  // Hämtas endast när objektet saknar egna prefs, för att kunna visa kundens
-  // faktiska ärvda värden read-only i editorn.
-  const objHasOwnDeliveryPrefs = !!(
-    resolvedObject as { deliveryPreferences?: DeliveryPreferences | null } | undefined
-  )?.deliveryPreferences;
-  const { data: resolvedDelivery } = useQuery<{
-    effective: DeliveryPreferences;
-    source: "object" | "customer" | "none";
-  }>({
-    queryKey: ["/api/objects", resolvedObject?.id, "delivery-preferences"],
-    enabled: !!resolvedObject?.id && !objHasOwnDeliveryPrefs,
-  });
-
   // Task #1128: scrollar till en sektion via dess id. Gamla flik-värden och
   // ObjectMetadataForm-navigeringen (onNavigateToTab) mappas hit.
   const scrollToSection = useCallback((key: string) => {
@@ -1237,8 +1223,8 @@ export default function ObjectDetailPage() {
   // Task #1138: leveranspreferenser ska kännas helt integrerade i metadataområdet.
   // De renderas som ett eget kort (#object-section-delivery-preferences) men listas
   // även i vänsterspaltens områdesnavigering och 360-översikten via extra-props.
-  // Antalet speglar kortets badge: konfigurerade regler från objektets EGNA prefs
-  // (ärvda kund-prefs visas bara som fallback i kortet, inte i räknaren).
+  // Antalet speglar kortets badge: konfigurerade regler från objektets EGNA prefs.
+  // Leveranspreferenser är objekt-egna (ADR v3) — det finns inget kund-arv.
   const ownDeliveryPrefs = (obj as { deliveryPreferences?: DeliveryPreferences | null })
     .deliveryPreferences;
   const deliveryPrefsCount = ownDeliveryPrefs
@@ -2270,51 +2256,23 @@ export default function ObjectDetailPage() {
                   />
                 )}
 
-                {/* Task #1133: Leveranspreferenser visas som ett metadata-likt
-                    fält direkt i metadataområdet (samma visuella språk:
-                    ikon-rubrik, antal-badge, källa/arv-badge). Spara-flödet är
-                    oförändrat — egen endpoint/datamodell. Behåller id:t
-                    "object-section-delivery-preferences" för bakåtkompatibla
-                    djuplänkar. */}
+                {/* Leveranspreferenser visas som ett metadata-likt fält direkt i
+                    metadataområdet (samma visuella språk: ikon-rubrik, antal-badge).
+                    Preferenserna är objekt-EGNA — inget kund-arv (ADR v3). Spara-flödet
+                    är oförändrat — egen endpoint/datamodell. Behåller id:t
+                    "object-section-delivery-preferences" för bakåtkompatibla djuplänkar. */}
                 {(() => {
                   const ownPrefs = (obj as { deliveryPreferences?: DeliveryPreferences | null })
                     .deliveryPreferences;
-                  // Task #1139: kundens faktiska fallback-värden (ärvda) hämtas
-                  // bara när objektet saknar egna prefs, så att arv-badgen blir
-                  // sann och editorn kan visa dem read-only.
-                  const fallbackPrefs =
-                    !ownPrefs && resolvedDelivery?.source === "customer"
-                      ? resolvedDelivery.effective
-                      : null;
-                  const sourceBadge = ownPrefs ? (
-                    <Badge variant="secondary" className="text-[10px]" data-testid="badge-delivery-prefs-source">
-                      Egen
-                    </Badge>
-                  ) : customer ? (
-                    <Badge
-                      variant="outline"
-                      className="text-[10px] inline-flex items-center gap-1"
-                      data-testid="badge-delivery-prefs-source"
-                    >
-                      <LinkIcon className="h-3 w-3" /> Ärvd från kund
-                    </Badge>
-                  ) : undefined;
                   return (
                     <div id="object-section-delivery-preferences" className="scroll-mt-24">
                       <DeliveryPreferencesEditor
                         entityKind="object"
                         entityId={obj.id}
                         initial={ownPrefs}
-                        fallback={fallbackPrefs}
                         invalidateKeys={[["/api/objects", obj.id], ["/api/objects"], ["/api/objects", obj.id, "delivery-preferences"]]}
                         metadataStyle
-                        sourceBadge={sourceBadge}
                       />
-                      {!ownPrefs && customer && !fallbackPrefs && (
-                        <p className="mt-2 text-xs text-muted-foreground">
-                          Inga preferenser för objektet — kundens preferenser används som fallback.
-                        </p>
-                      )}
                     </div>
                   );
                 })()}

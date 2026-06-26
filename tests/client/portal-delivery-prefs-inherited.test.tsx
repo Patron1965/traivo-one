@@ -8,24 +8,20 @@ import { LanguageProvider } from "@/hooks/use-language";
 import PortalSettingsPage from "@/pages/portal/PortalSettingsPage";
 import type { DeliveryPreferences } from "@shared/schema";
 
-// Task #1146: komponenttest för PortalObjectDeliveryPrefs (PortalSettingsPage).
-// Verifierar att portalen, när ett objekt saknar egna leveranspreferenser men
-// kunden har, visar kundens fallback i READ-ONLY-läge med badgen "Ärvd från kund"
-// — och att egna prefs i stället visar "Egen"-badge utan read-only.
+// Komponenttest för PortalObjectDeliveryPrefs (PortalSettingsPage).
+// Leveranspreferenser är objekt-EGNA (ADR v3) — det finns INGET kund-arv. Detta
+// test låser fast att objekt-editorn:
+//   - ALLTID är redigerbar (ingen read-only, ingen "Ärvd från kund"-badge, ingen
+//     ärvd-banner, ingen "Anpassa för objektet"-knapp) oavsett om objektet har
+//     egna prefs eller ej
+//   - visar ett tomt formulär när objektet saknar egna prefs
+//   - visar objektets egna prefs när de finns
 //
 // OBS: sidan renderar TVÅ DeliveryPreferencesEditor (entityKind="portal"): en
-// kund-nivå + en objekt-nivå. Vi skopar därför alla asserts till objekt-editorn
-// (kortet som innehåller objekt-väljaren + källbadgen) via `within`.
+// kund-nivå (renderas först) + en objekt-nivå (renderas sist, efter objekt-
+// väljaren). Vi skopar därför asserts till den SISTA editorn (objekt-editorn).
 
 const OBJECT_ID = "obj-portal-1146";
-
-const CUSTOMER_FALLBACK_PREFS: DeliveryPreferences = {
-  weeklyWindows: [{ weekday: 1, start: "08:00", end: "16:00" }],
-  blockedHours: [],
-  blockedDates: [],
-  notes: "Kundens ärvda anteckning",
-  priority: "preferred",
-};
 
 const OBJECT_OWN_PREFS: DeliveryPreferences = {
   weeklyWindows: [{ weekday: 2, start: "09:00", end: "12:00" }],
@@ -44,12 +40,10 @@ function jsonResponse(body: unknown): Response {
 
 /**
  * Mockad fetch som svarar per URL. Objekt-prefs-svaret styrs av `objectPrefs`
- * så samma rigg kan testa både fallback-läge och egna-prefs-läge.
+ * så samma rigg kan testa både tomt-formulär-läge och egna-prefs-läge. Svaret
+ * innehåller ALDRIG någon `fallback` — den modellen finns inte längre.
  */
-function installFetch(objectPrefs: {
-  deliveryPreferences: DeliveryPreferences | null;
-  fallback?: DeliveryPreferences | null;
-}) {
+function installFetch(objectPrefs: { deliveryPreferences: DeliveryPreferences | null }) {
   (globalThis as any).fetch = vi.fn(async (input: RequestInfo | URL) => {
     const url = typeof input === "string" ? input : input.toString();
     if (url.includes(`/api/portal/objects/${OBJECT_ID}/delivery-preferences`)) {
@@ -66,7 +60,7 @@ function installFetch(objectPrefs: {
         preferredContactPhone: "",
       });
     }
-    // Kund-nivå leveranspreferenser (separat editor) — ingen egen prefs.
+    // Kund-nivå leveranspreferenser (separat editor) — inga egna prefs.
     if (url.includes("/api/portal/delivery-preferences")) {
       return jsonResponse({ deliveryPreferences: null });
     }
@@ -92,25 +86,28 @@ function renderPage() {
   );
 }
 
-/** Väljer objektet och returnerar objekt-editorns rot-element (skopat). */
-async function selectObjectAndGetEditor(getByTestId: (id: string) => HTMLElement) {
+/**
+ * Väljer objektet och returnerar objekt-editorns rot-element. Objekt-editorn
+ * renderas EFTER kund-editorn, så den är den sista "delivery-preferences-portal".
+ */
+async function selectObjectAndGetEditor(
+  getByTestId: (id: string) => HTMLElement,
+  getAllByTestId: (id: string) => HTMLElement[],
+) {
   const select = await waitFor(() => {
     const el = getByTestId("select-portal-object") as HTMLSelectElement;
     if (!el.querySelector(`option[value="${OBJECT_ID}"]`)) throw new Error("option not ready");
     return el;
   });
   fireEvent.change(select, { target: { value: OBJECT_ID } });
-  // Objekt-editorn är den enda som innehåller källbadgen → använd den för att
-  // hitta rätt editor-instans.
   return waitFor(() => {
-    const badge = getByTestId("badge-portal-delivery-prefs-source");
-    const editor = badge.closest('[data-testid="delivery-preferences-portal"]') as HTMLElement | null;
-    if (!editor) throw new Error("object editor not ready");
-    return editor;
+    const editors = getAllByTestId("delivery-preferences-portal");
+    if (editors.length < 2) throw new Error("object editor not ready");
+    return editors[editors.length - 1];
   });
 }
 
-describe("Portal-inställningar: ärvda leveranspreferenser per objekt", () => {
+describe("Portal-inställningar: objekt-egna leveranspreferenser (inget kund-arv)", () => {
   beforeEach(() => {
     localStorage.setItem("portal_session", "test-token-1146");
     localStorage.setItem(
@@ -126,34 +123,42 @@ describe("Portal-inställningar: ärvda leveranspreferenser per objekt", () => {
     vi.restoreAllMocks();
   });
 
-  it("visar kundens fallback read-only med 'Ärvd från kund'-badge när objektet saknar egna prefs", async () => {
-    installFetch({ deliveryPreferences: null, fallback: CUSTOMER_FALLBACK_PREFS });
-    const { getByTestId } = renderPage();
+  it("visar ett redigerbart tomt formulär (ingen arv-badge/banner) när objektet saknar egna prefs", async () => {
+    installFetch({ deliveryPreferences: null });
+    const { getByTestId, getAllByTestId } = renderPage();
 
-    const editor = await selectObjectAndGetEditor(getByTestId);
+    const editor = await selectObjectAndGetEditor(getByTestId, getAllByTestId);
     const scoped = within(editor);
 
-    // "Ärvd från kund"-badge syns.
-    expect(getByTestId("badge-portal-delivery-prefs-source").textContent).toContain("Ärvd från kund");
-    // Read-only-banner finns i objekt-editorn.
-    expect(scoped.getByTestId("banner-inherited-prefs")).toBeTruthy();
-    // Read-only-läge: fieldset disabled, "Anpassa för objektet" istället för spara.
-    expect(editor.querySelector("fieldset")?.hasAttribute("disabled")).toBe(true);
-    expect(scoped.getByTestId("button-customize-preferences")).toBeTruthy();
-    expect(scoped.queryByTestId("button-save-preferences")).toBeNull();
+    // Alltid redigerbar: spara-knapp finns, fieldset ej disabled.
+    expect(scoped.getByTestId("button-save-preferences")).toBeTruthy();
+    expect(editor.querySelector("fieldset")?.hasAttribute("disabled")).toBe(false);
+
+    // Tomt formulär: anteckningsfältet är tomt.
+    expect((scoped.getByTestId("input-pref-notes") as HTMLTextAreaElement).value).toBe("");
+
+    // Inga arv-artefakter kvar (borttagen modell).
+    expect(scoped.queryByTestId("banner-inherited-prefs")).toBeNull();
+    expect(scoped.queryByTestId("button-customize-preferences")).toBeNull();
+    expect(scoped.queryByTestId("badge-portal-delivery-prefs-source")).toBeNull();
+    expect(editor.textContent).not.toContain("Ärvd från kund");
   });
 
-  it("visar 'Egen'-badge utan read-only när objektet har egna prefs", async () => {
-    installFetch({ deliveryPreferences: OBJECT_OWN_PREFS, fallback: CUSTOMER_FALLBACK_PREFS });
-    const { getByTestId } = renderPage();
+  it("visar objektets egna prefs i ett redigerbart formulär när de finns", async () => {
+    installFetch({ deliveryPreferences: OBJECT_OWN_PREFS });
+    const { getByTestId, getAllByTestId } = renderPage();
 
-    const editor = await selectObjectAndGetEditor(getByTestId);
+    const editor = await selectObjectAndGetEditor(getByTestId, getAllByTestId);
     const scoped = within(editor);
 
-    expect(getByTestId("badge-portal-delivery-prefs-source").textContent).toContain("Egen");
-    // Inte read-only: spara-knappen finns, fieldset ej disabled, ingen ärvd-banner.
+    // Redigerbar med spara-knapp, ingen arv-banner.
     expect(scoped.getByTestId("button-save-preferences")).toBeTruthy();
     expect(editor.querySelector("fieldset")?.hasAttribute("disabled")).toBe(false);
     expect(scoped.queryByTestId("banner-inherited-prefs")).toBeNull();
+
+    // Objektets egna anteckning förifylls i formuläret.
+    expect((scoped.getByTestId("input-pref-notes") as HTMLTextAreaElement).value).toBe(
+      OBJECT_OWN_PREFS.notes,
+    );
   });
 });

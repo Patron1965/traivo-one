@@ -9,11 +9,11 @@ import { AppError } from "../../server/errors";
 import { registerObjectRoutes } from "../../server/routes/objectRoutes";
 import { registerCustomerRoutes } from "../../server/routes/customerRoutes";
 
-// Task #1143: arvet av leveranspreferenser (objekt → kund → ingen) i
-// storage.resolveDeliveryPreferences är affärskritiskt för planering/VRP men
-// saknade tester. Fallback-kedjan kan tyst gå sönder (t.ex. om parseSafe slutar
-// fånga korrupt JSON eller kund-fallbacken tappas). Dessa tester kör mot riktig
-// DB (samma mönster som object-primary-parent.test.ts) och täcker dessutom att
+// Leveranspreferenser är objekt-EGNA (ADR v3) — det finns INGET kund-arv:
+// storage.resolveDeliveryPreferences returnerar objektets egna prefs
+// (source="object") eller tomt (source="none"), aldrig kundens. Dessa tester kör
+// mot riktig DB (samma mönster som object-primary-parent.test.ts), låser fast att
+// en kopplad kund ALDRIG ärvs ned till objektet, och täcker dessutom att
 // GET /api/objects/:id/delivery-preferences respekterar tenant-ägarskap.
 
 const NS = `dprefs-${Date.now()}`;
@@ -27,7 +27,7 @@ const CUSTOMER_PREFS: DeliveryPreferences = {
   weeklyWindows: [{ weekday: 1, start: "08:00", end: "12:00" }],
   blockedHours: [],
   blockedDates: [],
-  notes: "Kundens fallback-fönster",
+  notes: "Kundens egna fönster",
   priority: "preferred",
 };
 
@@ -52,10 +52,9 @@ function makeObject(
   } as InsertObject;
 }
 
-// Kund-kopplingen som resolveDeliveryPreferences läser kommer från object_payers
-// (primary), inte legacy objects.customer_id. Den här helpern skapar objektet och
-// — om customerId anges — en primär betalare så att fallbacken till kundens prefs
-// blir testbar via samma väg som produktion använder.
+// Den här helpern skapar objektet och — om customerId anges — en primär betalare
+// (object_payers). Vi behåller kundkopplingen i testerna just för att bevisa att
+// en kopplad kund med egna prefs ALDRIG ärvs ned till objektet.
 async function createObjectWithPrimaryCustomer(
   tenantId: string,
   customerId: string | null,
@@ -106,10 +105,10 @@ afterAll(async () => {
 }, 30000);
 
 // ---------------------------------------------------------------------------
-// storage.resolveDeliveryPreferences — fallback-kedjan objekt → kund → ingen
+// storage.resolveDeliveryPreferences — objekt-egna prefs (inget kund-arv)
 // ---------------------------------------------------------------------------
 
-describe("storage.resolveDeliveryPreferences — fallback-kedja", () => {
+describe("storage.resolveDeliveryPreferences — objekt-egna (inget kund-arv)", () => {
   it("returnerar objektets egna prefs (source=object) när de är satta", async () => {
     const obj = await createObjectWithPrimaryCustomer(TENANT_A, customerWithPrefs, {
       name: `${NS} egna-prefs`,
@@ -124,15 +123,16 @@ describe("storage.resolveDeliveryPreferences — fallback-kedja", () => {
     expect(resolved.effective.blockedDates).toEqual(["2026-12-24"]);
   });
 
-  it("ärver kundens prefs (source=customer) när objektet saknar egna", async () => {
+  it("ärver ALDRIG kundens prefs (source=none) när objektet saknar egna men kunden har", async () => {
     const obj = await createObjectWithPrimaryCustomer(TENANT_A, customerWithPrefs, {
-      name: `${NS} arv-fran-kund`,
+      name: `${NS} inget-kund-arv`,
     } as Partial<InsertObject> & Pick<InsertObject, "name">);
 
     const resolved = await storage.resolveDeliveryPreferences(obj.id);
-    expect(resolved.source).toBe("customer");
-    expect(resolved.effective.notes).toBe(CUSTOMER_PREFS.notes);
-    expect(resolved.effective.weeklyWindows).toEqual(CUSTOMER_PREFS.weeklyWindows);
+    expect(resolved.source).toBe("none");
+    // Kundens prefs får inte läcka in i objektets resolved-värde.
+    expect(resolved.effective.notes).toBe("");
+    expect(resolved.effective.weeklyWindows).toEqual([]);
   });
 
   it("returnerar tomt (source=none) när objektet saknar kundkoppling", async () => {
@@ -163,47 +163,38 @@ describe("storage.resolveDeliveryPreferences — fallback-kedja", () => {
     });
   });
 
-  it("faller tillbaka till kund när objektets prefs är korrupt JSON (parseSafe)", async () => {
+  it("returnerar tomt (source=none) när objektets prefs är korrupt JSON — ingen kund-fallback", async () => {
     const obj = await createObjectWithPrimaryCustomer(TENANT_A, customerWithPrefs, {
       name: `${NS} korrupt-objekt-prefs`,
     } as Partial<InsertObject> & Pick<InsertObject, "name">);
 
     // Skriv in en strukturellt ogiltig payload direkt i kolumnen (kringgår
-    // insert-validering) för att simulera korrupt/legacy data. parseSafe ska
-    // returnera null och fallbacken ska gå vidare till kunden.
+    // insert-validering) för att simulera korrupt/legacy data. Den ogiltiga
+    // payloaden ska ge source="none" — INTE falla tillbaka till kundens prefs.
     await db
       .update(objects)
       .set({ deliveryPreferences: { priority: "bogus", weeklyWindows: "inte-en-array" } as any })
       .where(eq(objects.id, obj.id));
 
     const resolved = await storage.resolveDeliveryPreferences(obj.id);
-    expect(resolved.source).toBe("customer");
-    expect(resolved.effective.notes).toBe(CUSTOMER_PREFS.notes);
+    expect(resolved.source).toBe("none");
+    expect(resolved.effective.notes).toBe("");
   });
 
-  it("returnerar tomt (source=none) när BÅDE objekt och kund har korrupt JSON", async () => {
-    const obj = await createObjectWithPrimaryCustomer(TENANT_A, customerNoPrefs, {
-      name: `${NS} korrupt-bada`,
+  it("returnerar tomt (source=none) när objektets prefs är korrupt och kunden har giltiga prefs", async () => {
+    const obj = await createObjectWithPrimaryCustomer(TENANT_A, customerWithPrefs, {
+      name: `${NS} korrupt-obj-giltig-kund`,
     } as Partial<InsertObject> & Pick<InsertObject, "name">);
 
     await db
       .update(objects)
       .set({ deliveryPreferences: { weeklyWindows: 42 } as any })
       .where(eq(objects.id, obj.id));
-    await db
-      .update(customers)
-      .set({ deliveryPreferences: { priority: 123 } as any })
-      .where(eq(customers.id, customerNoPrefs));
 
     const resolved = await storage.resolveDeliveryPreferences(obj.id);
+    // Även om kunden (customerWithPrefs) har giltiga prefs ska de inte ärvas.
     expect(resolved.source).toBe("none");
     expect(resolved.effective.notes).toBe("");
-
-    // Återställ kunden så övriga tester inte påverkas (körordning oberoende).
-    await db
-      .update(customers)
-      .set({ deliveryPreferences: null })
-      .where(eq(customers.id, customerNoPrefs));
   });
 
   it("returnerar tomt (source=none) för okänt objekt-id", async () => {
@@ -476,23 +467,26 @@ describe("PATCH /api/customers/:id — leveranspreferenser skriv-väg", () => {
     writeCustomerId = c.id;
   }, 30000);
 
-  it("sparar en giltig payload som round-trippar via resolve (kund-fallback)", async () => {
+  it("sparar en giltig payload som kan läsas tillbaka på kunden (objekt ärver den ej)", async () => {
     const app = await buildCustomerRoutesApp(TENANT_A);
     const res = await patchRoute(app, `/api/customers/${writeCustomerId}`, {
       deliveryPreferences: VALID_WRITE_PREFS,
     });
     expect(res.status).toBe(200);
 
-    // Skapa ett objekt utan egna prefs men kopplat till kunden — resolve ska
-    // då ärva kundens nyss sparade prefs (source=customer).
+    // Kundens egna prefs ska ha sparats (läs direkt på kund-raden).
+    const savedCustomer = await storage.getCustomer(writeCustomerId);
+    expect((savedCustomer?.deliveryPreferences as DeliveryPreferences | null)?.notes)
+      .toBe(VALID_WRITE_PREFS.notes);
+
+    // Ett objekt utan egna prefs men kopplat till kunden ska INTE ärva kundens
+    // nyss sparade prefs — resolve returnerar source="none".
     const obj = await createObjectWithPrimaryCustomer(TENANT_A, writeCustomerId, {
       name: `${NS} write-cust-rt`,
     } as Partial<InsertObject> & Pick<InsertObject, "name">);
     const resolved = await storage.resolveDeliveryPreferences(obj.id);
-    expect(resolved.source).toBe("customer");
-    expect(resolved.effective.notes).toBe(VALID_WRITE_PREFS.notes);
-    expect(resolved.effective.priority).toBe("strict");
-    expect(resolved.effective.weeklyWindows).toEqual(VALID_WRITE_PREFS.weeklyWindows);
+    expect(resolved.source).toBe("none");
+    expect(resolved.effective.notes).toBe("");
   });
 
   it("avvisar fel tid-format med 400 utan att skriva", async () => {

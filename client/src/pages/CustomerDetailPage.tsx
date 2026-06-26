@@ -1980,7 +1980,8 @@ export default function CustomerDetailPage() {
                 invalidateKeys={[["/api/customers", customer.id], ["/api/customers"]]}
               />
               <p className="text-xs text-muted-foreground mt-3">
-                Dessa preferenser används som fallback för objekt som saknar egna preferenser.
+                Kundens generella leveransönskemål. Leveransregler per objekt sätts på
+                respektive objekt.
               </p>
             </TabsContent>
           </Tabs>
