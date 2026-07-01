@@ -1,0 +1,1412 @@
+{
+  "sessionId": "95b18b8d4",
+  "exportedAt": "2026-07-01T14:36:06.115Z",
+  "summary": "### Key Topics Discussed\n- Mats' arrival and welcoming\n- Screen display and audio quality\n- Presentation and summary of assignment information packages, including an overview of nine \"engines\" that process information.\n- Introduction of the system's three fundamental source types and their categorization in a red-highlighted matrix under \"control.\"\n- Explanation of objects that drive the system, containing metadata, tasks, job assignments, and invoicing details.\n- The creation of tasks through an automated function called \"order concept.\"\n- The role of the order concept in identifying objects and defining the customer for tasks.\n- Sources of task information: order concept, customer creation/linking, and linked object.\n- Order concept's current role in managing tasks and potential future role in subscription invoicing.\n- Future additions to task creation: quick tasks allowing manual selection of article, customer, and object without automation.\n- Detailed description of data fields associated with an article/task: green for article information, grey for invoicing, blue for task/article status, brown for geographical location, another blue for delivery time, and yellow for information partly delivered by the task engine.\n- Further details on article/task data fields: external description for the customer, internal description for the performer, and potential deep-dive definition documents.\n- Supplier article numbers for purchase articles, task/article icons, and article status (active/archived).\n- Price and cost calculation for articles, including purchase price, standard costs, material costs, and shipping costs, which collectively form an estimated total cost.\n- Charging models for articles (fixed price, per hour, per unit).\n- Customer-specific pricing linked to a selected price list.\n- Importance of production time for articles/tasks, representing the time required for performers to complete services.\n- Handling of undefined or running production times for articles/tasks.\n- Quantity levels for tasks/articles, specified at three levels:\n    - First level: manual entry on the order concept or quick order (e.g., 10 units).\n    - Second level: derived from a given metadata field within the order concept (e.g., square meters for a cleaning task).\n    - Third level: performer adjustment of the quantity, which updates the invoiced amount and relevant metadata.\n- The concept of a \"taken quantity\" to manage waste or failed consumption of materials (e.g., 12 screws taken for 10 billed).\n- Possibility to limit the number of articles per customer or object, for example, for an establishment article.\n- Discussion of specific article types, such as establishment fees, environmental fees, or general consumables for a job, which should not be repeated per object type but once per location.\n- Introduction of two limitation fields for articles.\n- Option to hide the quantity from the performer.\n- Presence of a \"billable quantity\" field.\n- The quantity directly impacts total cost, sales price, and production time for a task.\n- The option to work with a fixed price for a task, set from the order concept.\n- Information column \"Article included in subscription\" (Artikel ingår i abonnemang) for tasks created via subscription.\n- Article type (artikeltyp) defining if an item is a service, product, deviation, or rejection.\n- Article area (artikelområde) allowing for sub-categorization under services, e.g., \"washing of rolling bins\" as a sub-area of cleaning services.\n- Introduction of an \"execution code\" (utförandekod) as a critical parameter to manage tasks and assign them to the correct performer.\n- Article storage location (lagerplats) and whether it's a stock item (lagervara) like a key or tool, implying it should not be consumed.\n- Handling of leftover spare parts using the same logic as unconsumed stock items, allowing them to be returned to storage.\n- Standard supplier for goods, especially for items with delivery times like keys, mentioning the system's ability to handle multiple suppliers.\n- Introduction of a \"safety stock\" (säkerhetslager) function to ensure a minimum quantity is always in stock.\n- Discussion of \"reorder points\" (beställningspunkter) for automated order suggestions when stock levels fall below a set threshold.\n- Explanation of \"economic order quantity\" (ekonomisk beställningskvantitet) or minimum order quantity, especially for items typically ordered in specific packages (e.g., boxes of 20 screws), to ensure correct ordering and pricing.\n- Offset time (offsettid): A parameter at the article level defining if an article is planned to be performed before or after the main article or articles without offset time, relative to the customer's desired delivery time.\n- Ability to display selected metadata fields in the performer app under column AJ for each task, providing flexible information such as container type, location in a recycling room, or a photo.\n- Metadata fields can be associated with articles/tasks, allowing for information suchs as status, color, or requiring an \"after-photo\" (efterfot) as proof.\n- Metadata fields can be configured to be either displayed only or updateable by the user.\n- Each metadata field has a description, for example, an \"after-photo\" in field AC.\n- Discussion of column AN, which relates to structured articles, and includes two data fields.\n- The first field in column AN indicates whether the article itself can be a structured article (i.e., part of another article). The default is yes, but it can be deselected for logical reasons, for instance, if it's already a structured article itself.\n- The second data field in column AN defines the structured article, allowing main articles to include other articles that are automatically added when the main article is selected.\n- Example of a structured article: a standard bin wash includes sub-articles like rolling out/pre-cleaning, fine cleaning, taking before/after photos, applying a decal (with its own article number), and then another set of before/after photos. This encompasses four to five sub-articles within the main article.\n- Logic for attaching articles based on metadata conditions, for example, a waste bin wash should attach to objects with a metadata field for bin type matching \"food waste bin\" of a certain type/size.\n- Confirmation that sub-articles within a structured article are automatically attached when the main article finds an object, such as the application of a sticker as a sub-process.\n- Sub-articles in a structured article retain their own attachment logic but are subordinate to the main article's attachment logic.\n- Possibility to mark if an article is dependent on the object's geographical position; notifications, for example, are not dependent on this.\n- Discussion of \"dependent articles\" (beroendeartiklar), where an article's execution is conditional on another, e.g., washing a recycling room being dependent on simultaneously washing the waste containers.\n- A stronger example of a dependent article is needing a key to access a recycling room, making the key an even clearer dependent task. The suggested solution for dependent articles is to move this parameter to the order concept, allowing a chain of tasks to be defined and executed sequentially within the order concept. This dependency is not related to the execution type of the article but rather to one article needing to be completed in conjunction with another.\n- Under column A/S, there is a definition of what the task has been inspected against, i.e., its origin.\n- Column O and T contain the basic fields related to the originating order concept.\n- Column AU defines the origin of the task (e.g., order concept or system-created) and indicates which object it's linked to, what information it comes from, and the associated customer.\n- Information from the order concept or future quick orders, specifically delivery time information, is attached to the article or task.\n- The basis for delivery time information includes a desired delivery period with a year.\n- The possibility of adding supplementary time windows based on metadata, which can be either \"hard\" or \"soft.\"\n- Soft time windows allow for flexibility (e.g., waste collection on Wednesdays, but performing work on Thursdays, Fridays, or Saturdays is acceptable).\n- Hard time windows impose strict limits (e.g., a grocery store opening at 9 AM and closing at 4 PM means tasks can only be performed within this specific timeframe), and if tasks cannot be performed within these, it confirms an agreement for non-completion.\n- The system requires automatic repetition of the order concept, with details for start and end dates, and repetition frequency (e.g., annually or bi-monthly), already partially implemented.\n- The system will allow dynamic time influence on execution time, marked under BC (dark blue), related to delivery time.\n- The system's automatic repetition of order concepts (based on defined time windows or periodicity with start/end dates) is distinct from subscriptions, though subscriptions share a similar underlying structure for fixed invoicing.\n- A second \"engine,\" a time engine, optimizes task schedules based on available times, performer capacity, other tasks, desired delivery times, and additional time windows. This engine determines the optimal execution time for a task.\n- The time engine summarizes the overall time (blue field) into a yellow field under BD, indicating \"when\" a task should be done.\n- Physical positioning for tasks is marked from column BE in light brown, indicating \"where\" a task should be done.\n- Physical positioning can include various geographical identifiers like street address, postcode, city, and two-dimensional coordinates (longitude and latitude).\n- The system also accounts for a third dimension (height) under BG for physical positioning, allowing to pinpoint the job location from a 3D perspective, for example, a specific floor in a building.\n- Under column BI, information from the National Land Survey (Lantmäteriet) like property designations and owners can be stored.\n- The system will also use \"Watch Words\" as another way to define location.\n- A dark brown field, corresponding to the dark blue field, will be used for external factors.\n- The route situation and vehicle location are crucial for determining the order tasks are performed, and this impacts the yellow field that indicates planned execution time.\n- There's a distinction between the vehicle's location and the task's execution location (utförandeplatsen). For example, in a large shopping center or Old Town Stockholm, the vehicle's location is where it parks, but the execution location can be on the third floor, requiring personnel to walk there. This means there are separate fields for vehicle location and task execution location.\n- External conditions dynamically influence both vehicle location and execution location, including changes from map data like queues and accidents.\n- Engine one, a geographical engine, has a loop that continuously tries to understand the unique task based on all available information.\n- This engine then outputs the location information into the yellow field under BN, indicating where a task is located (potentially vehicle location and job execution location if different).\n- Engine three is referred to as a \"grouping engine\" for multiple tasks.\n- The \"grouping engine\" (Engine three) identifies tasks of the same \"type, time, and place\" to consolidate them into a smaller cluster or \"tree of tasks\" (e.g., all tasks at \"Storgatan 22\").\n- The grouping engine must recognize that multiple execution locations within a short radius (e.g., two recycling rooms within 30 meters) constitute a single stop for the vehicle.\n- The grouping engine should also ensure that tasks grouped together are of the same execution type (e.g., not mixing bottom-opening containers with other types) to avoid incorrect clustering).\n- The grouping engine should disregard who pays for the job if the tasks are of the same type within the same location (e.g., a daycare's waste room vs. residents' waste room at the same address).\n- RepliT's role in proposing the design of the grouping engine, including the use of AI support for analysis and improvement suggestions.\n- The grouping engine's ability to analyze delivery times for tasks at the same location (e.g., different desired delivery months for residents and a restaurant at Storgatan 22).\n- The potential for the grouping engine to suggest optimizing task scheduling (e.g., moving a task by a week) to save time and resources.\n- Discussion of the \"location engine\" (Engine 1) which aims to understand \"where\" a task is based on available position information. This engine is relatively static.\n- Discussion of the \"time engine\" (Engine 2) which is more dynamic and determines \"when\" a task can be performed, considering time windows (soft or hard). Once a time window has passed, the task automatically moves to the next available slot.\n- The engines can collaborate, with the grouping engine proposing optimal clusters of jobs at the most suitable location.\n- The planner will use the output from the grouping engine and can override suggestions, but must consider promised delivery times and potential breaches of agreements.\n- The planner has the option to adjust tasks to achieve higher efficiency, possibly after consulting the customer for adjustments to delivery times.\n- Invoice references will be routinely entered in forms, with the customer already defined for basic invoicing.\n- Internal invoice references will correspond to the order number or order concept number, ensuring traceability for customer inquiries and changes.\n- The system will automatically generate the internal reference, allowing for easy lookup of the order concept history.\n- The system will automatically assign a user reference (planner or order recipient) based on who creates the order concept or quick order in Trivo.\n- The customer's reference on the invoice header, including an e-reference for the customer's point of contact responsible for the order, and a supplier's reference for the person handling the order.\n- The system also accommodates customer-specific order references, such as account numbers or purchase order numbers, which would be entered as the supplier's reference number.\n- The order concept can control invoice references by directing them to a specific metadata field, such as a contact person's name (e.g., Anna Svensson) or a location-specific identifier (e.g., a facade number).\n- The system allows for appending additional information to invoice lines using metadata fields (metadatafält på infoorderrad) for customers who wish to see details per property or object on a single invoice, rather than separate invoices.\n- Introduction of an \"invoice model.\"\n- Invoicing for tasks performed by different operators (e.g., specific vehicle for bottom-opening containers on Monday, another for rolling bins on Friday) but presented to the customer as a single assignment on one invoice.\n- Discussion of \"invoice release\" (fakturasläpp) options: continuous or consolidated.\n- Salesperson's preference for immediate invoicing upon task completion to receive payment quickly.\n- Risk of generating numerous invoices with continuous release.\n- Option to consolidate invoices per day, week, or month, especially for larger customers.\n- Discussion of fixed price options for services, such as a fixed fee for refreshing a recycling site, regardless of the number of bins cleaned.\n- The system will support both running accounts (based on actual work, e.g., number of bins or time spent) and fixed-price invoicing.\n- The system will support customer price lists, which should be visible when retrieving prices for invoicing.\n- Introduction of an invoice lock function, requiring all tasks on a job to be completed before the invoice can be released.\n- Clarification on whether fixed prices should be based on post-invoicing (actual work) or on predefined prices in the order concept, especially for recurring services.\n- Structured articles linked to a waste room can control subordinate articles.\n- An \"order engine\" will track completed tasks and determine when they can be invoiced.\n- Invoice splitting will be based on tasks having the same customer, customer reference, and customer reference number. If any of these differ, a new invoice will be generated.\n- The subscription invoicing engine (Engine 5) is designed to handle fixed monthly or quarterly invoicing, as well as reconciliation invoices based on performed tasks and any additional services, which will be invoiced at their actual cost. This engine requires specific setup, including defining which article will control the reconciliation line.\n- Subscription invoicing will have a \"lock\" based on a specific date interval for fixed monthly invoicing (e.g., for the entire year 2026).\n- The subscription invoicing engine can recalculate monthly invoicing dynamically if the number of units (e.g., bins) changes during an agreement period, for instance, updating the monthly charge from 1000 SEK for 10 bins to 1200 SEK for 12 bins. This engine can also be configured to not update the monthly amount even if additional work is performed outside the subscription, as long as that work falls under the same invoice reference.\n- The system needs to handle additional jobs that fall outside the current subscription agreement but are performed for the same customer (e.g., a special room cleaning requested by a subscribed customer).\n- The subscription invoicing engine will generate invoice documentation for performed tasks (e.g., washing 10 or 12 bins) to be reconciled against the pre-paid subscription, resulting in a zero-sum for these items.\n- Extra services, like room cleaning or additional water, will be directly invoiced if they are not part of the pre-paid subscription.\n- Engine number five manages what has been performed, how it's paid (cash or balanced against pre-paid credit).\n- Task statuses: planned, on site, en route; also includes statuses for when a task cannot be performed, with reasons explained in the app.\n- Task deletion: tasks can be deleted and archived, indicated by a purple field.\n- Overbooking: when a planner overbooks a production week or individual days, tasks scheduled for the end of the week will be marked as \"overbooked.\"\n- Introduction of a new status: \"offer\" or \"simulated\" for non-binding tasks in the quotation process, allowing for impact analysis on existing orders.\n- The \"simulated\" status allows for playing with tasks to determine time consumption during rough and fine planning, especially when integrated with AI support.\n- The system differentiates between \"simulated\" tasks (offers) and confirmed tasks that have an order acknowledgment and are subject to rough and fine planning.\n- The system will support delivery confirmations (leveransbekräftelse) which are similar to packing slips (följesedel), where the customer acknowledges receipt of delivered goods.\n- The system should support digital signatures for delivery confirmation, such as BankID or similar to how shipping companies operate.\n- The final step in the process is invoicing.\n- The system will include an option (under CJ) to mask prices on external documents (shipping labels, packing slips, delivery confirmations) to prevent their visibility, especially when selling through a reseller or if the recipient should not see the costs.\n- Introduction of Engine number six: a \"dependent task engine\" to manage tasks that are conditional on one another, ensuring prerequisite tasks are completed before main tasks.\n- Example of a dependent task: a notification task that must be performed three days before the main task (e.g., plumbing work) can commence.\n- Introduction of Engine number seven: an engine to handle physical articles with delivery times or storage locations, requiring a blocking task to retrieve the item from storage or delivery location. This engine must recognize if an item is not consumed (e.g., a key or tool) and initiate a blocking task to pick it up from its storage location (e.g., a specific key cabinet) for use at the task's geographical location.\n- Engine Seven's role in managing pickups and deliveries (plock och återleverans) of items, including tracking where an item is located and any return deliveries. It creates a \"dependent task\" for these actions.\n- The rough planning process should encompass all necessary tasks.\n- The planner can assign tasks to different performers, such as a key or sticker pickup to a specific person.\n- The dependent task engine will alert if a dependant task, like returning keys, is not completed.\n- Engine number eight: This engine summarizes much of the system's functionality and is responsible for managing task statuses and compliance with desired delivery times. It also handles customer notifications, particularly status notifications based on order documents (order acknowledgments) and delivery notes. This includes sending push notifications to customers about task status (e.g., 'on its way' or 'on site') and warnings to Kinab personnel if there are delays. The system aims for transparency, potentially generating news updates in the customer portal on task status.\n- Engine number nine: A \"metadata engine\" that monitors metadata fields for inaccuracies or specific conditions (e.g., a broken lid). This engine can generate warnings or create new tasks based on these conditions. Both customers and planning/administrative staff, as well as performers, can utilize this engine.\n- The metadata engine includes AI functionality, allowing users to query information (e.g., \"How many of my receptacles have fewer than five containers?\") and supporting conditional task creation (e.g., creating a task if a complaint is received, or if multiple items are broken) and proactive tasks (e.g., calling a customer about an upcoming review meeting or birthday celebration).\n- Definition of the data fields within the `uppgift` information package.\n- An article and a task are essentially the same thing, often linked to an object, customer, or execution code, but not necessarily mandatorily to all of these.\n- All tasks, regardless of their specific linkages, will end up in the rough planning stage.\n- Discussion about the system's ability to handle geographical positions beyond pinpointed addresses, including areas and lines (e.g., a gas pipeline).\n- RepliT's role in validating the infrastructure for handling information packages and ensuring logical consistency.\n\n### Decisions Made\n- The parameter for dependent articles should be moved to the order concept to define sequential task chains.\n- Consolidation of invoices can be configured per day, week, or month to avoid excessive individual invoices.\n- For subscription invoicing, the article used for fixed monthly invoicing needs to be defined in the basic data, ensuring compatibility with financial systems like Fort Knox.\n\n### Action Items\n- RepliT to propose the design for the grouping engine, including AI support elements.\n- RepliT to review the invoice lock functionality as it relates to the current invoice release process.\n- RepliT to critically question the logical consistency of current solutions and not implement solutions that hinder further system development.\n- RepliT to question and clarify delivery of invoices, especially regarding fields that appear redundant. All these tasks have already been completed.\n\n### Important Points & Insights\n- The system's design includes multiple \"engines\" to manage and optimize various aspects of task processing.\n- Dynamic external factors, suchs as traffic, are considered when determining task execution and vehicle location.\n- There's a clear differentiation between the physical location of the vehicle and the actual execution location of a task.\n- The system handles complex dependencies and structures for articles to ensure comprehensive task management.\n- The grouping engine utilizes physical object locations, associated tasks, and desired delivery times to cluster similar tasks efficiently, considering both geographical proximity for vehicle stops and type consistency for task execution.\n- AI support will be integrated into the grouping engine to analyze and suggest improvements for task scheduling and resource optimization.\n- RepliT is encouraged to view these functionalities as interconnected \"loops\" or \"engines.\"\n- The location engine (Engine 1) is static, focusing on understanding the task's location based on given position information.\n- The time engine (Engine 2) is more dynamic, adjusting task execution times based on available time windows; if a time slot is missed, the task automatically shifts to the next available time slot.\n- The collaboration between different engines, especially the grouping engine's proposals, supports efficient task planning.\n- Planners have the final decision-making power for task scheduling, but need to be mindful of customer agreements and delivery time commitments.\n- Optimizing efficiency might involve communicating with customers to adjust delivery times.\n- All invoice references, including customer and internal order numbers, will be automatically generated and linked to the order concept for full traceability.\n- The system supports both internal (e-reference) and external (customer-provided order codes/account numbers) references on invoices to ensure clear accountability and traceability for orders.\n- The order concept allows for fetching reference information, such as contact persons or specific reference numbers (e.g., facade numbers), from metadata fields associated with objects.\n- New functionality enables detailed information per object/property to be added to individual invoice lines (informationsorderrad) using metadata fields, such as object name or execution time, allowing customers to receive a single invoice with granular details for multiple services, rather than excessive repetition.\n- A parameter is needed to manage instances where a customer views separate tasks (performed by different operators at different times) as a single assignment, allowing for consolidation onto one invoice to reduce confusion and improve clarity.\n- The system should allow for a fixed price for certain services, for example, a fixed charge for refreshing a recycling site, irrespective of the number of individual bins cleaned within that site.\n- Customer price lists should be prominently displayed to indicate the source of pricing for invoices.\n- An \"invoice lock\" feature will prevent an invoice from being released until all tasks associated with the job are complete.\n- The \"order engine\" (`ordermotor`) will manage which `uppgifter` (tasks) are ready for invoicing based on their completion status.\n- The system will group tasks onto the same invoice header if they share the same customer, customer reference, and customer reference number. Any deviation in these fields will result in a new invoice.\n- The subscription invoicing engine (Engine 5) is a specialized engine for generating fixed monthly or quarterly invoices, as well as reconciliation invoices based on performed tasks and additional services. It requires specific system parameters, such as which article controls the reconciliation line.\n- The subscription invoicing engine will either have a fixed \"lock\" for a defined period (e.g., yearly) for consistent monthly billing, or it will dynamically recalculate the monthly invoice based on changes in the number of units if no lock is in place.\n- The subscription invoicing engine can be configured to not update the monthly invoice amount for subscription tasks for subscription tasks even if additional work is performed outside the subscription, as long as that work falls under the same invoice reference.\n- The system needs to handle additional jobs that fall outside the current subscription agreement but are performed for the same customer (e.g., a special room cleaning requested by a subscribed customer).\n- The subscription invoicing engine will generate invoice documentation for performed tasks (e.g., washing 10 or 12 bins) to be reconciled against the pre-paid subscription, resulting in a zero-sum for these items.\n- Extra services, like room cleaning or additional water, will be directly invoiced if they are not part of the pre-paid subscription.\n- Engine number five is responsible for tracking performed articles and their payment status (cash or balanced against pre-paid credit/customer debt).\n- The system will play a role for the planner to maximize production capacity and account for faster completion or task cancellation due to unforeseen circumstances (e.g., wrongly parked cars).\n- The system will display task statuses (e.g., planned, on site, en route) on the performer app, including reasons if a task cannot be performed.\n- Deleted tasks are archived and indicated by a purple field.\n- The system will flag tasks as \"overbooked\" if a planner schedules too many tasks for a week or day, particularly for tasks at the end of the week.\n- The new \"simulated\" task status also applies to offers, allowing for calculation and planning without being a confirmed assignment.\n- The system will handle delivery confirmation documents where customers can digitally sign for received goods.\n- The system will offer an option to hide prices on external documents (shipping labels, packing slips, delivery confirmations) when necessary.\n- The information package is structured around the article register and the order concept, with invoicing details and the invoice model being key components.\n- The 'control' aspect of the system involves tracing tasks back to their originating order concept, linked object, and customer.\n- Engines one to three primarily focus on understanding 'when', 'where', and 'what' tasks are located at the same place.\n- Engine four focuses on determining what to perform.\n- Engine number six, the \"dependent task engine,\" is crucial for managing tasks with prerequisites and ensuring their completion in the correct order, which may also require communication/dialogue.\n- Engine number seven (`motor nummer sju`) handles physical articles with delivery times or storage locations, requiring a dedicated task to retrieve these items. This engine will create a blocking task linked to the geographical location of the stock (e.g., a sticker from a warehouse, or a key from a key cabinet) to ensure its pickup.\n- Engine Seven's function to manage the picking up and dropping off of items (either to a customer or a delivery point) and to track the location of these items, as well as any return deliveries. It also ensures that a blocking dependent task is created to manage these logistics.\n- The system will prevent a vehicle from departing for a task if prerequisite dependent tasks (e.g., picking up items) have not been completed.\n- Rough planning must include all tasks.\n- The system's logic is based on tasks that can represent actions to be performed, items to be invoiced, or objects to be delivered (e.g., a waste bin).\n- Engine number eight, the status and notification engine, is responsible for tracking task status, ensuring compliance with desired delivery times, and managing customer notifications based on order documents and delivery notes. This includes the capability to send push notifications to customers about their delivery status (e.g., 'on its way,' 'on site,' or 'delivery time changed') and to alert Kinab personnel about delays.\n- The metadata engine (Engine 9) is designed for flexible use by customers, planners, and performers, and can be used to monitor metadata fields and trigger actions like warnings or new task creation based on specified conditions.\n- The metadata engine will incorporate AI to enable querying data and creating conditional tasks based on metadata evaluation.\n- The grouping engine is central to consolidating tasks of the same type at the same location, thereby creating efficiency clusters in rough planning.\n- The system infrastructure needs to handle diverse geographical positions including points, areas, and lines (e.g., for gas pipelines).\n\n### Open Questions/Pending Items\n- How to handle instances where a task is not completed, for example, due to incorrectly parked cars.\n- The necessity of a consignment note when parts need to be delivered as part of a journey.\n- The system requires some form of dialogue for dependent tasks, especially regarding their execution before a main task.\n- A dialog mechanism is needed when the system flags issues with task completion to the planner and performer.\n- The exact mechanism for generating news updates/notifications in the customer portal based on Engine 8's status tracking for maximum transparency.",
+  "conversation": [],
+  "transcripts": [
+    {
+      "text": "Ja. Vänta då.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och nu har du varit här i ett stort par timmar nu. Ja, och nu är Mats i matchen. Välkommen igen. Ja, den, den är inte på skärmen där. Nej. Ja, den kan bli det. Ja, nej men, eh, ha det en bra hörbarhet nu. Så ser vi att den... Bra! Då så, nu kommer jag att redogöra och sammanfatta för hur då uppgifternas informationspaket ser ut.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och, eh, jag kommer också att redogöra för nio stycken olika, som vi kallar, motorer då, som bearbetar informationen, eh, både i informationspaketen och bidrar då till informationen som kommer att bli i informationspaketen. Och om vi börjar från början då, så hela systemet är då uppbyggt utav, man kan säga, tre stycken grundkällor.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och de är också i den här matrisen som kommer att biläggas den här, eh, transkriptionen då, markerat i rött. Och det området kallas styrning. Och det som styr hela systemet är dels objekten.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Som då kommer att få påhakade uppgifter och som innehåller metadata, bland annat uppgiften i sig själv, men också annan metadata då som styr då uppgiften på jobbet och sen faktureringen på olika sätt.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Det andra som är väldigt viktigt, det är då hur uppgiften skapas. Och den automatiserade funktionen som används då för detta kallar vi orderkoncept. Och orderkonceptet pekas in emot objekt, ett eller flera, i en gren eller flera grenar om det grenar ut sig. Orderkonceptet har också då ett löpnummer och får så att säga sin egen",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "identitet. I orderkonceptet, som då har som yttersta syfte då att hitta objekt där orderkonceptets olika artiklar kan haka fast, eh, bes-- definieras också vilken som är kund för de här uppgifterna som skapas i orderkonceptet. Och vid sidan om objektet då och orderkonceptet så är ju så att säga kunden det som är avgörande då. Eh, i båda fallen-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. -här då så finns det så att säga också en källa då till varifrån uppgiften kommer ifrån, det vill säga vilket orderkoncept det är. Och det finns en källa varifrån, eh, så att säga, kunden har skapats eller kopplats och det finns en källa var, vad, vilket objekt som har varit påhakat, eh, eller har blivit påhakad för den här uppgiften då. Och det här är då märkt i rött och är ju då grunden i den här logiken.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Eh, ett tillägg här också då är ju att i dagslä-läget så ser jag alltså orderkonceptet som sköter det här. Orderkonceptet kan också sköta då, vilket vi kommer att komma till, eh, abonnemangsfakturering då. Eh, men det kommer också finnas andra funktioner som kan skapa en uppgift. Det kommer att bli någon form av snabuppgift där man bara kan välja en artikel, välja en kund, välja ett objekt och snabbt haka på en tvätt utan då den här automatik-automatiken då. Men nu går vi in-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. -då på det gröna fältet här. Och det gröna fältet är egentligen artikelinformationen. Och vid sidan om det gröna fältet så finns det också ett grått fält. Jag tar det bara sammanfattningsvis, inledningsvis då. Ett grått fält som anger det som har med fakturering att göra och det finns ett blått fält som anger då uppgiften eller artiklens status. Och sen så finns det ett brunt fält som anger var uppgiften finns geografiskt.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och det finns ett, ett ytterligare ett blått fält som anger då leveranstiden. Och det här kommer jag nog komma in på. Sedan finns det gula fält som anger då det uppgiftsmotorn åtminstone till del levererar. Men nu börjar vi med det gröna då. En artikel som också är likställd i det här systemet, eh, med en uppgift. För grunden är egentligen att varje sån här artikel är något som ska göra, göras. Den har då ett artikelnummer, ett s-- genererat nummer som då också är matchat mot Fort Knox. Så att den kan-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Ja ...faktureras. Sen har den ett namn. Den har en extern beskrivning för kund och den har en intern beskrivning för utföraren. Eh, det kan finnas ett fördjupande definitionsdokument som beskriver till exempel hur en tvätt ska gå till eller hur en vara ska monteras då.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Sen kan det finnas då för kötarartiklar, leverantörsartikelnummer som finns också i det här registret. Det kan finnas en ikon för uppgiften eller artikeln. Eh, det finns ett statusfält för artikeln om den är aktiv eller om den är arkiverad och inte används längre. Det finns en, ett pris på artikeln. Det finns en kostnads beräkning för artikeln då som består-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm ...av flera olika fält. Och det kan vara inköpspris, standardkostnader, materialkostnader och fraktkostnader och sen eventuellt ta hopslag då. Men det ger ju då en sammanräknad kostnad, estimerad då.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Det finns en debiteringsmodell för artikeln om den debiterar med ett fast pris oavsett antal eller om den debiteras per timme eller per styck.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Vid sidan om de här båda kostnaderna, alltså försäljningspriset och, eh, inköpspriset, så kan det då också förekomma ett kundunikt pris som är kopplat mot en vald list, eh, pris eller vald, inte en listprislista, utan en vald prislista som jag återkommer till.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Eh, men vid sidan av priserna sen så finns det då den som är otroligt viktig för oss och som definieras med produktionstid. Och det är alltså den tid som det tar då för, eh, utförarna att utföra företrädesvis tjänsten. Och för alla de här posterna då så behöver det inte betyda då att- Mm ...att det alltid finns uppgifter där. Eh, så om det är en uppgift som inte har en definierad tid eller att man inte vet den, då står det ju då ingen tid där.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och, eh, ibland behövs inte tiderna och ibland så blir det ju också då löpande. Man skulle också kunna tänka sig här då att det kan finnas artiklar som har så att säga en, en, en löpande tid. Till exempel, eh, om man då stämplar in eller har, har då bara löpande timtid och så får man då skriva in där det så att säga blir om det blev tio timmar eller om det blev två timmar då. Som en liten parentes.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Sen kommer det till antal och antalet finns i tre nivåer kan man väl säga då. Varav den första nivån är då det som man anger på orderkonceptet eller vid snabborden. Och där kan man då skriva att det är då till exempel tio. Eh, sen kan man också då i orderkonceptet då säga att den ska titta på antalet utifrån ett givet metadatafält. Så att om det är då en uppgift för att tvätta-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm ...antalet kvadratmeter i ett rum och man har ett fält för antalet kvadratmeter i ett rum, så ber man den alltså titta där och då kommer den då få en högre prioritet än det som står på orderkonceptet. Så om man sätter då tio där uppskattningsvis och det finns ett definierat metadatafält som säger tolv då, då kommer den att kalkylera utifrån tolv timmar då, eller, eller tolv kvadratmeter. Eh, sen anger man här om antalet får justeras av utföraren, ja eller nej. Och i den fall, eh,",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "utföraren får justera det här så innebär det ju då att i utförarappen då så kommer det att finnas möjlighet då att han kan mäta eller räkna direkt på plats då och till exempel uppdatera då till att det är elva och en halv kvadratmeter. Och då kommer då det...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Resultatet då att bli det som då faktureras sen. Och tillika så kommer då det fältet att uppdatera då, eller den informationen kommer att uppdateras då i den metadata som var kopplad till det här. Eh, det finns också en möjlighet att, eh, begränsa antalet utav, utav, eh, den här per kund eller per objekt. Med det vill säga då att man till-- Om man till exempel har en etableringsartikel då-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. Så, så ska ju inte den repeteras per objekttyp eller per, per soptunna då, utan det ska ju bli liksom en per plats då. Och då kan man lägga en begränsning där då så att man inte kan ändra då. Och etablering är ju ett typiskt sånt exempel då på det. Det skulle också kunna vara miljöavgift eller en artikel som anger, eh, förbrukningsmateriel generellt för själva uppdraget då.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och då finns det två stycken begränsningsfält för det. Det finns också i systemet en möjlighet att dölja antalet, eh, och det är ju då bara mer en möjlighet. Då kommer utföraren inte att se hur stort antal det är och då...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Eh, ja, eh, skälet till det kan jag inte faktiskt komma på nu, men det, det kan vara bra i ett visst läge. Och sen finns det då ett fält som är fakturerbart antal. Och...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Det är ju då det som då utföraren fyller i.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Så där har vi antalena då. Och, eh, jag sammanfattar det då. Du, du har alltså ett generellt antal för något konceptet. Du har ett, eh, definierat antal som kommer via metadata direkt kopplat till påhakat objekt och vi har ett verkligt fakturerbart antal ifrån, ifrån orderkonceptet. Utifrån ett serviceperspektiv, och det här finns inte då i systemet.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Idag så skulle man också ha ett, eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Ett fält som heter alltså taget antal. Så att om man exempelvis tar... Man har planerat att det, att det går åt tio skruvar och det faktiska fakturerbara antalet och som utföraren fyller i är också tio skruvar, men han har råkat tappa två skruvar. Då ska man alltså kunna s-- notera då att taget eller levererat, eller vad vi ska säga, eller förbrukat antalet tolv, men fakturerat antal är då tio. Det här är en sån här logik som-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm ...finns i såna här system för att man ska kunna hantera svinn eller misslyckade, eh, misslyckad förbrukning då.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Hoppas det framgår, annars får vi plötsligt att fundera eller fråga när det gäller antalslogiken.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Eh, antalet då styr ju också den totala kostnaden och försäljningspriset och produktionstiden för den enskilda uppgiften. Om...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Om man av olika skäl vill arbeta med ett fast pris, så finns det också möjlighet då att man kan lägga ett fast pris på, på, på, på uppgiften ifrån orderkonceptet.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Om den här uppgiften är skapad genom ett abonnemang så bör, så, så, så bör också den här informationen då framgå i kolumnen \"Artikel ingår i abonnemang\". För om den gör det, ska ju den då faktureras och jag kommer att återkomma till det då vad beträffar abonnemangsfakturering, eh, lite granna senare här då. Och då in-- Då, då, då är det också ett fält i det här fallet under W då som definierar det. Sen så finns det då under X-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. -artikeltyp och artikeltyp anger då vilken typ av artikel det är. Om det är en tjänst eller om det är en vara eller om det är en avvikelse eller avvisering. Här har alltså planeraren eller administratören möjlighet att d-definiera olika artiklar beroende på vilken typ av artikel det är. Sen finns det något under Y som heter artikelområde och där har man då möjlighet att definiera då delområde under tjänst. Så att om du har en tjänst som är tvätt av rullbara kärl, så, så kan man-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm ...angiva att det här är en artikel som ingår då i gruppen av artiklar för, för rullbara kärl. Och om det är då en vara som ingår i gruppen, eh, informationsdeklarer så kan man då lägga till det. Det är egentligen bara sorteringsbegrepp då. Och de är ju av mer administrativ karaktär då att förenkla helt enkelt för den som administrerar det här då att se vad, vad det är, om det är en reservdel eller om det är en tjänst. Sen under Z så kommer en betydligt mycket viktigare, eh, parameter då och det är det som kall",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "ar- Mm ...så utförandekod. För utförandekoden då, eh, är alltså avgörande då för att man ska kunna hantera uppgiften och dela ut den till rätt utförare. Och det skulle ju till exempel kunna vara då att om du behöver en, ett team och en utrustning för att tvätta rullbara kärl, så, så är det ju viktigt att de uppgifter som tilldelas den då bygger på att det är rätt utförandekod. I den händelse att det är en artikel som har en lagerplats så kommer vi nu-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm ...att det är läget då. Och då anger man då så att säga var artikeln bor någonstans och om den då har en lagerplats. Sen finns det då något som inte finns i dag, eh, men som, eh, bör finnas då för att logiken ska, eh, funka. Och det är då om det är en lagervara, eh, till exempel en nyckel eller ett verktyg eller något som-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm ...annat då som ska, ska så att säga, eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Ej förbrukas.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Då måste, då måste...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "systemet vetas att det här är en nyckel som inte... Om, om man har en skruv eller en vara eller ett listemärke, då kommer ju den att utlevereras och säljas till kunden. Men om det är en, en, en till exempel en nyckel då som ska med för jobbet eller en, eh, ett verktyg som, som ska vara med för att kunna utföra det här, då, då ska ju inte den levereras ut då, utan den, den ska ju ej förbrukas. Och då kommer ju då systemet att förstå dels att vi inte säljer den, men också då att den ska återlämnas då, eh, när det är klart. Och på mot-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Ja. -sådant här sätt så kan det ju också bli då att det blir varor över utav reservdelar. Det är en sån här praktisk grej då som också då bör kunna liksom då hanteras med samma logik då att om man, om man har med sig... Man, man har så planerat att det är tjugo skruvar som ska gå, gå åt, men man fakturerar bara femton. Då kommer ju då det att innebära att det är fem skruvar som är över då. Och då borde systemet med samma logik också där då förstå att det, det, det, det ska... De, de fem som blir över har inte förbrukats på samma sätt som nyckeln har ju inte heller förbrukats.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. Så då, då ska det ändå kunna levereras tillbaka då till sin lagerplats då, sin krok eller hyllplats. Sen kommer vi då till A-- kolumnen AC och det är då standardleverantör då. Och det handlar ju då primärt om varor då som vi anger varifrån vi köper dem då. Och systemet hanterar då flera leverantörer. Är det en vara eller en utrustning som har leveranstid, det kan vara nycklar, så anger man-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm ...det då positivt då att om det är fem dagars leveranstid så kommer då systemet att kalkylera då med att den behöver den tiden på sig för att bli tillgänglig då på lagerplatsen.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Eh, sedan finns det en funktion som heter säkerhetslager då. Och, eh, det är också en sån här logik som finns i lagersystem att man då kan bestämma att det ska alltid finnas ett visst antal då på lager. Eh, och om man kommer under den nivån då så kommer systemet då att kunna hantera och-- Eller föreslå beställningar. Sen finns det då beställningspunkter som är i princip, eh, kan man tycka då, samma sak, men man har alltså möjlighet att spela med olika här då. Och där är det-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. -att hög prioritet i systemet, men informationsfälten bör finnas. Och sedan så finns det ekonomisk beställningskvantitet eller minsta orderantal. Och det gäller ju framför allt då till exempel skruvar som man kanske beställer i lådor om tjugo. Då måste systemet då kunna föreslå här då att man beställer en eller flera lådor om tjugo så man inte beställer då tio stycken när lådan är på tjugo för då kommer ju då det att bli helt fel i beställningen då och priserna kanske inte stämmer. Man brukar också kunna kalla det här ekonomisk beställningskvantitet.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Eh, det vill säga det är-- Man beställer så här många för att få det pris. Eh, sen kommer vi till kolumnen AH och där har vi något som vi kallar offsettid då. Och den tiden definieras då på artikelnivån om den här artikeln förväntas eller planeras eller ska göras antingen före eller efter då huvudartikeln eller de artiklar då som inte har någon offsettid och då förväntas göras på den.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Eh, planerade utförandetidpunkten då enligt kundens önskade leveranstid. Och då anger man offsettiden då i, i hur lång tid det är och sen så om den är efter eller före då huvudutförandetiden då.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Eh, på varje uppgift så finns det också under kolumnen AJ en möjlighet att visa valda metadatafält. Och det här fältet då som kommer i utförandeappen och på andra ställen kan ju då vara vilken information som helst egentligen. Det kan vara, eh, alltifrån en hyllplats, eh, till då en, eh, eh, ja, hyllplats kanske var fel, för det skapar systemet själv.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Men, men det kan vara något som anger då vilken typ av kärl det är eller vilken plats de finns i ett återvinningsrum. Eller det kan vara ett foto på, på det här, eh, det här, eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Kopplade metadata för den uppgiften då. Eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Den här kan man då peka in en eller flera såna hära och man kan bocka för om den får uppdateras utav utföraren eller inte. Och med samma logik och samma system på respektive artikel, eh, och uppgiftsrad så kan man också be då utföraren att ha möjlighet eller kräva att utföraren ska lämna uppgifter, eh, baserat på, på, på...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "På, på artikeln s-- Pa-på artikeln, alltså jag ska inte blanda ihop det här, men artikeln eller uppgiften är en sak och som underställt där så finns det då möjlighet att kunna lämna metadata då så att man adresserar då här, ska man ta ett kort eller här ska man beskriva statusen eller färgen eller vad det nu kan vara då. Och de finns i två varianter, dels att man visar och a-om man vill så kan man också ge möjlighet att uppdatera den. Och om man ska lämna metadata så kan man då ställa krav att man till exempel ska ta ett efterfot.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. Då säger vi då på det. Eh, för de här metadata-fälten också i den här så finns det då en beskrivning, eh, av metadata-fältet som beskriver då vad, vad, vad metadata är i fältet AC till exempel, ett efterfot då.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Det var det som har med att hämta och lämna metadata. Sen kommer på kolumnen AN så kommer det då det som har med koppling till strukturartiklar då. Och det är två stycken datafel kan man säga. Den ena är väldigt enkel. Den som är på AN är att man anger om artikeln själv får vara en me-- eh, en strukturartikel, det vill säga ingå som del i en annan artikel. Det normala är att den alltid får det, men det kan finnas logiska skäl till att man inte vill att en artikel ska vara det. Till exempel då om den är en strukturartikel.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Strukturartikel själv så kanske man inte ska ha en strukturartikel i en strukturartikel. Det kanske inte systemet klarar av, vad vet jag? Eh, sen så... Sen så finns det då själva strukturartikeldefinitionen då. Den är ju väldigt enkel då. Så har vi alltså en huvudartikel så ska man alltså kunna lägga till andra artiklar som man får med på köpet då. Och, eh, när man då väljer de artiklarna så kommer ju de med då när man ha-- väljer huvudartikeln. Så till exempel så har vi då...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Det skulle ju det kunna vara då att en standardtvätt av ett kärl innebär då att vi har ett moment som är att vi rullar ut och grovrenhjört kärlen. Sen så fintvättar vi det, eh, och så har vi då olika metadatafält. Vi kanske tar också ett för- och ett efterfoto. Och sen så, så har vi då en dekal för fraktionen av ett visst artikelnummer och så har vi applicering utav, utav dekalen. Och sen så tar vi ett för- och ett efterfoto då, säger vi då. Och då har vi då en fyra, fem olika delartiklar då som ingår i huvudartikeln som man då bygger...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och det där sättet...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Det är då strukturartiklar och, eh, det var en grej som hade tungan här kring strukturartiklar.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Jo, eh, en grej till som kommer med där, det är då om struktur, de undervarande artiklarna ska användas utav egna antal eller om de ska styras utav huvudantalet på då, eh, huvudartikeln som de ligger under. Så det väljer man också där då. Eh, sen kommer vi till, eh, det som har med, eh, beroendeartiklar då. Och grunden för en artikel är ju att den har en fast-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. -logik utifrån ett metadatavillkor då, som gör då att den hakar fast. Till exempel då en tvätt av ett matavfallskärl ska ju då haka fast, eh, på då, eh, objekt som har ett metadatafält för typen, eh, för kärltyp som är lika be-- Med då till exempel matavfallskärl av en viss typ eller storlek, beroende på hur man läg-lägger upp det där då.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Eh, vad beträffar också då strukturartiklarna då, så är det ju då införstått, men vi kan väl understryka det då att om det förekommer strukturartiklar som är underordnad då en huvudartikel, eh, så hakas ju de då automatiskt på när huvudartikeln har hittat ett objekt då och hakar på. Vilket innebär ju då att till, till exempel då ett delmoment då som applicering utav ett klistermärke kanske, det är en generell, eh, känsla-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. Som vi har då att vi, vi tvättar först rent med sprit och sen sätter vi dit det där klistermärket. Och då, då, då, då, då följer den med tross att den inte är särskilt anpassad eller har en egen logik för att haka fast på just matavfallsskäll, utan det är en generell artikel som inte har, eh, ens någon fasthakningslogik då, utan den kommer med utav sig själv. Och har den en egen fasthakningslogik så blir den underordnad huvudartikels fasthakningslogik, annars kommer det ju inte att bli någon ordning på det där då. Eh, sen finns det möjlighet-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm ...att notera då om, eh, då, eh, den enskilda artikeln är beroende utav objektets geografiska position eller inte då. Och normalt så är ju alltid uppgiften beroende utav objektets geografiska position. Men det finns till exempel aviseringar som ju då inte har nåt. Det har med objektet att göra, men det har ingenting att göra med... Man kan göra aviseringen vart som helst och då kan man då kryssa i det. Eh, sen finns det en möjlighet att kryssa i då, eh, om det är en beroende-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm ...eh, artikel eller inte. Och beroendeartikel innebär ju då att om man kryssar i det här då så är den beroende utav nån annan artikel. Eh, det är lite granna ologiskt, ska jag vilja säga då, att det här finns på artikelnummer-nivå eller alltså på artikelstatus. Det vore mer logiskt att det här fanns, eh, i orderkonceptet så att man i orderkonseptnivå bestämmer att, eh, de här-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm ...är beroende utav varandra. Till exempel då om man, om man ska göra rumstvätten på ett, i ett återvinningsrum så är det en beroendeartikel då för att du också tvättar kälen samtidigt då. Och att man med igenom att kryssa i det där då så, så gör man då ett förtydligande då att man inte kan liksom dela upp själva uppdraget. Eh, sen finns det ju vassare beroende då, eh, som till exempel om man nu ska ha en nyckel för att komma in i det här återvinningsrummet, då är den en ännu mer tydlig, eh, beroendeuppgift. Alltså att man måste-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm ...ha nyckeln för att kunna låsa upp då rummet för att kunna utföra de andra uppgifterna som är-- De är som beroende utav varandra då. Men hur som helst så är det en parameter. Mitt spontana förslag är att den skulle flytta då till årligt konceptet istället för. Så när man gör årligt konceptet så man kan se-- Det är liksom-- Det är ungefär som ett litet dataprogram att man ska, man ska göra si och man ska göra så och man ska göra det. Och då kan-- Skulle man då kunna liksom notera där då att, eh, den här kedjan utav uppgifter kan man inte liksom då göra för-- Var för sig eller då att man-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm ...får göra det var för sig då. Sen är det viktigt att understryka då att det här har ju ingenting att göra med vilken utförandetyp det är då i den, eh, artikeln då. Utan det är bara att en viss artikel måste göras, eh, i samband med den andra. Och en parameter också utav det här är att man då på årligt konceptet kanske ger sig själv, men att man börjar från toppen av årligt konceptet och gör då uppgifterna i den ordning som man lägger upp det där då. Så att där kan det ju också finnas-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm ...ett behov att man kan på ett smidigt sätt då, eh, sortera bland uppgifterna då så att man börjar med att låsa upp rummet för att sen då, då göra den, de olika uppgifterna så man inte liksom blir i fel ordning då. För det, det ska ju jobbigt för den som ska utföra det och så blir det ju förvirrat för på allt vis då om det är beroende av den ena som ska vara utslutförd innan man kan göra den andra då. Sen finns under kolumnen A/S, det sista utav det gröna här då, eh, så är det då en definition vad den här uppgiften har-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm ...i inpekad, alltså var det, det egentligen en, en, en, en dokumentation vad den enskilda uppgiften har blivit inpekad emot då. Eh, var, var den härstammar ifrån helt enkelt.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Sen under O och T så finns då de här grundfältena som jag började med, eh, och noterade då, det vill säga var, var, vilket orderkoncept eller vad, vad, vad, vad kommer de att fråga för order, eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Administrativt orderdokument, orderkoncept eller snabba order eller, eller något annat som systemet har skapat uppgiften ifrån. Eh, ska också säga att vissa uppgifter kommer ju att också vara skapade utav systemet då. Eh, och det definieras också under AU där då, hur, hur den, om den kommer från ett orderkoncept eller om den är skapad utifrån då, eh, på något annat sätt. Och sen så står det då vad den här bokha-hakan på för ett objekt och det står vad den informationen kommer ifrån och det står vilken kund som är kopplad till.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. Eh, och det står vad den informationen här stammar ifrån. Så då har jag repeterat det röda där, vilken ordning det kommer nu då om det, det kanske kommer först och sen kommer det gröna. Det spelar egentligen inte någon större roll. Det är bara informationspaket som vi säger. Från orderkonceptet i alla fall då, eller ifrån en framtida s-snabborder så kommer ju då leveranstidsinformation då som hakar på då artikeln eller uppgiften som vi kallar det. Och grunden i det är ju då att det finns en önskad leveransperiod med, eh, år-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. -månad, datum och tidpunkt. Start och år, månad, datum och tidpunkt slut då. Och på det viset kan man ju liksom pe-peka in att vi har ett leveransfönster generellt hela januari eller vi har, eh, ett tidsfönster, eh, fredag mellan klockan nio och tio.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Eh, sen finns det då möjlighet att lägga in öv-kompletterande tidsfönster baserat då på, på, på, eh, metadata också, där man kan få med då ett, ett hårt eller mjukt tidsfönster som då anger att det är kanske tömningar på onsdagar och då är det väldigt, då är det ett mjukt tidsfönster. Att det är nog väldigt bra då att vi kommer dit på torsdagar och fredagar och möjligtvis lördagar.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Eh, sen så skulle det då kunna vara ett, eh, hårdare tidsfönster som, som då säger att, eh, till exempel, eh, har vi en livsmedelsbutik och de öppnar först klockan nio, så då är det liksom ett hårt tidsfönster att, eh, mellan klockan nio och så säger vi klockan sexton på eftermiddagarna, så är det då ett hårt tidsfönster. Det är den tid vi har varje dag att utföra uppdraget. Det går inte att utföra...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Nån annan tid än det, så man kan inte vara lite tidigare för då har de inte öppnat och efter klockan sexton kan man inte vara där för då har de så mycket kunder. Så då har vi en överenskommelse att man inte kan utföra uppdraget på grund av det. Sedan, utifrån leveranstiderna så finns det också under det här, måste också tydliggöras i, i, i, eh, orderkonceptet. Eh, eh, jag kallar det automatisk repetering av orderkoncept då. Och, eh, det finns delvis, men det är inte fullt utbyggt. Och här ska det alltså vara en, eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Knappt då där man kryssar i om man nu vill att orderkonceptet ska repeteras företrädesvis då år efter år eller att det ska repeteras då, eh, varannan månad till exempel då. Och då anger man då ett startdatum och ett slutdatum. Så vill man att det här orderkonceptet nu ska skapa uppgifter med start 2027, eh, januari, februari, första tidsfön-fönstret.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och andra tidsfön-fönstret augusti, september med slut 2029. Då kommer den alltså att-- När man kör den här så kommer den alltså att skapa då uppgifter, eh, vid de här tidsfönstrena utav ett orderkoncept då.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Så den repeterar sig själv då, antingen utifrån definierade tidsfönster eller utifrån en periodicitet då och med ett start- och slutdatum. Det här finns inte just nu riktigt, men det finns tendenser i systemet så det behöver förtydligas då. För i annat läge då så är det ju då bara liksom en körning per, per orderkoncept då. Men det är ju inte helt ovanligt då att det kan bli på det här viset då.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Eh, icke att förväxla då med ett abonnemang då som egentligen bygger på samma sak, fastän då sker då en fast fakturering som vi kommer åka-- återkomma till det. Eh, under det blåa som är leveranstiden då så kommer det att vara då en mängd, eh, tider och det kommer också kunna vara då en dynamisk tidspåverkan då utav utförandetiden. Eh, fr-fram-- Och den är markerad här under BC, mörk.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Blå då. Eh, och det bygger ju då på de andra uppgifterna som utföraren gör som då har tidspåverkan. Och det by-- befinner-- Det, det bygger också då på tillgängligheten på utföraren och, eh, utrustningens tillgänglighet. Sammantaget då, det ljusblåa och det mörkblåa, så kommer vi nu till den första motorn och i det här fallet så är det då motor två här. Och motor två, det är en motor, alltså en loop i syfte-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. Som har som enda uppgift här i världen att utföra optimering utav då de tider som finns för respektive, eh, uppgift.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Men delvis då i kombination med platsen. Men uppgifterna har ju då en geografisk position då. Men den här nummer två är alltså en tidsmotor då som ska titta på de här tiderna och egentligen fatta då ett beslut att just nu som det ser ut utifrån utförarens, eh, s-situation och de andra uppgifterna och framför allt då den önskade leveranstiden och de andra tidsfönstren, så är det lämpligt att man gör det här på torsdag förmiddag, säger vi då. Och då levererar då-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Ja ...den här tidsmotorn den här som en sammanfattning över då den sammantagna tiden då. Det vill säga det blå fältet där då sammanfattas i det gula under B och D. Och på motsvarande sätt då så kommer ni in då, för det, det är ju då i, eh, i grunden då, när ska en sak göras? Eh, och det är då blått och levereras då i gult under BD som en konklusion utav det. Och nästa är då, var ska den göras?",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Det vill säga då, vilken fysiska position är det då? Och det är då markerat från och med BE, kolumnen BE, och är då i ljusbrunt. Och då kan det ju finnas då olika adress eller geografiska, eh, positioneringar där adress, gataadress, postnummer och postort kan vara en sak. Eh, longitude och latitud, tvådimensionellt, kan vara en position eller en definition. Och vi har också la-lagt in då att man tar höjd för det under BG då här, att det även kan finnas en-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Ja.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Eh, 18.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "I, i, i höstleden, så att man på det där-- på det viset och utifrån ett tredimensionellt perspektiv kan peka in var jobbet är då nånstans. Så på en viss gataadress och n-n-n-- på en viss å-- våning, till exempel då. Eh, sen finns det också under BI här, lantmäteriuppgifter då, och det kan vara fastighetsbeteckningar och fastighetsägare och såna här grejer som kan finnas där. Och vi har även Watch Words här då som är ytterligare ett sätt att definiera det. Jag vill bara kolla, är den där med nu? Ja, ja, ja, jag har full koll. Förrän jag säger det.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Den försvann från bilden. Ja, det är därför jag, jag vill se vad jag gör. Ja. Ja. Eh, och sen kommer det då ett mörkbrunt fält som är motsvarande det mörkblåa fältet där då. Och det är då yttre faktorer då. Så väg...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Vägens situation och fordonets plats blir ju då viktig, alltså i vilken ordning man då så att säga ska åka till det här. Och det kan ju vara ett förutvarande jobb. Det påverkar ju så att säga då lite granna, eh, då det, det gula fältet som ska levereras här då. Och sen så har vi då utförandeplatsen för uppgiften eller objektet då. Och den kan ju då vara, det kan alltså vara olika här för fordonet. Om vi tar nu...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Ett stort köpcenter eller en, en gammal stan i Stockholm då, så kan det vara på det viset att vägen eller fordonets plats är ju där dit fordonet ska ta sig. Men utförandeplatsen kan ju vara liksom i ett stort komplex på tredje våningen dit personalen går. Så det innebär att det, det kan alltså finnas... Det finns alltså en fordonsplats och en utförandeplats. Och även här då så är det då yttre förutsättningar som dynamiskt och påverkar det här. Och det kan ju både vara väg...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Förändringar då utifrån en, en, en, vad kartdata säger då, det är köer och olyckor och, och- Dynamiskt och- Dynamiskt, ja. Så, så man har det. Hur som helst så kommer då, eh, det här att sammanställas utav, eh, motor ett då. Och motor ett, och det är en geografisk motor då som har till uppgift att ha en loop som hela tiden försöker då att förstå då vad den unika uppgiften. Den har, den tittar på det här alltså, på alla uppgifter och försöker då förstå vad är den här uppgiften?",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. I f-- Då belägen då baserat på all den tillgängliga informationen som finns då. Och baserat på det då så levererar den då det här gula fältet då under BN då. Så att där konstaterar den att denna uppgiften finns på den här platsen eller möjligtvis då två platserna om då bilen står på en plats och uppgiften är på en annan. Sen kommer vi då till en funktion som heter, eh, tre då eller en motor och den kallar-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm ...det då som en klumpningsmotor då för att flera uppgifter...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Kan ju då ha samma geografiska plats. Och det här har vi ju-- går inte in på detaljerna här för det har vi redan en diskussion vid. Här behövs det då en-- och det finns algoritmer för det här då och så. Här behöver den då liksom förstå nu baserat då på var fysiskt objektena och dess uppgifter finns och vart tidsfönstren finns eller önskade leveranstiderna finns. Så har den här då, eh, klumpningsmotorn då, motor nummer tre här, till uppgift att klumpa-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "...på ihop då uppgifter av samma typ, tid och plats. Då i ett litet, en liten, eh, ja, vad ska vi säga, en liten klump eller en, en, en, en, en, eh, vad ska vi kalla det? Alltså en, en, en, en- Ja. ...ett litet träd av uppgifter. Mm, ja. Eh, så att man då kan ha-- så, så rent konkret så, så, så har vi då, eh-- vi har Storgatan 22 säger vi då som man åker till. Och på Storgatan 22 i den fastigheten då så finns-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm ...det kanske två stycken återvinningsrum inom en radie av, av, av trettio meter. Och det innebär då att det är alltså två stycken utförandeplatser, men däremot så är det då ett stopp för bilen. Och då ska den här motorn då inse att ja, men det verkar ju som att det enda smarta sättet är att vi stan- Ja. ...stannar på- Perfekt, perfekt. Ja. Storgatan 22 och utifrån det då så kan man inom tj-- ungefär tjugo meter då nå-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm ...det här återvinnings- Mm ...skåpet och det här rummet då. Och sen så måste den också då hålla reda på då att det är då av samma utförandetyp också då. Så att den får ju liksom inte blanda ihop då. Det kan ju visa sig att det är en bottenöppnande behållare där då, och då får inte den hamna i samma klump. Men däremot kan det ju vara på att Storgatan 22 så är det dagis också där. Så dagiset har sitt soprum eller sopskåp då medan de boende har ett annat. Och då ska ju den här-- i det här ha-- eh, sammanhanget skita i vilken som ska betala jobbet om uppgifterna är av samma typ.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och på samma typ och på samma plats och möjlig att utföra vid samma tid. Eh, hur den här motorn ska se ut, det är ju då upp till RepliT att föreslå. Men en del utav det och med då både det AI-stödet som vi pratar om, blir ju också då att den kan analysera då och se förbättringar då. Så att om du har, återigen, Storgatan 22 då, och så ser vi då att vi har, vi har de boendes återvinningsrum som är önskad leverans i april. Men sen har vi en önskad leverans i maj för då en restaurang eller ett dagis som finns-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm ...på samma plats det. Då vore det ju väldigt bra då om, om den här motorn då kan ha en dialog då där den säger att ja, om vi kan för-förmå den ena att tidiglägga eller senarelägga det här uppdraget då en vecka så kommer vi då att tjäna, eh, tid och resurser på det. Så det är lite ny, ny, ny då sätt att se det. Men framför allt då så vill vi ju stå, stå slag i det här då att vi ser då gärna att RepliT liksom ser det här som loopar, motorer-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm ...som då har ett tydligt mål då, i det här fallet då ettan, att försöka förstå var någonstans är det här utifrån då den, eh, positionsinformation som finns. Tvåan, utifrån de olika tiderna som finns, när kan det här utföras? Och till skillnad mot ettan då som är ju ganska statisk, den kommer ju inte att förändras. Så är tvåan lite lurigare då, för den kan ju liksom då hoppa fram för har... O-om vi har ett tidsfönster som är januari, februari, men enbart torsdag, fredag som-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm ...eh, mjuka tidsfönster eller hårda tidsfönster så kommer det ju att bli då att, eh, är vi i december tjugo, eh, tjugo, tjugosex då det här ska ju utföras 2027 så kommer ju då det första tillfället att vara onsd... Den första torsdagen och fredagen i januari då. Men när det tåget har gått, då blir det ju automatiskt nästa då. Och här är väl en liten sån här dilemma för den här funktionen då. Hur tydlig gör man det? Uppgiften kan ju inte komma om och om och om igen liksom, utan den, den finns-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm ...då på den mest lämpliga platsen då. Och det är möjligt också då att de här motorerna kan samarbeta med varandra då. Så utifrån då det som klumpningsmotorn då ser är bäst, så kan man ju då försöka då välja då att man klumpar ihop alla de här jobben som är nära varandra vid en vecka då. Och sen så får planeraren här då utgå ifrån det och om han börjar ändra det här så får han ju då gå in i, i uppgiften då och se: \"Oj, här har vi en lovad leveranstid som är den här tidsramen och rucka-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm ...på det här så kommer jag då att bryta. Nu är det överenskommelse.\" Alternativt om han ser att om jag kan flytta det här så kan jag då be kunden då att justera det här och då kommer jag att få en högre effektivitet då.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Så där har vi de tre första otroligt viktiga motorerna då som, som optimerar tidpunkten, platsen och ihopklumpningen utav jobben. Sen kommer vi till ett grått fält som börjar vid BP, Betty Pelle, och den hör ju också i väldigt hög grad ihop med då motor nummer fyra som jag kommer att återkomma till. Men om vi tittar på fälten då, baserat på orderkonceptet eller, eh, ett s-- en snabborder...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Eh, formulär då, så kommer man ju då, eh, rutinmässigt att ange fakturarreferenser. Och kunden är ju liksom redan definierad och det är ju grundfakturering i fakturarreferensen, det vill säga vem som ska betala. Eh, sen kommer då vår fakturarreferens och det är ju lika med vårt ordernummer eller vårt orderkonseptsnummer. Det vill säga, om kunden ringer så kommer vi då kunna slå upp det här orderkonceptet och se var...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Hur, hur såg det här ut då när, när den här ordern skapades då? Om det nu är något fel eller om man behöver, behöver göra en förändring på grund av att då kunden vill det eller... Så då har vi spårbarheten där och det där ska skapas automatiskt. Sen har vi då vår referens och det blir ju då den, eh, operatör eller planerare eller ordremottagare som jobbar i, eh, Trivo då som lägger upp eller skapar det här orderkonceptet eller snabborden. Och det bör ju också då styras in automatiskt utifrån vem som är användare. Så är det...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Lucas Sjölund då, den som lägger upp den här orden och det är han som är användare som lägger in den. Ja, då ska ju då den komma som vår referens då.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. Eh, sen kommer vi då till, eh, kundens referens då. Och observera då, det är två fält då på fakturahuvudet här. Det ena fältet är ju då så kallas e-referens och normalt enligt praxis så är det ju då den som har ansvaret från kundens sida för, för beställningen. Så ringer Anna Svensson och pratar med Lucas Sjölund på, på hos leverantören då, så, så kommer ju han då att lägga dit sitt eget namn som vår referens och så lägger han då dit Anna Svensson som den som skickade-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm ...mail eller pratade i telefonen. Och då vet man ju också vem som har ansvaret från kundens sida för ordern. Sen så säger-- På motsvarande sätt så kanske kunden har något beställningssystem eller n-nån annan form av beställningsreferens och då uppger då kunden att: \"Jag vill att det här ska, eh, styras mot, eh, konto 2232 eller, eh, inköpsnummer si och så då.\" Och det är då ert referensnummer. I vårt system, eftersom de här ordrarna också ska kunna hantera då en automatiserad-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm ...beställningsrutin, så finns det då i orderkonceptet möjlighet då att styra de här mot ett givet metadatafält. Så att om er referens, det vill säga namnet Anna Svensson, ska komma då ifrån, eh, eh, eller styras in, så, så behöver det inte vara då att man har personlig kontakt, utan det kan ju stå på objektet då att den som är kontaktperson här är Anna Svensson. Och då hämtar den informationen igenom att vi pekar in mot, eh, ett metadatafält som heter kontakt och namn och då kommer Anna Svensson autom",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "atiserat då. Och Kenneth Kollegor, beroende på vad som står på de andra objekten då. Och på motsvarande sätt då så kommer det ju-- Kan det vara på det sättet att kunden vill då ha ett referensnummer, till exempel fasadnummer då. Så då pekar man in på fasadnumret och då kommer då Anna Svensson se då att de här upp-- Den här fakturan har hon ansvaret för och den gäller då fasadnummer si och så, fastighetsnummer si och så. Och så kan hon styra den kostnaden då enligt deras rutiner då.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Ja, det är ju inga konstigheter där.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Sedan så finns det en möjlighet då... Det här är då på fakturahuvudet då. Sen finns det en möjlighet då att lägga detta på, eh, som vi kallar då informationsorderrad. Och det innebär då att om kunden då har, eh, hundratals faktiskt det heter som kan vara aktuellt ibland eller hundratals uppdrag, så kanske kunden inte vill ha en faktura för varje, eh, fastighet.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Utan om kunden vill ha en faktura, men ändå se då att för ett visst, en viss fastighet eller ett visst objekt då så har det då utförts, eh, det här och det här. Och då finns det möjlighet här då att välja till metadatafält, eh, som är på infoorderrad då. Och då säger man helt enkelt då att, eh, man vill ha till exempel objektnamnet där och då kommer det då att stå där. Och man kanske vill ha utförandetiden, eh, när den, när den, eh, gjordes och vilken art-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Ja. Och då, då, då lägger den då in det på, på, eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "För att man ju återkommer då, det är helst upp per, per, per adress då, annars så kommer ju det att upprepas om och om och om igen då. Och då blir ju fakturan onödigt lång då. Så att om det är för objektnamnet, eh, Stora Boven 4, Storgatan 22, eh, utförandetid 26-08-30 då, så tvättades det 24 kärl av den här typen, eh, två kärl utav den typen och en rumstvätt och, och x antal likaler då. Och så får man väl samma så.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Sedan så kommer vi till någonting som vi kallar då, eh, fakturamodell. Och...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Eh, det definierar då om fakturamodellen bygger på att allt måste vara klart. Det vill säga, om vi har gjort en, ett orderkoncept som skapar en lista utav uppgifter så kan vi här styra om fakturan först ska skapas när allt är klart. Med andra ord för att kunden ska slippa få massor med fakturor på samma adress, vilket kunden förmodligen då inte vill, vill då. Och det kan ju också vara på det sättet då att, att, eh, ett uppdragsut-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "utförs av olika utförare. I vårt fall så har vi då en bil som kommer dit på måndag och tvättar de bottenöppnande och så kommer det då en bil på fredag som tvättar då, eh, de rullbara kärlen. Och då kunden ser ju det här som ett uppdrag och vill ju då få det på en faktura och det styr man med den där, eh, den där parametern då för att det ska bli mindre förvirring och bättre... Vi ska se tydligare ut gentemot kunden. Sen har vi då, eh, fakturasläpp, löpande eller samlat då. Och utifrån säljarens perspektiv så är det ju bra. Alltså så fort vi har gjort en order-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Ja ...och utfört en uppgift så släpper vi då en faktura. Men risken... Och då, och då får vi in pengarna så fort som möjligt då. Men risken med det är ju att det kan skapas väldigt många fakturor då. Så att där finns det då enligt Praxis Sverige möjlighet då att kunna välja då om fakturorna ska samlas per dag, vecka eller månad då. Och för vissa större kunder så kan ju vi då välja då att ha en månadsfakturu-- Faktura och då kommer det bara liksom fakturor en gång per månad då. Och det styr vi då genom att välja det. Notera här då att",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "...Eh, faktureringsbasen och rent praktiskt så kommer ju det i Kinaps värld då att vara ett-- en återvinningsplats då. Och då skulle vi mycket väl kunna, om vi gör det redan i dag då, att vi, vi har en fast avgift då, så att säga. Vi, vi tar 2 000 kronor för att vi fräschar upp återvinningsplatsen. Sen går vi inte in i detalj då på priset till kunden om vi, om vi då tvättar två eller tre kärl, utan vi har ett fast pris då. Och syftet med den där då är att kunna, kunna då styra in det där.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och sen kommer också det, se vi är då löpande pris och löpande räkning och det är ju lite samma sak då. Och sen kommer också fast pris ytterligare en variant. Här har vi liksom bara lagt in det här. Men det-- Om vi, om vi vänder på det hela då så, så är det ju det. Antingen så ska det då vara styrt med löpande räkning. Det blir det det blir, eh, baserat då på vad utföraren matar in i antal kärl eller tid eller vad det nu är. Alternativt då att vi har ett fast pris där vi har sagt att-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Det, det är då, eh-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. -liv och baserat på, på det, det man anger i årekoncepten. Eh, sen finns här då en möjlighet att, som är väldigt aktuell då, att man lägger in då en kundprislista och den bör då finnas med här då så man ser var, var, var den här fakturan har hämtat sitt pris då ifrån. Om det nu är då Axfood prislista 2026 då och så vidare.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Sen finns det möjlighet att lägga in fakturalåsning, eh, och det innebär då att allt på uppgift-- eller allt på... Alla uppgifter på jobbet måste vara slutförda innan fakturan släpps. Och här får Replit gärna liksom titta på, för det här är ju egentligen lite granna samma saker av samma sak då.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Så det här går nog liksom att optimera på, på ett lite bättre sätt då. Och däremot den sista grejen som kallas fakturabroms är då, eh, att, eh, fakturor skickas inte automatiskt till Fortnox, utan de hamnar i en attestlista då, där då en operatör måste så att säga attestera dem och släppa dem manuellt.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Eh, och här har vi då faktur-- Hela f-fakturabiten då. Och en sak som är viktigt för fakturan då, är det efterfakturering så är det ju efterfakturering. Då fakturerar man ju då det, det det blir. Är det ett fast pris så fakturerar man ju då det pris som är definierat i orderkonceptet då. Lite grann att fundera på där då, det är ju då liksom, bas ska det fasta priset liksom utgå ifrån?",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Rent praktiskt är det då ett återvinningsrum. Eh, och det här går ju också att styra manuellt då, där man så att säga då skapar egentligen en strukturartikel då som hakar fast på ett soprum och sen så tar den då alla undervarande. Och så säger vi, vi, vi skapar en, en, en...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "En, en klubbartikel eller en all inclusive-artikel som innehåller putsning av fönster och tvättat av det och det. Och så skapar vi då ett fast pris för den. Och då, då kommer ju det att lösas. Så systemet klarar ju då av det här, skulle jag vilja påstå. Men det är viktigt då att både vi själva och Rättligt är överens om hur, hur det då ska manövreras då så att vi inte liksom har flera parallella spår då, för det kan ju då bli rörigt. Eh, sen kommer vi då ner till motor nummer fyra då och det är då en motor som heter då, eh, faktura eller",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "ordermotor då. Och den motorn har då på motsvarande sätt som de andra motorerna då, som sin primära uppgift då att försöka då hålla reda på... Eller inte bara försöka, utan den håller reda på alla de här uppgifterna som blir klarmarkerade och håller reda på när de kan faktureras. Och det centrala där är ju då hur fakturan delas upp. Och då finns det något som ett till fem där som jag an-anger som minsta gemensamma nämnare då. Så att om du har...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Jag tar upp uppgifter där kunden är definierad, där er, kundens referens är m-- Är definierad och kundens referensnummer är definierad och de är lika för de uppgifterna, ja, då kommer ju alla de uppgifterna att samlas under samma fakturahuvud. Men så fort då, naturligtvis, om kunden ändras så blir det ju en ny faktura. Och om er referens, om det inte är annat sen så länge, utan det är, eh, Bengt Olsson som har gjort en beställ-- Ja, då kommer ju den fakturan-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm ...under, eller den uppgiften som ligger under honom då att bli en egen faktura. Och med samma logik då, om det är ett annat referensnummer då, så kommer ju då den att skapa då en, en annan. Så Anna Svensson kan alltså få tre olika fakturor med olika referensnummer, till exempel olika fastigheter då. Och då kommer hon att kunna hålla isär det där. Icke att förväxla då om man lägger den här informationen på orderrad då. Då får man inte den uppdelningen och det är ett sätt för att hålla nere antalet fakturor då. Eh, så minsta gemensamma nämnare-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm ...där. Och sen så tittar då systemet då på: \"Ska jag samla ihop? F-får jag släppa fakturan med delleverans, ja eller nej? Ska jag samla fakturorna till en vecko-faktura eller en månadsfaktura? Eh, är det ett fast pris? Är det inte ett fast pris? Eh, vilken prislista är kopplad till det här och vilket pris ska det vara?\" Eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och baserat på det så blir det ju då under om man säger CGR där då en sammanställd faktura.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "...Går på turer och håller även reda på de uppgifter som är gjorda inom ramen för ett abonnemang. Och rent praktiskt, som jag beskriver där och så utifrån... Orderkonceptet skapar ju då bara en massa uppgifter. Och om en uppgift är...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Definierad som en uppgift som ingår i ett abonnemang, då ska då inte den faktureras på vanligt sätt, alltså enligt faktura motor fyra, utan då blir det den här abonnemangsfaktureringsmotorn som får ta hand om den uppgiftens fakturering. Och motorn håller då reda på vilka uppgifter som ingår i det här och den fakturerar då månadsfakturerer-- Fakturor baserat då på den volymen och uppgifter-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. Som finns på de uppgifter som ligger i det här avtalet då. Och det fakturerar den då per månad eller kvartal så som det är uppsatt i årekonceptet. Och...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Men loppet låses också då på ett visst, utifrån ett visst datum, eh, intervall då. Så att om vi har ett avtal med en kund att vi ska ha en fast månadsfakturering under hela 2026, ja, då s-fakturerar vi varje månad det och sen så får vi ta smällen för om avtalet då, eller antalet kärl till exempel ändras då under, under året då. Och då, då låser man det här under en viss tid. Har man inte den där låsningen så får den här motorn liksom kalkylera om det så att om, om det var tio kärl första gången vi körde-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm Och så såg vi då när vi var där andra gången att det var tolv kärl, ja då s-får ju den här utifrån en bestämd affärsregel i den här motorn då uppdatera månadsfaktureringen. Så du kanske betalar tolvhundra kronor per månad ända tills, fram till, ja under januari, februari och mars. Men i slutet av mars var vi där och tvättade och då upptäckte vi att det inte längre var tio kärl utan det var tolv kärl och då kommer vi att fak-fakturera fjortonhundra kronor i månaden fortsättningsvis där då. Så då, då har du en viss dynamik i det. En annan del är ju också då att om...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Men då tillkommer äh jobb som ligger utanför det här så kan den här motorn då hantera det. Så det skulle ju kunna vara på det sättet då att, att man i den här motorn definierar då att nej, du ska inte uppdatera månadsbeloppet då, utan du ska fortsätta att ha betalt för tvätt av tio kärl, säger vi då varje, varje månad. Men när vi var där då i mars så bad kunden då om att få en rumstvätt. Och då ligger ju då rumstvättet utanför abonnemanget, men utföraren eller planeraren...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Lägger in en sådan uppgift då och den ligger under samma fakturerareferensen än den tidigare. Så, och den utförs då...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Precis, han har svängt det andra. Och då kommer ju det då att bli en faktura där kunden kommer då att få, eh, de, de tio eller tolv kärlen som tvättas enligt abonnemanget kommer det då att vara noll kronor på för de ligger ju och är ju förbetalda. Medan rumstvätten, säger vi tusen kronor, då kommer då att bli då ett fakturerbart belopp som ett extraarbete. Samma sak kan ju då hända, eh, i andra sammanhang då att vi har, eh, dynamiska saker som att om vi kommer fram och tvättar en behållare och så måste vi till exempel",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "kvarten och så anger operatören då att ja, nu har jag survat ut två kubikmeter vatten. Det visste man inte skulle hända och så kommer det på en tilläggsfaktura. Och där den här abonnemangsfaktureringsmotorn då, det är att den behöver då hålla reda på vad som ingår i, i abonnemanget, får det förändras under året, eh, och tillkommer det då uppgifter slash artiklar utav utföraren så ligger det utanför det hära och då faktureras dem, eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Med separat belopp. Och när den också då skickar det hära avräkningen. Det är alltså två typer utav fakturor i det fallet som den här motorn kommer att göra. Det ena är ju då den ganska simpla, eh, fakturan då, eh, månadsfakturan eller kvartalsfakturan, så där det kommer då att bara stå månadsavgift, eh, eh, och så blir-- får det bli metadatafält då, månadsavgift, driftshållning, renhållning, återvinningsmiljö, stordatan 22, om man vill ha det så.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och där vill jag då lägga då som fakturareferenser på radnivå där, eh, tolvhundra kronor i Sverige. Så kommer den fakturan varje månad och då kommer kunden då att betala in det. Och den artikel som är definierad på den fakturan kommer att vara styrd i Fortnox, där den också kommer att hanteras då som en kundfordran då. Sen när då uppgifterna utförs så måste den här motorn då hålla reda på så att den skickar då ett nytt fakturaunderlag där det står då att vi har tvättat de här tio eller tolv kärlen, eh, och, eh, de ska...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och då avräknas mot det förbör... För, för det utbetalda abonnemanget. Och då kommer det ju att stå tvätt av tio kärl, eh, hundrafemtio kronor. Och så står det då avräknas mot abonnemang och så står det då, eh, minus då eller plus, hur man nu ser det då. Så det blir plus minus noll då. Medan den här rumstvätten då eller det här extra vattnet som kommer att tas med, det kommer då som en direkt faktura då om det blir aktuellt på samma... Eller det är ett, ett, eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Direkt faktureringsbrev då om det blir aktuellt på samma faktura. Och då kommer kunden då att se att ja, nu har man gjort det här enligt abonnemanget och så har man gjort det här som ett extraarbete. Allt är tydligt och klart och det konteras då på rätt sätt bokföringsmässigt då. Och bokföringsmässigt så handlar det ju då egentligen om att vi ska hålla reda på hur många artiklar vi utför av en viss typ. Och så ska vi hålla reda på hur de betalas då. Antingen genom att kunden betalar in cash eller att de balanserar-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. Balanseras då på tillgång och havande kunden har i det här fallet då som en kundfodran på det förut betalda då. Eh, och det är då, eh, motor nummer fem. Eh, går vi vidare här...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Så kommer vi avslutningsvis till ett blått fält under kolumnen CH. Och det är då den sista delen i det här informationspaketet då kring uppgiften. Och det är tre kolumner eller tre fält. Den första, eh, och de här kallas då, då, då status. Och den första anger då vilken status har den här i Trivo. Är den skapad, grovplanerad, fin",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "- Ja ...planerad, är man på plats, på väg och så vidare enligt det som står där då. Alternativt att det finns begränsningsstatusar då eller avvikande statusar att den går inte att utföra. Ja, då får den ju statusen att den, ja, den går inte att utföra. Eh, och förhoppningsvis har man då förklarat också då i, i, eh, på själva utförande-appen där då varför den inte gick att utföra då. Sen kan man komma i ett läge då att en uppgift raderas av olika skäl då och arkiveras då. Och sen kommer en lila fält.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Då var det specialare kan man väl säga här då att när planeraren fyller då i finplaneringen produktionsveckor så kommer ju så att säga då olika uppgifter bli finplanerade på med, med dag och förmodligen tid. Eh, men om man överbokar då antingen hela veckan eller enskilda dagar då, ja, överplanerar med hela veckan, då kommer det ju då på den sista arbetsdagen då där. Och då kommer vissa uppgifter då ha statusen som överbokad.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Ja, det tror jag. Vilket innebär ju då att det är inte säkert att vi kommer att kunna utföra det och det blir stor risk då att den här, den här uppgiften kommer att ramla tillbaka då till grovplaneringen igen då. Eh-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Den inte blev gjord helt enkelt. Men det här blir lite grann då ett spel som planeraren kan använda då, dels för att maximera produktionskapaciteten och ta höjd då för om, om, om det går fortare än det är tänkt och om det blir bortfall då under-- På grund av att man inte kan utföra jobbet därför att det kanske är felparkerade bilar eller liknande då. Så där har vi den där överstatusen som vi kallar överbokad. Och sedan så har vi också, eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "En status här som jag kommer in på, den nästa kolom då som vi kallar, eh, offert eller, eller simulerad. Och det kommer att finnas ett, ett, ett, ett behov då att kunna, när, när företaget, den användaren då ska göra större affärer så kan man då lägga in en icke-skarv uppgift i offertarbetet för att se hur det här kommer då att slå då mot den befintliga orderstocken då.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. Eh, och hur man hanterar det. Och det innebär att det blir som en specialstatus också där då som vi kallar då, eh, simulerad då. Alltså, det är inte ett skarpt jobb, men man kan leka med det jobbet då för att se hur lång tid det kommer att ta och så vidare då. Eh, och hantera dem då i grovplaneringen primärt, men också då finplaneringen om man vill verkligen skarpräkna då och se hur det funkar ihop med a-andra jobb då. Och här kommer det också att behöva vara bra då med, med då AI-stödet som kommer att kunna hjälpa till då att dra slutsatser utav det här. Sen under kolumnen C i...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och första är då det här offerten, det simulerade, det vill säga vi, vi, vi, vi kalkylerar, men vi har inte ens en skarp uppgift, men den ligger som en uppgift och så vi kan spela med den. Men det normala är ju då att, eh, vi, vi skapar ett orderkännande, det vill säga då ligger ordern inne och vi har då en grov planering på den och kanske finplanering. Sen kan det vara bland-- Aktuellt ibland med en fraktsedel när det är en resa och delar ska levereras. Så då bekräftar vi då att vi, vi kommer att...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "...frakta oss dit, ut till kundens objekt och adress. Och sen väl på plats så kan vi då leverera en följesedel då vi har då, eh, utfört, eh, uppdraget.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och sen finns det då en leveransbekräftelse då som är ju egentligen samma sak som följesedel då, där vi talar om då att vi har levererat det vi har gjort. Men i det fallet så kvitterar då kunden också leveransen då. Och det är väl inget krav som vi har just nu, men systemet ska kanske då klara av då att man med ett bank-id eller, eller då med nån form av signatur på samma sätt då som, eh, speditörer och, och, och som posten har, att man kvitterar att man har mottagit godset då.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "För då är det ju då levererat. Och sen sista steget då i det där är faktura. Eh, ytterligare tillägg under CJ är då att man kan då klicka igenom om man vill ha maskering då så att priset inte syns på de, ska vi kalla externa dokumenten då, fraktsedel, följesedel och leveransbekräftelse då. För i vissa fall vill man då kanske inte blotta det priset om man säljer via en återförsäljare eller om man helt enkelt inte vill att den som skriver på ska se kostnaderna. Så där har vi då hela de här-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. -hela det här informationspaketet som består utav en mängd olika områden som är kopplade först till artikelregistret, sen kopplade till, eh, orderkonceptet där den där ordern skapas då. Där framför allt då fakturauppgifter finns med och vilken fakturamodell det är. Och sen så har vi då de tunga bitarna här då med det vi kallar styrningen då att var är... Vilket, vilket orderkoncept är det skapat ifrån? Vilket objekt är det kopplat emot? Vilken-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. -är kunden? Och så har vi då geografin och leveranstiden som jag har gått igenom. Avslutningsvis nu så finns det några motorer kvar här då som jag vill kommentera, eh, som har väsentlig betydelse för det här. Vi har nog tittat då på de motor ett till tre som egentligen handlar om att hålla reda på när och var och vilka uppgifter som är på samma plats. Sen har vi uppgiftsmotor fyra som handlar om att egentligen då se...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Vilka uppgifter går det att få på samma faktura och hur ofta ska fakturorna skickas och med vilka eventuella radreferenser? Sen har vi då femman som är en tung grej. Det är då den här abonnemangsfaktureringsmotorn som är väldigt speciell för till skillnad mot de andra så ska den också då skapa olika fakturor, bland annat de fasta... Fas-faktureringen för en fak-fas-fakt... För den fasta månads- eller kvartalsfaktureringen, men den ska också skapa-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm ...varav de här avräkningsfakturorna då baserat på utförda uppgifter enligt abonnemanget och eventuella tilläggsuppgifter som då ska faktureras med verkligt belopp. Den motorn, den är inte jätteavancerad, men den kräver en speciell, eh, speciellt upplägg och den kräver också då att man matar in liksom systemparametrar, till exempel vilken artikel ska då, eh, avräkningsraden styras emot.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och vilken artikel ska då den fasta månadsfaktureringen styras mot. Men det, det, det lägger man in i, i grunddata där då så att det funkar mot Fort Knox, eh, eller annat ekonomisystem. Eh, sen har vi då den här, en ytterligare motor, s-- motor nummer sex som är då en beroendeuppgiftsmotor. För som jag angav då tidigare där uppe då, så är ju vissa utav de här uppgifterna beroende utav varandra. Och då måste den ju liksom hålla reda på då, särskilt om en sån här offentlig uppgift",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "suppgift är utförd innan då, eh, huvuduppgiften ska göras. Ett konkret exempel är då att om det krävs en avisering, eh, på, eh, ett jobb och det ska vara tre dagar innan skruv-- stiftningen eller muntlingen, ja, då måste ju den uppgiften vara utförd innan dess huvuduppgiften, eh, ska genomföras då. Annars går ju då inte huvuduppgiften att, att genomföra. Och här krävs ju också då nån form av dialog, eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Dialog då där, där systemet då flaggar när det här håller på att gå åt helvete då. Både för planeraren men framför allt också för utföraren då som har blivit tilldelad den här uppgiften. Och, och naturligtvis om det ligger beroendeuppgifter som heller inte har blivit tilldelade utan bara ligger på grovplaneringen- -så måste man ju hålla reda på det också. Sen motor nummer sju då, eh, den har, är lite specialare då och delvis släkt med sexan då. Men, eh, sexan har bara till uppgift att",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "hantera det här då att uppgifter blir gjord, eh, innan rubrikuppgifter. Alltså, den jobbar mest med, med tider. Eh, medan sjuan, den har då till uppgift att hantera fysiska artiklar som då kan ha antingen leveranstid eller fysisk lagerplats, eh, med då en nödvändig blockuppgift då för att hämta den här varan då på lagerplats eller leveransplats då. Och det innebär då att...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "På samma sätt som ABONNEMANGSFAKTURERINGS-MOTORN så har den då rätt att skapa egna artiklar. Så kommer även den här motorn då för att hantera, eh, fysiska artiklar då ha möjlighet att skapa...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Eh, egna artiklar så ska du använda då ett klistermärke enligt exemplet här uppe. Då måste ju då den här motorn då inse då att det måste skapas en blockuppgift då, eh, som är kopplad till den geografiska platsen för lagret då för det där klistermärket. Och som jag beskrev också tidigare där uppe då, om du har en...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "En, en, en, eh, vara som inte förbrukas, till exempel en nyckel eller ett verktyg då, då måste den här också då se utifrån grunduppgiften att ja, här ska det användas en nyckel på Storgatan 22 och nyckel finns på, i ett nyckelskåp på Ariavägen 2 i Bjästa. Och det här är en vara som inte förbrukas. Då ska den här uppgiften då förstå att oj, den här måste då plockas i Bjästa företrädesvis då.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "På måndag då, utan teamet som då ska åka, säger vi, till slutstuds, va, till Storgatan 22. Och den måste också förstå då att ja, den här ska återleveras då till sin lagerplats, företrädesvis då kanske på torsdag eller fredag samma vecka när man återvänder då. Och då ligger den som en uppgift då, eh, där och där må-- då, då där det står att, att åter...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Åter... Ja, alltså... Det, det står alltså bara... Det är antingen att hämta eller att lämna va-varor då. Antingen, det, det kan också vara till en kund. Och den, den här motorn har då till uppgift att hålla reda på då en, ett plock och vart plocket är och en eventuell återleverans och vad den återleveransen är då. Och sen blir ju då det här samtidigt då en beroendeuppgift då. Så att den uppgift som den skapar här är ju då en beroendeuppgift då. Så det borde då sen den här beroendeuppgiften...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Motorn då, kan jag bara erbjuda, på så att om, om, om bilen då som ska till Stordalen 22 i Sundsvall åker på måndag morgon utan att beroendeuppgiften är gjord då på Arjävägen 2, då kommer de inte kunna få... Då, då ska systemet säga: \"Men du måste slutföra den här uppgiften innan du får åka.\" Mm. Ja. Mm. Äh, och mycket viktigt här också att se då att den här grovplaneringen då som görs då, ja, innehåller ju då, eller som skapas, den innehåller ju allt.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Ja, alla uppgifter då. Sen kommer ju då utförare eller planeraren då att kunna köra ut då de här uppgifterna på olika utförare då. Och det blir ju upp till planeraren då att bestämma vem som ska plocka den här nyckeln. Mm. Han kan ju mycket väl välja då om det är Lucas nu uppe på Arjävägen 7 att: \"Nej, jag lägger inte ut den här nyckelplocket då, att plocka fram den här nyckeln eller klistermärkena på Christer.\" Utan han kan ju själv på fredag, det sista han gör då- Mm. Så slutkör, slutför han då den, den uppgiften åt Christer-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. Och lägger nycklarna i framsätet på bilen då. Och då är de gjorda. Och då kommer inte Christer och märker någonting av det. Men däremot så ser Christer då: \"Oj, här har jag fått de här nycklarna.\" Ja. \"Det är ju jättebra.\" Mm. Och sen så kanske Christer själv har en uppgift: \"Oj, de här nycklarna får jag inte ha liggande i bilen längre.\" Utan jag kan alltså inte avsluta min vecka med att jag har ringt och åka då. Nej. Och om han skiter i att hänga tillbaka dem då och då, då kommer, då kommer ju liksom då den här beroendeuppgiftsmotorn då säga: \"Ja, men nu är det uppgifter som inte är slutförda här då.\" Mm. Och det innebär ju då att planeraren kan ringa Christer och säga: \"Oj, nu har du inte slutfört den här uppgiften.\"",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Nu kan du köra igen. Så, så då var vi alltså vid då motor nummer sju, de fysiska artiklar. Sen har vi då motor nummer åtta då, som är egentligen då en motor som sammanfattar väldigt mycket utav det här. Den har då som upp-- enda uppgift att hålla reda på då, eh, status på...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Uppgifterna och efterlevnad mot önskad leveranstid.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och hantera då aviseringar till kunden. Och, och när jag pratar om aviseringar här då, så är det då statusaviseringar då, företrädesvis baserade då på dels orderdokumenten, det vill säga ordererkännande och sen då följesedel.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och, eh, eller ett, eh, order- eller leveransbekräftelse. Och om kunden sen lägger till och vill ha korsnotiser då på om uppgifter till exempel skapas på kundens objekt och såna här saker, eller om det blir förändring på en uppgift, eh, eller...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Om, om, om kunden vill ha en pushnotis när vi är på väg och när vi är på plats och såna här saker då. Så då-- Den här motorn håller alltså reda på statusen och den varnar om-- Den varnar både kunden och den varnar, eh, Kinabs personal om det blir släp. Och det kommer ju att bli släp, och, och det är ju inget ovanligt. Alltså, om vi, om vi drar en parallell då till Postens app då, eh, som är en ganska fin app då som levererar. Den aviserar ju då att-- Den tror ju då att...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Den tror att det ska komma en leverans till ett paket på torsdag. Men om det blir försenat så får jag ju en pushnotis som säger: \"Nej, nu är ändrad leveranstid.\" Mm. Och, och, och nu-- Den gick inte att leverera med den bilen, utan den kommer att levereras dit. Du får hämta den eller vad, vad det är då. Och den generella uppfattningen som jag har då, det är att systemet ska vara väldigt transparent och den här motorn ska egentligen då på ett så öppet sätt som möjligt då både generera då på sikt pushnotiser, men också generera då i nån sorts nyhetsbrev. Så när kunden går in i sin kundportal så ska han då se att-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. Och då kan han då se att: \"Oj, nu har det ändrats mot det tidigare då.\" Och så. Mm. Sen har vi då en motor nummer nio och det är den senaste motorn då som inte direkt har då med uppgifterna direkt att göra. Men det är då en, den vi kallar då som en metadatabevakningsmotor då. Så att...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. Där är det flera motorer kan man väl säga. Så både utifrån kundens perspektiv och utifrån planerare eller administratörens perspektiv, så är då tanken att du ska kunna skapa en metadatamotor som till exempel bevakar då om du får ett metadatafält som är felaktigt eller om, om det är någonting... A-alltså ett metadatafält som anger att det är en trasig l-lucka till exempel. Mm. Då kan du skapa en metadatamotor då som, som tittar då på att varna mig- Mm. Om det blir-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. Det känns som att den här eller... Mm. Va-va... Den här är liksom fri, fri och franco. Jag tror att själva, själva motorn ska både kunden och, och den administrativa planerande personalen och även utföraren kunna skapa. Det blir ju... Och den här kommer att vara väldigt nära länkad till, till, till- Kundportalen. AI. Ja, ja, det menar jag. Så att det blir ju som en AI där du i princip då kan fråga: \"Vad är det nu? Är det många rum som...?\" Eller ja, där utföraren ska kunna tänka, men han skulle kunna använda den här frågan: \"Är det många, många, många utav mina st",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "öpsel som har bara mindre än fem kärl?\" Ja, hälften av den är stort, stort den här. Det är därför det blev så många. Ja, ja. Men det är mer... Och i förlängningen då utav den här metadatomotorn, där, där den, den ändå... Den, den, den annonserar metadatafält och, och talar om, eh, alltså utifrån ett villkor då. Mm. Eh, men den har också en funktion där man kan då lägga in en uppgift.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. Eller inte lägga in en uppgift, utan den skapar en uppgift där vi i princip då kan lägga då, då ett villkor att om det kommer ett klagomål eller om, om, om, om det är fler, fler än trasiga så här, ja, men då skapar den en uppgift då. Alltså, för, för vi måste förstå, ett metadatafält är bara information. Mm. Eh, utföraren och alla andra har möjlighet med, med metadataeditorter och, och så vidare att pusha in metadata. Men metadatan är ju bara-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Ja ...det är en multi, en multi. Vi måste alltså antingen via ett orderkoncept eller, eller via en snabborder skapa en uppgift. Mm. Och som ett komplement till det så blir det den här nian då, alltså den här metadatamotorn som också då kan-- där vi kan lägga om ett metadatafält ens på det här viset så skapar vi en uppgift. Och det kan vara en simpel uppgift, ringa upp kunden. Ja, ja. Mm. Och då, då-- Och, och om vi då har en uppgift som heter ringa upp kunden, då styr vi liksom bara in då metadatafältet där-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Hämta kontaktens namn- Ja ...hämta kontaktens, eh... Adress, objekt- Ja ...hämta allt, all information som du- Ja, och då kommer det en uppgift- Ja ...och det här är en utförandetyp som säg vi Lucas ska göra. Då kommer ju det liksom bara komma upp en uppgift. Du ska kontakta den här kunden- Ja ...därför att- Och här har du, här har du alla förutsättningar. Och om du då på kontaktuppgifter sätter upp, säger vi nu då, alltifrån att vi kanske har ett avstämningsmöte med kunden. Mm. Eh, vi sä-- Under kontakt så säger vi, säger vi då avstämnings- Mm. Vi har ett metadatafält-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Ja ...som säger då att vi ska ha ett avstämningsmöte i januari- Ja ...och i september. Ja, då kan du ju liksom skapa ett villkor då där den här skapar en uppgift- Mm ...att du ska ringa upp kunden. Mm. Du, du, du kan ju också, om du vet när kunden fyller år- Mm ...så skulle du då kunna skapa en upp-- En sån här som letar. Vilka kunder är det som fyller år i dag? Mm. Mm. Ja, ja, ja, ja. Och då skapar den en uppgift att de ska få en gratistvätt eller att vi ska skicka dem en gratulation. Banan. Så är logiken kring det där. Och nu innebär ju det här då att det här är slut på den här genomgången för den här och jag ska-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Ja ...göra som så att jag, eh, tackar då för det. Och jo, en, en viktig grej nu till budskap till Replik, Lotta, om vi får med dig i transkriberingen. Det är ju då nu då att nu har vi försökt att definiera de, eh, datafält som finns i det här informationspaketet uppgift. Och som det syns så är ju det alltså många datafält. Mm. De här datafälten, till och med datafältet vilken som är kund, är ju inte på något vis mandatory för- Nej ...utföra uppgiften. Nej. Utan det är ju många-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm ...datafält. Och i det bästa f-fallet så har vi då full koll på både lagerplats och leverantörer och så vidare då. Mm. Men, men ingenting faller ju på det. Och det som är viktigt också att den måste fatta här nu då rättligt då är ju att logiken i vårt system bygger ju då på att vi har uppgifter som då bo-- kan både vara en sak man ska göra o-och en sak man kan ta betalt för och en sak man kan leverera i form av en soptunna och som man kan ta betalt för. Men det behöver inte vara det. Nähä. Det kan bara vara-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Ja ...ett samtal också- Ja ...du gjort nån. Ja. Och det kan vi inte ta oss betalt för. Nej, nej. Det kan, det kan också vara ett backjobb där det inte finns nån kund- Nej ...eller det kan vara demojobb- Mm ...eller det kan vara rengöring utan en, en egen bil- Mm ...som är kopplad till bilen som objekt och så. Ja, ja, ja, ja. Systemet måste fatta- Mm ...uppgifter är då artiklar. Mm.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och en artikel och en uppgift är egentligen samma sak. De är oftast kopplade till ett objekt, men de behöver inte vara det. Mm. De är ofta kopplade till en kund, men de behöver inte vara det. De kan vara uppkopplade till en utförandekod- Mm ...men de behöver inte vara det. Mm.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Men gemensamt för alla uppgifter är att de hamnar i gropplaneringen. Ja. Och baserat på utförandetyp, geografi, kan man då sortera dem där. Och med hjälp utav den hära, eh, klumper-klumperingsmotorn som klumperar uppgifter av samma typ på samma plats, så kommer det då kunna bli liksom klumpar eller sjokt utav uppgifter. Så om vi leker med tanken nu då, vi kör axo till exempel. Där har vi-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. Och upplifter att vi tre dagar innan ska avisera butikerna att vi är på väg. Mm. Mm. När vi då skapar ett sånt årligt koncept så kommer vi då varje vecka då att få ett sjok med uppgifter av samma typ utan geografisk koppling som då kommer att klumpa ihop sig. Så det innebär ju då att det kommer att bli liksom en klump av uppgifter. Ring upp de här tjugotvå butikerna eller skicka mejl till de här tjugotvå butikerna då. Mm. Mm. Mm. Mm. Eh, ja, så det...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Men nu är det viktigt att, att Replit ställer-- ifrågasätter det här och det är också väldigt viktigt med att, att infrastru-strukturen som Replit har byggt upp för Tryvo nu verkligen kan hantera de här informationspaketen och att vi, vi, vi också inte låser oss. Och till exempel den geografiska positionen som vi inte har med här är ju att den ska kunna hantera då... Nu har vi pinpointade adresser- Mm. Mm. Men på sikt måste systemet kunna hantera en yta. Mm. Mm. Den kanske också måste kunna hantera en, en linje, alltså- Mm. Mm. Mm. En gasväg som- Ja, ja,",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "ja. -två mil i en riktning. Mm. Jag, jag har ju lagt till linjer på-- bredvid polylinje nu. Eller poly, eh, ruter så kan man göra linje också. Ja. Eh, och det där tror jag Boogie kommer lösa. Ja, är vi nöjda där? Nu, nu, nu är vi nöjda. Och, och så kommer den här-- nu ska jag spara den där och så- Kom igen nu Replit, gör ditt bästa. Ja, vi litar på dig. Ja. Du har gjort det bra hittills. Men lägg ner inte på några egna saker. Och om du ser några logiska luckor nu i det här resonemanget, antingen som du själv inte förstår eller att du ifrågas",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "ätter den logik som vi nu har byggt upp här, då måste du fråga. Och det finns några såna där, där också som nämnde det här med hur deleverans av fakturor- Mm. -där det liksom är egentligen flera fält som säger samma sak och så där. Mm. Ifrågasätt det, försök att rensa. Gräv inte ner dig i en, i en logi-logisk lösning som gör att vi inte kan, eh, jobba vidare med systemet. Tack så mycket.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Ja, alltså det är ju- Ja, det är för jävligt. Ja, det är ju som de- ...de som ska ut med bil- Ja. -långa morgonen. Jag sov bara eller satt och spelade hela natten. Ja. Ja, men det är första gången, man. Så det går inte att skylla på mig .",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Eh, men ska vi jobba ihop så får det vänja det med både det ena och det andra. Ja, men det är inte så. Det är bara att jobba ihop.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Ja, ja, men jag skojar ju. Du, du, du, du, du, du har lite svårt när jag assierar det med skoj och halvvar det. Men det är därför att du är felande huvud, men det kan inte du göra någonting åt. Nej, nej, nej.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Det var också skoj om du förstod då. Jo, jag tycker det var roligt jag. Ja, framför allt, du måste fatta att jag har jättemycket i huvudet nu. Ja, du är en- Jag kan inte hålla på och- Nej, nej, jag vet, jag vet, jag vet, jag vet, jag vet, jag vet. För det är en grej när jag säger, du skulle ju inte säga, du skulle, du skulle inte få fram ett ord alls. Jo, det ska vi se. Ja, men alltså det finns ingen anledning att få fram en massa ord för att det sköter du. Ja, ja. Eh, jag sköter mitt och sen så levererar vi någonting. Ja, det är helt fantastiskt. Ja, ja.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Jag har aldrig jobbat på såhär hög nivå med någon och fått se vad vi ska säga. Ja, det vet vi inte än, utan det får vi ju se resultatet. Ja, men du har ju redan sagt att det är så. Ja, det är... Jag tar lite den här och lämnar in. Ja, min fru var ju helt, eh, hon åkte här, skulle vara barnvakt här då. Och nu var ju hon så orolig vad du skulle ha för middag. Och jag sa: \"Ja, men Mats behöver ingen middag. Det finns väl korv i kylskåpet.\"",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Ja, just det. Ja, och då...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Så hade vi en korv. Eller, eh, eh, och så fanns det matlådor att värma också. Ja, det var det.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Ja, men det måste ju riktigt mycket mer idéer ha varit där. Man kan ju inte komma in hit och, eh- Men gud, vad hon är dum.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Ja.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Min fru, Ruben, det tror jag inte. Ja, du har- Nu byter jag ut den här till en sval. Men hon är snäll, hon håller på att blåsa i munnen ändå nu. Ja, men du kan inte ha det så här. Men det får vi ta, det ska vi ta när vi pratar privat. Nu jobbar vi. Så där kan man inte ha det, Mats.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Eh, nu ska vi se.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Nej, det kan jag ju inte.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Undra. Äh. Jag tror inte att hon är i två betalade ju för sig, men... Ja, men det är inte det är frågan om. Man ska inte gå i sitt eget hus på tårna och, äh, inte veta vilket humör det är den här dagen heller, utan man... Nej, så kan man inte göra. Men det är ju vad jag-- Det är du gör precis vad du tycker, men det är folk är olika.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Men det är väl bara när dottern flyttar ut, då får du väl fatta ett beslut bara. Ja, precis. Ja, då är det enkelt. Och så att det finns ett sätt att man har pengar.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Så man inte är be-beroende. Eller alltså, det är det som är det värsta. Ja, ja, men det pengar har ingen betydelse om, om man... Det är bättre att må bra och vara black än att ha pengar och må dåligt kan jag säga. Ja, jo, exakt.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Nej, jag, jag gör ju det som inte är av med några pengar så att det... Nej.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Men ska man ha någon innanför väggarna, då är det ju ganska skönt om liksom... Jag får ju skäll jag också för fan. Så det är ju inte fråga om det, utan det... Men det måste ju finnas nån...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Rimlighetszon. Men det där...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Nej, det här är så...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Vi tar tag i det när vi börjar tjäna pengar. Ja, ja, ja, precis. Ja. Då blir det lättare. Men vad fan, den här kåkjäveln som du bor ju där...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Den är ju... Vad fan tror du att du får för den om du säljer? Jäkla brännvin.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Tjugotio miljoner. Ja.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Tänk då hur, hur mycket lån har du kvar på den här då? Nej, men jag har ju ganska mycket. Jag har ju köpt in en Kina liksom. Ja, ja, ja. Jag har ju tre, fyra miljoner nånting. Ja, men det är väl ingenting. Men du har köpt den för tre, fyra miljoner. Ja, ja, men har du bara tre, fyra miljoner så är det väl ingenting. Nej, det är ju ingenting. Nej, då har du ju ett jävla övervärde. Så att då- Men det blir ju bara snabbt. Köpte den ju som sagt för, jag kommer inte ihåg, tre, fyra miljoner. Ja. Och det-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Ja.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Ja. Det är väl en trevlig del då? Ja.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Ja.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Ja. Nej, men det är ju för att Miljöpartisterna ska kunna bygga cykelvägar. Ja.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Det är ju vår fördel. Ja, det är vår, ja.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    }
+  ]
+}
