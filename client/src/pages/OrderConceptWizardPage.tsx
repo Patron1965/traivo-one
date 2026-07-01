@@ -170,6 +170,8 @@ export default function OrderConceptWizardPage() {
   // Step 3
   const [invoiceLock, setInvoiceLock] = useState(false);
   const [invoiceBrake, setInvoiceBrake] = useState(false);
+  // Uppgiftslogik v1 (Fakturalås BY+CE): fakturera först när hela segmentet är utfört.
+  const [requireCompleteSegment, setRequireCompleteSegment] = useState(false);
   const [invoiceMethod, setInvoiceMethod] = useState<string | null>(null);
   const [subscriptionAdjustmentDate, setSubscriptionAdjustmentDate] = useState("");
   const [invoiceConsolidation, setInvoiceConsolidation] = useState("customer");
@@ -245,6 +247,7 @@ export default function OrderConceptWizardPage() {
     form.setValue("invoiceModel", wizardData.invoiceModel || "");
     setInvoiceLock(wizardData.invoiceLock || false);
     setInvoiceBrake(wizardData.invoiceBrake || false);
+    setRequireCompleteSegment(wizardData.requireCompleteSegmentBeforeInvoice || false);
     setInvoiceMethod(wizardData.invoiceMethod || null);
     setSubscriptionAdjustmentDate(toDateInput(wizardData.subscriptionAdjustmentDate));
     setInvoiceConsolidation(wizardData.invoiceConsolidation || "customer");
@@ -492,6 +495,8 @@ export default function OrderConceptWizardPage() {
     billingFrequency: invoicePatch.billingFrequency,
     invoiceLock,
     invoiceBrake,
+    // Uppgiftslogik v1 (Fakturalås BY+CE): persistera segment-låset på konceptet.
+    requireCompleteSegmentBeforeInvoice: requireCompleteSegment,
     invoiceMethod: invoiceMethod || null,
     subscriptionAdjustmentDate: toIsoOrNull(subscriptionAdjustmentDate),
     // Abonnemangs-fält skrivs bara när metoden är abonnemang; annars utelämnas de
@@ -510,7 +515,7 @@ export default function OrderConceptWizardPage() {
     totalCost,
     estimatedHours,
     };
-  }, [conceptName, customerMode, selectedCustomerId, customerMetadataField, priceListId, priceModel, fixedPriceKronor, customerReference, customerLabel, ourReference, customerReferenceMode, customerReferenceMetadataField, customerLabelMode, customerLabelMetadataField, invoiceRowReferenceFields, includeExecutorFreetext, invoiceLevel, invoiceModel, invoiceLock, invoiceBrake, invoiceMethod, subscriptionAdjustmentDate, monthlyFee, billingFrequency, subscriptionStartDate, invoiceConsolidation, departmentMetadataField, targetObjectIds, mainDeliveryWindows, deliveryRestrictions, conceptArticles, totalValue, totalCost, estimatedHours]);
+  }, [conceptName, customerMode, selectedCustomerId, customerMetadataField, priceListId, priceModel, fixedPriceKronor, customerReference, customerLabel, ourReference, customerReferenceMode, customerReferenceMetadataField, customerLabelMode, customerLabelMetadataField, invoiceRowReferenceFields, includeExecutorFreetext, invoiceLevel, invoiceModel, invoiceLock, invoiceBrake, requireCompleteSegment, invoiceMethod, subscriptionAdjustmentDate, monthlyFee, billingFrequency, subscriptionStartDate, invoiceConsolidation, departmentMetadataField, targetObjectIds, mainDeliveryWindows, deliveryRestrictions, conceptArticles, totalValue, totalCost, estimatedHours]);
 
   const createConceptMutation = useMutation({
     mutationFn: async () => {
@@ -889,6 +894,7 @@ export default function OrderConceptWizardPage() {
                 invoiceFrequency={billingFrequency}
                 invoiceLock={invoiceLock}
                 invoiceBrake={invoiceBrake}
+                requireCompleteSegmentBeforeInvoice={requireCompleteSegment}
                 subscriptionAdjustmentDate={subscriptionAdjustmentDate}
                 invoiceConsolidation={invoiceConsolidation}
                 departmentMetadataField={departmentMetadataField}
@@ -908,6 +914,7 @@ export default function OrderConceptWizardPage() {
                   if (data.invoiceFrequency !== undefined) setBillingFrequency(data.invoiceFrequency || "monthly");
                   if (data.invoiceLock !== undefined) setInvoiceLock(data.invoiceLock);
                   if (data.invoiceBrake !== undefined) setInvoiceBrake(data.invoiceBrake);
+                  if (data.requireCompleteSegmentBeforeInvoice !== undefined) setRequireCompleteSegment(data.requireCompleteSegmentBeforeInvoice);
                   if (data.subscriptionAdjustmentDate !== undefined) setSubscriptionAdjustmentDate(data.subscriptionAdjustmentDate);
                   if (data.invoiceConsolidation !== undefined) setInvoiceConsolidation(data.invoiceConsolidation);
                   if (data.departmentMetadataField !== undefined) setDepartmentMetadataField(data.departmentMetadataField);

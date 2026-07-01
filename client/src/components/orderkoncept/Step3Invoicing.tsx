@@ -48,6 +48,9 @@ interface Step3State {
   invoiceFrequency: string | null;
   invoiceLock: boolean;
   invoiceBrake: boolean;
+  // Uppgiftslogik v1 (Fakturalås BY+CE): håll tillbaka fakturering tills hela
+  // fakturasegmentet (orderkoncept + kund) är utfört.
+  requireCompleteSegmentBeforeInvoice: boolean;
   subscriptionAdjustmentDate: string;
   invoiceConsolidation: string;
   departmentMetadataField: string | null;
@@ -110,6 +113,7 @@ export default function Step3Invoicing({
   invoiceFrequency,
   invoiceLock,
   invoiceBrake,
+  requireCompleteSegmentBeforeInvoice,
   subscriptionAdjustmentDate,
   invoiceConsolidation,
   departmentMetadataField,
@@ -499,6 +503,30 @@ export default function Step3Invoicing({
           <p className="text-xs text-muted-foreground mt-2" data-testid="text-invoice-method-help">
             {UI_METHOD_HELP[uiMethod]}
           </p>
+        </div>
+
+        {/* 4. Fakturalås — vänta på att hela fakturasegmentet är utfört */}
+        <div>
+          <h3 className="text-sm font-medium mb-3">Fakturalås</h3>
+          <div className="flex items-start space-x-2 rounded-md border border-border p-3" data-testid="block-invoice-lock">
+            <Checkbox
+              checked={requireCompleteSegmentBeforeInvoice}
+              onCheckedChange={(v) => onUpdate({ requireCompleteSegmentBeforeInvoice: !!v })}
+              id="require-complete-segment"
+              data-testid="checkbox-require-complete-segment"
+              className="mt-0.5"
+            />
+            <div>
+              <Label htmlFor="require-complete-segment" className="cursor-pointer text-sm">
+                Fakturera först när alla uppgifter i konceptet är utförda
+              </Label>
+              <p className="text-xs text-muted-foreground">
+                En utförd uppgift hålls tillbaka från fakturering tills samtliga uppgifter i
+                samma orderkoncept och kund är slutförda (eller avbrutna). Passar när hela
+                uppdraget ska faktureras samlat.
+              </p>
+            </div>
+          </div>
         </div>
 
         {/* 3b. Abonnemangskonfiguration */}

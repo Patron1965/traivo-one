@@ -14,10 +14,18 @@ break nor a grouping value (NULL segment = exactly today's behavior, full
 back-compat). It encodes the break node id and the grouping VALUE, but deliberately
 NOT the grouping field NAME.
 
-The key is consumed in THREE places that must stay in lockstep:
+The key is consumed in FOUR places that must stay in lockstep:
 1. in-memory grouping during a consolidation run (group key = baseKey + segmentKey),
 2. the cross-run additive-merge match conditions (eq segmentKey, or isNull for NULL),
-3. the LIVE preview route (groups by baseKey + segmentKey).
+3. the LIVE preview route (groups by baseKey + segmentKey),
+4. the fakturalås-gate (BY+CE "allt klart innan faktura") — releases a WO only when
+   every open sibling in the SAME group is done. The group MUST equal the consolidation
+   group or a finished group is held hostage by an unrelated one. So both consolidation
+   and the gate build the key via the shared `canonicalBaseKey(wo)` (r:<recipient> before
+   c:<customer>) + `composeGroupKey(base, segmentKey)` helpers — ONE source of truth. The
+   gate cannot filter on the frozen billingSegmentKey column in SQL (NULL until release),
+   so it recomputes the segment via the same `resolveWoSegment` used at freeze-time and
+   threads it into the release so the frozen key == the key it gated on (no drift).
 
 **Why:** if you add an extra dimension (e.g. `billingGroupingFieldName`) to only one
 of those paths — e.g. only the cross-run merge match — the paths disagree: two WOs

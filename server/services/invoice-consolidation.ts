@@ -24,7 +24,8 @@ import {
   type InvoiceConsolidationPolicy,
   type InvoiceConsolidationPeriod,
 } from "@shared/schema";
-import { and, eq, gte, isNull, isNotNull, lte, inArray, sql, desc } from "drizzle-orm";
+import { and, eq, gte, isNull, isNotNull, lte, inArray, notInArray, sql, desc } from "drizzle-orm";
+import type { WorkOrder } from "@shared/schema";
 import {
   getInvoiceFlowConfig,
   computeBillingSegmentForObject,
@@ -133,28 +134,86 @@ export function computePeriodStart(
   return end;
 }
 
-// Sätt invoice queue state för en WO baserat på resolverad policy.
-// Returns the new state + heldUntil (om held).
-export async function markWorkOrderReadyForInvoice(
-  workOrderId: string,
+export type ReadyState = "pending" | "held" | "blocked";
+export type ReadyResult = {
+  state: ReadyState;
+  heldUntil: Date | null;
+  policyId: string | null;
+  blockedReason?: string;
+};
+
+// Uppgiftslogik v1 (Fakturalås): en WO räknas som "klar" i segment-gaten när dess
+// livscykelstatus är 'utford' — samma signal som redan triggar readiness. Vi gate:ar
+// medvetet INTE på executionStatus='completed' här: mobil-completion sätter bara
+// orderStatus, så executionStatus kan släpa och skulle annars låsa segmentet för evigt.
+const GATE_COMPLETE_ORDER_STATUS = "utford";
+// Terminala icke-utförda statusar exkluderas ur segmentet (de faktureras aldrig och
+// får därför aldrig blockera syskonens fakturering).
+const GATE_CANCELLED_ORDER_STATUSES = ["avbruten", "omojlig"];
+
+// Det frysta billing-segmentet för EN WO: fullt segment-objekt (för lagring) +
+// den komponerade nyckeln (NULL = ingen split). Delas mellan segment-gaten och
+// applyReadyDecision så gate-scope och den lagrade nyckeln beräknas EN gång och
+// garanterat matchar (ingen recompute-drift mellan gate-pass och frysning).
+type GateSegment = { segment: BillingSegment; segmentKey: string | null };
+
+// Beräkna WO:ns billing-segment on-demand. Endast aktiverade tenants; fel i
+// metadata-beräkningen får aldrig blockera faktureringen (degraderar till
+// NULL-segment = dagens beteende). Väver in WO:ns FRYSTA huvudreferenser (satta vid
+// skapande) så WO med olika referenser hamnar på olika fakturor (en faktura kan inte
+// bära motstridiga huvudfält).
+async function resolveWoSegment(
+  wo: WorkOrder,
   tenantId: string,
-  now: Date = new Date(),
-): Promise<{ state: "pending" | "held"; heldUntil: Date | null; policyId: string | null }> {
-  const [wo] = await db
-    .select()
-    .from(workOrders)
-    .where(and(eq(workOrders.id, workOrderId), eq(workOrders.tenantId, tenantId)));
-  if (!wo) throw new Error("Arbetsorder hittades inte");
-
-  // Om WO redan exporterats eller konsoliderats — rör inget.
-  if (wo.invoiceQueueState === "consolidated" || wo.invoiceQueueState === "exported") {
-    return {
-      state: wo.invoiceQueueState as "pending" | "held",
-      heldUntil: wo.invoiceHeldUntil ?? null,
-      policyId: null,
-    };
+  config: Awaited<ReturnType<typeof getInvoiceFlowConfig>>,
+): Promise<GateSegment> {
+  let segment: BillingSegment = EMPTY_SEGMENT;
+  try {
+    if (config.enabled && wo.objectId) {
+      segment = await computeBillingSegmentForObject(tenantId, wo.objectId, config);
+    }
+  } catch (err) {
+    console.warn(`[invoice-flow] segment-beräkning misslyckades för WO ${wo.id}:`, err);
   }
+  const segmentKey = composeSegmentKeyWithReferences(segment.segmentKey, {
+    ourReference: wo.frozenOurReference,
+    ourDesignation: wo.frozenOurDesignation,
+    customerReference: wo.frozenCustomerReference,
+    customerInvoiceReference: wo.frozenCustomerInvoiceReference,
+  });
+  return { segment, segmentKey };
+}
 
+// Kanonisk bas-nyckel för fakturagruppering: mottagare vinner över kund (EXAKT samma
+// prefix-logik som konsolideringen i runConsolidationForTenant). Detta är den yttre
+// dimensionen WO grupperas på till fakturor; segment-nyckeln förfinar den ytterligare.
+function canonicalBaseKey(wo: {
+  frozenInvoiceRecipientId?: string | null;
+  customerId?: string | null;
+}): string {
+  return wo.frozenInvoiceRecipientId
+    ? `r:${wo.frozenInvoiceRecipientId}`
+    : wo.customerId
+      ? `c:${wo.customerId}`
+      : "";
+}
+
+// Full fakturagrupperings-nyckel (bas + segment) — identisk identitet som
+// konsolideringens `key` (baseKey + billingSegmentKey). NULL segment ⇒ ingen split.
+function composeGroupKey(baseKey: string, segmentKey: string | null): string {
+  return segmentKey ? `${baseKey}|${segmentKey}` : baseKey;
+}
+
+// Sätt invoice queue state (pending/held) för EN WO baserat på resolverad policy.
+// Ren beslutslogik utan segment-gate — anropas efter att gaten (om aktiv) passerat.
+// Rensar alltid ev. fakturalås-blockering på WO:n. `precomputedSegment` återanvänds
+// från segment-gaten (undviker omberäkning + garanterar identisk fryst nyckel).
+async function applyReadyDecision(
+  wo: WorkOrder,
+  tenantId: string,
+  now: Date,
+  precomputedSegment?: GateSegment,
+): Promise<ReadyResult> {
   const recipientId = (wo as any).frozenInvoiceRecipientId as string | null;
   const customerId = wo.customerId ?? null;
   const resolved = await resolveConsolidationPolicy(tenantId, { recipientId, customerId });
@@ -171,8 +230,11 @@ export async function markWorkOrderReadyForInvoice(
         billingBreakObjectId: null,
         billingGroupingFieldName: null,
         billingGroupingValue: null,
+        // Släppt ur fakturalåset (om det varit blockerat).
+        invoiceBlockedReason: null,
+        invoiceBlockedAt: null,
       })
-      .where(and(eq(workOrders.id, workOrderId), eq(workOrders.tenantId, tenantId)));
+      .where(and(eq(workOrders.id, wo.id), eq(workOrders.tenantId, tenantId)));
     return { state: "pending", heldUntil: null, policyId: resolved.policy?.id ?? null };
   }
 
@@ -184,27 +246,10 @@ export async function markWorkOrderReadyForInvoice(
   );
 
   // Task #970: frys metadatastyrt billing-segment vid ready-time (endast held).
-  // Endast aktiverade tenants; fel i metadata-beräkningen får aldrig blockera
-  // faktureringen (degraderar till NULL-segment = dagens beteende).
-  let segment: BillingSegment = EMPTY_SEGMENT;
-  try {
-    const config = await getInvoiceFlowConfig(tenantId);
-    if (config.enabled && wo.objectId) {
-      segment = await computeBillingSegmentForObject(tenantId, wo.objectId, config);
-    }
-  } catch (err) {
-    console.warn(`[invoice-flow] segment-beräkning misslyckades för WO ${workOrderId}:`, err);
-  }
-
-  // Fakturareferenser — huvud vs radnivå: väv in WO:ns FRYSTA huvudreferenser
-  // (satta vid skapande) i segment-nyckeln så WO med olika referenser hamnar på
-  // olika konsoliderade fakturor (en faktura kan inte bära motstridiga huvudfält).
-  const billingSegmentKey = composeSegmentKeyWithReferences(segment.segmentKey, {
-    ourReference: wo.frozenOurReference,
-    ourDesignation: wo.frozenOurDesignation,
-    customerReference: wo.frozenCustomerReference,
-    customerInvoiceReference: wo.frozenCustomerInvoiceReference,
-  });
+  // Återanvänd segment-gatens redan beräknade segment när det finns (identisk nyckel,
+  // ingen omberäkning); annars beräkna on-demand via delad resolver.
+  const { segment, segmentKey: billingSegmentKey } =
+    precomputedSegment ?? (await resolveWoSegment(wo, tenantId, await getInvoiceFlowConfig(tenantId)));
 
   await db
     .update(workOrders)
@@ -216,9 +261,162 @@ export async function markWorkOrderReadyForInvoice(
       billingBreakObjectId: segment.breakObjectId,
       billingGroupingFieldName: segment.groupingFieldName,
       billingGroupingValue: segment.groupingValue,
+      // Släppt ur fakturalåset (om det varit blockerat).
+      invoiceBlockedReason: null,
+      invoiceBlockedAt: null,
     })
-    .where(and(eq(workOrders.id, workOrderId), eq(workOrders.tenantId, tenantId)));
+    .where(and(eq(workOrders.id, wo.id), eq(workOrders.tenantId, tenantId)));
   return { state: "held", heldUntil: periodEnd, policyId: resolved.policy?.id ?? null };
+}
+
+// Uppgiftslogik v1 (Fakturalås BY+CE): GROV kandidatpool av ÖPPNA (ej fakturerade,
+// ej makulerade, ej raderade) fakturalåsta syskon-WO för (tenant, orderConceptId) i
+// SAMMA kanoniska bas-dimension som konsolideringen grupperar på: mottagare vinner
+// över kund. Detta är BARA den yttre ramen — det faktiska fakturasegmentet förfinas i
+// evaluateSegmentGate via billing-segment-nyckeln. Vi kan inte filtrera på
+// billingSegmentKey-kolumnen i SQL (NULL på ännu-ofrusna syskon; fryses först vid
+// release), men bas-dimensionen ger rätt yttre pool: mottagare kan spänna över flera
+// kunder (central faktura), så vi hämtar per recipientId när det finns — annars per
+// customerId + recipientId IS NULL (kund-fakturor grupperar aldrig ihop med
+// mottagar-fakturor).
+async function getOpenGateSiblings(
+  wo: WorkOrder,
+  tenantId: string,
+): Promise<WorkOrder[]> {
+  if (!wo.orderConceptId) return [];
+  const baseDimension = wo.frozenInvoiceRecipientId
+    ? eq(workOrders.frozenInvoiceRecipientId, wo.frozenInvoiceRecipientId)
+    : and(
+        wo.customerId
+          ? eq(workOrders.customerId, wo.customerId)
+          : isNull(workOrders.customerId),
+        isNull(workOrders.frozenInvoiceRecipientId),
+      );
+  return await db
+    .select()
+    .from(workOrders)
+    .where(
+      and(
+        eq(workOrders.tenantId, tenantId),
+        eq(workOrders.orderConceptId, wo.orderConceptId),
+        baseDimension,
+        eq(workOrders.frozenRequireCompleteSegmentBeforeInvoice, true),
+        isNull(workOrders.invoiceQueueState),
+        isNull(workOrders.deletedAt),
+        notInArray(workOrders.orderStatus, GATE_CANCELLED_ORDER_STATUSES),
+      ),
+    );
+}
+
+// Utvärdera segment-gaten för en fakturalåst WO. Gruppen = EXAKT samma identitet som
+// konsolideringen fakturerar på: kanonisk bas (recipient|customer) + billing-segment.
+// Om ALLA öppna WO i den gruppen är utförda släpps hela gruppen (varje WO får sitt
+// eget pending/held-beslut, med redan beräknat segment). Annars blockeras `trigger`
+// (om den själv är utförd) med en synlig orsak.
+async function evaluateSegmentGate(
+  trigger: WorkOrder,
+  tenantId: string,
+  now: Date,
+): Promise<ReadyResult> {
+  const config = await getInvoiceFlowConfig(tenantId);
+  const triggerSeg = await resolveWoSegment(trigger, tenantId, config);
+  const triggerGroupKey = composeGroupKey(canonicalBaseKey(trigger), triggerSeg.segmentKey);
+  const candidates = await getOpenGateSiblings(trigger, tenantId);
+  // Förfina den grova bas-poolen till DEN FAKTISKA fakturagruppen. WO med annan
+  // metadata-gruppering, andra frysta huvudreferenser eller annan bas-nyckel hamnar på
+  // egna fakturor och ska därför INTE blockera varandra (annars hålls en färdig grupp
+  // kvar tills orelaterade grupper för samma kund/mottagare också blir klara). Vi
+  // sparar varje syskons beräknade segment så release-steget slipper omberäkna.
+  const siblings: WorkOrder[] = [];
+  const segByWo = new Map<string, GateSegment>();
+  for (const c of candidates) {
+    const seg = c.id === trigger.id ? triggerSeg : await resolveWoSegment(c, tenantId, config);
+    const key = composeGroupKey(canonicalBaseKey(c), seg.segmentKey);
+    if (key === triggerGroupKey) {
+      siblings.push(c);
+      segByWo.set(c.id, seg);
+    }
+  }
+  const total = siblings.length;
+  const completed = siblings.filter((s) => s.orderStatus === GATE_COMPLETE_ORDER_STATUS).length;
+  const allComplete = total > 0 && completed === total;
+
+  if (allComplete) {
+    // Släpp hela gruppen. Varje WO resolverar sin egen policy; segmentet återanvänds.
+    let triggerResult: ReadyResult = { state: "blocked", heldUntil: null, policyId: null };
+    for (const sib of siblings) {
+      const res = await applyReadyDecision(sib, tenantId, now, segByWo.get(sib.id));
+      if (sib.id === trigger.id) triggerResult = res;
+    }
+    return triggerResult;
+  }
+
+  // Inte allt klart. Om trigger själv är utförd + öppen → markera den blockerad så
+  // det syns varför en färdig WO ändå inte gått vidare i fakturaflödet.
+  const triggerIsOpenComplete =
+    trigger.orderStatus === GATE_COMPLETE_ORDER_STATUS &&
+    trigger.invoiceQueueState == null &&
+    trigger.deletedAt == null;
+  const blockedReason = `Fakturalås: väntar på att alla uppgifter i fakturasegmentet ska slutföras (${completed}/${total} klara).`;
+  if (triggerIsOpenComplete) {
+    await db
+      .update(workOrders)
+      .set({ invoiceBlockedReason: blockedReason, invoiceBlockedAt: now })
+      .where(and(eq(workOrders.id, trigger.id), eq(workOrders.tenantId, tenantId)));
+  }
+  return { state: "blocked", heldUntil: null, policyId: null, blockedReason };
+}
+
+// Sätt invoice queue state för en WO baserat på resolverad policy.
+// Returns the new state + heldUntil (om held).
+// Uppgiftslogik v1: när WO:n är fakturalåst (frozenRequireCompleteSegmentBeforeInvoice)
+// går den via segment-gaten först — held/pending sätts bara när hela segmentet är klart.
+export async function markWorkOrderReadyForInvoice(
+  workOrderId: string,
+  tenantId: string,
+  now: Date = new Date(),
+): Promise<ReadyResult> {
+  const [wo] = await db
+    .select()
+    .from(workOrders)
+    .where(and(eq(workOrders.id, workOrderId), eq(workOrders.tenantId, tenantId)));
+  if (!wo) throw new Error("Arbetsorder hittades inte");
+
+  // Om WO redan exporterats eller konsoliderats — rör inget.
+  if (wo.invoiceQueueState === "consolidated" || wo.invoiceQueueState === "exported") {
+    return {
+      state: wo.invoiceQueueState as ReadyState,
+      heldUntil: wo.invoiceHeldUntil ?? null,
+      policyId: null,
+    };
+  }
+
+  // Fakturalås (opt-in per orderkoncept, fryst per WO): gate:a på segmentets kompletthet.
+  if (wo.frozenRequireCompleteSegmentBeforeInvoice && wo.orderConceptId) {
+    return await evaluateSegmentGate(wo, tenantId, now);
+  }
+
+  return await applyReadyDecision(wo, tenantId, now);
+}
+
+// Uppgiftslogik v1 (Fakturalås): re-utvärdera segment-gaten UTAN att sätta trigger
+// själv redo. Anropas när en fakturalåst WO blir terminal-icke-utförd (avbruten/
+// omöjlig) — då försvinner den ur det öppna segmentet och kan ha varit det sista
+// hindret för redan-utförda syskon. Ren no-op för icke-fakturalåsta WO.
+export async function releaseSegmentGateIfComplete(
+  workOrderId: string,
+  tenantId: string,
+  now: Date = new Date(),
+): Promise<void> {
+  const [wo] = await db
+    .select()
+    .from(workOrders)
+    .where(and(eq(workOrders.id, workOrderId), eq(workOrders.tenantId, tenantId)));
+  if (!wo) return;
+  if (!wo.frozenRequireCompleteSegmentBeforeInvoice || !wo.orderConceptId) return;
+  // trigger (wo) är nu terminal/utanför öppna segmentet → evaluateSegmentGate
+  // exkluderar den och släpper syskonen om de är kompletta.
+  await evaluateSegmentGate(wo, tenantId, now);
 }
 
 type WoForConsolidation = {
@@ -335,10 +533,9 @@ export async function runConsolidationForTenant(
   >();
   for (const wo of held) {
     if (!wo.customerId && !wo.frozenInvoiceRecipientId) continue;
-    const baseKey = wo.frozenInvoiceRecipientId
-      ? `r:${wo.frozenInvoiceRecipientId}`
-      : `c:${wo.customerId}`;
-    const key = wo.billingSegmentKey ? `${baseKey}|${wo.billingSegmentKey}` : baseKey;
+    // Samma grupp-identitet som fakturalås-gaten använder (canonicalBaseKey +
+    // composeGroupKey) — EN källa så gate-scope och konsolidering aldrig divergerar.
+    const key = composeGroupKey(canonicalBaseKey(wo), wo.billingSegmentKey);
     if (!groups.has(key)) {
       groups.set(key, {
         recipientId: wo.frozenInvoiceRecipientId,

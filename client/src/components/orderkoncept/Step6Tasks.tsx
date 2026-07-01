@@ -4,7 +4,8 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Search, Plus, Trash2, Package, MapPin, Clock } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Search, Plus, Trash2, Package, MapPin, Clock, Repeat } from "lucide-react";
 import type { Article } from "@shared/schema";
 import { deriveIsPreTask } from "@/lib/article-pre-task";
 
@@ -18,6 +19,7 @@ export interface ConceptArticleRow {
   metadataCorrespondence?: string | null;
   isPreTask?: boolean | null;
   dependencyOffsetMinutes?: number | null;
+  isSubscriptionArticle?: boolean | null;
 }
 
 interface Step6Props {
@@ -155,6 +157,22 @@ export default function Step6Tasks({
                         />
                       </div>
                     )}
+
+                    <div className="flex items-center gap-2 pl-1">
+                      <Checkbox
+                        id={`subscription-${ca.id}`}
+                        checked={!!ca.isSubscriptionArticle}
+                        onCheckedChange={(checked) => onUpdateArticleField(ca.id, { isSubscriptionArticle: checked === true })}
+                        data-testid={`checkbox-subscription-${ca.id}`}
+                      />
+                      <Label htmlFor={`subscription-${ca.id}`} className="text-xs text-muted-foreground font-normal cursor-pointer flex items-center gap-1">
+                        <Repeat className="h-3 w-3" />
+                        Ingår i abonnemang
+                      </Label>
+                      {ca.isSubscriptionArticle && (
+                        <Badge variant="outline" className="text-[10px]" data-testid={`badge-subscription-${ca.id}`}>Abonnemang</Badge>
+                      )}
+                    </div>
                   </div>
                 );
               })}

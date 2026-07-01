@@ -5705,6 +5705,20 @@ export class DatabaseStorage implements IStorage {
       }
     }
 
+    // Uppgiftslogik v1 (Fakturalås): när en fakturalåst WO blir terminal-icke-utförd
+    // (avbruten/omöjlig) försvinner den ur det öppna segmentet — re-utvärdera gaten så
+    // redan-utförda syskon kan släppas. Fail-safe: bryter ALDRIG status-flödet.
+    if (wo && (newStatus === 'avbruten' || newStatus === 'omojlig') && wo.tenantId) {
+      try {
+        const { releaseSegmentGateIfComplete } = await import("./services/invoice-consolidation");
+        await releaseSegmentGateIfComplete(wo.id, wo.tenantId).catch((err) => {
+          console.warn(`[invoice-consolidation] segment-gate release failed for wo=${wo.id}:`, err?.message ?? err);
+        });
+      } catch (err) {
+        console.warn("[invoice-consolidation] import failed:", err);
+      }
+    }
+
     // Task #421 Fas 0: skriv post_completion ML-snapshot vid utförd order.
     // Fail-safe: bryter ALDRIG completion-flödet. Fire-and-forget.
     if (wo && newStatus === 'utford' && wo.tenantId) {

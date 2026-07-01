@@ -215,6 +215,11 @@ export async function ensureWorkOrderForAssignmentExecution(
     orderConceptId: assignment.orderConceptId,
     invoiceSourceType: "assignment",
     frozenIsFixedPrice: assignment.isFixedPrice ?? false,
+    // Uppgiftslogik v1 (Fakturalås BY+CE): frys konceptets segment-lås på WO:n vid
+    // projektion. Saknat/raderat koncept ⇒ false (dagens beteende).
+    frozenRequireCompleteSegmentBeforeInvoice:
+      (conceptForTenantCheck as { requireCompleteSegmentBeforeInvoice?: boolean } | null)
+        ?.requireCompleteSegmentBeforeInvoice ?? false,
   };
 
   const articles = await storage.getAssignmentArticles(assignmentId);

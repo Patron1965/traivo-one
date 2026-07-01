@@ -17,6 +17,13 @@ import { OBJECT_LOCATION_TYPES, type ObjectLocationType } from "@shared/schema";
  *
  * Denna modul är den ENDA källan för objekt-platslogik (jfr beroende-uppgiften
  * "Lager- & återtagslogik") — duplicera aldrig koordinat-/fallback-logiken.
+ *
+ * Geografi v1/v2 (Mats beslut, uppgiftslogik): v1 behandlar geografi som PUNKT
+ * (pinpoint) — antal-/faktureringslogiken är rent numerisk och gör inga
+ * geometri-antaganden, så den fungerar oförändrat när v2 introducerar yta+linje.
+ * v2-sömmen: explicit yt-/linjegeometri (polygon/polyline) blir metadata-driven via
+ * metadata_katalog (geometri-datatyp) i stället för hårdkodade kolumner; "area" här
+ * är dagens minimala platshållare (centroid för karta, aldrig ruttbar) tills dess.
  */
 
 // Minimal delmängd av ServiceObject som resolvern behöver. Gör helpern användbar

@@ -486,6 +486,14 @@ export const workOrders = pgTable("work_orders", {
   invoiceReadyAt: timestamp("invoice_ready_at"),
   invoiceHeldUntil: timestamp("invoice_held_until"),
   consolidationInvoiceId: varchar("consolidation_invoice_id"),
+  // === Uppgiftslogik v1: Fakturalås (BY+CE) ===
+  // Fryst kopia av orderkonceptets requireCompleteSegmentBeforeInvoice vid expansion.
+  // När true hålls WO utanför pending/held tills alla syskon i samma billing-segment
+  // (tenant+orderConceptId+billingSegmentKey) är klara. NULL/false = dagens beteende.
+  frozenRequireCompleteSegmentBeforeInvoice: boolean("frozen_require_complete_segment_before_invoice").default(false),
+  // Synliggör varför en färdig WO ännu inte gått vidare i fakturaflödet (annars tyst).
+  invoiceBlockedReason: text("invoice_blocked_reason"),
+  invoiceBlockedAt: timestamp("invoice_blocked_at"),
   // === Task #970: Metadatastyrd fakturaflödeslogik ("Faktura från toppen") ===
   // Fryst billing-segment som förfinar konsoliderings-grupperingen ovanpå frozen
   // recipient/customer. Sätts vid markWorkOrderReadyForInvoice (endast held-WO,
@@ -575,6 +583,7 @@ export const workOrders = pgTable("work_orders", {
   index("idx_work_orders_resource").on(table.resourceId),
   index("idx_work_orders_cluster").on(table.clusterId),
   index("idx_work_orders_billing_segment").on(table.tenantId, table.billingSegmentKey),
+  index("idx_work_orders_segment_gate").on(table.tenantId, table.orderConceptId, table.billingSegmentKey),
   uniqueIndex("uq_work_orders_source_assignment")
     .on(table.tenantId, table.sourceAssignmentId)
     .where(sql`source_assignment_id IS NOT NULL`),
@@ -620,12 +629,50 @@ export const workOrderLines = pgTable("work_order_lines", {
   isCompleted: boolean("is_completed").default(false).notNull(),
   completedAt: timestamp("completed_at"),
   notes: text("notes"),
+  // === Uppgiftslogik v1 (kolumn T): Taget antal + svinn/retur ===
+  // quantity ovan förblir FAKTURERAT/LEVERERAT (rör aldrig). takenQuantity är det
+  // verkligt tagna/förbrukade (>= quantity). wasteQuantity = svinn (taget men ej
+  // fakturerbart, t.ex. skadat) = max(taken - quantity, 0). returnedQuantity =
+  // överskott tillbaka till lager (plockat - fakturerat) när plockdata finns.
+  // Allt nullable/default (expand-contract) — påverkar aldrig fakturering.
+  takenQuantity: integer("taken_quantity"),
+  returnedQuantity: integer("returned_quantity").default(0),
+  wasteQuantity: integer("waste_quantity").default(0),
+  quantityReconciliationNote: text("quantity_reconciliation_note"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (table) => [
   index("idx_work_order_lines_work_order_id").on(table.workOrderId),
   index("idx_work_order_lines_article").on(table.articleId),
   index("idx_work_order_lines_tenant").on(table.tenantId),
 ]);
+
+// === Uppgiftslogik v1: Audit-logg för antalshändelser (taget/svinn/retur) ===
+// Append-only händelselogg — INTE en auktoritativ lagerledger. Bär signalen
+// "taget antal påverkar ekonomi/lager" (svinn→förbrukning, överskott→återlager)
+// utan att hålla saldon. Framtida ekonomi/lager-export läser härifrån.
+export const workOrderLineQuantityEvents = pgTable("work_order_line_quantity_events", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
+  workOrderLineId: varchar("work_order_line_id").references(() => workOrderLines.id).notNull(),
+  workOrderId: varchar("work_order_id").references(() => workOrders.id).notNull(),
+  articleId: varchar("article_id").references(() => articles.id),
+  // 'taken' | 'waste' | 'return' | 'adjust'
+  eventType: text("event_type").notNull(),
+  quantity: integer("quantity").notNull(),
+  reason: text("reason"),
+  createdBy: varchar("created_by"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_wolqe_tenant_line").on(table.tenantId, table.workOrderLineId),
+  index("idx_wolqe_tenant_wo").on(table.tenantId, table.workOrderId),
+]);
+
+export const insertWorkOrderLineQuantityEventSchema = createInsertSchema(workOrderLineQuantityEvents).omit({
+  id: true,
+  createdAt: true,
+});
+export type WorkOrderLineQuantityEvent = typeof workOrderLineQuantityEvents.$inferSelect;
+export type InsertWorkOrderLineQuantityEvent = z.infer<typeof insertWorkOrderLineQuantityEventSchema>;
 
 // Länkning av flera objekt till en arbetsorder
 export const workOrderObjects = pgTable("work_order_objects", {
@@ -3091,6 +3138,12 @@ export const orderConcepts = pgTable("order_concepts", {
   // enda sanningskällan för faktureringsfrekvensen (contract-steg av Task #1056).
   invoiceLock: boolean("invoice_lock").default(false),
   invoiceBrake: boolean("invoice_brake").default(false),
+  // Uppgiftslogik v1 (kolumn BY+CE sammanslaget): Fakturalås — fakturera först när
+  // ALLA uppgifter i fakturasegmentet är klara (ingen delleverans). Distinkt från
+  // invoiceLock (=lås fakturamodell) och invoiceBrake (=attest-broms/CF). Utvärderas
+  // per faktura-referens/billing-segment (en enda faktura ⇒ hela ordern). Fryses per
+  // WO vid expansion. Default false = dagens beteende (expand-contract).
+  requireCompleteSegmentBeforeInvoice: boolean("require_complete_segment_before_invoice").default(false),
   deliveryModel: text("delivery_model"),
   deliveryStart: timestamp("delivery_start"),
   deliveryEnd: timestamp("delivery_end"),
@@ -3871,6 +3924,10 @@ export const orderConceptArticles = pgTable("order_concept_articles", {
   metadataCorrespondence: text("metadata_correspondence"), // vilket metadatafält styr antal
   isPreTask: boolean("is_pre_task").default(false), // föruppgift (plocka/beställ/föravisering)
   dependencyOffsetMinutes: integer("dependency_offset_minutes"), // negativt = före huvuduppgift (t.ex. föravisering −2 dagar)
+  // Uppgiftslogik v1 (kolumn W): artikeln ingår i ett abonnemang. Ingen motor i v1 —
+  // enbart en tagg som framtida abonnemangsmotor konsumerar. Statistik/räkning sker
+  // oavsett flaggan. Default false (expand-contract).
+  isSubscriptionArticle: boolean("is_subscription_article").default(false),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (table) => [
   index("idx_oca_order_concept").on(table.orderConceptId),

@@ -76,7 +76,8 @@ if command -v psql >/dev/null 2>&1 && [ -n "$DATABASE_URL" ]; then
            migrations/0110_icon_custom_and_execution_code_icon.sql \
            migrations/0110_assignments_execution_code.sql \
            migrations/0111_invoice_references.sql \
-           migrations/0112_invoice_from_assignment.sql; do
+           migrations/0112_invoice_from_assignment.sql \
+           migrations/0113_uppgiftslogik_v1.sql; do
     if [ -f "$f" ]; then
       echo "[post-merge] Applying $f"
       psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f "$f"

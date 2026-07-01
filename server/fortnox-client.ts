@@ -465,6 +465,21 @@ export async function exportWorkOrderToFortnox(
       };
     }
 
+    // Uppgiftslogik v1 (Fakturalås) — defense-in-depth: en fakturalåst WO som ännu
+    // inte släppts genom segment-gaten (queueState=NULL eller kvarstående blockering)
+    // får aldrig exporteras enskilt. Passerad gate ⇒ pending/held/consolidated (fångas
+    // ovan / nedan), aldrig NULL med kvar blockering.
+    if (
+      (workOrder as any).frozenRequireCompleteSegmentBeforeInvoice &&
+      (queueState == null || (workOrder as any).invoiceBlockedReason)
+    ) {
+      return {
+        success: false,
+        error:
+          "Arbetsordern är fakturalåst: alla uppgifter i fakturasegmentet måste vara utförda innan den kan faktureras.",
+      };
+    }
+
     const workOrderLines = await storage.getWorkOrderLines(invoiceExport.workOrderId);
     if (!workOrderLines.length) {
       return { success: false, error: "No work order lines to invoice" };

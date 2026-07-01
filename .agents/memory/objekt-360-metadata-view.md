@@ -14,7 +14,7 @@ legend, och ett separat read-only Systemgenererat-kort.
 överskrivet) · `Systemgenererad` (system/tjänst/utförande-ursprung) ·
 `Borttagen` (soft-deleted).
 
-**Why:** Mats mockups + arkitektgranskning fastställde dessa fem som hela
+**Why:** produktägarens mockups + arkitektgranskning fastställde dessa fem som hela
 sanningsmängden för hur ett metadatavärde uppstod. Att lägga till/ta bort ett
 tillstånd ändrar användarens mentala modell av var data kommer ifrån.
 **How to apply:** Återanvänd `MetadataSourceBadge`/`MetadataSourceLegend` när

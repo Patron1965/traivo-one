@@ -842,6 +842,15 @@ app.get("/api/mobile/tasks/:id/metadata-context", isMobileAuthenticated, asyncHa
           // tillbaka till lager (kräver lagerplats med koordinater).
           shouldBeReturned: a?.shouldBeReturned ?? false,
           hasStockLocation: !!(a?.stockLocation && a?.stockLatitude != null && a?.stockLongitude != null),
+          // Uppgiftslogik v1 (kolumn T): taget antal + härledd svinn/retur. `quantity`
+          // ovan är fakturerat/levererat och rör aldrig. takenQuantity=null ⇒ ej
+          // registrerat än. Fältet är alltid registrerbart (även för fast/dolt antal)
+          // så länge ordern ej är fakturalåst.
+          takenQuantity: line.takenQuantity ?? null,
+          wasteQuantity: line.wasteQuantity ?? 0,
+          returnedQuantity: line.returnedQuantity ?? 0,
+          quantityReconciliationNote: line.quantityReconciliationNote ?? null,
+          takenQuantityEditable: !orderInvoiceLocked && !!a && isActiveArticleStatus(a.status),
         };
       });
 
@@ -1075,6 +1084,131 @@ app.post("/api/mobile/tasks/:id/quantity-update", isMobileAuthenticated, asyncHa
     console.log(`[mobile] Quantity updated: line ${line.id} = ${qtyInt} (metadata ${article.quantityMetadataField}) on object ${order.objectId} by ${resourceId}`);
 
     res.json({ success: true, lineId: line.id, quantity: qtyInt, quantityMetadataField: article.quantityMetadataField });
+}));
+
+// ============================================
+// TAGET ANTAL (kolumn T) — Uppgiftslogik v1
+// Registrerar verkligt taget/förbrukat antal per orderrad UTAN att röra det
+// fakturerade/levererade `quantity`. Överskott (taken - quantity) härleds till
+// svinn (förbrukning) eller retur-till-lager (om artikeln är märkt shouldBeReturned),
+// enligt Mats beslut. Append-only audit i work_order_line_quantity_events.
+// ============================================
+app.post("/api/mobile/tasks/:id/taken-quantity-update", isMobileAuthenticated, asyncHandler(async (req: MobileAuthenticatedRequest, res: Response) => {
+    const orderId = req.params.id;
+    const resourceId = req.mobileResourceId;
+    const { lineId, takenQuantity, note } = req.body ?? {};
+
+    if (!lineId || takenQuantity === undefined || takenQuantity === null) {
+      throw new ValidationError("lineId och takenQuantity krävs");
+    }
+    const taken = Number(takenQuantity);
+    if (!Number.isFinite(taken) || taken < 0) {
+      throw new ValidationError("Ogiltigt taget antal");
+    }
+    const takenInt = Math.round(taken);
+
+    const order = await storage.getWorkOrder(orderId);
+    if (!order) throw new NotFoundError("Order hittades inte");
+    if (order.resourceId !== resourceId) throw new ForbiddenError("Ej behörig");
+
+    // Mobil-ytan kringgår tenant-middleware: härled tenant från den ägarskaps-
+    // kontrollerade ordern (aldrig req.tenantId/fallback).
+    const tenantId = order.tenantId;
+
+    // Fakturaintegritet: blockera ändring när ordern redan är konsoliderad/exporterad.
+    if (order.invoiceQueueState === "consolidated" || order.invoiceQueueState === "exported" || order.consolidationInvoiceId) {
+      throw new ForbiddenError("Taget antal kan inte ändras — ordern är redan fakturerad eller konsoliderad");
+    }
+
+    // Raden måste tillhöra DENNA order (IDOR-skydd via ägd order, aldrig rå lineId).
+    const lines = await storage.getWorkOrderLines(order.id);
+    const line = lines.find((l) => l.id === lineId);
+    if (!line || !line.articleId) throw new NotFoundError("Orderrad hittades inte");
+
+    // getArticle saknar tenant-param → verifiera tenant explicit efter uppslag.
+    const article = await storage.getArticle(line.articleId);
+    if (!article || article.tenantId !== tenantId || !isActiveArticleStatus(article.status)) {
+      throw new ForbiddenError("Taget antal kan inte registreras för denna artikel");
+    }
+
+    // Fakturerat/levererat antal (rör ALDRIG). Taget måste vara >= det fakturerade —
+    // man kan inte leverera/fakturera mer än man tagit.
+    const billable = line.quantity ?? 0;
+    if (takenInt < billable) {
+      throw new ValidationError(`Taget antal (${takenInt}) kan inte vara mindre än det fakturerade antalet (${billable})`);
+    }
+
+    // Överskott (taket - fakturerat) härleds enligt artikelns retur-flagga:
+    // shouldBeReturned ⇒ återlager (retur), annars ⇒ svinn/förbrukning.
+    const surplus = Math.max(takenInt - billable, 0);
+    const returnedQty = article.shouldBeReturned ? surplus : 0;
+    const wasteQty = article.shouldBeReturned ? 0 : surplus;
+    const trimmedNote = typeof note === "string" && note.trim() ? note.trim() : null;
+
+    // Skriv taget/svinn/retur på orderraden. `quantity` (fakturabas) utelämnas medvetet.
+    await storage.updateWorkOrderLine(line.id, {
+      takenQuantity: takenInt,
+      wasteQuantity: wasteQty,
+      returnedQuantity: returnedQty,
+      quantityReconciliationNote: trimmedNote,
+    });
+
+    // Append-only audit (INTE en lagerledger — bär bara signalen). Ett 'taken'-event
+    // per registrering + ett svinn-/retur-event när överskott finns.
+    const { workOrderLineQuantityEvents } = await import("@shared/schema");
+    const events: Array<{ tenantId: string; workOrderLineId: string; workOrderId: string; articleId: string | null; eventType: string; quantity: number; reason: string | null; createdBy: string | null }> = [
+      { tenantId, workOrderLineId: line.id, workOrderId: order.id, articleId: line.articleId, eventType: "taken", quantity: takenInt, reason: trimmedNote, createdBy: resourceId ?? null },
+    ];
+    if (wasteQty > 0) {
+      events.push({ tenantId, workOrderLineId: line.id, workOrderId: order.id, articleId: line.articleId, eventType: "waste", quantity: wasteQty, reason: trimmedNote, createdBy: resourceId ?? null });
+    }
+    if (returnedQty > 0) {
+      events.push({ tenantId, workOrderLineId: line.id, workOrderId: order.id, articleId: line.articleId, eventType: "return", quantity: returnedQty, reason: trimmedNote, createdBy: resourceId ?? null });
+    }
+    await db.insert(workOrderLineQuantityEvents).values(events);
+
+    console.log(`[mobile] Taget antal: line ${line.id} taken=${takenInt} waste=${wasteQty} return=${returnedQty} (billable ${billable}) by ${resourceId}`);
+
+    res.json({
+      success: true,
+      lineId: line.id,
+      takenQuantity: takenInt,
+      wasteQuantity: wasteQty,
+      returnedQuantity: returnedQty,
+      quantity: billable,
+      quantityReconciliationNote: trimmedNote,
+    });
+}));
+
+// Historik för taget antal (expansions-panelen i fältappen). Ägarskap via ägd order;
+// valfri lineId-filtrering (kontrolleras mot orderns egna rader).
+app.get("/api/mobile/tasks/:id/quantity-events", isMobileAuthenticated, asyncHandler(async (req: MobileAuthenticatedRequest, res: Response) => {
+    const orderId = req.params.id;
+    const resourceId = req.mobileResourceId;
+    const order = await storage.getWorkOrder(orderId);
+    if (!order) throw new NotFoundError("Order hittades inte");
+    if (order.resourceId !== resourceId) throw new ForbiddenError("Ej behörig");
+    const tenantId = order.tenantId;
+
+    const { workOrderLineQuantityEvents } = await import("@shared/schema");
+    const lineIdFilter = typeof req.query.lineId === "string" ? req.query.lineId : null;
+    if (lineIdFilter) {
+      // Bekräfta att raden tillhör ägd order (aldrig rå lineId).
+      const lines = await storage.getWorkOrderLines(order.id);
+      if (!lines.some((l) => l.id === lineIdFilter)) throw new NotFoundError("Orderrad hittades inte");
+    }
+
+    const rows = await db
+      .select()
+      .from(workOrderLineQuantityEvents)
+      .where(and(
+        eq(workOrderLineQuantityEvents.tenantId, tenantId),
+        eq(workOrderLineQuantityEvents.workOrderId, order.id),
+        ...(lineIdFilter ? [eq(workOrderLineQuantityEvents.workOrderLineId, lineIdFilter)] : []),
+      ))
+      .orderBy(desc(workOrderLineQuantityEvents.createdAt));
+
+    res.json(rows);
 }));
 
   // ============================================

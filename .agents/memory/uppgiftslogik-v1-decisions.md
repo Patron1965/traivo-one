@@ -1,14 +1,14 @@
 ---
-name: Uppgiftslogik v1 scope-beslut (Mats)
+name: Uppgiftslogik v1 scope-beslut
 description: Produktägarens beslut om fakturalås, fastpris-nivåer, geografi, abonnemang och taget antal — v1 vs v2 scope. Framtida arbete måste vara konsistent med dessa.
 ---
 
-Beslut fattade av Mats (produktägare) vid genomgången av "Uppgiftslogik/informationspaket"-matrisen (kolumner A–CJ) + de 9 motorerna. Detta är SCOPE-beslut, inte implementation. Respektera dem tills produktägaren ändrar dem.
+Beslut fattade av produktägaren vid genomgången av "Uppgiftslogik/informationspaket"-matrisen (kolumner A–CJ) + de 9 motorerna. Detta är SCOPE-beslut, inte implementation. Respektera dem tills produktägaren ändrar dem.
 
 ## 1. Fakturalås — slå ihop BY + CE till ETT fält
 Matrisens BY ("allt måste vara klart, ej delleverans, för fakturaskapande") och CE ("fakturalåsning, allt slutfört innan faktura skapas/släpps") är samma regel → **ett fält**.
 Lås på **orderkonceptets uppgiftslista per objekt** (hela beställningen från orderkonceptet).
-**Öppen delfråga Mats kastade tillbaka:** definitionen av "vad är vad" när ETT orderkoncept skapar FLERA fakturor — vad utgör då "allt klart"-enheten (hela ordern vs per faktura-referens/objekt).
+**Öppen delfråga produktägaren kastade tillbaka:** definitionen av "vad är vad" när ETT orderkoncept skapar FLERA fakturor — vad utgör då "allt klart"-enheten (hela ordern vs per faktura-referens/objekt).
 **Why:** eliminera redundanta fält som säger samma sak; undvik faktura som släpps innan jobbet är klart.
 
 ## 2. Fastpris finns på TVÅ nivåer, båda = efterfakturering
@@ -21,7 +21,7 @@ Lås på **orderkonceptets uppgiftslista per objekt** (hela beställningen från
 ## 3. Geografi — punkt räcker för v1, förbered v2 utan att låsa fast
 - v1: pinpointad port-/adressposition räcker. **Prioritera INTE yta/linje nu.**
 - v2.0: system måste kunna hantera **yta** (polyyta) och **linje** (polylinje, t.ex. gasledning flera mil).
-- Mats modell: geografi uttrycks via **metadatafält** (numeriska/alfanumeriska/bilder). Frågan för oss: hur definierar man ett metadatafält som polylinje/polyyta INOM befintlig metadatalogik. Yta/linje hanteras positionellt via **tyngdpunkt/representativ position**.
+- Produktägarens modell: geografi uttrycks via **metadatafält** (numeriska/alfanumeriska/bilder). Frågan för oss: hur definierar man ett metadatafält som polylinje/polyyta INOM befintlig metadatalogik. Yta/linje hanteras positionellt via **tyngdpunkt/representativ position**.
 **Why:** får inte bygga in en låsning som gör att systemet bara kan hantera pinpoint-adresser och slår i taket senare.
 
 ## 4. Abonnemang (motor 5) — motorn byggs SENARE, men artikel-taggning behövs nu

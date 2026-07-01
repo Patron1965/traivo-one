@@ -179,7 +179,7 @@ app.post("/api/order-concepts/:id/articles", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const rawConcept = await storage.getOrderConcept(req.params.id);
     if (!verifyTenantOwnership(rawConcept, tenantId)) throw new NotFoundError("Ej hittad");
-    const { articleId, quantity, unitPrice, taskCategory, metadataAssociation, metadataCorrespondence, isPreTask, dependencyOffsetMinutes } = req.body;
+    const { articleId, quantity, unitPrice, taskCategory, metadataAssociation, metadataCorrespondence, isPreTask, dependencyOffsetMinutes, isSubscriptionArticle } = req.body;
     if (!articleId || typeof articleId !== "string") {
       throw new ValidationError("articleId krävs");
     }
@@ -201,6 +201,8 @@ app.post("/api/order-concepts/:id/articles", asyncHandler(async (req, res) => {
       ...(typeof metadataCorrespondence === "string" ? { metadataCorrespondence } : {}),
       ...(typeof isPreTask === "boolean" ? { isPreTask } : {}),
       ...(typeof dependencyOffsetMinutes === "number" ? { dependencyOffsetMinutes } : {}),
+      // Uppgiftslogik v1 (kolumn W) — abonnemangs-tagg (ingen motor, bara flagga).
+      ...(typeof isSubscriptionArticle === "boolean" ? { isSubscriptionArticle } : {}),
     });
     const allArticles = await storage.getOrderConceptArticles(req.params.id);
     await storage.updateOrderConcept(req.params.id, tenantId, { totalArticles: allArticles.length });
@@ -234,6 +236,8 @@ app.patch("/api/order-concepts/:id/articles/:articleId", asyncHandler(async (req
     if (req.body.metadataCorrespondence === null || typeof req.body.metadataCorrespondence === "string") allowed.metadataCorrespondence = req.body.metadataCorrespondence;
     if (typeof req.body.isPreTask === "boolean") allowed.isPreTask = req.body.isPreTask;
     if (req.body.dependencyOffsetMinutes === null || typeof req.body.dependencyOffsetMinutes === "number") allowed.dependencyOffsetMinutes = req.body.dependencyOffsetMinutes;
+    // Uppgiftslogik v1 (kolumn W) — abonnemangs-tagg (ingen motor, bara flagga).
+    if (typeof req.body.isSubscriptionArticle === "boolean") allowed.isSubscriptionArticle = req.body.isSubscriptionArticle;
     const updated = await storage.updateOrderConceptArticle(req.params.articleId, req.params.id, allowed);
     if (!updated) throw new NotFoundError("Artikelrad hittades inte");
     res.json(updated);

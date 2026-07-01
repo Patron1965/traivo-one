@@ -777,6 +777,13 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
     editableQuantity?: boolean;
     shouldBeReturned?: boolean;
     hasStockLocation?: boolean;
+    // Uppgiftslogik v1 (kolumn T): taget antal + härledd svinn/retur. quantity ovan
+    // är fakturerat/levererat och rör aldrig. takenQuantity=null ⇒ ej registrerat än.
+    takenQuantity?: number | null;
+    wasteQuantity?: number;
+    returnedQuantity?: number;
+    quantityReconciliationNote?: string | null;
+    takenQuantityEditable?: boolean;
   }
 
   interface ShowMetadataFieldContext {
@@ -810,6 +817,12 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
   // Redigerbart antal per orderrad (keyas på lineId). Tomt = visa serverns antal.
   const [quantityEdits, setQuantityEdits] = useState<Record<string, string>>({});
   const [savingQuantityLineId, setSavingQuantityLineId] = useState<string | null>(null);
+  // Uppgiftslogik v1 (kolumn T): taget antal. Expansionspanel per orderrad med taget
+  // antal + valfri anteckning. Rör ALDRIG det fakturerade antalet (line.quantity).
+  const [expandedTakenLineId, setExpandedTakenLineId] = useState<string | null>(null);
+  const [takenEdits, setTakenEdits] = useState<Record<string, string>>({});
+  const [takenNoteEdits, setTakenNoteEdits] = useState<Record<string, string>>({});
+  const [savingTakenLineId, setSavingTakenLineId] = useState<string | null>(null);
 
   const { data: metadataContext } = useQuery<{ articles: MetadataArticleContext[]; dependencyArticles?: DependencyArticleContext[]; orderArticles?: OrderArticleContext[]; showMetadataFields?: ShowMetadataFieldContext[]; leaveMetadataFields?: LeaveMetadataFieldContext[] }>({
     queryKey: ["/api/mobile/tasks", selectedJobId, "metadata-context"],
@@ -864,6 +877,31 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
       toast({ title: "Kunde inte uppdatera antal", description: error instanceof Error ? error.message : "Försök igen", variant: "destructive" });
     } finally {
       setSavingQuantityLineId(null);
+    }
+  }, [selectedJobId, mobileApiCall, toast]);
+
+  // Uppgiftslogik v1 (kolumn T): registrera taget/förbrukat antal per orderrad.
+  // Servern härleder svinn/retur och rör aldrig det fakturerade antalet.
+  const handleTakenQuantityUpdate = useCallback(async (lineId: string, raw: string, note: string) => {
+    if (!selectedJobId) return;
+    const trimmed = (raw ?? "").trim().replace(",", ".");
+    const qty = Number(trimmed);
+    if (trimmed === "" || !Number.isFinite(qty) || qty < 0) {
+      toast({ title: "Ogiltigt taget antal", description: "Ange ett antal (0 eller mer).", variant: "destructive" });
+      return;
+    }
+    setSavingTakenLineId(lineId);
+    try {
+      await mobileApiCall("POST", `/api/mobile/tasks/${selectedJobId}/taken-quantity-update`, { lineId, takenQuantity: qty, note: note?.trim() || undefined });
+      queryClient.invalidateQueries({ queryKey: ["/api/mobile/tasks", selectedJobId, "metadata-context"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/mobile/tasks", selectedJobId, "quantity-events", lineId] });
+      setTakenEdits((prev) => { const next = { ...prev }; delete next[lineId]; return next; });
+      setTakenNoteEdits((prev) => { const next = { ...prev }; delete next[lineId]; return next; });
+      toast({ title: "Taget antal registrerat", description: `Taget: ${Math.round(qty)}` });
+    } catch (error) {
+      toast({ title: "Kunde inte registrera taget antal", description: error instanceof Error ? error.message : "Försök igen", variant: "destructive" });
+    } finally {
+      setSavingTakenLineId(null);
     }
   }, [selectedJobId, mobileApiCall, toast]);
 
@@ -2060,6 +2098,97 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
                           <Warehouse className="h-3.5 w-3.5 mr-1.5" />
                           {oa.hasStockLocation ? "Återta till lager" : "Saknar lagerplats"}
                         </Button>
+                      )}
+                      {/* Uppgiftslogik v1 (kolumn T): taget/förbrukat antal. Rör ALDRIG
+                          det fakturerade antalet (oa.quantity). Överskott bokförs som
+                          svinn (förbrukning) eller retur till lager. */}
+                      {(oa.takenQuantityEditable || oa.takenQuantity != null) && (
+                        <div className="border-t pt-2 mt-1 space-y-2">
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="flex items-center gap-1.5 min-w-0">
+                              <Package className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                              <span className="text-[11px] text-muted-foreground">Taget antal</span>
+                              {oa.takenQuantity != null && (
+                                <span className="text-xs font-semibold tabular-nums" data-testid={`text-taken-quantity-${oa.articleId}`}>
+                                  {oa.takenQuantity} {oa.quantityUnit}
+                                </span>
+                              )}
+                            </div>
+                            {oa.takenQuantityEditable && (
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="h-7 px-2 text-[11px] shrink-0"
+                                onClick={() => setExpandedTakenLineId((prev) => (prev === oa.lineId ? null : oa.lineId))}
+                                data-testid={`button-toggle-taken-${oa.articleId}`}
+                              >
+                                {oa.takenQuantity != null ? "Ändra" : "Registrera"}
+                                <ChevronDown className={`h-3.5 w-3.5 ml-1 transition-transform ${expandedTakenLineId === oa.lineId ? "rotate-180" : ""}`} />
+                              </Button>
+                            )}
+                          </div>
+                          {oa.takenQuantity != null && ((oa.wasteQuantity ?? 0) > 0 || (oa.returnedQuantity ?? 0) > 0) && (
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              {(oa.wasteQuantity ?? 0) > 0 && (
+                                <Badge variant="outline" className="text-[10px] border-warning text-warning" data-testid={`badge-waste-${oa.articleId}`}>
+                                  Svinn: {oa.wasteQuantity} {oa.quantityUnit}
+                                </Badge>
+                              )}
+                              {(oa.returnedQuantity ?? 0) > 0 && (
+                                <Badge variant="outline" className="text-[10px] border-chart-4 text-chart-4" data-testid={`badge-returned-${oa.articleId}`}>
+                                  Åter till lager: {oa.returnedQuantity} {oa.quantityUnit}
+                                </Badge>
+                              )}
+                            </div>
+                          )}
+                          {oa.quantityReconciliationNote && expandedTakenLineId !== oa.lineId && (
+                            <p className="text-[10px] text-muted-foreground italic truncate" data-testid={`text-taken-note-${oa.articleId}`}>
+                              {oa.quantityReconciliationNote}
+                            </p>
+                          )}
+                          {oa.takenQuantityEditable && expandedTakenLineId === oa.lineId && (
+                            <div className="space-y-2 rounded bg-muted/50 p-2">
+                              <p className="text-[10px] text-muted-foreground leading-snug">
+                                Verkligt taget/förbrukat antal. Påverkar inte det fakturerade antalet ({oa.quantity} {oa.quantityUnit}). Överskott bokförs som {oa.shouldBeReturned ? "retur till lager" : "svinn"}.
+                              </p>
+                              <div className="flex items-center gap-1.5">
+                                <Input
+                                  type="number"
+                                  inputMode="decimal"
+                                  min={0}
+                                  step="any"
+                                  className="h-8 flex-1 text-sm text-right tabular-nums"
+                                  value={takenEdits[oa.lineId] ?? (oa.takenQuantity != null ? String(oa.takenQuantity) : String(oa.quantity))}
+                                  onChange={(e) => setTakenEdits((prev) => ({ ...prev, [oa.lineId]: e.target.value }))}
+                                  data-testid={`input-taken-quantity-${oa.articleId}`}
+                                />
+                                <span className="text-xs text-muted-foreground shrink-0">{oa.quantityUnit}</span>
+                              </div>
+                              <Input
+                                type="text"
+                                className="h-8 text-sm"
+                                placeholder="Anteckning (valfritt)"
+                                value={takenNoteEdits[oa.lineId] ?? oa.quantityReconciliationNote ?? ""}
+                                onChange={(e) => setTakenNoteEdits((prev) => ({ ...prev, [oa.lineId]: e.target.value }))}
+                                data-testid={`input-taken-note-${oa.articleId}`}
+                              />
+                              <Button
+                                size="sm"
+                                className="w-full h-8 text-xs"
+                                disabled={savingTakenLineId === oa.lineId}
+                                onClick={() => handleTakenQuantityUpdate(
+                                  oa.lineId,
+                                  takenEdits[oa.lineId] ?? (oa.takenQuantity != null ? String(oa.takenQuantity) : String(oa.quantity)),
+                                  takenNoteEdits[oa.lineId] ?? oa.quantityReconciliationNote ?? "",
+                                )}
+                                data-testid={`button-save-taken-${oa.articleId}`}
+                              >
+                                {savingTakenLineId === oa.lineId ? <Loader2 className="h-4 w-4 animate-spin mr-1.5" /> : <Send className="h-3.5 w-3.5 mr-1.5" />}
+                                Registrera taget antal
+                              </Button>
+                            </div>
+                          )}
+                        </div>
                       )}
                     </div>
                   ))}
