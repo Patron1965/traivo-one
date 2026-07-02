@@ -2734,76 +2734,6 @@ export const METADATA_PROPAGATION_TYPES = [
 ] as const;
 export type MetadataPropagationType = typeof METADATA_PROPAGATION_TYPES[number];
 
-// Metadatadefinitioner (vilka fält som kan propagera)
-// @deprecated Task #992: ENGELSKA metadata-modellen är inte längre kanonisk källa.
-// Den svenska modellen (metadata_katalog/metadata_varden/metadata_historik) är nu
-// enda källan för objekt-metadata. Denna tabell behålls denna release ENBART som
-// read-only audit/rollback-källa — inga nya skrivningar sker hit. Ta inte bort (expand-contract).
-export const metadataDefinitions = pgTable("metadata_definitions", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
-  // Unikt namn för metadata-fältet
-  fieldKey: varchar("field_key", { length: 100 }).notNull(),
-  fieldLabel: text("field_label").notNull(),
-  // Datatyp: text, number, date, boolean, json
-  dataType: varchar("data_type", { length: 20 }).default("text"),
-  // Propagationstyp: fixed, falling, dynamic
-  propagationType: varchar("propagation_type", { length: 20 }).default("falling"),
-  // Vilka objektnivåer fältet kan appliceras på
-  applicableLevels: text("applicable_levels").array().default([]),
-  // Standardvärde
-  defaultValue: text("default_value"),
-  // Valideringsregler (JSON schema)
-  validationRules: jsonb("validation_rules").default({}),
-  isRequired: boolean("is_required").default(false),
-  // Sorteringsordning i UI
-  sortOrder: integer("sort_order").default(0),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  // ADR v3 §2.4 — soft-delete + livscykelskydd (bokföringsanalogin).
-  // Definitionen får inte hard-deleteas så länge värden eller framtida
-  // ordrar refererar fieldKey — annars tappar historiska snapshots mening.
-  deletedAt: timestamp("deleted_at"),
-  // Vid splittring (1→N): pekar på efterföljande definition så historik
-  // kan följa kedjan. Sätts manuellt vid migrations-flöde.
-  replacedByDefinitionId: varchar("replaced_by_definition_id"),
-}, (table) => [
-  index("idx_metadata_definitions_tenant").on(table.tenantId),
-  index("idx_metadata_definitions_field").on(table.fieldKey),
-  index("idx_metadata_definitions_tenant_deleted").on(table.tenantId, table.deletedAt),
-]);
-
-// Metadatavärden på objekt
-// @deprecated Task #992: ENGELSKA metadata-värdetabellen är inte längre kanonisk källa.
-// Objekt-metadata läses/skrivs nu via metadata_varden (svensk modell). Behålls denna
-// release ENBART som read-only audit/rollback-källa — inga nya skrivningar. Ta inte bort.
-export const objectMetadata = pgTable("object_metadata", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
-  objectId: varchar("object_id").references(() => objects.id).notNull(),
-  definitionId: varchar("definition_id").references(() => metadataDefinitions.id).notNull(),
-  // Värdet (text för enkla värden)
-  value: text("value"),
-  // JSON-värde för komplexa strukturer
-  valueJson: jsonb("value_json"),
-  // Brytlogik: stoppar arv nedåt för detta fält
-  breaksInheritance: boolean("breaks_inheritance").default(false),
-  // Om ärvt: varifrån kommer värdet?
-  inheritedFromObjectId: varchar("inherited_from_object_id"),
-  // Giltighet för dynamiska värden
-  validFrom: timestamp("valid_from"),
-  validTo: timestamp("valid_to"),
-  // Spårning
-  updatedBy: varchar("updated_by"),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").defaultNow(),
-}, (table) => [
-  index("idx_object_metadata_tenant").on(table.tenantId),
-  index("idx_object_metadata_object").on(table.objectId),
-  index("idx_object_metadata_definition").on(table.definitionId),
-  index("idx_object_metadata_object_definition").on(table.objectId, table.definitionId),
-  index("idx_object_metadata_tenant_object").on(table.tenantId, table.objectId),
-]);
-
 // ============================================
 // OBJEKTBILDER - Bildgalleri per objekt
 // ============================================
@@ -3708,17 +3638,6 @@ export const objectPayersRelations = relations(objectPayers, ({ one }) => ({
   customer: one(customers, { fields: [objectPayers.customerId], references: [customers.id] }),
 }));
 
-export const metadataDefinitionsRelations = relations(metadataDefinitions, ({ one, many }) => ({
-  tenant: one(tenants, { fields: [metadataDefinitions.tenantId], references: [tenants.id] }),
-  objectMetadata: many(objectMetadata),
-}));
-
-export const objectMetadataRelations = relations(objectMetadata, ({ one }) => ({
-  tenant: one(tenants, { fields: [objectMetadata.tenantId], references: [tenants.id] }),
-  object: one(objects, { fields: [objectMetadata.objectId], references: [objects.id] }),
-  definition: one(metadataDefinitions, { fields: [objectMetadata.definitionId], references: [metadataDefinitions.id] }),
-}));
-
 // ============================================
 // INSERT SCHEMAS FOR NEW TABLES
 // ============================================
@@ -3729,8 +3648,6 @@ export const insertFortnoxInvoiceExportSchema = createInsertSchema(fortnoxInvoic
 export const insertManualInvoiceLineSchema = createInsertSchema(manualInvoiceLines).omit({ id: true, createdAt: true });
 export const insertObjectPayerSchema = createInsertSchema(objectPayers).omit({ id: true, createdAt: true });
 export const insertInvoiceRecipientSchema = createInsertSchema(invoiceRecipients).omit({ id: true, createdAt: true, deletedAt: true });
-export const insertMetadataDefinitionSchema = createInsertSchema(metadataDefinitions).omit({ id: true, createdAt: true, deletedAt: true });
-export const insertObjectMetadataSchema = createInsertSchema(objectMetadata).omit({ id: true, createdAt: true });
 export const insertObjectImageSchema = createInsertSchema(objectImages).omit({ id: true, createdAt: true });
 export const insertObjectVignetteSchema = createInsertSchema(objectVignettes).omit({ id: true, uploadedAt: true, supersededAt: true });
 export const insertObjectContactSchema = createInsertSchema(objectContacts).omit({ id: true, createdAt: true });
@@ -3757,10 +3674,27 @@ export type ObjectPayer = typeof objectPayers.$inferSelect;
 export type InsertObjectPayer = z.infer<typeof insertObjectPayerSchema>;
 export type InvoiceRecipient = typeof invoiceRecipients.$inferSelect;
 export type InsertInvoiceRecipient = z.infer<typeof insertInvoiceRecipientSchema>;
-export type MetadataDefinition = typeof metadataDefinitions.$inferSelect;
-export type InsertMetadataDefinition = z.infer<typeof insertMetadataDefinitionSchema>;
-export type ObjectMetadata = typeof objectMetadata.$inferSelect;
-export type InsertObjectMetadata = z.infer<typeof insertObjectMetadataSchema>;
+// Task #992-cleanup: den engelska metadata_definitions/object_metadata-modellen är
+// borttagen. MetadataDefinition behålls som fristående interface (ingen tabell bakom)
+// eftersom /api/metadata-definitions-kompatvyn och frontend projicerar en svensk
+// katalograd (metadata_katalog) till denna form. server/metadata-queries.ts aliasar
+// den som MetadataDefinitionCompat.
+export interface MetadataDefinition {
+  id: string;
+  tenantId: string;
+  fieldKey: string;
+  fieldLabel: string;
+  dataType: string;
+  propagationType: string;
+  applicableLevels: string[];
+  defaultValue: string | null;
+  validationRules: Record<string, unknown>;
+  isRequired: boolean;
+  sortOrder: number;
+  createdAt: Date;
+  deletedAt: Date | null;
+  replacedByDefinitionId: string | null;
+}
 export type ObjectImage = typeof objectImages.$inferSelect;
 export type InsertObjectImage = z.infer<typeof insertObjectImageSchema>;
 export type ObjectVignette = typeof objectVignettes.$inferSelect;
@@ -4518,7 +4452,8 @@ export type InsertCustomerNotificationSettings = z.infer<typeof insertCustomerNo
 // ============================================================================
 // MATS VISION: OBJEKTDATA & METADATA-SYSTEM (EAV-modell)
 // Separerar objektdata (minimalistisk container) från metadata (flexibel EAV)
-// Kompletterar det befintliga metadataDefinitions/objectMetadata-systemet
+// Detta är det ENDA kanoniska metadata-systemet — det tidigare engelska
+// metadata_definitions/object_metadata-systemet är borttaget (kontraktsfas).
 // ============================================================================
 
 // Tillåtna datatyper för metadata (utökade per Mats spec)

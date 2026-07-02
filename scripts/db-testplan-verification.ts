@@ -118,8 +118,8 @@ function sectionA() {
     ["Kund", ["customers"]],
     ["Artikel", ["articles"]],
     ["Objekt", ["objects"]],
-    ["MetadataDefinition", ["metadata_katalog", "metadata_definitions"]],
-    ["MetadataVärde", ["metadata_varden", "object_metadata"]],
+    ["MetadataDefinition", ["metadata_katalog"]],
+    ["MetadataVärde", ["metadata_varden"]],
     ["Orderkoncept", ["order_concepts"]],
     ["Uppgift", ["assignments", "work_orders"]],
     ["Utförandetyp", ["execution_types"]],
@@ -147,7 +147,6 @@ function sectionA() {
     ["Objekt → förälder (self-ref)", "objects", "objects", "parent_id"],
     ["Objekt ↔ förälder (multi, object_parents)", "object_parents", "objects", undefined],
     ["MetadataVärde → MetadataKatalog", "metadata_varden", "metadata_katalog", undefined],
-    ["object_metadata → metadata_definitions", "object_metadata", "metadata_definitions", undefined],
     ["MetadataVärde → Objekt", "metadata_varden", "objects", undefined],
     ["Orderkoncept → Kund", "order_concepts", "customers", undefined],
     ["concept_filters → Orderkoncept", "concept_filters", "order_concepts", undefined],
@@ -246,7 +245,7 @@ function sectionA() {
 // SEKTION B — Multi-tenant isolering
 // =====================================================================
 async function sectionB() {
-  const coreTables = ["customers", "articles", "objects", "order_concepts", "assignments", "work_orders", "resources", "metadata_katalog", "metadata_varden", "metadata_definitions", "object_metadata"];
+  const coreTables = ["customers", "articles", "objects", "order_concepts", "assignments", "work_orders", "resources", "metadata_katalog", "metadata_varden"];
   const missing = coreTables.filter((t) => hasTable(t) && !hasCol(t, "tenant_id"));
   add("B. Multi-tenant", "B1", "tenant_id på alla kärntabeller", missing.length === 0 ? "PASS" : "FAIL",
     missing.length === 0 ? `alla ${coreTables.length} kärntabeller har tenant_id` : `saknar tenant_id: ${missing.join(", ")}`);

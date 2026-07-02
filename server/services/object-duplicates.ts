@@ -307,7 +307,7 @@ const REASSIGN_FK_TABLES = [
 // Barn-tabeller som flyttas (object_id) till keep-objektet.
 const REASSIGN_CHILD_TABLES = [
   "object_articles", "object_contacts", "object_images",
-  "object_metadata", "object_payers", "object_time_restrictions", "object_parents",
+  "object_payers", "object_time_restrictions", "object_parents",
 ];
 
 export class DuplicateMergeOwnershipError extends Error {}

@@ -10,7 +10,7 @@ import { NotFoundError, ValidationError, ForbiddenError, ConflictError } from ".
 import { validateParentMetadataLink, softDeleteMetadataType, getObjectWithAllMetadata, getDisplayValue, getMetadataKatalogUsage, getMetadataDefinitionsCompat, getMetadataDefinitionCompat, katalogToDefinitionCompat, mapEnglishDataTypeToDatatyp, createMetadata, updateMetadata, deleteMetadata, ensurePackageMetadataKatalog, findMetadataTypeByIdentity } from "../metadata-queries";
 import { requireAdmin, requirePlanner } from "../tenant-middleware";
 import { isReasoningModel } from "../ai-model-capabilities";
-import { objects, workOrders, objectMetadata, metadataVarden, apiUsageLogs, apiBudgets, invitations, insertMetadataDefinitionSchema, insertObjectMetadataSchema, insertObjectPayerSchema, metadataKatalog, insertMetadataKatalogSchema, workOrderLines, articles, weeklyReportNotes, weeklyReportActionItemSchema, type WeeklyReportActionItem, objectPayers } from "@shared/schema";
+import { objects, workOrders, metadataVarden, apiUsageLogs, apiBudgets, invitations, insertObjectPayerSchema, metadataKatalog, insertMetadataKatalogSchema, workOrderLines, articles, weeklyReportNotes, weeklyReportActionItemSchema, type WeeklyReportActionItem, objectPayers } from "@shared/schema";
 import { getISOWeek, getStartOfISOWeek } from "./helpers";
 import { sendEmail } from "../replit_integrations/resend";
 import { issueMagicLink } from "../replit_integrations/auth/magicLinkAuth";
@@ -2454,16 +2454,6 @@ app.delete("/api/objects/:objectId/metadata/:id", asyncHandler(async (req, res) 
     const userId = req.user?.claims?.sub;
     await deleteMetadata(req.params.id, tenantId, userId);
     res.status(204).send();
-}));
-
-// Get effective metadata for an object (including inherited values)
-app.get("/api/objects/:objectId/effective-metadata", asyncHandler(async (req, res) => {
-    const tenantId = getTenantIdWithFallback(req);
-    if (!await verifyObjectTenant(req.params.objectId, tenantId)) {
-      throw new ForbiddenError("Åtkomst nekad");
-    }
-    const effectiveMetadata = await storage.getEffectiveMetadata(req.params.objectId, tenantId);
-    res.json(effectiveMetadata);
 }));
 
 // ============== OBJECT PAYERS ==============

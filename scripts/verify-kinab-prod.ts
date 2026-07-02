@@ -7,7 +7,7 @@
  *   1. Räknesatser per nyckeltabell (customers, objects, price_lists,
  *      price_list_articles, articles, resources, teams, team_members,
  *      resource_profile_assignments, portal_users, portal_user_object_scopes,
- *      checklist_templates, metadata_definitions).
+ *      checklist_templates, metadata_katalog).
  *   2. Närvaro av kritisk konfig: tenants, tenant_branding, tenant_features,
  *      fortnox_config (+ access_token-status), fortnox_mappings.
  *   3. FK-orphan-checkar: objects.parent_id, objects.customer_id,
@@ -176,7 +176,6 @@ async function buildCountList(): Promise<CountRow[]> {
     { label: "price_lists (kund)", table: "price_lists", whereSql: "tenant_id = $1 AND customer_id IS NOT NULL", params: [TENANT] },
     { label: "price_list_articles", table: "price_list_articles", whereSql: "price_list_id IN (SELECT id FROM price_lists WHERE tenant_id = $1)", params: [TENANT], expectNonZero: true },
     { label: "checklist_templates", table: "checklist_templates", whereSql: "tenant_id = $1", params: [TENANT] },
-    { label: "metadata_definitions", table: "metadata_definitions", whereSql: "tenant_id = $1", params: [TENANT] },
     { label: "portal_users", table: "portal_users", whereSql: "customer_id IN (SELECT id FROM customers WHERE tenant_id = $1)", params: [TENANT] },
     { label: "portal_user_object_scopes", table: "portal_user_object_scopes", whereSql: "portal_user_id IN (SELECT pu.id FROM portal_users pu JOIN customers c ON c.id = pu.customer_id WHERE c.tenant_id = $1)", params: [TENANT] },
     { label: "fortnox_config", table: "fortnox_config", whereSql: "tenant_id = $1", params: [TENANT], expectNonZero: true },

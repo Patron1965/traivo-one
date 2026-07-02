@@ -1,0 +1,302 @@
+{
+  "sessionId": "12da49ccce",
+  "exportedAt": "2026-07-02T14:24:56.791Z",
+  "summary": "### Key Topics Discussed\n- Kvalitet och underhåll av kodbasen\n- Rensa gammalt brus i kodbasen\n- Utveckling av grundlogik för ett framtida system, baserat på objekt- och metadatalogik samt struktur och logik.\n- Kund- och slutkundstyrda metadatafält i Replit-systemet\n- Flexibilitet i metadataregister för kundkategorier (t.ex. livsmedelsbutiker) snarare än individuella kunder\n- Distinktion mellan metadata/objekt och faktureringskunder från Fortnox\n- Gruppering av systemstyrd metadata för att säkerställa greppbarhet och användarvänlighet\n- Orderkonceptet som en drivande faktor för att skapa uppgifter, med insikt att andra funktioner (metadataeditor, analysverktyg) även kommer att kunna generera uppgifter.\n- Skapande av uppgifter via snabborder (välja kund, eventuellt objekt) för fakturering eller intern administration.\n- Möjlighet för utföraren i appen att skapa extra eller kompletta uppgifter baserat på behov och plats.\n- Behov av väl dokumenterade \"sidodatabaser\" (utförare, produktionsutrustning, team) som Replit måste förstå och sammanställa.\n- Användning av ett sidoregister för ikoner för att tydligöra metadatafält.\n- Utveckling av objektöversikten, inklusive hantering av enskilda objekt och länkade kluster av objekt, samt delkluster.\n- Vikten av spelbarhet och hanterbarhet av metadata, inklusive ändringsloggar och \"släktnamn\".\n- Hantering av importkvalitet för objekt.\n- Organisation av objekt med intrinförälder och intrindummer.\n- Uppdatering av metadata, exempelvis vid import av flera objekt med nya kontaktpersoner eller metadatafält, samt export av objeklistan med referensnummer för ändringar.\n- Export av en \"rikslikare\" för objekt som innehåller Trivos unika objektnummer och en kundspecifik referens (t.ex. butiksnummer eller adress) för enkel sammankoppling med extern information.\n- Process för att uppdatera objektdata (objektnamn, metadatafält) med hjälp av en inläsningsfil som matchas mot objektets unika ID och en matchningsfunktion för metadatafälten.\n- Krav på varningssystem vid import av data som inte matchar metadatafältets definitioner (t.ex. \"ja/nej\"-fält).\n- Logik för hantering av historisk information vid databasuppdateringar.\n- Hantering av radering av objekt och orderkoncept, inklusive arkivering av objekt och att uppgifter inte försvinner om det ursprungliga orderkonceptet raderas.\n- Systemlogik för arkivering av raderade objekt och kunder för att uppgifter och orderkoncept ska kvarstå intakta.\n- Hantering av registermatchningsluckor vid radering eller förändring av kunder, samt historik för objekt som inte längre finns.\n- Matchningsutmaningar vid import av objekt och metadata.\n- Process för att testa systemet med objekt- och metadataimport, manuell skapande av kluster och test av flytt/ändring.\n- Aktivering och test av orderkoncept för att koppla uppgifter till grovplaneringen.\n- Matchning av uppgifter mot objektens metadata.\n- Automatisk uppdatering av framtida uppgifter baserade på ändrad metadata på objektet (t.ex. antal kärl eller geografisk plats).\n- Vikten av ärvningslogik för metadata vid uppdatering av objektets position, där förändringar på ett unikt kärl måste slå igenom logiskt på det överliggande återvinningsrummet för att undvika mismatch.\n- Övergång från grovplanering till finplanering och optimerade rutter.\n- Integration av utförande-appen för att hantera information från finplaneringen.\n- Centrala aspekter i grovplaneringen: hantering av uppgifter med kompletta/inkompletta datafält, geografisk koppling och faktureringskoppling.\n- Struktur för grovplaneringslistan: Lång lista med uppgifter baserad på önskade och optimerade/framkylerade leveranstider samt geografisk position (via geografisk motor).\n- Principer för uppgiftslistans uppbyggnad: \"när\" (datum), \"var\" (geografisk position), \"hur\" (uppgiftens typ, t.ex. tvätt, samtal).\n- Filterregister för utförandekoder på uppgifter, för exempelvis kärltvättbilar.\n- Möjlighet att skapa och spara filter för planerare, till exempel för att visa \"rullbara kärl\" inom ett specifikt geografiskt distrikt (t.ex. \"Sundsvall\" baserat på postnummer eller polylinjer).\n- Förmågan för planeraren att skapa filter för abiseringsuppgifter baserat på utförandekoder, utan geografisk koppling, och styra dessa efter önskad eller planerad tid, för att sedan kunna se dem i ett dags- eller veckoperspektiv.\n- Funktion för att från enskilda eller hopklumpade uppgifter (baserat på hopklumpningsmotor) tilldela en eller flera utförare.\n- Planerarens arbetsflöde: Baserat på produktionstiden för uppgifter och tillgängliga produktionstimmar för ett team, sålla fram aktuella jobb för att fylla en veckoplanering.\n- Hantering av kvarvarande uppgifter: Vid fullbelagd schemaläggning för en vecka, ska planeraren kunna hantera de kvarvarande uppgifterna, även om de enligt överenskommelse ska utföras, och eventuellt trycka in dem i befintliga produktionsveckor, göra omplaneringar, hantera övertid, eller flytta fram jobb.\n- Dynamik i planeringen: Nya jobb kommer in kontinuerligt (t.ex. via kundportaler), vilket kräver konstant hantering för att säkerställa att jobb blir gjorda och produktionsteamens veckor fylls maximalt genom överbokningslogik och ruttoptimering.\n\n### Decisions Made\n- Mats ska läsa igenom dokumentet och ge kommentarer.\n\n### Action Items\n- Replit ska sammanställa och dokumentera sidodatabaserna (utförare, produktionsutrustning, team).\n- Replit ska bedöma om de har förmågan att rita upp ett schema som beskriver hur register och stödregister förhåller sig till varandra.\n- Rensa bort dubbelspår och oönskade element i kodbasen för att uppnå en ren logik där all information ligger på definierade metadatafält.\n- Slutföra objektöversikten.\n- Replit har fria händer att radera all nuvarande data i systemet då inget har betydelse.\n- Replit ska testa uppdatering av metadata, till exempel ändringar av antal, kontaktpersoner eller tillägg av nya metadatafält för importerade objekt.\n- Replit ska i första steget få ordning för att kunna bygga upp och tanka in testregister över objekt och tillhörande metadata.\n- Replit ska tanka in listor på objekt och metadata, samt manuellt skapa mindre kluster av objekt och metadata för att testa flytt och ändring.\n- Replit ska aktivera ett eller flera orderkoncept och koppla på uppgifter för att testa leverans till grovplaneringen.\n- Replit bör fundera noggrant kring hur centrala filterfunktioner för planerare ska implementeras.\n\n### Important Points & Insights\n- Det är viktigt att bygga grunden för ett framtida system i den nuvarande tävlingen.\n- Grundlogiken för det framtida systemet är nu väl genomarbetad och bygger på objekt- och metadatalogik, inklusive gruppering och familjer av metadata, med fokus på struktur och logik.\n- Replit har implementerat kundstyrda metadatafält, men funktionen är inte helt genomarbetad och saknas på objektnivå.\n- Replit bör presentera nya funktioner i förväg för att möjliggöra hantering.\n- Objekt och metadata har inte nödvändigtvis en koppling till specifika kunder som betalar fakturor (Fortnox-kunder).\n- Metadataregister kan anpassas till kundkategorier (t.ex. \"livsmedelsbutiker\") för att hantera specifika behov effektivt, utan att skapa onödig metadata för alla kunder.\n- Ett toppobjekt (t.ex. \"Axfood Sverige\") är endast ett sätt att organisera information och är inte kopplat till faktureringens kund och organisationsnummer.\n- Orderkonceptet är för närvarande den primära källan för att skapa uppgifter, men detta kommer att utökas med andra funktioner som metadataeditor och metadataanalysverktyg.\n- Stor vikt läggs vid att Replit ska förstå behovet av att skapa uppgifter via snabborder och att utföraren i appen ska kunna skapa uppgifter.\n- Det är avgörande att Replit förstår och dokumenterar de så kallade \"sidodatabaserna\" (utförare, produktionutrustning, team).\n- Ett sidoregister för ikoner är ett typexempel på ett sidoregister som bidrar till helheten genom att tydligöra metadatafält.\n- Det finns en stark önskan att eliminera nuvarande problematik med \"konstiga grejer som ligger kvar\" och säkerställa en ren logik.\n- Övrig information för uppgifter ligger på sidodatabaserna, på logiken i objekten (föräldrar och barn), samt på orderkonceptet.\n- Det är brådskande att slutföra objektöversikten för att få ordning på ett eller flera objekt, inklusive länkade kluster och delkluster.\n- Kvalitet och underhåll av kodbasen är kritiskt, och gammalt brus ska rensas bort.\n- Systemet måste vara spelbart och hanterbart, med stöd för ändringsloggar och \"släktnamn\" för att hantera relationer mellan objekt.\n- Importkvaliteten för objekt är en central del för att kunna importera befintliga objekt.\n- Den nuvarande organisationen av objekt med intrinförälder och intrindummer fungerar utmärkt för första steget av organisering.\n- Möjligheten att exportera objektdata som en \"rikslikare\" förenklar massuppdateringar genom att koppla unika system-ID:n till externa referenser.\n- Den föreslagna uppdateringsprocessen med en inläsningsfil som matchar unika objektnummer och metadatafälten förväntas vara mycket effektiv.\n- Vid import via CSV/Excel är det viktigt att kolumnerna kan mappas mot Thrivos unika objektnummer, föräldra-/undervarande nummer, och specifika metadatafälten som kontaktpersonnamn eller titel.\n- Systemet måste inkludera varningsmeddelanden om importerad data (t.ex. \"ja/nej\") inte matchar metadatafältets fördefinierade format.\n- Det är viktigt att systemet varnar för uppdateringar som skriver över historisk information.\n- Det måste finnas en logik för att hantera radering av objekt genom att arkivera dem istället för att helt ta bort dem.\n- Uppgifter som skapas måste vara robusta och inte falla bort om det ursprungliga orderkonceptet raderas.\n- Arkivering av objekt och kunder vid radering är avgörande för att historiska uppgifter och orderkoncept ska behållas och förhindra registermatchningsluckor.\n- Systemet måste kunna hantera förändringar som namnbyten eller nedlagda butiker genom arkivering och fortsatt tillgång till historisk information trots att objektet inte längre finns.\n- Det kommer inte vara några problem med matchningsutmaningar.\n- Städningen av kodbasen förväntas lösa tidigare fel kopplade till orderkonceptet.\n- När orderkonceptet aktiveras ska det generera uppgifter med tunga informationspaket som ligger till grund för grovplaneringen.\n- Om en ändring av metadata, till exempel antalet kärl, upptäcks under utförandet av en uppgift, ska objektets information uppdateras.\n- Regelbundna körningar (t.ex. en gång per dygn) ska uppdatera alla framtida återkommande uppgifter med den reviderade metadatainformationen.\n- Systemet ska hantera uppdateringar av geografisk plats med stöd av en geografisk motor, där kunden initialt anger t.ex. en gata.\n- Utföraren i appen kommer att justera adressen utifrån verklig position med hjälp av longitude och latitude, även om den initiala adressen är en gatuadress. Den förfinade positionen (pinpoint) ska sedan uppdatera metadata i objektet.\n- Det är viktigt att systemet förstår och hanterar metadataärvning korrekt när position uppdateras, så att ändringar på ett unikt kärl logiskt slår igenom på det överordnade återvinningsrummet för att förhindra mismatch.\n- En finplaneringsrutin för ruttoptimering kommer att utvecklas parallellt med utförande-appen.\n- Det centrala i grovplaneringen är alla uppgifter, oavsett om deras datafält är kompletta eller inkompletta, om de har geografisk koppling eller inte, och om de har kopplats till faktureringsadress eller fakturakund.\n- Den långa listan med uppgifter för grovplaneringen kommer att inkludera önskade och optimerade leveranstider, samt geografisk position baserad på den geografiska motorn.\n- Uppgifterna i listan organiseras enligt principerna \"när\" (datum), \"var\" (geografisk position) och \"hur\" (typ av uppgift).\n- Ett filterregister för utförandekoder som kan tillämpas för att matchas mot specifika fordonstyper (t.ex. kärltvättbil för rullbara kärl).\n- Replit bör kunna utveckla ett filterregister för planerare för att skapa egna filter för uppgifter baserat på metadata (t.ex. rullbara kärl) och geografiska områden (t.ex. \"Sundsvall\" definierat med postnummer eller polylinjer).\n- Planeraren kan skapa specifika filter för abiseringsuppgifter och styra visningen av dessa utifrån tidsperspektiv som dag eller vecka.\n- Hela produkten av planeringsfunktionaliteten är möjligheten att tilldela enskilda eller en grupp av uppgifter till en eller flera utförare.\n- Grovplaneringen redovisar hela tiden information även vid sidan om filtret.\n- Tiden det tar att utföra en uppgift (\"produktionstid\") kommer att vara central för veckoplaneringen av ett team.\n- Planeraren ska kunna filtrera fram jobb för ett produktionsteam baserat på tillgängliga produktionstimmar och sedan tilldela dessa till teamets finplanering.\n- Planeraren kommer att hantera \"resterande\" uppgifter som inte kunde schemaläggas, till exempel om veckan redan är fullbokad, genom att eventuellt flytta in dem på andra produktionsveckor eller omplanera.\n- Systemet ska stödja hantering av övertid eller möjligheten att flytta tillbaka jobb för omplanering.\n- Det är en ständig dynamik med nya inkommande jobb, till exempel via kundportaler, vilket kräver kontinuerlig omplanering och optimering.\n- Målet är att maximera produktionen genom att fylla produktionsteamens veckor med jobb, eventuellt med överbokningslogik, och därefter ruttoptimera.\n\n### Open Questions/Pending Items\n- Anledningen till att systemet inte var i bruk, trots tomma databaser, har inte diskuterats fullt ut.\n- Hur ska möjligheten att välja metadataregister på objektnivå implementeras för kundstyrda metadatafält i Replit?\n- Hur säkerställs att metadata hanteras separat från den faktiska kundinformationen för fakturering?\n- Hur säkerställs att uppgifternas matchning mot objektets metadata hanteras korrekt, särskilt vid upprepade uppgifter och ändringar i metadata (t.ex. antal)?\n- Hur säkerställs att systemstyrd metadata grupperas för att vara greppbar och användarvänlig i alla lägen?\n- Hur kommer systemet att hantera lagring och återanvändning av sparade filter i planeringsverktyget?\n- Vilka geografiska baser (postnummer, polylinjer) kommer att användas för att definiera planeringsdistrikt?\n- Hur ska systemet säkerställa att uppgifter som enligt överenskommelse ska utföras men inte ryms i en given veckoplanering hanteras på bästa sätt, inklusive att eventuellt trycka in dem i befintliga produktionsveckor, hantera övertid, eller flytta tillbaka jobb för omplanering?\n- Hur ska den konstanta dynamiken med nya inkommande jobb hanteras för att upprätthålla en optimal planering och maximal produktion?",
+  "conversation": [],
+  "transcripts": [
+    {
+      "text": "Kvali-, ja, kvalitet och underhåll. Rensa det gamla typiskt bruset i kodbasen, ja. Ja, här, här börjar vi prata igen då och, eh, efter sista frågan som, eh, eh, vi var glada att ställa så ska Mats bara läsa igenom dokumentet och komma med vissa kommentarer.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Ja, vi får bara så tacka för det här beskedet och vi är besvikna att inte vi, eh, rättligt har, så att säga, fört det på tal tidigare. Vi utgick ifrån att Rättligt kände till och märkte att inte systemet var i bruk med tanke på att databaserna i princip är tomma. Men det som är viktigt nu fram i, i en tävling, det är att vi bygger grunden för ett framtida system och grundlogiken i den är ju nu väl genomarbetad och bygger ju på objektlogiken. Den bygger på metadatalogiken.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Kund, eh, styrda metadatafält och, eh, eh, med kund menar jag då den som driftar systemet, men också slutkundstyrda metadatafält och som man har möjlighet som Replit själva satt upp då att man kan skapa vissa unika datafält för en unik kund. Eh, och där ska vi också passa på att se, se då att såna här saker är vi tacksamma för, men det är också väldigt bra att Replit, när den inför såna här grejer, så presenterar det för oss då så vi kan hantera det. För, eh-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. Replit har själv lagt in då den här kund, eh, nivån på metadatafält, men den är inte genomarbetad, så den finns ju bara i metadataadministrationsfältet. Eh, den finns inte när man jobbar med metadatan på objektnivå, för då skulle man ju då behöva ha då en möjlighet att man då kan, eh, välja då, eh, metadataregister. Och för att ytterligare förtydliga det här då, så... Jag, jag vill vara väldigt tydlig med det att...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Objekten har ingen koppling till kunderna. Metadatan har heller inte nödvändigtvis nån koppling till kunderna. Men däremot kan det ju vara praktiskt att ha ett metadatorister som är anpassad till exempel till en kund som Axfood, men det skulle lika gärna kunna vara, eh, anpassat för en kundkategori som vi kallar livsmedelsbutiker då som har särskilt behov av viss metadata då, som är onödigt att den finns för alla typer av kunder, därför det blir enklare att jobba på det sättet. Så mycket viktigt nu att den här metadatan, det är bara ett namn som man alltså för vissa typer av metadater-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. -att han kan då, eh, adressera dem eller gruppera dem utifrån en viss kund då eller en viss kundkategori. Men det har absolut ingenting med den verkliga kunden som ska betala fakturan och som kommer från Fortnox att göra. Jag bara understryker det då. Och på samma sätt så om vi skapar ett huvudobjekt, toppobjekt som vi kallar Axfood Sverige, så har det objektet ingenting att göra med den kund och organisationsnummer som vi styr på, på en faktura, utan det är bara ett sätt att organis",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "era då. Eh, sen kan det ju ha samma namn då.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Eh, men om vi ser grunden då så har vi ju objekten och dess metadata och den logik som vi har där då med gruppering och, och familjer utav metadata. Och sen så kommer det nu då komma då vissa systemstyrda metadata. Och så får vi fundera här nu hur vi grupperar de här så att det blir greppbart då i alla lägen och användarvänligt då. Och på det andra spåret då så finns det då, eh, eh, orderkonceptet då som ju också är i, i, i, i, eh, eh, en form av-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. -list då som, som då skapar ett tredje då som är då uppgifterna då. Och det är viktigt också här då att det är bättre att ta till sig då att i dagsläget så är det orderkonceptet som kommer att skapa det hära. Men det kommer att komma till andra, eh, funktioner som skapar uppgifter då. Det, det vi har pratat om en sån här metadataeditor. Vi har pratat om en metadata, eh, eh, spårare eller analyserare som kan skapa uppgifter. Eh, det bör faktiskt ha en form",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "av snabborder där man bara snabbt väljer kund och, eh, kanske inte ens väljer något objekt utan bara skapar en uppgift då. Antingen för, för, för fakturering eller en uppgift för administration internt på före-företaget som, som driftar då det här systemet, och Kina blir det här fallet. Och, eh, det finns också behov då att, eh, utföraren då i utförarappen ska kunna, eh, skapa då en extra uppgift till exempel, eller även kunna skapa då en, en helt komplett uppgift genom att välja-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. -jag kund och det på-- Utifrån stund och ställe då om behovet finns. Så det här är mycket viktigt att, att Replit förstår det här. Det är också väldigt, väldigt, väldigt viktigt att Replit också förstår då de här Sido-databaserna som jag kallar dem. Det finns en Sido-databas av utförare, det finns en Sido-databas av produktionsutrustning och det finns en Sido-databas för team l-- Och så vidare. De här bör vara väl dokumenterade och Replit får gärna också sammanställa dem så att vi är överens då. Från-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. -smått till stort då. Och, eh, det lilla är väl egentligen, det finns ett Sido-register över ikoner som man ska kunna använda för att, eh, tydliggöra olika, till exempel metadatafält. Och det Sido-registret är ju då ett typexempel på, på, på då ett, ett, ett, eh, det Sido-register som kanske inte är jätteviktigt, men, men det gör en del utav helheten. Så nu kommer vi då... Det här var, var inledning och det är viktigt nu då att vi har en gemensam bild då. Egentligen så skulle också Replit försöka att rita upp ett schema kanske då som beskriver då hur register-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. -och de här stödregisterna som man ser det. Men det får Replit bedöma själv om Replit har den förmågan. Men hur som helst, steg nummer ett, det är att då städa bort de här dubbelspåren och det vill vi ju då väldigt gärna ta bort all den här jädra skiten då som ställer till det. Det är det som har gjort mig så otroligt upprörd då att det finns konstiga grejer som ligger kvar och att det sker då konstiga saker. Nu ska det vara en ren logik. All information ska ligga på de här definierade metadatafältena. Eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Punkt slut. Och den lilla övriga informationen ligger då på sidodatabaserna och på, på, på så att säga logiken i, eh... objekten, alltså föräldrar och, och barn. Och sen så ligger annan uppgiftsinformation då på orderkonceptet.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Eh, men det där blir inget ord om. Det är bara att köra och se till att ta bort, eh, allt så att det inte ligger någon skit kvar då. Punkt två då, slutför objektöversikten. Ja, vi, vi står och stampar och har gjort det länge nu och varit ganska upprörda här då för att steg-- Om vi tittar på hur systemet funkar. Första steget är att kunna få en ordning på ett eller flera då objekt och flera objekt som är länkade till varandra kallar vi kluster då. Och, och sen kan då ett, ett, ett kluster bestå utav flera delkluster.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Eller grenar då, hur, hur man nu ser det där. Men det är otroligt viktigt att det här ska vara spelbart och det ska kunna hanteras, eh, med allt vad det innebär då. Ändringsloggar som tas upp här och att det här då finns hanterbart med inte minst de här släktnamnen då.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Eh, kvalitet och underhåll. Eh, återigen då bara tacksamt ta emot och rensa bort gammalt brus i den här, eh, databasen. Och du har ju fria händer, alltså om det behövs, du kan ju radera allt. Inget utav det data som ligger i systemet nu har någon som helst betydelse, utan det är ju bara då att tanka in. Och kvalitén då, eh, på importen här. En central grej för att kunna importera det här är ju då att kunna importera objekten-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm ...tillhörande metadata och adresserade metadatafält då. Eh, vi har testat det här och det funkar alldeles utmärkt i första steget då med intrinförälder och intrinförälder och intrindummer för att organisera det. Det vi inte har testat som Replit själv kan få testa, det är då uppdatering utav, utav metadata. Så exempelvis då, om jag nu ska importera nu, eh, tio stycken objekt organiserade till varandra med olika kontaktpersoner och, eh, utifrån metadata då eller-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm ...vill jag då då ta utifrån antal eller tjältyp. Och så vill jag nu ändra den här metadatan så att det har blivit fler antal eller nya kontaktpersoner och kanske ett nytt metadatafält som anger färgen på avfallstjälen eller någonting. Då vill jag ju då kunna exportera då objekttlistan med lämpliga referensnummer som vi tar till exempel, eh, eh, de här tio objekten då så har de kanske då ett visst namn, eh, som-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm ...objekt. Ja, då och... exportera jag ut och byter från det. Eller de har en adress eller om vi har butiker som vi har haft uppe som flera exempel så har varje butik ett butiksnummer då. Och det innebär ju då att jag ur det register som finns i RepliT eller i, i Trivo här nu då, kan exportera då så att säga en, en rikslikare. Jag vet inte om du förstår vad en rikslikare är då, men jag förklarar då. Det, den består alltså utav Trivos unika objektnummer, systemskapat. Och sen så består den utav i kolumn två då eller vad det är, så finns det-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm ...ett referen-- en referens, en adress eller ett annat nummer som är känd och kopplingsbar till kundens information då eller vår information, den externa informationen. Och baserat på det här så blir det ju då väldigt lätt att göra en, en inläsningsfil då, där man då styr in unikt mot objektnumret då att det här objektet ska uppdateras, kanske objektnamnet eller då de enskilda metadatafälten. Och de enskilda metadatafälten styrs då in igenom den här matchningsfunktionen då så att",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "man på, eh, rad ett nivå i en CSV-fil eller en Excel-fil då kan bestämma då att kolumn ett är, är Thrivos unika objektnummer. Kolumn två är till exempel föräldernummer eller, eller undervarande nummer beroende på det här, intrinnummer och så vidare. Och sen så kommer då kolumn fem eller sex, beroende på vilken information man har i det här då, så, så kommer då att kolumn sex, säger vi nu då, är det är kontaktperson-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. namn, eh, kolumn sex är kontaktpersontitel och så vidare då. Och på det viset kan vi då adressera in den här, eh, numeriska eller alfanumeriska datan då in i systemet. Eh, i det här läget är det också viktigt att systemet har, har, har, har varningar om man till exempel har ett metadatafält som är definierat då som ja eller nej och så tankar man in då på samma metadatafält då en information som inte är ja eller nej utifrån det färd-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. -fördefinierade formatet då i Metadata Edit och då måste systemet då varna för det här. Och naturligtvis så behöver den också ha varningar då i utifrån, eh, gängse rutiner när man uppdaterar databaser då att man inte, eh, om man då håller på och skriver över historisk information. Och det är också väldigt viktigt här att det finns också en logik, både när det gäller objekt och när det gäller metadata och när det gäller då de här uppgifterna då som skapas.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Ja. Att det är en uppgift som är kopplad då till ett objekt eller till ett orderkoncept eller... Eh, i det här, eh, om, om jag i dag så att säga då väljer att radera bort objektet, det objektet ska inte finnas längre, så måste objektet då kunna inta en status som arke-arkiverad då så att vi inte... Det finns säkert något bra namn på det där utifrån Re-Replics perspektiv då, men det får ju inte bli liksom så att, eh, om jag raderar ett orderkoncept så får ju inte uppgiften falla då därför att den har, den, den vet inte var den kommer ifrån. Om du har någon-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. -uppgift som är kopplad till ett objekt och jag raderar objektet så får ju inte uppgiften falla därför att, eh, objektet inte finns längre. Eh, utan där måste systemet ha en logik då som gör att när man raderar så arkiveras de här och det gäller ju liksom även kunder då. Så att om en, en kund raderas eller ja, arkiveras då som vi säger, så, så kan ju den ku-kunden vara kopplad till, eh, tidigare, eh, uppgifter och orderkoncept. Och då måste den ju leva kvar där så att vi inte får",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "då, eh, registermatchningsluckor baserat på det här, men samtidigt kan hantera en förändring då där en kund kanske försvinner eller byter namn eller något sånt där vid ett givet datum och måste då arkiveras för att det inte blir fel. Och på motsvarande sätt om en butik läggs ner eller flyttas eller något sånt där och det blir förändringar i objektet så måste den kunna liksom hantera då. Och att man även får upp då historiken, eh, trots att objekten kanske inte finns längre då efter ett visst datum. Eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Så, eh, det här är lite grann utav det och vi kommer in då på matchnings, matchnings, eh, utmaningar här då som borde inte vara något problem. För övrigt nu då, första steget är nu att få ordning så vi kan bygga upp och tanka in ett antal testregister över objekten och där tillhörande metadata. Och det kommer då gå till på det viset att vi kommer att tanka in, eh, några listor på objekt och metadata och vi kommer manuellt då skapa, eh, då mindre...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "kluster av, av, av objekt och metadata. Och vi kommer att testa då att, att flytta, eh, och ändra det här då på det sätt som det ska vara. Nästa steg är då att vi kommer då att aktivera ett eller flera orderkoncept och börja hänga på uppgifter på det här. Och då kommer då listan med uppgifter då att levereras in till det som vi kallar grovplaneringen. Och då kommer vi också då att testa den. Och, eh, nu kanske mycket...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Det här kommer att räta till sig i den här städningen. Men vi kan väl säga då att i orderkonceptet har vi testat lite granna, men vi har inte skapat uppgifter skarpt. Och tidigare har det då varit fel här och det är viktigt nu och det är tydligt för Räffligt då att när orderkonceptet aktiveras och vi kör igenom det, då ska det ju då bli uppgifter med de här ganska tunga informationspaketen då som är grunden till då den här, eh, grovplaneringen då.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och när listan har kommit in där då, den kan ju vara som jag har sagt flera gånger nu, flera år lång eller upprepad med samma uppgift som kommer om och om igen, så ska också Räffligt då hålla reda på, eh, de här uppgifternas matchning mot objektets metadata då. Så ligger en uppgift, till exempel en tvätt av ett visst objekt, till exempel en grupp av återvinningskärl då, och den metadata som gäller i dag är tio för antalet.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och den här uppgiften då kanske återkommer åtta gånger framåt i tiden, två gånger varje år. Då kommer ju då utifrån dagsläget så ska ju då alla de här åtta uppgifterna som går ut på att tvätta de här tio kärlen då baseras på antalet tio och baseras på alla den metadata som gäller just nu. Medan-- Men om då första uppgiften ut-utförs och så konstateras det där då, ah, enligt logiken för antal då att det här är inte tio kärl utan det är-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Nej. Tolv kärl. Då ska ju den informationen uppdateras på objektet och samtidigt så ska det vara då en, en körning eller matchning då regelmässigt, eh, en gång per dygn eller något sånt där då. Så att alla då innevarande uppgifter framåt i tiden då uppdateras då med den uppdaterade metadatan då. Och samma sak gäller ju då om man justerar den geografiska platsen. Eh, och där har vi också den här geografiska motorn då som ska hålla reda på det. Men rent praktiskt så kommer det ju att gå till på det viset att kunden kommer att säga kanske en gata-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. -adress och utföraren kommer i utförarappen då att justera den hära utifrån verklig position. Så du kan stå Storgatan 22, men Storgatan 22 är på longitude och latitude si och så. Men i verkligheten så är det den här verkliga platsen, eh, för återvinningsdugan eller, eller återvinningsplatsen då tjugoåtta meter längre bort på baksidan av gården. Och då kommer ju då den nya positionen då, pinpoints, utifrån pinpointsprincipen då, uppdaterad då, eh, och förfinad-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. -den här mätadatan då i objektets, eh, eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "metadata. Och här är det ju också viktigt då att den förstår den här ärv... A-a-att rättigt förstår hur metadata ärvs. Så om jag är ute och tvättar nu då ett unikt kärl som har ärvt adressen eller platsen då ifrån det återvinningsrum, det ovanpåvarande, eh, objektsföräldern då, så är det ju viktigt då att den här förändringen slår igenom logiskt och direkt på toppen så att, så att allt ändras så att det inte blir något mismatch då, att det liksom ändras på en lägre nivå eller något sånt där.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. Utan logik, logik, logik. Hela det systemet bygger på struktur och logik. Och, eh, när vi då har kommit så här långt och fått den här grovplaneringslistan, då kommer vi då att testköra då att kunna lägga över den hära på det som vi kallar finplaneringen och sen kommer vi då att ta fram rut... Eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Nån form av upptopptimering, finplaneringsrutin där. Och sen kommer parallellt med det utförande appen då att matchas in för att få in de här informationen. Och jag vill bara avslutningsvis nu då från högt till lågt, men jag tror Refly tar en god förmåga att fånga upp det hära, att i grovplaneringen så kommer det centrala att vara då nummer ett att alla uppgifter med kompletta datafält eller inkompletta datafält med geografisk koppling eller inte, med faktureringsadress eller fakturakunskoppling eller inte.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Alla de här kommer bara ligga i en lång lista, eh, förhoppningsvis med önskade leveranstider och förhoppningsvis med leveranstidsmotorns optimerade eller framkalkylerade leveranstid. Och om det finns geografiska kopplingar på de här så kommer det då finnas geografisk position då för återigen utifrån den geografiska motorn framkalkylerat då. Och sen så har vi då den tredje att de är då ihopklumpade också då. Så hela den listan kommer då att bestå då utav...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Den bygger alltså på n-när, det vill säga datumet när man kan göra det, var, vad den geografiska positionen är och hur, det vill säga vilken-- Vad är det som ska göras? Vilken uppgift är det? Är det en tvätt? Är det ett samtal eller vad det nu är? Och de här ligger då utifrån närvaro, hur-principen då och påhäng med all den andra i den här långa, långa listan då. Och det sista då som hänger ihop då, när, var, hur, eh, och av vilka då blir då vilken, vilken...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "utförandekod uppgiften har. Är det en, en, en utförandekod som gör att den ska matchas på en kärltvättbil? För rullbara kärl så framgår det där. Och det jag vill bara avsluta med då, för att det här ska kunna funka så kommer det ju då att finnas ett filter här. Och en-- Någonting som inte finns i dag men som Repetir redan kan ta med är att det bör finnas ett litet filterregister då så att man kan alltså s-- U-- Planera det då, kan skapa färdiga register eller kanske till och med då f-färdiga delbilder eller vad vi ska-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. säga då för olika delar utav den här. Så om planeraren vill jobba med rullbara kärl i ett distrikt som vi kallar Sundsvall då, så har han alltså skapat ett filter då så att den ska enbart titta på uppgifter som har med rullbara kärl att göra. Och den ska utifrån nån postnummerbasis då eller polylinjer eller vad vi nu använder då, vara ett distrikt som är då Örnsköldsvik, söderut, ner mot Sundsvall och sen in emot medelpad, Jämtland och, och, och ett område så då. Och då ska man kunna spara den och säga att det här är, är då ett urval för...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och vill, vill planeraren enbart jobba med abiseringsuppgifter som då har en utförade kod, kanske utan geografisk koppling, ja då skapar han ett sånt där filter för abiseringar då. Och så styr han in det på, på när den önskade eller planerade tiden är och så kommer han då kunna, kunna se då på det här utifrån ett dagsperspektiv eller veckoperspektiv då. Eh, där ber jag rättvist att liksom fundera på det här, för det här blir ju då väldigt centralt då i det hela. Eh, administrationen-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. Utan uppgifter då. Och som, eh, hela produkten utav det där blir ju då funktionen där man då antingen utifrån enskilda uppgifter eller utifrån en eller flera hopklumpade uppgifter då utifrån, utifrån då den här hopklumpningsmotorns resultat och pekar ut de här på en utförare då. Så att man, man använder filtret och så, eh, markerar man för och tilldelar då uppgifterna. Och här är också väldigt viktigt då att...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Eh, vid sidan om själva filtret så redovisar hela tiden grovplaneringen då, eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "vilken produktionstid, eh, det tar att göra då det här. För den kommer ju-- Det kommer att vara det centrala då i att planera en, en vecka då för en produktionsenhet att ut-- Planeraren tittar då, ja, den här veckan kommer det här produktionsteamet kunna leverera t-trettio. Man har tillgänglig, säger vi, trettio produktionstimmar och då kommer ju, eh, planeraren då att sålla fram då de aktuella jobben som går att göra så att han får ihop då tjugoåtta eller trettio eller kanske trettiofem.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "produktionstimmar. Och baserat på hans kunskap då så kommer han att tilldela de här uppgifterna då på den här, eh, produktionsteamet då inne på deras finplanering. Och kvar då så har han ju då resterande uppgifter och de får han ju då att titta på och så kunna sortera dem från, från tider. Så att han-- Om han upptäcker nu då att han på grovplaneringslistan, trots att han har lagt ut fulla veckor, ändå har fem stycken klumpar med jobb som enligt överenskommelse ska göras då.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Vecka tjugonio innan vecka tjugonio är slut. Så får han ju då gå in på dem och se om han kan då trycka in dem på nån utav produktionsveckorna och vilka fördelar det får om det blir övertid eller om han kan pusha in dem eller att han till och med kan plocka tillbaka jobb då för att göra en omplanering. För det här kommer ju att vara en ständig dynamik då att det kommer att komma in nya jobb. Eh, kunderna kanske matar in jobb via, via sina kundportaler och det kommer ju liksom-- Det är ett digert arbete att hela tiden ligga och hålla huvudet...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "I nån slags rumstecken över vattenytan då och lägga ut de här jobbena och både se till att jobben blir gjorda med lika mycket då att se till att produktionsteamens veckor fylls till, till, till rågor eller till bredden då med den här överbokningslogiken som vi, vi har pratat om då. Så att man verkligen maximerar produktionen då. Och sen ruttet optimeras det och det här förs upp då hela tiden utav den här tidskoden.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    }
+  ]
+}

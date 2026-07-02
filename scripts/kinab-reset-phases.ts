@@ -78,7 +78,6 @@ export function buildResetPhases(tenant: string): ResetPhase[] {
         ["portal_user_object_scopes", `object_id IN (SELECT id FROM objects WHERE tenant_id = '${tenant}')`],
         ["object_contacts", `tenant_id = '${tenant}'`],
         ["object_images", `tenant_id = '${tenant}'`],
-        ["object_metadata", `tenant_id = '${tenant}'`],
         ["metadata_editor_submissions", `object_id IN (SELECT id FROM objects WHERE tenant_id = '${tenant}')`],
         ["object_articles", `tenant_id = '${tenant}'`],
         ["object_payers", `tenant_id = '${tenant}'`],

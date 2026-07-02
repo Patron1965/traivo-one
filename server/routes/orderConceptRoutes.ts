@@ -8,7 +8,7 @@ import { formatZodError, verifyTenantOwnership, DEFAULT_TENANT_ID } from "./help
 import { getTenantIdWithFallback } from "../tenant-middleware";
 import { asyncHandler } from "../asyncHandler";
 import { NotFoundError, ValidationError, ForbiddenError } from "../errors";
-import { objects, workOrders, customerCommunications, objectContacts, orderConceptArticles, orderConceptObjects, articleObjectMappings, conceptFilters, priceLists, objectMetadata, metadataDefinitions, deliverySchedules, assignments as assignmentsTable, articles, type InsertOrderConceptArticle } from "@shared/schema";
+import { objects, workOrders, customerCommunications, objectContacts, orderConceptArticles, orderConceptObjects, articleObjectMappings, conceptFilters, priceLists, deliverySchedules, assignments as assignmentsTable, articles, type InsertOrderConceptArticle } from "@shared/schema";
 import { getISOWeek, getStartOfISOWeek, getDateFromWeekdayInMonth } from "./helpers";
 import { getOrderConceptMethod } from "@shared/order-concept-method";
 import { computeConceptOrderValue } from "@shared/order-concept-value";
@@ -730,35 +730,13 @@ app.get("/api/invoice-preview", asyncHandler(async (req, res) => {
     // Get invoice rules
     const rules = await storage.getInvoiceRules(tenantId, orderConceptId as string | undefined);
     
-    // Group orders by invoice stop-level (or customer as fallback)
-    const ordersByInvoiceTarget: Record<string, { customerId: string; stopObjectName: string | null; invoiceReference: string | null; orders: typeof completedOrders }> = {};
-    for (const order of completedOrders) {
-      let targetKey = order.customerId || 'unknown';
-      let stopObjectName: string | null = null;
-      let invoiceReference: string | null = null;
-      
-      if (order.objectId) {
-        const stopLevel = await storage.findInvoiceStopLevel(order.objectId, tenantId);
-        if (stopLevel) {
-          targetKey = stopLevel.customerId;
-          stopObjectName = stopLevel.objectName;
-          invoiceReference = stopLevel.invoiceReference;
-        }
-      }
-      
-      if (!ordersByInvoiceTarget[targetKey]) {
-        ordersByInvoiceTarget[targetKey] = { customerId: targetKey, stopObjectName, invoiceReference, orders: [] };
-      }
-      ordersByInvoiceTarget[targetKey].orders.push(order);
-    }
-    
+    // Task #992-cleanup: fakturamottagare/-stopp härleds i konsoliderings- och
+    // export-flödet (resolveInvoiceRecipient). Denna preview grupperar orders på
+    // beställande kund.
     const ordersByCustomer: Record<string, typeof completedOrders> = {};
-    const invoiceStopInfo: Record<string, { stopObjectName: string | null; invoiceReference: string | null }> = {};
-    for (const [key, target] of Object.entries(ordersByInvoiceTarget)) {
-      ordersByCustomer[target.customerId] = [...(ordersByCustomer[target.customerId] || []), ...target.orders];
-      if (!invoiceStopInfo[target.customerId] && target.stopObjectName) {
-        invoiceStopInfo[target.customerId] = { stopObjectName: target.stopObjectName, invoiceReference: target.invoiceReference };
-      }
+    for (const order of completedOrders) {
+      const cid = order.customerId || 'unknown';
+      ordersByCustomer[cid] = [...(ordersByCustomer[cid] || []), order];
     }
     
     // Get all customers for name lookup
@@ -863,12 +841,9 @@ app.get("/api/invoice-preview", asyncHandler(async (req, res) => {
         }
       }
       
-      const stopInfo = invoiceStopInfo[cid];
       invoicePreviews.push({
         customerId: cid,
         customerName: customer?.name || 'Okänd kund',
-        invoiceStopObject: stopInfo?.stopObjectName || null,
-        invoiceReference: stopInfo?.invoiceReference || null,
         invoiceType,
         headerMetadata,
         lines,

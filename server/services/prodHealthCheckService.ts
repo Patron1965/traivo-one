@@ -141,7 +141,6 @@ function buildCountList(tenantId: string): CountRow[] {
     { label: "price_lists (kund)", table: "price_lists", whereSql: "tenant_id = $1 AND customer_id IS NOT NULL", params: T },
     { label: "price_list_articles", table: "price_list_articles", whereSql: "price_list_id IN (SELECT id FROM price_lists WHERE tenant_id = $1)", params: T, expectNonZero: true },
     { label: "checklist_templates", table: "checklist_templates", whereSql: "tenant_id = $1", params: T },
-    { label: "metadata_definitions", table: "metadata_definitions", whereSql: "tenant_id = $1", params: T },
     { label: "portal_users", table: "portal_users", whereSql: "customer_id IN (SELECT id FROM customers WHERE tenant_id = $1)", params: T },
     { label: "portal_user_object_scopes", table: "portal_user_object_scopes", whereSql: "portal_user_id IN (SELECT pu.id FROM portal_users pu JOIN customers c ON c.id = pu.customer_id WHERE c.tenant_id = $1)", params: T },
     { label: "fortnox_config", table: "fortnox_config", whereSql: "tenant_id = $1", params: T },

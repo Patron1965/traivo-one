@@ -2,16 +2,15 @@ import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
 import type { Request, Response, NextFunction, Express } from "express";
 import { AppError } from "../../server/errors";
 
-// Task #992: /api/metadata-definitions serveras nu som en KOMPATIBILITETS-VY
+// Task #992 + cleanup: /api/metadata-definitions serveras som en KOMPATIBILITETS-VY
 // över den kanoniska svenska metadata_katalog. De engelska tabellerna
-// (metadata_definitions/object_metadata) är read-only audit/rollback och får
-// ALDRIG skrivas härifrån. Detta integrationstest kör mot riktig DB via en
-// monterad kpiRoutes-app och verifierar:
+// (metadata_definitions/object_metadata) är BORTTAGNA — den engelska formen finns
+// bara kvar som en projektion (MetadataDefinition-interface) frontend väntar sig.
+// Detta integrationstest kör mot riktig DB via en monterad kpiRoutes-app och verifierar:
 //   - GET list/usage speglar katalogen i den engelska formen frontend väntar sig
 //     (id===katalog.id, fieldKey/fieldLabel=namn, dataType-mappning), inkl.
 //     beräknade (arBeraknad) fält.
-//   - POST skapar en svensk katalogpost (namn härleds från fieldKey) och INGEN
-//     engelsk metadata_definitions-rad.
+//   - POST skapar en svensk katalogpost (namn härleds från fieldKey).
 //   - Universalnyckel-skydd: rename (fieldLabel) av ett fält i bruk → 409.
 //   - DELETE soft-deletear via confirmUsage-grinden (exakt match krävs).
 //   - System-fält kan inte raderas; cross-tenant id → 404.
@@ -37,7 +36,6 @@ import {
   tenants,
   metadataKatalog,
   metadataVarden,
-  metadataDefinitions,
 } from "@shared/schema";
 import { and, eq } from "drizzle-orm";
 import { registerKPIRoutes } from "../../server/routes/kpiRoutes";
@@ -169,7 +167,6 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await db.delete(metadataVarden).where(eq(metadataVarden.tenantId, TENANT_A));
-  await db.delete(metadataDefinitions).where(eq(metadataDefinitions.tenantId, TENANT_A));
   await db.delete(metadataKatalog).where(eq(metadataKatalog.tenantId, TENANT_A));
   await db.delete(metadataKatalog).where(eq(metadataKatalog.tenantId, TENANT_B));
   await db.delete(tenants).where(eq(tenants.id, TENANT_A));
@@ -229,13 +226,6 @@ describe("/api/metadata-definitions kompatibilitets-vy (Task #992)", () => {
     expect(row).toBeTruthy();
     expect(row.datatyp).toBe("decimal"); // number → decimal
     expect(row.beskrivning).toBe("Nytt Fält Etikett"); // fieldLabel ≠ namn → beskrivning
-
-    // Ingen engelsk definition skrevs.
-    const englishRows = await db
-      .select()
-      .from(metadataDefinitions)
-      .where(eq(metadataDefinitions.tenantId, TENANT_A));
-    expect(englishRows.length).toBe(0);
   });
 
   it("PATCH: rename (fieldLabel) av ett fält i bruk → 409", async () => {

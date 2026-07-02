@@ -315,7 +315,6 @@ const OBJECT_CHILDREN = [
   "object_articles",
   "object_contacts",
   "object_images",
-  "object_metadata",
   "object_parents",
   "object_payers",
   "object_time_restrictions",
@@ -621,7 +620,6 @@ async function migrateConfig(prod: pg.PoolClient): Promise<void> {
   );
 
   await copyTable(prod, "checklist_templates", `tenant_id = $1`, [TENANT]);
-  await copyTable(prod, "metadata_definitions", `tenant_id = $1`, [TENANT]);
 
   await copyTable(prod, "fortnox_config", `tenant_id = $1`, [TENANT]);
   await copyTable(prod, "fortnox_mappings", `tenant_id = $1`, [TENANT]);
@@ -785,7 +783,6 @@ async function migrateCustomers(prod: pg.PoolClient): Promise<void> {
   log(`  Antal objekt att hänga av: ${objectIds.length}`);
 
   await copyTable(prod, "object_parents", `tenant_id = $1 AND object_id = ANY($2::text[])`, [TENANT, objectIds]);
-  await copyTable(prod, "object_metadata", `tenant_id = $1 AND object_id = ANY($2::text[])`, [TENANT, objectIds]);
   await copyTable(prod, "object_contacts", `tenant_id = $1 AND object_id = ANY($2::text[])`, [TENANT, objectIds]);
   // object_images SKIPPAS avsiktligt — uppladdade media är out-of-scope för
   // slim-migreringen (object-storage-artefakter följer inte med dev→prod).

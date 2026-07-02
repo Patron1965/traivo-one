@@ -7,7 +7,7 @@ import { formatZodError, verifyTenantOwnership, DEFAULT_TENANT_ID, ensureResourc
 import { getTenantIdWithFallback } from "../tenant-middleware";
 import { asyncHandler } from "../asyncHandler";
 import { NotFoundError, ValidationError, ForbiddenError, describeFortnoxMappingConflict } from "../errors";
-import { objects, workOrders, articles, customers, fortnoxMappings, objectContacts, importBatches, objectMetadata, metadataDefinitions, assignments, type InsertWorkOrder, type ServiceObject, type Assignment } from "@shared/schema";
+import { objects, workOrders, articles, customers, fortnoxMappings, objectContacts, importBatches, assignments, type InsertWorkOrder, type ServiceObject, type Assignment } from "@shared/schema";
 import {
   shouldSplitForStockPickup,
   resolveStockLocation,

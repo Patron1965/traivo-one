@@ -21,6 +21,7 @@ import {
   ObjectWithAllMetadataEAV,
   GeographicPosition,
   OrderTypeMetadataLink,
+  MetadataDefinition,
 } from "@shared/schema";
 
 // Task #663: katalogtyp berikad med dess kundlås-kopplingar (tom array = generellt
@@ -201,7 +202,6 @@ export function coerceMetadataVardeFromRaw(
 // Det engelska legacy-systemet (metadata_definitions.data_type / object_metadata)
 // använder ett mindre typvokabulär än den svenska katalogen
 // (metadata_katalog.datatyp / metadata_varden). Dessa mappningar används av
-// backfill-migreringen (scripts/backfill-english-metadata-to-swedish.ts) och av
 // kompatibilitets-API:t (/api/metadata-definitions som vy över katalogen) så att
 // en engelsk definition kan speglas mot rätt svensk datatyp och tvärtom.
 // ----------------------------------------------------------------------------
@@ -480,22 +480,9 @@ export async function getMetadataKatalogUsage(
 //     valbara definitioner (T002 strippar bara deras *värden* vid matchning).
 // ----------------------------------------------------------------------------
 
-export interface MetadataDefinitionCompat {
-  id: string;
-  tenantId: string;
-  fieldKey: string;
-  fieldLabel: string;
-  dataType: string;
-  propagationType: string;
-  applicableLevels: string[];
-  defaultValue: string | null;
-  validationRules: Record<string, unknown>;
-  isRequired: boolean;
-  sortOrder: number;
-  createdAt: Date;
-  deletedAt: Date | null;
-  replacedByDefinitionId: string | null;
-}
+// Task #992-cleanup: identisk form som den (nu tabell-lösa) MetadataDefinition i
+// @shared/schema. Aliasas för att undvika drift mellan compat-vyn och frontend-typen.
+export type MetadataDefinitionCompat = MetadataDefinition;
 
 // Speglar en svensk katalograd till den engelska MetadataDefinition-formen som
 // frontend förväntar sig. `byId` används av deriveMetadataDotKey för att hitta

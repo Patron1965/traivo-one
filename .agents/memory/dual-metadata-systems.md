@@ -1,15 +1,17 @@
 ---
-name: Två parallella metadata-system
-description: Traivo har två metadata-modeller (engelsk vs svensk); svenska är nu KANONISK källa för objekt-metadata, engelska är read-only audit/rollback (round-trip-drift löst).
+name: Metadata-systemet (svenska = enda systemet)
+description: Svenska metadata-systemet (metadataKatalog/Varden/Historik) är ENDA källan för objekt-metadata; det engelska metadataDefinitions/objectMetadata-systemet är BORTTAGET (bara TS-interfacet MetadataDefinition kvar som compat-vy-form).
 ---
 
-# Två parallella metadata-system i Traivo
+# Metadata-systemet i Traivo (svenska = enda systemet)
 
-Det finns TVÅ separata dynamiska metadata-modeller som lever sida vid sida:
+Det fanns historiskt TVÅ dynamiska metadata-modeller. Det ENGELSKA systemet
+(`metadataDefinitions` + `objectMetadata`) är nu **HELT BORTTAGET** (tabeller droppade,
+kontraktsfas — ingen prod-data, ingen expand-contract). Kvar finns bara det svenska
+systemet + ett rent TS-interface `MetadataDefinition` (`shared/schema.ts`) som beskriver
+formen `/api/metadata-definitions`-compat-vyn returnerar.
 
-- **Engelsk:** `metadataDefinitions` (katalog) + `objectMetadata` (värden). Stödjer
-  soft-delete (`deletedAt`), `confirmUsage`-livscykel m.m. (se metadata-definitions-lifecycle).
-- **Svensk ("post-it"):** `metadataKatalog` (definition: `namn`, `beteckning`,
+- **Svensk ("post-it") — ENDA systemet:** `metadataKatalog` (definition: `namn`, `beteckning`,
   `datatyp`, `allowedValues`, `allowDuplicates`, `kronologiskVisning`,
   `standardArvs`) + `metadataVarden` (typade värdekolumner) + `metadataHistorik`
   (arkiv). INGEN soft-delete — filtrera enbart på `tenantId`.
@@ -20,32 +22,29 @@ Det finns TVÅ separata dynamiska metadata-modeller som lever sida vid sida:
 - **Kompletterande** (`allowDuplicates=true`): nytt värde läggs till parallellt
   (INSERT). Identiska värden hoppas över (idempotent re-import).
 
-## Kanonisk källa = svenska systemet (round-trip-drift LÖST)
-Svenska modellen (`metadataKatalog/Varden/Historik`) är nu ENDA kanoniska källan för
-objekt-metadata. ALLA läsare, skrivare OCH villkorsmotorn (orderkoncept-targeting,
-portal-vy, KPI-CRUD, telink-synk, object-copy, objektmall import OCH export) går mot
-svenska systemet. Engelska tabellerna (`metadataDefinitions/objectMetadata`) är denna
-release READ-ONLY audit/rollback — INGA nya skrivningar (markerade `@deprecated` i
-`shared/schema.ts` + `server/storage.ts`). Inga drops (expand-contract).
+## Enda källan = svenska systemet (engelska BORTTAGET)
+Svenska modellen (`metadataKatalog/Varden/Historik`) är ENDA källan för objekt-metadata.
+ALLA läsare, skrivare OCH villkorsmotorn (orderkoncept-targeting, portal-vy, KPI-CRUD,
+telink-synk, object-copy, objektmall import OCH export) går mot svenska systemet. De
+engelska tabellerna (`metadataDefinitions/objectMetadata`) är **droppade** — inga rader,
+inga relationer, inga insert/select-typer kvar.
 
-- `/api/metadata-definitions` (alla 6 endpoints) serveras som en COMPAT-vy över
+- `/api/metadata-definitions` (alla endpoints) serveras fortfarande som en COMPAT-vy över
   `metadataKatalog` via `getMetadataDefinitionsCompat`/`katalogToDefinitionCompat`
-  (`id=katalog.id`, `fieldKey=deriveMetadataDotKey ?? namn`, `fieldLabel=namn`).
+  (`id=katalog.id`, `fieldKey=deriveMetadataDotKey ?? namn`, `fieldLabel=visningsnamn ?? namn`).
   Frontend (ObjectsPage, Articles*, orderkoncept-steg, MetadataDefinitionsPage,
-  IndustryPackages) är oförändrad — den läser fortfarande engelska FORMEN men datan
-  kommer från svenska katalogen.
-- Objektmall-EXPORT round-trippar nu: läser `getMetadataDefinitionsCompat` + `metadataVarden`
+  IndustryPackages) är oförändrad — den läser den engelska FORMEN (TS-interfacet
+  `MetadataDefinition`) men datan kommer från svenska katalogen.
+- Objektmall-EXPORT round-trippar: läser `getMetadataDefinitionsCompat` + `metadataVarden`
   (`raderad=false`, `objektId`-nyckel via `getDisplayValue`); kolumnrubrik = `fieldKey`
   (ej `fieldLabel`) så återimport matchar `buildMetadataTypeLookup`.
-- Backfill engelska→svenska: `scripts/backfill-english-metadata-to-swedish.ts` (dry-run
-  default, `--confirm`; registrerad i `scripts/post-merge.sh` så prod backfillas vid merge).
 
 **Why:** Importen skrev redan svenska (mall-semantiken `allowDuplicates`/`kronologiskVisning`
 finns bara där) men resten läste engelska → en importerad fil tappade sina värden vid
 export/koncept-expansion. Arkitekt-bekräftat: svenska = kanonisk.
 
-**How to apply:** Skriv ALDRIG nytt mot `objectMetadata`/`metadataDefinitions` (insert/update).
-Läs/skriv objekt-metadata via `server/metadata-queries.ts` (`createMetadata`/`updateMetadata`/
+**How to apply:** De engelska tabellerna finns inte längre — läs/skriv objekt-metadata ALLTID
+via `server/metadata-queries.ts` (`createMetadata`/`updateMetadata`/
 `deleteMetadata`/`writeImportedMetadataValue`/`getObjectsConditionMetadata`). Matcha katalog
 på `namn` ELLER `beteckning` (case-insensitivt). Datatyp-mappning: `mapEnglishDataTypeToDatatyp`
 /`mapDatatypToEnglishDataType`. Behåll computed (`arBeraknad` strippas vid läsning + blockeras
@@ -65,11 +64,10 @@ väljer kanonisk: is_system → har beteckning → äldst, pekar om ALLA refs in
 `import_templates.field_ids[]` + `parent_metadata_id`, sedan delete). `concept_filters.metadata_key`
 matchar på namn-sträng → kanonisk måste behålla namnet.
 
-## Blockera nedärvning sker i svenska systemet (inte engelska breaksInheritance)
+## Blockera nedärvning sker i svenska systemet (metadataVarden.stoppaVidareArvning)
 Objektformulärets metadata-datapath är det svenska systemet. "Blockera nedärvning"
 (stoppa ett fält från att ärvas vidare till barn) styrs av `metadataVarden.stoppaVidareArvning`
 — resolvern (`getObjectWithAllMetadata`) ackumulerar blockerade katalog-id nedför kedjan.
-Engelska `objectMetadata.breaksInheritance` är en **no-op** för formulärets vy.
 
 För ett ÄRVT fält (source='inherited', `id` = förfaderns rad — PATCH:a den ALDRIG):
 materialisera en lokal kopia via `POST /api/metadata/` och sätt sedan
@@ -120,8 +118,7 @@ Källa till områdesvärden/ordning/etiketter: `shared/metadata-areas.ts` (delas
 
 **Why:** Två fack för samma syfte gav dubbel logik (`område || kategori`) och drift.
 **How to apply:** Lägg aldrig nya beroenden mot `kategori` och gruppera/filtrera aldrig på
-den. Lägg nya områdesvärden i `shared/metadata-areas.ts`. OBS: detta gäller ENBART svenska
-systemet — engelska `metadataDefinitions` har sitt eget `category`-fält, orört.
+den. Lägg nya områdesvärden i `shared/metadata-areas.ts`.
 
 ## Artikel-koppling: två katalog-nycklar i SAMMA formulär
 Artikel-metadata kopplas på två sätt som råkar se identiska ut i UI:t men träffar

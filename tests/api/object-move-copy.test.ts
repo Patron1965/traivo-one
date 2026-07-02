@@ -15,8 +15,6 @@ import {
   objects,
   objectPayers,
   objectParents,
-  objectMetadata,
-  metadataDefinitions,
   metadataKatalog,
   metadataVarden,
 } from "@shared/schema";
@@ -143,10 +141,8 @@ afterAll(async () => {
   // Bäst-möjlig städning i FK-säker ordning. Lindas i try/catch eftersom
   // kopiering kan ha skapat extra rader (kluster m.m.) som inte är i scope.
   try {
-    await db.delete(objectMetadata).where(inArray(objectMetadata.tenantId, [TENANT_A, TENANT_B]));
     await db.delete(metadataVarden).where(inArray(metadataVarden.tenantId, [TENANT_A, TENANT_B]));
     await db.delete(metadataKatalog).where(inArray(metadataKatalog.tenantId, [TENANT_A, TENANT_B]));
-    await db.delete(metadataDefinitions).where(inArray(metadataDefinitions.tenantId, [TENANT_A, TENANT_B]));
     await db.delete(objectParents).where(inArray(objectParents.tenantId, [TENANT_A, TENANT_B]));
     await db.delete(objectPayers).where(inArray(objectPayers.tenantId, [TENANT_A, TENANT_B]));
     await db.delete(objects).where(inArray(objects.tenantId, [TENANT_A, TENANT_B]));
@@ -289,10 +285,9 @@ describe("POST /api/objects/:id/copy — gren-kopiering remappar parentId", () =
   });
 });
 
-describe("POST /api/objects/:id/copy — metadata-kopiering (lokala kopieras, ärvda fryses ej)", () => {
-  let defLocal: string;
-  let defInherited: string;
-  let katalogId: string;
+describe("POST /api/objects/:id/copy — metadata-kopiering (egna kopieras, ärvda fryses ej)", () => {
+  let katalogLocal: string;
+  let katalogParent: string;
   let parent: string;
   let source: string;
 
@@ -303,56 +298,46 @@ describe("POST /api/objects/:id/copy — metadata-kopiering (lokala kopieras, ä
     source = s.id;
     await addPrimaryPayer(source, TENANT_A);
 
-    // Engelska metadata-systemet: två definitioner — en lokal (egen) rad och en
-    // ärvd rad (inheritedFromObjectId satt). Endast den lokala ska kopieras.
-    const [dl] = await db.insert(metadataDefinitions).values({
-      tenantId: TENANT_A, fieldKey: `${NS}_local`, fieldLabel: "Lokal", dataType: "text",
+    // Task #992-cleanup: den engelska metadata-modellen är borttagen — endast den
+    // svenska metadata_varden finns kvar. Ett EGET värde på källobjektet ska
+    // kopieras; ett värde som bara finns på FÖRÄLDERN (ärvs on-read av källan) ska
+    // INTE frysas in på klonen.
+    const [katL] = await db.insert(metadataKatalog).values({
+      tenantId: TENANT_A, namn: `${NS}-eget`, datatyp: "string",
     }).returning();
-    defLocal = dl.id;
-    const [di] = await db.insert(metadataDefinitions).values({
-      tenantId: TENANT_A, fieldKey: `${NS}_inh`, fieldLabel: "Ärvd", dataType: "text",
+    katalogLocal = katL.id;
+    const [katP] = await db.insert(metadataKatalog).values({
+      tenantId: TENANT_A, namn: `${NS}-arvt`, datatyp: "string",
     }).returning();
-    defInherited = di.id;
+    katalogParent = katP.id;
 
-    await db.insert(objectMetadata).values([
-      { tenantId: TENANT_A, objectId: source, definitionId: defLocal, value: "lokalt-värde", inheritedFromObjectId: null },
-      { tenantId: TENANT_A, objectId: source, definitionId: defInherited, value: "ärvt-värde", inheritedFromObjectId: parent },
-    ]);
-
-    // Svenska metadata-systemet: ett lokalt metadata_varden-värde ska kopieras.
-    const [kat] = await db.insert(metadataKatalog).values({
-      tenantId: TENANT_A, namn: `${NS}-katalog`, datatyp: "string",
-    }).returning();
-    katalogId = kat.id;
+    // Eget värde på källan — ska kopieras.
     await db.insert(metadataVarden).values({
-      tenantId: TENANT_A, objektId: source, metadataKatalogId: katalogId, vardeString: "sv-lokalt",
+      tenantId: TENANT_A, objektId: source, metadataKatalogId: katalogLocal, vardeString: "sv-lokalt",
+    });
+    // Ärvt värde: lagras BARA på föräldern, aldrig som egen rad på källan.
+    await db.insert(metadataVarden).values({
+      tenantId: TENANT_A, objektId: parent, metadataKatalogId: katalogParent, vardeString: "sv-arvt",
     });
   });
 
-  it("kopierar lokala metadata men hoppar över ärvda engelska rader", async () => {
+  it("kopierar egna svenska metadata men fryser inte ärvda (förälder-)värden", async () => {
     const res = await req("POST", `/api/objects/${source}/copy`, { userId: ADMIN_A, body: { mode: "single" } });
     expect(res.status).toBe(201);
     const cloneId: string = res.body.id;
     expect(cloneId).toBeTruthy();
     expect(res.body?.metadataCopyError).toBeNull();
 
-    const cloneEnglish = await db.select().from(objectMetadata)
-      .where(and(eq(objectMetadata.objectId, cloneId), eq(objectMetadata.tenantId, TENANT_A)));
-    // Endast den lokala raden (inheritedFromObjectId NULL) ska finnas på klonen.
-    expect(cloneEnglish).toHaveLength(1);
-    expect(cloneEnglish[0].definitionId).toBe(defLocal);
-    expect(cloneEnglish[0].value).toBe("lokalt-värde");
-    expect(cloneEnglish[0].inheritedFromObjectId).toBeNull();
-    // Den ärvda definitionen ska INTE ha kopierats (återupplöses on-read).
-    expect(cloneEnglish.some((r) => r.definitionId === defInherited)).toBe(false);
-
     const cloneSwedish = await db.select().from(metadataVarden)
       .where(and(eq(metadataVarden.objektId, cloneId), eq(metadataVarden.tenantId, TENANT_A)));
+    // Endast källans EGNA rad ska ha kopierats — förälderns (ärvda) värde fryses ej.
     expect(cloneSwedish).toHaveLength(1);
+    expect(cloneSwedish[0].metadataKatalogId).toBe(katalogLocal);
     expect(cloneSwedish[0].vardeString).toBe("sv-lokalt");
+    expect(cloneSwedish.some((r) => r.metadataKatalogId === katalogParent)).toBe(false);
 
-    // Rapporterad räknare = 1 engelskt lokalt + 1 svenskt lokalt.
-    expect(res.body?.copiedMetadata).toBe(2);
+    // Rapporterad räknare = 1 svenskt eget värde.
+    expect(res.body?.copiedMetadata).toBe(1);
   });
 });
 
