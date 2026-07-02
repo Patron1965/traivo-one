@@ -39,3 +39,13 @@ Antalskedja (prioritet lägst→högst): planerat antal på orderkoncept → mat
 - Hänger ihop med motor 7 (fysiska artiklar): överskott ska tillbaka till lager (serviceföretag vill inte ha sidolager i servicebilar = obetalt kapital).
 - Utförarappen: sista antalet gäller i huvudvyn; **expansionsfunktion** för att se historik / justera taget antal (ej plats för 5 antal på telefonskärm).
 **Why:** standardlogik i svenska service-/teknikaffärssystem; behövs för korrekt fakturering + lagersaldo när verkligt åtgångsantal ≠ planerat.
+
+## 6. Genomgång 2026-07-02 → utvecklingslogg
+Produktägaren gick punkt-för-punkt genom uppgiftsmodell-analysen (två röst-sessioner + Excel-matrisen) och bekräftade/utvecklade. Fullständiga beslut + parkerat framtida arbete ligger i **`docs/uppgiftslogik-utvecklingslogg.md`**. Nyckelbeslut att vara konsistent med:
+- **Allt är uppgifter** byggda av artiklar; produktion/restid/egentid/spilltid = olika uppgiftstyper med olika utförandekod. Egentid/restid/personal → **rapporter, inte fakturor**.
+- **Över- + underbokning slås ihop** till ETT koncept ("spilltid", namn ej spikat). Överlappningsregel: **endast egentid** får överlappas; produktionstid och restid **aldrig**. Systemet **bokar inte** i v1 (manuell planerare, ingen inlärning); auto-/AI-bokning är deferrad.
+- **Ej-utförd orsak** = systemskapad metadata på objektet (orsak + ursprung + tidpunkt) + filter/rapport.
+- **Kontering:** team + kostnadsställe + projekt måste följa med i uppgiftens informationspaket → fakturan (föds ur team-uppsättningen).
+- **Leveranstider** = INTE en "trio" utan N tidsfönster (hård/mjuk, positiv/negativ) + SLA-trendvarning.
+- **Deferrade motorer (utvecklingslogg):** kapacitets-/fyllnadsmotor (vatten/lakvatten/avfall), arbetstids-/lönemodul (flextidsbank/beordrad övertid/tidskoder, steg 2), geografisk yta/linje-motor, tvåstegs-navigation i fältappen, metadata på fakturarad.
+**Why:** produktägaren betonade att grunderna inte får ha frågetecken och bad uttryckligen om en utvecklingslogg för senare bygge.

@@ -1,0 +1,710 @@
+{
+  "sessionId": "ef9c10005",
+  "exportedAt": "2026-07-02T10:55:28.228Z",
+  "summary": "### Key Topics Discussed\n- Confirmation, development, clarification, and answers regarding the analysis of the final part.\n- Adaptation of task categories to reflect new time definitions in a “gap time” concept.\n- Four sources understanding.\n- Task status and business status.\n- Planning flow and its connection to statuses.\n- Overbooking section and system handling of overbookings.\n- Overlapping of tasks and internal time (egentid) on schedules.\n- Impact of travel time to work on personal time (egentid) and job start times.\n- System calculation for periodic or on-demand recalculation of planning.\n- Limitations for system calculations, especially for long-term rough planning lists.\n- Management of overbooked time in relation to time banks (flextidsbank) and potential ordered overtime.\n- Classification and reporting of ordered overtime according to Swedish labor law.\n- Integration of actual worked time, overtime, and absence time into the system for payroll reporting, including all types of tasks (travel, sick leave, vacation, night rest).\n- Definition of tasks within the system, where all activities are considered tasks involving employees (production, travel, internal time, and personal tasks).\n- Handling of deviations in rough planning, which are central to planning.\n- The mechanism for creating metadata fields for deviations based on task status changes.\n- Administrative tasks, their flexibility in terms to f location (car, office), and the lack of geographical requirements for such tasks.\n- Geographical positioning of internal time (egentid) tasks based on employee's stated residence or location during off-duty periods (e.g., weekend rest).\n- Employee preference for longer workdays (e.g., ten-hour days) to condense the work week and return home sooner, and how this is reflected in rough planning from the planner's perspective.\n- Adjustments to work schedules (e.g., due to weather or traffic) and their reflection in detailed planning.\n- Importance of team cohesion, where a team consists of one or more employees, vehicles, or equipment.\n- Simple calendar logic and how the system should guide employees, especially in teams.\n- How the system should handle individual employee absences (e.g., sickness, dental appointments) within a team, including internal time and potential salary deductions.\n- Location requirements and handling of travel/movement time when a vehicle is on-site.\n- System recognition of pinpointed addresses for vehicle access and the use of AI for location determination (e.g., areas for grass cutting).\n- Two-step navigation for job locations, where the first step is vehicle navigation to a primary address (e.g., Kungsgatan 22) and the second step involves guidance within the execution app for the final meters to the exact work location (e.g., 50 meters into a garage or park).\n- Handling of pinpointed addresses, including multi-level structures (Z-axis) within large shopping centers or specific points within parks.\n- Future development for recognizing and working with areas (e.g., grass cutting) or lines (e.g., road maintenance, streetlights) rather than just pinpointed addresses, requiring the geographical engine to determine start points (e.g., middle, east, west).\n- The need for the system to be able to plan for objects spanning more than a couple of hundred meters, where the starting point (north, east, west) matters for handling large areas, unlike smaller areas like a football field.\n- Vendor and equipment levels, which should be considered as part of the team's or performer's capabilities.\n- The current production code for tasks is primarily from a production perspective.\n- The concept of \"spilltid\" (unused time/gap in schedule), which the system needs to define as a task.\n- The close relation between overbooking (overlapping) and \"underbokning\" (gaps/spilltid) and the suggestion to combine their management in the system.\n- Overlapping of time windows for tasks.\n- System warnings for production time exceeding the desired or required delivery time (e.g., beyond 4 PM).\n- The importance of the system warning about potential delays before they become a fact, leveraging trends and available information.\n- The system acting as a decision support or AI tool for the planner when jobs are at risk of exceeding deadlines.\n- The existence of a general delivery time for tasks, in addition to one or more time windows.\n- Time windows can have positive or negative availability (e.g., unavailability for lunch between 11 AM and 2 PM).\n- Time windows can be hard (mandatory) or soft (recommendation).\n- Overbooking policy and system's role in booking.\n- Initial planning process: Planner assigns tasks to execution teams.\n- Performer's view in rough planning: only sees the total production time sum.\n- Planner's role in creating a fine-grained plan for teams, including route optimization for daily tasks.\n- System's ability to handle overbooking at a weekly total level or as specific intrusions into team's internal time (egentid).\n- The importance of efficient planning to minimize travel time, especially when moving individual tasks between days.\n- The preference for performing all jobs at the same location to increase efficiency and minimize travel.\n- The ability to filter for jobs that could not be executed or were pushed back, either totally or per district. These filters allow the user to search for missed jobs by various criteria, including performer codes.\n- The execution app needs to support estimated, planned travel times, production times, and internal times.\n- The execution app should allow for simple confirmation (e.g., an \"OK\" button) to mark the end of a previous task and automatically display the next task, which could involve picking up keys, driving to a remote location (e.g., Sundsvall or Umeå).\n- The system needs to understand that once an employee confirms arrival at a job location, they are physically present there.\n- Upon completing all tasks at a geographical location, the system should automatically present the next task, which will likely involve travel to a new location.\n- The employee will primarily use the execution app to confirm task completion, update metadata, and quantity, then progress through their task list.\n- It's important to be aware that users might forget to mark a job as finished before moving on to the next.\n- Adjustments of times in the execution app, including manual entry of deviation times.\n- Mechanism for adding unscheduled breaks, such as lunch, in the execution app and how this impacts subsequent tasks in the schedule.\n- System for dynamically recalculating schedules.\n- Ability in the execution app to add unscheduled extra tasks at a job site.\n- Flexibility in the system to accommodate additional production time, internal time, and travel time.\n- The fourth category of tasks: time for overbooking or underbooking (gaps) that the system must handle.\n- Consequences of underbooking: less than 100% production for the day, possibly due to geographical or practical reasons.\n- Consequences of overbooking: the performer has to work more hours than agreed.\n- Impact of a performer working slower than calculated: leads to overbooking, which is a management issue.\n- The system must account for both when a performer takes too long (implying issues with the performer, production equipment, or customer) and when they complete a task faster than planned (implying the performer might be rushing or \"cheating\").\n- The system needs to accept a certain \"slack\" or deviation from planned time without immediate catastrophic consequences or triggering overtime, but significant deviations (e.g., several hours) require redefinition of the task.\n- The system should allow for a performer to start a job planned for the next day if they finish their current tasks much faster than anticipated.\n- \"Fyllnadsgrad\" (fill rate) for production. The system needs a specific engine to monitor the fill rate of production teams or equipment, potentially based on metadata.\n- The system can create a \"motor\" that automatically generates new tasks, such as refilling water for a vehicle after a certain amount of water consumption (e.g., after washing 20 rooms and 200 containers, indicating the water tank is theoretically empty).\n- Similarly, jobs involving collecting certain quantities of material (e.g., 2 cubic meters of leachate) can automatically trigger tasks.\n- Association of tasks with a specific team, cost center, and project for invoicing purposes.\n- The generation of information fields based on team setup (employees, vehicle, cost center, project number).\n- Identification of the task side with information from the concept and article data fields, linked with metadata, to achieve completeness.\n- Internal time (egentid), personnel tasks, night shifts, lunch, and travel time are all motivated by the same task identity as customer tasks.\n- The basic logic in the system is built solely on \"tasks\", and a task is made up of an \"article\". An article can be sellable, include a price, and have a fixed production time. All completed tasks, especially production tasks, should have an article number, sales price, and production time for a logical invoicing process.\n- Clarification of the boundary for the order concept and the non-billable nature of travel time to a location, even if reported.\n- Internal time and personnel tasks are simply different types of tasks performed by the team, which can generate reports but not invoices.\n- Grouping of all non-production tasks (travel, sick leave, changed leave, vacation, night rest) under a task category linked to the individual performer or team.\n- The planner's flexibility to add additional jobs to fill out a week or adjust working hours if certain jobs are cancelled.\n- System-created metadata for deviations (e.g., \"Ej utförd orsak\").\n- Metadata from tasks, like photos and reports, will be easily traceable and linkable to specific tasks or order concepts for review by humans or AI.\n\n### Decisions Made\n- The understanding of the four sources is correct.\n- The understanding of task status and business status is correct.\n- The system will not manage overbooking percentage; instead, it will handle manual overbookings entered by the planner.\n- Replit will propose a solution for generic deviations that are central to planning.\n- The system should create a metadata field for generic deviations, pointed to the relevant object, allowing for traceability.\n- Initially, the system will not have an automated booking engine; the planner will manually assign tasks to execution teams.\n- The system should create a system-generated metadata field.\n- Metadata for deviations (like \"ej utförd orsak\" - reason not performed) will automatically be created and linked to the object, providing a system-generated reason for the deviation.\n\n### Action Items\n- Replit to propose a solution for generic deviations that are central to planning.\n\n### Important Points & Insights\n- There is a possibility to hide certain information on business documents. This is an additional information field in the matrix.\n- The planning flow, which is linked to the statuses, has been correctly understood and is currently being discussed (point three).\n- The system will identify days/weeks where jobs cannot fit due to overlapping timelines.\n- A general system rule is needed to prioritize jobs at facilities, ensuring that two jobs do not occupy the same slot.\n- The system should allow overlapping for internal time (egentid) tasks, but not for other job types.\n- The system needs to account for internal time (egentid) schedules (e.g., ending at 7 AM or starting at 5 PM), and how new jobs affect these periods, including potential overlaps with breaks and evening internal time.\n- Travel time to work can overlap with personal time (egentid), for example, if one needs to be at a location at 7 AM but has a 30-minute commute.\n- The system must handle scenarios where a job is scheduled (e.g., 6 AM start) even when the performer has scheduled personal time (egentid) due to various reasons like traffic or customer availability, leading to time conflicts between personal time and travel time/job start.\n- The system must be able to handle overlaps and potentially warn about them.\n- The system should consider calculation possibilities, either periodically or via a recalculation button.\n- For rough planning lists that can span several years, the system's calculation should be limited to a shorter period (e.g., the next month) to avoid excessive processing power.\n- Overbooked time, if actualized, could be managed through a time bank (flextidsbank) or converted to ordered overtime.\n- A time bank would transparently track accumulated time (e.g., 5 extra hours) for both employer and employee. Excess time in the bank could be compensated by having fewer work hours in subsequent weeks.\n- If internal time (egentid) is overridden, it could be converted to ordered overtime.\n- According to Swedish labor law, employers have the right to order overtime, which must then be classified correctly (e.g., weekend overtime, weekday overtime).\n- The system should be able to classify this time as a time code for future reporting to payroll systems.\n- The system will need to handle actual worked time, overtime, and absence time for payroll reporting.\n- The logic for handling these time types will be similar to other tasks, with a different execution code.\n- The system should enable the creation of a motor for time reporting to payroll systems, potentially in tabular form, to show performed production time matching scheduled hours (e.g., four weeks x forty hours per month).\n- Any deviation from scheduled hours will be defined as overtime or absence.\n- All activities in the system, including production, travel, and internal time, are considered different types of tasks involving employees.\n- When a job's status changes, the rough planning system should create a metadata field to log the cause of the deviation (e.g., wrong key blocking access).\n- Administrative tasks, such as those performed in the car or office, do not have geographical requirements.\n- Internal time (egentid) is a task like any other, but it can have a geographical position. For example, if an employee's residence is set in Bjeasta for weekend rest, the system should acknowledge this geographical constraint for internal time.\n- Employees might opt for extended workdays (e.g., 6 AM to 8 PM) to complete their weekly hours faster and return home earlier. This preference should be representable in the rough planning from the planner's perspective.\n- Changes to working hours due to external factors like weather or traffic will be visible in the detailed planning.\n- The system needs to ensure that employee or team schedules, which may involve one or more employees, vehicles, or equipment, are accurately reflected in the detailed planning.\n- For teams, internal time should be set collectively, meaning all team members start at the same time (e.g., not one at 7 AM and another at 6 AM).\n- The system must handle individual employee absences like sickness or dental appointments within a team by allowing them to book it as internal time or time off, managed within the team and accounted for in terms of working hours and potential salary deductions.\n- Travel and movement time at a vehicle location: this distance does not need to be calculated in the task but is handled operatively by the execution app, becoming a two-step navigation.\n- The system will need to identify if a location is a pinpointed address accessible by vehicle. In some cases, the system will use AI to determine this, particularly for areas like grass cutting, which is a step two development.\n- The system needs to understand the exact location of a job (e.g., 50 meters from the nearest road).\n- The execution app's navigation support will provide the second step of navigation, guiding the employee from the primary navigated address (e.g., Kungsgatan 22) to the precise work location (e.g., into a garage or park).\n- The system must guide teams or employees to pinpointed addresses within complex environments (e.g., specific spot in a park, multi-story shopping center) using available tools like AR goggles.\n- Future development needs include the geographical engine understanding areas (e.g., for grass cutting) or lines (e.g., road maintenance, streetlight paths) and strategically determining the start point for work within these non-pinpointed locations.\n- For large objects (over a couple of hundred meters), the system must enable planning and reporting that considers the specific starting direction (e.g., north, east, west) for efficient work execution.\n- The system needs to define a type of task for time gaps (currently called \"spilltid\" or \"underbokning\") that occur when an employee's time cannot be fully utilized by production, travel, or internal time.\n- The system needs to handle scenarios where an employee is unplanned (minus minutes) or has planned overlapping time (plus minutes), typically for internal time.\n- Genuine jobs at sites cannot overlap; only genuine travel and production time, or internal time, can overlap.\n- Time windows can overlap, and if a job with a hard/soft deadline (e.g., by 4 PM) is dynamically pushed forward, its time window might overlap.\n- The system must warn the planner and performer if a job's production time is pushing delivery beyond the desired or required delivery time (e.g., past 4 PM).\n- The system needs to flag potential deadline overruns early, for instance, if a job initially planned for 13:00-14:00 on Thursday is nearing 16:00 on Tuesday afternoon due to delays or additional tasks.\n- Time windows can represent periods of positive (available) or negative (unavailable) accessibility for task execution.\n- A \"hard\" time window is a strict deadline, while a \"soft\" one is a recommendation.\n- It is important that the system understands the overbooking policy and builds the necessary engines to handle it.\n- A future updated version of the system might include an AI-supported booking engine.\n- The planner will gather jobs with production times of 25-35 hours and allocate them to team's fine planning with route optimization.\n- The system should show if the planned work fits within a 40-hour week, including travel.\n- Overbooking can occur, either for the total week (e.g., 42 hours planned with travel) or as specific shorter intrusions into a team's internal time (egentid).\n- Moving individual jobs between days can lead to increased total work time for the week due to additional travel, especially if the new job location is far from other tasks.\n- Team flexibility is crucial for efficient planning.\n- Reporting of \"real times\" and outcomes should be included.\n- The system's core functionality should involve engines that constantly track the desired delivery times.\n- The system needs to register when an employee arrives at a job site after a planned travel time.\n- The system should automatically present the next task after the completion of all tasks at a specific geographical location.\n- The execution app should allow manual adjustment of times and entry of deviations.\n- The execution app must support adding unplanned internal time (e.g., lunch) spontaneously. This action will cause subsequent scheduled tasks to be pushed forward, with the system accommodating these changes.\n- The system should have an engine that continuously tracks and recalculates the schedule.\n- Performers should be able to add extra tasks, such as an additional job at a food store (e.g., cleaning a loading dock), directly through the execution app.\n- The system should allow the performer to manually add a new task to an existing order's task list.\n- The system should support entering quantities (e.g., square meters) for tasks or using start/end times for tasks, where the clock starts ticking when the task is activated.\n- The system should calculate the cost implications of actual production time (e.g., 35 minutes of work should be billed as 35/60ths of the hourly rate for that task article).\n- The system acknowledges and processes additional production time as it occurs.\n- The system should handle additional travel time due to unforeseen circumstances like traffic jams or accidents.\n- The system will manage \"gaps\" (underbooking/overbooking) where production might not be 100% due to various reasons, such as geographical or practical limitations.\n- When overbooked, the performer will need to work more hours than agreed.\n- If a performer works slower than calculated, it results in an overbooked situation that is considered a management issue.\n- For a performer exceeding planned time, the system needs to determine if it's due to performer error, equipment failure, or customer issues.\n- For a performer finishing earlier than planned, the system should allow them to start tasks scheduled for the following day.\n- The system needs to present planned vs. actual time for evaluation by planners and supervisors.\n- The system can create a \"motor\" that automatically generates new tasks, for example, to refill water after a vehicle has consumed a certain amount, or to empty a container after a specific volume has been collected.\n- Information for each task must include the assigned team, cost center, and project, which are then used for invoicing.\n- Information fields for tasks are created based on the team's current setup (employees, vehicles, cost center, and project number).\n- Travel time to a location, while reported, will not be billed.\n- Internal time and personnel tasks are separate task types that generate reports but not invoices.\n- For personnel reporting, the system must easily provide a list showing what each person has been involved in (e.g., 15 minutes of washing containers, 22 minutes of travel, 8 hours of night rest in Sundsvall) to facilitate payroll compilation.\n- \"Gap time\" is defined as time that is not travel, production, or internal time.\n- The planner's ability to adjust schedules to fill out a week with additional jobs if others are cancelled, or to agree on reduced working hours (e.g., 35 hours) where the remaining hours are owed to the employer as extra production time for a future week.\n- The system will provide more information on an object when more metadata is available.\n\n### Open Questions/Pending Items\n- How the system will specifically integrate with payroll systems to report classified overtime hours, including the exact mechanism (e.g., direct integration or tabular data).\n- Details on how the geographical engine of the system will provide the final detailed navigation within the execution app to the precise work location.\n- How vendor and equipment levels are factored into a team's or performer's capabilities.\n- Finding a suitable name for time gaps/unused time that needs to be defined as a task in the system (e.g., \"spilltid\").\n- How to effectively combine the handling of overbooking (overlapping schedules) and underbooking/time gaps in the system for clarity.\n- How to handle scenarios where a job exceeding its planned delivery time requires rescheduling or alteration of other jobs.\n- Whether the system's warning function for deadline overruns should be considered a decision support or an AI-powered tool for planners.\n- How the system will communicate or handle an overbooking situation when it occurs, especially when it infringes upon team's internal time.\n- How frequently these filters for missed jobs will need to be applied on a daily basis.\n- The specific criteria and granularity of the filters for searching missed jobs (e.g., by district, by performer codes).\n- How to prevent and handle instances where employees forget to mark a job as finished in the system before starting a new one.\n- How the system differentiates between an unscheduled added task that is \"internal time\" (e.g., cleaning for free) and one that is linked to an existing order and should be compensated.\n- The necessity of a dedicated \"engine\" to monitor \"fill rate\" or \"fyllnadsgrad\" for production teams/equipment, and how it might use metadata.\n- The timeline for implementing the automatic generation of tasks for resource management (e.g., water refills, container emptying).\n- Future development of teams with \"motors\" that manage capacity and trigger actions like emptying a vehicle. Current setup includes employees, vehicle, cost center, and project number.\n- What defines the boundary for the order concept.\n- How \"gap time\" can overlap with \"internal time\" (egentid) based on a priority order.\n- The visual representation of the planning status (e.g., 110% or 95% utilization) in the fine planning for the team.",
+  "conversation": [],
+  "transcripts": [
+    {
+      "text": "Ja, det kan du. Då, eh, då lyssnar jag. Då kommer vi här nu att göra bekräftelser, utvecklingar, förtydligande och svar då på, eh, den här, eh, analysen utav den s-sista biten. Punkt ett då, helt rätt uppfattat då med de fyra källorna.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Punkt två, helt rätt då med-- Uppfattat med uppgiftsstatus och affärsstatusen där. Eh, och, eh, okommenterat här då med alltså att möjlighet att, att då dölja viss information då på affärsdokumenten, men det är bara ett informationsfält till som finns i matrisen där. Eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Planeringsflödet då som hänger ihop då med statusarna här då, det är ju också då helt rätt uppfattat.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Äh, den här överbokningsdelen då. Och som i den första versionen utav systemet här nu, så ser inte jag... Det kommer upp nån fråga lite längre ner här då, men, äh, angående, äh, procentuell överbokning. Jag tror inte att systemet ska sköta överbokningen, utan systemet ska hantera en överbokning. Så det blir alltså den manuella här nu då, planeraren som kommer då att lägga in och då kommer systemet att se att här en viss dag-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm ...totalt sett på veckan då, beroende på vad jobben då läggs ut, så kommer då, äh, jobb inte att få plats helt enkelt. Det kommer alltså vara tidslinjer som, som överlappar varandra då, så att... Och där måste ju då vara en, en generell, äh, systemregel då som gör då att, äh, jobb ute på, äh, objekt har hög prioritet och att alltså två stycken jobb-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm ...på två objekt kan inte överlappa varandra. Men däremot då, äh, den typ av uppgifter eller jobb då som egentiden utgörs, där måste då den här överlappningen bli då. Så att om jag sammanfattar läget, om du lägger ut tio jobb en dag då och den tillgängliga tiden medan pla-- utförarens avslut utav sin egentid klockan sju på morgonen och hans ar- arbetstags slut och påbörjande utav-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm ...egentid på eftermiddagen, middagen då klockan, säg klockan sjutton, är då minus det eventuella raster då och så en viss tid då. Och lägger man då in mer uppgifter då än vad det är så kommer ju då-- Då ska de överlappa då, äh, eventuella raster och egentiden på kvällen då. Och på motsvarande sätt så blir det ju då om, om egentiden är, är skriven då att den ska påbörjas klockan sj-- Eller avslutas klockan sju på måndag morgon och planeraren lägger in ett jobb.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. Äh, med en, en resa till jobbet då på trettio minuter, men att du ska vara klockan sju på en viss, på ett visst objekt. Då kommer ju in-- Resan till jobbet att inkräkta på egentiden.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Vilket får konsekvensen då att du har alltså en tidsmässig överlappning då med egen tid och i det här fallet restiden. Teoretiskt sett så skulle man ju också kunna säga då att av olika skäl så blir och planerar ändå ett jobb som ska påbörjas klockan sex på morgonen. Det vill säga då utföraren redan har planerat, äh, egen tid av olika skäl. Det kan vara trafikfrågor, det kan vara kundens tillgänglighet. S-s-s-- Du, du, du får inte röra den där nu heller. Och då måste, äh, då, då får, då får...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Du, du kommer jag av med. Du får inte röra... Jag, jag visar när, när du ska det. Då, då, då, då måste den kunna hantera då så att det blir överlappning där och eventuellt då varna för det då.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. Eh, och nu är vi på punkt tre då, planeringsflödet här då och där kommer det här då in.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och, eh, grovplaneringsmotorerna kickar ju då in och skickar det hära och det kan ju då bli förändringar där då. Och den här motorn då som övervakar då statusarna och, eh, eh, planerar tid mot önskad leveranstid får ju också en viktig uppgift där då. Och under tre så har du då lagt in mellanstatusar. Eh, och den första där då, opracerad, väntar på...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och då beräkning är ju, eh, möjlig. Och här får väl också systemet själv försöka då att, eh, se då om de här körs periodiskt eller om det då är, finns en beräkningsknapp då där man liksom rekalkylerar det här då, eh, för att då få ihop till exempel en vecka eller för att se då, eh, en viss del. Viktigt här då för systemet att tänka på då det är att det är nån form av rullande såna här för grovplaneringslistan, den kan ju liksom vara flera år lång och det innebär ju att de här motorerna kan ju inte lika...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "beräkna det här liksom då flera år framåt, utan den måste liksom ha en begränsning där att den jobbar liksom den närmsta månaden då eller att, eller att man kan ställa in det då på något sätt då. För annars så kommer det ju att ta för mycket datakraft då.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Eh, blockerad av beroende då. Eh, den är mycket bra. Eh, där måste det då in ett statusfält då som, som noterar då att när det, när det går fel. Och det är ju, som jag ser så är det den här motorn då som, som bevakar då leveranstider och beroendeuppgifter som håller på då att, eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Att, att, att, att jobba med det där då. Eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Sen kommer då om det går...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Överbokad då. Som sagt var, äh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Det bör då vara en, äh... Alltså där vi har tidsfönster som överlappar varandra. Och jag ser primärt då så att säga produktionstid som ö-överlappar då egentid här då. Och kontentan utav det då, det är att man accepterar då att, att, att den här produktionstiden då ligger över egentid. Äh, men vi har också ett, äh, framtida perspektiv här då den här ska matchas mot ett, ett lönesystem då. Och, och det innebär ju också då-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. Äh, den här överbokningstiden, om den då manifesteras, det vill säga att man jobbar på överbokad tid, då så kan vi komma i ett läge då, då att den här förändringen som gör då antingen kommer att, äh, summeras då i en tidsbank. Det vill säga om utföraren har en fyrtiotimmarsvecka och man är flexibel och villig att lösa uppgiften då och så jobbar man fem timmar, man tar fem timmar utav sin egentid och producerar då. Då utifrån ett svenskt perspektiv, då så kommer ju då den-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm ...tiden att hamna då antingen i form av att den hamnar i en flextidsbank då så att man sparar då, äh, transparent både för, för, för arbetsgivaren och arbetstagaren då att nu ligger du på plus på fem timmar här då. Vilket då kan hanteras på det sättet då att man då, då nästkommande vecka då det är mindre med jobb då, så, så, så ger man tillbaka de här fem timmarna då som egentid. Det vill säga man, man jobbar kanske inte alls då på torsdagen, utan man har inom citationstecken då jobbat in tid då.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Det andra alternativet är ju då att den här tiden då som har tagits utav egentiden, äh, omvandlas till beordrad övertid då. Och utifrån svensk arbetsrätt då så har arbetsgivaren rätt att beordra övertid, äh, men då ska ju också den arbetstiden då klassas, äh, på det sätt som den är då. Om det är övertid, äh, på helg till exempel, så är det en taxa i övertid på, på, på vardagar i, i nära anslutning till den ordinarie arbetstiden så är det då",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "lägre ersättning. Men den ska då kunna klassas som en tidskod så att systemet då på sikt kan rapportera de här tiderna då. Det har vi inte alls pratat om tidigare då, men utifrån utföraren då, inte teamets perspektiv, men utifrån utförarens perspektiv eller medarbetarens, äh, perspektiv då i teamet då så funkar det i Sverige på det sättet då att, äh, ett lönesystem som då, då skapar löneunderlaget för den månadslön då-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. Som, äh, gäller, äh, i det här fallet då i princip alltid då s-- då rapporterar den då in verkligt arbetad tid och, äh, sen eventuell övertid och eventuell frånvarotid då. Så här behöver liksom då på sikt systemet kunna hantera det här. Men egentligen så, ähm, är det ju samma logik då som för övriga uppgifter skulle jag vilja påstå då. Det är bara att det är en annan utförandekod på dem-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. Och på det viset så kan vi ju då skapa då om det nu blir en motor för, för då tidsrapportering till lönesystemet eller, eller om man bara tar det i tabellform, men då kommer man ju liksom då kunna se att nu har, har det då utförts såhär mycket produktionstid och då ska ju det ändå stämma med de fyra veckor gånger fyrtio timmar då för en given månad. Och har det då arbetats mer eller mindre då så definieras då den tiden då som övertid eller annan frånvaro. Och det är ju då bara en i-- Med vår grundlogik då bara en, en, en-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. -definition utav den här uppgiften då. Och det kanske är lite konstigt då, men, men, men systemet ser ju så att säga, byggs ju upp utav att allting som görs i systemet är bara uppgifter av olika typer, där då medarbetare är involverade, eh, antingen i produktionen eller i resor eller då i det vi kallar egentid då. Eh, sss-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. -så åter till grovplaneringen. Eh, ja, det är ju en, en, en a- en form av avvikelse som är väldigt central planeringsmässigt då. Så där måste Replit föreslå en, en lösning då. Och som jag sa där då så, eh, en generell avvikelse, eh, tycker jag ju då systemet ska skapa ett metadatafält som då pekas in på objektet som vi jobbar med då. För då kommer det liksom att ligga där och då kommer man alltid att kunna gå tillbaka då och se att här har vi en avvikelse kop",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "- Mm. -till då ett, en, en, en, en, en uppgift då där vi inte kunde komma in där för det var fel nyckel eller vad det nu kan vara då. Eh, det tycker jag är en grundläggande logik i. Sen behöver då den här grovplaneringen då möjligtvis ha, eh, jag kanske har fel och kallar det en motor och vad, men när då ett jobb får statusen som in-- Statusen är ju då inte ett metadatafält utan det är ett statusfält för uppgiften. Och får den då förändring där så ska den då gå in och skapa det här metadatafältet då och också presentera det då, eh-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. -på det sätt som föreslås här då att man tar med sig orsaken då.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Kära 5 datafel som saknas för de administrativa uppgifter. Grupp ett, jag markerar vad som redan finns i matrisen då och då går vi in på, på, på de här bitarna då. Eh, och då kommer vi på A, platskrav. Eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Där har vi ju då vissa utifrån utgiftsperspektivet då uppgifter som inte har ett geografiskt krav. Eh, till exempel då en administrativ eller uppgift som att avisera eller, eller, eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Ja, eh, ja, det är en administrativ uppgift. Det kan du göra både i bilen och du kan göra det på, på kontoret. Och det innebär ju då utifrån uppgiftsperspektivet då så saknar den... Den har ingen, ingen geografisk, eh, position då.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Eh, men ingen behöver exi-- Obligatorisk badrumsregel, ingen plats. Eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Ja, och för egentiden där då så är ju det...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Jag vet inte riktigt vad du menar där, men egentiden är ju en uppgift som vilken som helst. Ibland så kommer det ju då att ha en geografisk position därför att, eh, medarbetaren har bestämt att han bor i Bjeasta och kommer att ha helgvilan från, eh, fredag kväll till måndag morgon i Bjeasta och då kommer systemet att veta det som ett exempel då. Eh, men sen utifrån schemat under dagen då, eftersom det här bygger ju på restid, så kommer ju då måndag-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. Motivet i det här att vara då att en viss medarbetare kanske vill jobba tio timmars dagar för att jobba in veckan för att snabbare komma in, komma hem. Och det innebär ju då att då kan han lägga in en grovplan då där han utifrån planerarens perspektiv då, eh, informerar att ja, men jag jobbar från klockan sex på morgonen till klockan åtta på kvällen då.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och då, då, då s-syns det då i finplaneringen. Eh, och på samma sätt kan det också vara att man i samråd med planeraren säger då utifrån väder eller trafik så skjuter vi nu på din arbetstid så att du jobbar mellan klockan fjorton på eftermiddagen och tjugotre på kvällen då. Ja, då syns ju det då i, i finplaneringen och tidsfönstret att den här, den här medarbetaren eller teamet då... Och här är det viktigt också att vi håller ihop då. Eh, ett team består ju utav, utav en eller flera medarbetare.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och ett eller flera, eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Fordon eller utrustning då. Och naturligtvis så respektive...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Eh, medarbetare då eller utrustningar kommer ju att ha sitt, sin egen kalender. Så att om vi kommer i läger och det systemet behöver hantera då en skiftgång då på det här. Då kan det vara två stycken team som använder samma fordon. Och då, då kan ju inte det ena teamet så att säga planera att man använt, nyttjar fordonet från klockan fjorton till klockan tjugotvå på, på dagarna. Och sen är det ett annat team som utnyttjar samma fordon mellan klockan sju och klockan femton för då kommer ju fordonet och det var dubbelbokat då.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Enkel kalenderlogik då. Och, och sen om man ser utifrån medarbetarnas perspektiv så blir det ju då också att systemet måste guida dem. Om det är två medarbetare så kommer det ju då vara teamet som, som, som anger då den här, eh, egentiden. För det går ju inte liksom att systemet tillåter då att den ena medarbetaren börjar klockan sju på morgonen och den andra börjar klockan sex, utan det blir ju teamet som sätter arbetstiderna då. Eh, sen kan det ju mycket väl vara då att...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Systemet ska kunna hantera om den ena medarbetaren då, eh, blir sjuk eller har ett, eh, tandläkarbesök då på onsdag eftermiddag. Ja, då är det ju fullt möjligt att han kan boka in det som då, eh, egentid och tjänstledighet eller, eh, beroende på vilken poddies man har för det här sjukbesöket och att det hanteras då inom teamet och det hanteras då, eh, utifrån logiken med arbetstid då för, eh, eventuellt löneavdrag då för att man inte varit på plats. Eh, viktigt att systemet kan hantera det här-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. -och förstår inte systemet nu och de här bitarna som är ju ett steg två nu i systemet då för att hantera arbetstider. Så får vi fördjupa oss med, med det senare då.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Eh, platskrav. Eh, ja, det var ju det. B då, gång- och förflyttningstid på fordonsplats. Ja, eh, den här sträckan behöver ju inte räknas ut, eh, i uppgiften då, utan den hanteras ju i såna fall, eh, operativt utav, utav u-utförandeappen. Eller alltså, så att, att det blir ju bara att det blir en navigation i, i två steg.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och jag ser också det här som ett steg nummer... Steg två då. Och, och det här hänger också ihop då med, med att kunna hantera till exempel ytor för att klippa gräs och såna här saker. Men grunden är ju liksom att, eh, systemet kommer ju liksom att konstatera då att antingen är det en pinpointad adress dit man kan köra fram med fordonet då. Det vill säga det finns en väg där. Eh, i vissa fall så kommer det ju då att bli att systemet utifrån då eget AI-stöd eller annat, då kommer att konstatera det. Men det här ligger ju-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm ...nu femtio meter ifrån närmsta väg. Och då behöver ju då systemet förstå det och kanske också då i, i... Eller inte bara kanske, utan det behöver konstatera det och sen så behöver informationen då presenteras i utförande-appens, eh, navigationsstöd då. Så att det första steget är ju liksom att nästa jobb är på Kungsgatan 22. Eh, och, och, och då kommer man ju använda då ett navigations-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm ...stöd till exempel Waze eller något annat. Så navigerar man till platsen. Men sen i utförande-appen så står det då, ja, du kommer fram till Kungsgatan 22, men sen så har du då femtio meter till som du måste gå f-f-f... Till fots, eh, ner i ett garage eller ut på en, eh, i en parkanläggning eller vad det nu kan vara då. Eh, och, eh, det kommer ju bara innebära då att mest troligt så kommer ju, kommer ju den här utförande att se, ja, men jag går ner i garaget eller ut på det här fältet. Och om det behövs då och den här geografiska motorn-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm ...då har redovisat en, en adress, en pinpointad adress ute i den här parken eller vad det nu är då. Eller, eh, om det är flera våningar i ett stort köpcentrum då i Z-led och, och XY-led och... Så kommer den ju då att, att guida den här, eh, teamet då eller medarbetaren för att försöka hitta dit då med den till råds stående medel som finns då, eh, förutseendevis då, Goggles, eh, stöd för att, att hitta då platser.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. Eh, så att där har vi den. Sen kommer ju då en, en, en framtida läger och in om vi då har en yta som vi ska jobba på. Då, då är ju det inte en pinpointad adress. Så det innebär att den här geografiska motorn måste ju liksom fatta då var den här ytan börjar då eller en linje om det är en väg som ska underhållas eller en, en linje utav gatlyktor eller något annat som... Då, då måste den förstå börjar den i mitten eller börjar den i öst eller väst eller vad det nu är. Det blir ett strategiskt beslut som den här geografiska motorn då får, får-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. -besluta och redovisa för att det ska gå att planera då. Åtminstone då om objektet breder ut sig mer än kanske ett par hundra meter då. Är det mindre, då spelar det kanske inte så stor roll. Om du kommer till en fotbollsplan så spelar det liksom inte någon roll om du kommer från norr, öster, väster eller, eh, utan du kommer att hitta och kunna greppa objektet. Men däremot om det är en, en stor yta så går det inte att hantera på annat sätt. Eh, så där har vi den, eh, aspekten. Fordons- och utrustnings",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "nivå? Ja, eh, ja, det är bara då att ta, ta höjd för det för, eh, som en del då utav teamet eller utförarens förmåga då. Och det här har inte jag tänkt på, eh, men utan, eh, som lägen nu så är det ju då enbart så att säga då en utförade kod för uppgiften då. Och den är ju framför allt, eh, utifrån ett produktionsperspektiv då. Och det är väl i och för sig det här också då. Så jag tror man kommer att kunna lösa det den vägen då. Eh, den här glapp... Här är det-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm ...en felskrivning. Det är inte speltid, utan det är då spilltid eller vi skulle behöva hitta ett bra namn på det. Det är, det är alltså tid, tidsglapp som då skapas när man inte kan fulla-- fylla ut hela, eh, tiden med antingen medarbetarens egen tid eller produktionstid eller restid då. Och då finns det då en fjärde typ av tid som, ja, eh, s-systemet behöver ju då liksom definiera det här som en uppgift som-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm ...är en uppgift och den kan då heta, eh, spel-- spilltid då. Eh, samtidigt så blir ju den här, alltså under det här väldigt närbesläktat med överbokning också då. Så att det-- man kan ju också se det som underbokning och också då. Och överbokning är då att det överlappar då och underbokning innebär att det, det är ett glapp. Men systemet behöver hantera den och jag ser nu när jag kommenterar då att det är ju ganska smart att slå ihop då, eh, både överbokning och underbokning då, eh, och att systemet då tydliggör-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm ...det här då. Egentligen handlar det ju då om ett plus eller minus. Nu ligger man alltså på minus x antal oplanerade minuter en viss dag. Alternativet att man då ligger på plus. Man har alltså x antal minuter som man har planerat ut som, som man in-- som överlappar då, eh, i det här fallet då egentiden då. Eh, för som jag sa tidigare så tror jag då de genuina jobben då ute på objekten kan inte överlappa varandra, utan det, det blir ju liksom en genuin restid och en genuin produktionstid.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Eh, däremot så kommer ju då tidsfönster att kunna överlappa varandra. Så att om vi har alltså ett sånt här hårt eller mjukt tidsfönster för ett visst jobb som kan utföras då senast klockan sexton av olika skäl. Om det här jobbet då dynamiskt knuffas framåt så att jobbet...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "börjar då minut för minut att komma efter klockan sexton. Då får vi också en tidsmässig överlappning där då för produktionstid då. Och där ser inte jag annat än att systemet måste då varna för då att vi håller på att ramla utanför då önskad eller krävd leveranstid då. Och det är ju samma logik då som den här motorn för, för, för... Som hanterar då önskat mot planerad leveranstid ska hålla reda på då.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. Så att om vi har lovat att leverera en leverans senast då klockan sexton på torsdag och av olika skäl, då planeringstekniska skäl och så vidare, och hur arbetet går under veckan, så håller det här jobbet på att skjutas efter klockan sexton. Då måste ju då systemet varna både planeraren och utföraren att nu, nu, nu håller det här på att bryta då de överenskommelser som finns. Sen är ju det då en annan fr-fråga då om man då får radera ett annat jobb innan och flytta då delen upp till...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Ja. ...planeraren ihop med utföraren. Alternativt att man då har dialogen med kunden och säger: \"Tyvärr, vi lovade att det ska vara gjort klockan sexton, men räkna med att det kommer att gå över en halvtimme då av olika skäl.\" Är det acceptabelt då? Så får man hantera det därifrån. Men utifrån systemets sida så, så är det ju viktigast att, att den, eh, varnar för det här då. Och naturligtvis så bör den ju då varna för det då, eh, innan det är ett fullbordat faktum om den trenden och informationen går att fånga upp då. Så att...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Har vi den här jobbet som ska utföras då innan klockan sexton på torsdag och i början av veckan så såg det ut som att, eh, man skulle göra det mellan klockan tretton och fjorton, men sen blir det försenade jobb, eh, det tar lite längre tid att resa, eh, och dessutom så kommer det tilläggsuppgifter då som gör då att redan på tisdag eftermiddag då så har det, ligger den här då bara några minuter ifrån sexton enligt planen då. Och då bör ju liksom systemet kanske då börja flagga för att det här ser inte bra ut, utifrån och så affärsmässigt, eh-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Beslutsunderlag eller AI-stöd då?",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Eh, sen har vi då leveranstrion här då. Eh, ja, som jag ser så är det ju den här motorn som försöker då optimera det här. Jag är inte säker på då att det är...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "En trio, utan det här är ju flera tider. Det finns en generell leveranstiden som finns på uppgiften. Sen kan det finnas ett eller flera tidsfönster då med positiv eller negativ, eh, tillgänglighet. Det vill säga negativt är att vi kan inte utföra de här jobbena, eh, lunchtid mellan klockan, eh, elva och fjorton av något skäl. Eh, så då är det en negativ tid. Vi kan inte utföra det där och det gäller alla dagar. Eh, eh, eller då att den är på...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Vi kan utföra det här då en viss tidsperiod då. Och att de här då är hårda och mjuka som systemet har providat då. Det vill säga då att en hård, den är alltså... Den gäller, punkt slut. Och en mjuk är då mer en rekommendation då.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Eh, så viktigt att understryka, jag ser inte det här som någon sorts trio, utan det är ett antal tidsfönster som den här ska hålla reda på. Och, eh, att den här då kan hoppa fram då stegvis och att den här också blir då en produkt utav den här hopklumpningsmotorn då. För att när den klumpar ihop så kan det ju då vara som jag sa tidigare då i det att då klumpa ihop det här med andra jobb då, den andra eller tredje möjliga torsdagen då som det går att utföra.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. Eh, så viktigt att systemet förstår det och att de här motorerna byggs upp för att klara det. Sen har vi överbokningspolicy och den nämnde jag ju då också tidigare där då. Jag tror, eh, eller inte jag ska inte tro, utan systemet ska i dagsläget inte... Det är inte systemet som bokar än så länge. Det kan komma en bokningsmotor i en uppdaterad version utav systemet som så att säga med, med då ett AI-stöd eller något sånt där, bokar och fyller, fyller de här jobben upp hem. Men inledningsvis nu så kommer det här",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "funka på det viset att planeraren tar uppgifter enskilda eller i klump och lägger in, det vill säga tilldelar olika utförarteam jobben på olika veckor då. Och sen kommer utföraren då att lägga ut de här jobben. Eh, och där kommer det ju att bli då en uppskattning från hans sida att han, han ser nu att han... För i grovplaneringen så kommer utföraren då enbart att se produktionssumman av produktionstiden. Så det praktiskt kommer att funka på det sättet att planeraren, eh,",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "försöker då att skrapa ihop då ett, ett antal jobb då, säg har-- Som har en, eh, produktionstid på mellan tjugofem och trettiofem, eh, produktionstimmar då. Sen kommer han ju att lägga in det på teamets finplanering och sen så kommer han förhoppningsvis att ha en ruttoptimering där då så att han ber då systemet att lägga ut de här per dag i den tillgängliga tiden och med de resor som det blir då. Och så kommer han att se att, ja, det här rymdes då inom ramen för en fyrtiotimmarsvecka.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Alternativt då att det kommer att bli en överbokning, antingen på totalen på veckan, att det nu ligger utplanerat med resor fyrtiotvå timmar på totalen, varav vissa då utifrån geografi och produktionstid kommer att bli. Det kan ju mycket väl vara då att det blir fem minuters längre tid än planerat, det vill säga det inkräktar då på, eh, teamets egen tid på tisdag säger vi och sen på onsdag så är det av olika skäl en och en halv timme då som inkräktar på det. Men då, då kommer ju då antingen systemet då att...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Optimerar det här på bästa sätt i kombination med att utföraren själv drar då enskilda jobb. Och drar du ett enskilt jobb, säg från på den här övertiden på torsdag eller på onsdag nu då, och så flyttar du över det sista jobbet till, till, till dagen därpå då, torsdag. Då kommer ju då, då kan det innebära att då blir den totala veckan ännu längre då för att då kommer du att få en dubbelresa till det där då. För att det kommer ju hela tiden resplaneringsmässigt att bli att du jobbar på en vecka-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. Eller på en gata eller på en plats eller ett område. Och, och där kanske du har då sex produktionstimmar då och börjar du då. Och, och så har du ett annat jobb då som är kanske en och en halv timme bort ifrån det. Och det, det säger sig självt då att om planeraren kan lägga ut och det här ligger ju också i linje med det som utförarna av sunt förnuft säger då. Kan du utföra alla de här jobben på samma plats så kommer det att gå mest effektivt då istället för att hålla på och åka fram och tillbaka då. Och är då teamet flexibla här så kommer ju inte det att vara något problem då. Och då",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "kommer planeringen att fungera.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Oj, oj, oj.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Så det om överbokningspolicyn då. Eh, vi har kommenterat G där, eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och jag håller med då, eh, din bedömning. Ja, skapa, eh, gör det som ett systemskapat metadata.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "...Filter då, eh, där du då får fram alla de här jobben då som inte har kunnat bli utförda eller som har knuffats tillbaka då, antingen totalt eller per distrikt. Och det, det får ju då utföraren, eh, skapa då, eh, och, och naturligtvis också i-inom det, det är ett sånt där filter, kunna söka fram då. Så att om han nu har en rapport då där han tar fram alla missade jobb för hela företaget, ja, då är det bäst av alla världar så, så kanske det, det rör sig om mellan 10 och 20 jobb då eller uppgifter-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm ...som den kanske han kan hantera då, så att säga, manuellt. Bara lägga ut det på, på de teamen som man har i huvudet då. Eh, medan om det då blir mer komplicerat, då så kan man då förfinar med filtren och söka på olika utförarkoder i dem då. Eh, verkliga tider och utfall. Eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Som sagt var...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Det här har redan berört... Jag tror att tyngdpunkten här är ju då de här motorerna som hela tiden håller reda på, på, på så att säga vilken, vilken önskad leveranstid det är. Sen är det möjligt också att, eh, det här kommer ju då in i utförarappen då. Eh, och det kommer ju liksom på något vis så kommer ju systemet då att ha ett estimat med planerade restider och planerade produktionstider och planerade egentider. Och utförandeappen måste ju då stötta det här då så att, eh, systemet-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm ...när förutvarande uppgift slutar då. Och som jag ser det så, så, så blir ju det bara egentligen en okej-knapp. Så när du, när du kommer på morgonen på måndag, då, då ska du ju med en knapp, enkel knapptryckning, då bara liksom klicka att ja, men nu har jag slutat och då, då kommer ju liksom natu-naturligt nästa uppgift upp då. Och det skulle ju då kunna vara att man ska plocka några nycklar då på depån eller vad det nu är. Eller så är det bara att ta bilen och sen så åka mot Sundsvall eller Umeå eller vad man då ska åt då. Och då har systemet-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm ...planerat att den resan kommer att ta en och en halv timme. Ja, då utför man den och systemet vet att den tar en och en halv timme och sen, eh, kommer ju den då att ända i det första, den första uppgiften på uppdragsorten. Och när man då är framme där så trycker man ju då att man, eh, ska påbörja uppgiften. Och då först-- måste ju förstå-- systemet förstå då att då är man på platsen för uppgiften då. Och sen när man är klar med uppgiften eller de olika uppgifterna som är då på den geografiska platsen eller i den-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm ...lumpen, då kommer ju liksom nästa uppgift som ett brev på posten så att säga då. Eh, det, det, det kommer ju vara då att den-- när du är färdig med alla uppgifterna så kommer ju automatiskt då uppgiften att resa till ditt nästa ställe och komma upp då. Så, så det blir mer bara att du bara kvitterar där då och uppdaterar metadata och uppdaterar antal och sen så jobbar du dig igenom din, din uppgiftslista då. Sen kom-- får man ju vara medveten om att det kommer ju att bli misstag här då att man, man kanske glömmer då att trycka av, eh, till exempel sy-- avsluta jobbet då och så börjar man-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm ...åka i, i, i innan då och då. Ja, då, då får man väl ha någonting då satt i utförandeappen att man kan justera tillbaka de här tiderna. Det är ju att mata in tiden manuellt också då. Och på motsvarande sätt också då för att kunna hantera avvikelser så, eh, måste det ju finnas liksom ett plus då om, om systemet i den här grovplaneringen då eller inte-- Grovplanering är ju inte en effektplanering, har bestämt nu att dockan elva här nu och så ska vi åka till, eh, Storgatan 22 och sen är det en resa dit på, på 16 minuter då så...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Men under den här resan så, så ser vi ett bra matställe då. Då ska det ju finnas i, i operatörsappen här då att man bara trycker på ett plus och så trycker man då egentid lunch. Eh, och då får man ju en fråga här nu då. Vad är...? Ja, det är, det är egentid lunch. Och så tar man lunch i trettio minuter då och då får ju systemet köpa läget då för då kommer ju alla framförvarande jobb den dagen och kanske även de veckan att börja och tugga framåt i tiden då med de följder som det får då. Men det är ju bara att hålla reda på. Det är ju-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. -det finns en motor som håller reda på det och, och räknar om det här löpande då. Och på motsvarande sätt så, så ska man ju också kunna lägga in då ett extrajobb då. Så att om du, du blir stoppad på vägen eller du är på en livsmedelsbutik då och så, och så utför ett jobb och så kommer de fram: \"Ja, men nu måste ni, ni får ett extrajobb här. Ni ska spola den här lastkajen också\". Ja, då ska ju, då ska ju utföraren kunna då trycka där då på ett plus, eh, konstatera då är det här egentid, det vill säga han tvättar gratis åt kunden. Ja, då får han väl göra det. Men",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "på samma sätt som han har lunch i egen regi, även om det är svartarbete då. Men det normala är ju då att han trycker då, eh, och lägger till det här på en befintlig beställning. Det vill säga han manuellt lägger till en uppgift på den uppgiftslista som orderkonceptet har skapat då. Och då får det ju helt enkelt vara då att han får en, han får bekräftad då. Han är på den här platsen, han utför uppgifter, eh, och då kommer den ju att bekräfta: \"Ja, det här är hemköp si och så\". Och du vill lägga till då-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm ...att det är en uppgift som är då tvätt av, av, av lastkaj då. Och så kommer då, eh, den uppgiften då, eh, han matar in hur många kvadratmeter det är. Alternativt att han matar in då, eh, den tid att den, den artikeln är uppbyggd på, på start- och sluttid. Så då aktiverar han ju bara artikeln och så kommer ju då klockan att börja ticka då och det blev trettiofem minuter då. Ja, då kommer ju den då att debitera då, eh, trettiofem sextiondelar då utav då vad timpriset på den artikeln är-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm ...och samtidigt så har ju systemet då, eh, accepterat och, och, och förstått då att, eh, har då tillkommit då trettiofem minuter produktionstid i det fallet då. Eh, viktigt att, att, att den här flexibiliteten finns då i systemet och det gäller ju då alla tre tidstyper, alltså både produktionstid, egen tid och restid. För det kan ju också vara en, en kö eller en olycka eller något sånt där som gör då att restiden blir dubbelt så lång mot, mot-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm ...den planerade då. Och sen så, eh, har vi då den här fjärde kategori-kategorin då utav, utav uppgifter. Då är det tid som vi då kallar över- eller underbokning då. Alltså de här glappen som kan inträffa då som systemet får, får hantera själv då. Eh, det blir ju så att säga vad det, det det blir då, eh, med de följder som det får. Eh, och, och, och fördelarna i det här fallet är ju väldigt enkelt. Är det underbokat en dag, ja, då kommer vi ju liksom inte ha hundra procent-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm ...produktion den dagen och så kommer det ju naturligtvis att kunna vara av geografiska eller praktiska skäl. Och är det överbokat då, eh, så kommer det ju då att bli att utföraren får jobba fler timmar än han har överenskommit att han ska göra då. Eh, och följden utav det här är ju också då att om utföraren jobbar långsammare då så kommer det ju också då att komma i det här läget. Men det är ju då i det här fallet en arbetsledningsfråga då att om utföraren inte utför uppgifterna på den kalkylerade tiden, då gör ju utföraren fel då-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm ...eh, och det är ju åt båda hållen. Tar det för lång tid så gör utföraren fel, alternativt att det är fel på produktionsutrustningen eller kunden då. Eh, och, och det är ju då andra frågor. Och går det fortare än planerat, ja, då fuskar ju utföraren och då kommer ju det att synas på totalsumman då. Och naturligtvis så får ju då ett visst slack eller s-- måste ju då så att säga vara allmänt accepterat då både utav systemet, eh, anläggningsattörerna och planeraren och utföraren då att, eh, om man...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Om man inte hinner allting på de planerade åtta timmarna, utan det tar femton minuter till, så kommer det ju säkert då inte att vara liksom nån katastrof och övertid då. Men om det börjar ta flera timmar, då får man börja omdefiniera då det hära. Och gör man det lite fortare då, att det är planerat att det skulle ta då sju timmar och femtiofyra minuter och man gör det på sju och en halv timme då och kanske till och med då, eh, påbörjar ett jobb som ligger då, att man drar tillbaka jobbet som ligger dagen därpå för att göra hela dagen. Ja, då, då...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Då får man väl acceptera det, men om man börjar och gör det alltför fort då så, så får ju systemet redovisa då planerad, eh, planerad tid mot verklig tid då och, och, eh, det blir ju då en bedömning för planeraren och arbetsledaren att se vad, vad, vad, vad det är då. Eh, mycket, mycket, eh, bra under punkten i, eh, fyllnadspåverkan då. Eh, och här är det väldigt viktigt då att se det för att på samma sätt då som om man nu samlar sopor så kommer det ju då att få...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "en, en fyllnadsgrad då. Eh, och det här blir ju då en särskild motor skulle jag vilja säga då. Så att vi får alltså lägga på en motor på, eh, produktionsteamet eller, eller produktionsutrustningen då som ligger och bevakar det här då. Eh, så att, eh, och, och det här kan ju också då basera sig på metadata som kommer in då. Så att den här motorn, vi behöver inte ha det just nu, men systemet behöver ta höjd för det då. Så att om vi har ett fordon, praktiskt för Kinab nu då, som, som håller på då med, med, med-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. tvätt då så kommer vi då förbruka vatten på, på fordonet då. Och, och, eh, då vet vi ju då för varje tvätt som vi gör förbrukar vi en viss mängd vatten och fordonet har en, en, en tank med en total antal liter då. Och det innebär ju då att vi kan skapa en motor här då som ser att ja, men nu har du tvättat, eh, tjugo rum och tvåhundra kärl. Eh, så nu är då teoretiskt sett vattnet slut i bilen och det innebär då att, eh, den här motorn håller redan på och kommer då att skapa en-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. Uppgift att åka och fylla på vatten, eh, då för bilen. Men naturligtvis ska det här byggas någon gång, men vi behöver inte ha det just nu. Eh, och på motsvarande sätt kan det också vara då att ett jobb skapar då uppgifter att om vi nu har en, en behållare som vi stramsuger här och tar emot då, eh, säg två kubikmeter, eh, lakvatten. Eh, då kommer ju det då automatiskt då att-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. Om, om vi har den här logiken med motorer då så kommer vi då kunna ha en motor för lakvatten och sen fyller vi då i artiklar som skapar, som skapar så att säga metadata då om det här så kommer den här att kunna fatta beslutet att nu måste du åka och tömma lakvatten då.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Eh, mycket bra reflekterat också och missat det här måste få rep-- lägga till. Naturligtvis för varje såna informationspaket på uppgiften så måste det då framgå vilket team som har blivit tilldelad den här uppgiften och vilket, eh, kostnadsställe och projekt som då kommer med här och som sen ska åka med då till fakturan då. Så det kom inte alls med, eh, och det, det här är ju också typiska informationsfält som, som skapas av-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. Det är jämt upp baserat då på hur man hanterar uppgifterna från grovplaneringen. Så det här föds ju utifrån hur teamet är uppsättsatt då, eh, i dagsläget med vilka medarbetare det är och vilket fordon och vilket kostnadsställe och, eh, projektnummer som ska följa det här teamet då. Och på sikt så blir det att teamet kan utvecklas med de här motorerna som håller reda på då kapaciteten och det är dags att tömma bilen och så vidare. Men just i dagsläget då så har vi de här bitarna. Och när då ett team tilldelas en viss uppgift så ska-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm ...ju då den här uppgiften besidan då om den information som kommer ifrån ågigkonceptet och, eh, artikels datafält då och länkar med metadata även då länkas på det här. Så blir det ju då fullständigt. Sidonoteringen, jag har inte fått några sms, kan du bortse helt ifrån. Har inget med det här att göra. Eh, och nu ska jag svara då på några frågor. Egentid, personaluppgifter, natt, vidare, lunch, motiveras på samma uppgiftsidentitet som kunduppgifter.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Det avgörs ju så att A och D byggs. Ja, min uppfattning är ju då att grundlogiken i systemet är enbart det som vi kallar uppgifter och en uppgift by- byggs upp utav en artikel. Och artikeln kan vara en artikel som man kan sälja, men med pris och den kan ha ett fast, eh, produktionstid och så vidare. Så att den här egentiden då...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och även restiden då är ju bara olika uppgifter då eller artiklar som är samma logik med... Men som definieras på olika sätt. Och på det viset kan vi alltså hantera det här logiskt då. För det kan ju mycket väl vara också då att du har en kund som... Där vi tar betalt för, för, för framres- framresan så att säga. Och, och, och har vi då den här logiken då på att resan... Ja, nu ser jag, du tog bara upp nu här under fråga ett, egentid och, och personaluppgifter då. Men jag lägger även till då res...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Ja. Tiden där. Om resan för teamet fram till platsen skapas som en uppgift så blir det ju väldigt lätt då för systemet att hantera den uppgiften om vi vill ha med den på en faktura. Eh, men i normalläget så handlar det ju bara om då att egentligen alla uppgifter som slutförs, naturligtvis produktionsuppgifter då, ska ju möjligaste mål ha ett artikelnummer och ha ett försäljningspris och en vikt med antal då produktionstid. Och de är grunden då till det som hamnar...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Offerten. Restiden då fram till den här platsen, ja, den, den, den kanske vi också redovisar, men vi tar inget betalt för den, för den, den har liksom inget pris, men den hör också till uppgiften då. Eh, och då kommer det ju upp en fråga: \"Vad, vad går gränsen för, för själva orderkonceptet?\" Och ja, det kanske vi får reda ut i ett senare läge. Och det viktigaste är som sagt bara att uppgifterna kommer fram. Och när det gäller då egentid och personaluppgifter då, så är ju det bara en annan typ av uppgifter som utförs då, eh-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. Utav det här teamet som, som kassas som en annan sak då. Och vi kan alltså skapa inte fakturor då då, men alltså rapporter. Det är ju liksom bara samma sak, fast en, fast i en annan form. En, en, en faktura skapas per objekt baserat utifrån den logik som vi har gått igenom då utifrån orderkonceptet och, och, och hur vi samlar ihop fakturan då utifrån minsta gemensamma nämnare med referenser och så vidare då. Men den här egentiden och, och produktionstid utifrån ett personalperspektiv, det är ju bara-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. Att vi grupperar alla andra uppgifter, inklusive då restider och, och inställdes restid och, eh, förändrade ledigheter och sjukledigheter och semester och så vidare. Det är ju bara olika typer av uppgifter som vi då grupperar utifrån då den enskilda utföraren som är kopplad till dem då eller till teamet då. Men det, det är viktigt att också systemet förstår då att utifrån ett personalperspektiv måste vi så att säga på ett enkelt sätt kunna redovisa vad...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Vad respektive personal har varit involverade i för uppgifter. Jo, den har tvättat kärl här i femton minuter. Den har rest i tjugotvå minuter till den här. Den har haft nattvila i Sundsvall i, i åtta timmar och så vidare. Då, då kan man bara ta ut en lista på det där och då kommer man ju då att se precis hur mycket har den här personen, eh, producerat, hur mycket har den rest, hur mycket har den vilat och baserat på det kommer lönesystemet då enkelt att kunna, eh, sammanställa det här för en lön.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Ja. Det är ju betalning och både medarbetaren och arbetsgivaren kommer att se att, eh, legala krav för nattvilar och dagsvilar och arbetstid hålls eller inte hålls då. Eh, jag hoppas det är klart nog där. Överbokning, eh, ska sammanlätta, hur vi ska sätta samman, eh, ska mot att lära sig från historiska fall. Nej, som jag sa tidigare då, så överbokningen här som jag tycker ska länkas ihop då med den här, eh... Vi måste ha ett bra namn på det då, men alltså det är över- eller underbokning.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Tid som gillar i tid. Tid som inte är resa, tid som inte är produktion, tid som inte är egentid blir den här glapptiden då. Och den ska dessutom till skillnad då mot de andra tiderna kunna, eh, överlappa då utifrån en prioritetsordning då, eh, eh, egentiden. För produktionstid kan inte överlappas, eh, och restid kan heller inte överlappas då för då blir det omöjligt att utföra, utan slapp-slacket här tas upp utav egentiden då och kan då-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. -manas till, eh, flextid eller alltså inarbetad tid eller beordrad övertid.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och det var då punkt två där. Sen är det viktigt då, ja, under punkt två är det också viktigt då att det här syns tydligt då. Men det är ju egentligen en summering då i finplaneringen för teamet och så att man ser att nu ligger vi här på en, en planering som ligger på hundratio procent utav möjlig eller planerad, eh, arbetstid då. Eller så ligger man på nittiofem procent utav, utav det då. Och sen får man se då hur, hur det här ställer sig under veckan då. För det kan ju mycket väl bli då att vissa jobb går fortare att utföra eller det var planerat för det mindre jobb-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. Eller det är vissa jobb som utgår och då kan vi också komma i ett läge då att planeraren som följer upp veckan här då ihop med utföraren ser att, ja, men nu kan jag lägga in ytterligare då jobb här då, eh, för att fylla ut veckan då. Alternativt då att man kommer överens om då att, nej, men ni jobbar bara trettiofem timmar den här veckan och det innebär ju då att då är ni skyldiga arbetsgivaren fem timmar som man då planerade in då som, som inte övertid då, men, men som extra tid då, extra produktionstid veckan därpå. Den här flexibiliteten kommer-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm ...planeraren att kunna hantera då. Ej utförd orsak. Eh, ja, bildad orsak kan alltid landa som en system, systemskapad metadata på objektet. Ja, svar ja på den då. Så att det kommer liksom att bli då, desto mer vi vet på objektet att det ligger där då, eh, så, så desto bättre är det. Och för varje metadata som, som vi lägger in på objektet så kommer ju den att komma under en, en metadaterubrik. Och sen så kommer det då att vara en information där då som systemet säger: \"Det gick inte att utföra det här.\"",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. Så kommer det då att stå då varifrån den kommer och vilken tidpunkt det är. Och det kommer ju då att vara väldigt lätt då för både en människa och för en AI då att se att, ja, i samband med, med, med de här uppgifterna som låg på, utplanerade på objektet den tjugotredje, eh, juli så kunde-- så finns det då de här fotona kopplade och det finns de här, eh, rapporterna varför det inte gick att utföra. Då kan man ju väldigt lätt då sammanställa då och få en bild över då allt som hände vid det datumet då. Och eventuellt-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm ...att det finns också, eh, en logik här då där man, där man ser då att den här metadatan kommer då från uppgift si och så då eller orderkoncept si och så då. Då kommer man ju liksom då att kunna, eh, spåra det här på ett väldigt enkelt sätt och bara fråga: \"Ja, utifrån den här upp-- utifrån det här orderkonceptet som jag ska-- skapade här nu, finns det-- vilka bilder är frukter ifrån det då?\" Ja, då kan vi få fram-- söka i systemet och få fram en lång lista på bilder. Eller vilka avvikelser då i form av den här typen av metadata, eh, skapar-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm ...utifrån då, eh, de här uppgifterna. Ja, då får man fram det då, eh, utifrån då den här tilläggsinformationen som jag väl tycker då att systemet borde kunna få med då på den här . Vill du att jag omvandlar den här bristanalysen på en komplett... Nej, jag, jag tycker att nu har jag gått igenom den här ganska detaljerat då och det viktigaste här nu då det är ju att det får inte finnas några som helst frågetecken kring grunderna i det hära. Sen behöver Replit nu se, skapa en, en utvecklingslogg här då så att till exempel den här motorn då för att hantera...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm ...eh, hur mycket vatten eller hur mycket avfall som finns i ett produktionsfordon. Eh, eh, den får vi lägga liksom i en utvecklingslogg då så vi kan bygga ut den i ett senare skede då.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    }
+  ]
+}
