@@ -1,0 +1,188 @@
+{
+  "sessionId": "92097c627",
+  "exportedAt": "2026-07-02T17:08:48.520Z",
+  "summary": "### Key Topics Discussed\n- Layout and administration of objects, including viewing and editing an object and its associated metadata.\n- Object identification details: 'family name', 'object name', unique system ID, and status.\n- Improving user-friendliness by displaying selected metadata, including images, object location based on system info, and three customizable alphanumeric fields for metadata (e.g., object type, model, serial number, contact person, customer name, manufacturing year).\n- Basic object logic: selecting and displaying parent objects with an option to connect additional parents, and managing subordinate (child) objects.\n- Importance of keywords in the family name for efficient object searching.\n- Risk of administrative errors when linking sub-objects due to lack of information.\n- Similar layout and search logic for linking subordinate child objects, including metadata field search capability.\n- Metadata organization into different areas (contact details, production details, geographical information) and user selection of displayed metadata due to screen limitations.\n- Display of contact person information (title, creation date), handling multiple contacts, and updating/removing contact persons.\n- Information about inherited contact data and its origin.\n- Integration of address information, linked tasks, and order concepts, with system-generated metadata fields for the latter.\n- Logging of images (date, time, user) and displaying their origin.\n- Overview of object status, information, and upcoming tasks/events, including linked order concepts and tasks.\n- Inclusion of metadata fields for fault reports.\n- User interface management of screen size limitations by displaying limited groupings, requiring drill-down for more information.\n- Final review of the improved and clarified layout by RepliK.\n\n### Decisions Made\n- The three alphanumeric fields in the header can be customized by the user to display various metadata, editable via the three-dot button.\n- Existing object links can be deleted, and new ones added using the \"Koppla objekt\" (Link Object) button.\n- A dedicated window will open for \"Visa alla kontakter\" (Show all contacts) to facilitate management, editing, and deletion of contacts.\n- Changes to contact persons will be handled through this dedicated view.\n- Information regarding contact data inheritance and its origin will be displayed alongside a log of who entered the data.\n- RepliK is expected to update the current messy view in line with the new, clarified layout.\n\n### Action Items\n- The team needs to find a solution for selecting and displaying metadata fields due to screen space limitations.\n- It must be clearly indicated whether a contact person (e.g., Anna Karlsson) is still active or if their information is outdated in the small contact display boxes.\n- RepliK must update the view according to the new layout and raise any questions regarding it.\n\n### Important Points & Insights\n- The discussed image will be usable by all system users (administrators, planners, operators, customers).\n- The goal is to administer objects and retrieve information about their status, as well as past and upcoming tasks and events.\n- An example object, \"Pantmaskin 2,\" belongs to a hierarchical structure (Axfood Sverige, Hemköpa, etc.).\n- The object's unique system ID is system-generated and includes a running number.\n- Object status is either `active` or `archived`.\n- Five fields are available in the header for user-friendly display: two for images (vignette based on a metadata field), one for geographical location, and three alphanumeric fields for general, overarching information.\n- The system will contain potentially hundreds of thousands of objects, demanding effective search functionality for object linking.\n- Effective searching using keywords in the family name is essential to prevent administrative errors during object linking.\n- The search functionality for linking child objects will have a similar layout and logic, allowing searches within metadata fields.\n- The 'head' section primarily contains non-metadata information, with exceptions for the five display fields.\n- Contact person details are categorized under contact metadata; Christer from service or an administrator would have entered this information.\n- A small chain icon will indicate inherited contact information, showing its origin.\n- It is important to log the date, time, and user for images.\n- The interface aims to provide a comprehensive overview of status, information, and upcoming events/tasks.\n\n### Open Questions/Pending Items\n- The exact solution for metadata selection and display needs to be determined.\n- How the user guide will address the navigation of metadata fields due to screen size limitations.\n- RepliK's feedback on the refined layout.",
+  "conversation": [],
+  "transcripts": [
+    {
+      "text": "Liknande först. Öh, var du i-- pratade om ersättningen- Ja ...i, i det befintliga systemet?",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Det här är en rubrik- Oj, förlåt ...för hur man tittar och editerar ett objekt och dess kopplade metadata. Och jag kommer att beskriva hur den ser ut. Den här bilden kommer ju då att kunna användas utav i princip alla användare i systemet. Administratör, äh-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. Äh, planerare, utförare och kund.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och målet med den här bilden då, det är att kunna administrera objektet och få information om objektets, äh, ja, status, men också vilka uppgifter och händelser som är kopplade då till objektet genom tidigare och kommande utförda uppgifter. Och grunden i den här, den består väldigt, väldigt, väldigt enkelt utav...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Objekt, grunduppgifter för objektet. Och i det fallet så är det då, äh, det här släktnamnet eller namnet på objektet då. I det här fallet då så heter objektet Pantmaskin 2 och den har då ett släktnamn som är Axfood Sverige, Hemköpa, äh, hemköpskedjan Region Göteborg, Hemköp i Hisingen, Pantrummet och Paki-- Pantmaskin 2 då. Så då ser man liksom hur den, hur den hänger ihop då. Men det unika objektet då, det kan väl förbättra det här...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Lite grann. Den här bilden är ju två rader här nu som beskriver släkten. Det är ju bättre då att den ena beskriver släktnamnet och den andra beskriver namnet på objektet. En liten förbättring då. Sen så är det då objektets unika system-id. Det skapas utav systemet och ett la-- Löpnummer. Det är den som är märkt i mörkgrön. Och sen är det objektets status och den är väl, så vitt jag kan förstå, då enbart aktiv eller så är den arkiverad om objektet har utgått då.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Sen i huvudet här, så för att skapa användarvänlighet och bidra med information då lättare för-- Till, till användaren, så finns det fem stycken fält som man har möjlighet att peka in utvald metadata, varav två stycken utav de, eh, fältena är vigda till då bilder. Så att bilden på själva objektet då har man då möjlighet att peka in då det metadata-fält som innehåller en lämplig bild",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "och det kan ju vara den sista tagna bilden på objektet eller det kan vara, kan vara då, eh, ett metadata-fält för bilder som vi kallar vinjettbild eller logga eller vad vi, vad vi nu vill ha där då. Men i det här liksom standardskriftet då för den här så har man då möjlighet att, att som administratör då välja att visa en bild där. Den andra är om man då väljer att använda den, vilket de flesta kommer att göra, är då en kartsymbol. Så finns det en geografisk position...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Som då är angiven och som systemet då för objektet har, har, har vässat till då. Så kommer det då visa var i världen det här objektet är beläget då.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mycket enkelt. Sen finns det tre stycken alfanumeriska fält då, där man kan lägga till då, till exempel objekttyp om man använder den metadatadefinitionen, modell om man använder det och, och serienummer. Men man skulle lika gärna kunna välja att lägga dit kontaktperson och kundnamn om man har metadatafält för det. Eller, eh, tillverkningsår eller vad man nu vill då. Och det här editerar man genom att trycka på de där-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm ...tre knapparna eller knappen längst upp till höger med tre prickar på dem.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. Eh, sen kommer då nästa grundläggande obje-- logik för objektet och det är då val av föräldrar eller redovisade föräldrar. Så här redovisar den ju då f-- den här föräldrakedjan och det finns möjlighet att koppla på fler föräldrar om man nu skulle vilja det. Och sen till höger utav den så är det exakt samma sak då. Om det unika objektet har underordnade underobjekt eller barn, så kan man då lägga till det. Och i det här fallet så har den här pantmaskinen en sensor då som är kopplad-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. -till sig själv där på. När man vill editera eller justera det hära, då trycker man på den där gröna knappen Koppla objekt och då kan man då radera befintliga kopplingar och söka och leta nya kopplingar. Och en viktig grej där som jag understryker då, det är ju då att systemet kommer ju att bestå utav tusentals, hundratusentals olika objekt. Därför när man ska göra en sån här koppling så blir det då helt avgörande att man kan söka-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. -då på de här objekten genom att använda då nyckelord i släktnamnet. Så vill jag hen-hem-hitta den här pantmaskin två då, så skulle jag ju då kunna söka då på Hemköpkedjan, äh, Hisingen till exempel. Och då kommer det ju då att hitta den här maskinen då med släktnamnet Axfood Sverige. Och då vet jag ju då att jag har rätt- Mm. -att jag är på rätt, att det är rätt förälder som jag, jag har hittat då. Har jag inte den informationen, då kommer jag ju då inte att vi... Då är det stor chans att man kommer att göra ett administrativt fel och koppla på då ett-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. -underobjekt på fel förälder då.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och på motsvarande sätt så blir det så samma layout för att koppla underordnade barn då. Så har jag barn liggande som då, eh, jag vill koppla till här, så, så kan jag då söka dem på ett motsvarande sätt då. Och ytterligare då ett, ett tillägg här är ju då det som jag tror Rick Räknit själv föreslog då, är ju att i samma sökruta så kan vi då lägga samma logik som vi har då hela tiden att om vi vill, eh, hitta det här så kan vi ju då söka på, eh, metadatafält.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Så vi sätter, vi sätter ett villkor att metadatafältet är att, eh, objektet ska vara en modell som är typ Tomra. Mm. Vits så kommer vi då att få upp alla objekt som heter Tomra och då kan man ju då på ett enkelt sätt att plocka bland dem och plocka dem till rätt förälder om man jobbar från det hållet. Eller om man söker uppfintiga objekt och, och vill koppla till en förälder så kan man då söka på, på, på något annat då, ett pantrum av en viss typ. Så där har vi då grunden och det, det kallar jag huvudet då där den, den här informationen finns.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. Och det här är i huvudsak inte metadata förutom de fem fälten, de-- Som baseras utav vinjettbilden som väljs utifrån ett metadatafält och den geografiska kartan som väljs utifrån, eh, den geografiska positionen och tre andra fält som man då kan lämna intressant, eh, för kunden då, övergripande information. Sedan kommer då, eh, i den här speciella visningsvarianten då metadatafält.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "För metadatafält. Och som rättvitt väl vet så är ju metadata inredelat i olika områden, till exempel kontaktuppgifter eller produktionsuppgifter eller geografisk information då. Och då har man då möjlighet här att, eh, med den här lilla, eh, menyn här då hitta och välja ut då så att för man får inte upp allt det här på skälmen-- Skärmen nödvändigtvis då. Så där får rättvitt hitta en lösning som funkar. Eh, det är inte så otroligt viktigt, men däremot något som är desto mer viktigt då, det är ju...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Det är att om vi tittar på kontaktperson då, så kan vi då se på den här lilla rutan då att kontaktpersonen Anna Karlsson, hon är butikschef. Eh, det är ju då en grupp utav metadata för kontakt, eh, personer då, butikschefen. Eh, eller hur vi lägger upp det där då som metadatafamilj. Och, eh, vi kan se då att det är en kontakt utav tre kontakter och vi kan bläddra åt höger och vänster där. Och vi ser också att den är skapad 25.05.28.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Där 15.02 utav Christer på service då som pekade in den här informationen. Och sen så finns det då andra kontakter, eh, som, som är inordnade här och det är då en administratör som har lagt in information där. I båda fallen om man väljer att trycka på den knappen som visa-- Som heter Visa alla kontakter, då ska ett nytt fönster öppnas upp då där man har en bättre möjlighet att hantera de här och, eh, även då kanske editera dem för att justera dem och radera dem i vanlig...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Här gäller det ju då att, eh, om Anna Karlsson slutar så kommer det ju vara i den här vyn som är ett utav alternativen alternativt att uppdatera den här databiten. Så det kommer vara här man går in och då, eh, ändrar den här kontaktpersonen. En grej som inte framgår i de här små rutorna nu, men som måste framgå sen då, det är huruvida butikschefen Anna Karlsson är inpetad i pannan.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Maskinen eller om hon är ärvd. Och i det här fallet, den informationen syns inte på den här. Men invid då där man har loggat och när den är skapad utav en och av vem, så ska det då framgå då ett litet, en liten kedja där som talar om då att den här informationen kommer då... Eftersom hon är butikschef så kommer den då mest troligt att komma ifrån Hemköp Hisingen då. Så då kommer man att se, ja, den är ju ärvd uppifrån då den. Och när det gäller butikschef så är det ju helt logiskt. Butikschefen kommer ju då att finnas hela vägen på alla sina mes-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "-marknader. Medan om vi ser den andra kontakten, Johan Nilsson där då, han är kanske Axfolds, eh, fastighetschef för hela Sverige då. Så han kanske är ärvd ifrån Hemköp-kedjan eller till och med från toppen då. Så att han är kontakt för alla fastigheter i hela det här då. Och då ska den informationen framgå jämte den här loggen med vem som har matat in det också, varifrån den kommer då. Och fortsätter vi bara och, och, och tittar vidare då så kan vi då se här då att det finns...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Ja. Andra uppgifter med samma logik då med adressinformation, kopplade uppgifter, eh, kopplade orderkoncept då. Och när det gäller kopplade uppgifter och kopplade orderkoncept så är det då systemgenererade metadatafält då. Medan bilderna som är ovanför här då, det är ju då bilder som är, eh, skapade då företrädesvis utav utföraren som har genomfört det. Och här är det också viktigt då att vi har den här loggen, där vilket datum det är gjort, eh, bilderna-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. -skapad, vilken tid och vilken användare. Där är det också, eh, viktigt, så som på de andra, andra ställena, att man också visar varifrån då bilden härstammar. Eh, är det en administrativt manuellt inmatad kontaktperson som de här båda övre där, ja, då, då, då, då är det ju på det sättet. Medan, medan om det är en bild som kommer från en uppgift, då ska det då stå att det är, den är kopplad till den här uppgiften som härstammar ifrån det här orderkonceptet då. Och då ser man-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm ...historiken där. Och sen så finns det ju då en möjlighet då att man kan gå in då och visa alla de här bilderna och så kan man då också gå tillbaka och se varifrån de här kommer och, och få upp hela, hela, hela då den ordern eller vad man ska säga då. Så att det, det kommer ju så som jag ser det här så kommer den här vyn att vara då att man får en fantastisk överblick över, över både information, status, men också saker och ting som är på väg att hända, eh, kopplade orderkoncept, kopplade uppgifter-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm ...i och för sig att, eh, har vi metadatafält för felanmälningar och så vidare, så kommer det att komma in då. Och sen är det ju då en annan fråga hur den här användarguid och hantera det här för att skärmen har ju bara en viss storlek så att den kanske kan hantera då ett antal grupperingar, men sen får man då stega in för att se mer information då eller andra metadatafält då. Så man stegar runt i det hela.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Så, eh, och om RepliK nu har några frågor på den här layouten nu som är omarbetad, förbättrad och förtydligare mot de tidigare fyra bilderna, så måste RepliK då höra av sig om de frågeställningarna. Men annars förväntar vi oss att RepliK uppdaterar nu den hära, eh, vyn som vi har klagat på nu och som har varit då rörig i linje med den här layouten då.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    }
+  ]
+}
