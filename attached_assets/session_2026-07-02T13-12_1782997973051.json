@@ -1,0 +1,182 @@
+{
+  "sessionId": "1706fd5528",
+  "exportedAt": "2026-07-02T13:12:49.707Z",
+  "summary": "### Key Topics Discussed\n- Review of the latest compilation.\n- Discussion of the action plan.\n- Focus on clearing the view and the inclusion of surname as metadata.\n- Discussion on the full lineage of an object using the surname, e.g., Axfood Sweden, Hemköpskedjan, Region Syd, Hemköp Hisingen, Gothenburg.\n- Presentation of metadata and metadata editing areas.\n- Analysis of system-locked and system-created metadata, specifically for GPS coordinates (longitude and latitude).\n- Management of parent-child relationships for objects, including adding, removing, and re-linking parents.\n- Ability to add subordinate objects, such as new recycling containers or windows.\n- Two-step search functionality for adding children and parents.\n- The importance of presenting objects with their full lineage (surname) in search results to differentiate objects with identical names (e.g., \"pantrum\" for every store), especially given the large number of stores (e.g., 500 \"pantrum\" in Hemköpskedjan).\n- The importance of using surnames to prevent incorrect attachment of metadata to objects.\n- Discussion on history and catalog display, with an example layout from an ad site for images, which can also be applied to files and related data/orders.\n- Grouping of linked data, including parent-child relationships for objects and metadata families (e.g., contacts, name, title).\n- Application of grouping and parent-child logic to an order concept, where an order concept will lead to a list of tasks created against a unique object based on a hit from that order concept.\n- Discussion of structured articles in this context.\n- The application of parent-child logic to tasks associated with an object, such as cleaning different parts of a waste bin or applying a decal.\n- The requirement for each metadata value to include creation date and origin (e.g., manually entered by an administrator or updated by an operator).\n- The form or image layout will be very simple, with a header at the top containing basic information that is not metadata.\n- Usage of ChatGPT-generated mockup images as templates, acknowledging that their graphical layout differs from Replit's.\n- Grouping of metadata into categories like geographical and production-related metadata.\n- Replit may need to split metadata display across multiple pages instead of a single long scrollable screen.\n- The challenge for Replit to create a form for catalog-based metadata, considering all metadata can essentially be viewed as catalog-based.\n- Metadata history should be viewable as a catalog, allowing users to see current values and browse past values (e.g., seeing that there were 12 receptacles five months ago instead of the current 10).\n- Prioritizing phase one and two as the first deliverable steps, which include clearing the view and metadata presentation.\n- Definition of basic data scope: number, name, status, and surname.\n- Clarification that surname encompasses the parentage, illustrating with Axfood Sweden, Hemköpskedjan, Region Göteborg, and a unique store like Hemköp Hisingen, which can have subordinate elements like deposit rooms (pantrum) and recycling rooms with various containers. This grouping of objects by name is not metadata.\n- The importance of searching for and locating specific objects within an extensive hierarchy using the surname.\n- Discussion of vignette images as metadata, potentially a customer's logo, and how they would be inherited through the object lineage (e.g., Axfood's general logo for Axfood Sweden, potentially overridden at lower levels like Hemköp Hisingen).\n\n### Decisions Made\n- It should be possible to edit parent-child relationships, allowing for the addition or removal of parents for an object.\n- It should be possible to add subordinate objects to an existing object.\n- Objects should be re-linkable to new parents, for example, if a store changes ownership from one chain to another.\n- ChatGPT-generated mockup images can be used as templates despite graphical differences with Replit.\n- Phase one and two (clearing the view and metadata presentation) are prioritized as the first deliverable steps.\n- Vignette images are considered metadata and will be managed via a specific field.\n\n### Action Items\n- Ensure metadata values include creation date, time, originating source (e.g., manual administrator entry, operator update from task execution, or automatic ingestion), and the user who performed the action.\n- Create a system-created field for vignette images within the metadata structure.\n\n### Important Points & Insights\n- Everything that is not metadata should be in the view.\n- Surname is an important piece of metadata that is currently included.\n- The full surname helps to precisely identify the origin of individual objects (e.g., a trash can or a recycling room) within a specific store.\n- Metadata presentation should include the name, and metadata editing utilizes specified metadata areas.\n- System-created metadata should be permanent and unremovable by operators.\n- GPS coordinates (longitude and latitude) will be grouped under a parent metadata field like \"position\" within address information.\n- The central functionality for a unique object will be to see its parent and linked children.\n- There needs to be a clear process to edit these relationships, including adding multiple parents if an object has none, or easily removing children.\n- A two-step search is crucial for adding children and parents, especially when many objects share the same name (e.g., \"pantrum\").\n- The lineage (surname) must be presented in search results to allow users to distinguish between identically named objects and find the correct one (e.g., searching for \"Hemköpskedjan\" and \"pantrum\" to see all \"pantrum\" belonging to Hemköpskedjan).\n- Using surnames ensures that metadata is not mistakenly added to the wrong object.\n- A layout example from an ad site for catalog display of images will be provided and can be adapted for files and other linked information.\n- Grouping and parentage logic applies consistently across objects, metadata families (e.g., contacts, name, title), and order concepts.\n- The catalog form, similar to an ad site's image management, will be used to display grouped tasks and information.\n- Each metadata value must track its creation date and origin (e.g., if it was manually entered by an administrator or updated by an operator).\n- The metadata update process needs to capture the time of update, the performer (user/operator), and the source of the update.\n- The proposed form layout is simple, featuring a header at the top for fundamental, non-metadata information.\n- Users should be able to view the history of metadata values in a catalog format to assess information by seeing past updates and performers.\n- The basic data scope for an object includes number, name, status, and surname, with the surname defining the parentage.\n- The distinction between object grouping (like pantrum under Hemköp Hisingen) and metadata is important; grouping is about object names and their hierarchy.\n- The complete name, including the surname, is essential for unique identification and searching, especially when many objects share the same basic name (e.g., hundreds of \"pantrum\" within a chain).\n- Vignette images (e.g., customer logos) will be treated as metadata and can be displayed at the top of the interface.\n- Vignette images will inherit through the parent-child hierarchy, allowing generic high-level images to be overridden by specific ones at lower levels (e.g., Axfood logo at the corporate level, potentially a specific store logo for Hemköp Hisingen).\n\n### Open Questions/Pending Items\n- How to make an object standalone or smoothly link it to a parent in Axfood.\n- Clarification on the three distinct questions that need to be answered.\n- Whether Replit should implement multiple pages for metadata display instead of a long scrollable interface.",
+  "conversation": [],
+  "transcripts": [
+    {
+      "text": "Eh, ett, två, ett, två. Så ja. Eh, kommentar på din senaste, eh, sammanställning här.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Ja, och då går vi igenom, eh, åtgärdsplanen mycket kortfattat och sen så kommer det att bli svar på frågorna, då de tre frågorna där. Eh, ettan där då, rensa vyn, och jag understryker igen då att det är då det allt som inte är metadata ska finnas då där. Och en grej som är intressant här är då släktnamnet och den finns ju med där då. Och släktnamnet-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Ja ...är viktigt för släktnamnet. Om vi tar nu flödet så blir det ju då Axfood Sverige, Hemköpskedjan, Region Syd, Hemköp Hisingen, Göteborg. Och genom att redovisa hela släktnamnet, och det kan ju bli ganska långt, så ser man ju då, eh, i det läget precis var den här enskilda då, eh, objektet då, som kan vara mer till en soptunna eller ett återvinningsrum då eller något annat objekt på den enskilda, i det här fallet butiken då, härstammar då. Och den...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Namnet får ju då gärna finnas med då också där då. Metadata-presentationen och då tydliggör jag bara då att...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Iii då metadata-editeringen så finns det metadata-områden och det är dom områdena då som den ska använda sig utav här då.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Eh, vi behöver göra en analys och det här behöver inte vara liksom s... Det här är ju inte något visst status, men där systemet ser då att, eh, man av olika skäl då behöver ha, eh, systemlåsta, söp... Systemskapade metadata så ska systemet då skapa dem. Och det innebär ju då att operatören kan inte ta bort dem, utan de finns alltid med. Sen så kan vi då rep... Lite och vi ha en dialog då, eh, men det är ganska naturligt om, om, om, om rep lit nu tar fram ett, ett metadata-fält för den",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "positionen som är då i longitud och latitud, GPS-kordinater. Så kommer ju den att grupperas då som en, en metadata-rubrik eller två metadata-rubriker. Det blir en förälder som vi kallar då, eh, metadata-fält, eh, position och så står det longitud och så finns det plats för att lägga in den får... Siffran där och latitud, eh, ra... Raden under så blir det en liten familj då. Och den kommer ju då naturligtvis att grupperas till den an... Övriga adressinformationen då som ligger under, eh, position eller adresser då. Eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Föräldrar bra om skapa flöde. Eh, ja, i den här, eftersom det centrala kommer hela tiden att vara när du är inne på ett unikt objekt, kommer att vara att se vem är mamma och också se vilka barn som är kopplade till den hära. Och sen så kommer det då att finnas ett behov att kunna editera det dära. Så har du ett objekt som inte har någon förälder så ska du då kunna lägga till en eller flera föräldrar. Och ligger du då i, i ett objekt som är till exempel ett återvinningsrum så ska du ju lätt kunna ta bort.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Ja, precis. Du har fått plus och, och lägga till ett underordnat objekt. Det kan vara en, en, en, en grupp av nya återvinningskärl eller du lägger till en, ett objekt i form av ett fönster som ska putsas eller något sånt där. Men det, i det här läget så är det lätt att kunna lägga till dem. Och naturligtvis så ska det ju också finnas en möjlighet då att, att länka om de här. Så att om den här nu har en förälder, eh, låt säga nu att det är en viss butik här nu går under Axfood Sverige, men nu har den här butiken sålts och ingår i en annan kedja. Ja, då ska man ju kunna editera den och byta från Hemköp-kedjan till, eh, att den antingen-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Ja ...göra den helt stand alone eller koppla den till Rika eller vad du, vad du nu är då på ett väldigt smidigt sätt genom att bara, bara så ersätta den. En mycket viktig grej också när man skapar det här flödet och framför allt då när man ska lägga till barn då, eh, men också när man ska lägga till föräldrar, så är det ju väldigt bra om man kan ha en tvåstegssökning där då. Så att för... Eftersom att det är väldigt s-- D-dessa objekt kommer ju att få samma namn som om vi har då, eh, pantrum för då butiker-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm ...kommer det ju stå pantrum på varenda butik då. Då kommer det alltså vara omöjligt då att hitta då, eh, vilket pantrum man då ska lägga till de unika pantkärlen eller pantmaskinen eller vad det nu är då. Så där behöver det kunna presenteras med släktnamnet då. För då, då, då kan man ju då söka då, eh, och skriva då på enkla sätt, Hemköpskedjan och så eventuellt något tronkeringstecken eller bara fritext, pantrum då. Och då ska det ju då komma upp en lista då på alla pantrum som hör till Hemköpskedjan. Och det kommer ju då att vara hundratals då.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Ja. Så då kanske man lägger till, eh, Hemköp Hisingen pantrum. Ja, då kommer man, får man då upp Hemköps, eh, Hemköp Hisingen, eh, pantrum då och så kan man välja den. Men genom att använda släktnamnen här så, så, så säkerställer man ju då så att man inte lägger till ett enskilt objekt eller enskild metadata då på, på ett f-- grannens, eh, objekt då. Jag hoppas det där framgår klart och tydligt då.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och sen punkten fem, historik, eh, då. Och jag kommer att bifoga här nu en, en layout ifrån en annons-sajt då som hanterar då det här, det som jag då kallar katalog, eh, redovisning då. Och i det här fallet så är det bilder, men det går ju alldeles utmärkt att använda samma layout och princip för filer. Och det går att använda samma layout och princip också för, för, för till exempel, eh, uppgifter som har varit kopplade till den här, eller orderkonst-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Ja ...som är kopplade till den här då. Hur man nu väljer att redovisa de kopplade uppgifterna, de kommer ju också vara grupperade då här. Och här vill jag också understryka då att det här med gruppering och föräldraskap eller vad vi ska kalla det då, både när det gäller objekterna, när det gäller, eh, metadata, eh, familjer som till exempel då kontakt, kontakter, namn, eh, titel och så vidare. Det blir ju exakt samma sak också då med ett orderkoncept då där, där du kommer då utifrån ett orderkoncept så kommer det då att bli en lista på ett antal uppgifter-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm ...där det som har skapats mot det unika objektet och baserat på ett träff från det orderkonceptet då. Och dessutom kan det då vara strukturartiklar här då. Så det innebär ju också då på samma sätt med samma logik som att kontaktperson...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Kan gå fram, namn, telefonnummer och e-post och titel och så där. Så blir det ju exakt samma att en kärnträtt kan ju då ha rengöring lock, rengöring insida tunna, rengöring, eh, utsida tunna, applicering av dekal och en dekal. Så det blir ju samma logik som jag hoppas att Repditt fattar då. Att det blir alltså en, en grupp av, av i det fall då uppgifter och så kommer det. Och det här behöver ändå kunna redovisa och det här kommer då att bli aktuellt att ha då i den här det jag kallar katalogformen som är...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Ja. Som är synonym med den här, eh, Avant-saitens bildhantering, där man visar en bild och så kan man bläddra i den då. Och mycket viktigt här också då att, eh, Repditt fattar då att för varje metadatavärde så ska då det hängas på datum när den skapades, var den härstammar ifrån, är den härstammad ifrån, eh, en administratör som har lagt in uppgiften manuellt? Ja, då ska det stå. Härstammar den ifrån en operatör som har uppdaterat metadata via l",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "- Mm. -via ett visst datum så ska det framgå. Är den uppdaterad via, eh, en utförare som har utfört en uppgift och uppdaterat metadata utifrån då den logik för uppdatering av metadata som finns där, fr-- ska det framgå då med tidpunkt, eh, utförare, användare då som, som har gjort det och var den kommer ifrån, om det kommer då från eller om det kommer från en intankning på enklaste sätt. Mm.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och nu ska vi då svara på tre tydliga frågor här. Eh, och svar ja på första där. Eh, de mockup-bilderna nu som är skapade utav ChatGPT och naturligtvis som inte har samma grafiska layout som, som då, eh, Replit har då. Använd dem som, som mall, men den här-- Som jag ser, den, den här formuläret eller bilden är ju väldigt enkel. Det finns ett huvud längst upp där grundinformationen som inte meta-- är metadata finns.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och sen så är det bara en, en, en, en lista då med grupperade metadata, geografiska metadata, produktionsmässiga metadata och så vidare och så vidare, där det då är tillämpligt. Sen kan det ju då bli på det sättet att Replit, eh, kan behöva dela upp det här på flera sidor då, istället för att ha en lå-lång scrollbar-skärm. Men det kan vi också ta i ett senare skede. Och sen så tror jag att det är en stor utmaning för Replit då att skapa en form för de här katalogbaserade metadata. Och i princip så kan man ju se all metadata som katalogbaserad.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Det är även om till exempel metadata som antal bara är ett statiskt fält, men man kan se historiken i form av en katalog så att man kan alltså-- Man ser att det är tio där, det är det som ligger nu och de är uppdaterade sen-- Eh, utifrån en intankning eller utifrån senaste utföraren. Men man kan också klicka och bläddra och se då att för, eh, fem månader sedan så var det inte tio kärl, utan då var det tolv kärl och det var uppdaterat utav en utförare då. På det viset kan man värdera informationen. Hoppas det är klart, annars är det en rätt fråga.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Eh, prioritet, köra fas ett och två som första levererbara steg. Eh, och då antar jag då att det är rensa vyn och göra metadatapresentationen. Ja, men det är väl okej. Eh, samtidigt så är det ju inte såhär enkelt då för att de här fälten som kommer in då och, och hur man redan-- Det kommer ju att vara delar utav det där, men det där får väl rä-- Rättligt reda ut. Punkt tre, grunddataomfång. Är nummer, namn...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Namn, status, släkt, namn då. Notera här nu då att släktnamnet innefattar ju då förälder för släktnamnet föder då föräldraskapet. Om jag tar, jag tar det här ytterligare en gång då så att det räcker förhoppningsvis att du ska kunna förstå. Om vi tar exemplet med butikskedjan Axfood då så heter ju den då Axfood Sverige. Och så finns det då en, en gren som heter Hemköpskedjan. Och så finns det kanske en gren som heter Region Göteborg. Och så finns det då en unik butikskedja.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "I Göteborg som heter Hemköp Hisingen. Och så till Hemköp Hisingen så finns det då ett pantrum och så finns det kanske ett återvinningsrum och så finns det återvinningsgarage och så kan det finnas underordnade då delar i återvinningsrummet, finns det olika kärl och så vidare. Och, eh, det här är ju då inte metadata, utan det här är ju bara gruppering utav, utav då objektens namn. Och jag hoppas också att det framgår...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Ja, det får det. Det får det. Eller med det här med släktnamnet, för då ser man ju liksom då var den härstammar ifrån om man får det kompletta namnet. Och det är också viktigt då att man ska kunna söka för att kunna liksom hitta in i det här eftersom det är ganska omfattande information. Vara Hemköpkedjan består väl utav liksom femhundra, eh, butiker och det innebär att det finns minst femhundra pantrum då. Och då är det ju viktigt att de inte bara heter pantrum, r-r-rum, utan de heter ju då släktnamnet för det är un-un-unika pantrummet som man ser om man inte blandar ihop det här då. Särskilt när man...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Ja, det är viktigt.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Eh, och...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Nå, anledningen till att man ska ligga i grunddatan, ja, nu har du lagt in en, en vinjettbild där då, och, och jag har grundat på den då. Det-- Men det är väl trevligt att man kan ha en vinjettbild där, och det kan vara kundens logotyp eller det kan vara något annat då. Och den stora frågan som jag tänker på, är det då metadata eller inte? Ja, det är min uppfattning är då faktiskt att det också är metadata. Men man har alltså möjlighet då att, att adressera då. Då skapar vi alltså bara ett fält som vi kallar vinjettbilder, och så, och så kan vi då lägga upp dem då, antingen...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "I toppen på det här viset eller, eller då i, i, i-- Längre ner. Och konkret så kommer ju det att bli på det sättet då, att då metadatafältet, vinjettbild, som då kanske är sy-systemskapat då, finns där. Då kommer ju den att titta: \"Finns det någon vinjettbild på Axfood Sverige?\" Ja, det gör det. Det är Axfoods generella logotyp. Ja, då smäller man dit den. Går man ner på Axfoods pamprum på Hisingen då? Ja, eh, antingen så smäller man upp Axfoods logotyp där, men förmodligen har det då kommit andra vinjettbilder emellan. Så antingen-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    }
+  ]
+}

@@ -207,11 +207,9 @@ describe("ObjectDetailPage — översikt: navigering & sektioner", () => {
 
     const navToSection: Array<[string, string]> = [
       ["nav-overview", "object-section-overview"],
-      ["nav-location", "object-section-location"],
-      ["nav-access", "object-section-access"],
-      ["nav-equipment", "object-section-equipment"],
       ["nav-hierarchy", "object-section-hierarchy"],
       ["nav-metadata", "object-section-metadata"],
+      ["nav-location", "object-section-location"],
       ["nav-contacts", "object-section-contacts"],
       ["nav-images", "object-section-images"],
       ["nav-info-packages", "object-section-info-packages"],
@@ -264,6 +262,40 @@ describe("ObjectDetailPage — översikt: navigering & sektioner", () => {
     });
     await waitFor(() => {
       expect(getByTestId("button-toggle-deep-tools").getAttribute("data-state")).toBe("open");
+    });
+  });
+
+  it("renderar alltid sektions-wrappern för 'Objektfält (under migrering)' även utan värden", async () => {
+    await mountAndWaitForNav();
+    // Wrappern renderas alltid (även när kortet är tomt) så gamla ?tab=-djuplänkar
+    // hittar ett ankare; själva kortet visas bara när minst ett värde finns.
+    expect(document.getElementById("object-section-object-fields")).toBeTruthy();
+    expect(document.querySelector('[data-testid="card-object-fields"]')).toBeNull();
+  });
+
+  it("visar inte 'Objektfält'-kortet när accessType är default 'open' utan andra värden", async () => {
+    // accessType har DB-default "open" — det får INTE räknas som ett riktigt värde,
+    // annars fabriceras "Tillgångstyp: Öppet" på nästan alla objekt (exakt det PO
+    // ville bort från). Kortet ska förbli dolt när inga andra hårdkodade fält finns.
+    installFetchMock(makeResolvedObject({ accessType: "open" }));
+    const { queryByTestId } = renderObjectDetail(`/objects/${OBJECT_ID}`);
+    await waitFor(() => {
+      expect(queryByTestId("object-detail-section-nav")).toBeTruthy();
+    });
+    expect(document.querySelector('[data-testid="card-object-fields"]')).toBeNull();
+  });
+
+  it("bakåtkompatibel ?tab=access-djuplänk scrollar till 'Objektfält (under migrering)'", async () => {
+    installFetchMock(makeResolvedObject());
+    // ?tab-effekten läser window.location.search direkt; sätt jsdom-URL:en före montering.
+    window.history.replaceState(null, "", `/objects/${OBJECT_ID}?tab=access`);
+    const scroll = installScrollSpy();
+    const { queryByTestId } = renderObjectDetail(`/objects/${OBJECT_ID}?tab=access`);
+    await waitFor(() => {
+      expect(queryByTestId("object-detail-section-nav")).toBeTruthy();
+    });
+    await waitFor(() => {
+      expect(scroll.lastScrolledId()).toBe("object-section-object-fields");
     });
   });
 

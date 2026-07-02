@@ -143,10 +143,14 @@ interface SectionProps {
   children: React.ReactNode;
   locked?: boolean;
   defaultOpen?: boolean;
+  isEmpty?: boolean;
 }
 
-function Section({ title, icon, count, testId, children, locked, defaultOpen }: SectionProps) {
+function Section({ title, icon, count, testId, children, locked, defaultOpen, isEmpty }: SectionProps) {
   const [open, setOpen] = useState(!!defaultOpen);
+  // Fas 2 (Task #1128): systemgenererade grupper visas endast "i det förekommande
+  // fall" — utan värde renderas ingen sektion alls (ingen tom "Inga …"-rad).
+  if (isEmpty) return null;
   return (
     <Collapsible open={open} onOpenChange={setOpen}>
       <CollapsibleTrigger
@@ -366,6 +370,7 @@ export function ObjectSystemGeneratedPanel({ objectId }: Props) {
         testId="system-address"
         locked
         defaultOpen
+        isEmpty={!hasAddress}
       >
         {!hasAddress ? (
           <Empty text="Ingen adress registrerad." testId="text-no-address" />
@@ -383,6 +388,7 @@ export function ObjectSystemGeneratedPanel({ objectId }: Props) {
         icon={<Navigation className="h-4 w-4" />}
         testId="system-position"
         locked
+        isEmpty={!position.geocoded}
       >
         {!position.geocoded ? (
           <Empty text="Ej geokodad." testId="text-no-position" />
@@ -419,6 +425,7 @@ export function ObjectSystemGeneratedPanel({ objectId }: Props) {
         icon={<Target className="h-4 w-4" />}
         count={pointedInConcepts.length}
         testId="system-concepts"
+        isEmpty={pointedInConcepts.length === 0}
       >
         {pointedInConcepts.length === 0 ? (
           <Empty text="Inga orderkoncept pekar in på detta objekt." testId="text-no-concepts" />
@@ -451,6 +458,7 @@ export function ObjectSystemGeneratedPanel({ objectId }: Props) {
         icon={<ClipboardList className="h-4 w-4" />}
         count={tasksHistory.length}
         testId="system-tasks-history"
+        isEmpty={tasksHistory.length === 0}
       >
         {tasksHistory.length === 0 ? (
           <Empty text="Inga utförda/skapade uppgifter." testId="text-no-tasks-history" />
@@ -479,6 +487,7 @@ export function ObjectSystemGeneratedPanel({ objectId }: Props) {
         icon={<CalendarClock className="h-4 w-4" />}
         count={tasksFuture.length}
         testId="system-tasks-future"
+        isEmpty={tasksFuture.length === 0}
       >
         {tasksFuture.length === 0 ? (
           <Empty text="Inga planerade uppgifter." testId="text-no-tasks-future" />
@@ -511,6 +520,7 @@ export function ObjectSystemGeneratedPanel({ objectId }: Props) {
         icon={<ImageIcon className="h-4 w-4" />}
         count={images.length}
         testId="system-images"
+        isEmpty={images.length === 0}
       >
         {images.length === 0 ? (
           <Empty text="Inga bilder." testId="text-no-images" />
@@ -538,6 +548,7 @@ export function ObjectSystemGeneratedPanel({ objectId }: Props) {
         icon={<AlertTriangle className="h-4 w-4" />}
         count={issueReports.length}
         testId="system-issues"
+        isEmpty={issueReports.length === 0}
       >
         {issueReports.length === 0 ? (
           <Empty text="Inga felanmälningar." testId="text-no-issues" />
@@ -568,6 +579,7 @@ export function ObjectSystemGeneratedPanel({ objectId }: Props) {
         icon={<Star className="h-4 w-4" />}
         count={ratings.length}
         testId="system-ratings"
+        isEmpty={ratings.length === 0}
       >
         {ratings.length === 0 ? (
           <Empty text="Inga betyg." testId="text-no-ratings" />

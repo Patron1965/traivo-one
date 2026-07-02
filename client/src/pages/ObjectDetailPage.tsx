@@ -5,10 +5,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { DeliveryPreferencesEditor } from "@/components/DeliveryPreferencesEditor";
 import { ObjectHistoryArchiveTab } from "@/components/ObjectHistoryArchiveTab";
 import { ObjectVignetteSection } from "@/components/ObjectVignetteSection";
-import { ObjectMetadataForm, type MetadataFormEntry, type MetadataFormType, type MetadataRelatedParent, type MetadataRelatedChild, type MetadataExtraNavItem, type MetadataExtraTile } from "@/components/ObjectMetadataForm";
+import { ObjectMetadataForm, type MetadataFormEntry, type MetadataFormType, type MetadataRelatedParent, type MetadataRelatedChild } from "@/components/ObjectMetadataForm";
 import { ObjectTemplateMetadataForm, type TemplateMetadataType } from "@/components/ObjectTemplateMetadataForm";
 import { ObjectSystemGeneratedPanel } from "@/components/ObjectSystemGeneratedPanel";
 import { InfoPackageTree } from "@/components/objects/InfoPackageTree";
@@ -33,7 +32,7 @@ import {
   ArrowLeft, Building2, MapPin, Key, Keyboard, Users, DoorOpen,
   Clock, Package, FileText, Image, Contact, GitFork, AlertTriangle,
   Calendar, Loader2, ChevronRight, ExternalLink, Wrench, Shield,
-  Hash, Truck, Timer, Info, Box, Layers, ClipboardList, Plus,
+  Hash, Info, Box, Layers, ClipboardList, Plus,
   Trash2, Pencil, Save, X, Phone, Mail, LinkIcon, Search, History,
   ArrowUp, ArrowDown, RotateCcw, Cog, Copy, ArrowRightLeft
 } from "lucide-react";
@@ -42,7 +41,7 @@ import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { useMapConfig } from "@/hooks/use-map-config";
-import type { ServiceObject, WorkOrder, DeliveryPreferences, ImportTemplate } from "@shared/schema";
+import type { ServiceObject, WorkOrder, ImportTemplate } from "@shared/schema";
 import { PolylineEditor } from "@/components/PolylineEditor";
 import { objectStatusBadge as statusColors, workOrderStatusBadge as workOrderStatusColors } from "@/lib/status-colors";
 import { OBJECT_LOCATION_TYPE_LABELS, objectLocationTypeLabel, objectLocationTypeBadgeClass } from "@/lib/object-location";
@@ -244,15 +243,6 @@ interface ObjectEditForm {
   longitude?: number | string | null;
 }
 
-const hierarchyLevelLabels: Record<string, { label: string; color: string }> = {
-  koncern: { label: "Koncern", color: "bg-chart-5/15 text-chart-5 border border-chart-5/30" },
-  brf: { label: "BRF", color: "bg-chart-1/15 text-chart-1 border border-chart-1/30" },
-  fastighet: { label: "Fastighet", color: "bg-chart-2/15 text-chart-2 border border-chart-2/30" },
-  rum: { label: "Rum", color: "bg-chart-3/15 text-chart-3 border border-chart-3/30" },
-  karl: { label: "Kärl", color: "bg-chart-4/15 text-chart-4 border border-chart-4/30" },
-  objekt: { label: "Objekt", color: "bg-muted text-muted-foreground border border-border" },
-};
-
 const objectTypeLabels: Record<string, string> = {
   omrade: "Område",
   fastighet: "Fastighet",
@@ -365,6 +355,11 @@ const defaultIcon = L.icon({
 const TAB_TO_SECTION: Record<string, string> = {
   ekonomi: "deep-tools",
   "history-archive": "deep-tools",
+  // Bakåtkompatibilitet efter Fas 1-omstruktureringen: gamla ?tab=-djuplänkar för
+  // borttagna/omdöpta sektioner scrollar till närmaste kvarvarande ankare.
+  access: "object-fields",
+  equipment: "object-fields",
+  "delivery-preferences": "metadata",
 };
 
 export default function ObjectDetailPage() {
@@ -881,35 +876,6 @@ export default function ObjectDetailPage() {
     },
   });
 
-  const reorderMetadataMutation = useMutation({
-    mutationFn: async (orderedKatalogIds: string[]) => {
-      await apiRequest("PUT", `/api/metadata/objects/${objectId}/order`, { orderedKatalogIds });
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/metadata/objects", objectId] });
-    },
-    onError: (error: Error) => {
-      toast({ title: "Kunde inte spara sorteringsordning", description: error.message, variant: "destructive" });
-    },
-  });
-
-  // Flytta ett metadata-fält upp/ner och spara hela ordningen (katalog-id-lista).
-  const moveMetadata = (index: number, direction: -1 | 1) => {
-    const target = index + direction;
-    if (target < 0 || target >= metadata.length) return;
-    const ids = metadata
-      .map((m) => m.metadataKatalogId)
-      .filter((id): id is string => !!id);
-    const fromId = metadata[index]?.metadataKatalogId;
-    const toId = metadata[target]?.metadataKatalogId;
-    if (!fromId || !toId) return;
-    const fromPos = ids.indexOf(fromId);
-    const toPos = ids.indexOf(toId);
-    if (fromPos < 0 || toPos < 0) return;
-    [ids[fromPos], ids[toPos]] = [ids[toPos], ids[fromPos]];
-    reorderMetadataMutation.mutate(ids);
-  };
-
   const createWorkOrderMutation = useMutation({
     mutationFn: async (data: any) => {
       await apiRequest("POST", "/api/work-orders", data);
@@ -1220,36 +1186,6 @@ export default function ObjectDetailPage() {
   // Task #1128: primär förälder för header-sammanfattningen.
   const primaryParent = relatedParents.find((p) => p.isPrimary) ?? relatedParents[0] ?? null;
 
-  // Task #1138: leveranspreferenser ska kännas helt integrerade i metadataområdet.
-  // De renderas som ett eget kort (#object-section-delivery-preferences) men listas
-  // även i vänsterspaltens områdesnavigering och 360-översikten via extra-props.
-  // Antalet speglar kortets badge: konfigurerade regler från objektets EGNA prefs.
-  // Leveranspreferenser är objekt-egna (ADR v3) — det finns inget kund-arv.
-  const ownDeliveryPrefs = (obj as { deliveryPreferences?: DeliveryPreferences | null })
-    .deliveryPreferences;
-  const deliveryPrefsCount = ownDeliveryPrefs
-    ? (ownDeliveryPrefs.weeklyWindows?.length ?? 0) +
-      (ownDeliveryPrefs.blockedHours?.length ?? 0) +
-      (ownDeliveryPrefs.blockedDates?.length ?? 0)
-    : 0;
-  const deliveryPrefsNavItems: MetadataExtraNavItem[] = [
-    {
-      key: "delivery-preferences",
-      anchorId: "object-section-delivery-preferences",
-      label: "Leveranspreferenser",
-      count: deliveryPrefsCount,
-      icon: Truck,
-    },
-  ];
-  const deliveryPrefsTiles: MetadataExtraTile[] = [
-    {
-      icon: Truck,
-      label: "Leveranspreferenser",
-      value: deliveryPrefsCount,
-      anchorId: "object-section-delivery-preferences",
-      testid: "stat-delivery-preferences",
-    },
-  ];
 
   // Task #863: objektet som flytt-dialogen avser — sidans objekt eller ett barn
   // i grenträdet (hämtas från descendants-listan).
@@ -1282,11 +1218,7 @@ export default function ObjectDetailPage() {
   const hasEntrance = obj.entranceLatitude && obj.entranceLongitude;
   const AccessIcon = accessTypeLabels[obj.accessType || "open"]?.icon || DoorOpen;
 
-  // Task #848: objectType och hierarchyLevel sammanfaller ofta (t.ex. "Rum"/"Rum")
-  // efter etikett-mappning. Visa då bara ett fält; visa båda först när de skiljer sig.
   const objectTypeLabel = (obj.objectType && objectTypeLabels[obj.objectType]) || obj.objectType || "";
-  const hierarchyLabel = (obj.hierarchyLevel && hierarchyLevelLabels[obj.hierarchyLevel]?.label) || obj.hierarchyLevel || "";
-  const typeAndLevelMatch = !!objectTypeLabel && !!hierarchyLabel && objectTypeLabel === hierarchyLabel;
 
   const containerCounts = [
     { label: "K1", value: obj.containerCount },
@@ -1335,12 +1267,7 @@ export default function ObjectDetailPage() {
             )}
           </h1>
           <div className="flex items-center gap-2 mt-2 flex-wrap">
-            {obj.hierarchyLevel && hierarchyLevelLabels[obj.hierarchyLevel] && (
-              <Badge className={hierarchyLevelLabels[obj.hierarchyLevel].color} data-testid="badge-hierarchy-level">
-                {hierarchyLevelLabels[obj.hierarchyLevel].label}
-              </Badge>
-            )}
-            {!(typeAndLevelMatch && obj.hierarchyLevel && hierarchyLevelLabels[obj.hierarchyLevel]) && (
+            {objectTypeLabel && (
               <Badge variant="secondary" data-testid="badge-object-type">
                 {objectTypeLabel}
               </Badge>
@@ -1450,7 +1377,6 @@ export default function ObjectDetailPage() {
               ) : (
                 <ul className="divide-y">
                   {(searchHitsQuery.data || []).map((hit) => {
-                    const levelLabel = hit.hierarchyLevel && hierarchyLevelLabels[hit.hierarchyLevel];
                     const pathLabel = hit.path
                       .filter((p) => p.id !== hit.id)
                       .map((p) => p.name)
@@ -1472,9 +1398,6 @@ export default function ObjectDetailPage() {
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2 flex-wrap">
                               <span className="text-sm font-medium truncate">{hit.name || hit.objectNumber || "Objekt"}</span>
-                              {levelLabel && (
-                                <Badge variant="outline" className="text-[10px]">{levelLabel.label}</Badge>
-                              )}
                               {hit.objectNumber && (
                                 <span className="text-[10px] font-mono text-muted-foreground">#{hit.objectNumber}</span>
                               )}
@@ -1508,15 +1431,13 @@ export default function ObjectDetailPage() {
         data-testid="object-detail-section-nav"
       >
         <Button variant="ghost" size="sm" onClick={() => scrollToSection("overview")} data-testid="nav-overview">Översikt</Button>
-        <Button variant="ghost" size="sm" onClick={() => scrollToSection("location")} data-testid="nav-location">Plats & Karta</Button>
-        <Button variant="ghost" size="sm" onClick={() => scrollToSection("access")} data-testid="nav-access">Tillgång</Button>
-        <Button variant="ghost" size="sm" onClick={() => scrollToSection("equipment")} data-testid="nav-equipment">Utrustning</Button>
         <Button variant="ghost" size="sm" onClick={() => scrollToSection("hierarchy")} data-testid="nav-hierarchy">
-          Hierarki {descendants.length > 0 && <Badge variant="secondary" className="ml-1 text-xs">{descendants.length}</Badge>}
+          Släkt & Hierarki {descendants.length > 0 && <Badge variant="secondary" className="ml-1 text-xs">{descendants.length}</Badge>}
         </Button>
         <Button variant="ghost" size="sm" onClick={() => scrollToSection("metadata")} data-testid="nav-metadata">
           Metadata {metadata.length > 0 && <Badge variant="secondary" className="ml-1 text-xs">{metadata.length}</Badge>}
         </Button>
+        <Button variant="ghost" size="sm" onClick={() => scrollToSection("location")} data-testid="nav-location">Karta</Button>
         <Button variant="ghost" size="sm" onClick={() => scrollToSection("contacts")} data-testid="nav-contacts">
           Kontakter {contacts.length > 0 && <Badge variant="secondary" className="ml-1 text-xs">{contacts.length}</Badge>}
         </Button>
@@ -1629,85 +1550,6 @@ export default function ObjectDetailPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <Card>
               <CardHeader className="pb-3">
-                <div className="flex items-center justify-between">
-                  <CardTitle className="text-base flex items-center gap-2">
-                    <Building2 className="h-4 w-4" /> Grundinformation
-                  </CardTitle>
-                  <Button variant="ghost" size="sm" onClick={() => openEditDialog("overview")} data-testid="button-edit-overview">
-                    <Pencil className="h-3.5 w-3.5 mr-1" /> Redigera
-                  </Button>
-                </div>
-              </CardHeader>
-              <CardContent className="space-y-1">
-                <InfoRow label="Objektnamn" value={obj.name} icon={Building2} />
-                <InfoRow label="Objektnummer" value={obj.objectNumber} icon={Hash} />
-                {typeAndLevelMatch ? (
-                  <InfoRow label="Objekttyp / nivå" value={objectTypeLabel} icon={Box} />
-                ) : (
-                  <>
-                    <InfoRow label="Objekttyp" value={objectTypeLabel} icon={Box} />
-                    <InfoRow label="Hierarkinivå" value={hierarchyLabel} icon={Layers} />
-                  </>
-                )}
-                <InfoRow label="Status" value={obj.status === "active" ? "Aktiv" : obj.status === "inactive" ? "Inaktiv" : obj.status} icon={Info} />
-                {obj.notes && <InfoRow label="Anteckningar" value={obj.notes} icon={FileText} />}
-              </CardContent>
-            </Card>
-
-            {(customer || obj.lastServiceDate || obj.avgSetupTime) && (
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-base flex items-center gap-2">
-                  <Users className="h-4 w-4" /> Kund & Service
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-1">
-                {customer && (
-                  <InfoRow label="Kund" value={customer.name} icon={Users} />
-                )}
-                <InfoRow label="Senaste service" value={obj.lastServiceDate ? new Date(obj.lastServiceDate).toLocaleDateString("sv-SE") : null} icon={Calendar} />
-                <InfoRow label="Genomsnittlig ställtid" value={obj.avgSetupTime ? `${obj.avgSetupTime} min` : null} icon={Timer} />
-              </CardContent>
-            </Card>
-            )}
-
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-base flex items-center gap-2">
-                  <MapPin className="h-4 w-4" /> Adress
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-1">
-                <div className="flex items-center justify-between py-1.5">
-                  <span className="text-sm text-muted-foreground flex items-center gap-2">
-                    <MapPin className="h-4 w-4" /> Platstyp
-                  </span>
-                  <div className="flex items-center gap-2">
-                    <Badge variant="outline" className={objectLocationTypeBadgeClass(obj)} data-testid="badge-location-type">
-                      {objectLocationTypeLabel(obj)}
-                    </Badge>
-                    {!obj.locationType && (
-                      <span className="text-xs text-muted-foreground" data-testid="text-location-type-derived">(härledd)</span>
-                    )}
-                  </div>
-                </div>
-                <InfoRow label="Adress" value={obj.address} icon={MapPin} />
-                <InfoRow label="Postnummer" value={obj.postalCode} icon={Hash} />
-                <InfoRow label="Stad" value={obj.city} icon={Building2} />
-                {hasCoordinates && (
-                  <InfoRow label="Koordinater" value={`${Number(obj.latitude).toFixed(6)}, ${Number(obj.longitude).toFixed(6)}`} icon={MapPin} />
-                )}
-                {hasEntrance && (
-                  <InfoRow label="Entrékoordinater" value={`${Number(obj.entranceLatitude).toFixed(6)}, ${Number(obj.entranceLongitude).toFixed(6)}`} icon={DoorOpen} />
-                )}
-                {obj.addressDescriptor && (
-                  <InfoRow label="Adressbeskrivning" value={obj.addressDescriptor} icon={Info} />
-                )}
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="pb-3">
                 <CardTitle className="text-base flex items-center gap-2">
                   <ClipboardList className="h-4 w-4" /> Sammanfattning
                 </CardTitle>
@@ -1736,189 +1578,7 @@ export default function ObjectDetailPage() {
           </div>
         </section>
 
-        {/* ==================== PLATS & KARTA ==================== */}
-        <section id="object-section-location" className="space-y-4 scroll-mt-4">
-          <Card>
-            <CardHeader className="pb-3">
-              <div className="flex items-center justify-between gap-2">
-                <CardTitle className="text-base flex items-center gap-2">
-                  <MapPin className="h-4 w-4" /> Plats & Karta
-                </CardTitle>
-                <div className="flex items-center gap-2">
-                  <Badge variant="outline" className={objectLocationTypeBadgeClass(obj)} data-testid="badge-location-type-tab">
-                    {objectLocationTypeLabel(obj)}
-                  </Badge>
-                  <Button variant="ghost" size="sm" onClick={() => openEditDialog("overview")} data-testid="button-edit-location">
-                    <Pencil className="h-4 w-4" />
-                  </Button>
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent>
-              {hasCoordinates ? (
-                <div className="rounded-lg overflow-hidden border" style={{ height: 400 }}>
-                  <MapContainer
-                    center={[Number(obj.latitude), Number(obj.longitude)]}
-                    zoom={16}
-                    style={{ height: "100%", width: "100%" }}
-                  >
-                    <TileLayer
-                      url={mapConfig.tileUrl}
-                      attribution={mapConfig.attribution}
-                    />
-                    <Marker position={[Number(obj.latitude), Number(obj.longitude)]} icon={defaultIcon}>
-                      <Popup>
-                        <strong>{obj.name || obj.objectNumber}</strong>
-                        {obj.address && <br />}
-                        {obj.address}
-                      </Popup>
-                    </Marker>
-                    {hasEntrance && (
-                      <Marker
-                        position={[Number(obj.entranceLatitude), Number(obj.entranceLongitude)]}
-                        icon={L.divIcon({
-                          className: "entrance-marker",
-                          html: '<div style="background:#22c55e;width:12px;height:12px;border-radius:50%;border:2px solid white;box-shadow:0 1px 3px rgba(0,0,0,.3)"></div>',
-                          iconSize: [12, 12],
-                          iconAnchor: [6, 6],
-                        })}
-                      >
-                        <Popup>Entrékoordinat</Popup>
-                      </Marker>
-                    )}
-                  </MapContainer>
-                </div>
-              ) : (
-                <div className="flex items-center justify-center h-48 bg-muted/30 rounded-lg">
-                  <div className="text-center text-muted-foreground">
-                    <MapPin className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                    <p>Inga koordinater tillgängliga</p>
-                  </div>
-                </div>
-              )}
-
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
-                <InfoRow label="Adress" value={obj.address} icon={MapPin} />
-                <InfoRow label="Postnummer" value={obj.postalCode} icon={Hash} />
-                <InfoRow label="Stad" value={obj.city} icon={Building2} />
-              </div>
-            </CardContent>
-          </Card>
-
-          <div className="mt-4">
-            <PolylineEditor object={obj as ServiceObject} />
-          </div>
-        </section>
-
-        {/* ==================== TILLGÅNG ==================== */}
-        <section id="object-section-access" className="space-y-4 scroll-mt-4">
-          <Card>
-            <CardHeader className="pb-3">
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-base flex items-center gap-2">
-                  <Key className="h-4 w-4" /> Tillgångsinformation
-                </CardTitle>
-                <Button variant="ghost" size="sm" onClick={() => openEditDialog("access")} data-testid="button-edit-access">
-                  <Pencil className="h-3.5 w-3.5 mr-1" /> Redigera
-                </Button>
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-1">
-              <InfoRow label="Tillgångstyp" value={accessTypeLabels[obj.accessType || "open"]?.label || "Öppet"} icon={DoorOpen} />
-              {(() => {
-                const codeInfo = getInheritanceInfo("accessCode");
-                return (
-                  <InheritedInfoRow
-                    label="Portkod"
-                    value={obj.resolvedAccessCode || obj.accessCode}
-                    inherited={codeInfo.inherited}
-                    source={codeInfo.sourceName}
-                    icon={Keyboard}
-                  />
-                );
-              })()}
-              {(() => {
-                const keyInfo = getInheritanceInfo("keyNumber");
-                return (
-                  <InheritedInfoRow
-                    label="Nyckelnummer"
-                    value={obj.resolvedKeyNumber || obj.keyNumber}
-                    inherited={keyInfo.inherited}
-                    source={keyInfo.sourceName}
-                    icon={Key}
-                  />
-                );
-              })()}
-              {(() => {
-                const accessInfoData = getInheritanceInfo("accessInfo");
-                const info = obj.resolvedAccessInfo || obj.accessInfo;
-                if (!info) return null;
-                // Task #1128: rendera aldrig rå JSON/"{}" — bygg läsbar text och dölj tomma objekt.
-                let infoStr: string;
-                if (typeof info === "object") {
-                  const entries = Object.entries(info as Record<string, unknown>)
-                    .filter(([, v]) => v !== null && v !== undefined && v !== "")
-                    .map(([k, v]) => `${k}: ${String(v)}`);
-                  if (entries.length === 0) return null;
-                  infoStr = entries.join(" · ");
-                } else {
-                  infoStr = String(info).trim();
-                  if (infoStr === "" || infoStr === "{}") return null;
-                }
-                return (
-                  <InheritedInfoRow
-                    label="Övrig tillgångsinformation"
-                    value={infoStr}
-                    inherited={accessInfoData.inherited}
-                    source={accessInfoData.sourceName}
-                    icon={Info}
-                  />
-                );
-              })()}
-            </CardContent>
-          </Card>
-        </section>
-
-        {/* ==================== UTRUSTNING ==================== */}
-        <section id="object-section-equipment" className="space-y-4 scroll-mt-4">
-          <Card>
-            <CardHeader className="pb-3">
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-base flex items-center gap-2">
-                  <Package className="h-4 w-4" /> Utrustning & Behållare
-                </CardTitle>
-                <Button variant="ghost" size="sm" onClick={() => openEditDialog("equipment")} data-testid="button-edit-equipment">
-                  <Pencil className="h-3.5 w-3.5 mr-1" /> Redigera
-                </Button>
-              </div>
-            </CardHeader>
-            <CardContent>
-              {containerCounts.length > 0 && (
-                <div className="mb-4">
-                  <div className="text-sm font-medium mb-2">Behållarantal</div>
-                  <div className="flex gap-3 flex-wrap">
-                    {containerCounts.map(c => (
-                      <div key={c.label} className="text-center p-3 bg-muted/50 rounded-lg min-w-[80px]">
-                        <div className="text-xl font-bold">{c.value}</div>
-                        <div className="text-xs text-muted-foreground">{c.label}</div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-              <div className="space-y-1">
-                <InfoRow label="Serienummer" value={obj.serialNumber} icon={Hash} />
-                <InfoRow label="Tillverkare" value={obj.manufacturer} icon={Wrench} />
-                <InfoRow label="Inköpsdatum" value={obj.purchaseDate ? new Date(obj.purchaseDate).toLocaleDateString("sv-SE") : null} icon={Calendar} />
-                <InfoRow label="Garanti utgår" value={obj.warrantyExpiry ? new Date(obj.warrantyExpiry).toLocaleDateString("sv-SE") : null} icon={Shield} />
-                <InfoRow label="Senaste inspektion" value={obj.lastInspection ? new Date(obj.lastInspection).toLocaleDateString("sv-SE") : null} icon={ClipboardList} />
-                <InfoRow label="Skick" value={obj.condition} icon={Info} />
-              </div>
-            </CardContent>
-          </Card>
-        </section>
-
-        {/* ==================== HIERARKI ==================== */}
+        {/* ==================== SLÄKT & HIERARKI ==================== */}
         <section id="object-section-hierarchy" className="space-y-4 scroll-mt-4">
           <div className="flex flex-wrap items-center gap-2 mb-4">
             <Button
@@ -1965,11 +1625,6 @@ export default function ObjectDetailPage() {
                       >
                         <ChevronRight className="h-3 w-3 text-muted-foreground" />
                         <span className="text-sm font-medium">{anc.name || anc.objectNumber}</span>
-                        {anc.hierarchyLevel && hierarchyLevelLabels[anc.hierarchyLevel] && (
-                          <Badge className={`text-[10px] ${hierarchyLevelLabels[anc.hierarchyLevel].color}`}>
-                            {hierarchyLevelLabels[anc.hierarchyLevel].label}
-                          </Badge>
-                        )}
                       </div>
                     ))}
                     <div
@@ -2033,11 +1688,6 @@ export default function ObjectDetailPage() {
                           {child.objectType && (
                             <Badge variant="secondary" className="text-[10px]">
                               {objectTypeLabels[child.objectType] || child.objectType}
-                            </Badge>
-                          )}
-                          {child.hierarchyLevel && hierarchyLevelLabels[child.hierarchyLevel] && (
-                            <Badge className={`text-[10px] ${hierarchyLevelLabels[child.hierarchyLevel].color}`}>
-                              {hierarchyLevelLabels[child.hierarchyLevel].label}
                             </Badge>
                           )}
                           <div className="ml-auto flex items-center gap-1 shrink-0">
@@ -2229,8 +1879,6 @@ export default function ObjectDetailPage() {
                     onRestore={(katalogId) => restoreMetadataMutation.mutate(katalogId)}
                     softDeletePending={softDeleteMetadataMutation.isPending}
                     restorePending={restoreMetadataMutation.isPending}
-                    onReorder={(orderedKatalogIds) => reorderMetadataMutation.mutate(orderedKatalogIds)}
-                    reorderPending={reorderMetadataMutation.isPending}
                     renderHistoryButton={renderHistory}
                     systemFacts={
                       obj
@@ -2251,34 +1899,199 @@ export default function ObjectDetailPage() {
                     issueReportsCount={issueReports.length}
                     onNavigateToTab={(t) => scrollToSection(t)}
                     onNavigateToObject={(id) => navigate(`/objects/${id}`)}
-                    extraNavItems={deliveryPrefsNavItems}
-                    extraSummaryTiles={deliveryPrefsTiles}
                   />
                 )}
-
-                {/* Leveranspreferenser visas som ett metadata-likt fält direkt i
-                    metadataområdet (samma visuella språk: ikon-rubrik, antal-badge).
-                    Preferenserna är objekt-EGNA — inget kund-arv (ADR v3). Spara-flödet
-                    är oförändrat — egen endpoint/datamodell. Behåller id:t
-                    "object-section-delivery-preferences" för bakåtkompatibla djuplänkar. */}
-                {(() => {
-                  const ownPrefs = (obj as { deliveryPreferences?: DeliveryPreferences | null })
-                    .deliveryPreferences;
-                  return (
-                    <div id="object-section-delivery-preferences" className="scroll-mt-24">
-                      <DeliveryPreferencesEditor
-                        entityKind="object"
-                        entityId={obj.id}
-                        initial={ownPrefs}
-                        invalidateKeys={[["/api/objects", obj.id], ["/api/objects"], ["/api/objects", obj.id, "delivery-preferences"]]}
-                        metadataStyle
-                      />
-                    </div>
-                  );
-                })()}
               </div>
             );
           })()}
+        </section>
+
+        {/* ==================== OBJEKTFÄLT (UNDER MIGRERING) ==================== */}
+        {/* Task #1128 Fas 1: hårdkodade objektkolumner som ännu inte flyttats till
+            metadatamodellen. Presentation-only (expand-contract) — kolumnerna matar
+            fortfarande routing/VRP/mobil/Fortnox. Kortet visas endast när minst ett
+            värde finns; sektions-wrappern renderas alltid så gamla ?tab=-djuplänkar
+            (access/equipment) hittar ett ankare. Ingen egen nav-pill. */}
+        <section id="object-section-object-fields" className="space-y-4 scroll-mt-4">
+          {(() => {
+            let accessInfoStr: string | null = null;
+            const accessInfoRaw = obj.resolvedAccessInfo || obj.accessInfo;
+            if (accessInfoRaw) {
+              if (typeof accessInfoRaw === "object") {
+                const entries = Object.entries(accessInfoRaw as Record<string, unknown>)
+                  .filter(([, v]) => v !== null && v !== undefined && v !== "")
+                  .map(([k, v]) => `${k}: ${String(v)}`);
+                accessInfoStr = entries.length ? entries.join(" · ") : null;
+              } else {
+                const s = String(accessInfoRaw).trim();
+                accessInfoStr = s === "" || s === "{}" ? null : s;
+              }
+            }
+            const portkod = obj.resolvedAccessCode || obj.accessCode;
+            const nyckel = obj.resolvedKeyNumber || obj.keyNumber;
+            // accessType har DB-default "open" — behandla det som "inget värde" så vi
+            // inte visar ett fabricerat "Tillgångstyp: Öppet" (samma logik som header-badgen).
+            const hasRealAccessType = Boolean(obj.accessType && obj.accessType !== "open");
+            const hasAccess = Boolean(hasRealAccessType || portkod || nyckel || accessInfoStr);
+            const hasEquipment = Boolean(
+              obj.serialNumber || obj.manufacturer || obj.purchaseDate || obj.warrantyExpiry || obj.lastInspection,
+            );
+            const hasContainers = containerCounts.length > 0;
+            const hasNotes = Boolean(obj.notes);
+            if (!hasAccess && !hasEquipment && !hasContainers && !hasNotes) return null;
+            const codeInfo = getInheritanceInfo("accessCode");
+            const keyInfo = getInheritanceInfo("keyNumber");
+            const accessInfoData = getInheritanceInfo("accessInfo");
+            return (
+              <Card data-testid="card-object-fields">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <Package className="h-4 w-4" /> Objektfält (under migrering)
+                  </CardTitle>
+                  <p className="text-xs text-muted-foreground">
+                    Hårdkodade objektfält som ännu inte flyttats till metadatamodellen. Visas
+                    enbart när ett värde finns och matas fortfarande in via respektive
+                    redigeringsdialog.
+                  </p>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                  {hasAccess && (
+                    <div className="space-y-1">
+                      <div className="flex items-center justify-between">
+                        <div className="text-sm font-medium flex items-center gap-2">
+                          <Key className="h-4 w-4" /> Tillgång
+                        </div>
+                        <Button variant="ghost" size="sm" onClick={() => openEditDialog("access")} data-testid="button-edit-access">
+                          <Pencil className="h-3.5 w-3.5 mr-1" /> Redigera
+                        </Button>
+                      </div>
+                      {hasRealAccessType && obj.accessType && (
+                        <InfoRow
+                          label="Tillgångstyp"
+                          value={accessTypeLabels[obj.accessType]?.label || obj.accessType}
+                          icon={DoorOpen}
+                        />
+                      )}
+                      <InheritedInfoRow label="Portkod" value={portkod} inherited={codeInfo.inherited} source={codeInfo.sourceName} icon={Keyboard} />
+                      <InheritedInfoRow label="Nyckelnummer" value={nyckel} inherited={keyInfo.inherited} source={keyInfo.sourceName} icon={Key} />
+                      <InheritedInfoRow label="Övrig tillgångsinformation" value={accessInfoStr} inherited={accessInfoData.inherited} source={accessInfoData.sourceName} icon={Info} />
+                    </div>
+                  )}
+                  {(hasEquipment || hasContainers) && (
+                    <div className="space-y-1">
+                      <div className="flex items-center justify-between">
+                        <div className="text-sm font-medium flex items-center gap-2">
+                          <Package className="h-4 w-4" /> Utrustning &amp; Behållare
+                        </div>
+                        <Button variant="ghost" size="sm" onClick={() => openEditDialog("equipment")} data-testid="button-edit-equipment">
+                          <Pencil className="h-3.5 w-3.5 mr-1" /> Redigera
+                        </Button>
+                      </div>
+                      {hasContainers && (
+                        <div className="mb-2">
+                          <div className="text-xs text-muted-foreground mb-2">Behållarantal</div>
+                          <div className="flex gap-3 flex-wrap">
+                            {containerCounts.map(c => (
+                              <div key={c.label} className="text-center p-3 bg-muted/50 rounded-lg min-w-[80px]">
+                                <div className="text-xl font-bold">{c.value}</div>
+                                <div className="text-xs text-muted-foreground">{c.label}</div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      <InfoRow label="Serienummer" value={obj.serialNumber} icon={Hash} />
+                      <InfoRow label="Tillverkare" value={obj.manufacturer} icon={Wrench} />
+                      <InfoRow label="Inköpsdatum" value={obj.purchaseDate ? new Date(obj.purchaseDate).toLocaleDateString("sv-SE") : null} icon={Calendar} />
+                      <InfoRow label="Garanti utgår" value={obj.warrantyExpiry ? new Date(obj.warrantyExpiry).toLocaleDateString("sv-SE") : null} icon={Shield} />
+                      <InfoRow label="Senaste inspektion" value={obj.lastInspection ? new Date(obj.lastInspection).toLocaleDateString("sv-SE") : null} icon={ClipboardList} />
+                    </div>
+                  )}
+                  {hasNotes && (
+                    <div className="space-y-1">
+                      <div className="flex items-center justify-between">
+                        <div className="text-sm font-medium flex items-center gap-2">
+                          <FileText className="h-4 w-4" /> Anteckningar
+                        </div>
+                        <Button variant="ghost" size="sm" onClick={() => openEditDialog("overview")} data-testid="button-edit-notes">
+                          <Pencil className="h-3.5 w-3.5 mr-1" /> Redigera
+                        </Button>
+                      </div>
+                      <InfoRow label="Anteckningar" value={obj.notes} icon={FileText} />
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            );
+          })()}
+        </section>
+
+        {/* ==================== KARTA ==================== */}
+        <section id="object-section-location" className="space-y-4 scroll-mt-4">
+          <Card>
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between gap-2">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <MapPin className="h-4 w-4" /> Karta
+                </CardTitle>
+                <div className="flex items-center gap-2">
+                  <Badge variant="outline" className={objectLocationTypeBadgeClass(obj)} data-testid="badge-location-type-tab">
+                    {objectLocationTypeLabel(obj)}
+                  </Badge>
+                  <Button variant="ghost" size="sm" onClick={() => openEditDialog("overview")} data-testid="button-edit-location">
+                    <Pencil className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {hasCoordinates ? (
+                <div className="rounded-lg overflow-hidden border" style={{ height: 400 }}>
+                  <MapContainer
+                    center={[Number(obj.latitude), Number(obj.longitude)]}
+                    zoom={16}
+                    style={{ height: "100%", width: "100%" }}
+                  >
+                    <TileLayer
+                      url={mapConfig.tileUrl}
+                      attribution={mapConfig.attribution}
+                    />
+                    <Marker position={[Number(obj.latitude), Number(obj.longitude)]} icon={defaultIcon}>
+                      <Popup>
+                        <strong>{obj.name || obj.objectNumber}</strong>
+                        {obj.address && <br />}
+                        {obj.address}
+                      </Popup>
+                    </Marker>
+                    {hasEntrance && (
+                      <Marker
+                        position={[Number(obj.entranceLatitude), Number(obj.entranceLongitude)]}
+                        icon={L.divIcon({
+                          className: "entrance-marker",
+                          html: '<div style="background:#22c55e;width:12px;height:12px;border-radius:50%;border:2px solid white;box-shadow:0 1px 3px rgba(0,0,0,.3)"></div>',
+                          iconSize: [12, 12],
+                          iconAnchor: [6, 6],
+                        })}
+                      >
+                        <Popup>Entrékoordinat</Popup>
+                      </Marker>
+                    )}
+                  </MapContainer>
+                </div>
+              ) : (
+                <div className="flex items-center justify-center h-48 bg-muted/30 rounded-lg">
+                  <div className="text-center text-muted-foreground">
+                    <MapPin className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                    <p>Inga koordinater tillgängliga</p>
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          <div className="mt-4">
+            <PolylineEditor object={obj as ServiceObject} />
+          </div>
         </section>
 
         {/* ==================== KONTAKTER ==================== */}

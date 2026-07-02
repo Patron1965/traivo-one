@@ -14,7 +14,7 @@ import { apiRequest } from "@/lib/queryClient";
 import { metadataTypeOptionLabel, METADATA_DATATYPE_LABELS } from "@/lib/metadata-display";
 import {
   FileText, Image as ImageIcon, Upload, Download, Trash2, RotateCcw, Cog,
-  Link as LinkIcon, Plus, Loader2, ArrowUp, ArrowDown, Type, Hash, ToggleLeft,
+  Link as LinkIcon, Plus, Loader2, Type, Hash, ToggleLeft,
   Calendar, Braces, MapPin, FileIcon, Eye, Layers, Server, Tag, AlignLeft,
   SlidersHorizontal, Users, ClipboardList, AlertTriangle, LayoutGrid, ChevronRight,
   Star, GitFork, Network,
@@ -755,8 +755,6 @@ export function ObjectMetadataForm({
   onRestore,
   softDeletePending,
   restorePending,
-  onReorder,
-  reorderPending,
   renderHistoryButton,
   systemFacts,
   contacts,
@@ -779,8 +777,6 @@ export function ObjectMetadataForm({
   onRestore: (katalogId: string) => void;
   softDeletePending: boolean;
   restorePending: boolean;
-  onReorder: (orderedKatalogIds: string[]) => void;
-  reorderPending: boolean;
   renderHistoryButton?: (entry: MetadataFormEntry) => ReactNode;
   systemFacts?: MetadataSystemFacts;
   contacts?: MetadataRelatedContact[];
@@ -955,29 +951,9 @@ export function ObjectMetadataForm({
     if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
   };
 
-  // Byt två fälts plats i den globala ordningen (grupp-medveten omsortering).
-  const swapInGlobalOrder = (idA: string, idB: string) => {
-    const order = entries
-      .map((e) => e.metadataKatalogId)
-      .filter((x): x is string => !!x);
-    const ia = order.indexOf(idA);
-    const ib = order.indexOf(idB);
-    if (ia === -1 || ib === -1) return;
-    [order[ia], order[ib]] = [order[ib], order[ia]];
-    onReorder(order);
-  };
-
-  const moveWithinGroup = (items: MetadataFormEntry[], pos: number, dir: -1 | 1) => {
-    const target = pos + dir;
-    if (target < 0 || target >= items.length) return;
-    const idA = items[pos]?.metadataKatalogId;
-    const idB = items[target]?.metadataKatalogId;
-    if (!idA || !idB) return;
-    swapInGlobalOrder(idA, idB);
-  };
-
   // Enhetlig rad-rendering för alla metadata-poster (område + övrigt-underavsnitt).
-  const renderMetadataRow = (m: MetadataFormEntry, items: MetadataFormEntry[], idx: number) => {
+  // Ordningen styrs av katalogen (sortOrder) — ingen manuell omsortering i vyn.
+  const renderMetadataRow = (m: MetadataFormEntry) => {
     const t = resolveType(m);
     const datatyp = entryDatatyp(m);
     const dtMeta = DATATYPE_META[datatyp] ?? DATATYPE_META.string;
@@ -993,39 +969,15 @@ export function ObjectMetadataForm({
         className={`flex items-start justify-between gap-3 py-3 ${isSoftDeleted ? "opacity-60" : ""}`}
         data-testid={`metadata-row-${m.id}`}
       >
-        {/* Etikett + metainfo + omsortering */}
+        {/* Etikett + metainfo */}
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
-            <div className="flex flex-col gap-0.5">
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-4 w-5 p-0 text-muted-foreground"
-                disabled={idx === 0 || reorderPending || !m.metadataKatalogId}
-                onClick={() => moveWithinGroup(items, idx, -1)}
-                data-testid={`button-metadata-up-${m.id}`}
-                aria-label="Flytta upp"
-              >
-                <ArrowUp className="h-3 w-3" />
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-4 w-5 p-0 text-muted-foreground"
-                disabled={idx === items.length - 1 || reorderPending || !m.metadataKatalogId}
-                onClick={() => moveWithinGroup(items, idx, 1)}
-                data-testid={`button-metadata-down-${m.id}`}
-                aria-label="Flytta ner"
-              >
-                <ArrowDown className="h-3 w-3" />
-              </Button>
-            </div>
             <DtIcon className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
             <span className={`text-sm font-medium ${isSoftDeleted ? "line-through" : ""}`}>
               {m.katalog?.namn || t?.namn || "—"}
             </span>
           </div>
-          <div className="text-xs text-muted-foreground flex items-center gap-2 flex-wrap pl-[3.25rem]">
+          <div className="text-xs text-muted-foreground flex items-center gap-2 flex-wrap pl-[1.375rem]">
             <span>{dtMeta.label}</span>
             {lastChanged && (
               <span data-testid={`text-metadata-last-changed-${m.id}`}>
@@ -1108,7 +1060,7 @@ export function ObjectMetadataForm({
           </CardTitle>
         </CardHeader>
         <CardContent className="divide-y pt-0">
-          {items.map((m, idx) => renderMetadataRow(m, items, idx))}
+          {items.map((m) => renderMetadataRow(m))}
         </CardContent>
       </Card>
     );
