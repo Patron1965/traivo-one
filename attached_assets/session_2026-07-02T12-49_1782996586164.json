@@ -1,0 +1,536 @@
+{
+  "sessionId": "ecfc279c5",
+  "exportedAt": "2026-07-02T12:49:34.799Z",
+  "summary": "### Key Topics Discussed\nThe presentation of a new feature focusing on objects and metadata was initiated using the \"Hönshuset\" housing cooperative as an example. An overview of how objects are structured with parent-child relationships, allowing multiple parents, was provided, exemplified by recycling rooms forming a three-tier tree structure. The distinction between core data and associated, activated metadata (e.g., shoe size for contacts, container color for objects) was clarified.\n\nThe administrative section, specifically the \"metadata\" menu, was navigated, discussing how metadata fields are defined as general or customer-unique, affecting their visibility. A metadata group named \"objekttyp\" (object type) containing various fields was introduced, including \"tillgång\" (asset - for keys), \"produktion\" (production - for waste type, quantity, room size, emptying day), and \"geografi\" (geography - for street address, postal code, city, with potential for GPS coordinates). \"Kontaktinformation\" (contact information) fields include contact person, email, name, shoe size, and phone number. Archived metadata fields were also mentioned, as were system-generated fields versus n-Edison fields, with \"Geografi\" fields (address, postal code, city, longitude, latitude) being system-defined and mandatory.\n\nMethods for updating objects and metadata include manual creation and importing interim number lists. The crucial ability to specify a parent object during creation or import was highlighted. In edit mode, adjusting or adding child objects (e.g., individual bins in a recycling room) should be possible. The demonstration included creating a \"recycling room\" object with \"Hönshuset\" as its parent. The next step is to add individual child objects like \"waste recycling bins\" to the recycling room.\n\nThe discussion then focused on an incorrect metadata implementation where \"customer\" (kund) appeared as a field, which is not relevant in the object context. It was demonstrated how to search for objects, specifically \"Hönshuset,\" and select it. Furthermore, it was shown that it is possible to add a metadata field, specifically an address, which was successfully added and confirmed to be working. It was confirmed that the recycling room object inherited the address metadata as intended.\n\nWhen searching for an overriding object, the current design prompted for searching customers, which is incorrect as there are no customers to search for in this context. A suggestion was made to allow searching for an overriding object directly or in two steps.\n\nNew input related to \"antal kärl\" (number of containers) was discussed, confirming it should be placed under \"produktion\" (production). It was also clarified that the \"produktion\" section organizes known metadata fields, including \"fraktion\" (fraction).\n\nIt was observed that while the system correctly handled geography for the recycling room, the highest-level object (\"Hönshuset\") did not display geography metadata directly. This seems to be due to the system's own inherent geography handling.\n\n### Decisions Made\n- Metadata should be grouped and an overview section included.\n- Replit needs to review existing metadata implementation information before changing the object section.\n- Users should be able to view and update parent connections for objects.\n- The incorrect \"customer\" metadata field must be addressed as it's not relevant in the object world.\n- \"Antal kärl\" (number of containers) should be categorized under \"produktion\" (production).\n\n### Action Items\n- Replit needs to correct the metadata implementation based on previous instructions and requirements.\n- Replit to analyze and propose which metadata fields should be system-driven/mandatory based on the previous information package review.\n- Replit to provide an explanation and action plan for the current metadata implementation issues.\n\n### Important Points & Insights\n- The new feature emphasizes objects and metadata, starting with a simple form.\n- \"Hönshuset\" serves as the example housing cooperative.\n- The latest update includes an overview with the object name.\n- The current metadata implementation is incorrect, particularly regarding a non-existent \"equipment status\" field and the erroneous inclusion of \"customer\" (kund) as a metadata field.\n- Metadata should be displayed contextually and grouped.\n- \"Hard\" metadata exists, and AI will aid in its creation.\n- Object system information (number, name) is found under basic information.\n- Parent objects (toppkopplingar) must be visible and editable.\n- Objects can have multiple parents (e.g., property linked to management and owner).\n- Child objects should also be visible and selectable.\n- Two recycling rooms will be used to build a three-tier tree structure for testing object connections.\n- Activated metadata, distinct from basic data, is associated with an object (e.g., shoe size, container color).\n- Metadata can be general or customer-unique, with the latter visible only to specific customers.\n- Filters for customer-unique metadata are not critical but could be beneficial.\n- The \"objekttyp\" metadata group contains several fields.\n- Specific metadata fields include \"tillgång\" (keys/key numbers), \"produktion\" (waste type, quantity, room size, emptying day, and fraktion), \"geografi\" (street address, postal code, city, potential for GPS coordinates), and \"kontaktinformation\" (contact person, email, name, shoe size, phone number).\n- Archived metadata fields exist.\n- The system will auto-create additional metadata fields beyond n-Edison's.\n- \"Geografi\" metadata is system-defined, mandatory, and includes address, postal code, city, longitude, and latitude.\n- System-created/mandatory metadata fields cannot be deleted or fundamentally altered by users.\n- Fields like \"name, title, phone, and email\" for contact persons may be system-mandated.\n- \"Shoe size\" is an example of customer-specific metadata.\n- The ability to specify a parent object is crucial during manual addition or import.\n- Child objects (e.g., garbage bins, windows) must be adjustable or addable in edit mode.\n- It was successfully demonstrated that an address metadata field can be added to an object, and that the child object (recycling room) correctly inherits the address metadata from its parent.\n- The current search functionality for overriding objects incorrectly prompts for customer search, which needs adjustment to allow direct or two-step object search.\n- \"Antal kärl\" (number of containers) information is deemed important and should be correctly categorized under production.\n- The highest-level object (\"Hönshuset\") does not display geography, while its child object (recycling room) does, indicating the system's own geography handling.\n\n### Open Questions/Pending Items\n- Why does the object not have a last name (släktnamn)?\n- The current organization of administrative data, particularly metadata, appears inconsistent across sections.\n- Which metadata fields will be system-driven/mandatory?\n- How to practically work with information about object and metadata updates.\n- How to correct the erroneous \"customer\" metadata field.\n- How to modify the search for overriding objects to search for objects directly instead of customers.",
+  "conversation": [],
+  "transcripts": [
+    {
+      "text": "Vä-vä-vänta, Mats. Jag hade glömt att hö- på... Börja om där nu. Ja. Nu kommer vi att jobba med objekt och i förlängningen också metadata här. Och vi börjar i den enklaste formen. Vi har en bostadsrättsförening som heter Hönshuset och du klickar upp den.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Sen får du klicka på den där borta. Så. Och då ska vi se då. Då har vi då möjlighet här att lägga in... Och det här är den sista uppdateringen. Då ser vi alltså en översiktsinformation då att det är objektnamn. Om du rullar ner lite så ser vi neråt där.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Vi ser...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Vad var det som händer?",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Ja, det som är allvarligt här nu då, det är ju då återigen att det här enligt den senaste uppdateringen är ju inte gjort på det sagt sätt som jag har sagt hundra gånger. Mm. Utan det här är en redovisning utav metadata. Till exempel, här är utrustning skick god, står det där. Vi har inte ens ett metadata-pensum som heter skick på någon jävla behållare. Så här måste vi be Replet nu att nu måste den se till-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. Att ordna till det här så att det inte... Det får inte vara såhär. Men vi kan fortsätta då neråt där och se då att den här har inget släktnamn.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och det kan väl stämma. Här kommer det lite granna...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Här kommer det metadata då.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Men jag har ju gjort det... Det är ju de här bilderna jag har skickat till dig snart- Mm. -fem gånger. D-där jag redovisar hur det här ska se ut. Ja, ja, ja. Och den håller på då och i-i-ifrågasätter det, men det ska den ju inte göra. Eh, om du klickar på föräldrakedjan där, kan du... Är det till att lägga till en förälder där? Nej, det kan du inte. Nej, det kan man inte. Nej. Nej.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och bläddra neråt då.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Ja, och nu, alltså, nu kommer det ju bara med metadata står det. Jag menar, allt är ju metadata liksom. Så det, det, det, det liksom stämmer ju inte. Utan det har vi sagt att han ska gruppera metadata och det kommer någon översikt. Och du går ju längre upp så är det ju också någon översikt där. Ja, ja, ja. Ja, alltså så här är det då att metadatan ska redovisas i det förekommande fall som den finns. Och metadatan är ju uppgrupperad och den bilden har jag ju också skickat. Mm. Där har vi ju då geografisk metadata, vi har kontaktmetadata, vi har det. Mm. Och då, då redovis",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "ar vi- Okej, okej. Och för så, vad, vad, vad det är då? Det behöver inte hålla på och göra något såhär jävla skit som varenda leveranspreferenser.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Privatjet mjukt. Det finns ingenting sånt.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Det finns hård i konceptet. Mm. Och, eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Jag brukar ju alltid ta att det är, det är bara metadata- Mm, mm ...som kommer upp i såna fall där då. Mm. Och sen kommer det återkonceptet att hantera den metadatan i... Du vet ju i den hära- Ja. Eh, där har vi ju en AI, ett AI-stöd. Mm.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Så innan vi kommer med nån informationspaket...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Det här är bara skit. Han har inte gjort så som jag har sagt att han ska göra. Och här finns ju prompter om och om och om igen med det här. Ta bort den här biten. Nej, men det Replit ska göra nu, det är att gå tillbaka till den information du har fått om det här. Och sen ska Replit förklara hur du uppfattar det här innan du åtgärdar objektdelen. Mm, och vi kan... Nu har vi en inspelning, så jag kan ju förklara. Om du går till toppen på den här. Mm. Så har jag en...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Jag har ett objekt på det här viset. Ett objekt på det här viset. Från början börjar det ju ganska bra. Eh, det finns då systeminformation till objektet och det är objektets nummer. Det finns där då under grundinformationen och det finns objektets namn. Och det finns då, eh, vilket...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Eh, vilken status objektet har, om det är aktivt eller om det är a-a-arkiverat. Men det finns ingen objektnivå. Det är metadata. Det ska inte stå där. Det har ingenting med det där att göra. Eh, det finns, eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Ett felt då som talar om vilken eller vilka, eh, föräldrar var den här. Alltså toppkopplingen då uppåt. Och det ska ju vara en ruta här då på inledningsvis där man liksom både kan se det och man kan uppdatera det. Så vill man koppla ett enskilt återvinningsrum nu till en, till, till, till en till förälder, eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Så vi ska kunna ta liksom ett, eh, en viss fastighet skulle ju så att säga kunna ha en förälder att gå igenom ett, ett fastighetsskötselbolag- Mm ...och finnas där, men nu vill du också fastighetsägaren då koppla den till något eget själv. Ja, då får han ju då två föräldrar. Men där ska man kunna välja då vilka, vilka, vilken eller vilka föräldrar som det är. Och på motsvarande sätt så ska man då kunna se och välja och kunna se vilka barn den här har då. Så att i det här fallet så heter ju den här då bostadsrättsföreningen Hönshuset och det naturliga under den här då, eftersom det här är en",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "enklaste formen, är att det finns två stycken återvinningsplatser- Mm ...eller återvinningsrum. Och så kommer det då att bli ett, lite tre träd där som vi kommer att bygga då för att testa upp det här. Och där har vi då den här, eh, objektens koppling. Sedan under...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Det här grunddatan då som inte är metadata, så kommer då metadatan som är associerad till det här objektet. Och med associerad så menar jag ju då metadata som har, eh, aktiverats då, som vi har tankat in. Om vi till exempel har skostorlek på kontaktpersonen, ja, då är det en metadatafält som finns på det här objektet. Om vi har färgen på kärlen, eh, och det är ett objekt som består utav ett kärl, så är då den metadatan med-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. Sen om du går och går på admin eller grunddata där uppe, uppåt, alltså där. Uppåt, meny och så går du in. Det här är så konstigt uppdelat, men gå på admin då. Jag förstår inte varför man liksom har det i här och där, men... Och så går du på metadata.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och så kan vi ju se här då. Metadata är då fält som vi definierar och vi kan definiera dem generellt och vi kan tydligen också definiera dem till kundunika då så, så... Och, och om de är kundunika då, nu står det alla kunder här då, då innebär det ju då att då syns de bara för den, den kunden då. Mm. Och då måste man ju då kunna välja den då. Det kan vara lite bra att vi har filter, men det är inte livsfarligt. Sen har vi då ett metadata, en metadatagrupp då som heter objekttyp. Och då finns det ett antal metadatafält där som man då kan fylla med information. Och så går vi in-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm ...nere och tittar ner i listan. Så har du då med-- Ett metadata, eh, fält som har då med tillgång att göra, om det är nycklar och nyckelnummer och lite såna här saker. Och så finns det då ett metadatafält som heter produktion och det talar om då vad det är för typ av avfall, hur många det är och hur stor ett eventuellt rum är och tömningsdag. Och sen så har vi ett metadatafält i dagsläget som är geografi och den anger då gataadress, postnummer och postort. Eh, sen skulle man då kunna, om vi har, eh, GPS-kordinater, longitude och latitude-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm ...då skulle vi kunna lägga in det också här då. Och så har vi ett metadataområde som heter kontaktinformation och då står det kontaktbovärld, e-post, namn, skostorlek och telefon. Och sen så finns det arkiverade eller inte aktiva metadatafält då som, som inte används då. Och vid sidan om de här metadatafälten som finns i n-Edison så, eh, kommer ju då systemet att skapa ett antal metadatafält. Och det vore ju väldigt bra om de rätt-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm ...utifrån diskussionen tidigare då kan göra då en lista på de metadatafälten då. Eh, så att vi... Då kommer det att bli en eller flera grupper här som är liksom systemskapade då. Mm. Och man kan också mycket väl tänka sig då, eller inte mycket väl tänka sig, utan det kommer ju att vara på det sättet då att om du går ner där på geografi så kommer ju då, eh, det att finnas då... Eh, man kan mycket väl tänka sig att hela geografi-klumpen här kan ju vara liksom ett systemsatt metadatafält. Vi ska alltid ha-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm, mm ...här, vi har ju t.ex. hantera adresser, eh, postnummer och postorter. Och vi ska ha ett fält som kan hantera longitud och latitud. Vi ska ha ett, ett som kan ha-hantera, eh, kaskadiva ingång, what's your words eller vad vi nu vill då i, i den där. Och här då... Och det är ju bara liksom då att man, man i, eh... O-om du klickar upp adress där till exempel, eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Så, så, så...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Eller bara liksom att man noterar där då om, om det är liksom ett systemskapat, eh, metadatafält, då, då, då kan man ju liksom inte radera den eller, eller ändra den, utan då, då finns den ju med eller att systemet behöver den. Mm. Och det vi behöver göra nu då för att få ordning på det här, det är ju att rättligt analyserar och kommer med ett förslag baserat på den här omfattande genomgången vi hade tidigare då på informationspaketet. Mm. Vilka metadatafält blir system... Eh, ja, styrda fält, ja. Satta.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och, och, och jag kan mycket väl tänka mig att tittar man på kontaktperson, ja, det kanske inte behöver vara systemskapande, men om det är systemskapat eller systemmandat eller uppsatt då, ja, då är ju det liksom namn, titel, telefon och e-post då. Mm. Däremot skostorlek är ju nåt som då, eh, är nåt som man kanske då vill aktivera på för en viss kund om någon o-oligumlig anledning.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Så ska vi börja där då? Ja, vi börjar där och så får, så får vi förvänta oss en förklaring att rätt vi tar förstått det här och en åtgärdsplan. Precis, och vi kan också, när vi gör det här så kan vi också praktiskt då bara se hur vi jobbar med den här, med den här informationen då. Och då vill jag då bara understryka att det finns då alltså två sätt att uppdatera objekt och metadata. Och det som vi har delvis provat här, om du släcker ner den där och så går in på objekten då. Ja, då dog min mus.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Ja, så.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Så. Och så klickar du då upp, eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Ja, det där var...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Ja, de objekt som vi har för närvarande, de är manuellt skapade då. Eh, men, eh, det finns två sätt att skapa objekt. Det ena är då att man tankar in en lista med interimnummer och det här, och det tror jag då fungerar. Mm.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Det andra är att man manuellt sätter upp då ett objekt på det viset. I båda fallen alltså är det ju väldigt viktigt då att man kan ange vad som är förälder och i editeringsläget så kan man också då komma vidare så man kan justera eventuella barn då eller lägga till då. Och barn i det här fallet, det är att lägga till en enskild soptunna i ett återvinningsrum eller lägga till ett fönster som ska putsas eller, eller vad det är. Och det är ju viktigt att man både kan göra det genom att tanka in en lista och editera det manuellt då.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och där skapar vi ett nytt objekt. Du kan ju testa, slå in ett nytt objekt där. Då bara så testar vi vad det...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Nej, men du ska döpa det till något annat. Skriv återvinningsrum.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Rum ett säger vi.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och så väljer du överordnat objektet och så tar du då hönshuset där då.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och här är det ju då helt fel, höll jag på att säga. För här kommer det då kund. Mm. Kund är ju liksom ingenting som finns ens i den här objektsvärlden. Nej. Så här har ju då... Eller det, antingen har jag rätt liksom riktigt jävla dum. Eller så är det något annat mycket allvarligt fel på hur den tar till sig information. För här ska man ju då kunna söka då på, eh, objekt. Och då, och då, om du söker nu på hönshuset, skriv, eller brf då, nu har vi ju inte så många där då. Och då dyker, dyker ju, dök ju den i alla fall upp då. Så klicka på den då där nere och välj till den då.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Eh, och i det här fallet nu då så kan du ju då lägga till då met-- prova att se om det går att lägga till ett metadatafält då. Och, och då kan du ju lägga till då...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Ja, det där var kanske inte riktigt rätt då, men adressen hade ju varit nära till hands i alla fall då.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Som du lägger i till adress där då?",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Nej.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Så. Och då ser vi till vår glädje att det funkar. Så då kan du slå in en adress som du känner till där och så har vi fått med det. Mm.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och då har vi skaffat ett återvinningsrum. Mm. Och nästa steg här om vi bygger en liten kund som vi kan tanka in, det är då att vi ska lägga till ett antal objekt som är soptunnor, eh, återvinningskärl här då. Och då vill man ju inte... För om du backar ur den här nu, så ska vi få se vad som händer då. Och så går du på objektena.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Så, och så trycker du nu på \"Skapa ett objekt\" här då.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och så säger du nu då, eh, \"Återvinningskärl, rest av fall\". Eh, ja, vad är det nu?",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Du skriver precis som Lukas med småbokstäver hela tiden också.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och så ska vi just leta överordnat objekt då. Och då har vi då ett prov... Nu heter ju det återvinningsrum ett då. Så det finns ju en tanke som man har här nu då att sök kunder då. Jaha. Men, men, men då kanske man då ska ha... Men det finns ju inga kunder att söka på- Nej. -så då, då kanske man då ska kunna söka på överordnat objekt eller något sånt där- Mm. -då så man kan söka i två steg då. Mm. Du kan ju s-prova att skriva hönst där uppe och se om det kanske finns någon hönst där uppe.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Men vadå, den här e-posten var ju redan fel. Så om du skriver höns...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och så söker du då på återvinningsrum där då?",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Men här ser vi ju då ett, ett, ett, ett problem då att den har... Nu, nu vet du inte genom att här behöver den också då använda det som jag har sagt också, tror jag sagt det hundra gånger då, att den talar liksom om då släkt namn. Annars kommer du ju liksom då att få hundratals- Ja, ja. Exakt. Återvinningsrum där. Och i det här fallet så tror jag ju då återvinningsrummet, eh, den som heter OBG004 och 005, de vet jag ju inte-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm, mm, mm ...inte har något svarande ting med, med kallt hus att göra. Men däremot det där som är skrivet med stora bokstäver, det är ju vårat. Så det kan vi ju välja till där då.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och, eh, då ser vi också då att då ärvde ju det återvinningsrummet då metadatan då, eh, med adressen där. Mm. Och det är ju precis som det ska vara. Sen ska du lägga till då metadatafält här.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och då ska du lägga till då vilken traktion det är.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Så då lägger du till den.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och så skriver du resten av det här till exempel.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och så lägger du till ett metadatapar till antalet kärl där.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Jag, jag är inte säker på att du liksom riktigt gjorde rätt där nu. Du, du... Antal kärl. Ja, men ja, men du fick... Ja, stig tio där då, bara för...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Där har man sagt att det är också kl-kl-klar för att lägga i medeltal och ta fem där igen. Och så tycker jag då att det fanns...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Det ska ligga under produktion där uppe.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Ja, nej, men det kanske, kanske var rätt då.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Kör på det. Och så skapa lite mer.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och det vill man ju tillbaka h-hit egentligen direkt. Precis. Om du klickar upp hönshuset nu så kommer vi då att kunna se nu då. Nu funkar det ju a-ah, gott och väl då. Men då ser vi ju då här då att det står ingen geografi, men om du klickar upp de där då, så har du ju på återvinningsrummet ett jätte och en, en, en geografi. Men det här beror ju då på att det här jävla systemet har någon sorts egen... Det ska inte hålla på att skriva. Den har någon egen geografi då- Mm, mm ...på det där. Så, men om du klickar upp då,",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "eh, det här rummet där nu. Så, och så klickar du upp återvinningskärlen där då. Bara en sista grej. Upp, fram med dem då. Eh, nu har vi ju då nån... O-om vi går ner och ser på metadata då där. Allt är ju metadata här då, så att, eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Det är...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Ja, där är ju inga metadata. Lite längre ner här nu så kanske det kommer metadata då.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Nej, produktion. Ja, för här har ju-- Är det ju då någon sorts ordning här nu då? Så här har, har ju då den grupperat då med kända metadatafält då här, eh, som då innehåller fraktion och det är då, eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Titta här då liksom, alltså att det, det hade väl varit bra om det hade stått. Nu, nu står det ju liksom då... Det är inte ens på samma rad liksom.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Vad, vad vill du se? Mm, mm. Om du ska anmärka på detaljer och räkning ska ju vara duktig och få det. Men det, det borde ju stå då, eh, produktion då som replik, metadata-fältet, fraktion och så ska det då stå att det är en rest. Och så står det då lite finstilt under då, eh, ändrad då. Och där har vi också varit tydlig då och sagt att i den här loggen då som kommer på, på varje metadata-fält då, så ska det ju då finnas, eh, också vem som har gjort det. Och om du stannar lite grann där då, så har vi då geografin. Här har vi också en massa skilj-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. -som kommer med här då. Eh, i det här fallet så adress står ju då för en, en grupp av metadata. Och då ska den ju då ju an-använda en enkel tabellform här då, där att den talar om då att, eh, adress och så under då eventuellt, eh, ett tabellatorsteg in då så står det gataadress och så står det Storgatan 1 och sen står det postnummer och så står det 86500 och så står det post, postort Sundsvall. Och sen är det ju jättefint att den datum är ändrad och-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. -vi informerar också att den är ärvd då ifrån, ifrån då återvinningsrum ett. Och så, så långt är ju, är det ju i ordning då. Men det här borde inte, vi borde inte behöva om, om rättligt behöver hjälp med det här, får den säga till. Men den borde kunna... Den är så styv i korken så den borde kunna- -stä-städa det här på ett rättigt sätt så att det blir... Det är ju bara gängse praxis. Ja, ja, ja. Mm. Det är inget unikt för oss hur man redovisar, redovisar data. Sen uppskattar vi då att den har, eh, den har tydligen lagt in en funktion. Om du trycker på antalet kärl där, kan du flytta upp den då genom att trycka på pilarna där? Öh, ja.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Antalet kärl. Här, gå dit upp och så trycker du på den där ljusa pilen där. Tryck på den, den pilen.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Trycker du på den nu? Mm.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Där tar du frakten och- Ja. -den bara efter den här. Då kan man sortera ordningen på, på, på- Tar du på ens datat. Och den funktionen får en ju liksom gärna rensa bort då. Mm. För i den här formuläret för metadata så finns det ju redan en funktion där vi, där vi, där vi, där vi sätter ordningen på metadata. Ja, ja. Om du har en kontaktperson så kan vi säga då att namnet är, är, är då en sak- Mm, mm. -och, och, eh, titel kommer på nummer två. Mm.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och nummer tre så kommer telefon och nummer fyra kommer e-post säger vi då. Och då ska ju den ordningen, den följer ju liksom hela, hela tiden med då. Och, och, och på motsvarande sätt blir det ju också då adresser, så gatuadress, postnummer och post, postort då kommer efter varandra då. Men det är ju, det som är glädjande med det här är väl ändå att Räckligt har fått, fått ihop det här då, eh, något sådär. Nu är det ju bara att använda den här formen och utveckla den över hela den här översikten för objekten då. Mm, mm. Och sen är det ju då intressant här då, det jag oroar mig mest över då-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm ...det är hur hanterar Räckligt då det som vi kallar en katalog? Ja, okej. Det här är ju då unika metadata. Antalet kärl har bara en, ett värde. Men vi har också i specifikationen sagt då att man ska kunna klicka här någonstans då och kunna se liksom en historik då utav gamla värden på det här metadatafältet som borde finnas i registret så som vi har lagt upp det. Och om då vi har, låt oss säga nu är det då ett exempel, men om vi, om metadatafältet geografi nu som inte tillåts att vara ett katalog då. Men om vi-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm ...det, om det fanns en katalog med olika Storgatan ett, två, tre och så vidare- Mm ...då som man på något vis kunde välja där. Då ska ju då i den här formen Räckligt presentera den som en liten katalog som man kan bläddra i då.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. Och detsamma, och det jag är mest orolig för som jag, jag inte tror att Räckligt kommer att klara av, det är ju då hur den hanterar bilder. Ja, just det. Och filer då. Mm. För där blir det ju liksom en sekundär länk då. Mm. Drömläget är ju då att det här... Om vi har, om vi har ett, ett, en sån här liten katalog som du kan bläddra i då. Att, att, att, att den får, får, får en sån här ikon eller en mi-, en minibild då så du kan liksom bläddra ungefär som... Tekniken finns ju på annonser och så där. Då kommer det upp en liten bild och så vidare.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. Om du bläddrar där då så ser du på... Och när jag menar annonser så menar jag då annonstjänster och sånt där som finns på, på nätet. Så det är ju väldigt vanligt att du har... Ja, ja. Du, du säljer en båt och så ser du en bild på båten och så står det nere där att det här är en bild av fem bilder. Ja, ja. Och så kan du bläddra då den. Mm. Det är precis så som jag vill och vi kanske ska visa Räckligt att det ska vara så. För då kan du liksom bläddra fram och vartefter du bläddrar fram de där så följer då den här, eh, loggen då med hela tiden. Och det är viktigt också nu att...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Räckligt nu gör. Den här loggen ska ju heller inte innehålla för mycket information eller för lite information. Så att i det här fallet nu då, senast ändrad. Ja, här ska det ju stå då senast ändrad, eh, eh, objektadministration, eh, Thomas, användare Thomas Björnberg. Mm. Ja. Och om samma information nu skulle ha ändrat sig vid antalet här då vi, vi, vi då kan gå tillbaka, då ska ju det stå då senast ändrad, eh, eh, eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Utsågare, eh... Krist. Utsågare, ja. Eh, Christer. Ja. Och så datum. Mm. Och också vilket år det är koncept då som den... Ja, ja just det. Så vi har det numret och så man kan se liksom, aha, den härstammar från det. Så då kan man klicka på år det konceptet och så kan man komma tillbaka till, till åren. Ja, just det. Ja, smart. Ja. Mm. Perfekt.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    }
+  ]
+}
