@@ -235,7 +235,7 @@ function CollapsibleNavGroup({
   return (
     <SidebarGroup>
       <SidebarGroupLabel
-        className="cursor-pointer select-none flex items-center gap-1"
+        className="cursor-pointer select-none flex items-center gap-1 text-sidebar-primary"
         onClick={() => setOpen(!open)}
         data-testid={`nav-group-${label.toLowerCase().replace(/\s+/g, "-")}`}
       >
@@ -338,7 +338,7 @@ export function AppSidebar() {
       
       <SidebarContent>
         <SidebarGroup>
-          <SidebarGroupLabel data-testid="nav-group-favoriter">
+          <SidebarGroupLabel className="text-sidebar-primary" data-testid="nav-group-favoriter">
             <Star className="h-3 w-3 mr-1 fill-chart-3 text-chart-3" />
             {tl("nav.favorites")}
           </SidebarGroupLabel>

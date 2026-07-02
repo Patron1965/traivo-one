@@ -79,7 +79,7 @@ export function MobileNav() {
           <nav className="p-4 space-y-6" data-testid="mobile-nav-menu">
             {filteredGroups.map((group) => (
               <div key={group.title}>
-                <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
+                <h3 className="text-xs font-semibold text-accent-foreground uppercase tracking-wider mb-2">
                   {group.title}
                 </h3>
                 <div className="space-y-1">
