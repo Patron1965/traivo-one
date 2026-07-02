@@ -45,7 +45,6 @@ import { AICard } from "@/components/AICard";
 import { ObjectMetadataPanel } from "@/components/ObjectMetadataPanel";
 import { ObjectParentsPanel } from "@/components/ObjectParentsPanel";
 import { ObjectDisplayNames } from "@/components/ObjectDisplayNames";
-import { ObjectParentCombobox } from "@/components/ObjectParentCombobox";
 import { ObjectInheritedMetadataPanel } from "@/components/ObjectInheritedMetadataPanel";
 import { ObjectSystemGeneratedPanel } from "@/components/ObjectSystemGeneratedPanel";
 import { useLocalizedObjectName } from "@/lib/object-name";

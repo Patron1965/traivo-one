@@ -1097,7 +1097,7 @@ export default function ObjectDetailPage() {
                 className="w-full"
                 testId="select-new-parent"
               />
-              <p className="text-xs text-muted-foreground mt-1">Sök på namn, adress eller systemnummer. Släktnamnet visas per träff så du kopplar mot rätt gren.</p>
+              <p className="text-xs text-muted-foreground mt-1">Sök på objektets namn, adress eller något led i släktnamnet — t.ex. "Hemköp Hisingen pantrum". Släktnamnet visas per träff så du kopplar mot rätt gren.</p>
             </div>
             <div className="border-t pt-4">
               <Label className="mb-2 block">Metadata</Label>
