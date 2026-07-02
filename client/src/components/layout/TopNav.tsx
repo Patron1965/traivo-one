@@ -198,7 +198,7 @@ function NavDropdown({ label, items, icon: Icon, colorClass, badges, isFavorite,
           }
           if (sectionChanged && item.subSection) {
             prefix.push(
-              <DropdownMenuLabel key={`lbl-${item.subSection}`} className="px-3 py-1.5 text-xs font-semibold text-accent-foreground uppercase tracking-wide">
+              <DropdownMenuLabel key={`lbl-${item.subSection}`} className="px-3 py-1.5 text-xs font-semibold text-primary uppercase tracking-wide">
                 {item.subSection}
               </DropdownMenuLabel>
             );
