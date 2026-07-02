@@ -1,94 +1,73 @@
 # Traivo - AI-Driven Field Service Planning Platform
 
-## Run & Operate
-_Populate as you build_
-
 ## Stack
 **Frontend:** React, TypeScript, Vite, shadcn/ui, react-leaflet
-**Backend:** Express.js, Node.js (runtime)
+**Backend:** Express.js, Node.js
 **Database:** PostgreSQL, Drizzle ORM
-**AI/Optimization:** OpenAI, Geoapify (Routing API, VRP), OSRM, OR-Tools Optimization Service (Python FastAPI)
+**AI/Optimization:** OpenAI, Geoapify (Routing/VRP), OSRM, OR-Tools (Python FastAPI)
 **Geocoding:** Geoapify, OpenStreetMap Nominatim
-**Build Tool:** Vite
-**Validation:** Zod (implicitly used for API schema validation)
+**Validation:** Zod
 
 ## Where things live
-- **Database Schema:** Defined implicitly via Drizzle ORM in `server/db/schema.ts` (example)
-- **API Contracts:** Defined implicitly via Zod schemas and Express.js routes in `server/routes/`
-  - Planner Search Filters: `server/routes/plannerRoutes.ts`
-  - Article Components (BOM): `server/routes/configRoutes.ts`
-  - Work Order Operations: `server/routes/workOrderRoutes.ts` (example)
-  - Price List Adjustments: `server/routes/priceListRoutes.ts` (example)
-  - Mobile Endpoints: `server/routes/mobile/*` (v1 oförändrad; v2: `GET /api/mobile/v2/orders/:id` exponerar frozen-snapshot, BOM-checklista, beroende-status — se `docs/traivo-go-v2-handover.md`)
-- **UI Components:** `src/components/ui/` (shadcn/ui), `src/components/` for custom components
-- **Shared list-state wrapper:** `client/src/components/QueryState.tsx` (Skeleton/Empty/Error)
-- **Status badge tokens:** `client/src/lib/status-colors.ts` (objektstatus + work-order-status mappade till tema-tokens)
-- **Theme/Styling:** Refer to Traivo Color Palette and Inter font usage for Nordic aesthetic. Använd alltid tema-tokens (`bg-destructive`, `bg-warning`, `chart-*`, `muted` osv) i nya vyer — inga `bg-red-500`/`bg-amber-*`/`text-orange-*`. Använd `warning` för varningstillstånd (tight/snart/SLA-risk/fel-räknare), `destructive` för hård-blockerande/kritiskt, och `chart-4` enbart för kategoriska neutrala saker (kärl, rast, diagramserier, navigation). Se `docs/color-harmonization-review.md`. Tabellen stöder `density="compact"` för datatäta listor.
-- **Fortnox Integration:** `server/fortnox-client.ts`
-- **Delivery Preferences Logic:** `storage.resolveDeliveryPreferences(objectId)`
+- **Schema:** `shared/schema.ts` (Drizzle)
+- **API-routes:** `server/routes/*` — planner `plannerRoutes.ts`, BOM `configRoutes.ts`, WO `workOrderRoutes.ts`, prislista `priceListRoutes.ts`, mobil `server/routes/mobile/*` (v2 `GET /api/mobile/v2/orders/:id`, se `docs/traivo-go-v2-handover.md`)
+- **UI:** `client/src/components/ui/` (shadcn), `client/src/components/` (custom); delad list-state `QueryState.tsx`
+- **Theme:** Nordic-estetik, Inter-font. Använd ALLTID tema-tokens (`bg-destructive`, `bg-warning`, `chart-*`, `muted`) — aldrig `bg-red-500`/`bg-amber-*`/`text-orange-*`. `warning`=varning (tight/SLA-risk/fel), `destructive`=kritiskt/blockerande, `chart-4`=kategoriskt-neutralt. Status-badges `client/src/lib/status-colors.ts`. Se `docs/color-harmonization-review.md`. Tabell stöder `density="compact"`.
+- **Fortnox:** `server/fortnox-client.ts`
+- **Geo/routing/tiles:** allt via `getMapProvider()` (se Gotchas); avstånd utan API `haversineDistanceKm`/`estimateTravelMinutes` (`client/src/lib/geo.ts`)
 
 ## Architecture decisions
-- **AI-First Approach:** All functionalities are designed with AI integration at their core for optimization and automation.
-- **Multi-Tenant SaaS:** The platform supports multiple independent tenants with robust isolation and role-based access control.
-- **Offline-First Mobile:** The mobile application is designed to function offline, syncing data when connectivity is restored to support field workers.
-- **Externalized Optimization & Data Cleaning:** Complex route optimization and data validation are offloaded to dedicated external microservices to maintain core system focus and scalability.
-- **Expand-Contract Strategy for DB Changes:** New database columns are introduced as nullable/default to ensure backward compatibility and avoid breaking existing integrations (e.g., Mobile, VRP, Fortnox).
-- **Synthetic Team Resources for VRP:** For route optimization, teams are treated as single vehicles with synthetic resources, aggregating individual team member capacities and locations. `buildTeamVehicles()` (`server/team-vehicles.ts`) bygger fordon i prioriteringsordning: team-leader → första aktiva medlem → fallback till `team.lastPositionLat/Lng` eller `cluster.centerLatitude/Longitude` (via `team.cluster_id`). Team utan någon av dessa data hoppas över. Alla 4 callers (`server/routes/optimizationRoutes.ts` × 2, `server/optimization-job-runner.ts` × 2) skickar nu in `clusters` så fallback fungerar. Felmeddelande vid 0 ruttbara team: "Inga ruttbara team hittades. Varje aktivt team behöver minst en medlem, en team-leader, eller koppling till ett kluster med koordinater för att kunna ruttas."
+- **AI-First / Multi-Tenant SaaS** med tenant-isolering + rollbaserad access.
+- **Offline-First Mobile** (Traivo Go), synkar vid connectivity.
+- **Externaliserad optimering/data-cleaning** i separata microservices.
+- **Expand-Contract för DB-ändringar:** nya kolumner nullable/default för bakåtkompatibilitet (Mobile/VRP/Fortnox).
+- **Synthetic Team Resources för VRP:** team = ett fordon; `buildTeamVehicles()` (`server/team-vehicles.ts`) prioriterar team-leader → första aktiva medlem → `team.lastPositionLat/Lng`/`cluster.center*`. Alla callers skickar `clusters` för fallback; team utan koordinater hoppas över.
 
 ## Product
-- **AI-Driven Field Service Optimization:** Route planning, resource allocation, and predictive analytics for waste management.
-- **Comprehensive Planning Interface:** WeekPlanner with drag-and-drop scheduling, What-If analysis, constraint overlays, and Team/Resource toggles.
-- **Mobile Field App (Traivo Go):** Focus Mode, Signature Capture, Material Log, Job Protocol Generator, Day Report, Field Todo List, TimeThread Visual Timeline, QR-code reporting.
-- **Customer Portal:** Self-service options including order viewing, visit confirmations, technician ratings, chat, self-bookings, issue reports, and delivery preferences, with object-scoped access.
-- **Financial & Administrative Tools:** Invoice recalculation, index adjustment for price lists, Fortnox export with frozen pricing logic, team/user management, tenant configuration, fleet management.
-- **Advanced Data Management:** Modus 2.0 Import System, anomaly monitoring, auto-clustering for geographical organization, delivery preference management.
-- **Real-time Capabilities:** WebSocket notifications, GPS tracking, live state-sync for pop-out views.
+Route-optimering & prediktiv planering (WeekPlanner: drag-drop, What-If, constraint-overlays). Traivo Go (Focus Mode, signatur, materiallogg, dagrapport, TimeThread, QR). Kundportal (order, bekräftelser, betyg, chat, self-booking, felanmälan, leveranspref — objekt-scoped). Ekonomi (fakturaomräkning, indexjustering, Fortnox frozen-pricing, samlingsfakturor). Modus 2.0-import, anomali-övervakning, auto-clustering. Realtid (WebSocket, GPS, live state-sync).
 
 ## User preferences
-- **Language:** Swedish (sv) for UI
-- **Design:** Clean, professional Nordic aesthetic — Traivo Color Palette: Deep Ocean Blue (#1B4B6B), Arctic Ice (#E8F4F8), Mountain Gray (#6B7C8C), Northern Teal (#4A9B9B), Midnight Navy (#2C3E50), Aurora Green (#7DBFB0)
-- **Logo:** `@assets/traivo_logo_transparent.png` (transparent bakgrund, processad från original)
-- **Theme:** Dark/light mode support
-- **Font:** Inter for UI
-- **Development:** Alla nya funktioner ska alltid läggas till i frontend med navigeringslänkar - användaren vill se helheten och vad som byggs under skalet
+- **Language:** Svenska (sv) för UI
+- **Design:** Ren, professionell Nordic-estetik — Traivo-palett: Deep Ocean Blue #1B4B6B, Arctic Ice #E8F4F8, Mountain Gray #6B7C8C, Northern Teal #4A9B9B, Midnight Navy #2C3E50, Aurora Green #7DBFB0
+- **Logo:** `@assets/traivo_logo_transparent.png`
+- **Theme:** Dark/light mode
+- **Font:** Inter
+- **Development:** Alla nya funktioner ska in i frontend med navigeringslänkar — användaren vill se helheten och vad som byggs under skalet.
 
 ## Gotchas
-Aktiva, dagliga "var-uppmärksam-på"-saker. Historiska implementations-anteckningar per task ligger i `CHANGELOG.md`.
+Aktiva "var-uppmärksam-på"-regler. Djupare detalj i `.agents/memory/`, `CHANGELOG.md` och ADR-docs.
 
-- **Auto-tilldelning AV i prod (säkerhet):** `resolveFallbackTenantId()` returnerar alltid `null` när `NODE_ENV=production`. Nya användare måste bjudas in explicit via invitation-flödet — annars 0 access. Override med `AUTO_ASSIGN_TENANT=true` (rekommenderas inte). `/api/me/tenant` returnerar `tenantId: null` för oinloggade.
-- **Demo-seed AV i prod:** `seedDatabase()` skippar demo-data när `NODE_ENV=production` och `ENABLE_DEMO_SEED` ej satt. Använd `scripts/kinab-reset-operational-data.ts --confirm RENSA-KINAB` om demo-rester ändå hamnat i prod-DB.
-- **Auto-checkpoint kan committa raderingar:** Replits auto-checkpoint commit:ar disk-state utan integritetskontroll — en agent-session som råkar radera en mapp kan commit:a den som "Saved progress…" utan varning. Kör `npx tsx scripts/check-mass-deletion.ts --commits 50 --threshold 50` före varje `git push github main`. Återställning: `docs/disaster-recovery.md` §Scenario D.
-- **Roll-kolumner finns på två platser:** Legacy `users.role` (global) och per-tenant `user_tenant_roles.role`. **All access-kontroll använder tenant-rollen.** Vid ändring: gå alltid via `assignUserToTenant`; `users.role` ska lämnas orörd.
-- **Portal user scope:** Tom scope på `portal_users` = full access (back-compat). Sätt explicit scope för begränsning.
-- **BOM self-reference:** `article_components` förbjuder `childId === parentId`.
-- **Frozen prices i Fortnox-export:** Använder `frozenUnitPrice` om satt, annars `line.resolvedPrice`. WO med `frozen_*=NULL` påverkas ej.
-- **Idempotenta endpoints:** `POST /api/work-orders/:id/freeze` kräver `?force=true` för omfrysning. `POST /api/price-lists/:id/apply-index-adjustment` skriver alltid över `indexDate/indexPercentage` med senaste värdet.
-- **Öre vs kronor:** Använd `formatSek(kronor)` respektive `formatSekFromOre(öre)` från `client/src/lib/format.ts` — de är **inte** utbytbara. DB-prisfält är öre, Fleet/Invoice-summor är kronor.
-- **Geo & routing helpers (provider-abstraktion — ENDA KÄLLAN):** All rutt-/geokod-/tile-trafik går genom **`getMapProvider()`** (`server/services/mapProvider.ts`). Bakomliggande impl: rutter `server/services/routing.ts`, geokodning `server/services/geocoding.ts` (rå impl `server/geoapify-geocoding.ts` — Geoapify/Nominatim, INTE Google trots det historiska `isGoogleGeocodingAvailable`-funktionsnamnet + `google-geocoding`-kostnadslabeln), tiles via provider-`getTileConfig()` (Geoapify/OSM, eller Google tile-proxy `/api/system/map-tiles/{z}/{x}/{y}` när Google är aktiv). Avstånd utan API: `haversineDistanceKm`/`estimateTravelMinutes` (`client/src/lib/geo.ts`). Status-badges: `client/src/lib/status-colors.ts`. **Återinför aldrig ad-hoc `fetch` mot `api.geoapify.com`/OSRM/`tile.googleapis.com`** — lägg nya backends bakom en `MapProvider`-metod.
-- **Google Maps-migration (umbrella #471) — läge:** Fas 0 (provider-abstraktion) + Fas 1 (#472 `GoogleMapProvider` + shadow-jämförelse, #478 tile-proxy) är klara och **inert under default `MAP_PROVIDER=geoapify`** — inget kund-synligt beteende ändras, ingen Google-secret krävs. Skarp cutover (Fas 2) = sätt `MAP_PROVIDER=google` **+** secrets `GOOGLE_MAPS_API_KEY`/`GOOGLE_CLOUD_PROJECT_ID` (väntar på Google-dealen/startup-programmet). Utan nyckel faller `MAP_PROVIDER=google` automatiskt tillbaka till Geoapify/OSM — inga kodändringar krävs för själva bytet. Frontend-bytet Leaflet→Google JS SDK ("Google-utseendet") är en separat, mer riskfylld framtida task.
-- **Tema-tokens i UI:** Använd `bg-destructive`, `bg-warning`, `chart-*`, `muted` osv — inga `bg-red-500`/`bg-amber-*`/`text-orange-*`. `warning` för varningstillstånd, `destructive` för kritiskt/blockerande, `chart-4` endast kategoriskt-neutralt. Se `docs/color-harmonization-review.md`.
-- **Bypassad mobile-yta:** `/api/mobile/*` går utanför normal tenant-middleware. Läs aldrig `req.tenantId` där — använd `req.mobileTenantId` eller härled från autentiserad mobil-resurs.
-- **Metadatadefinitioner: soft-delete + bokföringsanalogi:** `metadata_definitions` får aldrig hard-deleteas via API — `DELETE` sätter `deletedAt`. Definitioner som används (objektvärden, aktiva koncept, framtida WO med snapshot, koncept-snapshots) blockerar DELETE med 409 + strukturerad payload; force-syntax är `?confirmUsage=N` där N **måste matcha exakt** aktuell count (analogt med `?force=true` för WO freeze). PATCH blockerar strukturella fält (`dataType`, `propagationType`, `applicableLevels`) när definitionen används; `fieldKey` är alltid immutable — använd `replacedByDefinitionId` vid splittring. Historiska `metadata_snapshot`-värden förblir läsbara även efter soft-delete (Fortnox-export, audit). Centraliserad räknare: `storage.getMetadataDefinitionUsage(id)`. ADR v3 §2.4.
-- **Metadatareferens (`metadata_katalog`) som stabil universell nyckel:** `metadata_katalog.namn` + kort `beteckning` är inte bara Excel-headers vid import — de är universella nycklar som binder ihop import-matchning, koncept-filter (`concept_filters.metadata_key`) och sök/filter. Därför är de **immutable när typen är i bruk**: `PUT /api/metadata/types/:id` blockerar (409) namnbyte av `namn`/`beteckning` om `getMetadataKatalogUsage(id, tenantId).total > 0` (= metadatavärden ELLER koncept-filter som matchar). Skapa en ny typ och migrera värden istället. Unikhet per tenant på både `namn` och `beteckning` valideras vid POST och vid rename (409 vid kollision). Centraliserad räknare: `getMetadataKatalogUsage` (`server/metadata-queries.ts`). OBS: detta är den andra metadata-modellen — `metadata_definitions.fieldKey` (raden ovan) är redan alltid immutable.
-- **Frozen invoice recipient (3 nivåer):** `invoice_recipients` (central/area/local) hänger på kunder och ärvs uppåt via `parent_customer_id`. Resolver: `storage.resolveInvoiceRecipient(tenantId, customerId, {hintLevel, pinnedRecipientId, at})` returnerar `{recipient, sourceCustomerId, sourceLevel, conflicts, hintConflict}` — lägre kund vinner, `breaks_inheritance` kapar uppåt-arv, lika prioritet på samma nivå = konflikt som blockerar order-koncept-expansion (ERROR i `/api/order-concepts/:id/validate`). Vid `freezeWorkOrder` fryses vinnaren på WO (`frozenInvoiceRecipientId/Level/SourceCustomerId`); Fortnox-export (`exportWorkOrderToFortnox`) använder frozen-recipient om satt — annars fallback till `object_payers`/`customers.fortnoxCustomerId`. Skriv aldrig logik som expanderar koncept utan att kolla `hasConflict`.
-- **Samlingsfakturor + invoice queue-state:** Varje WO har `invoiceQueueState` (NULL/`held`/`pending`/`consolidated`/`exported`). När en WO blir redo att fakturera anropas `markWorkOrderReadyForInvoice(woId, tenantId)` (`server/services/invoice-consolidation.ts`) som slår upp `resolveConsolidationPolicy` (recipient → customer → tenant-default `immediate`). `immediate` ⇒ `pending` (klar för Fortnox direkt). Annars ⇒ `held` med `invoiceHeldUntil = computePeriodEnd(now, policy)`. Hourly schemaläggare (`invoice-consolidation-scheduler`, ENV-gated `INVOICE_CONSOLIDATION_ENABLED=true` för att slå PÅ) kör `runConsolidationForTenant` per tenant, grupperar held-WOs vars `invoiceHeldUntil <= now` per recipient/customer, skapar en `customer_invoice` med `state="consolidated"` och länkar tillbaka via `workOrders.consolidationInvoiceId` + `workOrders.invoiceQueueState="consolidated"`. Manuell släpp: `POST /api/invoice-queue/release` (`requireAdmin`) skickar `force=true` och sätter `releasedBy/At/Reason` på fakturan. **Fortnox-export refuserar held WO** med svenskt felmeddelande — släpp eller vänta. **Policy ändrad mitt i period gäller från nästa period:** `invoiceHeldUntil` fryses när WO först markeras redo; senare policy-byten påverkar inte redan-held WOs i denna period — endast nya redo-markeringar. CRUD policies via `/api/invoice-consolidation-policies` (`requireAdmin` på write).
-- **Objektmall-import (v2, fyra nummer):** En fil + en körning gör create/update/repoint. Klassning per rad: interimsnummer ⇒ create (objectNumber `MALL-<interim>`, re-import dubblettar ej); systemnummer/butiksnummer/unikt butiksnamn ⇒ update; ändrad upplöst förälder ⇒ repoint (flytt + ärver adress). Endast `Objektnamn` + förälder krävs (förälder bara för icke-rot) — allt annat inkl. adress är metadata som ärvs nedåt. Uppdateringar är partiella (utelämnade fält + förälder bevaras). README-flaggan `[INTERIMSLISTA]` (`OBJEKTMALL_INTERIM_FLAG_MARKER`) tvingar ren nyimport: alla nummer tolkas som interim, system-kolumner ignoreras, befintliga systemobjekt matchas aldrig. Detaljer: `CHANGELOG.md` (Task #618).
-- **Objekt-kund-koppling går via order/`object_payers`:** Objekt är neutrala (ADR v3). `objects.customer_id` är **BORTTAGEN** (kolumn + FK + `idx_objects_customer`/`idx_objects_tenant_customer` droppade i migration `0114`, kontraktsfas — ingen prod-data). Använd `object_payers` (primary @ tidpunkt) eller `work_orders.customer_id` (beställare) för att besvara "vem hör detta objekt till". API-kontraktet `object.customerId` bevaras dock som ett **payer-överlägg**: läs-vägar exponerar primär betalare via `primaryPayerCustomerIdSql`/`objectColumnsWithPrimaryCustomer` (`server/storage.ts`) och write-vägar går via `ensurePrimaryPayer` (`server/services/object-customer.ts`). Skriv aldrig ny logik som antar att en fysisk `objects.customer_id`-kolumn finns.
-- **Multi-förälder & släktnamn:** Ett objekt kan ha flera föräldrar via `object_parents` (en `isPrimary`-rad + alternativ). Legacy `objects.parentId` speglar alltid den primära föräldern (skriv aldrig den ena utan den andra). Import synkar primär-relationen till `object_parents` vid create/update (`syncPrimaryObjectParent`). "Släktnamn" (hierarkiskt visningsnamn) beräknas en kedja per direkt förälder via `computeObjectDisplayNames` (`server/services/display-name.ts`); primärkedjan är default, övriga är alternativ. **Metadata- och hårdkodad fält-arv sker ALLTID från den primära föräldern** (`server/inheritance-processor.ts`) — alternativa föräldrar påverkar bara visningsnamn, aldrig arv. UI: web ObjectsPage rad-expander + ObjectParentsPanel "Släktnamn"-sektion, mobile SimpleFieldApp jobbdetalj-kort. Endpoint `GET /api/objects/:id/display-names` (no-cache, cookie-auth — funkar även i mobil-webbsessionen).
-- **Aktivstatus via objektmall-import (soft-delete, ej status):** Kolumnen `active_status` (aktiv/arkiverad, synonymer tolkas av `parseActiveStatus` i `shared/object-import-spec.ts`) styr arkivering/återställning vid objektmall-import. **Arkivering = soft-delete via `objects.deletedAt`** (+ `archivedBy`/`archivedReason`), **ALDRIG** `objects.status` (arkitektbeslut: `deletedAt` är enda markören). Tomt fält = orört. Undo är livscykel-medveten: `deletedAt` stämplas i `import_actions.beforeJson/afterJson` ENDAST för aktivstatus-rader, och alla tre undo-konsumenter (`snapshotMatches`, `update_object`-grenen, `restoreScalarSet` i `server/services/import-undo.ts`) gate:ar på `hasOwnProperty("deletedAt")` → legacy-actions rörs aldrig. Återanvänd alltid `archivePreflight`/`archiveObject`/`restoreObject` (`server/services/object-archive.ts`).
-- **Reversibel import (Ångra-funktion):** V2-import (`objectImportV2Routes`) stämplar `import_actions` per rad UNDER exekvering (inkrementellt — avbrott lämnar redan-utförda rader ångringsbara). Stämpel-ordning är säkerhetskritisk: stämpla ALLTID FÖRE den fel-benägna mutationen. `create_object` stämplas efter objekt+payer men FÖRE metadata-skrivning (undo soft-deletear objektet → metadata göms automatiskt, ingen separat metadata-undo på create-vägen). `update_object` stämplas (scalar-snapshot i `beforeJson`) direkt efter scalar-UPDATE och FÖRE parent-sync/payer/metadata. `metadata_write` (endast update-vägen) PRE-stämplas med `beforeJson.baseline` (befintliga metadata-id:n) + `afterJson.ids=null`, sedan skrivs metadata, sedan finaliseras `afterJson.ids` med exakt diff. **`writeObjectImportMetadataBatch` får ALDRIG wrappas i `db.transaction`** — dess per-rad-fallback förutsätter en levande tx (avbruten PG-tx avvisar alla följande satser); därför pre-stamp+finalize+baseline-recovery istället för atomisk tx. `POST /api/import/undo` (`requireAdmin`) backar senaste reversibla batchen inom `IMPORT_UNDO_WINDOW_MS` (7d), endast om nuvarande state == `afterJson` (annars markeras raden blockerad). Guardrails: skapade objekt med post-batch barn/WO/koncept/payer-ändringar blockerar undo. Undo av `metadata_write`: array `afterJson.ids` ⇒ radera exakt dem; saknad `ids` (krasch i finaliserings-fönstret) ⇒ recovery via baseline (radera objektets nuvarande metadata som ej fanns vid import — bounded av admin/senaste-batch/fönster).
+### Säkerhet / prod
+- **Auto-tilldelning AV i prod:** `resolveFallbackTenantId()`=null i prod; nya användare måste bjudas in explicit (override `AUTO_ASSIGN_TENANT=true`, avrådes). `/api/me/tenant`=null för oinloggade.
+- **Demo-seed AV i prod:** `seedDatabase()` skippar demo utan `ENABLE_DEMO_SEED`; rensa rester via `scripts/kinab-reset-operational-data.ts --confirm RENSA-KINAB`.
+- **Auto-checkpoint kan committa raderingar:** kör `scripts/check-mass-deletion.ts --commits 50 --threshold 50` före `git push github main`. Recovery: `docs/disaster-recovery.md` §Scenario D.
+- **Roll-kolumner (2 platser):** all access-kontroll använder tenant-rollen (`user_tenant_roles.role`) — ändra via `assignUserToTenant`, lämna `users.role` orörd.
+- **Bypassad mobile-yta:** `/api/mobile/*` går utanför tenant-mw — använd `req.mobileTenantId` (läs aldrig `req.tenantId` där).
+- **Portal user scope:** tom scope = full access (back-compat); sätt explicit scope för begränsning.
 
-- **Metadata-system: svenska är enda systemet (engelska BORTTAGET):** Det svenska systemet (`metadata_katalog`/`metadata_varden`/`metadata_historik`) är **enda källan** för objekt-metadata. Alla läsare, skrivare OCH villkorsmotorn (orderkoncept-targeting, portal-vy, KPI-CRUD, telink-synk, object-copy, objektmall import+export) går mot svenska systemet. De engelska tabellerna (`metadata_definitions`/`object_metadata`) är **helt borttagna** (kontraktsfas — ingen prod-data, ingen expand-contract). `/api/metadata-definitions` (alla endpoints) serveras fortfarande som en **compat-vy** över `metadata_katalog` (`getMetadataDefinitionsCompat`/`katalogToDefinitionCompat`: `id=katalog.id`, `fieldKey=deriveMetadataDotKey ?? namn`, `fieldLabel=visningsnamn ?? namn`) så frontend är oförändrad — den engelska formen finns bara kvar som TS-interfacet `MetadataDefinition` (`shared/schema.ts`). Använd alltid `server/metadata-queries.ts` (`createMetadata`/`updateMetadata`/`deleteMetadata`/`writeImportedMetadataValue`/`getObjectsConditionMetadata`). Datatyp-mappning via `mapEnglishDataTypeToDatatyp`/`mapDatatypToEnglishDataType`. Computed (`arBeraknad`), kundlås och sammansatta punktnotations-fält bevaras. Se memory `dual-metadata-systems.md`.
+### Priser / fakturering
+- **Öre vs kronor:** `formatSek(kronor)` vs `formatSekFromOre(öre)` (`client/src/lib/format.ts`) — ej utbytbara. DB-prisfält=öre, Fleet/Invoice-summor=kronor.
+- **Frozen prices (Fortnox):** `frozenUnitPrice` om satt annars `line.resolvedPrice`; WO med `frozen_*=NULL` opåverkade.
+- **Idempotens:** WO-freeze kräver `?force=true` för omfrysning; `apply-index-adjustment` skriver alltid över `indexDate/indexPercentage`.
+- **Frozen invoice recipient (3 nivåer):** `invoice_recipients` (central/area/local) ärvs uppåt via `parent_customer_id`; `resolveInvoiceRecipient()` — lägre kund vinner, `breaks_inheritance` kapar arv, lika prioritet=konflikt som blockerar koncept-expansion. Fryses på WO vid freeze; Fortnox använder frozen annars `object_payers`/`customers.fortnoxCustomerId`. Kolla alltid `hasConflict` före expansion.
+- **Samlingsfakturor:** WO har `invoiceQueueState` (NULL/held/pending/consolidated/exported). `markWorkOrderReadyForInvoice()` → policy `immediate`=pending annars held tills `invoiceHeldUntil`. Scheduler (ENV `INVOICE_CONSOLIDATION_ENABLED=true`) konsoliderar held→`customer_invoice`. Fortnox refuserar held WO. Manuell släpp: `POST /api/invoice-queue/release` (`requireAdmin`). Policy-byte gäller från nästa period. Detalj: ADR v3.
+- **BOM self-reference:** `article_components` förbjuder `childId===parentId`.
+
+### Objekt & metadata
+- **Objekt är kund-neutrala (ADR v3):** `objects.customer_id` BORTTAGEN — använd `object_payers` (primär betalare) eller `work_orders.customer_id` (beställare). API `object.customerId` bevaras som payer-överlägg (läs: `primaryPayerCustomerIdSql`; skriv: `ensurePrimaryPayer`).
+- **Multi-förälder & släktnamn:** objekt kan ha flera föräldrar (`object_parents`, en primär). `objects.parentId` speglar ALLTID primär — skriv aldrig ena utan andra; gå via `addObjectParentSafe`/`removeObjectParent`. Metadata-/fält-arv sker ALLTID från primär förälder; alternativa påverkar bara visningsnamn. Endpoint `GET /api/objects/:id/display-names`. Se memory `object-repoint-cycle-guard.md`.
+- **Arkivering = soft-delete:** objektmall-importens `active_status` sätter `objects.deletedAt` (+`archivedBy/Reason`), ALDRIG `objects.status`. Använd `archivePreflight`/`archiveObject`/`restoreObject` (`server/services/object-archive.ts`).
+- **Objektmall-import (v2, 4 nummer):** en fil → create/update/repoint per rad (interim⇒create, system/butik⇒update, ändrad förälder⇒repoint). Endast `Objektnamn`+förälder krävs; övrigt=metadata som ärvs nedåt. `[INTERIMSLISTA]`-flagga tvingar ren nyimport. Detalj: `CHANGELOG.md` #618.
+- **Reversibel import (Ångra):** stämplar `import_actions` FÖRE mutationen (inkrementellt); `writeObjectImportMetadataBatch` får ALDRIG tx-wrappas. `POST /api/import/undo` (`requireAdmin`) inom 7d. Detalj: memory `import-undo-reversibility.md`.
+- **Metadata: svenska = enda systemet:** `metadata_katalog`/`metadata_varden`/`metadata_historik` är enda källan; engelska (`metadata_definitions`/`object_metadata`) BORTTAGET. `/api/metadata-definitions` = compat-vy. Använd `server/metadata-queries.ts`. Detalj: memory `dual-metadata-systems.md`.
+- **Metadata-katalog immutability:** `namn`+`beteckning` är universella nycklar (import-matchning, `concept_filters.metadata_key`, sök) → immutable när i bruk (409 vid rename), unika per tenant. Soft-delete (aldrig hard-delete); `?confirmUsage=N` måste matcha exakt count. Räknare: `getMetadataKatalogUsage`.
+
+### Karta / routing
+- **Provider-abstraktion (ENDA KÄLLAN):** all rutt/geokod/tile-trafik via `getMapProvider()` (`server/services/mapProvider.ts`). Impl: `routing.ts`, `geocoding.ts` (rå `geoapify-geocoding.ts` — Geoapify/Nominatim, INTE Google trots namnet `isGoogleGeocodingAvailable`). Återinför ALDRIG ad-hoc `fetch` mot `api.geoapify.com`/OSRM/`tile.googleapis.com` — lägg bakom en `MapProvider`-metod.
+- **Google Maps-migration (#471):** Fas 0+1 klara, inert under default `MAP_PROVIDER=geoapify` (ingen Google-secret krävs). Cutover: `MAP_PROVIDER=google` + secrets `GOOGLE_MAPS_API_KEY`/`GOOGLE_CLOUD_PROJECT_ID` (utan nyckel → auto-fallback till Geoapify/OSM). Leaflet→Google JS SDK är separat framtida task.
 
 ## Pointers
-- **Uppgiftsmodell-utredning (`docs/uppgiftsmodellen-utredning.md`):** Bevisar att uppgiftens informationspaket redan motsvaras av befintliga system.
-- **Uppgiftslogik-utvecklingslogg (`docs/uppgiftslogik-utvecklingslogg.md`):** Bekräftade grunder + parkerat framtida bygge (kapacitets-/fyllnadsmotorer, arbetstids-/lönemodul, yta/linje-geografi m.m.) från produktägar-genomgången 2026-07-02.
-- **Master Implementation Guide v1.0:** For overarching sprint plans and decisions.
-- **ADR v2 (`adr-orderkoncept-v2.md`):** Fundamental architectural decision record for order concepts.
-- **ADR v3 (`docs/adr-orderkoncept-v3.md`):** Objekt-neutralitet, kund-hierarki, tre fakturanivåer, metadata-livscykel, samlingsfakturor (Session 2-principer).
-- **Zod Documentation:** For API schema validation understanding.
-- **Drizzle ORM Documentation:** For database interaction patterns.
-- **OpenAI API Documentation:** For AI integration details.
-- **Geoapify Documentation:** For routing and VRP API usage.
-- **Twilio API Documentation:** For SMS notification services.
-- **Fortnox API Documentation:** For accounting system integration.
+- **ADR v3** (`docs/adr-orderkoncept-v3.md`): objekt-neutralitet, kund-hierarki, tre fakturanivåer, metadata-livscykel, samlingsfakturor. **ADR v2** (`adr-orderkoncept-v2.md`): orderkoncept-grund.
+- **Uppgiftsmodell:** `docs/uppgiftsmodellen-utredning.md` + `docs/uppgiftslogik-utvecklingslogg.md` (parkerat framtida bygge, 2026-07-02).
+- **Master Implementation Guide v1.0:** övergripande sprint-planer.
+- **Externa API-doc:** Zod, Drizzle ORM, OpenAI, Geoapify (routing/VRP), Twilio (SMS), Fortnox (bokföring).
