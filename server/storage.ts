@@ -283,6 +283,30 @@ export interface CustomerObjectSearchHit {
   path: Array<{ id: string; name: string; hierarchyLevel: string | null }>;
 }
 
+export interface ObjectParentSearchHit {
+  id: string;
+  name: string;
+  objectNumber: string | null;
+  address: string | null;
+  city: string | null;
+  objectType: string | null;
+  hierarchyLevel: string | null;
+  // Släktnamn-kedja rot → löv (löv = objektet självt).
+  path: Array<{ id: string; name: string }>;
+}
+
+export interface ObjectParentRelationEnriched {
+  id: string;
+  objectId: string;
+  parentId: string;
+  isPrimary: boolean;
+  relationContext: string | null;
+  createdAt: Date | string | null;
+  parentName: string | null;
+  // Släktnamn-kedja för föräldern rot → förälder.
+  parentPath: Array<{ id: string; name: string }>;
+}
+
 export interface CustomerMapAggregate {
   cellKey: string;
   latitude: number;
@@ -473,6 +497,7 @@ export interface IStorage {
   getCustomerObjectTreeChildren(customerId: string, tenantId: string, parentId: string): Promise<CustomerTreeNode[]>;
   getCustomerObjectMapPoints(customerId: string, tenantId: string, opts?: { bbox?: [number, number, number, number]; clusterId?: string | null; limit?: number }): Promise<CustomerMapPoint[]>;
   searchCustomerObjects(customerId: string, tenantId: string, query: string, limit?: number): Promise<CustomerObjectSearchHit[]>;
+  searchObjectsForParent(tenantId: string, query: string, opts?: { excludeObjectId?: string; limit?: number }): Promise<ObjectParentSearchHit[]>;
   getCustomerObjectMapData(customerId: string, tenantId: string, opts: { bbox?: [number, number, number, number]; clusterId?: string | null; zoom: number; limit?: number }): Promise<CustomerMapData>;
   createObject(object: InsertObject, tx?: DbTransaction): Promise<ServiceObject>;
   updateObject(id: string, object: Partial<InsertObject>): Promise<ServiceObject | undefined>;
@@ -1210,6 +1235,7 @@ export interface IStorage {
 
   // Object Parents (multi-parent relationships)
   getObjectParents(objectId: string): Promise<ObjectParent[]>;
+  getObjectParentsEnriched(objectId: string, tenantId: string): Promise<ObjectParentRelationEnriched[]>;
   getObjectChildren(parentId: string): Promise<ObjectParent[]>;
   addObjectParent(data: InsertObjectParent): Promise<ObjectParent>;
   removeObjectParent(id: string, objectId?: string): Promise<void>;
@@ -2912,6 +2938,128 @@ export class DatabaseStorage implements IStorage {
       clusterId: m.clusterId,
       parentId: m.parentId,
       path: pathByLeaf.get(m.id) || [{ id: m.id, name: m.name, hierarchyLevel: m.hierarchyLevel }],
+    }));
+  }
+
+  // Sökbar förälder-väljare (Task: "Lägg till förälder"-feedback). Till skillnad
+  // från den vanliga /api/objects-sökningen (bara egna fält) matchar denna VARJE
+  // sökord mot objektets egna fält ELLER något led i primär-förälderkedjan, så
+  // att t.ex. "hemköp hisingen pantrum" hittar ett löv som heter "Pantrum" vars
+  // släktnamn innehåller "Hemköp"/"Hisingen". Returnerar hela släktnamnskedjan
+  // (rot → löv) för entydig verifiering bland tusentals liknande objekt.
+  async searchObjectsForParent(
+    tenantId: string,
+    query: string,
+    opts?: { excludeObjectId?: string; limit?: number },
+  ): Promise<ObjectParentSearchHit[]> {
+    const trimmed = query.trim();
+    if (!trimmed) return [];
+    const safeLimit = Math.max(1, Math.min(100, opts?.limit ?? 30));
+    const tokens = trimmed.toLowerCase().split(/\s+/).filter(Boolean).slice(0, 6);
+    if (tokens.length === 0) return [];
+
+    const excludeCond = opts?.excludeObjectId
+      ? sql`AND o.id <> ${opts.excludeObjectId}`
+      : sql``;
+    // Varje token måste finnas i den aggregerade sök-texten (egna fält + alla
+    // förälder-namn i primärkedjan). AND mellan tokens ⇒ alla ord måste matcha.
+    const tokenConds = tokens.map((t) => sql`a.search_text LIKE ${`%${t}%`}`);
+
+    const matches = await db.execute(sql`
+      WITH RECURSIVE chain AS (
+        SELECT o.id AS leaf_id, o.id AS node_id, o.name, o.parent_id, 0 AS depth
+        FROM objects o
+        WHERE o.tenant_id = ${tenantId} AND o.deleted_at IS NULL
+        UNION ALL
+        SELECT c.leaf_id, p.id, p.name, p.parent_id, c.depth + 1
+        FROM chain c
+        JOIN objects p ON p.id = c.parent_id
+        WHERE p.tenant_id = ${tenantId} AND p.deleted_at IS NULL AND c.depth < 20
+      ),
+      agg AS (
+        SELECT leaf_id, LOWER(string_agg(COALESCE(name, ''), ' ')) AS ancestor_text
+        FROM chain
+        GROUP BY leaf_id
+      )
+      SELECT
+        o.id,
+        o.name,
+        o.object_number AS "objectNumber",
+        o.address,
+        o.city,
+        o.object_type AS "objectType",
+        o.hierarchy_level AS "hierarchyLevel"
+      FROM objects o
+      JOIN agg ag ON ag.leaf_id = o.id
+      CROSS JOIN LATERAL (
+        SELECT (
+          ag.ancestor_text || ' '
+          || LOWER(COALESCE(o.object_number, '')) || ' '
+          || LOWER(COALESCE(o.address, '')) || ' '
+          || LOWER(COALESCE(o.city, ''))
+        ) AS search_text
+      ) a
+      WHERE o.tenant_id = ${tenantId} AND o.deleted_at IS NULL
+        ${excludeCond}
+        AND ${sql.join(tokenConds, sql` AND `)}
+      ORDER BY o.name
+      LIMIT ${safeLimit}
+    `);
+
+    interface MatchRow {
+      id: string;
+      name: string;
+      objectNumber: string | null;
+      address: string | null;
+      city: string | null;
+      objectType: string | null;
+      hierarchyLevel: string | null;
+    }
+    const matchRows = (matches.rows as unknown as MatchRow[]) || [];
+    if (matchRows.length === 0) return [];
+
+    const ids = matchRows.map((r) => r.id);
+    const ancestors = await db.execute(sql`
+      WITH RECURSIVE chain AS (
+        SELECT o.id AS leaf_id, o.id AS node_id, o.name, o.parent_id, 0 AS depth
+        FROM objects o
+        WHERE o.id IN (${sql.join(ids.map((id) => sql`${id}`), sql`, `)})
+          AND o.tenant_id = ${tenantId}
+          AND o.deleted_at IS NULL
+        UNION ALL
+        SELECT c.leaf_id, p.id, p.name, p.parent_id, c.depth + 1
+        FROM chain c
+        JOIN objects p ON p.id = c.parent_id
+        WHERE p.tenant_id = ${tenantId} AND p.deleted_at IS NULL AND c.depth < 20
+      )
+      SELECT leaf_id AS "leafId", node_id AS "id", name, depth
+      FROM chain
+      ORDER BY leaf_id, depth DESC
+    `);
+
+    interface ChainRow {
+      leafId: string;
+      id: string;
+      name: string;
+      depth: number;
+    }
+    const chainRows = (ancestors.rows as unknown as ChainRow[]) || [];
+    const pathByLeaf = new Map<string, Array<{ id: string; name: string }>>();
+    for (const row of chainRows) {
+      const arr = pathByLeaf.get(row.leafId) || [];
+      arr.push({ id: row.id, name: row.name });
+      pathByLeaf.set(row.leafId, arr);
+    }
+
+    return matchRows.map((m) => ({
+      id: m.id,
+      name: m.name,
+      objectNumber: m.objectNumber,
+      address: m.address,
+      city: m.city,
+      objectType: m.objectType,
+      hierarchyLevel: m.hierarchyLevel,
+      path: pathByLeaf.get(m.id) || [{ id: m.id, name: m.name }],
     }));
   }
 
@@ -9596,6 +9744,65 @@ export class DatabaseStorage implements IStorage {
   // ============== OBJECT PARENTS (multi-parent relationships) ==============
   async getObjectParents(objectId: string): Promise<ObjectParent[]> {
     return db.select().from(objectParents).where(eq(objectParents.objectId, objectId)).orderBy(desc(objectParents.isPrimary), objectParents.createdAt);
+  }
+
+  // Föräldrarelationer berikade med förälderns namn + fullt släktnamn (rot →
+  // förälder), så listan i "Föräldrar"-panelen kan visa entydig parentage utan
+  // att hämta hela objekt-listan.
+  async getObjectParentsEnriched(objectId: string, tenantId: string): Promise<ObjectParentRelationEnriched[]> {
+    const rels = await db
+      .select()
+      .from(objectParents)
+      .where(and(eq(objectParents.objectId, objectId), eq(objectParents.tenantId, tenantId)))
+      .orderBy(desc(objectParents.isPrimary), objectParents.createdAt);
+    if (rels.length === 0) return [];
+
+    const parentIds = Array.from(new Set(rels.map((r) => r.parentId)));
+    const ancestors = await db.execute(sql`
+      WITH RECURSIVE chain AS (
+        SELECT o.id AS leaf_id, o.id AS node_id, o.name, o.parent_id, 0 AS depth
+        FROM objects o
+        WHERE o.id IN (${sql.join(parentIds.map((id) => sql`${id}`), sql`, `)})
+          AND o.tenant_id = ${tenantId}
+          AND o.deleted_at IS NULL
+        UNION ALL
+        SELECT c.leaf_id, p.id, p.name, p.parent_id, c.depth + 1
+        FROM chain c
+        JOIN objects p ON p.id = c.parent_id
+        WHERE p.tenant_id = ${tenantId} AND p.deleted_at IS NULL AND c.depth < 20
+      )
+      SELECT leaf_id AS "leafId", node_id AS "id", name, depth
+      FROM chain
+      ORDER BY leaf_id, depth DESC
+    `);
+
+    interface ChainRow {
+      leafId: string;
+      id: string;
+      name: string;
+      depth: number;
+    }
+    const chainRows = (ancestors.rows as unknown as ChainRow[]) || [];
+    const pathByParent = new Map<string, Array<{ id: string; name: string }>>();
+    for (const row of chainRows) {
+      const arr = pathByParent.get(row.leafId) || [];
+      arr.push({ id: row.id, name: row.name });
+      pathByParent.set(row.leafId, arr);
+    }
+
+    return rels.map((r) => {
+      const path = pathByParent.get(r.parentId) || [];
+      return {
+        id: r.id,
+        objectId: r.objectId,
+        parentId: r.parentId,
+        isPrimary: r.isPrimary,
+        relationContext: r.relationContext,
+        createdAt: r.createdAt,
+        parentName: path.length > 0 ? path[path.length - 1].name : null,
+        parentPath: path,
+      };
+    });
   }
 
   async getObjectChildren(parentId: string): Promise<ObjectParent[]> {

@@ -1,0 +1,32 @@
+{
+  "sessionId": "d4d4b4e81",
+  "exportedAt": "2026-07-02T15:57:11.050Z",
+  "summary": "### Key Topics Discussed\n- Feedback on adding a parent to an object\n- Concerns about the \"relation type\" concept introduced by Reklit\n- Need to search for specific parent objects, such as a \"pantrum\" (recycling room) at \"Hemköp Hisingen\".\n\n### Important Points & Insights\n- The concept of \"relation type\" for parents is deemed illogical; one is either a parent or not.\n- The importance of being able to search for and verify the parent object, such as a \"pantrum\" belonging to a specific store like \"Hemköp Hisingen\", when adding child objects (e.g., recycling bins or machines).\n",
+  "conversation": [],
+  "transcripts": [
+    {
+      "text": "Hej! Hallå? Ja. Jo, äh, här kommer direkt fee-feedback då för att lägga till en förälder på den här objektet då. Och här är det då logiska, allvarliga fel som vi blev besvikna nu hur den har... Reklit har tänkt här nu. Äh, relationstyp, det är någonting som Reklit har hittat på. Det finns inte det, utan antingen är man en förälder eller så är man inte en förälder. Däremot så tog jag upp då att det kan vara en fördel att man då i...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Kan söka då, äh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Alltså, det som ska bli en förälder och så exempelvis då om du ska hitta ett pantrum och du har då, äh, femtusen livsmedelsbutiker som har pantrum då där du ska lägga till nu, äh, i det här fallet då ett antal pantkärl eller en pantmaskin eller vad det nu är då. Då behöver man då kunna nummer ett se då, äh, va-va- så att säga det pantrummet som man då ska haka i här att det verkligen är Hemköp.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Hisingen, pantrum, så att man träffar rätt då. Och det finns också då ett behov utav att man ska kunna söka då till exempel Hemköp Hisingen pantrum.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    }
+  ]
+}

@@ -1,14 +1,13 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type { ServiceObject } from "@shared/schema";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
-import { GitFork, Plus, Trash2, Star, StarOff } from "lucide-react";
+import { GitFork, Plus, Trash2, Star, StarOff, Check, ChevronsUpDown, Loader2 } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -16,6 +15,8 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Command, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { ObjectDisplayNames } from "@/components/ObjectDisplayNames";
 
 interface ObjectParentRelation {
@@ -25,6 +26,19 @@ interface ObjectParentRelation {
   isPrimary: boolean;
   relationContext: string | null;
   createdAt: string;
+  parentName: string | null;
+  parentPath: Array<{ id: string; name: string }>;
+}
+
+interface ObjectParentSearchHit {
+  id: string;
+  name: string;
+  objectNumber: string | null;
+  address: string | null;
+  city: string | null;
+  objectType: string | null;
+  hierarchyLevel: string | null;
+  path: Array<{ id: string; name: string }>;
 }
 
 interface ObjectParentsManagerProps {
@@ -40,13 +54,6 @@ interface ObjectParentsPanelProps {
   onOpenChange?: (open: boolean) => void;
 }
 
-const RELATION_CONTEXTS = [
-  { value: "primary", label: "Primär" },
-  { value: "billing", label: "Fakturering" },
-  { value: "operational", label: "Drift" },
-  { value: "ownership", label: "Ägare" },
-];
-
 /**
  * Task #1086: multi-förälder + släktnamn integreras direkt i det enhetliga
  * objektformuläret (ObjectDetailPage → Hierarki-fliken). Tidigare låg detta i en
@@ -57,41 +64,65 @@ const RELATION_CONTEXTS = [
 export function ObjectParentsManager({ object, enabled = true }: ObjectParentsManagerProps) {
   const { toast } = useToast();
   const [showAddDialog, setShowAddDialog] = useState(false);
-  const [selectedParentId, setSelectedParentId] = useState("");
-  const [selectedContext, setSelectedContext] = useState("primary");
+  const [selectedParent, setSelectedParent] = useState<ObjectParentSearchHit | null>(null);
+  const [parentPickerOpen, setParentPickerOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search), 250);
+    return () => clearTimeout(t);
+  }, [search]);
 
   const { data: parents = [], isLoading } = useQuery<ObjectParentRelation[]>({
     queryKey: ["/api/objects", object.id, "parents"],
     queryFn: async () => {
-      const res = await fetch(`/api/objects/${object.id}/parents`);
+      const res = await fetch(`/api/objects/${object.id}/parents`, { credentials: "include" });
       if (!res.ok) return [];
       return res.json();
     },
     enabled,
   });
 
-  const { data: allObjects = [] } = useQuery<ServiceObject[]>({
-    queryKey: ["/api/objects"],
-    enabled: showAddDialog,
+  const trimmedSearch = debouncedSearch.trim();
+  const { data: searchResults = [], isFetching: searchLoading } = useQuery<ObjectParentSearchHit[]>({
+    queryKey: ["/api/objects/parent-search", { q: trimmedSearch, exclude: object.id }],
+    queryFn: async () => {
+      const params = new URLSearchParams({ q: trimmedSearch, exclude: object.id });
+      const res = await fetch(`/api/objects/parent-search?${params.toString()}`, { credentials: "include" });
+      if (!res.ok) return [];
+      return res.json();
+    },
+    enabled: showAddDialog && trimmedSearch.length >= 2,
   });
 
-  const availableParents = allObjects.filter(
-    o => o.id !== object.id && !parents.some(p => p.parentId === o.id)
-  );
+  const existingParentIds = new Set(parents.map(p => p.parentId));
+  const filteredResults = searchResults.filter(hit => !existingParentIds.has(hit.id));
+
+  const formatPath = (path: Array<{ id: string; name: string }>) =>
+    path.map(p => p.name).join(" › ");
+
+  const closeAddDialog = () => {
+    setShowAddDialog(false);
+    setSelectedParent(null);
+    setParentPickerOpen(false);
+    setSearch("");
+    setDebouncedSearch("");
+  };
 
   const addParentMutation = useMutation({
     mutationFn: async () => {
+      if (!selectedParent) return;
       await apiRequest("POST", `/api/objects/${object.id}/parents`, {
-        parentId: selectedParentId,
+        parentId: selectedParent.id,
         isPrimary: parents.length === 0,
-        relationContext: selectedContext,
+        relationContext: "primary",
         tenantId: object.tenantId,
       });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/objects", object.id, "parents"] });
-      setShowAddDialog(false);
-      setSelectedParentId("");
+      closeAddDialog();
       toast({ title: "Förälder tillagd" });
     },
     onError: () => {
@@ -119,15 +150,6 @@ export function ObjectParentsManager({ object, enabled = true }: ObjectParentsMa
       toast({ title: "Primär förälder uppdaterad" });
     },
   });
-
-  const getObjectName = (id: string) => {
-    const obj = allObjects.find(o => o.id === id);
-    return obj?.name || id.slice(0, 8);
-  };
-
-  const getContextLabel = (ctx: string | null) => {
-    return RELATION_CONTEXTS.find(c => c.value === ctx)?.label || ctx || "Primär";
-  };
 
   return (
     <div className="space-y-4">
@@ -165,18 +187,22 @@ export function ObjectParentsManager({ object, enabled = true }: ObjectParentsMa
               className={`flex items-center justify-between p-3 rounded-lg border ${p.isPrimary ? "border-chart-3/50 bg-chart-3/10 dark:bg-chart-3/15" : ""}`}
               data-testid={`parent-relation-${p.id}`}
             >
-              <div>
+              <div className="min-w-0">
                 <div className="flex items-center gap-2">
-                  <span className="text-sm font-medium">{getObjectName(p.parentId)}</span>
+                  <span className="text-sm font-medium truncate" data-testid={`text-parent-name-${p.id}`}>
+                    {p.parentName || p.parentId.slice(0, 8)}
+                  </span>
                   {p.isPrimary && (
-                    <Badge variant="outline" className="text-chart-3 border-chart-3/50 text-xs">
+                    <Badge variant="outline" className="text-chart-3 border-chart-3/50 text-xs shrink-0">
                       Primär
                     </Badge>
                   )}
-                  <Badge variant="secondary" className="text-xs">
-                    {getContextLabel(p.relationContext)}
-                  </Badge>
                 </div>
+                {p.parentPath && p.parentPath.length > 1 && (
+                  <span className="text-xs text-muted-foreground" data-testid={`text-parent-path-${p.id}`}>
+                    {formatPath(p.parentPath)}
+                  </span>
+                )}
               </div>
               <div className="flex items-center gap-1">
                 {!p.isPrimary && (
@@ -213,48 +239,88 @@ export function ObjectParentsManager({ object, enabled = true }: ObjectParentsMa
         <ObjectDisplayNames objectId={object.id} enabled={enabled} allowSetPrimary showSettingsLink />
       </div>
 
-      <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>
+      <Dialog open={showAddDialog} onOpenChange={(o) => (o ? setShowAddDialog(true) : closeAddDialog())}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Lägg till förälder</DialogTitle>
           </DialogHeader>
-          <div className="space-y-4">
-            <div>
-              <Label>Förälder-objekt</Label>
-              <Select value={selectedParentId} onValueChange={setSelectedParentId}>
-                <SelectTrigger data-testid="select-parent-object">
-                  <SelectValue placeholder="Välj objekt..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {availableParents.map(o => (
-                    <SelectItem key={o.id} value={o.id}>
-                      {o.name} ({o.hierarchyLevel || o.objectType})
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label>Relationstyp</Label>
-              <Select value={selectedContext} onValueChange={setSelectedContext}>
-                <SelectTrigger data-testid="select-relation-context">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {RELATION_CONTEXTS.map(c => (
-                    <SelectItem key={c.value} value={c.value}>
-                      {c.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+          <div className="space-y-2">
+            <Label>Förälder-objekt</Label>
+            <Popover open={parentPickerOpen} onOpenChange={setParentPickerOpen}>
+              <PopoverTrigger asChild>
+                <Button
+                  variant="outline"
+                  role="combobox"
+                  aria-expanded={parentPickerOpen}
+                  className="w-full justify-between font-normal"
+                  data-testid="button-parent-picker"
+                >
+                  <span className="truncate text-left">
+                    {selectedParent ? formatPath(selectedParent.path) : "Sök förälder-objekt..."}
+                  </span>
+                  <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
+                <Command shouldFilter={false}>
+                  <CommandInput
+                    placeholder="Sök på namn, adress eller släktnamn..."
+                    value={search}
+                    onValueChange={setSearch}
+                    data-testid="input-parent-search"
+                  />
+                  <CommandList>
+                    {trimmedSearch.length < 2 ? (
+                      <div className="py-6 text-center text-sm text-muted-foreground">
+                        Skriv minst 2 tecken för att söka…
+                      </div>
+                    ) : searchLoading ? (
+                      <div className="flex items-center justify-center gap-2 py-6 text-sm text-muted-foreground">
+                        <Loader2 className="h-4 w-4 animate-spin" /> Söker…
+                      </div>
+                    ) : filteredResults.length === 0 ? (
+                      <div className="py-6 text-center text-sm text-muted-foreground">
+                        Inga objekt hittades.
+                      </div>
+                    ) : (
+                      <CommandGroup>
+                        {filteredResults.map(hit => (
+                          <CommandItem
+                            key={hit.id}
+                            value={hit.id}
+                            onSelect={() => {
+                              setSelectedParent(hit);
+                              setParentPickerOpen(false);
+                            }}
+                            data-testid={`option-parent-${hit.id}`}
+                            className="flex flex-col items-start gap-0.5"
+                          >
+                            <div className="flex w-full items-center gap-2">
+                              <Check className={`h-4 w-4 shrink-0 ${selectedParent?.id === hit.id ? "opacity-100" : "opacity-0"}`} />
+                              <span className="font-medium">{formatPath(hit.path)}</span>
+                            </div>
+                            {(hit.objectNumber || hit.address || hit.city) && (
+                              <span className="pl-6 text-xs text-muted-foreground">
+                                {[hit.objectNumber, hit.address, hit.city].filter(Boolean).join(" · ")}
+                              </span>
+                            )}
+                          </CommandItem>
+                        ))}
+                      </CommandGroup>
+                    )}
+                  </CommandList>
+                </Command>
+              </PopoverContent>
+            </Popover>
+            <p className="text-xs text-muted-foreground">
+              Sök på objektets namn, adress eller något led i släktnamnet — t.ex. "Hemköp Hisingen pantrum".
+            </p>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowAddDialog(false)}>Avbryt</Button>
+            <Button variant="outline" onClick={closeAddDialog}>Avbryt</Button>
             <Button
               onClick={() => addParentMutation.mutate()}
-              disabled={!selectedParentId || addParentMutation.isPending}
+              disabled={!selectedParent || addParentMutation.isPending}
               data-testid="button-confirm-add-parent"
             >
               Lägg till

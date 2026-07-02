@@ -1,0 +1,44 @@
+{
+  "sessionId": "ed515d448",
+  "exportedAt": "2026-07-02T16:06:57.559Z",
+  "summary": "### Key Topics Discussed\n- Improving the visualization of parent-child relationships in basic data.\n- Simplification of the display for parent-child relationships, focusing on ease of use.\n- Using the \"släktnamn\" (family name/lineage) to represent the hierarchy of parent-child objects.\n\n### Important Points & Insights\n- The suggestion is to make the function very simple, avoiding multiple boxes for parent generation, family name, parent chain, and child objects.\n- The \"släktnamn\" can be used to show a full hierarchical path, for example: Axfood Sverige > Hemköpskedjan > Region Göteborg > Hemköp Hisingen > Pantrum.\n- The `släktnamn` is generated based on the superordinate object.\n- The same logic for `släktnamn` should be applied when searching for parents and children and visualizing their connections.\n\n### Open Questions/Pending Items\n- How to display the connection between an individual object and one or more parents/children.\n- How to implement editing functionality for these connections.",
+  "conversation": [],
+  "transcripts": [
+    {
+      "text": "Nu kan du prata om sista sms-bilden jag skicka.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Ja.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Ja, äh, den sista här är då ett krav på förbättring. Det här är grunddata, den här föräldrar, äh, och barnöversikten då. Och, äh, blanda inte in någonting primär och, och sånt där, utan det är väldigt enkelt. Äh, det enskilda objektet har en koppling till en eller flera föräldrar och det enskilda objektet har koppling till en eller flera barn. Äh, och det är bara att visa hur den kopplingen ser ut. Och det är bara att sätta en penna där för att editera-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm ...och den här funktionen. Krångligare än så behöver den liksom inte vara. Här är det ju flera rutor då, föräldrageneration och släktnamn och, och föräldrakedja och barnobjekt och så, så vidare. Utan gör det här bara, bara väldigt enkelt. Äh, använd släktnamnet naturligtvis, men den används ju inte liksom riktigt här då, utan det blir ju på objektnivån då. Så att om det enskilda objektet är kopplat till en förälder, vilken den föräldern är kopplad till ett annat objekt och det objektet är kopplat till annat, så kan ju då släktnamnet bli som jag sa-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm ...två gånger då. Om toppen är Axfood Sverige och sen så har du ett underobjekt som är kopplat som är hemköpskedjan och så finns det ett underobjekt som är då ett område som heter, äh, Region Göteborg och sen så är det då Hemköp Hisingen. Äh, då blir ju släktnamnet Axfood Sverige, Hemköpskedjan, Region Göteborg, äh, Hemköp Hisingen, Pantrum två, till exempel.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Då har du ett släktnamn som bara föds utifrån då överordnad då. Och, och det är den logiken som man även ska söka på då när man då söker föräldrar och barn och ser kopplingen då. Det ska väl inte vara så otroligt svårt. Klar.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    }
+  ]
+}

@@ -473,13 +473,29 @@ app.post("/api/objects/batch-fill-city", asyncHandler(async (req, res) => {
   });
 }));
 
+// Sökbar förälder-väljare: matchar varje sökord mot objektets egna fält ELLER
+// någon förälder i primärkedjan och returnerar hela släktnamnskedjan, så att
+// rätt objekt kan hittas/verifieras bland tusentals liknande (t.ex. att hitta
+// exakt "Hemköp Hisingen pantrum" bland alla pantrum).
+app.get("/api/objects/parent-search", asyncHandler(async (req, res) => {
+  const tenantId = getTenantIdWithFallback(req);
+  const q = typeof req.query.q === "string" ? req.query.q : "";
+  const exclude = typeof req.query.exclude === "string" ? req.query.exclude : undefined;
+  if (!q.trim()) {
+    res.json([]);
+    return;
+  }
+  const hits = await storage.searchObjectsForParent(tenantId, q, { excludeObjectId: exclude, limit: 30 });
+  res.json(hits);
+}));
+
 app.get("/api/objects/:id/parents", asyncHandler(async (req, res) => {
   const tenantId = getTenantIdWithFallback(req);
   const existing = await storage.getObject(req.params.id);
   if (!verifyTenantOwnership(existing, tenantId)) {
     throw new NotFoundError("Objekt");
   }
-  const parents = await storage.getObjectParents(req.params.id);
+  const parents = await storage.getObjectParentsEnriched(req.params.id, tenantId);
   res.json(parents);
 }));
 

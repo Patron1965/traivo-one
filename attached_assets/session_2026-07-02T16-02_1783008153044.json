@@ -1,0 +1,26 @@
+{
+  "sessionId": "150448886b",
+  "exportedAt": "2026-07-02T16:02:25.044Z",
+  "summary": "### Key Topics Discussed\n- Problem with Replit layout consistency.\n- Issue with \"överordnat objekt\" (superior object) field not being descriptive enough.\n- Problem with the search functionality for customers, as there is no customer data to search on, only object names and relationships.\n- Potential improvement for search functionality by allowing filtering based on metadata, similar to existing quantity-based filters.\n\n### Important Points & Insights\n- The user frequently encounters logical and user interface errors.\n- The consistency of terminology in fields (e.g., \"överordnat objekt\") is crucial, even if the specific wording isn't perfect, as long as it's consistent.\n- An example for improved search is filtering by \"Axfood\" associated with \"Hemköp\" and \"panntrum\" (pantry/boiler room) to get a short list.\n\n### Open Questions/Pending Items\n- How to improve Replit layout consistency.\n- How to make the \"överordnat objekt\" field more logical or ensure consistent labeling.\n- How to implement a free-text search for objects that works correctly with available data, potentially including customer data, and considering metadata-based filtering.",
+  "conversation": [],
+  "transcripts": [
+    {
+      "text": "Hallå? Ja, äh, här har vi då ytterligare ett logiskt och användargränssnittmässigt fel. För det första vore det ju väldigt tacksamt om Replit kunde hålla ihop layouten lite granna då och inte bladdra i väg på en massa olika s-sätt då. För att här har vi också då att man ska va-- välja då överordnat objekt och här står det då inte.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Förändra, utan här står överordnat objekt. Jag, äh, lägger ingen vikt i vad som står där, bara det står samma varje gång. Och här är det också då ett fel. Här kan man söka på kund, men tyvärr så är det ju på det viset att det finns ingen kunddata att söka på här, utan det enda som man kan söka på är då, äh, objektnamn och, äh, äh, släktskap då. Så jag säger det igen. Det mest logiska här är ju då att man ska kunna fritill-söka på objekt som kanske...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Att det är Axfood och kanske kopplat till butiks- eller ett namn som heter Hemköp och, äh, det gäller panntrum. Och då får man fram en kort lista då där. Man skulle kunna tänka sig också att man utvecklar det här och lägger till då samma grund som vi har på mang-mängdemäss ställen där vi kan lägga in ett villkor på utvald metadata. Ett lite krångligare sätt, men det skulle ju då kunna göra, för då kan du ju lägga till ett, ett metadatavillkor eller flera metadatavillkor som tydligt definierar då ett, ett panntrum.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    }
+  ]
+}
