@@ -4597,6 +4597,36 @@ export const insertMetadataKatalogKundSchema = createInsertSchema(metadataKatalo
 });
 export type InsertMetadataKatalogKund = z.infer<typeof insertMetadataKatalogKundSchema>;
 
+// Objektöversikt Fas 1: konfigurerbara header-fält per objekttyp. Admin pekar in
+// upp till tre metadatafält (field1..3KatalogId → metadata_katalog.id) samt
+// bild-/kart-brickor som visas överst på objektsidan. Konfig gäller per
+// (tenant, objectType) — objectType är samma fria sträng som objects.object_type.
+// Additivt (expand-contract); saknad rad ⇒ standard-fallback i klienten
+// (objekttyp + serienummer). FK ON DELETE SET NULL så att ett borttaget
+// katalogfält bara nollar slotten (konfigen överlever).
+export const objectHeaderConfigs = pgTable("object_header_configs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
+  objectType: text("object_type").notNull(),
+  showImage: boolean("show_image").default(true).notNull(),
+  // 'vignette' (aktuell vinjettbild) | 'latest_image' (senaste objektbild)
+  imageSource: varchar("image_source", { length: 20 }).default("vignette").notNull(),
+  showMap: boolean("show_map").default(true).notNull(),
+  field1KatalogId: varchar("field1_katalog_id").references(() => metadataKatalog.id, { onDelete: "set null" }),
+  field2KatalogId: varchar("field2_katalog_id").references(() => metadataKatalog.id, { onDelete: "set null" }),
+  field3KatalogId: varchar("field3_katalog_id").references(() => metadataKatalog.id, { onDelete: "set null" }),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex("uq_object_header_config_tenant_type").on(table.tenantId, table.objectType),
+  index("idx_object_header_config_tenant").on(table.tenantId),
+]);
+export type ObjectHeaderConfig = typeof objectHeaderConfigs.$inferSelect;
+export const insertObjectHeaderConfigSchema = createInsertSchema(objectHeaderConfigs).omit({
+  id: true,
+  updatedAt: true,
+});
+export type InsertObjectHeaderConfig = z.infer<typeof insertObjectHeaderConfigSchema>;
+
 // Task #675: Redigerbara metadata-kategorier ("områden"). Område är det enda
 // grupperingsfältet i det svenska metadata-systemet (metadataKatalog.area). Tidigare
 // var listan hårdkodad och gemensam för alla tenants (shared/metadata-areas.ts).

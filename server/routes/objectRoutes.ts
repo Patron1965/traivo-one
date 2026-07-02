@@ -31,7 +31,7 @@ import {
 } from "../services/object-system-metadata";
 import { createMetadata, updateMetadata, deleteMetadata } from "../metadata-queries";
 import { getObjectInfoPackageTree } from "../services/object-info-package-tree";
-import { metadataKatalog, metadataVarden } from "@shared/schema";
+import { metadataKatalog, metadataVarden, objectHeaderConfigs } from "@shared/schema";
 import { getMapProvider } from "../services/mapProvider";
 import { isValidWhat3words, normalizeWhat3words, WHAT3WORDS_FORMAT_ERROR } from "@shared/what3words";
 
@@ -497,6 +497,91 @@ app.get("/api/objects/:id/parents", asyncHandler(async (req, res) => {
   }
   const parents = await storage.getObjectParentsEnriched(req.params.id, tenantId);
   res.json(parents);
+}));
+
+// Objektöversikt Fas 1: header-konfiguration per objekttyp (tenant-scoped).
+// GET är öppet för inloggade tenant-användare (styr enbart presentation).
+// PUT kräver admin och validerar att varje angivet katalog-id tillhör tenanten
+// (annars kan man peka in en annan organisations metadatafält).
+app.get("/api/object-header-config/:objectType", asyncHandler(async (req, res) => {
+  const tenantId = getTenantIdWithFallback(req);
+  const objectType = req.params.objectType;
+  const [config] = await db
+    .select()
+    .from(objectHeaderConfigs)
+    .where(and(
+      eq(objectHeaderConfigs.tenantId, tenantId),
+      eq(objectHeaderConfigs.objectType, objectType),
+    ))
+    .limit(1);
+  res.json(config ?? null);
+}));
+
+const objectHeaderConfigBodySchema = z.object({
+  showImage: z.boolean().optional(),
+  imageSource: z.enum(["vignette", "latest_image"]).optional(),
+  showMap: z.boolean().optional(),
+  field1KatalogId: z.string().nullable().optional(),
+  field2KatalogId: z.string().nullable().optional(),
+  field3KatalogId: z.string().nullable().optional(),
+});
+
+app.put("/api/object-header-config/:objectType", requireAdmin, asyncHandler(async (req, res) => {
+  const tenantId = getTenantIdWithFallback(req);
+  const objectType = req.params.objectType;
+  if (!objectType || !objectType.trim()) {
+    throw new ValidationError("objectType saknas");
+  }
+  const body = objectHeaderConfigBodySchema.parse(req.body);
+
+  // Säkerhet: varje inpekat katalog-id måste tillhöra denna tenant.
+  const katalogIds = [body.field1KatalogId, body.field2KatalogId, body.field3KatalogId]
+    .filter((v): v is string => typeof v === "string" && v.length > 0);
+  if (katalogIds.length > 0) {
+    const owned = await db
+      .select({ id: metadataKatalog.id })
+      .from(metadataKatalog)
+      .where(and(
+        eq(metadataKatalog.tenantId, tenantId),
+        inArray(metadataKatalog.id, katalogIds),
+      ));
+    const ownedSet = new Set(owned.map((r) => r.id));
+    for (const id of katalogIds) {
+      if (!ownedSet.has(id)) {
+        throw new ValidationError("Ogiltigt metadatafält för denna organisation");
+      }
+    }
+  }
+
+  const values = {
+    tenantId,
+    objectType,
+    showImage: body.showImage ?? true,
+    imageSource: body.imageSource ?? "vignette",
+    showMap: body.showMap ?? true,
+    field1KatalogId: body.field1KatalogId ?? null,
+    field2KatalogId: body.field2KatalogId ?? null,
+    field3KatalogId: body.field3KatalogId ?? null,
+    updatedAt: new Date(),
+  };
+
+  const [saved] = await db
+    .insert(objectHeaderConfigs)
+    .values(values)
+    .onConflictDoUpdate({
+      target: [objectHeaderConfigs.tenantId, objectHeaderConfigs.objectType],
+      set: {
+        showImage: values.showImage,
+        imageSource: values.imageSource,
+        showMap: values.showMap,
+        field1KatalogId: values.field1KatalogId,
+        field2KatalogId: values.field2KatalogId,
+        field3KatalogId: values.field3KatalogId,
+        updatedAt: values.updatedAt,
+      },
+    })
+    .returning();
+  res.json(saved);
 }));
 
 // Task #1085: Systemgenererad metadata för objektet — read-only fält som

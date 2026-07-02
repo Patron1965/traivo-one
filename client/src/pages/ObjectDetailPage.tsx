@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { ObjectHistoryArchiveTab } from "@/components/ObjectHistoryArchiveTab";
 import { ObjectVignetteSection } from "@/components/ObjectVignetteSection";
+import { ObjectHeaderPanel } from "@/components/ObjectHeaderPanel";
 import { ObjectMetadataForm, type MetadataFormEntry, type MetadataFormType, type MetadataRelatedParent, type MetadataRelatedChild } from "@/components/ObjectMetadataForm";
 import { ObjectTemplateMetadataForm, type TemplateMetadataType } from "@/components/ObjectTemplateMetadataForm";
 import { ObjectSystemGeneratedPanel } from "@/components/ObjectSystemGeneratedPanel";
@@ -1272,8 +1273,8 @@ export default function ObjectDetailPage() {
                 {objectTypeLabel}
               </Badge>
             )}
-            <Badge className={statusColors[obj.status || "active"] || statusColors.active} data-testid="badge-status">
-              {obj.status === "active" ? "Aktiv" : obj.status === "inactive" ? "Inaktiv" : obj.status || "Aktiv"}
+            <Badge className={(obj as any).deletedAt ? statusColors.inactive : statusColors.active} data-testid="badge-status">
+              {(obj as any).deletedAt ? "Arkiverad" : "Aktiv"}
             </Badge>
             {obj.accessType && obj.accessType !== "open" && (
               <Badge variant="outline" className="gap-1" data-testid="badge-access-type">
@@ -1327,6 +1328,21 @@ export default function ObjectDetailPage() {
           )}
         </div>
       </div>
+
+      <ObjectHeaderPanel
+        objectId={obj.id}
+        objectType={obj.objectType}
+        objectTypeLabel={objectTypeLabel}
+        serialNumber={(obj as any).serialNumber}
+        latitude={obj.latitude}
+        longitude={obj.longitude}
+        entranceLatitude={obj.entranceLatitude}
+        entranceLongitude={obj.entranceLongitude}
+        name={obj.name}
+        objectNumber={obj.objectNumber}
+        metadata={metadata}
+        canEdit={user?.role === "admin" || user?.role === "owner"}
+      />
 
       <ObjectVignetteSection objectId={obj.id} />
 
