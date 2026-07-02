@@ -1238,6 +1238,7 @@ export interface IStorage {
   getObjectParentsEnriched(objectId: string, tenantId: string): Promise<ObjectParentRelationEnriched[]>;
   getObjectChildren(parentId: string): Promise<ObjectParent[]>;
   addObjectParent(data: InsertObjectParent): Promise<ObjectParent>;
+  addObjectParentSafe(objectId: string, parentId: string, tenantId: string, relationContext?: string | null): Promise<ObjectParent>;
   removeObjectParent(id: string, objectId?: string): Promise<void>;
   setPrimaryParent(objectId: string, parentId: string, tenantId: string): Promise<ObjectParent | undefined>;
   moveObject(objectId: string, newParentId: string | null, tenantId: string): Promise<ServiceObject | undefined>;
@@ -9812,6 +9813,44 @@ export class DatabaseStorage implements IStorage {
   async addObjectParent(data: InsertObjectParent): Promise<ObjectParent> {
     const [result] = await db.insert(objectParents).values(data).returning();
     return result;
+  }
+
+  // Kopplar en förälder till objektet på ett invariant-säkert sätt: servern
+  // beslutar isPrimary (första föräldern = primär), insertar relationen OCH
+  // speglar objects.parentId när den blir primär — allt i EN transaktion.
+  // Invariant (replit.md): skriv aldrig object_parents utan att spegla
+  // objects.parentId; annars syns kopplingen aldrig i Barn-kort/descendants/arv.
+  // Cykel-/dubblett-/ägarskapskontroll görs i routen före anropet.
+  async addObjectParentSafe(
+    objectId: string,
+    parentId: string,
+    tenantId: string,
+    relationContext?: string | null,
+  ): Promise<ObjectParent> {
+    return await db.transaction(async (tx) => {
+      const existing = await tx
+        .select({ id: objectParents.id })
+        .from(objectParents)
+        .where(and(eq(objectParents.objectId, objectId), eq(objectParents.tenantId, tenantId)));
+      const isPrimary = existing.length === 0;
+      const [result] = await tx
+        .insert(objectParents)
+        .values({
+          objectId,
+          parentId,
+          tenantId,
+          isPrimary,
+          relationContext: relationContext ?? (isPrimary ? "primary" : "alternate"),
+        })
+        .returning();
+      if (isPrimary) {
+        await tx
+          .update(objects)
+          .set({ parentId })
+          .where(and(eq(objects.id, objectId), eq(objects.tenantId, tenantId)));
+      }
+      return result;
+    });
   }
 
   async removeObjectParent(id: string, objectId?: string): Promise<void> {

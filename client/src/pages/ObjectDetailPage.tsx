@@ -14,7 +14,7 @@ import { ObjectSystemGeneratedPanel } from "@/components/ObjectSystemGeneratedPa
 import { InfoPackageTree } from "@/components/objects/InfoPackageTree";
 import InvoiceRecipientsCard from "@/components/InvoiceRecipientsCard";
 import { TelinkSyncButton } from "@/components/TelinkSyncButton";
-import { ObjectParentsManager } from "@/components/ObjectParentsPanel";
+import { ObjectHierarchyCards } from "@/components/objects/ObjectHierarchyCards";
 import { ObjectParentCombobox } from "@/components/ObjectParentCombobox";
 import { MetadataFieldBuilder, type BuilderFieldValue, type InheritedFieldSeed } from "@/components/MetadataFieldBuilder";
 import { useAuth } from "@/hooks/use-auth";
@@ -32,10 +32,10 @@ import type { ObjectTimeRestriction } from "@shared/schema";
 import {
   ArrowLeft, Building2, MapPin, Key, Keyboard, Users, DoorOpen,
   Clock, Package, FileText, Image, Contact, GitFork, AlertTriangle,
-  Calendar, Loader2, ChevronRight, ExternalLink, Wrench, Shield,
+  Calendar, Loader2, ChevronRight, Wrench, Shield,
   Hash, Info, Box, Layers, ClipboardList, Plus,
   Trash2, Pencil, Save, X, Phone, Mail, LinkIcon, Search, History,
-  ArrowUp, ArrowDown, RotateCcw, Cog, Copy, ArrowRightLeft
+  ArrowUp, ArrowDown, RotateCcw, Cog, Copy
 } from "lucide-react";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
@@ -1596,132 +1596,15 @@ export default function ObjectDetailPage() {
 
         {/* ==================== SLÄKT & HIERARKI ==================== */}
         <section id="object-section-hierarchy" className="space-y-4 scroll-mt-4">
-          <div className="flex flex-wrap items-center gap-2 mb-4">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => openMoveDialog(objectId)}
-              data-testid="button-open-move"
-            >
-              <ArrowRightLeft className="h-4 w-4 mr-2" /> Flytta objekt
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => { setCopyName(obj.name || obj.objectNumber || ""); setCopyMode("single"); setCopyDialogOpen(true); }}
-              data-testid="button-open-copy"
-            >
-              <Copy className="h-4 w-4 mr-2" /> Kopiera objekt/gren
-            </Button>
-          </div>
-          {/* Släktnamn på objektnivå: hela kedjan rot → detta objekt som
-              brödsmula. Varje led (utom objektet självt) är klickbart. Detta
-              ersätter den tidigare separata "Föräldrakedja"-rutan. */}
-          {slaktnamnChain.length > 1 && (
-            <div className="mb-4 rounded-lg border bg-muted/30 px-4 py-3" data-testid="object-slaktnamn">
-              <div className="text-xs font-medium text-muted-foreground mb-1">Släktnamn</div>
-              <div className="flex flex-wrap items-center gap-1 text-sm">
-                {slaktnamnChain.map((c, i) => (
-                  <span key={c.id} className="flex items-center gap-1">
-                    {i > 0 && <ChevronRight className="h-3 w-3 text-muted-foreground shrink-0" />}
-                    {c.id === objectId ? (
-                      <span className="font-semibold" data-testid={`slaktnamn-current-${c.id}`}>{c.name}</span>
-                    ) : (
-                      <button
-                        type="button"
-                        className="text-primary hover:underline"
-                        onClick={() => navigate(`/objects/${c.id}`)}
-                        data-testid={`link-slaktnamn-${c.id}`}
-                      >
-                        {c.name}
-                      </button>
-                    )}
-                  </span>
-                ))}
-              </div>
-            </div>
-          )}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* Task #1086 / förenkling: föräldrar (en eller flera) med släktnamn +
-                penna för att redigera. Ingen "primär"-jargong i UI. */}
-            <Card>
-              <CardContent className="pt-6">
-                <ObjectParentsManager object={obj as unknown as ServiceObject} enabled />
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-base flex items-center gap-2">
-                  <Layers className="h-4 w-4" /> Barn ({descendants.length})
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                {descendants.length > 0 ? (
-                  <div className="space-y-1 max-h-96 overflow-y-auto">
-                    {(() => {
-                      // Bygg grenen som ett träd (barn → barnbarn) utifrån parentId
-                      // relativt det aktuella objektet, så användaren ser hela
-                      // grenen som följer med vid en flytt. getDescendants ger
-                      // hela underträdet (BFS) där varje rad bär parentId.
-                      const byParent = new Map<string, ServiceObject[]>();
-                      for (const d of descendants) {
-                        const p = d.parentId || "";
-                        if (!byParent.has(p)) byParent.set(p, []);
-                        byParent.get(p)!.push(d);
-                      }
-                      const ordered: Array<{ obj: ServiceObject; depth: number }> = [];
-                      const walk = (parentId: string, depth: number) => {
-                        for (const k of byParent.get(parentId) || []) {
-                          ordered.push({ obj: k, depth });
-                          walk(k.id, depth + 1);
-                        }
-                      };
-                      walk(objectId, 0);
-                      // Fallback: rader vars förälder inte nåddes (t.ex. bruten
-                      // kedja) läggs sist på rotnivå så inget tappas bort.
-                      const seen = new Set(ordered.map((o) => o.obj.id));
-                      for (const d of descendants) {
-                        if (!seen.has(d.id)) ordered.push({ obj: d, depth: 0 });
-                      }
-                      return ordered.map(({ obj: child, depth }) => (
-                        <div
-                          key={child.id}
-                          className="flex items-center gap-2 p-2 rounded-md hover:bg-muted/50 cursor-pointer"
-                          style={{ paddingLeft: `${depth * 16 + 8}px` }}
-                          onClick={() => navigate(`/objects/${child.id}`)}
-                          data-testid={`link-child-${child.id}`}
-                        >
-                          {depth > 0 && <ChevronRight className="h-3 w-3 text-muted-foreground shrink-0" />}
-                          <span className="text-sm font-medium">{child.name || child.objectNumber}</span>
-                          {child.objectType && (
-                            <Badge variant="secondary" className="text-[10px]">
-                              {objectTypeLabels[child.objectType] || child.objectType}
-                            </Badge>
-                          )}
-                          <div className="ml-auto flex items-center gap-1 shrink-0">
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="h-7 px-2"
-                              onClick={(e) => { e.stopPropagation(); openMoveDialog(child.id); }}
-                              data-testid={`button-move-child-${child.id}`}
-                              title="Flytta detta objekt"
-                            >
-                              <ArrowRightLeft className="h-3.5 w-3.5" />
-                            </Button>
-                            <ExternalLink className="h-3 w-3 text-muted-foreground" />
-                          </div>
-                        </div>
-                      ));
-                    })()}
-                  </div>
-                ) : (
-                  <p className="text-sm text-muted-foreground">Inga barnobjekt.</p>
-                )}
-              </CardContent>
-            </Card>
-          </div>
+          <ObjectHierarchyCards
+            object={obj as unknown as ServiceObject}
+            objectId={objectId}
+            slaktnamnChain={slaktnamnChain}
+            descendants={descendants}
+            objectTypeLabels={objectTypeLabels}
+            onMoveObject={openMoveDialog}
+            onCopy={() => { setCopyName(obj.name || obj.objectNumber || ""); setCopyMode("single"); setCopyDialogOpen(true); }}
+          />
         </section>
 
         {/* ==================== METADATA ==================== */}

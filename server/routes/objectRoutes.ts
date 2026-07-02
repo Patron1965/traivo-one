@@ -5,7 +5,7 @@ import { formatZodError, verifyTenantOwnership } from "./helpers";
 import { getTenantIdWithFallback, requireAdmin } from "../tenant-middleware";
 import { geocodeAddress, searchDestinations, batchGeocode, isGoogleGeocodingAvailable, reverseGeocode, lookupCityFromPostalCode, autocompleteAddress } from "../services/geocoding";
 import { createInheritanceProcessor } from "../inheritance-processor";
-import { insertObjectParentSchema, objects, workOrders, workOrderObjects, objectArticles, objectContacts, objectImages, objectParents, objectPayers, objectTimeRestrictions, geocodingMissingSnapshots } from "@shared/schema";
+import { objects, workOrders, workOrderObjects, objectArticles, objectContacts, objectImages, objectParents, objectPayers, objectTimeRestrictions, geocodingMissingSnapshots } from "@shared/schema";
 import { asyncHandler } from "../asyncHandler";
 import { NotFoundError, ValidationError } from "../errors";
 import { db } from "../db";
@@ -696,16 +696,31 @@ app.post("/api/objects/:id/parents", asyncHandler(async (req, res) => {
   if (!verifyTenantOwnership(existing, tenantId)) {
     throw new NotFoundError("Objekt");
   }
-  const parentObj = await storage.getObject(req.body.parentId);
+  const parentId = typeof req.body.parentId === "string" ? req.body.parentId.trim() : "";
+  if (!parentId) {
+    throw new ValidationError("parentId krävs.");
+  }
+  const parentObj = await storage.getObject(parentId);
   if (!verifyTenantOwnership(parentObj, tenantId)) {
     throw new NotFoundError("Förälderobjekt");
   }
-  const data = insertObjectParentSchema.parse({
-    ...req.body,
-    objectId: req.params.id,
-    tenantId,
-  });
-  const result = await storage.addObjectParent(data);
+  // Cykelskydd: föräldern får inte vara objektet självt eller ligga under det
+  // (skulle skapa en cykel i hierarkin). Samma guard som moveObject använder.
+  if (await storage.wouldCreateObjectCycle(tenantId, req.params.id, parentId)) {
+    throw new ValidationError(
+      "Objekten kan inte kopplas — det skulle skapa en cykel i hierarkin (föräldern ligger redan under detta objekt).",
+    );
+  }
+  // Dubblett-skydd: relationen får inte redan finnas.
+  const existingParents = await storage.getObjectParents(req.params.id);
+  if (existingParents.some((p) => p.parentId === parentId)) {
+    throw new ValidationError("Objekten är redan kopplade.");
+  }
+  const relationContext =
+    typeof req.body.relationContext === "string" ? req.body.relationContext : undefined;
+  // addObjectParentSafe beslutar isPrimary server-side (första föräldern = primär)
+  // och speglar objects.parentId i samma transaktion (klient-isPrimary ignoreras).
+  const result = await storage.addObjectParentSafe(req.params.id, parentId, tenantId, relationContext);
   res.status(201).json(result);
 }));
 
