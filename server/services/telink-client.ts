@@ -21,6 +21,7 @@ import { storage } from "../storage";
 // via de svenska write-helpers (historik + guards) i stället för den engelska
 // object_metadata-tabellen.
 import { createMetadata, updateMetadata, getDisplayValue } from "../metadata-queries";
+import { primaryPayerCustomerIdSql } from "./object-customer";
 
 export interface TelinkConfig {
   enabled: boolean;
@@ -391,7 +392,7 @@ async function loadMatchableObjects(tenantId: string): Promise<MatchableObject[]
       id: objects.id,
       name: objects.name,
       objectNumber: objects.objectNumber,
-      customerId: objects.customerId,
+      customerId: primaryPayerCustomerIdSql(),
     })
     .from(objects)
     .where(and(eq(objects.tenantId, tenantId), isNull(objects.deletedAt)));

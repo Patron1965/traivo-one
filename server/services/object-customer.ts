@@ -128,6 +128,54 @@ export function objectHasNoPrimaryCustomerSql(tenantId: string): SQL<boolean> {
   )`;
 }
 
+/**
+ * Idempotent skapande av primär payer (kund-koppling) för ett objekt.
+ * ADR v3: objekt är kund-neutrala — "vem objektet hör till" bärs av
+ * `object_payers` (primär), INTE av någon kolumn på objekt-raden. Denna helper
+ * ersätter de gamla `objects.customer_id`-skrivningarna: alla write-vägar som
+ * vill koppla ett nyskapat/kopierat objekt till en kund gör det via en
+ * primär-payer-rad här.
+ *
+ * Hoppar över om objektet redan har en primär payer (idempotent). Best-effort:
+ * kastar aldrig — en misslyckad payer-koppling får aldrig fälla objekt-skapandet.
+ * Returnerar den skapade payer-radens id, eller null (fanns redan / fel / ingen kund).
+ */
+export async function ensurePrimaryPayer(
+  tenantId: string,
+  objectId: string,
+  customerId: string | null | undefined,
+): Promise<string | null> {
+  if (!customerId) return null;
+  try {
+    const existing = await db
+      .select({ id: objectPayers.id })
+      .from(objectPayers)
+      .where(
+        and(
+          eq(objectPayers.objectId, objectId),
+          eq(objectPayers.isPrimary, true),
+          eq(objectPayers.tenantId, tenantId),
+        ),
+      );
+    if (existing[0]) return null;
+    const [ins] = await db
+      .insert(objectPayers)
+      .values({
+        tenantId,
+        objectId,
+        customerId,
+        payerType: "primary",
+        isPrimary: true,
+        sharePercent: 100,
+        priority: 1,
+      })
+      .returning({ id: objectPayers.id });
+    return ins?.id ?? null;
+  } catch {
+    return null;
+  }
+}
+
 export interface ObjectTreeNode {
   id: string;
   name: string;

@@ -1,5 +1,5 @@
 import { db } from "./db";
-import { tenants, customers, objects, resources, workOrders, brandingTemplates, tenantBranding, userTenantRoles, users, metadataKatalog, clusters, teams, tenantFeatures, featureAuditLog, articleTypeDefinitions, articles, orderConceptArticles } from "@shared/schema";
+import { tenants, customers, objects, objectPayers, resources, workOrders, brandingTemplates, tenantBranding, userTenantRoles, users, metadataKatalog, clusters, teams, tenantFeatures, featureAuditLog, articleTypeDefinitions, articles, orderConceptArticles } from "@shared/schema";
 import { sql, eq, and, or, inArray } from "drizzle-orm";
 import { getModulesForPackage } from "@shared/modules";
 
@@ -131,7 +131,6 @@ export async function seedDatabase() {
 
   const [omradeSyd] = await db.insert(objects).values({
     tenantId: DEFAULT_TENANT_ID,
-    customerId: telgebostader.id,
     name: "Område syd",
     objectNumber: "OMR-SYD",
     objectType: "omrade",
@@ -143,7 +142,6 @@ export async function seedDatabase() {
 
   const [omradeNord] = await db.insert(objects).values({
     tenantId: DEFAULT_TENANT_ID,
-    customerId: telgebostader.id,
     name: "Område nord",
     objectNumber: "OMR-NORD",
     objectType: "omrade",
@@ -155,7 +153,6 @@ export async function seedDatabase() {
 
   const [stensatravagen2] = await db.insert(objects).values({
     tenantId: DEFAULT_TENANT_ID,
-    customerId: telgebostader.id,
     parentId: omradeSyd.id,
     name: "Stensätravägen 2",
     objectNumber: "FAST-001",
@@ -174,7 +171,6 @@ export async function seedDatabase() {
 
   const [stensatravagen4] = await db.insert(objects).values({
     tenantId: DEFAULT_TENANT_ID,
-    customerId: telgebostader.id,
     parentId: omradeSyd.id,
     name: "Stensätravägen 4",
     objectNumber: "FAST-002",
@@ -193,7 +189,6 @@ export async function seedDatabase() {
 
   const [kungsgatan3] = await db.insert(objects).values({
     tenantId: DEFAULT_TENANT_ID,
-    customerId: telgebostader.id,
     parentId: omradeNord.id,
     name: "Kungsgatan 3",
     objectNumber: "FAST-003",
@@ -212,7 +207,6 @@ export async function seedDatabase() {
 
   const [brinken4] = await db.insert(objects).values({
     tenantId: DEFAULT_TENANT_ID,
-    customerId: telgebostader.id,
     parentId: omradeNord.id,
     name: "Brinken 4",
     objectNumber: "FAST-004",
@@ -229,10 +223,9 @@ export async function seedDatabase() {
     status: "active",
   }).returning();
 
-  await db.insert(objects).values([
+  const telgeChildren = await db.insert(objects).values([
     {
       tenantId: DEFAULT_TENANT_ID,
-      customerId: telgebostader.id,
       parentId: stensatravagen2.id,
       name: "Rum 1",
       objectNumber: "RUM-001",
@@ -244,7 +237,6 @@ export async function seedDatabase() {
     },
     {
       tenantId: DEFAULT_TENANT_ID,
-      customerId: telgebostader.id,
       parentId: stensatravagen2.id,
       name: "Rum 2",
       objectNumber: "RUM-002",
@@ -256,7 +248,6 @@ export async function seedDatabase() {
     },
     {
       tenantId: DEFAULT_TENANT_ID,
-      customerId: telgebostader.id,
       parentId: stensatravagen2.id,
       name: "Rum 3",
       objectNumber: "RUM-003",
@@ -267,7 +258,6 @@ export async function seedDatabase() {
     },
     {
       tenantId: DEFAULT_TENANT_ID,
-      customerId: telgebostader.id,
       parentId: stensatravagen2.id,
       name: "UJ Hushållsavfall",
       objectNumber: "UJ-001",
@@ -279,7 +269,6 @@ export async function seedDatabase() {
     },
     {
       tenantId: DEFAULT_TENANT_ID,
-      customerId: telgebostader.id,
       parentId: stensatravagen4.id,
       name: "Rum 1",
       objectNumber: "RUM-004",
@@ -291,7 +280,6 @@ export async function seedDatabase() {
     },
     {
       tenantId: DEFAULT_TENANT_ID,
-      customerId: telgebostader.id,
       parentId: stensatravagen4.id,
       name: "UJ Hushållsavfall",
       objectNumber: "UJ-002",
@@ -303,7 +291,6 @@ export async function seedDatabase() {
     },
     {
       tenantId: DEFAULT_TENANT_ID,
-      customerId: telgebostader.id,
       parentId: kungsgatan3.id,
       name: "Rum",
       objectNumber: "RUM-005",
@@ -315,7 +302,6 @@ export async function seedDatabase() {
     },
     {
       tenantId: DEFAULT_TENANT_ID,
-      customerId: telgebostader.id,
       parentId: brinken4.id,
       name: "Matafall, Skåp",
       objectNumber: "MAT-001",
@@ -326,7 +312,6 @@ export async function seedDatabase() {
     },
     {
       tenantId: DEFAULT_TENANT_ID,
-      customerId: telgebostader.id,
       parentId: brinken4.id,
       name: "Återvinning, Rum",
       objectNumber: "AV-001",
@@ -336,11 +321,10 @@ export async function seedDatabase() {
       containerCountK4: 4,
       status: "active",
     },
-  ]);
+  ]).returning();
 
   const [aldregardenSolstralen] = await db.insert(objects).values({
     tenantId: DEFAULT_TENANT_ID,
-    customerId: serviceboenden.id,
     name: "Äldregården Solstrålen",
     objectNumber: "SERV-001",
     objectType: "serviceboende",
@@ -358,7 +342,6 @@ export async function seedDatabase() {
 
   const [servicehusetGoken] = await db.insert(objects).values({
     tenantId: DEFAULT_TENANT_ID,
-    customerId: serviceboenden.id,
     name: "Servicehuset Göken",
     objectNumber: "SERV-002",
     objectType: "serviceboende",
@@ -374,10 +357,9 @@ export async function seedDatabase() {
     status: "active",
   }).returning();
 
-  await db.insert(objects).values([
+  const serviceChildren = await db.insert(objects).values([
     {
       tenantId: DEFAULT_TENANT_ID,
-      customerId: serviceboenden.id,
       parentId: aldregardenSolstralen.id,
       name: "Köket",
       objectNumber: "KOK-001",
@@ -389,7 +371,6 @@ export async function seedDatabase() {
     },
     {
       tenantId: DEFAULT_TENANT_ID,
-      customerId: serviceboenden.id,
       parentId: aldregardenSolstralen.id,
       name: "Soprum 1",
       objectNumber: "SOP-001",
@@ -400,7 +381,6 @@ export async function seedDatabase() {
     },
     {
       tenantId: DEFAULT_TENANT_ID,
-      customerId: serviceboenden.id,
       parentId: aldregardenSolstralen.id,
       name: "Soprum 2",
       objectNumber: "SOP-002",
@@ -411,7 +391,6 @@ export async function seedDatabase() {
     },
     {
       tenantId: DEFAULT_TENANT_ID,
-      customerId: serviceboenden.id,
       parentId: servicehusetGoken.id,
       name: "Köket",
       objectNumber: "KOK-002",
@@ -423,7 +402,6 @@ export async function seedDatabase() {
     },
     {
       tenantId: DEFAULT_TENANT_ID,
-      customerId: serviceboenden.id,
       parentId: servicehusetGoken.id,
       name: "Soprum 1",
       objectNumber: "SOP-003",
@@ -432,6 +410,38 @@ export async function seedDatabase() {
       containerCount: 8,
       status: "active",
     },
+  ]).returning();
+
+  // ADR v3: objekt är kund-neutrala — kundkopplingen bärs av object_payers
+  // (primär betalare), inte av någon kolumn på objekt-raden. Skapa en primär
+  // payer per demo-objekt så snöret/KPI:er och kund-överlägget fungerar.
+  const telgeObjectIds = [
+    omradeSyd.id, omradeNord.id, stensatravagen2.id, stensatravagen4.id,
+    kungsgatan3.id, brinken4.id, ...telgeChildren.map((o) => o.id),
+  ];
+  const serviceObjectIds = [
+    aldregardenSolstralen.id, servicehusetGoken.id,
+    ...serviceChildren.map((o) => o.id),
+  ];
+  await db.insert(objectPayers).values([
+    ...telgeObjectIds.map((objectId) => ({
+      tenantId: DEFAULT_TENANT_ID,
+      objectId,
+      customerId: telgebostader.id,
+      payerType: "primary" as const,
+      isPrimary: true,
+      sharePercent: 100,
+      priority: 1,
+    })),
+    ...serviceObjectIds.map((objectId) => ({
+      tenantId: DEFAULT_TENANT_ID,
+      objectId,
+      customerId: serviceboenden.id,
+      payerType: "primary" as const,
+      isPrimary: true,
+      sharePercent: 100,
+      priority: 1,
+    })),
   ]);
 
   console.log("Created objects hierarchy");
@@ -942,14 +952,26 @@ async function seedFieldAppDemoData(tomasResourceId: string) {
   ]);
 
   await db.insert(objects).values([
-    { id: "obj-1", tenantId: DEFAULT_TENANT_ID, customerId: "cust-telge", name: "Stensätravägen 2 - Soprum A", objectNumber: "OBJ-001", objectType: "rum", objectLevel: 3, address: "Stensätravägen 2", city: "Södertälje", postalCode: "151 57", latitude: 59.1876, longitude: 17.6432, accessType: "code", accessCode: "1234", hierarchyLevel: "rum", avgSetupTime: 5 },
-    { id: "obj-2", tenantId: DEFAULT_TENANT_ID, customerId: "cust-telge", name: "Oxbacksleden 12 - Fastighet", objectNumber: "OBJ-002", objectType: "fastighet", objectLevel: 2, address: "Oxbacksleden 12", city: "Södertälje", postalCode: "151 42", latitude: 59.1923, longitude: 17.6198, accessType: "key", hierarchyLevel: "fastighet", avgSetupTime: 10 },
-    { id: "obj-3", tenantId: DEFAULT_TENANT_ID, customerId: "cust-brf", name: "Strandvägen 15 - Kärl 240L", objectNumber: "OBJ-003", objectType: "karl", objectLevel: 4, address: "Strandvägen 15", city: "Södertälje", postalCode: "151 38", latitude: 59.1978, longitude: 17.6345, accessType: "open", hierarchyLevel: "karl", avgSetupTime: 3 },
-    { id: "obj-4", tenantId: DEFAULT_TENANT_ID, customerId: "cust-brf", name: "Strandvägen 17 - Soprum", objectNumber: "OBJ-004", objectType: "rum", objectLevel: 3, address: "Strandvägen 17", city: "Södertälje", postalCode: "151 38", latitude: 59.1981, longitude: 17.6351, accessType: "code", accessCode: "4567", hierarchyLevel: "rum", avgSetupTime: 8 },
-    { id: "obj-5", tenantId: DEFAULT_TENANT_ID, customerId: "cust-kommun", name: "Torekällbergets Skola", objectNumber: "OBJ-005", objectType: "fastighet", objectLevel: 2, address: "Torekällgatan 40", city: "Södertälje", postalCode: "151 72", latitude: 59.2012, longitude: 17.6287, accessType: "key", hierarchyLevel: "fastighet", avgSetupTime: 15 },
-    { id: "obj-6", tenantId: DEFAULT_TENANT_ID, customerId: "cust-kommun", name: "Brunnsängsparken - Container", objectNumber: "OBJ-006", objectType: "karl", objectLevel: 4, address: "Brunnsängsvägen 8", city: "Södertälje", postalCode: "151 45", latitude: 59.1834, longitude: 17.6512, accessType: "open", hierarchyLevel: "karl", avgSetupTime: 5 },
-    { id: "obj-7", tenantId: DEFAULT_TENANT_ID, customerId: "cust-fastighet", name: "Järnagatan 4 - Tvättstuga", objectNumber: "OBJ-007", objectType: "rum", objectLevel: 3, address: "Järnagatan 4", city: "Södertälje", postalCode: "151 04", latitude: 59.2045, longitude: 17.6150, accessType: "code", accessCode: "8901", hierarchyLevel: "rum", avgSetupTime: 10 },
-    { id: "obj-8", tenantId: DEFAULT_TENANT_ID, customerId: "cust-fastighet", name: "Turingegatan 10 - Källare", objectNumber: "OBJ-008", objectType: "rum", objectLevel: 3, address: "Turingegatan 10", city: "Södertälje", postalCode: "151 72", latitude: 59.1912, longitude: 17.6380, accessType: "key", hierarchyLevel: "rum", avgSetupTime: 12 },
+    { id: "obj-1", tenantId: DEFAULT_TENANT_ID, name: "Stensätravägen 2 - Soprum A", objectNumber: "OBJ-001", objectType: "rum", objectLevel: 3, address: "Stensätravägen 2", city: "Södertälje", postalCode: "151 57", latitude: 59.1876, longitude: 17.6432, accessType: "code", accessCode: "1234", hierarchyLevel: "rum", avgSetupTime: 5 },
+    { id: "obj-2", tenantId: DEFAULT_TENANT_ID, name: "Oxbacksleden 12 - Fastighet", objectNumber: "OBJ-002", objectType: "fastighet", objectLevel: 2, address: "Oxbacksleden 12", city: "Södertälje", postalCode: "151 42", latitude: 59.1923, longitude: 17.6198, accessType: "key", hierarchyLevel: "fastighet", avgSetupTime: 10 },
+    { id: "obj-3", tenantId: DEFAULT_TENANT_ID, name: "Strandvägen 15 - Kärl 240L", objectNumber: "OBJ-003", objectType: "karl", objectLevel: 4, address: "Strandvägen 15", city: "Södertälje", postalCode: "151 38", latitude: 59.1978, longitude: 17.6345, accessType: "open", hierarchyLevel: "karl", avgSetupTime: 3 },
+    { id: "obj-4", tenantId: DEFAULT_TENANT_ID, name: "Strandvägen 17 - Soprum", objectNumber: "OBJ-004", objectType: "rum", objectLevel: 3, address: "Strandvägen 17", city: "Södertälje", postalCode: "151 38", latitude: 59.1981, longitude: 17.6351, accessType: "code", accessCode: "4567", hierarchyLevel: "rum", avgSetupTime: 8 },
+    { id: "obj-5", tenantId: DEFAULT_TENANT_ID, name: "Torekällbergets Skola", objectNumber: "OBJ-005", objectType: "fastighet", objectLevel: 2, address: "Torekällgatan 40", city: "Södertälje", postalCode: "151 72", latitude: 59.2012, longitude: 17.6287, accessType: "key", hierarchyLevel: "fastighet", avgSetupTime: 15 },
+    { id: "obj-6", tenantId: DEFAULT_TENANT_ID, name: "Brunnsängsparken - Container", objectNumber: "OBJ-006", objectType: "karl", objectLevel: 4, address: "Brunnsängsvägen 8", city: "Södertälje", postalCode: "151 45", latitude: 59.1834, longitude: 17.6512, accessType: "open", hierarchyLevel: "karl", avgSetupTime: 5 },
+    { id: "obj-7", tenantId: DEFAULT_TENANT_ID, name: "Järnagatan 4 - Tvättstuga", objectNumber: "OBJ-007", objectType: "rum", objectLevel: 3, address: "Järnagatan 4", city: "Södertälje", postalCode: "151 04", latitude: 59.2045, longitude: 17.6150, accessType: "code", accessCode: "8901", hierarchyLevel: "rum", avgSetupTime: 10 },
+    { id: "obj-8", tenantId: DEFAULT_TENANT_ID, name: "Turingegatan 10 - Källare", objectNumber: "OBJ-008", objectType: "rum", objectLevel: 3, address: "Turingegatan 10", city: "Södertälje", postalCode: "151 72", latitude: 59.1912, longitude: 17.6380, accessType: "key", hierarchyLevel: "rum", avgSetupTime: 12 },
+  ]);
+
+  // ADR v3: kundkoppling via object_payers (primär betalare), inte objects.customer_id.
+  await db.insert(objectPayers).values([
+    { tenantId: DEFAULT_TENANT_ID, objectId: "obj-1", customerId: "cust-telge", payerType: "primary" as const, isPrimary: true, sharePercent: 100, priority: 1 },
+    { tenantId: DEFAULT_TENANT_ID, objectId: "obj-2", customerId: "cust-telge", payerType: "primary" as const, isPrimary: true, sharePercent: 100, priority: 1 },
+    { tenantId: DEFAULT_TENANT_ID, objectId: "obj-3", customerId: "cust-brf", payerType: "primary" as const, isPrimary: true, sharePercent: 100, priority: 1 },
+    { tenantId: DEFAULT_TENANT_ID, objectId: "obj-4", customerId: "cust-brf", payerType: "primary" as const, isPrimary: true, sharePercent: 100, priority: 1 },
+    { tenantId: DEFAULT_TENANT_ID, objectId: "obj-5", customerId: "cust-kommun", payerType: "primary" as const, isPrimary: true, sharePercent: 100, priority: 1 },
+    { tenantId: DEFAULT_TENANT_ID, objectId: "obj-6", customerId: "cust-kommun", payerType: "primary" as const, isPrimary: true, sharePercent: 100, priority: 1 },
+    { tenantId: DEFAULT_TENANT_ID, objectId: "obj-7", customerId: "cust-fastighet", payerType: "primary" as const, isPrimary: true, sharePercent: 100, priority: 1 },
+    { tenantId: DEFAULT_TENANT_ID, objectId: "obj-8", customerId: "cust-fastighet", payerType: "primary" as const, isPrimary: true, sharePercent: 100, priority: 1 },
   ]);
 
   await db.insert(workOrders).values([

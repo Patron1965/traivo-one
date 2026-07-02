@@ -23,6 +23,7 @@ import {
   OrderTypeMetadataLink,
   MetadataDefinition,
 } from "@shared/schema";
+import { primaryPayerCustomerIdSql } from "./services/object-customer";
 
 // Task #663: katalogtyp berikad med dess kundlås-kopplingar (tom array = generellt
 // fält, gäller alla kunder; en eller flera customerIds = kundlåst).
@@ -3307,16 +3308,16 @@ export async function getAllMetadataTypesWithCustomers(
 }
 
 // Task #663: returnerar katalogen kundlås-filtrerad för ett specifikt objekt.
-// Objektets kund härleds server-side (objects.customerId) så klienten aldrig kan
-// vidga synligheten via egna parametrar. Resultatet = generella fält + fält
-// kopplade till objektets kund eller någon av dess förfäder. Saknar objektet kund
-// (eller objektet hör ej till tenant) returneras endast generella fält.
+// Objektets kund härleds server-side via primär-payer (object_payers) så klienten
+// aldrig kan vidga synligheten via egna parametrar. Resultatet = generella fält +
+// fält kopplade till objektets kund eller någon av dess förfäder. Saknar objektet
+// kund (eller objektet hör ej till tenant) returneras endast generella fält.
 export async function getAvailableMetadataTypesForObject(
   tenantId: string,
   objectId: string,
 ): Promise<MetadataKatalogWithCustomers[]> {
   const [objekt] = await db
-    .select({ customerId: objects.customerId })
+    .select({ customerId: primaryPayerCustomerIdSql() })
     .from(objects)
     .where(and(eq(objects.id, objectId), eq(objects.tenantId, tenantId)))
     .limit(1);

@@ -943,7 +943,6 @@ async function preflightFkCoverage(prod: pg.PoolClient): Promise<void> {
   have.add("metadata_historik.objekt_id");
   have.add("metadata_varden.objekt_id");
   have.add("clusters.root_customer_id");
-  have.add("objects.customer_id");
   have.add("work_orders.customer_id");
   have.add("work_orders.object_id");
 

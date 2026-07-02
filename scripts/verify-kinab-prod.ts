@@ -297,19 +297,8 @@ async function runOrphanChecks(): Promise<void> {
     record("orphans: objects.parent_id", c === 0 ? "PASS" : "FAIL", `${c} orphan(s)`);
   }
 
-  // objects.customer_id
-  {
-    const c = (
-      await prod.query<{ c: number }>(
-        `SELECT count(*)::int AS c FROM objects o
-         WHERE o.tenant_id = $1
-           AND o.customer_id IS NOT NULL
-           AND NOT EXISTS (SELECT 1 FROM customers c WHERE c.id = o.customer_id)`,
-        [TENANT],
-      )
-    ).rows[0].c;
-    record("orphans: objects.customer_id", c === 0 ? "PASS" : "FAIL", `${c} orphan(s)`);
-  }
+  // objects.customer_id-orphan-checken är borttagen — kolumnen finns inte längre
+  // (ADR v3, kontraktsfas). Kundkoppling verifieras numera via object_payers.
 
   // clusters.root_customer_id
   {

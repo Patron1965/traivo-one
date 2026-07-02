@@ -1309,7 +1309,8 @@ export function registerObjectImportV2Routes(app: Express): void {
                   : undefined;
               const createdObj = await storage.createObject({
                 tenantId,
-                customerId: rowCustomerId,
+                // ADR v3: objects.customer_id borttagen — kundkopplingen skapas via
+                // ensurePrimaryPayer (object_payers) direkt efter create nedan.
                 clusterId: rowClusterId,
                 parentId: parentId ?? null,
                 name: row.fields.name || "Namnlöst objekt",

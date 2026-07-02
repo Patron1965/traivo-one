@@ -8,7 +8,7 @@ import { asyncHandler } from "../asyncHandler";
 import { NotFoundError, ValidationError } from "../errors";
 import { db } from "../db";
 import { eq, and, isNull, sql, or, inArray } from "drizzle-orm";
-import { primaryPayerCustomerIdSql, getObjectTreeLevel, objectHasPrimaryCustomerSql } from "../services/object-customer";
+import { primaryPayerCustomerIdSql, getObjectTreeLevel, objectHasPrimaryCustomerSql, ensurePrimaryPayer } from "../services/object-customer";
 import { ensureClusterAndAssign } from "../auto-cluster";
 import { triggerGeocodeIfMissing } from "../services/geocoding";
 import { copyObjectTree } from "../services/object-copy";
@@ -1064,18 +1064,27 @@ app.post("/api/objects", asyncHandler(async (req, res) => {
       throw new NotFoundError("Förälderobjekt");
     }
   }
-  if (data.customerId) {
-    const customer = await storage.getCustomer(data.customerId);
+  // ADR v3 (Task #560): objekt är kund-neutrala. Body-fältet `customerId` stöds
+  // fortfarande (API-kontrakt) men materialiseras som en primär payer i stället
+  // för en kolumn på objekt-raden. insertObjectSchema strippar bort det (ingen
+  // kolumn längre), så läs det direkt från body och validera tenant-ägarskap.
+  const bodyCustomerId =
+    typeof req.body?.customerId === "string" && req.body.customerId.trim()
+      ? req.body.customerId.trim()
+      : null;
+  if (bodyCustomerId) {
+    const customer = await storage.getCustomer(bodyCustomerId);
     if (!verifyTenantOwnership(customer, tenantId)) {
       throw new NotFoundError("Kund");
     }
   }
 
   const object = await storage.createObject(data);
-  
-  if (object.customerId) {
+
+  if (bodyCustomerId) {
+    await ensurePrimaryPayer(tenantId, object.id, bodyCustomerId);
     try {
-      await ensureClusterAndAssign(tenantId, object.customerId, object.id);
+      await ensureClusterAndAssign(tenantId, bodyCustomerId, object.id);
     } catch (err) {
       console.error("Auto-cluster error on object create:", err);
     }
@@ -1098,7 +1107,10 @@ app.patch("/api/objects/:id", asyncHandler(async (req, res) => {
   if (!parseResult.success) {
     return res.status(400).json(formatZodError(parseResult.error));
   }
-  const { tenantId: _t, id: _id, createdAt: _c, deletedAt: _d, ...updateData } = parseResult.data as Record<string, unknown>;
+  // ADR v3 (Task #560): objekt är kund-neutrala. `customerId` finns inte längre
+  // som kolumn — insertObjectSchema strippar bort det, så en PATCH med customerId
+  // blir en no-op här. Ändra kund via object_payers (ObjectPayersPanel-endpoints).
+  const { tenantId: _t, id: _id, createdAt: _c, deletedAt: _d, customerId: _cust, ...updateData } = parseResult.data as Record<string, unknown>;
 
   // Task #727: repoint (byt överordnat objekt) ska hålla object_parents primär-
   // relation i synk med legacy objects.parentId (invariant: skriv aldrig den ena

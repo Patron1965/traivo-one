@@ -3,7 +3,7 @@ import { storage } from "../storage";
 import { invalidateWorkflowCaches } from "../services/dashboardCache";
 import { db } from "../db";
 import { eq, sql, desc, and, gte, isNull, isNotNull, inArray } from "drizzle-orm";
-import { primaryPayerCustomerIdSql, objectHasPrimaryCustomerSql, objectPrimaryCustomerInSql, objectHasNoPrimaryCustomerSql } from "../services/object-customer";
+import { primaryPayerCustomerIdSql, objectHasPrimaryCustomerSql, objectPrimaryCustomerInSql, objectHasNoPrimaryCustomerSql, ensurePrimaryPayer } from "../services/object-customer";
 import { z } from "zod";
 import { formatZodError, verifyTenantOwnership, DEFAULT_TENANT_ID } from "./helpers";
 import { getTenantIdWithFallback, requireAdmin } from "../tenant-middleware";
@@ -510,7 +510,6 @@ app.post("/api/import/objects", upload.single("file"), asyncHandler(async (req, 
         
         const objectData = {
           tenantId,
-          customerId,
           parentId,
           name: row.name || row.namn || row.Namn || "",
           objectNumber: row.objectNumber || row.objektnummer || row.Objektnummer || null,
@@ -537,6 +536,8 @@ app.post("/api/import/objects", upload.single("file"), asyncHandler(async (req, 
         
         const createdObject = await storage.createObject(objectData);
         if (createdObject?.city) invalidateAreaSearchCityCache(tenantId);
+        // ADR v3: kund-koppling via primär payer (ej längre objects.customer_id).
+        await ensurePrimaryPayer(tenantId, createdObject.id, customerId);
 
         try {
           const clusterId = await ensureClusterForCustomer(tenantId, customerId);
@@ -1411,7 +1412,6 @@ async function runModusObjectsImportJob(params: {
 
         const hierarchyLevelMap: Record<number, string> = { 1: "omrade", 2: "fastighet", 3: "serviceenhet" };
         const objectFields = {
-          customerId,
           parentId: null as string | null,
           name,
           objectNumber,
@@ -1449,6 +1449,8 @@ async function runModusObjectsImportJob(params: {
             ...(clusterId ? { clusterId } : {}),
           });
           if (updatedObject) {
+            // ADR v3: kund-koppling via primär payer (ej längre objects.customer_id).
+            await ensurePrimaryPayer(tenantId, updatedObject.id, customerId);
             modusIdMap.set(modusId, updatedObject.id);
             updated.push(name);
             if (updatedObject.address && (updatedObject.latitude == null || updatedObject.longitude == null)) {
@@ -1463,6 +1465,8 @@ async function runModusObjectsImportJob(params: {
             importBatchId,
           });
           if (createdObject?.city) invalidateAreaSearchCityCache(tenantId);
+          // ADR v3: kund-koppling via primär payer (ej längre objects.customer_id).
+          await ensurePrimaryPayer(tenantId, createdObject.id, customerId);
           modusIdMap.set(modusId, createdObject.id);
           created.push(name);
           triggerGeocodeIfMissing(createdObject.id);
@@ -7302,7 +7306,8 @@ async function loadObjectsForDiff(tenantId: string) {
       name: objects.name,
       hierarchyLevel: objects.hierarchyLevel,
       parentId: objects.parentId,
-      customerId: objects.customerId,
+      // ADR v3: objects.customer_id borttagen — härled primär kund via object_payers.
+      customerId: primaryPayerCustomerIdSql(),
       address: objects.address,
       city: objects.city,
       postalCode: objects.postalCode,

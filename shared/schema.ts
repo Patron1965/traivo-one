@@ -144,11 +144,11 @@ export type ObjectLocationType = (typeof OBJECT_LOCATION_TYPES)[number];
 export const objects = pgTable("objects", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
-  // ADR v3: objekt är kund-neutrala. `customer_id` är legacy ("under
-  // avveckling") — auktoritativ kundkoppling sker via `object_payers` /
-  // `work_orders.customer_id`. Nullable (expand-contract) så kund-agnostiska
-  // importer (3-stegs import-wizard) kan skapa objekt utan kundbindning.
-  customerId: varchar("customer_id").references(() => customers.id),
+  // ADR v3: objekt är kund-neutrala. Den legacy `customer_id`-kolumnen är
+  // BORTTAGEN (kontraktsfas) — auktoritativ kundkoppling sker via `object_payers`
+  // (primär betalare) / `work_orders.customer_id`. API-kontraktet `object.customerId`
+  // bevaras oförändrat som en overlay (se primaryPayerCustomerIdSql /
+  // objectColumnsWithPrimaryCustomer i storage-läsvägarna).
   // Kluster som objektet tillhör - kundbaserad hierarki
   clusterId: varchar("cluster_id"),
   parentId: varchar("parent_id").references((): any => objects.id),
@@ -261,11 +261,9 @@ export const objects = pgTable("objects", {
   deletedAt: timestamp("deleted_at"),
 }, (table) => [
   index("idx_objects_tenant").on(table.tenantId),
-  index("idx_objects_customer").on(table.customerId),
   index("idx_objects_cluster").on(table.clusterId),
   index("idx_objects_parent").on(table.parentId),
   index("idx_objects_object_number").on(table.objectNumber),
-  index("idx_objects_tenant_customer").on(table.tenantId, table.customerId),
   index("idx_objects_interim").on(table.tenantId, table.isInterimObject),
   index("idx_objects_tenant_deleted").on(table.tenantId, table.deletedAt),
   index("idx_objects_tenant_objnumber").on(table.tenantId, table.objectNumber),
@@ -1943,7 +1941,11 @@ export type Customer = typeof customers.$inferSelect;
 export type InsertCustomer = z.infer<typeof insertCustomerSchema>;
 export type CustomerRelationship = typeof customerRelationships.$inferSelect;
 export type InsertCustomerRelationship = z.infer<typeof insertCustomerRelationshipSchema>;
-export type ServiceObject = typeof objects.$inferSelect;
+// ADR v3: objects.customer_id-kolumnen är borttagen, men API-kontraktet exponerar
+// fortfarande `customerId` som en overlay härledd från primär object_payers
+// (se objectColumnsWithPrimaryCustomer / primaryPayerCustomerIdSql). Intersection-
+// typen säkerställer att alla läsare fortsatt ser customerId på ett ServiceObject.
+export type ServiceObject = typeof objects.$inferSelect & { customerId: string | null };
 export type InsertObject = z.infer<typeof insertObjectSchema>;
 export type Resource = typeof resources.$inferSelect;
 export type InsertResource = z.infer<typeof insertResourceSchema>;

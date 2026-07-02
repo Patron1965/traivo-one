@@ -16,8 +16,9 @@
 // route:n innan anrop.
 import { db } from "../db";
 import { objects, objectParents } from "@shared/schema";
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq, isNull, getTableColumns } from "drizzle-orm";
 import type { ServiceObject } from "@shared/schema";
+import { ensurePrimaryPayer, primaryPayerCustomerIdSql } from "./object-customer";
 import { storage } from "../storage";
 import { copyObjectLocalMetadata } from "../metadata-queries";
 
@@ -40,7 +41,6 @@ function buildCloneInsert(
 ): Record<string, unknown> {
   return {
     tenantId,
-    customerId: src.customerId ?? undefined,
     parentId: parentId ?? undefined,
     name,
     objectType: src.objectType,
@@ -85,7 +85,12 @@ async function copyMetadataForClone(
 // BFS över barnobjekt (tenant-scopat) — returnerar i ordning förälder-före-barn
 // så att id-ommappningen alltid har förälderns nya id redo.
 async function getDescendantObjects(rootId: string, tenantId: string): Promise<ServiceObject[]> {
-  const all = await db.select().from(objects)
+  // ADR v3: objects.customer_id är borttagen — härled objektets primära kund via
+  // object_payers (samma overlay som storage.getObject) så klon-kopieringen kan
+  // spegla kundkopplingen per objekt.
+  const all = await db
+    .select({ ...getTableColumns(objects), customerId: primaryPayerCustomerIdSql() })
+    .from(objects)
     .where(and(eq(objects.tenantId, tenantId), isNull(objects.deletedAt)));
   const byParent = new Map<string, ServiceObject[]>();
   for (const o of all) {
@@ -169,6 +174,9 @@ export async function copyObjectTree(
   let copiedMetadata = 0;
   let metadataCopyError: string | null = null;
   for (const { src: s, clone } of clonePairs) {
+    // ADR v3: kund-koppling bärs av object_payers, inte av objekt-kolumn. Spegla
+    // källans primära kund till klonen (best-effort, utanför den atomära tx:n).
+    await ensurePrimaryPayer(tenantId, clone.id, s.customerId);
     const res = await copyMetadataForClone(s, clone.id, tenantId);
     copiedMetadata += res.metaCount;
     if (res.metaError && !metadataCopyError) metadataCopyError = res.metaError;

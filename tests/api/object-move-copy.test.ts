@@ -66,7 +66,6 @@ function makeObject(
 ): InsertObject {
   return {
     tenantId,
-    customerId: tenantId === TENANT_B ? customerB : customerA,
     objectType: "karl",
     objectLevel: 2,
     status: "active",
