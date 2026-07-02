@@ -1,0 +1,230 @@
+{
+  "sessionId": "8f3042c3d",
+  "exportedAt": "2026-07-02T09:40:28.399Z",
+  "summary": "### Key Topics Discussed\n- Problem with receiving SMS\n- Analysis of the Excel file and its data fields\n- Data fields for articles (article number, execution code, production time, prices, costs)\n- Data fields from the order concept (customer, linked object)\n- Creation of new data fields from article and order concept forms.\n- Data fields from object metadata.\n- Examples of new data fields: merged optimized delivery time, geographical location (for optimized delivery times), actual location (vehicle location, mission location).\n- Nine different engines that provide additional information.\n- Definition of two different execution locations: vehicle stopping point and personnel destination (e.g., a trash can on a lawn).\n- Contradiction regarding task status vs. business status.\n- System's view on task status and potential intermediate statuses during engine processing.\n- Decision-making process within engines regarding optimal delivery times and consolidation of tasks.\n- Importance of understanding the various engines' goals and deliverables.\n- Task planning process: roughly planned and finely planned tasks.\n- Manual job assignment and route optimization based on time sorting and available production time for each day of the week.\n- Integration of planned personal tasks (e.g., weekly rest, night rest) into the planner's schedule.\n- System's handling of tasks without a specified location, such as night rest.\n- Handling of 'gap time' (glapptid) in the schedule, both planned and unplanned.\n- Overbooking in task planning, similar to the airline industry approach, where more jobs are booked than available capacity.\n- Handling of overbooked jobs when other tasks are not performed.\n- Status updates for unperformable jobs and their return to rough planning.\n- The importance of documenting reasons for unperformed tasks in the execution app.\n- The quality of address information (e.g., a field instead of a valid address).\n- Production-related information vs. metadata.\n- Discussion on whether reasons for unperformed tasks should be metadata attached to the object.\n- Explanation of the nine engines and the data fields they generate (geographical, time optimization, clustering, invoice/order, subscription, dependency, physical articles with block/return tasks, status/delivery time, and metadata monitoring).\n- Future development of engines: Time engine to prioritize hard/soft times based on business rules, Geographical engine to handle different types of work locations (e.g., street address vs. off-road for specialized equipment), and Subscription invoicing.\n\n### Decisions Made\n- The system will allow overbooking of jobs, anticipating that some jobs will not be performed, similar to how airlines overbook flights.\n\n### Important Points & Insights\n- Overbooked jobs can be performed when other scheduled jobs are not completed, freeing up time.\n- Jobs that cannot be performed will receive a status indicating non-completion and return to rough planning.\n- The execution app should allow for noting the reason why a task could not be performed (e.g., traffic delays, incorrect address).\n- The system's task status (created, roughly planned, etc.) reflects the system's status of the task.\n- Business status is a product of the system's status, where various business documents (like order acknowledgments) are considered a status in themselves.\n- Order acknowledgments are created when a task is created and updated with delivery times when the task is roughly and finely planned, gaining newer content as it progresses.\n- Engines might cause intermediate statuses for tasks, either because they don't work continuously or work periodically to reduce load.\n- Once a task reaches rough planning, it will receive a geographical location and a planned delivery time.\n- Planned delivery times can be dynamic and change frequently, especially if an assignment can only be performed on specific days (e.g., Thursday afternoons).\n- Engine 3's task is to group tasks based on delivery time and geographical location, potentially overriding earlier decisions (e.g., choosing a later Thursday for delivery for better consolidation).\n- The complexity of execution locations arises when the vehicle cannot reach the exact object location, creating two distinct points for execution.\n- Time management becomes more complex due to multiple time windows that need to be tracked.\n- Engine 3 is responsible for identifying tasks of the same type and location and assessing if their various time windows allow for consolidation into a single block.\n- It's crucial for the new system to understand the objectives of the different engines to avoid inefficient single trips when tasks could be combined.\n- Geographical location becomes more complex when considering object location and vehicle location.\n- The first step in planning is that tasks appear on an individual's to-do list for a specific week, followed by route optimization.\n- Planners will likely sort tasks by time (e.g., Monday, Thursday only, specific time windows).\n- The task list can be sorted in various ways, and jobs are manually or in batches assigned to available production time slots throughout the week.\n- The system (Replit) needs to understand that these are unplanned tasks being assigned to an operator's week.\n- Personal tasks (e.g., start/end of weekly rest, night rest) will also be scheduled by the performer to ensure proper planning for an individual's work week.\n- The system needs to identify where a task can be performed. Not all tasks require all data fields.\n- For tasks like night rest, which do not have a fixed location, the system will not calculate travel time.\n- The system must handle 'gap time' (glapptid) which can occur between tasks, such as after night rest and before the next job, especially if the next job has a later start time (e.g., a store opening at 9 am).\n- The system needs to consider if a job can be inserted during 'gap time' and if that impacts calculated travel times.\n- If more jobs are assigned than can be accommodated between other tasks and personal time, the system will categorize these extra jobs as 'overbooked.'\n- The overbooking strategy is based on the expectation that some jobs will not be performed due to various reasons (e.g., customer, job type), freeing up planned production time for other overbooked tasks.\n- System-generated metadata could be used to record reasons for deviations or obstacles during task execution.\n- The ninth engine, which monitors metadata fields, will serve as a tool for both planners and customers, allowing them to track object activity.\n- Future development of the Time Engine will involve business rules to prioritize \"hard\" or \"soft\" times.\n- The Geographical Engine will need to evolve to manage different work locations, such as a street address for a vehicle that cannot go off-road, versus future scenarios with equipment that can operate in varied terrain (e.g., lawnmowers).\n\n### Open Questions/Pending Items\n- Why is the user not receiving SMS?\n- Are there any overlooked intermediate statuses in the system's task status progression?\n- How does the system reconcile potential conflicts between initial delivery time decisions and subsequent consolidation efforts by other engines?\n- How will the system handle the complexity of object location versus vehicle location in relation to geographical placement?\n- How will the system manage multiple time windows for tasks effectively?\n- How will the system integrate personal planned tasks (e.g., weekly rest, night rest) with customer and object tasks within the overall planning framework?\n- How will the system determine the appropriate location for tasks that do not explicitly have one (e.g., mobile tasks)?\n- How will the system account for and manage 'gap time' in the fine planning, considering potential insertions of other jobs?\n- Is the information about why a job couldn't be performed production-related data or metadata?\n- Are there other logical data fields related to objects that Replit might know of or could analyze from the current matrix, which are needed to administer tasks in the system? If so, why?\n- How Replit views the yellow-marked fields generated by the engines, which are not directly included in the base data but are crucial for various engine functions (e.g., geographical, time optimization, clustering, invoice/order, subscription, dependency, physical articles, status, and delivery times).\n- What business rules will govern the Time Engine's prioritization of hard versus soft times?\n- How will the Geographical Engine distinguish between a street address (vehicle stopping point) and the actual work location (e.g., a lawn for a mower) in its navigation and task assignment?\n- How will subscription invoicing be integrated and managed by the system?",
+  "conversation": [],
+  "transcripts": [
+    {
+      "text": "Jag har inte fått några sms inte.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Hallå? Ja, då ska vi kommentera då analysen utav den hära Excel-filen, eh, med då de datafält som vi har lokaliserat och definierat, eh.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "I systemet och utifrån vårt sätt att se på det. Eh, grundtanken är ju då att...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Uppgiften...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Eller artikeln då, men artikeln blir ju då en uppgift, någonting som ska göras i en eller annan form utifrån den logik vi har beskrivit och består ju då utav en ganska stor mängd datafält. Och grunden till de datafältena kommer ju ifrån artikelns datafält då. Artikelnumret, utförandekod, äh, produktionstid, äh, priser och kostnader och, och, och så vidare, enligt den, den logik och det formulär som finns där då. Den-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. -andra, de andra datafältena kommer ju då ifrån orderkonceptet. Dels utifrån då data som matas in i orderkonceptet, till exempel vilken kund som ska betala för uppgiften om det finns, äh, vilket objekt orderkonceptet har ko-- pekats in emot och, äh, som uppgiften artikeln skakar fast på då. Sen parallellt då med de här, om man säger, definierade datafältena då som finns i...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "I, i, i då de här båda, ska vi kalla det då, formulärerna för artikeln och formulären för orderkonceptet då. Och i förlängningen också då datafält som den hämtar ifrån objektens metadata då. Så kommer det ju då att skapas nya datafält. Äh, till exempel den sammanslagna optimerade leveranstiden eller geografiska platsen då som motorn för då, äh, möjlig leveranstider, optimerad leveranstid-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. Respektive då, äh, verklig plats då, fordonsplats och verklig plats, äh, för uppdraget då skapas då av den här motorn. Och sen så finns det ju då totalt sett nio stycken motorer som då levererar in olika tilläggsuppgifter. Och avslutningsvis så kommer ju då så att säga den hära uppgiften att flöda igenom systemet då. Och i det fallet då så har ju, äh, det är då de kolumnerna längst till höger-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm ...gördel då där. Och där hade också Räfflitt då, äh, en synpunkt på att det var motsägelser då. Och jag skulle vilja påstå att det inte är det då att, äh, uppgiftsstatusen då som anger att den är skapad, grodplanerad och så vidare, det är då systemets status på uppgiften. Medan då, äh, affärsstatus är så att säga en produkt av systemets, äh, äh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Äh, status då. Så att, äh, de olika affärsmässiga dokumentena som skapas, de i sig att betraktas som ett, som ett, som, som då ett status då va. Men, men, äh, exempelvis då så skapas ju orderkännandet utifrån då när, äh, uppgiften har skapats och den uppdateras då eventuellt då med leveranstid när den har grovplanerats och finplanerats då och blir så att få allt nyare innehåll då. Så att det är viktigt att Räfflitt inser liksom att, att-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. Äh, det som är under CH, kolumnen CH, uppgiftsstatus är alltså systemets syn på vad det är. Och där är ju också viktigt att Räfflitt nu funderar så att det inte finns några andra mellanlägen som vi har bortsett. Men grovt så är det ju att en uppgift skapas, den hamnar sen på grovplaneringen. Äh, sen däremellan så kommer ju då de här motorerna att kicka i gång då. Så det är möjligt att det, det blir någon sorts mellanstatusar där då för, av, av något skäl som inte jag vare sig lägger mig i eller, eller har liksom...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Förutsätter, men man kan ju tänka sig att motorerna kanske då inte jobbar hela tiden, så den ligger i något mellanläge eller att motorerna jobbar periodiskt då så att det inte-- För att minska på belastningen. Hur som helst så, så, så kommer den då hamna på grovplaneringen och då kommer den då att få geografisk plats. Den kommer att få en, en, en, en, en planerad leveranstid då. Och leveranstiden är väl den som är liksom den jobbigaste där då, för att den kan ju liksom hoppa fram vecka för vecka om till exempel uppdraget bara kan utföras på torsdag eftermiddagar då. Äh-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. Och där behöver det ju då fattas ett beslut i den här motorn. Då ska man presentera den första torsdagen då det är möjligt att göra det här. Och ja, det är förmodligen rätt då. Samtidigt då när motor nummer tre kickar i gång då med uppgift att klumpa ihop uppgifter utifrån typ äh leveranstid och geografisk plats då, så kan det ju visa sig då att det blir bättre att använda så att säga den tredje torsdagen då för leveranstid istället för den första. Därför att den hamnar då ihop med en annan möjlig uppgift-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. Som kan utföras då på den tredje torsdagen i-i stället för att vi låser oss på den första torsdagen som kommer innebära då att vi är tvungen att åka en-en-en enkelresa då för att göra den här och så missar vi då att göra en samkörning där. Och det här är väldigt viktigt med att rättligt nu förstår målet med de här bo-olika motorerna och vad det de ska leverera då. Och den geografiska platsen, ja, den är ju ganska enkel. Samtidigt så blir den lite svårare då om vi börjar prata då objektplats och fordonsplats då. För då, då måste motorn liksom inse då att ja men det här...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Jag kan inte köra ut fordonet på en gräsmatta, men det finns ett objekt, en soptunna som står på gräsmattan. Och det innebär ju då liksom att då kommer det att bli två platser för utförandet där då. Både då där bilen ska stanna och sen dit personalen ska gå då. Och på motsvarande sätt så har du då på tiderna här då, då har du en komplexitet då att den hoppar i väg och den måste hålla reda på flera olika tidsfönster då. Och sen så kommer då den tredje motorn in då som ska då försöka liksom att se här nu då, vilka uppgifter är av samma typ?",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och samma plats och går de i så fall då med sina olika tidsfönster att läggas ihop i en klump då?",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Eh, hur som helst så kommer vi alltså in då i, i statusar där och det här nu ligger vi på grovplaneringen. Och sen nästa steg då att utifrån grov-grovplaneringen så puttar vi då utifrån produktionstidssumman då och naturligtvis platsen och leveranstiden då över då enskilda uppgifter eller grupper av uppgifter eller då såna här klumpar av uppgifter ut på en utförares, eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Årstånd eller grov... Finplanering. Och första steget då är ju att de kommer på hans egna att göra lista för den unika veckan. Och sen så blir det ju då en ruttoptimering då där, där planeraren kommer ju i det här läget då att ha en lista förmodligen sorterad då i, eh, tidsordning. Att det här behöver göras på måndag eller det kan göras hela veckan. Sen kanske några saker som bara kan göras på torsdag och så vidare och så vidare. Och vissa saker kan då bara göras mellan klockan tio...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och sexton en viss dag. Men den här listan kan ju då naturligtvis sorteras på många olika sätt. Och den blir ju först sorterad då, då man antingen manuellt tar jobb för jobb eller sjok av jobb och lägger in då på den tillgängliga produktionstiden då som finns på måndag, tisdag och så vidare under veckan då. Och här är det ju också viktigt att Replit förstår då att, eh, det här är de oplanerade uppgifterna som läggs ut på en viss utförares vecka. Och på den här veckan då så...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Finns det ju då kanske redan planerade uppgifter, eh, kunduppgifter eller objektuppgifter. Men framför allt så kommer det ju då att finnas då, eh, planerade egentidsuppgifter då. För att, för att det här ska funka så kommer ju då, eh, utföraren att lägga in då att han börjar på, avslutar sin veckovila då, kanske klockan sju på måndag morgon. Och sen kanske han har då lagt in att han vill avsluta arbetsveckan klockan ett på tisdag.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och sen så har han lagt in ett önskemål eller en preliminär uppgift att han vill, han vill ha nattvila.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. På oklar plats då- Mm. -eh, mellan klockan tjugo noll noll och noll sju noll noll. Tisdag, måndag, tisdag, tisdag, onsdag och så vidare då. Och där finns det ju... Det är, det är väldigt viktigt för att systemet och rutt-och optimering ska funka så måste varje uppgift, oavsett om det nu är en kunduppgift eller alltså en uppgift som utförs på ett objekt och objektet har då en, en fysisk plats eller om det är då en annan egen uppgift och egen tid-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. -så behöver systemet då helst ta reda på var den här uppgiften, eh, kan utföras eller utförs då. Och, eh, samtidigt så sa vi ju inledningsvis, eller ja, eh, att alla fält för uppgifter behöver ju då inte ha alla fält då. Och det innebär ju då att om du har en nattvila då som du har lagt in då med natten mellan måndag kväll då och tisdag, så, eh, får ju då utföraren då lägga in då-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm ...att han, eh, inte har någon bestämd plats för det. Och det innebär ju då att då kommer ju systemet att inse att: \"Ja, men här är det nattvila, men det finns inget krav på plats här.\" Så då, då kommer ju det, det inte att bli nån r-restid dit. Så systemet kommer ju då att se det som att: \"Ja, det sista jobbet på måndag avslutar han då klockan nitton och, eh, fyrtiotre.\" Och sen hinner han inte så mycket mer då, men det önskas då att det är en, eh, nattvila som börjar klockan tjugo noll noll. Och ja, då kommer han ju att påbörja den på samma-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm ...plats då. Mm. För att sen avsluta den nattvilan då klockan sju på tisdag morgon. Och då fortsätter han med nästa jobb då på, på, på, eh, som då kanske ligger fem minuter ifrån då sista jobbet på måndagen. Och här är det viktigt nu då att man liksom förstår den här logiken. Dels kommer det ju då att bli glapp då som systemet måste kunna hantera eller konstatera då att, att det, det kommer ju inte gå liksom då att fylla tiden fullt ut då. Och då blir ju det nån annans, vad, vad man, vad man nu kallar det.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Speltid eller, eller, eller, eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Ja, galaktid eller vad jag ska säga då som kommer att vara då mellan. Det kan ju även bli utifrån planeringen då att, eh, vi, vi kommer till en livsmedelsbutik som först öppnar klockan nio, men vi har inget annat jobb som går att lägga innan då där. Och då blir det ju liksom en glaptid då mellan den avslutade nattvilan som är klockan sju till klockan nio. Och i bästa fall kan vi lägga in ett jobb på vägen då, men då kommer ju inte det med det kalkylerade restiden. Och så systemet måste då inför finplaneringen här då ha en, en, en-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. -förmåga då att liksom hantera de här glappena på samma sätt då som, eh, vi också definierar här i statusen då att om man trycker in mer jobb än vad som ryms då i den tillgängliga tiden mellan de andra uppgifterna och utförarteamets, eh, egentid, så kommer ju då vissa jobb att hamna i ett status som är alltså överbokning då. Och det kommer ju på samma sätt som flygbranschen då. Om du har ett flygplan med hundra säten, så de fle-flesta flygbolag i världen bokar ju förmodligen upp hundratio",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "passagerare då för de vet att, eh, ett visst antal passagerare inte kommer att, att, att hinna med från andra flighter och så vidare. Och, och, och målet är att man ska ha, eh, ett fullsatt flygplan. Och på motsvarande sätt blir det ju även i det här produktionssystemet då att vi vet att vissa jobb, beroende på vilken kund det är och, eh, och, och typ av jobb då, att vi kommer inte kunna utföra dem av olika skäl då. Och det innebär ju då att när ett jobb inte går att utföra så kommer ju då den planerade produktionstiden för det, det jobbet att försvinna och så kommer ju de framförvarande jobben då-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. att åka bakåt och möta då den tid som man står på, om man säger så. Och så kommer man ju fortsätta därifrån då. Och det innebär ju då att de överbokade jobben totalt på veckan eller per dag då kommer att, eh, kunna hinnas med då. Samtidigt då som det är jobb som inte kan utföras då intar en status att det inte gick att utföras och ramlar ju då tillbaka till grovplaneringen då med den statusen då som den har fått då där. Och, och där är det nog viktigt också då att man kan, eh-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. -i utförarappen då liksom no-no-notera då att det här gick inte att utföra på grund utav, eh, ja, stopp i trafiken eller, eller alternativt att det här gick inte att utföra, det är ett fullständigt fel. Den här adressen som jag åkte ut på, det var ute på ett, ett fält. Det fanns ingenting där. Ja, så, så sen, sen är det ju viktigt också då att den biten blir ju då en produktionsmässig information då. Och här måste man ju då se... Jag, jag ser inte i nuläget åtminstone då att det här direkt är metadata, fast samtidigt-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm ...är ju det här en form av metadata som ska hamna på det objektet då också då. Och i såna fall så, så skulle det ju då vara en systemskapad metadata då. Eh, för det kan ju vara intressant att se då att den här avvikelsen eller det här hindret fanns då och så har systemet skapat det utifrån då, eh, den situation som uppstår när det skulle utföras då. Men sammanfattningsvis då så känns det, och vi hoppas ju nu då att Replit har fångat upp det här och huvudfrågan var ju då: Finns det andra data...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Att det finns som vi har missat, antingen som Replit känner till, men som vi har inte, eh, lokaliserat då. Alternativt då att utifrån objekt då Replit att analysera den här matrisen då. Finns det andra logiska datafält då, eh, s-som kan tänkas behövas finnas med för att vi ska kunna administrera de här uppgifterna i systemet? Och i såna fall fråga och gärna och kommentera det då. Och jag understryker också då de här dynamiska",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "fälten som skapas utav, utav motorn då som egentligen inte riktigt är med. De gulmarkerade här då för, för den geografiska motorn, för tidsoptimeringsmotorn, klumpningsmotorn, eh, faktura och order, eh, som lägger ihop det, abonnemangsmotorn, beroendeuppgiftsmotorn, motorn som hanterar fysiska artiklar då med skapandet utav blockuppgifter då och återlämningsuppgifter. Och motorn som håller reda på då statusen och...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och framför allt då leveranstiden då planerad mot önskade leveranstider. Och den nionde motorn som är lite speciell då som bevakar då vissa metadatafält. Och den motorn kommer ju då att vara ett verktyg för planeraren, eh, likväl som för kunden då, där man då kan följa och se då vad som händer på objektet. Och, eh, för respektive sån här motor så tror jag också att det är viktigt att Replit på sikt s-ser de...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "här som stora förbättringsområden då, d-där vi kommer att kunna utveckla de här. Och det kommer också finnas affärsmässiga regler då som kan behöva komma in här då som, som bestämmer då hur tidsmotorn ska till exempel prioritera en hu-hård eller mjuk tid. H-hur den geografiska motorn ska liksom kunna hantera, eh, om, om... N-när till exempel blir det en arbetsplats till? När, när fordonet kommer...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Fram till en gatuadress för det går från åtminstone de fordon som vi har just nu kan inte köra i terrängen då. Men i ett framtida läge, om du då hanterar gräsplippare eller annan speciell utrustning, så kommer ju de då kunna köra inne i terrängen. Så den tidsmotorn, eller inte tidsmotorn, utan den geografiska motorn som hanterar var man ska ta sig, vart man ska navigera och vart man ska köra, är ju ett tydligt exempel på då ett, en, en motor som kommer att kunna utvecklas då. För att inte tala om den här abonnemangsfaktureringen-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    }
+  ]
+}
