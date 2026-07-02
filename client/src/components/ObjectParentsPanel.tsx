@@ -5,9 +5,8 @@ import { useToast } from "@/hooks/use-toast";
 import type { ServiceObject } from "@shared/schema";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
-import { GitFork, Plus, Trash2, Star, StarOff, Check, ChevronsUpDown, Loader2 } from "lucide-react";
+import { GitFork, Plus, Trash2, Check, ChevronsUpDown, Loader2, Pencil, ExternalLink } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -17,7 +16,7 @@ import {
 } from "@/components/ui/dialog";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Command, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
-import { ObjectDisplayNames } from "@/components/ObjectDisplayNames";
+import { useLocation } from "wouter";
 
 interface ObjectParentRelation {
   id: string;
@@ -63,6 +62,8 @@ interface ObjectParentsPanelProps {
  */
 export function ObjectParentsManager({ object, enabled = true }: ObjectParentsManagerProps) {
   const { toast } = useToast();
+  const [, navigate] = useLocation();
+  const [editMode, setEditMode] = useState(false);
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [selectedParent, setSelectedParent] = useState<ObjectParentSearchHit | null>(null);
   const [parentPickerOpen, setParentPickerOpen] = useState(false);
@@ -102,6 +103,13 @@ export function ObjectParentsManager({ object, enabled = true }: ObjectParentsMa
   const formatPath = (path: Array<{ id: string; name: string }>) =>
     path.map(p => p.name).join(" › ");
 
+  const invalidateHierarchy = () => {
+    // Föräldraändring påverkar släktnamn/ancestors + objektlistan. Prefix
+    // ["/api/objects"] träffar parents/ancestors/detalj/lista men inte
+    // parent-search (annan nyckel-prefix), så vyerna uppdateras direkt.
+    queryClient.invalidateQueries({ queryKey: ["/api/objects"] });
+  };
+
   const closeAddDialog = () => {
     setShowAddDialog(false);
     setSelectedParent(null);
@@ -121,7 +129,7 @@ export function ObjectParentsManager({ object, enabled = true }: ObjectParentsMa
       });
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/objects", object.id, "parents"] });
+      invalidateHierarchy();
       closeAddDialog();
       toast({ title: "Förälder tillagd" });
     },
@@ -135,109 +143,93 @@ export function ObjectParentsManager({ object, enabled = true }: ObjectParentsMa
       await apiRequest("DELETE", `/api/objects/${object.id}/parents/${relationId}`);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/objects", object.id, "parents"] });
+      invalidateHierarchy();
       toast({ title: "Förälder borttagen" });
     },
   });
 
-  const setPrimaryMutation = useMutation({
-    mutationFn: async (relationId: string) => {
-      await apiRequest("PATCH", `/api/objects/${object.id}/parents/${relationId}/primary`);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/objects", object.id, "parents"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/objects"] });
-      toast({ title: "Primär förälder uppdaterad" });
-    },
-  });
-
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       <div className="flex items-center justify-between">
         <h3 className="text-sm font-medium flex items-center gap-2">
           <GitFork className="h-4 w-4" />
-          Förälder-relationer
+          Föräldrar
         </h3>
         <Button
-          size="sm"
-          variant="outline"
-          onClick={() => setShowAddDialog(true)}
-          data-testid="button-add-parent"
+          size="icon"
+          variant="ghost"
+          className="h-7 w-7"
+          onClick={() => setEditMode((v) => !v)}
+          title={editMode ? "Klar" : "Redigera föräldrar"}
+          data-testid="button-edit-parents"
         >
-          <Plus className="h-3 w-3 mr-1" />
-          Lägg till förälder
+          {editMode ? <Check className="h-4 w-4" /> : <Pencil className="h-4 w-4" />}
         </Button>
       </div>
-      <p className="text-xs text-muted-foreground -mt-2">
-        Ett objekt kan tillhöra flera föräldrar. Den primära föräldern styr adress- och
-        metadata-arv samt släktnamnets standardkedja.
-      </p>
 
       {isLoading ? (
         <p className="text-sm text-muted-foreground">Laddar...</p>
       ) : parents.length === 0 ? (
         <p className="text-sm text-muted-foreground" data-testid="text-no-parents">
-          Inga förälder-relationer — detta är ett toppnivåobjekt.
+          Inga föräldrar — detta är ett toppnivåobjekt.
         </p>
       ) : (
         <div className="space-y-2">
-          {parents.map(p => (
-            <div
-              key={p.id}
-              className={`flex items-center justify-between p-3 rounded-lg border ${p.isPrimary ? "border-chart-3/50 bg-chart-3/10 dark:bg-chart-3/15" : ""}`}
-              data-testid={`parent-relation-${p.id}`}
-            >
-              <div className="min-w-0">
-                <div className="flex items-center gap-2">
-                  <span className="text-sm font-medium truncate" data-testid={`text-parent-name-${p.id}`}>
-                    {p.parentName || p.parentId.slice(0, 8)}
+          {parents.map((p) => {
+            const path = p.parentPath ?? [];
+            const leafIsParent = path.length > 0 && path[path.length - 1].id === p.parentId;
+            const prefixNodes = leafIsParent ? path.slice(0, -1) : path;
+            const prefix = prefixNodes.map((n) => n.name).join(" › ");
+            const leaf = p.parentName || (leafIsParent ? path[path.length - 1].name : p.parentId.slice(0, 8));
+            return (
+              <div
+                key={p.id}
+                className={`group flex items-center justify-between gap-2 p-3 rounded-lg border ${editMode ? "" : "cursor-pointer hover:bg-muted/50"}`}
+                onClick={editMode ? undefined : () => navigate(`/objects/${p.parentId}`)}
+                data-testid={`parent-relation-${p.id}`}
+              >
+                <div className="min-w-0">
+                  <span className="block text-sm font-medium truncate" data-testid={`text-parent-name-${p.id}`}>
+                    {leaf}
                   </span>
-                  {p.isPrimary && (
-                    <Badge variant="outline" className="text-chart-3 border-chart-3/50 text-xs shrink-0">
-                      Primär
-                    </Badge>
+                  {prefix && (
+                    <span className="block text-xs text-muted-foreground truncate" data-testid={`text-parent-path-${p.id}`}>
+                      {prefix}
+                    </span>
                   )}
                 </div>
-                {p.parentPath && p.parentPath.length > 1 && (
-                  <span className="text-xs text-muted-foreground" data-testid={`text-parent-path-${p.id}`}>
-                    {formatPath(p.parentPath)}
-                  </span>
-                )}
-              </div>
-              <div className="flex items-center gap-1">
-                {!p.isPrimary && (
+                {editMode ? (
                   <Button
                     size="icon"
                     variant="ghost"
-                    className="h-7 w-7"
-                    onClick={() => setPrimaryMutation.mutate(p.id)}
-                    title="Gör till primär förälder"
-                    data-testid={`button-set-primary-${p.id}`}
+                    className="h-7 w-7 text-destructive shrink-0"
+                    onClick={(e) => { e.stopPropagation(); removeParentMutation.mutate(p.id); }}
+                    title="Ta bort förälder"
+                    data-testid={`button-remove-parent-${p.id}`}
                   >
-                    <StarOff className="h-3 w-3" />
+                    <Trash2 className="h-3.5 w-3.5" />
                   </Button>
+                ) : (
+                  <ExternalLink className="h-3.5 w-3.5 shrink-0 text-muted-foreground opacity-0 group-hover:opacity-100" />
                 )}
-                {p.isPrimary && <Star className="h-3 w-3 text-chart-3 mr-1" />}
-                <Button
-                  size="icon"
-                  variant="ghost"
-                  className="h-7 w-7 text-destructive"
-                  onClick={() => removeParentMutation.mutate(p.id)}
-                  title="Ta bort förälder"
-                  data-testid={`button-remove-parent-${p.id}`}
-                >
-                  <Trash2 className="h-3 w-3" />
-                </Button>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
 
-      <div className="space-y-2 pt-2 border-t">
-        <h3 className="text-sm font-medium">Släktnamn</h3>
-        <ObjectDisplayNames objectId={object.id} enabled={enabled} allowSetPrimary showSettingsLink />
-      </div>
+      {editMode && (
+        <Button
+          size="sm"
+          variant="outline"
+          className="w-full"
+          onClick={() => setShowAddDialog(true)}
+          data-testid="button-add-parent"
+        >
+          <Plus className="h-3.5 w-3.5 mr-1" />
+          Lägg till förälder
+        </Button>
+      )}
 
       <Dialog open={showAddDialog} onOpenChange={(o) => (o ? setShowAddDialog(true) : closeAddDialog())}>
         <DialogContent>

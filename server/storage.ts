@@ -9819,7 +9819,41 @@ export class DatabaseStorage implements IStorage {
     if (objectId) {
       conditions.push(eq(objectParents.objectId, objectId));
     }
-    await db.delete(objectParents).where(and(...conditions));
+    // Läs relationen först så vi vet om den var primär. Invariant: objects.parentId
+    // speglar alltid den primära föräldern — tas den primära bort måste en annan
+    // förälder befordras, annars tappar objektet sin arvskälla/släktnamnskedja.
+    // Hela delete→befordra→spegla körs i en transaktion (self-contained write) så
+    // en krasch mitt i sekvensen inte kan lämna objektet utan primär/med felaktig parentId.
+    await db.transaction(async (tx) => {
+      const [row] = await tx.select().from(objectParents).where(and(...conditions));
+      if (!row) return;
+      await tx.delete(objectParents).where(and(...conditions));
+      if (!row.isPrimary) return;
+
+      // Befordra äldsta kvarvarande förälder till ny primär och spegla objects.parentId.
+      const remaining = await tx
+        .select()
+        .from(objectParents)
+        .where(eq(objectParents.objectId, row.objectId))
+        .orderBy(objectParents.createdAt);
+      const next = remaining[0];
+      if (next) {
+        await tx.update(objectParents)
+          .set({ isPrimary: false })
+          .where(eq(objectParents.objectId, row.objectId));
+        await tx.update(objectParents)
+          .set({ isPrimary: true })
+          .where(eq(objectParents.id, next.id));
+        await tx.update(objects)
+          .set({ parentId: next.parentId })
+          .where(eq(objects.id, row.objectId));
+      } else {
+        // Ingen förälder kvar → objektet blir ett toppnivåobjekt.
+        await tx.update(objects)
+          .set({ parentId: null })
+          .where(eq(objects.id, row.objectId));
+      }
+    });
   }
 
   async setPrimaryParent(objectId: string, parentId: string, tenantId: string): Promise<ObjectParent | undefined> {

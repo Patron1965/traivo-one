@@ -1598,53 +1598,46 @@ export default function ObjectDetailPage() {
               <Copy className="h-4 w-4 mr-2" /> Kopiera objekt/gren
             </Button>
           </div>
-          {/* Task #1086: multi-förälder + släktnamn integrerat direkt i formuläret
-              (tidigare separat Sheet via header-knappen). */}
-          <Card className="mb-4">
-            <CardContent className="pt-6">
-              <ObjectParentsManager object={obj as unknown as ServiceObject} enabled />
-            </CardContent>
-          </Card>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-base flex items-center gap-2">
-                  <GitFork className="h-4 w-4" /> Föräldrakedja
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                {ancestors.length > 0 ? (
-                  <div className="space-y-2">
-                    {ancestors.slice().reverse().map((anc, idx) => (
-                      <div
-                        key={anc.id}
-                        className="flex items-center gap-2 p-2 rounded-md hover:bg-muted/50 cursor-pointer"
-                        style={{ paddingLeft: `${idx * 16 + 8}px` }}
-                        onClick={() => navigate(`/objects/${anc.id}`)}
-                        data-testid={`link-ancestor-${anc.id}`}
+          {/* Släktnamn på objektnivå: hela kedjan rot → detta objekt som
+              brödsmula. Varje led (utom objektet självt) är klickbart. Detta
+              ersätter den tidigare separata "Föräldrakedja"-rutan. */}
+          {slaktnamnChain.length > 1 && (
+            <div className="mb-4 rounded-lg border bg-muted/30 px-4 py-3" data-testid="object-slaktnamn">
+              <div className="text-xs font-medium text-muted-foreground mb-1">Släktnamn</div>
+              <div className="flex flex-wrap items-center gap-1 text-sm">
+                {slaktnamnChain.map((c, i) => (
+                  <span key={c.id} className="flex items-center gap-1">
+                    {i > 0 && <ChevronRight className="h-3 w-3 text-muted-foreground shrink-0" />}
+                    {c.id === objectId ? (
+                      <span className="font-semibold" data-testid={`slaktnamn-current-${c.id}`}>{c.name}</span>
+                    ) : (
+                      <button
+                        type="button"
+                        className="text-primary hover:underline"
+                        onClick={() => navigate(`/objects/${c.id}`)}
+                        data-testid={`link-slaktnamn-${c.id}`}
                       >
-                        <ChevronRight className="h-3 w-3 text-muted-foreground" />
-                        <span className="text-sm font-medium">{anc.name || anc.objectNumber}</span>
-                      </div>
-                    ))}
-                    <div
-                      className="flex items-center gap-2 p-2 rounded-md bg-primary/10 font-semibold"
-                      style={{ paddingLeft: `${ancestors.length * 16 + 8}px` }}
-                    >
-                      <ChevronRight className="h-3 w-3" />
-                      <span className="text-sm">{obj.name || obj.objectNumber}</span>
-                    </div>
-                  </div>
-                ) : (
-                  <p className="text-sm text-muted-foreground">Inga föräldrar — detta är ett toppnivåobjekt.</p>
-                )}
+                        {c.name}
+                      </button>
+                    )}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Task #1086 / förenkling: föräldrar (en eller flera) med släktnamn +
+                penna för att redigera. Ingen "primär"-jargong i UI. */}
+            <Card>
+              <CardContent className="pt-6">
+                <ObjectParentsManager object={obj as unknown as ServiceObject} enabled />
               </CardContent>
             </Card>
 
             <Card>
               <CardHeader className="pb-3">
                 <CardTitle className="text-base flex items-center gap-2">
-                  <Layers className="h-4 w-4" /> Barnobjekt ({descendants.length})
+                  <Layers className="h-4 w-4" /> Barn ({descendants.length})
                 </CardTitle>
               </CardHeader>
               <CardContent>
