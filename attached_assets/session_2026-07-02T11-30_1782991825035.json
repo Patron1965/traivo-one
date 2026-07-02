@@ -1,0 +1,68 @@
+{
+  "sessionId": "a616b1e29",
+  "exportedAt": "2026-07-02T11:30:20.712Z",
+  "summary": "### Key Topics Discussed\n- Integration of existing systems and potential missed features.\n- Detailed discussion on handling delivery times and optimized delivery times based on current conditions (geography and grouping).\n- Focus on task statuses and the need to track actual outcomes versus planned times for tasks, including timestamping for creation and status changes.\n- Multiple time dimensions for tasks: desired delivery times, planned times, and calculated production times.\n\n### Important Points & Insights\n- The system should capture a timestamp when a task is created and another when its status changes (e.g., to \"grovplanering\"). This allows tracking the duration a task spends in different planning stages, such as rough planning (`grovplanering`) and fine planning (`finplanering`), before being scheduled for a specific day and executed with a start time. For example, a task could be in rough planning for two weeks.\n- Replit needs to develop a system that logs these various times to enable analysis of lead times and how times change.\n- The ideal scenario is for tasks to be executed according to customer wishes and planned times.\n\n### Open Questions/Pending Items\n- Clarification needed regarding the handling of \"tiderna\" (times/deadlines) within the system, specifically concerning task start/end times and actual versus calculated duration. Although suspected to be included, further confirmation is needed on how this data is captured and used.",
+  "conversation": [],
+  "transcripts": [
+    {
+      "text": "Ett vå.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Ja.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Jo, eh, en grej som både Rättligt och vi hittills kanske har missat eller så finns det inbyggt i systemet då, det är, eh, de här tiderna.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Eh, vi har ju nu önskad leveranstid och vi har motorn som då talar om vilken som är den mest optimerade eller optimala leveranstiden utifrån läget just nu då. Geografi och ihopdrumning då. Men sen har vi då sagt att vi ska ha de här uppgiftsstatus-- eh, statusarna då. Men ett perspektiv som vi inte har tagit med är tiderna. Eh, det finns ju naturligtvis loggar på när saker och ting skapas- Mm.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "-och, eh, till exempel då det som vi avslutade med här när man, eh-- Systemet kommer ju att planera då att en uppgift ska starta klockan tretton och tjugotre och den är kalkylerad då till, säger vi, sexton minuter. Och systemet behöver då hålla reda på vad det verkliga utfallet blev då. Mm. Så att, så att på det här informationspaketet nu då, det-- Jag, jag misstänker att det här redan finns med då, men, men på något vis då, när uppgiften intar då så att säga-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. -en status så, så kan det ju då vara läge då att vi tar höjd för det då. Eller, eller att vi rättigt tar någon annan lista på det där då att när uppgiften skapas och in-- Då, då får vi liksom en tidsstämpel på när den är, är då skapad. Mm. Och sen får vi då en annan tidsstämpel när den ändrar status då till att kommer på grovplaneringen. Och då kommer vi att kunna se då, den, den ramlade in på grovplaneringen och intog då statusen grovplanering, eh, tjugosex, noll-sju-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. -tjugotvå klockan tretton och trettio. Sen låg den där i grovplaneringen då, eh, i två veckor säger vi då. Innan den då fick olika såna här motorer som kördes på, på sig själv och så vidare. Och sen innan den var färdig så kom den då in på en finplanering och där låg den då en viss tid då. Och sen så blev den då utlagd på en dag och sen så utfördes den då med ett, ett start, en starttid då för, för uppgiften.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. Och, och då har vi ju så att säga flera sanningar här. Vi har ju alltså dels det som det blir löpande i systemet, antingen utav systemet självt eller i kombination då med att olika medarbetare, då administratörer, planerare och utföraren då gör olika saker med uppgiften. Och allt det här kokar ju ner till det viktigaste utav allt då, det vill säga när uppgiften ska utföras då. Och där har vi ju då flera tider då-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm ...vi har önskade leveranstider, vi har planerade tider, vi har kalkylerade produktionstider då. Och då blir det ju viktigt här nu då att Replit tar fram ett tids... Alltså ett, ett system där de här tiderna loggar då. Mm. Så att vi sen kan få ut ur systemet och analysera vad är liksom genomloppstiden, hur mycket ändras tider- Mm. Och även hur mycket har så att säga, eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "En aspekt ur tiden blir ju också då att nu har den här liksom... Här har vi en uppgift som liksom har gått ut på finplanering och ramlat tillbaka och gått ut på finplanering och ramlat tillbaka. Då, då blir det alltså en kombination utav tider då den intar olika statusar och tider för hur lång tid den ligger på statusar. Mm. Och det viktigaste som allting ska gå till, det är ju liksom då, i den bästa av alla världar så, så utförs ju uppgiften på den tid som kunden önskar och exakt utifrån den tid som det då är planerat då. För då kommer ju allting att stämma och uppgiften blir",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    }
+  ]
+}

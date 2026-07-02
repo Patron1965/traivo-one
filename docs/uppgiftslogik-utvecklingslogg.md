@@ -40,7 +40,7 @@ Grovplaneringslistan är **rullande och begränsad** — den får **inte** berä
 | **E** | **Leveranstider — INTE en "trio"** | Rätta modellen: en generell leveranstid på uppgiften **+ N tidsfönster** med positiv/negativ tillgänglighet, hårda/mjuka. Negativ = får ej utföras (t.ex. lunch 11–14 alla dagar); positiv = får utföras viss period. Hård = absolut, mjuk = rekommendation. Motorn håller reda på fönstren, kan hoppa framåt stegvis och är en produkt av klumpningsmotorn. | Verifiera mot befintliga `frozenTimeRules` |
 | **F** | **Överbokningspolicy / utförandesannolikhet** | Systemet **bokar inte** i v1. Ingen procentuell auto-överbokning, **ingen inlärning från historik**. Planeraren tilldelar jobb (enskilt/i klump); utföraren lägger ut. I grovplanering ser utföraren **endast summan av produktionstid**; ruttoptimering visar om det ryms i 40h-veckan. | Auto-/AI-bokning = §4 U5 |
 | **G** | **Ej-utförd / åter till grovplanering** | **Systemskapad metadata på objektet** med orsak + varifrån + tidpunkt. *Status* är ett statusfält på uppgiften (ej metadata); när status blir "kunde ej utföras" skapas metadatafältet och presenteras. Behövs **filter/rapport** över missade/tillbakaknuffade jobb (totalt eller per distrikt/utförarkod, sökbart). | Bekräftat krav (§5) |
-| **H** | **Verkliga tider / utförandeappens flöde** | Motorerna håller reda på planerade rest-/produktions-/egentider. Appen: **OK-knapp-flöde** (avsluta föregående → nästa uppgift kommer automatiskt; resa → framme → "påbörja uppgift" → klar → nästa). **Manuell tidsjustering** (glömda av-tryck). **"+"-knapp** för att lägga till egentid/lunch live (skjuter fram efterföljande jobb; motor räknar om löpande) och **extrajobb** live (egentid/gratis *eller* lägg till på befintlig order → aktivera artikel med kvm eller start/stopp-tid → debiteras + produktionstid registreras). Flexibiliteten gäller **alla tre tidstyper**. | Delvis byggt; live-tillägg/justering = verifiera/bygg (§5) |
+| **H** | **Verkliga tider / utförandeappens flöde** | Motorerna håller reda på planerade rest-/produktions-/egentider. Appen: **OK-knapp-flöde** (avsluta föregående → nästa uppgift kommer automatiskt; resa → framme → "påbörja uppgift" → klar → nästa). **Manuell tidsjustering** (glömda av-tryck). **"+"-knapp** för att lägga till egentid/lunch live (skjuter fram efterföljande jobb; motor räknar om löpande) och **extrajobb** live (egentid/gratis *eller* lägg till på befintlig order → aktivera artikel med kvm eller start/stopp-tid → debiteras + produktionstid registreras). Flexibiliteten gäller **alla tre tidstyper**. | Delvis byggt; live-tillägg/justering = verifiera/bygg (§5); tidslogg = §4 U8 |
 | **I** | **Fyllnadspåverkan / kapacitetsmotorer** | Separat **motor per produktionsteam/-utrustning** som bevakar fyllnadsgrad via inkommande metadata och auto-skapar uppgifter. **Behövs inte nu — men systemet ska ta höjd för det.** | **Utvecklingslogg (§4 U1)** |
 | **J** | **Kontering: team + kostnadsställe + projekt** | *(Missat i tidigare analys — läggs till.)* Varje informationspaket på uppgiften måste visa **vilket team** som tilldelats + **kostnadsställe** + **projekt** → följer med till fakturan. Föds ur team-uppsättningen (medlemmar, fordon, kostnadsställe, projektnummer följer teamet) när teamet tilldelas uppgiften. | Bekräftat krav (§5) |
 
@@ -91,6 +91,37 @@ Enda genuint saknade delen av informationspaketet (se `uppgiftsmodellen-utrednin
 ### U7. Restid som fakturerbar uppgift
 Modellen finns redan (uppgift/artikel). **Öppen fråga:** var går gränsen för orderkonceptet (vad ingår i konceptet vs faktureras separat). Reds ut i senare läge.
 
+### U8. Tids- & statushistorik (genomloppstids- & tidsdriftsanalys) — *tillägg 2026-07-02*
+Vi har redan önskad leveranstid, tidsmotorns optimerade/planerade tid, kalkylerad produktionstid och statusflödet. Det som saknas är en **sammanhållen, frågbar logg** över uppgiftens tider och statusövergångar genom **hela livscykeln** (skapad → grovplanering → finplanering → utlagd på dag → utförd), så att verkligt utfall kan analyseras mot plan.
+
+**Flera "sanningar" / tidsdimensioner per uppgift (ska loggas och jämföras):**
+- **Önskad leveranstid** (kundens/konceptets).
+- **Optimerad/planerad tid** (tidsmotorn — geografi + klumpning).
+- **Kalkylerad produktionstid** (t.ex. 16 min).
+- **Verkligt utfall** — faktisk starttid + faktisk varaktighet.
+
+**Statushistorik med tidsstämplar:**
+- Tidsstämpel när uppgiften **skapas** och vid **varje** statusövergång (t.ex. "in på grovplanering 2022-XX-XX 13:30").
+- **Dwell-tid** per status — hur länge uppgiften låg i varje status (t.ex. två veckor i grovplanering).
+- **Återgångar måste fångas:** en uppgift kan gå ut på finplanering och ramla tillbaka flera gånger. Det kräver en **append-only händelse-/övergångslogg** — de nuvarande enskilda milstolpe-kolumnerna räcker inte (de skrivs över och kan inte räkna antal återgångar).
+
+**Analys/utdata (varför):**
+- **Genomloppstid** (skapad → utförd).
+- **Tidsdrift** — hur mycket planerade tider ändras över uppgiftens liv.
+- **Antal återgångar** finplanering ↔ grovplanering (rework).
+- **Kalkyl vs utfall** — estimeringsträffsäkerhet (per utförarkod/team/distrikt), återkopplar till kalkylerad produktionstid.
+
+**Vad finns redan (återanvänd — bygg inte parallellt):**
+- Milstolpe-tidsstämplar på `work_orders` (`onWayAt`/`onSiteAt`/`completedAt`/`inspectedAt`/`invoicedAt`/`lockedAt`/`impossibleAt`/`frozenAt`) och `assignments` (`startedAt`/`completedAt`/`invoicedAt`/`createdAt`) + planerad tid vs `actualDuration`.
+- `slot_times` (tidsmotorns kandidater) med `createdAt`/`updatedAt`/`decidedAt`/`plannerDecision`.
+- `audit_logs` för generella ändringar.
+
+**Vad är genuint nytt:**
+- En **append-only händelse-/övergångshistorik per uppgift** som fångar upprepade statusbyten + dwell-tid (milstolpe-kolumnerna är enkelvärda och skrivs över).
+- En **analys-/rapportvy** för genomloppstid, tidsdrift, återgångar och kalkyl-vs-utfall.
+
+**Öppen designfråga:** var lever historiken (utöka `audit_logs`/`slot_times` eller en dedikerad `task_status_events`-tabell) och över vilken tabell den förs (`assignments` vs `work_orders` — jfr dualiteten i `uppgiftsmodellen-utredning.md §4`).
+
 ---
 
 ## 5. Bekräftade krav för kommande bygge (nära, ej "framtid")
@@ -104,6 +135,7 @@ Följande bekräftades som konkreta krav men **byggs inte av detta dokument** �
 - **Leveranstider som N tidsfönster** (hård/mjuk, positiv/negativ) + **SLA-varning/trendflagga** som beslutsunderlag innan leveranstid bryts. Verifiera mot befintliga `frozenTimeRules`/leveranstidsmotorn. *(E)*
 - **Utförandeappens live-tillägg** ("+" för egentid/lunch/extrajobb) + **manuell tidsjustering**. Verifiera mot befintlig fältapp. *(H)*
 - **Mellanstatusar** i planeringen: *oplacerad/väntar på beräkning*, *blockerad av beroende* (statusfält som noterar när det går fel; bevakas av leverans-/beroendemotorn), *överbokad*.
+- **Tids- & statushistorik-logg** över uppgiftens hela livscykel (tidsstämpel per statusbyte, dwell-tid, antal återgångar) + flera tidsdimensioner (önskad/planerad/kalkylerad/verkligt utfall) för genomloppstids- och tidsdriftsanalys. Produktägaren markerade detta som viktigt. *(Detaljer + vad-finns-redan/vad-är-nytt: §4 U8.)*
 
 ---
 
