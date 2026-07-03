@@ -16,7 +16,13 @@ export type TimeCategoryKey =
   | "rest_night"
   | "rest_weekend"
   | "overtime"
-  | "internal_training";
+  | "internal_training"
+  // Övriga tidskod-register-seedade nycklar (stil-/etikett-fallback så de aldrig
+  // renderas som "Övrigt"). Se server/storage.ts seedTimeCodeDefinitions.
+  | "setup"
+  | "internal_repair"
+  | "internal_cleaning"
+  | "internal_admin";
 
 export interface TimeCategoryStyle {
   /** Svensk etikett. */
@@ -90,6 +96,34 @@ export const TIME_CATEGORY_STYLES: Record<TimeCategoryKey, TimeCategoryStyle> = 
   },
   internal_training: {
     label: "Interntid/utbildning",
+    block: "bg-accent border-l-4 border-l-accent-foreground/50 text-accent-foreground",
+    dot: "bg-accent-foreground/70",
+    bar: "bg-accent-foreground/60",
+    text: "text-accent-foreground",
+  },
+  setup: {
+    label: "Ställtid / rigg",
+    block: "bg-chart-3/15 border-l-4 border-l-chart-3 text-chart-3",
+    dot: "bg-chart-3",
+    bar: "bg-chart-3",
+    text: "text-chart-3",
+  },
+  internal_repair: {
+    label: "Reparation & underhåll",
+    block: "bg-accent border-l-4 border-l-accent-foreground/50 text-accent-foreground",
+    dot: "bg-accent-foreground/70",
+    bar: "bg-accent-foreground/60",
+    text: "text-accent-foreground",
+  },
+  internal_cleaning: {
+    label: "Städning (intern)",
+    block: "bg-accent border-l-4 border-l-accent-foreground/50 text-accent-foreground",
+    dot: "bg-accent-foreground/70",
+    bar: "bg-accent-foreground/60",
+    text: "text-accent-foreground",
+  },
+  internal_admin: {
+    label: "Administration",
     block: "bg-accent border-l-4 border-l-accent-foreground/50 text-accent-foreground",
     dot: "bg-accent-foreground/70",
     bar: "bg-accent-foreground/60",

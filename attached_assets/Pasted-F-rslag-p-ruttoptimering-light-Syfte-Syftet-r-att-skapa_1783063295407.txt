@@ -1,0 +1,182 @@
+Förslag på ruttoptimering ”light”.
+
+Syfte
+
+Syftet är att skapa en kostnadseffektiv och intuitiv finplaneringsfunktion som ger ett stort praktiskt värde utan att kräva en avancerad AI-baserad ruttoptimeringsmotor. Lösningen ska fungera som ett första steg och senare kunna utvecklas till fullständig automatisk ruttoptimering.
+
+Arbetsflöde
+
+1. Från Grovplanering
+
+Planeraren väljer ut ett antal uppgifter till ett produktionsteam med stöd av plats, tid och klumpningsmotorn:
+
+önskat leveransdatum
+geografiskt område
+prioritet
+kompetens
+tillgänglig produktionstid
+
+Normalt tilldelas exempelvis omkring 30 timmars produktion till ett team inför veckoplaneringen, planeraren ser i detta läge summerad produktionstid, antal stop och ordervärde för att bygga en optimal produktionsvecka.
+
+Dessa uppgifter skickas därefter till valt team/utförares finplanering för vald vecka.
+
+⸻
+
+2. Visning på karta
+
+Alla tilldelade uppgifter visas som markörer på en karta.
+
+Planeraren ansvarar nu för den strategiska delen av ruttplaneringen genom att, med hjälp av sin lokalkännedom och erfarenhet, välja uppgifterna i den ordning de bör utföras.
+
+Istället för att en avancerad algoritm försöker lösa hela optimeringsproblemet används människans förmåga att snabbt se naturliga geografiska samband.
+
+⸻
+
+3. Drag & Drop-planering
+
+När planeraren klickar eller drar en adress från kartan placeras uppgiften automatiskt i kalendern.
+
+Exempel:
+
+Måndag
+
+Uppgift 1
+Uppgift 2
+Uppgift 3
+Uppgift 4
+
+När dagens tillgängliga tid är fylld dvs när den lediga tiden mellan utförarens egentid morgon och kväll är fylld fortsätter systemet automatiskt till tisdag, därefter onsdag osv.
+
+Planeringen sker alltså ungefär som i en vanlig kalender som fylls.
+
+⸻
+
+Automatisk beräkning av restid
+
+Den enda information som systemet behöver beräkna automatiskt är restiden mellan två efterföljande uppdrag.
+
+Exempel:
+
+Föregående uppdrag:
+
+Strandvägen 22
+
+Nästa valda uppdrag:
+
+Sveavägen 89
+
+Systemet skickar då en mycket enkel fråga till en karttjänst via API:
+
+Avstånd: 3,2 km
+Restid: 7 minuter
+
+Denna typ av förfrågan är okomplicerad och kan normalt lösas med kostnadsfria eller mycket billiga kart-API:er, eftersom endast en punkt-till-punkt-beräkning behövs – inte fullständig ruttoptimering.
+
+⸻
+
+Total tidsberäkning
+
+Varje uppdrag består då av:
+
+Produktionstid
+Restid från föregående uppdrag
+
+Exempel:
+
+Jobb A
+
+Produktion: 38 minuter
+
+Restid
+
+7 minuter
+
+Jobb B
+
+Produktion: 42 minuter
+
+Restid
+
+11 minuter
+
+Jobb C
+
+osv.
+
+Systemet summerar automatiskt dagens totala tid.
+
+⸻
+
+Dynamisk omplanering
+
+Om planeraren flyttar ett uppdrag till en annan plats i kalendern räknar systemet automatiskt om med en ny fråga om avstånd och tid:
+
+restid
+total tid
+efterföljande uppdrag
+
+När uppdraget utförs justerar systemet planeringen när verkliga tider rapporteras från produktionen.
+
+Exempel:
+
+Planerad restid:
+
+30 minuter
+
+Verklig restid:
+
+25 minuter
+
+Systemet frigör då fem minuter och flyttar automatiskt efterföljande uppdrag framåt.
+
+Om ett senare moment istället tar längre tid flyttas efterföljande uppdrag bakåt.
+
+Planeringen blir därför successivt mer korrekt utan att planeraren behöver göra manuella justeringar.
+
+⸻
+
+Roller
+
+Planeraren ansvarar för
+
+strategi
+prioritering
+geografisk bedömning
+logisk ordning
+erfarenhetsbaserade beslut
+
+Systemet ansvarar för
+
+restidsberäkningar
+avstånd
+summering av produktionstid
+automatisk tidsberäkning
+kalenderplacering
+omräkning när uppgifter flyttas
+löpande justering efter verkliga tider
+
+⸻
+
+Fördelar
+
+Betydligt lägre utvecklingskostnad än en avancerad AI-optimerare.
+Kan byggas med kostnadsfria eller mycket billiga kart-API:er.
+Enkelt att förstå och använda för planeraren.
+Bygger vidare på planerarnas erfarenhet istället för att försöka ersätta den.
+Ger omedelbart ett stort planeringsstöd.
+Skalbar lösning som senare kan kompletteras med automatisk AI-baserad ruttoptimering.
+
+⸻
+
+Begränsningar
+
+Ger inte matematiskt optimal rutt.
+Är beroende av planerarnas geografiska kunskap och erfarenhet.
+Tar inte automatiskt hänsyn till trafik, köer eller avancerade optimeringsregler.
+Resultatet kan variera mellan olika planerare.
+
+Trots dessa begränsningar bedöms lösningen ge en stor del av nyttan till en bråkdel av kostnaden för en fullskalig ruttoptimeringsmotor.
+
+Sammanfattning
+
+Detta upplägg bygger på principen att människan står för logik, strategi och beslutsfattande, medan systemet automatiserar de repetitiva beräkningarna. Planeraren väljer själv den mest lämpliga ordningen på uppdragen genom att arbeta direkt på kartan. Systemet beräknar därefter automatiskt avstånd och restid mellan varje efterföljande adress, placerar uppdragen i kalendern, summerar produktions- och restid samt justerar planeringen dynamiskt när uppdrag flyttas eller när verkliga tider rapporteras från produktionen. Lösningen ger ett kraftfullt planeringsstöd med låg utvecklingskostnad och utgör samtidigt en stabil grund för framtida AI-baserad automatisk ruttoptimering.

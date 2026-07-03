@@ -5,6 +5,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
 import { useUpload } from "@/hooks/use-upload";
 import { useExecutionCodes } from "@/hooks/use-execution-codes";
+import { useTimeCodes } from "@/hooks/use-time-codes";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { formatSekFromOre } from "@/lib/format";
 import { metadataDisplayName } from "@/lib/metadata-display";
@@ -201,6 +202,7 @@ interface ArticleFormData {
   showMetadataFields: ShowMetadataRow[];
   leaveMetadataFields: LeaveMetadataRow[];
   performerCategory: string;
+  timeCodeKey: string;
   iconKey: string;
 }
 
@@ -283,6 +285,7 @@ const emptyFormData: ArticleFormData = {
   showMetadataFields: [],
   leaveMetadataFields: [],
   performerCategory: "",
+  timeCodeKey: "",
   iconKey: "",
 };
 
@@ -669,6 +672,7 @@ export default function ArticleFormPage() {
   // Task #1108: Utförarkategori väljs från utförandekod-registret med
   // fritext-bakåtkompatibilitet — befintliga fritextvärden förblir valbara.
   const { options: executionCodeOptions } = useExecutionCodes([formData.performerCategory]);
+  const { options: timeCodeOptions } = useTimeCodes([formData.timeCodeKey]);
   // Task #837: Fortnox-koppling. `fortnoxArticleNumber` skickas bara när
   // `fortnoxLinkTouched` är true så att oförändrad redigering inte raderar kopplingen.
   const [fortnoxArticleNumber, setFortnoxArticleNumber] = useState<string | null>(null);
@@ -1162,6 +1166,7 @@ export default function ArticleFormPage() {
         ? ((article as any).leaveMetadataFields as LeaveMetadataRow[])
         : [],
       performerCategory: (article as any).performerCategory || "",
+      timeCodeKey: (article as any).timeCodeKey || "",
       iconKey: (article as any).iconKey || "",
     });
     {
@@ -3099,6 +3104,28 @@ export default function ArticleFormPage() {
               </Select>
               <p className="text-xs text-muted-foreground">
                 Vilken utförandekod (utförartyp) som normalt utför artikeln. Hanteras i utförandekod-registret.
+              </p>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="timeCodeKey">Tidskod</Label>
+              <Select
+                value={formData.timeCodeKey || "__none__"}
+                onValueChange={(v) => setFormData({ ...formData, timeCodeKey: v === "__none__" ? "" : v })}
+              >
+                <SelectTrigger id="timeCodeKey" data-testid="select-time-code">
+                  <SelectValue placeholder="Välj tidskod" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">Ingen</SelectItem>
+                  {timeCodeOptions.map((opt) => (
+                    <SelectItem key={opt.value} value={opt.value} data-testid={`option-time-code-${opt.value}`}>
+                      {opt.isLegacy ? `${opt.label} (fritext)` : opt.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                Vilken tidskod (produktion/ställtid/internt/egentid) artikelns utförda tid räknas som. Hanteras i tidskod-registret; fryses per uppgift vid expansion.
               </p>
             </div>
           </FormSection>

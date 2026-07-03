@@ -7,7 +7,7 @@ import { formatZodError, verifyTenantOwnership, DEFAULT_TENANT_ID } from "./help
 import { getTenantIdWithFallback, requireAdmin } from "../tenant-middleware";
 import { asyncHandler } from "../asyncHandler";
 import { AppError, NotFoundError, ValidationError, ForbiddenError, ConflictError } from "../errors";
-import { insertArticleSchema, insertArticleTypeDefinitionSchema, insertExecutionCodeDefinitionSchema, insertIconDefinitionSchema, insertArticleComponentSchema, insertPriceListSchema, insertPriceListArticleSchema, insertResourceArticleSchema, insertVehicleSchema, insertEquipmentSchema, insertResourceVehicleSchema, insertResourceEquipmentSchema, insertResourceAvailabilitySchema, insertVehicleScheduleSchema, insertSubscriptionSchema, insertTeamSchema, insertTeamMemberSchema, insertPlanningParameterSchema, insertResourceProfileSchema, insertResourceProfileAssignmentSchema, insertWorkSessionSchema, insertWorkEntrySchema, insertFuelLogSchema, insertMaintenanceLogSchema, workSessions, workEntries, timeLogs, equipmentBookings } from "@shared/schema";
+import { insertArticleSchema, insertArticleTypeDefinitionSchema, insertExecutionCodeDefinitionSchema, insertTimeCodeDefinitionSchema, insertIconDefinitionSchema, insertArticleComponentSchema, insertPriceListSchema, insertPriceListArticleSchema, insertResourceArticleSchema, insertVehicleSchema, insertEquipmentSchema, insertResourceVehicleSchema, insertResourceEquipmentSchema, insertResourceAvailabilitySchema, insertVehicleScheduleSchema, insertSubscriptionSchema, insertTeamSchema, insertTeamMemberSchema, insertPlanningParameterSchema, insertResourceProfileSchema, insertResourceProfileAssignmentSchema, insertWorkSessionSchema, insertWorkEntrySchema, insertFuelLogSchema, insertMaintenanceLogSchema, workSessions, workEntries, timeLogs, equipmentBookings } from "@shared/schema";
 import { getISOWeek, getStartOfISOWeek } from "./helpers";
 import { notificationService } from "../notifications";
 import { TASK_TYPE_KEYS, TASK_TYPE_LABELS } from "../grovplanering-grid";
@@ -348,6 +348,54 @@ app.delete("/api/execution-codes/:id", requireAdmin, asyncHandler(async (req, re
   if (!existing) throw new NotFoundError("Utförandekod hittades inte");
   const usage = await storage.getExecutionCodeUsageCount(tenantId, existing.key);
   await storage.archiveExecutionCodeDefinition(req.params.id, tenantId);
+  res.json({ archived: true, usage });
+}));
+
+// ============== Tidskoder: TIDSKOD-REGISTER ==============
+// Per-tenant register över tidskoder (grupp + prioritet). Läsning öppen för tenant-medlemmar;
+// skrivning kräver admin. Nyckeln är immutabel (patch tar bort key) och koder soft-deleteas.
+app.get("/api/time-codes", asyncHandler(async (req, res) => {
+  const tenantId = getTenantIdWithFallback(req);
+  // Seed-on-read: säkerställ att tenanten alltid har standardtidskoderna (idempotent, insert-only).
+  let list = await storage.getTimeCodeDefinitions(tenantId);
+  if (list.length === 0) {
+    await storage.seedTimeCodeDefinitions(tenantId);
+    list = await storage.getTimeCodeDefinitions(tenantId);
+  }
+  res.json(list);
+}));
+
+app.post("/api/time-codes", requireAdmin, asyncHandler(async (req, res) => {
+  const tenantId = getTenantIdWithFallback(req);
+  const data = insertTimeCodeDefinitionSchema.parse({ ...req.body, tenantId, isSystem: false });
+  const existing = await storage.getTimeCodeDefinitions(tenantId);
+  if (existing.some((t) => t.key === data.key)) {
+    throw new ConflictError(`Tidskoden med nyckel "${data.key}" finns redan.`);
+  }
+  const created = await storage.createTimeCodeDefinition(data);
+  res.status(201).json(created);
+}));
+
+app.patch("/api/time-codes/:id", requireAdmin, asyncHandler(async (req, res) => {
+  const tenantId = getTenantIdWithFallback(req);
+  const existing = await storage.getTimeCodeDefinition(req.params.id, tenantId);
+  if (!existing) throw new NotFoundError("Tidskod hittades inte");
+  const patchSchema = insertTimeCodeDefinitionSchema
+    .partial()
+    .omit({ tenantId: true, key: true, isSystem: true, deletedAt: true });
+  const parsed = patchSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json(formatZodError(parsed.error));
+  const updated = await storage.updateTimeCodeDefinition(req.params.id, tenantId, parsed.data);
+  res.json(updated);
+}));
+
+// Aldrig hard-delete: en tidskod som används av artiklar/personliga uppgifter arkiveras (soft-delete).
+app.delete("/api/time-codes/:id", requireAdmin, asyncHandler(async (req, res) => {
+  const tenantId = getTenantIdWithFallback(req);
+  const existing = await storage.getTimeCodeDefinition(req.params.id, tenantId);
+  if (!existing) throw new NotFoundError("Tidskod hittades inte");
+  const usage = await storage.getTimeCodeUsageCount(tenantId, existing.key);
+  await storage.archiveTimeCodeDefinition(req.params.id, tenantId);
   res.json({ archived: true, usage });
 }));
 

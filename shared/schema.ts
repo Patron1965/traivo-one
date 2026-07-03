@@ -463,6 +463,10 @@ export const workOrders = pgTable("work_orders", {
   frozenUnitPrice: real("frozen_unit_price"),
   frozenUnitCost: real("frozen_unit_cost"),
   frozenUnitTime: real("frozen_unit_time"),
+  // Tidskod (time_code_definitions.key) fryst per uppgift vid expansion, kopierad från
+  // artikelns timeCodeKey (admin/logistik-vägen; BOM/strukturella deluppgifter ärver
+  // från förälder-WO). Grunden för finplanering + lön. Nullable (expand-contract).
+  frozenTimeCode: text("frozen_time_code"),
   // Tidpunkt da snapshot las (audit + Traivo Go v2-kontrakt).
   frozenAt: timestamp("frozen_at"),
   // Snapshot av relevanta metadata-värden vid expansion (för audit/omräkning).
@@ -770,6 +774,10 @@ export const articles = pgTable("articles", {
   isGeoDependent: boolean("is_geo_dependent").default(true),
   // Utförandekod som krävs (t.ex. "kranbil", "tvatt", "sug")
   executionCode: text("execution_code"),
+  // Tidskoder: vilken tidskod (time_code_definitions.key) som artikelns utförda tid räknas
+  // som (produktion/ställtid/internt/egentid). Nullable/fri text (expand-contract, back-compat).
+  // Fryses per uppgift vid orderkoncept-expansion (assignments/work_orders.frozenTimeCode).
+  timeCodeKey: text("time_code_key"),
   // Task #942: Valfri ikon-referens till ikonregistret (icon_definitions.key).
   // Nullable/fri text för back-compat — pekar inte hårt på en FK.
   iconKey: text("icon_key"),
@@ -964,6 +972,45 @@ export const executionCodeDefinitions = pgTable("execution_code_definitions", {
   index("idx_execution_code_defs_tenant").on(table.tenantId),
   uniqueIndex("uq_execution_code_defs_tenant_key").on(table.tenantId, table.key),
 ]);
+
+// Tidskoder: Per-tenant register över TIDSKODER (time codes). En tidskod klassificerar vad
+// utförd/planerad tid räknas som och driver (a) finplaneringens överlapp/pussel via `priority`
+// och (b) framtida löne-/tidsredovisning via `groupKey`. `key` är det stabila värde som lagras
+// (articles.timeCodeKey, personal_tasks.timeCategory, assignments/work_orders.frozenTimeCode).
+// De tidigare hårdkodade time_category-värdena seedas som nycklar (subsumering — ingen
+// datamigrering, ingen kolumnomdöpning). Soft-delete via deletedAt.
+//   groupKey: produktion | stalltid | internt | egentid
+//   priority: 1 = högst (aldrig överlapp, t.ex. produktion/restid) ... 3 = lägst (egentid,
+//             får överbokas). En egentid kan höjas till prio 1 (t.ex. läkarbesök).
+export const timeCodeDefinitions = pgTable("time_code_definitions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
+  key: text("key").notNull(),
+  label: text("label").notNull(),
+  // Huvudgrupp för rapportering/löneunderlag (styrd värdelista, se ovan).
+  groupKey: text("group_key").default("internt").notNull(),
+  // Prioritet för finplaneringens överlapp (1 = högst = aldrig överlapp).
+  priority: integer("priority").default(2).notNull(),
+  // Valfri koppling till ikonregistret (icon_definitions.key) — NULL ⇒ textfallback.
+  iconKey: text("icon_key"),
+  sortOrder: integer("sort_order").default(0).notNull(),
+  isSystem: boolean("is_system").default(false).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  deletedAt: timestamp("deleted_at"),
+}, (table) => [
+  index("idx_time_code_defs_tenant").on(table.tenantId),
+  uniqueIndex("uq_time_code_defs_tenant_key").on(table.tenantId, table.key),
+]);
+
+export type TimeCodeDefinition = typeof timeCodeDefinitions.$inferSelect;
+export const timeCodeGroupKeys = ["produktion", "stalltid", "internt", "egentid"] as const;
+export const insertTimeCodeDefinitionSchema = createInsertSchema(timeCodeDefinitions).omit({ id: true, createdAt: true }).extend({
+  key: z.string().trim().min(1, "Nyckel krävs").max(50, "Nyckeln får vara högst 50 tecken"),
+  label: z.string().trim().min(1, "Visningsnamn krävs").max(80, "Visningsnamnet får vara högst 80 tecken"),
+  groupKey: z.enum(timeCodeGroupKeys).default("internt"),
+  priority: z.coerce.number().int().min(1).max(3).default(2),
+});
+export type InsertTimeCodeDefinition = z.infer<typeof insertTimeCodeDefinitionSchema>;
 
 // Task #942: Per-tenant ikonregister. Admin lägger upp namngivna ikoner som mappar mot
 // en Lucide-ikon (`lucideName`). Artiklar (articles.iconKey) kan välja en ikon från
@@ -3329,6 +3376,10 @@ export const assignments = pgTable("assignments", {
   // tidsperiod). Nullable (expand-contract): legacy-rader saknar värdet och faller då
   // tillbaka på derive-at-read via assignment_articles → articles.executionCode.
   executionCode: text("execution_code"),
+  // Tidskod (time_code_definitions.key) fryst per uppgift vid orderkoncept-expansion,
+  // kopierad från artikelns timeCodeKey. Grunden för finplanering (168h/vecka) + framtida
+  // lönerapport. Nullable (expand-contract): legacy-rader saknar värdet.
+  frozenTimeCode: text("frozen_time_code"),
   // Task #989: Länk från leverans-uppgiften till dess hämt-uppgift (hämta måste ske före
   // leverera). Mjuk länk: om hämt-uppgiften raderas blir fältet null (set null), inte cascade.
   parentAssignmentId: varchar("parent_assignment_id").references((): any => assignments.id, { onDelete: "set null" }),
@@ -7537,6 +7588,11 @@ export const personalTasks = pgTable("personal_tasks", {
   teamId: varchar("team_id").references(() => teams.id),
   // time_category (se värdelista) — production exkluderas här.
   timeCategory: text("time_category").notNull(),
+  // Prioritets-override för finplaneringens överlapp (1=högst/aldrig överlapp ... 3=lägst).
+  // NULL = härled från tidskod-registret via timeCategory (time_code_definitions.priority).
+  // Sätts explicit för att t.ex. höja en egentid (läkarbesök) till prio 1 så den beter sig
+  // som ett jobb och blockerar överlapp. Nullable (expand-contract).
+  priority: integer("priority"),
   title: text("title").notNull(),
   description: text("description"),
   plannedDate: date("planned_date"),

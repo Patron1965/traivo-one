@@ -52,8 +52,10 @@ import {
   PanelRightOpen,
   ChevronDown,
   ChevronUp,
+  Repeat,
 } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
+import { EgentidScheduleDialog } from "@/components/EgentidScheduleDialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -303,6 +305,7 @@ export default function WeeklyPlanViewPage() {
   const [rightCollapsed, setRightCollapsed] = useState(false);
   const [bottomCollapsed, setBottomCollapsed] = useState(false);
   const [addTimeOpen, setAddTimeOpen] = useState(false);
+  const [egentidScheduleOpen, setEgentidScheduleOpen] = useState(false);
   const [, setLocation] = useLocation();
 
   const { data: teams = [], isLoading: teamsLoading } = useQuery<Team[]>({
@@ -721,6 +724,17 @@ export default function WeeklyPlanViewPage() {
               Automatisk veckoplanering
             </Button>
           )}
+          <Button
+            size="sm"
+            variant="outline"
+            className="gap-1.5"
+            onClick={() => setEgentidScheduleOpen(true)}
+            title="Definiera återkommande egentid (rast, nattvila, helgvila) som materialiseras i veckoplanerna."
+            data-testid="button-egentid-schedule"
+          >
+            <Repeat className="h-4 w-4" />
+            Återkommande egentid
+          </Button>
           {planId && (
             <Button
               size="sm"
@@ -1167,6 +1181,11 @@ export default function WeeklyPlanViewPage() {
         saving={createPersonalTask.isPending}
         onClose={() => setAddTimeOpen(false)}
         onSave={(vars) => createPersonalTask.mutate(vars)}
+      />
+
+      <EgentidScheduleDialog
+        open={egentidScheduleOpen}
+        onClose={() => setEgentidScheduleOpen(false)}
       />
     </div>
   );

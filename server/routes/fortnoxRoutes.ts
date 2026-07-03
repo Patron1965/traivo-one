@@ -110,6 +110,8 @@ async function createStockPickupAssignment(opts: {
     logisticsRole: "pickup",
     // Task #1110: stämpla artikelns utförandekod på hämt-uppgiften (informationspaket).
     executionCode: linkedArticle?.executionCode ?? undefined,
+    // Tidskod fryst från artikelns timeCodeKey (finplanering/lön).
+    frozenTimeCode: linkedArticle?.timeCodeKey ?? undefined,
     // Task #1124: stämpla informationspaket-natur vid expansion (concept-nivå, gäller
     // alla uppgifter konceptet skapar). isFixedPrice styr radkollaps vid materialisering;
     // billingMethod = faktureringstyp (call_off/schedule/subscription) snapshot.
@@ -286,6 +288,8 @@ export async function generateScheduleAssignments(opts: {
         parentAssignmentId: pickupAssignmentId,
         // Task #1110: stämpla artikelns utförandekod på uppgiften (informationspaket).
         executionCode: linkedArticle?.executionCode ?? undefined,
+        // Tidskod fryst från artikelns timeCodeKey (finplanering/lön).
+        frozenTimeCode: linkedArticle?.timeCodeKey ?? undefined,
         // Task #997: fryst viktat tidsregel-paket (null om objektet saknar regler).
         frozenTimeRules: frozenTimeRulesByObject.get(obj.id) ?? null,
       });
@@ -1596,6 +1600,8 @@ app.post("/api/work-orders/:workOrderId/generate-pickup-tasks", asyncHandler(asy
         executionStatus: pickupDate ? "planned_rough" : "not_planned",
         creationMethod: "automatic",
         executionCode: mainWorkOrder.executionCode || undefined,
+        // Tidskod ärvs från förälder-WO (BOM/plock-derivat).
+        frozenTimeCode: mainWorkOrder.frozenTimeCode || undefined,
         taskLatitude: article.stockLatitude || undefined,
         taskLongitude: article.stockLongitude || undefined,
         logisticsRole: "pickup",
@@ -1874,6 +1880,8 @@ app.post("/api/work-orders/:id/expand-structural", asyncHandler(async (req, res)
         structuralArticleId: articleId,
         creationMethod: "structural",
         executionCode: workOrder.executionCode,
+        // Tidskod ärvs från förälder-WO (strukturellt delsteg).
+        frozenTimeCode: workOrder.frozenTimeCode,
       });
 
       await storage.createTaskDependency({
@@ -2708,6 +2716,8 @@ app.post("/api/order-concepts/:id/execute", asyncHandler(async (req, res) => {
         parentAssignmentId: pickupAssignmentId,
         // Task #1110: stämpla artikelns utförandekod på uppgiften (informationspaket).
         executionCode: linkedArticle?.executionCode ?? undefined,
+        // Tidskod fryst från artikelns timeCodeKey (finplanering/lön).
+        frozenTimeCode: linkedArticle?.timeCodeKey ?? undefined,
         // Task #997: fryst viktat tidsregel-paket (null om objektet saknar regler).
         frozenTimeRules: frozenTimeRulesByObject.get(obj.id) ?? null,
         // Task #1124: informationspaket-natur (fast pris + faktureringstyp) snapshotat
@@ -2777,6 +2787,8 @@ app.post("/api/order-concepts/:id/execute", asyncHandler(async (req, res) => {
           // Task #1110: stämpla artikelns utförandekod även på admin/logistik-WO så
           // grovplaneringen kan sortera/filtrera även dessa på utförandekod.
           executionCode: article.executionCode ?? null,
+          // Tidskod fryst från artikelns timeCodeKey (finplanering/lön).
+          frozenTimeCode: article.timeCodeKey ?? null,
         } as InsertWorkOrder);
         createdAdminWorkOrders.push({ id: wo.id, taskCategory: wo.taskCategory, articleId: ca.articleId });
       }
@@ -2848,6 +2860,8 @@ app.post("/api/order-concepts/:id/execute", asyncHandler(async (req, res) => {
             dependencyCriticality: article.dependencyCriticality ?? "critical",
             // Task #1110: stämpla artikelns utförandekod även på föruppgiften.
             executionCode: article.executionCode ?? undefined,
+            // Tidskod fryst från artikelns timeCodeKey (finplanering/lön).
+            frozenTimeCode: article.timeCodeKey ?? undefined,
             // Task #1124: informationspaket-natur (fast pris + faktureringstyp) snapshotat
             // vid expansion (call_off-väg; schema/abonnemang har returnerat ovan).
             isFixedPrice: isFixedPriceConcept(concept),

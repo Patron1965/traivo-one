@@ -1,0 +1,116 @@
+{
+  "sessionId": "77e6c153f",
+  "exportedAt": "2026-07-03T07:31:36.583Z",
+  "summary": "### Key Topics Discussed\n- Finplanering light system based on weekly schedules.\n- Matching jobs against availability.\n- Need for a travel time calculator.\n- Mobility of service providers between various locations.\n- Example of a service provider team having personal time until Monday morning at 7 am.\n- Detailed example of the travel time calculation functionality for jobs: from Ariavägen 2 in Viästa to Storgatan 22 in Sundsvall, and then to Hafnersväg 2 in Sundsvall.\n- Creation of travel time segments between job locations (e.g., Storgatan 22 to Hafnersväg).\n- Distinction between \"inställelsesresa\" (start-up travel, e.g., Ariavägen 2 to Storgatan 22) and \"ställtidsresa\" (downtime travel, e.g., Storgatan to Hafnersväg).\n- Challenge with Google Maps' ability to accurately calculate travel times for heavy vehicles, as it assumes passenger car speed, potentially underestimating travel time by 20-30 minutes for longer distances like Bjästa to Sundsvall.\n- Proposal to calculate travel time based on kilometers and adjustable speed, considering speed limits for heavy vehicles (e.g., 80 km/h in Sweden).\n- The need to adjust average speed or apply a correction factor for heavy vehicles and to account for seasonal variations (e.g., slower speeds in winter due to road conditions).\n- Introduction of \"trimfaktorer\" (adjustment factors) for calculated times, specifically for production time and travel time, allowing for discounts on calculated times for faster teams.\n- Consideration of correction factors for average speed, with a recognized challenge regarding the unknown road classes.\n- Impact of heavy vehicles on travel time, particularly on highways where cars are expected to travel much faster, contrasting it with urban environments where speed differences might be less but heavy vehicles are still slower and less agile than passenger cars.\n\n### Decisions Made\n- The system will query Google to determine travel time and distance between job locations.\n- In Finplanering, there must always be an option to view how each segment is calculated and to adjust the time code for travel.\n- The planner will manage and differentiate between \"inställelsesresa\" and \"ställtidsresa.\"\n\n### Action Items\n- The system needs a motor to quickly present travel times between locations, e.g., Viästa to Sundsvall.\n- A proposal is needed on how to implement adjustments for heavy vehicle travel times, considering the input received.\n\n### Important Points & Insights\n- The system needs a motor to quickly present travel times between locations, e.g., Viästa to Sundsvall.\n- There should be a functionality to adjust time codes for travel segments.\n- Google Maps may not be suitable for heavy vehicle travel time calculations; a more robust solution involving distance and adjustable speed is needed, considering factors like vehicle type (heavy vs. light) and season (winter vs. summer) to determine average speed.\n- Adjustment factors (trimfaktorer) for production and travel times could be implemented to finely tune time calculations based on team efficiency.\n- There are concerns about accurately determining average speed due to unknown road classes.\n- Heavy vehicles have a greater impact on travel times on highways compared to urban settings, even if within speed limits, due to their inherent slowness and lack of agility compared to passenger cars.\n\n### Open Questions/Pending Items\n- \"Finplanering light\" system details.\n- Implementation of the travel time calculator.\n- How to manage and track service providers' movement between locations.\n- How to integrate adjustable speed (e.g., for heavy vehicles) into the travel time calculation, potentially bypassing Google Maps for speed estimation, and also how to incorporate seasonal adjustments for travel speeds.\n- How to implement and apply correction factors for production and travel times effectively.\n- How to address the challenge of determining average speed without knowing road classes.\n- How to make adjustments to travel time calculations based on the specific characteristics and limitations of heavy vehicles in different road environments.",
+  "conversation": [],
+  "transcripts": [
+    {
+      "text": "Hörru, jag är upptagen. Ja? Ja, i den hära finplanering light då, som bygger på att man lägger ut jobben över veckoschemat och matchar in dem då mot...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Eh, ledighet då, det vill säga inte egen tid för den som är arbetare då, så kommer det då att behöva finnas en restidskalkylator som jag nämnde också tidigare. Så att hela systemet bygger ju på att, eh, utföraren i hög grad är i rörelse mellan olika platser. Eh, och som jag nämnde tidigare då så har vi ju då en hypotetiskt, eller exempelvis så kan ju utförarteamet ha en egen tid fram till klockan sju på måndag morgon-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. På platsen Ariavägen 2 i Viästa. Och det första jobbet är på Storgatan 22 i Sundsvall. Då vet ju systemet då att teamet är i Viästa klockan sju. Och när då planeraren lägger ut Storgatan 22 utifrån då den här, eh, ruttplanering light-verktyget då, så ska systemet göra då en fråga företrädesvis till Google och ta reda på hur lång tid tar det och hur många kilometer-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. Att äta mellan Ariavägen 2 i Viästa och Storgatan 22 i Sundsvall. Och då ska systemet ha en motor som snabbt då presenterar då den här restiden från Viästa till Sundsvall. Och när sen planeraren lägger in ett jobb, eh, till på Hafnersväg 2 i Sundsvall, så ska då den hära, eh, motorn snabbt göra en fråga till Google: \"Hur lång",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "är det och i hur många minuter kommer det då att ta att förflytta sig ifrån...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Då Storbrottan 22 till Hafnersväg, eh, och då ska det då skapas det här restidsmomentet däremellan då. Och då blir ju det då automatisk restid. Eh, men det finns också då, eh... Det ska hela tiden i finplanering finnas en möjlighet att man kan klicka upp varje sånt här moment så man ser då hu-hur det dels är framkalkylerat, men också att man kan justera tidskod. För i vissa lägen så kan det vara aktuellt då att ändra en resa till, eh-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. I egentid då. Till exempel denna resan som sker ifrån Arealvägen 2 till Storbrottan 22 då. För det är då den inställelsesresa som medarbetaren kommer att ha. Medan resan mellan Storgatan och Hafnersväg kommer då att vara en ställtidsresa då. Och det här kommer då, eh, planeraren att styra upp då.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Jo, eh, ett, ett tillägg här också.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Är den igång, inspe-- Ja. Jo, eh, när man gör den här frågan till Google Maps då för att få reda på tid och avstånd...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. Så... Mig veterligt så har de hära, särskilt Google, dåliga förutsättningar att hantera tunga fordon. Eh, så det, det, det bästa vore ju då dels att man får reda på hur många kilometer det är och att man då har en möjlighet att justera farten.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. Eh, och det är ju då en, en, en...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Eh, eh, vad ska man säga då? Objektsbaserad grej. För i Sverige då så går en lastbil, den får rulla i åttio kilometer i timmen då.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. Medan Google kommer och kalkylerar då med att man har kör i, i, i, i personbilsfart då. Och det kommer ju då påverka tiden på resan mellan då Bjästa och, eh, eh, Sundsvall då här med säkert tjugo minuter då, tjugo, trettio minuter på grund av att lastbilen eller tunga fordon är långsammare. Eh, det kan också då finnas, eh, det kan finnas ett behov så att säga då att kunna an...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Genom att justera medelhastighet eller göra en korrigeringsfaktor här då. Att justera det här, det här med farten då. Eh, dels baserat på att det är ett tungt fordon då och dels baserat på årstiden också. För vi vet också av erfarenhet då att farten går ner vintertid då på grund av väglag och så. Så det kan väl repli... Ta med sig då. Och de korrigeringarna ska då ligga inne på, eh, alltså teamets, eh-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. -eh, grundparametrar då. Och det är också möjligt där då att man skulle kunna ha, eh, alltså trimfaktorer här då. Så att även om du har ett snabbt team så skulle man då kunna ge rabatt på den kalkylerade tiden. Så att man skulle kunna ha korrigeringfaktorer för produktionstid och för restid då. Inte egen tid kanske då. Men, men, men där man då, så kan-- Så man då så att säga trimmar ner de där. Antingen igenom en justeringsfaktor, alternativt då utav reella värden då, särskilt för-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. -genomsnittsfarten och sånt där. Men, men det är problem också med det då för att, eh, jag misstänker att, eh, vi inte vet vilka vägklasser det är då va. Men, eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Det vill säga då att det har större påverkan då med tunga fordon på landsvägar då, där det förväntas att det kanske går hundra eller hundratio kilometer eller rent utav hundratjugo kilometer då. Eh, och lastbilen då bara tuffar på i åttio. Medan i en stadsmiljö då, då farten är bara fyrtio, så kommer ju lastbilen då kunna hålla fyrtio kilometer i timmen. Men lastbilen är inte lika snabb och lika smidig som en personbil, så det kommer ändå att gå lite långsammare. Så kom gärna med ett förslag räckligt hur man gör det här, de här-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. Justeringarna baserat då på det input som kommer då från...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    }
+  ]
+}

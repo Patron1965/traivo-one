@@ -340,13 +340,51 @@ interface TimeBlock {
   relatedTaskId?: string | null;
   relatedPersonalTaskId?: string | null;
   allowOverlap: boolean;
+  /** Tidskodens prioritet (1=högst/aldrig överlapp ... 3=lägst/får överbokas). */
+  priority: number;
+}
+
+// =============================================================================
+// Prioritetsmedveten överlapp: en tidskods prioritet (time_code_definitions.priority)
+// avgör om två överlappande block är en hård konflikt. Endast prio 1 ("aldrig överlapp",
+// t.ex. produktion/restid) kolliderar; lägre prioritet viker undan (egentid får överbokas).
+// =============================================================================
+
+// Fallback-prioritet när en tidskod saknas i tenantens register (spegling av seed-defaults
+// i storage.seedTimeCodeDefinitions). Registret är auktoritativt — detta är bara robusthet.
+const DEFAULT_CODE_PRIORITY: Record<string, number> = {
+  production: 1,
+  overtime: 1,
+  travel_between_jobs: 1,
+  setup: 1,
+  internal_training: 2,
+  internal_repair: 2,
+  internal_cleaning: 2,
+  internal_admin: 2,
+  travel_commute: 3,
+  break_meal: 3,
+  personal_time: 3,
+  rest_night: 3,
+  rest_weekend: 3,
+};
+const FALLBACK_CODE_PRIORITY = 2;
+
+function resolveCodePriority(
+  priorityMap: Map<string, number>,
+  key: string | null | undefined,
+): number {
+  if (!key) return FALLBACK_CODE_PRIORITY;
+  return priorityMap.get(key) ?? DEFAULT_CODE_PRIORITY[key] ?? FALLBACK_CODE_PRIORITY;
 }
 
 function collectTimeBlocks(
   tasks: WeeklyPlanTask[],
   personalTasks: PersonalTask[],
+  priorityMap: Map<string, number>,
 ): TimeBlock[] {
   const blocks: TimeBlock[] = [];
+  // Produktionsuppgifter (weekly_plan_tasks) representerar jobb → prioritet via "production".
+  const workPriority = resolveCodePriority(priorityMap, "production");
   for (const t of tasks) {
     if (t.plannedStartTime && t.plannedEndTime) {
       blocks.push({
@@ -355,6 +393,7 @@ function collectTimeBlocks(
         label: "uppgift",
         relatedTaskId: t.taskId,
         allowOverlap: Boolean((t.metadata as Record<string, unknown> | null)?.["allowOverlap"]),
+        priority: workPriority,
       });
     }
   }
@@ -366,6 +405,8 @@ function collectTimeBlocks(
         label: pt.title,
         relatedPersonalTaskId: pt.id,
         allowOverlap: Boolean((pt.metadata as Record<string, unknown> | null)?.["allowOverlap"]),
+        // Override (pt.priority, t.ex. läkarbesök→1) vinner; annars härled från registret.
+        priority: pt.priority ?? resolveCodePriority(priorityMap, pt.timeCategory),
       });
     }
   }
@@ -377,17 +418,21 @@ export function buildWarningSpecs(
   tasks: WeeklyPlanTask[],
   personalTasks: PersonalTask[],
   config: PlanEngineConfig,
+  priorityMap: Map<string, number>,
 ): WarningSpec[] {
   const specs: WarningSpec[] = [];
 
   // --- Tidskonflikt: överlappande block (med tillåtet överlapp via Kinab-regeln) ---
-  const blocks = collectTimeBlocks(tasks, personalTasks).sort((a, b) => a.start - b.start);
+  const blocks = collectTimeBlocks(tasks, personalTasks, priorityMap).sort((a, b) => a.start - b.start);
   for (let i = 0; i < blocks.length; i++) {
     for (let j = i + 1; j < blocks.length; j++) {
       const a = blocks[i];
       const b = blocks[j];
       if (b.start >= a.end) break; // sorterade på start → inga fler överlapp för a
       if (a.allowOverlap || b.allowOverlap) continue; // konverterad egentid → tillåtet
+      // Prioritetsmedveten: hård konflikt endast när BÅDA blocken är prio 1 ("aldrig
+      // överlapp"). Har något block lägre prioritet viker det undan (får överbokas).
+      if (a.priority !== 1 || b.priority !== 1) continue;
       specs.push({
         code: "TIME_CONFLICT",
         severity: "error",
@@ -686,11 +731,14 @@ export async function recomputeWeeklyPlan(
     await recomputeTravelForPlan(tenantId, weeklyPlanId, config);
   }
 
-  const [tasks, personalTasks, travelEntries] = await Promise.all([
+  const [tasks, personalTasks, travelEntries, timeCodes] = await Promise.all([
     storage.getWeeklyPlanTasks(tenantId, weeklyPlanId),
     storage.getPersonalTasks(tenantId, { weeklyPlanId }),
     storage.getTravelTimeEntries(tenantId, weeklyPlanId),
+    storage.getTimeCodeDefinitions(tenantId),
   ]);
+  // Prioritetskarta (key → priority) från tenantens tidskod-register för överlapp-logiken.
+  const priorityMap = new Map<string, number>(timeCodes.map((tc) => [tc.key, tc.priority]));
 
   const facts = await loadWorkOrderFacts(
     tenantId,
@@ -736,7 +784,7 @@ export async function recomputeWeeklyPlan(
     },
   });
 
-  const specs = buildWarningSpecs(summary, tasks, personalTasks, config);
+  const specs = buildWarningSpecs(summary, tasks, personalTasks, config, priorityMap);
   const warnings = await reconcileWarnings(tenantId, weeklyPlanId, specs);
 
   return { plan: updated ?? plan, summary, warnings };

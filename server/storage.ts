@@ -14,6 +14,7 @@ import {
   type Article, type InsertArticle,
   type ArticleTypeDefinition, type InsertArticleTypeDefinition,
   type ExecutionCodeDefinition, type InsertExecutionCodeDefinition,
+  type TimeCodeDefinition, type InsertTimeCodeDefinition,
   type IconDefinition, type InsertIconDefinition,
   type PriceList, type InsertPriceList,
   type PriceListArticle, type InsertPriceListArticle,
@@ -125,7 +126,7 @@ import {
   resourceProfiles, resourceProfileAssignments,
   fortnoxConfig, fortnoxMappings, fortnoxInvoiceExports, manualInvoiceLines,
   users, tenants, customers, customerRelationships, objects, resources, workOrders, setupTimeLogs, procurements,
-  articles, articleTypeDefinitions, executionCodeDefinitions, iconDefinitions, priceLists, priceListArticles, resourceArticles, workOrderLines, simulationScenarios,
+  articles, articleTypeDefinitions, executionCodeDefinitions, timeCodeDefinitions, iconDefinitions, priceLists, priceListArticles, resourceArticles, workOrderLines, simulationScenarios,
   vehicles, equipment, resourceVehicles, resourceEquipment, resourceAvailability,
   vehicleSchedule, subscriptions, teams, teamMembers, taskTypes, planningParameters, clusters,
   resourcePositions,
@@ -621,6 +622,15 @@ export interface IStorage {
   archiveExecutionCodeDefinition(id: string, tenantId: string): Promise<void>;
   getExecutionCodeUsageCount(tenantId: string, key: string): Promise<number>;
   seedExecutionCodeDefinitions(tenantId: string): Promise<void>;
+
+  // Time code registry (Tidskoder) — per-tenant register över tidskoder (grupp + prioritet)
+  getTimeCodeDefinitions(tenantId: string): Promise<TimeCodeDefinition[]>;
+  getTimeCodeDefinition(id: string, tenantId: string): Promise<TimeCodeDefinition | undefined>;
+  createTimeCodeDefinition(data: InsertTimeCodeDefinition): Promise<TimeCodeDefinition>;
+  updateTimeCodeDefinition(id: string, tenantId: string, patch: Partial<InsertTimeCodeDefinition>): Promise<TimeCodeDefinition | undefined>;
+  archiveTimeCodeDefinition(id: string, tenantId: string): Promise<void>;
+  getTimeCodeUsageCount(tenantId: string, key: string): Promise<number>;
+  seedTimeCodeDefinitions(tenantId: string): Promise<void>;
 
   // Icon registry (Task #942) — per-tenant katalog över namngivna ikoner
   getIconDefinitions(tenantId: string): Promise<IconDefinition[]>;
@@ -5041,6 +5051,100 @@ export class DatabaseStorage implements IStorage {
       .filter((t) => !existingKeys.has(t.key));
     if (toInsert.length > 0) {
       await db.insert(executionCodeDefinitions).values(toInsert);
+    }
+  }
+
+  // === Time code registry (Tidskoder) ===
+  // Standardtidskoder subsumerar de tidigare time_category-värdena (nycklarna bevaras) och
+  // lägger till interna koder + ställtid. groupKey driver rapport/lön; priority driver
+  // finplaneringens överlapp (1 = aldrig överlapp).
+  private static readonly DEFAULT_TIME_CODES: { key: string; label: string; groupKey: string; priority: number }[] = [
+    { key: "production", label: "Produktionstid", groupKey: "produktion", priority: 1 },
+    { key: "overtime", label: "Övertid", groupKey: "produktion", priority: 1 },
+    { key: "travel_between_jobs", label: "Restid mellan jobb", groupKey: "stalltid", priority: 1 },
+    { key: "setup", label: "Ställtid / rigg", groupKey: "stalltid", priority: 1 },
+    { key: "internal_training", label: "Utbildning", groupKey: "internt", priority: 2 },
+    { key: "internal_repair", label: "Reparation & underhåll", groupKey: "internt", priority: 2 },
+    { key: "internal_cleaning", label: "Städning (intern)", groupKey: "internt", priority: 2 },
+    { key: "internal_admin", label: "Administration", groupKey: "internt", priority: 2 },
+    { key: "travel_commute", label: "Inställelseresa / pendling", groupKey: "egentid", priority: 3 },
+    { key: "break_meal", label: "Rast & lunch", groupKey: "egentid", priority: 3 },
+    { key: "personal_time", label: "Egentid", groupKey: "egentid", priority: 3 },
+    { key: "rest_night", label: "Nattvila", groupKey: "egentid", priority: 3 },
+    { key: "rest_weekend", label: "Helgvila", groupKey: "egentid", priority: 3 },
+  ];
+
+  async getTimeCodeDefinitions(tenantId: string): Promise<TimeCodeDefinition[]> {
+    return db.select().from(timeCodeDefinitions)
+      .where(and(eq(timeCodeDefinitions.tenantId, tenantId), isNull(timeCodeDefinitions.deletedAt)))
+      .orderBy(timeCodeDefinitions.sortOrder, timeCodeDefinitions.label);
+  }
+
+  async getTimeCodeDefinition(id: string, tenantId: string): Promise<TimeCodeDefinition | undefined> {
+    const [row] = await db.select().from(timeCodeDefinitions)
+      .where(and(eq(timeCodeDefinitions.id, id), eq(timeCodeDefinitions.tenantId, tenantId)));
+    return row || undefined;
+  }
+
+  async createTimeCodeDefinition(data: InsertTimeCodeDefinition): Promise<TimeCodeDefinition> {
+    // Återuppliva en arkiverad kod med samma nyckel istället för att krocka mot unik-index.
+    const [existing] = await db.select().from(timeCodeDefinitions)
+      .where(and(eq(timeCodeDefinitions.tenantId, data.tenantId), eq(timeCodeDefinitions.key, data.key)));
+    if (existing) {
+      const [revived] = await db.update(timeCodeDefinitions)
+        .set({
+          label: data.label,
+          groupKey: data.groupKey ?? existing.groupKey,
+          priority: data.priority ?? existing.priority,
+          iconKey: data.iconKey ?? existing.iconKey,
+          sortOrder: data.sortOrder ?? existing.sortOrder,
+          deletedAt: null,
+        })
+        .where(eq(timeCodeDefinitions.id, existing.id))
+        .returning();
+      return revived;
+    }
+    const [row] = await db.insert(timeCodeDefinitions).values(data).returning();
+    return row;
+  }
+
+  async updateTimeCodeDefinition(id: string, tenantId: string, patch: Partial<InsertTimeCodeDefinition>): Promise<TimeCodeDefinition | undefined> {
+    // `key`/`tenantId` immutable; `isSystem`/`deletedAt` får aldrig muteras via denna väg.
+    const { key: _k, tenantId: _t, isSystem: _s, deletedAt: _d, ...safe } = patch as any;
+    const [row] = await db.update(timeCodeDefinitions)
+      .set(safe)
+      .where(and(eq(timeCodeDefinitions.id, id), eq(timeCodeDefinitions.tenantId, tenantId)))
+      .returning();
+    return row || undefined;
+  }
+
+  async archiveTimeCodeDefinition(id: string, tenantId: string): Promise<void> {
+    await db.update(timeCodeDefinitions)
+      .set({ deletedAt: new Date() })
+      .where(and(eq(timeCodeDefinitions.id, id), eq(timeCodeDefinitions.tenantId, tenantId)));
+  }
+
+  async getTimeCodeUsageCount(tenantId: string, key: string): Promise<number> {
+    const { count } = await import("drizzle-orm");
+    // Artiklar med matchande timeCodeKey + personliga uppgifter/scheman vars time_category = nyckeln.
+    const [art] = await db.select({ count: count() }).from(articles)
+      .where(and(eq(articles.tenantId, tenantId), eq(articles.timeCodeKey, key), isNull(articles.deletedAt)));
+    const [pt] = await db.select({ count: count() }).from(personalTasks)
+      .where(and(eq(personalTasks.tenantId, tenantId), eq(personalTasks.timeCategory, key)));
+    const [pts] = await db.select({ count: count() }).from(personalTaskSchedules)
+      .where(and(eq(personalTaskSchedules.tenantId, tenantId), eq(personalTaskSchedules.timeCategory, key)));
+    return (art?.count || 0) + (pt?.count || 0) + (pts?.count || 0);
+  }
+
+  async seedTimeCodeDefinitions(tenantId: string): Promise<void> {
+    const existing = await db.select({ key: timeCodeDefinitions.key }).from(timeCodeDefinitions)
+      .where(eq(timeCodeDefinitions.tenantId, tenantId));
+    const existingKeys = new Set(existing.map((r) => r.key));
+    const toInsert = DatabaseStorage.DEFAULT_TIME_CODES
+      .map((t, i) => ({ tenantId, key: t.key, label: t.label, groupKey: t.groupKey, priority: t.priority, sortOrder: i, isSystem: false }))
+      .filter((t) => !existingKeys.has(t.key));
+    if (toInsert.length > 0) {
+      await db.insert(timeCodeDefinitions).values(toInsert);
     }
   }
 
