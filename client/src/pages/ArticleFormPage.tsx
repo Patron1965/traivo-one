@@ -673,6 +673,35 @@ export default function ArticleFormPage() {
   // fritext-bakåtkompatibilitet — befintliga fritextvärden förblir valbara.
   const { options: executionCodeOptions } = useExecutionCodes([formData.performerCategory]);
   const { options: timeCodeOptions } = useTimeCodes([formData.timeCodeKey]);
+  const groupedTimeCodeOptions = useMemo(() => {
+    const GROUP_ORDER = ["produktion", "stalltid", "restid", "internt", "egentid"];
+    const GROUP_LABELS: Record<string, string> = {
+      produktion: "Produktion",
+      stalltid: "Ställtid",
+      restid: "Restid",
+      internt: "Interntid",
+      egentid: "Egentid",
+    };
+    const groups: Record<string, typeof timeCodeOptions> = {};
+    for (const opt of timeCodeOptions) {
+      const key = opt.isLegacy ? "__legacy__" : opt.groupKey || "__other__";
+      (groups[key] ||= []).push(opt);
+    }
+    const orderedKeys = [
+      ...GROUP_ORDER.filter((k) => groups[k]),
+      ...Object.keys(groups).filter(
+        (k) => !GROUP_ORDER.includes(k) && k !== "__legacy__" && k !== "__other__",
+      ),
+      ...(groups["__other__"] ? ["__other__"] : []),
+      ...(groups["__legacy__"] ? ["__legacy__"] : []),
+    ];
+    return orderedKeys.map((key) => ({
+      key,
+      label:
+        key === "__legacy__" ? "Fritext" : key === "__other__" ? "Övrigt" : GROUP_LABELS[key] ?? key,
+      options: groups[key] ?? [],
+    }));
+  }, [timeCodeOptions]);
   // Task #837: Fortnox-koppling. `fortnoxArticleNumber` skickas bara när
   // `fortnoxLinkTouched` är true så att oförändrad redigering inte raderar kopplingen.
   const [fortnoxArticleNumber, setFortnoxArticleNumber] = useState<string | null>(null);
@@ -2191,6 +2220,36 @@ export default function ArticleFormPage() {
                   />
                 </div>
               )}
+              <div className="space-y-2">
+                <Label htmlFor="timeCodeKey">Tidstyp</Label>
+                <Select
+                  value={formData.timeCodeKey || "__none__"}
+                  onValueChange={(v) => setFormData({ ...formData, timeCodeKey: v === "__none__" ? "" : v })}
+                >
+                  <SelectTrigger id="timeCodeKey" data-testid="select-time-code">
+                    <SelectValue placeholder="Välj tidstyp" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">Ingen</SelectItem>
+                    {groupedTimeCodeOptions.map((group) => (
+                      <SelectGroup key={group.key}>
+                        <SelectLabel>{group.label}</SelectLabel>
+                        {group.options.map((opt) => (
+                          <SelectItem key={opt.value} value={opt.value} data-testid={`option-time-code-${opt.value}`}>
+                            {opt.isLegacy ? `${opt.label} (fritext)` : opt.label}
+                            {opt.priority ? (
+                              <span className="ml-2 text-xs text-muted-foreground">prio {opt.priority}</span>
+                            ) : null}
+                          </SelectItem>
+                        ))}
+                      </SelectGroup>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  Vilken tidstyp (produktion/ställtid/internt/egentid) artikelns utförda tid räknas som — enligt tidskod-registret med prioritet. Fryses per uppgift vid expansion.
+                </p>
+              </div>
             </div>
 
             <div className="space-y-2 rounded-md border bg-muted/40 px-3 py-3 text-sm" data-testid="panel-price-buildup">
@@ -3104,28 +3163,6 @@ export default function ArticleFormPage() {
               </Select>
               <p className="text-xs text-muted-foreground">
                 Vilken utförandekod (utförartyp) som normalt utför artikeln. Hanteras i utförandekod-registret.
-              </p>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="timeCodeKey">Tidskod</Label>
-              <Select
-                value={formData.timeCodeKey || "__none__"}
-                onValueChange={(v) => setFormData({ ...formData, timeCodeKey: v === "__none__" ? "" : v })}
-              >
-                <SelectTrigger id="timeCodeKey" data-testid="select-time-code">
-                  <SelectValue placeholder="Välj tidskod" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__none__">Ingen</SelectItem>
-                  {timeCodeOptions.map((opt) => (
-                    <SelectItem key={opt.value} value={opt.value} data-testid={`option-time-code-${opt.value}`}>
-                      {opt.isLegacy ? `${opt.label} (fritext)` : opt.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <p className="text-xs text-muted-foreground">
-                Vilken tidskod (produktion/ställtid/internt/egentid) artikelns utförda tid räknas som. Hanteras i tidskod-registret; fryses per uppgift vid expansion.
               </p>
             </div>
           </FormSection>

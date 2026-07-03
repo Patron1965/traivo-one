@@ -42,3 +42,15 @@ val vid nästa recompute; guarden + manual-flaggan är enda skyddet.
 **How to apply:** rör du recompute-loopen, PATCH-guarden eller frontendens
 byt-tidskod/reset-knappar — behåll "auto skriver bara när !manual" och skicka aldrig
 `timeCategory` på reset.
+
+## Tidstyp-register (groupKeys) — obs mismatch mot användarens mentala modell
+`time_code_definitions.groupKey` har EXAKT fyra värden: `produktion | stalltid | internt |
+egentid` (ingen `restid`-grupp). Restid-koder bor under andra grupper (t.ex.
+`travel_between_jobs`/`travel_commute`). Artikelformulärets **"Tidstyp"-fält bor i sektionen
+Pris & Ekonomi** (bredvid Produktionstid), surfar registret grupperat på groupKey + prioritet
+via `useTimeCodes` (bunden till `articles.timeCodeKey`). Egentid-tasks sätter tidskod i
+`EgentidScheduleDialog` (filtrerat till egentid-gruppen); system-restid auto-klassas.
+**Why:** produktägaren tänker "tidstyp" = Produktion/Interntid/Restid/Egentid, men registret
+har stalltid i st.f. restid — lita på registret som källa.
+**How to apply:** lägg aldrig till en "restid"-grupp utan att först ändra `timeCodeGroupKeys`
+i `shared/schema.ts` + seeden; ändra aldrig groupKey-enumet enbart utifrån UI-önskemål.

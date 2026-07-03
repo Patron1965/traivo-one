@@ -21,7 +21,7 @@ inte lagrad som metadata_katalog/metadata_varden-rader.
 - **"Låst" betyder bara renderad read-only**, inte en DB-lås. Geokoordinater m.m. visas skrivskyddat
   för att undvika manuell krock; ingen kolumn/lås ändras.
 
-**Why:** Task #1085 krävde att specialflikar (Ordrar/Rating/Felanmälningar) viks in i metadata-modellen
+**Why:** Kravet var att specialflikar (Ordrar/Rating/Felanmälningar) viks in i metadata-modellen
 som tydligt märkta systemfält UTAN att fabricera data eller skriva nya metadata-rader (objekt-360-principen).
 **How to apply:** Lägg aldrig till ett systemfält som inte backas av en verklig kolumn/relation/live-compute;
 nya fält ska in i den enda servicen så båda ytorna får dem samtidigt.
