@@ -1,0 +1,146 @@
+{
+  "sessionId": "13dab68242",
+  "exportedAt": "2026-07-03T09:10:33.966Z",
+  "summary": "### Key Topics Discussed\n- Kommenteringar till användargränssnittet för ELN.\n- Möjlighet att skapa färdigdefinierade sparade filter i ELN för enkel åtkomst av olika distriktsindelningar.\n- Hur distrikt definieras i filter: med postnummer och orter.\n- Användning av frifält för att filtrera, t.ex. för att hitta jobb relaterade till \"Axfood\", eller med fristrängar som \"vård, tvätt, hemköp\" som då listar alla matchingar.\n- Problem med \"uppgiftstyperna\" i ELN, där Replik har lagt in typer som inte finns i uppgiftsregistret.\n- Förslag på ny navigationslogik för uppgiftstyper i ELN, liknande befintlig funktionalitet för tjänstefullt.\n- Möjlighet att fördjupa befintliga filter.\n- Fler filterrader kan läggas till.\n- Sökning av jobb baserat på geografisk position (postnummer, ort), tid och utförandetyp.\n- Möjlighet att se tidigare och framtida jobb effektivt.\n- Ett fördjupat filter ska göra det möjligt att söka på alla fält i uppgiftspaketet, som presenterades i den kolumnindelade Excel-filen.\n- Filtrering baserat på uppgiftstyp och uppgiftsstatus i systemet.\n- Att kunna skicka en filtrerad lista med uppgifter till ett specifikt team för en viss vecka.\n- Guide för att snabbt hitta team och rätt vecka vid tilldelning av jobb.\n- Möjlighet att ångra tilldelning av jobb till fel team eller vecka.\n- Användning av flera skärmar för planerare: en för att vaska fram jobb och en för planeringsveckan med strukturerat team.\n\n### Decisions Made\n- Uppgiftsstatus ska hänga ihop direkt med systemet.\n\n### Action Items\n- Rådis ska uppdatera ett fält i ELN baserat på rensade register, inte tomt innehåll.\n\n### Important Points & Insights\n- Sparade filter bör kunna inkludera geografiskt område och andra relevanta kriterier, t.ex. \"Sundsvall rullbara tjärn\".\n- Distriktsindelning kan enkelt plockas fram med sparade filter, vilket eliminerar behovet av att återskapa filtret.\n- Eftersom det saknas en funktion för att definiera distrikt direkt, används postnummer och orter för att definiera distrikt i filtret. Alla dessa måste vara positiva för att inkluderas.\n- Filtrering via postnummer och ort inkluderar uppgifter som matchar dessa kriterier.\n- Replik har implementerat en liknande logik för tjänstefullt som föreslås för uppgiftstyper, där användaren söker fram och lägger till värden i en ruta med ett bortkryssningsalternativ.\n- Sparade filter ska vara namngivna och snabbt kunna väljas för att vaska fram uppgifter baserat på huvudsakliga frågeställningar som område, postnummer, ort, frisök efter uppgifternas namn samt tidsintervall.\n- Ett fördjupat filter bör möjliggöra intensiv sökning på alla informationsfält i uppgiftspaketet.\n- En guide ska hjälpa användaren att snabbt hitta rätt team och vecka vid jobbtilldelning.\n- Det ska finnas en funktion för att backa tillbaka om man lagt jobb på fel team eller vecka.\n- Planerare kommer att arbeta med flera skärmar; en för att filtrera fram jobb och en för att visa och fylla planeringsveckan för specifika team.\n\n### Open Questions/Pending Items\n- Felaktiga uppgiftstyper som lagts in av Replik i ELN behöver åtgärdas och ersättas med den föreslagna sökningslogiken.",
+  "conversation": [],
+  "transcripts": [
+    {
+      "text": "Nu kan du.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Jo. E-ELN.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Ja, nu är det på. Jo, det här är då kommenteringar till då användargränssnittet Grovplanering här då. Och, eh, eh, vi måste också be Räppligt nu då att verkligen uppdatera det här fältet då så att det blir, eh, baserat på de rensade registerna och inte en massa annat tomt då. Eh, men vad beträffar då det här filterfältet och så-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. Är det två saker. Det ena är att...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Man ska kunna skapa färdigdefinierade sparade filter så att man kan alltså definiera då ett filter och kunna namnge det som till exempel, äh, Sundsvall rullbara tjärn. Och i det filtret så sparar man då vilket geografiskt område det här AC och man sparar, äh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Vilken typ av uppgifter som då ska filtreras fram här då. På det viset så kan man ju då på ett enkelt sätt plocka fram då olika distriktsindelningar på det här, på det här viset då. Och så man slipper skapa filtret om och om igen då. Så en snabb funktion där. Och nu till själva filtret då. Äh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "När man söker på det här så kan man ju då söka på område då. Och här har ju då den här något som kallas distrikt då. Och vi har ingen funktion där vi kan definiera distriktet. Så åtminstone i det här läget så blir det ju då att man definierar distriktet med postnummer i filtret då. Och man kan definiera det med orter som man också då plockar fram då som komplement till äh... Postnumrena. Och alla de här måste ju då vara positiva.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Träffar då eller vad man ska säga. Så har en uppgift ett postnummer, ja då kommer det med. Har en uppgift en ort som ligger med, ja då kommer då det med där då. Och det är möjligt också då att det skulle finnas frifälts...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Ja, så frif... fälts... fridextält här, där man då kan skriva in, till exempel, om man nu skulle vilja då att man bara får upp då jobb som har med, säger vi, Axfood att göra, till exempel. Eh, sen har vi då tidshorisonten, den är ju okej. Men en sak som är inte okej då, det är uppgiftstyperna. För här har Replik valt att lägga då uppgiftstyper som inte finns i det här uppgiftsregistret då.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Det här har då Replik hitta-hittat på själv och formen här bör ju vara, eftersom det kan finnas många uppgiftstyper då, att man har samma logik som på många andra ställen att man söker fram...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "En, en, en, en, en värde och så trycker man på det och då dyker det upp i en, i en ruta med ett litet, eh, kryss på. Så att om man inte vill vara med det så kryssar man bort det och så kan man lägga till då en eller flera såna här uppgiftstyper i den här rutan. Det är samma logik som Replik har byggt för tjänstfullt på andra ställen. Och det finns väl ingenting heller som hindrar då att man har samma logik på uppgiftsstatus. Men uppgiftsstatus i det här fallet, den ska ju direkt hänga ihop med systemet...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Eh, logiska, eh, flöde som vi gick igenom tidigare då. Eh, sen finns det ju också möjlighet att fördjupa det här filtret då. Eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Eh, och, eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Där finns det ju...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Nej, det finns... Jo, fler filter. Man kan alltså lägga till fler filterrader då. Och dit jag vill komma på, till här då, det är att det naturliga är att man kommer att söka det här utifrån geografisk position och vilken tid det är och vilken, eh, utförandetyp det är då. För det, det är grunden. Och sen så kommer det då att vara intressant att se jobb som redan är tilldelade och jobb som, som då är utförda och så vidare. Då kommer man att kunna söka och se då på tidigare jobb-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. Och framtida jobb på ett effektivt sätt. Men tillägget till, till det här då, alltså det fördjupade filtret då, det blir ju egentligen då att kunna söka på alla fält som finns då i det här så kallade uppgiftspaketet kring då en uppgift då. Alltså den här A till, eh, den här kolumnindelade Excel-filen som vi redovisade och, eh, gjorde komplett då. Så att i det fördjupade filtret så ska man då kunna gö-göra det.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Ja, det var väl liksom sammanfattningen utav det. Så nummer ett är att man ska kunna skapa och spara filternamngädda och man ska kunna snabbt då kunna välja dem och man ska kunna vaska fram det här då utifrån huvudfrågeställningen då. Det vill säga...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Vilket område, postnummer, ort, eh, eventuellt någon sorts frisöksrutor där man kan, kan då söka på namnen på uppgifterna, till exempel vård, tvätt, hemköp. Och om man då skriver hemköp så kommer då, eh, alla de uppgifterna upp. Och skriver man vård, tvätt, hemköp så kommer också samma uppgifter upp. Och sen kan man begränsa det då per orter och geografi och begränsa det utifrån då tidsfönster och begränsa det utifrån...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Typ av uppgift, uppgiftstyp då. Och begränsa det utifrån vilken status då, eh, respektive uppgift har i systemet. Med då ett fördjupat filter där man då intensivt ska kunna söka på alla informationsfälten i informationspaketet för varje uppgift.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Eh, det var väl allt och jag tycker att det här är tydligt nog, så det är bara för det rättigt att se till att det funkar. Jo, en sak också här, men den finns ju med då för tanken är ju... Och det, det är ju perfekt i botten utav den här då. När man, när man har fått den här listan så märker man antingen för, för enskilda eller man märker för hela rubbet. Och då ska man då skicka in det hära till då ett visst team och ett visst...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Teams vecka då. Och...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "I det läget då så är det ju bra då att man får en guide där så att man snabbt hittar teamen och snabbt hittar då rätt vecka. Och att det också då finns en möjlighet om det blir fel där att man kan backa tillbaka då om man la en hoper med jobb på fel team eller på fel vecka då.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Men nästa vecka kommer planeraren att sitta då med o-o- flera skärmar här så att man jobbar alltså, eh, och vaskar fram jobben i en skärm och sen har han då planeringsveckan för det strukturerade team uppe på en skärm till då där han ser vilken vecka han håller på att fylla då.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    }
+  ]
+}

@@ -1,0 +1,20 @@
+{
+  "sessionId": "158c2b225",
+  "exportedAt": "2026-07-03T09:11:58.268Z",
+  "summary": "### Key Topics Discussed\n- User perspective on filter functionality\n- Importance of a compact filter display\n- Prioritizing screen space for task lists\n\n### Important Points & Insights\n- The filter should be collapsible to maximize screen space for task lists.\n- The summary of filtered items at the top must always be visible.\n- The main area of the screen should be dedicated to the task list, which users will scroll through and select from based on the summary.\n\n### Open Questions/Pending Items\n- How to best implement the collapsing functionality for the filter.\n- How to ensure the summary area remains visible while the filter is compact.",
+  "conversation": [],
+  "transcripts": [
+    {
+      "text": "Tack. Hallå? Jo, ytterligare ett användarmässigt perspektiv på det här då är ju att filtret kan ju med fördel komple... kom... eh, kollapsa helt och hållet då. För att när du jobbar med den här så kommer du liksom då behöva använda pennan så mycket som möjligt då.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Längst upp där vi har summeringen utav det som är framvaskat, den måste ju synas då. Men filtret får gärna bli så kompakt som möjligt då så att en så stor del utav skärmen som möjligt då är listan med uppgifterna och de klump... hopklumpade uppgifterna. Så att... För det är ju den du kommer att rulla upp och ner då och antingen välja alla utifrån vad summeringen blir här uppe.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    }
+  ]
+}

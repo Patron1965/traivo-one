@@ -35,8 +35,9 @@ import {
   Calendar, Loader2, ChevronRight, Wrench, Shield,
   Hash, Info, Box, Layers, ClipboardList, Plus,
   Trash2, Pencil, Save, X, Phone, Mail, LinkIcon, Search, History,
-  ArrowUp, ArrowDown, RotateCcw, Cog, Copy
+  ArrowUp, ArrowDown, RotateCcw, Cog, Copy, Gauge
 } from "lucide-react";
+import { ObjectOverview360 } from "@/components/objects/ObjectOverview360";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
 import L from "leaflet";
@@ -1470,128 +1471,32 @@ export default function ObjectDetailPage() {
       <div className="space-y-8" data-testid="object-detail-sections">
         {/* ==================== ÖVERSIKT ==================== */}
         <section id="object-section-overview" className="space-y-4 scroll-mt-4">
-          {/* Task #692: lyft fram systemfälten "Senaste arbetsorder"/"Senaste
-              felanmälan" (skrivs read-only av systemet, Task #682) direkt på kortet. */}
-          {(() => {
-            const latestWoEntry = findSystemMetadata(metadata, LATEST_WORKORDER_FIELD);
-            const latestIssueEntry = findSystemMetadata(metadata, LATEST_ISSUE_FIELD);
-            const latestWoValue = getMetadataDisplayValue(latestWoEntry);
-            const latestIssueValue = getMetadataDisplayValue(latestIssueEntry);
-            const latestWoChanged = formatChangedAt(latestWoEntry?.lastChangedAt);
-            const latestIssueChanged = formatChangedAt(latestIssueEntry?.lastChangedAt);
-            // Task #694: id för djuplänk (om systemfältet har ett inbäddat id).
-            const latestWoId = parseSystemRefId(latestWoEntry, "wo-create");
-            const latestIssueId = parseSystemRefId(latestIssueEntry, "public-issue-report");
-            return (
-              <Card className="mb-4" data-testid="card-latest-activity">
-                <CardHeader className="pb-3">
-                  <div className="flex items-center justify-between">
-                    <CardTitle className="text-base flex items-center gap-2">
-                      <Clock className="h-4 w-4" /> Senaste aktivitet
-                    </CardTitle>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setWorkOrderDialogOpen(true)}
-                      data-testid="button-add-workorder"
-                    >
-                      <Plus className="h-3.5 w-3.5 mr-1" /> Ny snabborder
-                    </Button>
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div className="rounded-lg border p-3" data-testid="block-latest-workorder">
-                      <div className="flex items-center gap-1.5 text-xs text-muted-foreground mb-1.5">
-                        <ClipboardList className="h-3.5 w-3.5" /> Senaste arbetsorder
-                        <Badge variant="outline" className="text-[10px] px-1 py-0 h-4">system</Badge>
-                      </div>
-                      {latestWoValue ? (
-                        <>
-                          <div className="text-sm font-medium break-words" data-testid="text-latest-workorder">{latestWoValue}</div>
-                          {latestWoChanged && (
-                            <div className="text-xs text-muted-foreground mt-0.5">Uppdaterad {latestWoChanged}</div>
-                          )}
-                          {latestWoId && (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="h-auto p-0 mt-1 text-xs text-primary hover:bg-transparent"
-                              onClick={() => navigate(`/work-orders/${latestWoId}`)}
-                              data-testid="link-latest-workorder"
-                            >
-                              Öppna arbetsorder <ChevronRight className="h-3 w-3 ml-0.5" />
-                            </Button>
-                          )}
-                        </>
-                      ) : (
-                        <div className="text-sm text-muted-foreground" data-testid="empty-latest-workorder">
-                          Ingen arbetsorder registrerad ännu
-                        </div>
-                      )}
-                    </div>
-
-                    <div className="rounded-lg border p-3" data-testid="block-latest-issue">
-                      <div className="flex items-center gap-1.5 text-xs text-muted-foreground mb-1.5">
-                        <AlertTriangle className="h-3.5 w-3.5" /> Senaste felanmälan
-                        <Badge variant="outline" className="text-[10px] px-1 py-0 h-4">system</Badge>
-                      </div>
-                      {latestIssueValue ? (
-                        <>
-                          <div className="text-sm font-medium break-words" data-testid="text-latest-issue">{latestIssueValue}</div>
-                          {latestIssueChanged && (
-                            <div className="text-xs text-muted-foreground mt-0.5">Uppdaterad {latestIssueChanged}</div>
-                          )}
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-auto p-0 mt-1 text-xs text-primary hover:bg-transparent"
-                            onClick={() => navigate(latestIssueId ? `/cases?case=public:${latestIssueId}` : "/cases")}
-                            data-testid="link-latest-issue"
-                          >
-                            {latestIssueId ? "Öppna felanmälan" : "Visa felanmälningar"} <ChevronRight className="h-3 w-3 ml-0.5" />
-                          </Button>
-                        </>
-                      ) : (
-                        <div className="text-sm text-muted-foreground" data-testid="empty-latest-issue">
-                          Ingen felanmälan registrerad ännu
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            );
-          })()}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-base flex items-center gap-2">
-                  <ClipboardList className="h-4 w-4" /> Sammanfattning
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="text-center p-3 bg-muted/50 rounded-lg">
-                    <div className="text-2xl font-bold" data-testid="text-workorder-count">{workOrders.length}</div>
-                    <div className="text-xs text-muted-foreground">Arbetsordrar</div>
-                  </div>
-                  <div className="text-center p-3 bg-muted/50 rounded-lg">
-                    <div className="text-2xl font-bold" data-testid="text-children-count">{descendants.length}</div>
-                    <div className="text-xs text-muted-foreground">Barnobjekt</div>
-                  </div>
-                  <div className="text-center p-3 bg-muted/50 rounded-lg">
-                    <div className="text-2xl font-bold" data-testid="text-metadata-count">{metadata.length}</div>
-                    <div className="text-xs text-muted-foreground">Metadata</div>
-                  </div>
-                  <div className="text-center p-3 bg-muted/50 rounded-lg">
-                    <div className="text-2xl font-bold" data-testid="text-contacts-count">{contacts.length}</div>
-                    <div className="text-xs text-muted-foreground">Kontakter</div>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+          {/* Task #1128: 360°-översikt — tätt rutnät av kompakta kategorikort
+              (senaste post + karusell + källhänvisning + "Visa alla"). Ersätter
+              tidigare "Senaste aktivitet" + "Sammanfattning". De djupa sektionerna
+              nedan behålls som drilldown-mål via "Visa alla". */}
+          <div className="flex items-center justify-between">
+            <h2 className="text-base font-semibold flex items-center gap-2">
+              <Gauge className="h-4 w-4" /> 360°-översikt
+            </h2>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setWorkOrderDialogOpen(true)}
+              data-testid="button-add-workorder"
+            >
+              <Plus className="h-3.5 w-3.5 mr-1" /> Ny snabborder
+            </Button>
           </div>
+          <ObjectOverview360
+            objectId={objectId}
+            contacts={contacts}
+            workOrders={workOrders}
+            issueReports={issueReports}
+            assignments={objectAssignments}
+            onShowAll={scrollToSection}
+            onNavigate={navigate}
+          />
         </section>
 
         {/* ==================== SLÄKT & HIERARKI ==================== */}

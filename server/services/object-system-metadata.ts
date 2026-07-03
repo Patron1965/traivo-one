@@ -21,6 +21,7 @@ import { db } from "../db";
 import { and, eq, inArray, isNull, sql, desc } from "drizzle-orm";
 import {
   assignments,
+  customerCommunications,
   customers,
   orderConcepts,
   resources,
@@ -114,6 +115,29 @@ export type SystemRating = {
   createdAt: string | null;
 };
 
+// Task #1128: Inspektionsresultat — backas av inspection_metadata (objekt-scopat).
+export type SystemInspection = {
+  id: string;
+  inspectionType: string | null;
+  status: string | null;
+  comment: string | null;
+  inspectedBy: string | null;
+  inspectedAt: string | null;
+};
+
+// Task #1128: Kommunikation — backas av customer_communications (objekt-scopat).
+// Endast tenant-scopad läsning; innehåller mottagar-PII → aldrig utanför tenant.
+export type SystemCommunication = {
+  id: string;
+  channel: string | null;
+  notificationType: string | null;
+  recipientName: string | null;
+  subject: string | null;
+  aiGenerated: boolean;
+  status: string | null;
+  sentAt: string | null;
+};
+
 export type ObjectSystemGeneratedMetadata = {
   address: SystemAddressGroup;
   position: SystemPositionGroup;
@@ -123,6 +147,8 @@ export type ObjectSystemGeneratedMetadata = {
   images: SystemImage[];
   issueReports: SystemIssueReport[];
   ratings: SystemRating[];
+  inspections: SystemInspection[];
+  communications: SystemCommunication[];
 };
 
 const toIso = (v: unknown): string | null =>
@@ -313,6 +339,59 @@ async function computeRatings(
   }));
 }
 
+async function computeInspections(
+  tenantId: string,
+  objectId: string,
+): Promise<SystemInspection[]> {
+  // storage.getInspectionMetadata är redan tenant+objekt-scopad och sorterad
+  // (inspectedAt desc). Kapa till senaste 50.
+  const rows = await storage.getInspectionMetadata(tenantId, objectId);
+  return rows.slice(0, 50).map((r) => ({
+    id: r.id,
+    inspectionType: r.inspectionType ?? null,
+    status: r.status ?? null,
+    comment: r.comment ?? null,
+    inspectedBy: r.inspectedBy ?? null,
+    inspectedAt: toIso(r.inspectedAt),
+  }));
+}
+
+async function computeCommunications(
+  tenantId: string,
+  objectId: string,
+): Promise<SystemCommunication[]> {
+  // Tenant-scopad läsning (mottagar-PII får aldrig lämna tenant).
+  const rows = await db
+    .select({
+      id: customerCommunications.id,
+      channel: customerCommunications.channel,
+      notificationType: customerCommunications.notificationType,
+      recipientName: customerCommunications.recipientName,
+      subject: customerCommunications.subject,
+      aiGenerated: customerCommunications.aiGenerated,
+      status: customerCommunications.status,
+      sentAt: customerCommunications.sentAt,
+      createdAt: customerCommunications.createdAt,
+    })
+    .from(customerCommunications)
+    .where(and(
+      eq(customerCommunications.tenantId, tenantId),
+      eq(customerCommunications.objectId, objectId),
+    ))
+    .orderBy(desc(customerCommunications.createdAt))
+    .limit(50);
+  return rows.map((r) => ({
+    id: r.id,
+    channel: r.channel ?? null,
+    notificationType: r.notificationType ?? null,
+    recipientName: r.recipientName ?? null,
+    subject: r.subject ?? null,
+    aiGenerated: !!r.aiGenerated,
+    status: r.status ?? null,
+    sentAt: toIso(r.sentAt) ?? toIso(r.createdAt),
+  }));
+}
+
 /**
  * Bygger objektets systemgenererade metadata-paket. Tenant-ägarkontroll görs av
  * anroparen (routen) — denna funktion antar att objektet redan validerats.
@@ -351,15 +430,25 @@ export async function getObjectSystemGeneratedMetadata(
     what3words,
   };
 
-  const [pointedInConcepts, tasksHistory, tasksFuture, imagesRaw, issuesRaw, ratings] =
-    await Promise.all([
-      computePointedInConcepts(tenantId, object),
-      computeTasksHistory(tenantId, objectId),
-      computeTasksFuture(tenantId, objectId),
-      storage.getObjectImages(objectId),
-      storage.getPublicIssueReports(tenantId, { objectId }),
-      computeRatings(tenantId, objectId),
-    ]);
+  const [
+    pointedInConcepts,
+    tasksHistory,
+    tasksFuture,
+    imagesRaw,
+    issuesRaw,
+    ratings,
+    inspections,
+    communications,
+  ] = await Promise.all([
+    computePointedInConcepts(tenantId, object),
+    computeTasksHistory(tenantId, objectId),
+    computeTasksFuture(tenantId, objectId),
+    storage.getObjectImages(objectId),
+    storage.getPublicIssueReports(tenantId, { objectId }),
+    computeRatings(tenantId, objectId),
+    computeInspections(tenantId, objectId),
+    computeCommunications(tenantId, objectId),
+  ]);
 
   const images: SystemImage[] = imagesRaw.map((img) => ({
     id: img.id,
@@ -388,5 +477,7 @@ export async function getObjectSystemGeneratedMetadata(
     images,
     issueReports,
     ratings,
+    inspections,
+    communications,
   };
 }

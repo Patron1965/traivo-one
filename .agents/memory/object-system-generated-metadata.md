@@ -9,8 +9,13 @@ inte lagrad som metadata_katalog/metadata_varden-rader.
 
 - En enda backend-källa bygger paketet (`server/services/object-system-metadata.ts`),
   exponerad via `GET /api/objects/:id/system-generated-metadata` (tenant-ägarkontroll i routen).
-- Frontend-panelen (`ObjectSystemGeneratedPanel`, prop `{ objectId }`) konsumerar endpointet och
-  visas på TVÅ ställen: ObjectsPage sidopanel och ObjectDetailPage metadata-fliken. Håll prop-formen stabil.
+  Paketet inkluderar även inspektioner (`inspection_metadata`) och kommunikation
+  (`customer_communications`). Kommunikation bär mottagar-PII → läsningen MÅSTE vara
+  tenant+objekt-scopad (aldrig utanför tenant).
+- Konsumenter (håll prop-/svarsformen stabil): (1) `ObjectSystemGeneratedPanel` på ObjectsPage
+  sidopanel + ObjectDetailPage metadata-flik; (2) `ObjectOverview360`-rutnätet (360°-översikten
+  på objektdetaljsidans Översikt) som mappar svaret till kompakta kategorikort. Nya kategorier
+  ska in i servicen så ALLA ytor får dem samtidigt — hämta aldrig ad-hoc i en enskild yta.
 - **Inpekade orderkoncept live-beräknas** (återanvänder delade resolvern: deriveConceptTargets +
   getObjectSubtreeIds-medlemskap + evaluateConditionsForObject) — speglar steg 4-preview/expansion.
 - **"Låst" betyder bara renderad read-only**, inte en DB-lås. Geokoordinater m.m. visas skrivskyddat
