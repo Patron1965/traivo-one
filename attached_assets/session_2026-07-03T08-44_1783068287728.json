@@ -1,0 +1,86 @@
+{
+  "sessionId": "b0e3ec246",
+  "exportedAt": "2026-07-03T08:44:42.930Z",
+  "summary": "### Key Topics Discussed\n- Discussed three open questions: the nature of the rules, the level at which the rule is set, and how dependent articles are categorized.\n- The possibility of setting rules at article, order concept, or object level.\n- Clarification on how dependent jobs should behave when the main job is moved.\n- The concept of \"frozen\" versus \"soft\" offset for scheduling.\n\n### Decisions Made\n- The rule for dependent articles will be set at the company settings level under a \"Dependent Articles\" heading.\n- Dependent articles will have a tolerance of plus or minus one hour.\n- Dependent articles will be scheduled within a time window of 8 AM to 4 PM.\n- The decision was made to initially set the rule at the company level. Future adjustments to article, order concept, or object level can be made if needed.\n- For dependent jobs where the main job is moved, the dependent job (the \"tail\") will move with the main job in the performer's plan.\n- Offsets for dependent jobs cannot be absolute; they must include a time window (e.g., three hours plus/minus one hour) to avoid constant rescheduling.\n\n### Important Points & Insights\n- The most logical approach for setting rules for dependent articles seems to be at the company level, or to integrate it when defining a dependent article to another article. The decision on the exact model for implementation will be based on what is easiest to code.\n- Maintaining delivery times will be challenging without a flag indicating upcoming changes.\n\n### Open Questions/Pending Items\n- The exact nature of \"reglernas natur\" (the rules' nature) was initially an open question, which is now addressed by the decision to set the rule at the company settings level, with the flexibility for future adjustments.\n- The question of \"frozen\" versus \"soft\" offset remains open/parked.",
+  "conversation": [],
+  "transcripts": [
+    {
+      "text": "Smålar på de här tre... Det är tre öppna frågor då. Eh, fråga tre då, reglernas natur.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Eh, kvar är bara på vilken nivå det sätts.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Jag tror att den här regeln sätts på företagsinställningarna under en, en, en, en rubrik då som heter beroendeartiklar och sen så anger man generellt för, för hela företaget då att beroendeartiklar har en tolerans på plus minus en timme och de läggs in på ett tidsfönster som är mellan klockan, klockan åtta och, eh, sexton på eftermiddagarna.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och det, det är då den regeln om jag får, f-f-f-förklara det då att... Och då gäller det allting då. Skulle inte det vara tillräckligt i det framtida läge så får man väl då ta ett beslut om det ska då ligga på artikelnivå eller orderkoncept eller objektnivå. Eh, mest troligt inte objektnivå då, men, men, men... Och är det så att Replik nu tycker att det logiskt är bättre då att lägga in det på, eh, artikelnivå då. Visst kan man ju göra det då, men ja, det kanske är mest logiskt att-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Ja.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Tänker efter då. Så i samma läge som man då säger att det är en beroendeartikel till en annan artikel, så styr man in det här där då. Det får, eh, eh, vi välja den modell som är mest enklast att, att koda då.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. En fråga två då...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Eh, är... Frågan tycks då mest oklar. När huvudjobbet flyttas och så utförs, ska svansen flytta i utföra B's plan eller bara flaggas? Nej, min, min uppfattning är nog eftersom att det här är ju ett krav då, det är att då åker liksom det här jobbet med i hans plan då.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Eh, annars kommer man inte att hålla de här leveranstiderna då. Naturligtvis eventuellt ihop med då en flagga att det kommer, kommer, kommer då upp där, det här och...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Ja, där är en enkel. Fråga ett då: fryst mot mjukt offset.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Äh, ja, den är fortfarande parkerad då.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Men, men, äh, i-i-i offsetet måste... Alltså, vi kan inte ha ett absolut offset, utan det måste ju vara då att det finns en offset på tre timmar plus minus en timme då, så att man får ett tidsfönster. Annars så kommer ju det här att hela tiden ändras. Mm.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    }
+  ]
+}

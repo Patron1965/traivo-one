@@ -131,10 +131,10 @@ Beroendeuppgifter är **uppgifter som vilka som helst** (§1.4 — egen utföran
 
 **Relativ placering ("svansen hänger med"):**
 - Offset uttrycks **relativt** huvuduppgiften/klumpen (t.ex. "3 h före" eller "1 dygn före"), inte som absolut tid. När planeraren drar klumpen i finplaneringen ska svansen **flytta med** och räknas om (huvudjobb ons 13:00, 3 h före → aviseringsuppgift 10:00; flyttas huvudjobbet flyttas svansen).
-- Offset ger bara en **justerad mål-utförandetid** (huvudjobb ons 14:00, offset 3 h/3 dygn → svansen får mål-tid därefter). Svansen har ett **eget, snävt toleransfönster** kring mål-tiden (huvudinställning, t.ex. **± 1 h** utifrån krävd tid relativt huvudjobbet) och får **INTE** ärva huvudjobbets huvudtidsfönster — den ska ligga tätt inpå sin krävda relativa tid, inte spridas ut över hela leveransfönstret.
+- Offset ger bara en **justerad mål-utförandetid** (huvudjobb ons 14:00, offset 3 h/3 dygn → svansen får mål-tid därefter). Svansen har ett **eget, snävt toleransfönster** kring mål-tiden (företagsinställning "Beroendeartiklar", t.ex. **± 1 h** utifrån krävd tid relativt huvudjobbet) och får **INTE** ärva huvudjobbets huvudtidsfönster — den ska ligga tätt inpå sin krävda relativa tid, inte spridas ut över hela leveransfönstret.
 
 **Affärsregel — placering inom arbetstid (undvik natt/kväll/helg):**
-- Ren offset räcker inte: huvudjobb 07:00 − 3 h = 04:00 → orimligt. Svansartiklar ska **placeras inom officiell arbetstid** (huvudinställning, t.ex. **08–16**), aldrig natt, kväll eller helg — av hänsyn till **både kund och utförare**. Hamnar mål-tiden utanför arbetstidsfönstret **flyttas den** (framåt/bakåt) till närmaste tillåtna tid, eller stannar kvar.
+- Ren offset räcker inte: huvudjobb 07:00 − 3 h = 04:00 → orimligt. Svansartiklar ska **placeras inom officiell arbetstid** (företagsinställning under rubriken "Beroendeartiklar", t.ex. **08–16**), aldrig natt, kväll eller helg — av hänsyn till **både kund och utförare**. Hamnar mål-tiden utanför arbetstidsfönstret **flyttas den** (framåt/bakåt) till närmaste tillåtna tid, eller stannar kvar.
 - Detta är en **placeringsregel** (default-placering), inte ett hårt förbud: utföraren kan ändå välja att avvika. Samma slags mekanik som **leveranstidsfönstren (§E)** (hårda/mjuka, positiva/negativa fönster) — kombinera arbetstidsfönstret med svansens egna ± toleransfönster. **Verifiera mot befintliga `frozenTimeRules`/leveranstidsmotorn** innan en parallell modell byggs.
 - **Varning vid risk:** planeras eller utförs svansen så att den riskerar hamna utanför sitt förväntade utförandetidsfönster ska systemet **varna** (samma logik som befintlig SLA-/tidsfönstervarning), särskilt för beroendeuppgifter där en missad svans blockerar huvudjobbet.
 
@@ -147,11 +147,13 @@ Beroendeuppgifter är **uppgifter som vilka som helst** (§1.4 — egen utföran
 - Klumpningsmotorn (grovplanering `metadata.kind=clump`) + leveranstidsmotorn/`frozenTimeRules` (hård = snapshot/blockering, mjuk = prioritetsdelta i VRP).
 - Mellanstatus "blockerad av beroende" är redan bekräftad (§5).
 
-**Öppna designfrågor:**
-1. **Relativt offset** — fryses offset per uppgift vid expansion (jfr frozna tidsregler) eller är det ett mjukt mål som motorn optimerar?
-2. **Cross-utförare-flytt** — ska svansen **auto-flytta** i den andra utförarens plan, eller bara **flaggas** (mellanstatus + notifiering) för den planeraren att bekräfta?
-3. **Var konfigureras reglerna** — svansens ± toleransfönster och arbetstidsfönstret (t.ex. 08–16) som huvudinställning per tenant, och/eller override per orderkoncept/artikel/objekt-metadata; samt relation till leveranstidsfönstren (§E). *(Reglernas natur är klar 2026-07-03 — kvar är på vilken nivå de sätts.)*
-4. **Lagerval** — svans-beroenden i `assignments` (koncept-expansion) vs `work_orders` (fält) enligt logistik-splitten; ett cross-utförare-beroende bryter dagens "håll hela paret i ett lager"-regel.
+**Beslutade (2026-07-03):**
+1. **Offset = relativt mål + toleransfönster, aldrig absolut.** Offset uttrycks som t.ex. "3 h ± 1 h" så att svansen får ett litet fönster i stället för en exakt tidpunkt. *Varför:* ett absolut offset skulle räknas om och **driva hela tiden**; ett relativt fönster ger stabilitet. (Den finare frågan *fryst-per-uppgift vs motor-optimerad* är underordnad och fortsatt parkerad — nyckeln är relativt-mål-med-fönster.)
+2. **Cross-utförare: svansen auto-flyttar** i den andra utförarens plan när huvudjobbet flyttas — det är ett **krav** (annars hålls inte leveranstiderna) — **kombinerat med en flagga/notifiering** som syns för den planeraren. Alltså *inte* "bara flaggas".
+3. **Reglerna sätts på företagsinställningarna** under en rubrik **"Beroendeartiklar"**, företagsgemensamt: tolerans **± 1 h** + tidsfönster **08–16**, gäller alla beroendeartiklar. Framtida override (om företagsnivå inte räcker) troligen på **artikelnivå** — samma ställe där man anger att artikeln är beroendeartikel till en annan artikel — ev. orderkoncept; **sannolikt inte objektnivå**. Välj den modell som är enklast att implementera.
+
+**Öppen designfråga (kvar):**
+4. **Lagerval** — svans-beroenden i `assignments` (koncept-expansion) vs `work_orders` (fält) enligt logistik-splitten; ett cross-utförare-beroende (beslut 2) bryter dagens "håll hela paret i ett lager"-regel och kräver antingen en brygga assignment↔work_order eller ett medvetet undantag.
 
 **Trigger att bygga:** när beroende-/aviseringsstyrd finplanering prioriteras. *Behövs inte just nu — parkerat.*
 
