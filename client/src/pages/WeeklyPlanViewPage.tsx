@@ -579,17 +579,28 @@ export default function WeeklyPlanViewPage() {
   const bookingRate: number =
     kpi.planningRate ?? (contractedMinutes > 0 ? plannedWorkMinutes / contractedMinutes : 0);
   // Tröskel ±15 min → "balanserad" (undvik brus från avrundning/småjusteringar).
-  const spilltidState: "over" | "under" | "balanced" =
-    spilltidMinutes > 15 ? "over" : spilltidMinutes < -15 ? "under" : "balanced";
-  const spilltidTone =
-    spilltidState === "over"
-      ? { text: "text-warning", badge: "border-warning/40 bg-warning/10 text-warning", Icon: TrendingUp, label: "Överbokad – produktionen tar av egentiden" }
-      : spilltidState === "under"
-        ? { text: "text-muted-foreground", badge: "border-border bg-muted text-muted-foreground", Icon: TrendingDown, label: "Underbokad – oplanerad tid kvar" }
-        : { text: "text-chart-2", badge: "border-chart-2/40 bg-chart-2/10 text-chart-2", Icon: Scale, label: "Balanserad beläggning" };
+  // Delad ton-härledning: används både för vecko-KPI och per-dag-strecket.
+  type DailyBooking = { day: number; bookedMinutes: number; capacityMinutes: number; spilltidMinutes: number };
+  const getSpilltidTone = (minutes: number) => {
+    const state: "over" | "under" | "balanced" =
+      minutes > 15 ? "over" : minutes < -15 ? "under" : "balanced";
+    if (state === "over")
+      return { state, text: "text-warning", badge: "border-warning/40 bg-warning/10 text-warning", barBg: "bg-warning", Icon: TrendingUp, label: "Överbokad – produktionen tar av egentiden" };
+    if (state === "under")
+      return { state, text: "text-muted-foreground", badge: "border-border bg-muted text-muted-foreground", barBg: "bg-muted-foreground/40", Icon: TrendingDown, label: "Underbokad – oplanerad tid kvar" };
+    return { state, text: "text-chart-2", badge: "border-chart-2/40 bg-chart-2/10 text-chart-2", barBg: "bg-chart-2", Icon: Scale, label: "Balanserad beläggning" };
+  };
+  const spilltidTone = getSpilltidTone(spilltidMinutes);
   const spilltidAbsHours = formatHoursDec(Math.abs(spilltidMinutes));
   const spilltidSignedText =
     spilltidMinutes > 0 ? `+${spilltidAbsHours}` : spilltidMinutes < 0 ? `−${spilltidAbsHours}` : spilltidAbsHours;
+
+  // Feature D drill-down: per-dag bokad vs kapacitet (server-beräknad; gate på närvaro).
+  const WEEKDAY_ABBR = ["Mån", "Tis", "Ons", "Tor", "Fre", "Lör", "Sön"];
+  const dailyBooking: DailyBooking[] = Array.isArray(kpi.dailyBooking) ? kpi.dailyBooking : [];
+  const visibleDays = dailyBooking.filter((d) => d.day <= 4 || d.bookedMinutes > 0);
+  const dailyMaxMinutes = Math.max(1, ...visibleDays.map((d) => Math.max(d.bookedMinutes, d.capacityMinutes)));
+  const dailyCapacityRef = Math.round(contractedMinutes / 5);
 
   const donutSegments = TIME_CATEGORY_ORDER.map((key) => ({
     key,
@@ -1157,6 +1168,50 @@ export default function WeeklyPlanViewPage() {
                     <KpiRow icon={Clock} label="Bokad arbetstid" value={formatHoursDec(plannedWorkMinutes)} testId="kpi-worked-hours" />
                     <KpiRow icon={spilltidTone.Icon} label="Spilltid (±)" value={spilltidSignedText} testId="kpi-spilltid" />
                   </div>
+                  {visibleDays.length > 0 && (
+                    <div className="border-t pt-3" data-testid="section-spilltid-daily">
+                      <p className="mb-2 text-xs font-medium text-muted-foreground">Spilltid per dag</p>
+                      <div className="flex items-end gap-1.5">
+                        {visibleDays.map((d) => {
+                          const tone = getSpilltidTone(d.spilltidMinutes);
+                          const barPct = Math.round((d.bookedMinutes / dailyMaxMinutes) * 100);
+                          const capPct = Math.round((d.capacityMinutes / dailyMaxMinutes) * 100);
+                          const signed =
+                            d.spilltidMinutes > 0
+                              ? `+${formatHoursDec(d.spilltidMinutes)}`
+                              : d.spilltidMinutes < 0
+                                ? `−${formatHoursDec(Math.abs(d.spilltidMinutes))}`
+                                : formatHoursDec(0);
+                          return (
+                            <div
+                              key={d.day}
+                              className="flex flex-1 flex-col items-center gap-1"
+                              title={`${WEEKDAY_ABBR[d.day]}: bokad ${formatHoursDec(d.bookedMinutes)} / kapacitet ${formatHoursDec(d.capacityMinutes)} (${signed})`}
+                              data-testid={`col-spilltid-day-${d.day}`}
+                            >
+                              <span className={`text-[10px] tabular-nums ${tone.text}`}>{signed}</span>
+                              <div className="relative h-16 w-full overflow-hidden rounded bg-muted/40">
+                                <div
+                                  className={`absolute inset-x-0 bottom-0 ${tone.barBg}`}
+                                  style={{ height: `${barPct}%` }}
+                                />
+                                {d.capacityMinutes > 0 && (
+                                  <div
+                                    className="absolute inset-x-0 border-t border-dashed border-muted-foreground/60"
+                                    style={{ bottom: `${Math.min(capPct, 98)}%` }}
+                                  />
+                                )}
+                              </div>
+                              <span className="text-[10px] text-muted-foreground">{WEEKDAY_ABBR[d.day]}</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                      <p className="mt-2 text-[10px] text-muted-foreground">
+                        Streckad linje = dagskapacitet ({formatHoursDec(dailyCapacityRef)}/dag). Stapel = bokad arbetstid.
+                      </p>
+                    </div>
+                  )}
                 </CardContent>
               </Card>
 

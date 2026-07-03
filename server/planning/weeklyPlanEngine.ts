@@ -87,6 +87,15 @@ interface WorkOrderFacts {
   executionType: string | null;
 }
 
+// Feature D drill-down: bokad arbetstid vs dagskapacitet per veckodag.
+// day: 0=mån..6=sön. spilltidMinutes = bokad − kapacitet (signerat).
+export interface DailyBooking {
+  day: number;
+  bookedMinutes: number;
+  capacityMinutes: number;
+  spilltidMinutes: number;
+}
+
 export interface WeeklyPlanSummary {
   // Minuter per kategori
   totalProductionMinutes: number;
@@ -112,6 +121,8 @@ export interface WeeklyPlanSummary {
   // >0 = överbokad (produktion tar av egentid), <0 = underbokad (oplanerad tid kvar).
   // Härlett: workedMinutes - contractedMinutes. Invariant: spilltidMinutes > 0 ⟺ overContracted.
   spilltidMinutes: number;
+  // Feature D drill-down: bokad arbetstid vs dagskapacitet per veckodag (0=mån..6=sön).
+  dailyBooking: DailyBooking[];
   utilizationRate: number; // producerade / avtalade
   planningRate: number; // arbetade / avtalade ( = "% av planerad arbetstid")
   billingRate: number; // producerade / arbetade
@@ -277,6 +288,48 @@ export function computeWeeklyPlanSummary(
   const contractedHours =
     plan.contractedHours ?? config.defaultContractedHours;
   const contractedMinutes = contractedHours * 60;
+
+  // Feature D drill-down: per-dag bokad arbetstid vs dagskapacitet. 0=mån..6=sön.
+  // Speglar workedMinutes exakt (produktion + resa/inställelse/övertid), bucketat på
+  // plannedDate. Dagskapacitet = contractedMinutes/5 (mån–fre), helg=0 enligt mån–fre-
+  // konventionen. Odaterade block hamnar utanför dagsvyn (drill-down, ej ombokföring).
+  const weekdayIndex = (v: Date | string | null | undefined): number | null => {
+    if (!v) return null;
+    const d =
+      typeof v === "string" ? new Date(v.length <= 10 ? `${v}T12:00:00Z` : v) : new Date(v);
+    if (Number.isNaN(d.getTime())) return null;
+    return (d.getUTCDay() + 6) % 7; // JS 0=sön..6=lör → 0=mån..6=sön
+  };
+  const dailyProd: number[] = new Array(7).fill(0);
+  const dailyOther: number[] = new Array(7).fill(0);
+  for (const t of tasks) {
+    const facts = workOrderFacts.get(t.taskId);
+    const d = weekdayIndex(t.plannedDate ?? t.plannedStartTime ?? facts?.scheduledDate ?? null);
+    if (d == null) continue;
+    dailyProd[d] += t.productionMinutes ?? facts?.productionMinutes ?? 0;
+  }
+  if (productionTimeFactor !== 1.0) {
+    for (let i = 0; i < 7; i++) dailyProd[i] = Math.round(dailyProd[i] * productionTimeFactor);
+  }
+  const WORKED_PERSONAL_CATEGORIES = new Set(["travel_between_jobs", "travel_commute", "overtime"]);
+  for (const pt of personalTasks) {
+    if (!WORKED_PERSONAL_CATEGORIES.has(pt.timeCategory ?? "")) continue;
+    const d = weekdayIndex(pt.plannedDate ?? pt.startAt ?? null);
+    if (d == null) continue;
+    dailyOther[d] += personalTaskMinutes(pt);
+  }
+  for (const e of travelEntries) {
+    const d = weekdayIndex(e.plannedDate ?? null);
+    if (d == null) continue;
+    dailyOther[d] += e.travelMinutes ?? 0;
+  }
+  const dailyCapacityMinutes = Math.round(contractedMinutes / 5);
+  const dailyBooking: DailyBooking[] = Array.from({ length: 7 }, (_, d) => {
+    const bookedMinutes = Math.round(dailyProd[d] + dailyOther[d]);
+    const capacityMinutes = d <= 4 ? dailyCapacityMinutes : 0;
+    return { day: d, bookedMinutes, capacityMinutes, spilltidMinutes: bookedMinutes - capacityMinutes };
+  });
+
   const producedHours = totalProductionMinutes / 60;
   const workedHours = workedMinutes / 60;
 
@@ -314,6 +367,7 @@ export function computeWeeklyPlanSummary(
     workedHours: round2(workedHours),
     workedMinutes: Math.round(workedMinutes),
     spilltidMinutes: Math.round(workedMinutes - contractedMinutes),
+    dailyBooking,
     utilizationRate: round4(utilizationRate),
     planningRate: round4(planningRate),
     billingRate: round4(billingRate),
@@ -1081,6 +1135,7 @@ export async function recomputeWeeklyPlan(
         contractedHours: summary.contractedHours,
         contractedMinutes: summary.contractedMinutes,
         spilltidMinutes: summary.spilltidMinutes,
+        dailyBooking: summary.dailyBooking,
         utilizationRate: summary.utilizationRate,
         planningRate: summary.planningRate,
         billingRate: summary.billingRate,
