@@ -43,6 +43,14 @@ information_schema.columns WHERE table_name=... AND column_name=...) THEN <UPDAT
 IF; END $$;` — inuti en ej-tagen IF-gren planeras aldrig UPDATE:n, så referensen till
 den saknade kolumnen kastar inte. Själva droppen ska vara `DROP COLUMN IF EXISTS`.
 
+**Gäller även expand-fasens ALTER:** en TIDIGARE migration som gör en kolumn nullable
+(`ALTER COLUMN ... DROP NOT NULL`) ligger kvar i replay-listan även efter att en SENARE
+migration DROPPAR kolumnen. Eftersom db:push pre-droppar kolumnen körs den gamla
+DROP-NOT-NULL-satsen mot en saknad kolumn → hårt fel (`DROP NOT NULL` har ingen
+`IF EXISTS`-form). Guarda alltså inte bara backfill i drop-migrationen utan ALLA
+kolumn-muterande raw-satser vars kolumn en senare migration tar bort — samma
+`information_schema.columns`-guard.
+
 **OBS data:** Eftersom db:push droppar FÖRE backfillen i denna ordning hinner backfillen
 aldrig bevara data i post-merge/deploy-flödet — databevarandet måste i praktiken redan
 vara gjort i ett tidigare expand-/dual-write-steg. Backfillen i contract-migrationen är
