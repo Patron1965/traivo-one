@@ -15,6 +15,38 @@ import {
   CircleSlash,
 } from "lucide-react";
 import { Object360Card, type Object360Entry } from "./Object360Card";
+import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+
+// Mats-layout: 360°-korten grupperas under sex kategoriflikar
+// (Kontaktuppgifter, Produktionsuppgifter, Geografisk information, Kopplade
+// uppgifter, Kopplade orderkoncept, Historik & logg) och visas i ett
+// 4-kolumnsrutnät. Karusell + "Visa alla" per kort behålls oförändrat.
+const OVERVIEW_TABS: Array<{ key: string; label: string }> = [
+  { key: "kontakt", label: "Kontaktuppgifter" },
+  { key: "produktion", label: "Produktionsuppgifter" },
+  { key: "geografisk", label: "Geografisk information" },
+  { key: "uppgifter", label: "Kopplade uppgifter" },
+  { key: "orderkoncept", label: "Kopplade orderkoncept" },
+  { key: "historik", label: "Historik & logg" },
+];
+
+// Kort → flik. Kort utan post här hamnar i "produktion" som säker fallback.
+const CARD_TAB: Record<string, string> = {
+  contacts: "kontakt",
+  communications: "kontakt",
+  documents: "kontakt",
+  workorders: "produktion",
+  inspections: "produktion",
+  photos: "produktion",
+  issues: "produktion",
+  unperformed: "produktion",
+  ratings: "produktion",
+  geo: "geografisk",
+  assignments: "uppgifter",
+  concepts: "orderkoncept",
+  history: "historik",
+};
 
 // Task #1128: 360°-översikt för objektdetaljsidan.
 // Ett tätt rutnät av kompakta kategorikort (senaste post + karusell + källa +
@@ -532,26 +564,87 @@ export function ObjectOverview360({
   ];
 
   const visibleCards = cards.filter((c) => c.total > 0 || c.alwaysShow);
+  const cardsForTab = (tabKey: string) =>
+    visibleCards.filter((c) => (CARD_TAB[c.key] ?? "produktion") === tabKey);
+  // Alert-korten (driftstörningar=warning, ej-utförda=destructive) låg tidigare
+  // alltid synliga i det platta rutnätet; nu ligger de i en flik. Markera fliken
+  // med en prick så att uppmärksamhetskrävande innehåll inte göms.
+  const tabAlertTone = (tabKey: string): "warning" | "destructive" | null => {
+    const cs = cardsForTab(tabKey);
+    if (cs.some((c) => c.accent === "destructive" && c.total > 0)) return "destructive";
+    if (cs.some((c) => c.accent === "warning" && c.total > 0)) return "warning";
+    return null;
+  };
 
   return (
-    <div
-      className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4"
-      data-testid="grid-object-360"
-    >
-      {visibleCards.map((c) => (
-        <Object360Card
-          key={c.key}
-          title={c.title}
-          icon={c.icon}
-          entries={c.entries}
-          total={c.total}
-          onShowAll={c.onShowAll}
-          showAllLabel={(c as { showAllLabel?: string }).showAllLabel}
-          emptyText={c.emptyText}
-          testId={c.testId}
-          accent={c.accent}
-        />
-      ))}
-    </div>
+    <Tabs defaultValue="kontakt" className="w-full" data-testid="tabs-object-360">
+      <TabsList className="h-auto w-full flex-wrap justify-start gap-1 rounded-none border-b bg-transparent p-0 text-muted-foreground">
+        {OVERVIEW_TABS.map((t) => {
+          const count = cardsForTab(t.key).reduce((sum, c) => sum + c.total, 0);
+          const alertTone = tabAlertTone(t.key);
+          return (
+            <TabsTrigger
+              key={t.key}
+              value={t.key}
+              className="rounded-none border-b-2 border-transparent bg-transparent px-3 py-2 font-medium shadow-none data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:text-foreground data-[state=active]:shadow-none"
+              data-testid={`tab-360-${t.key}`}
+            >
+              {t.label}
+              {count > 0 && (
+                <Badge variant="secondary" className="ml-2 text-xs" data-testid={`count-360-${t.key}`}>
+                  {count}
+                </Badge>
+              )}
+              {alertTone && (
+                <span
+                  className={`ml-1.5 inline-block h-1.5 w-1.5 rounded-full ${
+                    alertTone === "destructive" ? "bg-destructive" : "bg-warning"
+                  }`}
+                  title="Kräver uppmärksamhet"
+                  aria-label="Kräver uppmärksamhet"
+                  data-testid={`alert-360-${t.key}`}
+                />
+              )}
+            </TabsTrigger>
+          );
+        })}
+      </TabsList>
+
+      {OVERVIEW_TABS.map((t) => {
+        const tabCards = cardsForTab(t.key);
+        return (
+          <TabsContent key={t.key} value={t.key} className="mt-4">
+            {tabCards.length > 0 ? (
+              <div
+                className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4"
+                data-testid={`grid-object-360-${t.key}`}
+              >
+                {tabCards.map((c) => (
+                  <Object360Card
+                    key={c.key}
+                    title={c.title}
+                    icon={c.icon}
+                    entries={c.entries}
+                    total={c.total}
+                    onShowAll={c.onShowAll}
+                    showAllLabel={(c as { showAllLabel?: string }).showAllLabel}
+                    emptyText={c.emptyText}
+                    testId={c.testId}
+                    accent={c.accent}
+                  />
+                ))}
+              </div>
+            ) : (
+              <p
+                className="py-8 text-center text-sm text-muted-foreground"
+                data-testid={`empty-360-${t.key}`}
+              >
+                Inget att visa i denna kategori ännu.
+              </p>
+            )}
+          </TabsContent>
+        );
+      })}
+    </Tabs>
   );
 }
