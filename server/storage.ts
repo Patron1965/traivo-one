@@ -577,7 +577,9 @@ export interface IStorage {
   createWorkOrderWithLines(
     workOrder: InsertWorkOrder,
     lines: Omit<InsertWorkOrderLine, "workOrderId" | "tenantId">[],
+    opts?: { assignOrderNumber?: boolean },
   ): Promise<{ workOrder: WorkOrder; lines: WorkOrderLine[] }>;
+  previewNextWorkOrderNumber(tenantId: string): Promise<string>;
   updateWorkOrder(id: string, workOrder: Partial<InsertWorkOrder>): Promise<WorkOrder | undefined>;
   deleteWorkOrder(id: string, opts?: { reason?: string; userId?: string | null }): Promise<void>;
   restoreWorkOrder(id: string): Promise<WorkOrder | undefined>;
@@ -3211,6 +3213,28 @@ export class DatabaseStorage implements IStorage {
     return this.computeNextObjectNumber(tenantId);
   }
 
+  // Snabborder: härled nästa lediga löpande ordernummer (`SO-<n>`, start 1001) per
+  // tenant. Speglar computeNextObjectNumber — räknar in soft-deletade rader så
+  // nummer aldrig återanvänds. Används både för förhandsvisning och (under
+  // advisory-lås) vid faktisk generering i createWorkOrderWithLines.
+  private async computeNextWorkOrderNumber(
+    tenantId: string,
+    executor: { execute: typeof db.execute } = db,
+  ): Promise<string> {
+    const result = await executor.execute(sql`
+      SELECT COALESCE(MAX(CAST(substring(order_number FROM '^SO-([0-9]+)$') AS INTEGER)), 1000) AS max_num
+      FROM work_orders
+      WHERE tenant_id = ${tenantId} AND order_number ~ '^SO-[0-9]+$'
+    `);
+    const maxNum = Number(rowsOf<{ max_num: number | string }>(result)[0]?.max_num ?? 1000);
+    const next = maxNum + 1;
+    return `SO-${next}`;
+  }
+
+  async previewNextWorkOrderNumber(tenantId: string): Promise<string> {
+    return this.computeNextWorkOrderNumber(tenantId);
+  }
+
   async createObject(insertObject: InsertObject, tx?: DbTransaction): Promise<ServiceObject> {
     // Explicit nummer (import, kopiering med eget nr) respekteras oförändrat.
     if (insertObject.objectNumber && String(insertObject.objectNumber).trim() !== "") {
@@ -4535,6 +4559,7 @@ export class DatabaseStorage implements IStorage {
   async createWorkOrderWithLines(
     insertWorkOrder: InsertWorkOrder,
     lines: Omit<InsertWorkOrderLine, "workOrderId" | "tenantId">[],
+    opts?: { assignOrderNumber?: boolean },
   ): Promise<{ workOrder: WorkOrder; lines: WorkOrderLine[] }> {
     const values = { ...insertWorkOrder };
     if (values.objectId && (values.taskLatitude == null || values.taskLongitude == null)) {
@@ -4555,6 +4580,16 @@ export class DatabaseStorage implements IStorage {
     }
 
     const result = await db.transaction(async (tx) => {
+      // Snabborder: mynta löpande "SO-<n>" per tenant under transaktionsbundet
+      // advisory-lås (samma mönster som OBJ-NNN i createObject) så två samtidiga
+      // skapanden inte kan landa på samma nummer. Klientsatt orderNumber strippas
+      // i route-lagret — här myntas det alltid server-side när flaggan är satt.
+      if (opts?.assignOrderNumber && !values.orderNumber && values.tenantId) {
+        await tx.execute(
+          sql`SELECT pg_advisory_xact_lock(hashtext('work_order_number'), hashtext(${values.tenantId}))`,
+        );
+        values.orderNumber = await this.computeNextWorkOrderNumber(values.tenantId, tx);
+      }
       const [workOrder] = await tx.insert(workOrders).values(values).returning();
 
       const insertedLines: WorkOrderLine[] = [];

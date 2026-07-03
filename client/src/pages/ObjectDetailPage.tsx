@@ -14,6 +14,7 @@ import { ObjectSystemGeneratedPanel } from "@/components/ObjectSystemGeneratedPa
 import { InfoPackageTree } from "@/components/objects/InfoPackageTree";
 import InvoiceRecipientsCard from "@/components/InvoiceRecipientsCard";
 import { TelinkSyncButton } from "@/components/TelinkSyncButton";
+import { SnabborderDialog } from "@/components/SnabborderDialog";
 import { ObjectHierarchyCards } from "@/components/objects/ObjectHierarchyCards";
 import { ObjectParentCombobox } from "@/components/ObjectParentCombobox";
 import { MetadataFieldBuilder, type BuilderFieldValue, type InheritedFieldSeed } from "@/components/MetadataFieldBuilder";
@@ -35,7 +36,7 @@ import {
   Calendar, Loader2, ChevronRight, Wrench, Shield,
   Hash, Info, Box, Layers, ClipboardList, Plus,
   Trash2, Pencil, Save, X, Phone, Mail, LinkIcon, Search, History,
-  ArrowUp, ArrowDown, RotateCcw, Cog, Copy, Gauge
+  ArrowUp, ArrowDown, RotateCcw, Cog, Copy, Gauge, Zap
 } from "lucide-react";
 import { ObjectOverview360 } from "@/components/objects/ObjectOverview360";
 import { ObjectSystemDetailLists } from "@/components/objects/ObjectSystemDetailLists";
@@ -391,8 +392,7 @@ export default function ObjectDetailPage() {
   const didInitialScroll = useRef(false);
 
   const [editForm, setEditForm] = useState<ObjectEditForm>({});
-  const [workOrderDialogOpen, setWorkOrderDialogOpen] = useState(false);
-  const [workOrderForm, setWorkOrderForm] = useState({ title: "", description: "", scheduledDate: "" });
+  const [snabborderOpen, setSnabborderOpen] = useState(false);
   // Task #713: flytta- och kopiera-dialoger
   const [moveDialogOpen, setMoveDialogOpen] = useState(false);
   const [moveSearch, setMoveSearch] = useState("");
@@ -879,22 +879,6 @@ export default function ObjectDetailPage() {
     },
   });
 
-  const createWorkOrderMutation = useMutation({
-    mutationFn: async (data: any) => {
-      await apiRequest("POST", "/api/work-orders", data);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/objects", objectId, "work-orders"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/work-orders"] });
-      toast({ title: "Arbetsorder skapad" });
-      setWorkOrderDialogOpen(false);
-      setWorkOrderForm({ title: "", description: "", scheduledDate: "" });
-    },
-    onError: (error: Error) => {
-      toast({ title: "Kunde inte skapa arbetsorder", description: error.message, variant: "destructive" });
-    },
-  });
-
   const openEditDialog = (section: "overview" | "access" | "equipment") => {
     if (!resolvedObject) return;
     setEditSection(section);
@@ -1325,6 +1309,15 @@ export default function ObjectDetailPage() {
           </div>
         </div>
         <div className="flex items-center gap-2">
+          {(user?.role === "admin" || user?.role === "owner" || user?.role === "planner") && (
+            <Button
+              size="sm"
+              onClick={() => setSnabborderOpen(true)}
+              data-testid="button-open-snabborder"
+            >
+              <Zap className="h-4 w-4 mr-1" /> Snabborder
+            </Button>
+          )}
           {(user?.role === "admin" || user?.role === "owner") && (
             <TelinkSyncButton objectId={obj.id} />
           )}
@@ -1483,7 +1476,7 @@ export default function ObjectDetailPage() {
             <Button
               variant="outline"
               size="sm"
-              onClick={() => setWorkOrderDialogOpen(true)}
+              onClick={() => setSnabborderOpen(true)}
               data-testid="button-add-workorder"
             >
               <Plus className="h-3.5 w-3.5 mr-1" /> Ny snabborder
@@ -2851,70 +2844,17 @@ export default function ObjectDetailPage() {
         </DialogContent>
       </Dialog>
 
-      {/* ==================== NY ARBETSORDER (snabborder) ==================== */}
-      <Dialog open={workOrderDialogOpen} onOpenChange={setWorkOrderDialogOpen}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>Skapa arbetsorder</DialogTitle>
-            <DialogDescription>Skapa en ny arbetsorder kopplad till detta objekt.</DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 py-2">
-            {!obj.customerId && (
-              <div className="p-3 bg-chart-3/10 dark:bg-chart-3/15 border border-chart-3/20 dark:border-chart-3/80 rounded-md text-sm text-chart-3 flex items-center gap-2">
-                <AlertTriangle className="h-4 w-4 shrink-0 text-warning" />
-                Objektet saknar kundkoppling. Koppla en kund innan du skapar en arbetsorder.
-              </div>
-            )}
-            <div className="space-y-2">
-              <Label>Titel *</Label>
-              <Input
-                value={workOrderForm.title}
-                onChange={(e) => setWorkOrderForm({ ...workOrderForm, title: e.target.value })}
-                placeholder="Arbetsorder titel"
-                data-testid="input-workorder-title"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>Beskrivning</Label>
-              <Textarea
-                value={workOrderForm.description}
-                onChange={(e) => setWorkOrderForm({ ...workOrderForm, description: e.target.value })}
-                placeholder="Valfri beskrivning"
-                data-testid="input-workorder-description"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>Planerat datum</Label>
-              <Input
-                type="date"
-                value={workOrderForm.scheduledDate}
-                onChange={(e) => setWorkOrderForm({ ...workOrderForm, scheduledDate: e.target.value })}
-                data-testid="input-workorder-date"
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setWorkOrderDialogOpen(false)} data-testid="button-cancel-workorder">
-              Avbryt
-            </Button>
-            <Button
-              onClick={() => createWorkOrderMutation.mutate({
-                title: workOrderForm.title,
-                description: workOrderForm.description || undefined,
-                scheduledDate: workOrderForm.scheduledDate || undefined,
-                objectId,
-                customerId: obj.customerId || undefined,
-                status: "unassigned",
-              })}
-              disabled={!workOrderForm.title || !obj.customerId || createWorkOrderMutation.isPending}
-              data-testid="button-save-workorder"
-            >
-              {createWorkOrderMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Plus className="h-4 w-4 mr-1" />}
-              Skapa
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {/* Snabborder: rik direktorder (kund + fakturareferenser + löpande SO-nr +
+          rader) — blir fakturaunderlag direkt. Ersätter tidigare minimala
+          arbetsorder-dialog. */}
+      <SnabborderDialog
+        open={snabborderOpen}
+        onOpenChange={setSnabborderOpen}
+        objectId={objectId}
+        objectName={obj.name}
+        objectNumber={obj.objectNumber}
+        defaultCustomerId={obj.customerId}
+      />
     </div>
   );
 }

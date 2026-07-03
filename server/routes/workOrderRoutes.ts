@@ -276,6 +276,14 @@ app.get("/api/work-orders", asyncHandler(async (req, res) => {
   }
 }));
 
+// Måste registreras FÖRE "/api/work-orders/:id" — annars fångar :id-routen den
+// statiska sökvägen (id="next-order-number") och preview-endpointen blir onåbar.
+app.get("/api/work-orders/next-order-number", requirePlanner, asyncHandler(async (req, res) => {
+  const tenantId = getTenantIdWithFallback(req);
+  const orderNumber = await storage.previewNextWorkOrderNumber(tenantId);
+  res.json({ orderNumber });
+}));
+
 app.get("/api/work-orders/:id", asyncHandler(async (req, res) => {
   const tenantId = getTenantIdWithFallback(req);
   let workOrder = await storage.getWorkOrder(req.params.id);
@@ -1018,6 +1026,10 @@ app.post("/api/work-orders", asyncHandler(async (req, res) => {
   const tenantId = getTenantIdWithFallback(req);
 
   const bodyData = { ...req.body };
+  // Ordernummer (SO-NNN) myntas ALLTID server-side via /with-lines
+  // (assignOrderNumber) — aldrig via denna route. Strippa ev. klientvärde så att
+  // en tenant-användare inte kan reservera/kollidera på framtida nummer.
+  delete bodyData.orderNumber;
   for (const field of ['scheduledDate', 'desiredDeliveryStart', 'desiredDeliveryEnd'] as const) {
     if (bodyData[field] && typeof bodyData[field] === 'string') {
       const dateStr = bodyData[field] as string;
@@ -1140,6 +1152,9 @@ app.post("/api/work-orders", asyncHandler(async (req, res) => {
 // N separata rad-anrop. Full tenant-scoping på alla refererade id:n och rader.
 const withLinesBodySchema = z.object({
   workOrder: z.record(z.unknown()),
+  // Top-level flagga: när true myntar servern ett löpande "SO-<n>"-ordernummer
+  // (snabborder). Klientsatt workOrder.orderNumber ignoreras alltid (strippas).
+  assignOrderNumber: z.boolean().optional(),
   lines: z.array(z.object({
     articleId: z.string().optional().nullable(),
     quantity: z.number().int().positive().optional(),
@@ -1153,7 +1168,7 @@ const withLinesBodySchema = z.object({
   })).default([]),
 });
 
-app.post("/api/work-orders/with-lines", asyncHandler(async (req, res) => {
+app.post("/api/work-orders/with-lines", requirePlanner, asyncHandler(async (req, res) => {
   const tenantId = getTenantIdWithFallback(req);
 
   const parsedBody = withLinesBodySchema.safeParse(req.body);
@@ -1162,6 +1177,8 @@ app.post("/api/work-orders/with-lines", asyncHandler(async (req, res) => {
   }
 
   const bodyData: Record<string, unknown> = { ...parsedBody.data.workOrder };
+  // Ordernummer myntas alltid server-side (opts-flagga) — aldrig från klienten.
+  delete bodyData.orderNumber;
   for (const field of ['scheduledDate', 'desiredDeliveryStart', 'desiredDeliveryEnd'] as const) {
     if (bodyData[field] && typeof bodyData[field] === 'string') {
       const dateStr = bodyData[field] as string;
@@ -1257,7 +1274,9 @@ app.post("/api/work-orders/with-lines", asyncHandler(async (req, res) => {
     }));
   }
 
-  const { workOrder, lines } = await storage.createWorkOrderWithLines(workOrderData, lineInputs);
+  const { workOrder, lines } = await storage.createWorkOrderWithLines(workOrderData, lineInputs, {
+    assignOrderNumber: parsedBody.data.assignOrderNumber === true,
+  });
 
   // Best-effort: systemgenererad metadata + notifieringar (får aldrig blockera).
   if (workOrder.objectId) {
@@ -1294,6 +1313,9 @@ app.patch("/api/work-orders/:id", asyncHandler(async (req, res) => {
 
   const clusterOverride = updateData.clusterOverride;
   delete updateData.clusterOverride;
+
+  // Ordernummer myntas server-side och får aldrig ändras/sättas via PATCH.
+  delete updateData.orderNumber;
 
   // Opt-in constraint-kontroll (detaljvyns redigera-dialog). Dessa flaggor är
   // styrfält och får aldrig sparas på ordern.

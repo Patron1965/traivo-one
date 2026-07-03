@@ -570,6 +570,11 @@ export const workOrders = pgTable("work_orders", {
   // fallback (schemalagt datum) oförändrad. Mjuka regler matas in i optimeraren
   // som viktad preferens; hårda fortsätter begränsa som idag.
   frozenTimeRules: jsonb("frozen_time_rules").$type<FrozenTimeRulePackage>(),
+  // === Snabborder (light ordergivare): löpande läsbart ordernummer per tenant ===
+  // Format "SO-<n>" (start 1001). Myntas ENDAST för snabborder-flödet (opts-flagga i
+  // createWorkOrderWithLines) under transaktionsbundet advisory-lås; övriga WO lämnas
+  // NULL (expand-contract, back-compat). Klientsatt värde ignoreras alltid.
+  orderNumber: text("order_number"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   deletedAt: timestamp("deleted_at"),
 }, (table) => [
@@ -599,6 +604,9 @@ export const workOrders = pgTable("work_orders", {
   index("idx_work_orders_tenant_desired_start").on(table.tenantId, table.desiredDeliveryStart),
   index("idx_work_orders_tenant_desired_end").on(table.tenantId, table.desiredDeliveryEnd),
   index("idx_work_orders_task_category").on(table.taskCategory),
+  uniqueIndex("uq_work_orders_tenant_order_number")
+    .on(table.tenantId, table.orderNumber)
+    .where(sql`order_number IS NOT NULL`),
 ]);
 
 // Orderrader - artiklar kopplade till en order med beräknade priser

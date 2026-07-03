@@ -1,0 +1,44 @@
+{
+  "sessionId": "9eed6f002",
+  "exportedAt": "2026-07-03T09:31:23.817Z",
+  "summary": "### Key Topics Discussed\n- Need for a well-functioning task editor.\n- Order concept as an advanced editor using metadata for articles.\n- Need for a complementary \"light order giver\" as a traditional option, for acute jobs.\n- Details for the light order giver, including customer reference, delivery time, and article information.\n- The light order function needs to be developed under the object heading, as a quick order function.\n\n### Decisions Made\n- The light order giver will allow selecting a customer first.\n- The light order giver will allow setting up invoice references directly, without metadata.\n- Both the order concept and the light order will generate an order number upon creation.\n- The light order giver will include selecting an object (or multiple objects) that the order is linked to.\n- The light order giver will allow for manual entry of a delivery address, in addition to selecting an object.\n\n### Important Points & Insights\n- The advanced order concept editor uses system support in objects and works with metadata.\n- The light order giver will be more traditional and a complement to the advanced editor, intended for direct orders and invoice creation without extensive metadata.\n- The light order giver will have a simple list for entering article numbers and quantities.\n- The quick order function is essential for quickly creating orders, especially for acute jobs like flushing a floor.",
+  "conversation": [],
+  "transcripts": [
+    {
+      "text": "Då var det så att man är här då innan pappa Hallå, hallå, nu är du med. Jo, eh, i utvecklingsloggen här nu då så har vi då ett behov utav att ha en väl fungerande uppgiftseditor. Vi har orderkonceptet då som en avancerad editor som vi pekar så att säga in med systemstöd i objekt och den, den, den jobbar då med metadata för att haka fast...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Ja. Artiklar och så vidare. Men som ett komplement till den så behöver vi en light ordergivare då som är mer traditionell. Det första som du gör är att du väljer vilket, eh, vilken eventuell kund det är. Sen så sätter man då direkt utan metadata och annat upp, eh, eh, fakturarreferenser, egna fakturarreferenser. Ja, när du skapar den här så kommer ju den då ge även det här, det här orderkonceptet då eller light ordern ett, ett ordernummer. Och sen...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och att, eh, behöva då eventuell kundreferens och så vidare, leveranstid. Eh, men det är det enda som finns för att fylla fakturahuvudet och de delarna i informationspaketet för, eh, artikeln. Och sen så ska det bara vara en enkel lista som en traditionell order-givare då att du, du slår in ett artikelnummer och så slår man in antal och slår in artikelnummer och ett antal. Och sen så blir det då en specialare då där...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Vi då bestämmer då vilket objekt den här ordern är kopplat mot då. Så att det behöver också finnas då... Du väljer kund, du väljer objekt eller flera ob-objekt om ordern ska vara mot flera. Och sen så, eh, gör du alltså... Så det, det blir en light vari-variant. Vi får utveckla den vart-- varefter den kommer, men målet med den är egentligen då att du ska kunna välja en kund, skapa ett fakturaunderlag, välja ett objekt, skapa en direktorder.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Ja, och den karaktären att ja, det är ett akut jobb, någon måste åka dit och spola ett golv till exempel. Då behöver vi inte göra det igenom ett årekoncept, utan vi vet att det gäller objektet, eh... Ja, vi, vi, vi måste alltså utveckla ny snabborderfunktionen i objektrubriken, alltså under objekt, till det du säger nu. Ja, och jag bara sitter... Normalt då i, i motsvarande så här när man tar från andra system så väljer man ju då fakturadress och kunden. Sen väljer man ju då leveransadress. Mm. Och i vårt fall så ersätts ju...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Leveransadressen har valt objektet. Och, och, och det är klart att man skulle till och med kunna ha flexibiliteten att man säger att vi ska leverera en vara eller så då att vi kan, vi kan, vi kan skriva in en leveransadress också manuellt att vi ska åka till Storgatan 22 och leverera en sotunna istället för att vi då väljer objektet återvinningsrummet på Storgatan 22. Eh, men det ger ju då samma sak. Men låt oss utveckla den här i flera olika steg, men att den här snabbfunktionen finns för att snabbt kunna då skapa...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    }
+  ]
+}
