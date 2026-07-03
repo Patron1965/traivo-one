@@ -1,0 +1,38 @@
+{
+  "sessionId": "140ff559a5",
+  "exportedAt": "2026-07-03T08:38:48.642Z",
+  "summary": "### Key Topics Discussed\n- Detaljer kring hantering av \"svansuppgifter\" och deras utförandekoder och tidskoder.\n- Regler för tidsfönster för utförande av svansartiklar, inklusive undvikande av natt-tidpunkter.\n\n### Important Points & Insights\n- Svansuppgifter kan ha varierande utförandekoder och tidskoder beroende på uppgiftstyp, exempelvis ställtid för beredning.\n- Systemet justerar svansuppgifternas utförandetid baserat på en offset-tid i förhållande till huvudjobbets planering. Till exempel, om huvudjobbet är planerat till onsdag kl. 14, och en svansuppgift har en offset på tre dagar, kommer svansuppgiften att justeras till att utföras tre dagar i förväg.\n- Svansartiklar får inte använda huvudtidsfönstret, utan ska ha ett eget utförandeintervall, eventuellt plus/minus en timme från den beräknade tiden relativt huvudjobbet.\n- En \"inte ringa upp på natten\"-regel innebär att svansartiklar ska planeras under ordinarie arbetstid (t.ex. 08:00-16:00) för att undvika natt-, kvälls- eller helgpass, vilket är viktigt både ur kund- och utförarperspektiv.\n- Även om uppgifter placeras inom planerade tidsfönster, finns en möjlighet att utföraren väljer att inte utföra dem då. Systemet bör dock varna om en beroendeartikel riskerar att hamna utanför sitt förväntade utförandetidsfönster, eftersom det kan blockera framtida jobb.",
+  "conversation": [],
+  "transcripts": [
+    {
+      "text": "Ja. Jo, och bara ett ytterligare sånt där förtydligande för de här, ska vi kalla det svansuppgifterna då. Eh, det är ju alldeles riktigt att de kan ha olika utförandekoder och de kan ha då, eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Olika tidskoder då beroende på vilken typ av uppgift det är, om det till exempel är ställtid för en beredning eller så. Men det viktigaste är att systemet förstår ju då baserat på den här offset-tiden då att om huvudjobbet är planerat då till, eh, då klockan två på onsdagen, så blir ju den här svansa-- eh, svansuppgiften då tre timmar eller tre dagar i förtid. Då blir ju det bara en justerad utförandetid enligt den här offset-tiden. Men det som är viktigt då då-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm ...det är ju att för svansartikeln här så får den ju inte använda ti-- huvudtidsfönstret då. Så att den, den, den, den måste ju liksom vara väldigt... Eh, och det är kanske då en sån här huvudinställning då att en svansartikel skall utföras plus minus kanske en timme då eller nåt sånt utifrån krävd tid utifrån huvudjobbet.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och för övrigt också inte ringa upp på natten-regeln blir ju då snarare då att såna här svansartiklar då läggs på, eh, en officiell arbetstid på dagarna då. Eh, både vad det gäller utifrån kundperspektivet men också vad det gäller utifrån utförarperspektivet då. Så att inte artiklar då hamnar på natten, kvällar eller helger, utan att, eh, svansartiklar utförs utifrån en affärsmässig regel i systemet då mellan klockan åtta och fyra säger vi då dagligen.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Normalt. Eller rättare sagt att de placeras där då. Sen kommer det alltid finnas en möjlighet att, att, eh, utföraren väljer att inte göra det ändå. Men, eh, med samma logik som finns i västen så ska ju då en uppgift då som är planerad att utgö-- utföras en viss tid, utföras på den tiden om den inte gör det och då den dessutom då riskerar att hamna utanför sitt förväntade utförandetidsfönster, ska ju då systemet varna, särskilt när det gäller en beroendeartikel då. För då kommer ju den att spärra ett framtida jobb då.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    }
+  ]
+}

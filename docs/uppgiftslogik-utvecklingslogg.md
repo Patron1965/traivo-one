@@ -3,7 +3,7 @@
 > **Typ:** Utvecklingslogg / parkeringsplats för framtida bygge. **Ingen kod ändras av detta dokument.**
 > **Syfte:** (1) slå fast grunderna så att det *inte finns några frågetecken* kring uppgiftsmodellen, och
 > (2) parkera framtida motorer/funktioner (t.ex. vatten-/avfalls-fyllnadsmotorn) så de kan byggas ut i ett senare skede.
-> **Källor:** produktägarens genomgång 2026-07-02 (två röst-sessioner + Excel-matrisen "Uppgiftslogik och informationspaket") + röst-session 2026-07-03 (beroendeuppgifter/"svans" i finplaneringen, §4 U9),
+> **Källor:** produktägarens genomgång 2026-07-02 (två röst-sessioner + Excel-matrisen "Uppgiftslogik och informationspaket") + röst-sessioner 2026-07-03 (beroendeuppgifter/"svans" i finplaneringen, §4 U9),
 > `docs/uppgiftsmodellen-utredning.md` (Task #1079), ADR v3 (`docs/adr-orderkoncept-v3.md`), minnesfilen `uppgiftslogik-v1-decisions.md`.
 > **Relation:** `uppgiftsmodellen-utredning.md` bevisar att informationspaketet redan motsvaras av befintliga system. *Detta* dokument är framåtblickande — bekräftade beslut + deferrat arbete.
 
@@ -122,8 +122,8 @@ Vi har redan önskad leveranstid, tidsmotorns optimerade/planerade tid, kalkyler
 
 **Öppen designfråga:** var lever historiken (utöka `audit_logs`/`slot_times` eller en dedikerad `task_status_events`-tabell) och över vilken tabell den förs (`assignments` vs `work_orders` — jfr dualiteten i `uppgiftsmodellen-utredning.md §4`).
 
-### U9. Beroendeuppgifter ("svans") i finplaneringen — relativ placering + aviseringsfönster — *tillägg 2026-07-03*
-Beroendeuppgifter är **uppgifter som vilka som helst** (§1.4 — egen utförandekod, ev. eget pris/rapport) men som måste utföras **före** en huvuduppgift/klump och som **följer med** huvuduppgiften när den flyttas i planeringen ("svans"). Klumpningsmotorn lägger klumpen av huvuduppgifter på finplaneringen; beroendeuppgiften bildar en svans som hänger på.
+### U9. Beroendeuppgifter ("svans") i finplaneringen — relativ placering + arbetstidsfönster — *tillägg 2026-07-03*
+Beroendeuppgifter är **uppgifter som vilka som helst** (§1.4 — egen utförandekod **och egen tidskod** beroende på typ, t.ex. ställtid för en beredning; ev. eget pris/rapport) men som måste utföras **före** en huvuduppgift/klump och som **följer med** huvuduppgiften när den flyttas i planeringen ("svans"). Klumpningsmotorn lägger klumpen av huvuduppgifter på finplaneringen; beroendeuppgiften bildar en svans som hänger på.
 
 **Två typer (produktägarens uppdelning):**
 - **Geografiskt knuten** — måste utföras på en viss plats före jobbet (t.ex. hämta en nyckel). Har platskrav (§A) + beroende till huvuduppgiften.
@@ -131,10 +131,12 @@ Beroendeuppgifter är **uppgifter som vilka som helst** (§1.4 — egen utföran
 
 **Relativ placering ("svansen hänger med"):**
 - Offset uttrycks **relativt** huvuduppgiften/klumpen (t.ex. "3 h före" eller "1 dygn före"), inte som absolut tid. När planeraren drar klumpen i finplaneringen ska svansen **flytta med** och räknas om (huvudjobb ons 13:00, 3 h före → aviseringsuppgift 10:00; flyttas huvudjobbet flyttas svansen).
+- Offset ger bara en **justerad mål-utförandetid** (huvudjobb ons 14:00, offset 3 h/3 dygn → svansen får mål-tid därefter). Svansen har ett **eget, snävt toleransfönster** kring mål-tiden (huvudinställning, t.ex. **± 1 h** utifrån krävd tid relativt huvudjobbet) och får **INTE** ärva huvudjobbets huvudtidsfönster — den ska ligga tätt inpå sin krävda relativa tid, inte spridas ut över hela leveransfönstret.
 
-**Affärsregel — aviseringsfönster (undvik att "ringa mitt i natten"):**
-- Ren offset räcker inte: huvudjobb 07:00 − 3 h = 04:00 → orimligt. Det krävs ett **tillåtet aviseringsfönster** (t.ex. senast 16:00 dagen före, tidigast en viss tid). Svansen **clampas** in i fönstret: hamnar beräknad tid utanför **hoppar den framåt/bakåt** till närmaste tillåtna tid (eller stannar kvar).
-- Detta är samma slags mekanik som **leveranstidsfönstren (§E)**: hårda/mjuka, positiva/negativa fönster. Ett negativt hårt "natt"-fönster + ett positivt aviseringsfönster + mål-offset = svansens placering. **Verifiera mot befintliga `frozenTimeRules`/leveranstidsmotorn** innan en parallell modell byggs.
+**Affärsregel — placering inom arbetstid (undvik natt/kväll/helg):**
+- Ren offset räcker inte: huvudjobb 07:00 − 3 h = 04:00 → orimligt. Svansartiklar ska **placeras inom officiell arbetstid** (huvudinställning, t.ex. **08–16**), aldrig natt, kväll eller helg — av hänsyn till **både kund och utförare**. Hamnar mål-tiden utanför arbetstidsfönstret **flyttas den** (framåt/bakåt) till närmaste tillåtna tid, eller stannar kvar.
+- Detta är en **placeringsregel** (default-placering), inte ett hårt förbud: utföraren kan ändå välja att avvika. Samma slags mekanik som **leveranstidsfönstren (§E)** (hårda/mjuka, positiva/negativa fönster) — kombinera arbetstidsfönstret med svansens egna ± toleransfönster. **Verifiera mot befintliga `frozenTimeRules`/leveranstidsmotorn** innan en parallell modell byggs.
+- **Varning vid risk:** planeras eller utförs svansen så att den riskerar hamna utanför sitt förväntade utförandetidsfönster ska systemet **varna** (samma logik som befintlig SLA-/tidsfönstervarning), särskilt för beroendeuppgifter där en missad svans blockerar huvudjobbet.
 
 **Svåraste delen — beroende över utförare OCH utförandekod:**
 - Svansen kan ha **annan utförandekod** och ligga på **en annan utförare** än huvuduppgiften. En flytt av huvudjobbet i utförare A:s finplanering innebär då en **flytt av beroendeuppgiften i utförare B:s** finplanering.
@@ -148,7 +150,7 @@ Beroendeuppgifter är **uppgifter som vilka som helst** (§1.4 — egen utföran
 **Öppna designfrågor:**
 1. **Relativt offset** — fryses offset per uppgift vid expansion (jfr frozna tidsregler) eller är det ett mjukt mål som motorn optimerar?
 2. **Cross-utförare-flytt** — ska svansen **auto-flytta** i den andra utförarens plan, eller bara **flaggas** (mellanstatus + notifiering) för den planeraren att bekräfta?
-3. **Aviseringsfönstrets ursprung** — konfigureras per orderkoncept/artikel/objekt-metadata, samt dess relation till leveranstidsfönstren (§E).
+3. **Var konfigureras reglerna** — svansens ± toleransfönster och arbetstidsfönstret (t.ex. 08–16) som huvudinställning per tenant, och/eller override per orderkoncept/artikel/objekt-metadata; samt relation till leveranstidsfönstren (§E). *(Reglernas natur är klar 2026-07-03 — kvar är på vilken nivå de sätts.)*
 4. **Lagerval** — svans-beroenden i `assignments` (koncept-expansion) vs `work_orders` (fält) enligt logistik-splitten; ett cross-utförare-beroende bryter dagens "håll hela paret i ett lager"-regel.
 
 **Trigger att bygga:** när beroende-/aviseringsstyrd finplanering prioriteras. *Behövs inte just nu — parkerat.*
