@@ -104,10 +104,16 @@ export interface WeeklyPlanSummary {
   taskCount: number;
   // KPI
   contractedHours: number;
+  contractedMinutes: number; // avtalad/planerad arbetstid i minuter
   producedHours: number;
   workedHours: number;
+  workedMinutes: number; // bokad arbetstid i minuter (produktion + resa + inställelse + övertid)
+  // Spilltid (Feature D): över-/underbokning slås ihop till ETT signerat ± koncept.
+  // >0 = överbokad (produktion tar av egentid), <0 = underbokad (oplanerad tid kvar).
+  // Härlett: workedMinutes - contractedMinutes. Invariant: spilltidMinutes > 0 ⟺ overContracted.
+  spilltidMinutes: number;
   utilizationRate: number; // producerade / avtalade
-  planningRate: number; // arbetade / avtalade
+  planningRate: number; // arbetade / avtalade ( = "% av planerad arbetstid")
   billingRate: number; // producerade / arbetade
   travelShare: number; // resa / (produktion + resa)
   productivity: number; // kr per producerad timme
@@ -303,8 +309,11 @@ export function computeWeeklyPlanSummary(
     totalTravelCost,
     taskCount: tasks.length,
     contractedHours,
+    contractedMinutes: Math.round(contractedMinutes),
     producedHours: round2(producedHours),
     workedHours: round2(workedHours),
+    workedMinutes: Math.round(workedMinutes),
+    spilltidMinutes: Math.round(workedMinutes - contractedMinutes),
     utilizationRate: round4(utilizationRate),
     planningRate: round4(planningRate),
     billingRate: round4(billingRate),
@@ -1068,7 +1077,10 @@ export async function recomputeWeeklyPlan(
       kpi: {
         producedHours: summary.producedHours,
         workedHours: summary.workedHours,
+        workedMinutes: summary.workedMinutes,
         contractedHours: summary.contractedHours,
+        contractedMinutes: summary.contractedMinutes,
+        spilltidMinutes: summary.spilltidMinutes,
         utilizationRate: summary.utilizationRate,
         planningRate: summary.planningRate,
         billingRate: summary.billingRate,

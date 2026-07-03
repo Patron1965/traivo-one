@@ -33,6 +33,8 @@ import {
   Clock,
   Gauge,
   TrendingUp,
+  TrendingDown,
+  Scale,
   Banknote,
   Package,
   Receipt,
@@ -561,9 +563,33 @@ export default function WeeklyPlanViewPage() {
   const orderValueTotal = orderTasks.reduce((sum, t) => sum + (t.value ?? 0), 0);
   const orderMinutesTotal = orderTasks.reduce((sum, t) => sum + (t.productionMinutes ?? 0), 0);
 
-  // Planerad arbetstid (rubrik). Föredra KPI-fältet, fall tillbaka på produktion.
+  // Bokad arbetstid (rubrik). Föredra KPI-fältet, fall tillbaka på produktion.
   const plannedWorkMinutes: number =
     kpi.workedMinutes ?? (kpi.workedHours != null ? kpi.workedHours * 60 : null) ?? productionMinutes;
+
+  // Spilltid (Feature D): över-/underbokning som ETT signerat ± koncept.
+  // Bokad arbetstid vs planerad/avtalad kapacitet → "% av planerad arbetstid".
+  // Backfill: äldre planer saknar de nya kpi-fälten tills nästa omräkning → härled klient-sida.
+  const contractedMinutes: number =
+    kpi.contractedMinutes ??
+    (kpi.contractedHours != null ? kpi.contractedHours * 60 : null) ??
+    ((plan?.contractedHours ?? 0) * 60);
+  const spilltidMinutes: number =
+    kpi.spilltidMinutes ?? (plannedWorkMinutes - contractedMinutes);
+  const bookingRate: number =
+    kpi.planningRate ?? (contractedMinutes > 0 ? plannedWorkMinutes / contractedMinutes : 0);
+  // Tröskel ±15 min → "balanserad" (undvik brus från avrundning/småjusteringar).
+  const spilltidState: "over" | "under" | "balanced" =
+    spilltidMinutes > 15 ? "over" : spilltidMinutes < -15 ? "under" : "balanced";
+  const spilltidTone =
+    spilltidState === "over"
+      ? { text: "text-warning", badge: "border-warning/40 bg-warning/10 text-warning", Icon: TrendingUp, label: "Överbokad – produktionen tar av egentiden" }
+      : spilltidState === "under"
+        ? { text: "text-muted-foreground", badge: "border-border bg-muted text-muted-foreground", Icon: TrendingDown, label: "Underbokad – oplanerad tid kvar" }
+        : { text: "text-chart-2", badge: "border-chart-2/40 bg-chart-2/10 text-chart-2", Icon: Scale, label: "Balanserad beläggning" };
+  const spilltidAbsHours = formatHoursDec(Math.abs(spilltidMinutes));
+  const spilltidSignedText =
+    spilltidMinutes > 0 ? `+${spilltidAbsHours}` : spilltidMinutes < 0 ? `−${spilltidAbsHours}` : spilltidAbsHours;
 
   const donutSegments = TIME_CATEGORY_ORDER.map((key) => ({
     key,
@@ -768,7 +794,7 @@ export default function WeeklyPlanViewPage() {
               Schema period: Mån 00:00 – Sön 24:00 (168 h)
             </span>
             <span className="flex items-center gap-1.5" data-testid="text-planned-work">
-              Planerad arbetstid:{" "}
+              Bokad arbetstid:{" "}
               <strong className="text-foreground tabular-nums">{formatHoursDec(plannedWorkMinutes, 1)}</strong>
             </span>
           </div>
@@ -1107,6 +1133,33 @@ export default function WeeklyPlanViewPage() {
                 </CardContent>
               </Card>
 
+              {/* Beläggning / Spilltid (Feature D) */}
+              <Card className="md:col-span-1 xl:col-span-2">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-base">Beläggning</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <div>
+                    <div className={`text-3xl font-semibold tabular-nums ${spilltidTone.text}`} data-testid="text-spilltid-rate">
+                      {formatPercent(bookingRate)}
+                    </div>
+                    <p className="text-xs text-muted-foreground">av planerad arbetstid för {teamName}</p>
+                  </div>
+                  <div
+                    className={`flex items-center gap-2 rounded-md border px-3 py-2 text-sm ${spilltidTone.badge}`}
+                    data-testid="status-spilltid"
+                  >
+                    <spilltidTone.Icon className="h-4 w-4 shrink-0" />
+                    <span>{spilltidTone.label}</span>
+                  </div>
+                  <div className="divide-y divide-border/60">
+                    <KpiRow icon={Gauge} label="Planerad arbetstid" value={formatHoursDec(contractedMinutes)} testId="kpi-contracted-hours" />
+                    <KpiRow icon={Clock} label="Bokad arbetstid" value={formatHoursDec(plannedWorkMinutes)} testId="kpi-worked-hours" />
+                    <KpiRow icon={spilltidTone.Icon} label="Spilltid (±)" value={spilltidSignedText} testId="kpi-spilltid" />
+                  </div>
+                </CardContent>
+              </Card>
+
               {/* Resor */}
               <Card className="md:col-span-1 xl:col-span-2">
                 <CardHeader className="pb-2">
@@ -1164,7 +1217,7 @@ export default function WeeklyPlanViewPage() {
             {/* Fotnot */}
             <div className="flex flex-wrap items-center justify-between gap-2 pt-1 text-xs text-muted-foreground">
               <span data-testid="text-footer-note">
-                Schemat omfattar {formatHoursDec(plannedWorkMinutes, 1)} planerad arbetstid inom veckans 168 timmar.
+                Schemat omfattar {formatHoursDec(plannedWorkMinutes, 1)} bokad arbetstid inom veckans 168 timmar.
               </span>
               <span data-testid="text-last-calculated">
                 Senast uppdaterad:{" "}
