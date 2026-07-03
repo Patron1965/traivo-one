@@ -38,6 +38,7 @@ import {
   ArrowUp, ArrowDown, RotateCcw, Cog, Copy, Gauge
 } from "lucide-react";
 import { ObjectOverview360 } from "@/components/objects/ObjectOverview360";
+import { ObjectSystemDetailLists } from "@/components/objects/ObjectSystemDetailLists";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
 import L from "leaflet";
@@ -1702,6 +1703,12 @@ export default function ObjectDetailPage() {
             );
           })()}
         </section>
+
+        {/* ==================== SYSTEMGENERERADE DRILLDOWN-LISTOR (Task #1154) ==================== */}
+        {/* Dedikerade fullständiga listor för Inspektionsresultat, Kommunikation och
+            Betyg — 360°-översiktens "Visa alla" landar här (egna ankare) i stället
+            för att bara scrolla till metadata-panelen. */}
+        <ObjectSystemDetailLists objectId={objectId} />
 
         {/* ==================== OBJEKTFÄLT (UNDER MIGRERING) ==================== */}
         {/* Task #1128 Fas 1: hårdkodade objektkolumner som ännu inte flyttats till
