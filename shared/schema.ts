@@ -1439,6 +1439,20 @@ export const teams = pgTable("teams", {
   streetSideGrouping: boolean("street_side_grouping"),
   // Arbetstakt i procent (100 = normal takt). Premiss som finplaneringen konsumerar.
   workPacePercent: integer("work_pace_percent"),
+  // === Task #1153: Restidsmotor — tunga fordon & tidskorrigering ===
+  // Team-grundparametrar för finplaneringens restidsmotor. Alla nullable/expand-only:
+  // NULL → tenant-default (planning_parameters) → motorns default. Team-värdet vinner.
+  // Hastighetstak (km/h) på resans medelfart. NULL = inget tak.
+  speedCapKmh: real("speed_cap_kmh"),
+  // Restidsfaktor (multiplikator på restid). NULL → 1.0. Trim-golv 0.5, tak 3.0.
+  travelTimeFactor: real("travel_time_factor"),
+  // Produktionstidsfaktor (multiplikator på produktionstid). NULL → 1.0. Golv 0.5, tak 3.0.
+  productionTimeFactor: real("production_time_factor"),
+  // Vinterfaktor (multiplikator på restid inom vinterperioden). NULL → 1.0. Golv 1.0.
+  winterFactor: real("winter_factor"),
+  // Vinterperiod som mm-dd-strängar (t.ex. "11-01".."03-31"; årsskifte tillåts när start>slut).
+  winterStart: text("winter_start"),
+  winterEnd: text("winter_end"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   deletedAt: timestamp("deleted_at"),
 });
@@ -1492,6 +1506,14 @@ export const planningParameters = pgTable("planning_parameters", {
   // → motorn faller tillbaka på DEFAULT_GROUPING_RADIUS_METERS. Tenant-nivå-raden
   // (customer_id IS NULL AND object_id IS NULL) bär defaulten.
   groupingRadiusMeters: integer("grouping_radius_meters"),
+  // Task #1153: Restidsmotor-defaults på tenant-nivå (raden med customer_id IS NULL AND
+  // object_id IS NULL bär defaulten). Team-parametern vinner; NULL → dessa → motordefault.
+  speedCapKmh: real("speed_cap_kmh"),
+  travelTimeFactor: real("travel_time_factor"),
+  productionTimeFactor: real("production_time_factor"),
+  winterFactor: real("winter_factor"),
+  winterStart: text("winter_start"),
+  winterEnd: text("winter_end"),
   notes: text("notes"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
@@ -7681,6 +7703,17 @@ export const travelTimeEntries = pgTable("travel_time_entries", {
   // Datakälla: osrm | geoapify | estimate.
   source: text("source"),
   plannedDate: date("planned_date"),
+  // Task #1153: Tidskod (time_code_definitions.key) för resemomentet. Auto-klassas av
+  // motorn (dagens första resa = inställelse/travel_commute, övriga = ställtid/setup),
+  // men kan override:as manuellt. Omräkningen skriver aldrig över en manuell tidskod.
+  timeCategory: text("time_category"),
+  timeCategoryManual: boolean("time_category_manual").default(false).notNull(),
+  // True = auto-genererad job→job-post (rebuildTravelEntriesForPlan). Manuella ad-hoc-poster
+  // (false) rörs aldrig av omräkning/rebuild.
+  isAuto: boolean("is_auto").default(false).notNull(),
+  // Framkalkylering (transparens, display-only): rå tid/källa + tillämpat hastighetstak,
+  // restidsfaktor och vinterfaktor. Se applyTravelCorrection i weeklyPlanEngine.
+  correction: jsonb("correction"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (table) => [
   index("idx_travel_time_entries_tenant").on(table.tenantId),

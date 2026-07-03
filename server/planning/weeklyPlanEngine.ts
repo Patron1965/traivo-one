@@ -14,20 +14,20 @@
  * redan tenant-filtrerats.
  */
 import { db } from "../db";
-import { and, eq, inArray } from "drizzle-orm";
-import { workOrders } from "@shared/schema";
+import { and, eq, inArray, isNull } from "drizzle-orm";
+import { workOrders, planningParameters } from "@shared/schema";
 import { storage } from "../storage";
-import {
-  getRouteSummary,
-  isGeoapifyRoutingAvailable,
-} from "../services/routing";
-import { haversineDistanceKm } from "../distance-matrix-service";
+// Task #1153: all rutt/distans-slagning går via den cachade, provider-abstraherade
+// getRoutingDistance (getMapProvider bakom, geohash-cache, haversine-fallback inbyggd)
+// — ingen direkt getRouteSummary/ad-hoc-fetch längre (gotcha: enda källan = mapProvider).
+import { getRoutingDistance } from "../distance-matrix-service";
 import { getStartOfISOWeek } from "../routes/helpers";
 import type {
   WeeklyPlan,
   WeeklyPlanTask,
   PersonalTask,
   TravelTimeEntry,
+  InsertTravelTimeEntry,
   WeeklyPlanWarning,
   PreTask,
 } from "@shared/schema";
@@ -182,6 +182,9 @@ export function computeWeeklyPlanSummary(
   travelEntries: TravelTimeEntry[],
   workOrderFacts: Map<string, WorkOrderFacts>,
   config: PlanEngineConfig,
+  // Task #1153: produktionstidsfaktor (team → tenant → 1.0). Trimmar/utökar den
+  // aggregerade produktionstiden — muterar aldrig WO-durationer. Audit i metadata.kpi.
+  productionTimeFactor: number = 1.0,
 ): WeeklyPlanSummary {
   let totalProductionMinutes = 0;
   let totalValue = 0;
@@ -190,6 +193,9 @@ export function computeWeeklyPlanSummary(
     const minutes = t.productionMinutes ?? facts?.productionMinutes ?? 0;
     totalProductionMinutes += minutes;
     totalValue += facts?.cachedValue ?? 0;
+  }
+  if (productionTimeFactor !== 1.0) {
+    totalProductionMinutes = Math.round(totalProductionMinutes * productionTimeFactor);
   }
 
   let personalTravel = 0;
@@ -635,16 +641,260 @@ function resolveEntryCoords(
   return { fromLat, fromLng, toLat, toLng };
 }
 
+// =============================================================================
+// Task #1153: Restidsmotor — grundparametrar, framkalkylering & auto-tidskod
+// =============================================================================
+
+/** Upplösta restidsmotor-parametrar (team → tenant-default → motordefault). */
+export interface TravelEngineParams {
+  /** Hastighetstak (km/h) på resans medelfart. null = inget tak. */
+  speedCapKmh: number | null;
+  /** Restidsfaktor (multiplikator). Golv 0.5, tak 3.0. */
+  travelTimeFactor: number;
+  /** Produktionstidsfaktor (multiplikator). Golv 0.5, tak 3.0. */
+  productionTimeFactor: number;
+  /** Vinterfaktor på restid inom vinterperioden. Golv 1.0, tak 3.0. */
+  winterFactor: number;
+  /** Vinterperiod (mm-dd). null = ingen vinterjustering. */
+  winterStart: string | null;
+  winterEnd: string | null;
+}
+
+const TRAVEL_FACTOR_FLOOR = 0.5;
+const TRAVEL_FACTOR_CEIL = 3.0;
+
+export const DEFAULT_TRAVEL_ENGINE_PARAMS: TravelEngineParams = {
+  speedCapKmh: null,
+  travelTimeFactor: 1.0,
+  productionTimeFactor: 1.0,
+  winterFactor: 1.0,
+  winterStart: null,
+  winterEnd: null,
+};
+
+function clampFactor(
+  v: number | null | undefined,
+  min = TRAVEL_FACTOR_FLOOR,
+  max = TRAVEL_FACTOR_CEIL,
+): number | null {
+  if (v == null || !Number.isFinite(v)) return null;
+  return Math.min(max, Math.max(min, v));
+}
+
+function firstNonNull<T>(...vals: (T | null | undefined)[]): T | null {
+  for (const v of vals) if (v != null) return v;
+  return null;
+}
+
 /**
- * Räknar om distans/restid/kostnad för alla travel_time_entries i en plan via
- * routing-tjänsten (Geoapify) med haversine-fallback. CO2 aggregeras till
- * planens metadata (travel_time_entries saknar egen co2-kolumn).
+ * Löser upp restidsmotor-parametrar. Team-värdet vinner, annars tenant-default
+ * (planning_parameters-raden med customer_id IS NULL AND object_id IS NULL),
+ * annars motorns default. Faktorer clampas [0.5, 3.0]; vinterfaktor ≥ 1.0.
+ * Hastighetstak > 0 annars behandlat som "inget tak".
+ */
+export async function resolveTravelEngineParams(
+  tenantId: string,
+  teamId: string | null,
+): Promise<TravelEngineParams> {
+  const team = teamId ? await storage.getTeam(teamId) : undefined;
+  const [tenantRow] = await db
+    .select()
+    .from(planningParameters)
+    .where(
+      and(
+        eq(planningParameters.tenantId, tenantId),
+        isNull(planningParameters.customerId),
+        isNull(planningParameters.objectId),
+      ),
+    )
+    .limit(1);
+
+  const rawCap = firstNonNull(team?.speedCapKmh, tenantRow?.speedCapKmh);
+  return {
+    speedCapKmh: rawCap != null && rawCap > 0 ? rawCap : null,
+    travelTimeFactor: clampFactor(firstNonNull(team?.travelTimeFactor, tenantRow?.travelTimeFactor)) ?? 1.0,
+    productionTimeFactor:
+      clampFactor(firstNonNull(team?.productionTimeFactor, tenantRow?.productionTimeFactor)) ?? 1.0,
+    winterFactor: clampFactor(firstNonNull(team?.winterFactor, tenantRow?.winterFactor), 1.0) ?? 1.0,
+    winterStart: firstNonNull(team?.winterStart, tenantRow?.winterStart),
+    winterEnd: firstNonNull(team?.winterEnd, tenantRow?.winterEnd),
+  };
+}
+
+/** mm-dd ur ett datum (sträng "YYYY-MM-DD" eller Date). */
+function toMmDd(d: string | Date): string {
+  if (typeof d === "string") return d.slice(5, 10);
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${mm}-${dd}`;
+}
+
+/** Är datumet inom vinterperioden? Hanterar årsskifte (start > slut). */
+function isInWinter(plannedDate: string | Date | null, start: string | null, end: string | null): boolean {
+  if (!plannedDate || !start || !end) return false;
+  const d = toMmDd(plannedDate);
+  if (start <= end) return d >= start && d <= end;
+  return d >= start || d <= end;
+}
+
+/** Framkalkylering (transparens, display-only) som lagras på resemomentet. */
+export interface TravelCorrection {
+  rawMinutes: number;
+  rawSource: string;
+  distanceKm: number;
+  avgSpeedKmh: number;
+  appliedSpeedCapKmh: number | null;
+  travelTimeFactor: number;
+  winterFactor: number;
+  winterApplied: boolean;
+  computedAt: string;
+}
+
+/**
+ * Framkalkylering per resa: hastighetstak på medelfarten → restidsfaktor →
+ * vinterfaktor. Taket adderar tid endast om medelfarten faktiskt överstiger taket
+ * (tunga fordon som "inte hinner"). Egentid/inställelse (travel_commute) får
+ * korrigeras men aldrig trimmas (restidsfaktor < 1.0 ignoreras).
+ */
+function applyTravelCorrection(
+  rawMinutes: number,
+  distanceKm: number,
+  rawSource: string,
+  params: TravelEngineParams,
+  plannedDate: string | Date | null,
+  timeCategory: string | null,
+): { minutes: number; correction: TravelCorrection } {
+  const avgSpeedKmh = rawMinutes > 0 ? distanceKm / (rawMinutes / 60) : 0;
+
+  let minutes = rawMinutes;
+  const capApplies =
+    params.speedCapKmh != null && params.speedCapKmh > 0 && avgSpeedKmh > params.speedCapKmh;
+  if (capApplies) {
+    minutes = Math.max(minutes, (distanceKm / (params.speedCapKmh as number)) * 60);
+  }
+
+  // Egentid/inställelse trimmas aldrig — restidsfaktor kan bara höja, inte sänka.
+  const isEgentid = timeCategory === "travel_commute";
+  let travelFactor = params.travelTimeFactor;
+  if (isEgentid && travelFactor < 1.0) travelFactor = 1.0;
+  minutes = minutes * travelFactor;
+
+  const winterApplied = isInWinter(plannedDate, params.winterStart, params.winterEnd);
+  const winterFactor = winterApplied ? params.winterFactor : 1.0;
+  minutes = minutes * winterFactor;
+
+  return {
+    minutes: Math.round(minutes),
+    correction: {
+      rawMinutes: Math.round(rawMinutes),
+      rawSource,
+      distanceKm: round2(distanceKm),
+      avgSpeedKmh: round2(avgSpeedKmh),
+      appliedSpeedCapKmh: capApplies ? (params.speedCapKmh as number) : null,
+      travelTimeFactor: round2(travelFactor),
+      winterFactor: round2(winterFactor),
+      winterApplied,
+      computedAt: new Date().toISOString(),
+    },
+  };
+}
+
+const TRAVEL_KEY_SEP = "|";
+function travelKey(day: string, fromTaskId: string, toTaskId: string): string {
+  return `${day}${TRAVEL_KEY_SEP}${fromTaskId}${TRAVEL_KEY_SEP}${toTaskId}`;
+}
+function toDayKey(d: string | Date): string {
+  return typeof d === "string" ? d.slice(0, 10) : d.toISOString().slice(0, 10);
+}
+
+/**
+ * Enda källan för auto-genererade resemoment: bygger job→job-poster per dag ur den
+ * ordnade uppgiftssekvensen (plannedStartTime, fallback sequence). Upsert på
+ * (plannedDate, fromTaskId, toTaskId):
+ *   - matchande auto-post lämnas orörd (id + manuell tidskod bevaras),
+ *   - saknad post skapas (isAuto=true),
+ *   - inaktuell auto-post raderas.
+ * Manuella ad-hoc-poster (isAuto=false) rörs aldrig.
+ */
+export async function rebuildTravelEntriesForPlan(tenantId: string, weeklyPlanId: string): Promise<void> {
+  const tasks = await storage.getWeeklyPlanTasks(tenantId, weeklyPlanId);
+  const facts = await loadWorkOrderFacts(tenantId, tasks.map((t) => t.taskId));
+
+  const byDay = new Map<string, WeeklyPlanTask[]>();
+  for (const t of tasks) {
+    if (!t.plannedDate) continue;
+    const day = toDayKey(t.plannedDate);
+    const arr = byDay.get(day);
+    if (arr) arr.push(t);
+    else byDay.set(day, [t]);
+  }
+
+  const desired: { day: string; fromTaskId: string; toTaskId: string }[] = [];
+  for (const [day, dayTasks] of Array.from(byDay)) {
+    dayTasks.sort((a, b) => {
+      const at = a.plannedStartTime ? new Date(a.plannedStartTime).getTime() : Number.MAX_SAFE_INTEGER;
+      const bt = b.plannedStartTime ? new Date(b.plannedStartTime).getTime() : Number.MAX_SAFE_INTEGER;
+      if (at !== bt) return at - bt;
+      return (a.sequence ?? 0) - (b.sequence ?? 0);
+    });
+    const withCoords = dayTasks.filter((t) => {
+      const f = facts.get(t.taskId);
+      return f?.lat != null && f?.lng != null;
+    });
+    for (let i = 0; i < withCoords.length - 1; i++) {
+      desired.push({ day, fromTaskId: withCoords[i].taskId, toTaskId: withCoords[i + 1].taskId });
+    }
+  }
+
+  const existing = await storage.getTravelTimeEntries(tenantId, weeklyPlanId);
+  const existingAuto = new Map<string, TravelTimeEntry>();
+  for (const e of existing) {
+    if (e.isAuto && e.plannedDate && e.fromTaskId && e.toTaskId) {
+      existingAuto.set(travelKey(toDayKey(e.plannedDate), e.fromTaskId, e.toTaskId), e);
+    }
+  }
+  const desiredKeys = new Set(desired.map((d) => travelKey(d.day, d.fromTaskId, d.toTaskId)));
+
+  for (const d of desired) {
+    if (existingAuto.has(travelKey(d.day, d.fromTaskId, d.toTaskId))) continue;
+    await storage.createTravelTimeEntry({
+      tenantId,
+      weeklyPlanId,
+      fromTaskId: d.fromTaskId,
+      toTaskId: d.toTaskId,
+      plannedDate: d.day,
+      isAuto: true,
+      isCommute: false,
+    });
+  }
+  for (const [key, entry] of Array.from(existingAuto)) {
+    if (!desiredKeys.has(key)) await storage.deleteTravelTimeEntry(tenantId, entry.id);
+  }
+}
+
+/**
+ * Räknar om distans/restid/kostnad för alla travel_time_entries i en plan.
+ * Steg: (1) synka auto-genererade job→job-poster, (2) lös upp motor-parametrar,
+ * (3) auto-klassa tidskod per dag (första resa = inställelse/travel_commute, övriga
+ * = ställtid/setup; manuella tidskoder rörs ej), (4) framkalkylera restid via cachad
+ * provider-slagning + hastighetstak/faktorer. CO2 aggregeras till planens metadata.
  */
 export async function recomputeTravelForPlan(
   tenantId: string,
   weeklyPlanId: string,
   config: PlanEngineConfig,
+  params?: TravelEngineParams,
 ): Promise<{ updated: number; totalKm: number; totalCostOre: number; totalCo2Kg: number }> {
+  // (1) Synka auto-poster mot nuvarande uppgiftssekvens.
+  await rebuildTravelEntriesForPlan(tenantId, weeklyPlanId);
+
+  // (2) Lös upp motor-parametrar (om inte redan gjort av recomputeWeeklyPlan).
+  let resolvedParams = params;
+  if (!resolvedParams) {
+    const plan = await storage.getWeeklyPlan(tenantId, weeklyPlanId);
+    resolvedParams = await resolveTravelEngineParams(tenantId, plan?.teamId ?? null);
+  }
+
   const entries = await storage.getTravelTimeEntries(tenantId, weeklyPlanId);
   const taskIds = new Set<string>();
   for (const e of entries) {
@@ -653,50 +903,89 @@ export async function recomputeTravelForPlan(
   }
   const facts = await loadWorkOrderFacts(tenantId, Array.from(taskIds));
 
+  // (3) Auto-klassa tidskod per dag på fromTask-ordning (plannedStartTime, fallback
+  //     sequence). Skriver aldrig över manuellt satt tidskod.
+  const planTasks = await storage.getWeeklyPlanTasks(tenantId, weeklyPlanId);
+  const taskOrder = new Map<string, { start: number; seq: number }>();
+  for (const t of planTasks) {
+    taskOrder.set(t.taskId, {
+      start: t.plannedStartTime ? new Date(t.plannedStartTime).getTime() : Number.MAX_SAFE_INTEGER,
+      seq: t.sequence ?? 0,
+    });
+  }
+  const entryOrder = (e: TravelTimeEntry): { start: number; seq: number } =>
+    (e.fromTaskId ? taskOrder.get(e.fromTaskId) : undefined) ?? {
+      start: Number.MAX_SAFE_INTEGER,
+      seq: Number.MAX_SAFE_INTEGER,
+    };
+
+  const entriesByDay = new Map<string, TravelTimeEntry[]>();
+  for (const e of entries) {
+    const day = e.plannedDate ? toDayKey(e.plannedDate) : "__nodate__";
+    const arr = entriesByDay.get(day);
+    if (arr) arr.push(e);
+    else entriesByDay.set(day, [e]);
+  }
+  const autoCategory = new Map<string, string>();
+  for (const [, dayEntries] of Array.from(entriesByDay)) {
+    dayEntries.sort((a, b) => {
+      const oa = entryOrder(a);
+      const ob = entryOrder(b);
+      if (oa.start !== ob.start) return oa.start - ob.start;
+      return oa.seq - ob.seq;
+    });
+    dayEntries.forEach((e, idx) => {
+      autoCategory.set(e.id, idx === 0 ? "travel_commute" : "setup");
+    });
+  }
+
+  // (4) Framkalkylera per resemoment.
   let updated = 0;
   let totalKm = 0;
   let totalCostOre = 0;
-  const routingAvailable = isGeoapifyRoutingAvailable();
 
   for (const entry of entries) {
     const coords = resolveEntryCoords(entry, facts);
     if (!coords) continue;
 
-    let distanceKm: number | null = null;
-    let travelMinutes: number | null = null;
-    let source = "estimate";
+    // Rå distans + tid via cachad, provider-abstraherad slagning (haversine-fallback inbyggd).
+    const raw = await getRoutingDistance(coords.fromLat, coords.fromLng, coords.toLat, coords.toLng);
 
-    if (routingAvailable) {
-      const summary = await getRouteSummary([
-        { lat: coords.fromLat, lng: coords.fromLng },
-        { lat: coords.toLat, lng: coords.toLng },
-      ]);
-      if (summary) {
-        distanceKm = summary.distanceKm;
-        travelMinutes = Math.round(summary.durationMinutes);
-        source = "geoapify";
-      }
-    }
-    if (distanceKm == null) {
-      distanceKm = haversineDistanceKm(coords.fromLat, coords.fromLng, coords.toLat, coords.toLng);
-      travelMinutes = Math.round((distanceKm / config.defaultSpeedKmh) * 60);
-      source = "estimate";
-    }
+    // Effektiv tidskod: manuell override vinner, annars auto-klassning.
+    const effectiveCategory = entry.timeCategoryManual
+      ? entry.timeCategory
+      : autoCategory.get(entry.id) ?? entry.timeCategory ?? null;
 
-    const travelCost = Math.round(distanceKm * config.costPerKmOre);
-    totalKm += distanceKm;
+    const { minutes, correction } = applyTravelCorrection(
+      raw.durationMin,
+      raw.distanceKm,
+      raw.source,
+      resolvedParams,
+      entry.plannedDate ?? null,
+      effectiveCategory,
+    );
+
+    const travelCost = Math.round(raw.distanceKm * config.costPerKmOre);
+    totalKm += raw.distanceKm;
     totalCostOre += travelCost;
 
-    await storage.updateTravelTimeEntry(tenantId, entry.id, {
+    const patch: Partial<InsertTravelTimeEntry> = {
       fromLat: coords.fromLat,
       fromLng: coords.fromLng,
       toLat: coords.toLat,
       toLng: coords.toLng,
-      distanceKm: round2(distanceKm),
-      travelMinutes: travelMinutes ?? 0,
+      distanceKm: round2(raw.distanceKm),
+      travelMinutes: minutes,
       travelCost,
-      source,
-    });
+      source: raw.source,
+      correction,
+      isCommute: effectiveCategory === "travel_commute",
+    };
+    // Skriv aldrig över en manuellt satt tidskod.
+    if (!entry.timeCategoryManual) {
+      patch.timeCategory = effectiveCategory ?? undefined;
+    }
+    await storage.updateTravelTimeEntry(tenantId, entry.id, patch);
     updated++;
   }
 
@@ -727,8 +1016,12 @@ export async function recomputeWeeklyPlan(
   if (!plan) return null;
   const config = resolveConfig(plan);
 
+  // Task #1153: lös upp restidsmotor-parametrar en gång (team → tenant → default)
+  // och återanvänd för både restidsberäkning och produktionstids-aggregering.
+  const travelParams = await resolveTravelEngineParams(tenantId, plan.teamId ?? null);
+
   if (opts?.recomputeTravel) {
-    await recomputeTravelForPlan(tenantId, weeklyPlanId, config);
+    await recomputeTravelForPlan(tenantId, weeklyPlanId, config, travelParams);
   }
 
   const [tasks, personalTasks, travelEntries, timeCodes] = await Promise.all([
@@ -745,7 +1038,15 @@ export async function recomputeWeeklyPlan(
     tasks.map((t) => t.taskId),
   );
 
-  const summary = computeWeeklyPlanSummary(plan, tasks, personalTasks, travelEntries, facts, config);
+  const summary = computeWeeklyPlanSummary(
+    plan,
+    tasks,
+    personalTasks,
+    travelEntries,
+    facts,
+    config,
+    travelParams.productionTimeFactor,
+  );
 
   const existingMeta = (plan.metadata as Record<string, unknown> | null) ?? {};
   const updated = await storage.updateWeeklyPlan(tenantId, weeklyPlanId, {
@@ -780,6 +1081,11 @@ export async function recomputeWeeklyPlan(
         estimatedCo2Kg: summary.estimatedCo2Kg,
         totalRestNightMinutes: summary.totalRestNightMinutes,
         totalRestWeekendMinutes: summary.totalRestWeekendMinutes,
+        // Task #1153: tillämpade restidsmotor-faktorer (transparens/audit).
+        appliedProductionFactor: travelParams.productionTimeFactor,
+        appliedTravelFactor: travelParams.travelTimeFactor,
+        appliedWinterFactor: travelParams.winterFactor,
+        appliedSpeedCapKmh: travelParams.speedCapKmh,
       },
     },
   });

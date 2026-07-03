@@ -35,6 +35,8 @@ import {
   Ruler,
   ArrowLeftRight,
   Gauge,
+  Truck,
+  Snowflake,
 } from "lucide-react";
 import type { Resource, Team, TeamMember } from "@shared/schema";
 
@@ -54,6 +56,12 @@ export function TeamMembersTab() {
   const [radiusInput, setRadiusInput] = useState<string>("");
   const [streetSideInput, setStreetSideInput] = useState<boolean>(true);
   const [workPaceInput, setWorkPaceInput] = useState<string>("");
+  const [speedCapInput, setSpeedCapInput] = useState<string>("");
+  const [travelFactorInput, setTravelFactorInput] = useState<string>("");
+  const [productionFactorInput, setProductionFactorInput] = useState<string>("");
+  const [winterFactorInput, setWinterFactorInput] = useState<string>("");
+  const [winterStartInput, setWinterStartInput] = useState<string>("");
+  const [winterEndInput, setWinterEndInput] = useState<string>("");
 
   const openPremises = (team: Team) => {
     setPremisesTeam(team);
@@ -64,6 +72,14 @@ export function TeamMembersTab() {
     setWorkPaceInput(
       team.workPacePercent != null ? String(team.workPacePercent) : "",
     );
+    setSpeedCapInput(team.speedCapKmh != null ? String(team.speedCapKmh) : "");
+    setTravelFactorInput(team.travelTimeFactor != null ? String(team.travelTimeFactor) : "");
+    setProductionFactorInput(
+      team.productionTimeFactor != null ? String(team.productionTimeFactor) : "",
+    );
+    setWinterFactorInput(team.winterFactor != null ? String(team.winterFactor) : "");
+    setWinterStartInput(team.winterStart ?? "");
+    setWinterEndInput(team.winterEnd ?? "");
   };
 
   const { data: teams = [], isLoading: teamsLoading } = useQuery<Team[]>({
@@ -179,11 +195,23 @@ export function TeamMembersTab() {
       groupingRadiusMeters: number | null;
       streetSideGrouping: boolean;
       workPacePercent: number | null;
+      speedCapKmh: number | null;
+      travelTimeFactor: number | null;
+      productionTimeFactor: number | null;
+      winterFactor: number | null;
+      winterStart: string | null;
+      winterEnd: string | null;
     }) => {
       const res = await apiRequest("PATCH", `/api/teams/${vars.id}`, {
         groupingRadiusMeters: vars.groupingRadiusMeters,
         streetSideGrouping: vars.streetSideGrouping,
         workPacePercent: vars.workPacePercent,
+        speedCapKmh: vars.speedCapKmh,
+        travelTimeFactor: vars.travelTimeFactor,
+        productionTimeFactor: vars.productionTimeFactor,
+        winterFactor: vars.winterFactor,
+        winterStart: vars.winterStart,
+        winterEnd: vars.winterEnd,
       });
       return res.json();
     },
@@ -223,11 +251,67 @@ export function TeamMembersTab() {
       });
       return;
     }
+
+    const parseNumOrNull = (raw: string): number | null => {
+      const t = raw.trim();
+      return t === "" ? null : Number(t);
+    };
+    const speedCap = parseNumOrNull(speedCapInput);
+    const travelFactor = parseNumOrNull(travelFactorInput);
+    const productionFactor = parseNumOrNull(productionFactorInput);
+    const winterFactor = parseNumOrNull(winterFactorInput);
+
+    if (speedCap != null && (!Number.isFinite(speedCap) || speedCap <= 0)) {
+      toast({
+        title: "Ogiltigt hastighetstak",
+        description: "Ange en positiv km/h, eller lämna tomt för standard.",
+        variant: "destructive",
+      });
+      return;
+    }
+    for (const [val, label] of [
+      [travelFactor, "restidsfaktor"],
+      [productionFactor, "produktionstidsfaktor"],
+      [winterFactor, "vinterfaktor"],
+    ] as [number | null, string][]) {
+      if (val != null && (!Number.isFinite(val) || val < 0.5 || val > 3.0)) {
+        toast({
+          title: `Ogiltig ${label}`,
+          description: "Ange en faktor mellan 0.5 och 3.0, eller lämna tomt för standard.",
+          variant: "destructive",
+        });
+        return;
+      }
+    }
+
+    const mmDd = /^(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/;
+    const winterStart = winterStartInput.trim();
+    const winterEnd = winterEndInput.trim();
+    for (const [val, label] of [
+      [winterStart, "vinterperiodens start"],
+      [winterEnd, "vinterperiodens slut"],
+    ] as [string, string][]) {
+      if (val !== "" && !mmDd.test(val)) {
+        toast({
+          title: `Ogiltig ${label}`,
+          description: "Ange datum som MM-DD (t.ex. 11-01), eller lämna tomt för standard.",
+          variant: "destructive",
+        });
+        return;
+      }
+    }
+
     updatePremisesMutation.mutate({
       id: premisesTeam.id,
       groupingRadiusMeters: radius != null ? Math.round(radius) : null,
       streetSideGrouping: streetSideInput,
       workPacePercent: pace != null ? Math.round(pace) : null,
+      speedCapKmh: speedCap,
+      travelTimeFactor: travelFactor,
+      productionTimeFactor: productionFactor,
+      winterFactor: winterFactor,
+      winterStart: winterStart === "" ? null : winterStart,
+      winterEnd: winterEnd === "" ? null : winterEnd,
     });
   };
 
@@ -664,6 +748,117 @@ export function TeamMembersTab() {
               <p className="text-xs text-muted-foreground">
                 Relativ arbetstakt jämfört med normal takt. Tomt = standard (100 %).
               </p>
+            </div>
+
+            <div className="space-y-4 border-t border-border/60 pt-4">
+              <div className="flex items-center gap-1.5">
+                <Truck className="h-4 w-4 text-chart-4" />
+                <p className="text-sm font-medium">Restidsmotor (tunga fordon)</p>
+              </div>
+              <p className="-mt-2 text-xs text-muted-foreground">
+                Korrigering av restid och produktionstid. Tomt fält faller tillbaka på tenantens
+                standard och därefter motordefault. Befintliga team påverkas inte.
+              </p>
+              <div className="space-y-1.5">
+                <Label htmlFor="premise-speedcap">Hastighetstak (km/h)</Label>
+                <Input
+                  id="premise-speedcap"
+                  type="number"
+                  min={1}
+                  step="1"
+                  inputMode="decimal"
+                  placeholder="Standard"
+                  value={speedCapInput}
+                  onChange={e => setSpeedCapInput(e.target.value)}
+                  data-testid="input-premise-speedcap"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Tak för medelfarten per resa. Tunga fordon som inte hinner över taket får längre
+                  restid.
+                </p>
+              </div>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div className="space-y-1.5">
+                  <Label htmlFor="premise-travelfactor">Restidsfaktor</Label>
+                  <Input
+                    id="premise-travelfactor"
+                    type="number"
+                    min={0.5}
+                    max={3}
+                    step="0.05"
+                    inputMode="decimal"
+                    placeholder="Standard (1.0)"
+                    value={travelFactorInput}
+                    onChange={e => setTravelFactorInput(e.target.value)}
+                    data-testid="input-premise-travelfactor"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="premise-productionfactor">Produktionstidsfaktor</Label>
+                  <Input
+                    id="premise-productionfactor"
+                    type="number"
+                    min={0.5}
+                    max={3}
+                    step="0.05"
+                    inputMode="decimal"
+                    placeholder="Standard (1.0)"
+                    value={productionFactorInput}
+                    onChange={e => setProductionFactorInput(e.target.value)}
+                    data-testid="input-premise-productionfactor"
+                  />
+                </div>
+              </div>
+              <p className="-mt-1 text-xs text-muted-foreground">
+                Trimfaktorer (0.5–3.0) för restid och produktion. Egentid trimmas aldrig nedåt.
+              </p>
+              <div className="space-y-1.5">
+                <Label htmlFor="premise-winterfactor" className="flex items-center gap-1.5">
+                  <Snowflake className="h-4 w-4 text-chart-4" />
+                  Vinterfaktor
+                </Label>
+                <Input
+                  id="premise-winterfactor"
+                  type="number"
+                  min={1}
+                  max={3}
+                  step="0.05"
+                  inputMode="decimal"
+                  placeholder="Standard (1.0)"
+                  value={winterFactorInput}
+                  onChange={e => setWinterFactorInput(e.target.value)}
+                  data-testid="input-premise-winterfactor"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Extra tidspåslag under vinterperioden nedan (aldrig under 1.0).
+                </p>
+              </div>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div className="space-y-1.5">
+                  <Label htmlFor="premise-winterstart">Vinter börjar (MM-DD)</Label>
+                  <Input
+                    id="premise-winterstart"
+                    type="text"
+                    inputMode="numeric"
+                    placeholder="t.ex. 11-01"
+                    value={winterStartInput}
+                    onChange={e => setWinterStartInput(e.target.value)}
+                    data-testid="input-premise-winterstart"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="premise-winterend">Vinter slutar (MM-DD)</Label>
+                  <Input
+                    id="premise-winterend"
+                    type="text"
+                    inputMode="numeric"
+                    placeholder="t.ex. 03-31"
+                    value={winterEndInput}
+                    onChange={e => setWinterEndInput(e.target.value)}
+                    data-testid="input-premise-winterend"
+                  />
+                </div>
+              </div>
             </div>
           </div>
           <DialogFooter>

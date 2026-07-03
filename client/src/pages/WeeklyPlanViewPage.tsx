@@ -71,6 +71,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Dialog,
@@ -84,6 +89,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { useTimeCodes, type TimeCodeOption } from "@/hooks/use-time-codes";
 import { formatSekFromOre, formatSek } from "@/lib/format";
 import {
   getTimeCategoryStyle,
@@ -1121,6 +1127,9 @@ export default function WeeklyPlanViewPage() {
                 </CardContent>
               </Card>
 
+              {/* Resemoment */}
+              <TravelSegmentCard travelEntries={plan.travelEntries ?? []} onChanged={invalidatePlan} />
+
               {/* Varningar */}
               <Card className="md:col-span-1 xl:col-span-2">
                 <CardHeader className="pb-2">
@@ -1486,6 +1495,228 @@ function Legend() {
         );
       })}
     </div>
+  );
+}
+
+interface TravelCorrectionView {
+  rawMinutes?: number;
+  rawSource?: string;
+  distanceKm?: number;
+  avgSpeedKmh?: number;
+  appliedSpeedCapKmh?: number | null;
+  travelTimeFactor?: number;
+  winterFactor?: number;
+  winterApplied?: boolean;
+  computedAt?: string;
+}
+
+function DetailRow({ label, value, testId }: { label: string; value: string; testId: string }) {
+  return (
+    <div className="flex items-center justify-between gap-2">
+      <dt className="text-muted-foreground">{label}</dt>
+      <dd className="text-right tabular-nums" data-testid={testId}>{value}</dd>
+    </div>
+  );
+}
+
+function TravelSegmentCard({
+  travelEntries,
+  onChanged,
+}: {
+  travelEntries: TravelTimeEntry[];
+  onChanged: () => void;
+}) {
+  const { toast } = useToast();
+  const { options, labelFor } = useTimeCodes(travelEntries.map((e) => e.timeCategory));
+
+  const updateCategory = useMutation({
+    mutationFn: async (vars: { id: string; body: Record<string, unknown> }) => {
+      const res = await apiRequest("PATCH", `/api/travel-entries/${vars.id}`, vars.body);
+      return res.json();
+    },
+    onSuccess: () => {
+      onChanged();
+      toast({ title: "Tidskod uppdaterad" });
+    },
+    onError: (e: Error) =>
+      toast({ title: "Kunde inte byta tidskod", description: e.message, variant: "destructive" }),
+  });
+
+  const sorted = useMemo(
+    () =>
+      [...travelEntries].sort((a, b) => {
+        const ad = a.plannedDate ?? "";
+        const bd = b.plannedDate ?? "";
+        if (ad !== bd) return ad.localeCompare(bd);
+        return (a.travelMinutes ?? 0) - (b.travelMinutes ?? 0);
+      }),
+    [travelEntries],
+  );
+
+  return (
+    <Card className="md:col-span-2 xl:col-span-4">
+      <CardHeader className="pb-2">
+        <CardTitle className="text-base flex items-center gap-2">
+          Resemoment
+          {sorted.length > 0 && (
+            <Badge variant="outline" data-testid="badge-travel-segment-count">{sorted.length}</Badge>
+          )}
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        {sorted.length === 0 ? (
+          <p className="text-sm text-muted-foreground" data-testid="empty-travel-segments">
+            Inga resemoment ännu — släpp uppdrag i planen för att beräkna restid.
+          </p>
+        ) : (
+          <div className="divide-y divide-border/60" data-testid="list-travel-segments">
+            {sorted.map((entry) => (
+              <TravelSegmentRow
+                key={entry.id}
+                entry={entry}
+                options={options}
+                labelFor={labelFor}
+                saving={updateCategory.isPending}
+                onSelect={(timeCategory) =>
+                  updateCategory.mutate({ id: entry.id, body: { timeCategory, timeCategoryManual: true } })
+                }
+                onReset={() =>
+                  updateCategory.mutate({ id: entry.id, body: { timeCategoryManual: false } })
+                }
+              />
+            ))}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function TravelSegmentRow({
+  entry,
+  options,
+  labelFor,
+  saving,
+  onSelect,
+  onReset,
+}: {
+  entry: TravelTimeEntry;
+  options: TimeCodeOption[];
+  labelFor: (v: string) => string;
+  saving: boolean;
+  onSelect: (timeCategory: string) => void;
+  onReset: () => void;
+}) {
+  const corr = (entry.correction ?? {}) as TravelCorrectionView;
+  const style = getTimeCategoryStyle(entry.timeCategory);
+  const dayLabel = entry.plannedDate
+    ? format(new Date(`${entry.plannedDate}T00:00:00`), "EEE d MMM", { locale: sv })
+    : "–";
+  const currentCat = entry.timeCategory ?? "";
+  const km = entry.distanceKm ?? corr.distanceKm ?? 0;
+
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          className="flex w-full items-center justify-between gap-3 rounded-md px-2 py-2 text-left hover-elevate"
+          data-testid={`button-travel-segment-${entry.id}`}
+        >
+          <div className="flex min-w-0 items-center gap-2">
+            <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${style.dot}`} />
+            <span className="truncate text-sm capitalize">{dayLabel}</span>
+            <Badge variant="outline" className="shrink-0 text-[10px]">
+              {entry.timeCategory ? labelFor(entry.timeCategory) : "Ingen tidskod"}
+            </Badge>
+            {entry.timeCategoryManual && (
+              <Badge variant="secondary" className="shrink-0 text-[10px]" data-testid={`badge-manual-${entry.id}`}>
+                manuell
+              </Badge>
+            )}
+          </div>
+          <div className="flex shrink-0 items-center gap-3 text-sm tabular-nums">
+            <span className="text-muted-foreground">{svDecimal(km, 1)} km</span>
+            <span>{formatHoursDec(entry.travelMinutes ?? 0)}</span>
+          </div>
+        </button>
+      </PopoverTrigger>
+      <PopoverContent className="w-80" align="end" data-testid={`popover-travel-segment-${entry.id}`}>
+        <div className="space-y-3">
+          <div>
+            <p className="text-sm font-medium">Framkalkylering</p>
+            <p className="text-xs text-muted-foreground capitalize">{dayLabel}</p>
+          </div>
+          <dl className="space-y-1.5 text-sm">
+            <DetailRow label="Sträcka" value={`${svDecimal(km, 1)} km`} testId={`detail-km-${entry.id}`} />
+            <DetailRow
+              label="Rå restid"
+              value={corr.rawMinutes != null ? formatHoursDec(corr.rawMinutes) : "–"}
+              testId={`detail-raw-${entry.id}`}
+            />
+            <DetailRow
+              label="Medelfart"
+              value={corr.avgSpeedKmh != null ? `${svDecimal(corr.avgSpeedKmh, 0)} km/h` : "–"}
+              testId={`detail-speed-${entry.id}`}
+            />
+            <DetailRow
+              label="Hastighetstak"
+              value={
+                corr.appliedSpeedCapKmh != null
+                  ? `${svDecimal(corr.appliedSpeedCapKmh, 0)} km/h (tillämpat)`
+                  : "Ej tillämpat"
+              }
+              testId={`detail-cap-${entry.id}`}
+            />
+            <DetailRow
+              label="Restidsfaktor"
+              value={corr.travelTimeFactor != null ? `×${svDecimal(corr.travelTimeFactor, 2)}` : "–"}
+              testId={`detail-travelfactor-${entry.id}`}
+            />
+            <DetailRow
+              label="Vinterfaktor"
+              value={corr.winterApplied ? `×${svDecimal(corr.winterFactor ?? 1, 2)}` : "Ej vinterperiod"}
+              testId={`detail-winter-${entry.id}`}
+            />
+            <div className="flex items-center justify-between border-t border-border/60 pt-1.5 font-medium">
+              <dt>Slutlig tid</dt>
+              <dd className="tabular-nums" data-testid={`detail-final-${entry.id}`}>
+                {formatHoursDec(entry.travelMinutes ?? 0)}
+              </dd>
+            </div>
+            {corr.rawSource && (
+              <DetailRow label="Källa" value={corr.rawSource} testId={`detail-source-${entry.id}`} />
+            )}
+          </dl>
+          <div className="space-y-1.5">
+            <Label className="text-xs text-muted-foreground">Tidskod</Label>
+            <Select value={currentCat || undefined} onValueChange={(v) => onSelect(v)} disabled={saving}>
+              <SelectTrigger data-testid={`select-timecode-${entry.id}`}>
+                <SelectValue placeholder="Välj tidskod" />
+              </SelectTrigger>
+              <SelectContent>
+                {options.map((o) => (
+                  <SelectItem key={o.value} value={o.value} data-testid={`option-timecode-${o.value}-${entry.id}`}>
+                    {o.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {entry.timeCategoryManual && (
+              <button
+                type="button"
+                className="text-xs text-muted-foreground underline-offset-2 hover:underline disabled:opacity-50"
+                onClick={onReset}
+                disabled={saving}
+                data-testid={`button-reset-timecode-${entry.id}`}
+              >
+                Återställ till automatisk klassning
+              </button>
+            )}
+          </div>
+        </div>
+      </PopoverContent>
+    </Popover>
   );
 }
 

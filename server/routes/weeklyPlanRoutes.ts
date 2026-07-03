@@ -592,7 +592,8 @@ export function registerWeeklyPlanRoutes(app: Express) {
     if (!plan) throw new NotFoundError("Veckoplan");
     const data = parseBody(taskCreateSchema, req.body);
     const created = await storage.createWeeklyPlanTask({ ...data, tenantId, weeklyPlanId: plan.id });
-    await recomputeWeeklyPlan(tenantId, plan.id);
+    // Task #1153: live restid vid släpp — synka auto-resemoment + framkalkylera.
+    await recomputeWeeklyPlan(tenantId, plan.id, { recomputeTravel: true });
     res.status(201).json(created);
   }));
 
@@ -602,7 +603,8 @@ export function registerWeeklyPlanRoutes(app: Express) {
     if (!existing) throw new NotFoundError("Veckoplan-uppgift");
     const data = parseBody(taskPatchSchema, req.body);
     const row = await storage.updateWeeklyPlanTask(tenantId, req.params.id, data);
-    if (existing.weeklyPlanId) await recomputeWeeklyPlan(tenantId, existing.weeklyPlanId);
+    // Task #1153: flytt/omordning kan ändra resesekvensen → räkna om restid live.
+    if (existing.weeklyPlanId) await recomputeWeeklyPlan(tenantId, existing.weeklyPlanId, { recomputeTravel: true });
     res.json(row);
   }));
 
@@ -611,7 +613,8 @@ export function registerWeeklyPlanRoutes(app: Express) {
     const existing = await storage.getWeeklyPlanTask(tenantId, req.params.id);
     if (!existing) throw new NotFoundError("Veckoplan-uppgift");
     await storage.deleteWeeklyPlanTask(tenantId, req.params.id);
-    if (existing.weeklyPlanId) await recomputeWeeklyPlan(tenantId, existing.weeklyPlanId);
+    // Task #1153: borttagen uppgift bryter resesekvensen → synka + räkna om restid.
+    if (existing.weeklyPlanId) await recomputeWeeklyPlan(tenantId, existing.weeklyPlanId, { recomputeTravel: true });
     res.status(204).end();
   }));
 
@@ -733,7 +736,13 @@ export function registerWeeklyPlanRoutes(app: Express) {
   // ==========================================================================
   // Restidsposter
   // ==========================================================================
-  const travelCreateSchema = insertTravelTimeEntrySchema.omit({ tenantId: true, weeklyPlanId: true });
+  // isAuto/correction är motor-ägda (rebuild + framkalkylering) — får aldrig sättas av klient.
+  const travelCreateSchema = insertTravelTimeEntrySchema.omit({
+    tenantId: true,
+    weeklyPlanId: true,
+    isAuto: true,
+    correction: true,
+  });
   const travelPatchSchema = travelCreateSchema.partial();
 
   app.get("/api/weekly-plans/:planId/travel-entries", ...guard, asyncHandler(async (req, res) => {
@@ -760,8 +769,14 @@ export function registerWeeklyPlanRoutes(app: Express) {
     const existing = await storage.getTravelTimeEntry(tenantId, req.params.id);
     if (!existing) throw new NotFoundError("Restidspost");
     const data = parseBody(travelPatchSchema, req.body);
+    // Task #1153: manuell tidskod-override. Sätts `timeCategory` utan explicit
+    // `timeCategoryManual` låses posten (auto-klassning skriver ej över den).
+    // Klienten kan återgå till auto genom att skicka `timeCategoryManual: false`.
+    if (data.timeCategory !== undefined && data.timeCategoryManual === undefined) {
+      data.timeCategoryManual = true;
+    }
     await storage.updateTravelTimeEntry(tenantId, req.params.id, data);
-    // Räkna om distans/kostnad/CO2 när en restidspost ändras (t.ex. nya koordinater).
+    // Räkna om distans/kostnad/CO2 + tidskod när en restidspost ändras.
     if (existing.weeklyPlanId) await recomputeWeeklyPlan(tenantId, existing.weeklyPlanId, { recomputeTravel: true });
     const row = await storage.getTravelTimeEntry(tenantId, req.params.id);
     res.json(row);
