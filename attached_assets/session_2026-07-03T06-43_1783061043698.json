@@ -1,0 +1,86 @@
+{
+  "sessionId": "1157675fa2",
+  "exportedAt": "2026-07-03T06:43:51.980Z",
+  "summary": "### Key Topics Discussed\n- Nödvändiga data för analysen\n- Klassificering av tidsloggar för arbetsuppgifter\n- Etableringstid och administrativ tid som separata tidskoder\n- Olika produktionstider för framtida uppföljning\n- Tidskoder för utbildning, städning och internt arbete\n- Tidskoder för frånvaro såsom nattvila, inställningsresetid, tjänstledighet, sjukfrånvaro och semester\n\n### Important Points & Insights\n- Tidstyper är ett tillägg till analysen av nödvändiga data.\n- Klassificering av tid för utförande, inklusive etableringstid och administrativ tid, är avgörande för finplanering och framtida tidsredovisningsfunktioner.\n- Förslag på att koda uppgifter (t.ex. diskning av kärl) som produktionstid på artikelnivå.\n- Man kan tänka sig att ha tre olika tidskoder per artikel: etableringstid, administrativ tid och produktionstid.\n- Olika typer av artiklar eller tjänster kan generera dessa tidskoder på olika sätt.\n- Grundlogiken måste hantera olika produktionstider för framtida uppföljning.\n- Tidskoder för internt arbete kan inkludera utbildning, städning, administrativa uppgifter och reparationer av utrustning.\n- Frånvarotid (nattvila, ledighet, sjukdom, semester) ska hanteras som en egen \"uppgift\" med en specifik tidskod i systemet.",
+  "conversation": [],
+  "transcripts": [
+    {
+      "text": "Hallå? Ja.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Jo, ett tillägg här i analysen då för vilka data som är nödvändiga då. Så har det kommit upp här...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Tidstyper.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och, eh, eh, det har ju i första hand då bäring på den så kallade finplaneringen, men också på en framtida tidsredovisningsfunktion då. Och det här bottnar då i att kunna klassificera olika tid för utförande beroende på arbetsuppgift då. Och om man då tittar på andra system då, så dels så-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "... Äh, alltså det är som två st... U-utifrån vår logik så kommer ju det här bygga då på att du utför en uppgift. Du tvättar ett kärl eller tio kärl i 30 minuter och de 30 minuterna ska ju då kodas, äh, som produktionstid. Och börjar vi i den änden då så skulle möjligtvis då på artikelnivå då här en, en, äh, äh, styrning då finnas där då på artikeln vilken tid den här artikeln produceras.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Äh, mm, och med samma logik då så skulle man ju då ha, om man har en annan, äh, artikel som är etablering, äh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "För utföraren eller administration av, av, äh, äh, utfört arbete då, att det ligger som en uppgift. Då skulle man då kunna tänka sig på de här artiklarna då att man har, äh, tre olika tidskoder då. Så att etableringstid är en sak, äh, administrativ tid är en sak till. Produktionstid är en typ då. Och man skulle också kunna tänka sig då att olika typer utav artiklar eller tjänster som man gör då genererar-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm ...olika typer av produktionstider också för en framtida uppföljning då. Det är inte viktigt just nu, men det är viktigt att grundlogiken hanterar det där. Och fortsätter vi då i samma, äh, med samma logik då, så skulle då en uppgift att till exempel genomföra utbildning då skulle kunna vara då ytterligare en sån här tidskod där man då ser att man nu har man då ägnat sig åt utbildning i olika verksamheter så kommer man då att ha städning och såna här grejer. Ja, har du st",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "ädning i uppgift så, så, så lägger du på det. Och, och då, då pratar vi ju då... Då, då kan vi alltså ha olika tidskoder då för produktion, det vill säga där vi tjänar pengar på. Sen kan vi då ha tidskoder för internt arbete eller vad man säger, då utbildning, städning, äh, äh, administrativa saker då, reparationer utav utrustning och så vidare. Äh, och sen så för extern eller personlig tid då så får du då, äh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Äh, nat-viletid och du har inställningsresetid och du har, äh, tjänstledighetstid, du har tj-tju-sju-sjukfrånvarotid och så vidare, baserat då på vad den, vilken uppgift då, äh, eller hur... Ja, ja, vi kallar det ju då uppgifter. Och vi kan också säga då att om medarbetaren då, äh, inte är i tjänst utan så att säga registrerar sig i det här-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. -systemet då med en egen uppgift då som skulle kunna vara nat-vila eller ledighet på grund av sjukdom eller ledighet på grund av semester eller något annat. Och så, så, så kommer ju det bara vara en uppgift som de andra i systemet. Men genom den här tidskoden då som vi sätter på för varje...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "artikel för de här...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    }
+  ]
+}
