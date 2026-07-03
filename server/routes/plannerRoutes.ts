@@ -2135,7 +2135,7 @@ app.get("/api/planner/area-search", isAuthenticated, requireTenantWithFallback, 
       wo.id, wo.tenant_id, wo.title, wo.description, wo.priority, wo.status, wo.order_status,
       wo.scheduled_date, wo.scheduled_start_time, wo.estimated_duration, wo.actual_duration,
       wo.resource_id, wo.team_id, wo.cluster_id, wo.object_id, wo.customer_id,
-      wo.task_category, wo.metadata, wo.execution_code, wo.creation_method,
+      wo.task_category, wo.location_requirement, wo.metadata, wo.execution_code, wo.creation_method,
       wo.planned_window_start, wo.planned_window_end, wo.desired_delivery_start, wo.desired_delivery_end,
       wo.order_type, wo.cached_value, wo.cached_cost, wo.cached_production_minutes,
       wo.is_simulated, wo.completed_at, wo.locked_at, wo.invoiced_at,
@@ -2178,7 +2178,7 @@ app.get("/api/planner/area-search", isAuthenticated, requireTenantWithFallback, 
     estimated_duration: number | null; actual_duration: number | null;
     resource_id: string | null; team_id: string | null; cluster_id: string | null;
     object_id: string; customer_id: string | null;
-    task_category: string | null; metadata: unknown; execution_code: string | null;
+    task_category: string | null; location_requirement: string | null; metadata: unknown; execution_code: string | null;
     creation_method: string | null;
     planned_window_start: string | null; planned_window_end: string | null;
     desired_delivery_start: string | null; desired_delivery_end: string | null;
@@ -2211,6 +2211,7 @@ app.get("/api/planner/area-search", isAuthenticated, requireTenantWithFallback, 
     objectId: r.object_id,
     customerId: r.customer_id,
     taskCategory: r.task_category,
+    locationRequirement: r.location_requirement,
     metadata: r.metadata,
     executionCode: r.execution_code,
     creationMethod: r.creation_method,

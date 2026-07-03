@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { LocationRequirementBadge } from "@/components/LocationRequirementBadge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -1014,6 +1015,7 @@ export default function OrderStockPage() {
                             {order.taskCategory === "logistics" ? "Logistik" : "Administrativ"}
                           </Badge>
                         )}
+                        <LocationRequirementBadge order={order} testIdSuffix={order.id} />
                       </div>
                       <div className="text-sm text-muted-foreground flex items-center gap-2 flex-wrap mt-1">
                         <span>{customer?.name || "-"}</span>

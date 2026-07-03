@@ -179,7 +179,7 @@ app.post("/api/order-concepts/:id/articles", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const rawConcept = await storage.getOrderConcept(req.params.id);
     if (!verifyTenantOwnership(rawConcept, tenantId)) throw new NotFoundError("Ej hittad");
-    const { articleId, quantity, unitPrice, taskCategory, metadataAssociation, metadataCorrespondence, isPreTask, dependencyOffsetMinutes, isSubscriptionArticle } = req.body;
+    const { articleId, quantity, unitPrice, taskCategory, locationRequirement, metadataAssociation, metadataCorrespondence, isPreTask, dependencyOffsetMinutes, isSubscriptionArticle } = req.body;
     if (!articleId || typeof articleId !== "string") {
       throw new ValidationError("articleId krävs");
     }
@@ -190,12 +190,16 @@ app.post("/api/order-concepts/:id/articles", asyncHandler(async (req, res) => {
     // Task #381 — uppgiftskategori styr om artikeln expanderas per objekt eller skapar admin-WO.
     const validCategory = (taskCategory === "admin" || taskCategory === "logistics" || taskCategory === "field")
       ? taskCategory : "field";
+    // §5 A — platskrav (obligatorisk/valfri/ingen); null = härled från kategori vid expansion.
+    const validLocationRequirement = (locationRequirement === "obligatorisk" || locationRequirement === "valfri" || locationRequirement === "ingen")
+      ? locationRequirement : null;
     const result = await storage.addOrderConceptArticle({
       orderConceptId: req.params.id,
       articleId,
       quantity: quantity || 1,
       unitPrice: unitPrice ?? null,
       taskCategory: validCategory,
+      locationRequirement: validLocationRequirement,
       // Session 9B — metadataassociation/-korrespondens, föruppgift & beroende-offset.
       ...(typeof metadataAssociation === "string" ? { metadataAssociation } : {}),
       ...(typeof metadataCorrespondence === "string" ? { metadataCorrespondence } : {}),
@@ -238,6 +242,10 @@ app.patch("/api/order-concepts/:id/articles/:articleId", asyncHandler(async (req
     if (req.body.dependencyOffsetMinutes === null || typeof req.body.dependencyOffsetMinutes === "number") allowed.dependencyOffsetMinutes = req.body.dependencyOffsetMinutes;
     // Uppgiftslogik v1 (kolumn W) — abonnemangs-tagg (ingen motor, bara flagga).
     if (typeof req.body.isSubscriptionArticle === "boolean") allowed.isSubscriptionArticle = req.body.isSubscriptionArticle;
+    // §5 A — platskrav (obligatorisk/valfri/ingen eller null = härled från kategori).
+    if (req.body.locationRequirement === null || req.body.locationRequirement === "obligatorisk" || req.body.locationRequirement === "valfri" || req.body.locationRequirement === "ingen") {
+      allowed.locationRequirement = req.body.locationRequirement;
+    }
     const updated = await storage.updateOrderConceptArticle(req.params.articleId, req.params.id, allowed);
     if (!updated) throw new NotFoundError("Artikelrad hittades inte");
     res.json(updated);
@@ -2661,6 +2669,7 @@ app.get("/api/order-concepts/:id/export-pdf", asyncHandler(async (req, res) => {
           quantity: orderConceptArticles.quantity,
           unitPrice: orderConceptArticles.unitPrice,
           taskCategory: orderConceptArticles.taskCategory,
+          locationRequirement: orderConceptArticles.locationRequirement,
         })
         .from(orderConceptArticles)
         .leftJoin(articles, eq(orderConceptArticles.articleId, articles.id))

@@ -292,6 +292,12 @@ export async function generateScheduleAssignments(opts: {
         frozenTimeCode: linkedArticle?.timeCodeKey ?? undefined,
         // Task #997: fryst viktat tidsregel-paket (null om objektet saknar regler).
         frozenTimeRules: frozenTimeRulesByObject.get(obj.id) ?? null,
+        // Platskrav (§5 A) stämplas MEDVETET inte här: detta är en concept-nivå-
+        // assignment (en per objekt, ej per artikel), så en enskild artikels
+        // locationRequirement har ingen entydig innebörd. Objektet är obligatoriskt
+        // (objectId NOT NULL) ⇒ resolveLocationRequirement härleder "obligatorisk"
+        // vid materialisering, identiskt med "valfri" i VRP. Per-artikel-platskrav
+        // tillämpas i admin/logistik-WO-vägen (se ca.locationRequirement nedan).
       });
 
       if (linkedArticle && linkedArticleId) {
@@ -2776,6 +2782,8 @@ app.post("/api/order-concepts/:id/execute", asyncHandler(async (req, res) => {
           objectId: null,
           clusterId: concept.targetClusterId ?? null,
           taskCategory: ca.taskCategory ?? "admin",
+          // §5 A — ärv platskrav från konceptartikeln (admin/logistik → normalt 'ingen').
+          locationRequirement: ca.locationRequirement ?? null,
           title: `${article.name} (${concept.name})`,
           description: concept.description ?? null,
           orderStatus: "ej_planerad",

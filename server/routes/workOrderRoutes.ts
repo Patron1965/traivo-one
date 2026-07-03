@@ -1,7 +1,7 @@
 import type { Express } from "express";
 import { storage } from "../storage";
 import { db } from "../db";
-import { eq, and, desc, inArray, isNull } from "drizzle-orm";
+import { eq, and, desc, inArray, isNull, or, ilike, gte, lte } from "drizzle-orm";
 import { z } from "zod";
 import {
   formatZodError,
@@ -14,7 +14,7 @@ import {
   ensureResourceIdsInTenant,
 } from "./helpers";
 import { getTenantIdWithFallback, requireAdmin, requirePlanner } from "../tenant-middleware";
-import { insertWorkOrderSchema, insertWorkOrderLineSchema, ORDER_STATUSES, type OrderStatus, articles, insertProcurementSchema, insertSetupTimeLogSchema, insertSimulationScenarioSchema, clusters, resources, orderConcepts, workOrderLines, fortnoxInvoiceExports, protocols, workOrders, customers, objects, objectPayers, slaRiskSnapshots, type OrderConcept, isOutsidePreferredWindow } from "@shared/schema";
+import { insertWorkOrderSchema, insertWorkOrderLineSchema, ORDER_STATUSES, type OrderStatus, articles, insertProcurementSchema, insertSetupTimeLogSchema, insertSimulationScenarioSchema, clusters, resources, orderConcepts, workOrderLines, fortnoxInvoiceExports, protocols, workOrders, customers, objects, objectPayers, slaRiskSnapshots, geographicDistricts, IMPOSSIBLE_REASON_LABELS, type ImpossibleReason, type OrderConcept, isOutsidePreferredWindow } from "@shared/schema";
 import type { WorkOrder, InsertWorkOrderLine } from "@shared/schema";
 import { handleWorkOrderStatusChange } from "../ai-communication";
 import { generatePreTasksForWorkOrder } from "../planning/weeklyPlanEngine";
@@ -331,7 +331,14 @@ app.get("/api/work-orders/:id/fortnox-codes", asyncHandler(async (req, res) => {
   if (!verified) throw new NotFoundError("Arbetsorder");
 
   const derived = await deriveFortnoxCodesWithSourceForWorkOrder(tenantId, verified);
-  res.json(derived);
+  // §5 J (Kontering): visa vilket team som tilldelats i uppgiftens infopaket, även
+  // när teamet inte är källan till kostnadsställe/projekt (t.ex. bil-härlett värde).
+  let team: { id: string; name: string } | null = null;
+  if (verified.teamId) {
+    const t = await storage.getTeam(verified.teamId);
+    if (t && t.tenantId === tenantId) team = { id: t.id, name: t.name };
+  }
+  res.json({ ...derived, team });
 }));
 
 // Aktivitetslogg för en arbetsorder: statusbyten, redigeringar, avbeställningar
@@ -1317,6 +1324,14 @@ app.patch("/api/work-orders/:id", asyncHandler(async (req, res) => {
   // Ordernummer myntas server-side och får aldrig ändras/sättas via PATCH.
   delete updateData.orderNumber;
 
+  // §5 A — platskrav: acceptera bara giltiga enum-värden eller null; släng ogiltigt.
+  if ("locationRequirement" in updateData) {
+    const lr = updateData.locationRequirement;
+    if (lr !== null && lr !== "obligatorisk" && lr !== "valfri" && lr !== "ingen") {
+      delete updateData.locationRequirement;
+    }
+  }
+
   // Opt-in constraint-kontroll (detaljvyns redigera-dialog). Dessa flaggor är
   // styrfält och får aldrig sparas på ordern.
   const wantsConstraintCheck = req.body.checkConstraints === true;
@@ -1839,6 +1854,106 @@ app.post("/api/work-orders/:id/restore", requireAdmin, asyncHandler(async (req, 
 
   console.log(`[work-orders] restored id=${req.params.id} tenant=${tenantId} userId=${userId}`);
   res.json(restored);
+}));
+
+// Task #1155 (Feature G): Rapport över ej-utförda uppgifter ("kunde ej utföras"
+// = orderStatus "omojlig"). Additiv läsvy: filtrera per distrikt, utförarkod,
+// orsak, fritext och datumintervall (på impossibleAt); aggregat per distrikt,
+// utförarkod och orsak. Ingen migration — fälten finns redan på work_orders.
+app.get("/api/reports/unperformed-orders", asyncHandler(async (req, res) => {
+  const tenantId = getTenantIdWithFallback(req);
+  const districtId = (req.query.districtId as string | undefined) || undefined;
+  const executionCode = (req.query.executionCode as string | undefined) || undefined;
+  const reason = (req.query.reason as string | undefined) || undefined;
+  const search = (req.query.search as string | undefined)?.trim() || undefined;
+  const startDate = req.query.startDate ? new Date(req.query.startDate as string) : undefined;
+  const endDate = req.query.endDate ? new Date(req.query.endDate as string) : undefined;
+
+  const conditions = [
+    eq(workOrders.tenantId, tenantId),
+    eq(workOrders.orderStatus, "omojlig"),
+    isNull(workOrders.deletedAt),
+  ];
+  if (districtId) conditions.push(eq(workOrders.districtId, districtId));
+  if (executionCode) conditions.push(eq(workOrders.executionCode, executionCode));
+  if (reason) conditions.push(eq(workOrders.impossibleReason, reason));
+  if (startDate && !isNaN(startDate.getTime())) conditions.push(gte(workOrders.impossibleAt, startDate));
+  if (endDate && !isNaN(endDate.getTime())) conditions.push(lte(workOrders.impossibleAt, endDate));
+  if (search) {
+    const like = `%${search}%`;
+    const searchCond = or(
+      ilike(workOrders.title, like),
+      ilike(objects.name, like),
+      ilike(workOrders.orderNumber, like),
+    );
+    if (searchCond) conditions.push(searchCond);
+  }
+
+  const rows = await db
+    .select({
+      id: workOrders.id,
+      orderNumber: workOrders.orderNumber,
+      title: workOrders.title,
+      objectId: workOrders.objectId,
+      objectName: objects.name,
+      districtId: workOrders.districtId,
+      districtName: geographicDistricts.name,
+      executionCode: workOrders.executionCode,
+      reasonCode: workOrders.impossibleReason,
+      reasonText: workOrders.impossibleReasonText,
+      impossibleAt: workOrders.impossibleAt,
+      impossibleByName: resources.name,
+      scheduledDate: workOrders.scheduledDate,
+    })
+    .from(workOrders)
+    .leftJoin(objects, eq(workOrders.objectId, objects.id))
+    .leftJoin(geographicDistricts, eq(workOrders.districtId, geographicDistricts.id))
+    .leftJoin(resources, eq(workOrders.impossibleBy, resources.id))
+    .where(and(...conditions))
+    .orderBy(desc(workOrders.impossibleAt))
+    .limit(1000);
+
+  const labelFor = (code: string | null): string | null =>
+    code ? (IMPOSSIBLE_REASON_LABELS[code as ImpossibleReason] ?? code) : null;
+
+  const orders = rows.map((r) => ({
+    ...r,
+    reason: labelFor(r.reasonCode),
+    impossibleAt: r.impossibleAt ? new Date(r.impossibleAt).toISOString() : null,
+    scheduledDate: r.scheduledDate ? new Date(r.scheduledDate).toISOString() : null,
+  }));
+
+  // Aggregat (över den hämtade mängden)
+  const bump = <K extends string>(
+    map: Map<K, { key: K; label: string; count: number }>,
+    key: K,
+    label: string,
+  ) => {
+    const cur = map.get(key);
+    if (cur) cur.count += 1;
+    else map.set(key, { key, label, count: 1 });
+  };
+
+  const districtMap = new Map<string, { key: string; label: string; count: number }>();
+  const executionMap = new Map<string, { key: string; label: string; count: number }>();
+  const reasonMap = new Map<string, { key: string; label: string; count: number }>();
+  for (const r of rows) {
+    bump(districtMap, r.districtId ?? "__none__", r.districtName ?? "Utan distrikt");
+    bump(executionMap, r.executionCode ?? "__none__", r.executionCode ?? "Utan utförarkod");
+    bump(reasonMap, r.reasonCode ?? "__none__", labelFor(r.reasonCode) ?? "Utan orsak");
+  }
+  const bySorted = (m: Map<string, { key: string; label: string; count: number }>) =>
+    Array.from(m.values()).sort((a, b) => b.count - a.count);
+
+  res.json({
+    orders,
+    summary: {
+      total: rows.length,
+      byDistrict: bySorted(districtMap),
+      byExecutionCode: bySorted(executionMap),
+      byReason: bySorted(reasonMap),
+    },
+  });
 }));
 
 app.get("/api/order-stock", asyncHandler(async (req, res) => {

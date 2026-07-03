@@ -12,6 +12,7 @@ import {
   MapPin,
   Star,
   History,
+  CircleSlash,
 } from "lucide-react";
 import { Object360Card, type Object360Entry } from "./Object360Card";
 
@@ -88,6 +89,15 @@ interface SystemGeneratedMetadata {
     customerName?: string | null;
     invoiceModel?: string | null;
     status?: string | null;
+  }>;
+  unperformedTasks: Array<{
+    id: string;
+    title: string | null;
+    reasonCode: string | null;
+    reason: string | null;
+    reasonText: string | null;
+    impossibleAt: string | null;
+    executionCode: string | null;
   }>;
   images: SystemImage[];
   ratings: Array<{
@@ -316,6 +326,18 @@ export function ObjectOverview360({
     onOpen: () => onNavigate(`/cases?case=public:${it.id}`),
   }));
 
+  // Task #1155 (Feature G): Ej-utförda uppgifter ("kunde ej utföras")
+  const unperformedEntries: Object360Entry[] = (system?.unperformedTasks ?? [])
+    .slice(0, CAROUSEL_CAP)
+    .map((u) => ({
+      id: u.id,
+      primary: u.title || "Uppgift",
+      secondary: u.reasonText || null,
+      date: fmtDate(u.impossibleAt),
+      status: u.reason || null,
+      onOpen: () => onNavigate(`/work-orders/${u.id}`),
+    }));
+
   const ratingEntries: Object360Entry[] = (system?.ratings ?? []).slice(0, CAROUSEL_CAP).map((r) => ({
     id: r.id,
     primary: `${r.rating}/5 ★`,
@@ -463,6 +485,18 @@ export function ObjectOverview360({
       testId: "issues",
       accent: "warning",
       alwaysShow: true,
+    } as CardDef & { showAllLabel?: string },
+    {
+      key: "unperformed",
+      title: "Ej-utförda uppgifter",
+      icon: CircleSlash,
+      entries: unperformedEntries,
+      total: system?.unperformedTasks.length ?? 0,
+      onShowAll: () => onNavigate("/missade-jobb"),
+      showAllLabel: "Öppna rapport",
+      emptyText: "Inga ej-utförda uppgifter.",
+      testId: "unperformed",
+      accent: "destructive",
     } as CardDef & { showAllLabel?: string },
     {
       key: "geo",

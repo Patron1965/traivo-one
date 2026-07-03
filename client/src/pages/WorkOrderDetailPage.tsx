@@ -69,6 +69,7 @@ import {
 } from "lucide-react";
 import type { WorkOrder } from "@shared/schema";
 import { getOrderTypeLabel } from "@shared/schema";
+import { KonteringCard } from "@/components/KonteringCard";
 
 type CancellationInfo = {
   reason?: string | null;
@@ -86,18 +87,6 @@ type WorkOrderDetail = WorkOrder & {
   cancellation?: CancellationInfo | null;
 };
 
-type FortnoxCodeSource = {
-  type: "vehicle" | "equipment" | "participant" | "resource" | "team";
-  id: string;
-  label: string;
-} | null;
-
-interface FortnoxCodesData {
-  costCenter: string | null;
-  project: string | null;
-  costCenterSource: FortnoxCodeSource;
-  projectSource: FortnoxCodeSource;
-}
 
 interface ActivityItem {
   id: string;
@@ -259,18 +248,6 @@ const ACTION_META: Record<string, { label: string; icon: typeof Activity }> = {
   restored: { label: "Order återställd", icon: RotateCcw },
 };
 
-const FORTNOX_SOURCE_TYPE_LABELS: Record<NonNullable<FortnoxCodeSource>["type"], string> = {
-  vehicle: "bil",
-  equipment: "utrustning",
-  participant: "deltagare",
-  resource: "resurs",
-  team: "team",
-};
-
-function fortnoxCodeSourceLabel(source: NonNullable<FortnoxCodeSource>): string {
-  return `från ${FORTNOX_SOURCE_TYPE_LABELS[source.type]} ${source.label}`;
-}
-
 function InfoRow({ label, value, icon: Icon }: { label: string; value: React.ReactNode; icon?: typeof Building2 }) {
   return (
     <div className="flex items-start justify-between gap-3 py-1.5 text-sm">
@@ -305,11 +282,6 @@ export default function WorkOrderDetailPage() {
 
   const { data: activityData } = useQuery<{ activity: ActivityItem[] }>({
     queryKey: ["/api/work-orders", workOrderId, "activity"],
-    enabled: !!workOrderId,
-  });
-
-  const { data: fortnoxCodes } = useQuery<FortnoxCodesData>({
-    queryKey: ["/api/work-orders", workOrderId, "fortnox-codes"],
     enabled: !!workOrderId,
   });
 
@@ -931,56 +903,9 @@ export default function WorkOrderDetailPage() {
         </Card>
       )}
 
-      {/* Task #1005: Fakturering — visa vilket kostnadsställe/projekt en genererad
-          uppgift faktiskt fakturerar mot + varifrån värdet härleds (read-only). */}
-      {fortnoxCodes && (
-        <Card data-testid="card-fortnox-codes">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base flex items-center gap-2">
-              <Receipt className="h-4 w-4" /> Fakturering (Fortnox)
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-0.5">
-            <InfoRow
-              label="Kostnadsställe"
-              value={
-                fortnoxCodes.costCenter ? (
-                  <span data-testid="text-fortnox-cost-center">
-                    {fortnoxCodes.costCenter}
-                    {fortnoxCodes.costCenterSource && (
-                      <span className="block text-xs font-normal text-muted-foreground">
-                        {fortnoxCodeSourceLabel(fortnoxCodes.costCenterSource)}
-                      </span>
-                    )}
-                  </span>
-                ) : null
-              }
-            />
-            <InfoRow
-              label="Projekt"
-              value={
-                fortnoxCodes.project ? (
-                  <span data-testid="text-fortnox-project">
-                    {fortnoxCodes.project}
-                    {fortnoxCodes.projectSource && (
-                      <span className="block text-xs font-normal text-muted-foreground">
-                        {fortnoxCodeSourceLabel(fortnoxCodes.projectSource)}
-                      </span>
-                    )}
-                  </span>
-                ) : null
-              }
-            />
-            {!fortnoxCodes.costCenter && !fortnoxCodes.project && (
-              <p className="text-xs text-muted-foreground sm:col-span-2 pt-1">
-                Inget kostnadsställe eller projekt kunde härledas — uppgiften
-                exporteras utan koder. Sätt kostnadsställe/projekt på bil,
-                utrustning, resurs eller team.
-              </p>
-            )}
-          </CardContent>
-        </Card>
-      )}
+      {/* §5 J (Kontering): tilldelat team + kostnadsställe + projekt som uppgiften
+          faktureras mot, med varifrån värdet härleds (read-only). */}
+      <KonteringCard workOrderId={workOrderId} />
 
       {/* Anteckningar */}
       {(notes?.notes || notes?.plannedNotes || notes?.description || order.notes) && (

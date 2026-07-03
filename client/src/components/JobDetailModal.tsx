@@ -25,6 +25,7 @@ import { workOrderStatusBadge } from "@/lib/status-colors";
 import type { WorkOrder, ServiceObject, Customer, Resource, WorkOrderObject, MetadataKatalog, WorkOrderLine, CustomerCommunication } from "@shared/schema";
 import { getOrderTypeLabel } from "@shared/schema";
 import { CoupledFieldInput, type OrderTypeMetadataField } from "./CoupledFieldInput";
+import { KonteringCard } from "@/components/KonteringCard";
 
 interface JobDetailModalProps {
   open: boolean;
@@ -1166,6 +1167,8 @@ export function JobDetailModal({ open, onClose, workOrderId, bulkWorkOrderIds = 
                 </Button>
               )}
             </div>
+
+            {workOrderId && <KonteringCard workOrderId={workOrderId} variant="section" />}
 
             <div className="space-y-2 pt-3 border-t">
               <div className="flex items-center justify-between">

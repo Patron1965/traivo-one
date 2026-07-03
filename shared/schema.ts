@@ -141,6 +141,13 @@ export type ObjectHierarchyLevel = typeof OBJECT_HIERARCHY_LEVELS[number];
 export const OBJECT_LOCATION_TYPES = ["pinpoint", "area", "none"] as const;
 export type ObjectLocationType = (typeof OBJECT_LOCATION_TYPES)[number];
 
+// Platskrav (§5 A) — uppgiftens geografiska krav. Härleds från taskCategory när
+// kolumnen är NULL (field→obligatorisk, admin/logistics→ingen); 'valfri' är det
+// nya uttrycket (t.ex. egentid som ibland har en geo-position). Se
+// shared/location-requirement.ts för härledningen.
+export const LOCATION_REQUIREMENTS = ["obligatorisk", "valfri", "ingen"] as const;
+export type LocationRequirement = (typeof LOCATION_REQUIREMENTS)[number];
+
 export const objects = pgTable("objects", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
@@ -348,6 +355,10 @@ export const workOrders = pgTable("work_orders", {
   // Värden: 'field' (fältuppgift, default), 'admin' (administrativ),
   // 'logistics' (logistik utan objekt).
   taskCategory: text("task_category").default("field").notNull(),
+  // Platskrav (§5 A) — obligatorisk/valfri/ingen. Nullable (expand-contract):
+  // NULL härleds från taskCategory via resolveLocationRequirement(). Ärvs från
+  // order_concept_articles vid expansion.
+  locationRequirement: text("location_requirement"),
   // Kluster som ordern tillhör (ärvs från objekt eller sätts manuellt)
   clusterId: varchar("cluster_id").references(() => clusters.id, { onDelete: 'set null' }),
   resourceId: varchar("resource_id").references(() => resources.id),
@@ -1880,6 +1891,10 @@ export const insertObjectSchema = createInsertSchema(objects).omit({ id: true, c
     locationType: z.enum(OBJECT_LOCATION_TYPES).nullish(),
   });
 export const insertResourceSchema = createInsertSchema(resources).omit({ id: true, createdAt: true });
+// OBS: location_requirement lämnas som native nullable text i insert-schemat
+// (inte z.enum) — annars smalnar Insert-typen av under select-typens `string | null`
+// och bryter befintliga "läs WO-rad → Partial → updateWorkOrder"-anrop (mobile/sync).
+// Enum-värdena (§5 A) valideras i stället på route-nivå där klient-input tas emot.
 export const insertWorkOrderSchema = createInsertSchema(workOrders).omit({ id: true, createdAt: true });
 export const insertWorkOrderLineSchema = createInsertSchema(workOrderLines).omit({ id: true, createdAt: true, completedAt: true });
 export const insertWorkOrderObjectSchema = createInsertSchema(workOrderObjects).omit({ id: true, createdAt: true });
@@ -3932,6 +3947,9 @@ export const orderConceptArticles = pgTable("order_concept_articles", {
   // 'field' (default) skapar en uppgift per objekt; 'admin'/'logistics' skapar
   // en uppgift per koncept-körning utan object_id.
   taskCategory: text("task_category").default("field").notNull(),
+  // Platskrav (§5 A) — obligatorisk/valfri/ingen; källan för
+  // work_orders.location_requirement vid expansion. NULL = härled från taskCategory.
+  locationRequirement: text("location_requirement"),
   sortOrder: integer("sort_order").default(0),
   // Override för artikelns quantityMode på just denna orderkoncept-rad.
   // null = använd artikelns inställning. Värden: 'use_object_quantity' | 'single_per_task'
@@ -3951,6 +3969,8 @@ export const orderConceptArticles = pgTable("order_concept_articles", {
   index("idx_oca_article").on(table.articleId),
 ]);
 
+// location_requirement lämnas som native nullable text (se not vid insertWorkOrderSchema);
+// enum-värdena (§5 A) valideras på route-nivå (orderConceptRoutes add/patch).
 export const insertOrderConceptArticleSchema = createInsertSchema(orderConceptArticles).omit({
   id: true,
   createdAt: true,

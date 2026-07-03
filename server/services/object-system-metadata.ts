@@ -28,6 +28,8 @@ import {
   technicianRatings,
   workOrders,
   workOrderLines,
+  IMPOSSIBLE_REASON_LABELS,
+  type ImpossibleReason,
 } from "@shared/schema";
 import {
   deriveConceptTargets,
@@ -138,12 +140,27 @@ export type SystemCommunication = {
   sentAt: string | null;
 };
 
+// Task #1155 (Feature G): Ej-utförda uppgifter — backas av work_orders med
+// orderStatus="omojlig" ("kunde ej utföras"). Systemgenererad (read-only):
+// orsak (kod+etikett+fritext), varifrån (uppgiftens titel) och tidpunkt
+// (impossibleAt). Härleds vid läsning — inga nya metadata-rader skrivs.
+export type SystemUnperformedTask = {
+  id: string;
+  title: string | null;
+  reasonCode: string | null;
+  reason: string | null;
+  reasonText: string | null;
+  impossibleAt: string | null;
+  executionCode: string | null;
+};
+
 export type ObjectSystemGeneratedMetadata = {
   address: SystemAddressGroup;
   position: SystemPositionGroup;
   pointedInConcepts: PointedInConcept[];
   tasksHistory: SystemTaskHistory[];
   tasksFuture: SystemTaskFuture[];
+  unperformedTasks: SystemUnperformedTask[];
   images: SystemImage[];
   issueReports: SystemIssueReport[];
   ratings: SystemRating[];
@@ -263,6 +280,49 @@ async function computeTasksHistory(
     scheduledDate: toIso(wo.scheduledDate),
     lineCount: lineCounts.get(wo.id) ?? 0,
   }));
+}
+
+// Task #1155 (Feature G): "kunde ej utföras" = orderStatus "omojlig". De
+// strukturerade fälten (impossibleReason/-Text/-At) finns redan på work_orders
+// (ingen migration). Presenteras som systemgenererad metadata på objektet.
+async function computeUnperformedTasks(
+  tenantId: string,
+  objectId: string,
+): Promise<SystemUnperformedTask[]> {
+  const rows = await db
+    .select({
+      id: workOrders.id,
+      title: workOrders.title,
+      impossibleReason: workOrders.impossibleReason,
+      impossibleReasonText: workOrders.impossibleReasonText,
+      impossibleAt: workOrders.impossibleAt,
+      scheduledDate: workOrders.scheduledDate,
+      executionCode: workOrders.executionCode,
+    })
+    .from(workOrders)
+    .where(and(
+      eq(workOrders.tenantId, tenantId),
+      eq(workOrders.objectId, objectId),
+      eq(workOrders.orderStatus, "omojlig"),
+      isNull(workOrders.deletedAt),
+    ))
+    .orderBy(desc(workOrders.impossibleAt))
+    .limit(50);
+  return rows.map((r) => {
+    const code = r.impossibleReason ?? null;
+    const label = code
+      ? (IMPOSSIBLE_REASON_LABELS[code as ImpossibleReason] ?? code)
+      : null;
+    return {
+      id: r.id,
+      title: r.title ?? null,
+      reasonCode: code,
+      reason: label,
+      reasonText: r.impossibleReasonText ?? null,
+      impossibleAt: toIso(r.impossibleAt) ?? toIso(r.scheduledDate),
+      executionCode: r.executionCode ?? null,
+    };
+  });
 }
 
 async function computeTasksFuture(
@@ -434,6 +494,7 @@ export async function getObjectSystemGeneratedMetadata(
     pointedInConcepts,
     tasksHistory,
     tasksFuture,
+    unperformedTasks,
     imagesRaw,
     issuesRaw,
     ratings,
@@ -443,6 +504,7 @@ export async function getObjectSystemGeneratedMetadata(
     computePointedInConcepts(tenantId, object),
     computeTasksHistory(tenantId, objectId),
     computeTasksFuture(tenantId, objectId),
+    computeUnperformedTasks(tenantId, objectId),
     storage.getObjectImages(objectId),
     storage.getPublicIssueReports(tenantId, { objectId }),
     computeRatings(tenantId, objectId),
@@ -474,6 +536,7 @@ export async function getObjectSystemGeneratedMetadata(
     pointedInConcepts,
     tasksHistory,
     tasksFuture,
+    unperformedTasks,
     images,
     issueReports,
     ratings,

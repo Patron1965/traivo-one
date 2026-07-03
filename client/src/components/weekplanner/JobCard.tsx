@@ -16,6 +16,7 @@ import {
 import { SubStepsExpander } from "./DndComponents";
 import { WorkOrderMetadataPanel } from "../WorkOrderMetadataPanel";
 import { useLocalizedObjectName } from "@/lib/object-name";
+import { LocationRequirementBadge } from "@/components/LocationRequirementBadge";
 
 interface JobCardProps {
   job: WorkOrderWithObject;
@@ -146,6 +147,7 @@ export const JobCard = memo(function JobCard({
                 Plockuppgift
               </Badge>
             )}
+            <LocationRequirementBadge order={job} compact testIdSuffix={job.id} />
             {(job.objectAccessCode || job.objectKeyNumber) && (
               <div className="flex items-center gap-2 mt-0.5">
                 {job.objectAccessCode && (

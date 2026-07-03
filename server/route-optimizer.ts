@@ -1,4 +1,5 @@
 import type { WorkOrder, Resource, ServiceObject, Cluster } from "@shared/schema";
+import { resolveLocationRequirement } from "@shared/location-requirement";
 import { getBatchDistances } from "./distance-matrix-service";
 import type { VRPConstraintOptions } from "./vrp-constraints";
 import { getMapProvider } from "./services/mapProvider";
@@ -190,8 +191,8 @@ export async function optimizeResourceDayRoute(
 ): Promise<OptimizedRoute | null> {
   const dayOrders = workOrders.filter(wo => {
     if (!wo.scheduledDate || wo.resourceId !== resourceId) return false;
-    // Task #381 — admin/logistik-uppgifter ska inte ingå i ruttoptimering eller dagsrutt.
-    if (wo.taskCategory && wo.taskCategory !== "field") return false;
+    // §5 A / Task #381 — platskrav 'ingen' (admin/logistik) ingår aldrig i ruttoptimering eller dagsrutt.
+    if (resolveLocationRequirement(wo) === "ingen") return false;
     if (!wo.objectId) return false;
     const orderDate = wo.scheduledDate instanceof Date 
       ? wo.scheduledDate.toISOString().split("T")[0]

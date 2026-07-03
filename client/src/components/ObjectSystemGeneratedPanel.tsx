@@ -12,6 +12,7 @@ import {
   Navigation,
   Target,
   CalendarClock,
+  CircleSlash,
   Image as ImageIcon,
 } from "lucide-react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -75,6 +76,15 @@ interface SystemTaskFuture {
   customerId: string | null;
   customerName: string | null;
 }
+interface SystemUnperformedTask {
+  id: string;
+  title: string | null;
+  reasonCode: string | null;
+  reason: string | null;
+  reasonText: string | null;
+  impossibleAt: string | null;
+  executionCode: string | null;
+}
 interface SystemImage {
   id: string;
   imageUrl: string;
@@ -105,6 +115,7 @@ interface SystemGeneratedMetadata {
   pointedInConcepts: PointedInConcept[];
   tasksHistory: SystemTaskHistory[];
   tasksFuture: SystemTaskFuture[];
+  unperformedTasks: SystemUnperformedTask[];
   images: SystemImage[];
   issueReports: SystemIssueReport[];
   ratings: SystemRating[];
@@ -355,7 +366,7 @@ export function ObjectSystemGeneratedPanel({ objectId }: Props) {
     );
   }
 
-  const { address, position, pointedInConcepts, tasksHistory, tasksFuture, images, issueReports, ratings } = data;
+  const { address, position, pointedInConcepts, tasksHistory, tasksFuture, unperformedTasks = [], images, issueReports, ratings } = data;
   const hasAddress = !!(address.gatuadress || address.postnummer || address.ort);
 
   return (
@@ -508,6 +519,40 @@ export function ObjectSystemGeneratedPanel({ objectId }: Props) {
                 <span className="flex items-center gap-2 shrink-0 text-muted-foreground">
                   {fmtDate(a.scheduledDate) && <span className="text-xs">{fmtDate(a.scheduledDate)}</span>}
                   {a.status && <Badge variant="outline" className="text-xs">{a.status}</Badge>}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Section>
+
+      {/* Task #1155 (Feature G): Ej-utförda uppgifter ("kunde ej utföras") */}
+      <Section
+        title="Ej-utförda uppgifter"
+        icon={<CircleSlash className="h-4 w-4 text-destructive" />}
+        count={unperformedTasks.length}
+        testId="system-unperformed"
+        isEmpty={unperformedTasks.length === 0}
+      >
+        {unperformedTasks.length === 0 ? (
+          <Empty text="Inga ej-utförda uppgifter." testId="text-no-unperformed" />
+        ) : (
+          <ul className="space-y-1">
+            {unperformedTasks.map((u) => (
+              <li
+                key={u.id}
+                className="flex items-start justify-between gap-2 text-sm px-2 py-1 rounded hover:bg-accent"
+                data-testid={`row-unperformed-${u.id}`}
+              >
+                <span className="min-w-0">
+                  <span className="block truncate">{u.title || "Uppgift"}</span>
+                  {u.reasonText && (
+                    <span className="block text-xs text-muted-foreground truncate">{u.reasonText}</span>
+                  )}
+                </span>
+                <span className="flex items-center gap-2 shrink-0 text-muted-foreground">
+                  {u.reason && <Badge variant="destructive" className="text-xs">{u.reason}</Badge>}
+                  {fmtDate(u.impossibleAt) && <span className="text-xs">{fmtDate(u.impossibleAt)}</span>}
                 </span>
               </li>
             ))}

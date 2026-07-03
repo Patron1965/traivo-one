@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Search, Plus, Trash2, Package, MapPin, Clock, Repeat } from "lucide-react";
 import type { Article } from "@shared/schema";
 import { deriveIsPreTask } from "@/lib/article-pre-task";
@@ -15,6 +16,7 @@ export interface ConceptArticleRow {
   quantity: number;
   unitPrice: number | null;
   taskCategory?: string | null;
+  locationRequirement?: string | null;
   metadataAssociation?: string | null;
   metadataCorrespondence?: string | null;
   isPreTask?: boolean | null;
@@ -172,6 +174,26 @@ export default function Step6Tasks({
                       {ca.isSubscriptionArticle && (
                         <Badge variant="outline" className="text-[10px]" data-testid={`badge-subscription-${ca.id}`}>Abonnemang</Badge>
                       )}
+                    </div>
+
+                    <div className="flex items-center gap-2 pl-1">
+                      <span className="text-xs text-muted-foreground flex items-center gap-1">
+                        <MapPin className="h-3 w-3" /> Platskrav:
+                      </span>
+                      <Select
+                        value={ca.locationRequirement ?? "auto"}
+                        onValueChange={(v) => onUpdateArticleField(ca.id, { locationRequirement: v === "auto" ? null : v })}
+                      >
+                        <SelectTrigger className="h-7 w-[180px] text-xs" data-testid={`select-location-req-${ca.id}`}>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="auto">Auto (härledd)</SelectItem>
+                          <SelectItem value="obligatorisk">Plats obligatorisk</SelectItem>
+                          <SelectItem value="valfri">Plats valfri</SelectItem>
+                          <SelectItem value="ingen">Ingen plats</SelectItem>
+                        </SelectContent>
+                      </Select>
                     </div>
                   </div>
                 );

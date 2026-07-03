@@ -1,5 +1,6 @@
 import { db } from "./db";
 import { optimizationJobs } from "@shared/schema";
+import { resolveLocationRequirement } from "@shared/location-requirement";
 import { eq, and, lt, inArray } from "drizzle-orm";
 import type { VRPOptimizationResult } from "./route-optimizer";
 import type { VRPConstraintOptions } from "./vrp-constraints";
@@ -166,8 +167,8 @@ async function executeORToolsJob(jobId: string, input: VRPJobInput): Promise<VRP
   let filteredOrders = workOrders.filter(o =>
     o.orderStatus !== "utford" && o.orderStatus !== "fakturerad"
   );
-  // Task #381 — exkludera administrativa/logistik-uppgifter från VRP-jobb (de saknar fysiskt objekt).
-  filteredOrders = filteredOrders.filter(o => (!o.taskCategory || o.taskCategory === "field") && !!o.objectId);
+  // §5 A / Task #381 — exkludera platskrav 'ingen' (admin/logistik utan fysiskt objekt) från VRP-jobb.
+  filteredOrders = filteredOrders.filter(o => resolveLocationRequirement(o) !== "ingen" && !!o.objectId);
   if (input.date) {
     filteredOrders = filteredOrders.filter(o => {
       if (!o.scheduledDate) return false;

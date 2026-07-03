@@ -53,6 +53,7 @@ const ArticlesPage = lazy(() => import("@/pages/ArticlesPage"));
 const ArticleFormPage = lazy(() => import("@/pages/ArticleFormPage"));
 const PriceListsPage = lazy(() => import("@/pages/PriceListsPage"));
 const OrderStockPage = lazy(() => import("@/pages/OrderStockPage"));
+const MissadeJobbPage = lazy(() => import("@/pages/MissadeJobbPage"));
 const VehiclesPage = lazy(() => import("@/pages/VehiclesPage"));
 const SubscriptionsPage = lazy(() => import("@/pages/SubscriptionsPage"));
 const PlanningParametersPage = lazy(() => import("@/pages/PlanningParametersPage"));
@@ -192,6 +193,7 @@ function Router() {
         <Route path="/articles">{() => <ProtectedRoute component={ArticlesPage} path="/articles" />}</Route>
         <Route path="/price-lists">{() => <ProtectedRoute component={PriceListsPage} path="/price-lists" />}</Route>
         <Route path="/order-stock">{() => <ProtectedRoute component={OrderStockPage} path="/order-stock" />}</Route>
+        <Route path="/missade-jobb">{() => <ProtectedRoute component={MissadeJobbPage} path="/missade-jobb" />}</Route>
         <Route path="/vehicles">{() => <ProtectedRoute component={VehiclesPage} path="/vehicles" />}</Route>
         <Route path="/subscriptions">{() => <ProtectedRoute component={SubscriptionsPage} path="/subscriptions" />}</Route>
         <Route path="/planning-parameters">{() => <ProtectedRoute component={PlanningParametersPage} path="/planning-parameters" />}</Route>

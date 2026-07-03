@@ -44,6 +44,7 @@ import {
   Tag,
   Workflow,
   Shapes,
+  CircleSlash,
   type LucideIcon,
 } from "lucide-react";
 import { translate } from "./i18n";
@@ -177,6 +178,7 @@ export function getEkonomiItems(tl?: (key: string) => string): NavItem[] {
     { title: l("nav.economics"), url: "/economics", icon: DollarSign, description: l("nav.economics.desc"), subSection: "Rapporter & analys" },
     { title: l("nav.reporting"), url: "/reporting", icon: BarChart3, description: l("nav.reporting.desc"), subSection: "Rapporter & analys" },
     { title: "Veckomötes-rapport", url: "/weekly-report", icon: FileText, description: "Sammanställd rapport för planeringsmötet (utfall, trender, plan, kvalitet) – PDF via utskrift", subSection: "Rapporter & analys" },
+    { title: "Ej-utförda uppgifter", url: "/missade-jobb", icon: CircleSlash, description: "Rapport över uppgifter som inte kunde utföras – orsak, distrikt, utförarkod och tidpunkt", subSection: "Rapporter & analys" },
     { title: l("nav.roi-report"), url: "/roi-report", icon: TrendingUp, description: l("nav.roi-report.desc"), subSection: "Rapporter & analys" },
     // Försäljning
     { title: l("nav.proactive-sales"), url: "/proactive-sales", icon: TrendingUp, description: l("nav.proactive-sales.desc"), subSection: "Försäljning" },
