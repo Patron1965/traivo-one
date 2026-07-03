@@ -1,0 +1,80 @@
+{
+  "sessionId": "d980d30e4",
+  "exportedAt": "2026-07-03T08:32:57.165Z",
+  "summary": "### Key Topics Discussed\n- Förtydligande av klumpningsfunktionen i finplaneringen\n- Hantering av beroendeuppgifter knutna till geografisk plats (t.ex. nyckelhämtning)\n- Hantering av beroendeuppgifter som inte är geografiskt knutna, men tidsbundna (t.ex. avisering)\n- Affärsmässig logik för tidsbegränsade aviseringar för att undvika aviseringar mitt i natten\n\n### Important Points & Insights\n- Beroendeuppgifter kan fungera som en \"svans\" som följer med huvuduppgiften vid omplanering, även om de inte är geografiskt bundna.\n- En grundläggande affärslogik och tidsspann måste finnas för att säkerställa att tidsbundna beroendeuppgifter (som aviseringar) hanteras korrekt och inte sker under olämpliga tider (t.ex. mitt i natten).\n- Tidsbundna beroendeuppgifter ska automatiskt flyttas eller kvarstå baserat på det grundläggande tidsspannet om huvuduppgiften flyttas.\n- När en klump av jobb flyttas i planeringen, ska de tidsbundna beroendeuppgifterna följa med, baserat på deras tidsintervall (t.ex. \"tre timmar före\").\n- Tidsbundna beroendeuppgifter kan ligga på en annan utförare och ska flyttas med huvudjobbet vid omplanering, även om huvudjobbet flyttas i en annan utförares finplanering.",
+  "conversation": [],
+  "transcripts": [
+    {
+      "text": "Japp.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Jo, ett förtydligande här och frågande resonemang då i finplaneringen är ju att, eh, vi har ju den här klumpningsfunktionen då som kommer att klumpa ihop uppgifter då på samma plats och vid samma tidpunkt. Men sen har vi då en logik som bygger på att det kan finnas då beroendeuppgifter då, som i vissa fall är knutna till en viss geografisk plats, till exempel att man ska plocka en nyckel eller någonting sådant. Eh, eller så har vi-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm ...det är en uppgift som inte är geografiskt knuten, men den ska utföras innan då. Till exempel att man ska ringa och avisera och komma överens när man kommer och förbereda kunden då på att man är där. Och i båda de här fallen så blir det ju då att hu-- Klumpen utav huvuduppgifter kommer ju då att läggas in på finplaneringen. Och bildligt så kommer ju då de här beroendeuppgifterna då att bli ungefär som en svans. Så om det finns en beroendeuppgift att vi till exempel ska-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "...tre timmar innan och jobbet läggs då klockan ett på en onsdag, så kommer det ju då att vara en lit- en liten uppgift då som, som, eh, som ligger då klockan, vad blir det då? Klockan, klockan tio, att det ska ringas upp då. Och flyttar vi då fram den här då, så, så kommer ju den här som en svans att åka med då.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och där behöver det också då vara en, eh, affärsmässig logik då som säger att, eh, eh, om den-- Om man nu planerar in ett jobb då klockan sju på morgonen och det är tre timmars föra avisering, då måste det finnas en, en, ett regelverk då som säger då att vi inte ringer upp då klockan mitt i natten då, utan då rings det här då senast till exempel klockan fyra då på, på, på, på dan. Så att man-- För att få en säkerhet i det här så-- De här beroendeuppgifterna bokas då in medan klockan åtta och fyra-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. Utifrån su-- En, en, ett, ett grundläggande tidsspann där för dem då. Och så hoppar de automatiskt fram då eller blir kvar då- Mm. Om det blir senare tid än det.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. Äh, så att- Mm.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Men, men planeringsmässigt så handlar ju det här om att när, när man drar i en klump av jobb då så här, då, då, då ska den här liksom följa med en dag eller tre timmar före.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "I sken va? Mm. Och det som försvårar det lite grann också, det är ju att den här beroendeuppgiften kan ju ha en annan utförandekod...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och ligga på en annan utförare också. Så teoretiskt sett så när du flyttar huvudjobbet på en utförare, sin planering, så flyttas då den här beroendeuppgiften på någon annans...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Fin planering då.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    }
+  ]
+}

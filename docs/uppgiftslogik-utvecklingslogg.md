@@ -3,7 +3,7 @@
 > **Typ:** Utvecklingslogg / parkeringsplats för framtida bygge. **Ingen kod ändras av detta dokument.**
 > **Syfte:** (1) slå fast grunderna så att det *inte finns några frågetecken* kring uppgiftsmodellen, och
 > (2) parkera framtida motorer/funktioner (t.ex. vatten-/avfalls-fyllnadsmotorn) så de kan byggas ut i ett senare skede.
-> **Källor:** produktägarens genomgång 2026-07-02 (två röst-sessioner + Excel-matrisen "Uppgiftslogik och informationspaket"),
+> **Källor:** produktägarens genomgång 2026-07-02 (två röst-sessioner + Excel-matrisen "Uppgiftslogik och informationspaket") + röst-session 2026-07-03 (beroendeuppgifter/"svans" i finplaneringen, §4 U9),
 > `docs/uppgiftsmodellen-utredning.md` (Task #1079), ADR v3 (`docs/adr-orderkoncept-v3.md`), minnesfilen `uppgiftslogik-v1-decisions.md`.
 > **Relation:** `uppgiftsmodellen-utredning.md` bevisar att informationspaketet redan motsvaras av befintliga system. *Detta* dokument är framåtblickande — bekräftade beslut + deferrat arbete.
 
@@ -121,6 +121,37 @@ Vi har redan önskad leveranstid, tidsmotorns optimerade/planerade tid, kalkyler
 - En **analys-/rapportvy** för genomloppstid, tidsdrift, återgångar och kalkyl-vs-utfall.
 
 **Öppen designfråga:** var lever historiken (utöka `audit_logs`/`slot_times` eller en dedikerad `task_status_events`-tabell) och över vilken tabell den förs (`assignments` vs `work_orders` — jfr dualiteten i `uppgiftsmodellen-utredning.md §4`).
+
+### U9. Beroendeuppgifter ("svans") i finplaneringen — relativ placering + aviseringsfönster — *tillägg 2026-07-03*
+Beroendeuppgifter är **uppgifter som vilka som helst** (§1.4 — egen utförandekod, ev. eget pris/rapport) men som måste utföras **före** en huvuduppgift/klump och som **följer med** huvuduppgiften när den flyttas i planeringen ("svans"). Klumpningsmotorn lägger klumpen av huvuduppgifter på finplaneringen; beroendeuppgiften bildar en svans som hänger på.
+
+**Två typer (produktägarens uppdelning):**
+- **Geografiskt knuten** — måste utföras på en viss plats före jobbet (t.ex. hämta en nyckel). Har platskrav (§A) + beroende till huvuduppgiften.
+- **Ej geografiskt knuten men tidsbunden** — administrativ föruppgift utan geo-krav (t.ex. ringa och avisera kunden, komma överens om ankomsttid, förbereda kunden). Saknar plats (§A) men har ett **tids-offset** relativt huvuduppgiften.
+
+**Relativ placering ("svansen hänger med"):**
+- Offset uttrycks **relativt** huvuduppgiften/klumpen (t.ex. "3 h före" eller "1 dygn före"), inte som absolut tid. När planeraren drar klumpen i finplaneringen ska svansen **flytta med** och räknas om (huvudjobb ons 13:00, 3 h före → aviseringsuppgift 10:00; flyttas huvudjobbet flyttas svansen).
+
+**Affärsregel — aviseringsfönster (undvik att "ringa mitt i natten"):**
+- Ren offset räcker inte: huvudjobb 07:00 − 3 h = 04:00 → orimligt. Det krävs ett **tillåtet aviseringsfönster** (t.ex. senast 16:00 dagen före, tidigast en viss tid). Svansen **clampas** in i fönstret: hamnar beräknad tid utanför **hoppar den framåt/bakåt** till närmaste tillåtna tid (eller stannar kvar).
+- Detta är samma slags mekanik som **leveranstidsfönstren (§E)**: hårda/mjuka, positiva/negativa fönster. Ett negativt hårt "natt"-fönster + ett positivt aviseringsfönster + mål-offset = svansens placering. **Verifiera mot befintliga `frozenTimeRules`/leveranstidsmotorn** innan en parallell modell byggs.
+
+**Svåraste delen — beroende över utförare OCH utförandekod:**
+- Svansen kan ha **annan utförandekod** och ligga på **en annan utförare** än huvuduppgiften. En flytt av huvudjobbet i utförare A:s finplanering innebär då en **flytt av beroendeuppgiften i utförare B:s** finplanering.
+- Kräver att beroendegrafen kan korsa resurser/kalendrar och att den andra planeraren/utföraren får en **notifiering/mellanstatus** (jfr §5 "blockerad av beroende").
+
+**Vad finns redan (återanvänd — bygg inte parallellt):**
+- Beroende-plumbing: `task_dependencies` (work_orders-internt) och `parentAssignmentId` (assignments-internt) — men de lever i **två separata lager utan brygga** (se minnet `logistics-task-split.md`). Cross-utförare/cross-tabell-beroende är därmed en **känd begränsning** som måste lösas för svans-över-resurs.
+- Klumpningsmotorn (grovplanering `metadata.kind=clump`) + leveranstidsmotorn/`frozenTimeRules` (hård = snapshot/blockering, mjuk = prioritetsdelta i VRP).
+- Mellanstatus "blockerad av beroende" är redan bekräftad (§5).
+
+**Öppna designfrågor:**
+1. **Relativt offset** — fryses offset per uppgift vid expansion (jfr frozna tidsregler) eller är det ett mjukt mål som motorn optimerar?
+2. **Cross-utförare-flytt** — ska svansen **auto-flytta** i den andra utförarens plan, eller bara **flaggas** (mellanstatus + notifiering) för den planeraren att bekräfta?
+3. **Aviseringsfönstrets ursprung** — konfigureras per orderkoncept/artikel/objekt-metadata, samt dess relation till leveranstidsfönstren (§E).
+4. **Lagerval** — svans-beroenden i `assignments` (koncept-expansion) vs `work_orders` (fält) enligt logistik-splitten; ett cross-utförare-beroende bryter dagens "håll hela paret i ett lager"-regel.
+
+**Trigger att bygga:** när beroende-/aviseringsstyrd finplanering prioriteras. *Behövs inte just nu — parkerat.*
 
 ---
 
