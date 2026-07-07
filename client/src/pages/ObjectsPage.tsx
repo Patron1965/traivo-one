@@ -862,22 +862,56 @@ export default function ObjectsPage() {
       });
       downloadCSV("objektlista.csv", [objektHeaders, ...objektRows]);
 
+      toast({ title: "Export klar", description: `${allObjects.length} objekt exporterade` });
+    } catch (err) {
+      toast({ title: "Export misslyckades", description: err instanceof Error ? err.message : "Okänt fel", variant: "destructive" });
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  // Separat, tydligt export-alternativ för en fullständig dump av alla
+  // metadatavärden per objekt (Objektnummer, Objektnamn, Metadatafält, Värde).
+  // Bryts medvetet ut ur "Rapport (CSV)" (som hålls slimmad till mockupens
+  // 11 objektkolumner) så att metadatadumpen erbjuds explicit vid behov.
+  const exportMetadataValuesCSV = async () => {
+    if (isExporting) return;
+    setIsExporting(true);
+    try {
+      const params = buildObjectFilterParams(100000, 0);
+      const res = await fetch(`/api/objects?${params.toString()}`, { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch objects");
+      const data: { objects: ServiceObject[] } = await res.json();
+      const allObjects = data.objects ?? [];
+
       const allKatalogIds = metadataCatalog.map(t => t.id);
       const katalogNameById = new Map(metadataCatalog.map(t => [t.id, t.namn]));
       const metaRows: (string | number)[][] = [["Objektnummer", "Objektnamn", "Metadatafält", "Värde"]];
       if (allKatalogIds.length > 0 && allObjects.length > 0) {
+        const objById = new Map(allObjects.map(o => [o.id, o]));
         const allIds = allObjects.map(o => o.id);
-        const CHUNK = 200;
-        for (let i = 0; i < allIds.length; i += CHUNK) {
-          const chunk = allIds.slice(i, i + CHUNK);
-          const mRes = await apiRequest("POST", "/api/metadata/objects/values-batch", {
-            objectIds: chunk,
-            katalogIds: allKatalogIds,
-          });
-          const mData: { values: Record<string, Record<string, string>> } = await mRes.json();
-          for (const objId of chunk) {
-            const obj = allObjects.find(o => o.id === objId);
-            const objValues = mData.values?.[objId] ?? {};
+        // Chunka BÅDA dimensionerna för att hålla oss inom values-batch-takten
+        // (objectIds ≤ 500, katalogIds ≤ 60), precis som exportSelectedColumns.
+        const OBJ_CHUNK = 200;
+        const KAT_CHUNK = 60;
+        for (let i = 0; i < allIds.length; i += OBJ_CHUNK) {
+          const objChunk = allIds.slice(i, i + OBJ_CHUNK);
+          // Slå samman katalog-delsvar per objekt innan vi skriver rader.
+          const valuesByObj: Record<string, Record<string, string>> = {};
+          for (let j = 0; j < allKatalogIds.length; j += KAT_CHUNK) {
+            const katChunk = allKatalogIds.slice(j, j + KAT_CHUNK);
+            const mRes = await apiRequest("POST", "/api/metadata/objects/values-batch", {
+              objectIds: objChunk,
+              katalogIds: katChunk,
+            });
+            const mData: { values: Record<string, Record<string, string>> } = await mRes.json();
+            for (const [objId, m] of Object.entries(mData.values ?? {})) {
+              valuesByObj[objId] = { ...(valuesByObj[objId] ?? {}), ...m };
+            }
+          }
+          for (const objId of objChunk) {
+            const obj = objById.get(objId);
+            const objValues = valuesByObj[objId] ?? {};
             for (const katalogId of allKatalogIds) {
               const val = objValues[katalogId];
               if (val === undefined || val === null || val === "") continue;
@@ -893,7 +927,7 @@ export default function ObjectsPage() {
       }
       downloadCSV("metadatalista.csv", metaRows);
 
-      toast({ title: "Export klar", description: `${allObjects.length} objekt exporterade i 2 filer (objektlista + metadatalista)` });
+      toast({ title: "Export klar", description: `Metadatavärden exporterade (${metaRows.length - 1} rader)` });
     } catch (err) {
       toast({ title: "Export misslyckades", description: err instanceof Error ? err.message : "Okänt fel", variant: "destructive" });
     } finally {
@@ -1542,7 +1576,14 @@ export default function ObjectsPage() {
               <FileSpreadsheet className="h-4 w-4 mr-2 mt-0.5 shrink-0" />
               <div className="flex flex-col">
                 <span>Rapport (CSV)</span>
-                <span className="text-xs text-muted-foreground">För analys i Excel – kan inte läsas tillbaka in</span>
+                <span className="text-xs text-muted-foreground">Objektlista för analys i Excel – kan inte läsas tillbaka in</span>
+              </div>
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={exportMetadataValuesCSV} data-testid="menu-export-metadata-values">
+              <FileSpreadsheet className="h-4 w-4 mr-2 mt-0.5 shrink-0" />
+              <div className="flex flex-col">
+                <span>Metadatavärden (CSV)</span>
+                <span className="text-xs text-muted-foreground">Fullständig dump av alla metadatavärden per objekt</span>
               </div>
             </DropdownMenuItem>
             <DropdownMenuSeparator />
