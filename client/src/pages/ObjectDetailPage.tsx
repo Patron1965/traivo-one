@@ -590,6 +590,20 @@ export default function ObjectDetailPage() {
     enabled: !!objectId && !isCreate,
   });
 
+  // Task #1165: senaste driftstatus-ändring (aktör + tidpunkt) för spårbarhet
+  // nära status-väljaren i huvudet.
+  const { data: statusHistory } = useQuery<{
+    latest: { changedAt: string; actorName: string | null; changes: { from?: string | null; to?: string | null } | null } | null;
+  }>({
+    queryKey: ["/api/objects", objectId, "status-history"],
+    queryFn: async () => {
+      const res = await fetch(versionedUrl(`/api/objects/${objectId}/status-history`), { credentials: "include" });
+      if (!res.ok) return { latest: null };
+      return res.json();
+    },
+    enabled: !!objectId && !isCreate,
+  });
+
   // Task #998: namngivna importmallar återanvänds som fälturval för mall-styrd
   // redigering. Läs-endpointen är öppen för admin/owner och planner.
   const { data: importTemplates = [] } = useQuery<ImportTemplate[]>({
@@ -610,6 +624,7 @@ export default function ObjectDetailPage() {
       queryClient.invalidateQueries({ queryKey: ["/api/objects", objectId, "resolved"] });
       queryClient.invalidateQueries({ queryKey: ["/api/objects", objectId, "ancestors"] });
       queryClient.invalidateQueries({ queryKey: ["/api/objects"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/objects", objectId, "status-history"] });
       toast({ title: "Sparat", description: "Objektet har uppdaterats." });
       setEditDialogOpen(false);
     },
@@ -1331,6 +1346,25 @@ export default function ObjectDetailPage() {
               <Badge className={getObjectStatusBadge(obj.status)} data-testid="badge-status">
                 {OBJECT_STATUS_LABELS[(obj.status as string) || "active"] ?? obj.status}
               </Badge>
+            )}
+            {statusHistory?.latest && !(obj as any).deletedAt && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span
+                    className="text-xs text-muted-foreground cursor-help"
+                    data-testid="text-status-last-changed"
+                  >
+                    Senast ändrad av {statusHistory.latest.actorName || "okänd"}{" "}
+                    {new Date(statusHistory.latest.changedAt).toLocaleDateString("sv-SE")}
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent>
+                  Status ändrad{statusHistory.latest.changes?.from ? ` från "${OBJECT_STATUS_LABELS[statusHistory.latest.changes.from] ?? statusHistory.latest.changes.from}"` : ""}
+                  {statusHistory.latest.changes?.to ? ` till "${OBJECT_STATUS_LABELS[statusHistory.latest.changes.to] ?? statusHistory.latest.changes.to}"` : ""}
+                  {" "}av {statusHistory.latest.actorName || "okänd"} den{" "}
+                  {new Date(statusHistory.latest.changedAt).toLocaleString("sv-SE")}
+                </TooltipContent>
+              </Tooltip>
             )}
             {obj.accessType && obj.accessType !== "open" && (
               <Badge variant="outline" className="gap-1" data-testid="badge-access-type">

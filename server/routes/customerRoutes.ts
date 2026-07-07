@@ -1190,6 +1190,26 @@ app.patch("/api/objects/:id", asyncHandler(async (req, res) => {
     object = (await storage.getObject(req.params.id)) ?? object;
   }
 
+  // Task #1165: spårbarhet för objektets driftstatus. När status ändras skriver vi
+  // en audit-rad (aktör + tidpunkt) via befintligt audit_logs-mönster. Best-effort:
+  // ett fel i loggningen får aldrig fälla själva statusuppdateringen.
+  if ("status" in updateData && updateData.status !== existing!.status) {
+    try {
+      await storage.createAuditLog({
+        tenantId,
+        userId: (req as any).user?.claims?.sub ?? null,
+        action: "object.status_change",
+        resourceType: "object",
+        resourceId: req.params.id,
+        changes: { from: existing!.status ?? null, to: (updateData.status as string) ?? null },
+        ipAddress: req.ip || null,
+        userAgent: req.headers["user-agent"] || null,
+      });
+    } catch (e) {
+      console.warn("[audit] object.status_change kunde inte skrivas", e);
+    }
+  }
+
   const addressChanged = "address" in updateData && updateData.address !== existing!.address;
   const coordsExplicitlyProvided = "latitude" in updateData || "longitude" in updateData;
   if (addressChanged && !coordsExplicitlyProvided && object.address) {
@@ -1199,6 +1219,41 @@ app.patch("/api/objects/:id", asyncHandler(async (req, res) => {
   }
 
   res.json(object);
+}));
+
+// Task #1165: senaste driftstatus-ändring för ett objekt (aktör + tidpunkt).
+// Används av objekt-huvudet för att visa "Senast ändrad av X <datum>" nära
+// status-väljaren. Tenant-scopad via getAuditLogs.
+app.get("/api/objects/:id/status-history", asyncHandler(async (req, res) => {
+  const tenantId = getTenantIdWithFallback(req);
+  const existing = await storage.getObject(req.params.id);
+  if (!verifyTenantOwnership(existing, tenantId)) {
+    throw new NotFoundError("Objekt");
+  }
+  const logs = await storage.getAuditLogs(tenantId, {
+    action: "object.status_change",
+    resourceType: "object",
+    resourceId: req.params.id,
+    limit: 1,
+  });
+  const latest = logs[0];
+  if (!latest) {
+    return res.json({ latest: null });
+  }
+  let actorName: string | null = null;
+  if (latest.userId) {
+    const user = await storage.getUser(latest.userId);
+    if (user) {
+      actorName = [user.firstName, user.lastName].filter(Boolean).join(" ").trim() || user.email || null;
+    }
+  }
+  res.json({
+    latest: {
+      changedAt: latest.createdAt,
+      actorName,
+      changes: latest.changes ?? null,
+    },
+  });
 }));
 
 app.put("/api/objects/:id/verify", asyncHandler(async (req, res) => {
