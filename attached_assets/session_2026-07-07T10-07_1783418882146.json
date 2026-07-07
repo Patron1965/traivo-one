@@ -1,0 +1,134 @@
+{
+  "sessionId": "8415f1234",
+  "exportedAt": "2026-07-07T10:07:50.674Z",
+  "summary": "### Key Topics Discussed\n- Riktning för informationspaket och dess centrala roll i systemet.\n- Ursprung för informationsfält (sidoregister, metadata, artikeldata, systemsatt, orderkoncept, motorer).\n- Informationsnivåer från systemets motorer (nio stycken, varav 1-7 är relevanta för informationspaketet).\n- Specifika motorer: geografisk motor, tidsmotor, klumpningsmotor, faktureringsmotor, abonnemangsmotor, beroendeuppgiftsmotor, uppgiftsskapande motor.\n- Klumpningsmotorns funktion att gruppera uppgifter med en indexkod.\n- Fakturaordermotorns koppling till fakturareferens i orderkonceptet och dess förmåga att klumpa uppgifter baserat på fakturareferens, oavsett geografisk plats eller leveranstid.\n- Fakturaordermotorns hantering av faktureringsvariabler som dags-, vecko- eller månadsfakturering, samt krav på slutförda uppgifter innan fakturering.\n- Uppgiftens status (punkt sex) upplevs som tillkrånglad, men levereras som en avgörande del till informationspaketet för sortering. Status kan vara skapad, planerad, fakturakontroll, fakturerad, eller omöjlig att utföra.\n- Skapa filter för att se uppgifter som inte har kunnat utföras.\n- Möjlighet att filtrera uppgifter baserat på geografiskt distrikt för en utförare.\n- Utökning av filterfunktionalitet för att ändra tid och status för uppgifter.\n\n### Decisions Made\n- Uppdatera datafält till det som har överenskommits.\n\n### Action Items\n- Repli ska tydliggöra vad varje motor levererar och i vilken form datan levereras.\n- Säkerställa att fakturaordermotorns leveranser av fakturareferens och faktureringsvariabler dyker upp i informationspaketet.\n\n### Important Points & Insights\n- Informationspaketet är centralt för hela systemets syfte.\n- Det är avgörande för Repli att se till att alla datafält från artiklar inkluderas i informationspaketet.\n- Alla data- och informationsfält på orderkonceptet, som leveranstid och kundinformation, måste inkluderas i den nya uppställningen.\n- För tydlighetens skull bör Repli specificera källan för varje informationsfält (sidoregister, metadatastyrt, rådata från artikel/orderkoncept, systemsatt).\n- Det finns tre huvudsakliga källor för information: artikelregistret, orderkonceptet och objektets metadata.\n- Systemets motorer levererar egna datafält som också måste beaktas i informationspaketet.\n- Geografisk motor kan behöva identifiera fysisk plockning från lager och skapa en uppgift för det.\n- Klumpningsmotorn levererar en indexkod för att gruppera uppgifter.\n- Fakturaordermotorn kopplar uppgifter till orderkonceptets fakturareferens och grupperar uppgifter med samma fakturareferens till en faktura, oberoende av geografisk plats eller leveranstid.\n- Fakturaordermotorn hanterar variabler för faktureringstakt (dag, vecka, månad) och krav på slutförda uppgifter innan fakturering.\n- Uppgiftens status är en central del i informationspaketet och dess olika stadier (skapad, planerad, fakturakontroll, fakturerad, omöjlig att utföra) är viktiga för sortering.\n- Möjligt att skapa filter för att se outförda uppgifter, geografiska distrikt eller specifika utförare.\n- Behov av att utveckla filtret för att kunna ändra tid och uppgiftsstatus.\n- Uppgiftsstatusen ska tonas ner och förtydligas, för att vara en del av olika statusar snarare än ett 'rött stopp'.\n\n### Open Questions/Pending Items\n- Analysera vilka datafält som måste komma in från orderkonceptet.\n- Repli ska addera information om varifrån varje datafält härstammar (sidoregister, metadatastyrt, systemsatt, orderkoncept, motorer).\n- Analysera hur datafälten från systemets motorer (1-7) ska integreras i informationspaketet.\n- Förenkla logiken för \"Uppgiftens status\" (punkt sex).\n- Utveckla filterfunktionen för att bättre hantera tids- och statusändringar för uppgifter.",
+  "conversation": [],
+  "transcripts": [
+    {
+      "text": "Jag brukar ju sitta och kolla på de där.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Då gör jag nu då.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Ja, jag kommer då... Jo, det, det som det var, var då det här med informationspaketen. Informationspaketet är ju ett... Alltså hela syftet med hela systemet då. Och det är otroligt viktigt då att vi ber Repli att rannsaka sig själv då och gå in här och titta på nummer ett, artikeln och se då att alla datafält som finns på artikeln måste ju också komma in här i informationspaketet i en eller annan form.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och alla datafält eller informationsfält som finns på orderkonceptet måste komma in i den här uppställningen då. Till exempel leveranstid eller ja, kund finns ju väl med här då.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. Så att jag gör liksom en riktig analys i det och tittar. Och här, här får... För ordningens skull, här också så kan ju då Replit då... Nu har man ju delat upp här då vad som hämtas från sidoregister, om det är metadatastyrt, om det är ren data då ifrån artikeln eller orderkonceptet och, eller om det är systemsatt. Om Replit också lägger till på varje sån där då varifrån den här informationen härstammar- Ja, jättebra. Så kommer vi då att se då att vissa informationer då, till exempel produktionstid-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. -då som är ren data, den kommer ju då ifrån, eh, artikelregistret då och artikeln. Eh, medan då, eh, vi ska se här. Eh, ja, man kan säga att man har ju grupperat det så att det stämmer väl delvis då det som har med artikeln att göra där. Då ligger ju där då medan... Men det skulle vara väldigt bra att se då... Eh, ja, det är lite mismatch så att säga. För att komma antal metadata, ja men då, då kommer ju antalet här då, det kommer ju ifrån, ifrån, eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Orderkonceptet och, och mer. Ja, det har den fått med där. Men, men information här kommer ju att härstamma ifrån antingen artikelregistret eller alltså datan som finns på respektive artikel. Eller så kommer den att hem-- Eh, härstamma ifrån orderkonceptet. Eller så kommer den att härstamma ifrån objektets metadata då. Så det finns ju liksom som tre källor då här som den kommer. Sen kan ju respektive data från artikeln, objektet eller orderkonceptet vara då...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Ren data eller det kan vara metadatastyrt eller det kan vara systemsatt eller det kan hämtas då från ett sidoregister. Så analysera det där lite bättre och se till att allting kommer med. Och ytterligare då en, en informationsnivå som finns här som Replik inte har fått med, det är det som levereras då utav de här motorerna då. Och då finns det ju... Det finns nio stycken motorer, varav då motor ett till sju då har ju väldigt mycket med det, med informationen-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. Paketet att göra. De viktigaste",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "och var då. Eh, den geografiska motorn som försöker definiera platsen. Den tidsmotorn som försöker att definiera när det kan göra utifrån önskade leveranstider och hårda och mjuka tidsfönster då. Och sen har vi klumpningsmotorn då som slår ihop då uppgifter av samma typ på samma plats då så att det blir liksom ett stopp då. Eh, och de här levererar ju då ett datafält.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Eller uppdaterat datafält då till, till, eh, det som vi har där uppe då. Eh, och på motsvarande sätt så blir det ju då, eh, med fyran som är alltså, eh, f-faktureringsmotorn då som grupperar uppgifterna utifrån fakturavillkoren. Så där kommer vi att se då att ja, den här uppgiften, den hör ihop med den fakturan och den här hör ihop med en annan faktura då. Och sen har vi då abonnemangsmotorn då som, som dels då ser till att göra, eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "De här månadsfakturorna som inte har någonting med uppgifterna att göra, utan det ligger helt utanför då. Men, men däremot så håller den ju reda då på de uppgifter som är kopplade då till de, de, de, de faktur-- Eller de uppgifterna som ligger ute där då. Eh, sen har vi de här blå då, det är beroendeuppgiftsmotorn då som, som, som då håller reda på om uppgifter måste utföras i en viss ordning för att till exempel en huvuduppgift ska göras. Och så sjuan då som är en, eh, uppgiftsskapande motor då som, som förstår att om man ska...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Har ett behov utav en fysisk artikel på en geografisk plats under veckan, så måste den här då hålla reda på att den måste fysiskt plockas från ett, ett fysiskt lager då. Och då skapa också då en uppgift då. Så, så, så här kan det också vara bra då att, att Repli, både för sig själv och för oss, tydliggör då vad är det, vad är det varje sån här motor liksom då levererar då och i vilken form, eh, levereras det då in då. Så att de översta gröna, det är ju bara uppdaterade platser och, och leveranstider då.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Eh, körmedicinskt motor, den levererar väl rimligtvis en kod då så att uppgifter som, som, som då kan klumpas ihop då får ett, en indexkod på sig så att de kan alltså hänga ihop då utifrån en ny logik då som den här motorn skapar då. Eh, och, eh, f-fakturaordermotorn här då, den, den, den ser ju utifrån orderkonceptet då att den här uppgiften är kopplad till orderkonceptets fakturarreferens si och så.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och andra då eventuella uppgifter med samma fakturarreferens kommer då utifrån fakturaperspektivet då att kunna klumpas ihop då som en, som en faktura, oavsett om de finns på samma geografiska plats eller samma leveranstid då. Eh, och sen håller den ju också reda på då variablerna, eh, som tillåter då, eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Dagsfakturering eller veckofakturering, månadsfakturering eller om alla uppgifterna, eh, på fakturan måste vara slutförda innan fakturan skapas. Det gör då den där motorn. Så då, då, d-d-det försök att få en, en, en bättre logik där då så man ser vad de, vad de här levererar och att de också dyker upp då i informationspaketet då där uppe. Eh, sen då det här punkten sex då, uppgiftens status då. Alltså, l-l... Den känns lite tillkrånglad då så att säga då för att...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "En uppgift har alltså... Det är inte en livscykel, utan det är ju liksom bara en, en status att den är, den är, den, den är skapad, den är planerad utifrån olika lägen, fakturakontroll och den är fakturerad. Se-sen blir det ju då att om den är omöjlig att utfö-utföra eller om det är något annat, ja, då intar den ju liksom bara en, en annan status då. Och det här ska ju också levereras upp då till informationspaketet då så att man läser...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Ja. Kan sortera då, för det blir ju en central del i ut... Eh, eller alltså i den här master... Om du bläddrar ner där, så jag...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Alltså i, i, i den här masterplaneringen då, eh, där man då kan söka på... Ja, enkelt sammanfatt så kan man, kan man ju liksom söka på informationspaketets alla statusar där då. Och, eh, där nämnde vi väl också i det här sammanhanget då att man kan ska... Alltså i en central del i masterplaneringen är då återigen ett sidoregister då där vi kan skapa ett register på olika filter då. Så vill planeraren då skapa ett filter",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "över arbeten som inte har... Eller uppgi-uppgifter då som inte har gått att utföra oberoende utav typ. Så, så kan man alltså skapa ett filter då så han kan slå fram det då och se hela tiden då vad, vad, vad som händer. Alltså vilka som skapas då och intar den statusen. Och på samma sätt så kan han skapa ett filter då som ser alla uppgifter utifrån ett visst geografiskt distrikt, till exempel för en utförare. Så att om man har en utförare som jobbar på postnummer si och så i Sundsvall och har en u... Kan utföra...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "uppgifter utav den här typen med den här utförandetyps-koden då, då skapar man det registret och så ser man då hela tiden då hur, hur många uppgifter som finns där. Och sen så kan man då aktivt i filtret gå då in och ändra vilken tid det är och kanske vilken status de, de är tilldelade, utförda och så vidare. Men där, där, där behöver vi utveckla då, då det där, det där filtret. Eh, och så tonar ner den här li... Alltså uppgiftsstatusen. Gör det här lite tydligare att det behöver inte vara en sån där röd stopp, utan en uppgift har olika statusar och...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    }
+  ]
+}

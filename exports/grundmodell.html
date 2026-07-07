@@ -167,75 +167,78 @@
   <!-- 3. Informationspaketet -->
   <div class="section">
     <h2>3 · Informationspaketet (uppgiften fält för fält)</h2>
-    <p class="note" style="margin-top:0;margin-bottom:12px">En uppgift = en artikel med <b>"när, var och hur"</b>. Teoretiskt bär paketet all länkad information — varje fält är antingen ren data, metadata-styrt eller hämtat ur ett sidoregister.</p>
+    <p class="note" style="margin-top:0;margin-bottom:12px">En uppgift = en artikel med <b>"när, var och hur"</b>. Grundregel: <b>alla</b> datafält på artikeln och på orderkonceptet ska återfinnas här — i en eller annan form. Varje fält har en <b>KÄLLA</b> (kortets rubrik: artikeln · orderkonceptet · objektet · systemet) och ett <b>HÄMTNINGSSÄTT</b> (badgen nedan).</p>
     <div class="legend">
-      <span><span class="lg s">S</span>hämtas från sidoregister</span>
-      <span><span class="lg m">M</span>metadata-styrt</span>
       <span><span class="lg d">D</span>ren data</span>
-      <span><span class="lg sys">SYS</span>systemsatt</span>
+      <span><span class="lg m">M</span>metadata-styrt</span>
+      <span><span class="lg s">S</span>hämtas från sidoregister</span>
+      <span><span class="lg sys">SYS</span>systemsatt (motorer)</span>
     </div>
     <div class="row">
       <div class="card ice pkgcard">
-        <h3>Artikel</h3>
+        <h3>Från artikeln</h3>
         <ul class="fields">
-          <li>Artikelnr · namn · beskrivningar <em class="d">D</em></li>
-          <li>Dokument · leverantörsartikelnr <em class="d">D</em></li>
-          <li>Pris · kostnader · fast pris <em class="d">D</em></li>
-          <li>Produktionstid <em class="d">D</em></li>
-          <li>Ikon <em class="s">S</em></li>
-          <li>Enhet <em class="s">S</em></li>
-          <li>Debiteringsmodell <em class="s">S</em></li>
-          <li>Artikeltyp <em class="s">S</em></li>
-          <li>Artikelområde <em class="s">S</em></li>
-          <li>Utförandekod <em class="s">S</em></li>
+          <li>Artikelnr · namn · beskrivning <em class="d">D</em></li>
+          <li>Pris · kostnader · påslag · fast pris <em class="d">D</em></li>
+          <li>Produktionstid · restid · ställtid <em class="d">D</em></li>
+          <li>Antalsläge (styck/formel/matchar fält) <em class="d">D</em></li>
+          <li>Får ändras av utförare · dölj antal <em class="d">D</em></li>
+          <li>Dokument · arbetsbeskrivning <em class="d">D</em></li>
+          <li>Visa · lämna metadatafält <em class="m">M</em></li>
+          <li>Fasttagningslogik (hakar på metadata =) <em class="m">M</em></li>
+          <li>Ikon · enhet · debiteringsmodell <em class="s">S</em></li>
+          <li>Artikeltyp · artikelområde <em class="s">S</em></li>
+          <li>Utförandekod · tidskod <em class="s">S</em></li>
           <li>Lagerplats · leverantör <em class="s">S</em></li>
           <li>Strukturartiklar (BOM) <em class="s">S</em></li>
         </ul>
       </div>
-      <div class="card teal pkgcard">
-        <h3>Antal &amp; metadata</h3>
+      <div class="card orange pkgcard">
+        <h3>Från orderkonceptet</h3>
         <ul class="fields">
-          <li>Antal enl. orderkoncept <em class="d">D</em></li>
-          <li>Antal enl. objekt-metadata <em class="m">M</em></li>
-          <li>Får uppdateras av utförare <em class="d">D</em></li>
-          <li>Dölj antal <em class="d">D</em></li>
-          <li>Taget · fakturerbart antal <em class="d">D</em></li>
-          <li>Begränsning (per objekt/antal) <em class="d">D</em></li>
-          <li>Ingår i abonnemang <em class="d">D</em></li>
-          <li>Visa metadatafält <em class="m">M</em></li>
-          <li>Lämna data (metadatafält) <em class="m">M</em></li>
-          <li>Fasttagningslogik (metadata = …) <em class="m">M</em></li>
+          <li>Kund · betalare <em class="d">D</em> <em class="m">M</em></li>
+          <li>Antal (grundvärde · korsbefruktning) <em class="d">D</em> <em class="m">M</em></li>
+          <li>Önskad leveranstid · tidsfönster <em class="d">D</em> <em class="m">M</em></li>
+          <li>Leveransrestriktioner (mjuk/hård) <em class="d">D</em></li>
+          <li>Prismodell (löpande/fast) · fast pris-bas <em class="d">D</em></li>
+          <li>Faktureringssätt (efterhand/schema/abonn.) <em class="d">D</em></li>
+          <li>Fakturakonsolidering (jobb/vecka/mån/avd) <em class="d">D</em></li>
+          <li>Fakturalås · fakturabroms <em class="d">D</em></li>
+          <li>Vår ref · Er ref · beteckning <em class="d">D</em> <em class="m">M</em></li>
+          <li>Fakturareferens per rad <em class="d">D</em> <em class="m">M</em></li>
+          <li>Prislista <em class="s">S</em></li>
+          <li>Abonnemang (avgift · frekvens · bindning) <em class="d">D</em></li>
         </ul>
       </div>
-      <div class="card orange pkgcard">
-        <h3>Styrning &amp; leverans</h3>
+      <div class="card teal pkgcard">
+        <h3>Från objektet (metadata)</h3>
         <ul class="fields">
-          <li>Skapad av (skaparens löpnr) <em class="sys">SYS</em></li>
-          <li>Hur skapad (klartext) <em class="d">D</em></li>
-          <li>Påhakat objekt <em class="s">S</em></li>
-          <li>Kund <em class="s">S</em></li>
-          <li>Önskad leveranstid <em class="m">M</em></li>
-          <li>Planerad · verklig leveranstid <em class="d">D</em></li>
-          <li>Geografisk position <em class="d">D</em></li>
-          <li>Uppgiftstyp (produktion/resa/ställ/egentid) <em class="sys">SYS</em></li>
-          <li>Klump-ID (samkörning, motor 3) <em class="sys">SYS</em></li>
+          <li>Påhakat objekt (namn · nummer) <em class="d">D</em></li>
+          <li>Objektets adress · koordinat <em class="d">D</em></li>
+          <li>Objektets metadatafält (kärltyp, kod …) <em class="m">M</em></li>
+          <li>Antal enl. objekt-metadata <em class="m">M</em></li>
+          <li>Ärvda metadatafält (från förälder) <em class="m">M</em></li>
+          <li>Felanmälan · betyg (kundportal) <em class="m">M</em></li>
         </ul>
       </div>
       <div class="card purple pkgcard">
-        <h3>Fakturahuvud &amp; status</h3>
+        <h3>Systemsatt (motorer &amp; system)</h3>
         <ul class="fields">
-          <li>Kund <em class="s">S</em></li>
+          <li>Skapad av (skaparens löpnr) <em class="sys">SYS</em></li>
+          <li>Hur skapad (klartext) <em class="sys">SYS</em></li>
           <li>Vår referens (löpnr → källa) <em class="sys">SYS</em></li>
-          <li>Er referens · reg.nr <em class="m">M</em></li>
-          <li>Fakturareferens per rad <em class="d">D</em></li>
-          <li>Fakturamodell (del/hel) <em class="d">D</em></li>
-          <li>Fakturasläpp (dag/vecka/mån) <em class="d">D</em></li>
-          <li>Prislista <em class="s">S</em></li>
-          <li>System- + affärsstatus <em class="d">D</em></li>
+          <li>Uppgiftstyp (produktion/resa/ställ/egen) <em class="sys">SYS</em></li>
+          <li>Ruttbar position (geografisk motor) <em class="sys">SYS</em></li>
+          <li>Planerad · verklig leveranstid (tidsmotor) <em class="sys">SYS</em></li>
+          <li>Klump-/indexkod (klumpmotor) <em class="sys">SYS</em></li>
+          <li>Fakturagruppering (fakturamotor) <em class="sys">SYS</em></li>
+          <li>Abonnemangskoppling (abonn.motor) <em class="sys">SYS</em></li>
+          <li>Beroende-ordning (beroendemotor) <em class="sys">SYS</em></li>
+          <li>System- + affärsstatus <em class="sys">SYS</em></li>
         </ul>
       </div>
     </div>
-    <p class="note"><b>Poäng:</b> paketet samkör flera register. Kan sakna kund/full metadata — t.ex. antal fylls i på plats (5 &rarr; verkligt 15). "Vår referens" = skaparens löpnummer, så uppgiften alltid kan spåras tillbaka till orderkonceptet / felanmälan / rating som skapade den. <b>Fler variabler tillkommer</b> från orderkoncept- och artikelregistret och förfinas senare. Varje uppgift bär även en <b>uppgiftstyp</b> — restid mellan objekt skapas automatiskt som en egen uppgift; typen styr tidskoder för framtida löneexport.</p>
+    <p class="note"><b>Tre datakällor + system:</b> varje fält härstammar från <b>artikeln</b>, <b>orderkonceptet</b> eller <b>objektets metadata</b> — och sätts därefter av systemets motorer. Samma slags data kan komma på olika sätt (ren data · metadatastyrt · sidoregister · systemsatt). Paketet kan sakna kund/full metadata vid skapandet — t.ex. antal fylls i på plats (5 &rarr; verkligt 15). "Vår referens" = skaparens löpnummer, så uppgiften alltid kan spåras tillbaka till orderkonceptet / felanmälan / rating som skapade den. Restid mellan objekt blir en <b>egen systemskapad uppgift</b>; uppgiftstypen styr tidskoder för framtida löneexport.</p>
   </div>
 
   <!-- 4. Flödet, två spår -->
@@ -280,20 +283,20 @@
     <div class="sub-label"><span class="lg" style="background:#4A9B9B;width:10px;height:10px;min-width:10px;padding:0;margin-right:6px"></span>Planera — när · var · ihop</div>
     <div class="motor-grid">
       <div class="motor"><div class="num a">1</div><div><b>Geografisk motor</b><span>Fastställer var uppgiften finns — objektplats + fordonsplats. Levererar position.</span></div></div>
-      <div class="motor"><div class="num a">2</div><div><b>Tidsmotor</b><span>Väljer lämplig tidpunkt utifrån önskad leveranstid, tidsfönster &amp; utförarens läge.</span></div></div>
+      <div class="motor"><div class="num a">2</div><div><b>Tidsmotor</b><span>Väljer lämplig tidpunkt utifrån önskad leveranstid, hårda/mjuka tidsfönster &amp; utförarens läge. <b>Levererar:</b> planerad leveranstid.</span></div></div>
       <div class="motor"><div class="num a">3</div><div><b>Klumpningsmotor</b><span>Slår ihop uppgifter av samma typ/tid/plats till en klump (ett stopp) och märker uppgiften med klump-ID (t.ex. "Storgatan 22 · 22 juli"). Kan föreslå tidiga-/senarelägg för samkörning.</span></div></div>
     </div>
 
     <div class="sub-label"><span class="lg" style="background:#C97B3C;width:10px;height:10px;min-width:10px;padding:0;margin-right:6px"></span>Fakturera</div>
     <div class="motor-grid">
-      <div class="motor"><div class="num b">4</div><div><b>Faktura-/ordermotor</b><span>Bevakar klarmarkerade uppgifter; avgör vad som kan samlas på samma faktura, hur ofta &amp; med vilka radreferenser.</span></div></div>
-      <div class="motor"><div class="num b">5</div><div><b>Abonnemangsmotor</b><span>Fast månads-/kvartalsfaktura + avräkning för utfört/tillägg. Räknar om vid volymändring; kan skapa egna fakturor.</span></div></div>
+      <div class="motor"><div class="num b">4</div><div><b>Faktura-/ordermotor</b><span>Grupperar uppgifter utifrån orderkonceptets fakturareferens — samma referens klumpas till en faktura oavsett geografi/leveranstid. Håller reda på dag-/vecko-/månadsfakturering &amp; om alla uppgifter måste vara klara först. <b>Levererar:</b> fakturagruppering (vilken uppgift hör till vilken faktura).</span></div></div>
+      <div class="motor"><div class="num b">5</div><div><b>Abonnemangsmotor</b><span>Skapar månadsfakturor som ligger <b>utanför</b> uppgifterna, men håller reda på de uppgifter som är kopplade till abonnemanget. Räknar om vid volymändring. <b>Levererar:</b> abonnemangskoppling.</span></div></div>
     </div>
 
     <div class="sub-label"><span class="lg" style="background:#6d5bbf;width:10px;height:10px;min-width:10px;padding:0;margin-right:6px"></span>Beroenden &amp; fysiska artiklar</div>
     <div class="motor-grid">
-      <div class="motor"><div class="num c">6</div><div><b>Beroendeuppgiftsmotor</b><span>Håller reda på uppgifter som måste göras före huvuduppgiften (t.ex. avisering 3 dagar innan). Varnar vid risk.</span></div></div>
-      <div class="motor"><div class="num c">7</div><div><b>Plock-/leveransmotor</b><span>Fysiska artiklar med lagerplats/leveranstid. Skapar block-/beroendeuppgift för att hämta &amp; återlämna vara (nyckel, dekal).</span></div></div>
+      <div class="motor"><div class="num c">6</div><div><b>Beroendeuppgiftsmotor</b><span>Håller reda på om uppgifter måste utföras i viss ordning för att en huvuduppgift ska kunna göras (t.ex. avisering 3 dagar innan). Varnar vid risk. <b>Levererar:</b> beroende-ordning.</span></div></div>
+      <div class="motor"><div class="num c">7</div><div><b>Plock-/leveransmotor</b><span>Om en fysisk artikel behövs på en geografisk plats under veckan måste den plockas från ett fysiskt lager. <b>Skapar:</b> en plock-/hämta-uppgift (och retur, t.ex. nyckel/dekal).</span></div></div>
     </div>
 
     <div class="sub-label"><span class="lg" style="background:#1B4B6B;width:10px;height:10px;min-width:10px;padding:0;margin-right:6px"></span>Status, avisering &amp; bevakning</div>
@@ -305,12 +308,12 @@
 
   <!-- 6. Status -->
   <div class="section">
-    <h2>6 · Uppgiftens status</h2>
+    <h2>6 · Status (ett fält i paketet)</h2>
     <div class="stat-box">
-      <span class="mini-label">Livscykel</span>
-      Skapad &rarr; I masterplanering &rarr; I finplanering (exakt leveransdag) &rarr; Utförandeläge (på väg / på plats) &rarr; Utförd &rarr; Fakturakontroll &rarr; Fakturerad
+      <span class="mini-label">Statusar</span>
+      Skapad · I masterplanering · Planerad (olika lägen) · Utförandeläge (på väg / på plats) · Utförd · Fakturakontroll · Fakturerad · Omöjlig att utföra
     </div>
-    <div class="err-line"><span class="mini-label">Stopp</span>Omöjlig att utföra — inget separat "mellanläge", bara en av statusarna. Planeraren söker fram och åtgärdar.</div>
+    <p class="note" style="margin-bottom:0">Ingen "livscykel" och inget mellanläge — bara en <b>status</b> uppgiften intar. Statusen levereras upp i informationspaketet och blir <b>sök- och sorterbar i masterplaneringen</b> (t.ex. filter på "omöjlig att utföra").</p>
   </div>
 
   <!-- 6. Begrepp -->
@@ -330,7 +333,7 @@
     <div class="row">
       <div class="card green">
         <div class="tag">Produktionsdb · Kinab</div><h3>Masterplanering</h3>
-        <span style="font-size:11px;opacity:.75">(fd grovplanering)</span> — master-listan över <b>alla</b> uppgifter. Sorteras på status, utförandekod, leveranstid, tilldelning; krymper i takt med att man planerar. Sparade <b>filterregister</b> (per utförarinriktning, missade jobb, utfört per kund) för snabb åtkomst.
+        <span style="font-size:11px;opacity:.75">(fd grovplanering)</span> — master-listan över <b>alla</b> uppgifter. Sök/sortera på paketets alla statusar. Sparade <b>filterregister</b> (sidoregister): planeraren skapar filter på valfri status/utförandekod/distrikt (t.ex. "omöjliga att utföra" eller "distrikt Nord för utförare X") och kan ändra tid/status/tilldelning direkt i filtret.
       </div>
       <div class="card green">
         <div class="tag">Produktionsdb · Kinab</div><h3>Utförarplan / vecka <span style="font-size:11px;opacity:.75">(fd finplanering)</span></h3>
