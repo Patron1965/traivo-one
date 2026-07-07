@@ -9,31 +9,23 @@
   .page { width: 1440px; margin: 0 auto; padding: 40px 44px 56px; }
 
   h1 { font-size: 30px; color: #1B4B6B; margin-bottom: 4px; letter-spacing: -0.5px; }
-  .subtitle { font-size: 14px; color: #6B7C8C; margin-bottom: 24px; }
+  .subtitle { font-size: 14px; color: #6B7C8C; margin-bottom: 22px; }
 
-  .principle {
-    background: #1B4B6B; color: #E8F4F8; border-radius: 14px;
-    padding: 18px 24px; margin-bottom: 36px; font-size: 15px; line-height: 1.55;
-  }
-  .principle b { color: #7DBFB0; }
-  .principle .k { color: #fff; font-weight: 700; }
+  .principle { background: #1B4B6B; color: #E8F4F8; border-radius: 14px; padding: 16px 24px; margin-bottom: 12px; font-size: 14.5px; line-height: 1.55; }
+  .principle b { color: #7DBFB0; } .principle .k { color: #fff; font-weight: 700; }
+  .principle2 { background: #E8F9F6; border: 2px solid #4A9B9B; color: #245; border-radius: 14px; padding: 14px 24px; margin-bottom: 34px; font-size: 14px; line-height: 1.5; }
+  .principle2 b { color: #2d6b6b; }
 
-  .section { margin-bottom: 34px; }
-  .section > h2 {
-    font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: 1.6px;
-    color: #4A9B9B; margin-bottom: 16px; padding-left: 2px;
-  }
+  .section { margin-bottom: 32px; }
+  .section > h2 { font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: 1.6px; color: #4A9B9B; margin-bottom: 14px; padding-left: 2px; }
 
-  .row { display: flex; gap: 16px; align-items: stretch; }
+  .row { display: flex; gap: 14px; align-items: stretch; }
 
-  .card {
-    flex: 1; border-radius: 12px; padding: 16px 18px; font-size: 12.5px; line-height: 1.55;
-    box-shadow: 0 2px 10px rgba(27,75,107,0.07); border: 2px solid transparent; background: #fff;
-  }
-  .card h3 { font-size: 14px; margin-bottom: 4px; }
-  .card .tag { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; opacity: .7; margin-bottom: 2px; }
-  .card ul { list-style: none; padding: 0; margin-top: 8px; }
-  .card ul li { padding: 2px 0; padding-left: 14px; position: relative; }
+  .card { flex: 1; border-radius: 12px; padding: 14px 16px; font-size: 12px; line-height: 1.5; box-shadow: 0 2px 10px rgba(27,75,107,0.07); border: 2px solid transparent; background: #fff; }
+  .card h3 { font-size: 13.5px; margin-bottom: 3px; }
+  .card .tag { font-size: 9.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; opacity: .7; margin-bottom: 2px; }
+  .card ul { list-style: none; padding: 0; margin-top: 7px; }
+  .card ul li { padding: 1.5px 0; padding-left: 13px; position: relative; }
   .card ul li::before { content: "›"; position: absolute; left: 0; font-weight: bold; opacity: .55; }
 
   .ice   { background: #E8F4F8; border-color: #1B4B6B; } .ice h3   { color: #1B4B6B; }
@@ -42,137 +34,231 @@
   .purple{ background: #F2F0FB; border-color: #6d5bbf; } .purple h3{ color: #574a9e; }
   .green { background: #EAF7F1; border-color: #4C9A78; } .green h3 { color: #2f7355; }
   .gray  { background: #F1F5F9; border-color: #94a3b8; } .gray h3  { color: #475569; }
+  .amber { background: #FFF8E8; border-color: #C99A2E; } .amber h3 { color: #8a6a12; }
 
-  .arrow { display: flex; align-items: center; justify-content: center; color: #6B7C8C; font-size: 24px; font-weight: 700; flex: 0 0 30px; }
+  .highlight { box-shadow: 0 0 0 2px #4A9B9B, 0 4px 14px rgba(74,155,155,0.25); }
 
-  .note { font-size: 12px; color: #6B7C8C; margin-top: 12px; padding-left: 2px; }
+  .arrow { display: flex; align-items: center; justify-content: center; color: #6B7C8C; font-size: 20px; font-weight: 700; flex: 0 0 24px; }
+
+  .note { font-size: 12px; color: #6B7C8C; margin-top: 11px; padding-left: 2px; }
   .note b { color: #4A9B9B; }
 
   .compose { display: flex; align-items: center; gap: 14px; }
-  .inputs { display: flex; flex-direction: column; gap: 10px; flex: 0 0 380px; }
-  .chip { background: #fff; border: 2px solid #cbd8e0; border-radius: 10px; padding: 10px 14px; font-size: 12.5px; line-height: 1.4; }
+  .inputs { display: flex; flex-direction: column; gap: 9px; flex: 0 0 380px; }
+  .chip { background: #fff; border: 2px solid #cbd8e0; border-radius: 10px; padding: 9px 13px; font-size: 12px; line-height: 1.4; }
   .chip b { color: #1B4B6B; }
-  .uppgift-big { flex: 1; background: #2C3E50; color: #E8F4F8; border-radius: 14px; padding: 20px 24px; }
-  .uppgift-big h3 { color: #7DBFB0; font-size: 17px; margin-bottom: 8px; }
-  .uppgift-big p { font-size: 13px; line-height: 1.6; }
-  .uppgift-big .warn { margin-top: 12px; font-size: 12px; color: #FFD9A8; }
+  .uppgift-big { flex: 1; background: #2C3E50; color: #E8F4F8; border-radius: 14px; padding: 18px 22px; }
+  .uppgift-big h3 { color: #7DBFB0; font-size: 16px; margin-bottom: 8px; }
+  .uppgift-big p { font-size: 12.5px; line-height: 1.55; margin-bottom: 6px; }
+  .uppgift-big .times { margin-top: 8px; font-size: 12px; }
+  .uppgift-big .times b { color: #7DBFB0; }
+  .uppgift-big .warn { margin-top: 8px; font-size: 11.5px; color: #FFD9A8; }
 
-  .stat-box { background: #EAF7F1; border: 2px solid #4C9A78; border-radius: 12px; padding: 14px 18px; font-size: 13px; line-height: 1.5; font-weight: 600; color: #2f7355; }
+  .lane { margin-bottom: 12px; }
+  .lane-label { font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; color: #94a3b8; margin-bottom: 6px; padding-left: 2px; }
+  .flow-box { flex: 1; border-radius: 11px; padding: 11px 10px; font-size: 11.5px; line-height: 1.35; text-align: center; background: #fff; border: 2px solid #1B4B6B; display: flex; flex-direction: column; justify-content: center; }
+  .flow-box b { display: block; font-size: 12px; color: #1B4B6B; margin-bottom: 2px; }
+  .flow-box span { color: #6B7C8C; font-size: 10.5px; }
+  .flow-box.end { border-color: #4C9A78; background: #EAF7F1; } .flow-box.end b { color: #2f7355; }
+  .flow-box.biz { border-color: #C97B3C; background: #FFF4EC; } .flow-box.biz b { color: #b4632a; }
+
+  .stat-box { background: #EAF7F1; border: 2px solid #4C9A78; border-radius: 12px; padding: 12px 18px; font-size: 12.5px; line-height: 1.5; font-weight: 600; color: #2f7355; }
   .mini-label { font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; opacity: .7; display:block; margin-bottom: 4px; }
-  .status-row { display: flex; gap: 16px; margin-top: 12px; }
-  .status-row .half { flex: 1; border-radius: 12px; padding: 14px 18px; font-size: 12.5px; line-height: 1.5; font-weight: 600; }
-  .half.err { background: #FCEEEE; border: 2px solid #C0504D; color: #9c3b39; }
-  .half.biz { background: #FFF4EC; border: 2px solid #C97B3C; color: #b4632a; }
+  .err-line { margin-top: 10px; background: #FCEEEE; border: 2px solid #C0504D; color: #9c3b39; border-radius: 12px; padding: 10px 18px; font-size: 12px; font-weight: 600; }
 
-  .flow-box { flex: 1; border-radius: 12px; padding: 14px 14px; font-size: 12.5px; line-height: 1.45; text-align: center; background: #fff; border: 2px solid #1B4B6B; display: flex; flex-direction: column; justify-content: center; }
-  .flow-box.end { border-color: #4C9A78; background: #EAF7F1; }
-  .flow-box b { display: block; font-size: 13px; color: #1B4B6B; margin-bottom: 3px; }
-  .flow-box.end b { color: #2f7355; }
-  .flow-box span { color: #6B7C8C; font-size: 11px; }
+  .struken { position: relative; }
+  .struken h3 { text-decoration: line-through; opacity: .75; }
+  .struken .xtag { position: absolute; top: 12px; right: 14px; background: #C0504D; color: #fff; font-size: 9.5px; font-weight: 800; letter-spacing: .5px; padding: 3px 8px; border-radius: 6px; }
+
+  .side-grid { display: flex; flex-wrap: wrap; gap: 10px; }
+  .side { background: #fff; border: 1.5px solid #cbd8e0; border-radius: 9px; padding: 9px 13px; font-size: 12px; line-height: 1.35; flex: 0 0 calc(25% - 8px); }
+  .side b { color: #1B4B6B; display: block; font-size: 12.5px; }
+  .side span { color: #6B7C8C; font-size: 11px; }
 </style>
 </head>
 <body>
 <div class="page">
   <h1>Traivo — Grundmodellen (Steg 0)</h1>
-  <p class="subtitle">Gemensam bild: hur objekt, metadata, orderkoncept och uppgifter hänger ihop · 7 juli 2026</p>
+  <p class="subtitle">Gemensam bild: objekt, metadata, uppgiftsskapare, uppgifter → planering & flöde · uppdaterad 7 juli 2026</p>
 
   <div class="principle">
     Endast <b>tre</b> saker är <span class="k">INTE</span> metadata:
     <span class="k">objektnummer</span> (systemskapat) · <span class="k">status</span> (aktiv / arkiverad) · <span class="k">släktskap</span> (föräldrar / barn).
     &nbsp;<b>Allt annat</b> om ett objekt är metadata.
   </div>
+  <div class="principle2">
+    <b>Allt som ska göras i systemet blir en uppgift</b> i uppgiftsregistret — inget ligger utanför uppgiftslistan. Även "ring en kund" eller en påminnelse blir en uppgift (kopplad till objekt + kontakt). Det finns inget mellanting.
+  </div>
 
+  <!-- 1. Fyra register -->
   <div class="section">
-    <h2>1 · Fyra register — inga sidoregister</h2>
+    <h2>1 · Fyra register</h2>
     <div class="row">
       <div class="card ice">
         <div class="tag">Register 1</div><h3>Objektregistret</h3>
         Objektet + dess släktskap. Bara objektets egen info.
         <ul><li>Objektnummer (system)</li><li>Status: aktiv / arkiverad</li><li>Släktskap: föräldrar / barn</li></ul>
       </div>
-      <div class="card teal">
-        <div class="tag">Register 2</div><h3>Metadataregistret</h3>
-        All metadata av olika typ, med villkor per fält.
-        <ul><li>Foto · kontakt · antal · adress</li><li>Hård/mjuk leveranstid · fastighetsnr</li><li>Historik (arkiverade värden)</li><li>Ursprung: system/operatör (vem &amp; när)</li></ul>
+      <div class="card teal highlight">
+        <div class="tag">Register 2 · komplext &amp; unikt</div><h3>Metadataregistret</h3>
+        Kopplat till objekten — "post-it-lappar" som hakas på objektet.
+        <ul><li>Katalog + unika värden</li><li>Ärvs nedåt i släktträdet</li><li>Villkor per fält</li><li>Historik (arkiverade värden)</li><li>Ursprung: system/operatör (vem &amp; när)</li></ul>
       </div>
       <div class="card orange">
-        <div class="tag">Register 3</div><h3>Orderkonceptregistret</h3>
-        Koncepten som <b>skapar</b> uppgifter.
-        <ul><li>Vem är kund · vem betalar</li><li>När · vad</li><li>På vilka inpekade objekt</li></ul>
+        <div class="tag">Register 3</div><h3>Uppgiftsskaparna</h3>
+        De olika sätten att <b>skapa</b> uppgifter. Orderkonceptet är det mest avancerade.
+        <ul><li>Orderkoncept · Snabborder</li><li>Felanmälan · Rating</li><li>Metadata-analysator</li></ul>
       </div>
       <div class="card purple">
-        <div class="tag">Register 4</div><h3>Uppgiftsregistret</h3>
-        Uppgifterna = informationspaketen.
-        <ul><li>Samkör objekt + metadata + koncept</li><li>Bär systemstatus per uppgift</li></ul>
+        <div class="tag">Register 4 · jätteviktigt</div><h3>Uppgiftsregistret</h3>
+        Master-listan där <b>allt</b> som ska göras hamnar.
+        <ul><li>Ett informationspaket per uppgift</li><li>Samkör objekt + metadata + skapare</li><li>Bär systemstatus</li></ul>
       </div>
     </div>
   </div>
 
+  <!-- 2. Uppgiftsskaparna i detalj -->
   <div class="section">
-    <h2>2 · Vad är en uppgift? (informationspaketet)</h2>
+    <h2>2 · Uppgiftsskaparna (register 3 i detalj)</h2>
+    <div class="row">
+      <div class="card orange">
+        <div class="tag">Mest avancerad &amp; automatiserad</div><h3>Orderkoncept</h3>
+        Samlar leveranstider &amp; kunder, letar upp objekt (kluster), artiklar hakar på — skapar <b>1 till tusentals</b> uppgifter.
+      </div>
+      <div class="card ice">
+        <div class="tag">Manuell / förenklad</div><h3>Snabborder</h3>
+        Välj objekt + kund, peka in artiklar → skapar uppgifter samma väg, men manuellt.
+      </div>
+      <div class="card gray">
+        <div class="tag">On demand · tredje person</div><h3>Felanmälan / avvikelse</h3>
+        Någon anmäler ett fel (t.ex. trasigt lock). Funktionen skapar uppgiften först när felet kommer in.
+      </div>
+      <div class="card gray">
+        <div class="tag">On demand</div><h3>Ratingfunktion</h3>
+        En rating skapar en uppgift som i sin tur skapar metadata (betyg/omdöme).
+      </div>
+      <div class="card amber">
+        <div class="tag">Delvis framtid</div><h3>Metadata-analysator</h3>
+        Bevakar viss metadata och skapar uppgift när en logik uppfylls (t.ex. tidsmotorn finns redan).
+      </div>
+    </div>
+    <p class="note"><b>Gemensamt:</b> alla skapare landar i samma uppgiftsregister. "On demand"-skaparna lägger inte uppgiften i listan förrän händelsen inträffar.</p>
+  </div>
+
+  <!-- 3. Vad är en uppgift -->
+  <div class="section">
+    <h2>3 · Vad är en uppgift? (informationspaketet)</h2>
     <div class="compose">
       <div class="inputs">
         <div class="chip"><b>Artikel</b> — vara/tjänst, pris, alla artikelfält</div>
-        <div class="chip"><b>Orderkoncept</b> — kund, betalare, önskad leveranstid, vad</div>
-        <div class="chip"><b>Objekt-metadata</b> — antal, hård/mjuk leveranstid, kontakt</div>
+        <div class="chip"><b>Skaparens info</b> — kund, betalare, vad (från koncept/snabborder …)</div>
+        <div class="chip"><b>Objekt-metadata</b> — antal, leveranstid, kontakt, position</div>
         <div class="chip"><b>Systemstatus</b> — var i flödet uppgiften befinner sig</div>
       </div>
       <div class="arrow">&#10132;</div>
       <div class="uppgift-big">
-        <h3>Uppgift = ett stort informationspaket</h3>
-        <p>En uppgift är <b>en artikel</b> med påhakad information från orderkonceptet och objektets metadata, plus systemets status. Paketet lever i planeringen — <b>inte</b> som ett fält på objektsidan.</p>
-        <div class="warn">Kan sakna kund och full metadata — t.ex. antal fylls i på plats av utföraren (5 &rarr; verkligt 15).</div>
+        <h3>Uppgift = en artikel med "när, var och hur"</h3>
+        <p>En uppgift är <b>en artikel</b> med påhakad information. Paketet lever i planeringen — inte som ett fält på objektsidan.</p>
+        <div class="times"><b>Leveranstid i tre former:</b> önskad · planerad · verklig (utförd)</div>
+        <div class="times"><b>Geografisk position:</b> finns i de allra flesta fall (inte alltid)</div>
+        <div class="warn">Kan sakna kund och full metadata — t.ex. antal fylls i på plats (5 &rarr; verkligt 15).</div>
       </div>
     </div>
   </div>
 
+  <!-- 4. Flödet, två spår -->
   <div class="section">
-    <h2>3 · Flödet</h2>
-    <div class="row">
-      <div class="flow-box"><b>Objekt + Metadata + Orderkoncept</b><span>grunddata &amp; det som skapar uppgifter</span></div>
-      <div class="arrow">&#10132;</div>
-      <div class="flow-box"><b>Uppgift skapas</b><span>artikel + koncept + metadata + status</span></div>
-      <div class="arrow">&#10132;</div>
-      <div class="flow-box"><b>Grovplanering</b><span>hela uppgiftslistan</span></div>
-      <div class="arrow">&#10132;</div>
-      <div class="flow-box"><b>Finplanering = Veckoplan 168 h</b><span>tilldelad + utförandetid</span></div>
-      <div class="arrow">&#10132;</div>
-      <div class="flow-box end"><b>Utförd</b><span>tillbaka i uppgiftslistan</span></div>
+    <h2>4 · Flödet — två parallella spår</h2>
+    <div class="lane">
+      <div class="lane-label">Produktion (utförarflöde)</div>
+      <div class="row">
+        <div class="flow-box"><b>Uppgift skapas</b><span>artikel + info + status</span></div>
+        <div class="arrow">&#10132;</div>
+        <div class="flow-box"><b>Masterplanering</b><span>hela uppgiftslistan</span></div>
+        <div class="arrow">&#10132;</div>
+        <div class="flow-box"><b>Finplanering 168 h</b><span>tilldelad + utförandetid</span></div>
+        <div class="arrow">&#10132;</div>
+        <div class="flow-box"><b>Utförande</b><span>på väg → på plats → utförd</span></div>
+        <div class="arrow">&#10132;</div>
+        <div class="flow-box"><b>Fakturakontroll</b><span>granskning</span></div>
+        <div class="arrow">&#10132;</div>
+        <div class="flow-box end"><b>Slutfakturerad</b><span>med ev. mellansteg</span></div>
+      </div>
     </div>
-    <p class="note"><b>Återtag:</b> en uppgift kan plockas tillbaka finplanering &rarr; grovplanering. Då saknar den utförandedag och ligger på den <b>önskade</b> leveranstiden igen.</p>
+    <div class="lane">
+      <div class="lane-label">Affär (parallellt)</div>
+      <div class="row">
+        <div class="flow-box biz"><b>Ordererkännande</b><span>när uppgift skapas</span></div>
+        <div class="arrow">&#10132;</div>
+        <div class="flow-box biz"><b>Uppdaterat ordererkännande</b><span>exakt leveranstid vid finplanering</span></div>
+        <div class="arrow">&#10132;</div>
+        <div class="flow-box biz"><b>Följesedel</b><span>kund kvitterar</span></div>
+        <div class="arrow">&#10132;</div>
+        <div class="flow-box biz"><b>Faktura</b><span></span></div>
+      </div>
+    </div>
+    <p class="note"><b>Återtag:</b> en uppgift kan gå tillbaka finplanering &rarr; masterplanering (utan utförandedag, åter på önskad leveranstid). <b>Fler mellansteg finns</b> och förfinas i ett senare steg.</p>
   </div>
 
+  <!-- 5. Status -->
   <div class="section">
-    <h2>4 · Uppgiftens status</h2>
+    <h2>5 · Uppgiftens status</h2>
     <div class="stat-box">
-      <span class="mini-label">Produktion</span>
-      Skapad &rarr; I grovplanering &rarr; I finplanering (exakt leveransdag) &rarr; Utförandeläge (på väg) &rarr; Slutförd &rarr; Fakturakontroll &rarr; Skickad för fakturering
+      <span class="mini-label">Livscykel</span>
+      Skapad &rarr; I masterplanering &rarr; I finplanering (exakt leveransdag) &rarr; Utförandeläge (på väg / på plats) &rarr; Utförd &rarr; Fakturakontroll &rarr; Fakturerad
     </div>
-    <div class="status-row">
-      <div class="half err"><span class="mini-label">Mellanläge</span>Omöjlig att utföra (fel)</div>
-      <div class="half biz"><span class="mini-label">Parallellt · affärsstatus</span>Order befäst &rarr; Följesedel (kund kvitterar) &rarr; Faktura</div>
+    <div class="err-line"><span class="mini-label">Mellanläge</span>Omöjlig att utföra (fel)</div>
+  </div>
+
+  <!-- 6. Begrepp -->
+  <div class="section">
+    <h2>6 · Begrepp</h2>
+    <div class="row">
+      <div class="card teal"><h3>Uppgift</h3>En <b>artikel</b> + tillhörande info (när, var, hur). Systemets minsta utförbara enhet.</div>
+      <div class="card gray"><h3>Order</h3><b>Flytande begrepp</b> för flera uppgifter — används olika av olika personer (geografi, koncept, fakturareferens).</div>
+      <div class="card orange"><h3>Orderkoncept</h3>Den mest avancerade uppgiftsskaparen: kund, betalare, när, vad, inpekade objekt.</div>
+      <div class="card ice"><h3>Snabborder</h3>Manuell miniatyr utan autologik. Pekar ut objekt + kund + artiklar &rarr; samma sorts uppgifter.</div>
     </div>
   </div>
 
+  <!-- 7. Planeringsverktyg -->
   <div class="section">
-    <h2>5 · Begrepp</h2>
+    <h2>7 · Planeringsverktyg</h2>
     <div class="row">
-      <div class="card teal"><h3>Uppgift</h3>En <b>artikel</b> + tillhörande metadata/info. Systemets minsta utförbara enhet.</div>
-      <div class="card gray"><h3>Order</h3><b>Flera uppgifter.</b> Flytande begrepp — grupperas per geografi, orderkoncept eller fakturareferens.</div>
-      <div class="card orange"><h3>Orderkoncept</h3>Det <b>formella</b>: kund, betalare, när, vad och inpekade objekt. Skapar uppgifter automatiskt.</div>
-      <div class="card ice"><h3>Snabborder</h3>Manuell miniatyr utan autologik. Pekar ut ett objekt ("tvätta 10 kärl") &rarr; samma sorts uppgifter.</div>
+      <div class="card green">
+        <div class="tag">Produktionsdb · Kinab</div><h3>Masterplanering</h3>
+        <span style="font-size:11px;opacity:.75">(fd grovplanering)</span> — master-listan över <b>alla</b> uppgifter. Sorteras på status, utförandekod, leveranstid, tilldelning; krymper i takt med att man planerar.
+      </div>
+      <div class="card green">
+        <div class="tag">Produktionsdb · Kinab</div><h3>Finplanering = Veckoplan 168 h</h3>
+        Veckouppdelad med cykler om 168 timmar. Tilldelad utförare + utförandetid.
+      </div>
+      <div class="card gray struken">
+        <span class="xtag">UTGÅR</span>
+        <div class="tag">Tas bort / arkiveras</div><h3>Generell veckoplanering</h3>
+        Saknar logiken för hur systemet är byggt och förvirrar mer än den hjälper. Ej aktuell.
+      </div>
     </div>
+    <p class="note"><b>Regel:</b> en uppgift ska synas i <b>båda</b> Kinab-verktygen (master + fin).</p>
   </div>
 
+  <!-- 8. Sidoregister -->
   <div class="section">
-    <h2>6 · Tre planeringsverktyg</h2>
-    <div class="row">
-      <div class="card green"><div class="tag">Produktionsdb · Kinab</div><h3>Grovplanering</h3>Stor uppgiftslista med alla uppgifter, inkl. utförda och tilldelade.</div>
-      <div class="card green"><div class="tag">Produktionsdb · Kinab</div><h3>Finplanering = Veckoplan 168 h</h3>Tilldelad utförare + utförandetid i 168-timmarsveckan.</div>
-      <div class="card gray"><div class="tag">Separat · framtid</div><h3>Generell veckoplanering</h3>Ingen koppling till Kinab i produktionsdatabasen.</div>
+    <h2>8 · Sidoregister (stödregister)</h2>
+    <div class="side-grid">
+      <div class="side"><b>Artikelregister</b><span>varor/tjänster + BOM/komponenter</span></div>
+      <div class="side"><b>Kundregister</b><span>kunder, betalare, hierarki</span></div>
+      <div class="side"><b>Prislistor</b><span>priser per kund/avtal</span></div>
+      <div class="side"><b>Utförandekoder</b><span>utförandetyper</span></div>
+      <div class="side"><b>Ikonregister</b><span>ikoner för objekt/metadata</span></div>
+      <div class="side"><b>Utförarregister</b><span>personal/utförare</span></div>
+      <div class="side"><b>Fordonsregister</b><span>fordon</span></div>
+      <div class="side"><b>Resurser / team</b><span>resurser för planering</span></div>
+      <div class="side"><b>Metadata-katalog</b><span>fältdefinitioner (ryggrad i reg. 2)</span></div>
     </div>
-    <p class="note"><b>Regel:</b> en uppgift ska synas i <b>båda</b> Kinab-verktygen (grov + fin). Inga sidoregister, ingen påhittad historik, inga "inneliggande ordrar".</p>
+    <p class="note"><b>Roll:</b> sidoregistren matar valen i objekt-, metadata- och uppgiftsskapar-registren (välja ikon, utförandekod, kund, artikel …). Listan kan växa.</p>
   </div>
+
 </div>
 </body>
 </html>

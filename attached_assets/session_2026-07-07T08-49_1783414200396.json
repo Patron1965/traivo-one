@@ -1,0 +1,230 @@
+{
+  "sessionId": "5cbfd9158",
+  "exportedAt": "2026-07-07T08:49:25.149Z",
+  "summary": "### Key Topics Discussed\n- Agreement on Trivo basics\n- Discussion of Trivo registers: Object Register, Metadata Register, Order Concept Register, and Task Register\n- Different order types (Order Concept, Quick Order)\n- Simplified task creation through deviations and error reports\n- On-demand task creation for error reports and rating functions\n- Metadata Analyzers and their role in task creation\n- Task creators (uppgiftsskaparna) and their function\n- The task flow, including business-oriented steps like order acknowledgement and detailed planning for delivery times.\n- Task status\n- Definition of key concepts, especially the centrality of a \"task\"\n- The concept of \"år\" (year) as a fluid term used by different people.\n- Replit's understanding and communication regarding task creation methods.\n- Importance of planning, specifically \"grobplaneringen\" (rough planning).\n- The planning view (master list) where tasks accumulate and decrease as they are sorted.\n- Detailed planning, which is week-based with 168-hour cycles.\n- Task creation for calls, linking tasks to specific objects and contacts for quick functions.\n- The unique logic of the system where nothing exists outside of its defined structure.\n- The importance of Register 4 (Task Register).\n- Side registers, including icon register, execution type register, article register, customer register, and price list register. These side registers support selections within the main registers, particularly guiding choices for \"Order Concept\" where tasks are created based on predefined positions and customer information.\n\n### Decisions Made\n- It is crucial to understand the complexity and uniqueness of the Metadata Register.\n- The general weekly planning should be removed or archived as it lacks logic for the system's structure and causes confusion.\n\n### Action Items\n- Detaljera flödet för att inkludera alla steg, speciellt ur utförarperspektivet.\n- Replit should provide a list of all side registers to ensure clarity.\n\n### Important Points & Insights\n- The Object Register tracks what is being worked on.\n- The Metadata Register is linked to the Object Register, acting like \"post-it notes\" with additional information (e.g., photos, delivery times, contacts, quantity) attached to objects. This metadata can be in catalogue form and includes unique values that are inherited.\n- The Order Concept Register (or Order Register) is the most complex way to create tasks, gathering information on delivery times and customers, then searching for and clustering various objects.\n- Articles can be linked, leading to the creation of numerous tasks, ranging from one to thousands, which are then stored in the Task Register.\n- The Order Concept is one specific method for task creation, but a \"Quick Order\" offers a more manual and simplified approach where users select an Mobject, a customer, and a number of articles. Both methods create tasks in the Task Register in the same way, with the Quick Order being more manual in nature.\n- In addition to the advanced, automated Order Concept and the simplified Quick Order, tasks can also be created via deviations and error reports (felanmälningar), often initiated by a third party for issues like a broken lid. These tasks can be created \"on demand\", meaning the task for an error report doesn't exist until the error is reported.\n- A rating function can also create a task, which then generates metadata.\n- Metadata Analyzers are a future feature that will allow a \"motor\" to process and analyze metadata. This motor monitors metadata, and if a certain metadata meets specific criteria, it creates a task based on pre-defined logic.\n- The Task Register contains a long list of tasks, each with an information package, which is correctly understood.\n- The workflow (flödet) is also correctly understood, but needs further detailing.\n- Business steps like order acknowledgement occur when a task is created. An updated order acknowledgement with an exact delivery time is issued after detailed planning. Subsequent steps include the task being executed, completed, and followed by invoice control.\n- Task status is important and should be clearly defined.\n- The concept of a \"task\" is central, comprising an article with associated information (when, where, how), representing a desired, planned, and valuable item.\n- \"År\" (year) is a fluid concept, used differently by various individuals.\n- Most cases of a task will include a geographical position, though not always.\n- The name and concept of \"grobplaneringen\" (rough planning) should not be overemphasized but is significant.\n- The task list (uppgiftslistan) in the Task Register is where all items to be done in the system are collected.\n- If a call needs to be made, it results in a task with a specific task code. Quick orders are also used to create these tasks.\n- There is a quick function to link a task to a specific object and contact, especially for reminders like calling a customer.\n- The system has a unique logic where all operations and data are contained within its defined structure.\n- Side registers, such as the icon register, execution type register, article register, customer register, and price list register, primarily appear in the Object Register and Metadata Register for selection. These side registers actively assist in making selections, particularly within the Order Concept, where they help define the customer and pre-defined positions.\n\n### Open Questions/Pending Items\n- Replit should expand Register 3 (the pink level) to include the different \"task creators\".\n- There is concern that Replit does not have sufficient understanding regarding the differentiation between order concept and quick order task creation, and other methods. Specifically, there's a perceived lack of communication or comprehension from Replit regarding these distinct task creation approaches, despite prior discussions.\n- Need to update the information regarding side registers.",
+  "conversation": [],
+  "transcripts": [
+    {
+      "text": "Så, och så kör du inspelaren där nu. Ja, den är... Är den i gång? Ja. Ja, eh, syftet med det här nu är att vi då ska vara överens om alla grunderna i Trivo här nu då. Och här redovisar ju då, eh, Replik då fyra stycken, eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Register. Register då. Och, eh, det, det är alldeles rätt. Alltså objektregistret, det är ju rätt. Det, det håller reda på så att säga vad, vad, vad det är vi jobbar på. Metadataregistret, och här är det viktigt att understryka, det är ju då kopplat till objektregistret. Vi har beskrivet då det här som post-it-lappar som vi hakar på eller klistrar fast på, på, på objekten då för... Med, med information. Det kan vara foton, leveranstider, antal kontaktpersoner och, och, och så vidare.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Eh, och det kan vara då i katalogform. Det kan vara, det kan vara...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Unika värden, det, det, det ärvs och så vidare. Så det är väldigt viktigt här nu att du, eh, rättligt måste förstå komplexiteten och uniki-- Det unika med då det här metadataregistret, eh, med allt vad det innebär. Och sen har vi då orderkonceptregistret då, eller orderregistret då. Eh, här skulle jag ju liksom vilja lägga till också då att...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "De här snabbodrarna eller enkla odrarna eller... Eh, det, det är viktigt att förstå här nu då att den mest komplexa formen att skapa uppgifter är ju då att använda, eh, orderkonceptet då som, som, som i grund och botten då samlar information om leveranstider och kunder och så vidare då. Sen går ju den in och letar då i bland, eh, olika objekt och samlar dit kluster och, och hittar då upp-- Objekt där då...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Artiklar kan haka fast då och sen skapas det ju då mängder utav uppgifter utav det då. Eller ja, det kan vara allt från en uppgift till, till tusentals uppgifter då. Eh, och det blir ju då uppgiftsregistret. Men det är viktigt också att Replit förstår då att, eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "orderkonceptet är ett sätt att göra det här. Sen har vi då en, en, en snabborder där man mer än mindre manuellt då väljer ett objekt, man väljer en kund, eh, man pekar in då ett antal artiklar på den som en snabb, förenklad snabborder. Och den skapar ju då också uppgifter till uppgiftsregistret på exakt samma sätt då som orderkonceptet, fastän det är då mer av, av manuell karaktär då. Sen har vi-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm ...vi har även då, eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Utifrån då den, eh, eh, eh, nummer tre där då, eh, att vi skapar uppgifter i form av avvikelser och felanmälningar och, och så då. Och det är ju också en variant utav förenklade, eh, eh, orderskapare då, där, där, eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Jag, jag skulle vilja att, att Replit summerar det här utifrån all den här informationen då. Att vi har, vi har alltså orderkonceptet som är den mest avancerade och automatiserade funktionen. Sen har vi snabborden då som är syftet att skapa, eh, uppgifter då, eh, eller ordrar då på, på nåt som ska göras. Sen så har vi felanmälningar utifrån tredje person då, eh, där nån anmäler nu att ett lock är trasigt eller nånting. Eh, sen har vi, eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och så sån här funktioner då som att man kan rejta jobb och, och, och, och så då. Antingen att det ligger som en, som en uppgift som ska göras eller att uppgiften skapas on demand så att säga då. Om, om vi tar som en felanmälan så ligger ju inte uppgiften att felanmäla där, utan då har vi ju då en, en, en felanmälningsfunktion som, som så att säga skapar uppgiften alla minut så att säga då- Mm ...u-u-utifrån då, eh, ja, ett fel som en tredje person eller-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm ...meddela, meddela ser då. Och, och på samma sätt så kan vi ju då se om, om vi har en ratingfunktion då i, i ru- i rummet så skapar du så att säga en, en... Ja, den är en uppgift som sen då skapar en, en, en metadata då. Eh, s-s-sen har vi också det här, det vi kallar då metadata, eh, analyzatorer då eller vad vi ska säga då som, där du kan skapa... Den, den finns väl inte riktigt än då, men, men den, den kommer ju att behövas där vi kan, eh, be då en motor som ligger då och-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm ...och titta på en viss metadata. Ja, vi har ju det redan med tidsmotorn och så vidare. Men, men, men den ligger och bevakar det. Och om en viss metadata är en viss sak, ja, då skapar den en, en uppgift kring det då utifrån en logik som vi skapat. Hur som helst så här skulle det vara bra då att, att, att Replit då utvidgar så att säga den här rosa eller nivå tre, register tre där då med, med de här olika, eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Eh, ord eller skaparna då. Mm. Eh, eller uppgiftsskaparna. Och sen kommer uppgiften och det är ju dock rent då... Eh, den, den, det är en lång lista med, med, med uppgifter, med ett informationspaket då. Och det är ju rätt uppfattat där.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och sen kommer flödet och flödet är ju också helt rätt. Eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och att den, att den, att den uppfylls kan, kan då gå till-tillbaka. Eh... Vi har de här affärsmässiga, eh... Stegen som man skulle kunna bygga in i den här modellen där, där innebär då att, eh... I och med då att en uppgift skapas så får vi då ordererkännandet. Eh... När den finplaneras så får vi då ett uppdaterat ordererkännande med, med, med exakt, eh... Leveranstid. Och sedan så har vi då, eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Alltså, rent praktiskt borde vi göra det här fl-flödet mer detaljerat då så att vi, vi, vi, vi får de olika stegen här i, i detalj. Eh... För, för det finns en massa fler steg här då, eh... Och det borde vi rent praktiskt förstå. Men, men det är ju utifrån utförarperspektivet då efter finplaneringen så blir det ju då till exempel då att man, man är, man är på väg, man är på plats och, eh... Uppgiften då slutligen blir utförd och efter att den är utförd så kommer det ändå till fakturakontroll och så-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. Mm. -där det är slutinfrakturerad då med de olika mellansteg som det kan vara här då. Och sen det parallella flödet då med, med, med de här affärsmässiga stegen då.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och ja, uppgiftsstatus då, det är ju li-- Det bägge är ju liksom inne i det där, men det kan väl vara bra då att man, man gör det.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Tydligt då. Och sen har vi begreppen. Det är väl också...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Eh, eh, ja, det är väl, det är väl ganska väl fångat då alltså att uppgif- uppgiften är ju central och en uppgift är en artikel med tillhörande i- information då. Jag är väl lite så här häpnad över då att, att, att Replid inte har fångat upp det. Men, men det är alltså när, var och hur då. Så att uppgiften är ju... Den innehåller ju då en, en, en, en önskad och planerad och värdefull-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. -leveranstid. Och sen så innehåller den ju i de allra flesta fall då, inte alltid, men, eh, då en geografisk position då.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och år, det är mera ett flytande begrepp då som används av olika personer då. Eh, orderkonceptet, här får ni liksom gärna då, då utveckla det där då. Alltså att orderkonceptet som är det mest avancerade då, där man skapar uppgifter då till då snabborder då, där man skapar uppgifter på ett mer manuellt sätt. Och sen de andra som jag nämnde då. Där, där kan man ju... Alltså jag förvä-- Jag blir, jag blir orolig över att Replit inte har bättre koll på-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. -det här ägget för att det här har vi gått igenom och det här borde Replit ha bättre struktur på. Men det är väl bara att förstå här att Replit har inte lyssnat eller Replit har inte förmågan att, att kommunicera. Men vi har ju flera olika fall av... Som, som vi har promptat då Replit här.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och så har vi då planeringen då och där är det viktigt då. Namnet på de här är ju mera då, eh, vi får inte hänga upp det, men på grobplaneringen...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Där finns ju alltså alla uppgifter och uppgifterna går att sorteras utifrån status och utifrån utförandekod och utifrån all... Ja, alltså i det här informationspaketet som uppgifterna då innehåller då med, med, med, eh, ja, leveranstider och om de är tilldelade och vilken status de har. All den informationen sorterar man i den här, eh, grobplaneringen och det kanske är läge att den skulle ha ett annat namn, masterplanering.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Planeringsvyn liksom, eller masterlistan över... För, för det, det är liksom allt som ligger i den och den minskar ju då i takt med att man då sorterar den då. Och sen har vi finplaneringen. Den är ju det den är då, eh, och den är ju veckouppdelad och den har då cykler om hundrasextioåtta timmar baserat på det då. Och sen vad den här andra generella veckoplaneringen är, det, det-- Bort med den skiten för den saknar logiken för, för det sätt som systemet är uppbyggd.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Så att om den förvirrar äppligt mer än den gör nytta så radera hela skiten eller arkivera det liksom för att...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Det är inte aktuellt nu på något sätt. N-n-nej, det är inte så som systemet är uppbyggt. Så att då blir det liksom väldigt, väldigt konstigt. Det kan förvirras till. Ja, o-och en väldigt, väldigt viktig bit om vi går liksom till grunden här då. Det är ju liksom, det är den här uppgiftslistan då som finns då på det här registret lite längre upp då där, uppgiftsregistret. Det är att allt, alla saker som ska göras i det här systemet hamnar i den här uppgiftslistan.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Det finns liksom inget mellanting på något vis?",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Utan, utan är det ett samtal som ska ringas så är det en uppgift som ligger där med en upp-uh-uppgiftskod på vad, vad du ska göra. Sen, sen så skapar man då med, med snabbordrar och de här uppgifterna då. Och, och, och en felanmälan eller en, en kom ihåg upp-- Att man ska komma ihåg att ringa en kund, ja, då ska det ju finnas då en snabb funktion då som man, man kopplar då en uppgift till ett visst objekt och en viss kontakt som finns på det objektet då liksom.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Det, det, det, det vikt-- Alltså, det här är kanske ett annorlunda sätt att jobba, men, men, men man-- Alltså, det, det unika i det här systemet, det finns liksom ingenting som ligger utanför den här logiken. Utan... Och...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och, och, och register fyra där, uppgiftsregistret, det är jätteviktigt. Eh, sen vore det också väldigt bra då om Replit också i den här summerar då de här sidoregistrerna som vi har. Eh, och det är ju ganska många vid det här laget. Alltifrån då banala, simpla saker som ikonregistret till registret utifrån utförande, eh, typer, eh, artikelregistret naturligtvis, eh, är ju kundregistret, register över prislistor, eh-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. Om, om Replit tittar i sig själv då så vi får en lista på de här, de här sidoregistrerna då så att vi har koll på dem. Och det som är ju unikt för alla de här sidoregistrerna är ju att de dyker ju upp då framför allt i, i, i, i objektregistret då och i metadataregistret då. Där väljer man ju till exempel ikoner eller där väljer man, väljer man då, eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "utifrån de här fördefinierade positionerna, vilken kund det ska vara. Det kommer ju upp i årekonceptet och så, så väljer man ju då vilket-- Vil-vilken ku-kund det är då. Så att de här sidoregisterna stöttar ju då så att säga valena i, i, i, i då de här tre eller flera. Det är framför allt det där registret med tre då, där uppgifter skapas då som, som, som är lite yvigare då än, än, än bara årekonceptet. Så ja, försök att... Jag får uppdatera det där först.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    }
+  ]
+}
