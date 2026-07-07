@@ -91,6 +91,7 @@
 - [Hide-empty-gates vs DB-defaults](hide-empty-db-default-columns.md) — "visa endast om värde"-gates måste exkludera kolumn-DB-defaults (accessType="open", condition="good") annars fabriceras defaultvärdet.
 - [Frozen-payload has-config gate](frozen-payload-config-gate.md) — nullable fryst payload med flera sub-flaggor: gaten som avgör null vs ej-null måste täcka VARJE sub-flagga (m. resolver-default), annars tappas en utelämnad sub-feature tyst vid frysning.
 - [Uppgiftslogik v1 scope-beslut](uppgiftslogik-v1-decisions.md) — produktägarens v1-scope: fakturalås BY+CE=ett fält; fastpris artikel+order; geografi punkt v1; tagga W-artiklar; taget antal→lager.
+- [Uppgiftskontrakt v1 (P2 låst)](uppgiftskontrakt-v1.md) — status via deriveUppgiftStatus() (ENDA mappningen); informationspaket 2 axlar (KÄLLA×D/M/S/SYS); 1 logisk uppgift över assignments+work_orders.
 - [Tidskod prio-konfliktregel](tidskod-priority-conflict-rule.md) — TIME_CONFLICT bara när BÅDA blocken prio1; prio2/3 får överlappa; saknad kod→FALLBACK(2); medveten invertering av "flagga alla överlapp".
 - [Restidsmotor & tidskod](travel-time-engine-tidskod.md) — hastighetstak på MEDELFART (ej %); manuell tidskod skrivs ALDRIG över av recompute; groupKeys i topic-filen.
 - [Server-myntade sekvensnummer](server-minted-sequence-numbers.md) — SO-NNN/OBJ-NNN myntas server-side; strippa klient-värdet på ALLA WO-write-routes (POST+PATCH+with-lines), ej bara minting-routen; statiska routes före /:id.

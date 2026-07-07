@@ -68,6 +68,6 @@ Aktiva "var-uppmärksam-på"-regler. Djupare detalj i `.agents/memory/`, `CHANGE
 
 ## Pointers
 - **ADR v3** (`docs/adr-orderkoncept-v3.md`): objekt-neutralitet, kund-hierarki, tre fakturanivåer, metadata-livscykel, samlingsfakturor. **ADR v2** (`adr-orderkoncept-v2.md`): orderkoncept-grund.
-- **Uppgiftsmodell:** `docs/uppgiftsmodellen-utredning.md` + `docs/uppgiftslogik-utvecklingslogg.md` (parkerat framtida bygge, 2026-07-02).
+- **Uppgiftsmodell:** `docs/uppgiftsmodellen-utredning.md` + `docs/uppgiftslogik-utvecklingslogg.md` (parkerat framtida bygge, 2026-07-02). **LÅST kontrakt:** `docs/adr-uppgiftskontrakt-v1.md` + `shared/uppgift-contract.ts` (P2: gemensam uppgiftsmodell, informationspaket-fält, status som ETT fält via `deriveUppgiftStatus()`) — additivt, expand-contract; motorer/migration byggs P3+.
 - **Master Implementation Guide v1.0:** övergripande sprint-planer.
 - **Externa API-doc:** Zod, Drizzle ORM, OpenAI, Geoapify (routing/VRP), Twilio (SMS), Fortnox (bokföring).

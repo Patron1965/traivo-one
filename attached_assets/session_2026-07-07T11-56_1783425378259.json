@@ -1,0 +1,80 @@
+{
+  "sessionId": "1698e8af6f",
+  "exportedAt": "2026-07-07T11:56:14.717Z",
+  "summary": "### Key Topics Discussed\n- Creation of tasks within the system.\n- New task type: metadata editor for fault reports/ratings.\n- Functionality of the metadata analyzer in relation to new tasks.\n- Activation methods for the metadata editor task (e.g., QR-codes).\n\n### Decisions Made\n- The metadata editor task will not be integrated into the master planning but will be managed through a separate side register.\n\n### Action Items\n- Repplif needs to recognize the metadata editor as a standing task, triggered when someone inputs information and creates it.\n\n### Important Points & Insights\n- Tasks are usually created from a poor concept or a quick order.\n- Tasks can also be created automatically, such as a logistical task for a picking order (e.g., if an item for an order at Storgatan 22 in Sundsvall is located in Bjeasta, the system automatically creates a picking task based on that logic).\n- A new type of task applies to fault reports or ratings, which might not have been fully understood yet. This new task type, referred to as a \"metadata editor,\" involves tasks like taking a picture to report a fault or assessing cleanliness/completion of a job. Its purpose is to update metadata, sometimes in combination with other tasks like laundry or repairs.\n- The metadata editor task is triggered by user input, which then pushes metadata information to the linked object based on its definition. This can be activated via methods like QR codes, by pointing to an object and inputting information into a metadata field, or by submitting photos.\n- It's important not to confuse the metadata editor with the metadata analyzer, which is a continuous loop that monitors metadata on objects.\n- The metadata analyzer monitors for conditions, such as a fault report or rating. When a condition is met (e.g., a metadata field indicates a fault like \"broken lid\" or \"overfilled bin\"), it creates a task in the master plan. This task then presents the fault with the same logic as other tasks, linked to the relevant object.\n\n### Open Questions/Pending Items\n- No new open questions or pending items to report.",
+  "conversation": [],
+  "transcripts": [
+    {
+      "text": "Jag sparar på ett annat äh, ja.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Den ska du svara på. Jo, på agentens fråga på trean av fyra frågor så kommer här nu ett svar då. Äh, och först en liten bakgrund då. Normalt skapas ju uppgifter utav ett dåligt koncept eller en snabba order. Men uppgifter kan också skapas automatiskt, till exempel, äh, en, en, en logistisk uppgift om vi har en plockuppgift. Vi behöver en skruv på en upp...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "I Storgatan 22 i Sundsvall. Systemet och den här motorn som vet var den där ligger, konstaterar att den ligger i Bjeasta på en viss hylla där. Då skapas det ju då en automatiskt av systemet en plockuppgift då baserat på den, äh, den logiken då. Och när det gäller då felanmälan eller, äh, rating så är det då en ny typ. Det här finns, jag kanske re-repliken inte har förstått det, men, äh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "...Givetvis. Dels ofte- till exempel är att ta ett kort och förklara vad som är trasigt eller, eller, eh, eh, uppleva hur rent och väl utfört uppdraget var eller statusen är på det här rummet. Och då måste, eh, eh, Repplif förstå då att en sån, jag kallar det en metadataeditor, för, för syftet är ju...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Är ju så att säga både vanliga uppgifter, men den här uppgiften är ju en form av, av, av, eh, av, eh, ja, en uppgift som ska göras som tillika då uppdaterar metadata då i kombination då i vissa fall med att man gör ett tvättuppdrag eller något annat, man reparerar en sak. Men i det här fallet då så måste Repplif se då den här metadataeditorn då som en stående uppgift. Så när den triggas, det vill säga att nån då matar in vad man heter och, och skapar då, eh, eh, information-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm ...här, då blir det så att säga då en, en uppgift. Den här uppgiften kommer ju aldrig att komma in i, i, i masterplaneringen på nåt vis, utan den här, den, den blir ju bara då. Sen blir det väl en annan, eh, sidoregister här då. Vi måste hålla reda på vilka såna här metadataeditorer då som ligger utlagda och eventuellt då vilka objekt de är kopplade mot då. Men grundprincipen i metadataeditorn är ju att nån triggar i gång uppgiften, bekräftar eller väljer vilket objekt den är kopplad-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm ...mot. Och sen så kommer det då att pushas in metadatainformation på det objektet utifrån då hur den här är definierad enligt samma logik då som en vanlig uppgift. Sen så ska vi nog inte förväxla då det här med då det som heter då metadataanalysator då. För det är ju då en, en loop som ligger hela tiden och tittar då på metadata ute på objekten. Antingen på alla objekt eller att den inpekar på ett, på ett visst objekt då. Eh, och",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "baserat- Mm ...på det då så, så kan ju den här ligga och bevaka då om det blir en felanmälan eller ratingen utifrån utfört. Eller, eh, det kan ju också vara liksom ett kundmeddelande i nån annan form. Det är ju bara fantasin som sätter stopp för det här då. Och när den då får träff enligt villkoret då på den här, eh, metadataanalysatorn, då rapporterar den det hära, eh, som jag ser det då utifrån en, eh, att den skapar då en uppgift som handlar i masterplanen då. Så att om ett metadatafält lika med tr-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm ...felanmälan, säger vi då, är lika med att det är sant att det har skapats information. Då det kan stå trasigt block eller f-- överfyllt kärl eller dåligt städat. Då, eh, blir då det metadatad-fältet sant och då skapar den en uppgift då kopplat till det metadatafältet då som säger att här är det en felanmälan. Och, eh, så presenterar den med samma logik som a-a-alla annat då. Felanmälan, trasigt lock och det ligger ju då redan kopplat till, till det objektet då som, som det pekar på.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. Och så får man hantera det därefter då. Och sen kommer det ju att bli-- Den uppgiften blir ju då en administrativ uppgift med ett roligt och så. Då kommer ju sen den att omvandlas då till en serviceorder.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Genom en snabborder eller ett orderkoncept. Eh, det här tror jag är en utveckling och ett svar på då den här logiken med då hur ratingar, felmeddelanden och liknande då funkar med hjälp av då det som vi kallar, och lite tråkigt, metadata editor. Men det är alltså en, en stående uppgift som man kan trigga i gång till exempel med en QR-kod, eh, peka mot ett objekt, berätta, eh, genom att skicka in information på ett metadatafält då eller fylla ett metadatafält.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Ja, då tar det upp med, med foton och annat då utifrån då den statusen där. Och sen kommer då metadataanalysatorn då som sen skapar då en uppgift då på det hära, eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    }
+  ]
+}
