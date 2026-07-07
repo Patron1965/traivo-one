@@ -1,0 +1,56 @@
+{
+  "sessionId": "2451a993d",
+  "exportedAt": "2026-07-07T15:09:40.379Z",
+  "summary": "### Key Topics Discussed\n- Missnöje med användargränssnittet för hantering av objekt och metadata\n- Problem med hårdkodade fält och metadata-logiken\n- Utmaningar med layout för överordnade/underordnade objekt\n- Hantering av metadata på radnivå och dess koppling till objekt\n\n### Decisions Made\n- Sammanfattning att det finns en stor besvikelse över bristande förändring i användargränssnittet för objekthantering och metadata.\n\n### Important Points & Insights\n- Exportfilen för metadatauppdatering diskuterades.\n- Överenskommelsen var att hårdkodade fält skulle tas bort.\n- Systemet ska inordnas i metadata-logiken där endast objektnummer, objektnamn och aktiv/inaktiv status ska vara unikt för ett objekt.\n- Överordnade och underordnade objekt presenterar layoutmässiga problem, särskilt vid många sådana objekt.\n- Metadata på radnivå kan redovisas i en separat fil.\n- Repli måste hantera logiken för objekt, objektnummer och eventuellt separata tabeller för kopplade överordnade/underordnade objekt och metadata.\n- Behov av en standardiserad struktur för objekthantering.",
+  "conversation": [],
+  "transcripts": [
+    {
+      "text": "Ja, gå in i spelaren. Ja, det gör den. Ja. Ja, jo, äh, ytterligare en kommentar till det här. Vi kan väl sammanfatta det hela med att vi är mycket, mycket, mycket besvikna eftersom det inte är någon förändring i den här, äh, användargränssnittet för att hantera, äh, objekt och deras metadata då. Ytterligare en grej som vi vill lägga in här är då, vi har exporterat den här, äh, exportfilen då som ska användas för att uppdatera metadata och vi var ju överens om att all...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Nu tändas tusen juleljus och bakom fönstret.",
+      "timestamp": "",
+      "speaker": "Others",
+      "isFinal": true
+    },
+    {
+      "text": "Flytta prakten.",
+      "timestamp": "",
+      "speaker": "Others",
+      "isFinal": true
+    },
+    {
+      "text": "hårdkodade, äh, hårdkodade fält skulle bort då och att hela systemet skulle inordnas i den här metadata-logiken där det enda unika för ett objekt är objektnumret, objektnamnet och statusen om den är aktiv eller inte aktiv. Och sen så är det då överordnade och underordnade objekt då. Och här är ju ett litet problem då layoutmässigt naturligtvis då om det finns många underordnade eller överordnade objekt, så hur...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Men kommer ihåg att tämna djus för dem som behöver. Änglavakten. Önskar dig inget än eller annat. Önskar dig en stilla natt.",
+      "timestamp": "",
+      "speaker": "Others",
+      "isFinal": true
+    },
+    {
+      "text": "metadata då på radnivå så att det kanske ska då redovisas i en separat fil då. Men det här förutsätter ju att Replit hanterar den här logiken då. Så att grunden är ju att du har, att du har ett objekt och du har ett objektnummer på det. Och sen är det möjligt att det är separata tabeller för kopplade överordnade och kopplade underordnade objekt samt kopplade metadata då. Äh, men det här behöver bara hålla en, en, en, en, en, en struktur och en standard för det är ju bara för oss att inrätta.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Det går en vind över vindens sängar.",
+      "timestamp": "",
+      "speaker": "Others",
+      "isFinal": true
+    },
+    {
+      "text": "Du fladdrar till, ingen tuggar ut.",
+      "timestamp": "",
+      "speaker": "Others",
+      "isFinal": true
+    }
+  ]
+}
