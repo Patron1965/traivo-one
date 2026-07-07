@@ -49,9 +49,17 @@ import "leaflet/dist/leaflet.css";
 import { useMapConfig } from "@/hooks/use-map-config";
 import type { ServiceObject, WorkOrder, ImportTemplate } from "@shared/schema";
 import { PolylineEditor } from "@/components/PolylineEditor";
-import { objectStatusBadge as statusColors, workOrderStatusBadge as workOrderStatusColors } from "@/lib/status-colors";
+import { objectStatusBadge as statusColors, workOrderStatusBadge as workOrderStatusColors, getObjectStatusBadge } from "@/lib/status-colors";
 import { OBJECT_LOCATION_TYPE_LABELS, objectLocationTypeLabel, objectLocationTypeBadgeClass } from "@/lib/object-location";
 import type { LucideIcon } from "lucide-react";
+
+// Task #1158: objektets driftstatus (ej arkivering) — samma trippel som
+// redigeringsdialogen skriver (SelectItem active/inactive/pending).
+const OBJECT_STATUS_LABELS: Record<string, string> = {
+  active: "Aktiv",
+  inactive: "Inaktiv",
+  pending: "Väntande",
+};
 
 interface InheritanceSource {
   field: string;
@@ -353,6 +361,8 @@ export default function ObjectDetailPage() {
   const { user } = useAuth();
   const isAdmin = user?.role === "admin" || user?.role === "owner";
   const canUseTemplates = isAdmin || user?.role === "planner";
+  // Task #1158: planerare (samt admin/owner) får byta objektstatus direkt i huvudet.
+  const canEditObjectStatus = isAdmin || user?.role === "planner";
 
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [editSection, setEditSection] = useState<"overview" | "access" | "equipment">("overview");
@@ -1290,9 +1300,38 @@ export default function ObjectDetailPage() {
                 {objectTypeLabel}
               </Badge>
             )}
-            <Badge className={(obj as any).deletedAt ? statusColors.inactive : statusColors.active} data-testid="badge-status">
-              {(obj as any).deletedAt ? "Arkiverad" : "Aktiv"}
-            </Badge>
+            {/* Task #1158: arkivering (soft-delete via deletedAt) är read-only i
+                huvudet — objektets driftstatus (active/inactive/pending) redigeras
+                separat via väljaren nedan (befintlig PATCH /api/objects/:id). */}
+            {(obj as any).deletedAt ? (
+              <Badge className={statusColors.inactive} data-testid="badge-status">
+                Arkiverad
+              </Badge>
+            ) : canEditObjectStatus ? (
+              <Select
+                value={(obj.status as string) || "active"}
+                onValueChange={(v) => updateObjectMutation.mutate({ status: v } as Partial<ServiceObject>)}
+                disabled={updateObjectMutation.isPending}
+              >
+                <SelectTrigger
+                  className={`h-7 w-auto gap-1.5 border-0 px-2 py-0 text-xs font-medium ${getObjectStatusBadge(obj.status)}`}
+                  data-testid="select-object-status"
+                >
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {Object.entries(OBJECT_STATUS_LABELS).map(([val, label]) => (
+                    <SelectItem key={val} value={val} data-testid={`option-status-${val}`}>
+                      {label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            ) : (
+              <Badge className={getObjectStatusBadge(obj.status)} data-testid="badge-status">
+                {OBJECT_STATUS_LABELS[(obj.status as string) || "active"] ?? obj.status}
+              </Badge>
+            )}
             {obj.accessType && obj.accessType !== "open" && (
               <Badge variant="outline" className="gap-1" data-testid="badge-access-type">
                 <AccessIcon className="h-3 w-3" />
