@@ -1,0 +1,39 @@
+Traivo — Grundmodellen (Steg 0) Gemensam bild: hur objekt, metadata, orderkoncept och uppgifter hänger ihop · 7 juli 2026 Endast TRE saker är INTE metadata:  objektnummer (system)  ·  status (aktiv / arkiverad)  ·  släktskap (föräldrar / barn).
+Allt annat om ett objekt är metadata. 1 · Fyra register — inga sidoregister 🏢 Objektregistret
+
+Objektet + släktskap. Bara objektets egen info.
+• Objektnummer (system)
+• Status: aktiv / arkiverad
+• Släktskap: föräldrar / barn 🏷 Metadataregistret
+
+All metadata, villkor per fält.
+• Foto, kontakt, antal, adress
+• Hård/mjuk leveranstid, fastighetsnr
+• Historik (arkiverade värden)
+• Ursprung: system/operatör (vem & när) 📑 Orderkonceptregistret
+
+Koncepten som skapar uppgifter.
+• Kund · betalare
+• När · vad
+• Inpekade objekt 🧩 Uppgiftsregistret
+
+Uppgifterna = informationspaketen.
+• Samkör objekt + metadata + koncept
+• Bär systemstatus per uppgift 2 · Vad är en uppgift? (informationspaketet) Artikel — vara/tjänst, pris, alla artikelfält Orderkoncept — kund, betalare, leveranstid, vad Objekt-metadata — antal, hård/mjuk tid, kontakt Systemstatus — var i flödet uppgiften är  🧩 Uppgift = ett stort informationspaket
+
+En artikel med påhakad information från orderkonceptet och objektets metadata + systemstatus.
+Paketet lever i planeringen — inte som ett fält på objektsidan.
+
+⚠ Kan sakna kund och full metadata — antal fylls ofta i på plats (5 → verkligt 15). 3 · Flödet Objekt + Metadata + Orderkoncept
+(grunddata + det som skapar uppgifter) Uppgift skapas
+(artikel + koncept + metadata + status) Grovplanering
+(hela uppgiftslistan) Finplanering = Veckoplan 168 h
+(tilldelad + utförandetid) Utförd
+(tillbaka i uppgiftslistan)     ↩ Återtag: finplanering → grovplanering (utan utförandedag, ligger på önskad leveranstid igen). 4 · Uppgiftens status Produktion:  Skapad  →  I grovplanering  →  I finplanering (exakt leveransdag)  →  Utförandeläge (på väg)  →  Slutförd  →  Fakturakontroll  →  Skickad för fakturering Mellanläge:  Omöjlig att utföra (fel) Affärsstatus (parallellt):  Order befäst  →  Följesedel (kund kvitterar)  →  Faktura 5 · Begrepp 🧩 Uppgift
+En artikel + tillhörande metadata/info. Systemets minsta utförbara enhet. 📦 Order
+Flera uppgifter. Flytande begrepp — grupperas per geografi, koncept eller fakturareferens. 📑 Orderkoncept
+Det formella: kund, betalare, när, vad, inpekade objekt. Skapar uppgifter. ⚡ Snabborder
+Manuell miniatyr utan autologik. Pekar ut objekt ('tvätta 10 kärl') → samma uppgifter. 6 · Tre planeringsverktyg 📋 Grovplanering  (Kinab · prod)
+Stor uppgiftslista — alla uppgifter, även utförda/tilldelade. 📅 Finplanering = Veckoplan 168 h  (Kinab · prod)
+Tilldelad utförare + utförandetid. 🗓 Generell veckoplanering  (separat / framtid)
+Ingen Kinab-koppling i produktionsdatabasen. Regel: en uppgift ska synas i BÅDA Kinab-verktygen (grov + fin). Inga sidoregister, ingen påhittad historik, inga 'inneliggande ordrar'.

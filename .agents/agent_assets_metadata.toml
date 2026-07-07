@@ -186,3 +186,15 @@ id = "RX2dArz1Q5md7fDKbetCM"
 uri = "file://docs/uppgiftslogik-utvecklingslogg.md"
 type = "text"
 title = "Uppgiftslogik – utvecklingslogg (uppdaterad: U8 tidslogg)"
+
+[[outputs]]
+id = "-FQ4B8iv3bXiwBRCC-e1U"
+uri = "file://exports/traivo-grundmodell.pdf"
+type = "pdf"
+title = "Traivo — Grundmodellen (Steg 0) · PDF"
+
+[[outputs]]
+id = "kwwgmX6y9GG-GCl24QIHs"
+uri = "file://exports/traivo-grundmodell.png"
+type = "image"
+title = "Traivo — Grundmodellen (Steg 0) · PNG"
