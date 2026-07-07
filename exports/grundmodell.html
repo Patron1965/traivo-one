@@ -217,6 +217,8 @@
           <li>Önskad leveranstid <em class="m">M</em></li>
           <li>Planerad · verklig leveranstid <em class="d">D</em></li>
           <li>Geografisk position <em class="d">D</em></li>
+          <li>Uppgiftstyp (produktion/resa/ställ/egentid) <em class="sys">SYS</em></li>
+          <li>Klump-ID (samkörning, motor 3) <em class="sys">SYS</em></li>
         </ul>
       </div>
       <div class="card purple pkgcard">
@@ -233,7 +235,7 @@
         </ul>
       </div>
     </div>
-    <p class="note"><b>Poäng:</b> paketet samkör flera register. Kan sakna kund/full metadata — t.ex. antal fylls i på plats (5 &rarr; verkligt 15). "Vår referens" = skaparens löpnummer, så uppgiften alltid kan spåras tillbaka till orderkonceptet / felanmälan / rating som skapade den.</p>
+    <p class="note"><b>Poäng:</b> paketet samkör flera register. Kan sakna kund/full metadata — t.ex. antal fylls i på plats (5 &rarr; verkligt 15). "Vår referens" = skaparens löpnummer, så uppgiften alltid kan spåras tillbaka till orderkonceptet / felanmälan / rating som skapade den. <b>Fler variabler tillkommer</b> från orderkoncept- och artikelregistret och förfinas senare. Varje uppgift bär även en <b>uppgiftstyp</b> — restid mellan objekt skapas automatiskt som en egen uppgift; typen styr tidskoder för framtida löneexport.</p>
   </div>
 
   <!-- 4. Flödet, två spår -->
@@ -273,13 +275,13 @@
   <!-- 5. De nio motorerna -->
   <div class="section">
     <h2>5 · De nio motorerna (förfinar resultaten)</h2>
-    <p class="note" style="margin-top:0;margin-bottom:12px">Mellan master- och finplanering bearbetar nio motorer informationspaketen. De <b>förfinar</b> uppgiften (när · var · ihop · faktura · status) och <b>skapar vid behov tilläggsuppgifter</b> (motor 4–7 och 9). De kan köra periodiskt, samarbeta i loopar och lämnar besluten till planeraren.</p>
+    <p class="note" style="margin-top:0;margin-bottom:12px">Mellan master- och finplanering bearbetar nio motorer informationspaketen. De <b>levererar in de systemsatta (gulmärkta) fälten</b> — leveranstid, position, klump-ID — och <b>förfinar</b> uppgiften (när · var · ihop · faktura · status). Vid behov <b>skapar de tilläggsuppgifter</b> (motor 6, 7 och 9) och egna fakturor (motor 5). De kan köra periodiskt, samarbeta i loopar och lämnar besluten till planeraren.</p>
 
     <div class="sub-label"><span class="lg" style="background:#4A9B9B;width:10px;height:10px;min-width:10px;padding:0;margin-right:6px"></span>Planera — när · var · ihop</div>
     <div class="motor-grid">
       <div class="motor"><div class="num a">1</div><div><b>Geografisk motor</b><span>Fastställer var uppgiften finns — objektplats + fordonsplats. Levererar position.</span></div></div>
       <div class="motor"><div class="num a">2</div><div><b>Tidsmotor</b><span>Väljer lämplig tidpunkt utifrån önskad leveranstid, tidsfönster &amp; utförarens läge.</span></div></div>
-      <div class="motor"><div class="num a">3</div><div><b>Klumpningsmotor</b><span>Slår ihop uppgifter av samma typ/tid/plats till en klump (ett stopp). Kan föreslå tidiga-/senarelägg för samkörning.</span></div></div>
+      <div class="motor"><div class="num a">3</div><div><b>Klumpningsmotor</b><span>Slår ihop uppgifter av samma typ/tid/plats till en klump (ett stopp) och märker uppgiften med klump-ID (t.ex. "Storgatan 22 · 22 juli"). Kan föreslå tidiga-/senarelägg för samkörning.</span></div></div>
     </div>
 
     <div class="sub-label"><span class="lg" style="background:#C97B3C;width:10px;height:10px;min-width:10px;padding:0;margin-right:6px"></span>Fakturera</div>
@@ -296,8 +298,8 @@
 
     <div class="sub-label"><span class="lg" style="background:#1B4B6B;width:10px;height:10px;min-width:10px;padding:0;margin-right:6px"></span>Status, avisering &amp; bevakning</div>
     <div class="motor-grid">
-      <div class="motor"><div class="num d">8</div><div><b>Status- &amp; aviseringsmotor</b><span>Bevakar status mot önskad leveranstid; aviserar kund &amp; personal (på väg, på plats, släp) — transparens à la Posten.</span></div></div>
-      <div class="motor"><div class="num d">9</div><div><b>Metadatabevakningsmotor</b><span>Bevakar metadatafält mot villkor (trasig lucka, &lt;5 kärl, klagomål); varnar och kan skapa en uppgift. AI-/kundportal-nära = "Metadata-analysatorn" i register 3.</span></div></div>
+      <div class="motor"><div class="num d">8</div><div><b>Status- &amp; aviseringsmotor</b><span>Skapar ingen egen data — flaggar varningar när planerad/oplanerad tid hamnar efter önskad leveranstid, och aviserar kund &amp; personal (på väg, på plats, släp). Transparens à la Posten.</span></div></div>
+      <div class="motor"><div class="num d">9</div><div><b>Metadatabevakningsmotor</b><span>Kund eller planerare skapar en bevakare (fungerar som ett sidoregister) på ett metadatafält — t.ex. antal &gt;100 eller felanmälan sann &rarr; skapar en uppgift. AI-/kundportal-nära = "Metadata-analysatorn" i register 3.</span></div></div>
     </div>
   </div>
 
@@ -308,7 +310,7 @@
       <span class="mini-label">Livscykel</span>
       Skapad &rarr; I masterplanering &rarr; I finplanering (exakt leveransdag) &rarr; Utförandeläge (på väg / på plats) &rarr; Utförd &rarr; Fakturakontroll &rarr; Fakturerad
     </div>
-    <div class="err-line"><span class="mini-label">Mellanläge</span>Omöjlig att utföra (fel)</div>
+    <div class="err-line"><span class="mini-label">Stopp</span>Omöjlig att utföra — inget separat "mellanläge", bara en av statusarna. Planeraren söker fram och åtgärdar.</div>
   </div>
 
   <!-- 6. Begrepp -->
@@ -328,11 +330,11 @@
     <div class="row">
       <div class="card green">
         <div class="tag">Produktionsdb · Kinab</div><h3>Masterplanering</h3>
-        <span style="font-size:11px;opacity:.75">(fd grovplanering)</span> — master-listan över <b>alla</b> uppgifter. Sorteras på status, utförandekod, leveranstid, tilldelning; krymper i takt med att man planerar.
+        <span style="font-size:11px;opacity:.75">(fd grovplanering)</span> — master-listan över <b>alla</b> uppgifter. Sorteras på status, utförandekod, leveranstid, tilldelning; krymper i takt med att man planerar. Sparade <b>filterregister</b> (per utförarinriktning, missade jobb, utfört per kund) för snabb åtkomst.
       </div>
       <div class="card green">
-        <div class="tag">Produktionsdb · Kinab</div><h3>Finplanering = Veckoplan 168 h</h3>
-        Veckouppdelad med cykler om 168 timmar. Tilldelad utförare + utförandetid.
+        <div class="tag">Produktionsdb · Kinab</div><h3>Utförarplan / vecka <span style="font-size:11px;opacity:.75">(fd finplanering)</span></h3>
+        168 h per utförare: alla tilldelade uppgifter + utförarens ställtid/restid + egentid (ledig tid). Tilldelad utförare + exakt utförandetid.
       </div>
       <div class="card gray struken">
         <span class="xtag">UTGÅR</span>
@@ -362,6 +364,7 @@
       <div class="side"><b>Utförarregister</b><span>personal/utförare</span></div>
       <div class="side"><b>Fordonsregister</b><span>fordon</span></div>
       <div class="side"><b>Resurser / team</b><span>resurser för planering</span></div>
+      <div class="side"><b>Filterregister</b><span>sparade filter i masterplaneringen</span></div>
     </div>
     <div class="sub-label" style="margin-top:14px">Register som pekas in i uppgiften</div>
     <div class="side-grid">

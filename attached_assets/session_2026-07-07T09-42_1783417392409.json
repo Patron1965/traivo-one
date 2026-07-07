@@ -1,0 +1,188 @@
+{
+  "sessionId": "83b43217",
+  "exportedAt": "2026-07-07T09:42:57.314Z",
+  "summary": "### Key Topics Discussed\n- Samkörda uppgifter och informationspaket för uppgifter.\n- Variabler i orderkonceptet och artikelregistret.\n- Sammanställning av uppgifter utifrån utförarperspektiv baserat på typ, tid och plats.\n- Diskussion om olika \"motorer\" och deras funktioner (1-4 för befintliga uppgifter, 6-7 för uppgiftsberoenden, 7 för plockuppgifter, 8 för bevakningsfunktion, 9).\n- \"Motor 9\" som en metadatabevakare för att skapa uppgifter baserat på metadatafältens förändringar eller värden (t.ex. antal stiger över en gräns, eller ett fält blir 'sann').\n- Uppgiftsstatuser och deras hantering. En uppgift har systemstatusar och ingen \"mellanläge\", den följer ett flöde från order till faktura men kan stoppas om den inte kan utföras, vilket resulterar i en specifik status som planeraren får hantera.\n- Planeringsverktygen, inklusive masterplaneringen och finplaneringen.\n- Sidoregister och filterregister i masterplaneringen för snabb sökning och filtrering av uppgifter (t.ex. per geografiskt område, utförarinriktning, icke genomförda uppgifter, kundspecifika uppgifter).\n- Förslag på namnbyte för finplaneringen till \"utförarplan per vecka\" med information om 168 timmar, tilldelade uppgifter, restider/ställtider samt utförarens egen lediga tid.\n- Specifikation av fyra typer av tid: produktionstid, restid, ställtid, övrig arbetstid och egentid, som är systemdefinierade och inte sidoregister.\n- Vikten av att informationspaketet för en uppgift tydligt anger om det är en produktionsuppgift eller en ställtid.\n- Reseuppgifter: Systemet måste kunna skapa och hantera reseuppgifter automatiskt mellan objekt, vilka är centrala eftersom huvuddelen av uppgifterna involverar resor.\n- Tidskoder i informationspaketet för export till lönesystem/personalliggare för att uppfylla skyldigheter gällande arbetstider och vilotider.\n\n### Decisions Made\n\n### Action Items\n- Refly ska granska orderkonceptet för att säkerställa att alla variabler inkluderas och att de även finns med i informationspaketen.\n- Artikelregistret ska granskas för att säkerställa att alla variabler på artikeldatabasen överförs.\n- Saknade \"motorer\" för informationspaketen (leveranstid, geografisk plats, ihopklumpning av uppgifter) ska identifieras och implementeras.\n- Få med funktionen för \"motor 9\" (metadatabevakaren) i dokumentationen.\n- Överväga att döpa om finplaneringen till \"utförarplan per vecka\".\n- Säkerställa att informationspaketet för varje uppgift tydligt indikerar om det rör sig om en produktionsuppgift eller ställtid.\n- Säkerställa att informationspaketet för reseuppgifter innehåller nödvändiga tidskoder för export till lönesystem/personalliggare.\n\n### Important Points & Insights\n- Det saknas motorer som levererar information som var gulmärkt i det ursprungliga underlaget, såsom leveranstid och geografisk plats, för informationspaketen. Skapat av-informationen finns dock med.\n- En viktig motor saknas för att klumpa ihop uppgifter baserat på utförarperspektivet, med hänsyn till typ, tid och plats (t.ex. allt som kan göras vid samma tidpunkt på samma plats).\n- \"Motorerna\" 1-4 hanterar befintliga uppgifter.\n- \"Motorerna\" 6-7 skapar och hanterar uppgiftsberoenden, där 7 specifikt skapar plockuppgifter.\n- \"Motorn\" 8 är en bevakningsfunktion som flaggar varningar när planerad tid ligger efter önskad leveranstid, snarare än att skapa data.\n- \"Motor 9\" fungerar som en metadatabevakare som skapar uppgifter när specificerade metadatafält ändras eller når vissa värden (t.ex. ett antal överskrider en gräns, eller ett felanmälningsfält blir 'sann'). Den kan ses som ett sidoregister.\n- En uppgift har bara olika systemstatusar, inte ett \"mellanläge\". Om en uppgift inte kan utföras, intar den en status som indikerar detta, och det är upp till planeraren att söka på och hantera sådana fel.\n- Masterplaneringen behöver ett filterregister där planeraren kan skapa anpassade register för att snabbt kunna söka och plocka fram uppgifter baserat på kriterier som geografiskt område, utförarinriktning, uppgifter som inte har gått att genomföra, eller kund.\n- Finplaneringen (möjligen omdöpt till \"utförarplan per vecka\") omfattar 168 timmar och ska innehålla alla uppgifter tilldelade en utförare, samt kopplade ställtider/restider och utförarens lediga tid.\n- Det finns fyra typer av tid: produktionstid, restid, ställtid, övrig arbetstid och egentid. Dessa tider definieras av systemet och är inte del av något sidoregister.\n- Informationspaketet för en uppgift måste klargöra om uppgiften avser produktion eller ställtid.\n- Reseuppgifter: Systemet ska automatiskt skapa reseuppgifter mellan objekt som en central del av processen.\n- Tidskoder i informationspaketet är nödvändiga för att kunna exportera arbetstider till lönesystem och personalliggare, vilket är en arbetsgivarplikt.\n\n### Open Questions/Pending Items\n- Vilka specifika motorer behövs för att leverera leveranstid och geografisk plats i informationspaketen?\n- Hur ska den nya motorn för ihopklumpning av uppgifter specificeras och implementeras?\n- Vilket namn ska finplaneringen få? \"Utfårarplan per vecka\" med parentes om 168 timmar och dess innehåll är ett förslag.",
+  "conversation": [],
+  "transcripts": [
+    {
+      "text": "Ja, eh, det absolut viktigaste informationsmässigt nu är ju de här samkörda uppgifterna i informationspaketen där och, eh, för uppgifterna. Och där kan man väl säga, det är jättebra då att Refly har delat upp de här, de här fyra fälten. Eh, men jag kan konstatera att det finns fler variabler än de som Refly har tagit upp här då. Eh, så Refly får rannsaka sig själv och den här listan som jag läste ifrån och gå in i...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. Orderkonceptet framför allt då för att se så att alla variabler kommer med där då. Mm. Eh, så, och att de också kommer med här.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och, eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och så går in då på artikelregistret då och ser då att alla variabler som finns på artikeldatabasen då måste ju då också komma in här. Sen saknar jag då de här, eh, motorerna som vi pratar om då. De har ju då till uppgift att leverera in det som, ja, i mitt underlag var gulmärkt då. Så här finns det ju systemsats-satt då, till exempel skapat av, eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Ja, den som har skapats så att säga, den här vår referens och så vidare. Men, men jag skulle också vilja få med här då vilka... I de här informationspaketen så kommer det ju då att vara...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "En metodator som levererar, eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Leveranstid, en motor som levererar, eh, geografisk plats...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och, eh, en som levererar då hur, hur, hur uppgifter klumpas ihop då utifrån utförarperspektivet och baserat på, på typ, tid, plats. Eh, ja, enkelt uttryckt att allt som går att göra har blivit samma tidpunkt på samma plats utifrån den logiken då med var man parkerar bilen och sånt där ska, ska ju, ska ju då klumpas till. Och det, det innebär ju då att det är ytterligare då ett, ett, om det är då ett gult fält då där-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm ...som, som talar om, eh, eh, utförare vid då att de här uppgifterna är då ihopklumpade till klump...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Eh, ett och de här är ihopklumpade till klump två. Eller det här är ihopklumpat till Storgatan 22 den 22 juli, till exempel. Eh, så att...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Alltså, förbädro. För syftet med de här motorerna är ju då, åtminstone då, motor, eh, nummer ett till, eh, åtta.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Eller ja, alltså ett, två, tre, fyra, de har ju till uppgift att hålla reda på befintliga uppgifter då och skapa, eh, sex och sju skapar ju så att säga och håller reda på då, eh, hur uppgifter är beroende varandra och, eh, sjuan då är ju motorn som skapar då plockuppgifter då. Eh, sen har vi då åttan då som är egentligen bara en... Den är ju lite vekare då. Det är ju en bevakningsfunktion då, så den...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Skapar ju egentligen ingen data, utan den, den flaggar ju varningar då när planerad tid eller oplanerad tid ligger, eh, efter då önskad leveranstid. Och sen så har vi då nian då som är en...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Specialare då, för den ligger ju då och tittar på u-vissa metadatafält då och så skapar den då uppgifter om någonting händer där. Eh, o-och den kan ju... Den är också då som ett sidoregister eller vad man ska sä-säga för att där kan du ju alltså skapa en metadata, antingen som planerare eller, eller, eller som, som kund så kan du ju då liksom skapa en metadatabevakare då som tittar till exempel på om antalet metadatafältet, antalet ö",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "- Mm. Stiger hundra, säger vi. Då skapar den en uppgift att det här är väl ändå orimligt. Mm. Och, och, och du kan lägga den och metadatafältet då för, eh, felanmälan, om vi nu har en, en metadataeditor då som levererar in metadatafält från felanmälan som heter, eh, felanmälan. Om den då blir sann eller innehåller då, då, då skapar den då en uppgift att nu har det kommit in en, en, en, en felanmälan här då. Mm. Trasigt lock då. Och så får man då hantera det då och dela ut det. Men, eh, så få med det upp där. Sen har vi då...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och uppgiftsstatuser. Det tycker jag är lite såhär...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Ja, ska vi se, tillkrånglat. Alltså, eh, en uppgift har ju bara olika systemstatusar i systemet och det finns inget som heter mellanläge, utan, utan grejen är ju då att, eh, den följer ett flöde och i bästa fall så går det ju liksom från order till faktura. Men i vissa fall då så blir det ju då ett stopp där, där det, det går inte att utföra uppgiften och då, då kommer ju den då bara att inhöra-- inta en status så att den inte är...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Nej, den är inte utföra då liksom. Och det är inget mellanläge, utan det är ju liksom bara att den, den har den statusen. Sen blir det ju då upp till, upp till planeraren då att söka på det här och se om det är något fel.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Så då har vi med, med det. Sen är det uppskattat och bra där att vi har rett ut de här begreppena.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Eh, vi har planeringsverktygen.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Eh, och de, de, de är ju...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Ja, de, de är ju så, som, som de är. Den här masterplan... Eh, eh, stort jobb blir det då med masterplaneringen här. Eller stort jobb är det ju inte. Det är väl enkelt. Den måste ju då ha de här filterna. Jo, ett sidoregister också, eh, där då som finns är ju då att det ska finnas då i masterplaneringen ett filterregister då så att, eh, planeraren kan skapa, eh, register då på, eh... Om man har en utförare som, som, som normalt sett agerar i ett visst geografiskt område med en viss typ av...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "...utförarinriktning så skapar han då ett register så att han snabbt kan plocka det registret och så får han fram alla uppgifter som ligger för den, den tiden. Mm, just det. Och på motsvarande sätt så kan du skapa register då för att ta reda på såna hära uppgifter som inte har gått att genomföra och, och få en rapport på det. Du kan skapa ett register som, som, som tar fram uppgifter som, som är utförda för en viss kund och så vidare då. Och, och, och för att du ska kunna jobba snabbt med det där så, så, så behöver du ha ett register på, på filtret då och att du kan söka dem.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. Eh, på, på ett snapset och plocka, plocka fram dem.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Så där har vi det på, på, på masterplaneringen. Och, eh, jag, jag tycker också att vi kan fundera där då. Finplaneringen här nu då, det, den, den kanske vi kan, kan också hitta på ett bra namn då på... Den är ju en finplanering, men egentligen så är ju det då en utförarplan per vecka då som vi pratar om här då.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. Eh, så den kanske kan döpas om till det. Och sen inom parentes då, eh, är det då hundrasextioåtta timmar och att den innehåller då i det fallet alla uppgifter som är tilldelade den här utföraren och alla uppgifter som är kopplat till den här utförarens ställtider eller restider då. Och sen så utförarens egentid, alltså ledig tid, och utför",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "arens... Eh, jag tror vi kom fram till det här att det fanns tre styck-- Eller fyra typer utav tid. Det är produktionstid, det är restid, ställtid, det är övrig arbetstid och det är egentid. Mm. Och det är ju då inte något sidoregister, utan det är systemet som, som definierar då de här olika, eh, tiderna. Och en sak också då som kommer till här som jag har sagt, men som inte har kommit med här, det är ju då om du går upp, upp-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Så, så har vi då... Mera. Där står. Då, då har vi då här på, eh, informationspaketet då, eh, det vill säga då uppgiften här då. Så, så är det också viktigt då att, eh, här måste det framgå då om den här uppgiften är produktions... En produktionsuppgift eller om den här uppgiften är en ställ...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Uppgift, det vill säga en reseuppgift. Och det är också viktigt här nu då att systemet måste förstå också att uppgiften att resa från en, ett objekt till ett annat, det är också en uppgift som upp... Systemet skapar då. Och, och, och, och den uppgiften då som skapas så att säga automatiskt då utav systemet som restiden som är en central del eftersom... Huvuddelen utav alla uppgifter går ju ut på att man reser mellan dem, och det är ju hela syftet med hela systemet.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Äh, men i det informationspaketet behöver det komma med då. Och, och det var ju, har ju då att göra med då de här tidskoderna för den här framtida, äh, exporten av arbetstid då till ett lönesystem eller personalliggare eller vad det kallas då, där man som arbetsgivare har en skyldighet att hålla reda på vem och när de här personerna har arbetat och vilka vilotider de har haft då. Äh, ja, äh, utifrån rutplaneringen också så kan man ju passa på att notera...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    }
+  ]
+}
