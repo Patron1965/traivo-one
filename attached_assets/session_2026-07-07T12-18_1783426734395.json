@@ -1,0 +1,110 @@
+{
+  "sessionId": "968353a3e",
+  "exportedAt": "2026-07-07T12:18:27.406Z",
+  "summary": "### Key Topics Discussed\n- Uppdatering av objektöversikten\n- Detaljer kring objekt-ID, status och arkivering\n- Snabbmetadatafält för snabbare översikt (t.ex. objekttyp, fraktionstyp)\n- Editeringsfunktion för metadata och minnesfunktion för upprepade val\n- Visning av vinjettbild och kartfunktion för objektets position\n- Hantering av föräldra- och barnobjekt, inklusive redigering av kopplingar och tillägg av underordnade objekt\n- Visning av när objektet skapades (datum/tid).\n- Systemgenererade uppgifter som kopplade ordrar och uppgifter.\n- Hantering av kontaktpersoner, inklusive visning, uppdatering, tillägg och radering av kontakter och deras metadata.\n- Källhantering (RVD) för kontaktpersoninformation, inklusive hur redigering påverkar källan.\n- Koppling av nya kontaktpersoner till specifika objekt eller nivåer.\n- Arvslogik för metadata och villkor för metadata (fotoformat, alfanumeriskt, multipel förekomst).\n- Uppdatering av användargränssnitt baserat på mockups, med huvudinformation och kopplade metadatafält samt systemgenererade uppgifter.\n- Historik och framtida händelser för objektet, inklusive felanmälningar.\n- Geografisk information.\n- Modulär hantering av metadatafält, anpassningsbar för varje objekt och kund (kan vara allt från två till tjugo fält med bilder och dokument).\n\n### Decisions Made\n- Ett objekt-ID kan aldrig ändras då det är systemgenererat.\n- Statusen för ett objekt kan ändras, bland annat till att arkivera objektet.\n\n### Action Items\n- Rensa bort befintlig information i objektöversikten och ersätta med det nya formatet baserat på diskussionen.\n\n### Important Points & Insights\n- Snabbmetadatafält ska underlätta för att snabbt se information om objektet, som objekttyp eller fraktionstyp.\n- En editeringsfunktion för metadatafält är nödvändig.\n- Systemet bör komma ihåg tidigare val av metadata vid skapande av flera relaterade objekt för att undvika upprepade val.\n- Vinjettbilden kopplas till objektet och visas för utföraren.\n- Kartfunktionen plottar objektets position.\n- Föräldra- och barnobjektrelationer kan ändras och underordnade objekt kan läggas till.\n- Vissa element i huvudet (vinjettbild, karta, valda metadatafält) är metadata, medan övriga detaljer är unika för objektet.\n- Informationen om när objektet skapades (t.ex. datum) bör visas för att ge kontext.\n- Endast valda metadata som är direkt kopplade till det valda objektet ska visas.\n- Systemgenererade uppgifter som kopplade uppgifter, orderkoncept och snabba ordrar ska också visas.\n- Alla fält ska vara uppbyggda för att möjliggöra bläddring som i kataloger.\n- Det ska vara möjligt att uppdatera metadatafält, t.ex. telefonnummer för en kontaktperson, direkt från vyn.\n- Det ska finnas en funktion för att lägga till nya kontaktpersoner samt radera inaktuella kontaktpersoner.\n- Kontaktinformation, som för Anna Karlsson (butikschef), är RVD (Relevant vid Datum) och dess källa bör framgå.\n- Att redigera en RVD-kontakt kommer att uppdatera informationen vid källan.\n- Nya kontaktpersoner som läggs till (t.ex. Sara Nilsson för en pantmaskin) kopplas till den specifika objektnivån (t.ex. pantrummet) och inte nödvändigtvis andra liknande objekt.\n- Arvslogiken för metadata är central, samt villkoren för metadata (t.ex. fotoformat, alfanumeriskt, om flera metadata får förekomma).\n- Designen för användargränssnittet ska ha ett huvud med grunduppgifter, och nedanför respektive metadatafält (ärvda eller direkt kopplade) samt kopplade uppgifter och orderkoncept.\n- Historik över händelser på objektet, inklusive felanmälningar, ska visas.\n- Sidan ska vara helt modulär vad gäller metadatafält, anpassningsbar per anläggning eller kund, och kan variera kraftigt i antal fält och innehåll (bilder, dokument).\n\n### Open Questions/Pending Items\n- Hantering av RVD-märkning och källinformation för kontaktpersoner i mockups eller UI-design.\n- Hur man säkerställer att nya kontaktpersoner kopplas till rätt nivå/objekt för att undvika felaktig synlighet.",
+  "conversation": [],
+  "transcripts": [
+    {
+      "text": "Ja, nu, nu har vi en...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Ja, det kan jag säga då. Ja. Ja, nu, nu är det allvar här, för nu måste vi ränta upp. Radera den där jävla skiten som finns för objektöversikten. Nu är det det här som gäller punkt slut, och nu har vi sagt det här flera, flera gånger tillräckligt. Och nu tar jag den här från, från, från toppen där. Längst upp så framgår namnet på det, eh, eh, berörda objektet. Och den här bilden är, är lite dum, dum då. Namnet kanske då skulle räcka att det är pampmaskin två där då. Och sen räcker det med att man skriver då släck...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Dags för att släcka hemchips sedan och så vidare då en gång. Eventuellt lite granna mindre på det här sättet då. Sen har vi objekt-id:et, bekräftande, och det är vilken status den har. Och för varje sån här objekt-id:et, det är ju satt av systemet, så det kan man aldrig ändra på. Men däremot statusen kan man ju då arkivera då ett sånt här objekt, och det gör man ifrån den här menyn. Och sen har vi, som jag tror, replik har gått bekräftad och fattat, så finns det då tre stycken snabbmetadatafält som man...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Ja, det är för att man bättre, snabbare ska se till exempel att vad det är för en objekttyp då. Om man har ett sånt metadatafält, skulle man ha vad det är för fraktionstyp, ja, då kan man ju välja det då. Och, och då bör det ju finnas en editeringsfunktion också där uppe då så att man för det här objektet kan plocka fram då dem som en liten snabb grej. Och sen får, eh, den ju försöka komma ihåg det då om man skapar fler objekt då som hör till samma då så att man slipper välja om alltihopa igen. Och sen så ytterligare metadata-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Ja. -en bild som vi då kan kalla vinjettbild. Eh, och den där bilden som man väljer där, den ska ju också följa objektet sen då. Så är det uppgifter på objektet, så är det ju den bilden som kommer att visas för utföraren. Och sen är det då en liten kartfunktion som plottar ut var objektets position är. Det är huvudet för, för den här som är lite special då. Och under huvudet här så kommer då föräldrar och barn. Och det är ju då två stycken rutor, informationsfält där man då kan se hur kopplingen ser ut.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och man kan öppna den där och ändra kopplingen. Så vill man ändra förälder och byta den här till någon annan, så kan man då göra det den här vägen. Och vill man lägga till ett underordnat objekt då, det vi kallar barn, ja, då gör man det. Sedan...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Det här är översta här nu då. Jag är medveten om att det är lite motsägelsefullt för de här tre valda metadata-fälten och biljettbilden och kartan är ju då metadata. Men de övriga grejerna i huvudet är unika detaljer kopplade till själva objektet då. Och...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Ja, men det är så mycket man också kan lägga till här då när objektet skapades eller något sånt som man kan se där då. Det, jag kom på det nu. Det är ju sån logisk information som kan vara intressant då att man ser att det här är ett objekt som har varit med sedan 2022 eller det här är ett objekt som skapades i går. Men det är huvudet. Under det där kommer sen då bara valda metadata som är kopplade till det valda objektet. Inget annat, inget, ingenting som sy-systemet...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Ja. Ska hitta på. Så är det ett objekt som bara har ett metadatafält som är antal och kontakter. Ja, då visar man bara antal och kontakter här då. Och sen kommer det då lite granna systemgenererat då, eh, med kopplade uppgifter och kopplade, eh, orderkoncept och eventuellt kopplade snabba ordrar då till objektet. Där får ju så att säga då, det är metadata, men det är, det är ju då lite granna speciellt. Alla de här fältena ska vara uppbyggda på det sättet att man kan bläddra som kataloger då så är det.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Kontakter där nu då. Anna Karlsson, butikschef. Så är hon då en av tre kontakter och så kan man då bläddra där då. Eh, viktigt också då här att det framgår inte på mock, mo-mockupen här då va, men man ska kunna uppdatera ett metadatafält. Så, så, så om Anna Karlsson nu då inte har ett nytt telefonnummer så ska man kunna klicka på den där, en penna där och så ska man kunna editera det här metadatafältet ifrån den här vyn då och byta ut hennes, till hennes",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "telefon eller vad det nu är. Och det ska också kunna finnas en, en plusknapp då. Så att har man, sitter man i det här läget nu då och då har en ny, en ny kontaktperson, ja, ja då ska man kunna lägga till en fjärde kontaktperson där då. På samma sätt som man ska kunna radera då en kontaktperson, eh, som, som inte är aktuell längre då. Och en annan viktig grej som kanske inte framgår riktigt utav den här, det är ju då, eh, hur då, eh, metadatan är...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Eh, RVD. Eh, och det står ju lite grann här var den kommer ifrån. Men, men, men om vi har till exempel nu då, eh, kontaktpersonen nu, Anna Karlsson, som tillhör nu den här pantmaskinen. Hon är ju då butikschef. Så att den kontaktinformationen är ju RVD och det bör framgå då här. Jag ser på mockappen så framgår inte det där då. Men att den är RVD utav då den nivå som är alltså källan till, till den. Och det innebär ju också då att om man går in och editerar henne här då...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Ja. Då kommer man ju att editera den på källan då. Mm. Medan om man trycker ett plus på en kontaktperson, det kanske är Sara Nilsson är ansvarig för, för pantmaskinen. Mm. Och då kommer ju hon då komma in som kontaktperson på, på, på pantmaskinsnivån då. Eller rimligtvis så skulle man ju då styra in henne på pantrummet då så att hon, hon... Annars så om det finns en pantmaskin två-- till i pantrummet, ja, då kommer hon ju inte att dyka upp på den då. Så här får man ju hålla tungan rätt i mun.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Jag vill att ni rätt-- nu analyserar bilden, analyserar också, eh, det som jag har sagt och skapar nu en skottsäker, eh, logik för att liksom kunna hantera det här då. Glöm inte bort arvslogiken. Glöm inte bort villkoren för metadatan, alltså om det är fotoformat, om det är bara alfanumeriskt, om det får förekomma flera metadata, eller något sånt där. Allt det där finns ju utifrån hur vi sätter upp metadata. Och...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Att den, eh, replikt utav fram ett användargränssnitt i linje med det som finns i den här mockappen. Men det finns inget krav att det behöver se ut exakt såhär, men det ska finnas ett huvud som har de här grunduppgifterna och under huvudet ska respektive metadatafält då som är kopplat till den här och som finns, ärvt eller direkt på objektet finnas. Och dessutom ska då de här kopplade uppgifterna, kopplade orderkoncepten och kopplade snabborderna, alltså allt sånt som är kopplat ska också då finnas i samma logik, läge.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. Längre ner då så man kan se vad som har hänt på objektet, eh, och vad som kommer att hämta då. Och naturligtvis om det finns felanmälningar så ska ju det också finnas med då. Geografisk information, eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Direkta uppgifter om, om, om själva anläggningen, besiktningsresultat och så vidare kan man skapa. Men det bygger helt och hållet på vilka metadatafält som man sätter upp för-- Generellt för företaget eller för den enskilda kunden. Och det är helt modulärt då. Så att den här sidan kan liksom vara två fält, men för ett annat objekt kan det vara tjugo fält med bilder och olika dokument.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    }
+  ]
+}
