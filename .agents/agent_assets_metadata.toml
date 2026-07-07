@@ -191,10 +191,10 @@ title = "Uppgiftslogik – utvecklingslogg (uppdaterad: U8 tidslogg)"
 id = "-FQ4B8iv3bXiwBRCC-e1U"
 uri = "file://exports/traivo-grundmodell.pdf"
 type = "pdf"
-title = "Traivo — Grundmodellen (Steg 0) · PDF (uppdaterad)"
+title = "Traivo Grundmodell (Steg 0) — med de nio motorerna"
 
 [[outputs]]
 id = "kwwgmX6y9GG-GCl24QIHs"
 uri = "file://exports/traivo-grundmodell.png"
 type = "image"
-title = "Traivo — Grundmodellen (Steg 0) · PNG (uppdaterad)"
+title = "Traivo Grundmodell (Steg 0) — PNG"

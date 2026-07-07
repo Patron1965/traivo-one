@@ -86,6 +86,13 @@
   .pkgcard .fields em { flex: 0 0 auto; font-style: normal; font-size: 9px; font-weight: 800; color: #fff; padding: 1px 5px; border-radius: 4px; letter-spacing: .3px; }
   em.s { background: #C97B3C; } em.m { background: #4A9B9B; } em.d { background: #94a3b8; } em.sys { background: #6d5bbf; }
   .sub-label { font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .8px; color: #94a3b8; margin-bottom: 8px; }
+
+  .motor-grid { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 12px; }
+  .motor { flex: 0 0 calc(33.333% - 7px); background: #fff; border: 1.5px solid #cbd8e0; border-radius: 10px; padding: 11px 13px; display: flex; gap: 11px; align-items: flex-start; }
+  .motor .num { flex: 0 0 auto; width: 27px; height: 27px; border-radius: 50%; color: #fff; font-weight: 800; font-size: 13px; display: flex; align-items: center; justify-content: center; }
+  .num.a { background: #4A9B9B; } .num.b { background: #C97B3C; } .num.c { background: #6d5bbf; } .num.d { background: #1B4B6B; }
+  .motor b { color: #1B4B6B; font-size: 12.5px; display: block; line-height: 1.2; }
+  .motor span { color: #6B7C8C; font-size: 10.5px; line-height: 1.35; display: block; margin-top: 3px; }
 </style>
 </head>
 <body>
@@ -263,9 +270,40 @@
     <p class="note"><b>Återtag:</b> en uppgift kan gå tillbaka finplanering &rarr; masterplanering (utan utförandedag, åter på önskad leveranstid). <b>Fler mellansteg finns</b> och förfinas i ett senare steg.</p>
   </div>
 
-  <!-- 5. Status -->
+  <!-- 5. De nio motorerna -->
   <div class="section">
-    <h2>5 · Uppgiftens status</h2>
+    <h2>5 · De nio motorerna (förfinar resultaten)</h2>
+    <p class="note" style="margin-top:0;margin-bottom:12px">Mellan master- och finplanering bearbetar nio motorer informationspaketen. De <b>förfinar</b> uppgiften (när · var · ihop · faktura · status) och <b>skapar vid behov tilläggsuppgifter</b> (motor 4–7 och 9). De kan köra periodiskt, samarbeta i loopar och lämnar besluten till planeraren.</p>
+
+    <div class="sub-label"><span class="lg" style="background:#4A9B9B;width:10px;height:10px;min-width:10px;padding:0;margin-right:6px"></span>Planera — när · var · ihop</div>
+    <div class="motor-grid">
+      <div class="motor"><div class="num a">1</div><div><b>Geografisk motor</b><span>Fastställer var uppgiften finns — objektplats + fordonsplats. Levererar position.</span></div></div>
+      <div class="motor"><div class="num a">2</div><div><b>Tidsmotor</b><span>Väljer lämplig tidpunkt utifrån önskad leveranstid, tidsfönster &amp; utförarens läge.</span></div></div>
+      <div class="motor"><div class="num a">3</div><div><b>Klumpningsmotor</b><span>Slår ihop uppgifter av samma typ/tid/plats till en klump (ett stopp). Kan föreslå tidiga-/senarelägg för samkörning.</span></div></div>
+    </div>
+
+    <div class="sub-label"><span class="lg" style="background:#C97B3C;width:10px;height:10px;min-width:10px;padding:0;margin-right:6px"></span>Fakturera</div>
+    <div class="motor-grid">
+      <div class="motor"><div class="num b">4</div><div><b>Faktura-/ordermotor</b><span>Bevakar klarmarkerade uppgifter; avgör vad som kan samlas på samma faktura, hur ofta &amp; med vilka radreferenser.</span></div></div>
+      <div class="motor"><div class="num b">5</div><div><b>Abonnemangsmotor</b><span>Fast månads-/kvartalsfaktura + avräkning för utfört/tillägg. Räknar om vid volymändring; kan skapa egna fakturor.</span></div></div>
+    </div>
+
+    <div class="sub-label"><span class="lg" style="background:#6d5bbf;width:10px;height:10px;min-width:10px;padding:0;margin-right:6px"></span>Beroenden &amp; fysiska artiklar</div>
+    <div class="motor-grid">
+      <div class="motor"><div class="num c">6</div><div><b>Beroendeuppgiftsmotor</b><span>Håller reda på uppgifter som måste göras före huvuduppgiften (t.ex. avisering 3 dagar innan). Varnar vid risk.</span></div></div>
+      <div class="motor"><div class="num c">7</div><div><b>Plock-/leveransmotor</b><span>Fysiska artiklar med lagerplats/leveranstid. Skapar block-/beroendeuppgift för att hämta &amp; återlämna vara (nyckel, dekal).</span></div></div>
+    </div>
+
+    <div class="sub-label"><span class="lg" style="background:#1B4B6B;width:10px;height:10px;min-width:10px;padding:0;margin-right:6px"></span>Status, avisering &amp; bevakning</div>
+    <div class="motor-grid">
+      <div class="motor"><div class="num d">8</div><div><b>Status- &amp; aviseringsmotor</b><span>Bevakar status mot önskad leveranstid; aviserar kund &amp; personal (på väg, på plats, släp) — transparens à la Posten.</span></div></div>
+      <div class="motor"><div class="num d">9</div><div><b>Metadatabevakningsmotor</b><span>Bevakar metadatafält mot villkor (trasig lucka, &lt;5 kärl, klagomål); varnar och kan skapa en uppgift. AI-/kundportal-nära = "Metadata-analysatorn" i register 3.</span></div></div>
+    </div>
+  </div>
+
+  <!-- 6. Status -->
+  <div class="section">
+    <h2>6 · Uppgiftens status</h2>
     <div class="stat-box">
       <span class="mini-label">Livscykel</span>
       Skapad &rarr; I masterplanering &rarr; I finplanering (exakt leveransdag) &rarr; Utförandeläge (på väg / på plats) &rarr; Utförd &rarr; Fakturakontroll &rarr; Fakturerad
@@ -275,7 +313,7 @@
 
   <!-- 6. Begrepp -->
   <div class="section">
-    <h2>6 · Begrepp</h2>
+    <h2>7 · Begrepp</h2>
     <div class="row">
       <div class="card teal"><h3>Uppgift</h3>En <b>artikel</b> + tillhörande info (när, var, hur). Systemets minsta utförbara enhet.</div>
       <div class="card gray"><h3>Order</h3><b>Flytande begrepp</b> för flera uppgifter — används olika av olika personer (geografi, koncept, fakturareferens).</div>
@@ -286,7 +324,7 @@
 
   <!-- 7. Planeringsverktyg -->
   <div class="section">
-    <h2>7 · Planeringsverktyg</h2>
+    <h2>8 · Planeringsverktyg</h2>
     <div class="row">
       <div class="card green">
         <div class="tag">Produktionsdb · Kinab</div><h3>Masterplanering</h3>
@@ -307,7 +345,7 @@
 
   <!-- 8. Sidoregister -->
   <div class="section">
-    <h2>8 · Sidoregister (stödregister)</h2>
+    <h2>9 · Sidoregister (stödregister)</h2>
     <div class="sub-label">Stödregister som definierar valen</div>
     <div class="side-grid">
       <div class="side"><b>Artikelregister</b><span>varor/tjänster + BOM</span></div>
