@@ -35,6 +35,16 @@ export const KNOWN_FIELDS: Record<string, string> = {
   systemföräldranummer: "system_parent_id",
   systemforaldranummer: "system_parent_id",
   objektnamn: "name",
+  namn: "name",
+  // Tre-fils-export (Task #1176): Fil 1/Fil 2 använder "Objektnummer"/"Huvudobjekt"
+  // för objektets eget systemnummer och "Koppling uppåt" för förälderns nummer.
+  objektnummer: "system_id",
+  huvudobjekt: "system_id",
+  "koppling uppåt": "system_parent_id",
+  "koppling uppat": "system_parent_id",
+  // Släktnamn = härlett visningsnamn (read-only) → ignoreras vid återimport.
+  släktnamn: "__empty",
+  slaktnamn: "__empty",
   interimsnummer: "interim_id",
   interimföräldranummer: "interim_parent_id",
   interimforaldranummer: "interim_parent_id",

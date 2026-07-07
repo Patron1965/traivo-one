@@ -9,7 +9,7 @@ import { objects, workOrders, workOrderObjects, objectArticles, objectContacts, 
 import { asyncHandler } from "../asyncHandler";
 import { NotFoundError, ValidationError } from "../errors";
 import { db } from "../db";
-import { sql, eq, and, isNull, inArray, desc } from "drizzle-orm";
+import { sql, eq, and, isNull, isNotNull, inArray, desc } from "drizzle-orm";
 import { geocodeObjectById } from "../services/geocoding";
 import {
   evaluateAndNotifyMissingCoordinates,
@@ -487,6 +487,42 @@ app.get("/api/objects/parent-search", asyncHandler(async (req, res) => {
   }
   const hits = await storage.searchObjectsForParent(tenantId, q, { excludeObjectId: exclude, limit: 30 });
   res.json(hits);
+}));
+
+// Bulk-export av alla förälderkopplingar för tenantens objekt (Fil 2 "Kopplade
+// objekt" i tre-fils-exporten). Returnerar en rad per (objekt, förälder) så att
+// multi-förälder stöds. Kombinerar object_parents med legacy objects.parentId
+// (för objekt utan object_parents-rader). Tenant-scopat.
+app.get("/api/objects/parents-export", asyncHandler(async (req, res) => {
+  const tenantId = getTenantIdWithFallback(req);
+  const links = await db
+    .select({
+      objectId: objectParents.objectId,
+      parentId: objectParents.parentId,
+      isPrimary: objectParents.isPrimary,
+    })
+    .from(objectParents)
+    .where(eq(objectParents.tenantId, tenantId));
+
+  const seen = new Set(links.map((l) => `${l.objectId}::${l.parentId}`));
+  const result: { objectId: string; parentId: string; isPrimary: boolean }[] = links.map((l) => ({
+    objectId: l.objectId,
+    parentId: l.parentId,
+    isPrimary: l.isPrimary,
+  }));
+
+  // Legacy: objekt med parentId men utan object_parents-rad.
+  const legacy = await db
+    .select({ id: objects.id, parentId: objects.parentId })
+    .from(objects)
+    .where(and(eq(objects.tenantId, tenantId), isNull(objects.deletedAt), isNotNull(objects.parentId)));
+  for (const o of legacy) {
+    if (!o.parentId) continue;
+    if (seen.has(`${o.id}::${o.parentId}`)) continue;
+    result.push({ objectId: o.id, parentId: o.parentId, isPrimary: true });
+  }
+
+  res.json(result);
 }));
 
 app.get("/api/objects/:id/parents", asyncHandler(async (req, res) => {

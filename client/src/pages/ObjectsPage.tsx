@@ -827,41 +827,145 @@ export default function ObjectsPage() {
     URL.revokeObjectURL(url);
   };
 
-  const exportCSV = async () => {
+  // Hämtar samtliga objekt (enligt aktiva filter) för exporterna. Återanvänds av
+  // alla tre exportfilerna nedan.
+  const fetchAllObjectsForExport = async (): Promise<ServiceObject[]> => {
+    const params = buildObjectFilterParams(100000, 0);
+    const res = await fetch(`/api/objects?${params.toString()}`, { credentials: "include" });
+    if (!res.ok) throw new Error("Kunde inte hämta objekt");
+    const data: { objects: ServiceObject[] } = await res.json();
+    return data.objects ?? [];
+  };
+
+  // Släktnamn = det hierarkiska visningsnamnet (t.ex. "Stockholm › BRF › Hus A").
+  // /api/objects levererar det som displayName; faller tillbaka på namnet.
+  const slaktnamnOf = (obj: ServiceObject): string => (obj as any).displayName ?? obj.name;
+
+  // ── Fil 1 – Objekt: de fyra intrinsiska kolumnerna (nummer, namn, släktnamn,
+  // status). Objektet äger bara dessa; allt annat (adress, stad m.m.) ligger i
+  // metadatafilen (Fil 3). Kan läsas tillbaka via matchningsimporten
+  // (Objektnummer → system_id, Objektnamn → name, Status → active_status).
+  const buildObjektFileRows = (allObjects: ServiceObject[]): (string | number)[][] => {
+    const headers = ["Objektnummer", "Objektnamn", "Släktnamn", "Status"];
+    const rows: (string | number)[][] = allObjects.map(obj => [
+      obj.objectNumber || "",
+      obj.name,
+      slaktnamnOf(obj),
+      obj.status || "",
+    ]);
+    return [headers, ...rows];
+  };
+
+  // ── Fil 2 – Kopplade objekt: en rad per förälderkoppling (multi-förälder-stöd).
+  // Huvudobjekt = objektets eget nummer, Koppling uppåt = förälderns nummer.
+  const buildKoppladeObjektFileRows = async (
+    allObjects: ServiceObject[],
+  ): Promise<(string | number)[][]> => {
+    const headers = ["Huvudobjekt", "Namn", "Koppling uppåt", "Släktnamn"];
+    const objById = new Map(allObjects.map(o => [o.id, o]));
+    const numberById = new Map(allObjects.map(o => [o.id, o.objectNumber || ""]));
+
+    const res = await fetch(`/api/objects/parents-export`, { credentials: "include" });
+    if (!res.ok) throw new Error("Kunde inte hämta förälderkopplingar");
+    const links: { objectId: string; parentId: string; isPrimary: boolean }[] = await res.json();
+
+    const rows: (string | number)[][] = [];
+    for (const link of links) {
+      const child = objById.get(link.objectId);
+      if (!child) continue; // förälder-/barn utanför aktiva filter
+      const parentNumber = numberById.get(link.parentId);
+      if (!parentNumber) continue; // förälder ej i exporturvalet
+      rows.push([
+        child.objectNumber || "",
+        child.name,
+        parentNumber,
+        slaktnamnOf(child),
+      ]);
+    }
+    return [headers, ...rows];
+  };
+
+  // ── Fil 3 – Metadata: långformat, en rad per objekt + metadatafält
+  // (Objektnummer, Objektnamn, Släktnamn, Metadatafält, Data). Inkluderar
+  // sammansatta/kontaktfält (allt som ligger i metadatakatalogen).
+  const buildMetadataFileRows = async (
+    allObjects: ServiceObject[],
+  ): Promise<(string | number)[][]> => {
+    const headers = ["Objektnummer", "Objektnamn", "Släktnamn", "Metadatafält", "Data"];
+    const allKatalogIds = metadataCatalog.map(t => t.id);
+    const katalogNameById = new Map(metadataCatalog.map(t => [t.id, t.namn]));
+    const rows: (string | number)[][] = [];
+    if (allKatalogIds.length === 0 || allObjects.length === 0) return [headers, ...rows];
+
+    const objById = new Map(allObjects.map(o => [o.id, o]));
+    const allIds = allObjects.map(o => o.id);
+    // Chunka båda dimensionerna (objectIds ≤ 500, katalogIds ≤ 60).
+    const OBJ_CHUNK = 200;
+    const KAT_CHUNK = 60;
+    for (let i = 0; i < allIds.length; i += OBJ_CHUNK) {
+      const objChunk = allIds.slice(i, i + OBJ_CHUNK);
+      const valuesByObj: Record<string, Record<string, string>> = {};
+      for (let j = 0; j < allKatalogIds.length; j += KAT_CHUNK) {
+        const katChunk = allKatalogIds.slice(j, j + KAT_CHUNK);
+        const mRes = await apiRequest("POST", "/api/metadata/objects/values-batch", {
+          objectIds: objChunk,
+          katalogIds: katChunk,
+        });
+        const mData: { values: Record<string, Record<string, string>> } = await mRes.json();
+        for (const [objId, m] of Object.entries(mData.values ?? {})) {
+          valuesByObj[objId] = { ...(valuesByObj[objId] ?? {}), ...m };
+        }
+      }
+      for (const objId of objChunk) {
+        const obj = objById.get(objId);
+        const objValues = valuesByObj[objId] ?? {};
+        for (const katalogId of allKatalogIds) {
+          const val = objValues[katalogId];
+          if (val === undefined || val === null || val === "") continue;
+          rows.push([
+            obj?.objectNumber || "",
+            obj?.name ?? "",
+            obj ? slaktnamnOf(obj) : "",
+            katalogNameById.get(katalogId) || katalogId,
+            val,
+          ]);
+        }
+      }
+    }
+    return [headers, ...rows];
+  };
+
+  // Tre-fils-export: producerar Objekt-, Kopplade objekt- och Metadatafilerna
+  // enligt "allt är metadata"-modellen. Samma tre filer kan läsas tillbaka via
+  // matchningsimporten för att uppdatera befintliga objekt + metadata.
+  const exportThreeFiles = async () => {
     if (isExporting) return;
     setIsExporting(true);
     try {
-      const params = buildObjectFilterParams(100000, 0);
-      const res = await fetch(`/api/objects?${params.toString()}`, { credentials: "include" });
-      if (!res.ok) throw new Error("Failed to fetch objects");
-      const data: { objects: ServiceObject[] } = await res.json();
-      const allObjects = data.objects ?? [];
-
-      const nameById = new Map<string, string>();
-      for (const o of allObjects) nameById.set(o.id, (o as any).displayName || o.name);
-
-      const objektHeaders = [
-        "Objektnummer", "Namn", "Visningsnamn", "Status", "Adress", "Stad",
-        "Tillgång", "Kod", "Ställtid (min)", "Överordnat objektnummer", "Överordnat objekt",
-      ];
-      const objektRows: (string | number)[][] = allObjects.map(obj => {
-        const parent = obj.parentId ? allObjects.find(o => o.id === obj.parentId) : undefined;
-        return [
-          obj.objectNumber || "",
-          obj.name,
-          (obj as any).displayName ?? obj.name,
-          obj.status || "",
-          obj.address || "",
-          obj.city || "",
-          accessTypeLabels[obj.accessType || "open"]?.label || obj.accessType || "",
-          obj.accessCode || "",
-          (obj as any).avgSetupTime ?? "",
-          parent?.objectNumber || "",
-          obj.parentId ? (nameById.get(obj.parentId) ?? "") : "",
-        ];
+      const allObjects = await fetchAllObjectsForExport();
+      const objektRows = buildObjektFileRows(allObjects);
+      const koppladeRows = await buildKoppladeObjektFileRows(allObjects);
+      const metaRows = await buildMetadataFileRows(allObjects);
+      downloadCSV("1-objekt.csv", objektRows);
+      downloadCSV("2-kopplade-objekt.csv", koppladeRows);
+      downloadCSV("3-metadata.csv", metaRows);
+      toast({
+        title: "Export klar",
+        description: `${allObjects.length} objekt i tre filer (objekt, kopplade objekt, metadata)`,
       });
-      downloadCSV("objektlista.csv", [objektHeaders, ...objektRows]);
+    } catch (err) {
+      toast({ title: "Export misslyckades", description: err instanceof Error ? err.message : "Okänt fel", variant: "destructive" });
+    } finally {
+      setIsExporting(false);
+    }
+  };
 
+  const exportObjektFil = async () => {
+    if (isExporting) return;
+    setIsExporting(true);
+    try {
+      const allObjects = await fetchAllObjectsForExport();
+      downloadCSV("1-objekt.csv", buildObjektFileRows(allObjects));
       toast({ title: "Export klar", description: `${allObjects.length} objekt exporterade` });
     } catch (err) {
       toast({ title: "Export misslyckades", description: err instanceof Error ? err.message : "Okänt fel", variant: "destructive" });
@@ -870,64 +974,29 @@ export default function ObjectsPage() {
     }
   };
 
-  // Separat, tydligt export-alternativ för en fullständig dump av alla
-  // metadatavärden per objekt (Objektnummer, Objektnamn, Metadatafält, Värde).
-  // Bryts medvetet ut ur "Rapport (CSV)" (som hålls slimmad till mockupens
-  // 11 objektkolumner) så att metadatadumpen erbjuds explicit vid behov.
-  const exportMetadataValuesCSV = async () => {
+  const exportKoppladeObjektFil = async () => {
     if (isExporting) return;
     setIsExporting(true);
     try {
-      const params = buildObjectFilterParams(100000, 0);
-      const res = await fetch(`/api/objects?${params.toString()}`, { credentials: "include" });
-      if (!res.ok) throw new Error("Failed to fetch objects");
-      const data: { objects: ServiceObject[] } = await res.json();
-      const allObjects = data.objects ?? [];
+      const allObjects = await fetchAllObjectsForExport();
+      const rows = await buildKoppladeObjektFileRows(allObjects);
+      downloadCSV("2-kopplade-objekt.csv", rows);
+      toast({ title: "Export klar", description: `${rows.length - 1} kopplingar exporterade` });
+    } catch (err) {
+      toast({ title: "Export misslyckades", description: err instanceof Error ? err.message : "Okänt fel", variant: "destructive" });
+    } finally {
+      setIsExporting(false);
+    }
+  };
 
-      const allKatalogIds = metadataCatalog.map(t => t.id);
-      const katalogNameById = new Map(metadataCatalog.map(t => [t.id, t.namn]));
-      const metaRows: (string | number)[][] = [["Objektnummer", "Objektnamn", "Metadatafält", "Värde"]];
-      if (allKatalogIds.length > 0 && allObjects.length > 0) {
-        const objById = new Map(allObjects.map(o => [o.id, o]));
-        const allIds = allObjects.map(o => o.id);
-        // Chunka BÅDA dimensionerna för att hålla oss inom values-batch-takten
-        // (objectIds ≤ 500, katalogIds ≤ 60), precis som exportSelectedColumns.
-        const OBJ_CHUNK = 200;
-        const KAT_CHUNK = 60;
-        for (let i = 0; i < allIds.length; i += OBJ_CHUNK) {
-          const objChunk = allIds.slice(i, i + OBJ_CHUNK);
-          // Slå samman katalog-delsvar per objekt innan vi skriver rader.
-          const valuesByObj: Record<string, Record<string, string>> = {};
-          for (let j = 0; j < allKatalogIds.length; j += KAT_CHUNK) {
-            const katChunk = allKatalogIds.slice(j, j + KAT_CHUNK);
-            const mRes = await apiRequest("POST", "/api/metadata/objects/values-batch", {
-              objectIds: objChunk,
-              katalogIds: katChunk,
-            });
-            const mData: { values: Record<string, Record<string, string>> } = await mRes.json();
-            for (const [objId, m] of Object.entries(mData.values ?? {})) {
-              valuesByObj[objId] = { ...(valuesByObj[objId] ?? {}), ...m };
-            }
-          }
-          for (const objId of objChunk) {
-            const obj = objById.get(objId);
-            const objValues = valuesByObj[objId] ?? {};
-            for (const katalogId of allKatalogIds) {
-              const val = objValues[katalogId];
-              if (val === undefined || val === null || val === "") continue;
-              metaRows.push([
-                obj?.objectNumber || "",
-                obj ? ((obj as any).displayName ?? obj.name) : "",
-                katalogNameById.get(katalogId) || katalogId,
-                val,
-              ]);
-            }
-          }
-        }
-      }
-      downloadCSV("metadatalista.csv", metaRows);
-
-      toast({ title: "Export klar", description: `Metadatavärden exporterade (${metaRows.length - 1} rader)` });
+  const exportMetadataFil = async () => {
+    if (isExporting) return;
+    setIsExporting(true);
+    try {
+      const allObjects = await fetchAllObjectsForExport();
+      const rows = await buildMetadataFileRows(allObjects);
+      downloadCSV("3-metadata.csv", rows);
+      toast({ title: "Export klar", description: `Metadatavärden exporterade (${rows.length - 1} rader)` });
     } catch (err) {
       toast({ title: "Export misslyckades", description: err instanceof Error ? err.message : "Okänt fel", variant: "destructive" });
     } finally {
@@ -1572,18 +1641,33 @@ export default function ObjectsPage() {
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-80">
-            <DropdownMenuItem onClick={exportCSV} data-testid="menu-export-csv-report">
+            <DropdownMenuItem onClick={exportThreeFiles} data-testid="menu-export-three-files">
               <FileSpreadsheet className="h-4 w-4 mr-2 mt-0.5 shrink-0" />
               <div className="flex flex-col">
-                <span>Rapport (CSV)</span>
-                <span className="text-xs text-muted-foreground">Objektlista för analys i Excel – kan inte läsas tillbaka in</span>
+                <span>Tre-fils-export (CSV)</span>
+                <span className="text-xs text-muted-foreground">Objekt + kopplade objekt + metadata – kan läsas tillbaka via matchningsimporten</span>
               </div>
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={exportMetadataValuesCSV} data-testid="menu-export-metadata-values">
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={exportObjektFil} data-testid="menu-export-objekt-file">
               <FileSpreadsheet className="h-4 w-4 mr-2 mt-0.5 shrink-0" />
               <div className="flex flex-col">
-                <span>Metadatavärden (CSV)</span>
-                <span className="text-xs text-muted-foreground">Fullständig dump av alla metadatavärden per objekt</span>
+                <span>Fil 1 – Objekt (CSV)</span>
+                <span className="text-xs text-muted-foreground">Objektnummer, objektnamn, släktnamn, status</span>
+              </div>
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={exportKoppladeObjektFil} data-testid="menu-export-kopplade-file">
+              <FileSpreadsheet className="h-4 w-4 mr-2 mt-0.5 shrink-0" />
+              <div className="flex flex-col">
+                <span>Fil 2 – Kopplade objekt (CSV)</span>
+                <span className="text-xs text-muted-foreground">En rad per förälderkoppling (multi-förälder)</span>
+              </div>
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={exportMetadataFil} data-testid="menu-export-metadata-file">
+              <FileSpreadsheet className="h-4 w-4 mr-2 mt-0.5 shrink-0" />
+              <div className="flex flex-col">
+                <span>Fil 3 – Metadata (CSV)</span>
+                <span className="text-xs text-muted-foreground">En rad per objekt + metadatafält (namn, data)</span>
               </div>
             </DropdownMenuItem>
             <DropdownMenuSeparator />

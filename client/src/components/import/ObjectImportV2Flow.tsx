@@ -199,6 +199,61 @@ async function fileToMatrix(file: File): Promise<string[][]> {
   return (parsed.data as string[][]).map((r) => r.map((c) => String(c ?? "")));
 }
 
+// Tre-fils-export (Task #1176), Fil 3 – Metadata: långformat med en rad per
+// objekt + metadatafält (Objektnummer, Objektnamn, [Släktnamn,] Metadatafält,
+// Data). Matchningsimporten arbetar i brett format (en rad per objekt), så vi
+// pivoterar långformatet → brett format innan uppladdning: identitetskolumner
+// (Objektnummer/Objektnamn) behålls och varje distinkt Metadatafält blir en
+// egen "metadata.<namn>"-kolumn. Returnerar null om matrisen inte är långformat.
+export function pivotLongMetadataMatrix(matrix: string[][]): string[][] | null {
+  if (matrix.length < 2) return null;
+  const header = matrix[0].map((c) => (c ?? "").trim().toLowerCase());
+  const idxOf = (...names: string[]) => header.findIndex((h) => names.includes(h));
+
+  const objIdx = idxOf("objektnummer", "systemnummer", "huvudobjekt");
+  const fieldIdx = idxOf("metadatafält", "metadatafalt", "metadatafält");
+  const dataIdx = idxOf("data", "värde", "varde");
+  if (objIdx < 0 || fieldIdx < 0 || dataIdx < 0) return null;
+
+  const nameIdx = idxOf("objektnamn", "namn");
+
+  // Samla identiteter + värden per objekt, och alla förekommande fältnamn.
+  const objOrder: string[] = [];
+  const byObj = new Map<string, { name: string; values: Map<string, string> }>();
+  const fieldOrder: string[] = [];
+  const fieldSeen = new Set<string>();
+
+  for (let r = 1; r < matrix.length; r++) {
+    const row = matrix[r];
+    const objNo = (row[objIdx] ?? "").trim();
+    const field = (row[fieldIdx] ?? "").trim();
+    if (!objNo || !field) continue;
+    const data = (row[dataIdx] ?? "").trim();
+    let entry = byObj.get(objNo);
+    if (!entry) {
+      entry = { name: nameIdx >= 0 ? (row[nameIdx] ?? "").trim() : "", values: new Map() };
+      byObj.set(objNo, entry);
+      objOrder.push(objNo);
+    } else if (!entry.name && nameIdx >= 0) {
+      entry.name = (row[nameIdx] ?? "").trim();
+    }
+    entry.values.set(field, data); // sista värdet vinner (multivärde → senaste)
+    if (!fieldSeen.has(field)) {
+      fieldSeen.add(field);
+      fieldOrder.push(field);
+    }
+  }
+  if (objOrder.length === 0) return null;
+
+  const outHeader = ["Objektnummer", "Objektnamn", ...fieldOrder.map((f) => `metadata.${f}`)];
+  const out: string[][] = [outHeader];
+  for (const objNo of objOrder) {
+    const entry = byObj.get(objNo)!;
+    out.push([objNo, entry.name, ...fieldOrder.map((f) => entry.values.get(f) ?? "")]);
+  }
+  return out;
+}
+
 export function ObjectImportV2Flow() {
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -233,8 +288,10 @@ export function ObjectImportV2Flow() {
 
   const uploadMutation = useMutation({
     mutationFn: async (file: File) => {
-      const matrix = await fileToMatrix(file);
-      if (matrix.length === 0) throw new Error("Filen är tom.");
+      const rawMatrix = await fileToMatrix(file);
+      if (rawMatrix.length === 0) throw new Error("Filen är tom.");
+      // Fil 3 (metadata-långformat) pivoteras till brett format innan uppladdning.
+      const matrix = pivotLongMetadataMatrix(rawMatrix) ?? rawMatrix;
       const res = await apiRequest("POST", "/api/import/objects-v2/upload", {
         fileName: file.name,
         matrix,
