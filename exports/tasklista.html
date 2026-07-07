@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+<meta charset="UTF-8">
+<title>Traivo — Prioriterad task-lista</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Inter', 'Segoe UI', 'Noto Sans', sans-serif; background: #f8fafc; color: #2C3E50; }
+  .page { width: 1440px; margin: 0 auto; padding: 40px 44px 56px; }
+
+  h1 { font-size: 30px; color: #1B4B6B; margin-bottom: 4px; letter-spacing: -0.5px; }
+  .subtitle { font-size: 14px; color: #6B7C8C; margin-bottom: 22px; }
+
+  .principle2 { background: #E8F9F6; border: 2px solid #4A9B9B; color: #245; border-radius: 14px; padding: 14px 24px; margin-bottom: 22px; font-size: 14px; line-height: 1.5; }
+  .principle2 b { color: #2d6b6b; }
+
+  .legend { display: flex; gap: 20px; font-size: 11.5px; color: #6B7C8C; margin-bottom: 28px; align-items: center; flex-wrap: wrap; }
+  .legend > span { display: flex; align-items: center; }
+  .tg { display: inline-block; font-size: 9px; font-weight: 800; letter-spacing: .4px; padding: 3px 8px; border-radius: 5px; color: #fff; text-transform: uppercase; margin-right: 7px; }
+  .tg.b { background: #4C9A78; } .tg.v { background: #1B4B6B; } .tg.d { background: #C99A2E; }
+
+  .prio { margin-bottom: 24px; }
+  .prio-head { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+  .prio-badge { font-size: 13px; font-weight: 800; color: #fff; padding: 6px 14px; border-radius: 9px; letter-spacing: .5px; white-space: nowrap; }
+  .prio-title { font-size: 15px; font-weight: 800; color: #1B4B6B; }
+  .prio-why { font-size: 11.5px; color: #6B7C8C; margin-left: auto; font-style: italic; max-width: 560px; text-align: right; line-height: 1.4; }
+  .p1 .prio-badge { background: #C0504D; } .p2 .prio-badge { background: #C97B3C; }
+  .p3 .prio-badge { background: #4A9B9B; } .p4 .prio-badge { background: #4C9A78; }
+  .p5 .prio-badge { background: #6B7C8C; }
+
+  .list { display: flex; flex-direction: column; gap: 8px; }
+  .item { display: flex; gap: 12px; align-items: flex-start; background: #fff; border: 1.5px solid #cbd8e0; border-radius: 10px; padding: 11px 15px; box-shadow: 0 2px 8px rgba(27,75,107,0.05); }
+  .item .n { flex: 0 0 auto; min-width: 34px; height: 27px; padding: 0 6px; border-radius: 7px; background: #1B4B6B; color: #fff; font-weight: 800; font-size: 11.5px; display: flex; align-items: center; justify-content: center; }
+  .item .body { flex: 1; }
+  .item .body b { color: #1B4B6B; font-size: 12.5px; }
+  .item .body span { display: block; color: #6B7C8C; font-size: 11px; line-height: 1.45; margin-top: 2px; }
+  .item .body .dep { color: #b4632a; font-weight: 700; }
+  .item .type { flex: 0 0 auto; font-size: 9px; font-weight: 800; letter-spacing: .4px; padding: 3px 8px; border-radius: 5px; color: #fff; text-transform: uppercase; align-self: center; }
+  .type.b { background: #4C9A78; } .type.v { background: #1B4B6B; } .type.d { background: #C99A2E; }
+
+  .note { font-size: 12px; color: #6B7C8C; margin-top: 8px; padding-left: 2px; }
+  .note b { color: #4A9B9B; }
+</style>
+</head>
+<body>
+<div class="page">
+  <h1>Traivo — Prioriterad task-lista</h1>
+  <p class="subtitle">Åtgärdslistan ordnad efter prioritet &amp; beroenden · 7 juli 2026</p>
+
+  <div class="principle2">
+    <b>Läsning:</b> P1 görs först, sedan nedåt. <b>#N</b> pekar tillbaka på åtgärdslistans nummer. Beslut (P2) låser datakontrakten som motorerna (P4) och planeringen (P5) bygger på — bygg dem inte innan besluten är tagna.
+  </div>
+
+  <div class="legend">
+    <span><span class="tg b">Bygga</span> ny funktion / omskrivning</span>
+    <span><span class="tg v">Verifiera</span> finns delvis — kontrollera mot modellen</span>
+    <span><span class="tg d">Beslut</span> produktbeslut krävs först</span>
+  </div>
+
+  <!-- P1 -->
+  <div class="prio p1">
+    <div class="prio-head">
+      <span class="prio-badge">P1 · KRITISK</span>
+      <span class="prio-title">Objektsidan (Steg 1) — gör nu</span>
+      <span class="prio-why">Metadata-först-fundamentet som allt annat vilar på.</span>
+    </div>
+    <div class="list">
+      <div class="item"><div class="n">#1</div><div class="body"><b>Bygg om objektsidan runt "allt är metadata"</b><span>Endast tre systemfält utanför metadata: objektnummer, status, släktskap. Allt annat renderas som metadata.</span></div><div class="type b">Bygga</div></div>
+      <div class="item"><div class="n">#2</div><div class="body"><b>Källmärk varje fält (D / M / S / SYS)</b><span>Visa var fältet kommer ifrån och hur det hämtas — samma logik som informationspaketet.</span></div><div class="type b">Bygga</div></div>
+      <div class="item"><div class="n">#3</div><div class="body"><b>Objektsidan läser endast metadata-katalogen</b><span>Inga hårdkodade fält kvar — katalogen (svenska) är enda källan.</span></div><div class="type v">Verifiera</div></div>
+      <div class="item"><div class="n">#4</div><div class="body"><b>Släktskap: primär vs alternativa föräldrar</b><span>Arv/metadata alltid från primär förälder; alternativa påverkar bara visningsnamn.</span></div><div class="type v">Verifiera</div></div>
+    </div>
+  </div>
+
+  <!-- P2 -->
+  <div class="prio p2">
+    <div class="prio-head">
+      <span class="prio-badge">P2 · HÖG</span>
+      <span class="prio-title">Lås modellen — beslut före bygge</span>
+      <span class="prio-why">Låser datakontrakten som P4 (motorer) och P5 (planering) bygger på.</span>
+    </div>
+    <div class="list">
+      <div class="item"><div class="n">#5</div><div class="body"><b>En gemensam uppgiftsmodell</b><span>Allt som ska göras blir en uppgift i uppgiftsregistret — även "ring kund"/påminnelse. Inget mellanting.</span></div><div class="type d">Beslut</div></div>
+      <div class="item"><div class="n">#8</div><div class="body"><b>Informationspaketets datakontrakt</b><span>Vilka fält bär uppgiften, från vilken källa (artikel / orderkoncept / objekt / motorer) och hur de märks.</span></div><div class="type d">Beslut</div></div>
+      <div class="item"><div class="n">#19</div><div class="body"><b>Status som ETT fält</b><span>Fastställ statusvärdena (skapad &rarr; … &rarr; fakturerad + "omöjlig att utföra"). Ingen livscykel, inget mellanläge.</span></div><div class="type d">Beslut</div></div>
+    </div>
+  </div>
+
+  <!-- P3 -->
+  <div class="prio p3">
+    <div class="prio-head">
+      <span class="prio-badge">P3 · MEDEL</span>
+      <span class="prio-title">Uppgiftsflödet</span>
+      <span class="prio-why">Koppla ihop skaparna och gör uppgifter synliga hela vägen. <span class="dep">Beror på #5.</span></span>
+    </div>
+    <div class="list">
+      <div class="item"><div class="n">#6</div><div class="body"><b>Koppla ihop de fyra uppgiftsskaparna</b><span>Orderkoncept, snabborder, felanmälan och metadata-bevakare mynnar i samma uppgiftsflöde.</span></div><div class="type b">Bygga</div></div>
+      <div class="item"><div class="n">#7</div><div class="body"><b>Koncept-avrop &rarr; riktig uppgift</b><span>Avrops-uppgifter projiceras till uppgiftsregistret så fält &amp; planering ser dem och kan slutföra &rarr; fakturera.</span></div><div class="type b">Bygga</div></div>
+      <div class="item"><div class="n">#9</div><div class="body"><b>Fältinventering: artikel + orderkoncept</b><span>Bekräfta att alla fält finns i paketet och är korrekt källmärkta. <span class="dep">Beror på #8.</span></span></div><div class="type v">Verifiera</div></div>
+    </div>
+  </div>
+
+  <!-- P4 -->
+  <div class="prio p4">
+    <div class="prio-head">
+      <span class="prio-badge">P4 · ROLLANDE</span>
+      <span class="prio-title">De nio motorerna — bygg i tur</span>
+      <span class="prio-why">Varje motor levererar in i paketet. <span class="dep">Beror på datakontraktet #8.</span></span>
+    </div>
+    <div class="list">
+      <div class="item"><div class="n">#10</div><div class="body"><b>Geografisk motor &rarr; position</b><span>All plats/ruttbarhet via objektets platsmodell. Planeringsgrund.</span></div><div class="type v">Verifiera</div></div>
+      <div class="item"><div class="n">#11</div><div class="body"><b>Tidsmotor &rarr; planerad leveranstid</b><span>Tidpunkt utifrån önskad leveranstid + hårda/mjuka tidsfönster + utförarens läge. Planeringsgrund.</span></div><div class="type b">Bygga</div></div>
+      <div class="item"><div class="n">#12</div><div class="body"><b>Klumpningsmotor &rarr; klump-ID</b><span>Slår ihop uppgifter av samma typ/tid/plats till ett stopp.</span></div><div class="type b">Bygga</div></div>
+      <div class="item"><div class="n">#15</div><div class="body"><b>Beroendeuppgiftsmotor &rarr; beroende-ordning</b><span>Uppgifter som måste göras före huvuduppgiften; varnar vid risk.</span></div><div class="type b">Bygga</div></div>
+      <div class="item"><div class="n">#16</div><div class="body"><b>Plock-/leveransmotor &rarr; plockuppgift</b><span>Skapar plock-/hämta-/retur-uppgift för fysiska artiklar (nyckel, dekal).</span></div><div class="type b">Bygga</div></div>
+      <div class="item"><div class="n">#13</div><div class="body"><b>Faktura-/ordermotor &rarr; fakturagruppering</b><span>Grupperar uppgifter på orderkonceptets fakturareferens; dag-/vecko-/månadsfakturering.</span></div><div class="type b">Bygga</div></div>
+      <div class="item"><div class="n">#14</div><div class="body"><b>Abonnemangsmotor &rarr; abonnemangskoppling</b><span>Månadsfaktura utanför uppgifterna, men med koppling till dem; räknar om vid volymändring.</span></div><div class="type b">Bygga</div></div>
+      <div class="item"><div class="n">#17</div><div class="body"><b>Status- &amp; aviseringsmotor &rarr; varningar + avisering</b><span>Flaggar tid efter önskad leverans; aviserar kund &amp; personal (på väg / på plats / släp).</span></div><div class="type b">Bygga</div></div>
+      <div class="item"><div class="n">#18</div><div class="body"><b>Metadatabevakningsmotor &rarr; skapar uppgift</b><span>Bevakare på metadatafält (t.ex. antal &gt;100 eller felanmälan sann) skapar en uppgift.</span></div><div class="type b">Bygga</div></div>
+    </div>
+  </div>
+
+  <!-- P5 -->
+  <div class="prio p5">
+    <div class="prio-head">
+      <span class="prio-badge">P5 · SENARE</span>
+      <span class="prio-title">Planering &amp; synlighet</span>
+      <span class="prio-why">Kräver att status (#19) och motorerna (P4) matar paketet först.</span>
+    </div>
+    <div class="list">
+      <div class="item"><div class="n">#20</div><div class="body"><b>Status sök- &amp; sorterbar i masterplaneringen</b><span>Statusen blir en filtrerbar dimension (t.ex. "omöjlig att utföra").</span></div><div class="type b">Bygga</div></div>
+      <div class="item"><div class="n">#21</div><div class="body"><b>Masterplanering: filterregister</b><span>Skapa filter på valfri status/utförandekod/distrikt; ändra tid/status/tilldelning direkt i filtret.</span></div><div class="type b">Bygga</div></div>
+      <div class="item"><div class="n">#22</div><div class="body"><b>Utförarplan / vecka</b><span>168 h per utförare: uppgifter + ställtid/restid + egentid, med tilldelad utförare &amp; exakt tid.</span></div><div class="type b">Bygga</div></div>
+    </div>
+  </div>
+
+  <p class="note"><b>Nästa steg:</b> P1 (#1–#4, objektsidan) startas efter godkännande. P2-besluten tas parallellt så P4/P5 kan börja utan omtag.</p>
+</div>
+</body>
+</html>

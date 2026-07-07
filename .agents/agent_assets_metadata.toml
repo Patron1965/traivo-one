@@ -210,3 +210,15 @@ id = "En_mspIBwEO4LM8AxRD_k"
 uri = "file://exports/traivo-atgardslista.png"
 type = "image"
 title = "Traivo Åtgärdslista — PNG"
+
+[[outputs]]
+id = "Xt6Kl9ePDICElwsZazBc5"
+uri = "file://exports/traivo-tasklista.pdf"
+type = "pdf"
+title = "Traivo Prioriterad task-lista — PDF"
+
+[[outputs]]
+id = "fORrh2HqdMyjuosJeuX1k"
+uri = "file://exports/traivo-tasklista.png"
+type = "image"
+title = "Traivo Prioriterad task-lista — PNG"
