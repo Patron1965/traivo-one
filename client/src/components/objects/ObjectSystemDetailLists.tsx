@@ -82,7 +82,7 @@ export function ObjectSystemDetailLists({ objectId }: Props) {
   );
 
   return (
-    <>
+    <div className="grid grid-cols-1 lg:grid-cols-3 gap-4" data-testid="system-detail-grid">
       {/* ==================== INSPEKTIONSRESULTAT ==================== */}
       <section id="object-section-inspections" className="space-y-4 scroll-mt-4">
         <Card>
@@ -283,6 +283,6 @@ export function ObjectSystemDetailLists({ objectId }: Props) {
           </CardContent>
         </Card>
       </section>
-    </>
+    </div>
   );
 }

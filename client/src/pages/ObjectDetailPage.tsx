@@ -1723,6 +1723,8 @@ export default function ObjectDetailPage() {
           </div>
         </section>
 
+        {/* Domänkort i responsivt nät (mockup: kortnät i stället för staplade helbreddssektioner). */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {/* ==================== KONTAKTER ==================== */}
         <section id="object-section-contacts" className="space-y-4 scroll-mt-4">
           <Card>
@@ -1849,6 +1851,7 @@ export default function ObjectDetailPage() {
             </CardContent>
           </Card>
         </section>
+        </div>
 
         {/* ==================== INFORMATIONSPAKET-TRÄD (Task #1129 — läsvy, utförda + kommande) ==================== */}
         <section id="object-section-info-packages" className="space-y-4 scroll-mt-4">
