@@ -198,3 +198,15 @@ id = "kwwgmX6y9GG-GCl24QIHs"
 uri = "file://exports/traivo-grundmodell.png"
 type = "image"
 title = "Traivo Grundmodellen (Steg 0) — PNG"
+
+[[outputs]]
+id = "HkeIHMcFyfWUZLCpIkewX"
+uri = "file://exports/traivo-atgardslista.pdf"
+type = "pdf"
+title = "Traivo Åtgärdslista — PDF"
+
+[[outputs]]
+id = "En_mspIBwEO4LM8AxRD_k"
+uri = "file://exports/traivo-atgardslista.png"
+type = "image"
+title = "Traivo Åtgärdslista — PNG"

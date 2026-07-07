@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+<meta charset="UTF-8">
+<title>Traivo — Åtgärdslista</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Inter', 'Segoe UI', 'Noto Sans', sans-serif; background: #f8fafc; color: #2C3E50; }
+  .page { width: 1440px; margin: 0 auto; padding: 40px 44px 56px; }
+
+  h1 { font-size: 30px; color: #1B4B6B; margin-bottom: 4px; letter-spacing: -0.5px; }
+  .subtitle { font-size: 14px; color: #6B7C8C; margin-bottom: 22px; }
+
+  .principle { background: #1B4B6B; color: #E8F4F8; border-radius: 14px; padding: 16px 24px; margin-bottom: 12px; font-size: 14.5px; line-height: 1.55; }
+  .principle b { color: #7DBFB0; } .principle .k { color: #fff; font-weight: 700; }
+  .principle2 { background: #E8F9F6; border: 2px solid #4A9B9B; color: #245; border-radius: 14px; padding: 14px 24px; margin-bottom: 30px; font-size: 14px; line-height: 1.5; }
+  .principle2 b { color: #2d6b6b; }
+
+  .legend { display: flex; gap: 20px; font-size: 11.5px; color: #6B7C8C; margin-bottom: 26px; align-items: center; }
+  .legend > span { display: flex; align-items: center; }
+  .tg { display: inline-block; font-size: 9px; font-weight: 800; letter-spacing: .4px; padding: 3px 8px; border-radius: 5px; color: #fff; text-transform: uppercase; margin-right: 7px; }
+  .tg.b { background: #4C9A78; } .tg.v { background: #1B4B6B; } .tg.d { background: #C99A2E; }
+
+  .section { margin-bottom: 26px; }
+  .section > h2 { font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: 1.6px; color: #4A9B9B; margin-bottom: 12px; padding-left: 2px; }
+  .section > h2 .cnt { color: #b7c2cc; font-weight: 700; letter-spacing: .5px; margin-left: 6px; }
+
+  .list { display: flex; flex-direction: column; gap: 8px; }
+  .item { display: flex; gap: 12px; align-items: flex-start; background: #fff; border: 1.5px solid #cbd8e0; border-radius: 10px; padding: 11px 15px; box-shadow: 0 2px 8px rgba(27,75,107,0.05); }
+  .item .n { flex: 0 0 auto; width: 27px; height: 27px; border-radius: 7px; background: #1B4B6B; color: #fff; font-weight: 800; font-size: 12px; display: flex; align-items: center; justify-content: center; }
+  .item .body { flex: 1; }
+  .item .body b { color: #1B4B6B; font-size: 12.5px; }
+  .item .body span { display: block; color: #6B7C8C; font-size: 11px; line-height: 1.45; margin-top: 2px; }
+  .item .type { flex: 0 0 auto; font-size: 9px; font-weight: 800; letter-spacing: .4px; padding: 3px 8px; border-radius: 5px; color: #fff; text-transform: uppercase; align-self: center; }
+  .type.b { background: #4C9A78; } .type.v { background: #1B4B6B; } .type.d { background: #C99A2E; }
+
+  .note { font-size: 12px; color: #6B7C8C; margin-top: 6px; padding-left: 2px; }
+  .note b { color: #4A9B9B; }
+</style>
+</head>
+<body>
+<div class="page">
+  <h1>Traivo — Åtgärdslista</h1>
+  <p class="subtitle">Vad grundmodellen (Steg 0) leder till — konkreta åtgärder · 7 juli 2026</p>
+
+  <div class="principle">
+    Åtgärderna nedan följer direkt av <b>grundmodellen</b>: objekt &amp; metadata, uppgiftsregistret, informationspaketet, de nio motorerna, status och planeringsverktygen.
+  </div>
+  <div class="principle2">
+    <b>Arbetssätt:</b> stegvis (Steg&nbsp;1 &rarr; 6). Ingen kod ändras förrän respektive steg är godkänt. <b>Steg&nbsp;1 = objektsidan.</b>
+  </div>
+
+  <div class="legend">
+    <span><span class="tg b">Bygga</span> ny funktion / omskrivning</span>
+    <span><span class="tg v">Verifiera</span> finns delvis — kontrollera mot modellen</span>
+    <span><span class="tg d">Beslut</span> produktbeslut krävs först</span>
+  </div>
+
+  <!-- A -->
+  <div class="section">
+    <h2>A · Objektsidan &amp; metadata-grunden <span class="cnt">(Steg 1)</span></h2>
+    <div class="list">
+      <div class="item"><div class="n">1</div><div class="body"><b>Bygg om objektsidan runt "allt är metadata"</b><span>Endast tre systemfält står utanför metadata — objektnummer, status (aktiv/arkiverad) och släktskap. Allt annat renderas som metadata.</span></div><div class="type b">Bygga</div></div>
+      <div class="item"><div class="n">2</div><div class="body"><b>Källmärk varje fält (D / M / S / SYS)</b><span>Visa varifrån fältet kommer och hur det hämtas — samma logik som informationspaketet (artikel / orderkoncept / objekt / systemsatt).</span></div><div class="type b">Bygga</div></div>
+      <div class="item"><div class="n">3</div><div class="body"><b>Objektsidan läser endast metadata-katalogen (svenska)</b><span>Inga hårdkodade fält kvar — katalogen är enda källan. Kontrollera att inget läggs utanför.</span></div><div class="type v">Verifiera</div></div>
+      <div class="item"><div class="n">4</div><div class="body"><b>Släktskap: primär vs alternativa föräldrar</b><span>Visa primär förälder + alternativa; metadata/arv sker alltid från primär förälder, alternativa påverkar bara visningsnamn.</span></div><div class="type v">Verifiera</div></div>
+    </div>
+  </div>
+
+  <!-- B -->
+  <div class="section">
+    <h2>B · Uppgiftsregistret — "allt blir en uppgift"</h2>
+    <div class="list">
+      <div class="item"><div class="n">5</div><div class="body"><b>En gemensam uppgiftsmodell</b><span>Allt som ska göras hamnar i uppgiftsregistret — även "ring en kund" eller en påminnelse (kopplad till objekt + kontakt). Inget mellanting.</span></div><div class="type d">Beslut</div></div>
+      <div class="item"><div class="n">6</div><div class="body"><b>Koppla ihop de fyra uppgiftsskaparna</b><span>Orderkoncept, snabborder, felanmälan och metadata-bevakare ska mynna i samma uppgiftsflöde.</span></div><div class="type b">Bygga</div></div>
+      <div class="item"><div class="n">7</div><div class="body"><b>Koncept-avrop måste bli en riktig uppgift</b><span>Avrops-uppgifter från orderkoncept ska projiceras till uppgiftsregistret så att fält &amp; planering ser dem och kan slutföra &rarr; fakturera.</span></div><div class="type b">Bygga</div></div>
+    </div>
+  </div>
+
+  <!-- C -->
+  <div class="section">
+    <h2>C · Informationspaketet</h2>
+    <div class="list">
+      <div class="item"><div class="n">8</div><div class="body"><b>Definiera paketets datakontrakt</b><span>Uppgiften bär ett komplett paket sammansatt av fält från artikeln, orderkonceptet, objektet/metadata och motorerna — var och en källmärkt.</span></div><div class="type d">Beslut</div></div>
+      <div class="item"><div class="n">9</div><div class="body"><b>Fältinventering mot artikel + orderkoncept</b><span>Bekräfta att alla artikel- och orderkonceptfält finns med i paketet och är korrekt källmärkta (D/M/S/SYS).</span></div><div class="type v">Verifiera</div></div>
+    </div>
+  </div>
+
+  <!-- D -->
+  <div class="section">
+    <h2>D · De nio motorerna — vad var och en levererar in i paketet</h2>
+    <div class="list">
+      <div class="item"><div class="n">10</div><div class="body"><b>Geografisk motor &rarr; position</b><span>All plats/ruttbarhet via objektets platsmodell (object-location / mapProvider). Ingen ad-hoc-geokod.</span></div><div class="type v">Verifiera</div></div>
+      <div class="item"><div class="n">11</div><div class="body"><b>Tidsmotor &rarr; planerad leveranstid</b><span>Väljer tidpunkt utifrån önskad leveranstid + hårda/mjuka tidsfönster + utförarens läge.</span></div><div class="type b">Bygga</div></div>
+      <div class="item"><div class="n">12</div><div class="body"><b>Klumpningsmotor &rarr; klump-ID</b><span>Slår ihop uppgifter av samma typ/tid/plats till ett stopp och märker uppgiften med klump-ID.</span></div><div class="type b">Bygga</div></div>
+      <div class="item"><div class="n">13</div><div class="body"><b>Faktura-/ordermotor &rarr; fakturagruppering</b><span>Grupperar uppgifter på orderkonceptets fakturareferens (oavsett geografi/tid); håller reda på dag-/vecko-/månadsfakturering.</span></div><div class="type b">Bygga</div></div>
+      <div class="item"><div class="n">14</div><div class="body"><b>Abonnemangsmotor &rarr; abonnemangskoppling</b><span>Skapar månadsfakturor utanför uppgifterna men håller reda på de kopplade uppgifterna; räknar om vid volymändring.</span></div><div class="type b">Bygga</div></div>
+      <div class="item"><div class="n">15</div><div class="body"><b>Beroendeuppgiftsmotor &rarr; beroende-ordning</b><span>Håller reda på uppgifter som måste göras före huvuduppgiften (t.ex. avisering 3 dagar innan) och varnar vid risk.</span></div><div class="type b">Bygga</div></div>
+      <div class="item"><div class="n">16</div><div class="body"><b>Plock-/leveransmotor &rarr; plockuppgift</b><span>Behövs en fysisk artikel på plats skapas en plock-/hämta-uppgift (och retur, t.ex. nyckel/dekal).</span></div><div class="type b">Bygga</div></div>
+      <div class="item"><div class="n">17</div><div class="body"><b>Status- &amp; aviseringsmotor &rarr; varningar + kundavisering</b><span>Flaggar när planerad tid hamnar efter önskad leveranstid; aviserar kund &amp; personal (på väg / på plats / släp) — transparens à la Posten. Skapar ingen egen data.</span></div><div class="type b">Bygga</div></div>
+      <div class="item"><div class="n">18</div><div class="body"><b>Metadatabevakningsmotor &rarr; skapar uppgift</b><span>Kund/planerare skapar en bevakare på ett metadatafält (t.ex. antal &gt;100 eller felanmälan sann) som skapar en uppgift.</span></div><div class="type b">Bygga</div></div>
+    </div>
+  </div>
+
+  <!-- E -->
+  <div class="section">
+    <h2>E · Status</h2>
+    <div class="list">
+      <div class="item"><div class="n">19</div><div class="body"><b>Modellera status som ETT fält i paketet</b><span>Skapad &rarr; i masterplanering &rarr; planerad &rarr; utförandeläge &rarr; utförd &rarr; fakturakontroll &rarr; fakturerad + "omöjlig att utföra". Ingen livscykel, inget mellanläge.</span></div><div class="type d">Beslut</div></div>
+      <div class="item"><div class="n">20</div><div class="body"><b>Status sök- &amp; sorterbar i masterplaneringen</b><span>Statusen levereras upp i paketet och blir en filtrerbar dimension (t.ex. "omöjlig att utföra").</span></div><div class="type b">Bygga</div></div>
+    </div>
+  </div>
+
+  <!-- F -->
+  <div class="section">
+    <h2>F · Planeringsverktyg</h2>
+    <div class="list">
+      <div class="item"><div class="n">21</div><div class="body"><b>Masterplanering: filterregister</b><span>Master-listan över alla uppgifter. Planeraren skapar filter på valfri status/utförandekod/distrikt och kan ändra tid/status/tilldelning direkt i filtret.</span></div><div class="type b">Bygga</div></div>
+      <div class="item"><div class="n">22</div><div class="body"><b>Utförarplan / vecka</b><span>168 h per utförare: tilldelade uppgifter + ställtid/restid + egentid, med tilldelad utförare &amp; exakt utförandetid.</span></div><div class="type b">Bygga</div></div>
+    </div>
+  </div>
+
+  <p class="note"><b>Nästa steg:</b> starta Steg 1 (åtgärd 1–4, objektsidan) efter godkännande. Övriga grupper planeras in som Steg 2–6 i tur och ordning.</p>
+</div>
+</body>
+</html>
