@@ -97,6 +97,22 @@ export function registerObjectLifecycleRoutes(app: Express): void {
     if (!result.ok) {
       throw new ConflictError("archive_blocked", { preflight: result.preflight });
     }
+    // Task #1172: spårbarhet — vem arkiverade och varför (best-effort; ett fel i
+    // loggningen får aldrig fälla själva arkiveringen).
+    try {
+      await storage.createAuditLog({
+        tenantId,
+        userId,
+        action: "object.archive",
+        resourceType: "object",
+        resourceId: req.params.id,
+        changes: { reason: parsed.data.reason ?? null },
+        ipAddress: req.ip || null,
+        userAgent: req.headers["user-agent"] || null,
+      });
+    } catch (e) {
+      console.warn("[audit] object.archive kunde inte skrivas", e);
+    }
     res.json({ ok: true, preflight: result.preflight });
   }));
 
@@ -107,6 +123,21 @@ export function registerObjectLifecycleRoutes(app: Express): void {
     const found = archived.find((r: any) => r.id === req.params.id);
     if (!found) throw new NotFoundError("Arkiverat objekt");
     await restoreObject(req.params.id, tenantId);
+    // Task #1172: spårbarhet — vem återställde objektet (best-effort).
+    try {
+      await storage.createAuditLog({
+        tenantId,
+        userId: (req as any).user?.claims?.sub ?? (req as any).user?.id ?? null,
+        action: "object.restore",
+        resourceType: "object",
+        resourceId: req.params.id,
+        changes: null,
+        ipAddress: req.ip || null,
+        userAgent: req.headers["user-agent"] || null,
+      });
+    } catch (e) {
+      console.warn("[audit] object.restore kunde inte skrivas", e);
+    }
     res.json({ ok: true });
   }));
 

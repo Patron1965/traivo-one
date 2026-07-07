@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { ClipboardCheck, MessageSquare, Star, Sparkles } from "lucide-react";
+import { ClipboardCheck, MessageSquare, Star, Sparkles, AlertTriangle } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { DomainCarouselCard } from "./DomainCarouselCard";
 
@@ -39,10 +39,24 @@ interface SystemCommunication {
   sentAt: string | null;
 }
 
+// Task #1167: Felanmälningar/driftstörningar — systemgenererad (SYS) domän,
+// backas av customer_issue_reports (objekt-scopat) via samma single-source-
+// endpoint. Foton bläddras via kortets fullista.
+interface SystemIssueReport {
+  id: string;
+  title: string | null;
+  description: string | null;
+  category: string | null;
+  status: string | null;
+  photos: string[] | null;
+  createdAt: string | null;
+}
+
 interface SystemGeneratedMetadata {
   ratings: SystemRating[];
   inspections: SystemInspection[];
   communications: SystemCommunication[];
+  issueReports: SystemIssueReport[];
 }
 
 const COMM_CHANNEL_LABELS: Record<string, string> = {
@@ -50,6 +64,15 @@ const COMM_CHANNEL_LABELS: Record<string, string> = {
   sms: "SMS",
   push: "Push",
   phone: "Telefon",
+};
+
+const ISSUE_STATUS_LABELS: Record<string, string> = {
+  open: "Öppen",
+  new: "Ny",
+  in_progress: "Pågår",
+  pending: "Väntar",
+  resolved: "Åtgärdad",
+  closed: "Stängd",
 };
 
 const fmtDate = (v: string | null | undefined): string | null => {
@@ -72,6 +95,51 @@ export function ObjectSystemDetailLists({ objectId }: Props) {
   const inspections = data?.inspections ?? [];
   const communications = data?.communications ?? [];
   const ratings = data?.ratings ?? [];
+  const issueReports = data?.issueReports ?? [];
+
+  const renderIssueReport = (it: SystemIssueReport) => (
+    <div
+      className="rounded-lg border border-border p-3"
+      data-testid={`row-issue-report-${it.id}`}
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <div className="text-sm font-medium truncate">{it.title || "Felanmälan"}</div>
+          {it.description && (
+            <p className="mt-1 text-xs text-muted-foreground break-words">{it.description}</p>
+          )}
+          {it.category && (
+            <Badge variant="outline" className="mt-1 text-xs">
+              {it.category}
+            </Badge>
+          )}
+        </div>
+        <div className="flex flex-col items-end gap-1 shrink-0">
+          {it.status && (
+            <Badge variant="outline" className="text-xs">
+              {ISSUE_STATUS_LABELS[it.status] ?? it.status}
+            </Badge>
+          )}
+          {fmtDate(it.createdAt) && (
+            <span className="text-xs text-muted-foreground">{fmtDate(it.createdAt)}</span>
+          )}
+        </div>
+      </div>
+      {Array.isArray(it.photos) && it.photos.length > 0 && (
+        <div className="mt-2 flex gap-2 overflow-x-auto">
+          {it.photos.slice(0, 6).map((src, i) => (
+            <img
+              key={i}
+              src={src}
+              alt={`Foto ${i + 1} för ${it.title || "felanmälan"}`}
+              className="h-14 w-14 rounded object-cover border border-border shrink-0"
+              data-testid={`img-issue-report-${it.id}-${i}`}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
 
   const renderInspection = (i: SystemInspection) => (
     <div
@@ -175,6 +243,21 @@ export function ObjectSystemDetailLists({ objectId }: Props) {
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-4" data-testid="system-detail-grid">
+      <section id="object-section-issue-reports" className="scroll-mt-4">
+        <DomainCarouselCard<SystemIssueReport>
+          icon={AlertTriangle}
+          title="Felanmälningar"
+          description="Inkomna felanmälningar och driftstörningar för detta objekt."
+          items={issueReports}
+          getKey={(it) => it.id}
+          renderItem={renderIssueReport}
+          getFooter={(it) => ({ time: it.createdAt, who: null, kalla: "SYS" })}
+          loading={isLoading}
+          emptyText="Inga felanmälningar."
+          testidPrefix="issue-reports"
+        />
+      </section>
+
       <section id="object-section-inspections" className="scroll-mt-4">
         <DomainCarouselCard<SystemInspection>
           icon={ClipboardCheck}

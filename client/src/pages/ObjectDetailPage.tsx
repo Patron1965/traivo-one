@@ -31,6 +31,8 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, versionedUrl } from "@/lib/queryClient";
 import type { ObjectTimeRestriction } from "@shared/schema";
@@ -52,7 +54,7 @@ import "leaflet/dist/leaflet.css";
 import { useMapConfig } from "@/hooks/use-map-config";
 import type { ServiceObject, WorkOrder, ImportTemplate, WorkOrderWithObject } from "@shared/schema";
 import { PolylineEditor } from "@/components/PolylineEditor";
-import { objectStatusBadge as statusColors, workOrderStatusBadge as workOrderStatusColors, getObjectStatusBadge } from "@/lib/status-colors";
+import { objectStatusBadge as statusColors, workOrderStatusBadge as workOrderStatusColors, getObjectStatusBadge, getWorkOrderStatusBadge } from "@/lib/status-colors";
 import { OBJECT_LOCATION_TYPE_LABELS, objectLocationTypeLabel, objectLocationTypeBadgeClass } from "@/lib/object-location";
 import type { LucideIcon } from "lucide-react";
 
@@ -62,6 +64,28 @@ const OBJECT_STATUS_LABELS: Record<string, string> = {
   active: "Aktiv",
   inactive: "Inaktiv",
   pending: "Väntande",
+};
+
+// Task #1172: etiketter för objektets livscykel-händelser i den utfällbara
+// historik-vyn (audit-actions).
+const OBJECT_LIFECYCLE_ACTION_LABELS: Record<string, string> = {
+  "object.status_change": "Statusändring",
+  "object.archive": "Arkiverad",
+  "object.restore": "Återställd",
+};
+
+// Task #1169: Modus-orderstatus-etiketter för den inline-öppnade arbetsorder-
+// panelen (samma schema som tidslinjen använder).
+const WORK_ORDER_STATUS_LABELS: Record<string, string> = {
+  skapad: "Skapad",
+  planerad_pre: "Förplanerad",
+  planerad_resurs: "Resursplanerad",
+  ln: "Planerad",
+  planerad_las: "Låst",
+  utford: "Utförd",
+  fakturerad: "Fakturerad",
+  omojlig: "Omöjlig",
+  avbruten: "Avbruten",
 };
 
 interface InheritanceSource {
@@ -611,14 +635,42 @@ export default function ObjectDetailPage() {
   // nära status-väljaren i huvudet.
   const { data: statusHistory } = useQuery<{
     latest: { changedAt: string; actorName: string | null; changes: { from?: string | null; to?: string | null } | null } | null;
+    entries?: Array<{
+      id: string;
+      action: string;
+      changedAt: string;
+      actorName: string | null;
+      changes: { from?: string | null; to?: string | null; reason?: string | null } | null;
+    }>;
   }>({
     queryKey: ["/api/objects", objectId, "status-history"],
     queryFn: async () => {
       const res = await fetch(versionedUrl(`/api/objects/${objectId}/status-history`), { credentials: "include" });
-      if (!res.ok) return { latest: null };
+      if (!res.ok) return { latest: null, entries: [] };
       return res.json();
     },
     enabled: !!objectId && !isCreate,
+  });
+
+  // Task #1169: inline-öppna en arbetsorder från tidslinjen i en Sheet i stället
+  // för att navigera bort — snabb överblick med "Öppna order" för hela vyn.
+  const [timelineWoId, setTimelineWoId] = useState<string | null>(null);
+  const { data: timelineWo, isLoading: timelineWoLoading } = useQuery<
+    (WorkOrder & {
+      customerName?: string | null;
+      objectName?: string | null;
+      objectAddress?: string | null;
+      isCancelled?: boolean;
+      cancellation?: { reason?: string | null } | null;
+    }) | null
+  >({
+    queryKey: ["/api/work-orders", timelineWoId],
+    queryFn: async () => {
+      const res = await fetch(versionedUrl(`/api/work-orders/${timelineWoId}`), { credentials: "include" });
+      if (!res.ok) throw new Error("Kunde inte hämta arbetsordern");
+      return res.json();
+    },
+    enabled: !!timelineWoId,
   });
 
   // Task #998: namngivna importmallar återanvänds som fälturval för mall-styrd
@@ -1335,11 +1387,28 @@ export default function ObjectDetailPage() {
             {/* Task #1158: arkivering (soft-delete via deletedAt) är read-only i
                 huvudet — objektets driftstatus (active/inactive/pending) redigeras
                 separat via väljaren nedan (befintlig PATCH /api/objects/:id). */}
-            {(obj as any).deletedAt ? (
-              <Badge className={statusColors.inactive} data-testid="badge-status">
-                Arkiverad
-              </Badge>
-            ) : canEditObjectStatus ? (
+            {(obj as any).deletedAt ? (() => {
+              // Task #1173: visa vem som arkiverade + när (och ev. orsak) via
+              // audit-historiken; fall tillbaka på objektets egna arkiv-kolumner.
+              const archiveEntry = statusHistory?.entries?.find((e) => e.action === "object.archive");
+              const archivedByName = archiveEntry?.actorName ?? (obj as any).archivedBy ?? null;
+              const archivedAt = archiveEntry?.changedAt ?? (obj as any).deletedAt;
+              const archivedReason = archiveEntry?.changes?.reason ?? (obj as any).archivedReason ?? null;
+              return (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Badge className={`${statusColors.inactive} cursor-help`} data-testid="badge-status">
+                      Arkiverad
+                    </Badge>
+                  </TooltipTrigger>
+                  <TooltipContent data-testid="tooltip-archived">
+                    Arkiverad{archivedByName ? ` av ${archivedByName}` : ""}
+                    {archivedAt ? ` den ${new Date(archivedAt).toLocaleDateString("sv-SE")}` : ""}
+                    {archivedReason ? ` — ${archivedReason}` : ""}
+                  </TooltipContent>
+                </Tooltip>
+              );
+            })() : canEditObjectStatus ? (
               <Select
                 value={(obj.status as string) || "active"}
                 onValueChange={(v) => updateObjectMutation.mutate({ status: v } as Partial<ServiceObject>)}
@@ -1382,6 +1451,56 @@ export default function ObjectDetailPage() {
                   {new Date(statusHistory.latest.changedAt).toLocaleString("sv-SE")}
                 </TooltipContent>
               </Tooltip>
+            )}
+            {/* Task #1172: full livscykel-historik (status/arkiv/återställ) i en
+                utfällbar lista — visas oavsett arkiverad eller ej. */}
+            {statusHistory?.entries && statusHistory.entries.length > 0 && (
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 gap-1 px-2 text-xs text-muted-foreground"
+                    data-testid="button-status-history"
+                  >
+                    <History className="h-3 w-3" />
+                    Historik ({statusHistory.entries.length})
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent align="start" className="w-80 p-0" data-testid="popover-status-history">
+                  <div className="border-b px-3 py-2 text-sm font-medium">Livscykelhistorik</div>
+                  <div className="max-h-72 overflow-y-auto py-1">
+                    {statusHistory.entries.map((entry) => (
+                      <div
+                        key={entry.id}
+                        className="px-3 py-2 text-xs hover:bg-muted/50"
+                        data-testid={`row-status-history-${entry.id}`}
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="font-medium">
+                            {OBJECT_LIFECYCLE_ACTION_LABELS[entry.action] ?? entry.action}
+                          </span>
+                          <span className="text-muted-foreground">
+                            {new Date(entry.changedAt).toLocaleDateString("sv-SE")}
+                          </span>
+                        </div>
+                        {entry.action === "object.status_change" && (entry.changes?.from || entry.changes?.to) && (
+                          <div className="mt-0.5 text-muted-foreground">
+                            {entry.changes?.from ? `${OBJECT_STATUS_LABELS[entry.changes.from] ?? entry.changes.from} → ` : ""}
+                            {entry.changes?.to ? OBJECT_STATUS_LABELS[entry.changes.to] ?? entry.changes.to : ""}
+                          </div>
+                        )}
+                        {entry.changes?.reason && (
+                          <div className="mt-0.5 text-muted-foreground break-words">{entry.changes.reason}</div>
+                        )}
+                        <div className="mt-0.5 text-muted-foreground">
+                          {entry.actorName || "okänd"} · {new Date(entry.changedAt).toLocaleTimeString("sv-SE", { hour: "2-digit", minute: "2-digit" })}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </PopoverContent>
+              </Popover>
             )}
             {obj.accessType && obj.accessType !== "open" && (
               <Badge variant="outline" className="gap-1" data-testid="badge-access-type">
@@ -2095,12 +2214,100 @@ export default function ObjectDetailPage() {
               <ObjectTimeline
                 fetchTimeline={fetchObjectTimeline}
                 queryKeyPrefix={["/api/objects", objectId, "timeline"]}
-                onSelectTask={(taskId) => navigate(`/work-orders/${taskId}`)}
+                onSelectTask={(taskId) => setTimelineWoId(taskId)}
                 initialViewMode="month"
               />
             </CardContent>
           </Card>
         </section>
+
+        {/* Task #1169: snabböversikt av en arbetsorder inline (Sheet) från
+            tidslinjen — utan att lämna objektvyn. "Öppna order" tar hela vyn. */}
+        <Sheet open={!!timelineWoId} onOpenChange={(open) => { if (!open) setTimelineWoId(null); }}>
+          <SheetContent className="w-full sm:max-w-md overflow-y-auto" data-testid="sheet-timeline-workorder">
+            {timelineWoLoading ? (
+              <div className="flex items-center justify-center py-16" data-testid="loading-timeline-workorder">
+                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+              </div>
+            ) : timelineWo ? (
+              <>
+                <SheetHeader className="space-y-2 text-left">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <SheetTitle className="text-lg" data-testid="text-timeline-wo-title">
+                      {timelineWo.title || timelineWo.orderNumber || "Arbetsorder"}
+                    </SheetTitle>
+                    {timelineWo.orderStatus && (
+                      <Badge className={getWorkOrderStatusBadge(timelineWo.orderStatus)} data-testid="badge-timeline-wo-status">
+                        {WORK_ORDER_STATUS_LABELS[timelineWo.orderStatus] ?? timelineWo.orderStatus}
+                      </Badge>
+                    )}
+                    {timelineWo.isCancelled && (
+                      <Badge className={statusColors.inactive} data-testid="badge-timeline-wo-cancelled">
+                        Avbruten
+                      </Badge>
+                    )}
+                  </div>
+                  {timelineWo.orderNumber && (
+                    <SheetDescription className="font-mono" data-testid="text-timeline-wo-number">
+                      {timelineWo.orderNumber}
+                    </SheetDescription>
+                  )}
+                </SheetHeader>
+                <div className="mt-4 space-y-3 text-sm">
+                  {timelineWo.description && (
+                    <p className="text-muted-foreground break-words" data-testid="text-timeline-wo-description">
+                      {timelineWo.description}
+                    </p>
+                  )}
+                  <dl className="space-y-2">
+                    {timelineWo.scheduledDate && (
+                      <div className="flex justify-between gap-4">
+                        <dt className="text-muted-foreground">Planerad</dt>
+                        <dd data-testid="text-timeline-wo-scheduled">
+                          {new Date(timelineWo.scheduledDate).toLocaleDateString("sv-SE")}
+                        </dd>
+                      </div>
+                    )}
+                    {timelineWo.customerName && (
+                      <div className="flex justify-between gap-4">
+                        <dt className="text-muted-foreground">Kund</dt>
+                        <dd className="text-right" data-testid="text-timeline-wo-customer">{timelineWo.customerName}</dd>
+                      </div>
+                    )}
+                    {timelineWo.objectName && (
+                      <div className="flex justify-between gap-4">
+                        <dt className="text-muted-foreground">Objekt</dt>
+                        <dd className="text-right" data-testid="text-timeline-wo-object">{timelineWo.objectName}</dd>
+                      </div>
+                    )}
+                    {timelineWo.objectAddress && (
+                      <div className="flex justify-between gap-4">
+                        <dt className="text-muted-foreground">Adress</dt>
+                        <dd className="text-right" data-testid="text-timeline-wo-address">{timelineWo.objectAddress}</dd>
+                      </div>
+                    )}
+                  </dl>
+                  {timelineWo.isCancelled && timelineWo.cancellation?.reason && (
+                    <p className="text-xs text-muted-foreground" data-testid="text-timeline-wo-cancel-reason">
+                      Orsak: {timelineWo.cancellation.reason}
+                    </p>
+                  )}
+                  <Button
+                    className="w-full"
+                    onClick={() => timelineWoId && navigate(`/work-orders/${timelineWoId}`)}
+                    data-testid="button-open-timeline-workorder"
+                  >
+                    Öppna order
+                  </Button>
+                </div>
+              </>
+            ) : (
+              <div className="py-16 text-center text-sm text-muted-foreground" data-testid="empty-timeline-workorder">
+                Kunde inte hämta arbetsordern.
+              </div>
+            )}
+          </SheetContent>
+        </Sheet>
 
         {/* ==================== AVANCERADE VERKTYG (hopfällbart) ==================== */}
         <section id="object-section-deep-tools" className="space-y-4 scroll-mt-4">

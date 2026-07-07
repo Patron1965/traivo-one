@@ -1230,29 +1230,58 @@ app.get("/api/objects/:id/status-history", asyncHandler(async (req, res) => {
   if (!verifyTenantOwnership(existing, tenantId)) {
     throw new NotFoundError("Objekt");
   }
+  // Task #1172: full livscykel-historik (statusändringar + arkivering/
+  // återställning) för objekt-huvudets utfällbara vy. Bakåtkompatibelt:
+  // `latest` (senaste statusändringen) behålls för "Senast ändrad av"-etiketten.
+  const LIFECYCLE_ACTIONS = new Set([
+    "object.status_change",
+    "object.archive",
+    "object.restore",
+  ]);
   const logs = await storage.getAuditLogs(tenantId, {
-    action: "object.status_change",
     resourceType: "object",
     resourceId: req.params.id,
-    limit: 1,
+    limit: 200,
   });
-  const latest = logs[0];
-  if (!latest) {
-    return res.json({ latest: null });
-  }
-  let actorName: string | null = null;
-  if (latest.userId) {
-    const user = await storage.getUser(latest.userId);
-    if (user) {
-      actorName = [user.firstName, user.lastName].filter(Boolean).join(" ").trim() || user.email || null;
-    }
-  }
+  const lifecycleLogs = logs.filter((l) => LIFECYCLE_ACTIONS.has(l.action));
+
+  // Lös aktörsnamn via en Map (undvik N+1 mot users).
+  const actorIds = Array.from(
+    new Set(lifecycleLogs.map((l) => l.userId).filter((v): v is string => !!v)),
+  );
+  const nameById = new Map<string, string | null>();
+  await Promise.all(
+    actorIds.map(async (uid) => {
+      const user = await storage.getUser(uid);
+      if (user) {
+        nameById.set(
+          uid,
+          [user.firstName, user.lastName].filter(Boolean).join(" ").trim() || user.email || null,
+        );
+      }
+    }),
+  );
+  const resolveActor = (userId: string | null): string | null =>
+    userId ? nameById.get(userId) ?? null : null;
+
+  const entries = lifecycleLogs.map((l) => ({
+    id: l.id,
+    action: l.action,
+    changedAt: l.createdAt,
+    actorName: resolveActor(l.userId),
+    changes: (l.changes as Record<string, unknown> | null) ?? null,
+  }));
+
+  const latestStatus = lifecycleLogs.find((l) => l.action === "object.status_change");
   res.json({
-    latest: {
-      changedAt: latest.createdAt,
-      actorName,
-      changes: latest.changes ?? null,
-    },
+    latest: latestStatus
+      ? {
+          changedAt: latestStatus.createdAt,
+          actorName: resolveActor(latestStatus.userId),
+          changes: (latestStatus.changes as Record<string, unknown> | null) ?? null,
+        }
+      : null,
+    entries,
   });
 }));
 
