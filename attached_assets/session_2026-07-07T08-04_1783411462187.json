@@ -1,0 +1,206 @@
+{
+  "sessionId": "16c50230f2",
+  "exportedAt": "2026-07-07T08:04:16.854Z",
+  "summary": "### Key Topics Discussed\n- Rening av Replit-databasen från gammal, felaktig data.\n- Vikten av att Replit förstår och och följer grundläggande logik angående objekt och deras släktskap.\n- Specifikation av metadata för objekt, inklusive villkor för fält som foton, kontaktpersoner och aktuellt antal.\n- Struktureringen av grundregistren: register över objekt, register över kopplad metadata (inklusive uppgiftsregister/orderregister).\n- Definition av en \"uppgift\" som ett sammansatt informationspaket, bestående av artikeln (tjänst/vara, kostnad), kundinformation från orderkonceptet, önskad leveranstid, och metadata från objektet (t.ex. antal, leveranstid, kontaktperson).\n- Hantering av uppgifter i grov- och finplanering (veckoplanering, 168 timmar) med hjälp av nio motorer för grafiska positioner, leveranstider och aviseringar.\n- Flödet av uppgifter: från utförande, tillbaka till grovplanering.\n- Gruppering av uppgifter: Uppgifter kan grupperas efter typ, geografisk plats, orderkoncept eller fakturareferenser.\n- Perspektiv på \"order\": Skilnaden mellan utförarens (specifik adress, t.ex. \"order på Storgatan 22\" med sex uppgifter) och kundens perspektiv (bredare, t.ex. \"order på mina fastigheter i Sundsvall\" som inkluderar flera adresser och uppgifter), samt betydelsen av faktura- eller orderreferens för att söka efter uppgifter kopplade till en förvaltare.\n- Distinktionen mellan det flytande begreppet \"order\" och det klart definierade \"orderkoncept\" i deras system.\n- Definition av \"orderkoncept\" som ett resultat av en beställning, tydliggörande av kund, betalare, utförandetid och vilka objekt som berörs.\n- Begreppet \"snabboorder\" som en miniatyr av orderkonceptet, där den logiska automatskapningen och kopplingen tas bort för att direkt peka ut objekt för specifika uppgifter.\n- Uppgifter består alltid av en artikel med tillhörande information från orderkonceptet och metadata på objektet (t.ex. antal, leveransdag, faktureringskund).\n- Uppgifter behöver inte ha all metadata ifylld från början; till exempel kan ett initialt antal för en kärltvätt uppdateras av utföraren på plats, vilket sedan påverkar både fakturering och objektets metadata.\n- Vikten av att Replit skapar ett schema för att visualisera kopplingen mellan objekt, metadata, orderkoncept och uppgifter.\n- Finplaneringen innefattar sortering och tilldelning av uppgifter till utförare baserat på 168-timmars veckoschemat, där uppgiften ligger kvar tills den är utförd.\n- Uppgifters status i systemet: skapad, på grovplanering, på finplanering (med exakt leveransdag), i utförandeläge (utföraren på väg), utförd, i fakturakontroll, skickad för fakturering eller omöjlig att utföra.\n- Ekonomiska statusar skiljer sig från uppgiftsstatusar och inkluderar; order, följesedel/leveranssedel och faktura.\n- Möjlighet att flytta tillbaka en uppgift från finplaneringen till grovplaneringen ifall utförandetiden ändras eller datum för utförande tas bort.\n\n### Decisions Made\n- Replit måste ovillkorligt radera bort all data som inte följer den beskrivna logiken.\n- Systemet ska byggas utifrån den nuvarande grundlogiken, utan att ta hänsyn till gammal historik eller inneliggande ordrar.\n- Den generella veckoplaneringen ska inte ha någon koppling till Kinabs produktionsdatabas.\n- Replit ska inte skapa några sidoregister, utan endast de definerade registren för objekt, metadata, orderkoncept och uppgifter.\n\n### Action Items\n- Replit bör fokusera på att sortera ut och arbeta vidare med den definierade logiken.\n- Replit bör skapa ett schema eller liknande för att visualisera och säkerställa en gemensam förståelse av hur objekt, metadata, orderkoncept och uppgifter hänger ihop.\n- Replit ska tydligt redovisa de olika statusarna för en uppgift i systemet.\n\n### Important Points & Insights\n- Ett objekt definieras av sig självt och sitt släktskap, och detta är en grundläggande logik som måste följas.\n- Möjligheten att arkivera objekt är nödvändig.\n- Metadata ska vara kopplad till objekten med specifika villkor; till exempel ett foto-fält ska endast innehålla ett foto, och ett kontaktpersonsfält kan innehålla en eller flera kontaktpersoner.\n- Metadatafält som visar aktuellt antal för ett objekt ska arkivera tidigare värden i historiken.\n- Uppgiftsregistret är centralt och kopplat till orderkoncept/order.\n- Orderkonceptet och artikeln arbetar dynamiskt med att hämta metadata från objektet för att berika uppgiften.\n- Hela informationspaketet för en uppgift hanteras i grovplaneringen tillsammans med andra uppgifter och ordrar, och sedan i finplaneringen där uppgiften tilldelas och får en utförandetid.\n- Det är avgörande att förstå flödet där utförda uppgifter återgår till grovplaneringen.\n- Termen \"grovplanering\" kan eventuellt vara missvisande; det handlar mer om en stor uppgiftslista.\n- Alla uppgifter ska vara synliga i både grovplanering och finplanering (veckoplaneringen).\n- Uppgiften är det mest komplexa elementet i systemet, då den innehåller samkörd och samordnad information från objektsregistret, metadataregistret, orderkonceptet samt systemets status för den enskilda uppgiften.\n- En uppgift definieras som en artikel med tillhörande metadata och information.\n- En order är en samling av flera uppgifter (t.ex. flera tjänster för ett återvinningsrum).\n- \"Order\" kan uppfattas olika beroende på perspektiv: utföraren ser en order per specifik adress med dess uppgifter, medan kunden kan se en order som omfattande flera fastigheter/adresser med tillhörande uppgifter.\n- Det är viktigt att hålla reda på begreppen \"order\" och \"orderkoncept\" då \"order\" är ett flytande begrepp medan \"orderkoncept\" är klart definierat i systemet.\n- Orderkonceptet definierar kunden, betalaren, utförandetid och berörda objekt.\n- En uppgift behöver inte ha en kund, och all metadata behöver inte vara komplett vid skapandet.\n- Uppgiften är det mest centrala elementet i systemet och har flera statusar.\n- En uppgift som hamnar på finplaneringen har uppdaterats med en exakt leveransdag.\n- Om en uppgift flyttas tillbaka till grovplaneringen förlorar den sin exakta utförandedag och återgår till att baseras på önskad leveranstid.\n- Affärsmässiga dokument (order, följesedel/leveranssedel, faktura) relaterar till uppgifternas livscykel men är inte samma sak som uppgifternas operativa statusar.\n- Följesedeln/leveranssedeln ger kunden möjlighet att kvittera utförda tjänster.\n\n### Open Questions/Pending Items\n- Har Replit några frågor eller invändningar mot logiken kring objekt, deras släktskap och metadatans villkor?\n- Namnkonvention för \"grovplanering\" och andra delar av systemet kan diskuteras, men fokus ligger nu på att Replit förstår flödet och logiken.",
+  "conversation": [],
+  "transcripts": [
+    {
+      "text": "Hallå?",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Ja, nu förtydligar Thomas och jag det här e-en gång. Alltså, Replit måste nu lyssna på vad vi säger. Gammalt jävla skit som ligger inne i det här som bryter mot då grundlogiken måste ovillkorligen tas bort. Och nu säger jag det här en gång till här nu, så att förhoppningsvis det går fram. Ett objekt är ett objekt med sin släktskap. Har Replit någon som helst fråga kring det, den logiken?",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Alltså, ställ nu den frågan. Och att ett objekt ska kunna arkiveras, eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och administreras på det sätt som, som vi har beskrivet. Nummer två är metadatan. Och metadata är uppgifter kopplade till objekten och med de villkor som framgår i metadata, eh, setupen. Så att om det till exempel är ett metadatafält som, eh, ska innehålla ett foto, så innehåller det metadatafältet ett foto och inget annat. Är det ett metadatafält som innehåller flera kontaktpersoner, så innehåller det här metadatafältet flera, en eller flera kontaktpersoner.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Är det metadatafält som enbart kan visa aktuellt antal för objektet, ja, då innehåller det till exempel tio, medan då tidigare metadatafält arkiveras då och finns med i historiken. Eh, och är det några som helst frågor kring den här logiken då, så får Repli ställa frågor kring det. Och allt annat då som inte finns i den här, den här logiken-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm ...som vi försöker beskriva här måste Repli ovillkorligen radera bort.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och, och, och, och jag, jag bara vill också bara förtydliga nu då hur, hur grundregistren ser ut i det här. Du har-- Vi har nu registret över objektet, objektet. Sen finns det då registret över de kopplade metadata av olika typ, där även då uppgiftsregister som är väl kanske det centrala då, eh, är kopplat då. Och uppgiftsregistret då, eller orderregistret då, som i sin tur kommer ifrån orderkoncept eller order då, har då de här informations...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "paketena. För vad är ett, eh, eh, eh, en uppgift? Jo, en uppgift är en sammansatt, är ett sammansatt informationspaket med nummer ett, själva ordern, eh, eller förlåt mig, själva artikeln där det står vad det är, om det är en tjänst eller om det är en vara, eh, vad den kostar och så vidare. Med alla de fälten då som finns kring, eh, själva artikeln. Sedan så är den här då skapad av ett orderkoncept och på orderkonceptet framgår det då vilken som är kunden",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": ", när leveranstiden önskas, eh, och alla de här delarna då som finns specificerade i orderkonceptet. Och sedan så både orderkonceptet och artikeln jobbar då dynamiskt genom att också då hämta, eh, viss metadata då ifrån objektet, till exempel antal eller till exempel en hård eller mjuk fördelaktig, eh, leveranstid eller en kontaktperson eller annan information då som behövs till själva uppgiften. Sammantaget så blir det här ett stort informations",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "paket då. Hela det här informationspaketet hamnar sen i grovplaneringen tillsammans med alla andra uppgifter och ordrar. Och sen tas de där om hand med de här nio olika motorerna som då hjälper till, eh, med grafiska positioner och leveranstider och aviseringar och allt vad det nu är då. Och sen så placeras sen uppgiften i det som vi kallar då finplanering, det vill säga då är den tilldelad och den har en, en utförandetid.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och sen utförs den därifrån och sen kommer den ju då komma tillbaka till, kan vi kalla det grovplaneringen, när den är utförd då. Och där ligger ju också då utförda uppgifter i, det är kanske fel namn att kalla det grovplanering, det är mer en, en, en, en stor uppgiftslista. Men vad vi kallar det sen och vad det ska heta, det får vi, får vi ju, det är lätt att ändra. Men det viktiga är att du rikt-riktigt förstår det här flödet nu. Och jag säger det en gång till och Thomas kanske också får säga det. Det finns inget allt gammalt jävla skit som Replit och på något vis har hittat till.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Det är en massa konstiga saker. Det måste bort. Det finns bara den här, den här logiken nu utifrån det sena. Det finns ingen historik, det finns inga inneliggande ordrar. Bygg nu systemet utifrån den här grundlogiken och inte en massa annat skit. Är det uppfattat? Ja. Eh, ba-bara en liten, eh, notering till här då till Replit. När vi pratar finplanering, men det har du väl redan förstått, då är ju det lika med veckoplan inom parentes hundrasextioåtta timmar. Och det är ju alltså i-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. -de här grobplanering och veckoplan hundrasextioåtta timmar Kinab kommer att jobba i. Och det är de två planeringsverktygen som ska finnas i produktionsdatabasen. Sen har vi ju en tredje variant som vi hade, eller som vi började med initialt när vi byggde det här systemet. Den så kallade ge-generella veckoplaneringen då. Den ska inte ha någon som helst koppling i produktionsdatabasen till Kinab, utan den är tänkt att ha i ett senare skede när vi v-v-vänder oss till andra typer av verksamheter. Men i det här läget ska inte den ha någon...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. Som helst connection i Kinabs, eh, produktionsdatabas. Comprende? Ja, och bara oavsett vilka användargränssnitt som används så ska uppgifterna vara synliga i båda systemen. Nu kan vi se att om vi skapar vissa uppgifter så syns de bara i den här enklare planeringen då.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Ja, vi börjar där, så sorterar vi ut och så jobbar vi vidare. Och, och jag vill bara understryka, håll inte på med några sidoregister nu, Replid, i det här, utan det finns bara ett register över objekten. Det finns bara ett register över de metadata som vi har satt upp utifrån den logiken. Det finns ett register över de här orderkonceptena som skapar uppgifter. Och sen så finns det då ett register med alla de här uppgifterna och de här informationspaketen som vi har beskrevit tidigare då för att...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Uppgiften blir ju det kom-- mest komplexa i hela systemet, för uppgiften innehåller ju då all information, till skillnad då bara ett objekt innehåller ju bara objektets information då. Så, så, så det är ju en samkörd, samordnad information från både objektregistret, metadataregistret och order-- informationen i orderkonceptet. Och dessutom då systemets status då på o-- på, på, på den enskilda uppgiften. Och ett tillägg också, det Thomas sa då att, eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "När en uppgift skapas och en uppgift kan ju då grupperas på olika sätt. Den kan grupperas efter-- tillsammans med uppgifter av samma typ. Den kan grupperas efter uppgifter på samma geografiska plats. Den kan grupperas ut-- eh, utifrån uppgifter som härstammar från samma orderkoncept. Den kan grupperas utifrån uppgifter som har samma fakturarreferenser. Den kan alltså upp-- grupperas på flera olika sätt och då bilda då en order-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Ja. Och det är viktigt att vi är tydlig med definitionerna här. En uppgift är en artikel med tillhörande metadata och information. Medan en order är flera uppgifter. Till exempel så kan det då vara en order på ett återvinningsrum där det står då: \"Tvätta tio kärl utav den typen, tvätta två utav den typen, rengör rummet.\" De tre artiklarna då, eller uppgifterna, bildar då en arbetsorder på, eh, det, det, det, det, det objektet.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. Där det är på de objektena, grupperingen utav objektena. Uttrycket order kommer systemet inte att, eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Använda då ut-- På det sättet, utan order kommer mest att vara ett uttryck utifrån utförarens perspektiv. Utföraren kommer ju då att säga såhär att: \"Ja, nu har jag en order på Storgatan 22 och det kanske är då sex uppgifter som ska utföras.\" Medan om vi pratar med samma kund så kommer kunden då att säga såhär: \"Ja, jag har en order på mina fastigheter i Sundsvall.\" Och då är då det... Dels uppgifterna då som är på Storgatan 22 och sen så är det uppgifter kanske på sex andra adresser. Så då...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Då kommer kunden att säga då: \"Ja, men det här är min order.\" Pratar du med en enskild förvaltare så kommer han att säga: \"Jo, men jag har en order på Vårtveten.\" Och i det fallet så gäller det då fastigheten på, på Storgatan 22 och så säger vi Storgatan 24 då. Och då kommer de att grupperas utifrån, eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Den förvaltarens fakturareferens då. Så att då kommer jag han då, eller faktura eller orderreferens, det är ju samma sak. Då kommer han ju att söka då på Vårtveten 2026 till exempel. Och då ser han då: \"Ja, där ligger det nu kanske tio uppgifter på mina, de två fastigheter som jag har.\" Så det är viktigt att, att vi håller reda på de här begreppen. Alltså order är ett väldigt flytande begrepp. Orderkoncept däremot i vårt, vår värld, det är väldigt klart definierat. Det är, det är ett orderkoncept som naturligtvis be-bottnar i en beställning. Som då",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "tydliggör vem som-- Vilket som är kunden, vem som ska betala, när det ska utföras och vad som ska utföras och på vilka inpekade objekt då. Eh, sen har vi då snabboorder. Det är ju då en miniatyr utav samma sak då som har-- Där vi tar bort den, den logiska automatskapningen då, eh, och kopplingen. Då går man in på ett objekt bara och pekar ut och säger: \"Det här objektet, här ska det tvättas tio kärl.\" Men det som produceras då ifrån orderkonceptet eller den här snabba ordern-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm Exakt samma sak, det är det vi kallar då uppgifter. Och en uppgift består alltid utav en artikel med påhakan information som kommer då från orderkonceptet och metadatan på objektet, till exempel antal eller leveransdag eller f-faktura, eh, kund som ska faktureras. Och de ser likadana ut och de, de skapas. Och som jag också sa tidigare då att uppgifter, eh, behöver inte ha nån kund och en uppgift behöver, eh-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. Inte ha, ha all metadata, utan det kan ju f-- Teoretiskt sett vara på det sättet att vi har en kärnträtt, eh, på-- Som pekas ut mot, mot ett objekt, men vi vet inte antalet då. Och då kommer-- Har vi då en antalslogik som vi har beskrivet och där kanske vi då skriver fem. Nej, men när man kommer på plats så kommer ju då utföraren då uppdatera den metadatan och konstatera då kanske att det är femton kärl och så tvättar man femton kärl, fakturerar femton kärl och samtidigt så har också metadatan för antalet av den kärnträtten-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. -uppdateras. Eh, pratar mycket om det här, men det är viktigt nu att Replit förstår och vi kanske också skulle be Replit att göra ett schema eller något sånt där på det här nu så att vi har en gemensam bild hur det här- Ja, det är bra förstås. Ja. Mm. Hur det här hänger ihop va, så att Replit... Och att det inte finns några... Alltså, det, det är de här stegen. Objekten, metadatan, orderkonceptet och sen blir det uppgifterna. Och så har vi då grovplaneringen utav uppgifter som är giv-- Det är ju-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Komma till uppgifter, utföra uppgifter, alltså alla uppgifter, även tilldelade uppgifter. Och så har vi då ifrån den listan, så sorterar vi den, tilldelar då utförare den, eh, de olika uppgifterna och det blir då det vi kallar en finplanering, både utifrån vem som ska göra det, eh, när det ska göras utifrån det där 168-timmarsveckaschemat. Och, eh, där ligger då uppgiften ända tills den, tills den är utförd. Ja, den ligger väl säkert där senast på kvällen.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Ja, den ligger där senast på kvällen också va. Men, men, men då kommer den ju då ändra status då till, till då att den är utförd eller att den inte gick att utföras då. Och en mycket viktig också bit i det här då att det mest centrala i systemet är ju själva uppgiften och den har också då status i systemet då som vi har gått igenom. Och det är också bra att det räp-- räkligt redovisar de här statusen. Det finns några liksom grova logiska här, men sen finns det några mellanlägen och... Men första steget är att uppgiften är skapad och i och med att den är skapad-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. -så hamnar den ju då på grobplaneringen. Sen nästa steg är att den hamnar på finplaneringen och då har den ju uppdaterats då med exakt, eh, leveransdag. Eh, sen så kommer det ju då bli ett steg att, eh, den kan ju falla tillbaka. Man kan ju plocka tillbaka en order ifrån finplaneringen eller, eller, eh, själva, ja, som planerat utförande datum så att den kommer till grobplaneringen. Och innan den är tillbaka på grobplaneringen så har den ju då inte något utförande dag, utan då ligger ju den utifrån det önskade, eh, leveranstiden då.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och sen så blir det då när den är i utförandeläge så är då, eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Utföraren är på väg på plats och sen har den blivit slutförd och sen så kommer den då komma i fakturakontroll om det önskas så och så skickas den för fakturering då. Och sen finns det något så här mellanlägen då att den inte kan bli, om den nu blir i, eh, omöjlig att utföra därför att det är ett fel, ja då ha-- Får-- Kommer den då i ett yt-- I ytterligare statusläge. Och parallellt med det här också då, men inte samma sak, så finns det då affärsmässiga statusar i det här då. När vi skapar en order så skapas det då en order...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Befäst, eller så. Och den kan då uppdateras med mer exakt leveranstid beroende på statusen på den eller när vi väljer att skicka den eller när den blir tydlig. Och sedan så kommer då, eh, följesedeln då eller leveranssedeln. Det är när det är utfört då, då, då har alltså möj-- Kunden möjlighet att kvittera och ta emot att det blev tvätt av tio stycken. Och sen nästa affärsmässiga dokument är då fakturan. Och eventuellt så kan man också då, eh, utifrån följesedeln-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    }
+  ]
+}
