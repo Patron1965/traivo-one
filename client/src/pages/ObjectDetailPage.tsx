@@ -42,6 +42,7 @@ import {
 } from "lucide-react";
 import { ObjectMetadataBody } from "@/components/objects/ObjectMetadataBody";
 import { ObjectSystemDetailLists } from "@/components/objects/ObjectSystemDetailLists";
+import { DomainCarouselCard } from "@/components/objects/DomainCarouselCard";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
 import L from "leaflet";
@@ -1799,130 +1800,115 @@ export default function ObjectDetailPage() {
         {/* Domänkort i responsivt nät (mockup: kortnät i stället för staplade helbreddssektioner). */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {/* ==================== KONTAKTER ==================== */}
-        <section id="object-section-contacts" className="space-y-4 scroll-mt-4">
-          <Card>
-            <CardHeader className="pb-3">
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-base flex items-center gap-2">
-                  <Contact className="h-4 w-4" /> Kontakter
-                </CardTitle>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setContactDialogOpen(true)}
-                  data-testid="button-add-contact"
-                >
-                  <Plus className="h-3.5 w-3.5 mr-1" /> Lägg till
-                </Button>
-              </div>
-            </CardHeader>
-            <CardContent>
-              {contacts.length > 0 ? (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  {contacts.map((c) => (
-                    <div key={c.id} className="p-3 border rounded-lg" data-testid={`contact-card-${c.id}`}>
-                      <div className="flex items-center justify-between mb-1">
-                        <span className="font-medium text-sm">{c.name}</span>
-                        <div className="flex items-center gap-1">
-                          {c.inherited && (
-                            <Badge variant="outline" className="text-[10px]">Ärvd</Badge>
-                          )}
-                          {!c.inherited && (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="h-7 w-7 p-0 text-destructive hover:text-destructive"
-                              onClick={() => deleteContactMutation.mutate(c.id)}
-                              disabled={deleteContactMutation.isPending}
-                              data-testid={`button-delete-contact-${c.id}`}
-                            >
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </Button>
-                          )}
-                        </div>
-                      </div>
-                      <div className="text-xs text-muted-foreground">
-                        {CONTACT_TYPES.find(t => t.value === c.contactType)?.label || c.role || c.contactType || ""}
-                      </div>
-                      {c.phone && (
-                        <div className="text-xs mt-1 flex items-center gap-1">
-                          <Phone className="h-3 w-3 text-muted-foreground" /> {c.phone}
-                        </div>
-                      )}
-                      {c.email && (
-                        <div className="text-xs flex items-center gap-1">
-                          <Mail className="h-3 w-3 text-muted-foreground" /> {c.email}
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-sm text-muted-foreground">Inga kontakter registrerade.</p>
-              )}
-            </CardContent>
-          </Card>
-        </section>
-
-        {/* ==================== BILDER ==================== */}
-        <section id="object-section-images" className="space-y-4 scroll-mt-4">
-          <Card>
-            <CardHeader className="pb-3">
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-base flex items-center gap-2">
-                  <Image className="h-4 w-4" /> Bilder
-                </CardTitle>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setImageDialogOpen(true)}
-                  data-testid="button-add-image"
-                >
-                  <Plus className="h-3.5 w-3.5 mr-1" /> Lägg till
-                </Button>
-              </div>
-            </CardHeader>
-            <CardContent>
-              {images.length > 0 ? (
-                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-                  {images.map((img) => (
-                    <div key={img.id} className="relative group" data-testid={`image-card-${img.id}`}>
-                      <div className="aspect-square rounded-lg overflow-hidden border bg-muted">
-                        <img
-                          src={img.url || img.imageUrl}
-                          alt={img.description || img.title || "Bild"}
-                          className="w-full h-full object-cover"
-                          onError={(e) => {
-                            (e.target as HTMLImageElement).style.display = "none";
-                          }}
-                        />
-                      </div>
+        <section id="object-section-contacts" className="scroll-mt-4">
+          <DomainCarouselCard<ObjectContact>
+            icon={Contact}
+            title="Kontakter"
+            items={contacts}
+            getKey={(c) => c.id}
+            hideWhenEmpty={false}
+            emptyText="Inga kontakter registrerade."
+            testidPrefix="contacts"
+            getFooter={(c) => ({ kalla: c.inherited ? "S" : "M", who: c.inherited ? "Ärvd" : undefined })}
+            headerAction={
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setContactDialogOpen(true)}
+                data-testid="button-add-contact"
+              >
+                <Plus className="h-3.5 w-3.5 mr-1" /> Lägg till
+              </Button>
+            }
+            renderItem={(c) => (
+              <div className="p-3 border rounded-lg" data-testid={`contact-card-${c.id}`}>
+                <div className="flex items-center justify-between mb-1">
+                  <span className="font-medium text-sm">{c.name}</span>
+                  <div className="flex items-center gap-1">
+                    {c.inherited && (
+                      <Badge variant="outline" className="text-[10px]">Ärvd</Badge>
+                    )}
+                    {!c.inherited && (
                       <Button
-                        variant="destructive"
+                        variant="ghost"
                         size="sm"
-                        className="absolute top-1 right-1 h-7 w-7 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
-                        onClick={() => deleteImageMutation.mutate(img.id)}
-                        disabled={deleteImageMutation.isPending}
-                        data-testid={`button-delete-image-${img.id}`}
+                        className="h-7 w-7 p-0 text-destructive hover:text-destructive"
+                        onClick={() => deleteContactMutation.mutate(c.id)}
+                        disabled={deleteContactMutation.isPending}
+                        data-testid={`button-delete-contact-${c.id}`}
                       >
                         <Trash2 className="h-3.5 w-3.5" />
                       </Button>
-                      {img.description && (
-                        <div className="text-xs text-muted-foreground mt-1 truncate">{img.description}</div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="flex items-center justify-center h-32 bg-muted/30 rounded-lg">
-                  <div className="text-center text-muted-foreground">
-                    <Image className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                    <p className="text-sm">Inga bilder uppladdade</p>
+                    )}
                   </div>
                 </div>
-              )}
-            </CardContent>
-          </Card>
+                <div className="text-xs text-muted-foreground">
+                  {CONTACT_TYPES.find(t => t.value === c.contactType)?.label || c.role || c.contactType || ""}
+                </div>
+                {c.phone && (
+                  <div className="text-xs mt-1 flex items-center gap-1">
+                    <Phone className="h-3 w-3 text-muted-foreground" /> {c.phone}
+                  </div>
+                )}
+                {c.email && (
+                  <div className="text-xs flex items-center gap-1">
+                    <Mail className="h-3 w-3 text-muted-foreground" /> {c.email}
+                  </div>
+                )}
+              </div>
+            )}
+          />
+        </section>
+
+        {/* ==================== BILDER ==================== */}
+        <section id="object-section-images" className="scroll-mt-4">
+          <DomainCarouselCard<ObjectImage>
+            icon={Image}
+            title="Bilder"
+            items={images}
+            getKey={(img) => img.id}
+            hideWhenEmpty={false}
+            emptyText="Inga bilder uppladdade."
+            testidPrefix="images"
+            getFooter={() => ({ kalla: "M" })}
+            headerAction={
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setImageDialogOpen(true)}
+                data-testid="button-add-image"
+              >
+                <Plus className="h-3.5 w-3.5 mr-1" /> Lägg till
+              </Button>
+            }
+            renderItem={(img) => (
+              <div className="relative group" data-testid={`image-card-${img.id}`}>
+                <div className="aspect-video rounded-lg overflow-hidden border bg-muted">
+                  <img
+                    src={img.url || img.imageUrl}
+                    alt={img.description || img.title || "Bild"}
+                    className="w-full h-full object-cover"
+                    onError={(e) => {
+                      (e.target as HTMLImageElement).style.display = "none";
+                    }}
+                  />
+                </div>
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  className="absolute top-1 right-1 h-7 w-7 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                  onClick={() => deleteImageMutation.mutate(img.id)}
+                  disabled={deleteImageMutation.isPending}
+                  data-testid={`button-delete-image-${img.id}`}
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </Button>
+                {img.description && (
+                  <div className="text-xs text-muted-foreground mt-1 truncate">{img.description}</div>
+                )}
+              </div>
+            )}
+          />
         </section>
         </div>
 
