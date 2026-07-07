@@ -1,6 +1,5 @@
 import {
   Calendar,
-  Map,
   Building2,
   Users,
   Settings,
@@ -10,21 +9,15 @@ import {
   Receipt,
   ClipboardList,
   Truck,
-  RefreshCw,
   Settings2,
-  Sliders,
-  Target,
-  DollarSign,
   TrendingUp,
   Smartphone,
   Building,
   Database,
   BarChart3,
-  History,
   ListChecks,
   UserCheck,
   Brain,
-  MapPin,
   Fuel,
   ClipboardCheck,
   Activity,
@@ -34,7 +27,6 @@ import {
   Phone,
   CalendarDays,
   MessageCircle,
-  Gauge,
   Globe,
   Palette,
   Inbox,
@@ -44,7 +36,7 @@ import {
   Tag,
   Workflow,
   Shapes,
-  CircleSlash,
+  Zap,
   type LucideIcon,
 } from "lucide-react";
 import { translate } from "./i18n";
@@ -113,38 +105,15 @@ export function getGrunddataItems(t: (key: string, fallback: string) => string, 
 export function getOrdrarItems(t: (key: string, fallback: string) => string, tl?: (key: string) => string): NavItem[] {
   const l = tl || svFallback;
   return [
-    // Order & tilldelning — det dagliga orderflödet
-    { title: l("nav.order-stock"), url: "/order-stock", icon: ClipboardList, description: l("nav.order-stock.desc"), subSection: "Order & tilldelning" },
-    { title: l("nav.assignments"), url: "/assignments", icon: UserCheck, description: l("nav.assignments.desc"), subSection: "Order & tilldelning" },
-    // Återkommande & koncept — det som genererar order
-    { title: l("nav.subscriptions"), url: "/subscriptions", icon: RefreshCw, description: l("nav.subscriptions.desc"), subSection: "Återkommande & koncept" },
-    { title: l("nav.order-concepts"), url: "/order-concepts", icon: ListChecks, description: l("nav.order-concepts.desc"), subSection: "Återkommande & koncept" },
-    // Ärenden — avvikelser och felanmälningar
-    { title: "Ärenden", url: "/cases", icon: Inbox, description: "Samlad vy: avvikelser, kund- och allmänhetens felanmälningar", subSection: "Ärenden" },
+    { title: l("nav.order-concepts"), url: "/order-concepts", icon: ListChecks, description: l("nav.order-concepts.desc") },
+    { title: "Snabborder", url: "/snabborder", icon: Zap, description: "Skapa en snabb order på ett valt objekt" },
   ];
 }
 
 export function getPlaneringItems(tl?: (key: string) => string): NavItem[] {
-  const l = tl || svFallback;
   return [
-    // Planeringstavlor — det dagliga planeringsarbetet
-    { title: l("nav.week-planner"), url: "/planner", icon: Calendar, description: l("nav.week-planner.desc"), subSection: "Planeringstavlor" },
-    { title: "Veckoplanering", url: "/veckoplanering", icon: CalendarDays, description: "168h-veckoschema per team: ej planerade jobb, kalender, ruttoptimerad tur och summering", subSection: "Planeringstavlor" },
-    { title: "Grovplanering", url: "/grovplanering", icon: CalendarDays, description: "Ej planerade uppgifter: filtrera per distrikt, se på kartan och tilldela till team", subSection: "Planeringstavlor" },
-    // Kartor & rutter
-    { title: l("nav.route-planning"), url: "/routes", icon: Map, description: l("nav.route-planning.desc"), subSection: "Kartor & rutter" },
-    { title: l("nav.planner-map"), url: "/planner-map", icon: MapPin, description: l("nav.planner-map.desc"), subSection: "Kartor & rutter" },
-    { title: l("nav.historical-map"), url: "/historical-map", icon: History, description: l("nav.historical-map.desc"), subSection: "Kartor & rutter" },
-    // Översikt & uppföljning
-    { title: "Kontrollpanel", url: "/control-tower", icon: Gauge, description: "Värmekarta över beläggning och SLA-risk", subSection: "Översikt & uppföljning" },
-    { title: "Produktionsledare", url: "/enhetsansvarig", icon: Target, description: "Dagsproduktion, lönsamhetsgräns per resurs och avvikelseprocess", subSection: "Översikt & uppföljning" },
-    // Långsiktig planering
-    { title: l("nav.annual-planning"), url: "/annual-planning", icon: Target, description: l("nav.annual-planning.desc"), subSection: "Långsiktig planering" },
-    // Inställningar — uppsättning för planeringen
-    { title: "Distrikt", url: "/distrikt", icon: Globe, description: "Hantera geografiska distrikt och zoner (postnummer/polygon)", subSection: "Inställningar" },
-    { title: l("nav.production-control"), url: "/planning-parameters", icon: Settings2, description: l("nav.production-control.desc"), subSection: "Inställningar" },
-    { title: l("nav.planner-search-filters"), url: "/planner-search-filters", icon: Sliders, description: l("nav.planner-search-filters.desc"), subSection: "Inställningar" },
-    { title: "Utförandetyper", url: "/utforandetyper", icon: ListChecks, description: "Hantera utförandetyper och automatiska förberedelseuppgifter per typ", subSection: "Inställningar" },
+    { title: "Grovplanering", url: "/grovplanering", icon: CalendarDays, description: "Master: alla uppgifter från skapad till fakturerad — sök, sortera och filtrera via filterbibliotek" },
+    { title: "Veckoplanering", url: "/veckoplan", icon: CalendarDays, description: "Fin: 168h-veckoschema per team med kalender, ruttoptimerad tur och summering" },
   ];
 }
 
@@ -170,18 +139,14 @@ export function getFaltItems(t: (key: string, fallback: string) => string, tl?: 
 export function getEkonomiItems(tl?: (key: string) => string): NavItem[] {
   const l = tl || svFallback;
   return [
-    // Fakturering — fakturaflödet
+    // Fakturering — fakturaflödet & Fortnox-export
     { title: l("nav.invoicing"), url: "/invoicing", icon: Receipt, description: l("nav.invoicing.desc"), subSection: "Fakturering" },
     { title: "Fakturakö", url: "/invoice-queue", icon: Clock, description: "Bromsade arbetsorder + samlingsfakturor (konsoliderings-policy per mottagare)", subSection: "Fakturering" },
     { title: l("nav.invoice-recalculation-log"), url: "/invoice-recalculation-log", icon: Receipt, description: l("nav.invoice-recalculation-log.desc"), subSection: "Fakturering" },
-    // Rapporter & analys
-    { title: l("nav.economics"), url: "/economics", icon: DollarSign, description: l("nav.economics.desc"), subSection: "Rapporter & analys" },
-    { title: l("nav.reporting"), url: "/reporting", icon: BarChart3, description: l("nav.reporting.desc"), subSection: "Rapporter & analys" },
-    { title: "Veckomötes-rapport", url: "/weekly-report", icon: FileText, description: "Sammanställd rapport för planeringsmötet (utfall, trender, plan, kvalitet) – PDF via utskrift", subSection: "Rapporter & analys" },
-    { title: "Ej-utförda uppgifter", url: "/missade-jobb", icon: CircleSlash, description: "Rapport över uppgifter som inte kunde utföras – orsak, distrikt, utförarkod och tidpunkt", subSection: "Rapporter & analys" },
-    { title: l("nav.roi-report"), url: "/roi-report", icon: TrendingUp, description: l("nav.roi-report.desc"), subSection: "Rapporter & analys" },
-    // Försäljning
-    { title: l("nav.proactive-sales"), url: "/proactive-sales", icon: TrendingUp, description: l("nav.proactive-sales.desc"), subSection: "Försäljning" },
+    // Register kopplade till Fortnox
+    { title: "Kundregister", url: "/customers", icon: Building, description: "Administrera kundregister — synkas mot Fortnox", subSection: "Register (Fortnox)" },
+    { title: "Artikelregister", url: "/articles", icon: Package, description: "Administrera artikelregister — kopplat till Fortnox artikel-API", subSection: "Register (Fortnox)" },
+    { title: l("nav.price-lists"), url: "/price-lists", icon: Receipt, description: l("nav.price-lists.desc"), subSection: "Register (Fortnox)" },
   ];
 }
 
@@ -242,7 +207,6 @@ export function getSidebarStartItems(tl?: (key: string) => string): NavItem[] {
   const l = tl || svFallback;
   return [
     { title: l("nav.today"), url: "/", icon: Calendar, description: "" },
-    { title: l("nav.dashboard"), url: "/dashboard", icon: BarChart3, description: "" },
   ];
 }
 

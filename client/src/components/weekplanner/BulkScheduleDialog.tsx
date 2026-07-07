@@ -159,7 +159,6 @@ export const BulkScheduleDialog = memo(function BulkScheduleDialog(props: BulkSc
       });
       queryClient.invalidateQueries({ queryKey: ["/api/v1/work-orders"] });
       queryClient.invalidateQueries({ queryKey: ["/api/work-orders"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/dashboard/alerts"] });
       queryClient.invalidateQueries({ queryKey: ["/api/planner/area-search"] });
       // Also refresh OrderStock so successful rows disappear from the batch
       // page even when the user keeps the dialog open to retry conflicts.

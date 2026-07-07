@@ -5,7 +5,6 @@ test.use({ serviceWorkers: "block" });
 
 const criticalPages = [
   { name: "Home", path: "/" },
-  { name: "Dashboard", path: "/dashboard" },
   { name: "Objects", path: "/objects" },
   { name: "Clusters", path: "/clusters" },
   { name: "Resources", path: "/resources" },
@@ -34,7 +33,7 @@ test.describe("Navigation - All critical pages load", () => {
 test.describe("Navigation - Mobile responsive", () => {
   test("mobile viewport renders without crash", async ({ page }) => {
     await page.setViewportSize({ width: 375, height: 812 });
-    await navigateTo(page, "/dashboard");
+    await navigateTo(page, "/");
     await expect(page.locator("body")).toBeVisible({ timeout: 10000 });
     const hasError = await page.locator("text=Application Error").isVisible().catch(() => false);
     expect(hasError).toBe(false);
@@ -42,7 +41,7 @@ test.describe("Navigation - Mobile responsive", () => {
 
   test("desktop viewport renders without crash", async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
-    await navigateTo(page, "/dashboard");
+    await navigateTo(page, "/");
     await expect(page.locator("body")).toBeVisible({ timeout: 10000 });
     const hasError = await page.locator("text=Application Error").isVisible().catch(() => false);
     expect(hasError).toBe(false);

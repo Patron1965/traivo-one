@@ -5,7 +5,7 @@ test.use({ serviceWorkers: "block" });
 
 test.describe("Page navigation & rendering", () => {
   const pages = [
-    "/", "/dashboard", "/clusters", "/assignments", "/planner",
+    "/", "/clusters", "/assignments", "/planner",
     "/resources", "/map", "/reporting", "/invoicing", "/fleet",
     "/import", "/historical-map", "/user-management", "/tenant-config",
     "/price-lists", "/order-concepts", "/optimization", "/checklist-templates",
@@ -28,25 +28,6 @@ test.describe("Page navigation & rendering", () => {
   test("/reporting shows tabs", async ({ page }) => {
     await navigateTo(page, "/reporting");
     await expect(page.locator('[data-testid="tab-overview"]')).toBeVisible({ timeout: 10000 });
-  });
-});
-
-test.describe("Dashboard functionality", () => {
-  test("renders greeting or error boundary", async ({ page }) => {
-    await navigateTo(page, "/dashboard");
-    const greetingVisible = await page.locator('[data-testid="text-dashboard-greeting"]').isVisible({ timeout: 10000 }).catch(() => false);
-    const errorBoundaryVisible = await page.getByText("Något gick fel").isVisible().catch(() => false);
-    expect(greetingVisible || errorBoundaryVisible).toBe(true);
-  });
-
-  test("QuickActions links present when loaded", async ({ page }) => {
-    await navigateTo(page, "/dashboard");
-    const greetingVisible = await page.locator('[data-testid="text-dashboard-greeting"]').isVisible({ timeout: 10000 }).catch(() => false);
-    if (greetingVisible) {
-      await expect(page.locator('[data-testid="card-quick-actions"]')).toBeVisible({ timeout: 10000 });
-      const firstLink = page.locator('[data-testid^="quick-link-"]').first();
-      await expect(firstLink).toBeVisible({ timeout: 10000 });
-    }
   });
 });
 

@@ -37,7 +37,7 @@ const ObjectDuplicatesPage = lazy(() => import("@/pages/ObjectDuplicatesPage"));
 const MissingCoordinatesPage = lazy(() => import("@/pages/MissingCoordinatesPage"));
 const ResourcesPage = lazy(() => import("@/pages/ResourcesPage"));
 const ExecutorRegisterPage = lazy(() => import("@/pages/ExecutorRegisterPage"));
-const DashboardPage = lazy(() => import("@/pages/DashboardPage"));
+const SnabborderPage = lazy(() => import("@/pages/SnabborderPage"));
 const SettingsPage = lazy(() => import("@/pages/SettingsPage"));
 const ImportPage = lazy(() => import("@/pages/ImportPage"));
 const ObjektmallImportPage = lazy(() => import("@/pages/admin/ObjektmallImportPage"));
@@ -204,7 +204,6 @@ function Router() {
         <Route path="/suppliers">{() => <ProtectedRoute component={SuppliersPage} path="/suppliers" />}</Route>
         <Route path="/invoice-recalculation-log">{() => <ProtectedRoute component={InvoiceRecalculationLogPage} path="/invoice-recalculation-log" />}</Route>
         <Route path="/invoice-queue">{() => <ProtectedRoute component={InvoiceQueuePage} path="/invoice-queue" />}</Route>
-        <Route path="/dashboard">{() => <ProtectedRoute component={DashboardPage} path="/dashboard" />}</Route>
         <Route path="/economics">{() => <ProtectedRoute component={EconomicsDashboardPage} path="/economics" />}</Route>
         <Route path="/setup-analysis">{() => <ProtectedRoute component={SetupTimeAnalysisPage} path="/setup-analysis" />}</Route>
         <Route path="/predictive-planning">{() => <ProtectedRoute component={PredictivePlanningPage} path="/predictive-planning" />}</Route>
@@ -243,6 +242,7 @@ function Router() {
         <Route path="/api-costs">{() => <ProtectedRoute component={ApiCostsDashboardPage} path="/api-costs" />}</Route>
         <Route path="/environmental-certificates">{() => <ProtectedRoute component={EnvironmentalCertificatePage} path="/environmental-certificates" />}</Route>
         <Route path="/architecture">{() => <ProtectedRoute component={ArchitecturePage} path="/architecture" />}</Route>
+        <Route path="/snabborder">{() => <ProtectedRoute component={SnabborderPage} path="/snabborder" />}</Route>
         <Route path="/order-concepts">{() => <ProtectedRoute component={OrderConceptsPage} path="/order-concepts" />}</Route>
         <Route path="/order-concepts/new">{() => <ProtectedRoute component={OrderConceptWizardPage} path="/order-concepts" />}</Route>
         <Route path="/order-concepts/:id/edit">{() => <ProtectedRoute component={OrderConceptWizardPage} path="/order-concepts" />}</Route>
