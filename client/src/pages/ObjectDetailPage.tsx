@@ -13,6 +13,8 @@ import { buildLegacyObjectFieldEntries, type LegacyFieldInput } from "@/lib/lega
 import { KallaBadge } from "@/lib/metadata-kalla";
 import { ObjectTemplateMetadataForm, type TemplateMetadataType } from "@/components/ObjectTemplateMetadataForm";
 import { ObjectSystemGeneratedPanel } from "@/components/ObjectSystemGeneratedPanel";
+import { ObjectTimeline } from "@/components/timeline/ObjectTimeline";
+import { ObjectLinkedTasksCards } from "@/components/objects/ObjectLinkedTasksCards";
 import { InfoPackageTree } from "@/components/objects/InfoPackageTree";
 import InvoiceRecipientsCard from "@/components/InvoiceRecipientsCard";
 import { TelinkSyncButton } from "@/components/TelinkSyncButton";
@@ -48,7 +50,7 @@ import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { useMapConfig } from "@/hooks/use-map-config";
-import type { ServiceObject, WorkOrder, ImportTemplate } from "@shared/schema";
+import type { ServiceObject, WorkOrder, ImportTemplate, WorkOrderWithObject } from "@shared/schema";
 import { PolylineEditor } from "@/components/PolylineEditor";
 import { objectStatusBadge as statusColors, workOrderStatusBadge as workOrderStatusColors, getObjectStatusBadge } from "@/lib/status-colors";
 import { OBJECT_LOCATION_TYPE_LABELS, objectLocationTypeLabel, objectLocationTypeBadgeClass } from "@/lib/object-location";
@@ -452,6 +454,20 @@ export default function ObjectDetailPage() {
       scrollToSection(tab);
     }
   }, [isCreate, resolvedObject, scrollToSection]);
+
+  // Task #1160: Historik & logg-tidslinje — återanvänder ObjectTimeline mot
+  // admin-endpointen /api/objects/:id/timeline (objekt + underträd, tenant-scoped).
+  const fetchObjectTimeline = useCallback(
+    async (startDate: string, endDate: string): Promise<WorkOrderWithObject[]> => {
+      const params = new URLSearchParams({ startDate, endDate });
+      const res = await fetch(`/api/objects/${objectId}/timeline?${params.toString()}`, {
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("Kunde inte hämta tidslinjen");
+      return res.json();
+    },
+    [objectId],
+  );
 
   const customerIdForSearch: string | undefined = resolvedObject?.customerId || undefined;
   const searchHitsQuery = useQuery<Array<{
@@ -1594,10 +1610,12 @@ export default function ObjectDetailPage() {
         <Button variant="ghost" size="sm" onClick={() => scrollToSection("images")} data-testid="nav-images">
           Bilder {images.length > 0 && <Badge variant="secondary" className="ml-1 text-xs">{images.length}</Badge>}
         </Button>
+        <Button variant="ghost" size="sm" onClick={() => scrollToSection("linked-tasks")} data-testid="nav-linked-tasks">Uppgifter &amp; koncept</Button>
         <Button variant="ghost" size="sm" onClick={() => scrollToSection("info-packages")} data-testid="nav-info-packages">Informationspaket</Button>
         <Button variant="ghost" size="sm" onClick={() => scrollToSection("restrictions")} data-testid="nav-restrictions">
           SlotPreference {timeRestrictions.length > 0 && <Badge variant="secondary" className="ml-1 text-xs">{timeRestrictions.length}</Badge>}
         </Button>
+        <Button variant="ghost" size="sm" onClick={() => scrollToSection("timeline")} data-testid="nav-timeline">Historik &amp; logg</Button>
         <Button variant="ghost" size="sm" onClick={() => scrollToSection("deep-tools")} data-testid="nav-deep-tools">Avancerat</Button>
       </nav>
 
@@ -1913,6 +1931,14 @@ export default function ObjectDetailPage() {
         </div>
 
         {/* ==================== INFORMATIONSPAKET-TRÄD (Task #1129 — läsvy, utförda + kommande) ==================== */}
+        {/* ==================== KOPPLADE UPPGIFTER & ORDERKONCEPT ==================== */}
+        {/* Task #1160: dedikerade kort som lyfter fram objektets kopplade
+            uppgifter (kommande/historik/ej-utförda) och inpekade orderkoncept
+            från /api/objects/:id/system-generated-metadata. */}
+        <section id="object-section-linked-tasks" className="space-y-4 scroll-mt-4">
+          <ObjectLinkedTasksCards objectId={objectId} navigate={navigate} />
+        </section>
+
         <section id="object-section-info-packages" className="space-y-4 scroll-mt-4">
           <Card>
             <CardHeader className="pb-3">
@@ -2046,6 +2072,32 @@ export default function ObjectDetailPage() {
               ) : (
                 <p className="text-sm text-muted-foreground">Inga tidsregler konfigurerade. Lägg till fördelaktiga eller ofördelaktiga tider.</p>
               )}
+            </CardContent>
+          </Card>
+        </section>
+
+        {/* ==================== HISTORIK & LOGG ==================== */}
+        {/* Task #1160: zoombar tidslinje (år→dag) över objektets + underträdets
+            arbetsordrar. Återanvänder ObjectTimeline med injicerad fetch mot
+            admin-endpointen /api/objects/:id/timeline. */}
+        <section id="object-section-timeline" className="space-y-4 scroll-mt-4">
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base flex items-center gap-2">
+                <History className="h-4 w-4" /> Historik &amp; logg
+                <KallaBadge kalla="SYS" />
+              </CardTitle>
+              <p className="text-xs text-muted-foreground">
+                Zoombar tidslinje över objektets och underträdets arbetsordrar — växla mellan år, kvartal, månad, vecka och dag.
+              </p>
+            </CardHeader>
+            <CardContent className="p-0">
+              <ObjectTimeline
+                fetchTimeline={fetchObjectTimeline}
+                queryKeyPrefix={["/api/objects", objectId, "timeline"]}
+                onSelectTask={(taskId) => navigate(`/work-orders/${taskId}`)}
+                initialViewMode="month"
+              />
             </CardContent>
           </Card>
         </section>
