@@ -272,6 +272,7 @@ export function ObjectImportV2Flow() {
   const [result, setResult] = useState<ExecuteResponse | null>(null);
   const [customerId, setCustomerId] = useState<string>("");
   const [skippedRows, setSkippedRows] = useState<Set<number>>(new Set());
+  const [overwriteMetadata, setOverwriteMetadata] = useState(false);
   const [importing, setImporting] = useState(false);
 
   const { data: customers = [] } = useQuery<Customer[]>({ queryKey: ["/api/customers"] });
@@ -342,6 +343,7 @@ export function ObjectImportV2Flow() {
       const res = await apiRequest("POST", `/api/import/objects-v2/${sessionId}/execute`, {
         customerId: customerId || undefined,
         skipRowNumbers: Array.from(skippedRows),
+        overwriteMetadata,
       });
       return (await res.json()) as { session_id: string; status: string };
     },
@@ -859,6 +861,24 @@ export function ObjectImportV2Flow() {
                       ? "Du har mappat en kund-kolumn — varje objekt kopplas till kunden i sin rad. Den här kunden används bara som fallback för rader vars kund inte kan hittas. Lämna tomt för tenantens första kund."
                       : "Objekten kopplas till kunden för klustring. Lämna tomt för tenantens första kund. Tips: mappa en kolumn till \u201eKund (namn)\u201d eller \u201eKund (kundnummer)\u201d för att koppla varje objekt till olika kunder."}
                   </p>
+                </div>
+                <div className="flex max-w-md items-start gap-2">
+                  <Checkbox
+                    id="overwrite-metadata"
+                    checked={overwriteMetadata}
+                    onCheckedChange={(v) => setOverwriteMetadata(v === true)}
+                    data-testid="checkbox-overwrite-metadata"
+                  />
+                  <div className="space-y-1">
+                    <Label htmlFor="overwrite-metadata" className="cursor-pointer">
+                      Skriv över befintliga metadatavärden
+                    </Label>
+                    <p className="text-xs text-muted-foreground">
+                      Uppdaterar redan lagrade metadatafält på befintliga objekt med värdena i filen
+                      (t.ex. en redigerad export). Lämna av för att bevara befintliga värden och bara
+                      lägga till fält som saknas.
+                    </p>
+                  </div>
                 </div>
                 {(executeMutation.isPending || importing) && (
                   <Progress

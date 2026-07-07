@@ -120,6 +120,10 @@ const mappingsSchema = z.object({
 const executeSchema = z.object({
   customerId: z.string().trim().max(64).optional(),
   skipRowNumbers: z.array(z.number().int()).max(50000).optional(),
+  // Opt-in: skriv över redan lagrade metadatavärden på BEFINTLIGA objekt med
+  // importens värden (äkta export → redigera → importera). Default false =
+  // bakåtkompatibelt "första-skrivningen-vinner" (befintliga värden bevaras).
+  overwriteMetadata: z.boolean().optional(),
 });
 
 function toCell(v: string | number | boolean | null): string {
@@ -501,6 +505,72 @@ export function registerObjectImportV2Routes(app: Express): void {
         }
       }
 
+      // Feature: metadata-överskrivningsförhandsvisning. För rader som matchar
+      // ett BEFINTLIGT objekt (via system_id/external_id) och skriver ersättande
+      // metadatafält som redan har ett lagrat värde: visa vilka fält som är
+      // berörda. Som standard bevaras dessa (första-skrivningen-vinner); aktivera
+      // "Skriv över befintliga värden" i importsteget för att uppdatera dem.
+      // Kompletterande fält (allowDuplicates=true) berörs aldrig och listas ej.
+      const metaRows = resolved.filter((r) => {
+        if (byRow.get(r.rowNumber)?.status === "invalid") return false;
+        const { strings, jsonGroups } = groupMetadataForWrite(r.metadata);
+        return strings.length > 0 || jsonGroups.length > 0 || !!r.metadata.typ;
+      });
+      if (metaRows.length) {
+        const sysNums = Array.from(
+          new Set(metaRows.map((r) => r.fields.system_id).filter(Boolean) as string[]),
+        );
+        const objByNumber = new Map<string, string>();
+        if (sysNums.length) {
+          const found = await db
+            .select({ id: objects.id, objectNumber: objects.objectNumber })
+            .from(objects)
+            .where(and(eq(objects.tenantId, tenantId), inArray(objects.objectNumber, sysNums)));
+          for (const o of found) if (o.objectNumber) objByNumber.set(o.objectNumber, o.id);
+        }
+        const targetIds = Array.from(new Set(Array.from(objByNumber.values())));
+        // katalogId → namn för icke-kompletterande (ersättande) katalogfält som
+        // faktiskt HAR ett värde på något av målobjekten.
+        const existingByObject = new Map<string, Set<string>>();
+        if (targetIds.length) {
+          const existing = await db
+            .select({
+              objektId: metadataVarden.objektId,
+              namn: metadataKatalog.namn,
+              allowDuplicates: metadataKatalog.allowDuplicates,
+            })
+            .from(metadataVarden)
+            .innerJoin(metadataKatalog, eq(metadataKatalog.id, metadataVarden.metadataKatalogId))
+            .where(and(eq(metadataVarden.tenantId, tenantId), inArray(metadataVarden.objektId, targetIds)));
+          for (const e of existing) {
+            if (e.allowDuplicates || !e.objektId) continue;
+            if (!existingByObject.has(e.objektId)) existingByObject.set(e.objektId, new Set());
+            existingByObject.get(e.objektId)!.add(e.namn);
+          }
+        }
+        for (const r of metaRows) {
+          const objId = r.fields.system_id ? objByNumber.get(r.fields.system_id) : undefined;
+          if (!objId) continue; // nytt objekt → inget att skriva över
+          const existingNames = existingByObject.get(objId);
+          if (!existingNames || existingNames.size === 0) continue;
+          const { strings, jsonGroups } = groupMetadataForWrite(r.metadata);
+          const rowNames = new Set<string>();
+          for (const s of strings) rowNames.add(s.namn);
+          for (const g of jsonGroups) rowNames.add(g.namn);
+          if (r.metadata.typ) rowNames.add("typ");
+          const collisions = Array.from(rowNames).filter((n) => existingNames.has(n));
+          if (collisions.length === 0) continue;
+          const row = byRow.get(r.rowNumber);
+          if (!row) continue;
+          row.issues.push({
+            field: "metadata",
+            message: `Metadatafält med befintligt värde: ${collisions.join(", ")}. Bevaras som standard — aktivera "Skriv över befintliga värden" i importsteget för att uppdatera dem.`,
+            severity: "warning",
+          });
+          if (row.status === "valid") row.status = "warning";
+        }
+      }
+
       const rows = Array.from(byRow.values());
       const summary = {
         total_rows: rows.length,
@@ -626,6 +696,7 @@ export function registerObjectImportV2Routes(app: Express): void {
       // ADR v3: objekt är neutrala — verklig koppling sker via object_payers, så
       // varje skapat objekt får dessutom en primär object_payer på resolverad
       // kund (per-rad om en kund-kolumn är mappad, annars denna fallback).
+      const overwriteMetadata = parsed.data.overwriteMetadata === true;
       let customerId = parsed.data.customerId ?? null;
       if (customerId) {
         const ownCheck = await db.execute(
@@ -1044,6 +1115,7 @@ export function registerObjectImportV2Routes(app: Express): void {
             fields,
             katalogByName,
             skapadAv: userId ?? undefined,
+            overwriteExisting: overwriteMetadata,
           });
         };
 

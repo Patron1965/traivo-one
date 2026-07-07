@@ -37,6 +37,7 @@ import { and, eq } from "drizzle-orm";
 let baseUrl = "";
 let server: any;
 let originalNodeEnv: string | undefined;
+let lastValidation: any = null;
 
 const NS = `oiv2rt-${Date.now()}`;
 const TENANT = `${NS}-tenant`;
@@ -70,7 +71,11 @@ async function req(
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
 // Kör hela flödet upload→mappings→validate→execute och pollar tills klart.
-async function runImport(matrix: string[][], mappings: Record<string, any>): Promise<any> {
+async function runImport(
+  matrix: string[][],
+  mappings: Record<string, any>,
+  opts: { overwriteMetadata?: boolean } = {},
+): Promise<any> {
   const up = await req("POST", "/api/import/objects-v2/upload", {
     userId: ADMIN,
     body: { matrix, fileName: "roundtrip.csv" },
@@ -87,10 +92,11 @@ async function runImport(matrix: string[][], mappings: Record<string, any>): Pro
   const val = await req("POST", `/api/import/objects-v2/${sessionId}/validate`, { userId: ADMIN });
   expect(val.status).toBe(200);
   expect(val.body.summary.invalid).toBe(0);
+  lastValidation = val.body;
 
   const exec = await req("POST", `/api/import/objects-v2/${sessionId}/execute`, {
     userId: ADMIN,
-    body: { customerId: CUSTOMER_ID },
+    body: { customerId: CUSTOMER_ID, overwriteMetadata: opts.overwriteMetadata ?? false },
   });
   expect(exec.status).toBe(202);
 
@@ -280,9 +286,50 @@ describe("Tre-fils-export → återimport round-trip (Task #1177)", () => {
     expect(result.summary.errors).toBe(0);
     expect(result.summary.updated).toBe(1);
 
+    // Förhandsvisningen varnar om att Adress (befintligt värde) bevaras.
+    const butikRow = lastValidation?.rows?.find((r: any) =>
+      (r.issues ?? []).some((i: any) => i.field === "metadata"),
+    );
+    expect(butikRow).toBeTruthy();
+    const metaIssue = butikRow.issues.find((i: any) => i.field === "metadata");
+    expect(metaIssue.message).toContain("Adress");
+    expect(metaIssue.message).toContain("Skriv över");
+
     // Befintligt värde bevaras (skrivs inte över).
     expect(await readMetaValue(butikId, adressKatId)).toBe("Gamla vägen 1");
     // Fält som saknades adderas.
     expect(await readMetaValue(butikId, stadKatId)).toBe("Göteborg");
+  });
+
+  // Task #1179: med overwriteMetadata=true skrivs ett redigerat metadatavärde
+  // på ett BEFINTLIGT objekt faktiskt över (äkta export → redigera → importera).
+  it("Fil 3 med skriv-över: uppdaterar befintligt metadatavärde", async () => {
+    const longMatrix = [
+      ["Objektnummer", "Objektnamn", "Släktnamn", "Metadatafält", "Data"],
+      [BUTIK_NO, "Butik Centrum", "Org › Butik Centrum", "Adress", "Nyaste vägen 9"],
+    ];
+    const wide = pivotLongMetadataMatrix(longMatrix)!;
+    const mappings = {
+      "0": { target: "system_id", type: "standard" as const },
+      "1": { target: "name", type: "standard" as const, required: true },
+      "2": { target: "metadata.Adress", type: "metadata" as const },
+    };
+    const result = await runImport(wide, mappings, { overwriteMetadata: true });
+    expect(result.summary.errors).toBe(0);
+
+    // Adress skrivs nu över med det redigerade värdet.
+    expect(await readMetaValue(butikId, adressKatId)).toBe("Nyaste vägen 9");
+    // Endast ett värde per ersättande katalogfält (inget dubblettvärde kvar).
+    const rows = await db
+      .select()
+      .from(metadataVarden)
+      .where(
+        and(
+          eq(metadataVarden.tenantId, TENANT),
+          eq(metadataVarden.objektId, butikId),
+          eq(metadataVarden.metadataKatalogId, adressKatId),
+        ),
+      );
+    expect(rows).toHaveLength(1);
   });
 });

@@ -1652,8 +1652,13 @@ export async function writeObjectImportMetadataBatch(args: {
   fields: ImportMetadataBatchField[];
   katalogByName: Map<string, MetadataKatalog>;
   skapadAv?: string;
+  // När true skrivs redan lagrade ersättande fält (allowDuplicates=false) ÖVER
+  // med importens värde i stället för att bevaras ("första-skrivningen-vinner").
+  // Möjliggör en äkta export → redigera → importera-cykel. Default false =
+  // bakåtkompatibelt bevarande.
+  overwriteExisting?: boolean;
 }): Promise<void> {
-  const { tenantId, objektId, objectParentId, isNewObject, fields, katalogByName, skapadAv } = args;
+  const { tenantId, objektId, objectParentId, isNewObject, fields, katalogByName, skapadAv, overwriteExisting } = args;
   if (fields.length === 0) return;
 
   type Prepared = {
@@ -1715,24 +1720,49 @@ export async function writeObjectImportMetadataBatch(args: {
 
   // Dubblettkoll mot redan lagrade värden (endast ersättande fält). Nyskapade
   // objekt har inga befintliga värden → hoppa hela kollen.
+  //
+  // Standardläge (overwriteExisting=false): "första-skrivningen-vinner" —
+  // katalog-id som redan har ett värde tas bort ur `prepared` (bevaras).
+  //
+  // Skriv-över-läge (overwriteExisting=true): redan lagrade värden RADERAS så
+  // att importens värde ersätter dem (äkta export → redigera → importera).
+  // Gamla värdet fångas för historik (gammaltVarde) innan raderingen.
+  const overwrittenOldValues = new Map<string, string | null>();
   if (!isNewObject) {
     const noDupKatalogIds = prepared
       .filter((p) => !p.katalog.allowDuplicates)
       .map((p) => p.katalog.id);
     if (noDupKatalogIds.length) {
       const existing = await db
-        .select({ katalogId: metadataVarden.metadataKatalogId })
+        .select()
         .from(metadataVarden)
         .where(and(
           eq(metadataVarden.objektId, objektId),
           eq(metadataVarden.tenantId, tenantId),
           inArray(metadataVarden.metadataKatalogId, noDupKatalogIds),
         ));
-      const existingSet = new Set(existing.map((e) => e.katalogId));
+      const existingSet = new Set(existing.map((e) => e.metadataKatalogId));
       if (existingSet.size) {
-        for (let i = prepared.length - 1; i >= 0; i--) {
-          if (!prepared[i].katalog.allowDuplicates && existingSet.has(prepared[i].katalog.id)) {
-            prepared.splice(i, 1);
+        if (overwriteExisting) {
+          // Fånga gamla värden per katalog (för historik) och radera dem så att
+          // den nya inserten blir det enda ersättande värdet.
+          for (const row of existing) {
+            if (!overwrittenOldValues.has(row.metadataKatalogId)) {
+              overwrittenOldValues.set(row.metadataKatalogId, getDisplayValue(row as MetadataVarden));
+            }
+          }
+          await db
+            .delete(metadataVarden)
+            .where(and(
+              eq(metadataVarden.objektId, objektId),
+              eq(metadataVarden.tenantId, tenantId),
+              inArray(metadataVarden.metadataKatalogId, Array.from(existingSet)),
+            ));
+        } else {
+          for (let i = prepared.length - 1; i >= 0; i--) {
+            if (!prepared[i].katalog.allowDuplicates && existingSet.has(prepared[i].katalog.id)) {
+              prepared.splice(i, 1);
+            }
           }
         }
       }
@@ -1759,7 +1789,7 @@ export async function writeObjectImportMetadataBatch(args: {
     metadataVardenId: row.id,
     objektId,
     metadataKatalogId: row.metadataKatalogId,
-    gammaltVarde: null as string | null,
+    gammaltVarde: overwrittenOldValues.get(row.metadataKatalogId) ?? null,
     nyttVarde: getDisplayValue(row),
     andradAv: skapadAv ?? "system",
     andringsMetod: "import",
