@@ -32,6 +32,10 @@ export interface DomainCarouselCardProps<T> {
   emptyText?: string;
   loading?: boolean;
   testidPrefix: string;
+  /** Ankar-id på kortet (t.ex. "object-section-contacts") för snabbnavigering. */
+  sectionId?: string;
+  /** Extra klasser på kort-roten (t.ex. "h-full" för enhetlig höjd i nätet). */
+  className?: string;
 }
 
 const fmtDate = (v: string | Date | null | undefined): string | null => {
@@ -61,6 +65,8 @@ export function DomainCarouselCard<T>({
   emptyText = "Inga poster.",
   loading = false,
   testidPrefix,
+  sectionId,
+  className,
 }: DomainCarouselCardProps<T>) {
   const [idx, setIdx] = useState(0);
   const [expanded, setExpanded] = useState(false);
@@ -93,7 +99,12 @@ export function DomainCarouselCard<T>({
   };
 
   return (
-    <Card ref={cardRef} className="scroll-mt-24" data-testid={`card-${testidPrefix}`}>
+    <Card
+      ref={cardRef}
+      id={sectionId}
+      className={`scroll-mt-24${className ? ` ${className}` : ""}`}
+      data-testid={`card-${testidPrefix}`}
+    >
       <CardHeader className="pb-3">
         <div className="flex items-center justify-between gap-2">
           <CardTitle className="text-base flex items-center gap-2">
@@ -148,6 +159,26 @@ export function DomainCarouselCard<T>({
               >
                 {footerParts.length > 0 && <span>{footerParts.join(" • ")}</span>}
                 {footer?.kalla && <KallaBadge kalla={footer.kalla} />}
+              </div>
+            )}
+
+            {count > 1 && count <= 7 && (
+              <div
+                className="flex items-center justify-center gap-1 pt-1"
+                data-testid={`dots-${testidPrefix}`}
+              >
+                {items.map((_, i) => (
+                  <button
+                    key={i}
+                    type="button"
+                    aria-label={`Gå till ${i + 1} av ${count}`}
+                    onClick={() => setIdx(i)}
+                    className={`h-1.5 rounded-full transition-all ${
+                      i === safeIdx ? "w-4 bg-primary" : "w-1.5 bg-muted-foreground/30"
+                    }`}
+                    data-testid={`dot-${testidPrefix}-${i}`}
+                  />
+                ))}
               </div>
             )}
 

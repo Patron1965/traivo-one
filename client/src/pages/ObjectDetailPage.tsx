@@ -10,11 +10,8 @@ import { ObjectVignetteSection } from "@/components/ObjectVignetteSection";
 import { ObjectHeaderPanel } from "@/components/ObjectHeaderPanel";
 import { type MetadataFormEntry, type MetadataFormType, type MetadataRelatedParent, type MetadataRelatedChild } from "@/components/ObjectMetadataForm";
 import { buildLegacyObjectFieldEntries, type LegacyFieldInput } from "@/lib/legacy-object-fields";
-import { KallaBadge } from "@/lib/metadata-kalla";
 import { ObjectTemplateMetadataForm, type TemplateMetadataType } from "@/components/ObjectTemplateMetadataForm";
 import { ObjectSystemGeneratedPanel } from "@/components/ObjectSystemGeneratedPanel";
-import { ObjectTimeline } from "@/components/timeline/ObjectTimeline";
-import { ObjectLinkedTasksCards } from "@/components/objects/ObjectLinkedTasksCards";
 import { InfoPackageTree } from "@/components/objects/InfoPackageTree";
 import InvoiceRecipientsCard from "@/components/InvoiceRecipientsCard";
 import { TelinkSyncButton } from "@/components/TelinkSyncButton";
@@ -45,15 +42,11 @@ import {
   ArrowUp, ArrowDown, RotateCcw, Cog, Copy, Gauge, Zap
 } from "lucide-react";
 import { ObjectMetadataBody } from "@/components/objects/ObjectMetadataBody";
-import { ObjectSystemDetailLists } from "@/components/objects/ObjectSystemDetailLists";
+import { ObjectDomainGrid } from "@/components/objects/ObjectDomainGrid";
 import { DomainCarouselCard } from "@/components/objects/DomainCarouselCard";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
-import L from "leaflet";
 import "leaflet/dist/leaflet.css";
-import { useMapConfig } from "@/hooks/use-map-config";
 import type { ServiceObject, WorkOrder, ImportTemplate, WorkOrderWithObject } from "@shared/schema";
-import { PolylineEditor } from "@/components/PolylineEditor";
 import { objectStatusBadge as statusColors, workOrderStatusBadge as workOrderStatusColors, getObjectStatusBadge, getWorkOrderStatusBadge } from "@/lib/status-colors";
 import { OBJECT_LOCATION_TYPE_LABELS, objectLocationTypeLabel, objectLocationTypeBadgeClass } from "@/lib/object-location";
 import type { LucideIcon } from "lucide-react";
@@ -351,31 +344,31 @@ function InfoRow({ label, value, icon: Icon }: { label: string; value: string | 
   );
 }
 
-const defaultIcon = L.icon({
-  iconUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
-  iconRetinaUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png",
-  shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
-  iconSize: [25, 41],
-  iconAnchor: [12, 41],
-});
-
 // Task #1128: enkelsidig "Objektöversikt" — sektion-id:n motsvarar de gamla
 // flik-värdena. Ekonomi/arkiv ligger i den hopfällbara "Avancerat"-sektionen,
 // så gamla ?tab=-djuplänkar dit mappas till deep-tools.
 const TAB_TO_SECTION: Record<string, string> = {
-  ekonomi: "deep-tools",
-  "history-archive": "deep-tools",
-  // Bakåtkompatibilitet efter Fas 1-omstruktureringen: gamla ?tab=-djuplänkar för
-  // borttagna/omdöpta sektioner scrollar till närmaste kvarvarande ankare.
-  // Steg 1 ("allt är metadata"): objektfälten (access/equipment) renderas nu
-  // som legacy-metadata inuti metadata-sektionen, så gamla djuplänkar dit landar.
-  access: "metadata",
-  equipment: "metadata",
-  "delivery-preferences": "metadata",
+  // Task #1128/mockup-omstrukturering: kroppen är nu ett gemensamt domänkort-nät
+  // under sex ankargrupper + en hopfällbar "Fält & verktyg". Metadata, informations-
+  // paket, tidsregler, ekonomi och arkiv bor i "tools"-kollapsen; gamla djuplänkar
+  // dit landar där. Systemgenererade domäner ligger i kort-nätet ("production").
+  ekonomi: "tools",
+  "history-archive": "tools",
+  "deep-tools": "tools",
+  metadata: "tools",
+  "info-packages": "tools",
+  restrictions: "tools",
+  access: "tools",
+  equipment: "tools",
+  "delivery-preferences": "tools",
+  images: "production",
+  inspections: "production",
+  communications: "production",
+  ratings: "production",
+  "issue-reports": "production",
 };
 
 export default function ObjectDetailPage() {
-  const mapConfig = useMapConfig();
   const [, params] = useRoute("/objects/:id");
   const [, navigate] = useLocation();
   const { toast } = useToast();
@@ -460,7 +453,7 @@ export default function ObjectDetailPage() {
       const el = document.getElementById(`object-section-${target}`);
       if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
     };
-    if (target === "deep-tools") {
+    if (target === "tools") {
       setDeepToolsOpen(true);
       window.setTimeout(doScroll, 160);
     } else {
@@ -1268,8 +1261,6 @@ export default function ObjectDetailPage() {
     };
   };
 
-  const hasCoordinates = obj.latitude && obj.longitude;
-  const hasEntrance = obj.entranceLatitude && obj.entranceLongitude;
   const AccessIcon = accessTypeLabels[obj.accessType || "open"]?.icon || DoorOpen;
 
   const objectTypeLabel = (obj.objectType && objectTypeLabels[obj.objectType]) || obj.objectType || "";
@@ -1709,33 +1700,42 @@ export default function ObjectDetailPage() {
         </div>
       )}
 
-      {/* Task #1128: enkelsidig översikt — snabbnavigering ersätter flikraden. */}
+      {/* ==================== SLÄKT & HIERARKI (ovanför snabbnavigeringen, matchar mockup) ==================== */}
+      <section id="object-section-hierarchy" className="space-y-4 scroll-mt-4 mb-6">
+        <ObjectHierarchyCards
+          object={obj as unknown as ServiceObject}
+          objectId={objectId}
+          slaktnamnChain={slaktnamnChain}
+          descendants={descendants}
+          objectTypeLabels={objectTypeLabels}
+          onMoveObject={openMoveDialog}
+          onCopy={() => { setCopyName(obj.name || obj.objectNumber || ""); setCopyMode("single"); setCopyDialogOpen(true); }}
+        />
+      </section>
+
+      {/* Task #1128/mockup: snabbnavigering — sex ankargrupper + hopfällbar Fält & verktyg. */}
       <nav
-        className="sticky top-0 z-30 -mx-4 md:-mx-6 px-4 md:px-6 flex flex-wrap gap-1 border-b py-3 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80"
+        className="sticky top-0 z-30 -mx-4 md:-mx-6 px-4 md:px-6 flex flex-wrap items-center gap-1 border-b py-3 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80"
         aria-label="Snabbnavigering"
         data-testid="object-detail-section-nav"
       >
-        <Button variant="ghost" size="sm" onClick={() => scrollToSection("overview")} data-testid="nav-overview">Åtgärder</Button>
-        <Button variant="ghost" size="sm" onClick={() => scrollToSection("hierarchy")} data-testid="nav-hierarchy">
-          Släkt & Hierarki {descendants.length > 0 && <Badge variant="secondary" className="ml-1 text-xs">{descendants.length}</Badge>}
-        </Button>
-        <Button variant="ghost" size="sm" onClick={() => scrollToSection("metadata")} data-testid="nav-metadata">
-          Metadata {metadata.length > 0 && <Badge variant="secondary" className="ml-1 text-xs">{metadata.length}</Badge>}
-        </Button>
-        <Button variant="ghost" size="sm" onClick={() => scrollToSection("location")} data-testid="nav-location">Karta</Button>
         <Button variant="ghost" size="sm" onClick={() => scrollToSection("contacts")} data-testid="nav-contacts">
-          Kontakter {contacts.length > 0 && <Badge variant="secondary" className="ml-1 text-xs">{contacts.length}</Badge>}
+          Kontaktuppgifter {contacts.length > 0 && <Badge variant="secondary" className="ml-1 text-xs">{contacts.length}</Badge>}
         </Button>
-        <Button variant="ghost" size="sm" onClick={() => scrollToSection("images")} data-testid="nav-images">
-          Bilder {images.length > 0 && <Badge variant="secondary" className="ml-1 text-xs">{images.length}</Badge>}
-        </Button>
-        <Button variant="ghost" size="sm" onClick={() => scrollToSection("linked-tasks")} data-testid="nav-linked-tasks">Uppgifter &amp; koncept</Button>
-        <Button variant="ghost" size="sm" onClick={() => scrollToSection("info-packages")} data-testid="nav-info-packages">Informationspaket</Button>
-        <Button variant="ghost" size="sm" onClick={() => scrollToSection("restrictions")} data-testid="nav-restrictions">
-          SlotPreference {timeRestrictions.length > 0 && <Badge variant="secondary" className="ml-1 text-xs">{timeRestrictions.length}</Badge>}
-        </Button>
+        <Button variant="ghost" size="sm" onClick={() => scrollToSection("production")} data-testid="nav-production">Produktionsuppgifter</Button>
+        <Button variant="ghost" size="sm" onClick={() => scrollToSection("location")} data-testid="nav-location">Geografisk information</Button>
+        <Button variant="ghost" size="sm" onClick={() => scrollToSection("linked-tasks")} data-testid="nav-linked-tasks">Kopplade uppgifter</Button>
+        <Button variant="ghost" size="sm" onClick={() => scrollToSection("linked-concepts")} data-testid="nav-linked-concepts">Kopplade orderkoncept</Button>
         <Button variant="ghost" size="sm" onClick={() => scrollToSection("timeline")} data-testid="nav-timeline">Historik &amp; logg</Button>
-        <Button variant="ghost" size="sm" onClick={() => scrollToSection("deep-tools")} data-testid="nav-deep-tools">Avancerat</Button>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="ml-auto text-muted-foreground"
+          onClick={() => scrollToSection("tools")}
+          data-testid="nav-tools"
+        >
+          <Wrench className="h-3.5 w-3.5 mr-1" /> Fält &amp; verktyg
+        </Button>
       </nav>
 
       <div className="space-y-8" data-testid="object-detail-sections">
@@ -1759,18 +1759,44 @@ export default function ObjectDetailPage() {
           </div>
         </section>
 
-        {/* ==================== SLÄKT & HIERARKI ==================== */}
-        <section id="object-section-hierarchy" className="space-y-4 scroll-mt-4">
-          <ObjectHierarchyCards
-            object={obj as unknown as ServiceObject}
-            objectId={objectId}
-            slaktnamnChain={slaktnamnChain}
-            descendants={descendants}
-            objectTypeLabels={objectTypeLabels}
-            onMoveObject={openMoveDialog}
-            onCopy={() => { setCopyName(obj.name || obj.objectNumber || ""); setCopyMode("single"); setCopyDialogOpen(true); }}
-          />
-        </section>
+        {/* ==================== ENHETLIGT DOMÄNKORT-NÄT (mockup) ==================== */}
+        {/* Systemgenererade domäner (kontakter, produktion, inspektioner, bilder,
+            driftstörningar, geografi, kopplade uppgifter/koncept, historik, betyg)
+            renderas som ett enhetligt responsivt kort-nät. */}
+        <ObjectDomainGrid
+          objectId={objectId}
+          obj={obj}
+          contacts={contacts as any}
+          images={images as any}
+          metadata={metadata as any[]}
+          onAddContact={() => setContactDialogOpen(true)}
+          onDeleteContact={(id) => deleteContactMutation.mutate(id)}
+          contactDeletePending={deleteContactMutation.isPending}
+          onAddImage={() => setImageDialogOpen(true)}
+          onDeleteImage={(id) => deleteImageMutation.mutate(id)}
+          imageDeletePending={deleteImageMutation.isPending}
+          onEditGeo={() => openEditDialog("overview")}
+          navigate={navigate}
+          fetchTimeline={fetchObjectTimeline}
+          onSelectTimelineTask={(id) => setTimelineWoId(id)}
+        />
+
+        {/* ==================== FÄLT & VERKTYG (hopfällbart: metadata, informationspaket, tidsregler, ekonomi, arkiv) ==================== */}
+        <section id="object-section-tools" className="space-y-4 scroll-mt-4">
+          <Collapsible open={deepToolsOpen} onOpenChange={setDeepToolsOpen}>
+            <CollapsibleTrigger asChild>
+              <Button
+                variant="outline"
+                className="w-full justify-between"
+                data-testid="button-toggle-tools"
+              >
+                <span className="flex items-center gap-2">
+                  <Wrench className="h-4 w-4" /> Fält &amp; verktyg
+                </span>
+                <ChevronRight className={`h-4 w-4 transition-transform ${deepToolsOpen ? "rotate-90" : ""}`} />
+              </Button>
+            </CollapsibleTrigger>
+            <CollapsibleContent className="space-y-8 pt-6">
 
         {/* ==================== METADATA ==================== */}
         <section id="object-section-metadata" className="space-y-4 scroll-mt-4">
@@ -1854,209 +1880,6 @@ export default function ObjectDetailPage() {
           })()}
         </section>
 
-        {/* ==================== SYSTEMGENERERADE DRILLDOWN-LISTOR (Task #1154) ==================== */}
-        {/* Dedikerade fullständiga listor för Inspektionsresultat, Kommunikation och
-            Betyg — 360°-översiktens "Visa alla" landar här (egna ankare) i stället
-            för att bara scrolla till metadata-panelen. */}
-        <ObjectSystemDetailLists objectId={objectId} />
-
-        {/* Objektfälten (access/equipment) under migrering renderas nu genom den
-            enhetliga metadata-ytan ovan (kortet "Objektfält (under migrering)" i
-            ObjectMetadataForm). Gamla ?tab=access/equipment-djuplänkar mappas till
-            metadata-sektionen via TAB_TO_SECTION. */}
-
-        {/* ==================== KARTA ==================== */}
-        <section id="object-section-location" className="space-y-4 scroll-mt-4">
-          <Card>
-            <CardHeader className="pb-3">
-              <div className="flex items-center justify-between gap-2">
-                <CardTitle className="text-base flex items-center gap-2">
-                  <MapPin className="h-4 w-4" /> Karta
-                  <KallaBadge kalla="SYS" />
-                </CardTitle>
-                <div className="flex items-center gap-2">
-                  <Badge variant="outline" className={objectLocationTypeBadgeClass(obj)} data-testid="badge-location-type-tab">
-                    {objectLocationTypeLabel(obj)}
-                  </Badge>
-                  <Button variant="ghost" size="sm" onClick={() => openEditDialog("overview")} data-testid="button-edit-location">
-                    <Pencil className="h-4 w-4" />
-                  </Button>
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent>
-              {hasCoordinates ? (
-                <div className="rounded-lg overflow-hidden border" style={{ height: 400 }}>
-                  <MapContainer
-                    center={[Number(obj.latitude), Number(obj.longitude)]}
-                    zoom={16}
-                    style={{ height: "100%", width: "100%" }}
-                  >
-                    <TileLayer
-                      url={mapConfig.tileUrl}
-                      attribution={mapConfig.attribution}
-                    />
-                    <Marker position={[Number(obj.latitude), Number(obj.longitude)]} icon={defaultIcon}>
-                      <Popup>
-                        <strong>{obj.name || obj.objectNumber}</strong>
-                        {obj.address && <br />}
-                        {obj.address}
-                      </Popup>
-                    </Marker>
-                    {hasEntrance && (
-                      <Marker
-                        position={[Number(obj.entranceLatitude), Number(obj.entranceLongitude)]}
-                        icon={L.divIcon({
-                          className: "entrance-marker",
-                          html: '<div style="background:#22c55e;width:12px;height:12px;border-radius:50%;border:2px solid white;box-shadow:0 1px 3px rgba(0,0,0,.3)"></div>',
-                          iconSize: [12, 12],
-                          iconAnchor: [6, 6],
-                        })}
-                      >
-                        <Popup>Entrékoordinat</Popup>
-                      </Marker>
-                    )}
-                  </MapContainer>
-                </div>
-              ) : (
-                <div className="flex items-center justify-center h-48 bg-muted/30 rounded-lg">
-                  <div className="text-center text-muted-foreground">
-                    <MapPin className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                    <p>Inga koordinater tillgängliga</p>
-                  </div>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
-          <div className="mt-4">
-            <PolylineEditor object={obj as ServiceObject} />
-          </div>
-        </section>
-
-        {/* Domänkort i responsivt nät (mockup: kortnät i stället för staplade helbreddssektioner). */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {/* ==================== KONTAKTER ==================== */}
-        <section id="object-section-contacts" className="scroll-mt-4">
-          <DomainCarouselCard<ObjectContact>
-            icon={Contact}
-            title="Kontakter"
-            items={contacts}
-            getKey={(c) => c.id}
-            hideWhenEmpty={false}
-            emptyText="Inga kontakter registrerade."
-            testidPrefix="contacts"
-            getFooter={(c) => ({ kalla: c.inherited ? "S" : "M", who: c.inherited ? "Ärvd" : undefined })}
-            headerAction={
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setContactDialogOpen(true)}
-                data-testid="button-add-contact"
-              >
-                <Plus className="h-3.5 w-3.5 mr-1" /> Lägg till
-              </Button>
-            }
-            renderItem={(c) => (
-              <div className="p-3 border rounded-lg" data-testid={`contact-card-${c.id}`}>
-                <div className="flex items-center justify-between mb-1">
-                  <span className="font-medium text-sm">{c.name}</span>
-                  <div className="flex items-center gap-1">
-                    {c.inherited && (
-                      <Badge variant="outline" className="text-[10px]">Ärvd</Badge>
-                    )}
-                    {!c.inherited && (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-7 w-7 p-0 text-destructive hover:text-destructive"
-                        onClick={() => deleteContactMutation.mutate(c.id)}
-                        disabled={deleteContactMutation.isPending}
-                        data-testid={`button-delete-contact-${c.id}`}
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </Button>
-                    )}
-                  </div>
-                </div>
-                <div className="text-xs text-muted-foreground">
-                  {CONTACT_TYPES.find(t => t.value === c.contactType)?.label || c.role || c.contactType || ""}
-                </div>
-                {c.phone && (
-                  <div className="text-xs mt-1 flex items-center gap-1">
-                    <Phone className="h-3 w-3 text-muted-foreground" /> {c.phone}
-                  </div>
-                )}
-                {c.email && (
-                  <div className="text-xs flex items-center gap-1">
-                    <Mail className="h-3 w-3 text-muted-foreground" /> {c.email}
-                  </div>
-                )}
-              </div>
-            )}
-          />
-        </section>
-
-        {/* ==================== BILDER ==================== */}
-        <section id="object-section-images" className="scroll-mt-4">
-          <DomainCarouselCard<ObjectImage>
-            icon={Image}
-            title="Bilder"
-            items={images}
-            getKey={(img) => img.id}
-            hideWhenEmpty={false}
-            emptyText="Inga bilder uppladdade."
-            testidPrefix="images"
-            getFooter={() => ({ kalla: "M" })}
-            headerAction={
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setImageDialogOpen(true)}
-                data-testid="button-add-image"
-              >
-                <Plus className="h-3.5 w-3.5 mr-1" /> Lägg till
-              </Button>
-            }
-            renderItem={(img) => (
-              <div className="relative group" data-testid={`image-card-${img.id}`}>
-                <div className="aspect-video rounded-lg overflow-hidden border bg-muted">
-                  <img
-                    src={img.url || img.imageUrl}
-                    alt={img.description || img.title || "Bild"}
-                    className="w-full h-full object-cover"
-                    onError={(e) => {
-                      (e.target as HTMLImageElement).style.display = "none";
-                    }}
-                  />
-                </div>
-                <Button
-                  variant="destructive"
-                  size="sm"
-                  className="absolute top-1 right-1 h-7 w-7 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
-                  onClick={() => deleteImageMutation.mutate(img.id)}
-                  disabled={deleteImageMutation.isPending}
-                  data-testid={`button-delete-image-${img.id}`}
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                </Button>
-                {img.description && (
-                  <div className="text-xs text-muted-foreground mt-1 truncate">{img.description}</div>
-                )}
-              </div>
-            )}
-          />
-        </section>
-        </div>
-
-        {/* ==================== INFORMATIONSPAKET-TRÄD (Task #1129 — läsvy, utförda + kommande) ==================== */}
-        {/* ==================== KOPPLADE UPPGIFTER & ORDERKONCEPT ==================== */}
-        {/* Task #1160: dedikerade kort som lyfter fram objektets kopplade
-            uppgifter (kommande/historik/ej-utförda) och inpekade orderkoncept
-            från /api/objects/:id/system-generated-metadata. */}
-        <section id="object-section-linked-tasks" className="space-y-4 scroll-mt-4">
-          <ObjectLinkedTasksCards objectId={objectId} navigate={navigate} />
-        </section>
 
         <section id="object-section-info-packages" className="space-y-4 scroll-mt-4">
           <Card>
@@ -2195,30 +2018,28 @@ export default function ObjectDetailPage() {
           </Card>
         </section>
 
-        {/* ==================== HISTORIK & LOGG ==================== */}
-        {/* Task #1160: zoombar tidslinje (år→dag) över objektets + underträdets
-            arbetsordrar. Återanvänder ObjectTimeline med injicerad fetch mot
-            admin-endpointen /api/objects/:id/timeline. */}
-        <section id="object-section-timeline" className="space-y-4 scroll-mt-4">
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base flex items-center gap-2">
-                <History className="h-4 w-4" /> Historik &amp; logg
-                <KallaBadge kalla="SYS" />
-              </CardTitle>
-              <p className="text-xs text-muted-foreground">
-                Zoombar tidslinje över objektets och underträdets arbetsordrar — växla mellan år, kvartal, månad, vecka och dag.
-              </p>
-            </CardHeader>
-            <CardContent className="p-0">
-              <ObjectTimeline
-                fetchTimeline={fetchObjectTimeline}
-                queryKeyPrefix={["/api/objects", objectId, "timeline"]}
-                onSelectTask={(taskId) => setTimelineWoId(taskId)}
-                initialViewMode="month"
-              />
-            </CardContent>
-          </Card>
+        {/* ==================== EKONOMI (inuti Fält & verktyg) ==================== */}
+        <div className="space-y-4">
+          <h2 className="text-lg font-semibold">Ekonomi</h2>
+          {/* Task #1086: "Betalare" borttaget — kund härleds via orderkoncept och
+              visas på kortet "Kopplade uppgifter". Endast fakturamottagare kvar här. */}
+          {objectId && (
+            <InvoiceRecipientsCard objectId={objectId} />
+          )}
+          {!isAdmin && (
+            <p className="text-xs text-muted-foreground mt-3">
+              Endast administratörer kan ändra fakturamottagare.
+            </p>
+          )}
+        </div>
+
+        {/* ==================== HISTORIK & ARKIV (inuti Fält & verktyg) ==================== */}
+        <div className="space-y-4">
+          <h2 className="text-lg font-semibold">Historik &amp; arkiv</h2>
+          <ObjectHistoryArchiveTab objectId={objectId} isArchived={!!resolvedObject?.deletedAt} />
+        </div>
+            </CollapsibleContent>
+          </Collapsible>
         </section>
 
         {/* Task #1169: snabböversikt av en arbetsorder inline (Sheet) från
@@ -2309,45 +2130,6 @@ export default function ObjectDetailPage() {
           </SheetContent>
         </Sheet>
 
-        {/* ==================== AVANCERADE VERKTYG (hopfällbart) ==================== */}
-        <section id="object-section-deep-tools" className="space-y-4 scroll-mt-4">
-          <Collapsible open={deepToolsOpen} onOpenChange={setDeepToolsOpen}>
-            <CollapsibleTrigger asChild>
-              <Button
-                variant="outline"
-                className="w-full justify-between"
-                data-testid="button-toggle-deep-tools"
-              >
-                <span className="flex items-center gap-2">
-                  <Wrench className="h-4 w-4" /> Avancerade verktyg
-                </span>
-                <ChevronRight className={`h-4 w-4 transition-transform ${deepToolsOpen ? "rotate-90" : ""}`} />
-              </Button>
-            </CollapsibleTrigger>
-            <CollapsibleContent className="space-y-8 pt-6">
-              {/* ==================== EKONOMI ==================== */}
-              <div className="space-y-4">
-                <h2 className="text-lg font-semibold">Ekonomi</h2>
-                {/* Task #1086: "Betalare" borttaget — kund härleds via orderkoncept och
-                    visas på fliken "Kopplade uppgifter". Endast fakturamottagare kvar här. */}
-                {objectId && (
-                  <InvoiceRecipientsCard objectId={objectId} />
-                )}
-                {!isAdmin && (
-                  <p className="text-xs text-muted-foreground mt-3">
-                    Endast administratörer kan ändra fakturamottagare.
-                  </p>
-                )}
-              </div>
-
-              {/* ==================== HISTORIK & ARKIV ==================== */}
-              <div className="space-y-4">
-                <h2 className="text-lg font-semibold">Historik &amp; arkiv</h2>
-                <ObjectHistoryArchiveTab objectId={objectId} isArchived={!!resolvedObject?.deletedAt} />
-              </div>
-            </CollapsibleContent>
-          </Collapsible>
-        </section>
       </div>
 
       {/* ==================== REDIGERA OBJEKT-DIALOG ==================== */}
