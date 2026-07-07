@@ -193,6 +193,7 @@ export function registerWeeklyPlanRoutes(app: Express) {
     city: z.string().trim().max(120).optional(),
     from: z.coerce.date().optional(),
     to: z.coerce.date().optional(),
+    objectId: z.string().trim().max(64).optional(), // Mikro-grovplanering: begränsa till ett objekt + subträd
   });
 
   const gridPageSchema = z.object({
@@ -211,6 +212,7 @@ export function registerWeeklyPlanRoutes(app: Express) {
       city: query.city,
       from: query.from,
       to: query.to,
+      objectId: query.objectId,
     });
     if (!parsed.success) {
       const formatted = formatZodError(parsed.error);
@@ -236,6 +238,7 @@ export function registerWeeklyPlanRoutes(app: Express) {
       to: parsed.data.to,
       taskTypes: taskTypes.length ? taskTypes : undefined,
       statuses: statuses.length ? statuses : undefined,
+      rootObjectId: parsed.data.objectId || undefined,
     };
     return { groupBy: parsed.data.groupBy as GroupBy, filters };
   }

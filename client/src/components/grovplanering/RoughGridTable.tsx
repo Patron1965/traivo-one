@@ -32,6 +32,7 @@ import { formatSekFromOre } from "@/lib/format";
 import { useExecutionCodes } from "@/hooks/use-execution-codes";
 import {
   ROUGH_STATUS_META,
+  creationSourceLabel,
   formatHours,
   formatCount,
   formatDateShort,
@@ -62,6 +63,8 @@ interface RoughGridTableProps {
   allVisibleSelected: boolean;
   onAssignRow: (row: GridTaskRow) => void;
   onRevokeRow: (row: GridTaskRow) => void;
+  // Mikro-grovplanering (objektsidan): läsvy utan urval/tilldelning.
+  readOnly?: boolean;
 }
 
 function StatusCell({ status }: { status: GridTaskRow["status"] }) {
@@ -81,6 +84,7 @@ function TaskRow({
   onToggleRow,
   onAssignRow,
   onRevokeRow,
+  readOnly = false,
 }: {
   row: GridTaskRow;
   selected: boolean;
@@ -88,16 +92,20 @@ function TaskRow({
   onToggleRow: (row: GridTaskRow) => void;
   onAssignRow: (row: GridTaskRow) => void;
   onRevokeRow: (row: GridTaskRow) => void;
+  readOnly?: boolean;
 }) {
   const chip = weekChip(row.roughPlannedWeek);
+  const sourceLabel = creationSourceLabel(row.source);
   return (
     <TableRow data-state={selected ? "selected" : undefined} data-testid={`row-task-${row.id}`}>
       <TableCell className="w-9">
-        <Checkbox
-          checked={selected}
-          onCheckedChange={() => onToggleRow(row)}
-          data-testid={`check-task-${row.id}`}
-        />
+        {!readOnly && (
+          <Checkbox
+            checked={selected}
+            onCheckedChange={() => onToggleRow(row)}
+            data-testid={`check-task-${row.id}`}
+          />
+        )}
       </TableCell>
       <TableCell className="w-8" />
       <TableCell>
@@ -110,6 +118,14 @@ function TaskRow({
         <div className="truncate font-medium">{row.objectName ?? "–"}</div>
         {row.title && (
           <div className="truncate text-xs text-muted-foreground">{row.title}</div>
+        )}
+        {sourceLabel && (
+          <div
+            className="truncate text-[11px] text-muted-foreground/80"
+            data-testid={`text-task-source-${row.id}`}
+          >
+            Källa: {sourceLabel}
+          </div>
         )}
       </TableCell>
       <TableCell>
@@ -159,35 +175,37 @@ function TaskRow({
         {formatSekFromOre(row.value)}
       </TableCell>
       <TableCell className="w-9">
-        <DropdownMenu modal={false}>
-          <DropdownMenuTrigger asChild>
-            <Button
-              size="icon"
-              variant="ghost"
-              className="h-7 w-7"
-              data-testid={`button-row-actions-${row.id}`}
-            >
-              <MoreVertical className="h-4 w-4" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuItem
-              onClick={() => onAssignRow(row)}
-              data-testid={`action-assign-${row.id}`}
-            >
-              <UserPlus className="h-4 w-4" />
-              Tilldela…
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              disabled={row.status !== "tilldelad"}
-              onClick={() => onRevokeRow(row)}
-              data-testid={`action-revoke-${row.id}`}
-            >
-              <RotateCcw className="h-4 w-4" />
-              Återkalla tilldelning
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+        {!readOnly && (
+          <DropdownMenu modal={false}>
+            <DropdownMenuTrigger asChild>
+              <Button
+                size="icon"
+                variant="ghost"
+                className="h-7 w-7"
+                data-testid={`button-row-actions-${row.id}`}
+              >
+                <MoreVertical className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem
+                onClick={() => onAssignRow(row)}
+                data-testid={`action-assign-${row.id}`}
+              >
+                <UserPlus className="h-4 w-4" />
+                Tilldela…
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                disabled={row.status !== "tilldelad"}
+                onClick={() => onRevokeRow(row)}
+                data-testid={`action-revoke-${row.id}`}
+              >
+                <RotateCcw className="h-4 w-4" />
+                Återkalla tilldelning
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
       </TableCell>
     </TableRow>
   );
@@ -205,6 +223,7 @@ export function RoughGridTable({
   allVisibleSelected,
   onAssignRow,
   onRevokeRow,
+  readOnly = false,
 }: RoughGridTableProps) {
   const flat = grouping === "ingen";
   const GroupIcon = GROUP_ICON[grouping];
@@ -221,11 +240,13 @@ export function RoughGridTable({
         <TableHeader>
           <TableRow>
             <TableHead className="w-9">
-              <Checkbox
-                checked={allVisibleSelected}
-                onCheckedChange={(c) => onToggleAllVisible(c === true)}
-                data-testid="check-select-all"
-              />
+              {!readOnly && (
+                <Checkbox
+                  checked={allVisibleSelected}
+                  onCheckedChange={(c) => onToggleAllVisible(c === true)}
+                  data-testid="check-select-all"
+                />
+              )}
             </TableHead>
             <TableHead className="w-8" />
             <TableHead>Status</TableHead>
@@ -256,11 +277,13 @@ export function RoughGridTable({
                     data-testid={`row-group-${group.key}`}
                   >
                     <TableCell className="w-9">
-                      <Checkbox
-                        checked={groupSelected}
-                        onCheckedChange={(c) => onToggleGroup(group, c === true)}
-                        data-testid={`check-group-${group.key}`}
-                      />
+                      {!readOnly && (
+                        <Checkbox
+                          checked={groupSelected}
+                          onCheckedChange={(c) => onToggleGroup(group, c === true)}
+                          data-testid={`check-group-${group.key}`}
+                        />
+                      )}
                     </TableCell>
                     <TableCell className="w-8">
                       <button
@@ -316,6 +339,7 @@ export function RoughGridTable({
                       onToggleRow={onToggleRow}
                       onAssignRow={onAssignRow}
                       onRevokeRow={onRevokeRow}
+                      readOnly={readOnly}
                     />
                   ))}
               </Fragment>

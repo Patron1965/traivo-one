@@ -51,6 +51,7 @@ export interface GridFilters {
   statuses?: RoughStatus[];
   teamIds?: string[]; // "Fler filter" — filtrera på tilldelat team
   executionCodes?: string[]; // Task #1110 — filtrera på utförandekod (work_orders.execution_code)
+  rootObjectId?: string; // Mikro-grovplanering: begränsa till ett objekt + dess ättlingar (subträd)
 }
 
 export interface GridKpis {
@@ -82,6 +83,7 @@ export interface GridTaskRow {
   lastServiceDate: string | null;
   value: number; // öre
   cost: number; // öre
+  source: string | null; // creation_method-nyckel (manual/import/external_report/performer/automatic)
 }
 
 export interface GridGroup {
@@ -206,6 +208,18 @@ function buildConditions(tenantId: string, filters: GridFilters): SQL[] {
   if (filters.executionCodes && filters.executionCodes.length > 0) {
     conditions.push(inArray(workOrders.executionCode, filters.executionCodes));
   }
+  // Mikro-grovplanering: objektets egna uppgifter + ättlingarnas (subträd via hierarchy_path).
+  // Tenant-predikat på subquery:n (aldrig läcka objekt tvärs tenant).
+  if (filters.rootObjectId) {
+    const root = filters.rootObjectId;
+    conditions.push(
+      sql`${workOrders.objectId} IN (
+        SELECT o2.id FROM objects o2
+        WHERE o2.tenant_id = ${tenantId}
+          AND (o2.id = ${root} OR ${root} = ANY(o2.hierarchy_path))
+      )`,
+    );
+  }
   if (filters.postalCode) {
     const norm = filters.postalCode.replace(/\s/g, "");
     conditions.push(
@@ -255,6 +269,7 @@ interface RawRow {
   lastServiceDate: Date | null;
   value: number | null;
   cost: number | null;
+  creationMethod: string | null;
   lat: number | null;
   lng: number | null;
 }
@@ -362,6 +377,7 @@ async function buildOrderedGroups(
       lastServiceDate: objects.lastServiceDate,
       value: workOrders.cachedValue,
       cost: workOrders.cachedCost,
+      creationMethod: workOrders.creationMethod,
       lat: sql<number | null>`COALESCE(${workOrders.taskLatitude}, ${objects.latitude})`,
       lng: sql<number | null>`COALESCE(${workOrders.taskLongitude}, ${objects.longitude})`,
     })
@@ -406,6 +422,7 @@ async function buildOrderedGroups(
       lastServiceDate: toIso(r.lastServiceDate),
       value: r.value ?? 0,
       cost: r.cost ?? 0,
+      source: r.creationMethod ?? null,
       lat: r.lat != null ? Number(r.lat) : null,
       lng: r.lng != null ? Number(r.lng) : null,
     });

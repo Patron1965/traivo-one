@@ -4,7 +4,6 @@ import { useRoute, useLocation } from "wouter";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { ObjectHistoryArchiveTab } from "@/components/ObjectHistoryArchiveTab";
 import { ObjectVignetteSection } from "@/components/ObjectVignetteSection";
 import { ObjectHeaderPanel } from "@/components/ObjectHeaderPanel";
@@ -12,8 +11,6 @@ import { type MetadataFormEntry, type MetadataFormType, type MetadataRelatedPare
 import { buildLegacyObjectFieldEntries, type LegacyFieldInput } from "@/lib/legacy-object-fields";
 import { ObjectTemplateMetadataForm, type TemplateMetadataType } from "@/components/ObjectTemplateMetadataForm";
 import { ObjectSystemGeneratedPanel } from "@/components/ObjectSystemGeneratedPanel";
-import { InfoPackageTree } from "@/components/objects/InfoPackageTree";
-import InvoiceRecipientsCard from "@/components/InvoiceRecipientsCard";
 import { TelinkSyncButton } from "@/components/TelinkSyncButton";
 import { SnabborderDialog } from "@/components/SnabborderDialog";
 import { ObjectHierarchyCards } from "@/components/objects/ObjectHierarchyCards";
@@ -29,10 +26,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, versionedUrl } from "@/lib/queryClient";
-import type { ObjectTimeRestriction } from "@shared/schema";
 import {
   ArrowLeft, Building2, MapPin, Key, Keyboard, Users, DoorOpen,
   Clock, Package, FileText, Image, Contact, GitFork, AlertTriangle,
@@ -43,11 +38,12 @@ import {
 } from "lucide-react";
 import { ObjectMetadataBody } from "@/components/objects/ObjectMetadataBody";
 import { ObjectDomainGrid } from "@/components/objects/ObjectDomainGrid";
+import { ObjectLinkedTasksGrid } from "@/components/objects/ObjectLinkedTasksGrid";
 import { DomainCarouselCard } from "@/components/objects/DomainCarouselCard";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import "leaflet/dist/leaflet.css";
-import type { ServiceObject, WorkOrder, ImportTemplate, WorkOrderWithObject } from "@shared/schema";
-import { objectStatusBadge as statusColors, workOrderStatusBadge as workOrderStatusColors, getObjectStatusBadge, getWorkOrderStatusBadge } from "@/lib/status-colors";
+import type { ServiceObject, WorkOrder, ImportTemplate } from "@shared/schema";
+import { objectStatusBadge as statusColors, workOrderStatusBadge as workOrderStatusColors, getObjectStatusBadge } from "@/lib/status-colors";
 import { OBJECT_LOCATION_TYPE_LABELS, objectLocationTypeLabel, objectLocationTypeBadgeClass } from "@/lib/object-location";
 import type { LucideIcon } from "lucide-react";
 
@@ -314,23 +310,6 @@ const IMAGE_TYPES = [
   { value: "instruction", label: "Instruktion" },
 ];
 
-const RESTRICTION_TYPES = [
-  { value: "time_window", label: "Tidsfönster" },
-  { value: "blocked_period", label: "Blockerad period" },
-  { value: "preferred_time", label: "Föredragen tid" },
-  { value: "access_hours", label: "Öppettider" },
-];
-
-const WEEKDAY_LABELS = [
-  { value: 1, label: "Mån" },
-  { value: 2, label: "Tis" },
-  { value: 3, label: "Ons" },
-  { value: 4, label: "Tor" },
-  { value: 5, label: "Fre" },
-  { value: 6, label: "Lör" },
-  { value: 0, label: "Sön" },
-];
-
 function InfoRow({ label, value, icon: Icon }: { label: string; value: string | number | null | undefined; icon?: LucideIcon }) {
   if (value === null || value === undefined || value === "") return null;
   return (
@@ -348,24 +327,30 @@ function InfoRow({ label, value, icon: Icon }: { label: string; value: string | 
 // flik-värdena. Ekonomi/arkiv ligger i den hopfällbara "Avancerat"-sektionen,
 // så gamla ?tab=-djuplänkar dit mappas till deep-tools.
 const TAB_TO_SECTION: Record<string, string> = {
-  // Task #1128/mockup-omstrukturering: kroppen är nu ett gemensamt domänkort-nät
-  // under sex ankargrupper + en hopfällbar "Fält & verktyg". Metadata, informations-
-  // paket, tidsregler, ekonomi och arkiv bor i "tools"-kollapsen; gamla djuplänkar
-  // dit landar där. Systemgenererade domäner ligger i kort-nätet ("production").
-  ekonomi: "tools",
-  "history-archive": "tools",
-  "deep-tools": "tools",
-  metadata: "tools",
-  "info-packages": "tools",
-  restrictions: "tools",
-  access: "tools",
-  equipment: "tools",
-  "delivery-preferences": "tools",
-  images: "production",
-  inspections: "production",
-  communications: "production",
-  ratings: "production",
-  "issue-reports": "production",
+  // Objektvyn är omstrukturerad till tre ankarsektioner: huvud, metadata och
+  // kopplade uppgifter (linked-tasks). Gamla ?tab=-djuplänkar mappas hit för
+  // bakåtkompatibilitet.
+  metadata: "metadata",
+  "info-packages": "metadata",
+  restrictions: "metadata",
+  access: "metadata",
+  equipment: "metadata",
+  "delivery-preferences": "metadata",
+  contacts: "metadata",
+  location: "metadata",
+  production: "metadata",
+  "deep-tools": "metadata",
+  hierarchy: "huvud",
+  huvud: "huvud",
+  ekonomi: "huvud",
+  "history-archive": "huvud",
+  images: "linked-tasks",
+  inspections: "linked-tasks",
+  communications: "linked-tasks",
+  ratings: "linked-tasks",
+  "issue-reports": "linked-tasks",
+  "linked-concepts": "linked-tasks",
+  timeline: "linked-tasks",
 };
 
 export default function ObjectDetailPage() {
@@ -388,10 +373,6 @@ export default function ObjectDetailPage() {
   const [editSection, setEditSection] = useState<"overview" | "access" | "equipment">("overview");
   const [contactDialogOpen, setContactDialogOpen] = useState(false);
   const [imageDialogOpen, setImageDialogOpen] = useState(false);
-  const [restrictionDialogOpen, setRestrictionDialogOpen] = useState(false);
-  // Task #1128: flikar ersatta av ankrade sektioner. "Avancerat" (ekonomi/arkiv)
-  // är hopfällt som standard; öppnas automatiskt vid navigering dit.
-  const [deepToolsOpen, setDeepToolsOpen] = useState(false);
   const didInitialScroll = useRef(false);
 
   const [editForm, setEditForm] = useState<ObjectEditForm>({});
@@ -406,16 +387,6 @@ export default function ObjectDetailPage() {
   const [copyMode, setCopyMode] = useState<"single" | "branch">("single");
   const [contactForm, setContactForm] = useState({ name: "", contactType: "primary", phone: "", email: "", role: "" });
   const [imageForm, setImageForm] = useState({ imageUrl: "", imageType: "photo", description: "" });
-  const [restrictionForm, setRestrictionForm] = useState({
-    restrictionType: "time_window",
-    description: "",
-    startTime: "",
-    endTime: "",
-    weekdays: [] as number[],
-    isBlockingAllDay: false,
-    preference: "unfavorable" as "favorable" | "unfavorable",
-    reason: "",
-  });
   const [searchInput, setSearchInput] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
@@ -449,16 +420,10 @@ export default function ObjectDetailPage() {
   // ObjectMetadataForm-navigeringen (onNavigateToTab) mappas hit.
   const scrollToSection = useCallback((key: string) => {
     const target = TAB_TO_SECTION[key] ?? key;
-    const doScroll = () => {
+    requestAnimationFrame(() => {
       const el = document.getElementById(`object-section-${target}`);
       if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
-    };
-    if (target === "tools") {
-      setDeepToolsOpen(true);
-      window.setTimeout(doScroll, 160);
-    } else {
-      requestAnimationFrame(doScroll);
-    }
+    });
   }, []);
 
   // Task #1128: bakåtkompatibilitet — gamla ?tab=-djuplänkar scrollar till
@@ -471,20 +436,6 @@ export default function ObjectDetailPage() {
       scrollToSection(tab);
     }
   }, [isCreate, resolvedObject, scrollToSection]);
-
-  // Task #1160: Historik & logg-tidslinje — återanvänder ObjectTimeline mot
-  // admin-endpointen /api/objects/:id/timeline (objekt + underträd, tenant-scoped).
-  const fetchObjectTimeline = useCallback(
-    async (startDate: string, endDate: string): Promise<WorkOrderWithObject[]> => {
-      const params = new URLSearchParams({ startDate, endDate });
-      const res = await fetch(`/api/objects/${objectId}/timeline?${params.toString()}`, {
-        credentials: "include",
-      });
-      if (!res.ok) throw new Error("Kunde inte hämta tidslinjen");
-      return res.json();
-    },
-    [objectId],
-  );
 
   const customerIdForSearch: string | undefined = resolvedObject?.customerId || undefined;
   const searchHitsQuery = useQuery<Array<{
@@ -593,15 +544,6 @@ export default function ObjectDetailPage() {
     enabled: !!objectId && !isCreate,
   });
 
-  const { data: timeRestrictions = [] } = useQuery<ObjectTimeRestriction[]>({
-    queryKey: ["/api/objects", objectId, "time-restrictions"],
-    queryFn: async () => {
-      const res = await fetch(`/api/objects/${objectId}/time-restrictions`);
-      if (!res.ok) return [];
-      return res.json();
-    },
-    enabled: !!objectId && !isCreate,
-  });
 
   const { data: parentRelations = [] } = useQuery<ParentRelation[]>({
     queryKey: ["/api/objects", objectId, "parents"],
@@ -645,26 +587,6 @@ export default function ObjectDetailPage() {
     enabled: !!objectId && !isCreate,
   });
 
-  // Task #1169: inline-öppna en arbetsorder från tidslinjen i en Sheet i stället
-  // för att navigera bort — snabb överblick med "Öppna order" för hela vyn.
-  const [timelineWoId, setTimelineWoId] = useState<string | null>(null);
-  const { data: timelineWo, isLoading: timelineWoLoading } = useQuery<
-    (WorkOrder & {
-      customerName?: string | null;
-      objectName?: string | null;
-      objectAddress?: string | null;
-      isCancelled?: boolean;
-      cancellation?: { reason?: string | null } | null;
-    }) | null
-  >({
-    queryKey: ["/api/work-orders", timelineWoId],
-    queryFn: async () => {
-      const res = await fetch(versionedUrl(`/api/work-orders/${timelineWoId}`), { credentials: "include" });
-      if (!res.ok) throw new Error("Kunde inte hämta arbetsordern");
-      return res.json();
-    },
-    enabled: !!timelineWoId,
-  });
 
   // Task #998: namngivna importmallar återanvänds som fälturval för mall-styrd
   // redigering. Läs-endpointen är öppen för admin/owner och planner.
@@ -842,33 +764,6 @@ export default function ObjectDetailPage() {
     },
   });
 
-  const addRestrictionMutation = useMutation({
-    mutationFn: async (data: Partial<ObjectTimeRestriction>) => {
-      await apiRequest("POST", `/api/objects/${objectId}/time-restrictions`, data);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/objects", objectId, "time-restrictions"] });
-      toast({ title: "Tidsrestriktion tillagd" });
-      setRestrictionDialogOpen(false);
-      setRestrictionForm({ restrictionType: "time_window", description: "", startTime: "", endTime: "", weekdays: [], isBlockingAllDay: false, preference: "unfavorable", reason: "" });
-    },
-    onError: (error: Error) => {
-      toast({ title: "Kunde inte lägga till tidsrestriktion", description: error.message, variant: "destructive" });
-    },
-  });
-
-  const deleteRestrictionMutation = useMutation({
-    mutationFn: async (restrictionId: string) => {
-      await apiRequest("DELETE", `/api/time-restrictions/${restrictionId}`);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/objects", objectId, "time-restrictions"] });
-      toast({ title: "Tidsrestriktion borttagen" });
-    },
-    onError: (error: Error) => {
-      toast({ title: "Kunde inte ta bort tidsrestriktion", description: error.message, variant: "destructive" });
-    },
-  });
 
   const addMetadataMutation = useMutation({
     mutationFn: async (data: any) => {
@@ -1700,8 +1595,8 @@ export default function ObjectDetailPage() {
         </div>
       )}
 
-      {/* ==================== SLÄKT & HIERARKI (ovanför snabbnavigeringen, matchar mockup) ==================== */}
-      <section id="object-section-hierarchy" className="space-y-4 scroll-mt-4 mb-6">
+      {/* ==================== (1) HUVUD: identitet, släktträd, arkivering ==================== */}
+      <section id="object-section-huvud" className="space-y-4 scroll-mt-4 mb-6">
         <ObjectHierarchyCards
           object={obj as unknown as ServiceObject}
           objectId={objectId}
@@ -1711,94 +1606,24 @@ export default function ObjectDetailPage() {
           onMoveObject={openMoveDialog}
           onCopy={() => { setCopyName(obj.name || obj.objectNumber || ""); setCopyMode("single"); setCopyDialogOpen(true); }}
         />
+        <ObjectHistoryArchiveTab objectId={objectId} isArchived={!!resolvedObject?.deletedAt} />
       </section>
 
-      {/* Task #1128/mockup: snabbnavigering — sex ankargrupper + hopfällbar Fält & verktyg. */}
+      {/* Snabbnavigering — tre ankarsektioner: Huvud, Metadata, Kopplade uppgifter. */}
       <nav
         className="sticky top-0 z-30 -mx-4 md:-mx-6 px-4 md:px-6 flex flex-wrap items-center gap-1 border-b py-3 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80"
         aria-label="Snabbnavigering"
         data-testid="object-detail-section-nav"
       >
-        <Button variant="ghost" size="sm" onClick={() => scrollToSection("contacts")} data-testid="nav-contacts">
-          Kontaktuppgifter {contacts.length > 0 && <Badge variant="secondary" className="ml-1 text-xs">{contacts.length}</Badge>}
-        </Button>
-        <Button variant="ghost" size="sm" onClick={() => scrollToSection("production")} data-testid="nav-production">Produktionsuppgifter</Button>
-        <Button variant="ghost" size="sm" onClick={() => scrollToSection("location")} data-testid="nav-location">Geografisk information</Button>
-        <Button variant="ghost" size="sm" onClick={() => scrollToSection("linked-tasks")} data-testid="nav-linked-tasks">Kopplade uppgifter</Button>
-        <Button variant="ghost" size="sm" onClick={() => scrollToSection("linked-concepts")} data-testid="nav-linked-concepts">Kopplade orderkoncept</Button>
-        <Button variant="ghost" size="sm" onClick={() => scrollToSection("timeline")} data-testid="nav-timeline">Historik &amp; logg</Button>
-        <Button
-          variant="ghost"
-          size="sm"
-          className="ml-auto text-muted-foreground"
-          onClick={() => scrollToSection("tools")}
-          data-testid="nav-tools"
-        >
-          <Wrench className="h-3.5 w-3.5 mr-1" /> Fält &amp; verktyg
+        <Button variant="ghost" size="sm" onClick={() => scrollToSection("huvud")} data-testid="nav-huvud">Huvud</Button>
+        <Button variant="ghost" size="sm" onClick={() => scrollToSection("metadata")} data-testid="nav-metadata">Metadata</Button>
+        <Button variant="ghost" size="sm" onClick={() => scrollToSection("linked-tasks")} data-testid="nav-linked-tasks">
+          Kopplade uppgifter
         </Button>
       </nav>
 
       <div className="space-y-8" data-testid="object-detail-sections">
-        {/* ==================== SNABBÅTGÄRDER ==================== */}
-        {/* Det fabricerade 360°-dashboardet är rivet — objektets kropp är nu
-            100% metadata-driven (se metadata-sektionen). Denna strip behåller
-            bara den primära åtgärden och sektionsankaret. */}
-        <section id="object-section-overview" className="space-y-4 scroll-mt-4">
-          <div className="flex items-center justify-between">
-            <h2 className="text-base font-semibold flex items-center gap-2">
-              <Zap className="h-4 w-4" /> Snabbåtgärder
-            </h2>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setSnabborderOpen(true)}
-              data-testid="button-add-workorder"
-            >
-              <Plus className="h-3.5 w-3.5 mr-1" /> Ny snabborder
-            </Button>
-          </div>
-        </section>
-
-        {/* ==================== ENHETLIGT DOMÄNKORT-NÄT (mockup) ==================== */}
-        {/* Systemgenererade domäner (kontakter, produktion, inspektioner, bilder,
-            driftstörningar, geografi, kopplade uppgifter/koncept, historik, betyg)
-            renderas som ett enhetligt responsivt kort-nät. */}
-        <ObjectDomainGrid
-          objectId={objectId}
-          obj={obj}
-          contacts={contacts as any}
-          images={images as any}
-          metadata={metadata as any[]}
-          onAddContact={() => setContactDialogOpen(true)}
-          onDeleteContact={(id) => deleteContactMutation.mutate(id)}
-          contactDeletePending={deleteContactMutation.isPending}
-          onAddImage={() => setImageDialogOpen(true)}
-          onDeleteImage={(id) => deleteImageMutation.mutate(id)}
-          imageDeletePending={deleteImageMutation.isPending}
-          onEditGeo={() => openEditDialog("overview")}
-          navigate={navigate}
-          fetchTimeline={fetchObjectTimeline}
-          onSelectTimelineTask={(id) => setTimelineWoId(id)}
-        />
-
-        {/* ==================== FÄLT & VERKTYG (hopfällbart: metadata, informationspaket, tidsregler, ekonomi, arkiv) ==================== */}
-        <section id="object-section-tools" className="space-y-4 scroll-mt-4">
-          <Collapsible open={deepToolsOpen} onOpenChange={setDeepToolsOpen}>
-            <CollapsibleTrigger asChild>
-              <Button
-                variant="outline"
-                className="w-full justify-between"
-                data-testid="button-toggle-tools"
-              >
-                <span className="flex items-center gap-2">
-                  <Wrench className="h-4 w-4" /> Fält &amp; verktyg
-                </span>
-                <ChevronRight className={`h-4 w-4 transition-transform ${deepToolsOpen ? "rotate-90" : ""}`} />
-              </Button>
-            </CollapsibleTrigger>
-            <CollapsibleContent className="space-y-8 pt-6">
-
-        {/* ==================== METADATA ==================== */}
+        {/* ==================== (2) METADATA: editor + samlingskaruseller ==================== */}
         <section id="object-section-metadata" className="space-y-4 scroll-mt-4">
           {(() => {
             const selectedTemplate = importTemplates.find((t) => t.id === selectedTemplateId);
@@ -1878,257 +1703,63 @@ export default function ObjectDetailPage() {
               </div>
             );
           })()}
+
+          {/* Samlingskaruseller: Kontakt / Produktion / Geografi */}
+          <ObjectDomainGrid
+            section="collections"
+            objectId={objectId}
+            obj={obj}
+            contacts={contacts as any}
+            images={images as any}
+            onAddContact={() => setContactDialogOpen(true)}
+            onDeleteContact={(id) => deleteContactMutation.mutate(id)}
+            contactDeletePending={deleteContactMutation.isPending}
+            onAddImage={() => setImageDialogOpen(true)}
+            onDeleteImage={(id) => deleteImageMutation.mutate(id)}
+            imageDeletePending={deleteImageMutation.isPending}
+            onEditGeo={() => openEditDialog("overview")}
+            navigate={navigate}
+          />
         </section>
 
+        {/* ==================== (3) KOPPLADE UPPGIFTER ==================== */}
+        <section id="object-section-linked-tasks" className="space-y-6 scroll-mt-4">
+          <div className="flex items-center justify-between">
+            <h2 className="text-base font-semibold flex items-center gap-2">
+              <Layers className="h-4 w-4" /> Kopplade uppgifter
+            </h2>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setSnabborderOpen(true)}
+              data-testid="button-add-workorder"
+            >
+              <Plus className="h-3.5 w-3.5 mr-1" /> Ny snabborder
+            </Button>
+          </div>
 
-        <section id="object-section-info-packages" className="space-y-4 scroll-mt-4">
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base flex items-center gap-2">
-                <Package className="h-4 w-4" /> Informationspaket
-              </CardTitle>
-              <p className="text-xs text-muted-foreground">
-                Bläddra bland objektets uppgifter — utförda och kommande — med inmatad metadata, foton och faktureringskoppling. Gruppera på objekt, plats, orderreferens eller utförandetid.
-              </p>
-            </CardHeader>
-            <CardContent className="p-0">
-              <InfoPackageTree objectId={objectId} />
-            </CardContent>
-          </Card>
+          {/* Mikro-grovplanering: subträd + källa, exakt grovplaneringslayout (readOnly) */}
+          <ObjectLinkedTasksGrid objectId={objectId} />
+
+          {/* List-block (bläddra + sök): orderkoncept, snabbordrar, uppgifter, bilder */}
+          <ObjectDomainGrid
+            section="linked"
+            objectId={objectId}
+            obj={obj}
+            contacts={contacts as any}
+            images={images as any}
+            workOrders={workOrders as any}
+            onAddContact={() => setContactDialogOpen(true)}
+            onDeleteContact={(id) => deleteContactMutation.mutate(id)}
+            contactDeletePending={deleteContactMutation.isPending}
+            onAddImage={() => setImageDialogOpen(true)}
+            onDeleteImage={(id) => deleteImageMutation.mutate(id)}
+            imageDeletePending={deleteImageMutation.isPending}
+            onEditGeo={() => openEditDialog("overview")}
+            navigate={navigate}
+          />
         </section>
 
-        {/* ==================== SLOTPREFERENCE ==================== */}
-        <section id="object-section-restrictions" className="space-y-4 scroll-mt-4">
-          <Card>
-            <CardHeader className="pb-3">
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-base flex items-center gap-2">
-                  <Clock className="h-4 w-4" /> SlotPreference — Tidsregler
-                </CardTitle>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setRestrictionDialogOpen(true)}
-                  data-testid="button-add-restriction"
-                >
-                  <Plus className="h-3.5 w-3.5 mr-1" /> Lägg till
-                </Button>
-              </div>
-            </CardHeader>
-            <CardContent>
-              {timeRestrictions.length > 0 ? (
-                <>
-                  {/* Week calendar view */}
-                  <div className="mb-4">
-                    <h4 className="text-xs font-medium text-muted-foreground mb-2">Veckokalender</h4>
-                    <div className="grid grid-cols-7 gap-1" data-testid="slot-week-calendar">
-                      {WEEKDAY_LABELS.map(day => (
-                        <div key={day.value} className="text-center">
-                          <div className="text-xs font-medium mb-1">{day.label}</div>
-                          {(() => {
-                            const daySlots = timeRestrictions.filter((tr) =>
-                              tr.weekdays && Array.isArray(tr.weekdays) && tr.weekdays.includes(day.value)
-                            );
-                            const favorable = daySlots.filter((tr) => tr.preference === "favorable");
-                            const unfavorable = daySlots.filter((tr) => tr.preference !== "favorable");
-                            if (daySlots.length === 0) {
-                              return <div className="h-12 rounded border border-dashed border-muted-foreground/20 flex items-center justify-center text-[10px] text-muted-foreground">—</div>;
-                            }
-                            return (
-                              <div className="space-y-0.5">
-                                {favorable.map((s) => (
-                                  <div key={s.id} className="bg-chart-2/15 dark:bg-chart-2/15 border border-chart-2/30 dark:border-chart-2/70 rounded px-1 py-0.5" data-testid={`slot-favorable-${s.id}`}>
-                                    <div className="text-[10px] font-medium text-chart-2 truncate">{s.startTime || "Hela"}{s.endTime ? `–${s.endTime}` : ""}</div>
-                                  </div>
-                                ))}
-                                {unfavorable.map((s) => (
-                                  <div key={s.id} className="bg-destructive/15 dark:bg-destructive/15 border border-destructive/30 dark:border-destructive/70 rounded px-1 py-0.5" data-testid={`slot-unfavorable-${s.id}`}>
-                                    <div className="text-[10px] font-medium text-destructive truncate">{s.startTime || "Hela"}{s.endTime ? `–${s.endTime}` : ""}</div>
-                                  </div>
-                                ))}
-                              </div>
-                            );
-                          })()}
-                        </div>
-                      ))}
-                    </div>
-                    <div className="flex gap-4 mt-2">
-                      <div className="flex items-center gap-1.5 text-xs">
-                        <div className="w-3 h-3 rounded bg-chart-2/15 dark:bg-chart-2/15 border border-chart-2/30 dark:border-chart-2/70" />
-                        Fördelaktig tid
-                      </div>
-                      <div className="flex items-center gap-1.5 text-xs">
-                        <div className="w-3 h-3 rounded bg-destructive/15 dark:bg-destructive/15 border border-destructive/30 dark:border-destructive/70" />
-                        Ofördelaktig tid
-                      </div>
-                    </div>
-                  </div>
-
-                  <Separator className="my-3" />
-
-                  {/* List view */}
-                  <div className="divide-y">
-                    {timeRestrictions.map((tr) => {
-                      const isFavorable = tr.preference === "favorable";
-                      return (
-                        <div key={tr.id} className={`py-3 border-l-2 pl-3 ${isFavorable ? "border-l-chart-2" : "border-l-destructive"}`} data-testid={`restriction-row-${tr.id}`}>
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-2">
-                              <span className="text-sm font-medium">{RESTRICTION_TYPES.find((t) => t.value === tr.restrictionType)?.label || tr.restrictionType || "Restriktion"}</span>
-                              <Badge variant="outline" className={isFavorable ? "border-chart-2/50 text-chart-2" : "border-destructive/50 text-destructive"}>
-                                {isFavorable ? "Fördelaktig" : "Ofördelaktig"}
-                              </Badge>
-                              <Badge variant={tr.isActive !== false ? "default" : "secondary"}>
-                                {tr.isActive !== false ? "Aktiv" : "Inaktiv"}
-                              </Badge>
-                            </div>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="h-7 w-7 p-0 text-destructive hover:text-destructive"
-                              onClick={() => deleteRestrictionMutation.mutate(tr.id)}
-                              disabled={deleteRestrictionMutation.isPending}
-                              data-testid={`button-delete-restriction-${tr.id}`}
-                            >
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </Button>
-                          </div>
-                          {tr.reason && (
-                            <p className="text-xs mt-1 italic">{tr.reason}</p>
-                          )}
-                          {tr.description && (
-                            <p className="text-xs text-muted-foreground mt-0.5">{tr.description}</p>
-                          )}
-                          <div className="flex gap-4 mt-1 text-xs text-muted-foreground">
-                            {tr.startTime && <span>Start: {tr.startTime}</span>}
-                            {tr.endTime && <span>Slut: {tr.endTime}</span>}
-                            {tr.weekdays && Array.isArray(tr.weekdays) && tr.weekdays.length > 0 && (
-                              <span>Dagar: {tr.weekdays.map((d: number) => WEEKDAY_LABELS.find(w => w.value === d)?.label || d).join(", ")}</span>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </>
-              ) : (
-                <p className="text-sm text-muted-foreground">Inga tidsregler konfigurerade. Lägg till fördelaktiga eller ofördelaktiga tider.</p>
-              )}
-            </CardContent>
-          </Card>
-        </section>
-
-        {/* ==================== EKONOMI (inuti Fält & verktyg) ==================== */}
-        <div className="space-y-4">
-          <h2 className="text-lg font-semibold">Ekonomi</h2>
-          {/* Task #1086: "Betalare" borttaget — kund härleds via orderkoncept och
-              visas på kortet "Kopplade uppgifter". Endast fakturamottagare kvar här. */}
-          {objectId && (
-            <InvoiceRecipientsCard objectId={objectId} />
-          )}
-          {!isAdmin && (
-            <p className="text-xs text-muted-foreground mt-3">
-              Endast administratörer kan ändra fakturamottagare.
-            </p>
-          )}
-        </div>
-
-        {/* ==================== HISTORIK & ARKIV (inuti Fält & verktyg) ==================== */}
-        <div className="space-y-4">
-          <h2 className="text-lg font-semibold">Historik &amp; arkiv</h2>
-          <ObjectHistoryArchiveTab objectId={objectId} isArchived={!!resolvedObject?.deletedAt} />
-        </div>
-            </CollapsibleContent>
-          </Collapsible>
-        </section>
-
-        {/* Task #1169: snabböversikt av en arbetsorder inline (Sheet) från
-            tidslinjen — utan att lämna objektvyn. "Öppna order" tar hela vyn. */}
-        <Sheet open={!!timelineWoId} onOpenChange={(open) => { if (!open) setTimelineWoId(null); }}>
-          <SheetContent className="w-full sm:max-w-md overflow-y-auto" data-testid="sheet-timeline-workorder">
-            {timelineWoLoading ? (
-              <div className="flex items-center justify-center py-16" data-testid="loading-timeline-workorder">
-                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-              </div>
-            ) : timelineWo ? (
-              <>
-                <SheetHeader className="space-y-2 text-left">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <SheetTitle className="text-lg" data-testid="text-timeline-wo-title">
-                      {timelineWo.title || timelineWo.orderNumber || "Arbetsorder"}
-                    </SheetTitle>
-                    {timelineWo.orderStatus && (
-                      <Badge className={getWorkOrderStatusBadge(timelineWo.orderStatus)} data-testid="badge-timeline-wo-status">
-                        {WORK_ORDER_STATUS_LABELS[timelineWo.orderStatus] ?? timelineWo.orderStatus}
-                      </Badge>
-                    )}
-                    {timelineWo.isCancelled && (
-                      <Badge className={statusColors.inactive} data-testid="badge-timeline-wo-cancelled">
-                        Avbruten
-                      </Badge>
-                    )}
-                  </div>
-                  {timelineWo.orderNumber && (
-                    <SheetDescription className="font-mono" data-testid="text-timeline-wo-number">
-                      {timelineWo.orderNumber}
-                    </SheetDescription>
-                  )}
-                </SheetHeader>
-                <div className="mt-4 space-y-3 text-sm">
-                  {timelineWo.description && (
-                    <p className="text-muted-foreground break-words" data-testid="text-timeline-wo-description">
-                      {timelineWo.description}
-                    </p>
-                  )}
-                  <dl className="space-y-2">
-                    {timelineWo.scheduledDate && (
-                      <div className="flex justify-between gap-4">
-                        <dt className="text-muted-foreground">Planerad</dt>
-                        <dd data-testid="text-timeline-wo-scheduled">
-                          {new Date(timelineWo.scheduledDate).toLocaleDateString("sv-SE")}
-                        </dd>
-                      </div>
-                    )}
-                    {timelineWo.customerName && (
-                      <div className="flex justify-between gap-4">
-                        <dt className="text-muted-foreground">Kund</dt>
-                        <dd className="text-right" data-testid="text-timeline-wo-customer">{timelineWo.customerName}</dd>
-                      </div>
-                    )}
-                    {timelineWo.objectName && (
-                      <div className="flex justify-between gap-4">
-                        <dt className="text-muted-foreground">Objekt</dt>
-                        <dd className="text-right" data-testid="text-timeline-wo-object">{timelineWo.objectName}</dd>
-                      </div>
-                    )}
-                    {timelineWo.objectAddress && (
-                      <div className="flex justify-between gap-4">
-                        <dt className="text-muted-foreground">Adress</dt>
-                        <dd className="text-right" data-testid="text-timeline-wo-address">{timelineWo.objectAddress}</dd>
-                      </div>
-                    )}
-                  </dl>
-                  {timelineWo.isCancelled && timelineWo.cancellation?.reason && (
-                    <p className="text-xs text-muted-foreground" data-testid="text-timeline-wo-cancel-reason">
-                      Orsak: {timelineWo.cancellation.reason}
-                    </p>
-                  )}
-                  <Button
-                    className="w-full"
-                    onClick={() => timelineWoId && navigate(`/work-orders/${timelineWoId}`)}
-                    data-testid="button-open-timeline-workorder"
-                  >
-                    Öppna order
-                  </Button>
-                </div>
-              </>
-            ) : (
-              <div className="py-16 text-center text-sm text-muted-foreground" data-testid="empty-timeline-workorder">
-                Kunde inte hämta arbetsordern.
-              </div>
-            )}
-          </SheetContent>
-        </Sheet>
 
       </div>
 
@@ -2661,123 +2292,6 @@ export default function ObjectDetailPage() {
         </DialogContent>
       </Dialog>
 
-      {/* ==================== LÄGG TILL TIDSRESTRIKTION ==================== */}
-      <Dialog open={restrictionDialogOpen} onOpenChange={setRestrictionDialogOpen}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>Lägg till tidsregel</DialogTitle>
-            <DialogDescription>Konfigurera fördelaktiga eller ofördelaktiga tider för detta objekt.</DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 py-2">
-            <div className="space-y-2">
-              <Label>Preferens *</Label>
-              <Select value={restrictionForm.preference} onValueChange={(v) => setRestrictionForm({ ...restrictionForm, preference: v as "favorable" | "unfavorable" })}>
-                <SelectTrigger data-testid="select-preference">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="favorable">Fördelaktig tid</SelectItem>
-                  <SelectItem value="unfavorable">Ofördelaktig tid</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label>Typ *</Label>
-              <Select value={restrictionForm.restrictionType} onValueChange={(v) => setRestrictionForm({ ...restrictionForm, restrictionType: v })}>
-                <SelectTrigger data-testid="select-restriction-type">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {RESTRICTION_TYPES.map(t => (
-                    <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label>Anledning</Label>
-              <Input
-                value={restrictionForm.reason}
-                onChange={(e) => setRestrictionForm({ ...restrictionForm, reason: e.target.value })}
-                placeholder={restrictionForm.preference === "favorable" ? "T.ex. 'Bästa tömningsdag'" : "T.ex. 'P-förbud gäller'"}
-                data-testid="input-restriction-reason"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>Beskrivning</Label>
-              <Input
-                value={restrictionForm.description}
-                onChange={(e) => setRestrictionForm({ ...restrictionForm, description: e.target.value })}
-                placeholder="Valfri ytterligare detalj"
-                data-testid="input-restriction-description"
-              />
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-2">
-                <Label>Starttid</Label>
-                <Input
-                  type="time"
-                  value={restrictionForm.startTime}
-                  onChange={(e) => setRestrictionForm({ ...restrictionForm, startTime: e.target.value })}
-                  data-testid="input-restriction-startTime"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Sluttid</Label>
-                <Input
-                  type="time"
-                  value={restrictionForm.endTime}
-                  onChange={(e) => setRestrictionForm({ ...restrictionForm, endTime: e.target.value })}
-                  data-testid="input-restriction-endTime"
-                />
-              </div>
-            </div>
-            <div className="space-y-2">
-              <Label>Veckodagar</Label>
-              <div className="flex flex-wrap gap-2">
-                {WEEKDAY_LABELS.map(day => (
-                  <label key={day.value} className="flex items-center gap-1.5 text-sm cursor-pointer">
-                    <Checkbox
-                      checked={restrictionForm.weekdays.includes(day.value)}
-                      onCheckedChange={(checked) => {
-                        setRestrictionForm({
-                          ...restrictionForm,
-                          weekdays: checked
-                            ? [...restrictionForm.weekdays, day.value]
-                            : restrictionForm.weekdays.filter(d => d !== day.value),
-                        });
-                      }}
-                      data-testid={`checkbox-weekday-${day.value}`}
-                    />
-                    {day.label}
-                  </label>
-                ))}
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              <Checkbox
-                checked={restrictionForm.isBlockingAllDay}
-                onCheckedChange={(checked) => setRestrictionForm({ ...restrictionForm, isBlockingAllDay: !!checked })}
-                data-testid="checkbox-blocking-all-day"
-              />
-              <Label className="cursor-pointer">Blockerar hela dagen</Label>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setRestrictionDialogOpen(false)} data-testid="button-cancel-restriction">
-              Avbryt
-            </Button>
-            <Button
-              onClick={() => addRestrictionMutation.mutate(restrictionForm)}
-              disabled={addRestrictionMutation.isPending}
-              data-testid="button-save-restriction"
-            >
-              {addRestrictionMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Plus className="h-4 w-4 mr-1" />}
-              Lägg till
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
       {/* Snabborder: rik direktorder (kund + fakturareferenser + löpande SO-nr +
           rader) — blir fakturaunderlag direkt. Ersätter tidigare minimala

@@ -1,9 +1,10 @@
 import { useRef, useState, type ReactNode } from "react";
 import type { LucideIcon } from "lucide-react";
-import { ChevronLeft, ChevronRight, List, Loader2 } from "lucide-react";
+import { ChevronLeft, ChevronRight, List, Loader2, Search } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { KallaBadge, type Kalla } from "@/lib/metadata-kalla";
 
 /** Footer-metadata för ett kort: "tid • vem (källa)". Alla fält valfria. */
@@ -25,6 +26,8 @@ export interface DomainCarouselCardProps<T> {
   renderFullItem?: (item: T) => ReactNode;
   /** "tid • vem (källa)" för den visade posten. */
   getFooter?: (item: T) => DomainCardFooter;
+  /** Aktiverar sökruta i kortet — returnerar den text posten ska matchas mot. */
+  getSearchText?: (item: T) => string;
   /** T.ex. "Lägg till"-knapp i kortets header. */
   headerAction?: ReactNode;
   /** Dölj hela kortet när det saknas poster (mockup: tomma kort döljs). */
@@ -55,11 +58,12 @@ export function DomainCarouselCard<T>({
   icon: Icon,
   title,
   description,
-  items,
+  items: allItems,
   getKey,
   renderItem,
   renderFullItem,
   getFooter,
+  getSearchText,
   headerAction,
   hideWhenEmpty = true,
   emptyText = "Inga poster.",
@@ -70,13 +74,24 @@ export function DomainCarouselCard<T>({
 }: DomainCarouselCardProps<T>) {
   const [idx, setIdx] = useState(0);
   const [expanded, setExpanded] = useState(false);
+  const [query, setQuery] = useState("");
   const cardRef = useRef<HTMLDivElement>(null);
+
+  // Sök (opt-in via getSearchText): filtrera in-memory på den visade listan.
+  const q = query.trim().toLowerCase();
+  const items =
+    getSearchText && q
+      ? allItems.filter((it) => getSearchText(it).toLowerCase().includes(q))
+      : allItems;
+  const searchable = !!getSearchText && allItems.length > 0;
 
   const count = items.length;
   const isEmpty = count === 0;
+  const shownEmptyText =
+    q && allItems.length > 0 ? `Inga träffar för "${query}".` : emptyText;
 
-  // Tomma kort döljs (utom när ett headerAction, t.ex. "Lägg till", ska nås).
-  if (isEmpty && !loading && hideWhenEmpty && !headerAction) return null;
+  // Tomma kort döljs (utom när ett headerAction/sökruta ska nås).
+  if (allItems.length === 0 && !loading && hideWhenEmpty && !headerAction) return null;
 
   const safeIdx = Math.min(idx, Math.max(0, count - 1));
   const cur = items[safeIdx];
@@ -118,6 +133,22 @@ export function DomainCarouselCard<T>({
           {headerAction}
         </div>
         {description && <p className="text-xs text-muted-foreground">{description}</p>}
+        {searchable && (
+          <div className="relative mt-2">
+            <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
+            <Input
+              value={query}
+              onChange={(e) => {
+                setQuery(e.target.value);
+                setIdx(0);
+                setExpanded(!!e.target.value.trim());
+              }}
+              placeholder="Sök..."
+              className="h-8 pl-7 text-sm"
+              data-testid={`input-search-${testidPrefix}`}
+            />
+          </div>
+        )}
       </CardHeader>
       <CardContent>
         {loading ? (
@@ -129,7 +160,7 @@ export function DomainCarouselCard<T>({
           </div>
         ) : isEmpty ? (
           <p className="text-sm text-muted-foreground" data-testid={`empty-${testidPrefix}`}>
-            {emptyText}
+            {shownEmptyText}
           </p>
         ) : expanded ? (
           <div className="space-y-3" data-testid={`fulllist-${testidPrefix}`}>

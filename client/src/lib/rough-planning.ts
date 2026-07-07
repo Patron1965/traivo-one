@@ -52,6 +52,7 @@ export interface GridTaskRow {
   lastServiceDate: string | null;
   value: number; // öre
   cost: number; // öre
+  source: string | null; // creation_method-nyckel (manual/import/external_report/performer/automatic)
 }
 
 export interface GridGroup {
@@ -70,6 +71,22 @@ export interface GridResponse {
   pagination: { offset: number; limit: number; total: number };
   grouping: GroupBy;
   truncated: boolean;
+}
+
+// Uppgiftskälla (work_orders.creation_method) → svensk etikett. Visar VARIFRÅN en
+// uppgift kommer: manuellt inlagd, importerad, från felanmälan, skapad av utförare,
+// eller automatiskt av systemet (t.ex. orderkoncept-expansion).
+export const CREATION_SOURCE_LABELS: Record<string, string> = {
+  manual: "Manuell",
+  import: "Import",
+  external_report: "Felanmälan",
+  performer: "Utförare",
+  automatic: "Automatisk",
+};
+
+export function creationSourceLabel(source: string | null | undefined): string | null {
+  if (!source) return null;
+  return CREATION_SOURCE_LABELS[source] ?? source;
 }
 
 // Legend-ordning (matchar referensbilden): Utförd, Tilldelad, Otilldelad, Delvis, Avviker.
