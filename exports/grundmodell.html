@@ -74,6 +74,18 @@
   .side { background: #fff; border: 1.5px solid #cbd8e0; border-radius: 9px; padding: 9px 13px; font-size: 12px; line-height: 1.35; flex: 0 0 calc(25% - 8px); }
   .side b { color: #1B4B6B; display: block; font-size: 12.5px; }
   .side span { color: #6B7C8C; font-size: 11px; }
+
+  .legend { display: flex; gap: 20px; font-size: 11.5px; color: #6B7C8C; margin-bottom: 12px; align-items: center; }
+  .legend > span { display: flex; align-items: center; }
+  .lg { display: inline-block; min-width: 18px; height: 18px; line-height: 18px; text-align: center; border-radius: 5px; font-size: 9px; font-weight: 800; color: #fff; margin-right: 6px; padding: 0 4px; }
+  .lg.s { background: #C97B3C; } .lg.m { background: #4A9B9B; } .lg.d { background: #94a3b8; } .lg.sys { background: #6d5bbf; }
+  .pkgcard h3 { margin-bottom: 4px; }
+  .pkgcard .fields { list-style: none; padding: 0; margin: 6px 0 0; }
+  .pkgcard .fields li { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 3.5px 0; border-bottom: 1px solid rgba(27,75,107,0.09); font-size: 11.5px; line-height: 1.3; }
+  .pkgcard .fields li:last-child { border-bottom: none; }
+  .pkgcard .fields em { flex: 0 0 auto; font-style: normal; font-size: 9px; font-weight: 800; color: #fff; padding: 1px 5px; border-radius: 4px; letter-spacing: .3px; }
+  em.s { background: #C97B3C; } em.m { background: #4A9B9B; } em.d { background: #94a3b8; } em.sys { background: #6d5bbf; }
+  .sub-label { font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .8px; color: #94a3b8; margin-bottom: 8px; }
 </style>
 </head>
 <body>
@@ -145,25 +157,76 @@
     <p class="note"><b>Gemensamt:</b> alla skapare landar i samma uppgiftsregister. "On demand"-skaparna lägger inte uppgiften i listan förrän händelsen inträffar.</p>
   </div>
 
-  <!-- 3. Vad är en uppgift -->
+  <!-- 3. Informationspaketet -->
   <div class="section">
-    <h2>3 · Vad är en uppgift? (informationspaketet)</h2>
-    <div class="compose">
-      <div class="inputs">
-        <div class="chip"><b>Artikel</b> — vara/tjänst, pris, alla artikelfält</div>
-        <div class="chip"><b>Skaparens info</b> — kund, betalare, vad (från koncept/snabborder …)</div>
-        <div class="chip"><b>Objekt-metadata</b> — antal, leveranstid, kontakt, position</div>
-        <div class="chip"><b>Systemstatus</b> — var i flödet uppgiften befinner sig</div>
+    <h2>3 · Informationspaketet (uppgiften fält för fält)</h2>
+    <p class="note" style="margin-top:0;margin-bottom:12px">En uppgift = en artikel med <b>"när, var och hur"</b>. Teoretiskt bär paketet all länkad information — varje fält är antingen ren data, metadata-styrt eller hämtat ur ett sidoregister.</p>
+    <div class="legend">
+      <span><span class="lg s">S</span>hämtas från sidoregister</span>
+      <span><span class="lg m">M</span>metadata-styrt</span>
+      <span><span class="lg d">D</span>ren data</span>
+      <span><span class="lg sys">SYS</span>systemsatt</span>
+    </div>
+    <div class="row">
+      <div class="card ice pkgcard">
+        <h3>Artikel</h3>
+        <ul class="fields">
+          <li>Artikelnr · namn · beskrivningar <em class="d">D</em></li>
+          <li>Dokument · leverantörsartikelnr <em class="d">D</em></li>
+          <li>Pris · kostnader · fast pris <em class="d">D</em></li>
+          <li>Produktionstid <em class="d">D</em></li>
+          <li>Ikon <em class="s">S</em></li>
+          <li>Enhet <em class="s">S</em></li>
+          <li>Debiteringsmodell <em class="s">S</em></li>
+          <li>Artikeltyp <em class="s">S</em></li>
+          <li>Artikelområde <em class="s">S</em></li>
+          <li>Utförandekod <em class="s">S</em></li>
+          <li>Lagerplats · leverantör <em class="s">S</em></li>
+          <li>Strukturartiklar (BOM) <em class="s">S</em></li>
+        </ul>
       </div>
-      <div class="arrow">&#10132;</div>
-      <div class="uppgift-big">
-        <h3>Uppgift = en artikel med "när, var och hur"</h3>
-        <p>En uppgift är <b>en artikel</b> med påhakad information. Paketet lever i planeringen — inte som ett fält på objektsidan.</p>
-        <div class="times"><b>Leveranstid i tre former:</b> önskad · planerad · verklig (utförd)</div>
-        <div class="times"><b>Geografisk position:</b> finns i de allra flesta fall (inte alltid)</div>
-        <div class="warn">Kan sakna kund och full metadata — t.ex. antal fylls i på plats (5 &rarr; verkligt 15).</div>
+      <div class="card teal pkgcard">
+        <h3>Antal &amp; metadata</h3>
+        <ul class="fields">
+          <li>Antal enl. orderkoncept <em class="d">D</em></li>
+          <li>Antal enl. objekt-metadata <em class="m">M</em></li>
+          <li>Får uppdateras av utförare <em class="d">D</em></li>
+          <li>Dölj antal <em class="d">D</em></li>
+          <li>Taget · fakturerbart antal <em class="d">D</em></li>
+          <li>Begränsning (per objekt/antal) <em class="d">D</em></li>
+          <li>Ingår i abonnemang <em class="d">D</em></li>
+          <li>Visa metadatafält <em class="m">M</em></li>
+          <li>Lämna data (metadatafält) <em class="m">M</em></li>
+          <li>Fasttagningslogik (metadata = …) <em class="m">M</em></li>
+        </ul>
+      </div>
+      <div class="card orange pkgcard">
+        <h3>Styrning &amp; leverans</h3>
+        <ul class="fields">
+          <li>Skapad av (skaparens löpnr) <em class="sys">SYS</em></li>
+          <li>Hur skapad (klartext) <em class="d">D</em></li>
+          <li>Påhakat objekt <em class="s">S</em></li>
+          <li>Kund <em class="s">S</em></li>
+          <li>Önskad leveranstid <em class="m">M</em></li>
+          <li>Planerad · verklig leveranstid <em class="d">D</em></li>
+          <li>Geografisk position <em class="d">D</em></li>
+        </ul>
+      </div>
+      <div class="card purple pkgcard">
+        <h3>Fakturahuvud &amp; status</h3>
+        <ul class="fields">
+          <li>Kund <em class="s">S</em></li>
+          <li>Vår referens (löpnr → källa) <em class="sys">SYS</em></li>
+          <li>Er referens · reg.nr <em class="m">M</em></li>
+          <li>Fakturareferens per rad <em class="d">D</em></li>
+          <li>Fakturamodell (del/hel) <em class="d">D</em></li>
+          <li>Fakturasläpp (dag/vecka/mån) <em class="d">D</em></li>
+          <li>Prislista <em class="s">S</em></li>
+          <li>System- + affärsstatus <em class="d">D</em></li>
+        </ul>
       </div>
     </div>
+    <p class="note"><b>Poäng:</b> paketet samkör flera register. Kan sakna kund/full metadata — t.ex. antal fylls i på plats (5 &rarr; verkligt 15). "Vår referens" = skaparens löpnummer, så uppgiften alltid kan spåras tillbaka till orderkonceptet / felanmälan / rating som skapade den.</p>
   </div>
 
   <!-- 4. Flödet, två spår -->
@@ -245,18 +308,30 @@
   <!-- 8. Sidoregister -->
   <div class="section">
     <h2>8 · Sidoregister (stödregister)</h2>
+    <div class="sub-label">Stödregister som definierar valen</div>
     <div class="side-grid">
-      <div class="side"><b>Artikelregister</b><span>varor/tjänster + BOM/komponenter</span></div>
+      <div class="side"><b>Artikelregister</b><span>varor/tjänster + BOM</span></div>
       <div class="side"><b>Kundregister</b><span>kunder, betalare, hierarki</span></div>
-      <div class="side"><b>Prislistor</b><span>priser per kund/avtal</span></div>
-      <div class="side"><b>Utförandekoder</b><span>utförandetyper</span></div>
-      <div class="side"><b>Ikonregister</b><span>ikoner för objekt/metadata</span></div>
+      <div class="side"><b>Prislistor</b><span>komplext: unika listor + unika priser, annars ordinarie</span></div>
+      <div class="side"><b>Utförandekoder</b><span>avgörande för tilldelning</span></div>
+      <div class="side"><b>Ikonregister</b><span>ikoner (redigeras från bild)</span></div>
+      <div class="side"><b>Enhetstyper</b><span>styck, kvm … enhetlig stavning</span></div>
+      <div class="side"><b>Debiteringsmodeller</b><span>per timme, fast per S/M/L …</span></div>
+      <div class="side"><b>Artikeltyper</b><span>tjänst/vara/lager/beställning/UE</span></div>
+      <div class="side"><b>Artikelområden</b><span>verksamhetsområde: kärl, gatlyktor …</span></div>
+      <div class="side"><b>Lagerplatser</b><span>lager &amp; hyllor</span></div>
+      <div class="side"><b>Leverantörer</b><span>underleverantörer</span></div>
       <div class="side"><b>Utförarregister</b><span>personal/utförare</span></div>
       <div class="side"><b>Fordonsregister</b><span>fordon</span></div>
       <div class="side"><b>Resurser / team</b><span>resurser för planering</span></div>
-      <div class="side"><b>Metadata-katalog</b><span>fältdefinitioner (ryggrad i reg. 2)</span></div>
     </div>
-    <p class="note"><b>Roll:</b> sidoregistren matar valen i objekt-, metadata- och uppgiftsskapar-registren (välja ikon, utförandekod, kund, artikel …). Listan kan växa.</p>
+    <div class="sub-label" style="margin-top:14px">Register som pekas in i uppgiften</div>
+    <div class="side-grid">
+      <div class="side"><b>Metadata-katalog</b><span>fältdefinitioner + logiska värden (t.ex. kärltyper)</span></div>
+      <div class="side"><b>Artikelregistret självt</b><span>strukturartiklar (BOM) — cirkelskydd</span></div>
+      <div class="side"><b>Objektregistret</b><span>inpekat objekt</span></div>
+    </div>
+    <p class="note"><b>Roll:</b> sidoregistren matar valen i objekt-, metadata- och uppgiftsskapar-registren (ikon, enhet, utförandekod, kund, artikel …). Listan kan växa.</p>
   </div>
 
 </div>

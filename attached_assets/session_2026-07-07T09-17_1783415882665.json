@@ -1,0 +1,344 @@
+{
+  "sessionId": "e8a8e566",
+  "exportedAt": "2026-07-07T09:17:58.746Z",
+  "summary": "### Key Topics Discussed\n- Review of the information package for an assignment, focusing on logic and data synchronization between different registries.\n- Discussion of data fields related to articles, including the ability to add icons linked to an icon registry.\n- Article status (active/archived) and units per article were also covered.\n- Detailed discussion on unit types, pricing, costs, and billing models for articles.\n- Production time as a data field.\n- Number of items according to the order concept and metadata on the object.\n- Whether an item can be updated by the executor.\n- Discussion of \"taken quantity\" (åtgånget antal) and \"billable quantity\" (fakturerbart antal).\n- Fixed price as a data field for tasks.\n- Article type, including whether it's a service, product, or specific type like laundry service.\n- Inventory status (stocked, orderable, self-produced) for articles.\n- Definition of \"artikelområde\" (article area) as a higher-level classification for articles, specifying which business area an article belongs to (e.g., rolling bins, technical waste equipment, street lights).\n- Execution code as a determinant for task assignment, managed by a side registry.\n- Storage locations (lagerplats).\n- Discussion of suppliers and a supplier registry.\n- Data fields related to delivery time, safety clearance, and ordering information like economic order quantity and offset time.\n- Metadata fields at the article or task level, which are selected from a metadata registry.\n- Requirement for metadata fields to be submitted.\n- Whether an individual article can be used as a structural article.\n- How subordinate structural articles are included in a main article, referencing other articles from the article registry itself.\n- Fastening logic, which is determined by metadata from the metadata registry.\n- Need for a side registry for metadata, specifically for defining different types (e.g., container types like food waste, residual waste, glass).\n- Discussion on how logical values for metadata articles are currently defined directly.\n- Data fields related to geographical position of an object.\n- Dependent articles, where one article is linked as dependent on another.\n- Referenced objects, which connect to an object registry.\n- Task creation and unique numbering by an order or task creator, managed by the system as a form of registry.\n- How a task was created (e.g., from an order concept or other order creator).\n- Attached object linked to the task.\n- Customer information from the customer registry.\n- Geographical position for tasks is pure data, not a side registry.\n- Invoice header information for tasks, including customer details from the customer registry.\n- The origin of a task (e.g., order concept, other task creator) as a reference, considered an indirect side registry.\n- The purpose of an order concept or other order creator creating multiple tasks, and the ability to trace back to the source (e.g., quick order, fault report, feedback, deviation report, improvement suggestion).\n- \"Our reference\" (Vår referens) as a possible side registry, exemplified by a user like \"Lukas Sjölund\", but could also be internal reference numbers.\n- Metadata for contacts and names is stored in a metadata registry (side registry).\n- Registration number is either manually entered or selected from the metadata registry (side registry).\n- Discussion about invoice release frequency (daily, weekly, monthly).\n- Discussion on variable pricing and its dependency on price lists.\n- Price lists as a complex side registry, encompassing unique customer-specific price lists and standard pricing for articles without unique prices.\n- Article status, including general system status and business status.\n\n### Decisions Made\n- No new decisions made.\n\n### Action Items\n- No new action items.\n\n### Important Points & Insights\n- The information package will be reviewed using Replit.\n- Key data fields discussed include article number, article name, external and internal descriptions, assignment document, and supplier article name.\n- Icons can be created for articles within an icon registry (e.g., a food waste bin icon).\n- Article status indicates if an article is active or archived.\n- Units per article can be defined in a side registry, allowing for various units like individual pieces, square meters, or ranges (e.g., 0-20 square meters).\n- There should be a side registry to define unit types to ensure consistency (e.g., prevent variations like \"per styck\" vs. \"Per styck\").\n- Price and cost are unique to each article.\n- Costs at the article level are well-understood by Replit.\n- A side registry should define billing models (e.g., per hour, fixed cost based on size like small, medium, large room).\n- Production time is considered pure data.\n- The number of items according to the order concept is pure data, based on metadata on the object.\n- The ability for an item to be updated by the executor is a pure data field.\n- There are limitations such as once per object or number of objects, which are also pure data.\n- It is possible to hide the quantity for certain reasons, which is pure data, meaning the executor only performs their task without knowing the quantity.\n- \"Taken quantity\" and \"billable quantity\" are pure data. Taken quantity is what is used, and can be updated in the execution view if not all items should be billed.\n- Fixed price for a task is also pure data.\n- Whether an article is part of a subscription is pure data.\n- Article type (service, product, laundry service, etc.) should be defined in a side registry.\n- Inventory status (stocked, orderable, self-produced) is also part of the article type definition in the side registry.\n- Article area should be managed with a side registry and defines the business area an article belongs to (e.g., rolling bins, technical waste equipment).\n- The execution code (utförandekod) is critical for assigning tasks and should be managed by a side registry. This includes determining whether a team, such as one working with rolling bins, can perform a task, or if it's an administrative task.\n- Storage locations (lagerplats) and shelves should be defined and managed using a side registry.\n- A supplier registry is crucial for managing suppliers tied to articles (services or goods) from subcontractors.\n- Delivery time and safety clearance are pure data fields.\n- Ordering status, economic order quantity, and offset time are pure data fields.\n- Metadata fields at the article or task level are pure data, selected from a metadata registry. Entering data for a task uses the same logic, pointing to a metadata field for the heading.\n- The requirement to submit a metadata field is pure data.\n- Whether an individual article can be used as a structural article is pure data.\n- Subordinate structural articles are sourced from the article registry itself (e.g., for \"Bin Wash Standard,\" components like lid wash, container wash, and a decal are articles from the same registry).\n- There's a need to implement a warning mechanism to prevent circular references in structural articles (an article cannot contain itself).\n- The fastening logic is determined by the metadata registry, allowing selection of metadata that defines the logic (e.g., \"if the metadata field for container type equals...\").\n- A side registry is needed for metadata to define types, like different container types (e.g., food waste, residual waste, glass).\n- Currently, logical values for metadata articles (e.g., \"restavfallskärl\") are defined directly when creating the metadata article. This suggests a potential area for future standardization or migration to the proposed side registry.\n- The geographical position of an object is considered pure data.\n- Dependent articles are linked by choosing another article.\n- Referenced objects are selected from an object registry (a side registry).\n- Task \"steering\" refers to the unique number generated by the system when created by an order or task creator. This is a system-generated registry.\n- The method of task creation (e.g., from an order concept or other external order creator) is noted in clear text.\n- An attached object is associated with the task.\n- Customer information is retrieved from the customer registry.\n- The geographical position specific to a task is considered pure data, not a side registry.\n- Customer information for the invoice header refers to the customer registry.\n- The task's reference (origin) indicating how it was created (e.g., from an order concept or another task creator's unique number) is an indirect side registry.\n- The reference for a task can be a side registry, encompassing internal reference numbers or user-specific references.\n- A metadata registry (side registry) is used for contacts and names.\n- Registration numbers are either manually input or selected from the metadata registry.\n- Whether an invoice reference should be marked as complete is pure data input (yes/no).\n- Invoice release can be grouped daily, weekly, or monthly; these are options, not a side registry.\n- Variable pricing is pure data.\n- Price lists are a complex side registry, containing unique lists (e.g., customer-specific like \"HSB Sverige 2026\") and defining unique prices for specific articles. Articles not covered by unique prices use the ordinary price.\n- The information package provided contains all relevant linked information.\n\n### Open Questions/Pending Items\n- Whether it is advisable to have different internal reference numbers, acknowledging it's not a high priority but should be logically consistent.\n",
+  "conversation": [],
+  "transcripts": [
+    {
+      "text": "Äh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Eftersom allting handlar i det här handlar om logik och samkörning utav olika register, så kommer jag nu ta hjälp utav Replit här för att titta på informationspaketet här då utifrån uppgiften då. Och, och då nämner jag bara då varje rubrik här och kommenterar den då. Artikelna-nummer, namn på artikeln och extern beskrivning och intern beskrivning utav artikeln, äh, uppgiftsdokument, leverantörssss, äh, artikelnamn-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. Nummer och så. Äh, det är ju då rena data på artikeln. Äh, men däremot då så har vi även här på artikeln möjlighet att lägga då till en ikon och det är ju då kopplat till det här ikonregistret då där man kan skapa, ska kunna skapa ikoner. Till exempel en ikon för ett matavfallskärl, till exempel då. Då, då ska man kunna editera och göra en sån utifrån en bild då. Äh, sen kommer då status på artikeln. Det är också bara ren data.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Äh, om den är aktiv eller arkiverad. Äh, vi har enhet per artikeln. Ja, det här skulle kunna vara ett sidoregister då liksom där man definierar vilka olika enheter det, det kan vara bara för att man får rätt och så stycke eller kvadratmeter eller, eller, äh, noll till, äh, tjugo, äh, kvadratmeter till exempel då så här som, som, som en enhet. För, för grejen är ju då att här väljer man ju då på, på artikeln per m-multipel och det innebär ju att man-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm ...om det är ett sidoregister så kan det ju bli då att man skriver per styck med S, sto-stort S och stort T ibland och litet ibland och så vidare då. Så här är min uppfattning att det ska finnas ett sidoregister som definierar enhetstyperna. Äh, sen finns det då pris och pris är ju unikt för artikeln. Samma sak gäller ju kostnad. Äh, äh, och, äh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Så om du räknas fram uti-uti-utifrån det, det finns ju flera olika kostnader på artikelnivå som Replit väl känner till. Äh, sen har vi debiteringsmodell. Även här skulle det ju då finnas ett sidoregister där man då, äh, definierar om det är per timme eller om det är, äh-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. -med en fast kostnad utifrån då om det är ett small, ma-medium eller large rum eller vad det nu är då.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Sen kommer produktionstid, det är ren data.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Äh, sen kommer antalet enligt re-- orderkonceptet, det är ren data. Antal enligt äh, metadata på objektet. Ja, det är ju metadata som den tittar efter och det finns redan fördefinierat. Äh, sen har vi då om det får uppdateras utav utförare eller inte, ja eller nej. Äh, ja, det är också bara ett rent datafält, inget register.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Sen finns det begränsningar, äh, en gång per objekt eller antal objekt. Det är också bara ren data.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Äh, sen finns det möjlighet att lägga in om man döljer antalet av något skäl. Äh, ja, det är också bara ren data, äh, och det innebär ju då att man döljer antalet och sen gör utföraren bara det han ska, äh.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Äh, jag kan inte se riktigt vad, vad, vad syftet är med den där, men det är en grej som Replit har hittat på själv. Äh, sen har vi då taget antal, det vill säga åtgången, och fakturerbart antal. Och det är också bara rena data. Taget antal är det man tar och sen kan man då gå in i utförandevyn då och uppdatera det om man inte ska fakturera alla.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Äh, fast pris också bara ren data på uppgiften. Äh, är det här en artikel som ingår i ett abonnemang? Ja. Äh, det är också bara ren data. Sen har vi artikeltyp då, det vill säga vilken typ av artikel, om det är en tjänst eller om det är en vara eller om det är en tvättjänst eller en... Ja, det här är ju då typiskt sidoregister där man definierar vad, vad, vad det är. Här ingår även om det är en lagerförd vara eller en beställningsvara eller en egen tillverkad.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Ja. Äh, så man definierar vad det är. Eller om det är en, äh, tjänst som är, äh, en tjänst som man kanske köper utav en underentreprenör eller så, så kan man definiera det. Det här registret, äh, s-skall då hanteras med sidoregister. Artikelområde, det vill säga...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Äh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Då...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Var det tillhör då? Alltså, det, det första, artikeltyp, det är alltså vad det är, om det är en reservdel eller om det är en tvättjänst eller vad det är. Artikelområde är då överordnat kan man säga. Det är alltså vad den här artikeln tillhör för verksamhetsområde då. Om det då är till exempel rullbara kärl eller om det är, eh, teknisk soputrustning eller om det är gatlyktor eller vad, vad det nu är. Så här har man alltså möjlighet att, att definiera då så att säga vad...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Vad det här området, eh, i... Ja, vilket artikelområde det är. Eh, sen har vi då utförande ko... Och även det är ju då ett sidoregister. Sen har vi utförandekoden. Den är... De, de första här är ju alltså mer av en registerkaraktär då, medan utförandekoden är ju då avgörande då för tilldelningen av uppgiften. Och återigen så är ju det ett sidoregister då som man, eh, definierar då var...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Om, om det nu är ett team som jobbar med rullbara kärl som kan utföra uppgiften eller om det är en administrativ uppgift då. Det bör hanteras med sidoregister. Eh, sen har vi lagerplats då och lagerplatserna är ju i allra högsta grad ett sidoregister då, där man definierar vilka lagerplatser och hyllor som man har. Eh, så det bör hanteras med sidoregister. Sen kommer då...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Det förbrukas... Vet jag inte riktigt vad det är. Det är väl ena register då. Och sen har vi då leverantörer då och leverantörsregistret och där man väljer om man har en leverantör är i allra högsta grad ett sidoregister då där man definierar vilka, vilka leverantörer man har för eventuella artiklar då som, som antingen i form av en tjänst eller av en vara levereras då av en underleverantör. Leveranstid, ren data, säkerhetsklar.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Eh, leverantör, ren data, beställningstunt, ren data, eh, ekonomisk beställningskvantitet, ren data, offsettid och typ av offsettid är bara ren data. Eh, sen kommer det då visa metadatafält på artikeln eller uppgiftsnivån. Det är också bara ren data då kan man säga. Men det väljs ju då utifrån då registret metadata då så att om man sätter då kontaktpersoner-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm ...namn så kommer det ju då att visa det. Så det är ju då indirekt ett sidoregister, men utifrån metadataregistret då. Eh, huruvida det får uppdateras av utföraren, ja, det är bara ren data. Och på motsvarande sätt att lämna data på uppgiften så är det ju då exakt samma logik att man pekar in då ett, ett metadatafält då rubrikmässigt då.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. Eh, utifrån metadatafältsregistret då. Eh, krav att metadatafältet måste lämnas, ja, det är ren data. Eh-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. Om den enskilda artikeln kan användas som strukturartikel är ju bara ren data. Eh, sen kommer det då, eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "hur vidare då ingår underordnade strukturartiklar i huvudartikeln då. Ja, det är ju, eh, återigen hämtad då ifrån ett register och i det fallet så är det ju artikelregistret i sig själv då som man hämtar. Så till exempel, kärltvättstandard kan ingå då, eh, tvätt av lock, tvätt av, eh, si, tvätt av så och en dekal säger vi. Men det är ju då, eh, regist-- eller parti-- andra artiklar ur, ur artikelregistret då.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och här får man väl ha någon sorts varning då så att man inte kan få en cirkelreferens då så man har alltså en artikel. En strukturartikel kan inte innehålla sig själv då för då blir det ju en cirkelreferens. Sen kommer vi till fasttagningslogiken. Eh, det är ju då i allra högsta grad, eh, då, eh, sidoregister och det är ju metadatarregistret där man väljer då vilken metadata, om man väljer, eh, huruvida, eh, logiken är att...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Om metadatafältet för kärltyp är lika med...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Eh, då mappar fallskärm så ska man då...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Eh, få upp den där. Här kommer det också upp då ett behov utav ett sidoregister i metadatan då. Eh, och det finns ju då redan då där att man kan för... Om vi tar nu till exempel kärltyper då, så finns det matavfall, eh, restavfall, glas och, och så vidare. Då, då måste man då kunna definiera de olika typerna då utav, eh, utav i det här fallet kärltyper då i ett metadataregister. Men i dagsläget nu så står-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. -skapar man ju det då direkt när man definierar metadataartikeln och bestämmer att den här kan ha de här logiska värdena då, till exempel, eh, restavfallskärl.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Eh, beror det på utifrån objektets geografiska position? Ja, det är bara ren data att man talar om vad det är. Eh, beroendeartikel, ja, det är att man kopplar då en artikel som är beroende utav den här och det väljer man ju då bara en annan artikel. Inpekat objekt, ja, det är ju sidoregister, eh, i det här fallet objektregister som man väljer då där.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Sen kommer då, eh, det vi kallar styrning då och det är ju då, eh, eh, att den är skapad av ett, eh, ja, en orderskapare eller uppgiftsskapare då. Och då har vi det unika numret då på det orderkonceptet eller den orderskaparen som skapat uppgiften då. Och det är då ett löpnummer som systemet skapar. Så det är ju en form av, av register då, men det handtas ju ut av, ut av systemet då.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Eh, sen är det då hur den har skapats, ja, det är ju då i klartext om den kommer från ett orderkoncept eller om den kommer utifrån, eh, någon annan form av orderskapare då.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Eh, påhakat objekt, ja, det är det objekt som hör ihop med uppgiften.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och, eh, sen är det då, eh, vilken kund det är. Eh, ja, det är ju kundregistret då.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Sen kommer då leveranstider. Eh, ja, det är inget sidoregister alls, utan det är antingen direkt ifrån orderkonceptet, önskad leveranstid. Alternativt så är det då metadata styrt ifrån objektet då.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Sen kommer vi då på geografin. Det är ingen, eh, sidoregister alls, utan det är ju bara ren data.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och sen kommer vi då till fakturahuvudet då, eller vad vi ska kalla det då, som hör till uppgiften. Och kunden är kundregister. Eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. Vår referens... Ja, det är ju då kan man säga ett sidoregister indirekt då, va. Men vår referens är ju då, eh... Vilket-- Hur den här uppgiften är skapad, alltså från vilken-- Vilket återkoncept eller, eller annan uppgiftsskapares nummer då, eh, unika nummer som den kommer ifrån då.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Eh, och bara så, så att rättligt förstår här, vad är syftet i det där då? Jo, ett orderkoncept eller en annan orderskapare kan ju skapa flera uppgifter då. Och då finns det ju ett syfte att liksom kunna gå tillbaka då och, och se då den snabba ordern eller den, det orderkonceptet eller den, eh, inmatningen i form av en felanmälan eller en, en, en feedback eller en avvikelserapport ifrån en utförare eller en förbättringsförslag. Då kan man se då att",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "hur uppgiften är skapat utav den källan vid den ti-vid den tidpunkten då. Eh, sen har vi vår referens. Eh, det är ju då möjligtvis då ett sidoregister. I det här fallet så är ju det användaren då, i exemplet här, Lukas Sjölund då. Men det kan ju också finnas då, eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Är det idé att man har då olika såna interna referensnummer då? Det är inte hög prioritet, men ska det vara logiskt så ska det vara. Er referens...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Ja, det är manuellt inmatad data här då. Äh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Samtidigt då så, så är det ju då om man väljer att hämta metadata så är det då ett sidoregister och det är då metadataregistret då för kontakter och namn. Sen har vi då ert registreringsnummer och det är antingen manuellt inmatat, alternativt då att det är inpekat sidoregister då som är metadataregistret. Äh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Sen har vi information om...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Eh, hur, eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Om fakturareferens ska vara per rad, eh, och det är då information, eh, där man talar om då per, per fakturarad, eh, en informationstext och sen är det inpekad metadata mot sidoregister, men det är inget unikt sidoregister. Eh, fakturamodell, eh, delfakturering eller inte per faktura, det vill säga allt på beställningen eller alla uppgifter som är kopplade till samma fakt",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "ur. Mm. Mura då baserat på fakturareferens ska vara klart eller inte, eh, ja eller nej då. Det är bara datainmatning.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Fakturasläpp, om det ska samlas, om man hopar ihop det här per vecka, eh, per dag, vecka eller månad då. Det är inget sidoregister, utan det är bara val, tre eller fyra alternativ.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och sen har vi då efter fakturering.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och vidare rörligt pris, ja, det är inga sidor i det. Däremot så väljer man då prislista här då. Och, eh, prislistorna är ju ett sidoregister då. Eh, ett komplext register då. Dels ett register över de unika prislistorna, till exempel aktien 2026 eller, eh, ja, HSB, eh, Sverige 2026 då som en unik, kundunik prislista. Men sen innehåller ju då prislistor-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. Där så behövs då unika priser för respektive artikel då som det finns unika priser på.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och de artiklar som inte har unika priser då i en sida prislista eller i, i, i en kundunik prislista på det här viset, de får ju då ordinarie pris då.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Eh, ja, det är väl det. Sen så kommer vi då till statusen avslutningsvis då och det är ju i tre spalter då, eller ja, det, det är två. Det ena är ju liksom den generella upp-- eh, statusen utifrån systemet och sen är det affärsstatusen då. Men det har ju rep dit rätt ut. Så, då tror jag att vi har fått med allting. För det jag har gjort nu var ju att jag gick igenom då informationspaketet för uppgiften då som teoretiskt sett då innehåller ju då alla-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Ja ...samma länkad information. Så det som finns med där, det kommer ju då... Ja, där finns all information.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    }
+  ]
+}
