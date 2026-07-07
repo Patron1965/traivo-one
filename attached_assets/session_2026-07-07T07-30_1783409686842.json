@@ -1,0 +1,326 @@
+{
+  "sessionId": "a886502d4",
+  "exportedAt": "2026-07-07T07:30:41.025Z",
+  "summary": "### Key Topics Discussed\n- Grundläggande funktioner: hantering och visning av objekt.\n- Objektets struktur: namn, släktskap (föräldrar/barn).\n- Metadata för objekt.\n- Förståelsen av nuvarande översiktsbild för Replit, där oro uttrycks gällande Rättvists förståelse.\n- Detaljerad beskrivning av objektsmenyn och hur man navigerar till ett specifikt objekt.\n- Visning av objektsinformation: namn, nummer, status (aktiv/arkiverad).\n- Arkivering av objekt direkt från vyn där alla objektrelaterade åtgärder utförs.\n- Uppdatering av fält och metadata kopplade till ett objekt.\n- Problematiken med att visa samma information (t.ex. vinjettbild) flera gånger.\n- Släktskapsstruktur för objekt med exempel (Axfood Sverige, Hemköpskedjan, Region Göteborg, Hemköp Hisingen, Pantrummet, Pantmaskin 2).\n- Mockup-bild som referens för layout och grundprinciper (namn, nummer, status, bild).\n- Användning av metadata för vinjettbild och geografisk placering.\n- Interaktiva funktioner för karta och bilder.\n- Detaljer om metadatafält för objektsinformation, såsom objekttyp, modell och serienummer, vilka kan väljas som snabbfält för ytterligare information.\n- Vikten av att kunna söka på objektsnamn (t.ex. \"Hemköp Hisingen\") för att hitta och placera nya underobjekt (t.ex. pantrum) korrekt inom släktskapsträdet.\n- Risken att manuellt koppla nya objekt till fel \"förälder\" (t.ex. pantrum) om den fullständiga släktskapsinformationen inte är tydlig vid sökning och val.\n- Introduktion av metadatafälten senare i processen, under \"toppen\" för den aktuella objekttypen.\n- Korrekt presentation av metadata: endast metadata baserat på definierade metadatarubriker under \"Metadata\"-formuläret ska listas. Ej genererad information eller \"informationspaket\" som inte är metadata.\n- Uppgifter och dess prissättning samt metadata kopplade till uppgifter (t.ex. antal, utförandetid, kontaktpersoner).\n- \"Motorer\" för uppgifterna.\n- Uppgiftsinformation som status och faktureringsdetaljer som en del av ett större informationspaket.\n- Hantering av uppgifter och orderkoncept kopplade till objekt som metadata, inklusive planerade utförandetider och status.\n- Användning av katalogmodell för att hantera metadata för foton och kontaktuppgifter, där man kan bläddra mellan flera värden.\n- Historiska metadata-värden kan hanteras i samma modell men arkiveras, för att kunna se ändringar över tid, t.ex. \"antal\" ändrat från tio till tolv.\n- Spårbarhet för metadatafält: vem som skapade eller uppdaterade fältet och när det gjordes, antingen av systemet eller en operatör.\n- Diskussion kring \"tidsregler\" som förtydligades vara metadata, exempelvis \"leverans önskas torsdag eftermiddagar\".\n- Hantering av tidsinformation via en \"motor\" som påverkar önskad och planerad leveranstid för uppgifter baserat på metadata.\n- Förtydligande gällande uppgifter som metadata: Uppgifter och orderkoncept bör betraktas som metadata och kopplas på samma sätt som ett foto eller antal till objektet, med möjlighet att klicka för att visa mer detaljer.\n- Förtydligande gällande kartfunktion: Kartan är en hjälpfunktion som visualiserar adressen/koordinaterna, men kartan i sig är inte metadata utan ett verktyg.\n- Utveckling av en uppgiftsöversikt för att visa utförda och planerade uppgifter, när de utfördes/ska utföras, och hur de är grupperade.\n- Hantering av gamla foton och möjligheten att arkivera dessa.\n- Import av underobjekt hanteras via en matchningsfunktion, inte direkt i denna kontext.\n- Exportfunktion för objekt i CSV-format.\n- Adress och stad kan vara metadata.\n- Tillgång kan vara metadata.\n- Ospecificerad information som \"drabble\" som Replit tagit fram.\n- Ställtid är inte metadata utan skapas i finplaneringen.\n- Replit får inte \"hitta på\" information.\n- Möjlighet att lägga till skript för att få ut rader med valda metadatafält, t.ex. fastighetsnummer, i en lista.\n- Exportfunktionen för objekt ska möjliggöra uppdatering av befintlig data baserat på metadata, t.ex. fastighetsnummer, för att hantera ändringar i kontaktpersoner eller tömningsdatum.\n- Uppdatering av metadata kan ske antingen via formulär eller genom import av uppdaterad metadata via exportfunktionen.\n\n### Decisions Made\n- Exportfunktion för objekt i CSV-format ska finnas.\n- Exportfunktionen ska inkludera möjlighet att välja specifika metadatafält för utskrift.\n\n### Action Items\n- Replit måste säkerställa att endast relevant metadata, baserat på definierade metadatarubriker, visas och inte inkludera icke-metadata som \"informationspaket\".\n\n### Important Points & Insights\n- Objektets släktskap inkluderar överordnade och underordnade relationer.\n- Det finns en oro att Rättvist har svårt att förstå kopplingen mellan objekt och metadata.\n- En mockup har skickats in för att förtydliga hur systemet skulle kunna se ut och lösa nuvarande problem. Denna mockup ska användas som referens för att visa namn, nummer, status och en associerad bild som kan bytas baserat på metadata.\n- Oavsett vilken åtgärd man väljer (förändring, anslutning) så ska det leda till samma översiktsbild för objektet.\n- Översiktsbilden ska tydligt visa objektets namn och nummer.\n- Det är viktigt att tydliggöra om ett objekt är aktivt eller arkiverat, med möjlighet att ändra statusen.\n- Användare med tillgång bör ha full behörighet att uppdatera fält och metadata.\n- Att visa samma information upprepade gånger anses vara dåligt och ineffektivt.\n- En grundprincip är att Replit måste förstå kopplingen mellan all information och metadata.\n- All information kring ett objekt, förutom systemskapade ID, aktiv status och koppling till barn/underordnade, består av metadata.\n- Möjlighet att välja specifik metadata, som vinjettbild, för visning.\n- Funktionalitet för att visa objektets geografiska placering via adressinformation på en karta, med möjlighet att förstora kartan och bilden.\n- Metadata som objekttyp (t.ex. pantmaskin), modell och serienummer kan väljas som \"snabbfält\" för att ge kortfattad, relevant information om objektet.\n- Överordnade föräldrar och deras kopplingar ska visas i två separata rutor efter den inledande objektsinformationen.\n- Fullständig släktskapsinformation är kritisk vid sökning för att säkerställa att nya objekt kopplas till rätt överordnat objekt, exempelvis ett pantrum under rätt Hemköp-butik.\n- Replit måste säkerställa att endast relevant metadata, baserat på definierade metadatarubriker, visas. Det är inte acceptabelt att systemet själv skapar eller inkluderar icke-metadata som \"informationspaket\" vid presentation av objektinformation, då detta är kopplat till uppgifter och inte metadata för objektet.\n- Uppgiftsrelaterad information, inklusive pris, metadata (antal, utförandetid, kontaktpersoner) och status/fakturering, utgör ett stort informationspaket som ligger utanför objektshanteringen och hör till att-göra-listan i grovplaneringen.\n- Från objektets perspektiv ska det vara möjligt att se vilka uppgifter och orderkoncept som är kopplade till objektet, inklusive deras planerade utförandetider. Dessa uppgifter ska hanteras som metadata, även om de innehåller mer information än traditionell metadata (t.ex. uppgiftsnummer, önskad leverans, planerad tid och status).\n- En katalogmodell kan användas för att hantera metadata, till exempel för foton och kontaktuppgifter, med möjlighet att bläddra mellan flera förekomster.\n- Historiska värden för metadata bör kunna lagras och visas, även om de är arkiverade, för att spåra förändringar över tid.\n- Full spårbarhet för metadatafält är nödvändig, inklusive information om när och av vem (system eller operatör) metadatafältet skapades eller uppdaterades.\n- Ett uttryckt önskemål är att Replit bör börja om från början med implementeringen, med fokus på mock-up bilden och beskrivningen.\n- Det fanns en diskussion kring \"tidsregler\" som verkade vara ett missförstånd. Det klargjordes att det inte finns \"tidsregler\" i sig, utan att det rör sig om metadata som beskriver tidspreferenser, vilka sedan hanteras av en motor för att påverka planering av uppgifter.\n- Logiken kring metadata för fakturor och ordrar baserat på orderkonceptet förväntas lösa många frågor, men en uppgiftsöversikt kan fungera som ett hjälpmedel för användaren, likt kartfunktionen.\n- De \"avancerade verktygen\" för historik och arkiv är inte aktuella i nuläget eftersom befintlig logik redan hanterar detta.\n- Det finns en betydande oro för att Replit har tappat logiken helt och hållet, särskilt gällande \"ställtid\" som inte är metadata utan en del av finplaneringen.\n- Överordnat objekt kan visas med namn.\n- Exportfunktionen för objekt kommer huvudsakligen att användas för att importera uppdaterad data, med möjlighet att matchas på specifik metadata som fastighetsnummer.\n- Användare ska kunna exportera listor med valda metadatafält för att sedan importera uppdaterad information för befintliga objekt, matchat på systemets interna logik och nummer (t.ex. OB001 för \"Bostadsrättsföreningen Hönset\") eller kundens egen benämning (t.ex. \"Stora Boven 20\").\n\n### Open Questions/Pending Items\n- Hanteringen av \"motorer\" för uppgifter.\n- Replit behöver möjligen en layoutlösning för hur uppgifter presenteras.\n- Hur restriktiv information på mockuppen ska implementeras.\n- Vilka \"avancerade verktyg\" som har lagts till i Replit och vad de innebär.\n- Huruvida Replit fullt ut förstått flödet för uppdatering av metadata, både via formulär och via import.",
+  "conversation": [],
+  "transcripts": [
+    {
+      "text": "God morgon, god morgon. Ska vi se här då. Ja, nu är den här jäkla Mats här igen och ska köra med oss. Varsågod, Mats. Ja, nu kommer vi gå igenom en utav de absolut grundläggande och viktigaste funktionerna, nämligen hanteringen utav objekten, visningen av objektena. Och här är det då man säger två tunga bitar då. Det ena är då objektet i sig själv med då namnet, släktskapet och...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Överordnade respektive underordnade, eh, ja, föräldrar eller barn då till, till, till objektet. Och den andra tunga biten är då, eh, det metadata som finns för den här. Och här är vi oroliga för då att rättvist verkar ha svårt att fatta det hära. Eh, vi har också skickat en, en mockup hur det här skulle kunna se ut då. Och nu kommer jag att kommentera för att rättvist då ska förstå, eh, den hära nuvarande översiktsbilden då som, som, som Replit har...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Erbjudit då. Och backar vi ur då... Vi, vi är alltså inne då på den meny som vi kallar då objekt. Och vi går då in på ett valfritt objekt. Och min uppfattning är då att oavsett vad du trycker här, om du vill göra en förändring, om du vill, vill, vill ansluta mer, så ska du komma till samma bild och det är den här bilden då som vi pratar om nu då och som vi kommer att väl också skicka med här, exempel då. Men hur som helst, på toppen utav den här så ska då obj",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "ektets namn och nummer anges. Och det gör ju även rättligt här då. Eh, så det står, det är snyggt. Sen så ska, ska, ska det då tydliggöras om det här objektet är aktivt eller om det är arkiverat. Och det står ju en liten, liten knapp där. Men där är ju väldigt viktigt då att man ska kunna, eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Arkivera ett objekt då utifrån den här vyn då. Eh, för det är ju här man gör allting med objektet och den som har tillgång till det här ska ju ha full access att både uppdatera då fält som går att uppdatera och, eh, uppdatera, eh, ja, adresser och, eh... Jag pratar om att uppdatera metadata då. Eh, sen så kommer det då en vinjettbild och en kartposition och sen kommer det en vinjettbild igen. Och bara det här att visa samma information två gånger är ju väldigt, väldigt-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm ...dåligt. Och jag hänvisar till den här mockup-bilden som vi har gjort då. För där är allting klart och tydligt. Eh, släktskapet då som är viktigt här, alltså den här namnet då, eh, det skulle då kunna heta Axfood Sverige, Hemköpskedjan, Region Göteborg, Hemköp Hisingen, Pantrummet och Pantmaskin 2 som ett exempel då. Eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Ja.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Ja, och enklast är ju liksom...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "I det här fallet att vi hänvisar till den här mocka-bilden som vi har, som vi har skapat då. För den, den, den... Layoutmässigt går det väl att göra, göra förbättringar på den då, va? Men, men, men grundprincipen då att man anger namnet, eh, numret på objektet, vilken status det har då. Och sen så visar man då en bild som man då kan, eh, byta då utifrån, utifrån då den metadata som man har satt upp för den. Så att allt... Replit måste också förstå att allting-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. Är metadata här, eh, förutom då det systemskapade objekt-id:et, huruvida den är aktivt, aktiv eller inte och hu-huruvida den är kopplad till barn eller underordnade. Alla de andra... All den andra informationen som finns, eh, kring ett objekt och således på den här, eh, informationsbilden är bara metadata. Och på toppen här också för att göra det användarvänligt då, så har man möjligt att, möjlighet att välja v",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "iss metadata som det vi kallar vignettbild. Och det finns en funktion som visar geografiskt utifrån, eh, adressinformationen var objektet är beläget. Så då ser man på bilden ungefär vad det är och man ser på kartan ungefär var det är någonstans. Och så rimligtvis så kan man då klicka på kartan och komma upp i en förstorad karta och klicka på bilden för att få en större bild. Eh, sen har vi då möjlighet att fritt välja tre stycken...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. Metadata som man för, för objektet då väljer. I det här fallet så, så finns det då metadatafältet objekttyp och då står det att det är en p-pantmaskin. Och så står det, eh, redovisaren metadatafältet modell och då står det vad det är för en modell. Och så står det metadatafältet serienummer. Och de här, eh, fältena kan man då välja. Det är som snabbfält bara för man ska få lite mer, mer information. Efter det här inledande sjoket så kommer...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Då två stycken rutor som visar överordnade föräldrar och hur de är kopplade.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och så finns det motsvarande för underordnade barn. Och i båda fallen så ska det ju då finnas en knapp där man då kan koppla då underordnade eller överordnade. Och i den sök... När man då söker ett, ett, eh, en förälder eller ett barn som man då ska koppla till i den här sökrutan, och den finns ju inte med här då, så är det viktigt att Replit hanterar släktnamnet då. Så att om jag nu söker en förälder här nu då som till exempel skulle kunna vara...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Hemköp Hisingen då, då, då ska jag kunna söka på Hisingen kanske då eller Hemköp Hisingen. Och då får jag då upp Hemköp Hisingen och kan lägga till då ett pantrum eller ett återvinningsrum eller ett, ett garage under den då. Eh, så att man har hela det här släktnamnet då i den söksekvensen. Annars så blir det ju omöjligt att veta liksom till vilket... Eh, ja, om, om man bara ska koppla nu en pantmaskin till ett pantrum, då behöver, behöver man den här informationen. Annars är ju sannolikheten väldigt stor att man",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "kopplar det nya objektet då, om man jobbar manuellt så här, till fel pantrum då, då man inte har helheten. Eh, senare då under den här toppen här nu då, så kommer då, eh, metadatafälten. Och...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "I Räddningstjänstfall, om man tittar på den här, så har ju den då hållit på att hitta på en massa saker själv här då, eh, som inte är metadata eller som är något annat. Utan den ska ju bara vara upplistad här utifrån de metadatarubriker som finns under formuläret metadata då. Så finns det, eh, metadata för kontakter, ja, då renvisar den det. Finns det metadata för, för, eh, uppgifter och orderkoncept, redovisar den det. I...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Utanför ruta under varandra här då. Och här har också då, eh, Replit i det här exemplet då tagit med i-informationspaket. Det finns inget metadata som jag ser som finns som heter informationspaket, utan när vi har pratat om informationspaket så är det alltså den information som kring-- finns kring en uppgift som är någonting helt annat. Men, eh, det, det måste Repl-Replit känna till vid det här laget då att runt i kring en uppgift så sammanlänkas ju... Grunden är ju uppgifter.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Ja. Uppgiften och priset för uppgiften. Och sen så hämtas det ju metadata då för till exempel antal eller utförandetid eller, eh, eh, kontaktpersoner och sånt där till den här uppgiften. Och sen så finns det ju de här motorerna också som vi har nämnt då. Så kring den så blir det ju då utifrån den här stora matrisen en mängd med information då, eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Som även innehåller status för uppgiften, hur den ska faktureras och så vidare. Så det är ett stort informationspaket, men det ligger helt utanför det här. Det är ju att göra-listan i grobplaneringen och sen så i... Vidare...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Vidare lagt upp till tidplaneringen för respektive utförartid. Eh, sen vill vi ju då naturligtvis att utifrån objektets perspektiv, då så ska man ju kunna se vilka, vilka uppgifter och orderkoncept som är kopplat till det här objektet och när de är planerade att göra. Men de ska hanteras på motsvarande sätt som annan metadata. Så att om en uppgift är kopplad till ett objekt så är ju det då ett, en, ett uppgifts... I det är det ett uppgiftsnummer, till exempel tvätta pannkakor.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Maskin. Eh, och så står det ju då när det önskas levereras och så står det när det är planerat och vilken status den har och så vidare då. Men den är i grund och botten bara en, en metadata, om än i en mer, eh... Det finns mer information på den då än många andra metadata. Men det är ju, det, det är ju då en koppling av en uppgift till den här. Och när man klickar upp den så kan man ju se, se, se vad det är. Sen förstår jag då att en Replit har möjligtvis för uppgifterna här en, en layoutmässig, eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "dilemma då, va? Men det är ju inte så svårt. A-a-om man använder sig utav det här katalogmodellen som vi har nu som funkar på både, eh, foton och kontaktuppgifter då, där man kan bläddra då om det finns metadata i form av, av tre stycken kontaktuppgifter så kan man bläddra mellan dem då i, i den där layouten. Och finns det, eh, om vi tar en simpel information då som till exempel antal och så står det tolv, ja, då är det metadatafältet uppsatt så att det bara kan vara tolv.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Ja, det är ju bara ett värde där, men de historiska värdena kan ju ligga i samma modell, bara att de är arkiverade värden. Då kan man ju se då att ja, fram till ett visst datum så, så, så var det då tio stycken och sen har det då blivit tolv. En annan viktig bit i det här som också framgår utav mockupen då är att för restriktiv... Det...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Med datafält så framgår det så att säga vem... Alltså när uppdaterades eller skapades metadatafältet och vem var det som gjorde det då? Alternativt att det är systemskapat eller, eller, eh, skapat av en operatör eller, eller, eller så då. På det viset får man full fölbarhet då, eh, för, för vem som har gjort det.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Ja, eh, jag hoppas att budskapet har gått fram tillsammans då med, med den här mocka-bilden som vi har och den här beskrivningen och att nu rättligt nu ser till att rätta till det här och ta bort... Jag tror att rättligt får börja om från början. Eh, det här är... Alltså, det står ju med tidsregler där. Har du några kommentarer på, på den? Längst ner under informationspaket så har du ju tidsregler.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Vad, vad, vad pratar du om nu?",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Vi har inget som heter tidsregler.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Gå, gå därnäst ner.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Äh, slott, preferens, tidsregler och så finns det... Ja, men det är jättebra att du tar upp, tar upp det där. Men det finns ingenting som heter tidsregler, utan det finns ju bara metadata. Ja. Och, och om det finns en, en, en hård eller mjuk metadata som säger då att, att leverans önskas torsdag eftermiddagar. Ja, då redovisas ju den som den metadata som den är här, utan förvanskningar. Ja. Och, och, och sen kommer ju den då att hanteras av den här motorn som har-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. Hanterar tidsinformation så att en kopplad uppgift då kommer ju... Om det här är ett hårt- Mm. Krav att man bara får komma på torsdag eftermiddagar, så kommer ju det att återspegla sig på, på den önskade leveranstiden och förhoppningsvis planerad leveranstiden då för uppgifterna. Mm. Kommentera även, du säger att de har lagt till avancerade verktyg här, alltså klickar du ner. Vad har...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Ja, det är ju, det är ju då återigen fel då för att... Jag säger det igen. Här ska det bara vara listat metadata som är kopplat till den här och de uppgifter då. Och när det gäller uppgifter så ser jag också då en uppgift som är metadata. Alltså på samma sätt som att man har en fo-, ett foto på, säg det pantmaskinen eller soltunnan. Så, så har man en uppgift som är kopplad till den här eller ett orderkoncept. Uppgiften kommer ju från orderkonceptet. Så är de bara-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. Båda, eh, kopplade som på samma sätt som ett foto eller som antal eller något sånt där. Och sen vill man titta mer då på de dära, ja, då får man ju då klicka upp dem. Sen som jag säger så, så kan det ju då vara bra då att ha hjälpfunktioner här. Kartan är ju en hjälpfunktion där, där, där, eh, användargränssnittet här nu då lägger ut adressen på en karta. Eh, kartan i sig är ju ingen metadata, utan kartan är ett verktyg på sidan för att man lättare ska förstå var adressen eller koordinaterna är.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och på motsvarande sätt så... Men, men det kan vi ta i nästa steg då. Så kommer vi att behöva, eh, om, om vi har då uppgifter som är kopplade till den här så, så, så skulle det då vara bra sen att utveckla en uppgiftsöversikt då. Eh, men det föreslår att vi tar till nästa steg då. Mm. För där kommer det att vara intressant att se liksom då vilka uppgifter är det som, som är utförda? Vilka uppgifter är det som är planerade och när ska de utföras? Och när utfördes de? Och hur har den klumpat ihop de här uppgifterna? Och vilka uppgifter ligger på samma fäktning?",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och så vidare. Eh, i-- Min uppfattning är ju då med den logik som vi har kring metadatan då, eh, hur vi skapar fakturor och ordrar utifrån orderkonceptet så kommer det där att ge sig väldigt mycket själv. Men det kan tänkas då att man tar fram något hjälpmedel på samma sätt som kartfunktionen då, eh, som, som- Mm. För att visa det på ett lättare sätt för användaren då. Men, men i övrigt, eh, de här avancerade verktygen då, historik och arkiv, ja, men det är inte aktuellt därför att vi har-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. Vi har de här som man rullar, åtminstone inledningsvis nu. Så om du har gamla foton och så vidare, ja, men då får väl de ligga då på en sån där som man får, får, får bläddra. Och det är möjligt då att, det har vi inte nu, men att vi då skapar nån funktion då så att vi kan arkivera gamla foton eller så då, eh, för att få undan det. Eh, metadatahistorik och importerade underobjekt. Ja, ja, det är inte här man importerar underobjekt, utan det gör vi ju liksom i den här matchningsfunktionen. Mm. Eh, ytterligare en grej-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. Jag vet inte om jag ska ta upp det nu, men det finns ju en exportfunktion då där man kan exportera objekt i CSV-format. Och...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Då finns det något då som heter objektlista. Och när jag tar upp då objektlista här, så är ju-- Om jag börjar från vänster då, så är allting solklart. Det är alltså objektnumret, eh, namnet på objektet. Men sen har den hittat på visningsnamn och det finns logiskt sett inget visningsnamn, utan ett objekt har ju liksom bara ett namn. Eh, så här har den då tagit upp två stycken. Eh, sen så statusen att den är aktiv eller inte aktiv, ja, det är ju...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Eh, sen så kommer då adress och stad. Ja, det skulle ju mycket väl kunna vara metadata då. Eh, men... Och tillgång skulle också kunna vara metadata, men i det här fallet så finns inte det här. Det här vet jag är något gammalt drabble som, som Replit har tagit fram ifrån sitt, sitt, sin... Den har hittat på eller tagit fram då. Sen finns det ställtid och den är ju helt apart då. Här blir man ju riktigt rädd om Replit har, har tappat logiken helt och hållet då för att ställtiden-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Ja, ställtid finns inte på metadata-nivå, utan ställtiden skapas ju i, i finplaneringen då, där man ser då hur, hur, hur man ska resa då. Så, så det här är bara drabble. Sen kommer det överordnat objekt då. Ja, det är väl okej då. Det kan väl stå där då. Och så kommer överordnat objekt med namn då. Ja, det, det är väl okej att det står där då. Men det som är viktigt här nu då, det är att Replit får inte hitta på någonting. Och en sån här lista, den vill man kunna-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm ...exportera och...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Jag kanske fel att säga det här, men här vill man också då kunna lägga till ett, ett, ett script då så man kan alltså få ut en sån här, här radlista med några valda, eh, metadatafält. Eller liksom, man kan liksom lägga till dem där. Så att... Och, och om det till exempel finns då ett metadatafält som heter fastighetsnummer då, ja, då skulle man kunna lägga ut det på den här listan då. Det vore ju önskvärt då. För då, då kan man ju då se vilket fastighetsnummer den här hög",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "arna kommer att primärt då att användas för att kunna tanka in uppdaterade uppgifter då. För det kommer ju verkligen att funka på det sättet att kunden kommer ju då att leverera utifrån, eh, någon given metadata då, till exempel fastighetsnummer. Så här, ja, på fastighetsnummer 22 här nu så har vi en ny kontaktperson eller vi har, eh, någon annan intressant metadata. Eller det, det kommer nya datum för tömningen av kärlen då. Och då, då kan man då använda den listan för att få ut då den här...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och bygga på den där för att sen tanka in då den här uppdaterade metadatan till de givna objekten då utifrån, eh, systemets logik då och nummer. Så att, eh, till exempel bostadsrättsföreningen Hönset här då som heter OB001 då, då skulle man ta ut den här listan och då kanske kunden kallar det här då sin egen fastighet då för fastighetsbeteckningen Stora Boven 20 då säger vi. Och då, då, då kan man få med den inf",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "on- Mm. Ja, jag vet inte om Replik förstod det här, eh, och det är väl lite, har väl... Det, det är liksom sekundärt så vi kanske får ta det i nästa steg. Men, men grundflödet är ju liksom då att antingen uppdaterar man metadata i det formulär vi pratade om inledningsvis eller så uppdaterar man metadata genom att, eh, tanka in. Och en grej som jag missade där som, eh, är givet, men, men det kanske inte är givet för m-- för Replik. Om vi går in i...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "I den här sidan då där vi har själva meta, eh, objektet och metadata, så måste det också finnas då en möjlighet här bland metadata-fälten att man kan trycka ett plus då. Eh, och det finns det väl här. Där står det länk till. Ja, jo men den finns med. Så man, man, man skulle kunna lägga till ett metadatavärde då.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "På, på det här sättet.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och då ska... Då, då, då, då ska det komma till. Eh, sen ser jag också på flera ställen här som bekräftar och liksom det hära...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Det, det finns då en funktion här som heter snabborder och, och, och den ligger på några olika ställen också här. Jag har för mig att den är längre ner och den...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Där är vi ganska okej som man ser det här då.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Du kan väl alltså skapa en stambord kopplat till objektet?",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Nej, så att den, den, den, den, den, den är riktig.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Man kan välja kund och man kan välja orderreferenser och man kan lägga till orderrad här på...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    }
+  ]
+}
