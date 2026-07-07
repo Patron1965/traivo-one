@@ -40,6 +40,12 @@
  *                              vid känd baseline, t.ex. dev-räkningen)
  *   --no-dev-diff         hoppa över jämförelse mot dev (om DATABASE_URL
  *                         saknas eller pekar på prod)
+ *   --post-reset          verifiera "redo för nyimport"-läget efter en
+ *                         driftdata-rensning: objects (aktiva) FÖRVÄNTAS = 0
+ *                         (FAIL om > 0), och tomt price_list_articles /
+ *                         fortnox_config behandlas som WARN/INFO i stället
+ *                         för FAIL. Använd detta efter operational reset,
+ *                         INTE efter en full migrering.
  */
 
 import pg from "pg";
@@ -62,6 +68,7 @@ const TENANT = arg("tenant", "kinab")!;
 const EXPECTED_MIN_CUSTOMERS = parseInt(arg("expected-customers", "400")!, 10);
 const EXPECTED_MIN_OBJECTS = parseInt(arg("expected-objects", "1")!, 10);
 const NO_DEV_DIFF = arg("no-dev-diff") === "true";
+const POST_RESET = arg("post-reset") === "true";
 
 // ----------------------------- env ------------------------------
 
@@ -212,6 +219,18 @@ async function runCounts(): Promise<void> {
       continue;
     }
     if (row.label === "objects (aktiva)") {
+      if (POST_RESET) {
+        if (n === 0) {
+          record(`count: ${row.label}`, "PASS", `0 (redo för nyimport)`);
+        } else {
+          record(
+            `count: ${row.label}`,
+            "FAIL",
+            `${n} aktiva objekt kvar — rensningen förväntar 0 (kvarvarande driftdata)`,
+          );
+        }
+        continue;
+      }
       if (n >= EXPECTED_MIN_OBJECTS) {
         record(`count: ${row.label}`, "PASS", `${n} (≥ ${EXPECTED_MIN_OBJECTS})`);
       } else {
@@ -228,8 +247,18 @@ async function runCounts(): Promise<void> {
       else record(`count: ${row.label}`, "WARN", `${n} work_orders i prod — slim-migrering förväntar 0 före Modus-import`);
       continue;
     }
+    // I post-reset-läget var price_list_articles / fortnox_config tomma
+    // redan före rensningen (de fylls först vid nyimport/OAuth), så ett
+    // 0 här är förväntat och ska inte fälla grinden.
+    const softInPostReset =
+      POST_RESET &&
+      (row.label === "price_list_articles" || row.label === "fortnox_config");
     if (row.expectNonZero && n === 0) {
-      record(`count: ${row.label}`, "FAIL", `${n} (förväntade > 0)`);
+      if (softInPostReset) {
+        record(`count: ${row.label}`, "WARN", `${n} (tomt — förväntat i post-reset, fylls vid nyimport)`);
+      } else {
+        record(`count: ${row.label}`, "FAIL", `${n} (förväntade > 0)`);
+      }
     } else {
       record(`count: ${row.label}`, "INFO", `${n}`);
     }
@@ -465,7 +494,13 @@ async function runConfigPresence(): Promise<void> {
       [TENANT],
     );
     const row = r.rows[0];
-    if (!row.has_row) record("config: fortnox_config", "FAIL", "ingen rad för tenant");
+    if (!row.has_row) {
+      if (POST_RESET) {
+        record("config: fortnox_config", "WARN", "ingen rad för tenant — förväntat i post-reset, sätts vid Fortnox-OAuth");
+      } else {
+        record("config: fortnox_config", "FAIL", "ingen rad för tenant");
+      }
+    }
     else if (!row.has_token) record("config: fortnox_config.access_token", "WARN", "rad finns men access_token saknas — Fortnox-OAuth behöver göras om i prod");
     else record("config: fortnox_config", "PASS", "rad + access_token finns");
   }
@@ -497,8 +532,9 @@ async function main() {
   log(`Verifierar Kinab prod-data (tenant=${TENANT})`);
   log(`PROD_DATABASE_URL: <maskerad>`);
   log(`Dev-diff: ${wantDevDiff ? "PÅ" : "AV"}`);
+  log(`Läge: ${POST_RESET ? "POST-RESET (redo för nyimport, objects=0)" : "POST-MIGRERING (full data)"}`);
   log(`Förväntat min antal aktiva kunder: ${EXPECTED_MIN_CUSTOMERS}`);
-  log(`Förväntat min antal aktiva objekt:  ${EXPECTED_MIN_OBJECTS}`);
+  if (!POST_RESET) log(`Förväntat min antal aktiva objekt:  ${EXPECTED_MIN_OBJECTS}`);
 
   await runCounts();
   await runDevDiff();
@@ -523,6 +559,7 @@ async function main() {
   lines.push(`# Kinab prod-verifikation ${stamp}`);
   lines.push("");
   lines.push(`- Tenant: \`${TENANT}\``);
+  lines.push(`- Läge: ${POST_RESET ? "POST-RESET (redo för nyimport, objects=0)" : "POST-MIGRERING (full data)"}`);
   lines.push(`- Dev-diff: ${wantDevDiff ? "PÅ" : "AV"}`);
   lines.push(`- Förväntat min antal aktiva kunder: ${EXPECTED_MIN_CUSTOMERS}`);
   lines.push("");
