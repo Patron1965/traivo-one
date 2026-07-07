@@ -1,0 +1,206 @@
+{
+  "sessionId": "f72600e3a",
+  "exportedAt": "2026-07-07T13:51:10.869Z",
+  "summary": "### Key Topics Discussed\n- Metadata areas and system-created metadata connections.\n- Metadata editors and their connection logic.\n- Deletion of existing data and starting anew.\n- Presentation of metadata fields in carousels.\n- Editing and managing inherited metadata in carousels.\n- Inheritance of information down through objects.\n- Handling of editable versus archived information in carousels.\n- Definition of metadata and handling of unique vs. multiple information fields.\n\n### Decisions Made\n- All existing data will be deleted, and the system will start over.\n\n### Action Items\n- The user to provide a clear list of what he perceives needs to be deleted.\n- 'He' (likely the person responsible for deletion) to delete everything and start fresh.\n\n### Important Points & Insights\n- Under the header, it's acceptable to have a menu that refers to various metadata areas defined in the system.\n- This includes special system-created metadata connections linked to year concepts and quick orders.\n- Metadata editors are linked with similar logic to year concepts, metadata editors themselves, and quick orders.\n- Some object-related tasks are system-generated.\n- The system will present all related tasks, indicating their origin (e.g., year concept, quick order), with links to jump back to the source.\n- Each metadata field should be presented in carousels that can handle both history and multiple information fields (e.g., multiple accounts).\n- In the carousel, editable metadata should have a pen icon to allow changes.\n- If metadata is inherited, the system must handle it by allowing edits at the source or by creating a new contact with different properties at the current level.\n- Information is inherited downwards and supplemented at lower levels.\n- For example, a store manager contact will be present on all underlying objects.\n- A contact responsible for the pantrum will also be present alongside the store manager.\n- To change a store manager's number, one must go to the level where the store manager is defined (e.g., the store level).\n- Information established at a lower level will be displayed in carousels.\n- Editable information can be changed, but archived information (e.g., historical counts) cannot be altered.\n- When editable information is changed, the old value becomes archived, and the new value is updated with the current date.\n- When defining a metadata field, it's specified if it can be a catalog (multiple values) or unique information.\n- Examples of unique information fields include address, object name, and quantity, which can only have one current value.\n\n### Open Questions/Pending Items\n- The user mentioned having stated the content under the header 20 times, indicating a potential lack of clarity or repeated questioning on this specific point.",
+  "conversation": [],
+  "transcripts": [
+    {
+      "text": "Åh, det är tidigt smid.",
+      "timestamp": "",
+      "speaker": "Others",
+      "isFinal": true
+    },
+    {
+      "text": "Och var gång som jag vågats att bada i den blir jag helt-",
+      "timestamp": "",
+      "speaker": "Others",
+      "isFinal": true
+    },
+    {
+      "text": "Det andra jag, varför jag inte badar mer.",
+      "timestamp": "",
+      "speaker": "Others",
+      "isFinal": true
+    },
+    {
+      "text": "Varför, varför när jag vet allt är ljuvligt?",
+      "timestamp": "",
+      "speaker": "Others",
+      "isFinal": true
+    },
+    {
+      "text": "Ja. Ja, under huvudet då som jag har nu sagt säkert 20 gånger vad det ska innehålla, så är det helt okej att ha en meny som hänvisar ner till olika metadataområden som finns definierat i systemet, inklusive då de speciella metadatakopplingar systemskapade, det vill säga de som är kopplade till årekoncept, snabbordrar och, och liknande som har berört objektet, det vill säga a-att det ska-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Du kan nästan verka som jag försöker att umgå dig.",
+      "timestamp": "",
+      "speaker": "Others",
+      "isFinal": true
+    },
+    {
+      "text": "Att känna mig rädd för nåderna glädjen som du skänker mig för under det.",
+      "timestamp": "",
+      "speaker": "Others",
+      "isFinal": true
+    },
+    {
+      "text": "Det finns en bråd, en källa till liv i min egen kropp.",
+      "timestamp": "",
+      "speaker": "Others",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. -så de här, eh, metadata-eh-editortorerna som jag säger, de, de är också uppgifter som är kopplade då med samma logik. Och vissa kommer då att vara så kopplade via ett årekoncept, vissa kommer att vara kopplade via en, en metadataeditor, eh, vissa kommer att vara kopplade via en, en snabborder. Vissa uppgifter som är kopplat till objektet kommer att vara skapad av systemet i, i det som fall-- Vissa fall. Och den här logiken får du rättigt försöka då att hålla, hålla reda på. Men den-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "När jag druckit tagen, fylls jag av klarhet och saknat hopp.",
+      "timestamp": "",
+      "speaker": "Others",
+      "isFinal": true
+    },
+    {
+      "text": "Var gång som jag vågat att dricka ur den, blir jag hel och ren.",
+      "timestamp": "",
+      "speaker": "Others",
+      "isFinal": true
+    },
+    {
+      "text": "Och jag känner ett lindrande ljus gå igenom varje ben.",
+      "timestamp": "",
+      "speaker": "Others",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. - presenterar alla orden där nere. Så då kan man se alla uppgifter som är kopplade till objektet utifrån det och var uppgifterna är födda ifrån om de då är födda ur ett årekoncept eller en, en, en snabborder. Då kan man då få en länk och hoppa tillbaka till, till den då, upplysningsvis då för det här. Eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Så rensa upp.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Varför jag inte dricker.",
+      "timestamp": "",
+      "speaker": "Others",
+      "isFinal": true
+    },
+    {
+      "text": "Varför, varför när jag vet allt är ju-",
+      "timestamp": "",
+      "speaker": "Others",
+      "isFinal": true
+    },
+    {
+      "text": "Reniga, och få bort skiten och sen så- Nej, jag har, jag har bett han skriva en tydlig lista nu på vad han uppfattat som ska raderas. I och med att- Ja, det är allt som ska raderas. Han ska radera allt- Ja. Och börja om från början. Ja, okej. Ja. Och, och, och sen så när det gäller presentationen utav det hära då, så ska ju då respektive metadata-fält ligga redovisat i de hära karusellerna som man säger, som kan hantera då både historik eller flera informationsfält som till exempel, det finns en, flera kont",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Så jag åkundar som det är. Kan nästan verka som jag försöker att umgå dig. Att du känner mig rädd för nåden och glädjen som du skänker mig. Var underlig. Var underlig. Jag vill trotsa det motstånd jag har att ta emot dig som gör mig gott.",
+      "timestamp": "",
+      "speaker": "Others",
+      "isFinal": true
+    },
+    {
+      "text": "Den kloka att gå runt och söka det som jag redan har.",
+      "timestamp": "",
+      "speaker": "Others",
+      "isFinal": true
+    },
+    {
+      "text": "akter som är kopplade mot det här objektet då. Så kan man i den här karusellen bland-- radera fram och tillbaka, tillbaka, tillbaka. Och den metadata som vi-- visas då och som är redigerbar, ska man då kunna trycka på en penna för att till exempel då ändra.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Visst, kontaktpersons titel eller radera personen eller vad det nu är. Och är den ärvd så måste då systemet hantera det här. Så att om, om den är ärvd ska man ju gå tillbaka till källan och så justerar man ju den då från toppen. Alternativet i det är ju att man skapar en ny kontakt med andra egenskaper då på den här nivån som man är på i...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Nu undrar jag varför jag inte badar mer. Varför, varför? När jag vet allt det ljusa och båda som det ger. Det kan nästan verka som jag försöker att undgå dig. Att du känner mig rädd för nåden.",
+      "timestamp": "",
+      "speaker": "Others",
+      "isFinal": true
+    },
+    {
+      "text": "Du känner mig.",
+      "timestamp": "",
+      "speaker": "Others",
+      "isFinal": true
+    },
+    {
+      "text": "Alltså det objektet som, som, som ligger inne. Och då, det, det bygger ju liksom då på att information ärvs nedåt och kompletteras nedåt. Så det innebär ju liksom att om det finns en butikschef så kommer ju den butikschefen att finnas som kontakt på alla underbarande objekt. Medan om det då finns en som är ansvarig för pantrummet så kommer ju den då att finnas där tillsammans med, eh, butikschefen. Vill man ändra butikschefens nummer om...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Eller, eller, eller, ja, om det ska ändras på det, ja, då måste man gå upp då på den nivå som butikschefen är, eh, definierad på. Eh, det vill säga butiksnivån då.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Jag skulle vakna mitt i natten och gå upp och ta en lång promenad. Jag skulle låta blicken möta andra ögon i en främmande stad. Jag skulle inte ha så bråttom med att träffa nån ny. Jag är rätt mycket mig själv, precis som du. Jag skulle-",
+      "timestamp": "",
+      "speaker": "Others",
+      "isFinal": true
+    },
+    {
+      "text": "Medan om det då är som en läggnivå så, så, så etablerar man den då på, på den nivå som, som man är här på. Eh, och sen redovisar man de här i de här karusellerna. Man kan radera, man kan ändra information då. Är det, är det öppen information så får man ändra det. Men däremot om det är arkiverad information som till exempel antalet och som bara kan vara en typ av informationsvälj, så kan man inte gå tillbaka och bläddra i den här och se att nej, jag ändrade liksom då, det var tolv stycken kärl fram till den fjärde.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Jag skulle sitta på ett tåg mot Paris och låta Stockholm va. Jag skulle få-",
+      "timestamp": "",
+      "speaker": "Others",
+      "isFinal": true
+    },
+    {
+      "text": "Nej, det är ju det. Då kan man inte ändra det. Det är ju, det är ju arkiverat då. Medan om, om man nu vet att antalet ska reduceras till tio kärl nu, då kan man gå in och ändra den och då ändrar man då ifrån om det nu var tolv kärl innan och så kommer det tolv kärl då att bli arkiverade, den arkiverade informationen som ligger då. Så kan man se att fram till dagens datum, den 7 juli, så var det då säger vi tolv kärl och sen gick någon in och ändrade det där så det blev tio kärl.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och då uppdateras då den informationen och det, eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Jag skulle pröva mina-",
+      "timestamp": "",
+      "speaker": "Others",
+      "isFinal": true
+    },
+    {
+      "text": "Det är ju så vi tar definitionen av metadata. Och när man lägger upp ett metadatafält så talar man ju om, om det, om det får vara en katalog, det vill säga flera, flera informationer eller om det är en unik information då så... Men som adress och objektnamn och antal, det är ju typiska saker som bara kan ha ett värde. Den kan inte ha två adresser, då blir den i sådana fall två objekt. Och det kan inte ha två antal, utan det har hela tiden det senaste antalet som gäller. Och den har hela tiden den senaste adressen. Den kan inte ha två adresser.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Ja.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    }
+  ]
+}
