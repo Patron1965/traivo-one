@@ -86,7 +86,8 @@ if command -v psql >/dev/null 2>&1 && [ -n "$DATABASE_URL" ]; then
            migrations/0119_travel_engine_team_params.sql \
            migrations/0120_travel_time_entries_tidskod.sql \
            migrations/0121_work_order_order_number.sql \
-           migrations/0122_work_order_location_requirement.sql; do
+           migrations/0122_work_order_location_requirement.sql \
+           migrations/0123_object_quick_field_configs.sql; do
     if [ -f "$f" ]; then
       echo "[post-merge] Applying $f"
       psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f "$f"

@@ -4728,6 +4728,35 @@ export const insertObjectHeaderConfigSchema = createInsertSchema(objectHeaderCon
 });
 export type InsertObjectHeaderConfig = z.infer<typeof insertObjectHeaderConfigSchema>;
 
+// Objektvy 360 (P1): PER-OBJEKT snabbfälts-konfiguration. Skiljer sig från
+// objectHeaderConfigs (per objekttyp, tenant-omfattande admin-default) genom att
+// gälla ETT objekt och ÄRVAS NEDÅT genom den PRIMÄRA förälderkedjan
+// (närmast-vinner), åsidosättbar på lägre nivå — samma arvsmodell som
+// objekt-metadata. En rad = objektet definierar sin egen konfig (även tom rad =
+// medvetet inga snabbfält här); ingen rad = ärv från närmaste förfader, annars
+// fall tillbaka på objectHeaderConfigs för objektets objectType. Upp till tre
+// inpekade katalogfält. Additivt/expand-contract (nullable slots). objectId
+// kaskad-raderas med objektet (ren presentationskonfig, ingen affärsdata).
+export const objectQuickFieldConfigs = pgTable("object_quick_field_configs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
+  objectId: varchar("object_id").references(() => objects.id, { onDelete: "cascade" }).notNull(),
+  field1KatalogId: varchar("field1_katalog_id").references(() => metadataKatalog.id, { onDelete: "set null" }),
+  field2KatalogId: varchar("field2_katalog_id").references(() => metadataKatalog.id, { onDelete: "set null" }),
+  field3KatalogId: varchar("field3_katalog_id").references(() => metadataKatalog.id, { onDelete: "set null" }),
+  updatedBy: varchar("updated_by"),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex("uq_object_quick_field_config_object").on(table.tenantId, table.objectId),
+  index("idx_object_quick_field_config_tenant").on(table.tenantId),
+]);
+export type ObjectQuickFieldConfig = typeof objectQuickFieldConfigs.$inferSelect;
+export const insertObjectQuickFieldConfigSchema = createInsertSchema(objectQuickFieldConfigs).omit({
+  id: true,
+  updatedAt: true,
+});
+export type InsertObjectQuickFieldConfig = z.infer<typeof insertObjectQuickFieldConfigSchema>;
+
 // Task #675: Redigerbara metadata-kategorier ("områden"). Område är det enda
 // grupperingsfältet i det svenska metadata-systemet (metadataKatalog.area). Tidigare
 // var listan hårdkodad och gemensam för alla tenants (shared/metadata-areas.ts).

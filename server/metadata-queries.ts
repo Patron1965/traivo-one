@@ -13,6 +13,8 @@ import {
   metadataVarden,
   metadataHistorik,
   orderTypeMetadataLinks,
+  objectHeaderConfigs,
+  objectQuickFieldConfigs,
   MetadataArea,
   MetadataKatalog,
   MetadataVarden,
@@ -1775,6 +1777,173 @@ export async function writeObjectImportMetadataBatch(args: {
   } catch (err) {
     console.error("[metadata-queries] enqueueMetadataChange failed (import batch):", err);
   }
+}
+
+// ============================================================================
+// PRIMÄR ARVSKEDJA (delad primitiv)
+// ----------------------------------------------------------------------------
+// Returnerar objekt-id:n längs objektets PRIMÄRA förälderkedja, ordnade
+// närmast-först: [self, primär-förälder, ..., rot]. `objects.parentId` speglar
+// alltid den primära föräldern (se object_parents), så en enkel parent_id-
+// vandring ger exakt den kedja som metadata-arv följer. Icke-primära föräldrar
+// ärver aldrig nedåt och ingår därför inte. Används av arvs-skrivsemantiken
+// (edit-på-källan / ny-instans-på-nivå) och snabbfälts-konfigens nedåt-arv.
+// ============================================================================
+
+export async function getPrimaryChainObjectIds(
+  tenantId: string,
+  objektId: string,
+): Promise<string[]> {
+  const result = await db.execute(sql`
+    WITH RECURSIVE chain AS (
+      SELECT id, parent_id, 0 AS depth
+      FROM objects
+      WHERE id = ${objektId} AND tenant_id = ${tenantId}
+      UNION ALL
+      SELECT o.id, o.parent_id, c.depth + 1
+      FROM objects o
+      INNER JOIN chain c ON o.id = c.parent_id
+      WHERE o.tenant_id = ${tenantId} AND c.depth < 100
+    )
+    SELECT id FROM chain ORDER BY depth ASC
+  `);
+  return (result.rows as any[]).map((r) => r.id as string);
+}
+
+// ============================================================================
+// SNABBFÄLTS-KONFIG (objektvy 360, P1)
+// Löser upp vilka (upp till tre) katalogfält som ska visas som "snabbfält" högst
+// upp på ett objekt. Arvsmodellen speglar objekt-metadata: närmast-vinner uppåt
+// den PRIMÄRA förälderkedjan (en per-objekt-rad åsidosätter alla förfäder), och
+// om inget objekt i kedjan har en egen rad faller vi tillbaka på den tenant-
+// omfattande objectHeaderConfigs för objektets objectType. En per-objekt-rad
+// gäller ÄVEN om alla tre slots är tomma (= medvetet inga snabbfält här).
+// ============================================================================
+
+export interface ResolvedQuickFieldSlot {
+  katalogId: string;
+  namn: string;
+  visningsnamn: string | null;
+  datatyp: string;
+  beteckning: string | null;
+}
+
+export interface ResolvedQuickFieldConfig {
+  // Ordnade katalog-slots (hydrerade med namn/datatyp för klienten). Tomma slots
+  // och katalogfält som inte längre finns/tillhör tenant filtreras bort.
+  fields: ResolvedQuickFieldSlot[];
+  // Var konfigen kom ifrån: ett specifikt objekt i kedjan, objekttyp-defaulten,
+  // eller ingenstans (default null-konfig).
+  source:
+    | { level: "object"; objectId: string }
+    | { level: "objectType"; objectType: string }
+    | { level: "none" };
+  // Om DETTA objekt har en egen rad (styr om UI:t visar "åsidosatt" vs "ärvd").
+  hasOwnOverride: boolean;
+  // Råa slot-id:n från den vinnande konfigen (icke-hydrerade, i slot-ordning).
+  rawKatalogIds: (string | null)[];
+}
+
+export async function resolveQuickFieldConfig(
+  tenantId: string,
+  objektId: string,
+): Promise<ResolvedQuickFieldConfig> {
+  const chain = await getPrimaryChainObjectIds(tenantId, objektId);
+
+  // Hämta alla per-objekt-konfigar längs kedjan i EN fråga och välj närmast-först.
+  let winning: { objectId: string; ids: (string | null)[] } | null = null;
+  let hasOwnOverride = false;
+  if (chain.length > 0) {
+    const rows = await db
+      .select({
+        objectId: objectQuickFieldConfigs.objectId,
+        f1: objectQuickFieldConfigs.field1KatalogId,
+        f2: objectQuickFieldConfigs.field2KatalogId,
+        f3: objectQuickFieldConfigs.field3KatalogId,
+      })
+      .from(objectQuickFieldConfigs)
+      .where(and(
+        eq(objectQuickFieldConfigs.tenantId, tenantId),
+        inArray(objectQuickFieldConfigs.objectId, chain),
+      ));
+    const byObject = new Map(rows.map((r) => [r.objectId, r]));
+    hasOwnOverride = byObject.has(objektId);
+    for (const id of chain) {
+      const row = byObject.get(id);
+      if (row) {
+        winning = { objectId: id, ids: [row.f1, row.f2, row.f3] };
+        break;
+      }
+    }
+  }
+
+  let source: ResolvedQuickFieldConfig["source"] = { level: "none" };
+  let rawKatalogIds: (string | null)[] = [];
+
+  if (winning) {
+    source = { level: "object", objectId: winning.objectId };
+    rawKatalogIds = winning.ids;
+  } else {
+    // Fallback: tenant-omfattande objecttyp-default (objectHeaderConfigs).
+    const [self] = await db
+      .select({ objectType: objects.objectType })
+      .from(objects)
+      .where(and(eq(objects.id, objektId), eq(objects.tenantId, tenantId)))
+      .limit(1);
+    if (self?.objectType) {
+      const [cfg] = await db
+        .select({
+          f1: objectHeaderConfigs.field1KatalogId,
+          f2: objectHeaderConfigs.field2KatalogId,
+          f3: objectHeaderConfigs.field3KatalogId,
+        })
+        .from(objectHeaderConfigs)
+        .where(and(
+          eq(objectHeaderConfigs.tenantId, tenantId),
+          eq(objectHeaderConfigs.objectType, self.objectType),
+        ))
+        .limit(1);
+      if (cfg) {
+        source = { level: "objectType", objectType: self.objectType };
+        rawKatalogIds = [cfg.f1, cfg.f2, cfg.f3];
+      }
+    }
+  }
+
+  // Hydrera slots (bevara slot-ordning; hoppa över tomma/okända/andra tenants).
+  const ids = rawKatalogIds.filter((v): v is string => typeof v === "string" && v.length > 0);
+  const fields: ResolvedQuickFieldSlot[] = [];
+  if (ids.length > 0) {
+    const katalogRows = await db
+      .select({
+        id: metadataKatalog.id,
+        namn: metadataKatalog.namn,
+        visningsnamn: metadataKatalog.visningsnamn,
+        datatyp: metadataKatalog.datatyp,
+        beteckning: metadataKatalog.beteckning,
+      })
+      .from(metadataKatalog)
+      .where(and(
+        eq(metadataKatalog.tenantId, tenantId),
+        inArray(metadataKatalog.id, ids),
+        isNull(metadataKatalog.deletedAt),
+      ));
+    const byId = new Map(katalogRows.map((r) => [r.id, r]));
+    for (const id of ids) {
+      const k = byId.get(id);
+      if (k) {
+        fields.push({
+          katalogId: k.id,
+          namn: k.namn,
+          visningsnamn: k.visningsnamn,
+          datatyp: k.datatyp,
+          beteckning: k.beteckning,
+        });
+      }
+    }
+  }
+
+  return { fields, source, hasOwnOverride, rawKatalogIds };
 }
 
 // ============================================================================

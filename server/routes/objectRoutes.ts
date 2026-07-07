@@ -29,9 +29,9 @@ import {
   getObjectSystemGeneratedMetadata,
   WHAT3WORDS_METADATA_NAME,
 } from "../services/object-system-metadata";
-import { createMetadata, updateMetadata, deleteMetadata } from "../metadata-queries";
+import { createMetadata, updateMetadata, deleteMetadata, getPrimaryChainObjectIds, resolveQuickFieldConfig } from "../metadata-queries";
 import { getObjectInfoPackageTree } from "../services/object-info-package-tree";
-import { metadataKatalog, metadataVarden, objectHeaderConfigs } from "@shared/schema";
+import { metadataKatalog, metadataVarden, objectHeaderConfigs, objectQuickFieldConfigs } from "@shared/schema";
 import { getMapProvider } from "../services/mapProvider";
 import { isValidWhat3words, normalizeWhat3words, WHAT3WORDS_FORMAT_ERROR } from "@shared/what3words";
 
@@ -584,6 +584,108 @@ app.put("/api/object-header-config/:objectType", requireAdmin, asyncHandler(asyn
   res.json(saved);
 }));
 
+// ============================================================================
+// Objektvy 360 (P1): PER-OBJEKT snabbfälts-konfig (upp till tre katalogfält som
+// visas överst på objektet). Ärvs NEDÅT genom primär-kedjan (närmast-vinner),
+// åsidosättbar på lägre nivå; faller tillbaka på objectHeaderConfigs per
+// objekttyp. Till skillnad från den tenant-omfattande objecttyp-defaulten
+// (requireAdmin) är per-objekt-åsidosättningen medvetet INTE admin-gate:ad —
+// den är en granulär vy-inställning på det enskilda objektet, i linje med det
+// låsta beslutet "åsidosättbar på lägre nivå". Tenant-ägarskap av objektet och
+// varje inpekat katalog-id valideras dock alltid server-side.
+// ============================================================================
+app.get("/api/objects/:id/quick-field-config", asyncHandler(async (req, res) => {
+  const tenantId = getTenantIdWithFallback(req);
+  const existing = await storage.getObject(req.params.id);
+  if (!verifyTenantOwnership(existing, tenantId)) {
+    throw new NotFoundError("Objekt");
+  }
+  const resolved = await resolveQuickFieldConfig(tenantId, req.params.id);
+  res.json(resolved);
+}));
+
+const objectQuickFieldConfigBodySchema = z.object({
+  field1KatalogId: z.string().nullable().optional(),
+  field2KatalogId: z.string().nullable().optional(),
+  field3KatalogId: z.string().nullable().optional(),
+});
+
+app.put("/api/objects/:id/quick-field-config", asyncHandler(async (req, res) => {
+  const tenantId = getTenantIdWithFallback(req);
+  const objektId = req.params.id;
+  const existing = await storage.getObject(objektId);
+  if (!verifyTenantOwnership(existing, tenantId)) {
+    throw new NotFoundError("Objekt");
+  }
+  const body = objectQuickFieldConfigBodySchema.parse(req.body);
+
+  // Säkerhet: varje inpekat katalog-id måste tillhöra denna tenant (IDOR-skydd).
+  const katalogIds = [body.field1KatalogId, body.field2KatalogId, body.field3KatalogId]
+    .filter((v): v is string => typeof v === "string" && v.length > 0);
+  if (katalogIds.length > 0) {
+    const owned = await db
+      .select({ id: metadataKatalog.id })
+      .from(metadataKatalog)
+      .where(and(
+        eq(metadataKatalog.tenantId, tenantId),
+        inArray(metadataKatalog.id, katalogIds),
+        isNull(metadataKatalog.deletedAt),
+      ));
+    const ownedSet = new Set(owned.map((r) => r.id));
+    for (const id of katalogIds) {
+      if (!ownedSet.has(id)) {
+        throw new ValidationError("Ogiltigt metadatafält för denna organisation");
+      }
+    }
+  }
+
+  const values = {
+    tenantId,
+    objectId: objektId,
+    field1KatalogId: body.field1KatalogId ?? null,
+    field2KatalogId: body.field2KatalogId ?? null,
+    field3KatalogId: body.field3KatalogId ?? null,
+    updatedBy: (req as any).user?.claims?.sub ?? null,
+    updatedAt: new Date(),
+  };
+
+  await db
+    .insert(objectQuickFieldConfigs)
+    .values(values)
+    .onConflictDoUpdate({
+      target: [objectQuickFieldConfigs.tenantId, objectQuickFieldConfigs.objectId],
+      set: {
+        field1KatalogId: values.field1KatalogId,
+        field2KatalogId: values.field2KatalogId,
+        field3KatalogId: values.field3KatalogId,
+        updatedBy: values.updatedBy,
+        updatedAt: values.updatedAt,
+      },
+    });
+
+  const resolved = await resolveQuickFieldConfig(tenantId, objektId);
+  res.json(resolved);
+}));
+
+// Ta bort per-objekt-åsidosättningen → objektet ärver igen (närmaste förfader
+// eller objecttyp-defaulten). Tenant-scopat DELETE (defense-in-depth).
+app.delete("/api/objects/:id/quick-field-config", asyncHandler(async (req, res) => {
+  const tenantId = getTenantIdWithFallback(req);
+  const objektId = req.params.id;
+  const existing = await storage.getObject(objektId);
+  if (!verifyTenantOwnership(existing, tenantId)) {
+    throw new NotFoundError("Objekt");
+  }
+  await db
+    .delete(objectQuickFieldConfigs)
+    .where(and(
+      eq(objectQuickFieldConfigs.tenantId, tenantId),
+      eq(objectQuickFieldConfigs.objectId, objektId),
+    ));
+  const resolved = await resolveQuickFieldConfig(tenantId, objektId);
+  res.json(resolved);
+}));
+
 // Task #1085: Systemgenererad metadata för objektet — read-only fält som
 // härleds live (inpekade orderkoncept, kopplade uppgifter historik/kommande,
 // adress, geokodad position, bilder, felanmälningar, betyg). Inget fabriceras.
@@ -688,6 +790,160 @@ app.post("/api/objects/:id/what3words", asyncHandler(async (req, res) => {
 
   const data = await getObjectSystemGeneratedMetadata(tenantId, req.params.id);
   res.json({ ...data, what3wordsCoordinates: resolvedCoordinates });
+}));
+
+// ===========================================================================
+// ARVS-SKRIVSEMANTIK (objektvy 360, P0) — "skottsäker" redigering av ärvda fält
+// ---------------------------------------------------------------------------
+// Ett ärvt metadatafält ägs av ett annat (käll-)objekt. Objektvyn erbjuder två,
+// och ENDAST två, skrivvägar (produktägar-låst modell 2026-07-07):
+//   1. edit-source  — ändra ett BEFINTLIGT värde där det bor (på källan). Slår
+//      igenom för alla som ärver. Samma entitet kan aldrig ha två olika värden
+//      på olika nivåer (Anna Karlsson kan inte ha ett nummer på pantmaskinen och
+//      ett annat en nivå upp).
+//   2. new-instance — skapa ett NYTT unikt värde på en EXPLICIT vald nivå i den
+//      primära arvskedjan (self eller en förfader). Ärvs nedåt därifrån.
+// Det finns MEDVETET ingen väg som skapar en lokal "shadow"-override med ett
+// avvikande värde för samma entitet — det motsäger den låsta modellen.
+// Säkerhet: käll-/nivå-id valideras ALLTID mot objektets primära arvskedja +
+// tenant (lita aldrig på klient-skickat id → annars IDOR mot metadata_varden).
+// ===========================================================================
+
+// createMetadata/updateMetadata kastar rena Error med svenska valideringstexter
+// (Dubblett/Nivå-lås/systemfält/…). Översätt kända fel till ValidationError (400)
+// så klienten får ett läsbart meddelande i stället för en generisk 500.
+const METADATA_VALIDATION_RE =
+  /Dubblett|Nivå-lås|Ogiltigt värde|Invalid \w+ value|Unknown datatype|systemfält|beräknat fält|rubrik|does not belong|not found|kan inte redigeras|kan inte ändras|kan inte anges|kan inte sättas|kan inte ha ett eget värde/i;
+function rethrowMetadataValidation(err: unknown): never {
+  const msg = err instanceof Error ? err.message : String(err ?? "");
+  if (METADATA_VALIDATION_RE.test(msg)) {
+    throw new ValidationError(msg);
+  }
+  throw err;
+}
+
+const editSourceSchema = z.object({
+  vardeId: z.string().min(1),
+  varde: z.any(),
+});
+
+app.patch("/api/objects/:id/metadata/edit-source", asyncHandler(async (req, res) => {
+  const tenantId = getTenantIdWithFallback(req);
+  const existing = await storage.getObject(req.params.id);
+  if (!verifyTenantOwnership(existing, tenantId)) {
+    throw new NotFoundError("Objekt");
+  }
+  const body = editSourceSchema.parse(req.body);
+  const actor = (req as any).user?.claims?.sub ?? "system";
+
+  // Ladda käll-raden (tenant-scoped) och verifiera att den bor på ett objekt i
+  // DET HÄR objektets primära arvskedja (self eller förfader). En rad utanför
+  // kedjan ärvs aldrig hit och får därför inte redigeras härifrån (IDOR-spärr).
+  const [row] = await db
+    .select({ id: metadataVarden.id, objektId: metadataVarden.objektId })
+    .from(metadataVarden)
+    .where(and(eq(metadataVarden.id, body.vardeId), eq(metadataVarden.tenantId, tenantId)))
+    .limit(1);
+  if (!row) {
+    throw new NotFoundError("Metadatavärde");
+  }
+  const chain = await getPrimaryChainObjectIds(tenantId, req.params.id);
+  if (!row.objektId || !chain.includes(row.objektId)) {
+    throw new ValidationError(
+      "Värdet tillhör inte objektets arvskedja och kan inte redigeras härifrån.",
+    );
+  }
+
+  // updateMetadata upprätthåller alla fält-guards (beräknat/system/readonly-
+  // ursprung, rubrik, allowedValues, datatyp). Skrivningen sker på källan och
+  // propageras därmed nedåt till alla som ärver.
+  let updated;
+  try {
+    updated = await updateMetadata(row.id, body.varde, tenantId, actor, "manuell");
+  } catch (err) {
+    rethrowMetadataValidation(err);
+  }
+  res.json(updated);
+}));
+
+const newInstanceSchema = z.object({
+  metadataTypNamn: z.string().min(1),
+  varde: z.any(),
+  level: z.string().min(1), // objekt-id för nivån där det nya värdet ska skapas
+});
+
+app.post("/api/objects/:id/metadata/new-instance", asyncHandler(async (req, res) => {
+  const tenantId = getTenantIdWithFallback(req);
+  const existing = await storage.getObject(req.params.id);
+  if (!verifyTenantOwnership(existing, tenantId)) {
+    throw new NotFoundError("Objekt");
+  }
+  const body = newInstanceSchema.parse(req.body);
+  const actor = (req as any).user?.claims?.sub ?? "system";
+
+  // Nivån måste ligga i objektets PRIMÄRA arvskedja (self eller förfader). En
+  // icke-primär förälder ärver aldrig nedåt → att skapa där vore osynligt här.
+  const chain = await getPrimaryChainObjectIds(tenantId, req.params.id);
+  if (!chain.includes(body.level)) {
+    throw new ValidationError("Vald nivå ligger inte i objektets primära arvskedja.");
+  }
+
+  // Slå upp katalogfältet (tenant-scoped) för kardinalitetsregeln.
+  const [katalog] = await db
+    .select({ id: metadataKatalog.id, allowDuplicates: metadataKatalog.allowDuplicates })
+    .from(metadataKatalog)
+    .where(and(eq(metadataKatalog.namn, body.metadataTypNamn), eq(metadataKatalog.tenantId, tenantId)))
+    .limit(1);
+  if (!katalog) {
+    throw new ValidationError(`Metadatafältet "${body.metadataTypNamn}" finns inte.`);
+  }
+
+  // Shadow-spärr: för ett enkelvärt fält (allowDuplicates=false) som REDAN ärvs
+  // från en förfader är "nytt värde" fel operation — det skulle bli en lokal
+  // override med avvikande värde för samma entitet. Tvinga edit-på-källan i stället.
+  if (!katalog.allowDuplicates) {
+    const guard = await db.execute(sql`
+      WITH RECURSIVE chain AS (
+        SELECT id, parent_id, 0 AS depth
+        FROM objects WHERE id = ${req.params.id} AND tenant_id = ${tenantId}
+        UNION ALL
+        SELECT o.id, o.parent_id, c.depth + 1
+        FROM objects o INNER JOIN chain c ON o.id = c.parent_id
+        WHERE o.tenant_id = ${tenantId} AND c.depth < 100
+      )
+      SELECT 1 FROM metadata_varden mv
+      INNER JOIN chain c ON c.id = mv.objekt_id AND c.depth > 0
+      WHERE mv.tenant_id = ${tenantId}
+        AND mv.metadata_katalog_id = ${katalog.id}
+        AND COALESCE(mv.raderad, FALSE) = FALSE
+        AND mv.arvs_nedat = TRUE
+      LIMIT 1
+    `);
+    if ((guard.rows as any[]).length > 0) {
+      throw new ValidationError(
+        "Fältet ärvs redan från en förälder. Redigera på källan i stället för att skapa ett nytt värde här — eller tillåt dubbletter i katalogen om flera värden ska finnas.",
+      );
+    }
+  }
+
+  // createMetadata upprätthåller objekt∈tenant, katalog∈tenant, nivå-lås,
+  // dubblettkontroll (allowDuplicates=false på samma nivå) och datatyp-validering.
+  // arvsNedat=true → värdet ärvs nedåt från den valda nivån.
+  let created;
+  try {
+    created = await createMetadata({
+      tenantId,
+      objektId: body.level,
+      metadataTypNamn: body.metadataTypNamn,
+      varde: body.varde,
+      arvsNedat: true,
+      skapadAv: actor,
+      metod: "manuell",
+    });
+  } catch (err) {
+    rethrowMetadataValidation(err);
+  }
+  res.status(201).json(created);
 }));
 
 app.post("/api/objects/:id/parents", asyncHandler(async (req, res) => {

@@ -1,0 +1,128 @@
+{
+  "sessionId": "88a42e107",
+  "exportedAt": "2026-07-07T12:34:24.011Z",
+  "summary": "### Key Topics Discussed\n- Layout för den nya objektvyn, specifikt flikindelningar och metadata-gruppering.\n- Utmaningar med att få en överblick av metadatafält för objekt med varierande komplexitet.\n- Hantering av ärvda metadatafält, redigering och synkronisering med källobjekt.\n- Scenarier för uppdatering av kontaktinformation och roller för ärvda metadatafält.\n- Vikten av att den som administrerar systemet förstår var information ska pekas in, särskilt vid hantering av kontaktuppgifter för olika objekt för att undvika att skapa dubbletter eller missa viktig information.\n- Dynamisk tillägg av metadatafält för specifika objekt (t.ex. butiker) och deras ärvningsbeteende nedåt.\n- Centraliserad hantering av metadata för större entiteter (t.ex. fastighetsbolag) och hur denna information flödar ner.\n- Exempel på övergripande fastighetsinformation som färg på fasad, område, fastighetsbeteckning, förvaltare och avdelning som ska ärvas av alla underliggande objekt.\n\n### Decisions Made\n- Mats kommer att svara på frågor gällande layouten för den nya objektvyn.\n\n### Important Points & Insights\n- Det finns tre frågor och tre förklaringar/svar relaterade till layouten för den nya objektvyn.\n- Den föreslagna layouten inkluderar rubriker för metadatafält, uppdelade i geografisk och produktionsrelaterad metadata.\n- Ett navigeringsförslag involverar att använda snabbflikar för metadata-grupperingar (t.ex. en flik för \"geografi\").\n- Beroende på objektets komplexhet kan antalet metadatafält variera kraftigt (från tre till tjugo), vilket påverkar hur layouten ser ut.\n- Det är viktigt att användaren kan få en överblick över metadata, trots varierande antal fält.\n- Ärvda metadatafält indikerar att de ägs av ett annat objekt.\n- Redigering av ett ärvt metadatafält måste synkroniseras med källobjektet (t.ex. ett telefonnummer ska vara konsekvent överallt).\n- Två typer av frågor kan uppstå vid redigering av ärvda fält: ska ändringen gå till källan, eller ska det skapas ett nytt unikt fält för den specifika nivån.\n- Vid redigering av ärvda fält, som t.ex. kontaktinformation eller roll, måste systemet hantera logiska frågor om ändringen ska uppdatera källan eller skapa ett nytt unikt metadatafält för den aktuella nivån.\n- Naturligt är att uppdateringar sker på källan, men det kan uppstå behov av att skapa nya metadatafält på en specifik nivå för att hantera nya, unika roller eller kontaktpersoner.\n- Administratören måste vara noggrann vid hantering av kontaktinformation för att säkerställa att rätt data kopplas till rätt objekt, för att undvika att missa eller duplicera information.\n- Användare kan lägga till nya, anpassade metadatafält för specifika objekt (t.ex. butikschefens namn, födelsedatum, bilbild) som sedan ärvs av underliggande objektnivåer.\n- För större kunder/fastighetsbolag kan övergripande metadata (t.ex. fastighetsbeteckning, förvaltare, fastighetsområde, avdelning) definieras på en högre nivå och flöda ner till underordnade objekt, såsom en fastighet \"Stora Boben 2\" med förvaltare \"Kurt Björk\" i \"Nordväst\"-området.\n\n### Open Questions/Pending Items\n- Hur man bäst navigerar bland metadatafält, antingen genom flikar eller nedrullning.",
+  "conversation": [],
+  "transcripts": [
+    {
+      "text": "Yes, sir.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Nu ska vi svara, eh, Mats ska svara här på lite frågor agenten har kring layouten för den nya objektvyn. Det är tre frågor och här kommer tre förklaringar och svar.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Ja, om vi börjar med själva layouten och indelningen i flikar eller inte då. Så det, huvudet ska ju, det är ju vad det är. Och sedan är mitt förslag då att metadatafälten eller metadatainformationsbärarna eller alltså definitionen av metadata är ju indelade på, eh, geografiska metadata och produktionsmässiga metadata. Eh, om vi ska ha en, en flik eller-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm ...navnavigering då, så skulle man ju då kunna tänka sig då att, att den presenterar då de här metadata... rubrikerna, eh, eller grupperingarna som, som snabbflikar. Så vill jag komma ner till geografi så kan jag då trycka på det.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Eh, det är väl en vettig...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "lösning då för att få, få nån å-ordning på, på, på det där då. Men annars är det väl bara att man då rullar ner i metadatan som jag tror... Alltså, jag, jag är inte riktigt... Endast kollat 360-vy. Jag, jag förstår inte vad det är. Eh, men att man, man, man måste få en överblick och i grunden så kommer ju det här då... På nåt ställe kanske man bara har tre metadatafält och det är det enda man behöver se. Sen har man då en komplex objekt som har kanske tjugo metadatafält och det är klart att det kommer att se lite olika ut då.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Ja, det kommer att se lite olika ut.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Tror jag att det var.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Ja, det är väldigt logiskt då. Det ska ju framgå då att det är ett ärvt metadatafält. Och det innebär ju då att det metadatafältet ägs ju utav ett annat objekt då. Så det innebär ju då att om du redigerar källan så blir det då två stycken frågor. Den, den ena frågan är ju då om man ska ändra på det ärvda metadatafältet, till exempel då Anna Karlssons telefonnummer. Och då måste frågan bli: Ska, ska-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. -den här ändras då på, på, på, på källan? Eh, och det kommer ju att bli då rätt svar, för man kan ju inte ge Anna Karlsson ett telefonnummer på pantmaskinen och ett annat på en högre nivå, utan det-- Ändringen måste då gå upp till, till, till källan då så att man lämnar den här. Den andra frågan är ju då, berättar jag med samma logik då, det är ju då frågan: Är det här ett nytt unikt metadatafält som då ska uppstå från den här nivån? Nu är det ett dåligt exempel, men om Anna Karlsson har ett särskilt telefonnummer för just den här pantmaskinen-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. -och det fungerar mellan på den, ja, då skulle man ju då kunna tänka sig då att Anna Karlsson har ett, en, en uppdaterad kontaktinformation eller en uppdaterad roll på den här nivån. Man skulle ju kunna tänka sig Anna, Anna Karlsson, både butikschef- Mm. -och teknisk chef då. Mm. Och, och då innebär det ju då att då kommer ju Anna Karlsson att få ett nytt kontaktkort på den här nivån då- Mm. -som rimligtvis då inte är pantmaskinen, utan i sådana fall kanske det ska vara pantrummet då.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och det där måste ju då dyka upp i editeringen med logiska frågor. Ska det bli...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och det naturliga är ju att man uppdaterar på källan. Och följdfrågan är då, ska det skapas ett nytt metadatafält? För att det är också viktigt att den här editeringen måste ju då, om Anna Karlsson är generell kontaktperson som butikschef för både pampmaskinerna och alla sottunnor för hela butiken och det nu uppstår en ny person här som har rollen då ansvarig för pampmaskinerna. Då ska ju det, den kontaktpersonen kunna skapas till här på den här nivån tillsammans med Anna Karlsson då och titlar och kontaktpersoner.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och sen gäller det ju då att hålla tungan rätt i mun här då, men det är ju upp till operatören eller administratören här då så att man inte skapar en kontakt för den ena pampmaskinen och så kommer vi att göra ett jobb på den andra pampmaskinen och där finns inga kontok-- kontaktuppgifter. Så det är ju viktigt då att den som administrerar systemet förstår var informationen ska pekas in.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Ja.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Ja, det var en väldigt bra fråga angående fråga tre då. Eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Jag tror att minnet får fungera nedåt så att säga, om du förstår vad jag menar. Så att, eh... Om man inte utnyttjar de dära fälten, eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Då, då finns inga fälten, men då kan man trycka på ett plus eller en penna och så kan man då gå in och välja de där fälten då. Och om man då väljer det på en viss butik då, och så säger man då att det ska stå butikschefens namn och så ska det stå, står då hans födelsedatum och så ska det vara en bild på hans bil då för de här metadaten. Ja, då kommer ju det att minnas då och lagras så att det gäller hans butik och nedåt då. Mm. Så att om man väljer då och, och lägger de huvuddatan då på, på den här-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm ...butiken, eh, som vi hade här ute på Hisingen då, så, så blir det då bilden på Hisingen där och så kommer ju den då flöda ner och så kommer butikschefens namn och vad den nu väljer för annan information då. Och om vi då går in på en större kund, nu tar vi inte Axfood, utan vi tar ett större fastighetsbolag. Då kanske vi bestämmer på toppen där då att vi ska redovisa, eh, fastighetsbeteckning och vi ska redovisa förvaltare och vi ska redovisa, eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "F-f-färgen på fasaden eller, eller, eller området. Vi ska redovisa vilken, vilken, vilken, eh, vilken avdelning fastigheten tillhör i det här företaget. Så då skulle det liksom då kunna, kunna stå då, eh, fastighetsbeteckning Stora Boben 2 och så står det då, eh, eh, förvaltare Kurt Björk och så står det, står det då, eh, fastighetsområde, eh, Nordväst säger vi då. Ja, då kommer, då, då kommer det att dyka upp då på alla. Så oavsett vilket objekt du går...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    }
+  ]
+}

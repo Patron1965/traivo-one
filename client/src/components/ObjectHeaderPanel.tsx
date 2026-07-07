@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { MapContainer, TileLayer, Marker } from "react-leaflet";
 import L from "leaflet";
@@ -18,7 +18,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription,
 } from "@/components/ui/dialog";
 import {
-  Image as ImageIcon, MapPin, MoreVertical, Loader2, ArrowDownToLine,
+  Image as ImageIcon, MapPin, MoreVertical, Loader2, ArrowDownToLine, RotateCcw,
 } from "lucide-react";
 
 // Fältvärdena kommer från objektets metadata-array som ObjectDetailPage redan
@@ -46,6 +46,28 @@ interface HeaderConfig {
   field1KatalogId: string | null;
   field2KatalogId: string | null;
   field3KatalogId: string | null;
+}
+
+// Speglar server-svaret från GET /api/objects/:id/quick-field-config
+// (server/metadata-queries.ts ResolvedQuickFieldConfig). Snabbfälten ärvs nedåt
+// genom objektets primära förälderkedja (närmast-vinner) med fallback till
+// objecttyp-standarden (objectHeaderConfigs).
+interface ResolvedQuickFieldSlot {
+  katalogId: string;
+  namn: string;
+  visningsnamn: string | null;
+  datatyp: string;
+  beteckning: string | null;
+}
+
+interface QuickFieldConfig {
+  fields: ResolvedQuickFieldSlot[];
+  source:
+    | { level: "object"; objectId: string }
+    | { level: "objectType"; objectType: string }
+    | { level: "none" };
+  hasOwnOverride: boolean;
+  rawKatalogIds: (string | null)[];
 }
 
 interface MetadataDefinitionOption {
@@ -150,8 +172,16 @@ export function ObjectHeaderPanel({
     queryKey: ["/api/metadata-definitions"],
   });
 
+  // Per-objekt-upplösta snabbfält (närmast-vinner uppåt primär-kedjan, fallback
+  // objecttyp-standard). Avgör VILKA katalogfält som visas; värdena tas från
+  // metadata-propen nedan.
+  const { data: qfc } = useQuery<QuickFieldConfig>({
+    queryKey: ["/api/objects", objectId, "quick-field-config"],
+    enabled: !!objectId,
+  });
+
+  // config = per-objekttyp-standard; används nu ENBART för bild/karta-visningen.
   const effective: HeaderConfig = config ?? DEFAULT_CONFIG;
-  const hasConfig = !!config;
 
   const { data: vignettes = [] } = useQuery<Vignette[]>({
     queryKey: ["/api/objects", objectId, "vignettes"],
@@ -186,15 +216,14 @@ export function ObjectHeaderPanel({
 
   type Slot = { key: string; label: string; value: string | null; inheritedFrom?: string | null };
   const slots: Slot[] = [];
-  if (hasConfig) {
-    for (const id of [effective.field1KatalogId, effective.field2KatalogId, effective.field3KatalogId]) {
-      if (!id) continue;
-      const entry = entryByKatalog.get(id);
-      const label = entry?.katalog?.visningsnamn || entry?.katalog?.namn || defLabel(id) || "Fält";
+  if (qfc && qfc.source.level !== "none") {
+    for (const f of qfc.fields) {
+      const entry = entryByKatalog.get(f.katalogId);
+      const label = f.visningsnamn || f.namn || entry?.katalog?.visningsnamn || entry?.katalog?.namn || defLabel(f.katalogId) || "Fält";
       const inheritedFrom = entry?.source === "inherited"
         ? (entry?.fromObject?.namn || entry?.inheritedFromName || null)
         : null;
-      slots.push({ key: id, label, value: entryDisplayValue(entry), inheritedFrom });
+      slots.push({ key: f.katalogId, label, value: entryDisplayValue(entry), inheritedFrom });
     }
   } else {
     slots.push({ key: "objtype", label: "Objekttyp", value: objectTypeLabel || objectType || null });
@@ -215,7 +244,7 @@ export function ObjectHeaderPanel({
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3 flex-1">
                 {slots.length === 0 && (
                   <div className="text-sm text-muted-foreground" data-testid="text-header-fields-empty">
-                    Inga fält valda för denna objekttyp.
+                    Inga snabbfält valda för detta objekt.
                   </div>
                 )}
                 {slots.map((s) => (
@@ -241,17 +270,56 @@ export function ObjectHeaderPanel({
                   </div>
                 ))}
               </div>
-              {canEdit && objectType && (
-                <HeaderConfigEditor
-                  objectType={objectType}
-                  current={effective}
-                  definitions={definitions}
-                  onSaved={() => {
-                    queryClient.invalidateQueries({ queryKey: ["/api/object-header-config", objectType] });
-                  }}
-                  toast={toast}
-                />
-              )}
+              <div className="flex items-center gap-1.5 shrink-0">
+                {qfc?.source.level === "objectType" && (
+                  <Badge
+                    variant="outline"
+                    className="text-[10px] px-1.5 py-0 font-normal"
+                    title="Snabbfälten kommer från standarden för objekttypen"
+                    data-testid="badge-quick-field-source"
+                  >
+                    Objekttyp-standard
+                  </Badge>
+                )}
+                {qfc?.source.level === "object" && !qfc.hasOwnOverride && (
+                  <Badge
+                    variant="outline"
+                    className="text-[10px] px-1.5 py-0 font-normal"
+                    title="Snabbfälten ärvs från ett överordnat objekt"
+                    data-testid="badge-quick-field-source"
+                  >
+                    Ärvd
+                  </Badge>
+                )}
+                {qfc?.hasOwnOverride && (
+                  <Badge
+                    variant="secondary"
+                    className="text-[10px] px-1.5 py-0 font-normal"
+                    title="Detta objekt har egna snabbfält"
+                    data-testid="badge-quick-field-source"
+                  >
+                    Egen
+                  </Badge>
+                )}
+                {canEdit && (
+                  <HeaderQuickFieldEditor
+                    objectId={objectId}
+                    objectType={objectType ?? null}
+                    qfc={qfc ?? null}
+                    displayConfig={effective}
+                    definitions={definitions}
+                    onFieldsSaved={() =>
+                      queryClient.invalidateQueries({ queryKey: ["/api/objects", objectId, "quick-field-config"] })
+                    }
+                    onDisplaySaved={() => {
+                      if (objectType) {
+                        queryClient.invalidateQueries({ queryKey: ["/api/object-header-config", objectType] });
+                      }
+                    }}
+                    toast={toast}
+                  />
+                )}
+              </div>
             </div>
           </div>
 
@@ -306,60 +374,127 @@ export function ObjectHeaderPanel({
   );
 }
 
-interface EditorProps {
-  objectType: string;
-  current: HeaderConfig;
+interface QuickFieldEditorProps {
+  objectId: string;
+  objectType: string | null;
+  qfc: QuickFieldConfig | null;
+  displayConfig: HeaderConfig;
   definitions: MetadataDefinitionOption[];
-  onSaved: () => void;
+  onFieldsSaved: () => void;
+  onDisplaySaved: () => void;
   toast: ReturnType<typeof useToast>["toast"];
 }
 
-function HeaderConfigEditor({ objectType, current, definitions, onSaved, toast }: EditorProps) {
+// Snabbfälts-editorn har TVÅ scope:
+//  1. Snabbfält (upp till 3 katalogfält) = PER OBJEKT, ärvs nedåt (PUT/DELETE
+//     /api/objects/:id/quick-field-config). Inte admin-gate:ad.
+//  2. Bild & karta = PER OBJEKTTYP (PUT /api/object-header-config/:type, admin).
+// De sparas oberoende av varandra med varsin knapp.
+function HeaderQuickFieldEditor({
+  objectId, objectType, qfc, displayConfig, definitions,
+  onFieldsSaved, onDisplaySaved, toast,
+}: QuickFieldEditorProps) {
   const [open, setOpen] = useState(false);
-  const [draft, setDraft] = useState<HeaderConfig>(current);
+  const [fieldDraft, setFieldDraft] = useState<(string | null)[]>([null, null, null]);
+  const [display, setDisplay] = useState<HeaderConfig>(displayConfig);
+  // Seedas ENDAST vid öppning (false→true). Att seeda på varje qfc/displayConfig-
+  // ändring skulle klippa osparade ändringar i det andra scope:t när ett scope
+  // sparas (invalidering → qfc uppdateras medan dialogen är öppen).
+  const seededRef = useRef(false);
 
   useEffect(() => {
-    if (open) setDraft(current);
-  }, [open, current]);
+    if (open && !seededRef.current) {
+      const raw = qfc?.rawKatalogIds ?? [];
+      setFieldDraft([raw[0] ?? null, raw[1] ?? null, raw[2] ?? null]);
+      setDisplay(displayConfig);
+      seededRef.current = true;
+    } else if (!open) {
+      seededRef.current = false;
+    }
+  }, [open, qfc, displayConfig]);
 
-  const saveMutation = useMutation({
-    mutationFn: async (payload: HeaderConfig) => {
-      return apiRequest("PUT", `/api/object-header-config/${encodeURIComponent(objectType)}`, payload);
-    },
+  const fieldsMutation = useMutation({
+    mutationFn: async (ids: (string | null)[]) =>
+      apiRequest("PUT", `/api/objects/${objectId}/quick-field-config`, {
+        field1KatalogId: ids[0],
+        field2KatalogId: ids[1],
+        field3KatalogId: ids[2],
+      }),
     onSuccess: () => {
-      onSaved();
-      setOpen(false);
-      toast({ title: "Header-fält sparade", description: `Gäller alla objekt av typen "${objectType}".` });
+      onFieldsSaved();
+      toast({ title: "Snabbfält sparade", description: "Gäller detta objekt och ärvs nedåt." });
     },
     onError: (err: any) => {
       toast({ title: "Kunde inte spara", description: err?.message ?? "Okänt fel", variant: "destructive" });
     },
   });
 
-  const fieldSelect = (slot: 1 | 2 | 3) => {
-    const key = (`field${slot}KatalogId`) as "field1KatalogId" | "field2KatalogId" | "field3KatalogId";
-    return (
-      <div className="space-y-1.5">
-        <Label>Fält {slot}</Label>
-        <Select
-          value={draft[key] ?? NONE_VALUE}
-          onValueChange={(v) => setDraft((d) => ({ ...d, [key]: v === NONE_VALUE ? null : v }))}
-        >
-          <SelectTrigger data-testid={`select-header-field-${slot}`}>
-            <SelectValue placeholder="Välj metadatafält" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value={NONE_VALUE}>— Inget —</SelectItem>
-            {definitions.map((d) => (
-              <SelectItem key={d.id} value={d.id}>
-                {d.fieldLabel || d.namn || d.fieldKey || d.id}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-    );
-  };
+  const resetMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("DELETE", `/api/objects/${objectId}/quick-field-config`);
+      return (await res.json()) as QuickFieldConfig;
+    },
+    onSuccess: (resolved) => {
+      // Efter återställning speglar draften de nu ärvda värdena (utan att röra
+      // bild/karta-draften i det andra scope:t).
+      const raw = resolved?.rawKatalogIds ?? [];
+      setFieldDraft([raw[0] ?? null, raw[1] ?? null, raw[2] ?? null]);
+      onFieldsSaved();
+      toast({ title: "Återställt", description: "Objektet ärver snabbfält igen." });
+    },
+    onError: (err: any) => {
+      toast({ title: "Kunde inte återställa", description: err?.message ?? "Okänt fel", variant: "destructive" });
+    },
+  });
+
+  const displayMutation = useMutation({
+    mutationFn: async (payload: HeaderConfig) => {
+      if (!objectType) throw new Error("Objekttyp saknas");
+      return apiRequest("PUT", `/api/object-header-config/${encodeURIComponent(objectType)}`, payload);
+    },
+    onSuccess: () => {
+      onDisplaySaved();
+      toast({
+        title: "Visning sparad",
+        description: objectType ? `Gäller alla objekt av typen "${objectType}".` : undefined,
+      });
+    },
+    onError: (err: any) => {
+      toast({ title: "Kunde inte spara visning", description: err?.message ?? "Okänt fel", variant: "destructive" });
+    },
+  });
+
+  const fieldSelect = (slot: 0 | 1 | 2) => (
+    <div className="space-y-1.5">
+      <Label>Snabbfält {slot + 1}</Label>
+      <Select
+        value={fieldDraft[slot] ?? NONE_VALUE}
+        onValueChange={(v) => setFieldDraft((d) => {
+          const n = [...d];
+          n[slot] = v === NONE_VALUE ? null : v;
+          return n;
+        })}
+      >
+        <SelectTrigger data-testid={`select-quick-field-${slot + 1}`}>
+          <SelectValue placeholder="Välj metadatafält" />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value={NONE_VALUE}>— Inget —</SelectItem>
+          {definitions.map((d) => (
+            <SelectItem key={d.id} value={d.id}>
+              {d.fieldLabel || d.namn || d.fieldKey || d.id}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
+  );
+
+  const inheritLabel =
+    qfc?.source.level === "objectType" ? "Ärver just nu standarden för objekttypen."
+    : qfc?.source.level === "object" && !qfc.hasOwnOverride ? "Ärver just nu snabbfält från ett överordnat objekt."
+    : qfc?.hasOwnOverride ? "Detta objekt har egna snabbfält."
+    : "Inga snabbfält är valda ännu.";
 
   return (
     <>
@@ -368,7 +503,7 @@ function HeaderConfigEditor({ objectType, current, definitions, onSaved, toast }
         size="sm"
         className="h-8 w-8 p-0 shrink-0"
         onClick={() => setOpen(true)}
-        title="Anpassa header-fält"
+        title="Anpassa snabbfält"
         data-testid="button-edit-header-config"
       >
         <MoreVertical className="h-4 w-4" />
@@ -377,67 +512,109 @@ function HeaderConfigEditor({ objectType, current, definitions, onSaved, toast }
         <DialogContent className="max-w-md" data-testid="dialog-header-config">
           <DialogHeader>
             <DialogTitle>Anpassa objekthuvud</DialogTitle>
-            <DialogDescription>
-              Inställningarna gäller alla objekt av typen "{objectType}".
-            </DialogDescription>
+            <DialogDescription>{inheritLabel}</DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4">
-            {fieldSelect(1)}
-            {fieldSelect(2)}
-            {fieldSelect(3)}
-
-            <div className="flex items-center justify-between pt-2 border-t">
-              <Label htmlFor="toggle-header-image">Visa bild</Label>
-              <Switch
-                id="toggle-header-image"
-                checked={draft.showImage}
-                onCheckedChange={(v) => setDraft((d) => ({ ...d, showImage: v }))}
-                data-testid="switch-header-image"
-              />
-            </div>
-            {draft.showImage && (
-              <div className="space-y-1.5">
-                <Label>Bildkälla</Label>
-                <Select
-                  value={draft.imageSource}
-                  onValueChange={(v) => setDraft((d) => ({ ...d, imageSource: v as HeaderConfig["imageSource"] }))}
+            <div className="space-y-3">
+              <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                Snabbfält (detta objekt, ärvs nedåt)
+              </div>
+              {fieldSelect(0)}
+              {fieldSelect(1)}
+              {fieldSelect(2)}
+              <div className="flex items-center justify-between gap-2">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  disabled={!qfc?.hasOwnOverride || resetMutation.isPending}
+                  onClick={() => resetMutation.mutate()}
+                  data-testid="button-quick-field-reset"
                 >
-                  <SelectTrigger data-testid="select-header-image-source">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="vignette">Vinjettbild</SelectItem>
-                    <SelectItem value="latest_image">Senaste objektbild</SelectItem>
-                  </SelectContent>
-                </Select>
+                  {resetMutation.isPending ? (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <RotateCcw className="h-4 w-4 mr-2" />
+                  )}
+                  Återställ till ärvt
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={() => fieldsMutation.mutate(fieldDraft)}
+                  disabled={fieldsMutation.isPending}
+                  data-testid="button-quick-field-save"
+                >
+                  {fieldsMutation.isPending ? (
+                    <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Sparar...</>
+                  ) : (
+                    <><ArrowDownToLine className="h-4 w-4 mr-2" /> Spara snabbfält</>
+                  )}
+                </Button>
+              </div>
+            </div>
+
+            {objectType && (
+              <div className="space-y-3 pt-3 border-t">
+                <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                  Bild &amp; karta (objekttypen "{objectType}")
+                </div>
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="toggle-header-image">Visa bild</Label>
+                  <Switch
+                    id="toggle-header-image"
+                    checked={display.showImage}
+                    onCheckedChange={(v) => setDisplay((d) => ({ ...d, showImage: v }))}
+                    data-testid="switch-header-image"
+                  />
+                </div>
+                {display.showImage && (
+                  <div className="space-y-1.5">
+                    <Label>Bildkälla</Label>
+                    <Select
+                      value={display.imageSource}
+                      onValueChange={(v) => setDisplay((d) => ({ ...d, imageSource: v as HeaderConfig["imageSource"] }))}
+                    >
+                      <SelectTrigger data-testid="select-header-image-source">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="vignette">Vinjettbild</SelectItem>
+                        <SelectItem value="latest_image">Senaste objektbild</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="toggle-header-map">Visa karta</Label>
+                  <Switch
+                    id="toggle-header-map"
+                    checked={display.showMap}
+                    onCheckedChange={(v) => setDisplay((d) => ({ ...d, showMap: v }))}
+                    data-testid="switch-header-map"
+                  />
+                </div>
+                <div className="flex justify-end">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => displayMutation.mutate(display)}
+                    disabled={displayMutation.isPending}
+                    data-testid="button-header-display-save"
+                  >
+                    {displayMutation.isPending ? (
+                      <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Sparar...</>
+                    ) : (
+                      "Spara visning"
+                    )}
+                  </Button>
+                </div>
               </div>
             )}
-            <div className="flex items-center justify-between">
-              <Label htmlFor="toggle-header-map">Visa karta</Label>
-              <Switch
-                id="toggle-header-map"
-                checked={draft.showMap}
-                onCheckedChange={(v) => setDraft((d) => ({ ...d, showMap: v }))}
-                data-testid="switch-header-map"
-              />
-            </div>
           </div>
 
           <DialogFooter>
             <Button variant="outline" onClick={() => setOpen(false)} data-testid="button-header-config-cancel">
-              Avbryt
-            </Button>
-            <Button
-              onClick={() => saveMutation.mutate(draft)}
-              disabled={saveMutation.isPending}
-              data-testid="button-header-config-save"
-            >
-              {saveMutation.isPending ? (
-                <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Sparar...</>
-              ) : (
-                <><ArrowDownToLine className="h-4 w-4 mr-2" /> Spara</>
-              )}
+              Stäng
             </Button>
           </DialogFooter>
         </DialogContent>
