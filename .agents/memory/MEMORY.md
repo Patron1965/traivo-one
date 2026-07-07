@@ -95,3 +95,4 @@
 - [Restidsmotor & tidskod](travel-time-engine-tidskod.md) — hastighetstak på MEDELFART (ej %); manuell tidskod skrivs ALDRIG över av recompute; groupKeys i topic-filen.
 - [Server-myntade sekvensnummer](server-minted-sequence-numbers.md) — SO-NNN/OBJ-NNN myntas server-side; strippa klient-värdet på ALLA WO-write-routes (POST+PATCH+with-lines), ej bara minting-routen; statiska routes före /:id.
 - [Beläggning/spilltid terminologi](belaggning-spilltid-terminology.md) — veckoplanen: "planerad/avtalad arbetstid"=contractedMinutes (kapacitet), "bokad arbetstid"=plannedWorkMinutes; spilltid=bokad−planerad signerat; samma fras för båda kolliderar.
+- ["Allt är metadata" Steg 1](allt-ar-metadata-presentation-layer.md) — P1 = presentation-only; legacy-objektkolumner projiceras som read-only metadata-rader firewallade från metadata_varden (edit→objekt-PATCH); ingen migrering; KÄLLA-taggar D/M/S/SYS.

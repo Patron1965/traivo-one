@@ -9,6 +9,8 @@ import { ObjectHistoryArchiveTab } from "@/components/ObjectHistoryArchiveTab";
 import { ObjectVignetteSection } from "@/components/ObjectVignetteSection";
 import { ObjectHeaderPanel } from "@/components/ObjectHeaderPanel";
 import { ObjectMetadataForm, type MetadataFormEntry, type MetadataFormType, type MetadataRelatedParent, type MetadataRelatedChild } from "@/components/ObjectMetadataForm";
+import { buildLegacyObjectFieldEntries, type LegacyFieldInput } from "@/lib/legacy-object-fields";
+import { KallaBadge } from "@/lib/metadata-kalla";
 import { ObjectTemplateMetadataForm, type TemplateMetadataType } from "@/components/ObjectTemplateMetadataForm";
 import { ObjectSystemGeneratedPanel } from "@/components/ObjectSystemGeneratedPanel";
 import { InfoPackageTree } from "@/components/objects/InfoPackageTree";
@@ -33,8 +35,8 @@ import type { ObjectTimeRestriction } from "@shared/schema";
 import {
   ArrowLeft, Building2, MapPin, Key, Keyboard, Users, DoorOpen,
   Clock, Package, FileText, Image, Contact, GitFork, AlertTriangle,
-  Calendar, Loader2, ChevronRight, Wrench, Shield,
-  Hash, Info, Box, Layers, ClipboardList, Plus,
+  Calendar, Loader2, ChevronRight, Wrench,
+  Box, Layers, Plus,
   Trash2, Pencil, Save, X, Phone, Mail, LinkIcon, Search, History,
   ArrowUp, ArrowDown, RotateCcw, Cog, Copy, Gauge, Zap
 } from "lucide-react";
@@ -314,37 +316,6 @@ function InfoRow({ label, value, icon: Icon }: { label: string; value: string | 
   );
 }
 
-function InheritedInfoRow({ label, value, inherited, source, icon: Icon }: {
-  label: string;
-  value: string | number | null | undefined;
-  inherited?: boolean;
-  source?: string;
-  icon?: LucideIcon;
-}) {
-  if (value === null || value === undefined || value === "") return null;
-  return (
-    <div className="flex items-start gap-3 py-2">
-      {Icon && <Icon className="h-4 w-4 mt-0.5 text-muted-foreground shrink-0" />}
-      <div className="min-w-0 flex-1">
-        <div className="text-xs text-muted-foreground flex items-center gap-1">
-          {label}
-          {inherited && (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Badge variant="outline" className="text-[10px] px-1 py-0 h-4 cursor-help">
-                  Ärvd
-                </Badge>
-              </TooltipTrigger>
-              <TooltipContent>Ärvd från: {source || "förälder"}</TooltipContent>
-            </Tooltip>
-          )}
-        </div>
-        <div className="text-sm font-medium break-words">{String(value)}</div>
-      </div>
-    </div>
-  );
-}
-
 const defaultIcon = L.icon({
   iconUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
   iconRetinaUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png",
@@ -361,8 +332,10 @@ const TAB_TO_SECTION: Record<string, string> = {
   "history-archive": "deep-tools",
   // Bakåtkompatibilitet efter Fas 1-omstruktureringen: gamla ?tab=-djuplänkar för
   // borttagna/omdöpta sektioner scrollar till närmaste kvarvarande ankare.
-  access: "object-fields",
-  equipment: "object-fields",
+  // Steg 1 ("allt är metadata"): objektfälten (access/equipment) renderas nu
+  // som legacy-metadata inuti metadata-sektionen, så gamla djuplänkar dit landar.
+  access: "metadata",
+  equipment: "metadata",
   "delivery-preferences": "metadata",
 };
 
@@ -1214,6 +1187,64 @@ export default function ObjectDetailPage() {
     { label: "K4", value: obj.containerCountK4 },
   ].filter(c => c.value && c.value > 0);
 
+  // Task #1128 Fas 1 (P1 / "allt är metadata"): objektkolumner som ännu inte
+  // flyttats till metadatamodellen projiceras som syntetiska metadata-poster
+  // (KÄLLA=M + "Under migrering") och renderas genom den enhetliga
+  // metadata-ytan i stället för i ett separat hårdkodat kort. Presentation-only
+  // (expand-contract) — kolumnerna matar fortfarande routing/VRP/mobil/Fortnox.
+  const legacyFieldEntries: MetadataFormEntry[] = (() => {
+    // Tillgångsinformation kan vara objekt eller sträng — samma normalisering
+    // som det gamla kortet använde.
+    let accessInfoStr: string | null = null;
+    const accessInfoRaw = obj.resolvedAccessInfo || obj.accessInfo;
+    if (accessInfoRaw) {
+      if (typeof accessInfoRaw === "object") {
+        const parts = Object.entries(accessInfoRaw as Record<string, unknown>)
+          .filter(([, v]) => v !== null && v !== undefined && v !== "")
+          .map(([k, v]) => `${k}: ${String(v)}`);
+        accessInfoStr = parts.length ? parts.join(" · ") : null;
+      } else {
+        const s = String(accessInfoRaw).trim();
+        accessInfoStr = s === "" || s === "{}" ? null : s;
+      }
+    }
+    const portkod = obj.resolvedAccessCode || obj.accessCode;
+    const nyckel = obj.resolvedKeyNumber || obj.keyNumber;
+    // accessType har DB-default "open" — behandla det som "inget värde".
+    const hasRealAccessType = Boolean(obj.accessType && obj.accessType !== "open");
+    const codeInfo = getInheritanceInfo("accessCode");
+    const keyInfo = getInheritanceInfo("keyNumber");
+    const accessInfoData = getInheritanceInfo("accessInfo");
+    const fmtDate = (d: string | Date | null | undefined) =>
+      d ? new Date(d).toLocaleDateString("sv-SE") : null;
+    const inputs: LegacyFieldInput[] = [
+      {
+        column: "accessType",
+        namn: "Tillgångstyp",
+        value: hasRealAccessType && obj.accessType
+          ? accessTypeLabels[obj.accessType]?.label || obj.accessType
+          : null,
+        editGroup: "access",
+      },
+      { column: "accessCode", namn: "Portkod", value: portkod, editGroup: "access", inherited: codeInfo.inherited, inheritedFromName: codeInfo.sourceName },
+      { column: "keyNumber", namn: "Nyckelnummer", value: nyckel, editGroup: "access", inherited: keyInfo.inherited, inheritedFromName: keyInfo.sourceName },
+      { column: "accessInfo", namn: "Övrig tillgångsinformation", value: accessInfoStr, editGroup: "access", inherited: accessInfoData.inherited, inheritedFromName: accessInfoData.sourceName },
+      ...containerCounts.map((c) => ({
+        column: `containerCount${c.label}`,
+        namn: `Behållarantal ${c.label}`,
+        value: c.value,
+        editGroup: "equipment" as const,
+      })),
+      { column: "serialNumber", namn: "Serienummer", value: obj.serialNumber, editGroup: "equipment" },
+      { column: "manufacturer", namn: "Tillverkare", value: obj.manufacturer, editGroup: "equipment" },
+      { column: "purchaseDate", namn: "Inköpsdatum", value: fmtDate(obj.purchaseDate as any), editGroup: "equipment" },
+      { column: "warrantyExpiry", namn: "Garanti utgår", value: fmtDate(obj.warrantyExpiry as any), editGroup: "equipment" },
+      { column: "lastInspection", namn: "Senaste inspektion", value: fmtDate(obj.lastInspection as any), editGroup: "equipment" },
+      { column: "notes", namn: "Anteckningar", value: obj.notes, editGroup: "overview" },
+    ];
+    return buildLegacyObjectFieldEntries(inputs);
+  })();
+
   return (
     <div className="p-4 md:p-6 max-w-6xl mx-auto space-y-6" data-testid="object-detail-page">
       <div className="flex items-center gap-3 flex-wrap">
@@ -1275,14 +1306,17 @@ export default function ObjectDetailPage() {
               <GitFork className="h-4 w-4 text-muted-foreground shrink-0" />
               <span className="text-muted-foreground">Förälder:</span>
               {primaryParent ? (
-                <button
-                  type="button"
-                  onClick={() => navigate(`/objects/${primaryParent.id}`)}
-                  className="font-medium text-foreground hover:underline"
-                  data-testid="link-header-parent"
-                >
-                  {primaryParent.name}
-                </button>
+                <span className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => navigate(`/objects/${primaryParent.id}`)}
+                    className="font-medium text-foreground hover:underline"
+                    data-testid="link-header-parent"
+                  >
+                    {primaryParent.name}
+                  </button>
+                  <span className="text-[10px] uppercase tracking-wide text-muted-foreground">(primär)</span>
+                </span>
               ) : (
                 <span className="text-muted-foreground" data-testid="text-header-parent-none">Ingen förälder</span>
               )}
@@ -1296,6 +1330,37 @@ export default function ObjectDetailPage() {
               >
                 <Pencil className="h-3.5 w-3.5" />
               </Button>
+              {/* Task #1128: alternativa föräldrar (multi-parent). Arv sker ALLTID från
+                  primär förälder — alternativa påverkar endast visningsnamn. */}
+              {relatedParents.length > 1 && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span
+                      className="flex items-center gap-1 text-muted-foreground cursor-help flex-wrap"
+                      data-testid="header-alternate-parents"
+                    >
+                      <span className="text-xs">Alternativ:</span>
+                      {relatedParents
+                        .filter((p) => p.id !== primaryParent?.id)
+                        .map((p, i, arr) => (
+                          <button
+                            key={p.id}
+                            type="button"
+                            onClick={() => navigate(`/objects/${p.id}`)}
+                            className="text-xs hover:underline hover:text-foreground"
+                            data-testid={`link-header-alternate-parent-${p.id}`}
+                          >
+                            {p.name}{i < arr.length - 1 ? "," : ""}
+                          </button>
+                        ))}
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent className="max-w-xs">
+                    Alternativa föräldrar påverkar endast visningsnamn. Metadata- och
+                    fältarv sker alltid från den primära föräldern.
+                  </TooltipContent>
+                </Tooltip>
+              )}
             </div>
             <button
               type="button"
@@ -1527,6 +1592,7 @@ export default function ObjectDetailPage() {
                   <CardHeader className="pb-3">
                     <CardTitle className="text-base flex items-center gap-2">
                       <Cog className="h-4 w-4" /> Systemgenererad metadata
+                      <KallaBadge kalla="SYS" />
                     </CardTitle>
                   </CardHeader>
                   <CardContent>
@@ -1690,6 +1756,8 @@ export default function ObjectDetailPage() {
                     issueReportsCount={issueReports.length}
                     onNavigateToTab={(t) => scrollToSection(t)}
                     onNavigateToObject={(id) => navigate(`/objects/${id}`)}
+                    legacyEntries={legacyFieldEntries}
+                    onEditLegacyField={(group) => openEditDialog(group as "overview" | "access" | "equipment")}
                   />
                 )}
               </div>
@@ -1703,125 +1771,10 @@ export default function ObjectDetailPage() {
             för att bara scrolla till metadata-panelen. */}
         <ObjectSystemDetailLists objectId={objectId} />
 
-        {/* ==================== OBJEKTFÄLT (UNDER MIGRERING) ==================== */}
-        {/* Task #1128 Fas 1: hårdkodade objektkolumner som ännu inte flyttats till
-            metadatamodellen. Presentation-only (expand-contract) — kolumnerna matar
-            fortfarande routing/VRP/mobil/Fortnox. Kortet visas endast när minst ett
-            värde finns; sektions-wrappern renderas alltid så gamla ?tab=-djuplänkar
-            (access/equipment) hittar ett ankare. Ingen egen nav-pill. */}
-        <section id="object-section-object-fields" className="space-y-4 scroll-mt-4">
-          {(() => {
-            let accessInfoStr: string | null = null;
-            const accessInfoRaw = obj.resolvedAccessInfo || obj.accessInfo;
-            if (accessInfoRaw) {
-              if (typeof accessInfoRaw === "object") {
-                const entries = Object.entries(accessInfoRaw as Record<string, unknown>)
-                  .filter(([, v]) => v !== null && v !== undefined && v !== "")
-                  .map(([k, v]) => `${k}: ${String(v)}`);
-                accessInfoStr = entries.length ? entries.join(" · ") : null;
-              } else {
-                const s = String(accessInfoRaw).trim();
-                accessInfoStr = s === "" || s === "{}" ? null : s;
-              }
-            }
-            const portkod = obj.resolvedAccessCode || obj.accessCode;
-            const nyckel = obj.resolvedKeyNumber || obj.keyNumber;
-            // accessType har DB-default "open" — behandla det som "inget värde" så vi
-            // inte visar ett fabricerat "Tillgångstyp: Öppet" (samma logik som header-badgen).
-            const hasRealAccessType = Boolean(obj.accessType && obj.accessType !== "open");
-            const hasAccess = Boolean(hasRealAccessType || portkod || nyckel || accessInfoStr);
-            const hasEquipment = Boolean(
-              obj.serialNumber || obj.manufacturer || obj.purchaseDate || obj.warrantyExpiry || obj.lastInspection,
-            );
-            const hasContainers = containerCounts.length > 0;
-            const hasNotes = Boolean(obj.notes);
-            if (!hasAccess && !hasEquipment && !hasContainers && !hasNotes) return null;
-            const codeInfo = getInheritanceInfo("accessCode");
-            const keyInfo = getInheritanceInfo("keyNumber");
-            const accessInfoData = getInheritanceInfo("accessInfo");
-            return (
-              <Card data-testid="card-object-fields">
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-base flex items-center gap-2">
-                    <Package className="h-4 w-4" /> Objektfält (under migrering)
-                  </CardTitle>
-                  <p className="text-xs text-muted-foreground">
-                    Hårdkodade objektfält som ännu inte flyttats till metadatamodellen. Visas
-                    enbart när ett värde finns och matas fortfarande in via respektive
-                    redigeringsdialog.
-                  </p>
-                </CardHeader>
-                <CardContent className="space-y-6">
-                  {hasAccess && (
-                    <div className="space-y-1">
-                      <div className="flex items-center justify-between">
-                        <div className="text-sm font-medium flex items-center gap-2">
-                          <Key className="h-4 w-4" /> Tillgång
-                        </div>
-                        <Button variant="ghost" size="sm" onClick={() => openEditDialog("access")} data-testid="button-edit-access">
-                          <Pencil className="h-3.5 w-3.5 mr-1" /> Redigera
-                        </Button>
-                      </div>
-                      {hasRealAccessType && obj.accessType && (
-                        <InfoRow
-                          label="Tillgångstyp"
-                          value={accessTypeLabels[obj.accessType]?.label || obj.accessType}
-                          icon={DoorOpen}
-                        />
-                      )}
-                      <InheritedInfoRow label="Portkod" value={portkod} inherited={codeInfo.inherited} source={codeInfo.sourceName} icon={Keyboard} />
-                      <InheritedInfoRow label="Nyckelnummer" value={nyckel} inherited={keyInfo.inherited} source={keyInfo.sourceName} icon={Key} />
-                      <InheritedInfoRow label="Övrig tillgångsinformation" value={accessInfoStr} inherited={accessInfoData.inherited} source={accessInfoData.sourceName} icon={Info} />
-                    </div>
-                  )}
-                  {(hasEquipment || hasContainers) && (
-                    <div className="space-y-1">
-                      <div className="flex items-center justify-between">
-                        <div className="text-sm font-medium flex items-center gap-2">
-                          <Package className="h-4 w-4" /> Utrustning &amp; Behållare
-                        </div>
-                        <Button variant="ghost" size="sm" onClick={() => openEditDialog("equipment")} data-testid="button-edit-equipment">
-                          <Pencil className="h-3.5 w-3.5 mr-1" /> Redigera
-                        </Button>
-                      </div>
-                      {hasContainers && (
-                        <div className="mb-2">
-                          <div className="text-xs text-muted-foreground mb-2">Behållarantal</div>
-                          <div className="flex gap-3 flex-wrap">
-                            {containerCounts.map(c => (
-                              <div key={c.label} className="text-center p-3 bg-muted/50 rounded-lg min-w-[80px]">
-                                <div className="text-xl font-bold">{c.value}</div>
-                                <div className="text-xs text-muted-foreground">{c.label}</div>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                      <InfoRow label="Serienummer" value={obj.serialNumber} icon={Hash} />
-                      <InfoRow label="Tillverkare" value={obj.manufacturer} icon={Wrench} />
-                      <InfoRow label="Inköpsdatum" value={obj.purchaseDate ? new Date(obj.purchaseDate).toLocaleDateString("sv-SE") : null} icon={Calendar} />
-                      <InfoRow label="Garanti utgår" value={obj.warrantyExpiry ? new Date(obj.warrantyExpiry).toLocaleDateString("sv-SE") : null} icon={Shield} />
-                      <InfoRow label="Senaste inspektion" value={obj.lastInspection ? new Date(obj.lastInspection).toLocaleDateString("sv-SE") : null} icon={ClipboardList} />
-                    </div>
-                  )}
-                  {hasNotes && (
-                    <div className="space-y-1">
-                      <div className="flex items-center justify-between">
-                        <div className="text-sm font-medium flex items-center gap-2">
-                          <FileText className="h-4 w-4" /> Anteckningar
-                        </div>
-                        <Button variant="ghost" size="sm" onClick={() => openEditDialog("overview")} data-testid="button-edit-notes">
-                          <Pencil className="h-3.5 w-3.5 mr-1" /> Redigera
-                        </Button>
-                      </div>
-                      <InfoRow label="Anteckningar" value={obj.notes} icon={FileText} />
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            );
-          })()}
-        </section>
+        {/* Objektfälten (access/equipment) under migrering renderas nu genom den
+            enhetliga metadata-ytan ovan (kortet "Objektfält (under migrering)" i
+            ObjectMetadataForm). Gamla ?tab=access/equipment-djuplänkar mappas till
+            metadata-sektionen via TAB_TO_SECTION. */}
 
         {/* ==================== KARTA ==================== */}
         <section id="object-section-location" className="space-y-4 scroll-mt-4">
@@ -1830,6 +1783,7 @@ export default function ObjectDetailPage() {
               <div className="flex items-center justify-between gap-2">
                 <CardTitle className="text-base flex items-center gap-2">
                   <MapPin className="h-4 w-4" /> Karta
+                  <KallaBadge kalla="SYS" />
                 </CardTitle>
                 <div className="flex items-center gap-2">
                   <Badge variant="outline" className={objectLocationTypeBadgeClass(obj)} data-testid="badge-location-type-tab">
