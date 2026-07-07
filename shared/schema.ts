@@ -4997,6 +4997,22 @@ export interface MetadataVardenWithKatalog extends MetadataVarden {
   // (notNull boolean) och får inte redeklareras som optional här.
   // Resolverad per-objekt sorteringsindex (lägre = högre upp). Saknas → katalog-ordning.
   sortIndex?: number | null;
+  // Multi-instans: alla värden i katalog-gruppen (endast satt för allowDuplicates-
+  // fält). Nearest/collapse för skalära fält är oförändrat; detta är ett additivt
+  // fält så klienten kan bläddra flera värden (t.ex. flera kontakter) i karusell.
+  instances?: MetadataInstance[];
+}
+
+// Multi-instans-rad för ett duplicerbart katalogfält (för karusell-bläddring).
+export interface MetadataInstance {
+  id: string;
+  objektId: string;
+  source: 'local' | 'inherited';
+  fromObjectName: string | null;
+  level: number;
+  metod: string;
+  displayValue: string | null;
+  vardeJson: unknown;
 }
 
 export interface ObjectWithAllMetadataEAV {

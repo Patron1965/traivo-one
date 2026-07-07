@@ -75,6 +75,10 @@ export type SystemTaskHistory = {
   orderStatus: string | null;
   scheduledDate: string | null;
   lineCount: number;
+  // "Född ur": orderNumber som börjar "SO-" = snabborder; orderConceptId satt =
+  // orderkoncept. Klienten härleder ursprungsetiketten + länk från dessa.
+  orderNumber: string | null;
+  orderConceptId: string | null;
 };
 
 export type SystemTaskFuture = {
@@ -279,6 +283,8 @@ async function computeTasksHistory(
     orderStatus: wo.orderStatus ?? null,
     scheduledDate: toIso(wo.scheduledDate),
     lineCount: lineCounts.get(wo.id) ?? 0,
+    orderNumber: wo.orderNumber ?? null,
+    orderConceptId: wo.orderConceptId ?? null,
   }));
 }
 

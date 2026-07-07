@@ -13,8 +13,9 @@ inte lagrad som metadata_katalog/metadata_varden-rader.
   (`customer_communications`). Kommunikation bär mottagar-PII → läsningen MÅSTE vara
   tenant+objekt-scopad (aldrig utanför tenant).
 - Konsumenter (håll prop-/svarsformen stabil): (1) `ObjectSystemGeneratedPanel` på ObjectsPage
-  sidopanel + ObjectDetailPage metadata-flik; (2) `ObjectOverview360`-rutnätet (360°-översikten
-  på objektdetaljsidans Översikt) som mappar svaret till kompakta kategorikort. Nya kategorier
+  sidopanel + ObjectDetailPage metadata-kropp (via `ObjectMetadataBody`); (2) `ObjectSystemOrdersList`
+  läser samma endpoint (`tasksHistory` → systemkopplade ordrar, born-from-klassning). Det fabricerade
+  `ObjectOverview360`-rutnätet är BORTTAGET (kroppen är nu 100% metadata-driven). Nya kategorier
   ska in i servicen så ALLA ytor får dem samtidigt — hämta aldrig ad-hoc i en enskild yta.
 - **Inpekade orderkoncept live-beräknas** (återanvänder delade resolvern: deriveConceptTargets +
   getObjectSubtreeIds-medlemskap + evaluateConditionsForObject) — speglar steg 4-preview/expansion.

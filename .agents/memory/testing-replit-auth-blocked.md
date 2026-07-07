@@ -20,3 +20,17 @@ tsc/LSP, clean Vite build (no transform errors in workflow logs), static
 integrity greps (section/nav balance, removed symbols), and architect review.
 Reserve `runTest` for unauthenticated surfaces or hand it a path that doesn't
 cross the login redirect. Record an e2e skip with a clear reason at completion.
+
+**Baseline-red jsdom test — don't chase:** the client vitest suite carries a
+pre-existing red integration test that mounts the whole ObjectDetailPage. It
+fails for two reasons independent of any current diff: (1) ObjectHeaderPanel's
+quick-field-config read is not null-safe against a truthy-but-shapeless value —
+the test's catch-all fetch mock returns `[]`, so `qfc.source.level` throws an
+uncaught render exception that pollutes the run; (2) it asserts anchor ids /
+testids for a legacy "Objektfält" section that do not exist in the code (nor in
+HEAD). Before blaming your change, `git status` the crashing file: if it isn't in
+your diff and the asserted ids were never in HEAD, it's baseline noise. Confirm
+your own touched surface instead (grep that your nav sections + testids are all
+present). The full `tests/client` run also gets OOM-killed under the dev
+workflow's resource pressure — run one file at a time (`npx vitest run
+tests/client/<file> --reporter=dot`; `--poolOptions` is an invalid flag here).

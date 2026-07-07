@@ -12,6 +12,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useUpload } from "@/hooks/use-upload";
 import { apiRequest } from "@/lib/queryClient";
 import { metadataTypeOptionLabel, METADATA_DATATYPE_LABELS } from "@/lib/metadata-display";
+import type { MetadataInstance } from "@shared/schema";
 import {
   FileText, Image as ImageIcon, Upload, Download, Trash2, RotateCcw, Cog,
   Link as LinkIcon, Plus, Loader2, Type, Hash, ToggleLeft, Pencil,
@@ -29,6 +30,8 @@ export interface MetadataFormKatalog {
   datatyp?: string;
   area?: string | null;
   kronologiskVisning?: boolean;
+  allowDuplicates?: boolean;
+  allowedValues?: string[] | null;
 }
 
 export interface MetadataFormEntry {
@@ -55,6 +58,10 @@ export interface MetadataFormEntry {
   // hamna i metadata_varden spar-/raderingsvägarna.
   legacyColumn?: string;
   legacyEditGroup?: string;
+  // Resolverad per-objekt sorteringsindex (lägre = högre upp).
+  sortIndex?: number | null;
+  // Multi-instans: alla värden i katalog-gruppen (endast satt för allowDuplicates-fält).
+  instances?: MetadataInstance[];
 }
 
 export interface MetadataFormType {
@@ -169,12 +176,12 @@ function getRelationContextLabel(ctx?: string | null): string {
   return RELATION_CONTEXT_LABELS[ctx] ?? ctx;
 }
 
-function humanizeArea(slug: string): string {
+export function humanizeArea(slug: string): string {
   if (!slug) return "Övrigt";
   return slug.charAt(0).toUpperCase() + slug.slice(1).replace(/[_-]+/g, " ");
 }
 
-function rawDisplayValue(entry: MetadataFormEntry): string | null {
+export function rawDisplayValue(entry: MetadataFormEntry): string | null {
   if (entry.vardeString != null && entry.vardeString !== "") return entry.vardeString;
   if (entry.vardeInteger != null) return String(entry.vardeInteger);
   if (entry.vardeDecimal != null) return String(entry.vardeDecimal);
@@ -1398,7 +1405,7 @@ export function MetadataUploadButton({
 
 /** Lägg-till-dialog. Stöder fritext, fasta val (dropdown) samt direkt
  *  filuppladdning för bild-/filfält. */
-function MetadataAddButton({
+export function MetadataAddButton({
   objectId,
   metadataTypes,
   onAdd,

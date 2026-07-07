@@ -8,7 +8,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { ObjectHistoryArchiveTab } from "@/components/ObjectHistoryArchiveTab";
 import { ObjectVignetteSection } from "@/components/ObjectVignetteSection";
 import { ObjectHeaderPanel } from "@/components/ObjectHeaderPanel";
-import { ObjectMetadataForm, type MetadataFormEntry, type MetadataFormType, type MetadataRelatedParent, type MetadataRelatedChild } from "@/components/ObjectMetadataForm";
+import { type MetadataFormEntry, type MetadataFormType, type MetadataRelatedParent, type MetadataRelatedChild } from "@/components/ObjectMetadataForm";
 import { buildLegacyObjectFieldEntries, type LegacyFieldInput } from "@/lib/legacy-object-fields";
 import { KallaBadge } from "@/lib/metadata-kalla";
 import { ObjectTemplateMetadataForm, type TemplateMetadataType } from "@/components/ObjectTemplateMetadataForm";
@@ -40,7 +40,7 @@ import {
   Trash2, Pencil, Save, X, Phone, Mail, LinkIcon, Search, History,
   ArrowUp, ArrowDown, RotateCcw, Cog, Copy, Gauge, Zap
 } from "lucide-react";
-import { ObjectOverview360 } from "@/components/objects/ObjectOverview360";
+import { ObjectMetadataBody } from "@/components/objects/ObjectMetadataBody";
 import { ObjectSystemDetailLists } from "@/components/objects/ObjectSystemDetailLists";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
@@ -1506,7 +1506,7 @@ export default function ObjectDetailPage() {
         aria-label="Snabbnavigering"
         data-testid="object-detail-section-nav"
       >
-        <Button variant="ghost" size="sm" onClick={() => scrollToSection("overview")} data-testid="nav-overview">Översikt</Button>
+        <Button variant="ghost" size="sm" onClick={() => scrollToSection("overview")} data-testid="nav-overview">Åtgärder</Button>
         <Button variant="ghost" size="sm" onClick={() => scrollToSection("hierarchy")} data-testid="nav-hierarchy">
           Släkt & Hierarki {descendants.length > 0 && <Badge variant="secondary" className="ml-1 text-xs">{descendants.length}</Badge>}
         </Button>
@@ -1528,15 +1528,14 @@ export default function ObjectDetailPage() {
       </nav>
 
       <div className="space-y-8" data-testid="object-detail-sections">
-        {/* ==================== ÖVERSIKT ==================== */}
+        {/* ==================== SNABBÅTGÄRDER ==================== */}
+        {/* Det fabricerade 360°-dashboardet är rivet — objektets kropp är nu
+            100% metadata-driven (se metadata-sektionen). Denna strip behåller
+            bara den primära åtgärden och sektionsankaret. */}
         <section id="object-section-overview" className="space-y-4 scroll-mt-4">
-          {/* Task #1128: 360°-översikt — tätt rutnät av kompakta kategorikort
-              (senaste post + karusell + källhänvisning + "Visa alla"). Ersätter
-              tidigare "Senaste aktivitet" + "Sammanfattning". De djupa sektionerna
-              nedan behålls som drilldown-mål via "Visa alla". */}
           <div className="flex items-center justify-between">
             <h2 className="text-base font-semibold flex items-center gap-2">
-              <Gauge className="h-4 w-4" /> 360°-översikt
+              <Zap className="h-4 w-4" /> Snabbåtgärder
             </h2>
             <Button
               variant="outline"
@@ -1547,15 +1546,6 @@ export default function ObjectDetailPage() {
               <Plus className="h-3.5 w-3.5 mr-1" /> Ny snabborder
             </Button>
           </div>
-          <ObjectOverview360
-            objectId={objectId}
-            contacts={contacts}
-            workOrders={workOrders}
-            issueReports={issueReports}
-            assignments={objectAssignments}
-            onShowAll={scrollToSection}
-            onNavigate={navigate}
-          />
         </section>
 
         {/* ==================== SLÄKT & HIERARKI ==================== */}
@@ -1585,101 +1575,6 @@ export default function ObjectDetailPage() {
               ) : null;
             return (
               <div className="space-y-4">
-                {/* Task #1085: Systemgenererad metadata — read-only fält som
-                    härleds live (inpekade orderkoncept, kopplade uppgifter,
-                    adress, position, bilder, felanmälningar, betyg). */}
-                <Card data-testid="card-system-generated-metadata">
-                  <CardHeader className="pb-3">
-                    <CardTitle className="text-base flex items-center gap-2">
-                      <Cog className="h-4 w-4" /> Systemgenererad metadata
-                      <KallaBadge kalla="SYS" />
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <ObjectSystemGeneratedPanel objectId={objectId} />
-                  </CardContent>
-                </Card>
-
-                {/* Orderkoncept-uppgifter: actionable deep-links till
-                    orderkoncept/kund för uppgifter som genererats från koncept. */}
-                <Card data-testid="card-object-assignments">
-                  <CardHeader className="pb-3">
-                    <CardTitle className="text-base flex items-center gap-2">
-                      <LinkIcon className="h-4 w-4" /> Orderkoncept-uppgifter
-                      {objectAssignments.length > 0 && (
-                        <Badge variant="secondary" className="text-xs" data-testid="badge-assignment-count">
-                          {objectAssignments.length}
-                        </Badge>
-                      )}
-                    </CardTitle>
-                    <p className="text-xs text-muted-foreground">
-                      Planerade uppgifter som genererats från orderkoncept för detta objekt. Klicka för att navigera till orderkonceptet eller kunden.
-                    </p>
-                  </CardHeader>
-                  <CardContent>
-                    {objectAssignments.length > 0 ? (
-                      <div className="space-y-2">
-                        {objectAssignments.map((a) => (
-                          <div
-                            key={a.id}
-                            className="rounded-lg border border-border p-3"
-                            data-testid={`assignment-row-${a.id}`}
-                          >
-                            <div className="flex items-start justify-between gap-3">
-                              <div className="min-w-0 flex-1">
-                                <div className="text-sm font-medium truncate" data-testid={`text-assignment-title-${a.id}`}>
-                                  {a.title}
-                                </div>
-                                <div className="mt-1 flex items-center gap-3 flex-wrap text-xs text-muted-foreground">
-                                  {a.scheduledDate && (
-                                    <span className="flex items-center gap-1">
-                                      <Calendar className="h-3 w-3" />
-                                      {new Date(a.scheduledDate).toLocaleDateString("sv-SE")}
-                                    </span>
-                                  )}
-                                  {typeof a.quantity === "number" && a.quantity > 0 && (
-                                    <span>{a.quantity} st</span>
-                                  )}
-                                </div>
-                              </div>
-                            </div>
-                            <div className="mt-2 flex items-center gap-2 flex-wrap">
-                              {a.orderConceptId && (
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  className="h-7 px-2 text-xs"
-                                  onClick={() => navigate(`/order-concepts/${a.orderConceptId}/edit`)}
-                                  data-testid={`link-assignment-concept-${a.id}`}
-                                >
-                                  <LinkIcon className="h-3 w-3 mr-1" />
-                                  {a.orderConceptName || "Orderkoncept"}
-                                </Button>
-                              )}
-                              {a.customerId && (
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  className="h-7 px-2 text-xs"
-                                  onClick={() => navigate(`/customers/${a.customerId}`)}
-                                  data-testid={`link-assignment-customer-${a.id}`}
-                                >
-                                  <Users className="h-3 w-3 mr-1" />
-                                  {a.customerName || "Kund"}
-                                </Button>
-                              )}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <p className="text-sm text-muted-foreground" data-testid="empty-object-assignments">
-                        Inga orderkoncept-uppgifter genererade för detta objekt ännu.
-                      </p>
-                    )}
-                  </CardContent>
-                </Card>
-
                 {canUseTemplates && importTemplates.length > 0 && (
                   <Card>
                     <CardContent className="flex flex-col gap-2 py-4 sm:flex-row sm:items-center sm:justify-between">
@@ -1726,7 +1621,7 @@ export default function ObjectDetailPage() {
                     renderHistoryButton={renderHistory}
                   />
                 ) : (
-                  <ObjectMetadataForm
+                  <ObjectMetadataBody
                     objectId={objectId}
                     entries={metadata as MetadataFormEntry[]}
                     types={metadataTypes as MetadataFormType[]}
@@ -1737,27 +1632,10 @@ export default function ObjectDetailPage() {
                     softDeletePending={softDeleteMetadataMutation.isPending}
                     restorePending={restoreMetadataMutation.isPending}
                     renderHistoryButton={renderHistory}
-                    systemFacts={
-                      obj
-                        ? {
-                            objectNumber: obj.objectNumber,
-                            createdAt: obj.createdAt,
-                            status: obj.status,
-                            importBatchId: obj.importBatchId,
-                            hierarchyDepth: obj.hierarchyDepth,
-                          }
-                        : undefined
-                    }
-                    contacts={contacts}
-                    tasks={objectAssignments}
-                    parents={relatedParents}
-                    children={relatedChildren}
-                    imagesCount={images.length}
-                    issueReportsCount={issueReports.length}
-                    onNavigateToTab={(t) => scrollToSection(t)}
-                    onNavigateToObject={(id) => navigate(`/objects/${id}`)}
                     legacyEntries={legacyFieldEntries}
                     onEditLegacyField={(group) => openEditDialog(group as "overview" | "access" | "equipment")}
+                    objectAssignments={objectAssignments}
+                    navigate={navigate}
                   />
                 )}
               </div>

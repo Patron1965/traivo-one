@@ -983,6 +983,28 @@ export async function getObjectWithAllMetadata(
         ? mergeCompositeJsonValues(group.map((r) => r.varde_json))
         : nearest.varde_json;
 
+    // Multi-instans (allowDuplicates): additivt — exponera alla värden i gruppen
+    // så klienten kan bläddra dem i karusell. Nearest/collapse ovan är OFÖRÄNDRAT
+    // (funktionen delas av portal/kpi/article). Endast satt för duplicerbara fält.
+    const instances =
+      (nearest.katalog_allow_duplicates ?? false) === true
+        ? group
+            .filter((r) => r.raderad !== true && rawRowDisplay(r) != null)
+            .map((r) => ({
+              id: r.id,
+              objektId: r.objekt_id,
+              source: (r.source === "inherited" ? "inherited" : "local") as
+                | "local"
+                | "inherited",
+              fromObjectName:
+                r.source === "inherited" ? (r.from_objekt_namn ?? null) : null,
+              level: r.level ?? 0,
+              metod: r.metod ?? "manuell",
+              displayValue: rawRowDisplay(r),
+              vardeJson: r.varde_json ?? null,
+            }))
+        : undefined;
+
     metadataWithKatalog.push({
       id: nearest.id,
       tenantId: tenantId,
@@ -1040,6 +1062,7 @@ export async function getObjectWithAllMetadata(
       inheritedFromName,
       softDeleted,
       raderad: nearest.raderad === true,
+      instances,
     });
   }
 
