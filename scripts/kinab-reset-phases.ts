@@ -12,9 +12,12 @@
  * BEHÅLLER (config/master): tenants, users, user_tenant_roles, resources,
  *   branding_templates, tenant_branding, articles, article_components,
  *   metadata_katalog, fortnox-config, tenant-features/moduler, audit_logs,
- *   tenant-prislistor (customer_id IS NULL).
+ *   tenant-prislistor (customer_id IS NULL), orderkoncept (order_concepts +
+ *   concept_filters + invoice_rules + order_concept_run_logs + CASCADE-barn).
  * RADERAR (operativt): work_orders + barn, objects + barn, customers + barn,
  *   import_batches, fortnox_invoice_exports, notifications, ai-tips, kund-prislistor.
+ *   Objekt-länkarna order_concept_objects raderas (pekar på raderade objekt) men
+ *   SJÄLVA orderkoncepten behålls — de re-pekas mot nya objekt vid nyimport.
  */
 
 export interface ResetPhase {
@@ -96,15 +99,11 @@ export function buildResetPhases(tenant: string): ResetPhase[] {
         ["customer_issue_reports", `tenant_id = '${tenant}'`],
         ["annual_goals", `tenant_id = '${tenant}'`],
         ["planning_parameters", `tenant_id = '${tenant}'`],
-        // Orderkoncept (operativa tjänste-definitioner) — raderas EFTER assignments
-        // (FK assignments.order_concept_id) men FÖRE clusters/price_lists (Fas E).
-        // CASCADE-barn (order_concept_articles, *_configurations, delivery_schedules)
-        // försvinner automatiskt; concept_filters/invoice_rules/order_concept_run_logs
-        // är NO ACTION och måste raderas explicit först.
-        ["concept_filters", `order_concept_id IN (SELECT id FROM order_concepts WHERE tenant_id = '${tenant}')`],
-        ["invoice_rules", `order_concept_id IN (SELECT id FROM order_concepts WHERE tenant_id = '${tenant}')`],
-        ["order_concept_run_logs", `order_concept_id IN (SELECT id FROM order_concepts WHERE tenant_id = '${tenant}')`],
-        ["order_concepts", `tenant_id = '${tenant}'`],
+        // Orderkoncept BEHÅLLS (config/master, Task #1157). Bara objekt-länkarna
+        // order_concept_objects raderas här — de pekar på objekt som rensas (FK
+        // NO ACTION på object-sidan) och måste bort FÖRE objects (Fas D). Övriga
+        // koncept-barn (concept_filters/invoice_rules/order_concept_run_logs +
+        // CASCADE-barn) refererar aldrig objekt/kund/arbetsorder och behålls.
       ],
     },
     {
