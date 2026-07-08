@@ -91,7 +91,7 @@ export function ObjectVignetteSection({ objectId }: Props) {
       <CardContent className="p-4">
         <div className="flex items-start gap-4">
           {/* Vinjetbild */}
-          <div className="relative w-24 h-24 md:w-28 md:h-28 shrink-0 rounded-md overflow-hidden border bg-muted flex items-center justify-center">
+          <div className="relative w-20 h-20 md:w-24 md:h-24 shrink-0 rounded-md overflow-hidden border bg-muted flex items-center justify-center">
             {isLoading ? (
               <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
             ) : current ? (
