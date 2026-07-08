@@ -17,7 +17,7 @@ import type { Express } from "express";
   import { taskDependencies, objects } from "@shared/schema";
   import { articleHasStockLocation, resolveStockLocation } from "../../services/logistics-task-expansion";
   import { reverseGeocode, buildAddressString } from "../../services/geocoding";
-  import { logWorkOrderTransition } from "../../services/task-event-log";
+  import { logWorkOrderTransition, getTaskEvents } from "../../services/task-event-log";
 
   // Löser effektiv produktionstid (minuter) ur redan hämtade listrader.
   // Prioritet: resurs-specifik (giltig) → generisk lista (giltig) → artikelns
@@ -1441,6 +1441,55 @@ app.get("/api/mobile/v2/orders/:id", isMobileAuthenticated, asyncHandler(async (
       canStart,
       blockedBy: dependencyStatus.filter(d => d.isBlocking).map(d => d.orderId),
     });
+}));
+
+// Task #1189: uppgiftens tidslinje för fältappen (Traivo Go). Speglar webbens
+// /api/work-orders/:id/timeline men på den mobil-auktoriserade ytan. Tenant
+// härleds ur resursens work_order (order.tenantId), ALDRIG req.tenantId — mobil
+// yta går utanför tenant-middleware. Append-only läsning; skriver aldrig.
+app.get("/api/mobile/orders/:id/timeline", isMobileAuthenticated, asyncHandler(async (req: MobileAuthenticatedRequest, res: Response) => {
+    const orderId = req.params.id;
+    const resourceId = req.mobileResourceId;
+
+    const order = await storage.getWorkOrder(orderId);
+    if (!order) throw new NotFoundError("Order hittades inte");
+    if (order.resourceId !== resourceId) throw new ForbiddenError("Ej behörig");
+
+    const tenantId = order.tenantId;
+    if (!tenantId) throw new NotFoundError("Order hittades inte");
+
+    const events = await getTaskEvents(tenantId, orderId);
+
+    // Lös upp användarnamn för user-aktörer i en batch (samma som webben).
+    const userIds = Array.from(new Set(
+      events.filter(e => e.actorType === "user" && e.actorId).map(e => e.actorId as string),
+    ));
+    const userMap = new Map<string, string>();
+    await Promise.all(userIds.map(async (uid) => {
+      const u = await storage.getUser(uid).catch(() => null);
+      if (u) {
+        const name = [u.firstName, u.lastName].filter(Boolean).join(" ").trim() || u.email || uid;
+        userMap.set(uid, name);
+      }
+    }));
+
+    const timeline = events.map(e => ({
+      id: e.id,
+      eventType: e.eventType,
+      timeKind: e.timeKind,
+      fromStatus: e.fromStatus,
+      toStatus: e.toStatus,
+      actorType: e.actorType,
+      actorId: e.actorId,
+      actorName: e.actorType === "user"
+        ? (e.actorId ? (userMap.get(e.actorId) ?? "Okänd användare") : "Okänd användare")
+        : e.actorType === "resource" ? "Fältresurs" : "System",
+      detail: e.detail ?? {},
+      occurredAt: e.occurredAt,
+      createdAt: e.createdAt,
+    }));
+
+    res.json({ timeline });
 }));
 
   }

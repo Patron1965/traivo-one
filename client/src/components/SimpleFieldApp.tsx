@@ -11,7 +11,8 @@ import {
   Key, DoorOpen, ListChecks, CircleDot, Circle, Mail, Coffee, MessageSquare, ChevronRight,
   User, CloudSun, Pause, SkipForward, Send, Flag, Thermometer, Wind, Download, Share,
   Lock, Unlock, ClipboardCheck, Wrench, UserX, AlarmClock, Car, Database, FileText, ListTodo, Eye, EyeOff, Settings, Network, Plus,
-  Search, Route, Users, Warehouse, ChevronDown, Package, Hash, Moon, Sun
+  Search, Route, Users, Warehouse, ChevronDown, Package, Hash, Moon, Sun,
+  ArrowRightLeft, RotateCcw, Calendar, Truck, History, Activity
 } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
@@ -39,6 +40,7 @@ import { SigningValidationModal } from "@/components/SigningValidationModal";
 import type { WorkOrderWithObject, Customer } from "@shared/schema";
 import { IMPOSSIBLE_REASONS, IMPOSSIBLE_REASON_LABELS, REQUIRED_FIELDS_BY_ORDER_TYPE } from "@shared/schema";
 import { CATEGORY_LABELS, SEVERITY_LABELS, GO_CATEGORIES } from "@shared/changeRequestCategories";
+import { UPPGIFT_STATUS_LABELS, type UppgiftStatus } from "@shared/uppgift-contract";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -198,6 +200,165 @@ function MyReportsPanel({ mobileApiCall }: { mobileApiCall: (method: string, url
               </div>
             ))}
           </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+// Task #1189: uppgiftens tidslinje i fältappen. Speglar webbens tidslinje
+// (WorkOrderDetailPage) men läser via den mobil-auktoriserade endpointen.
+interface FieldTimelineEvent {
+  id: string;
+  eventType: string;
+  timeKind?: string | null;
+  fromStatus?: string | null;
+  toStatus?: string | null;
+  actorName: string;
+  detail?: Record<string, unknown> | null;
+  occurredAt?: string | null;
+}
+
+const FIELD_TIMELINE_EVENT_META: Record<string, { label: string; icon: typeof Activity; tone: "muted" | "warning" | "primary" }> = {
+  status_changed: { label: "Status ändrad", icon: ArrowRightLeft, tone: "muted" },
+  bounce: { label: "Studs (grov ↔ fin)", icon: RotateCcw, tone: "warning" },
+  rescheduled: { label: "Ombokad", icon: Calendar, tone: "warning" },
+  resource_reassigned: { label: "Resurs ombokad", icon: Users, tone: "warning" },
+  desired_window_set: { label: "Önskad tid satt", icon: Clock, tone: "muted" },
+  planned_window_set: { label: "Planerad tid satt", icon: Clock, tone: "muted" },
+  en_route: { label: "På väg", icon: Truck, tone: "primary" },
+  arrived: { label: "På plats", icon: MapPin, tone: "primary" },
+  completed: { label: "Utförd", icon: History, tone: "primary" },
+  impossible: { label: "Omöjlig att utföra", icon: AlertTriangle, tone: "warning" },
+};
+
+const FIELD_TIMELINE_TONE_CLASSES: Record<"muted" | "warning" | "primary", string> = {
+  muted: "bg-muted text-muted-foreground",
+  warning: "bg-warning/15 text-warning",
+  primary: "bg-primary/15 text-primary",
+};
+
+const FIELD_TIME_KIND_LABELS: Record<string, string> = {
+  onskad: "Önskad",
+  planerad: "Planerad",
+  verklig: "Verklig",
+};
+
+function fieldUppgiftStatusLabel(status?: string | null): string {
+  if (!status) return "—";
+  return UPPGIFT_STATUS_LABELS[status as UppgiftStatus] ?? status;
+}
+
+function fieldFmtDateTime(value?: string | null): string {
+  if (!value) return "—";
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return "—";
+  return d.toLocaleString("sv-SE", { dateStyle: "medium", timeStyle: "short" });
+}
+
+function fieldFmtDatePart(v: unknown): string {
+  if (v == null || v === "") return "—";
+  const d = new Date(String(v));
+  if (Number.isNaN(d.getTime())) return String(v);
+  return d.toLocaleDateString("sv-SE", { dateStyle: "medium" });
+}
+
+function fieldDescribeTimelineDetail(ev: FieldTimelineEvent): string | null {
+  const d = (ev.detail ?? {}) as Record<string, any>;
+  switch (ev.eventType) {
+    case "rescheduled": {
+      const from = d.fromDate ? fieldFmtDatePart(d.fromDate) : "—";
+      const to = d.toDate ? fieldFmtDatePart(d.toDate) : "—";
+      const times = (d.fromTime || d.toTime) ? ` (${d.fromTime ?? "—"} → ${d.toTime ?? "—"})` : "";
+      return `${from} → ${to}${times}`;
+    }
+    case "bounce":
+      return `${d.from ?? "—"} → ${d.to ?? "—"}`;
+    case "impossible":
+      return d.reason ? `Orsak: ${d.reason}` : null;
+    default:
+      return null;
+  }
+}
+
+function TaskTimelinePanel({
+  workOrderId,
+  mobileApiCall,
+  enabled,
+}: {
+  workOrderId: string;
+  mobileApiCall: (method: string, url: string, body?: unknown) => Promise<Response>;
+  enabled: boolean;
+}) {
+  const { data, isLoading } = useQuery<{ timeline: FieldTimelineEvent[] }>({
+    queryKey: ["/api/mobile/orders", workOrderId, "timeline"],
+    queryFn: async () => {
+      const res = await mobileApiCall("GET", `/api/mobile/orders/${workOrderId}/timeline`);
+      return res.json();
+    },
+    enabled: enabled && !!workOrderId,
+  });
+
+  const timeline = data?.timeline ?? [];
+
+  return (
+    <Card data-testid="card-task-timeline">
+      <CardHeader className="pb-3">
+        <CardTitle className="text-sm flex items-center gap-2">
+          <History className="h-4 w-4" /> Tidslinje
+          {timeline.length > 0 && <Badge variant="secondary" className="ml-1 text-xs">{timeline.length}</Badge>}
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        {isLoading ? (
+          <div className="flex items-center justify-center py-4">
+            <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+          </div>
+        ) : timeline.length > 0 ? (
+          <div className="space-y-4" data-testid="list-task-timeline">
+            {timeline.map((ev) => {
+              const meta = FIELD_TIMELINE_EVENT_META[ev.eventType] ?? { label: ev.eventType, icon: Activity, tone: "muted" as const };
+              const Icon = meta.icon;
+              const detail = fieldDescribeTimelineDetail(ev);
+              return (
+                <div key={ev.id} className="flex gap-3" data-testid={`task-timeline-row-${ev.id}`}>
+                  <span className={`flex h-7 w-7 items-center justify-center rounded-full shrink-0 ${FIELD_TIMELINE_TONE_CLASSES[meta.tone]}`}>
+                    <Icon className="h-3.5 w-3.5" />
+                  </span>
+                  <div className="min-w-0 flex-1 space-y-1 pb-1">
+                    <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5">
+                      <span className="text-sm font-medium flex items-center gap-1.5">
+                        {meta.label}
+                        {ev.timeKind && FIELD_TIME_KIND_LABELS[ev.timeKind] && (
+                          <Badge variant="outline" className="text-[10px] font-normal">{FIELD_TIME_KIND_LABELS[ev.timeKind]}</Badge>
+                        )}
+                      </span>
+                      <span className="text-xs text-muted-foreground" data-testid={`task-timeline-time-${ev.id}`}>
+                        {fieldFmtDateTime(ev.occurredAt)}
+                      </span>
+                    </div>
+                    <div className="text-xs text-muted-foreground" data-testid={`task-timeline-actor-${ev.id}`}>
+                      {ev.actorName}
+                    </div>
+                    {ev.eventType === "status_changed" && (
+                      <div className="text-sm">
+                        {fieldUppgiftStatusLabel(ev.fromStatus)}{" "}
+                        <span className="text-muted-foreground">→</span>{" "}
+                        <span className="font-medium">{fieldUppgiftStatusLabel(ev.toStatus)}</span>
+                      </div>
+                    )}
+                    {detail && (
+                      <div className="text-sm" data-testid={`task-timeline-detail-${ev.id}`}>{detail}</div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <p className="text-sm text-muted-foreground" data-testid="empty-task-timeline">
+            Ingen tidslinje ännu. Statusövergångar och tidsstämplar (önskad → planerad → verklig), studsar och ombokningar loggas här efter hand.
+          </p>
         )}
       </CardContent>
     </Card>
@@ -3356,6 +3517,14 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
                 )}
               </CardContent>
             </Card>
+          )}
+
+          {!focusMode && (
+            <TaskTimelinePanel
+              workOrderId={selectedJob.id}
+              mobileApiCall={mobileApiCall}
+              enabled={view === "job"}
+            />
           )}
         </div>
 
