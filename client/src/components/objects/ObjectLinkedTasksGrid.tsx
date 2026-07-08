@@ -31,7 +31,7 @@ export function ObjectLinkedTasksGrid({ objectId }: ObjectLinkedTasksGridProps) 
         groupBy: grouping,
         objectId,
         offset: "0",
-        limit: "500",
+        limit: "200",
       });
       const res = await apiRequest("GET", `/api/rough-planning/grid?${params.toString()}`);
       return res.json();
