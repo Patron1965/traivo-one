@@ -177,11 +177,16 @@ function formatChangedAt(value: string | null | undefined): string | null {
 interface MetadataType {
   id?: string;
   namn: string;
+  visningsnamn?: string | null;
   kategori?: string;
   datatyp?: string;
   allowedValues?: string[] | null;
   area?: string | null;
   displayNumber?: number | null;
+  sortOrder?: number | null;
+  parentMetadataId?: string | null;
+  arBeraknad?: boolean | null;
+  allowDuplicates?: boolean | null;
 }
 
 interface ObjectContact {

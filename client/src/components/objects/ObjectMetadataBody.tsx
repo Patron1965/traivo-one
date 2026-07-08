@@ -5,9 +5,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
-  Layers, AlertTriangle, Cog, Link as LinkIcon, ClipboardList, Calendar, Users, Info,
+  Layers, AlertTriangle, Cog, Link as LinkIcon, ClipboardList, Calendar, Users, Info, ListFilter,
 } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Checkbox } from "@/components/ui/checkbox";
 import { KallaBadge, KallaLegend } from "@/lib/metadata-kalla";
 import {
   MetadataAddButton,
@@ -91,10 +92,19 @@ export function ObjectMetadataBody({
   navigate,
 }: ObjectMetadataBodyProps) {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  // BILD 2/3: filtrera listan på metadataområden (tom = visa alla).
+  const [areaFilter, setAreaFilter] = useState<Set<string>>(new Set());
 
   const { data: areas = [] } = useQuery<MetadataAreaMeta[]>({
     queryKey: ["/api/metadata/areas"],
   });
+
+  // Redan tillagda katalog-namn — låter familje-tillägget hoppa över dubbletter.
+  const existingNamn = useMemo(() => {
+    const s = new Set<string>();
+    for (const e of entries) if (e.katalog?.namn) s.add(e.katalog.namn);
+    return s;
+  }, [entries]);
 
   const typeByNamn = useMemo(() => {
     const m = new Map<string, MetadataFormType>();
@@ -107,15 +117,27 @@ export function ObjectMetadataBody({
     [entries, areas],
   );
 
+  const filterActive = areaFilter.size > 0;
+  const visibleGroups = useMemo(
+    () => (filterActive ? groups.filter((g) => areaFilter.has(g.area)) : groups),
+    [groups, areaFilter, filterActive],
+  );
+  const visibleCount = useMemo(
+    () => visibleGroups.reduce((sum, g) => sum + g.items.length, 0),
+    [visibleGroups],
+  );
+
+  // Vid aktivt områdesfilter fokuseras vyn på valda områden — övriga
+  // system-/order-sektioner döljs så listan visar bara det man filtrerat på.
   const sections: MetadataNavSection[] = [
-    ...groups.map((g) => ({
+    ...visibleGroups.map((g) => ({
       key: `area-${anchorSlug(g.area)}`,
       anchorId: `meta-area-${anchorSlug(g.area)}`,
       label: g.label,
       count: g.items.length,
       icon: Layers,
     })),
-    ...(legacyEntries.length
+    ...(!filterActive && legacyEntries.length
       ? [{
           key: "legacy",
           anchorId: "meta-area-legacy",
@@ -124,9 +146,13 @@ export function ObjectMetadataBody({
           icon: AlertTriangle,
         }]
       : []),
-    { key: "system", anchorId: "meta-area-system", label: "Systemgenererad metadata", count: 0, icon: Cog },
-    { key: "assignments", anchorId: "meta-area-assignments", label: "Orderkoncept-uppgifter", count: objectAssignments.length, icon: LinkIcon },
-    { key: "orders", anchorId: "meta-area-orders", label: "Systemkopplade ordrar", count: 0, icon: ClipboardList },
+    ...(!filterActive
+      ? [
+          { key: "system", anchorId: "meta-area-system", label: "Systemgenererad metadata", count: 0, icon: Cog },
+          { key: "assignments", anchorId: "meta-area-assignments", label: "Orderkoncept-uppgifter", count: objectAssignments.length, icon: LinkIcon },
+          { key: "orders", anchorId: "meta-area-orders", label: "Systemkopplade ordrar", count: 0, icon: ClipboardList },
+        ]
+      : []),
   ];
 
   const renderField = (entry: MetadataFormEntry) => (
@@ -153,10 +179,66 @@ export function ObjectMetadataBody({
 
       <div className="min-w-0 flex-1 space-y-6">
         <div className="flex items-center justify-between gap-2">
-          <h2 className="text-sm font-medium text-muted-foreground">
-            {entries.length} metadatafält
+          <h2 className="text-sm font-medium text-muted-foreground" data-testid="text-metadata-count">
+            {filterActive ? `${visibleCount} av ${entries.length}` : entries.length} metadatafält
           </h2>
           <div className="flex items-center gap-2">
+            {groups.length > 0 && (
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant={filterActive ? "secondary" : "outline"}
+                    size="sm"
+                    data-testid="button-metadata-area-filter"
+                  >
+                    <ListFilter className="h-4 w-4 mr-1.5" />
+                    {filterActive ? `Område (${areaFilter.size})` : "Filtrera område"}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent align="end" className="w-64 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                      Metadataområden
+                    </span>
+                    {filterActive && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-6 px-2 text-xs"
+                        onClick={() => setAreaFilter(new Set())}
+                        data-testid="button-clear-area-filter"
+                      >
+                        Visa alla
+                      </Button>
+                    )}
+                  </div>
+                  <div className="space-y-1 max-h-64 overflow-y-auto">
+                    {groups.map((g) => (
+                      <label
+                        key={g.area}
+                        className="flex items-center gap-2 rounded-md px-2 py-1.5 cursor-pointer hover-elevate"
+                        data-testid={`filter-area-${anchorSlug(g.area)}`}
+                      >
+                        <Checkbox
+                          checked={areaFilter.has(g.area)}
+                          onCheckedChange={(checked) => {
+                            setAreaFilter((prev) => {
+                              const next = new Set(prev);
+                              if (checked) next.add(g.area);
+                              else next.delete(g.area);
+                              return next;
+                            });
+                          }}
+                          data-testid={`checkbox-area-${anchorSlug(g.area)}`}
+                        />
+                        <span className="text-sm flex-1">{g.label}</span>
+                        <Badge variant="secondary" className="text-[10px]">{g.items.length}</Badge>
+                      </label>
+                    ))}
+                  </div>
+                </PopoverContent>
+              </Popover>
+            )}
             <Popover>
               <PopoverTrigger asChild>
                 <Button
@@ -179,6 +261,7 @@ export function ObjectMetadataBody({
               metadataTypes={types}
               onAdd={onAdd}
               isPending={isAdding}
+              existingNamn={existingNamn}
             />
           </div>
         </div>
@@ -191,7 +274,15 @@ export function ObjectMetadataBody({
           </Card>
         )}
 
-        {groups.map((g) => (
+        {filterActive && visibleGroups.length === 0 && (
+          <Card>
+            <CardContent className="py-8 text-center text-sm text-muted-foreground" data-testid="empty-filtered-metadata">
+              Inga metadatafält i valda områden.
+            </CardContent>
+          </Card>
+        )}
+
+        {visibleGroups.map((g) => (
           <section
             key={g.area}
             id={`meta-area-${anchorSlug(g.area)}`}
@@ -205,7 +296,7 @@ export function ObjectMetadataBody({
           </section>
         ))}
 
-        {legacyEntries.length > 0 && (
+        {!filterActive && legacyEntries.length > 0 && (
           <section
             id="meta-area-legacy"
             className="scroll-mt-24 space-y-3"
@@ -218,6 +309,8 @@ export function ObjectMetadataBody({
           </section>
         )}
 
+        {!filterActive && (
+        <>
         {/* Systemgenererad metadata — read-only, live-härledd. */}
         <section id="meta-area-system" className="scroll-mt-24">
           <Card data-testid="card-system-generated-metadata">
@@ -316,6 +409,8 @@ export function ObjectMetadataBody({
         <section id="meta-area-orders" className="scroll-mt-24">
           <ObjectSystemOrdersList objectId={objectId} navigate={navigate} />
         </section>
+        </>
+        )}
       </div>
 
       <Dialog open={!!previewUrl} onOpenChange={(o) => !o && setPreviewUrl(null)}>

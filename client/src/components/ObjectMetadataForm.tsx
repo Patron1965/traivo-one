@@ -5,13 +5,14 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useToast } from "@/hooks/use-toast";
 import { useUpload } from "@/hooks/use-upload";
 import { apiRequest } from "@/lib/queryClient";
-import { metadataTypeOptionLabel, METADATA_DATATYPE_LABELS } from "@/lib/metadata-display";
+import { metadataTypeOptionLabel, metadataDisplayName, METADATA_DATATYPE_LABELS } from "@/lib/metadata-display";
+import { useMetadataAreas } from "@/hooks/use-metadata-areas";
 import type { MetadataInstance } from "@shared/schema";
 import {
   FileText, Image as ImageIcon, Upload, Download, Trash2, RotateCcw, Cog,
@@ -73,6 +74,13 @@ export interface MetadataFormType {
   allowedValues?: string[] | null;
   area?: string | null;
   displayNumber?: number | null;
+  // Familje-/gruppering: barnfält pekar på sin förälder (metadata_katalog.id).
+  // Serverns available-types returnerar hela katalog-raden så dessa finns redan
+  // i JSON — deklareras här så väljaren kan gruppera familjer.
+  sortOrder?: number | null;
+  parentMetadataId?: string | null;
+  arBeraknad?: boolean | null;
+  allowDuplicates?: boolean | null;
 }
 
 // Skrivskyddade systemfält från objektet (riktiga kolumner — inga påhittade fält).
@@ -1410,17 +1418,21 @@ export function MetadataAddButton({
   metadataTypes,
   onAdd,
   isPending,
+  existingNamn,
 }: {
   objectId: string;
   metadataTypes: MetadataFormType[];
   onAdd: (data: { objektId: string; metadataTypNamn: string; varde: string }) => void;
   isPending: boolean;
+  existingNamn?: Set<string>;
 }) {
   const { toast } = useToast();
   const { uploadFile, isUploading } = useUpload();
+  const { order: areaOrder, areaLabel } = useMetadataAreas();
   const [open, setOpen] = useState(false);
   const [selectedType, setSelectedType] = useState("");
   const [value, setValue] = useState("");
+  const [familyValues, setFamilyValues] = useState<Record<string, string>>({});
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploadedName, setUploadedName] = useState("");
 
@@ -1432,26 +1444,163 @@ export function MetadataAddButton({
 
   // Rubrik-/samlingsfält håller aldrig ett eget värde (de grupperar bara
   // underfält) — exkludera dem ur lägg-till-väljaren.
-  const addableTypes = metadataTypes.filter((t) => t.datatyp !== "rubrik");
-  const sortedTypes = [...addableTypes].sort((a, b) => {
+  const addableTypes = useMemo(
+    () => metadataTypes.filter((t) => t.datatyp !== "rubrik"),
+    [metadataTypes],
+  );
+
+  // Alla typer (inkl. rubrik-föräldrar) per id — behövs för att härleda familjer
+  // även när familjeroten själv är ett rubrik-fält som inte visas som val.
+  const typeById = useMemo(() => {
+    const m = new Map<string, MetadataFormType>();
+    for (const t of metadataTypes) if (t.id) m.set(t.id, t);
+    return m;
+  }, [metadataTypes]);
+
+  // Valbara barn per förälder-id (familjemedlemmar).
+  const childrenByParentId = useMemo(() => {
+    const m = new Map<string, MetadataFormType[]>();
+    for (const t of addableTypes) {
+      if (t.parentMetadataId) {
+        const list = m.get(t.parentMetadataId) ?? [];
+        list.push(t);
+        m.set(t.parentMetadataId, list);
+      }
+    }
+    return m;
+  }, [addableTypes]);
+
+  const baseSort = (a: MetadataFormType, b: MetadataFormType) => {
     const an = a.displayNumber ?? 9999;
     const bn = b.displayNumber ?? 9999;
     if (an !== bn) return an - bn;
+    const as = a.sortOrder ?? 9999;
+    const bs = b.sortOrder ?? 9999;
+    if (as !== bs) return as - bs;
     return a.namn.localeCompare(b.namn, "sv");
-  });
+  };
+
+  // Väljar-alternativ grupperade per metadataområde (SelectGroup + SelectLabel),
+  // med familjer samlade: rot först, barn direkt efter (indenterade).
+  const dropdownGroups = useMemo(() => {
+    const OVRIGT = "__ovrigt__";
+    const orderIndex = new Map<string, number>();
+    areaOrder.forEach((v, i) => orderIndex.set(v, i));
+
+    const byArea = new Map<string, MetadataFormType[]>();
+    for (const t of addableTypes) {
+      const a = (t.area ?? "").trim() || OVRIGT;
+      if (!byArea.has(a)) byArea.set(a, []);
+      byArea.get(a)!.push(t);
+    }
+
+    const groups = Array.from(byArea.entries()).map(([area, types]) => {
+      const idsInGroup = new Set(
+        types.map((t) => t.id).filter((id): id is string => !!id),
+      );
+      // Rot = fält vars förälder inte finns i samma grupp (top-level här).
+      const roots = types.filter(
+        (t) => !(t.parentMetadataId && idsInGroup.has(t.parentMetadataId)),
+      );
+      roots.sort(baseSort);
+      const rows: { type: MetadataFormType; isChild: boolean }[] = [];
+      for (const r of roots) {
+        rows.push({ type: r, isChild: !!r.parentMetadataId });
+        const kids = (r.id ? childrenByParentId.get(r.id) : undefined) ?? [];
+        kids.sort(baseSort);
+        for (const k of kids) rows.push({ type: k, isChild: true });
+      }
+      return {
+        area,
+        label: area === OVRIGT ? "Övrigt" : areaLabel(area),
+        sortOrder: area === OVRIGT ? 99999 : orderIndex.get(area) ?? 5000,
+        rows,
+      };
+    });
+
+    groups.sort((a, b) => {
+      if (a.sortOrder !== b.sortOrder) return a.sortOrder - b.sortOrder;
+      return a.label.localeCompare(b.label, "sv");
+    });
+    return groups;
+  }, [addableTypes, childrenByParentId, areaOrder, areaLabel]);
+
+  // Familjemedlemmar för vald typ: hela familjen (rot + syskon) som valbara
+  // värdefält. Tom/1 medlem → inte en familj (enskilt fält).
+  const familyMembers = useMemo(() => {
+    if (!selectedMetaType) return [] as MetadataFormType[];
+    let rootId: string | undefined;
+    if (
+      selectedMetaType.parentMetadataId &&
+      (typeById.has(selectedMetaType.parentMetadataId) ||
+        childrenByParentId.has(selectedMetaType.parentMetadataId))
+    ) {
+      rootId = selectedMetaType.parentMetadataId;
+    } else if (selectedMetaType.id && childrenByParentId.has(selectedMetaType.id)) {
+      rootId = selectedMetaType.id;
+    }
+    if (!rootId) return [];
+    const root = typeById.get(rootId);
+    const kids = [...(childrenByParentId.get(rootId) ?? [])].sort(baseSort);
+    const members: MetadataFormType[] = [];
+    if (root && root.datatyp !== "rubrik") members.push(root);
+    members.push(...kids);
+    return members;
+  }, [selectedMetaType, typeById, childrenByParentId]);
+
+  const isFamily = familyMembers.length >= 2;
+  const familyLabel = (() => {
+    if (!isFamily || !selectedMetaType) return "";
+    const rootId = selectedMetaType.parentMetadataId ?? selectedMetaType.id;
+    const root = rootId ? typeById.get(rootId) : undefined;
+    return metadataDisplayName(root ?? selectedMetaType);
+  })();
+
+  // Skäl att inte kunna fylla en familjemedlem (annars kastar servern 400).
+  const memberDisabledReason = (m: MetadataFormType): string | null => {
+    if (m.arBeraknad) return "beräknas automatiskt";
+    if (UPLOAD_DATATYPES.has(m.datatyp ?? "string")) return "laddas upp separat";
+    if (existingNamn?.has(m.namn) && !m.allowDuplicates) return "redan tillagd";
+    return null;
+  };
 
   const reset = () => {
     setSelectedType("");
     setValue("");
     setUploadedName("");
+    setFamilyValues({});
   };
 
-  const handleAdd = () => {
+  const familyHasValue = familyMembers.some(
+    (m) => !memberDisabledReason(m) && (familyValues[m.namn] ?? "").trim() !== "",
+  );
+
+  const handleAddSingle = () => {
     if (!selectedType || !value) return;
     onAdd({ objektId: objectId, metadataTypNamn: selectedMetaType?.namn || selectedType, varde: value });
     setOpen(false);
     reset();
   };
+
+  // "Hela familjen kommer med": lägg varje ifylld, tillåten medlem via den
+  // vanliga enkelvärdes-vägen (ett anrop per medlem).
+  const handleAddFamily = () => {
+    const toAdd = familyMembers.filter(
+      (m) => !memberDisabledReason(m) && (familyValues[m.namn] ?? "").trim() !== "",
+    );
+    if (toAdd.length === 0) return;
+    for (const m of toAdd) {
+      onAdd({
+        objektId: objectId,
+        metadataTypNamn: m.namn,
+        varde: (familyValues[m.namn] ?? "").trim(),
+      });
+    }
+    setOpen(false);
+    reset();
+  };
+
+  const handleAdd = () => (isFamily ? handleAddFamily() : handleAddSingle());
 
   const handleUpload = async (file: File) => {
     const res = await uploadFile(file);
@@ -1485,10 +1634,19 @@ export function MetadataAddButton({
                     <SelectValue placeholder="Välj typ..." />
                   </SelectTrigger>
                   <SelectContent>
-                    {sortedTypes.map((t) => (
-                      <SelectItem key={t.id || t.namn} value={t.namn}>
-                        {metadataTypeOptionLabel(t)}
-                      </SelectItem>
+                    {dropdownGroups.map((g) => (
+                      <SelectGroup key={g.area}>
+                        <SelectLabel data-testid={`select-group-${g.area}`}>{g.label}</SelectLabel>
+                        {g.rows.map(({ type: t, isChild }) => (
+                          <SelectItem
+                            key={t.id || t.namn}
+                            value={t.namn}
+                            className={isChild ? "pl-12" : undefined}
+                          >
+                            {isChild ? metadataDisplayName(t) : metadataTypeOptionLabel(t)}
+                          </SelectItem>
+                        ))}
+                      </SelectGroup>
                     ))}
                   </SelectContent>
                 </Select>
@@ -1501,6 +1659,58 @@ export function MetadataAddButton({
                 />
               )}
             </div>
+            {isFamily ? (
+              <div className="space-y-3">
+                <p className="text-xs text-muted-foreground" data-testid="text-family-hint">
+                  Hela familjen{" "}
+                  <span className="font-medium text-foreground">{familyLabel}</span>{" "}
+                  läggs till — fyll i de fält du vill spara.
+                </p>
+                {familyMembers.map((m) => {
+                  const reason = memberDisabledReason(m);
+                  const memberAllowed = m.allowedValues ?? null;
+                  const memberHasOptions = !!memberAllowed && memberAllowed.length > 0;
+                  const memberNumber = m.datatyp === "integer" || m.datatyp === "decimal";
+                  const nm = metadataDisplayName(m);
+                  const displayName = nm ? nm.charAt(0).toUpperCase() + nm.slice(1) : m.namn;
+                  return (
+                    <div key={m.id || m.namn} className="space-y-1.5">
+                      <div className="flex items-center gap-2">
+                        <Label className="text-xs">{displayName}</Label>
+                        {reason && (
+                          <Badge variant="secondary" className="text-[10px]" data-testid={`badge-family-disabled-${m.namn}`}>
+                            {reason}
+                          </Badge>
+                        )}
+                      </div>
+                      {reason ? null : memberHasOptions ? (
+                        <Select
+                          value={familyValues[m.namn] ?? ""}
+                          onValueChange={(v) => setFamilyValues((prev) => ({ ...prev, [m.namn]: v }))}
+                        >
+                          <SelectTrigger data-testid={`select-family-value-${m.namn}`}>
+                            <SelectValue placeholder="Välj värde..." />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {memberAllowed!.map((opt) => (
+                              <SelectItem key={opt} value={opt}>{opt}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      ) : (
+                        <Input
+                          type={memberNumber ? "number" : "text"}
+                          value={familyValues[m.namn] ?? ""}
+                          onChange={(e) => setFamilyValues((prev) => ({ ...prev, [m.namn]: e.target.value }))}
+                          placeholder="Ange värde"
+                          data-testid={`input-family-value-${m.namn}`}
+                        />
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
             <div className="space-y-2">
               <Label>Värde *</Label>
               {isUploadType ? (
@@ -1555,12 +1765,13 @@ export function MetadataAddButton({
                 />
               )}
             </div>
+            )}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => { setOpen(false); reset(); }} data-testid="button-cancel-metadata">
               Avbryt
             </Button>
-            <Button onClick={handleAdd} disabled={!selectedType || !value || isPending || isUploading} data-testid="button-save-metadata">
+            <Button onClick={handleAdd} disabled={(isFamily ? !familyHasValue : (!selectedType || !value)) || isPending || isUploading} data-testid="button-save-metadata">
               {isPending ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Plus className="h-4 w-4 mr-1" />}
               Lägg till
             </Button>
