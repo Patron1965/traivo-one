@@ -138,12 +138,38 @@ function toNum(v: number | string | null | undefined): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
+// P1 = standardadress/fordon = RUTTBAR. Teal teardrop (Northern Teal), oförändrad.
 const greenPin = L.divIcon({
   className: "object-header-pin",
   html: '<div style="background:#4A9B9B;width:16px;height:16px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);border:2px solid white;box-shadow:0 1px 4px rgba(0,0,0,.4)"></div>',
   iconSize: [16, 16],
   iconAnchor: [8, 14],
 });
+
+// P2 = fördjupad position = ALDRIG ruttbar. Visuellt distinkt (ihålig cirkel,
+// Mountain Gray) så den aldrig förväxlas med den ruttbara P1-nålen.
+const advancedPositionIcon = L.divIcon({
+  className: "object-header-advanced-pin",
+  html: '<div style="width:14px;height:14px;border-radius:50%;background:transparent;border:3px solid #6B7C8C;box-shadow:0 1px 3px rgba(0,0,0,.4)"></div>',
+  iconSize: [14, 14],
+  iconAnchor: [7, 7],
+});
+
+// Minimal spegling av server-fälten vi behöver ur GET /api/objects/:id/
+// system-generated-metadata (SystemGeoField). Delad cache med
+// ObjectSystemGeneratedPanel → ingen extra nätverkskostnad.
+interface GeoFieldLite {
+  value: string | null;
+  point: { lat: number; lng: number } | null;
+  source: "own" | "inherited" | "missing";
+  fromObject: { id: string; namn: string } | null;
+}
+interface SystemGeoResponse {
+  advancedPosition?: {
+    fordjupadPosition: GeoFieldLite;
+    avdelningPortVaning: GeoFieldLite;
+  };
+}
 
 export function ObjectHeaderPanel({
   objectId, objectType, objectTypeLabel, serialNumber,
@@ -192,6 +218,13 @@ export function ObjectHeaderPanel({
     enabled: !!objectId && effective.showImage && effective.imageSource === "latest_image",
   });
 
+  // Fördjupad position (P2) + Avdelning/Port/Våning-descriptor. Delad cache-nyckel
+  // med ObjectSystemGeneratedPanel (route: /api/objects/:id/system-generated-metadata). Display-only.
+  const { data: geoData } = useQuery<SystemGeoResponse>({
+    queryKey: ["/api/objects", objectId, "system-generated-metadata"],
+    enabled: !!objectId && effective.showMap,
+  });
+
   const imageUrl: string | null = (() => {
     if (!effective.showImage) return null;
     if (effective.imageSource === "vignette") {
@@ -233,6 +266,24 @@ export function ObjectHeaderPanel({
   const lat = toNum(latitude) ?? toNum(entranceLatitude);
   const lng = toNum(longitude) ?? toNum(entranceLongitude);
   const hasCoords = lat != null && lng != null;
+
+  // P1 = ruttbar standardadress (objektets koordinat). P2 = fördjupad position
+  // (ALDRIG ruttbar). polygon/sträckning → point=null server-side → ingen markör.
+  const p1: [number, number] | null = hasCoords ? [lat!, lng!] : null;
+  const advPos = geoData?.advancedPosition;
+  const p2Field = advPos?.fordjupadPosition;
+  const p2Point: [number, number] | null =
+    p2Field?.point != null ? [p2Field.point.lat, p2Field.point.lng] : null;
+  const p2Title =
+    p2Field?.source === "inherited" && p2Field?.fromObject?.namn
+      ? `Fördjupad position (ej ruttbar) · ärvd från ${p2Field.fromObject.namn}`
+      : "Fördjupad position (ej ruttbar)";
+
+  const descriptor = advPos?.avdelningPortVaning;
+  const descriptorValue =
+    descriptor?.value != null && descriptor.value.trim() !== "" ? descriptor.value.trim() : null;
+  const descriptorInherited = descriptor?.source === "inherited";
+  const descriptorFrom = descriptor?.fromObject?.namn ?? null;
 
   return (
     <Card data-testid="object-header-panel">
@@ -338,31 +389,65 @@ export function ObjectHeaderPanel({
               </div>
             )}
             {effective.showMap && (
-              <div
-                className="w-28 h-28 md:w-32 md:h-32 rounded-md overflow-hidden border bg-muted"
-                data-testid="header-map-tile"
-              >
-                {hasCoords ? (
-                  <MapContainer
-                    center={[lat!, lng!]}
-                    zoom={14}
-                    style={{ height: "100%", width: "100%" }}
-                    dragging={false}
-                    scrollWheelZoom={false}
-                    doubleClickZoom={false}
-                    zoomControl={false}
-                    attributionControl={false}
-                    keyboard={false}
-                    boxZoom={false}
-                    touchZoom={false}
+              <div className="flex flex-col gap-1" data-testid="header-map-column">
+                <div
+                  className="w-28 h-28 md:w-32 md:h-32 rounded-md overflow-hidden border bg-muted"
+                  data-testid="header-map-tile"
+                >
+                  {(p1 || p2Point) ? (
+                    <MapContainer
+                      // Remount när punktuppsättningen ändras (P2 laddas asynkront) så
+                      // bounds/center hinner appliceras — MapContainer läser bara init-props.
+                      key={`${p1 ? p1.join(",") : ""}|${p2Point ? p2Point.join(",") : ""}`}
+                      {...(p1 && p2Point
+                        ? {
+                            bounds: [p1, p2Point] as [[number, number], [number, number]],
+                            boundsOptions: { padding: [20, 20] as [number, number], maxZoom: 16 },
+                          }
+                        : { center: (p1 ?? p2Point)!, zoom: 14 })}
+                      style={{ height: "100%", width: "100%" }}
+                      dragging={false}
+                      scrollWheelZoom={false}
+                      doubleClickZoom={false}
+                      zoomControl={false}
+                      attributionControl={false}
+                      keyboard={false}
+                      boxZoom={false}
+                      touchZoom={false}
+                    >
+                      <TileLayer url={mapConfig.tileUrl} attribution={mapConfig.attribution} />
+                      {p1 && (
+                        <Marker position={p1} icon={greenPin} title="Standardadress (ruttbar)" />
+                      )}
+                      {p2Point && (
+                        <Marker position={p2Point} icon={advancedPositionIcon} title={p2Title} />
+                      )}
+                    </MapContainer>
+                  ) : (
+                    <div className="w-full h-full flex flex-col items-center justify-center text-muted-foreground/60 gap-1">
+                      <MapPin className="h-6 w-6" />
+                      <span className="text-[10px]">Ingen position</span>
+                    </div>
+                  )}
+                </div>
+                {descriptorValue && (
+                  <div
+                    className="w-28 md:w-32 flex items-center gap-1 text-[10px] text-muted-foreground leading-tight"
+                    data-testid="header-advanced-descriptor"
+                    title={descriptorInherited && descriptorFrom ? `Ärvd från ${descriptorFrom}` : undefined}
                   >
-                    <TileLayer url={mapConfig.tileUrl} attribution={mapConfig.attribution} />
-                    <Marker position={[lat!, lng!]} icon={greenPin} />
-                  </MapContainer>
-                ) : (
-                  <div className="w-full h-full flex flex-col items-center justify-center text-muted-foreground/60 gap-1">
-                    <MapPin className="h-6 w-6" />
-                    <span className="text-[10px]">Ingen position</span>
+                    <span className="truncate" data-testid="text-advanced-descriptor">
+                      {descriptorValue}
+                    </span>
+                    {descriptorInherited && (
+                      <Badge
+                        variant="outline"
+                        className="text-[9px] px-1 py-0 font-normal shrink-0"
+                        data-testid="badge-advanced-descriptor-inherited"
+                      >
+                        Ärvd
+                      </Badge>
+                    )}
                   </div>
                 )}
               </div>

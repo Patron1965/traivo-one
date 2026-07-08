@@ -126,6 +126,14 @@ export async function geocodeObject(
     }
 
     await storage.updateObject(objectId, updateData);
+    // Kanonisk geomodell (T004): spegla den geokodade koordinaten tillbaka till
+    // objektets Koordinater-metadatafält (metod='auto'). Fire-and-forget; respekterar
+    // en manuell pin och konvergerar (skriver inget om värdet redan stämmer).
+    void import("./geo-field-sync")
+      .then(({ mirrorCoordinatesToMetadata }) =>
+        mirrorCoordinatesToMetadata(obj.tenantId, objectId, result.latitude!, result.longitude!),
+      )
+      .catch((err) => console.error(`[geocoding-service] coord-mirror failed for ${objectId}:`, err));
     console.log(
       `[geocoding-service] Geocoded object ${objectId} -> (${result.latitude}, ${result.longitude}) from "${fullAddress}"`
     );

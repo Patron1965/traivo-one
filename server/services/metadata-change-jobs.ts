@@ -94,8 +94,23 @@ async function runMetadataChangeJob(tenantId: string, objectIds: string[]): Prom
     }
   }
 
+  // 4. Kanonisk geomodell (T004): synka de systemlåsta geo-metadatafälten ned i
+  //    objektets ruttbara kolumner (enkelriktad cache). cascade=true eftersom en
+  //    förälders adress-ändring ändrar barnens UPPLÖSTA värde. No-op när objektet
+  //    saknar geo-metadatavärden (t.ex. adress bara i kolumner) — säkert i alla miljöer.
+  let geoSynced = 0;
+  try {
+    const { syncObjectGeoFields } = await import("./geo-field-sync");
+    for (const objectId of objectIds) {
+      const results = await syncObjectGeoFields(tenantId, objectId, { cascade: true });
+      geoSynced += results.filter((r) => r.columnsUpdated.length > 0 || r.geocodeTriggered).length;
+    }
+  } catch (err) {
+    console.error(`[metadata-change-jobs] geo-field sync failed:`, err);
+  }
+
   const ms = Date.now() - start;
-  console.log(`[metadata-change-jobs] tenant=${tenantId} objects=${objectIds.length} recalc=${recalcCount} clusterDelta=${clusterAssigned} taskQty=${taskQtyUpdated} ms=${ms}`);
+  console.log(`[metadata-change-jobs] tenant=${tenantId} objects=${objectIds.length} recalc=${recalcCount} clusterDelta=${clusterAssigned} taskQty=${taskQtyUpdated} geoSynced=${geoSynced} ms=${ms}`);
 }
 
 // Räknar om antal + cachade totaler för icke-finaliserade assignments vars artikel

@@ -68,6 +68,38 @@ export function isUsableCoord(lat: unknown, lng: unknown): boolean {
   );
 }
 
+/**
+ * Tolkar en koordinat-JSON tolerant. Accepterar {lat,lng}, {latitude,longitude}
+ * eller GeoJSON {coordinates:[lng,lat]}. Returnerar null om ingen giltig punkt
+ * (t.ex. polygon/sträckning med nästlad coordinates-array → isUsableCoord false).
+ *
+ * Bor här (leaf-modul) så både geo-field-sync (skriv-sidan) och metadata-queries
+ * (läs-sidan/getObjectGeoFields.point) delar EN parser utan importcykel.
+ */
+export function parseCoordinateJson(raw: unknown): { lat: number; lng: number } | null {
+  let obj: any = raw;
+  if (typeof raw === "string") {
+    try {
+      obj = JSON.parse(raw);
+    } catch {
+      return null;
+    }
+  }
+  if (!obj || typeof obj !== "object") return null;
+
+  let lat: unknown = obj.lat ?? obj.latitude;
+  let lng: unknown = obj.lng ?? obj.lon ?? obj.longitude;
+  if ((lat == null || lng == null) && Array.isArray(obj.coordinates) && obj.coordinates.length >= 2) {
+    // GeoJSON-ordning: [longitude, latitude]
+    lng = obj.coordinates[0];
+    lat = obj.coordinates[1];
+  }
+  if (isUsableCoord(lat, lng)) {
+    return { lat: lat as number, lng: lng as number };
+  }
+  return null;
+}
+
 /** Bygger en sammansatt adresssträng; tål stad-only, gatuadress eller koordinater. */
 export function buildObjectAddress(
   obj: Pick<LocatableObject, "address" | "postalCode" | "city">,

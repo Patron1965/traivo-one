@@ -35,7 +35,11 @@ import {
   deriveConceptTargets,
   evaluateConditionsForObject,
 } from "./order-concept-targeting";
-import { getMetadataValue } from "../metadata-queries";
+import {
+  getObjectWithAllMetadata,
+  getObjectGeoFields,
+  type ObjectGeoFields,
+} from "../metadata-queries";
 
 export type SystemAddressGroup = {
   gatuadress: string | null;
@@ -168,6 +172,11 @@ export type SystemUnperformedTask = {
 export type ObjectSystemGeneratedMetadata = {
   address: SystemAddressGroup;
   position: SystemPositionGroup;
+  // T005: den kanoniska systemlåsta geografimodellen som TVÅ arvs-medvetna grupper.
+  // `address`/`position` ovan behålls (expand-contract) för bakåtkompatibilitet —
+  // dessa nya grupper bär KÄLLA/ARV + ownRowId och driver objekthuvud-UI:t (T006).
+  standardAddress: ObjectGeoFields["standardAddress"];
+  advancedPosition: ObjectGeoFields["advancedPosition"];
   // Task #1204 (66): arvbart fastighetsägare-fält, läst arvs-medvetet ur katalogen.
   propertyOwner: string | null;
   pointedInConcepts: PointedInConcept[];
@@ -479,19 +488,43 @@ export async function getObjectSystemGeneratedMetadata(
 ): Promise<ObjectSystemGeneratedMetadata> {
   const object = await storage.getObject(objectId);
 
+  // T005: hämta objektets arvs-medvetna metadata EN gång och härled What3words,
+  // Fastighetsägare OCH geo-grupperna ur samma ögonblicksbild (undviker 3 separata
+  // recursive-CTE:er). owm=null om objektet inte finns i tenanten → fälten degraderas.
+  const owm = await getObjectWithAllMetadata(objectId, tenantId);
+
   const address: SystemAddressGroup = {
     gatuadress: object?.address ?? null,
     postnummer: object?.postalCode ?? null,
     ort: object?.city ?? null,
   };
 
-  // Task #1110: What3words läses arvs-medvetet ur metadata-katalogen (icke-system,
-  // manuellt skrivbart). Saknas fältet/raden returneras null.
-  const what3wordsRaw = await getMetadataValue(
-    objectId,
-    WHAT3WORDS_METADATA_NAME,
-    tenantId,
-  );
+  // Task #1110/#1204: What3words + Fastighetsägare läses arvs-medvetet ur katalogen
+  // (icke-system, manuellt skrivbara). Speglar getMetadataValue:s datatyp-switch.
+  const readCatalogValue = (namn: string): unknown => {
+    const entry = owm?.metadata.find((m) => m.katalog.namn === namn);
+    if (!entry) return null;
+    switch (entry.katalog.datatyp) {
+      case "string":
+        return entry.vardeString;
+      case "integer":
+        return entry.vardeInteger;
+      case "decimal":
+        return entry.vardeDecimal;
+      case "boolean":
+        return entry.vardeBoolean;
+      case "datetime":
+        return entry.vardeDatetime;
+      case "json":
+        return entry.vardeJson;
+      case "referens":
+        return entry.vardeReferens;
+      default:
+        return null;
+    }
+  };
+
+  const what3wordsRaw = readCatalogValue(WHAT3WORDS_METADATA_NAME);
   const what3words =
     typeof what3wordsRaw === "string" && what3wordsRaw.trim()
       ? what3wordsRaw.trim()
@@ -507,19 +540,14 @@ export async function getObjectSystemGeneratedMetadata(
     what3words,
   };
 
-  // Task #1204 (66): Fastighetsägare läses arvs-medvetet ur metadata-katalogen
-  // (arvbart, manuellt skrivbart). Saknas fältet/raden returneras null.
-  const fastighetsagareRaw = await getMetadataValue(
-    objectId,
-    FASTIGHETSAGARE_METADATA_NAME,
-    tenantId,
-  );
+  const fastighetsagareRaw = readCatalogValue(FASTIGHETSAGARE_METADATA_NAME);
   const propertyOwner =
     typeof fastighetsagareRaw === "string" && fastighetsagareRaw.trim()
       ? fastighetsagareRaw.trim()
       : null;
 
   const [
+    geo,
     pointedInConcepts,
     tasksHistory,
     tasksFuture,
@@ -530,6 +558,7 @@ export async function getObjectSystemGeneratedMetadata(
     inspections,
     communications,
   ] = await Promise.all([
+    getObjectGeoFields(objectId, tenantId, owm),
     computePointedInConcepts(tenantId, object),
     computeTasksHistory(tenantId, objectId),
     computeTasksFuture(tenantId, objectId),
@@ -562,6 +591,8 @@ export async function getObjectSystemGeneratedMetadata(
   return {
     address,
     position,
+    standardAddress: geo.standardAddress,
+    advancedPosition: geo.advancedPosition,
     propertyOwner,
     pointedInConcepts,
     tasksHistory,

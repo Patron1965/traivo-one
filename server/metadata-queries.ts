@@ -26,6 +26,7 @@ import {
   MetadataDefinition,
 } from "@shared/schema";
 import { primaryPayerCustomerIdSql } from "./services/object-customer";
+import { parseCoordinateJson } from "./services/object-location";
 
 // Task #663: katalogtyp berikad med dess kundlås-kopplingar (tom array = generellt
 // fält, gäller alla kunder; en eller flera customerIds = kundlåst).
@@ -3961,6 +3962,334 @@ async function seedLegacyDefaultMetadataTypes(tenantId: string, skipNames: Set<s
       area: (type as any).area ?? type.kategori,
     });
   }
+}
+
+// ============================================================================
+// SYSTEMLÅST GEOGRAFIMODELL — kanoniska positionsfält
+// ----------------------------------------------------------------------------
+// Två positioner som RIKTIGA ärvda metadatafält (metadata_katalog), systemlåsta
+// (systemlast=true → STRUKTUREN kan ej ändras/raderas via API, men VÄRDEN är fria;
+// jfr isSystem som låser värden). isSystem=false här — adresser måste kunna redigeras.
+//   1. Standardadress (ruttbar, ärvs nedåt): Gatuadress, Postnummer, Postort,
+//      Koordinater (ruttbar punkt lat/lng).
+//   2. Fördjupad position (valfri, ALDRIG ruttbar, ärvs + override per objekt):
+//      geometri (punkt/yta/sträckning som JSON) + Avdelning/Port/Våning.
+//
+// Adoption-in-place: matchar befintligt fält SKIFTLÄGESOKÄNSLIGT på `namn` (den
+// immutabla universella nyckeln) bland AKTIVA (deletedAt IS NULL) rader och flippar
+// det till systemlåst + kanonisk area/ordning/arv — `namn` och `datatyp` rörs ALDRIG.
+// Säkerhetsspärrar (aldrig tyst omtypning/dubblett/värdekorruption):
+//   • datatyp-krock  → hoppas över + rapporteras.
+//   • flera aktiva träffar (tvetydigt) → hoppas över + rapporteras.
+//   • befintlig träff är isSystem (värdelåst) → hoppas över + rapporteras
+//     (får ej bli en redigerbar positionsmodell med låsta värden).
+//   • ingen aktiv träff → skapas nytt.
+// Idempotent: andra körningen är no-op (alreadyOk). Rör ALDRIG metadata_varden.
+// Exporteras som ENDA källan för geo-modellen (T004 sync / T005 objekthuvud läser
+// `ruttbar` härifrån).
+// ============================================================================
+
+export interface SystemlastGeoFaltDef {
+  key: string;          // lower(namn) — kanonisk identitet för skiftlägesokänslig matchning
+  namn: string;         // föredraget namn vid nyskapande (immutabel universell nyckel)
+  visningsnamn: string;
+  datatyp: string;
+  standardArvs: boolean;
+  sortOrder: number;
+  icon: string;
+  beskrivning: string;
+  ruttbar: boolean;     // true = del av ruttbar standardadress; false = fördjupad (ALDRIG ruttbar)
+  grupp: 'standardadress' | 'fordjupad_position';
+}
+
+export const SYSTEMLASTA_GEO_FALT: SystemlastGeoFaltDef[] = [
+  // --- Standardadress (ruttbar, ärvs nedåt) ---
+  { key: 'gatuadress', namn: 'Gatuadress', visningsnamn: 'Gatuadress', datatyp: 'string', standardArvs: true, sortOrder: 1, icon: 'MapPin', beskrivning: 'Gatuadress för standardadressen (ruttbar, ärvs nedåt).', ruttbar: true, grupp: 'standardadress' },
+  { key: 'postnummer', namn: 'Postnummer', visningsnamn: 'Postnummer', datatyp: 'string', standardArvs: true, sortOrder: 2, icon: 'Hash', beskrivning: 'Postnummer för standardadressen.', ruttbar: true, grupp: 'standardadress' },
+  { key: 'postort', namn: 'Postort', visningsnamn: 'Postort', datatyp: 'string', standardArvs: true, sortOrder: 3, icon: 'Building2', beskrivning: 'Postort för standardadressen.', ruttbar: true, grupp: 'standardadress' },
+  { key: 'koordinater', namn: 'Koordinater', visningsnamn: 'Koordinater', datatyp: 'location', standardArvs: true, sortOrder: 4, icon: 'Navigation', beskrivning: 'Ruttbar koordinat (lat/lng). Geokodas från adressen men kan överskridas manuellt.', ruttbar: true, grupp: 'standardadress' },
+  // --- Fördjupad position (valfri, ALDRIG ruttbar, ärvs + override) ---
+  { key: 'fördjupad position', namn: 'Fördjupad position', visningsnamn: 'Fördjupad position', datatyp: 'location', standardArvs: true, sortOrder: 5, icon: 'MapPinned', beskrivning: 'Valfri exakt position (punkt/yta/sträckning) — ALDRIG ruttbar. Lagras som JSON-geometri {type, coordinates}.', ruttbar: false, grupp: 'fordjupad_position' },
+  { key: 'avdelning/port/våning', namn: 'Avdelning/Port/Våning', visningsnamn: 'Avdelning/Port/Våning', datatyp: 'string', standardArvs: true, sortOrder: 6, icon: 'DoorOpen', beskrivning: 'Avdelning, port och/eller våning för den fördjupade positionen.', ruttbar: false, grupp: 'fordjupad_position' },
+];
+
+export interface EnsureSystemlastGeoResult {
+  created: string[];
+  adopted: string[];
+  alreadyOk: string[];
+  conflicts: Array<{ namn: string; reason: string }>;
+}
+
+// Idempotent installation av den kanoniska systemlåsta geografimodellen för en
+// tenant. Anropas från den befintliga idempotenta auto-seed-vägen (metadata GET
+// /types) så partiella kataloger alltid får baslinjen utan migrering.
+export async function ensureSystemlastaFalt(tenantId: string): Promise<EnsureSystemlastGeoResult> {
+  const result: EnsureSystemlastGeoResult = { created: [], adopted: [], alreadyOk: [], conflicts: [] };
+
+  // Hämta alla katalograder för tenanten en gång (aktiva + arkiverade) så vi kan
+  // matcha skiftlägesokänsligt och skilja aktiva från soft-deletade.
+  const rows = await db
+    .select({
+      id: metadataKatalog.id,
+      namn: metadataKatalog.namn,
+      datatyp: metadataKatalog.datatyp,
+      area: metadataKatalog.area,
+      sortOrder: metadataKatalog.sortOrder,
+      standardArvs: metadataKatalog.standardArvs,
+      systemlast: metadataKatalog.systemlast,
+      isSystem: metadataKatalog.isSystem,
+      visningsnamn: metadataKatalog.visningsnamn,
+      deletedAt: metadataKatalog.deletedAt,
+    })
+    .from(metadataKatalog)
+    .where(eq(metadataKatalog.tenantId, tenantId));
+
+  for (const def of SYSTEMLASTA_GEO_FALT) {
+    const activeMatches = rows.filter(
+      (r) => r.deletedAt === null && r.namn.toLowerCase() === def.key,
+    );
+
+    if (activeMatches.length === 0) {
+      // Skapa nytt kanoniskt systemlåst fält (STRUKTUR låst, VÄRDEN fria).
+      await db.insert(metadataKatalog).values({
+        tenantId,
+        namn: def.namn,
+        visningsnamn: def.visningsnamn,
+        datatyp: def.datatyp,
+        arLogisk: true,
+        standardArvs: def.standardArvs,
+        kategori: 'geografi',
+        area: 'geografi',
+        beskrivning: def.beskrivning,
+        sortOrder: def.sortOrder,
+        icon: def.icon,
+        isSystem: false,
+        systemlast: true,
+      });
+      result.created.push(def.namn);
+      continue;
+    }
+
+    if (activeMatches.length > 1) {
+      result.conflicts.push({
+        namn: def.namn,
+        reason: `Flera aktiva fält matchar "${def.key}" (${activeMatches.length} st) — tvetydigt, hoppar över adoption.`,
+      });
+      continue;
+    }
+
+    const existing = activeMatches[0];
+
+    // isSystem-fält låser VÄRDEN → får inte bli en redigerbar positionsmodell.
+    if (existing.isSystem) {
+      result.conflicts.push({
+        namn: existing.namn,
+        reason: `Fältet är isSystem (värdelåst) — adopteras ej till redigerbar positionsmodell.`,
+      });
+      continue;
+    }
+
+    // Datatyp-krock: adoptera aldrig ett fält med annan datatyp (skulle korrumpera
+    // befintliga värden).
+    if ((existing.datatyp ?? '').toLowerCase() !== def.datatyp.toLowerCase()) {
+      result.conflicts.push({
+        namn: existing.namn,
+        reason: `Datatyp "${existing.datatyp}" ≠ kanonisk "${def.datatyp}" — hoppar över (byter aldrig datatyp på fält i bruk).`,
+      });
+      continue;
+    }
+
+    // Redan kanoniskt? (idempotens)
+    const alreadyOk =
+      existing.systemlast === true &&
+      existing.area === 'geografi' &&
+      existing.sortOrder === def.sortOrder &&
+      existing.standardArvs === def.standardArvs &&
+      (existing.visningsnamn ?? '').length > 0;
+    if (alreadyOk) {
+      result.alreadyOk.push(existing.namn);
+      continue;
+    }
+
+    // Adoptera in-place: flippa systemlast + kanonisk area/ordning/arv. `namn` och
+    // `datatyp` rörs ALDRIG. Behåll befintligt visningsnamn om satt, annars kanoniskt.
+    await db
+      .update(metadataKatalog)
+      .set({
+        systemlast: true,
+        area: 'geografi',
+        kategori: 'geografi',
+        sortOrder: def.sortOrder,
+        standardArvs: def.standardArvs,
+        visningsnamn:
+          (existing.visningsnamn ?? '').length > 0 ? existing.visningsnamn : def.visningsnamn,
+      })
+      .where(and(eq(metadataKatalog.id, existing.id), eq(metadataKatalog.tenantId, tenantId)));
+    result.adopted.push(existing.namn);
+  }
+
+  return result;
+}
+
+// ============================================================================
+// T005: LÄS OBJEKTETS GEO-FÄLT (arvs-medvetet) FÖR OBJEKTHUVUD / SYSTEM-METADATA
+// ----------------------------------------------------------------------------
+// Exponerar den kanoniska systemlåsta geografimodellen som TVÅ grupper —
+// standardadress (ruttbar) och fördjupad position (ALDRIG ruttbar) — läst
+// ARVS-MEDVETET ur metadata-katalogen (samma källa som object-location-cachen,
+// närmast-vinner). Varje fält bär KÄLLA/ARV (eget/ärvt/saknas) + ownRowId så
+// objekthuvud-UI:t (T006) kan visa arv-badges och redigera via metadata.
+//
+// VIKTIGT: getMetadataValue:s datatyp-switch saknar 'location'-fall → returnerar
+// null för Koordinater/Fördjupad position. Här läses vardeJson DIREKT i stället.
+// ============================================================================
+
+export type GeoFieldSource = 'own' | 'inherited' | 'missing';
+
+export interface SystemGeoField {
+  key: string;
+  katalogId: string | null; // null = fältet är inte seedat i denna tenant
+  namn: string;
+  visningsnamn: string;
+  datatyp: string; // 'string' | 'location'
+  ruttbar: boolean;
+  grupp: 'standardadress' | 'fordjupad_position';
+  value: string | null; // display-text för sträng-fält
+  json: unknown | null; // location-json {lat,lng} eller {type,coordinates}
+  point: { lat: number; lng: number } | null; // normaliserad punkt (location-fält); null för polygon/sträckning
+  source: GeoFieldSource;
+  fromObject: { id: string; namn: string } | null;
+  metod: string | null;
+  ownRowId: string | null; // egen aktiv rad (endast source='own') — för PATCH i T006
+}
+
+export interface ObjectGeoFields {
+  standardAddress: {
+    gatuadress: SystemGeoField;
+    postnummer: SystemGeoField;
+    postort: SystemGeoField;
+    koordinater: SystemGeoField;
+  };
+  advancedPosition: {
+    fordjupadPosition: SystemGeoField;
+    avdelningPortVaning: SystemGeoField;
+  };
+}
+
+const SYSTEMLASTA_GEO_KEYS = new Set(SYSTEMLASTA_GEO_FALT.map((d) => d.key));
+
+export async function getObjectGeoFields(
+  objektId: string,
+  tenantId: string,
+  preloaded?: Awaited<ReturnType<typeof getObjectWithAllMetadata>>,
+): Promise<ObjectGeoFields> {
+  // 1) Katalog-id per geo-namn (aktiva, skiftlägesokänsligt). Ger katalogId ÄVEN
+  //    när objektet saknar värde, så T006 kan skapa ett första värde.
+  const katalogRows = await db
+    .select({
+      id: metadataKatalog.id,
+      namn: metadataKatalog.namn,
+      visningsnamn: metadataKatalog.visningsnamn,
+      datatyp: metadataKatalog.datatyp,
+    })
+    .from(metadataKatalog)
+    .where(and(eq(metadataKatalog.tenantId, tenantId), isNull(metadataKatalog.deletedAt)));
+  const katByKey = new Map<
+    string,
+    { id: string; visningsnamn: string | null; datatyp: string | null }
+  >();
+  for (const r of katalogRows) {
+    const k = (r.namn ?? '').toLowerCase();
+    if (SYSTEMLASTA_GEO_KEYS.has(k) && !katByKey.has(k)) {
+      katByKey.set(k, {
+        id: r.id,
+        visningsnamn: r.visningsnamn ?? null,
+        datatyp: r.datatyp ?? null,
+      });
+    }
+  }
+
+  // 2) Arvs-medvetna värden ur EAV (närmast-vinner). Återanvänder ev. redan hämtad
+  //    ObjectWithAllMetadata för att undvika en extra recursive-CTE.
+  const owm = preloaded ?? (await getObjectWithAllMetadata(objektId, tenantId));
+  const entryByKey = new Map<string, MetadataVardenWithKatalog>();
+  if (owm) {
+    for (const m of owm.metadata) {
+      const k = (m.katalog?.namn ?? '').toLowerCase();
+      if (SYSTEMLASTA_GEO_KEYS.has(k) && !entryByKey.has(k)) entryByKey.set(k, m);
+    }
+  }
+
+  const build = (def: SystemlastGeoFaltDef): SystemGeoField => {
+    const kat = katByKey.get(def.key) ?? null;
+    const entry = entryByKey.get(def.key);
+    let value: string | null = null;
+    let json: unknown | null = null;
+    let point: { lat: number; lng: number } | null = null;
+    let source: GeoFieldSource = 'missing';
+    let fromObject: { id: string; namn: string } | null = null;
+    let metod: string | null = null;
+    let ownRowId: string | null = null;
+
+    if (entry) {
+      const isLocal = entry.source === 'local';
+      const isTombstone = isLocal && entry.raderad === true;
+      if (isTombstone) {
+        // Eget värde borttaget (tombstone stryker ev. ärvt) → inget effektivt värde.
+        source = 'missing';
+      } else {
+        source = isLocal ? 'own' : 'inherited';
+        metod = entry.metod ?? null;
+        if (def.datatyp === 'location') {
+          json = entry.vardeJson ?? null;
+          // Normaliserad punkt via delad parser (single source). null för
+          // polygon/sträckning (nästlad coordinates) → objekthuvudet ritar då
+          // ingen P2-markör, bara descriptorn.
+          point = parseCoordinateJson(json);
+        } else {
+          value = entry.vardeString ?? null;
+        }
+        if (source === 'inherited' && entry.fromObject) {
+          fromObject = { id: entry.fromObject.id, namn: entry.fromObject.namn };
+        }
+        if (source === 'own') ownRowId = entry.id ?? null;
+      }
+    }
+
+    return {
+      key: def.key,
+      katalogId: kat?.id ?? entry?.metadataKatalogId ?? null,
+      namn: def.namn,
+      visningsnamn:
+        kat?.visningsnamn && kat.visningsnamn.length > 0 ? kat.visningsnamn : def.visningsnamn,
+      datatyp: def.datatyp,
+      ruttbar: def.ruttbar,
+      grupp: def.grupp,
+      value,
+      json,
+      point,
+      source,
+      fromObject,
+      metod,
+      ownRowId,
+    };
+  };
+
+  const byKeyDef = (key: string): SystemGeoField =>
+    build(SYSTEMLASTA_GEO_FALT.find((d) => d.key === key)!);
+
+  return {
+    standardAddress: {
+      gatuadress: byKeyDef('gatuadress'),
+      postnummer: byKeyDef('postnummer'),
+      postort: byKeyDef('postort'),
+      koordinater: byKeyDef('koordinater'),
+    },
+    advancedPosition: {
+      fordjupadPosition: byKeyDef('fördjupad position'),
+      avdelningPortVaning: byKeyDef('avdelning/port/våning'),
+    },
+  };
 }
 
 // ============================================================================

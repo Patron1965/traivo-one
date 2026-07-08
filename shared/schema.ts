@@ -4763,6 +4763,14 @@ export const metadataKatalog = pgTable("metadata_katalog", {
   beteckning: varchar("beteckning", { length: 30 }),
   // Systemmetadata som inte kan raderas (KUND, PARENT, TYP, etc.)
   isSystem: boolean("is_system").default(false).notNull(),
+  // Systemlåst STRUKTUR (≠ isSystem). isSystem gör fältet read-only för VÄRDEN
+  // (auto-ursprung sätter dem). systemlast låser istället DEFINITIONEN — namn/
+  // beteckning/datatyp/sortOrder/parent kan ej ändras och fältet kan ej raderas —
+  // men VÄRDEN är fritt redigerbara per objekt. Används för kanoniska fält som
+  // alltid måste finnas i fast ordning (t.ex. geografigruppen: Standardadress +
+  // Fördjupad position). Återanvändbar för fler systemlåsta fält framöver.
+  // Additivt (expand-contract): default false, befintliga fält opåverkade.
+  systemlast: boolean("systemlast").default(false).notNull(),
   // Obligatorisk metadata vid objektskapande
   isRequired: boolean("is_required").default(false).notNull(),
   // Tillåtna värden (dropdown) — null = fritext

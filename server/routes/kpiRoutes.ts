@@ -1996,6 +1996,12 @@ app.patch("/api/metadata-definitions/:id", requireAdmin, asyncHandler(async (req
       throw new ForbiddenError("Systemmetadata: skyddade fält kan inte ändras (namn, datatyp, isRequired)");
     }
 
+    // Systemlåst STRUKTUR (≠ isSystem): definitionen är kanonisk och låst
+    // (namn/datatyp/ordning/arv/obligatorisk), men VÄRDEN redigeras fritt per objekt.
+    if (existing.systemlast && (renamesNamn || changesDatatyp || parsed.sortOrder !== undefined || parsed.isRequired !== undefined || nextStandardArvs !== undefined)) {
+      throw new ForbiddenError("Systemlåst metadata: strukturen är låst (namn, datatyp, ordning, arv, obligatorisk kan ej ändras). Värden kan redigeras fritt per objekt.");
+    }
+
     const updateData: Record<string, string | number | boolean | null> = {};
     if (nextNamn !== undefined && nextNamn.length > 0) updateData.namn = nextNamn;
     if (nextDatatyp !== undefined) updateData.datatyp = nextDatatyp;
@@ -2030,6 +2036,9 @@ app.delete("/api/metadata-definitions/:id", requireAdmin, asyncHandler(async (re
     }
     if (existing.isSystem) {
       throw new ForbiddenError("Systemmetadata kan inte raderas");
+    }
+    if (existing.systemlast) {
+      throw new ForbiddenError("Systemlåst metadata kan inte raderas — strukturen är kanonisk. Värden kan tömmas per objekt.");
     }
 
     // Gruppfält med underfält blockeras (FK skulle annars ge ett rått DB-fel).
@@ -2124,7 +2133,7 @@ app.get("/api/metadata-labels/:id", asyncHandler(async (req, res) => {
 
 app.post("/api/metadata-labels", requireAdmin, asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
-    const data = insertMetadataKatalogSchema.parse({ ...req.body, tenantId, isSystem: false });
+    const data = insertMetadataKatalogSchema.parse({ ...req.body, tenantId, isSystem: false, systemlast: false });
     // Task #674: Område är grupperingsfältet — håll legacy `kategori` i synk.
     data.kategori = (data.area as string | null | undefined) || 'annat';
     // Namn/beteckning är per-tenant unika universella nycklar (samma metadata_katalog-
@@ -2224,6 +2233,17 @@ app.patch("/api/metadata-labels/:id", requireAdmin, asyncHandler(async (req, res
         throw new ForbiddenError("Systemmetadata: skyddade fält kan inte ändras (namn, beteckning, datatyp, område, isRequired)");
       }
     }
+    // Systemlåst STRUKTUR (≠ isSystem): definitionen är kanonisk och låst; endast
+    // rent kosmetiska fält (beskrivning, ikon) får ändras. VÄRDEN redigeras fritt per objekt.
+    if (existing.systemlast) {
+      const systemlastProtected = ['namn', 'beteckning', 'datatyp', 'area', 'isRequired', 'sortOrder', 'standardArvs', 'displayNumber', 'allowedValues', 'allowDuplicates', 'kronologiskVisning', 'arLogisk'] as const;
+      for (const field of systemlastProtected) {
+        delete updateData[field];
+      }
+      if (Object.keys(updateData).length === 0) {
+        throw new ForbiddenError("Systemlåst metadata: strukturen är låst (endast beskrivning/ikon kan ändras). Värden redigeras fritt per objekt.");
+      }
+    }
     // Task #674: Område är grupperingsfältet — håll legacy `kategori` i synk när
     // området ändras (efter system-skyddet, så systemfält aldrig driftar).
     if (updateData.area !== undefined) {
@@ -2281,6 +2301,9 @@ app.delete("/api/metadata-labels/:id", requireAdmin, asyncHandler(async (req, re
     
     if (existing.isSystem) {
       throw new ForbiddenError("Systemmetadata kan inte raderas");
+    }
+    if (existing.systemlast) {
+      throw new ForbiddenError("Systemlåst metadata kan inte raderas — strukturen är kanonisk. Värden kan tömmas per objekt.");
     }
 
     // Task #662: blockera radering av ett gruppfält som har underfält (FK skulle
