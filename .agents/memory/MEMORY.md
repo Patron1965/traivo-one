@@ -103,3 +103,4 @@
 - [Abonnemang 0-faktura & kvittning](subscription-settlement-net-zero.md) — täckt uppgift kvittas till netto 0 (2 lager: woAmount→0 + fortnox enforceNetZero); fail-closed utan kvittningsartikel/mapping.
 - ["Plannix" dött namn](naming-plannix-dead.md) — plattform=Traivo (Traivo One), app=Traivo Go; april-2026 Plannix-rebrand reverterad; ignorera stale rebrand-docs; seed.ts rebrandPlannixToKinab = separat tenant-data.
 - [Uppgiftens tidslogg (task_events)](task-event-log.md) — append-only händelselogg per WO; logga bara faktiska diffar via delad service; verklig tidsstämpel = occurredAt; kontraktet läses aldrig omdefinieras.
+- [Informationspaket 94-fälts-avstämning](informationspaket-94-falt-avstamning.md) — CSV=94 atomära fält (rad4, riktig parser ej `;`-split); kontraktet buntar till ~42 medvetet; status-taggar (finns/härleds/delvis/saknas/motor_kvar); INFORMATIONSPAKET_FALT har inga kod-konsumenter.

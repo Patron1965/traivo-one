@@ -234,3 +234,9 @@ id = "MgLXcEQHgP3PfBjubFZ3u"
 uri = "file://docs/Arbetsmodell-for-Replit.pdf"
 type = "pdf"
 title = "Arbetsmodell för Replit — spelbok för nya bygg"
+
+[[outputs]]
+id = "TY0oSsMHCs6V0CgrFEsw0"
+uri = "file://docs/informationspaket-94-falt-avstamning.md"
+type = "text"
+title = "Informationspaket – 94-fälts-avstämning"

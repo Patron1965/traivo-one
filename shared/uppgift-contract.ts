@@ -168,6 +168,12 @@ export const KALLA_LABELS: Record<UppgiftKalla, string> = {
 /** Var kontraktsfältet fysiskt bor idag (nuvarande backing). */
 export type FaltStorage = "column" | "live-compute" | "engine-output" | "sidoregister";
 
+/**
+ * Status per fält mot 94-fälts-avstämningen (se docs/informationspaket-94-falt-avstamning.md).
+ * Utelämnad status tolkas som "finns" (modellerat och i drift).
+ */
+export type FaltStatus = "finns" | "harleds" | "delvis" | "saknas" | "motor_kvar";
+
 export interface InformationspaketFalt {
   /** Fältnamn enligt grundmodell §3. */
   falt: string;
@@ -179,6 +185,8 @@ export interface InformationspaketFalt {
   storage: FaltStorage;
   /** Nuvarande backing (kolumn/tjänst) — best-effort karta till dagens kod. */
   backing: string;
+  /** Status mot 94-fälts-avstämningen. Utelämnad = "finns". */
+  status?: FaltStatus;
 }
 
 /**
@@ -192,7 +200,7 @@ export const INFORMATIONSPAKET_FALT: InformationspaketFalt[] = [
   { falt: "Pris · kostnader · påslag · fast pris", kalla: "artikel", hamtning: ["D"], storage: "column", backing: "articles pris/kostnad/påslag (öre); fixed_price_basis" },
   { falt: "Produktionstid · restid · ställtid", kalla: "artikel", hamtning: ["D"], storage: "column", backing: "articles tidsfält (min)" },
   { falt: "Antalsläge (styck/formel/matchar fält)", kalla: "artikel", hamtning: ["D"], storage: "column", backing: "articles.quantityMode → computeArticleQuantity" },
-  { falt: "Får ändras av utförare · dölj antal", kalla: "artikel", hamtning: ["D"], storage: "column", backing: "articles quantityEditable/hideQuantityInApp" },
+  { falt: "Får ändras av utförare · dölj antal", kalla: "artikel", hamtning: ["D"], storage: "column", backing: "articles operatorCanUpdateQuantity/hideQuantityInApp" },
   { falt: "Dokument · arbetsbeskrivning", kalla: "artikel", hamtning: ["D"], storage: "column", backing: "articles dokument/arbetsbeskrivning" },
   { falt: "Visa/lämna metadatafält", kalla: "artikel", hamtning: ["M"], storage: "live-compute", backing: "article associationRules → getArticleMetadataForObject (katalog-namn)" },
   { falt: "Fasttagningslogik (hakar på metadata =)", kalla: "artikel", hamtning: ["M"], storage: "live-compute", backing: "matchesFilter (shared/condition-matching.ts)" },
@@ -236,6 +244,43 @@ export const INFORMATIONSPAKET_FALT: InformationspaketFalt[] = [
   { falt: "Abonnemangskoppling (abonn.motor)", kalla: "system", hamtning: ["SYS"], storage: "engine-output", backing: "motor 5 (deferrad); computeConceptSubscriptionFee" },
   { falt: "Beroende-ordning (beroendemotor)", kalla: "system", hamtning: ["SYS"], storage: "column", backing: "motor 6 → parentAssignmentId; task_dependencies" },
   { falt: "System- + affärsstatus", kalla: "system", hamtning: ["SYS"], storage: "live-compute", backing: "deriveUppgiftStatus() över orderStatus+executionStatus+invoiceQueueState" },
+
+  // ---- Kompletterande atomära fält från 94-fälts-avstämningen ----
+  // (docs/informationspaket-94-falt-avstamning.md). Additivt: gör kontraktet
+  // 1:1 mot CSV:ns 94 fält så inget döljs i en hopbuntad rubrikrad. Status
+  // anger var något ännu inte är helt modellerat.
+  { falt: "Artikelstatus (aktiv)", kalla: "artikel", hamtning: ["D"], storage: "column", backing: "articles status (isActiveArticleStatus)", status: "finns" },
+  { falt: "Begränsning antal per adress/objekt", kalla: "artikel", hamtning: ["D"], storage: "column", backing: "articles.maxPerAddress", status: "finns" },
+  { falt: "Begränsningstyp (en gång per objekt/adress/kund)", kalla: "artikel", hamtning: ["D"], storage: "column", backing: "maxPerAddress (adress); typ per objekt/kund ej modellerad", status: "delvis" },
+  { falt: "Lagernivåer (säkerhetslager · beställningspunkt · minsta order)", kalla: "artikel", hamtning: ["D"], storage: "column", backing: "articles.safetyStock/reorderPoint/minOrderQuantity", status: "finns" },
+  { falt: "Leverantörs artnr · leveranstid", kalla: "artikel", hamtning: ["D", "S"], storage: "column", backing: "articles leverantörs-artnr/leveranstid; leverantörsregister", status: "finns" },
+  { falt: "Ej förbrukas (icke-förbrukningsartikel)", kalla: "artikel", hamtning: ["D"], storage: "column", backing: "lagermodell hanterar förbrukning; explicit flagga ej modellerad", status: "delvis" },
+  { falt: "Visade metadatafält får uppdateras av utförare (per fält)", kalla: "artikel", hamtning: ["M"], storage: "live-compute", backing: "visa-metadata editable-flagga; per-fält-precisering ej bekräftad", status: "delvis" },
+  { falt: "Krav: metadata måste lämnas för att slutföra", kalla: "artikel", hamtning: ["M"], storage: "live-compute", backing: "obligatorisk-metadata completion-gate (completion-gate dual status)", status: "finns" },
+  { falt: "Visas på faktura · faktureras till kund (artikelflaggor)", kalla: "artikel", hamtning: ["D"], storage: "column", backing: "via faktura-materialisering/ej_fakturerbar; artikel-nivå flaggor ej bekräftade", status: "delvis" },
+  { falt: "Ej beroende av objektets geografiska position", kalla: "artikel", hamtning: ["D"], storage: "column", backing: "ingen explicit flagga; object-location inferrerar legacy", status: "delvis" },
+  { falt: "Kan användas själv som strukturartikel", kalla: "artikel", hamtning: ["D"], storage: "column", backing: "articles struktur-flagga", status: "finns" },
+
+  { falt: "Offset (tid · typ samtidigt/före/efter)", kalla: "orderkoncept", hamtning: ["SYS"], storage: "column", backing: "assignments offset_minutes + offset-typ (beroendemotor)", status: "finns" },
+  { falt: "Automatisk repetering (start/stopp/säsong)", kalla: "orderkoncept", hamtning: ["D"], storage: "column", backing: "recurrence/recurrenceInterval/-Unit + flexibel frekvens (säsong)", status: "finns" },
+  { falt: "Inpekat objekt (topp av gren)", kalla: "orderkoncept", hamtning: ["D"], storage: "column", backing: "target_object_ids (subträd primär parent)", status: "finns" },
+
+  { falt: "Objektets höjd Pos Z (3D)", kalla: "objekt", hamtning: ["D"], storage: "column", backing: "— ingen höjd/Z-koordinat modellerad", status: "saknas" },
+  { falt: "Objektets yta eller sträcka", kalla: "objekt", hamtning: ["D"], storage: "column", backing: "— ej modellerat", status: "saknas" },
+  { falt: "Lantmäteri (fastighetsbeteckning · -ägare per plats)", kalla: "objekt", hamtning: ["M"], storage: "live-compute", backing: "metadata FASBET (fastighetsbeteckning); fastighetsägare per plats ej bekräftad", status: "delvis" },
+  { falt: "What3words (sekundär platsreferens)", kalla: "objekt", hamtning: ["M"], storage: "live-compute", backing: "metadata What3words-fält (object-system-metadata)", status: "finns" },
+
+  { falt: "Taget · fakturerbart antal", kalla: "system", hamtning: ["SYS"], storage: "column", backing: "orderrad takenQuantity/returnedQuantity vs quantity (fakturerat)", status: "finns" },
+  { falt: "Hur objektet hittades/hakats på (klartext)", kalla: "system", hamtning: ["SYS"], storage: "column", backing: "härledning via koncept-resolver; per-uppgift-klartext ej komplett", status: "delvis" },
+  { falt: "Hur kunden valts/styrts", kalla: "system", hamtning: ["SYS"], storage: "column", backing: "HARDCODED/FROM_METADATA (order-concept-customer-resolution)", status: "finns" },
+  { falt: "Tidslogg (begärd · planerad · verklig leveranstid)", kalla: "system", hamtning: ["SYS"], storage: "engine-output", backing: "task_events tidslogg + slot_times", status: "finns" },
+  { falt: "Affärsstatus (offert→ordererkännande→följesedel→faktura)", kalla: "system", hamtning: ["SYS"], storage: "column", backing: "dokumenttyp-map (delivery_note m.fl.); full kedja ej komplett", status: "delvis" },
+  { falt: "Maskering av pris på följesedel", kalla: "system", hamtning: ["SYS"], storage: "column", backing: "pris-maskering konceptuellt; explicit flagga ej bekräftad", status: "delvis" },
+  { falt: "Tidstyp som grund för löneunderlag", kalla: "system", hamtning: ["SYS"], storage: "column", backing: "tidskod → payroll-export (härleds ur uppgiftens tidstyp)", status: "harleds" },
+  { falt: "Utförare/team tilldelad", kalla: "system", hamtning: ["SYS"], storage: "column", backing: "assignments/work_orders tilldelning (team/fordon)", status: "finns" },
+  { falt: "Kostnadsställe · projekt", kalla: "system", hamtning: ["SYS"], storage: "column", backing: "costCenter/projectCode (fortnox-code-derivation)", status: "finns" },
+  { falt: "Överbokad (som egen uppgiftsstatus)", kalla: "system", hamtning: ["SYS"], storage: "live-compute", backing: "— saknas i deriveUppgiftStatus(); planerad åtgärd D", status: "saknas" },
+  { falt: "Plockuppgift: val artikelnr (plocka-från-lager vs beställ-hem)", kalla: "system", hamtning: ["SYS"], storage: "engine-output", backing: "lagermodell känner saldo; förgrenings-logik ej byggd", status: "motor_kvar" },
 ];
 
 /* ============================================================
