@@ -97,6 +97,8 @@ export type SystemTaskFuture = {
   orderConceptName: string | null;
   customerId: string | null;
   customerName: string | null;
+  // Task #1205 (fält 54): läsbar matchningsorsak (varför objektet hakades på konceptet).
+  matchReason: string | null;
 };
 
 export type SystemImage = {
@@ -354,6 +356,7 @@ async function computeTasksFuture(
       orderConceptName: orderConcepts.name,
       customerId: orderConcepts.customerId,
       customerName: customers.name,
+      matchReason: assignments.matchReason,
     })
     .from(assignments)
     .leftJoin(orderConcepts, eq(assignments.orderConceptId, orderConcepts.id))
@@ -376,6 +379,7 @@ async function computeTasksFuture(
     orderConceptName: r.orderConceptName ?? null,
     customerId: r.customerId ?? null,
     customerName: r.customerName ?? null,
+    matchReason: r.matchReason ?? null,
   }));
 }
 

@@ -279,7 +279,7 @@ export const INFORMATIONSPAKET_FALT: InformationspaketFalt[] = [
   { falt: "Tidstyp som grund för löneunderlag", kalla: "system", hamtning: ["SYS"], storage: "column", backing: "tidskod → payroll-export (härleds ur uppgiftens tidstyp)", status: "harleds" },
   { falt: "Utförare/team tilldelad", kalla: "system", hamtning: ["SYS"], storage: "column", backing: "assignments/work_orders tilldelning (team/fordon)", status: "finns" },
   { falt: "Kostnadsställe · projekt", kalla: "system", hamtning: ["SYS"], storage: "column", backing: "costCenter/projectCode (fortnox-code-derivation)", status: "finns" },
-  { falt: "Överbokad (som egen uppgiftsstatus)", kalla: "system", hamtning: ["SYS"], storage: "live-compute", backing: "— saknas i deriveUppgiftStatus(); planerad åtgärd D", status: "saknas" },
+  { falt: "Överbokad (planerar-härledd varning)", kalla: "system", hamtning: ["SYS"], storage: "live-compute", backing: "planerar-overlay på resurs-dag-nivå (bokad tid > kapacitet); overbookedResourceDays i usePlannerData + krockvarning på berörda uppgiftskort; MEDVETET utanför deriveUppgiftStatus()", status: "finns" },
   { falt: "Plockuppgift: val artikelnr (plocka-från-lager vs beställ-hem)", kalla: "system", hamtning: ["SYS"], storage: "engine-output", backing: "lagermodell känner saldo; förgrenings-logik ej byggd", status: "motor_kvar" },
 ];
 

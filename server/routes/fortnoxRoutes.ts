@@ -32,6 +32,7 @@ import {
   resolveTargetObjects,
   filterObjectsByConditions,
   resolveConceptMatchingObjects,
+  buildMatchReasonsForObjects,
 } from "../services/order-concept-targeting";
 import { deriveFortnoxCodesForWorkOrder } from "../services/fortnox-code-derivation";
 import { buildConceptTimeRulePackagesByObject } from "../services/time-rule-package";
@@ -83,8 +84,10 @@ async function createStockPickupAssignment(opts: {
   customerId: string | null;
   quantity: number;
   userId: string | undefined;
+  // Task #1205 (fält 54): läsbar matchningsorsak för objektet (ärvs till hämt-uppgiften).
+  matchReason?: string;
 }): Promise<Assignment> {
-  const { tenantId, concept, obj, linkedArticle, deliverDate, customerId, quantity, userId } = opts;
+  const { tenantId, concept, obj, linkedArticle, deliverDate, customerId, quantity, userId, matchReason } = opts;
   const stock = resolveStockLocation(linkedArticle);
   const pickupDate = computePickupDate(deliverDate, linkedArticle);
   return storage.createAssignment({
@@ -108,6 +111,8 @@ async function createStockPickupAssignment(opts: {
     cachedValue: 0,
     cachedCost: 0,
     logisticsRole: "pickup",
+    // Task #1205 (fält 54): matchningsorsak ärvs till hämt-uppgiften.
+    matchReason: matchReason ?? undefined,
     // Task #1110: stämpla artikelns utförandekod på hämt-uppgiften (informationspaket).
     executionCode: linkedArticle?.executionCode ?? undefined,
     // Tidskod fryst från artikelns timeCodeKey (finplanering/lön).
@@ -197,6 +202,20 @@ export async function generateScheduleAssignments(opts: {
     matchingObjects.map((o) => o.id),
   );
 
+  // Task #1205 (fält 54): läsbar matchningsorsak per objekt (delad batch), stämplas
+  // på varje genererad assignment så att VARFÖR objektet hakades på överlever senare
+  // filteredigeringar.
+  const scheduleFilters = await storage.getConceptFilters(concept.id);
+  const matchReasonByObject = await buildMatchReasonsForObjects(
+    tenantId,
+    matchingObjects,
+    scheduleFilters.map((f: any) => ({
+      metadataKey: f.metadataKey,
+      operator: f.operator,
+      filterValue: f.filterValue,
+    })),
+  );
+
   const created: any[] = [];
   let skipped = 0;
   for (const t of targets) {
@@ -257,6 +276,7 @@ export async function generateScheduleAssignments(opts: {
           customerId: effectiveCustomerId,
           quantity,
           userId,
+          matchReason: matchReasonByObject.get(obj.id),
         });
         pickupAssignmentId = pickup.id;
         created.push(pickup);
@@ -286,6 +306,8 @@ export async function generateScheduleAssignments(opts: {
         cachedCost: totalCost,
         logisticsRole: splitForStock ? "deliver" : undefined,
         parentAssignmentId: pickupAssignmentId,
+        // Task #1205 (fält 54): läsbar matchningsorsak snapshotad vid expansion.
+        matchReason: matchReasonByObject.get(obj.id),
         // Task #1110: stämpla artikelns utförandekod på uppgiften (informationspaket).
         executionCode: linkedArticle?.executionCode ?? undefined,
         // Tidskod fryst från artikelns timeCodeKey (finplanering/lön).
@@ -2429,6 +2451,15 @@ app.post("/api/order-concepts/:id/execute", asyncHandler(async (req, res) => {
       { fallbackAllObjects: true },
     );
 
+    // Task #1205 (fält 54): läsbar matchningsorsak per objekt (delad batch) —
+    // snapshotas på call_off- och föruppgifter så att VARFÖR objektet hakades på
+    // överlever senare filteredigeringar.
+    const matchReasonByObject = await buildMatchReasonsForObjects(
+      tenantId,
+      matchingObjects,
+      filterInputs,
+    );
+
     // Generate assignments for each matching object
     const createdAssignments = [];
     // Task #911-beslut: Stockholm-normaliseringen gäller ENBART datum-only-
@@ -2724,6 +2755,7 @@ app.post("/api/order-concepts/:id/execute", asyncHandler(async (req, res) => {
           customerId: effectiveCustomerId,
           quantity,
           userId,
+          matchReason: matchReasonByObject.get(obj.id),
         });
         pickupAssignmentId = pickup.id;
         createdAssignments.push(pickup);
@@ -2753,6 +2785,8 @@ app.post("/api/order-concepts/:id/execute", asyncHandler(async (req, res) => {
         cachedCost: totalCost,
         logisticsRole: splitForStock ? "deliver" : undefined,
         parentAssignmentId: pickupAssignmentId,
+        // Task #1205 (fält 54): läsbar matchningsorsak snapshotad vid expansion.
+        matchReason: matchReasonByObject.get(obj.id),
         // Task #1110: stämpla artikelns utförandekod på uppgiften (informationspaket).
         executionCode: linkedArticle?.executionCode ?? undefined,
         // Tidskod fryst från artikelns timeCodeKey (finplanering/lön).
@@ -2899,6 +2933,8 @@ app.post("/api/order-concepts/:id/execute", asyncHandler(async (req, res) => {
             // (dependencyAcknowledgedAt) före huvuduppgiften, annars varnar systemet.
             requiresAcknowledgment: article.requiresAcknowledgment ?? false,
             dependencyCriticality: article.dependencyCriticality ?? "critical",
+            // Task #1205 (fält 54): matchningsorsak ärvs även till föruppgiften.
+            matchReason: matchReasonByObject.get(obj.id),
             // Task #1110: stämpla artikelns utförandekod även på föruppgiften.
             executionCode: article.executionCode ?? undefined,
             // Tidskod fryst från artikelns timeCodeKey (finplanering/lön).

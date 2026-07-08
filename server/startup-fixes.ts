@@ -22,6 +22,13 @@ export async function runIdempotentMigrations(): Promise<void> {
   await db.execute(sql`
     ALTER TABLE articles ADD COLUMN IF NOT EXISTS warehouse_cost integer;
   `);
+  // Task #1205 (fält 54): läsbar matchningsorsak per uppgift (koncept-expansion).
+  await db.execute(sql`
+    ALTER TABLE assignments ADD COLUMN IF NOT EXISTS match_reason text;
+  `);
+  await db.execute(sql`
+    ALTER TABLE work_orders ADD COLUMN IF NOT EXISTS match_reason text;
+  `);
 }
 
 export async function fixInitialOwnerRole(): Promise<void> {

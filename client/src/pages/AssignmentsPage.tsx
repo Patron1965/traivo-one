@@ -754,6 +754,14 @@ export default function AssignmentsPage() {
                   </p>
                 </div>
               )}
+              {selectedAssignment.orderConceptId && (
+                <div>
+                  <Label className="text-muted-foreground">Matchningsorsak</Label>
+                  <p className="text-sm" data-testid="text-assignment-match-reason">
+                    {selectedAssignment.matchReason || "—"}
+                  </p>
+                </div>
+              )}
               {selectedAssignment.address && (
                 <div>
                   <Label className="text-muted-foreground">Adress</Label>

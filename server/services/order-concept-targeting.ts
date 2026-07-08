@@ -6,7 +6,7 @@ import { getObjectsConditionMetadata } from "../metadata-queries";
 import { type ServiceObject } from "@shared/schema";
 // Task #940: matchesFilter lever nu i @shared/condition-matching (delas av klient
 // och server). Re-exporteras här så befintliga server-importörer är oförändrade.
-import { matchesFilter } from "@shared/condition-matching";
+import { matchesFilter, CONDITION_OPERATORS, operatorNeedsNoValue } from "@shared/condition-matching";
 
 export { matchesFilter };
 
@@ -170,6 +170,79 @@ export async function evaluateConditionsForObject(
     };
   });
   return { matched: results.every((r) => r.passed), results };
+}
+
+// ============================================================================
+// Task #1205 (fält 54): läsbar matchningsorsak.
+//
+// Bygger en människoläsbar svensk sammanfattning av VARFÖR ett objekt hakades på
+// ett orderkoncept (vilka villkor som matchade), snapshotad vid expansion så att
+// den överlever senare filteredigeringar. Använder EXAKT samma värde-upplösning
+// (resolveConditionValue) och operator-semantik (matchesFilter) som urvalet, så
+// orsaken alltid speglar den faktiska matchningen.
+// ============================================================================
+
+/** Läsbar operator-etikett (svensk) för en villkorsoperator. */
+function operatorLabel(operator: string): string {
+  return CONDITION_OPERATORS.find((o) => o.value === operator)?.label ?? operator;
+}
+
+/** Formaterar ett filtervärde läsbart (arrayer → "a/b/c"). */
+function formatFilterValue(value: unknown): string {
+  if (Array.isArray(value)) return value.map((v) => String(v)).join("/");
+  return String(value ?? "");
+}
+
+/**
+ * Bygger en läsbar orsak-sträng från per-villkor-resultat. Endast passerade
+ * villkor tas med (matchande objekt passerar alla). Tom villkorslista ⇒
+ * "Hela grenen (inga villkor)".
+ */
+export function formatMatchReason(results: ConditionEvalResult[]): string {
+  if (results.length === 0) return "Hela grenen (inga villkor)";
+  const passed = results.filter((r) => r.passed);
+  if (passed.length === 0) return "Hela grenen (inga villkor)";
+  const parts = passed.map((r) => {
+    const field = r.metadataKey;
+    const op = operatorLabel(r.operator);
+    if (operatorNeedsNoValue(r.operator)) return `${field} ${op}`;
+    return `${field} ${op} ${formatFilterValue(r.filterValue)}`;
+  });
+  return parts.join("; ");
+}
+
+/**
+ * Bygger matchningsorsak per objekt i EN batch (delad metadata-karta) för de
+ * angivna objekten mot filtren. Returnerar Map<objectId, orsak-sträng>. Används
+ * vid koncept-expansion för att stämpla assignments.matchReason.
+ */
+export async function buildMatchReasonsForObjects(
+  tenantId: string,
+  objectsList: ServiceObject[],
+  filters: ConditionFilterInput[],
+): Promise<Map<string, string>> {
+  const reasons = new Map<string, string>();
+  if (objectsList.length === 0) return reasons;
+  if (filters.length === 0) {
+    for (const obj of objectsList) reasons.set(obj.id, formatMatchReason([]));
+    return reasons;
+  }
+  const metaByObject = await buildObjectMetadataMap(tenantId, objectsList.map((o) => o.id));
+  for (const obj of objectsList) {
+    const meta = metaByObject.get(obj.id) ?? {};
+    const results: ConditionEvalResult[] = filters.map((f) => {
+      const actualValue = resolveConditionValue(obj, meta, f.metadataKey);
+      return {
+        metadataKey: f.metadataKey,
+        operator: f.operator,
+        filterValue: f.filterValue,
+        actualValue,
+        passed: matchesFilter(actualValue, f.operator, f.filterValue),
+      };
+    });
+    reasons.set(obj.id, formatMatchReason(results));
+  }
+  return reasons;
 }
 
 /**

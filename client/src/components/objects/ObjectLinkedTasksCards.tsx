@@ -41,6 +41,7 @@ interface SystemTaskFuture {
   orderConceptName: string | null;
   customerId: string | null;
   customerName: string | null;
+  matchReason: string | null;
 }
 interface SystemUnperformedTask {
   id: string;
@@ -131,6 +132,15 @@ export function ObjectLinkedTasksCards({
                               )}
                               {typeof a.quantity === "number" && a.quantity > 0 && <span>{a.quantity} st</span>}
                             </div>
+                            {a.orderConceptId && (
+                              <div
+                                className="mt-1 text-xs text-muted-foreground"
+                                data-testid={`text-linked-task-match-reason-${a.id}`}
+                              >
+                                <span className="font-medium">Matchningsorsak:</span>{" "}
+                                {a.matchReason || "—"}
+                              </div>
+                            )}
                           </div>
                           {a.status && (
                             <Badge className={`text-[10px] shrink-0 ${getWorkOrderStatusBadge(a.status)}`}>

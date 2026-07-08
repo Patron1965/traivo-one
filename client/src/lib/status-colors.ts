@@ -153,3 +153,20 @@ export function getInspectionStatusBadge(status: string | null | undefined): str
   if (!status) return inspectionStatusBadge.ok;
   return inspectionStatusBadge[status] ?? inspectionStatusBadge.ok;
 }
+
+// Task #1205 (88): persistent per-resource-day overbooking (bokad tid > kapacitet).
+// Överbokning = varning (SLA-risk), inte blockerande → warning-token. Aldrig bg-red-*.
+export function getOverbookingWarning(
+  bookedHours: number,
+  capacityHours: number,
+): { isOverbooked: boolean; overBy: number; textClass: string; cellClass: string; badgeClass: string } {
+  const overBy = Math.round((bookedHours - capacityHours) * 10) / 10;
+  const isOverbooked = overBy > 0.05;
+  return {
+    isOverbooked,
+    overBy: Math.max(0, overBy),
+    textClass: "text-warning font-semibold",
+    cellClass: "bg-warning/10 dark:bg-warning/15 ring-1 ring-inset ring-warning/40",
+    badgeClass: "bg-warning/15 text-warning border border-warning/30",
+  };
+}

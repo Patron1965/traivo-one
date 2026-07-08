@@ -854,7 +854,25 @@ export function usePlannerData() {
   }, [detectConflictsForJob, teamDayJobMap]);
 
   const activeStatuses = useMemo(() => new Set(["skapad", "planerad_pre", "planerad_resurs", "planerad_las"]), []);
-  const jobConflicts = useMemo(() => { const c: Record<string, string[]> = {}; for (const j of scheduledJobs) { if (!j.scheduledDate || !j.resourceId) continue; if (!activeStatuses.has(j.orderStatus)) continue; const r = detectConflictsForJob(j, j.resourceId, format(new Date(j.scheduledDate), "yyyy-MM-dd"), j.scheduledStartTime || null); if (r.length > 0) c[j.id] = r; } return c; }, [scheduledJobs, detectConflictsForJob, activeStatuses]);
+
+  // Task #1205 (88): Persistent per-resurs-dag överbokning (bokad tid > kapacitet).
+  // Härleds ur resourceDayJobMap.hours — ren planerar-overlay, ej deriveUppgiftStatus().
+  const overbookedResourceDays = useMemo(() => {
+    const set = new Set<string>();
+    for (const rid of Object.keys(resourceDayJobMap.hours)) {
+      const byDay = resourceDayJobMap.hours[rid];
+      for (const dk of Object.keys(byDay)) {
+        if (byDay[dk] > HOURS_IN_DAY + 0.05) set.add(`${rid}|${dk}`);
+      }
+    }
+    return set;
+  }, [resourceDayJobMap]);
+  const isResourceDayOverbooked = useCallback(
+    (rid: string, day: Date) => overbookedResourceDays.has(`${rid}|${format(day, "yyyy-MM-dd")}`),
+    [overbookedResourceDays],
+  );
+
+  const jobConflicts = useMemo(() => { const c: Record<string, string[]> = {}; for (const j of scheduledJobs) { if (!j.scheduledDate || !j.resourceId) continue; if (!activeStatuses.has(j.orderStatus)) continue; const dk = format(new Date(j.scheduledDate), "yyyy-MM-dd"); const r = detectConflictsForJob(j, j.resourceId, dk, j.scheduledStartTime || null); if (overbookedResourceDays.has(`${j.resourceId}|${dk}`)) { const over = Math.round(((resourceDayJobMap.hours[j.resourceId]?.[dk] || 0) - HOURS_IN_DAY) * 10) / 10; r.push(`Överbokad dag — ${Math.max(0, over).toFixed(1)}h över kapacitet (${HOURS_IN_DAY}h)`); } if (r.length > 0) c[j.id] = r; } return c; }, [scheduledJobs, detectConflictsForJob, activeStatuses, overbookedResourceDays, resourceDayJobMap]);
 
   const addToUndoStack = useCallback((action: PlannerAction) => { setUndoStack(prev => [...prev.slice(-19), action]); setRedoStack([]); }, []);
 

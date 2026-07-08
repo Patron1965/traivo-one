@@ -372,6 +372,10 @@ export const workOrders = pgTable("work_orders", {
   status: text("status").default("draft").notNull(),
   // Modus-style order status: skapad, planerad_pre, planerad_resurs, planerad_las, utford, fakturerad
   orderStatus: text("order_status").default("skapad").notNull(),
+  // Task #1205 (fält 54): läsbar matchningsorsak — VARFÖR objektet hakades på ett
+  // orderkoncept (vilka villkor som matchade), snapshotad vid expansion. Nullable
+  // (expand-contract): historiska/manuella uppgifter saknar värdet och visar "—".
+  matchReason: text("match_reason"),
   scheduledDate: timestamp("scheduled_date"),
   scheduledStartTime: text("scheduled_start_time"),
   // Önskad leveransperiod (sätts av planerare/kund — mjuk preferens, ej hårt villkor)
@@ -3575,6 +3579,10 @@ export const assignments = pgTable("assignments", {
   isFixedPrice: boolean("is_fixed_price").default(false),
   billingMethod: text("billing_method"),
   exceptionStatus: text("exception_status"),
+  // Task #1205 (fält 54): läsbar matchningsorsak — VARFÖR objektet hakades på
+  // konceptet (vilka villkor som matchade), snapshotad vid expansion. Nullable
+  // (expand-contract): historiska/manuella uppgifter saknar värdet och visar "—".
+  matchReason: text("match_reason"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   deletedAt: timestamp("deleted_at"),
 }, (table) => [
