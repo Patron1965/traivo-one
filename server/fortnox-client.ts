@@ -14,6 +14,38 @@ const FORTNOX_API_BASE = "https://api.fortnox.se/3";
 const FORTNOX_AUTH_URL = "https://apps.fortnox.se/oauth-v1/auth";
 const FORTNOX_TOKEN_URL = "https://apps.fortnox.se/oauth-v1/token";
 
+/**
+ * Task #1204 (91) — prismaskering på följesedel.
+ *
+ * En abonnemangstäckt WO (`subscriptionCovered`) exporteras till Fortnox som en
+ * 0-netto-FÖLJESEDEL (leverans-/utförandebevis utan debitering) — inte en faktura.
+ * På en följesedel får priser inte läcka ut. Vi respekterar konceptets befintliga
+ * "visa pris"-inställning per dokumenttyp (`document_configurations.showPrice` för
+ * documentType "delivery_note"):
+ *   - Ej abonnemangstäckt (vanlig faktura)        → maskera ALDRIG (visa priser).
+ *   - Följesedel utan koncept                     → maskera (säker standard).
+ *   - Följesedel, ingen delivery_note-inställning → maskera (säker standard).
+ *   - Följesedel, showPrice === false             → maskera.
+ *   - Följesedel, showPrice === true              → visa priser.
+ */
+async function shouldMaskPricesForDeliveryNote(
+  workOrder: { subscriptionCovered?: boolean | null; orderConceptId?: string | null },
+): Promise<boolean> {
+  if (workOrder?.subscriptionCovered !== true) return false;
+  const conceptId = workOrder?.orderConceptId;
+  if (!conceptId) return true;
+  try {
+    const configs = await storage.getDocumentConfigurations(conceptId);
+    const deliveryNote = configs.find((c) => c.documentType === "delivery_note");
+    if (!deliveryNote) return true;
+    return deliveryNote.showPrice === false;
+  } catch (err) {
+    // Fail-safe: om inställningen inte kan läsas, maskera hellre än att läcka pris.
+    console.warn("[fortnox] kunde inte läsa dokumentinställning för följesedel, maskerar priser:", err);
+    return true;
+  }
+}
+
 // Dynamic import for ESM-only packages
 let rateLimiter: ReturnType<typeof import("p-limit").default> | null = null;
 let pRetryFn: typeof import("p-retry").default | null = null;
@@ -587,6 +619,8 @@ export async function exportWorkOrderToFortnox(
         resolveArticleNumber: async (articleId) =>
           (await storage.getFortnoxMapping(tenantId, "article", articleId))?.fortnoxId ?? null,
         enforceNetZero: (workOrder as any).subscriptionCovered === true,
+        // Task #1204 (91): maskera priser när WO exporteras som följesedel.
+        maskPrices: await shouldMaskPricesForDeliveryNote(workOrder as any),
       });
       const invoiceRows = collapseFortnoxLogicalRows(logicalRows);
 
@@ -958,6 +992,8 @@ export async function exportConsolidatedInvoiceToFortnox(
           resolveArticleNumber: async (articleId) =>
             (await storage.getFortnoxMapping(tenantId, "article", articleId))?.fortnoxId ?? null,
           enforceNetZero: (wo as any).subscriptionCovered === true,
+          // Task #1204 (91): maskera priser när WO exporteras som följesedel.
+          maskPrices: await shouldMaskPricesForDeliveryNote(wo as any),
         })),
       );
     }

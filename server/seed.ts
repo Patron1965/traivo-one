@@ -57,6 +57,9 @@ export async function seedDatabase() {
   // Task #1110: "What3words" platsfält till alla tenants (insert-only, icke-system).
   await backfillWhat3wordsField();
 
+  // Task #1204 (66): "Fastighetsägare" arvbart metadatafält (insert-only, icke-system).
+  await backfillFastighetsagareField();
+
   // Skip seed entirely if any tenant already exists (production / customer setup).
   // Demo seed only runs against a completely empty tenants table.
   const defaultRows = await db
@@ -1160,6 +1163,42 @@ async function backfillWhat3wordsField() {
     created++;
   }
   if (created > 0) console.log(`Backfilled "What3words" field to ${created} tenant(s)`);
+}
+
+/**
+ * Task #1204 (66): "Fastighetsägare" — fastighetens ägare per plats. Ett ARVBART
+ * (standardArvs: true), manuellt skrivbart (isSystem: false) metadatafält som
+ * seedas insert-only över alla tenants så att det alltid finns att fylla i och
+ * visas i objektvyn där det är satt. Läses arvs-medvetet via metadata-katalogen
+ * (namn "Fastighetsägare"), samma mönster som What3words. Matchar på namn
+ * (case-insensitivt) så att befintliga rader aldrig dubbleras.
+ */
+async function backfillFastighetsagareField() {
+  const allTenants = await db.select({ id: tenants.id }).from(tenants);
+  let created = 0;
+  for (const t of allTenants) {
+    const existing = await db.select({ id: metadataKatalog.id })
+      .from(metadataKatalog)
+      .where(and(
+        eq(metadataKatalog.tenantId, t.id),
+        sql`lower(${metadataKatalog.namn}) = 'fastighetsägare'`,
+      ))
+      .limit(1);
+    if (existing.length > 0) continue;
+    await db.insert(metadataKatalog).values({
+      tenantId: t.id,
+      namn: "Fastighetsägare",
+      datatyp: "string",
+      standardArvs: true,
+      kategori: "grunduppgifter",
+      beskrivning: "Fastighetens ägare per plats (arvbart metadatafält)",
+      icon: "Building",
+      area: "grunduppgifter",
+      isSystem: false,
+    });
+    created++;
+  }
+  if (created > 0) console.log(`Backfilled "Fastighetsägare" field to ${created} tenant(s)`);
 }
 
 /**

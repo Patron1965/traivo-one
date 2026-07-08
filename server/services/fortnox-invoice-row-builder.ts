@@ -90,6 +90,13 @@ export interface BuildLogicalRowsParams {
    * saknad Fortnox-mapping som tappat kvittningsraden) → fail-closed export.
    */
   enforceNetZero?: boolean;
+  /**
+   * Task #1204 (91) — prismaskering på följesedel. När true utelämnas pris/summa
+   * på ALLA debiteringsrader (Price = undefined). Styrs av dokumenttypens
+   * "visa pris"-inställning (delivery_note) i callern; saknad inställning ⇒ maskera
+   * (säker standard). Priset ingår i kollaps-nyckeln → maskade rader kollapsar på "∅".
+   */
+  maskPrices?: boolean;
 }
 
 function compactWhitespace(s: string): string {
@@ -137,6 +144,7 @@ export async function buildFortnoxLogicalRowsForWorkOrder(
     articleFilter,
     resolveArticleNumber,
     enforceNetZero = false,
+    maskPrices = false,
   } = params;
 
   // ADR v3 (F6): frozenUnitPrice är ett WO-nivå-genomsnitt (totalPrice/totalQty).
@@ -216,6 +224,13 @@ export async function buildFortnoxLogicalRowsForWorkOrder(
         CostCenter: cc,
         Project: proj,
       };
+    }
+
+    // Task #1204 (91): följesedel-maskering — utelämna pris/summa helt. Görs FÖRE
+    // kollaps-nyckeln så maskade rader kollapsar på "∅" och net-0-kontrollen (om
+    // aktiv) trivialt håller (alla priser = 0).
+    if (maskPrices) {
+      chargeRow.Price = undefined;
     }
 
     const collapseEligible = !isFixedPrice;

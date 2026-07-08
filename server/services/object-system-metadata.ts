@@ -59,6 +59,11 @@ export type SystemPositionGroup = {
 // Task #1110: katalognamnet för det återinförda What3words-platsfältet.
 export const WHAT3WORDS_METADATA_NAME = "What3words";
 
+// Task #1204 (66): katalognamnet för "Fastighetsägare" — ett arvbart (icke-system)
+// metadatafält som läses arvs-medvetet ur metadata-katalogen, samma mönster som
+// What3words. Till skillnad från What3words ärvs det nedåt (standardArvs: true).
+export const FASTIGHETSAGARE_METADATA_NAME = "Fastighetsägare";
+
 export type PointedInConcept = {
   id: string;
   name: string;
@@ -161,6 +166,8 @@ export type SystemUnperformedTask = {
 export type ObjectSystemGeneratedMetadata = {
   address: SystemAddressGroup;
   position: SystemPositionGroup;
+  // Task #1204 (66): arvbart fastighetsägare-fält, läst arvs-medvetet ur katalogen.
+  propertyOwner: string | null;
   pointedInConcepts: PointedInConcept[];
   tasksHistory: SystemTaskHistory[];
   tasksFuture: SystemTaskFuture[];
@@ -496,6 +503,18 @@ export async function getObjectSystemGeneratedMetadata(
     what3words,
   };
 
+  // Task #1204 (66): Fastighetsägare läses arvs-medvetet ur metadata-katalogen
+  // (arvbart, manuellt skrivbart). Saknas fältet/raden returneras null.
+  const fastighetsagareRaw = await getMetadataValue(
+    objectId,
+    FASTIGHETSAGARE_METADATA_NAME,
+    tenantId,
+  );
+  const propertyOwner =
+    typeof fastighetsagareRaw === "string" && fastighetsagareRaw.trim()
+      ? fastighetsagareRaw.trim()
+      : null;
+
   const [
     pointedInConcepts,
     tasksHistory,
@@ -539,6 +558,7 @@ export async function getObjectSystemGeneratedMetadata(
   return {
     address,
     position,
+    propertyOwner,
     pointedInConcepts,
     tasksHistory,
     tasksFuture,

@@ -7,6 +7,7 @@ import {
   AlertTriangle,
   Loader2,
   Cog,
+  Building,
   MapPin,
   MapPinned,
   Navigation,
@@ -112,6 +113,7 @@ interface SystemRating {
 interface SystemGeneratedMetadata {
   address: SystemAddressGroup;
   position: SystemPositionGroup;
+  propertyOwner: string | null;
   pointedInConcepts: PointedInConcept[];
   tasksHistory: SystemTaskHistory[];
   tasksFuture: SystemTaskFuture[];
@@ -366,7 +368,7 @@ export function ObjectSystemGeneratedPanel({ objectId }: Props) {
     );
   }
 
-  const { address, position, pointedInConcepts, tasksHistory, tasksFuture, unperformedTasks = [], images, issueReports, ratings } = data;
+  const { address, position, propertyOwner, pointedInConcepts, tasksHistory, tasksFuture, unperformedTasks = [], images, issueReports, ratings } = data;
   const hasAddress = !!(address.gatuadress || address.postnummer || address.ort);
 
   return (
@@ -430,6 +432,15 @@ export function ObjectSystemGeneratedPanel({ objectId }: Props) {
       </Section>
 
       <What3wordsSection objectId={objectId} value={position.what3words} />
+
+      <Section
+        title="Fastighetsägare"
+        icon={<Building className="h-4 w-4" />}
+        testId="system-property-owner"
+        isEmpty={!propertyOwner}
+      >
+        <Field label="Fastighetsägare" value={propertyOwner} testId="field-property-owner" />
+      </Section>
 
       <Section
         title="Inpekade orderkoncept"
