@@ -1,0 +1,470 @@
+{
+  "sessionId": "130f1b7f00",
+  "exportedAt": "2026-07-08T11:19:05.370Z",
+  "summary": "### Key Topics Discussed\n- Syftet med systemet är att producera olika typer av uppgifter, som är informationspaket sammanställda från objektets metadata och orderkonceptet eller uppgiftsskaparunderlag.\n- Systemet kan skapa uppgifter automatiskt via uppgiftsmotorer.\n- Informationspaketet är tydligt sammanställt och inkluderar artikeluppgifter samt resuppgifter (reserutter).\n- Artikeluppgifter, som kärnträtt och klistermärken, kan plockas in i orderkonceptet med en angiven kvantitet.\n- Reseuppgifter skapas av systemets motor för att planera resor och behöver tilldelas ett artikelnummer. Tidsuppskattningar för resuppgifter uppdateras dynamiskt.\n- Systemet skapar även uppgifter för att plocka fysiska artiklar.\n- Uppgifter baseras på den fysiska lagerplatsen för artikeln eller var en nyckel ska lämnas tillbaka på en lagerplats.\n- Replit måste styra att nya artiklar tilldelas förbestämda artikelnummer.\n- Varje skapad uppgift får ett unikt uppgiftsnummer baserat på den tillhörande artikeln.\n- Grunduppgifter för varje artikel innefattar beskrivning, artikeltyp, leverantörsnummer, ikon, aktivstatus, enhet (t.ex. kilometer, stycke, timmar), priser och produktionstider.\n- Systemet hanterar faktureringsparametrar, där det kan vara möjligt att fakturera en annan kvantitet än den som faktiskt tagits (t.ex. vid misslyckanden). Dessutom ska kostnader och priser för en artikel alltid finnas med.\n- Om en order har fastpris, ska enskilda artikelrader inte faktureras.\n- Artiklar kan ingå i ett fast abonnemang och ska då kvitteras utifrån abonnemangsmotorn.\n- Olika artikeltyper specificeras, såsom resa eller tjänst, tillsammans med utförandekod.\n- Systemet ska spåra vilken typ av tid som genereras av en artikel (t.g. produktionstid för kärltvätt, restid för resor, eller egentid för nattvila).\n- Det finns en \"styrning\" som anger hur en artikel har skapats (systemskapad, orderkoncept, snabborder osv.).\n- Artiklar har ett referensnummer som länkar tillbaka till källan för att spåra hur de skapats.\n- En artikel tillhör ett specifikt objekt eller kluster av objekt (t.ex. ett soprum på en adress).\n- Artiklar är kopplade till kunder och hur kunden har styrts, antingen från orderkonceptet eller via metadata.\n- Systemet hanterar leveranstider baserat på önskade tider från orderkonceptet, manuellt satta fönster (hårda/mjuka) eller via metadata. Dessa tidsfönster kan vara positiva eller negativa, vilket indikerar lämpliga tider att komma eller när man inte kan komma, till exempel för att det är stängt.\n- För repeterande uppgifter (abonnemang) finns ett tidsfönster med start- och slutdatum för upprepning, t.ex. varannan månad.\n- Det finns en tidslogg för uppgifter som tydliggör begärd/önskad leveranstid, planerad/optimerad utförandetid och verklig tid.\n- Tidsmotorn levererar den bästa eller nödvändiga leveranstiden och optimerar denna baserat på vad som behövs, vilket resulterar i den planerade tiden.\n- Tidsplanering sker i två steg: grovplanering med breda tidsfönster (t.ex. \"januari, februari\") och finplanering där den exakta leveranstiden fastställs.\n- Tidsbotten föreslår det första lämpliga datumet inom definierade grova tidsfönster och eventuella begränsningar (t.ex. endast torsdagar).\n- Geografisk information för metadata kan vara olika typer, från gatuadresser till X och Y-koordinater, samt hyllplatser för varor. Den geografiska motorn måste hantera varierande platser som parker eller köpcentra.\n- Den geografiska motorn beräknar den lämpliga platsen och systemet stödjer två platser: en för fordonets navigering (med vägar) och en sekundär plats där objektet finns. Dessa är ofta samma, men systemet hanterar båda.\n- En \"ihopklumpningsmotor\" (motor tre) ska klumpa ihop uppgifter baserat på önskad leveranstid, geografisk plats och uppgiftstyp. Den levererar klumpar benämnda med en geografisk adress (t.ex. Storgatan 22 i Sundsvall).\n- Uppgifter på samma gatuadress (t.ex. Storgatan 22) blir en uppgiftsklump, även om de kan ha olika kunder. Affärsmässiga regler behövs för att definiera radien runt en plats för ihopklumpning (t.ex. 30 meter).\n- Funktionen för ihopklumpning ska inte klumpa ihop uppgifter som finns på olika sidor av gatan, t.ex. Storgatan 22 och Storgatan 25, även om de är inom angiven radie, för att underlätta för fordon att positionera sig korrekt.\n- Vissa uppgifter, som aviseringsuppgifter, har ingen geografisk plats.\n- Fakturering involverar kund- och fakturareferenser (på huvud- och radnivå baserat på metadatavärden).\n- Systemet ska hantera ihopklumpning av fakturor, delfakturering, veckofakturor eller månadsfakturor.\n- Val av faktureringsmodell, såsom fast, efterfakturering, rörlig eller löpande räkning, samt prislista.\n- Fakturabroms innebär att fakturan hamnar i ett attestläge innan den skickas till ekonomisystemet.\n- Fakturamotorn (motor fem) har till uppgift att klumpa ihop alla fakturerbara uppgifter kopplade till ett objekt och en kund på samma faktura, med samma referenser. Denna motor väntar tills alla relaterade processer är klara innan den agerar.\n- Inställda resor eller nattvila ska inte faktureras.\n- Uppgifters status anges i ett blått fält. Denna status inkluderar vilken tidstyp uppgiften har (t.ex. resa, produktion), där tid för en vara i sig inte finns men för plockuppgiften.\n- Uppgifter skapas via en order, uppgiftsskapare, orderkonceptet eller snabborder och hamnar i en \"masterlista\" över alla utförda och kommande uppgifter med önskade leveranstider via leveranstidsmotorn.\n- Den geografiska motorn optimerar positioner för ihopklumpning av uppgifter baserat på plats och tid.\n- Tidskod för vara/administration, som anger typ av tid (delvis dubblerad information från artikeln).\n- Möjlighet att ändra status på tider för export till lönesystem.\n- Affärsmässig status relaterad till ordererkännande och följesedel.\n- Systemet måste avgränsa vilka uppgifter som får ordererkännande (endast de från orderkonceptet, inte systemgenererade som inställd resa eller nattvila).\n- Dokumentation av prismaskering på orderdokument är en övervägning.\n- Ett grönt fält är reserverat för tilldelning av uppgiften, vilket inkluderar team, kostnadsställe och projekt (baserat på teamets grunduppgifter).\n- En loggfunktion kan behövas för att spåra förändringar i teamtilldelning och andra fält, då en uppgift kan omfördelas mellan team.\n- Systemet ska kunna hantera status för uppgifter som blir överbokade, det vill säga att de är tidplanerade men det finns inte tillräcklig tid för att utföra arbetet såvida inte andra jobb uteblir eller går snabbare.\n- Systemet ska kunna exportera en lista över uppgifter baserat på olika filter (orderreferens, utförare, kund, adress, objekt) för efterkalkylering och avstämning med kund.\n- Alla data kopplade till en uppgift eller artikel i informationspaketet är på radnivå.\n- En artikel kan ha ett eller flera metadatafält, som ett foto eller en status för behållarens skick. Dessa metadatafält genereras av uppgifter och kommer att lagras i ett sidoregister, men länkas till det objekt som uppgiften hör till.\n- Exempel på uppgifter i informationspaketet inkluderar:\n    - Resa till ett objekt\n    - Tvättuppgift (tjänst)\n    - Leverans av vara (dekal)\n    - Plockuppgift för dekalen\n    - Offsetuppgift för avisering (\"vi är på väg\")\n    - Utförarens egen tid (t.ex. nattvila)\n- Alla dessa uppgifter har en tid då de ska utföras, och vissa (som resor) är dynamiska med en planerad start- och sluttid.\n- Utförarens app kommer att visa dynamiska, verkliga värden baserat på hur utföraren tar an sig olika uppgiftsklumpar.\n- Utföraren avslutar en uppgift på en plats och får sedan information om nästa uppgift, inklusive restid till nästa plats (t.ex. 15 minuter till gatuadressen).\n- Vid ankomst till en uppgiftsklump (t.ex. Storgatan 22) kommer utföraren att arbeta en uppskattad tid (t.ex. 30 minuter), kvittera alla uppgifter, uppdatera metadata och markera jobbet som klart.\n- Efter att hela jobbet är utfört kommer utföraren att se nästa uppgift (t.ex. resa till en adress 50 meter bort) och därefter en eventuell planerad nattvila på ett hotell när arbetsdagen är slut.\n- Systemet kommer att kalkylera om teamplaneringen och alla dynamiska tider i listan om en utförare bestämmer sig för att utföra ett jobb från en kommande dag.\n- Systemet innefattar elva motorer; den geografiska motorn levererar navigationsplats samt objektets faktiska plats, och utförandetidsmotorn hittar den bästa möjliga tiden att utföra en uppgift.\n- Ruttenmotorn (nummer fyra) beräknar kontinuerligt restiden mellan uppgifter eller platser och används i \"ruttoptimering light\" för att planera jobb baserat på närmsta resväg.\n- Abonnemangsmotorn hanterar uppgifter som ingår i abonnemang och ska faktureras med fasta månadsavgifter.\n- Beroendeuppgiftsmotorn hanterar beroenden mellan uppgifter, till exempel att en aviseringsuppgift måste utföras ett visst antal timmar innan huvuduppgiften, och varnar om detta inte följs.\n- Motorn för att hantera fysiska artiklar har till uppgift att skapa uppgifter när en artikel behöver förflyttas från en lagerplats till en geografisk plats, t.ex. en nyckel eller ett klistermärke från Aria vägen 2 till Storgatan 22.\n- Motor nio spårar önskad leveranstid mot verklig leveranstid, vilket är kritiskt på grund av dynamiken med resor och tidsmotorns förslag.\n- En ny uppgiftsmotor (motor tio) bevakar objekt eller kluster av objekt och specifika metadatafält (t.ex. felanmälan eller rating). När ett villkor uppstår (t.ex. felanmälan eller dåligt resultat) skapar motorn en eller flera uppgifter/artiklar. Denna motor är enkel, den skapar inte uppgifter hela tiden på samma värde, men kan skapa nya vid ny rating eller köras regelbundet.\n- Motor elva är en metadatamotor som styr metadata mot ett visst objekt, gärna baserat på en Q-kod eller liknande. Genom att skanna t.ex. en QR-kod kan användare fylla i ett formulär på sin telefon för att betygsätta något (t.ex. rengöring eller lukt) på en femgradig skala. Detta värde kopplas sedan till objektet, och uppgiftsmotor tio kan skapa en uppgift baserat på denna information.\n- Vikten av noggrannhet och logik i informationspaketet och uppgifterna betonas, då det är avgörande för produktionssystemets funktion.\n- Filformat för utdata: Utdata kan innehålla både text och bild, samt Excel- eller PDF-filer. Det kan även vara lämpligt att dela upp informationen och skicka en separat fil för motorerna.\n- Utvecklingsprocess för motorer: Det föreslås en process där kraven för varje motor (totalt elva) beskrivs och bekräftas. Efter bekräftelse skapas en \"task\" (arbetsuppgift) för att producera motorn, men kodningen påbörjas inte förrän alla elva tasks är godkända.\n\n### Decisions Made\n- Nya artiklar ska tilldelas förbestämda artikelnummer av Replit.\n- Om en order har fastpris, ska enskilda artikelrader inte faktureras.\n- Systemet ska endast skicka ordererkännanden för uppgifter som härstammar från orderkonceptet, inte för systemgenererade uppgifter som inställda resor eller nattvila.\n- Utvecklingsprocessen för systemets elva motorer ska involvera en stegvis godkännandeprocess: först beskrivs och bekräftas kraven för varje motor, därefter skapas en arbetsuppgift (\"task\") för den motorn, och kodning inleds först när alla elva tasks är godkända.\n\n### Action Items\n\n### Important Points & Insights\n- Artiklar kan ha flera typer av genererad tid (produktionstid, restid, egentid).\n- Tidsplanering sker i två steg: grovplanering och finplanering.\n- Den geografiska motorn hanterar två platser: navigationsplats och objektets faktiska plats.\n- \"Ihopklumpningsmotorn\" ska klumpa ihop uppgifter baserat på leveranstid och geografisk plats, med affärsmässiga regler för att definiera radius men undvika att klumpa ihop uppgifter på olika sidor av gatan.\n- Fakturamotorn avgör vilka uppgifter som är fakturerbara och grupperar dem på fakturahuvudet.\n- Tidsstatus för en uppgift indikerar dess typ (resa, jobb, produktion). En varas plockuppgift har en tidsstatus.\n- Tidernas status är viktig för export till lönesystem.\n- Tilldelningen av uppgifter, inklusive team, kostnadsställe och projekt, sker i ett dedikerat grönt fält och baseras på teamets grunduppgifter. En uppgift kan tilldelas ett annat team eller sakna tilldelat team.\n- Systemet bör logga förändringar i uppgiftstilldelningar.\n- Överbokningsstatus: Om planerade jobb överstiger tillgänglig tid (t.ex. 9,5 timmar på en 8-timmarsdag), får de sista jobben status som planerade men inte garanterat utförda. Förutsättningen för att de ska utföras är att något annat jobb faller bort eller går snabbare.\n- Systemet ska tillhandahålla en radlista med många kolumner som kan exporteras för efterkalkylering eller avstämning med kund.\n- All data för en uppgift eller artikel, inklusive metadatafält, ska presenteras på radnivå i listan.\n- Metadata som genereras av uppgifter (t.ex. efterfoton eller behållarstatus) kommer att pushas till det relevanta objektet och lagras i ett sidoregister.\n- Utföraren interagerar med systemet via sin app för att hantera uppgifter dynamiskt baserat på realtidsförlopp, inklusive restider och uppgiftsavslut. Detta inkluderar möjligheten att dra in jobb från kommande dagar, vilket omkalkylerar teamplaneringen och dynamiska tider.\n- Nattvila hanteras som en separat, oklumpad uppgift. Ruttenmotorn beräknar restiden från nattvilans adress till det första jobbet.\n- Systemet har en \"ruttoptimering light\"-funktion som kontinuerligt beräknar restider mellan jobb baserat på närmsta resväg.\n- Abonnemangsmotorn håller reda på abonnemangsuppgifter för att sedan fakturera fasta månadsavgifter.\n- Beroendeuppgiftsmotorn hanterar och övervakar beroenden mellan uppgifter, t.ex. aviseringsuppgifter som måste utföras innan huvuduppgifter, och varnar vid missade beroenden.\n- Motorn för fysiska artiklar ansvarar för att skapa uppgifter för att förflytta artiklar mellan lagerplatser och geografiska platser, exempelvis en nyckel från Aria vägen 2. Dessa uppgifter klumpas då ihop med andra uppgifter vid samma geografiska plats.\n- Systemet ska varna om det blir omöjligt att utföra planerade uppgifter med önskade leveransdatum på grund av t.ex. att arbetsveckan tar slut, för att möjliggöra omförhandling av leveranstider med kunden.\n- Den nya metadatamotorn (motor elva) har i uppgift att styra in metadata mot ett visst objekt, med inmatning via t.ex. QR-koder. Denna metadata kan sedan trigga uppgiftsmotor tio för att skapa nya uppgifter.\n- Det unika och mycket viktiga med produktionssystemet är informationspaketet och uppgifterna; otydlighet här kommer att påverka systemets effektivitet negativt.\n\n### Open Questions/Pending Items\n- Utvecklingsloggen ska inkludera att uppgiftsmotorn (motor tio) kan köras med viss regelbundenhet för att skapa nya uppgifter baserat på uppdaterade villkor.",
+  "conversation": [],
+  "transcripts": [
+    {
+      "text": "Ett vå- Ja, syftet med hela det här systemet är då att egentligen producera uppgifter av olika typer. Och en uppgift är ju då ett informationspaket sammanställt med mängder utav uppgifter, dels ifrån objektet och objektets metadata och dels ifrån orderkonceptet eller nåt annat order- eller uppgiftsskaparunderlag då som s-, som, som skapar en uppg",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "ift. Alternativt att det är en systemskapad uppgift då som har skapats av systemet utav sig självt eller nån utav då de här uppgiftsmotorerna. Och tittar man på det här informationspaketet så har vi nu försökt att sammanställa det så tydligt som det bara går då. Och det första gröna fältet är då artikeluppgifter, det vill säga saker som hör till en artikel. Eh, och en logik här som Replit måste reda ut då det är att...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "En artikel, till exempel kärnträtt, är ju, eller ett, en vara som ett klistermärke då är ju en artikel som, som man då, eh, plockar in i orderkonceptet eller snabba orden och, och säger att man då ska leverera tio eller göra tio tvättar. Men det kommer också då vara andra uppgifter här, bland annat uppgifter som skapas, eh, s-s-s... Resuppgifter, alltså reserutter. Och en sån uppgift ska ju då skapas utav systemets motor för att...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Planeringen av resan från en plats till en annan då. Eh, och då måste den ju liksom tilldelas ett, ett artikelnummer då. Och sen så två, så behöver den ju då uppdateras då med... Det är ju en dynamisk uppgift då. Eller den är planerad att det kanske tar femton minuter att göra, men det kan ta både fjorton minuter och tjugo minuter. Så att systemet måste liksom hantera då den och uppdatera den typen av uppgift. En annan systemskapad uppgift är ju då att plocka fysiska artiklar då. Och en sån...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Ja. Uppgift baseras ju då på var den fysiska lagerplatsen för artikeln är eller var en nyckel då som ska lämnas tillbaka på en, eh, på en, på en artikel eller på en lagerplats är någonstans då. Och det innebär ju då att, eh, den skapar då den uppgiften då. Och här behöver vi ha en styrning i Replit också att när Replit skapar en ny sån här artikel eller en sån här artikel måste vi ju ha en, en, eh, förbestämt vad, vad den artikeln har för artikelnummer.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och vartefter artiklar då skapas eller rättare sagt uppgifter skapas så får ju då varje, eh, artikel ett unikt uppgiftsnummer då, eh, som baseras på den artikel som den tillhör då.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. Och baserat på den informationen så kommer då alla grunduppgifterna, så vilken beskrivning har den? Vilken, vilken, eh, typ av artikel är det? Vilket leverantörsnummer är det? Vilken ikon ska artikeln ha? Eh, är den aktiv? Är den inte aktiv? Är den... Vilken enhet är det? Kilometer? Är det stycke eller är det timmar? Och så kommer priser och produktionstider är tillämpligt och antal styrningar ifrån orderkoncept och ifrån objekt.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och utifrån utförare. Och sen så kommer det parametrar som vad som ska faktureras, eh, versus det som man har tagit om det är tillämpligt. Man kan till exempel ta tio skruvar men kanske bara fakturera fem därför man har misslyckats då. Och det är ju, det är ju då en, en parameter. Sen kommer det då in sådana här saker som om det är fastpris. En order kan ju ha ett fastpris och det innebär ju då att enskilda artikelrader inte ska faktureras.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Men då har jag ändå en, ett, ett pris och en kostnad. Så att, eh, det ska ju så att säga få, eh, finna, eh, komma med då. Eh, sen kan det ju även vara då att en artikel ingår i ett fast abonnemang eller inte, och då ska ju den då kvitteras utifrån abonnemangsmotorn. Och sen avslutas det här lite granna då med vilka typ, vilken typ av artikel det är, om det är en resa eller om det är en tjänst, eh, om det är en, vilken utförandekod det är-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm ...och så vidare. Och vilken typ av tid som den här skapar då. Så en artikel att tvätta ett kärl skapar då produktionstid och en artikel som är att resa till platsen skapar då restid mellan jobb och en uppgift att ha nattvila över natten i Sundsvall och inte producera, det är då egentid nattvila då. Så att man på det här viset kan följa upp",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "vad det är för en sorts tid som har producerats då. Eh, sss-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Sen kommer då lite ha-fasthakningslogik och så. Och så kommer det ett-- Det-- Och det här är gr-- det gröna då som, som, som hänger ihop med, med, med artikeln då i väldigt hög grad. Sen kommer det ett rött fält och det är då det som vi kallar styrning då. Eh, alltså vad-- Hur har artikeln skapats? Är det en systemskapad artikel eller kommer den från en-- ett orderkoncept eller kommer det från en snabborder eller kommer det från, eh, nå-nå-något annat då? Och där finns det ju någon form av referensnummer som man hela tiden-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm ...då kan då länka sig tillbaka till källan för att spåra då en, en, en artikel, hur den har blivit till då. Eh, och sen anges det då hur den har skapats då, om den kommer från ett orderkoncept och då finns ju då numret där. Och sen så kommer den då vad den-- va-- vilket objekt den tillhör då. Så, så är den påhakad på ett soprum på Storgatan 22, ja, då, då tillhör den ju liksom det objektet då eller den-- det klustret av objekt då. Eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och sen är det då hur den har hakat fast och vilken kund det är och hur kunden har styrts då, om det kommer från orderkonceptet eller om det är, är styrt ifrån metadatan. Det är det röda fältet. Sen kommer det då ett blått fält och det är då leveranstider. Och det är då önskade leveranstider från orderkonceptet eller från hårda eller mjuka fönster som man manuellt har satt dit. Eller om man...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Har då pekat in ett metadatafält som begär då, eh, det hära. Sen så finns det ju då ett tidsfönster om det här är en repeterande uppgift, det vill säga ett abonnemang, så kommer ju då den här, eh, artikeln då att upprepa sig själv, till exempel varannan månad eller januari, februari, mars, april eller, eller vad det nu är då som är angivet då med ett start- och slutdatum. Det finns då tiden där, eller tids... Det blå fältet, tidsuppgifter.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Sen kommer det också då till under tider där då en tidslogg då, där, eh, om man säger satta tider tydliggörs då. Alltså att begärde och önskad leveranstid, det är ju då det som har begärts för den respek-respektive uppgift då. Och sen blir det då planerad eller optimerad utförandetid och sen så blir det då verklig tid då. Eh, och det här kan ju-- Det är ju återigen bara liksom en tidslogg baserat på, eh, det, det är ett lite speciellt fält då, för det här är ju där det, där det är mer tids-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. -blior och de första fälten är ju det som begärs då utifrån, eh, ordern. Eh, sen kommer det, det första gula fältet och det är ju då en tidsmotorns leverans, eh, för då bästa leveranstid eller nödvändig leveranstid. Så tidsmotorn optimerar ju då det här baserat då på vad som behövs då.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och det blir ju då automatiskt då den här planerade tiden då.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Under förutsättning då att den finplaneras baserat på det här då.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Eh, och det är då i finplanering. För i grovplaneringen så kommer ju enbart de...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "De, de grova tidsfönstren att finnas, till exempel att det ska vara leverans januari, februari till exempel då. Och då ser de hur ko... Men, men denna tidsbotten levererar ju också då ett första förslag. Så att om vi har då leverans i, i, i januari, februari, men enbart torsdagar, så kommer ju den då att föreslå då den första lämpliga torsdagen då. Och det här är ju bara att sortera och optimera då, vilket Replik borde vara duktiga på. Sen så kommer det...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Brutfält som är geografi från metadata då. Och det kan ju då vara olika typer av geografier, alltifrån en gatuadress till X och Y-koordinater och en hyllplats för en vara då. Och sen kommer då gult fält här igen och det är då, eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Den geografiska motorn då som beräknar var den lämpliga platsen är. Och notera då att ibland kan då, eh, det bli då en dubbel plats här för att, eh, det finns ju då en plats för att navigera fram med fordonet då, det vill säga där det finns vägar. Och sen så finns det då en sekundär plats där själva, eh, objektet finns. Och ofta är ju det här då exakt samma plats, men systemet för stödar då två platser.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och det kan ju då vara någonting som är inne i en park där man är ute på en gräsmatta. Eller det kan ju vara någonting som är inne i en stor lokal, ett köpcentra då. Så att den här geografiska motorn ska då hantera det här efter bästa förmåga. Sen kommer då den här ihopklumpningsmotorn då, motor tre, och den har ju det till uppgift att baserat på den, eh, önskade leveranstiden och den geografiska platsen för uppgifter så klumpar den ju då ihop så att alla uppgifter-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm ...som är att betrakta på Storgatan 22 blir då ett, en uppgiftsklump.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och oberoende då, i, i de allra flesta fall så kommer det ju förmodligen att vara samma kund på, på de här olika uppgifterna på adressen. Men den ska kunna hantera då att om det är, eh, olika kunder på samma adress eller i, på samma geografiska område. Och det här har vi också gått igenom att det måste finnas då affärsmässiga regler då där man säger att det som är nu på Storgatan 22 är liksom en, en radie runt 30 meter då på det här. Samtidigt finns det, eh, fallgropar med det också då för att när vi står på Storgatan 22-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. Så vill vi ju då inte ha uppgifterna på andra sidan gatan då, eh, som då kanske heter Storgatan 25 då. För att då är vi tvungen då att, att dra så att säga tjälen över gatan då, vilket kanske inte är möjligt. Eh, så den bör då betrakta, eh, är uppgiften knuten till en gataadress som heter 22 och då, eh, inom en 30 meters radius på det, då är det samma uppgift. Men är det nån utav de-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm ...uppgifterna som är knuten till en gataad-- annan gataadress, till exempel 25. Och i Sverige är det på det sättet att jämna gataadresser är på ena sidan av gatan och udda är på de, på den andra sidan av gatan. Och då, då, då kan det ju lätt att skilja på det bara för att man ska då ha fordonet på rätt sida av vägen. Så det är då hopklumpningsmotorn. Eh, och notera också här då att vissa uppgifter har ju då inte, eh, geografiska platser, till exempel en aviseringsuppgift.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. Då blir det bara att hålla reda på när den ska utföras då och att det laddas över till utförarnappen. Sen kommer det ett grått fält och det är då med fakturering att göra. Och grunden där är ju kunden och sen är det då fakturarreferenser på fakturahuvudet, två stycken fält. Och så är det då fakturarreferenser på radnivå om man önskar ha det då baserat på metadatavärden. Och sen är det då ihopklumpning utav fakturor då om man tillåter det.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Delfakturering eller om man kräver veckofaktura eller månadsfaktura och vilken faktureringsmodell man ska ha då, om det är då fast fakturering eller efterfakturering, rörligt eller löpande räkning då. Och vilken prislista då fakturans priser ska baseras på. Och avslutningsvis så anger man där då om faktureringen ska vara...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Eh, låst på att alla uppgifter på beställningen eller det som är kopplat till den här fakturan då utifrån ordervärd konceptet ska vara klart eller om man tillåter delfakturering då per dag eller vecka eller månad. Eh, och sen har vi det vi kallar fakturabroms och det innebär då att fakturan hamnar i ett attestläge innan det ska skickas i väg då till, eh, ekonomisystemet. Och även här då så är det då en motor, den som vi kallar, eh, fakturamotorn nummer fem som då har till uppgift...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Att klumpa ihop då alla uppgifter som nummer ett ska faktureras då. En inställd resa ska ju till exempel inte faktureras eller en nattvila ska inte faktureras, utan de uppgifter då som ska faktureras och som är kopplat till objektet och kunden klum-- Och kan då klumpas ihop på samma faktura, det vill säga med, eh, på fakturahuvudet då med samma, eh, referenser blir då en faktura. Och så får den då hålla reda på vilka som då kan faktureras omedelbart eller-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. -och måste väntas till att allt är slut för då. Och det gör då den här motor nummer fem. Sen kommer det ett blått fält och det är då, eh, anger då statusen på uppgiften. Och, eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Flödet här har vi gått igenom, va, men, eh, uppgiften skapas ju då via, eh, en order eller en uppgiftsskapare, orderkonceptet eller snabboorder eller något annat då. Och då hamnar den ju i den här master... Eh, vi ska ha ett bra namn för det, men alltså i den, den gigantiska listan då som består utav alla utförda uppgifter och alla kommande uppgifter med då önskade leveranstider utifrån då leveranstidsmotorns, eh, arbete och-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm ...geografiska positioner utifrån då den här geografiska motorns optimering och ihopklumpning enligt då den här o-ihopklumpningsmotorn då som klumpar ihop objek-- eh, uppgifter på samma plats och, eh, av samma typ och på samma tidpunkt då i, i en kl-- ihopklumpning eller en, en lista på flera uppgifter då. Eh, och sen så kommer det då, eh, en punkt till här under tider och det är egentligen då, eh, eller under, under, under status",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": ". Mm. Det är alltså vilken status tiden har då och det är samma då som, som tidstyp för uppgiften då. Men att är det en uppgift då, en resa, så är det en resa medan jobb och är det en produktion så är det en produktion. Är det en vara, ja, den har ju inte riktigt någon tids... För en vara tar ingen tid direkt då, men att plocka en vara tar tid och då är det ju plockuppgiften då som har en, en, eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "En tidskod för vara administration. Så här anges det då vilken typ av, av tid det är då. Jag ska säga, det är, det är lite dubbelt då för det är samma som, som finns under, under artikeln då. Viktigt också här då att man, eh, bör kunna liksom då ändra status på, på, eh, på tider. För det här ska ju då exporteras sen till en, till ett lönesystem delvis. Eh, sen har vi den affärsmässiga statusen, eh, och det är ju huruvida då ett ordererkännande, eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och en följesedel då, eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Skickas ur systemet då. Och här blir det ju också för systemet att hålla reda på att den kan ju inte hålla på. Den måste dra liksom en gräns då. Så normalt sett en inställd resa, till exempel en nattvila, det kan den inte skicka någon ordererkännande på för att även om man kan tycka då att det tillhör samma, samma objekt så, så, så går det ju en gräns där. Utan den skickar bara ordererkännande på det, de uppgifter som finns på orderkonceptet och inte på de andra uppgifterna som skapas runtikring då. Det kan ju också vara ett...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Ett, ett, ett lock då utav en vara och det blir då inte kanske nätpo... Eh, det blir inte nätpoordererkännande då.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Sen är det en, eh, liten grej här, huruvida det då, eh, priset ska vara maskerat eller inte på, på, på orderdokumenten då. Eh, och avslutningsvis så finns ett grönt fält som då är tilldelningen då. Och där, eh, loggas det då vilket team som då har fått uppgiften och, eh, vilket kostnadsställe, eh, då den här uppgiften ska bokföras på och vilket projekt den ska... Och det är baserat då på team.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Teamets grunduppgifter. Och här, eh, kan det också då behövas finnas då någon form av logg då för att man kan ju tänka sig då både för det här gröna fältet och för andra fält här kan det ju då bytas. Att jag menar, en uppgift kan ju bli tilldelad ett team för att sen då studsa tillbaka då och, eh, bli, eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Ja, bli, bli, bli tilldelad ett annat team då eller bli av. Inte ha något tilldelat team då. Och en grej till som inte har någon, eh, tidstyp här då, men som vi bör ta-- beakta då, det är då baserat på om den är tilldelad eller inte, om den är...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Eh, och det är ju-- Men det är ju egentligen som en, en-- Vi har också statusen då på, på det. Men om, om den är överbokad då för att, eh, ett jobb kan ju då så att säga bli planerat, tidplanerat, men det finns inte tid för att göra jobbet under förutsättningen att inte annat jobb uteblir då eller går fortare. Eh, men med de här parametrarna så, så går det nog att, eh, att, eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Att få med det. Och det blir ju lite granna utav, eh, rutt- optimeringen på finplaneringen då på veckan som får se då att om man, om man nu lägger ut tio jobb på en dag då så består av åtta timmar säger vi då. Och de här tio jobben är inklusive resa då är nio och en halv timme. Så innebär det ju då att, eh, kanske de två sista jobben inte har... Alltså de har status att de är planerade, men de har inte status att de, de ligger i, i, i-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. Överbokningsstatus då. Så förutsättningen för att de ska bli gjorda är ju då att någonting faller ifrån eller att det går fortare då.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och då bör systemet hantera det. Eh, ytterligare då en sammanfattning. Den, den här datalistan nu som består då utav... Det, det är också, ska vi säga, ett förslag. Ser Replit flera statusfält så får Replit gärna komplettera den här då. Men grunden med den här listan är ju att det här är det informationspaket som är grunden egentligen till VELA-systemet och grunden för den här masterplaneringen då över utförda och kommande uppgifter och deras status. Och att det här också då följer med då och blir, eh, förfinas då i finplaneringen.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och att man ur systemet kan när som helst tanka ur den här listan då baserat på en viss order, referens eller en viss utförare eller en viss kund eller en viss adress eller ett visst objekt. Och baserat på det så kan vi ju då snabbt få ut en lista för att göra en efterkalkyl eller stämma av med kunden då vad som är gjort eller inte gjort eller vad som ska göras eller vad som, som, som är, är gjort då. Så där är den här radlistan som består då utav ganska många kolumner. Och...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Sedan så vill vi då noter-- Ja, notera här då att alla de här uppgifterna, datat, kopplat till en uppgift eller en artikel då i informationspaketet är då på radnivå. Det vill säga, eh, ja, data sida vid sida och en enda rad för, för, för varje uppgift då. Förutom då vissa metadatafält då. För logiken i det här är ju att för varje uppgift så kan man ju för information eller för att lämna information, eh, koppla in då i-- Till uppgiften.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Ja. I den här artikeln då ett eller flera metadatafält. Eh, det kan till exempel vara att uppgifter ge-genererar ett metadatafält som är ett foto eller det genererar-- Ett metadatafält som genererar att behållaren är okej eller inte då. Och de här kommer ju då att hamna på en, en, en sido-- Ett sidoregister då. Så att för till exempel uppgiften i exemplet här 12:35 då som är tvätt utav en behållare, har vi då länkat på ett efterfoto här då som genererar en metadata med ett efterfoto-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. Och kanske en kontroll ja eller nej att behållaren är i, i gott skick då. Då kommer den metadatan då att pushas in naturligtvis på det objekt som uppgiften hör till. Men den metadatan kommer då att ligga utanför den här listan då. Mm. Eh, logiskt då.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och där har vi den övre delen utav den här filen då som består utav informationspaketet då med exempel då. Och de exempel som jag valt att ta med, det är då en... Exempel på en, en, en resa, eh, till ett objekt. Det finns en tvättuppgift, alltså en vanlig tjänst. Det finns en leverans utav en, en vara, en dekal och det finns då en plockuppgift för den dekalen. Och det finns en offsetuppgift i form då av avisering att vi är på väg.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. Att vi är på väg dit, eh, som ligger som en uppgift. Och det finns ett exempel på utförarens egen tid och i det här fallet en nattvila som är inbokad då med, med, med plats. Och gemensamt för alla de här uppgifterna är ju då att de har en, eh, en tid, det vill säga när de ska utföras eller när de rullar på. Vissa kommer ju att vara dynamiska som resan då. Den har en plan att det kanske tar femton minuter med start klockan tio och, och tio noll fem och så ska det sluta femton minuter senare. Men alla...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Allting är ju en planering och ett dynamiskt verkligt värde då baserat på hur utföraren jackar in i olika uppgiftsklumpar då på, på sin utförandeapp. Så att han kommer ju då att vara på ett ställe och så kommer han att avsluta den uppgiften där. Och sen kommer han att se då att nu har jag en uppgift då att åka ungefär femton minuter till Storgatan 22 i exemplet här. På Storgatan 22 kommer han att jobba kanske i trettio minuter med det, det som...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. Ska göras där och så kvitterar han alla de här uppgifterna, uppdaterar de metadata som, som då ska uppdateras. Och när hela jobbet är utfört så kvitterar han att jobbet är klart och då kommer han då att se att ja, nu har jag nästa uppgift och det är att jag då ska resa till, eh, en, en adress femtio meter längre fram och så utför han den. Och när den är utförd så kommer han att se att ja, nu är min arbetsdag, eh, planerad slut och det innebär att jag då åker till min nattvila på ett hotell, eh, som också finns anläggt-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm ...då på den geografiska platsen för nattvilan. Alternativt då att han bestämmer sig för att nej, det är så bra väder och bra form, så han drar in ett jobb från dagen därpå då. Mm. Det vill säga att det är en onsdag här nu och det har gått bra så att han, han, han vill hålla på fram till klockan sex och nu är klockan fem och han känner ja, men nu tar jag och drar in då de två jobben som också är i samma stad då på, på, på tisdagen säger vi här då. Så, och då kommer det då att kalkylera om hela den här teamplaneringen då-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm ...och alla de här dynamiska tiderna i den här listan. Och avslutningsvis på den här då så finns det numera elva stycken uppgiv-- Eller, eh, motorer då. Vi har den geografiska motorn som har till enda uppgift att leverera den geografiska platsen för navigeringen dit fordonet ska åka och den geografiska platsen där objektet finns. Och sen så finns det utförandetidsmotorn då som har till enda uppgift att försöka reda ut närmsta bästa möjliga tid att utföra den här uppgiften-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm ...baserat då på önskad leveransperiod och positiva eller negativa tidsfönster, hårda eller mjuka tidsfönster, det vill säga tider som det är lämpligt att komma eller inte komma och le-- Tider som vi inte får eller kan komma på grund av att det till exempel är stängt eller inte då. Och så har vi klumpningsmotorn nummer tre som har till uppgift att klumpa ihop alla uppgifter då som finns på samma plats och av samma tid och av samma typ då. Och den har till enda uppgift här i livet då att-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm ...att leverera de här klumparna då som... Och klumpen kommer ju då att benämnas med en geografisk adress, till exempel Storgatan 22 i Sundsvall då. Och sen på den navigeringspunkten, då ska det ju då sen finnas flera uppgifter, flera objekt, eh, men man kan hantera det från en framkörning och ett stopp då. Och sen har vi nummer fyra, ruttmotorn då. Den har till uppgift att hela tiden försöka då beräkna fram hur lång tid tar det att åka ifrån den här uppgiften eller den här-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm ...eh, hopklumpade platsen- Ja ...eh, eller den andra k-- eh, eller den kända adressen- Ja ...för den uppgift som jag gör nu då. Så har jag en nattdriva så är inte det en op-- hopklumpad, eller en hopklumpad uppgift, utan det är att jag har nattdriva på, eh, eh, Strandgatan 28- Ja, men- ...och då vet ju systemet att jag har nattdriva där och det innebär ju då att då ska den här ruttmotorn då hålla reda på då och räkna ut att, eh, jag behöver arton minuter att ta mig från den adressen till det första jobbet-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm ...och då levererar den in den planen då och baserat på den närmsta resvägen då där. Och det är också grunden till den här ruttoptimering light då som vi har i systemet, där man lägger ut jobben och så räknar hela tiden systemet då. Ja, här har du ett jobb på Storgatan 22 och nästa jobb är på Storgatan 28. Och då ser den att det tar fem minuter att ta sig mellan dem där och det är två kilometer eller vad det då kan vara. Eh, sen har vi då abonnemangsmotorn. Det-- Den är inte med i matrisen här",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": ". Men den har en liknande uppgift att hålla reda på uppgifter då som ingår i abonnemang och som ska faktureras med fasta månadsavgifter enligt då den regeln och den planen. Och den ligger ju också då i loggen för systemet då att ta fram det. Sen har vi beroendeuppgiftsmotorn. Den har sin till enda uppgift att hålla reda på, i det här fallet till exempel då att aviseringsuppgiften måste då utföras om det nu är tre timmar innan huvuduppgiften ska utföras då. Och om man då inte utför den innan, då, då, då blir den rödmarkerad och då varnar",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "systemet då att nu, nu, nu, nu håller du på och glömmer en sak då. Och samma sak är ju då beroendeuppgiften att man ska plocka klistermärket då på den geografiska platsen, eh, för att kunna ha det med sig då när man kommer till kundens, kundens... Och så har vi motorn för att hantera fysiska artiklar då. Den är ju lite närbesläktad med bero-beroendemotorn, men den har då till uppgift att konstatera här att jag behöver en nyckel eller ett klistermärke på Storgatan 22, men klistermärket har en lagerplats på Aria vägen 2 i Bjeasta. Och då har den här till uppgift då att skapa uppgifter.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Den med den geografiska positionen Aria vägen 2 i Bjeasta då. Så att den beroendeuppgiften skapas och naturligtvis att den blir utförd då när den här utföraren, eh, passerar Bjeasta. Vad... Och, och uppgiften kommer ju att ligga som vilken uppgift som helst och den kommer ju då att klumpa ihop sig med andra uppgifter, eh, i Bjeasta. Till exempel att tvätta bilen eller vad det då kan vara då. Och då kommer ju planeraren då att kunna ta den klumpen som har med Aria vägen 2 och lägga ut den då på samma sätt som tidigare då.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Eh, sen har vi då, eh, motor nio som har till uppgift att hålla reda på önskad leveranstid mot verklig leveranstid. Eh, det är möjligt att den här ingår på något vis i de andra, men det är så viktigt det här med att klara leveranstiderna och det är så mycket dynamik här med resor och, och, eh, tidsmotorn här då som föreslår en tid och verklig tid. Så att den här motorn, motor nummer nio då, den håller hela tiden reda på då hur ligger vi till mot den önskade leveranstiden. Och sen när",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "vi- Mm ...utifrån en affärsmässig regel så måste den börja varna då att om vi har önskemål om att vi har jobb som ska slutföras då senast den tjugoandra juli och vi då börjar att ligga i ett läge där då den tjugoandra juli att det är omöjligt att utföra de här uppgifterna för arbetsveckan tar slut. Då bör den här motorn då börja flagga för det så att vi har möjlighet att avisera kunden och omförhandla leveranstiderna.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och sen har vi motor nummer tio då. Det är en specialare. Det är en uppgiftsmotor som bevakar ett visst pekat objekt eller kluster då, alltså grupp av objekt. Och så tittar den efter ett visst metadatafält, till exempel en felanmälan eller en rating. Och när det här då ett villkor uppstår här, till exempel att det finns en felanmälan eller, eh, att det, det är dåligt resultat, då skapar den en uppgift. Det vill säga den skapar en eller flera artiklar då-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm ...som, som, som, eh, kommer då på den här stora masterlistan som man då får hantera som ett kragomål till exempel eller, eller, eh, en klapp på axeln för dem som har utfört det då om det är bra, eh, rating på, på uppdraget då. Men den är, den är en väldigt enkel motor. Den, den tittar på objekt och den tittar på det meta-- ett eller flera metadatafält. Den har ett villkor och är det någonting som uppnår det villkoret, då skapar den en uppgift.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Eh, och, eh, den här kan inte, inte skapa liksom uppgifter hela tiden, utan när den har skapat en uppgift på det värdet då så, så, så är ju det kört då. Men kommer det då en ny rating, ja, då får den väl då skapa en ny uppgift och där eller att man ber att den, att den körs med viss regelbundenhet. Men det här ligger i utveck-- ut-utvecklingsloggen då. Och sen motor nummer elva då som var lite ny här, det är då en m-m-metadatamotor som har till enda uppgift då att styra in metadata mot ett visst objekt då, gärna baserat på ett-- en Q-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Ja. -kod då eller liknande då. Så att man blippar QR-koden och så får man upp ett formulär i sin telefon och så får man till exempel, eh, tala om hur man upplever att rengöringen i rummet är och sen re-rejtar man den på en femgradig skala och så trycker man enter och då torskas då det värdet in på det objektet då. Och då får då den till exempel en rating hur rent det är eller hur illa det luktar då på noll till fem. Och då har den informationen kommit in på objektet och det innebär då också att man kan då gå in och titta.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Ja. Då får man ju veta vad folk har tyckt, eh, om det. Och man kan då ha, eh, en uppgiftsmotor i tian där då som sammanställer det här eller skapar då en uppgift på det. Så det var slut då. Då, eh, eh, hoppas jag att jag har redogjort för det här. Det här-- Det måste betonas att det här är alltså otroligt viktigt för det här är det unika i hela det här produktionssystemet. Då blir det röra i det här informationspaketet och de här uppgifterna, då kommer det inte att bli så bra. Så-- Men eftersom det är strikt logiskt och egentligen strikt-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. -eh, register, eh, hantering så borde det inte vara något problem att logiskt bygga upp det här via Replit då. Och sen så fokuserar vi på de här elva motorerna då och trimmar in dem då så de levererar rätt tilläggsuppgifter då, optimerade uppgifter för, för, eh, de här uppgiftspaketen då.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Vad efter det här? Och kommer den där filen?",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Oj, jag vet inte om man ska ha den som bild, men den är- Nej, det kommer att bli både text och bild. Jag kollar nu vad du vill ha. Och det är tydligt när det ska vara bild och när det ska vara Excel-filer eller PDF-filer. Ja, det man möjligtvis skulle kunna göra är att man delar upp den då och, och skickar in en fil för de här motorerna. Ja, det-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Precis det jag skulle säga. Utan att utifrån den beskrivningen, hur vi-- Som vi jobbade precis just nu då. Där kommer vi jobba helgen efter på ett lite annorlunda sätt. Utan vad är det vi vill? Ja, vi har elva motorer. Ja. Ja. Och då ska vi beskriva bara, det här vill jag rätt att du förbereder dig på. Vi ska ha elva motorer som ska göra här i, i, i vår, ja, eh, det här då. Eh, och sen be- bekräftar man det bara. Och sen så skickar man in motorrätt och så för man diskussionen-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. Med, med, med den att motorrätt bekräfta det här och det här vill du att ska göras och bekräfta. Och när vi tycker då att motorrätt har fattat det vill vi vara okej, säger vi. Då skapar du en task, en arbetsuppgift för att producera det här. Ja. Skapa tasken. Och vi har godkänt att han skapar tasken, men vi har inte börjat koda. Nej. Nej, men vi har godkänt det. Sen tar vi motor nummer två, gör samma sak. Motor nummer tre, gör samma sak. Motor nummer fyra, gör samma sak. Och till sist har vi elva tasks. Eh, och då kan jag säga till systemet att nu kan du börja skapa de här.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och då är det såhär finurligt i systemet. Tidigare var det ju så att då kunde han bara ta en task i taget. Nu kan han ta fl-flera tasks parallellt om han kan göra det i tabellerna. Han kan inte göra saker som ska vara i samma tabell, då måste han ta eftersom. Mm. Men då kan han till exempel kanske göra fem utav de här tasken parallellt. Mm. Och de andra fem eller sex då blir eftersom. Eh, så, så det är så som kommer liksom att vara, vara. Men, eh... Och de här motorerna ser jag ju då som att vi, de kommer ju då kunna upp-- bli förbättrade då med AI-stöd. Oh ja, oh ja, oh ja. Men känns det okej för dig?",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    }
+  ]
+}
