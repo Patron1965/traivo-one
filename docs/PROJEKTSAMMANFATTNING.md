@@ -1,10 +1,11 @@
-# Plannix – Sammanställning av alla projekttasks
+# Traivo – Sammanställning av alla projekttasks
 
 _Senast uppdaterad: 2026-04-20_
 
 Det här dokumentet är en tematisk översikt över alla tasks (#1–#169) som
-hittills planerats eller utförts i Plannix-projektet (tidigare Traivo,
-ursprungligen Nordnav One). Status motsvarar läget i projekttasklistan
+hittills planerats eller utförts i Traivo-projektet (ursprungligen Nordnav
+One; kort omdöpt till Plannix i april 2026, sedan återfört till Traivo).
+Status motsvarar läget i projekttasklistan
 just nu.
 
 **Status-förkortningar**
@@ -20,7 +21,7 @@ just nu.
 | # | Titel | Status |
 |---|-------|--------|
 | #16 | Rebranding: Nordnav One → Traivo | ✅ |
-| #152 | Byt namn från Traivo till Plannix | ✅ |
+| #152 | Byt namn från Traivo till Plannix (ångrad — återförd till Traivo) | ✅ |
 | #18 | Transparent logga – ta bort bakgrund programmatiskt | 🟡 |
 | #25 | Tenant-terminologi – branschanpassat språk | ✅ |
 | #27 | Kom igång-guide för pilotkund | ✅ |
@@ -256,7 +257,7 @@ just nu.
 | # | Vad det handlar om | Varför det är kvar |
 |---|--------------------|--------------------|
 | #17 | Refaktor av `routes.ts` (~19 850 rader) till modulära routerfiler | Stort men inte blockerande – bättre att göra när nästa större backend-ändring ändå krävs |
-| #18 | Programmatiskt göra Plannix-loggan transparent | Estetiskt, väntar på beslut om slutgiltig logga |
+| #18 | Programmatiskt göra Traivo-loggan transparent | Estetiskt, väntar på beslut om slutgiltig logga |
 | #19 | Ta bort kvarvarande mock-data, använd riktig API-data överallt | Småfix, beror på vilka vyer som fortfarande har platshållare |
 | #20 | Ersätt `any` i TS med riktiga interfaces | Kvalitetsförbättring, görs gradvis |
 | #21 | Global error middleware med standardiserat svarsformat | Behövs när #17 görs för att inte dubbelarbeta |
