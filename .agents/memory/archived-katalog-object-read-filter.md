@@ -31,3 +31,16 @@ Kontaktinformation → "metadata blandas mellan metadataområden på objektet".
   senare arkiverade typer.
 - Datan som utlöste buggen finns bara i PROD (kinab); dev är ren → fixen syns för PO först
   efter Publish.
+
+## Remediering: flytta orphan-värden istället för att dölja
+Read-filtret DÖLJER bara orphan-värdena. Om värdena är riktiga (t.ex. en bovärd-kontakt)
+vill PO ofta BEHÅLLA dem. Åtgärd = **repoint**: `UPDATE metadata_varden SET
+metadata_katalog_id = <aktiv typ med samma namn>` per objekt/tenant.
+- Ingen kollision så länge objektet saknar en aktiv rad för samma namn (kolla först); annars
+  krockar unik (objekt_id, katalog_id).
+- Repoint flyttar automatiskt värdet till rätt `area` (area bor på katalogtypen, inte på värdet)
+  och nollar `arkiverad`-flaggan — grupperingen i UI följer med utan kodändring.
+- **Prod-mutation-väg:** `executeSql environment:"production"` är READ-ONLY. Datastädning i prod
+  körs via guardat engångsskript mot `PROD_DATABASE_URL` (mönster: `scripts/kinab-reset-*`,
+  `restore-dormant-customer.ts`) — transaktion, dev/prod-spärr (`DATABASE_URL !== PROD_DATABASE_URL`),
+  `CONFIRM`-token, dry-run default, verifiera rowCount===1 per rad. Prod-DB täcks EJ av checkpoints.
