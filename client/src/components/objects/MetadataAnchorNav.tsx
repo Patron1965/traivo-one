@@ -1,7 +1,5 @@
 import { Badge } from "@/components/ui/badge";
 import type { Type } from "lucide-react";
-import { KallaLegend } from "@/lib/metadata-kalla";
-import { MetadataSourceLegend } from "@/components/ObjectMetadataForm";
 
 export interface MetadataNavSection {
   key: string;
@@ -16,7 +14,7 @@ function scrollToAnchor(id: string) {
   if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
-/** Vänsterspaltens sticky navigering över metadata-kroppens sektioner + teckenförklaringar. */
+/** Vänsterspaltens sticky navigering över metadata-kroppens sektioner. */
 export function MetadataAnchorNav({ sections }: { sections: MetadataNavSection[] }) {
   return (
     <nav
@@ -48,11 +46,6 @@ export function MetadataAnchorNav({ sections }: { sections: MetadataNavSection[]
           })}
         </div>
       )}
-
-      <div className="space-y-4 border-t pt-3">
-        <KallaLegend />
-        <MetadataSourceLegend />
-      </div>
     </nav>
   );
 }

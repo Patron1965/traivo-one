@@ -5,11 +5,13 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
-  Layers, AlertTriangle, Cog, Link as LinkIcon, ClipboardList, Calendar, Users,
+  Layers, AlertTriangle, Cog, Link as LinkIcon, ClipboardList, Calendar, Users, Info,
 } from "lucide-react";
-import { KallaBadge } from "@/lib/metadata-kalla";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { KallaBadge, KallaLegend } from "@/lib/metadata-kalla";
 import {
   MetadataAddButton,
+  MetadataSourceLegend,
   type MetadataFormEntry,
   type MetadataFormType,
 } from "@/components/ObjectMetadataForm";
@@ -154,12 +156,31 @@ export function ObjectMetadataBody({
           <h2 className="text-sm font-medium text-muted-foreground">
             {entries.length} metadatafält
           </h2>
-          <MetadataAddButton
-            objectId={objectId}
-            metadataTypes={types}
-            onAdd={onAdd}
-            isPending={isAdding}
-          />
+          <div className="flex items-center gap-2">
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  data-testid="button-metadata-legend"
+                >
+                  <Info className="h-4 w-4 mr-1.5" /> Förklaring
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent align="end" className="w-80 space-y-4">
+                <KallaLegend />
+                <div className="border-t pt-3">
+                  <MetadataSourceLegend />
+                </div>
+              </PopoverContent>
+            </Popover>
+            <MetadataAddButton
+              objectId={objectId}
+              metadataTypes={types}
+              onAdd={onAdd}
+              isPending={isAdding}
+            />
+          </div>
         </div>
 
         {groups.length === 0 && legacyEntries.length === 0 && (
