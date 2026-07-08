@@ -500,6 +500,18 @@ app.patch("/api/mobile/orders/:id/status", isMobileAuthenticated, asyncHandler(a
       }
     }
 
+    // Lagermodell (Motor 8): vid slutförande, stäm av lagerpåverkan för orderns
+    // artikelrader (avdrag av taget/förbrukat, återläggning vid retur). Idempotent
+    // via stock_applied_quantity + best-effort — blockerar aldrig statusbytet.
+    if ((status === 'utford' || status === 'completed') && order.tenantId) {
+      try {
+        const { reconcileWorkOrderStock } = await import("../../services/stock-balance");
+        await reconcileWorkOrderStock(order.tenantId, orderId);
+      } catch (stockErr) {
+        console.error("[stock-balance] reconcile (slutförande) misslyckades:", stockErr);
+      }
+    }
+
     // Ny modell: vid slutförande, skriv tillbaka medskickade "lämna"-värden för
     // konfigurerade leaveMetadataFields (best-effort; blockerar aldrig statusbytet).
     const completedObjectId = updatedOrder?.objectId;

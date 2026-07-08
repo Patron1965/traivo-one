@@ -660,6 +660,11 @@ export const workOrderLines = pgTable("work_order_lines", {
   returnedQuantity: integer("returned_quantity").default(0),
   wasteQuantity: integer("waste_quantity").default(0),
   quantityReconciliationNote: text("quantity_reconciliation_note"),
+  // Lagermodell (Motor 8): netto-förbrukning (taget - retur) som REDAN dragits från
+  // lagersaldot för denna rad. Idempotens-spärr så att om-registrering/omslutförande
+  // bara applicerar DELTAT mot saldot, aldrig hela beloppet på nytt. NULL/0 = inget
+  // draget ännu (expand-contract; artiklar utan lagerplats rör aldrig saldo).
+  stockAppliedQuantity: integer("stock_applied_quantity").default(0),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (table) => [
   index("idx_work_order_lines_work_order_id").on(table.workOrderId),
@@ -694,6 +699,39 @@ export const insertWorkOrderLineQuantityEventSchema = createInsertSchema(workOrd
 });
 export type WorkOrderLineQuantityEvent = typeof workOrderLineQuantityEvents.$inferSelect;
 export type InsertWorkOrderLineQuantityEvent = z.infer<typeof insertWorkOrderLineQuantityEventSchema>;
+
+// === Lagermodell (Motor 8): spårat lagersaldo per artikel + lagerplats ===
+// Auktoritativ saldo-tabell (till skillnad från articles.stockLocations-jsonb där
+// balance var "readonly/beräknat"). Ett saldo per (tenant, artikel, lagerplats).
+// `balance` = antal i lager (st, kan bli negativt vid överuttag → synliggör fel).
+// reorderPoint/safetyStock är valfria per-plats-nivåer; saknas de faller varnings-
+// logiken tillbaka på artikelns egna reorderPoint/safetyStock. Saldot muteras enbart
+// via reconcileWorkOrderLineStock (avdrag vid taget/slutförande, återläggning vid
+// retur) och manuell justering från inköp/planering. Additivt (expand-contract):
+// artiklar utan lagerplats får aldrig någon rad och påverkas aldrig.
+export const stockBalances = pgTable("stock_balances", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
+  articleId: varchar("article_id").references(() => articles.id).notNull(),
+  location: text("location").notNull(),
+  balance: integer("balance").default(0).notNull(),
+  reorderPoint: integer("reorder_point"),
+  safetyStock: integer("safety_stock"),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex("uq_stock_balances_tenant_article_location").on(table.tenantId, table.articleId, table.location),
+  index("idx_stock_balances_tenant").on(table.tenantId),
+  index("idx_stock_balances_article").on(table.articleId),
+]);
+
+export const insertStockBalanceSchema = createInsertSchema(stockBalances).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+export type StockBalance = typeof stockBalances.$inferSelect;
+export type InsertStockBalance = z.infer<typeof insertStockBalanceSchema>;
 
 // Länkning av flera objekt till en arbetsorder
 export const workOrderObjects = pgTable("work_order_objects", {

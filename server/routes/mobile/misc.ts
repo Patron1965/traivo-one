@@ -1167,6 +1167,20 @@ app.post("/api/mobile/tasks/:id/taken-quantity-update", isMobileAuthenticated, a
     }
     await db.insert(workOrderLineQuantityEvents).values(events);
 
+    // Lagermodell (Motor 8): dra taget/förbrukat från lagersaldot (retur läggs
+    // automatiskt tillbaka via netto = taget - retur). Idempotent + best-effort —
+    // får aldrig blockera registreringen. No-op om artikeln saknar lagerplats.
+    let stockSignal: { balance: number; effectiveReorderPoint: number | null; isLow: boolean } | null = null;
+    if (article.stockLocation && article.stockLocation.trim()) {
+      try {
+        const { reconcileWorkOrderLineStock, getStockSignalForArticleLocation } = await import("../../services/stock-balance");
+        await reconcileWorkOrderLineStock(tenantId, line.id);
+        stockSignal = await getStockSignalForArticleLocation(tenantId, article.id, article.stockLocation);
+      } catch (stockErr) {
+        console.error("[stock-balance] reconcile (taken-quantity-update) misslyckades:", stockErr);
+      }
+    }
+
     console.log(`[mobile] Taget antal: line ${line.id} taken=${takenInt} waste=${wasteQty} return=${returnedQty} (billable ${billable}) by ${resourceId}`);
 
     res.json({
@@ -1177,6 +1191,7 @@ app.post("/api/mobile/tasks/:id/taken-quantity-update", isMobileAuthenticated, a
       returnedQuantity: returnedQty,
       quantity: billable,
       quantityReconciliationNote: trimmedNote,
+      stock: stockSignal,
     });
 }));
 
