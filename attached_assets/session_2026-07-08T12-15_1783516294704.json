@@ -1,0 +1,140 @@
+{
+  "sessionId": "15850f553a",
+  "exportedAt": "2026-07-08T12:15:46.493Z",
+  "summary": "### Key Topics Discussed\n- Confirmation of readiness before starting development.\n- Verification of the \"information package\" structure is crucial for accurate task assignment and order processing.\n- The importance of Replit understanding the timing for different engines to deliver their specific outputs within master and detailed planning.\n- Master planning primarily focuses on tasks, potential timings, geographical positions, and execution types, without route optimization details. It is a tool for sorting upcoming and completed tasks, viewing order stock, task types, status, and completed tasks per object.\n- The concept of \"utförandekod\" (execution code) and how planners will assign jobs to specific executors' detailed planning or weekly schedules (168-hour weeks).\n- Clarification that master planning is a \"grobplanering\" (rough planning) and acts as a long to-do list, which requires a naming correction. It serves as the core of the entire operation.\n- The first step involves a filter tool to sort tasks, e.g., by type or district, or to identify tasks requiring customer notification.\n- The work model where tasks from master planning are transferred to a detailed plan, specifically a weekly plan.\n- The detailed planning phase involves combining tasks with the executor team's self-reported availability, including start/end times and breaks (e.g., lunch, night work).\n- Initial agreement to use a \"light\" version of route optimization for placing jobs within the weekly plan.\n- Discussion on how tasks are pushed onto a map for planners/executors to select. The system then calculates travel time between locations, for example, from a night rest location to the first job site, automatically creating a travel task.\n- Example of detailed planning process: Starting a job at Storgatan 22 at 09:30, taking 30 minutes, then moving to Storgatan 28, where the system calculates a 5-minute travel time. This process fills up the week.\n- Rule for preventing overbooked jobs: If a planned work day ends at 16:00 and a job finishing at 15:45 is followed by a 1-hour job, it will be flagged as overbooked for that day.\n- Handling of overbooked jobs: An executor might choose to extend their working hours (e.g., to 19:00 instead of 16:00) to fit in an additional task. If the task still conflicts with their personal time for the day, it will either be moved to the next day (e.g., Tuesday, starting at 07:00) or pushed back to master planning if it cannot be accommodated.\n- Replit needs to understand and create relevant tools to manage task clusters for various execution types.\n\n### Decisions Made\n\n### Action Items\n\n### Important Points & Insights\n- Replit's analysis of the matrix should include supporting systems and registers for different execution types to avoid creating inappropriate time codes.\n\n### Open Questions/Pending Items\n- Replit needs to confirm their thorough understanding of the \"information package.\" This includes all necessary information fields (up to 50 potential fields) and the underlying logic to create these fields. The package facilitates geographical and temporal connections to order concepts (e.g., quick orders) and includes details like quantities and metadata.\n- Replit also needs to confirm their understanding of how these information packages will be delivered and integrated into the master planning and rough planning processes.\n- Once Replit confirms their understanding and delivery capability, development can proceed with the filter tool in master planning, enabling sorting by execution type, customer, geography, etc.\n- Replit needs to understand when different \"engines\" should activate and deliver their respective results to ensure proper integration into the detailed planning, especially considering master planning does not include route optimization (RUT-optimering).\n- The renaming of \"grobplanering\" (rough planning) as it is essentially a long to-do list for the company/user, serving as a master to-do planning system.",
+  "conversation": [],
+  "transcripts": [
+    {
+      "text": "Ja. Jo, innan vi nu sätter i gång och bygger här, så behöver vi få bekräftat nu då att vi verkligen är på bana. Och då vill vi att Replit bekräftar här nu då att den hära...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Informationspaketet som vi kallar det, som består då utav en artikel som kan vara en tjänst eller en vara eller en systemskapad artikel, att den nu har alla då de här informationsfälten och att det finns logik bakom för att skapa de här olika fälten. Det är ju nästan femtio fält som, som då kan innehålla information. Och att det också finns en logik då att när en uppgift då, eh, om...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "...bandas från en artikel, till exempel att tvätta tio kärl, så får då den här artikel då ett uppgiftsnummer då. Och i och med att den har fått ett uppgiftsnummer så har den då den geografiska kopplingen och den har den tidsmässiga kopplingen till orderkonceptet eller snabborder. Den har alla de andra uppgifterna med antal och vilka metadata som ska levereras och lämnas. Och ja, alltså de här upp till femtio olika fältena då som finns i den här matrisen, Excel-matrisen då.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. Och att nu Replit verkligen har förstått det och att leveransen för de här informationspaketen då, uppgifterna, är då på det som vi kallar då den här tidigare grovplaneringen med masterplaneringen då. Att har Replit nu förstått det? Och när vi nu kan börja leverera såna informationspaket så får vi då utveckla, eh, det här filter, eh, verktyget då i masterplaneringen då, där man kan sortera utifrån utförandetyp och utifrån kund och utifrån geografi och så vidare då.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. Med syftet att knuffa in det här i, i då finplaneringen. Eh, det är också väldigt viktigt här att Replit fattar då och ser när de här olika motorerna då ska kicka in och leverera sina saker. För exempelvis då i den stora masterplanen så finns ju då ingen RUT-optimering med. Alltså, de, de uppgifterna för att resa till och från platserna finns inte där. Därför att man vet inte i vilken ordning man ska ta jobben och man vet inte vilka jobb som, som hör ihop med varandra. Så att det...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. Masterplaneringen som finns är enbart uppgifter, eh, på saker och ting som ska göras på, vid olika möjliga tidpunkter och vid, i de allra flesta fall, geografiska positioner och olika uppgifter med o-olika utförandetyper då. Och sen kommer liksom nästa steg. När man sen då tilldelar de här hopklumpade objekt-- Eh, inte objekten utan hopklumpade uppgifterna då utifrån gemensam leveranstid och gemensam, eh, plats och gemensam...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Utförandekod. Då kommer planeraren ändå att knuffa in de här jobben eller pusha in de här jobbena på en utförare och på en utförares finplanering eller veckoschema. Det här är hundra...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Ja, eller hundrasextioåtta timmars... Ja, o-och det, när du säger nu då masterplaneringen, så är-- Motförar det veckoplaneringen? Nej, det gör inte. Det gör inte? Masterplaneringen är gro-- Det är grobplaneringen. Så vi behöver rätta till det där. Ja, ja. Grobplaneringen är ju egentligen en lång to-do-lista. Det är fel ord att kalla det grobplaneringen om det- Ja, så d-d-därför ska den döpas om nu då till... Till, ja, vi får försöka-- Rättvik kanske har något bra förslag, men om vi s-- analyserar vad den är. Jo, den är ju en lång to-do-lista på företagets eller användarens då-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. Alla kommande och utförda uppgifter. Ja, just det. Och den är ett verktyg för att sortera bland de här uppgifterna, för att se hur mycket man har i orderstock, för att se, eh, hur många det är, vilken typ av uppgift, vilken status en uppgift har, vilken, alltså, vilka uppgifter som är utförda på ett objekt och så vidare. Det söker man bara i den här listan. Det är bara en, en lång, lång lista över uppgifter med olika status på. Och, eh, så den är ju liksom en master to-do-planning...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Alltså, det, det är ju hjärtat i hela, hela, hela, hela verksamheten. Och sen kommer vi ju att trimma den där då genom att lägga till olika hjälpmedel då. Men första steget är det här filterverktyget då, där man kan ha olika filter för att till exempel filtera fram alla jobb av en viss typ på ett visst distrikt eller a-alla jobb av en viss typ, till exempel att, eh, avisera kunder på, på, på ett annat, med ett annat filter då.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. Eh, och sen då att vi har liksom arbetsmodellen då, liksom att här finns de här uppgifterna och sen lägger man in dem då på en finplanering. Och finplaneringen i det här fallet då, det är en veckoplan. Och när man har lagt in det på den här veckoplanen så kommer ju de här uppgifterna då att möta andra planer på den veckan. I den bästa av alla världar då så har ju utförarteamet lagt in sina, sin egen tid, det vill säga när de avslutar helg- bilen på måndag morgon och när de påbörjar he-helg-bilen på...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. På, på fredag kväll eller vad man nu väljer. Och när man har luncher och nattbiler under veckan då. Det vill säga om man jobbar, eh, sju till fyra eller om man jobbar sju till åtta och jobbar in. Och det, det styr man där, där då. Och när hela det här sjoket då med uppgifter då har landat på den här, då kommer ju då planeraren och kanske också utföraren då och börja lägga ut de här jobbena på veckan. Och där har vi ju då enats om att vi ska använda inledningsvis då en ruttoptimering light som...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. Bygger då på att den pushar ut alla de här uppgifterna på en karta där de finns. Och sen så plockar planeraren eller utföraren de här. Då kan han ju säga: \"Men jag kommer att åka från söder och så åka si och så åka så första dagen.\" Och då, och då plockar han de tio punkterna då och lägger in på måndagen. Och vartefter han lägger in dem på måndagen så kickar den hära, eh, motorn då som r-r-räknar h-hur lång tid det är det tar att åka från en platsen innan till nästa plats då. Så har",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "man då, eh, lagt in att man har en nattvila i Bjästa fram till klockan sju på måndag morgon. Och så lägger man in då första jobbet då som man tycker då, Storgatan 22 i Sundsvall då. I samma läge då som man drar in den där på måndagen där, då kommer systemet då att skapa en uppgift att resa ifrån Bjästa till Storgatan 22. Säten tar då två och en halv timme.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och det innebär ju då att då kommer man att påbörja arbetet då, eh, vad blir det nu, s-s-s... nio o-o-och trettio säger vi då på Storgatan 22. Och sen är jobbet där då trettio minuter. Så då har man byggt liksom första pusslet då i produktionen. Och sen nästa steg så tar man då nästa jobb, Storgatan 28 kanske, och så kommer den att räkna ut att jag vill ta fem minuter att ta sig dit. Och så bygger man vartefter den här veckan och fyller då sin tid. Sen har vi ju då en sån här regelmässig grej då att om vi på måndagen då har sagt",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "- Mm ...vi börjar klockan sju och så säger vi då att vi slutar klockan fyra då. Det är planerat så. Och sen så har vi då ett jobb som tar slut på Storgatan 32 säger vi då klockan s-- femton och fyrtiofem. Lägger man då in ett jobb då som tar en timme på Hafnersväg eller nåt annat sånt där, en liten bit därifrån då, som tar en timme. Då ko-- Om man lägger det på måndag, då kommer det jobbet då att bli ett ö-överbokat jobb på måndag.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. För då finns det ju inte tid för en timme till. Det fanns ju bara femton minuter. Så då kommer ju den att hamna då på att den, den krockar då med, med egentiden där. Och det som kan hända då då, det är ju att utföraren säger: \"Men det är så... Det, det går så bra det här. Jag vill, jag vill göra det så.\" Så då, då justerar... Om man vill så justerar han då kvällstiden och säger: \"Ja, ja, men jag, jag, jag slutar inte fyra, utan jag, jag kan tänka mig att jobba fram till klockan, klockan nitton\", säger vi då. \"Ja, men då kommer jag att hi-hinna med det jobbet då.\" Och så länge då det jobbet krockar med hans me-- egentid-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och, och på måndag då. Och, och det innebär ju då att om man inte hinner det på måndag då, tack vare att något utav de andra jobben utgår eller går fortare så man kan jobba in den vägen, så kommer ju det här jobbet att, att, att krocka med... Ja, det finns alltså inte arbetstid så det räcker. Och då finns ju två alternativ då. Antingen så flyttar man då med sig jobbet till tisdagen, då man börjar klockan sju, och då kommer det ju då att börja där. Alternativt då att man knuffar tillbaka jobbet till masterplaneringen då och säger att det här jobbet, det, det, det, det, det hands inte med. Och den här logiken-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm ...nu som jag försöker beskriva här, den måste då Replit förstå och skapa då relevanta verktyg så man kan hantera de här uppgifterna och klumparna av, av uppgifter då.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. Och det är också viktigt här nu då att rättvist s-- analysera den här matrisen nu då, så att vi får också med, eh, de här hjälpsystemena då, om man säger så då, som...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och, och, och stödregisterna som, som... Det finns ju olika utförandetyper här nu då. De, de registerna måste vi också sätta upp då så att det inte rättvist system skapar nåt som den tycker då för olika tidskoder.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    }
+  ]
+}
