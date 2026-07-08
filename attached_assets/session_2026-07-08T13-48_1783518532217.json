@@ -1,0 +1,368 @@
+{
+  "sessionId": "2c481b6e6",
+  "exportedAt": "2026-07-08T13:48:38.730Z",
+  "summary": "### Key Topics Discussed\n- Status för informationspaket och validering av fält.\n- Definition av uppgiftsskapande och dess koppling till artiklar, inklusive hantering av systemskapade uppgifter som plockuppgifter.\n- Vikten av en \"motor\" för uppgiftshantering och dess logik för att skapa rätt typ av uppgift baserat på behov.\n- Utvecklingslogg och planering.\n- Hantering av lång uppgiftslista och visning av informationspaket.\n- Förtydligande av den långa uppgiftlistans innehåll och syfte, samt dess hantering av olika uppgiftsstatusar (utförda, finplanerade, oplanerade).\n- Regler för hur långt fram abonnemangsuppgifter ska skapas och visas på uppgiftslistan, och hur det påverkar systemprestanda.\n- Behov av förbättrat filterverktyg för informationspaket, inklusive sökning direkt på kund, alla fält i informationspaketet (t.ex. faktureringstyp, status, geografi, tidpunkt) och specifika parametrar som när, var, hur och utförandekod.\n- Vikten av att inkludera adress och fakturareferens i uppgiftens informationspaket för sökbarhet och identifiering.\n- Utökat filterbehov: Sökning på objektnamn (t.ex. pantrum), förälder i objektkedjor (t.ex. \"Hemköpskedjan Region Syd\") med möjlighet till begränsning i klustret, samt sökning på fakturakund kopplad till uppgifter.\n- Möjligheten att filtrera på uppgiftsstatus för att föra dialog med kund eller internt om läget.\n- Behov av att kunna spara, namnge och hantera filter i ett filterbibliotek, organiserat eventuellt per kund, för effektiv hantering av orderstock och andra listor.\n- Utökade funktioner för filterbiblioteket: möjligheten att styra filter mot kund, team och ekonomisk uppföljning, samt att dela filter personligen, med teamet eller med externa kunder (t.ex. via kundportalen).\n- Synlighet av uppgifter för kunder via kundportalen, inklusive utförda och kommande uppgifter med olika statusar, där endast kostnadsinformation skulle behövas begränsas.\n- Vikten av att kunna maska filterfunktionen och uppgiftslistan utifrån olika användare och kunder.\n- Rutmotorns roll i finplaneringen.\n- Finplaneringens \"veckoplan\" och vikten av en drag-and-drop-funktion för att flytta och ta bort jobb.\n- Hantering av överbokning som en uppgiftsstatus, där uppgifter som överlappar egen tid eller andra uppgifter markeras som överbokade, även om dubbelbokning kan accepteras vid dubbel personal.\n- Att systemet ska varna för tidskrockar mellan uppgifter men inte ta egna beslut om hanteringen.\n- Behov av upprensning av stödregister.\n- Strukturen för menyer, specifikt \"Grunddata\" och \"Admin\", där kunder och objekt administreras under \"Grunddata\" tillsammans med utförare, utrustning, fordon, artiklar, strukturartiklar, leverantörer och prislistor. \"Admin\" hanterar mer grundläggande inställningar som metadata och sidoregister.\n- Integrationer, drift och plattform.\n- Betydelsen av att ha ordning på objekt och metadata som grund för systemet.\n- Hur snabbordern, via orderkonceptet, fungerar under \"Objekt\" och kravet på att välja ett objekt.\n- Flexibilitet i uppgiftsskapande, inklusive när, var, hur en uppgift ska utföras, och att uppgifter ska kunna utföras även utan en tydlig objekt- eller metadatalänk.\n- Typer av uppgifter: reparationer (fordon, soptunna), tvätt, administrativa uppgifter (ringa upp, kontrollera), eller uppgifter för kunden (rating, uppdatera kod).\n\n### Important Points & Insights\n- Det är viktigt att inga fria antaganden görs och att det inte finns några lösa trådar i logiken kring informationspaketet.\n- Alla fält måste vara definerade på rätt sätt och ha rätt källa för att undvika problem.\n- Grundlogiken är att varje uppgift ska bottna i en artikel som definierar allting kring uppgiften.\n- Artikeln definieras i orderkonceptet/snabbordern med klartext för tvätt av kärl etc.\n- En logik måste finnas för systemskapade plocktjänster, där det definieras om det är en plockuppgift från en lagerplats eller en beställningsuppgift om varan inte finns på lager.\n- En central \"motor\" är avgörande för att skapa och leverera förväntade uppgifter, med inbyggd logik för att differentiera mellan olika typer av uppgifter (t.ex. plockuppgifter vs. beställningsuppgifter) baserat på samma grundläggande behov.\n- Den långa uppgiftslistan är inte en orderstock utan en historik över alla skapade uppgifter med varierande statusar (framtida, finplanerade, fakturerade, omöjliga att utföra, etc.). Systemet måste förstå dessa olika statusar, inklusive möjligheten att se utförda, finplanerade och oplanerade uppgifter.\n- Den långa uppgiftslistan, som representerar alla informationspaket, måste ha en mekanism för att visa detaljerad information för varje paket.\n- Arkivering av äldre uppgifter (t.ex. äldre än 1-2 år) kan behövas av tekniska skäl för att hantera listans storlek.\n- Det behövs affärsmässiga regler i företagsinställningarna för att styra hur långt fram i tiden abonnemangsuppgifter ska planeras och visas på uppgiftslistan för att hantera systemets prestanda.\n- Ett filterverktyg med förbättrad layout och funktion, som matchar informationsposterna i informationspaketet (ca 50 fält), är nödvändigt. Det bör inkludera sökning direkt på kund, postnummer, alla fält som finns i informationspaketet (t.ex. faktureringstyp eller status) samt specifika parametrar som \"när\" (tidsoptimering), \"var\" och \"hur\" (utförandekod).\n- Uppgiftens adress och fakturareferens är avgörande för att möjliggöra effektiv sökning och identifiering, särskilt vid kundförfrågningar baserade på referensnummer. Informationspaketet måste tydligt visa relevanta kunddata för att ytterligare förfina sökningar om flera matchande referenser finns.\n- Filtrering baserad på objektnamn (t.ex. \"pantrum\") och förälder i objektkedjor är viktigt, med möjlighet att begränsa sökningen till specifika nivåer i klustret.\n- Grundläggande filtreringsfunktioner inkluderar geografi och tidpunkter för att ringa in specifika områden och perioder.\n- Det är viktigt att kunna spara filter med unika namn (t.ex. \"orderstock Sundsvall rullbara kärl\") och att filterbiblioteket kan stödja organisering, exempelvis per kund, för att hantera många sparade filter effektivt.\n- Kundens inloggning i kundportalen bör spegla samma logik för uppgifter och filter som interna användare har, med visning av utförda och kommande uppgifter samt olika statusar, med undantag för kostnadsinformation.\n- Motorn för att leverera tider ska vara byggd och bekräftad redan när den levererar tajming.\n- \"Veckoplanen\" i finplaneringen behöver en drag-and-drop-funktion för att hantera jobb (flytta/tabort).\n- Överbokning ska vara en tydlig status, särskilt när uppgifter överlappar personlig tid eller andra schemalagda uppgifter. Systemet ska varna för tidskrockar.\n- Systemet ska varna för krockar men inte fatta egna beslut om dem.\n- Stödregister behöver rensas upp.\n- Under \"Grunddata\" administreras utförare, utrustning, fordon, artiklar, strukturartiklar, leverantörer och prislistor. \"Admin\" hanterar metadatauppsättningar och sidoregister. Företagsinställningar och användarhantering ligger i \"Admin\".\n- Grunden i hela systemet är att få ordning på objekt och metadata.\n- Det finns en snabborderfunktion som är kopplad till objekt och kräver att ett objekt väljs.\n- Logiken i uppgiftspaketet kräver att en uppgift har ett artikelnummer för att definiera tjänsten som ska utföras, vilket även kan inkludera pris och leveranstider. Uppgiften får sedan ett eget uppgiftsnummer.\n- Uppgiftsskapandet ska vara flexibelt, oavsett om det är kopplat till ett objekt eller en kund, med fokus på \"när, var, hur\" den ska utföras. Geografisk position är inte alltid intressant.\n- Systemet måste kunna hantera \"enkla ordrar\" utan direkta objektkopplingar, där uppgifter utförs baserat på grundläggande instruktioner (t.ex. \"tvätta tio kärl\") snarare än via objekt eller metadata.\n- Uppgiften definieras av den handling som ska utföras, t.ex. reparera ett fordon, en soptunna, tvätta en soptunna, eller en administrativ uppgift som att ringa upp eller kontrollera.\n- Systemet ska stödja uppgifter som läggs ut på kunden, t.ex. att bedöma ett uppdrag eller uppdatera en kod.\n\n### Open Questions/Pending Items\n- Osäkerhet kring \"åk 495 till fälten\" – vad det innebär och om det är relevant för informationspaketet.\n- Vad händer när en uppgift skapas utanför den definierade artikelkopplingen?\n- Vilket artikelnummer får en systemskapad plocktjänst (t.ex. vid varubehov på objektet) och vad styr detta artikelnummer?\n- Hur den aviserade \"motorn\" för uppgiftsskapande ska utformas och vilken logik som ska styra dess funktion.\n- Behovet av att lösa \"utvecklingsloggen\" är noterad men skjuts upp för tillfället.\n- Hur kunna se informationen i informationspaketet från den långa uppgiftslistan.\n- Hur ska systemet hantera att abonnemang genererar uppgifter långt fram i tiden, och vilka regler ska styra detta, med hänsyn till systemets prestanda? Detta är viktigt för att undvika att systemet saktas ner om man sorterar tusentals uppgifter flera år framåt.\n- Varför \"Filter direkt på kund finns inte som gruppering\" enligt Replit, och hur det nya filterverktyget ska hantera detta för att möjliggöra sökning direkt på kund.\n- Hur filtrering på objektkedjor, inklusive föräldrar som \"Hemköpskedjan Region Syd\", ska implementeras med eventuella begränsningar i höjdled inom klustret.\n- Hur filterbiblioteket ska designas för att effektivt hantera ett stort antal sparade filter, inklusive möjligheten att organisera dem per kund.\n- Hur systemet kommer att stödja filter som är styrda mot kund, team och ekonomisk uppföljning.\n- Detaljer kring hur personliga filter, delade filter (med användare/team) och filter delade med kunder ska implementeras och hanteras, särskilt med tanke på kundportalen.\n- Exakt hur begränsningen av kostnadsinformation för kunder i kundportalen ska implementeras.\n- Hur filterfunktionen och uppgiftslistan kan maskas för olika användare och kunder.\n- Detaljer kring hur ruttmotorn ska integreras i finplaneringen.\n- Hur överbokning ska implementeras som en uppgiftsstatus, särskilt när två uppgifter begärs utföras samtidigt, och hur systemet ska varna för tidskrockar utan att fatta egna beslut.\n- Vilka stödregister som behöver rensas upp och hur detta ska genomföras.\n- De exakta behoven för \"inställningar\" och \"metadata\" i \"Admin\"-menyn. Metadata läggs upp i \"Admin\".\n- Placeringen av metadatalämnaren (push för metadata via utvecklingsloggen) och uppgiftsskaparen utifrån metadata i menysystemet.\n- Detaljer om integrationer, drift och plattform.",
+  "conversation": [],
+  "transcripts": [
+    {
+      "text": "Yes, sir. Ja, det är ju roligt då att vi är på banan och att det mesta...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Är på plats då. Men vi accepterar inte fria antaganden här, utan allting... Det får inte vara några lösa trådar i den här, eh, logiken kring det här informationspaketet då. Men vi kommenterar nu svaren här då. Eh, informationspaketet, eh, som blir då en uppgift, uppges då att den finns.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Eh, åk 495 till fälten, den finns också bakom.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Kan rätt-- lite verifiera det ytterligare så att det inte är bara något antagande här. Alla de här fälten måste finnas och de måste vara, eh, definierade på, på, på, på rätt sätt och har rätt källa då så att det inte blir nån, nån, nåt strul här. En hängande tråd som jag upplever är då när systemet skapar en uppgift. Grundlogiken säger ju då att varje uppgift ska bottna-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm ...i en artikel som ju definierar allting kring uppgiften då. Och det innebär ju då att, eh, med, med det, med det som grund... Grunden är ju då att man har ett orderkoncept eller vi har en snabborder då där man i klartext skriver dit att det ska vara artikel si och så, tvätt av, av, av de här kärlen och, och, och så vidare då. Eh, och då definierar man ju artikeln som sen kommer att bli en uppgift när den får en träff på objektet. Men vad händer då när en...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm ...systemskapad uppgift skapas då? Eh, och då har vi ju då till exempel då en plockuppgift .",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Som skapas då baserat på ett varubehov ute på objektet då. Vilket artikelnummer får då den där plocktjänsten och vad styr det artikelnumret då? Eh, där borde det då finnas en logik då, där, eh, man för plocktjänsten definierar då om det är nu en artikel att man ska plocka en vara på ett la-, en lagerplats eller om det blir en uppgift att man ska beställa en vara, eh, då den inte finns på lager.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Eh, och det innebär att den här motorn då, och vi kanske kommer till det va, men den här motorn då som sköter det här måste då nummer ett fungera och leverera de uppgifter som, som, som då förväntas.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "skapas. Och dessutom måste ju motorn då ha nån form av, av logik då som gör att rätt uppgift skapas för rätt uppgift, så att säga. Är det en uppgift att man ska plocka på ett lager, ja, då är det en form av uppgift. Är det att det skapas en uppgift att man ska beställa hem en sak, ja, då är det en annan typ av uppgift, eh, skapad av samma motor och utifrån samma behov då. Eh, därför blir det väldigt viktigt då att vi har en logik och att vi fördjupar oss i den motorn.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Som en del i utvecklingen utav, utav, eh, utvecklingsloggen där då. Eh, vi behöver kanske inte lösa det där just nu då. Eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Eh, bas- och planeringen...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Eh, den långa uppgiftslistan, eh, som du har hela tiden, planering i-- som andelsnamn då. Eh, där vill jag också understryka då att den här listan i grunden är ju då en lista med hela alla informationspaketen. Och naturligtvis så kan man inte visa alla informationspaketen på en rad på skärmen. Men det är ju väldigt viktigt då att man ska kunna komma in då i det här informationspaketet och kunna se den här informationen i någon...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Form då om man behöver just den informationen. Och, eh, det är också viktigt att man förstår då att det här är inte en, en orderstock heller, utan den här listan kommer ju att innehålla alla typer utav uppgifter som har funnits i s-- skapats i systemet och oavsett om de är-- ligger för ett framtida jobb eller om de är finplanerade och har fått ännu mer detaljerad information på det. Om de har statusen att de är fakturerade, att de-- om de har statusen att de är...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "att de inte går att utföra. Eh, och ja, alltså alla oräkningar, olika alternativ utav statusar av uppgifter och från alltså planerade till på väg att utföras och utförda och fakturerade då. Och vi behöver då, eh, ja, det, det, det är viktigt nu att, att systemet förstår det här. Sen av tekniska skäl kanske man då arkiverar då, eh, uppgifter som är mer än ett-- två år gamla eller något sånt där, så att de inte kommer upp",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "... ...finns fysiskt på den här listan. Det vet inte jag, men det är väl en senare fråga. Och på motsvarande sätt så om du har ett abonnemang då så, så behöver ju... Eh, det kan ju finnas abonnemang som, som rullar på tills vidare och då behöver ju så att säga listan då ha, ha visst regelverk att den kanske jobbar då de två år-- rullande åren framåt då liksom för att den inte ska skapa liksom tvättuppdrag hundra år framåt i tiden då. Eh, så där behöver vi då ha, eh, affärsmässiga regler som ju kommer in...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. På företagsinställningarna då, hur långt fram man då ska, eh, se automatiskt hur mycket som är planerat eller som den då visar för att spara kraft. Alternativt att den planerar ut på den här listan. Eh, det får väl också Replit avgöra då. Det kanske är fullt möjligt att ha. Om vi har nu tvätten på Storgatan 22 och så säger vi att det är ett abonnemang som då ska pågå trettio år framåt i tiden och det är två gånger per år, ska det ändå skapa de, eh, två uppgifterna per år då och trettio år framåt i tiden och de ligger där? Det, det kan inte jag-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Ja ...göra, men det är viktigt att vi tar ställning så att inte det segar ner systemet då. Att man... Att det inte går att bläddra i dagens lista därför man sorterar tusentals uppgifter fem år framåt i tiden. Eh, nästa sak är då, eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Filterverktyget då. Och den måste ha en klar förbättring, både i layout och funktion då, och att den matchas emot då alla de här, eh, informationsposterna i informationspaketet då. Och att man, eh, kan söka... Jag förstår till exempel inte hur Replit resonerar då när man säger: \"Filter direkt på kund finns inte som gruppering.\" Eh, det jag vill säga är ju att det här filtret ska...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Kunna söka på alla fält som finns i informationspaketet. Så vill vi ha alla uppgifter som ska, som faktureras med veckofaktura, ja, då ska vi kunna filtrera fram dem. Eh, eventuellt då utifrån status, vilka som ligger i pipelinen och vilka som är utförda, vilken kund de tillhör eller vilket postnummer de tillhör. Så det här filtret behöver verkligen vässas till och vara logiskt uppbyggt. Och då kommer det ju att visa sig då att det finns vissa saker...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. Som är mest intressant. Och, eh, jag kan ju dra dem redan nu då. Det är ju liksom när, var, hur då? Vilken utförandekod är det? Det vill säga, hur ska uppgiften utföras? När ska uppgiften utföras utifrån då tidsoptimeringen? Är det imorgon eller är det, eh, har vi en möjlighet att göra det en månad framåt i tiden? Och...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Vart ska uppgiften utföras? Alltså, vilken adress är det på uppgiften? Och vid sidan av det här då, så kommer ju då andra logiska referensnummer till då. Eh, det ena är ju då naturligtvis, eh, vilken kund det är på objektet eller vilken referens det är på... Fel om mig, jag sa objektet nu. Jag menar naturligtvis uppgiften. Vilken referens, vilken fakturareferens är det på, eh, en enskild uppgift? Och på det viset kommer du ju då kunna söka fram-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm ...om kunden säger: \"Jo, men jag har en beställning här med referensnummer 2230\". Ja, då kommer jag ju kunna gå in där och så söker jag då på alla uppgifter som har fakturarese-referens 2230 och då kommer jag ju då få fram de, dem. Eh, är, är, är systemet väldigt fullt så kanske jag får då fram flera sådana för 2230 är ju kanske en vanlig sitt-sittarkombination då. Men då är det ju väldigt viktigt i informationspaketet då att man ser då vilken, till exempel, vilken kund det är då. Eller att jag kan lägga till en parameter till vilken är kundens-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm ...beställningsreferens och det är Anna som har beställt den. Så Anna och, eh, 2230 då. Alternativt att jag söker på objekt...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och får då ett objektnamn, eh, och hittar där och så jag söker på pantrum eller jag söker på, på, på, eh... Och här är en liten slamkrypare då. Om man, om man tänker sig då i, eh, de här objektkedjorna då så kan det vara på det viset att man söker då på, eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Hemköpskedjan Region Syd för att se vad som har hänt där. Då vill jag ju liksom då få fram alla jobb som är länkade till föräldern i Hemköpskedjan Region Syd då. Eh, och där är det också möjligt att filtret ska ha nån form av begränsning också då i, om man säger höjdled i, i, i, i klustret då. Men det kommer många gånger att, att funka på det viset. Sen ska jag naturligtvis kunna söka på fakturakund då som är kopplad till de här uppgifterna. Och en mycket, mycket viktig del då är att kunna, eh, söka då på...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Status på uppgiften så att jag kan se då utifrån kunden vilka uppgifter som är utförda, vilka som, som är finplanerade och vilka som inte är planerade ännu då. Så att jag utifrån det kan föra en dialog, antingen internt eller med kunden då över hur, hur läget ser ut. Och vid sidan om de här basala grundfiltreringsfunktionerna då, då, då finns ju alltså geografi och, och tidpunkter så man kan ringa in ett geografiskt område och en tidsmässig, eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Spando på det här. Så måste det finnas ett fördjupat filter där jag i princip då kan gå in och söka på varje enskilt fildi-- Fi-- Varje enskilt fält i den här femtio, eh, postsinformationspaketet då.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och det sista viktiga då när det gäller filterverktyget och s-- För att kunna jobba effektivt med det här så behöver man då ha ett litet register över sparade filter. Så att om jag vill skapa ett filter för att se hur orderstocken ser ut i Sundsvall utifrån ett postnummerområde och en viss utförandetål, så kan jag döpa den då till filtret, eh, ett filter som heter, eh, orderstock Sundsvall, eh, rullbara kärl säger vi. Och vill jag ha ett annat filter som tittar på, eh, på, på orderstocken-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm ...totalt eller det som är planerat, tidsplanerat eller nåt sånt, så kan jag ändå skapa och döpa då de titlarna, eh, efter det då. Med tanke på att det kan bli ganska många filter så kan det också vara idé då att de här fil-- filterbiblioteken dels supportar att man kan lägga filter utifrån kund...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Eh, filter som är, är, är styrda mot kund. Om en viss kund vill ha en viss form av rapport och man kan ha filterstyrda mot team och man kan ha f-f-filterstyrda utifrån ekonomisk uppföljning och så där. Man kan skapa och gruppera de här efter varandra. Och sen vore det också väldigt bra då om systemet kunde supporta en logik där man då har personliga filter och man har filter som man delar med resten utav användarna och filter som man kanske också då delar med kunderna då för att...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Min syn på det hela är ju då att i den här logiken med uppgifterna och filtrerna så, så blir det ju då att kundens inloggning, han kommer ju liksom att se sina uppgifter på exakt samma sätt. Så i kundportalen så kommer han då att kunna titta på utförda och, och kommande uppgifter och olika statusar då. Så att i princip, det, det finns liksom inget skäl till liksom att dölja så mycket utav det här då, mer än att i det fallet måste man ju då skilja eller ja, begränsa det lite grann så man till exempel inte ser kostnader som framgår då i, i, i det här inkomst-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. -paketet och interna avvikelser och sånt där. Men det får väl också vara en grej för utvecklingsloggen då att man kan alltså, eh, dels lyfta ut den här filterfunktionen och lyfta ut den här, eh, masterplanerings- eller uppgiftslistan då. Och att man då kan maska den då utifrån olika användare och kunder.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "När motorn levererar tajming, bekräfta och rätt byggd i... Bekräftat och rätt byggd. Den ska alltså finnas redan då, den här motorn som levererar tider.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och ruttmotorn som kickar in i finplaneringen då, den behöver då förstås dykas här då.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och så har vi finplaneringen, veckoplanen. Eh, den är otroligt viktig att den fungerar och att man har då en drag and drop-funktion då. Både att man då kan flytta jobben, men också ta bort jobben från, från veckan då. Och sen har vi det här som vi har pratat om då, överbokningen då, som är ju också en status då. Alltså, om man planerar in fler upp i veckan-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm ...däremot vad man, vad, vad man kan utföra. Eh, så att en uppgift överlappar då företrädesvis, eh, egen tid då, eh, så, så ska det då markeras. Och uppgiften ska också inta då en status som överbokad. Eh, och samma sak borde också logiskt kunna hända då att om det är två stycken uppgifter som begärs ska utföras på samma tid. Då blir ju det också inte en överbokning, men, men man kanske ska förstå att, att det här... Om, om-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm ...om en uppgift, om det står en uppgift att den ska utföras klockan nio och sen så lägger vi en annan uppgift som också ska utföras klockan nio. Då blir det ju en tidsmässig krock där då, eh, som måste varnas för då. För då blir det ju en dubbelbokning då eller överbokning. I min värld så är det samma logiska problem då. Eh, i vissa lägen kan man ju acceptera den här dubbel- eller överbokningen då därför att, eh, det är dubbel personal på, på teamet. Så man kan ju tänka så där den ena, man delar upp sig och så gör den ena den ena uppgiften och den andra gör den andra uppgiften samtidigt.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. Så att systemet ska bara hantera det här och tala om för, för, för, eh, användaren eller utföraren eller planeraren att det är visat här, men inte börja ta några egna beslut då.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Eh, de här stödregisterna behöver rensas upp och, eh, vi kommer ju då i systemets två sista menyer då där, eh, där det då finns ett behov av att, eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Helt enkelt, eh, det som heter grunddata och det som heter admin. Och som jag förstår då, i grunddata så administrerar man kunder och objekten.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och man administrerar då...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Utförare och, eh, utrustning och fordon. Eh, man administrerar artiklar och strukturartiklar. Eh, och man hanterar leverantörer och man hanterar prislistor. Eh, det är väl grunden där och sen är det en massa brus då. Medan man i admin då jobbar med, eh, de mer grundläggande då som, ja, metadatauppsättningar är ju typiskt som de här sidoregistrerna som vi nämner här nu då. De lägger-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. Man då upp i, i, i då admin. Och här först ser vi då, ja, företagsinställning, användarhantering är väl okej. Vad inställningar är, det vet jag inte. Metadata är, eh, vad det är. Eh, metadatalämnare, det vill säga en sån här, eh, den som ligger i utvecklingsloggen då för att pusha in metadata. Kanske ska stå här, det vet jag inte. Eh, sen har vi den här uppgiftsskaparen då utifrån metadata. Ja, den kanske står tillsammans med de här, där man då skapar såna funktioner då.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Sen kommer integrationer, det är väl okej. Eh, och sen lite drift och plattform. Jag har ingenting att säga om, om det är. Men vi, vi behöver liksom få... Grunden i hela systemet är ju då nummer ett är att man får ordning på objekten och metadatan då. Eh, och...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Eh, nu ligger ju då det under objekt då. Och sen så kommer vi då på ordrar och då har man då orderkonceptet och sen får vi komma in då på den här snabbordern som väl finns delvis här då. Men nu ser jag hur fun-- och den funkar. Eh, där man då kan...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Där det är då ett objekt. Jag ser att här är det också mandatory. Nu har jag spårat ur för övrigt då, men det är, det är att man måste v-v-välja ett, ett objekt här då. Och det är, som jag ser, inte ett...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Ett, eh... Man, man måste kunna skapa en, en, en order även om man inte har ett objekt. Det är inte, det är inte ett krav.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Eh, på något vis, utan...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Logiken måste kunna hantera, och, och det här Anneli har tagit upp, det här är ju då att det faller tillbaka på logiken i det här uppgiftspaketet. Det enda som är kravställt i uppgiftspaketet eller för en uppgift, och det är att den har, den har ett artikelnummer, företagsvis man ser vad det är för då definierar vi tjänsten som vi ska utföra. Vi har möjlighet att lägga på ett pris eller inte ett pris, leveranstider och a- hela den biten. Och sen så kommer uppgiften då att få ett, ett eget uppgiftsnummer då. Sen om den är kopplad...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Ja. Till ett objekt eller om den är kopplad till en kund eller inte. Det är ju i sammanhanget då utifrån Replis perspektiv ointressant då. Det viktigaste är liksom att uppgiften skapas med de premisser som, som, som finns runt kring den. Och det är ju egentligen när, var, hur och när, när ska det här utföras? Vart är det någonstans om det är intressant? Eh, men det är inte alltid intressant att det är en geografisk position och hur, det vill säga, vad är, eh, vad är up",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "pgiften? Vart går uppgiften ut på? Är det att det ska repareras ett fordon eller ska man reparera en soptunna eller tvätta en soptunna? Eller är det bara en administrativ uppgift att man ska ringa upp? Eller är det en uppgift att man ska kontrollera? Eh, det kan vara en uppgift som, som läggs ut på kunden, att kunden får en uppgift att, att rate:a så att säga, eh, uppdraget eller uppdatera en kod. Eh, tänk och utgå från, från flexibilitet i, i det här systemet då. Och...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Om vi också analyserar nu, vad, vad är liksom flaskhalsarna eller vad är de tyngsta bitarna här då? Jo, eh, det är ju...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Vad ska man säga? Artikeln som beskriver vad man ska göra och hela informationspaketet runt omkring den. Och sen så...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "faller ju det här tillbaka då på om det är ett objekt som är kopplat till det här, om det är metadata som är kopplat till det här. Men finns det inte en sån koppling, ja, då ska ju inte uppgiften falla för det då.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Äh, utan då får man ju utföra uppgiften utifrån, ja, man kan säga som ett klassiskt system då att, äh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Konkurrenterna till, till Tr-Tribbo här då, jag menar, de har-- Det är ju system som man bara lägger en order så står det tvätta tio kärl och så åker man förhoppningsvis till rätt ställe och tvättar de där tio kärlarna. Det finns ju ingen koppling till några objekt där, så vi behöver liksom kunna hantera det då. Äh, såna simpla ordrar eller vad man ska kalla det då.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    }
+  ]
+}
