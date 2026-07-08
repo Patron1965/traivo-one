@@ -101,3 +101,4 @@
 - [Nav-omstrukturering 2026-07](nav-restructure-2026-07.md) — Dashboard borttagen; rapporter DOLDA (routes kvar, ersätts av Grovplanering-Excel-export); Ekonomi=Fortnox-meny; AI parkerad för 9-motorer; register duplicerade i Grunddata+Ekonomi.
 - [Systemuppgift roll-badges](task-role-badges.md) — `TaskRoleBadge` är ENDA källan för systemroll-härledning+badge (hämtning/leverans/retur/admin/logistik/avrop); assignments bär bara logisticsRole.
 - ["Plannix" dött namn](naming-plannix-dead.md) — plattform=Traivo (Traivo One), app=Traivo Go; april-2026 Plannix-rebrand reverterad; ignorera stale rebrand-docs; seed.ts rebrandPlannixToKinab = separat tenant-data.
+- [Uppgiftens tidslogg (task_events)](task-event-log.md) — append-only händelselogg per WO; logga bara faktiska diffar via delad service; verklig tidsstämpel = occurredAt; kontraktet läses aldrig omdefinieras.

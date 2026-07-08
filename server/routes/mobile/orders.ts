@@ -17,6 +17,7 @@ import type { Express } from "express";
   import { taskDependencies, objects } from "@shared/schema";
   import { articleHasStockLocation, resolveStockLocation } from "../../services/logistics-task-expansion";
   import { reverseGeocode, buildAddressString } from "../../services/geocoding";
+  import { logWorkOrderTransition } from "../../services/task-event-log";
 
   // Löser effektiv produktionstid (minuter) ur redan hämtade listrader.
   // Prioritet: resurs-specifik (giltig) → generisk lista (giltig) → artikelns
@@ -480,6 +481,22 @@ app.patch("/api/mobile/orders/:id/status", isMobileAuthenticated, asyncHandler(a
     const updatedOrder = await storage.updateWorkOrder(orderId, updateData);
     
     console.log(`[mobile] Order ${orderId} status updated to ${status} by resource ${resourceId}`);
+
+    // Task #1188: uppgiftens tidslogg (append-only). Tenant härleds ur WO:n
+    // (mobil-ytan går utanför tenant-middleware → läs aldrig req.tenantId här).
+    // Best-effort — får aldrig blockera statusbytet.
+    if (updatedOrder && order.tenantId) {
+      try {
+        await logWorkOrderTransition({
+          tenantId: order.tenantId,
+          before: order as Record<string, unknown>,
+          after: updatedOrder as Record<string, unknown>,
+          actor: { type: "resource", id: resourceId ?? null },
+        });
+      } catch (logErr) {
+        console.error(`[task-events] failed to log mobile transition for ${orderId}:`, logErr);
+      }
+    }
 
     // Task #1124: när en projicerad konceptuppgift-WO klarmarkeras i fält, frys
     // informationspaketet + pris och lägg WO:n i fakturakön. Best-effort — får

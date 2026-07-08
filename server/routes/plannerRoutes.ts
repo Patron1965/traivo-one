@@ -13,6 +13,7 @@ import { workSessions, workEntries, equipmentBookings, deviationReports, teamMem
 import { notificationService } from "../notifications";
 import { validateSchedule, type ConstraintContext, type ScheduleMove } from "../planning/constraintEngine";
 import { computeDeliveryRestrictionNotesByObject } from "../services/delivery-restriction-notes";
+import { logWorkOrderTransition } from "../services/task-event-log";
 
 const requirePlannerAccess = requireRole("owner", "admin", "planner");
 
@@ -321,6 +322,19 @@ app.patch("/api/planner/orders/:id/reassign", requireTenantWithFallback, require
 
     const updated = await storage.updateWorkOrder(orderId, { resourceId });
     if (!updated) throw new NotFoundError("Order hittades inte");
+
+    // Task #1188: uppgiftens tidslogg (append-only). Best-effort — en loggmiss
+    // får aldrig blockera ombokningen.
+    try {
+      await logWorkOrderTransition({
+        tenantId,
+        before: existingOrder as Record<string, unknown>,
+        after: updated as Record<string, unknown>,
+        actor: { type: "user", id: (req as any).user?.claims?.sub ?? null },
+      });
+    } catch (logErr) {
+      console.error(`[task-events] failed to log planner reassign for ${orderId}:`, logErr);
+    }
 
     broadcastPlannerEvent({
       type: 'order_reassigned',

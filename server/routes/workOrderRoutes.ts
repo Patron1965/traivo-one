@@ -22,6 +22,7 @@ import { notificationService } from "../notifications";
 import { asyncHandler } from "../asyncHandler";
 import { AppError, NotFoundError, ValidationError, ConflictError, ForbiddenError } from "../errors";
 import { deriveFortnoxCodesWithSourceForWorkOrder } from "../services/fortnox-code-derivation";
+import { logWorkOrderTransition, getTaskEvents } from "../services/task-event-log";
 
 /** Räknar ut outsidePreferredWindow-flaggan + priority utifrån objektets/kundens
  * effektiva leveranspreferens och plannedWindowStart/End. */
@@ -382,6 +383,52 @@ app.get("/api/work-orders/:id/activity", asyncHandler(async (req, res) => {
   }));
 
   res.json({ activity });
+}));
+
+// Task #1188: uppgiftens tidslogg (händelselogg). Append-only, kronologisk lista
+// över statusövergångar och tidsstämplar (önskad→planerad→verklig, studsar,
+// ombokningar). Läser task_events; skriver aldrig.
+app.get("/api/work-orders/:id/timeline", asyncHandler(async (req, res) => {
+  const tenantId = getTenantIdWithFallback(req);
+  let workOrder = await storage.getWorkOrder(req.params.id);
+  if (!workOrder) {
+    const [deleted] = await db.select().from(workOrders).where(eq(workOrders.id, req.params.id));
+    if (deleted) workOrder = deleted;
+  }
+  if (!verifyTenantOwnership(workOrder, tenantId)) throw new NotFoundError("Arbetsorder");
+
+  const events = await getTaskEvents(tenantId, req.params.id);
+
+  // Lös upp användarnamn för user-aktörer i en batch.
+  const userIds = Array.from(new Set(
+    events.filter(e => e.actorType === "user" && e.actorId).map(e => e.actorId as string),
+  ));
+  const userMap = new Map<string, string>();
+  await Promise.all(userIds.map(async (uid) => {
+    const u = await storage.getUser(uid);
+    if (u) {
+      const name = [u.firstName, u.lastName].filter(Boolean).join(" ").trim() || u.email || uid;
+      userMap.set(uid, name);
+    }
+  }));
+
+  const timeline = events.map(e => ({
+    id: e.id,
+    eventType: e.eventType,
+    timeKind: e.timeKind,
+    fromStatus: e.fromStatus,
+    toStatus: e.toStatus,
+    actorType: e.actorType,
+    actorId: e.actorId,
+    actorName: e.actorType === "user"
+      ? (e.actorId ? (userMap.get(e.actorId) ?? "Okänd användare") : "Okänd användare")
+      : e.actorType === "resource" ? "Fältresurs" : "System",
+    detail: e.detail ?? {},
+    occurredAt: e.occurredAt,
+    createdAt: e.createdAt,
+  }));
+
+  res.json({ timeline });
 }));
 
 app.get("/api/work-orders/:id/expand", asyncHandler(async (req, res) => {
@@ -1551,6 +1598,19 @@ app.patch("/api/work-orders/:id", asyncHandler(async (req, res) => {
     }
   } catch (auditErr) {
     console.error(`[work-orders] failed to write update audit log for ${req.params.id}:`, auditErr);
+  }
+
+  // Task #1188: uppgiftens tidslogg (append-only). Best-effort — en loggmiss får
+  // aldrig blockera uppdateringen.
+  try {
+    await logWorkOrderTransition({
+      tenantId,
+      before: existingOrder as Record<string, unknown>,
+      after: workOrder as Record<string, unknown>,
+      actor: { type: "user", id: getRequestUserId(req) },
+    });
+  } catch (logErr) {
+    console.error(`[task-events] failed to log transition for ${req.params.id}:`, logErr);
   }
 
   const newResourceId = workOrder.resourceId;

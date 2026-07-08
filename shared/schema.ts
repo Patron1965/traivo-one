@@ -2500,11 +2500,68 @@ export const auditLogsRelations = relations(auditLogs, ({ one }) => ({
   user: one(users, { fields: [auditLogs.userId], references: [users.id] }),
 }));
 
+// Task #1188: Uppgiftens tidslogg (händelselogg). Append-only per uppgift —
+// varje statusövergång och tidsstämpel (önskad→planerad→verklig, plus studsar
+// grov↔fin och ombokningar) skrivs som en NY rad och skrivs ALDRIG över.
+// Fristående från audit_logs (generisk fält-diff) och additiv/expand-contract:
+// befintliga in-place-fält på work_orders lämnas orörda; detta är en logg vid
+// sidan om. Statusvärdena speglar det låsta kontraktet (deriveUppgiftStatus) —
+// loggen läser kontraktet, den omdefinierar det aldrig.
+export const TASK_EVENT_TYPES = [
+  "status_changed",       // kanonisk uppgiftsstatus ändrad (från→till)
+  "bounce",               // studs grov↔fin (planned_rough ↔ planned_fine)
+  "rescheduled",          // ombokning: schemalagt datum/starttid ändrad
+  "resource_reassigned",  // resurs ombokad
+  "desired_window_set",   // önskad leveranstid satt/ändrad
+  "planned_window_set",   // planerad tid (tidsfönster) satt/ändrad
+  "en_route",             // verklig: på väg (onWayAt) — även mobil "dispatched"
+  "arrived",              // verklig: på plats (onSiteAt)
+  "completed",            // verklig: utförd (completedAt)
+  "impossible",           // verklig: omöjlig att utföra (impossibleAt)
+] as const;
+export type TaskEventType = (typeof TASK_EVENT_TYPES)[number];
+
+// Vilken av tidslinjens tre axlar händelsen hör till.
+export const TASK_EVENT_TIME_KINDS = ["onskad", "planerad", "verklig"] as const;
+export type TaskEventTimeKind = (typeof TASK_EVENT_TIME_KINDS)[number];
+
+export const taskEvents = pgTable("task_events", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
+  workOrderId: varchar("work_order_id").references(() => workOrders.id, { onDelete: "cascade" }).notNull(),
+  // TASK_EVENT_TYPES (otypad text för bakåtkompatibilitet/expand-contract).
+  eventType: text("event_type").notNull(),
+  // TASK_EVENT_TIME_KINDS — vilken tidslinjeaxel (null för rena statusbyten).
+  timeKind: text("time_kind"),
+  // Kanonisk uppgiftsstatus (UPPGIFT_STATUSES) före/efter — endast för status_changed.
+  fromStatus: text("from_status"),
+  toStatus: text("to_status"),
+  // Aktör: user | resource | system.
+  actorType: text("actor_type"),
+  actorId: varchar("actor_id"),
+  // Fri detalj (gammalt/nytt datum, resurs, orsak, m.m.).
+  detail: jsonb("detail").default({}),
+  // När händelsen faktiskt inträffade (kan vara en fångad verklig-tidsstämpel).
+  occurredAt: timestamp("occurred_at").defaultNow().notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_task_events_work_order").on(table.workOrderId, table.occurredAt),
+  index("idx_task_events_tenant").on(table.tenantId),
+]);
+
+export const taskEventsRelations = relations(taskEvents, ({ one }) => ({
+  tenant: one(tenants, { fields: [taskEvents.tenantId], references: [tenants.id] }),
+  workOrder: one(workOrders, { fields: [taskEvents.workOrderId], references: [workOrders.id] }),
+}));
+
 // Insert schemas
 export const insertBrandingTemplateSchema = createInsertSchema(brandingTemplates).omit({ id: true, createdAt: true });
 export const insertTenantBrandingSchema = createInsertSchema(tenantBranding).omit({ id: true, createdAt: true });
 export const insertUserTenantRoleSchema = createInsertSchema(userTenantRoles).omit({ id: true, createdAt: true });
 export const insertAuditLogSchema = createInsertSchema(auditLogs).omit({ id: true, createdAt: true });
+export const insertTaskEventSchema = createInsertSchema(taskEvents)
+  .omit({ id: true, createdAt: true })
+  .extend({ occurredAt: z.coerce.date().optional() });
 
 // Types
 export type BrandingTemplate = typeof brandingTemplates.$inferSelect;
@@ -2515,6 +2572,8 @@ export type UserTenantRole = typeof userTenantRoles.$inferSelect;
 export type InsertUserTenantRole = z.infer<typeof insertUserTenantRoleSchema>;
 export type AuditLog = typeof auditLogs.$inferSelect;
 export type InsertAuditLog = z.infer<typeof insertAuditLogSchema>;
+export type TaskEvent = typeof taskEvents.$inferSelect;
+export type InsertTaskEvent = z.infer<typeof insertTaskEventSchema>;
 
 // Role constants
 export const USER_ROLES = ["owner", "admin", "planner", "technician", "user", "viewer", "customer", "reporter"] as const;

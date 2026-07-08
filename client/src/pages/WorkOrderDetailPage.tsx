@@ -69,6 +69,7 @@ import {
 } from "lucide-react";
 import type { WorkOrder } from "@shared/schema";
 import { getOrderTypeLabel } from "@shared/schema";
+import { UPPGIFT_STATUS_LABELS, type UppgiftStatus } from "@shared/uppgift-contract";
 import { KonteringCard } from "@/components/KonteringCard";
 
 type CancellationInfo = {
@@ -100,6 +101,20 @@ interface ActivityItem {
     reason?: string | null;
   } | null;
   metadata?: Record<string, unknown> | null;
+}
+
+interface TimelineEvent {
+  id: string;
+  eventType: string;
+  timeKind?: string | null;
+  fromStatus?: string | null;
+  toStatus?: string | null;
+  actorType?: string | null;
+  actorId?: string | null;
+  actorName: string;
+  detail?: Record<string, unknown> | null;
+  occurredAt?: string | null;
+  createdAt?: string | null;
 }
 
 interface ExpandPeriod {
@@ -248,6 +263,64 @@ const ACTION_META: Record<string, { label: string; icon: typeof Activity }> = {
   restored: { label: "Order återställd", icon: RotateCcw },
 };
 
+// Task #1188: händelselogg — etikett/ikon per händelsetyp. tone styr färgtoken
+// (theme-tokens only): "muted"=neutralt, "warning"=studs/ombokning, "primary"=verklig.
+const TIMELINE_EVENT_META: Record<string, { label: string; icon: typeof Activity; tone: "muted" | "warning" | "primary" }> = {
+  status_changed: { label: "Status ändrad", icon: ArrowRightLeft, tone: "muted" },
+  bounce: { label: "Studs (grov ↔ fin)", icon: RotateCcw, tone: "warning" },
+  rescheduled: { label: "Ombokad", icon: Calendar, tone: "warning" },
+  resource_reassigned: { label: "Resurs ombokad", icon: Users, tone: "warning" },
+  desired_window_set: { label: "Önskad tid satt", icon: Clock, tone: "muted" },
+  planned_window_set: { label: "Planerad tid satt", icon: Clock, tone: "muted" },
+  en_route: { label: "På väg", icon: Truck, tone: "primary" },
+  arrived: { label: "På plats", icon: MapPin, tone: "primary" },
+  completed: { label: "Utförd", icon: History, tone: "primary" },
+  impossible: { label: "Omöjlig att utföra", icon: AlertTriangle, tone: "warning" },
+};
+
+const TIMELINE_TONE_CLASSES: Record<"muted" | "warning" | "primary", string> = {
+  muted: "bg-muted text-muted-foreground",
+  warning: "bg-warning/15 text-warning",
+  primary: "bg-primary/15 text-primary",
+};
+
+const TIME_KIND_LABELS: Record<string, string> = {
+  onskad: "Önskad",
+  planerad: "Planerad",
+  verklig: "Verklig",
+};
+
+function uppgiftStatusLabel(status?: string | null): string {
+  if (!status) return "—";
+  return UPPGIFT_STATUS_LABELS[status as UppgiftStatus] ?? status;
+}
+
+function fmtDatePart(v: unknown): string {
+  if (v == null || v === "") return "—";
+  const d = new Date(String(v));
+  if (Number.isNaN(d.getTime())) return String(v);
+  return d.toLocaleDateString("sv-SE", { dateStyle: "medium" });
+}
+
+// Kort människoläsbar beskrivning av en händelses detalj (ombokning, studs, m.m.).
+function describeTimelineDetail(ev: TimelineEvent): string | null {
+  const d = (ev.detail ?? {}) as Record<string, any>;
+  switch (ev.eventType) {
+    case "rescheduled": {
+      const from = d.fromDate ? fmtDatePart(d.fromDate) : "—";
+      const to = d.toDate ? fmtDatePart(d.toDate) : "—";
+      const times = (d.fromTime || d.toTime) ? ` (${d.fromTime ?? "—"} → ${d.toTime ?? "—"})` : "";
+      return `${from} → ${to}${times}`;
+    }
+    case "bounce":
+      return `${d.from ?? "—"} → ${d.to ?? "—"}`;
+    case "impossible":
+      return d.reason ? `Orsak: ${d.reason}` : null;
+    default:
+      return null;
+  }
+}
+
 function InfoRow({ label, value, icon: Icon }: { label: string; value: React.ReactNode; icon?: typeof Building2 }) {
   return (
     <div className="flex items-start justify-between gap-3 py-1.5 text-sm">
@@ -285,6 +358,11 @@ export default function WorkOrderDetailPage() {
     enabled: !!workOrderId,
   });
 
+  const { data: timelineData } = useQuery<{ timeline: TimelineEvent[] }>({
+    queryKey: ["/api/work-orders", workOrderId, "timeline"],
+    enabled: !!workOrderId,
+  });
+
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const { user } = useAuth();
@@ -312,6 +390,7 @@ export default function WorkOrderDetailPage() {
     queryClient.invalidateQueries({ queryKey: ["/api/work-orders", workOrderId] });
     queryClient.invalidateQueries({ queryKey: ["/api/work-orders", workOrderId, "expand"] });
     queryClient.invalidateQueries({ queryKey: ["/api/work-orders", workOrderId, "activity"] });
+    queryClient.invalidateQueries({ queryKey: ["/api/work-orders", workOrderId, "timeline"] });
     queryClient.invalidateQueries({ queryKey: ["/api/work-orders"] });
     if (objectId) {
       queryClient.invalidateQueries({ queryKey: ["/api/objects", objectId, "work-orders"] });
@@ -466,6 +545,7 @@ export default function WorkOrderDetailPage() {
   const images = expand?.images ?? [];
   const notes = expand?.notes;
   const activity = activityData?.activity ?? [];
+  const timeline = timelineData?.timeline ?? [];
 
   const objectAddress = order.objectAddress;
 
@@ -1065,6 +1145,64 @@ export default function WorkOrderDetailPage() {
           ) : (
             <p className="text-sm text-muted-foreground" data-testid="empty-activity">
               Ingen registrerad aktivitet ännu. Statusbyten, redigeringar och avbeställningar visas här.
+            </p>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Task #1188: Uppgiftens tidslinje (append-only händelselogg) */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base flex items-center gap-2">
+            <History className="h-4 w-4" /> Tidslinje
+            {timeline.length > 0 && <Badge variant="secondary" className="ml-1 text-xs">{timeline.length}</Badge>}
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {timeline.length > 0 ? (
+            <div className="space-y-4" data-testid="list-timeline">
+              {timeline.map((ev) => {
+                const meta = TIMELINE_EVENT_META[ev.eventType] ?? { label: ev.eventType, icon: Activity, tone: "muted" as const };
+                const Icon = meta.icon;
+                const detail = describeTimelineDetail(ev);
+                return (
+                  <div key={ev.id} className="flex gap-3" data-testid={`timeline-row-${ev.id}`}>
+                    <span className={`flex h-7 w-7 items-center justify-center rounded-full shrink-0 ${TIMELINE_TONE_CLASSES[meta.tone]}`}>
+                      <Icon className="h-3.5 w-3.5" />
+                    </span>
+                    <div className="min-w-0 flex-1 space-y-1 pb-1">
+                      <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5">
+                        <span className="text-sm font-medium flex items-center gap-1.5">
+                          {meta.label}
+                          {ev.timeKind && TIME_KIND_LABELS[ev.timeKind] && (
+                            <Badge variant="outline" className="text-[10px] font-normal">{TIME_KIND_LABELS[ev.timeKind]}</Badge>
+                          )}
+                        </span>
+                        <span className="text-xs text-muted-foreground" data-testid={`timeline-time-${ev.id}`}>
+                          {fmtDateTime(ev.occurredAt)}
+                        </span>
+                      </div>
+                      <div className="text-xs text-muted-foreground" data-testid={`timeline-actor-${ev.id}`}>
+                        {ev.actorName}
+                      </div>
+                      {ev.eventType === "status_changed" && (
+                        <div className="text-sm">
+                          {uppgiftStatusLabel(ev.fromStatus)}{" "}
+                          <span className="text-muted-foreground">→</span>{" "}
+                          <span className="font-medium">{uppgiftStatusLabel(ev.toStatus)}</span>
+                        </div>
+                      )}
+                      {detail && (
+                        <div className="text-sm" data-testid={`timeline-detail-${ev.id}`}>{detail}</div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground" data-testid="empty-timeline">
+              Ingen tidslinje ännu. Statusövergångar och tidsstämplar (önskad → planerad → verklig), studsar och ombokningar loggas här efter hand.
             </p>
           )}
         </CardContent>
