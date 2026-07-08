@@ -1,0 +1,20 @@
+{
+  "sessionId": "76cd8ef0a",
+  "exportedAt": "2026-07-08T17:32:49.075Z",
+  "summary": "### Key Topics Discussed\n- Förverkligande av fordonsadresser.\n- Skillnaden mellan standardadress och fördjupad adress för fordonstransporter.\n\n### Decisions Made\n- Standardadressen används för att navigera fordonet till en körbar plats (väg, infart).\n- Fördjupad adress används om en specifik position inne i en byggnad eller icke körbart område behövs, exempelvis i ett köpcentrum eller på specifik våning.\n\n### Important Points & Insights\n- Båda adresstyperna inkluderar gatuadress, longitud/latitud och eventuellt W3W-position.\n- Den fördjupade adressen kan kompletteras med mer detaljerad information som våningsplan (t.ex. \"tredje våningen\").",
+  "conversation": [],
+  "transcripts": [
+    {
+      "text": "Ja, f-f-fordonsadress, vad vill du? Jo, förtydliga adresserna då. Det här är inte mer komplicerat än att det är två stycken positioner. Den ena positionen som vi kan kalla då är standardadressen, är då det som man navigerar fram fordonet då till. Vanligtvis då där det finns en väg eller åtminstone att det går att köra fram. Och den andra adressen, om den behövs då, är alltså en fördjupad adress",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "eh, som kanske då anger då en position inne där det inte är körbart eller att det är inne i en fastighet, ett större körs-köpcentrum e-eller liknande då. Och grunden i det här är ju då att det finns en, eh, i båda fallen en gataadress och så finns det då en, en, en longitud och latitud och kanske då en position enligt W3 Worlds då. Och ett komplement då, särskilt på alternativ nummer två då, att man kan beskriva då att det här är på tredje våningen eller eh, om det finns någon annan beskrivning vad det är, block...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    }
+  ]
+}
