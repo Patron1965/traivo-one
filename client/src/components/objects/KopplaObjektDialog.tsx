@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -65,6 +65,9 @@ export function KopplaObjektDialog({
   const [selected, setSelected] = useState<ObjectParentSearchHit | null>(null);
   const [newName, setNewName] = useState("");
   const [newType, setNewType] = useState("");
+  // Kom ihåg ett redan skapat objekt så ett nytt försök efter ett kopplingsfel
+  // återanvänder samma objekt i stället för att skapa en dubblett.
+  const createdIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     const t = setTimeout(() => setDebounced(search), 250);
@@ -79,6 +82,7 @@ export function KopplaObjektDialog({
       setSelected(null);
       setNewName("");
       setNewType("");
+      createdIdRef.current = null;
     }
   }, [open]);
 
@@ -146,26 +150,33 @@ export function KopplaObjektDialog({
       const name = newName.trim();
       if (!name) return;
       // 1) Skapa objektet (kund-neutralt; endast namn krävs, objectType har default).
-      const createRes = await fetch("/api/objects", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({ name, ...(newType ? { objectType: newType } : {}) }),
-      });
-      if (!createRes.ok) {
-        let msg = "Kunde inte skapa objektet.";
-        try {
-          const j = await createRes.json();
-          if (j?.message) msg = j.message;
-        } catch {
-          /* fallback */
+      //    Hoppa över detta steg om ett objekt redan skapats i ett tidigare försök
+      //    (kopplingen fallerade) — annars skapas en dubblett vid nytt klick.
+      let createdId = createdIdRef.current;
+      if (!createdId) {
+        const createRes = await fetch("/api/objects", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({ name, ...(newType ? { objectType: newType } : {}) }),
+        });
+        if (!createRes.ok) {
+          let msg = "Kunde inte skapa objektet.";
+          try {
+            const j = await createRes.json();
+            if (j?.message) msg = j.message;
+          } catch {
+            /* fallback */
+          }
+          throw new Error(msg);
         }
-        throw new Error(msg);
+        const created = await createRes.json();
+        createdId = created.id as string;
+        createdIdRef.current = createdId;
       }
-      const created = await createRes.json();
       // 2) Koppla via den säkra parents-vägen (aldrig objects.parentId direkt).
-      const childId = mode === "parent" ? objectId : created.id;
-      const parentId = mode === "parent" ? created.id : objectId;
+      const childId = mode === "parent" ? objectId : createdId;
+      const parentId = mode === "parent" ? createdId : objectId;
       const linkRes = await fetch(`/api/objects/${childId}/parents`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -173,6 +184,9 @@ export function KopplaObjektDialog({
         body: JSON.stringify({ parentId }),
       });
       if (!linkRes.ok) {
+        // Objektet finns nu men är okopplat — visa det i listor och behåll id:t
+        // så ett nytt försök kopplar samma objekt i stället för att skapa ett nytt.
+        queryClient.invalidateQueries({ queryKey: ["/api/objects"] });
         let msg = "Objektet skapades men kunde inte kopplas.";
         try {
           const j = await linkRes.json();
@@ -184,6 +198,7 @@ export function KopplaObjektDialog({
       }
     },
     onSuccess: () => {
+      createdIdRef.current = null;
       queryClient.invalidateQueries({ queryKey: ["/api/objects"] });
       toast({
         title:

@@ -38,3 +38,14 @@ status-mappningen och är orörd.
 **How to apply:** När kundens fältlista ändras, uppdatera BÅDE rapporten (atomärt) och
 kontraktet (grupperat + ev. atomär status-rad). Verifiera CSV-fältantal med riktig
 CSV-parser, aldrig rå `;`-split.
+
+## Objektsidans uppgiftsfilter
+Filtret i `ObjectLinkedTasksGrid` bygger på de fält som faktiskt finns på `GridTaskRow`
+(status, källa, uppgiftstyp, fritext) — INTE på `INFORMATIONSPAKET_FALT`.
+
+**Why:** En literal "filtrera på alla 94 fält" går inte att bygga — fälten är inte
+materialiserade på uppgiftsraderna (de flesta härleds/beräknas eller kommer först med
+motorerna). Ett katalog-drivet filter skulle bli tomma val utan data bakom.
+
+**How to apply:** När fler filterfält efterfrågas, kontrollera FÖRST att datan finns på
+raden (GridTaskRow / grid-svaret) innan filtret läggs till.

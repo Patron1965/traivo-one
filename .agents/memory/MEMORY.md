@@ -104,4 +104,4 @@
 - ["Plannix" dött namn](naming-plannix-dead.md) — plattform=Traivo (Traivo One), app=Traivo Go; april-2026 Plannix-rebrand reverterad; ignorera stale rebrand-docs; seed.ts rebrandPlannixToKinab = separat tenant-data.
 - [Uppgiftens tidslogg (task_events)](task-event-log.md) — append-only händelselogg per WO; logga bara faktiska diffar via delad service; verklig tidsstämpel = occurredAt; kontraktet läses aldrig omdefinieras.
 - [Överbokning-overlay & matchningsorsak](overbooking-and-match-reason.md) — överbokad = planerar-overlay på resurs-dag (aldrig i deriveUppgiftStatus); match_reason på work_orders+assignments, fångas vid koncept-expansion.
-- [Informationspaket 94-fälts-avstämning](informationspaket-94-falt-avstamning.md) — CSV=94 atomära fält (rad4, riktig parser ej `;`-split); kontraktet buntar till ~42 medvetet; status-taggar (finns/härleds/delvis/saknas/motor_kvar); INFORMATIONSPAKET_FALT har inga kod-konsumenter.
+- [Informationspaket 94-fält](informationspaket-94-falt-avstamning.md) — CSV=94 atomära fält (riktig parser, ej `;`-split); kontraktet buntar till ~42 medvetet; INFORMATIONSPAKET_FALT saknar kod-konsumenter → ej filterbart literalt.
