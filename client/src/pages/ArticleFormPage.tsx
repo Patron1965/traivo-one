@@ -150,6 +150,10 @@ interface ArticleFormData {
   leaveMetadataFormat: string;
   leaveMetadataRequired: boolean;
   maxPerAddress: number | null;
+  limitationScope: string;
+  notConsumed: boolean;
+  showOnInvoice: boolean;
+  invoiceToCustomer: boolean;
   associationLabel: string;
   associationValue: string;
   associationOperator: string;
@@ -234,6 +238,10 @@ const emptyFormData: ArticleFormData = {
   leaveMetadataFormat: "",
   leaveMetadataRequired: false,
   maxPerAddress: null,
+  limitationScope: "address",
+  notConsumed: false,
+  showOnInvoice: true,
+  invoiceToCustomer: true,
   associationLabel: "",
   associationValue: "",
   associationOperator: "equals",
@@ -1132,6 +1140,10 @@ export default function ArticleFormPage() {
       leaveMetadataFormat: article.leaveMetadataFormat || "",
       leaveMetadataRequired: (article as any).leaveMetadataRequired ?? false,
       maxPerAddress: article.maxPerAddress ?? null,
+      limitationScope: (article as any).limitationScope || "address",
+      notConsumed: (article as any).notConsumed ?? false,
+      showOnInvoice: (article as any).showOnInvoice ?? true,
+      invoiceToCustomer: (article as any).invoiceToCustomer ?? true,
       associationLabel: article.associationLabel || "",
       associationValue: article.associationValue || "",
       associationOperator: article.associationOperator || "equals",
@@ -2914,7 +2926,30 @@ export default function ArticleFormPage() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="maxPerAddress">Max antal per adress</Label>
+              <Label htmlFor="limitationScope">Begränsning räknas per</Label>
+              <Select value={formData.limitationScope || "address"} onValueChange={(v) => setFormData({ ...formData, limitationScope: v })}>
+                <SelectTrigger id="limitationScope" data-testid="select-limitation-scope">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="address">Adress</SelectItem>
+                  <SelectItem value="object">Objekt</SelectItem>
+                  <SelectItem value="customer">Kund</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                Vad taket "Max antal" nedan räknas mot.
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="maxPerAddress">
+                {formData.limitationScope === "object"
+                  ? "Max antal per objekt"
+                  : formData.limitationScope === "customer"
+                    ? "Max antal per kund"
+                    : "Max antal per adress"}
+              </Label>
               <div className="flex items-center gap-3">
                 <Input
                   id="maxPerAddress"
@@ -2927,12 +2962,64 @@ export default function ArticleFormPage() {
                   data-testid="input-max-per-address"
                 />
                 <span className="text-xs text-muted-foreground">
-                  {formData.maxPerAddress ? `Max ${formData.maxPerAddress} per adress` : "Ingen begränsning"}
+                  {formData.maxPerAddress
+                    ? `Max ${formData.maxPerAddress} per ${formData.limitationScope === "object" ? "objekt" : formData.limitationScope === "customer" ? "kund" : "adress"}`
+                    : "Ingen begränsning"}
                 </span>
               </div>
               <p className="text-xs text-muted-foreground">
-                Hur många gånger artikeln får beställas på samma adress. Lämna tomt för obegränsat.
+                Hur många gånger artikeln får beställas per {formData.limitationScope === "object" ? "objekt" : formData.limitationScope === "customer" ? "kund" : "adress"}. Lämna tomt för obegränsat.
               </p>
+            </div>
+
+            <div className="space-y-3 border-t pt-3">
+              <label className="flex items-start gap-2 cursor-pointer" data-testid="label-not-consumed">
+                <input
+                  type="checkbox"
+                  className="mt-1"
+                  checked={formData.notConsumed}
+                  onChange={(e) => setFormData({ ...formData, notConsumed: e.target.checked })}
+                  data-testid="checkbox-not-consumed"
+                />
+                <span>
+                  <span className="font-medium">Förbrukas ej</span>
+                  <p className="text-xs text-muted-foreground">
+                    Artikeln drar aldrig lagersaldo vid utförande (t.ex. verktyg/utrustning som används men inte förbrukas), även om en lagerplats är satt.
+                  </p>
+                </span>
+              </label>
+
+              <label className="flex items-start gap-2 cursor-pointer" data-testid="label-show-on-invoice">
+                <input
+                  type="checkbox"
+                  className="mt-1"
+                  checked={formData.showOnInvoice}
+                  onChange={(e) => setFormData({ ...formData, showOnInvoice: e.target.checked })}
+                  data-testid="checkbox-show-on-invoice"
+                />
+                <span>
+                  <span className="font-medium">Visa på faktura</span>
+                  <p className="text-xs text-muted-foreground">
+                    När avmarkerad utelämnas artikeln helt från fakturan (utförs men syns inte för kunden).
+                  </p>
+                </span>
+              </label>
+
+              <label className="flex items-start gap-2 cursor-pointer" data-testid="label-invoice-to-customer">
+                <input
+                  type="checkbox"
+                  className="mt-1"
+                  checked={formData.invoiceToCustomer}
+                  onChange={(e) => setFormData({ ...formData, invoiceToCustomer: e.target.checked })}
+                  data-testid="checkbox-invoice-to-customer"
+                />
+                <span>
+                  <span className="font-medium">Fakturera till kund</span>
+                  <p className="text-xs text-muted-foreground">
+                    När avmarkerad visas raden{formData.showOnInvoice ? "" : " (om den visas på faktura)"} men debiteras med pris 0 (intern/ej debiterbar post).
+                  </p>
+                </span>
+              </label>
             </div>
           </FormSection>
 

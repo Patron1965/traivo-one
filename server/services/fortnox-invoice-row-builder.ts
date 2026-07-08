@@ -59,6 +59,14 @@ interface BuilderLine {
   resolvedPrice?: number | null;
   notes?: string | null;
   description?: string | null;
+  // Informationspaket fält 26 & 27 (artikel-nivå fakturaflaggor, upplösta av caller).
+  //   showOnInvoice=false     ⇒ raden utelämnas HELT ur fakturan (utförs men syns ej).
+  //   invoiceToCustomer=false ⇒ raden visas men med pris 0 (intern/ej debiterbar post).
+  // Undefined = default true (oförändrat beteende). Den proportionella fryst-pris-
+  // skalningen räknas över ALLA rader, så en nollad/dold rad drar bort exakt sin egen
+  // andel av frozenTotal utan att blåsa upp övriga rader.
+  showOnInvoice?: boolean | null;
+  invoiceToCustomer?: boolean | null;
 }
 
 // Strukturell delmängd av WorkOrder.
@@ -186,11 +194,23 @@ export async function buildFortnoxLogicalRowsForWorkOrder(
       continue;
     }
 
+    // Informationspaket fält 26: "Visa på faktura" = false ⇒ utelämna raden helt.
+    // (Skalningen ovan räknades över alla rader, så övriga rader behåller sin andel;
+    // den utelämnade radens andel av frozenTotal försvinner ur fakturasumman.)
+    if (line.showOnInvoice === false) {
+      continue;
+    }
+
     const quantity = Number(line.quantity) * (payerPercentage / 100);
     const basePrice = Number(line.resolvedPrice ?? 0);
-    const price = useFrozen
-      ? Math.round(basePrice * scale * 100) / 100
-      : line.resolvedPrice || undefined;
+    // Informationspaket fält 27: "Fakturera till kund" = false ⇒ pris 0 (raden visas
+    // men debiteras inte). Sätts efter fryst-skalningen så andelen dras bort från summan.
+    const notCharged = line.invoiceToCustomer === false;
+    const price = notCharged
+      ? 0
+      : useFrozen
+        ? Math.round(basePrice * scale * 100) / 100
+        : line.resolvedPrice || undefined;
 
     let chargeRow: FortnoxChargeRow;
     if (!line.articleId) {

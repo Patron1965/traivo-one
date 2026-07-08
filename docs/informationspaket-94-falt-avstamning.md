@@ -60,21 +60,21 @@ Beteckningar för "Hur det fylls": **D** = ren data · **M** = metadata-katalog 
 | 16 | Antal orderkoncept | Orderkoncept | D/M | `order_concepts` grundantal → `computeArticleQuantity` | Finns |
 | 17 | Antal objekt-metadata | Objekt | M | `matches_field` → `getArticleMetadataForObject` | Finns |
 | 18 | Antal får uppdateras av utförare | Artikel | D | `articles.operatorCanUpdateQuantity` | Finns |
-| 19 | Begränsningstyp (en gång per objekt/adress/kund) | Artikel | D | `maxPerAddress` täcker adress; typ per objekt/kund ej bekräftad | **Delvis** |
+| 19 | Begränsningstyp (en gång per objekt/adress/kund) | Artikel | D | `limitationType` (typ 1) + `limitationScope`/`maxPerAddress` (numeriskt tak); enforced i `workOrderRoutes` | Finns |
 | 20 | Begränsning antal per adress/objekt | Artikel | D | `articles.maxPerAddress` | Finns |
 | 21 | Dolt antal | Artikel | D | `articles.hideQuantityInApp` | Finns |
 | 22 | Taget antal | System | SYS | orderrad `takenQuantity` | Finns |
 | 23 | Fakturerbart antal | System | SYS | `quantity` (fakturerat) vs `takenQuantity`/`returnedQuantity` | Finns |
 | 24 | Fastpris från orderkoncept | Orderkoncept | D | `fixed_price_basis` | Finns |
 | 25 | Artikel ingår i abonnemang | Orderkoncept | D | `order_concepts` abonnemang | Finns |
-| 26 | Ska visas på faktura | Artikel | D | via faktura-materialisering; artikel-nivå flagga ej bekräftad | **Delvis** |
-| 27 | Ska faktureras till kund | Artikel | D | `billingMethod`/`ej_fakturerbar`-status | **Delvis** |
+| 26 | Ska visas på faktura | Artikel | D | `articles.showOnInvoice` → Fortnox-radbyggaren utelämnar raden | Finns |
+| 27 | Ska faktureras till kund | Artikel | D | `articles.invoiceToCustomer` → Fortnox-radbyggaren pris 0; `ej_fakturerbar` kvar som per-tillfälle-override | Finns |
 | 28 | Artikeltyp (tjänst/vara/avvikelse/avisering) | Artikel | S | artikeltyp-register | Finns |
 | 29 | Artikelområde (RBK/Deklaration/Reservdel/Förbrukning) | Artikel | S | artikelområde-register | Finns |
 | 30 | Utförandekod | Artikel | S | execution-code-register | Finns |
 | 31 | Skapar tidstyp (Produktion/Ställtid/Resa/Nattvila/Rast…) | Artikel | S | tidskod-register | Finns |
 | 32 | Lagerplats | Artikel | S | lagerplats-register | Finns |
-| 33 | Ej förbrukas | Artikel | D | lagermodell hanterar förbrukning; explicit "ej förbrukas"-flagga ej bekräftad | **Delvis** |
+| 33 | Ej förbrukas | Artikel | D | `articles.notConsumed` → `reconcileWorkOrderLineStock` hoppar över lagerdrag | Finns |
 | 34 | Standardleverantör | Artikel | S | leverantörsregister | Finns |
 | 35 | Leveranstid (leverantör) | Artikel | D | `articles` leveranstid | Finns |
 | 36 | Säkerhetslager | Artikel | D | `articles.safetyStock` | Finns |
@@ -83,13 +83,13 @@ Beteckningar för "Hur det fylls": **D** = ren data · **M** = metadata-katalog 
 | 39 | Offsettid | Orderkoncept | SYS | assignments `offset_minutes` | Finns |
 | 40 | Typ offset (samtidigt/före/efter) | Orderkoncept | SYS | offset-typ | Finns |
 | 41 | Visa metadata (valda fält) | Artikel | M | `associationRules` → `getArticleMetadataForObject` | Finns |
-| 42 | Visade fält får uppdateras av utförare | Artikel | M | visa-metadata editable-flagga (behöver bekräftas per fält) | **Delvis** |
+| 42 | Visade fält får uppdateras av utförare | Artikel | M | `showMetadataFields[].canUpdate` (per fält); enforced server-side (`mobile/misc` metadata-update, `isFieldUpdatable`) | Finns |
 | 43 | Lämna metadata | Artikel | M | lämna-metadata (`getArticleMetadataForObject`) | Finns |
 | 44 | Krav: metadata måste lämnas för att slutföra | Artikel | M | obligatorisk-metadata completion-gate | Finns |
 | 45 | Kan användas som strukturartikel | Artikel | D | `articles` struktur-flagga | Finns |
 | 46 | Strukturartikel (BOM) | Artikel | S | `article_components` (self-ref förbjuden) | Finns |
 | 47 | Fasthakningslogik (metadatavillkor) | Artikel | M | `matchesFilter` (condition-matching) | Finns |
-| 48 | Ej beroende av objektets geografiska position | Artikel | D | ingen explicit flagga; object-location inferrerar legacy | **Delvis** |
+| 48 | Ej beroende av objektets geografiska position | Artikel | D | `articles.isGeoDependent` (inverterad UI-flagga) | Finns |
 | 49 | Beroende artikel | Orderkoncept | SYS | `task_dependencies`/`parentAssignmentId` (beroendemotor) | Finns |
 
 ¹ Systemskapad **plockuppgift**-gren (plocka-från-lager vs beställ-hem) saknar ännu val-logik — se "Hängande trådar".

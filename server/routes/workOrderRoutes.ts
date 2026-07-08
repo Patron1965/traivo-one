@@ -1115,33 +1115,74 @@ app.post("/api/work-orders", asyncHandler(async (req, res) => {
 
   if (data.articleId && data.objectId) {
     const article = await storage.getArticle(data.articleId);
-    if (article && article.limitationType && article.limitationType !== "unlimited") {
+    const hasLimitationType =
+      !!article && !!article.limitationType && article.limitationType !== "unlimited";
+    // Informationspaket fält 19: numeriskt tak (maxPerAddress) räknat per
+    // limitationScope (address/object/customer). Skilt från limitationType (tak 1).
+    const hasMaxCap =
+      !!article &&
+      typeof (article as any).maxPerAddress === "number" &&
+      (article as any).maxPerAddress > 0;
+
+    if (article && (hasLimitationType || hasMaxCap)) {
       const allOrders = await storage.getWorkOrders(tenantId);
       const existingForArticle = allOrders.filter(
         wo => wo.articleId === data.articleId && wo.orderStatus !== "avbruten" && wo.deletedAt === null
       );
 
-      if (article.limitationType === "one_per_object") {
-        const existing = existingForArticle.find(wo => wo.objectId === data.objectId);
-        if (existing) {
-          throw new ValidationError(`Artikeln "${article.name}" får bara utföras en gång per objekt. En order finns redan.`);
-        }
-      } else if (article.limitationType === "one_per_address") {
-        const targetObj = await storage.getObject(data.objectId);
-        if (targetObj?.address) {
-          for (const wo of existingForArticle) {
-            if (wo.objectId) {
-              const woObj = await storage.getObject(wo.objectId);
-              if (woObj?.address === targetObj.address) {
-                throw new ValidationError(`Artikeln "${article.name}" får bara utföras en gång per adress. En order finns redan på "${targetObj.address}".`);
+      if (hasLimitationType) {
+        if (article.limitationType === "one_per_object") {
+          const existing = existingForArticle.find(wo => wo.objectId === data.objectId);
+          if (existing) {
+            throw new ValidationError(`Artikeln "${article.name}" får bara utföras en gång per objekt. En order finns redan.`);
+          }
+        } else if (article.limitationType === "one_per_address") {
+          const targetObj = await storage.getObject(data.objectId);
+          if (targetObj?.address) {
+            for (const wo of existingForArticle) {
+              if (wo.objectId) {
+                const woObj = await storage.getObject(wo.objectId);
+                if (woObj?.address === targetObj.address) {
+                  throw new ValidationError(`Artikeln "${article.name}" får bara utföras en gång per adress. En order finns redan på "${targetObj.address}".`);
+                }
               }
             }
           }
+        } else if (article.limitationType === "one_per_customer") {
+          const existing = existingForArticle.find(wo => wo.customerId === data.customerId);
+          if (existing) {
+            throw new ValidationError(`Artikeln "${article.name}" får bara utföras en gång per kund.`);
+          }
         }
-      } else if (article.limitationType === "one_per_customer") {
-        const existing = existingForArticle.find(wo => wo.customerId === data.customerId);
-        if (existing) {
-          throw new ValidationError(`Artikeln "${article.name}" får bara utföras en gång per kund.`);
+      }
+
+      if (hasMaxCap) {
+        const cap = (article as any).maxPerAddress as number;
+        const scope = ((article as any).limitationScope as string) || "address";
+        let matchCount = 0;
+        let scopeLabel = "adress";
+        if (scope === "object") {
+          scopeLabel = "objekt";
+          matchCount = existingForArticle.filter(wo => wo.objectId === data.objectId).length;
+        } else if (scope === "customer") {
+          scopeLabel = "kund";
+          matchCount = existingForArticle.filter(wo => wo.customerId === data.customerId).length;
+        } else {
+          // address (default): jämför objektens adress.
+          const targetObj = await storage.getObject(data.objectId);
+          const targetAddress = targetObj?.address ?? null;
+          if (targetAddress) {
+            for (const wo of existingForArticle) {
+              if (!wo.objectId) continue;
+              const woObj = await storage.getObject(wo.objectId);
+              if (woObj?.address === targetAddress) matchCount++;
+            }
+          }
+        }
+        if (matchCount >= cap) {
+          throw new ValidationError(
+            `Artikeln "${article.name}" får beställas max ${cap} gång${cap === 1 ? "" : "er"} per ${scopeLabel}. Gränsen är redan nådd (${matchCount}).`,
+          );
         }
       }
     }

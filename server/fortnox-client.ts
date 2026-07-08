@@ -10,6 +10,40 @@ import {
 } from "./services/fortnox-invoice-row-builder";
 import { deriveFortnoxCodesForWorkOrder } from "./services/fortnox-code-derivation";
 
+// Task #1203 (informationspaket fält 26 & 27): berika orderrader med artikelns
+// permanenta fakturaflaggor innan de skickas till radbyggaren. showOnInvoice=false
+// ⇒ raden utelämnas; invoiceToCustomer=false ⇒ pris 0. Default (kolumn NULL/true)
+// ⇒ oförändrat beteende. Unika artikel-ID slås upp en gång var (liten cache-map).
+async function enrichLinesWithArticleInvoiceFlags<
+  T extends { articleId?: string | null },
+>(
+  lines: T[],
+): Promise<
+  Array<T & { showOnInvoice?: boolean | null; invoiceToCustomer?: boolean | null }>
+> {
+  const uniqueIds = Array.from(
+    new Set(lines.map((l) => l.articleId).filter((x): x is string => !!x)),
+  );
+  const flagMap = new Map<
+    string,
+    { showOnInvoice?: boolean | null; invoiceToCustomer?: boolean | null }
+  >();
+  for (const id of uniqueIds) {
+    const a = await storage.getArticle(id);
+    if (a) {
+      flagMap.set(id, {
+        showOnInvoice: (a as any).showOnInvoice,
+        invoiceToCustomer: (a as any).invoiceToCustomer,
+      });
+    }
+  }
+  return lines.map((l) =>
+    l.articleId && flagMap.has(l.articleId)
+      ? { ...l, ...flagMap.get(l.articleId)! }
+      : l,
+  );
+}
+
 const FORTNOX_API_BASE = "https://api.fortnox.se/3";
 const FORTNOX_AUTH_URL = "https://apps.fortnox.se/oauth-v1/auth";
 const FORTNOX_TOKEN_URL = "https://apps.fortnox.se/oauth-v1/token";
@@ -512,7 +546,9 @@ export async function exportWorkOrderToFortnox(
       };
     }
 
-    const workOrderLines = await storage.getWorkOrderLines(invoiceExport.workOrderId);
+    const workOrderLines = await enrichLinesWithArticleInvoiceFlags(
+      await storage.getWorkOrderLines(invoiceExport.workOrderId),
+    );
     if (!workOrderLines.length) {
       return { success: false, error: "No work order lines to invoice" };
     }
@@ -976,7 +1012,9 @@ export async function exportConsolidatedInvoiceToFortnox(
         consolidatedYourReference = objectRefs.kundreferens.slice(0, 50);
       }
       const derivedCodes = await deriveFortnoxCodesForWorkOrder(tenantId, wo);
-      const lines = await storage.getWorkOrderLines(woId);
+      const lines = await enrichLinesWithArticleInvoiceFlags(
+        await storage.getWorkOrderLines(woId),
+      );
       if (!lines.length) continue;
       // Task #1124: ackumulera logiska rader (kollaps körs en gång efter loopen).
       // Frozen-skalning, fritextrader, info-rader och fast-pris hanteras inuti

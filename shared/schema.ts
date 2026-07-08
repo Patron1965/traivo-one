@@ -865,6 +865,26 @@ export const articles = pgTable("articles", {
   isInfoCarrier: boolean("is_info_carrier").default(false),
   // Artikelbegränsning (P11)
   limitationType: text("limitation_type").default("unlimited"),
+  // Informationspaket fält 19: begränsningstyp för den numeriska antalsgränsen
+  // (maxPerAddress). Avgör VAD taket räknas mot: "address" (default, bakåtkompatibelt),
+  // "object" eller "customer". Skild från limitationType (som är "en gång per X" = tak 1).
+  // Expand-contract: nullable/default "address" → befintliga rader oförändrade.
+  limitationScope: text("limitation_scope").default("address"),
+  // Informationspaket fält 33: "Ej förbrukas". När true drar artikeln ALDRIG lagersaldo
+  // vid utförande (t.ex. verktyg/utrustning som används men inte förbrukas) — även om en
+  // lagerplats är satt. reconcileWorkOrderLineStock hoppar över raden. Default false
+  // (oförändrat: förbrukning styrs av taget antal mot lagerplats).
+  notConsumed: boolean("not_consumed").default(false),
+  // Informationspaket fält 26 & 27: artikel-nivå fakturaflaggor.
+  //   showOnInvoice     — artikeln får synas som fakturarad (default true). false ⇒
+  //                       raden utelämnas helt ur fakturan (utförs men syns ej för kund).
+  //   invoiceToCustomer — artikeln debiteras kunden (default true). false ⇒ raden visas
+  //                       (om showOnInvoice) men med pris 0 (intern/ej debiterbar post).
+  // Tillämpas vid fakturamaterialisering (Fortnox-radbyggaren). Per-tillfälle-undantag
+  // (assignments.exceptionStatus = "ej_fakturerbar") kvarstår som override ovanpå dessa
+  // permanenta artikel-defaults. Expand-contract: default true ⇒ oförändrat beteende.
+  showOnInvoice: boolean("show_on_invoice").default(true),
+  invoiceToCustomer: boolean("invoice_to_customer").default(true),
   // Associations-kod för artikelhook mot metadata-typ (legacy)
   associationCode: text("association_code"),
   // Kinab tvåstegsfilter (legacy enkel-villkor): association via metadata-etikett + värde.

@@ -90,7 +90,8 @@ if command -v psql >/dev/null 2>&1 && [ -n "$DATABASE_URL" ]; then
            migrations/0123_object_quick_field_configs.sql \
            migrations/0124_stock_balances.sql \
            migrations/0124_task_events.sql \
-           migrations/0124_subscription_settlement.sql; do
+           migrations/0124_subscription_settlement.sql \
+           migrations/0125_article_flags_field_editing.sql; do
     if [ -f "$f" ]; then
       echo "[post-merge] Applying $f"
       psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f "$f"

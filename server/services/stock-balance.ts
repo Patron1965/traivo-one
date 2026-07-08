@@ -100,6 +100,9 @@ export async function reconcileWorkOrderLineStock(tenantId: string, lineId: stri
     .from(articles)
     .where(and(eq(articles.id, line.articleId), eq(articles.tenantId, tenantId)));
   if (!article) return;
+  // Informationspaket fält 33 ("Förbrukas ej"): artikeln drar aldrig lagersaldo
+  // vid utförande även om en lagerplats är satt (t.ex. verktyg/utrustning).
+  if ((article as any).notConsumed === true) return;
   const location = (article.stockLocation ?? "").trim();
   if (!location) return; // Artikel utan lagerplats rör aldrig något saldo.
 

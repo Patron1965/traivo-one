@@ -250,15 +250,15 @@ export const INFORMATIONSPAKET_FALT: InformationspaketFalt[] = [
   // 1:1 mot CSV:ns 94 fält så inget döljs i en hopbuntad rubrikrad. Status
   // anger var något ännu inte är helt modellerat.
   { falt: "Artikelstatus (aktiv)", kalla: "artikel", hamtning: ["D"], storage: "column", backing: "articles status (isActiveArticleStatus)", status: "finns" },
-  { falt: "Begränsning antal per adress/objekt", kalla: "artikel", hamtning: ["D"], storage: "column", backing: "articles.maxPerAddress", status: "finns" },
-  { falt: "Begränsningstyp (en gång per objekt/adress/kund)", kalla: "artikel", hamtning: ["D"], storage: "column", backing: "maxPerAddress (adress); typ per objekt/kund ej modellerad", status: "delvis" },
+  { falt: "Begränsning antal per adress/objekt", kalla: "artikel", hamtning: ["D"], storage: "column", backing: "articles.maxPerAddress + limitationScope (adress/objekt/kund); enforced i workOrderRoutes", status: "finns" },
+  { falt: "Begränsningstyp (en gång per objekt/adress/kund)", kalla: "artikel", hamtning: ["D"], storage: "column", backing: "articles.limitationType (one_per_object/address/customer); enforced i workOrderRoutes", status: "finns" },
   { falt: "Lagernivåer (säkerhetslager · beställningspunkt · minsta order)", kalla: "artikel", hamtning: ["D"], storage: "column", backing: "articles.safetyStock/reorderPoint/minOrderQuantity", status: "finns" },
   { falt: "Leverantörs artnr · leveranstid", kalla: "artikel", hamtning: ["D", "S"], storage: "column", backing: "articles leverantörs-artnr/leveranstid; leverantörsregister", status: "finns" },
-  { falt: "Ej förbrukas (icke-förbrukningsartikel)", kalla: "artikel", hamtning: ["D"], storage: "column", backing: "lagermodell hanterar förbrukning; explicit flagga ej modellerad", status: "delvis" },
-  { falt: "Visade metadatafält får uppdateras av utförare (per fält)", kalla: "artikel", hamtning: ["M"], storage: "live-compute", backing: "visa-metadata editable-flagga; per-fält-precisering ej bekräftad", status: "delvis" },
+  { falt: "Ej förbrukas (icke-förbrukningsartikel)", kalla: "artikel", hamtning: ["D"], storage: "column", backing: "articles.notConsumed → reconcileWorkOrderLineStock hoppar över lagerdrag", status: "finns" },
+  { falt: "Visade metadatafält får uppdateras av utförare (per fält)", kalla: "artikel", hamtning: ["M"], storage: "live-compute", backing: "showMetadataFields[].canUpdate; enforced server-side (mobile/misc metadata-update, isFieldUpdatable)", status: "finns" },
   { falt: "Krav: metadata måste lämnas för att slutföra", kalla: "artikel", hamtning: ["M"], storage: "live-compute", backing: "obligatorisk-metadata completion-gate (completion-gate dual status)", status: "finns" },
-  { falt: "Visas på faktura · faktureras till kund (artikelflaggor)", kalla: "artikel", hamtning: ["D"], storage: "column", backing: "via faktura-materialisering/ej_fakturerbar; artikel-nivå flaggor ej bekräftade", status: "delvis" },
-  { falt: "Ej beroende av objektets geografiska position", kalla: "artikel", hamtning: ["D"], storage: "column", backing: "ingen explicit flagga; object-location inferrerar legacy", status: "delvis" },
+  { falt: "Visas på faktura · faktureras till kund (artikelflaggor)", kalla: "artikel", hamtning: ["D"], storage: "column", backing: "articles.showOnInvoice/invoiceToCustomer → Fortnox-radbyggaren (skip/pris 0); ej_fakturerbar kvar som per-tillfälle-override", status: "finns" },
+  { falt: "Ej beroende av objektets geografiska position", kalla: "artikel", hamtning: ["D"], storage: "column", backing: "articles.isGeoDependent (inverterad UI-flagga)", status: "finns" },
   { falt: "Kan användas själv som strukturartikel", kalla: "artikel", hamtning: ["D"], storage: "column", backing: "articles struktur-flagga", status: "finns" },
 
   { falt: "Offset (tid · typ samtidigt/före/efter)", kalla: "orderkoncept", hamtning: ["SYS"], storage: "column", backing: "assignments offset_minutes + offset-typ (beroendemotor)", status: "finns" },
