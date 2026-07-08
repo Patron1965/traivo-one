@@ -911,6 +911,11 @@ export async function getObjectWithAllMetadata(
         )
         AND mv.tenant_id = ${tenantId}
         AND mk.tenant_id = ${tenantId}
+        -- Arkiverade (soft-deletade) katalogtyper ska aldrig rendera sina värden
+        -- på objektet. Utan detta läcker gamla arkiverade familjer (t.ex. en
+        -- tidigare "Kontakt" under Grunduppgifter) in bredvid den aktiva familjen
+        -- → samma fält syns i två områden = metadata "blandas" mellan områden.
+        AND mk.deleted_at IS NULL
     )
     -- Task #644: behåll ALLA berättigade nivåer (ej bara rn=1). Skalära fält tar
     -- fortfarande närmaste värdet (rn=1) i JS nedan, men sammansatta json-fält
