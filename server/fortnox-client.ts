@@ -586,6 +586,7 @@ export async function exportWorkOrderToFortnox(
         articleFilter: payer?.articleTypes ?? undefined,
         resolveArticleNumber: async (articleId) =>
           (await storage.getFortnoxMapping(tenantId, "article", articleId))?.fortnoxId ?? null,
+        enforceNetZero: (workOrder as any).subscriptionCovered === true,
       });
       const invoiceRows = collapseFortnoxLogicalRows(logicalRows);
 
@@ -956,6 +957,7 @@ export async function exportConsolidatedInvoiceToFortnox(
           project: derivedCodes.project ?? null,
           resolveArticleNumber: async (articleId) =>
             (await storage.getFortnoxMapping(tenantId, "article", articleId))?.fortnoxId ?? null,
+          enforceNetZero: (wo as any).subscriptionCovered === true,
         })),
       );
     }

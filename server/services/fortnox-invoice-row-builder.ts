@@ -84,6 +84,12 @@ export interface BuildLogicalRowsParams {
   articleFilter?: string[];
   /** Slår upp Fortnox-artikelnummer för ett artikel-ID (null = saknar mapping → hoppa). */
   resolveArticleNumber: (articleId: string) => Promise<string | null>;
+  /**
+   * Task #1187: abonnemangstäckt WO — de byggda raderna MÅSTE netta 0 (ordinarie
+   * rader + kvittningsrad). Kastar om nettot ≠ 0 (t.ex. payer-artikelfilter eller
+   * saknad Fortnox-mapping som tappat kvittningsraden) → fail-closed export.
+   */
+  enforceNetZero?: boolean;
 }
 
 function compactWhitespace(s: string): string {
@@ -130,6 +136,7 @@ export async function buildFortnoxLogicalRowsForWorkOrder(
     payerPercentage = 100,
     articleFilter,
     resolveArticleNumber,
+    enforceNetZero = false,
   } = params;
 
   // ADR v3 (F6): frozenUnitPrice är ett WO-nivå-genomsnitt (totalPrice/totalQty).
@@ -227,6 +234,24 @@ export async function buildFortnoxLogicalRowsForWorkOrder(
       : `${baseKey}¦__fixed__:${workOrder.id}:${lineIndex}`;
 
     out.push({ chargeRow, infoRows, collapseEligible, collapseKey });
+  }
+
+  // Task #1187 — net-0-invariant för abonnemangstäckt WO. De byggda debiteringsrad-
+  // erna (ordinarie + kvittning) måste summera till 0. Om ett payer-artikelfilter
+  // eller en saknad Fortnox-mapping tappat kvittningsraden (men behållit den positiva)
+  // skulle uppgiften dubbelfaktureras — kasta i stället (fail-closed export).
+  if (enforceNetZero) {
+    const netExport = out.reduce(
+      (s, lr) =>
+        s + Number(lr.chargeRow.Price ?? 0) * Number(lr.chargeRow.DeliveredQuantity ?? 0),
+      0,
+    );
+    if (Math.abs(netExport) > 0.01) {
+      throw new Error(
+        `[fortnox] Abonnemangstäckt arbetsorder ${workOrder.id} nettar ${netExport.toFixed(2)} ≠ 0 vid export ` +
+          `— kvittningsraden saknas eller filtrerades bort (artikelfilter/Fortnox-mapping). Exporten avbryts.`,
+      );
+    }
   }
 
   return out;

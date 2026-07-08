@@ -427,6 +427,8 @@ type WoForConsolidation = {
   frozenUnitPrice: number | string | null;
   frozenQuantity: number | string | null;
   cachedValue: number | string | null;
+  // Task #1187: abonnemangstäckt WO bär netto 0 (kvittningsrad) → bidrar 0 kr.
+  subscriptionCovered: boolean | null;
   invoiceHeldUntil: Date | null;
   invoiceReadyAt: Date | null;
   // Task #970: fryst billing-segment (NULL = ingen split = back-compat).
@@ -443,6 +445,9 @@ type WoForConsolidation = {
 };
 
 function woAmount(wo: WoForConsolidation): number {
+  // Task #1187: en abonnemangstäckt WO nettar 0 (kvittningsraden) — bidrar aldrig
+  // med belopp till samlingsfakturan även om ett stale cachedValue skulle finnas.
+  if (wo.subscriptionCovered) return 0;
   const price = Number(wo.frozenUnitPrice ?? 0);
   const qty = Number(wo.frozenQuantity ?? 0);
   if (price > 0 && qty > 0) return Math.round(price * qty);
@@ -498,6 +503,7 @@ export async function runConsolidationForTenant(
       frozenUnitPrice: workOrders.frozenUnitPrice,
       frozenQuantity: workOrders.frozenQuantity,
       cachedValue: workOrders.cachedValue,
+      subscriptionCovered: workOrders.subscriptionCovered,
       invoiceHeldUntil: workOrders.invoiceHeldUntil,
       invoiceReadyAt: workOrders.invoiceReadyAt,
       billingSegmentKey: workOrders.billingSegmentKey,

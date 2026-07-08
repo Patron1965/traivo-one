@@ -580,6 +580,12 @@ export default function WorkOrderDetailPage() {
             {getExecutionStatusLabel(order.executionStatus)}
           </Badge>
         )}
+        {/* Task #1187: abonnemangstäckt uppgift — faktureras 0 kr (avgiften tas via abonnemanget). */}
+        {order.subscriptionCovered && (
+          <Badge className="bg-chart-4/15 text-chart-4 border border-chart-4/30" data-testid="badge-subscription-covered">
+            Täckt av abonnemang
+          </Badge>
+        )}
       </PageHeader>
 
       {order.isCancelled ? (

@@ -100,5 +100,6 @@
 - ["Allt är metadata" Steg 1](allt-ar-metadata-presentation-layer.md) — P1 = presentation-only; legacy-objektkolumner projiceras som read-only metadata-rader firewallade från metadata_varden (edit→objekt-PATCH); ingen migrering; KÄLLA-taggar D/M/S/SYS.
 - [Nav-omstrukturering 2026-07](nav-restructure-2026-07.md) — Dashboard borttagen; rapporter DOLDA (routes kvar, ersätts av Grovplanering-Excel-export); Ekonomi=Fortnox-meny; AI parkerad för 9-motorer; register duplicerade i Grunddata+Ekonomi.
 - [Systemuppgift roll-badges](task-role-badges.md) — `TaskRoleBadge` är ENDA källan för systemroll-härledning+badge (hämtning/leverans/retur/admin/logistik/avrop); assignments bär bara logisticsRole.
+- [Abonnemang 0-faktura & kvittning](subscription-settlement-net-zero.md) — täckt uppgift kvittas till netto 0 (2 lager: woAmount→0 + fortnox enforceNetZero); fail-closed utan kvittningsartikel/mapping.
 - ["Plannix" dött namn](naming-plannix-dead.md) — plattform=Traivo (Traivo One), app=Traivo Go; april-2026 Plannix-rebrand reverterad; ignorera stale rebrand-docs; seed.ts rebrandPlannixToKinab = separat tenant-data.
 - [Uppgiftens tidslogg (task_events)](task-event-log.md) — append-only händelselogg per WO; logga bara faktiska diffar via delad service; verklig tidsstämpel = occurredAt; kontraktet läses aldrig omdefinieras.

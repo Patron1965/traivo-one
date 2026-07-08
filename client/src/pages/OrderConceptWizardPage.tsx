@@ -182,6 +182,8 @@ export default function OrderConceptWizardPage() {
   // DB-kolumn (billingFrequency) — invoicePeriod är avvecklad (contract-steget).
   const [billingFrequency, setBillingFrequency] = useState<string>("monthly");
   const [subscriptionStartDate, setSubscriptionStartDate] = useState("");
+  // Task #1187: kvittningsartikel för abonnemangstäckta uppgifter (netto 0).
+  const [settlementArticleId, setSettlementArticleId] = useState<string | null>(null);
   // Step 4
   const [targetObjectIds, setTargetObjectIds] = useState<Set<string>>(new Set());
   const [filters, setFilters] = useState<ConditionFilter[]>([]);
@@ -258,6 +260,7 @@ export default function OrderConceptWizardPage() {
     // (daily/weekly) till {monthly,quarterly,yearly}.
     setBillingFrequency(normalizeInvoiceFrequency(wizardData.billingFrequency ?? wizardData.invoicePeriod));
     setSubscriptionStartDate(toDateInput(wizardData.deliveryStart));
+    setSettlementArticleId(wizardData.settlementArticleId || null);
     setTargetObjectIds(new Set(Array.isArray(wizardData.targetObjectIds) ? wizardData.targetObjectIds : []));
     setFilters((wizardData.filters || []).map((f: any) => ({
       metadataKey: f.metadataKey, operator: f.operator, filterValue: f.filterValue,
@@ -503,6 +506,9 @@ export default function OrderConceptWizardPage() {
     // (undefined) så befintliga värden inte nollställs vid metodbyte.
     monthlyFee: invoiceModel === "subscription" ? (monthlyFee ?? null) : undefined,
     deliveryStart: invoiceModel === "subscription" ? toIsoOrNull(subscriptionStartDate) : undefined,
+    // Task #1187: kvittningsartikel skrivs bara i abonnemangsläge (annars utelämnas
+    // den, som övriga abonnemangsfält, så metodbyte inte nollställer värdet).
+    settlementArticleId: invoiceModel === "subscription" ? (settlementArticleId ?? null) : undefined,
     invoiceConsolidation: invoicePatch.invoiceConsolidation,
     departmentMetadataField: invoicePatch.departmentMetadataField,
     targetObjectIds: Array.from(targetObjectIds),
@@ -515,7 +521,7 @@ export default function OrderConceptWizardPage() {
     totalCost,
     estimatedHours,
     };
-  }, [conceptName, customerMode, selectedCustomerId, customerMetadataField, priceListId, priceModel, fixedPriceKronor, customerReference, customerLabel, ourReference, customerReferenceMode, customerReferenceMetadataField, customerLabelMode, customerLabelMetadataField, invoiceRowReferenceFields, includeExecutorFreetext, invoiceLevel, invoiceModel, invoiceLock, invoiceBrake, requireCompleteSegment, invoiceMethod, subscriptionAdjustmentDate, monthlyFee, billingFrequency, subscriptionStartDate, invoiceConsolidation, departmentMetadataField, targetObjectIds, mainDeliveryWindows, deliveryRestrictions, conceptArticles, totalValue, totalCost, estimatedHours]);
+  }, [conceptName, customerMode, selectedCustomerId, customerMetadataField, priceListId, priceModel, fixedPriceKronor, customerReference, customerLabel, ourReference, customerReferenceMode, customerReferenceMetadataField, customerLabelMode, customerLabelMetadataField, invoiceRowReferenceFields, includeExecutorFreetext, invoiceLevel, invoiceModel, invoiceLock, invoiceBrake, requireCompleteSegment, invoiceMethod, subscriptionAdjustmentDate, monthlyFee, billingFrequency, subscriptionStartDate, settlementArticleId, invoiceConsolidation, departmentMetadataField, targetObjectIds, mainDeliveryWindows, deliveryRestrictions, conceptArticles, totalValue, totalCost, estimatedHours]);
 
   const createConceptMutation = useMutation({
     mutationFn: async () => {
@@ -900,6 +906,8 @@ export default function OrderConceptWizardPage() {
                 departmentMetadataField={departmentMetadataField}
                 monthlyFee={monthlyFee}
                 subscriptionStartDate={subscriptionStartDate}
+                settlementArticleId={settlementArticleId}
+                articles={articles}
                 customerReference={customerReference}
                 customerLabel={customerLabel}
                 ourReference={ourReference}
@@ -920,6 +928,7 @@ export default function OrderConceptWizardPage() {
                   if (data.departmentMetadataField !== undefined) setDepartmentMetadataField(data.departmentMetadataField);
                   if (data.monthlyFee !== undefined) setMonthlyFee(data.monthlyFee);
                   if (data.subscriptionStartDate !== undefined) setSubscriptionStartDate(data.subscriptionStartDate);
+                  if (data.settlementArticleId !== undefined) setSettlementArticleId(data.settlementArticleId);
                   if (data.customerReference !== undefined) setCustomerReference(data.customerReference);
                   if (data.customerLabel !== undefined) setCustomerLabel(data.customerLabel);
                   if (data.ourReference !== undefined) setOurReference(data.ourReference);

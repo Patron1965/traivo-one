@@ -6,7 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { type InvoiceModel, type MetadataDefinition } from "@shared/schema";
+import { type InvoiceModel, type MetadataDefinition, type Article } from "@shared/schema";
 import {
   UI_INVOICE_METHODS,
   UI_INVOICE_METHOD_LABELS,
@@ -56,6 +56,9 @@ interface Step3State {
   departmentMetadataField: string | null;
   monthlyFee: number | null;
   subscriptionStartDate: string;
+  // Task #1187: kvittningsartikel — negativ rad som nettar en abonnemangstäckt
+  // uppgift till 0 kr vid slutförande (undviker dubbelfakturering).
+  settlementArticleId: string | null;
   customerReference: string;
   customerLabel: string;
   // Task #1124 — fakturareferenser
@@ -70,6 +73,9 @@ interface Step3State {
 
 interface Step3Props extends Step3State {
   conceptId?: string | null;
+  // Task #1187: tenantens artiklar (för kvittningsartikel-väljaren). Skickas in från
+  // wizarden som redan hämtar /api/articles — undviker dubbel query.
+  articles: Article[];
   onUpdate: (data: Partial<Step3State>) => void;
 }
 
@@ -119,6 +125,7 @@ export default function Step3Invoicing({
   departmentMetadataField,
   monthlyFee,
   subscriptionStartDate,
+  settlementArticleId,
   customerReference,
   customerLabel,
   ourReference,
@@ -129,6 +136,7 @@ export default function Step3Invoicing({
   invoiceRowReferenceFields,
   includeExecutorFreetext,
   conceptId,
+  articles,
   onUpdate,
 }: Step3Props) {
   // Fakturastopp-fältet (departmentMetadataField) använder den engelska compat-vyn.
@@ -613,6 +621,37 @@ export default function Step3Invoicing({
                 data-testid="input-subscription-adjustment-date"
               />
               <p className="text-xs text-muted-foreground mt-1">Tomt = löpande utan fast justering.</p>
+            </div>
+            {/* Task #1187: kvittningsartikel — nettar täckta uppgifter till 0 kr */}
+            <div>
+              <Label className="text-sm mb-1 block">Kvittningsartikel</Label>
+              <Select
+                value={settlementArticleId ?? "__none__"}
+                onValueChange={(v) => onUpdate({ settlementArticleId: v === "__none__" ? null : v })}
+              >
+                <SelectTrigger className="max-w-md" data-testid="select-settlement-article">
+                  <SelectValue placeholder="Välj kvittningsartikel…" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">Ingen — kvitta inte</SelectItem>
+                  {articles.map((a) => (
+                    <SelectItem key={a.id} value={a.id} data-testid={`option-settlement-article-${a.id}`}>
+                      {a.articleNumber ? `${a.articleNumber} – ` : ""}{a.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground mt-1">
+                När en abonnemangstäckt uppgift slutförs läggs en negativ rad med denna
+                artikel som nettar uppgiften till 0 kr — så att arbetet aldrig
+                dubbelfaktureras (abonnemangsavgiften faktureras separat).
+              </p>
+              {!settlementArticleId && (
+                <p className="text-xs text-warning mt-1" data-testid="warn-settlement-article">
+                  Ingen kvittningsartikel vald — täckta uppgifter hålls kvar i fakturakön
+                  tills en artikel väljs.
+                </p>
+              )}
             </div>
           </div>
         )}

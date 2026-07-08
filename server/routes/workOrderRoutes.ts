@@ -2126,6 +2126,22 @@ app.post("/api/work-orders/:id/status", asyncHandler(async (req, res) => {
     const workOrder = await storage.updateWorkOrderStatus(req.params.id, status);
     if (!workOrder) throw new NotFoundError("Arbetsorder");
 
+    // Task #1187/#1124: denna route auto-köar (markReady) men kör INTE finalize.
+    // För en projicerad konceptuppgift-WO måste finalize köras så att bl.a. en
+    // abonnemangstäckt WO får sin negativa kvittningsrad (netto 0) INNAN den når
+    // samlingsfaktura/Fortnox — annars blockeras exporten (net-0-invarianten).
+    // Best-effort — får aldrig blockera statusbytet.
+    if (status === "utford" && workOrder.sourceAssignmentId) {
+      try {
+        const { finalizeCompletedAssignmentForInvoice } = await import(
+          "../services/assignment-invoice-materializer"
+        );
+        await finalizeCompletedAssignmentForInvoice(tenantId, workOrder.id);
+      } catch (e) {
+        console.error("[assignment-invoice] finalize (status-route) misslyckades:", e);
+      }
+    }
+
     if (previousStatus !== status) {
       try {
         await storage.createAuditLog({

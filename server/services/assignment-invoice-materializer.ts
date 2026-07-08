@@ -22,12 +22,20 @@
 // fångas och faller tillbaka på den befintliga WO:n). assignments.invoicedAt är en
 // sekundär markör för att frysning/fakturering bara sker en gång.
 //
-// Endast call_off (avrop/efterfakturering) projiceras/materialiseras här — schema
-// och abonnemang faktureras i sina egna flöden (utanför scope).
+// call_off (avrop/efterfakturering) OCH subscription (abonnemang) projiceras/
+// materialiseras här. Schema faktureras i sitt eget flöde (utanför scope).
+//
+// Task #1187 — Abonnemang 0-faktura & kvittning: en abonnemangstäckt uppgift blir
+// ett riktigt jobb precis som call_off, MEN vid frysning får WO:n en NEGATIV
+// kvittningsrad (konceptets settlementArticleId, −Σ ordinarie rader) så att nettot
+// blir 0. Abonnemangsavgiften bär intäkten; uppgiften dubbelfaktureras aldrig men
+// flödar ändå genom samlingsfaktura/fakturastopp/Fortnox som en 0-netto-följesedel.
+// Fail-closed: saknas kvittningsartikel (eller dess Fortnox-koppling) markeras WO:n
+// täckt (woAmount→0 + net-0-invarianten vid export) men läggs INTE i fakturakön.
 
 import { db } from "../db";
 import { workOrders } from "@shared/schema";
-import type { InsertWorkOrder, InsertWorkOrderLine, Assignment, OrderConcept } from "@shared/schema";
+import type { InsertWorkOrder, InsertWorkOrderLine, Assignment, OrderConcept, WorkOrder } from "@shared/schema";
 import { and, eq } from "drizzle-orm";
 import { storage } from "../storage";
 import { getOrderConceptMethod } from "@shared/order-concept-method";
@@ -121,7 +129,12 @@ export async function ensureWorkOrderForAssignmentExecution(
   }
 
   const { method, concept: loadedConcept } = await resolveBillingMethod(assignment);
-  if (method !== "call_off") return { status: "skipped", reason: `method:${method}` };
+  // Task #1187: subscription materialiseras nu också — dess uppgifter blir riktiga
+  // jobb och kvittas till 0 vid frysning (finalizeCompletedAssignmentForInvoice).
+  // Schema fortsätter faktureras i sitt eget flöde (utanför scope).
+  if (method !== "call_off" && method !== "subscription") {
+    return { status: "skipped", reason: `method:${method}` };
+  }
 
   // Defense-in-depth (arkitekt-rekommendation): verifiera att konceptet tillhör
   // samma tenant innan vi stämplar orderConceptId på WO:n. assignment.orderConceptId
@@ -146,6 +159,7 @@ export async function ensureWorkOrderForAssignmentExecution(
       id: workOrders.id,
       executionStatus: workOrders.executionStatus,
       orderStatus: workOrders.orderStatus,
+      subscriptionCoveredAt: workOrders.subscriptionCoveredAt,
     })
     .from(workOrders)
     .where(
@@ -181,6 +195,14 @@ export async function ensureWorkOrderForAssignmentExecution(
           scheduledStartTime: assignment.scheduledStartTime ?? null,
           orderStatus,
           executionStatus,
+          // Task #1187: håll täckningsflaggan i synk vid re-projektion (idempotent).
+          // Sätts ENDAST för abonnemang; en befintlig tidsstämpel bevaras.
+          ...(method === "subscription"
+            ? {
+                subscriptionCovered: true,
+                subscriptionCoveredAt: existing.subscriptionCoveredAt ?? new Date(),
+              }
+            : {}),
         })
         .where(and(eq(workOrders.id, existing.id), eq(workOrders.tenantId, tenantId)));
       return { status: "updated", workOrderId: existing.id };
@@ -225,6 +247,14 @@ export async function ensureWorkOrderForAssignmentExecution(
     frozenRequireCompleteSegmentBeforeInvoice:
       (conceptForTenantCheck as { requireCompleteSegmentBeforeInvoice?: boolean } | null)
         ?.requireCompleteSegmentBeforeInvoice ?? false,
+    // Task #1187: stämpla abonnemangstäckning REDAN vid projektion (inte först vid
+    // kvittningen i fas 2). Då håller guards — woAmount→0 (samlingsfaktura) +
+    // net-0-invarianten vid Fortnox-export — från WO:ns födelse. Completion-vägar
+    // som INTE kör finalizeCompletedAssignmentForInvoice fail:ar då STÄNGT (blockeras)
+    // i stället för att helfakturera en abonnemangsuppgift. Själva kvittningsraden
+    // läggs fortfarande i fas 2 (applySubscriptionSettlement).
+    subscriptionCovered: method === "subscription",
+    subscriptionCoveredAt: method === "subscription" ? new Date() : undefined,
   };
 
   const articles = await storage.getAssignmentArticles(assignmentId);
@@ -319,6 +349,24 @@ export async function finalizeCompletedAssignmentForInvoice(
     }
   }
 
+  // Task #1187 — Abonnemang 0-faktura & kvittning: faktureras uppgiften via ett
+  // abonnemang läggs en negativ kvittningsrad så att WO:n nettar 0 FÖRE frysningen
+  // (freezeWorkOrder läser raderna). Fail-closed: kan kvittningen inte appliceras
+  // (saknad/omappd kvittningsartikel) markeras WO:n täckt men läggs INTE i kön —
+  // uppgiften stämplas utförd (ej fakturerad) så att den kan retas efter åtgärd.
+  if (await isSubscriptionCovered(wo, assignmentValid ? assignment! : null)) {
+    const settlement = await applySubscriptionSettlement(wo, tenantId, now);
+    if (!settlement.settled) {
+      if (assignmentValid) {
+        await storage.updateAssignment(wo.sourceAssignmentId, tenantId, {
+          completedAt: assignment!.completedAt ?? now,
+          status: "completed",
+        });
+      }
+      return { status: "skipped", reason: settlement.reason ?? "settlement_blocked" };
+    }
+  }
+
   // Frys pris/antal/kostnad/tid + vinnande fakturamottagare, lägg i fakturakön.
   await ensureFrozenAndReady(workOrderId, tenantId, now);
 
@@ -332,6 +380,106 @@ export async function finalizeCompletedAssignmentForInvoice(
   }
 
   return { status: "invoiced", workOrderId };
+}
+
+// Task #1187 — är uppgiften fakturerad via ett abonnemang? billingMethod fryses på
+// uppgiften vid expansion; legacy faller tillbaka på konceptets live-härledning.
+async function isSubscriptionCovered(
+  wo: WorkOrder,
+  assignment: Assignment | null,
+): Promise<boolean> {
+  if (assignment?.billingMethod) return assignment.billingMethod === "subscription";
+  const conceptId = wo.orderConceptId ?? assignment?.orderConceptId ?? null;
+  if (!conceptId) return false;
+  const concept = await storage.getOrderConcept(conceptId);
+  return concept ? getOrderConceptMethod(concept) === "subscription" : false;
+}
+
+// Task #1187 — applicera kvittningen på en abonnemangstäckt WO. Idempotent och
+// path-oberoende:
+//   * WO:n markeras täckt (subscriptionCovered) DIREKT → woAmount→0 +
+//     net-0-invarianten vid export skyddar oavsett vilken completion-väg som körde.
+//   * en negativ kvittningsrad läggs bara om ingen redan finns OCH nettot ≠ 0
+//     (en befintlig negativ rad = redan kvittad → idempotent no-op).
+// Fail-closed: saknas kvittningsartikel eller dess Fortnox-koppling sätts en
+// invoiceBlockedReason och { settled:false } returneras (WO:n köas ej av finalize).
+export async function applySubscriptionSettlement(
+  wo: WorkOrder,
+  tenantId: string,
+  now: Date,
+): Promise<{ settled: boolean; reason?: string }> {
+  const lines = await storage.getWorkOrderLines(wo.id);
+  const net = lines.reduce(
+    (sum, l) => sum + Number(l.resolvedPrice ?? 0) * Number(l.quantity ?? 1),
+    0,
+  );
+
+  // Markera täckt direkt (idempotent) så guards skyddar oavsett path/ordning.
+  await db
+    .update(workOrders)
+    .set({
+      subscriptionCovered: true,
+      subscriptionCoveredAt: wo.subscriptionCoveredAt ?? now,
+    })
+    .where(and(eq(workOrders.id, wo.id), eq(workOrders.tenantId, tenantId)));
+
+  // Nettar raderna redan 0 finns inget att kvitta (värdelös WO, eller redan kvittad
+  // och oförändrad) — ingen kvittningsartikel krävs.
+  if (net === 0) {
+    await setInvoiceBlockReason(wo.id, tenantId, null);
+    return { settled: true };
+  }
+
+  const concept = wo.orderConceptId ? await storage.getOrderConcept(wo.orderConceptId) : null;
+  const settlementArticleId =
+    (concept as { settlementArticleId?: string | null } | null)?.settlementArticleId ?? null;
+  if (!settlementArticleId) {
+    await setInvoiceBlockReason(wo.id, tenantId, "abonnemang_saknar_kvittningsartikel");
+    return { settled: false, reason: "no_settlement_article" };
+  }
+  const mapping = await storage.getFortnoxMapping(tenantId, "article", settlementArticleId);
+  if (!mapping?.fortnoxId) {
+    await setInvoiceBlockReason(wo.id, tenantId, "kvittningsartikel_saknar_fortnox_koppling");
+    return { settled: false, reason: "settlement_article_unmapped" };
+  }
+
+  // Idempotens: en befintlig NEGATIV rad PÅ KVITTNINGSARTIKELN = redan kvittad.
+  // Matcha på artikel-id (inte "någon negativ rad") så en legitim kreditrad på en
+  // ANNAN artikel aldrig undertrycker kvittningen och lämnar WO:n i netto ≠ 0.
+  const alreadySettled = lines.some(
+    (l) => l.articleId === settlementArticleId && Number(l.resolvedPrice ?? 0) < 0,
+  );
+  if (alreadySettled) {
+    await setInvoiceBlockReason(wo.id, tenantId, null);
+    return { settled: true };
+  }
+
+  // Negativ kvittningsrad — SAMMA heltalskolumn (resolvedPrice) så nettot blir
+  // exakt 0 oavsett öre/kronor. createWorkOrderLine kör om cachedValue → 0.
+  await storage.createWorkOrderLine({
+    tenantId,
+    workOrderId: wo.id,
+    articleId: settlementArticleId,
+    quantity: 1,
+    resolvedPrice: -net,
+    resolvedCost: 0,
+    resolvedProductionMinutes: 0,
+    description: "Kvittning – ingår i abonnemang",
+  });
+  await setInvoiceBlockReason(wo.id, tenantId, null);
+  return { settled: true };
+}
+
+// Tenant-scopad (defense-in-depth) sättning/rensning av fakturablockeringsorsak.
+async function setInvoiceBlockReason(
+  workOrderId: string,
+  tenantId: string,
+  reason: string | null,
+): Promise<void> {
+  await db
+    .update(workOrders)
+    .set({ invoiceBlockedReason: reason })
+    .where(and(eq(workOrders.id, workOrderId), eq(workOrders.tenantId, tenantId)));
 }
 
 /**

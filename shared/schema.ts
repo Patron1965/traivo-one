@@ -547,6 +547,14 @@ export const workOrders = pgTable("work_orders", {
   orderConceptId: varchar("order_concept_id").references((): any => orderConcepts.id),
   invoiceSourceType: text("invoice_source_type"),
   frozenIsFixedPrice: boolean("frozen_is_fixed_price").default(false),
+  // === Task #1187: Abonnemang 0-faktura & kvittning ===
+  // Sätts när en abonnemangstäckt uppgift materialiseras: WO:n har fått en negativ
+  // kvittningsrad så att nettot blir 0. Driver "Täckt av abonnemang"-badge i
+  // fakturakön, woAmount→0 (ingen positiv cachedValue-fallback) och net-0-invarianten
+  // vid Fortnox-export. Fungerar även som idempotens-vakt (kvittningsraden läggs bara
+  // en gång). Default false = dagens beteende (expand-contract).
+  subscriptionCovered: boolean("subscription_covered").default(false),
+  subscriptionCoveredAt: timestamp("subscription_covered_at"),
   // === Task #785: Veckoplanering – datafundament (expand-contract, alla nullable) ===
   // Planeringsinput för grov-/veckoplanering. Rapportens generiska `tasks`-fält
   // införs här eftersom Traivos arbetsenhet är work_orders (ingen tasks-tabell).
@@ -3225,6 +3233,13 @@ export const orderConcepts = pgTable("order_concepts", {
   contractLockMonths: integer("contract_lock_months"), // Bindningstid i månader
   contractLock: boolean("contract_lock").default(false),
   subscriptionMetadataField: text("subscription_metadata_field"), // Metadata-nyckel för antal (t.ex. "antal_karl")
+  // Task #1187 (Abonnemang 0-faktura & kvittning): kvittningsartikel som pekas ut
+  // per abonnemangskoncept. När en abonnemangstäckt uppgift utförs och materialiseras
+  // läggs en NEGATIV kvittningsrad (denna artikel, −Σ ordinarie rader) på WO:n så att
+  // nettot blir 0 — abonnemangsavgiften bär intäkten, uppgiften dubbelfaktureras aldrig.
+  // NULL = ingen kvittningsartikel vald ⇒ täckta uppgifter läggs INTE i fakturakön
+  // (fail-closed, se assignment-invoice-materializer). Nullable (expand-contract).
+  settlementArticleId: varchar("settlement_article_id").references(() => articles.id),
   
   // === FLEXIBEL SCHEMALÄGGNING (ny) ===
   flexibleFrequency: jsonb("flexible_frequency"),

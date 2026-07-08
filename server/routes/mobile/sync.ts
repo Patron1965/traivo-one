@@ -105,6 +105,27 @@ app.post("/api/mobile/sync", isMobileAuthenticated, asyncHandler(async (req: Mob
               updateData.orderStatus = validOrderStatuses.includes(newStatus) ? newStatus : 'skapad';
             }
             const syncUpdated = await storage.updateWorkOrder(orderId, updateData);
+
+            // Task #1187/#1124: offline-sync sätter 'utford' via updateWorkOrder utan
+            // att köra finalize. För en projicerad konceptuppgift-WO måste finalize
+            // köras så att bl.a. en abonnemangstäckt WO får sin negativa kvittningsrad
+            // (netto 0) och läggs i fakturakön. Tenant härleds ur WO:n (mobil-ytan går
+            // utanför tenant-mw → läs aldrig req.tenantId här). Best-effort.
+            if (
+              (newStatus === 'utford' || newStatus === 'completed') &&
+              syncUpdated?.sourceAssignmentId &&
+              order.tenantId
+            ) {
+              try {
+                const { finalizeCompletedAssignmentForInvoice } = await import(
+                  "../../services/assignment-invoice-materializer"
+                );
+                await finalizeCompletedAssignmentForInvoice(order.tenantId, orderId);
+              } catch (e) {
+                console.error("[assignment-invoice] finalize (offline-sync) misslyckades:", e);
+              }
+            }
+
             await storage.updateOfflineSyncLogStatus(logEntry.id, "completed");
             results.push({ clientId, status: "completed" });
 

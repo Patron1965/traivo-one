@@ -292,6 +292,10 @@ export async function generateScheduleAssignments(opts: {
         frozenTimeCode: linkedArticle?.timeCodeKey ?? undefined,
         // Task #997: fryst viktat tidsregel-paket (null om objektet saknar regler).
         frozenTimeRules: frozenTimeRulesByObject.get(obj.id) ?? null,
+        // Task #1124/#1187: faktureringstyp-snapshot (schedule/subscription). Läses av
+        // materialiseraren; abonnemangsuppgifter kvittas till 0 vid slutförande så att
+        // identifieringen inte hänger på att konceptet finns kvar/oförändrat senare.
+        billingMethod: getOrderConceptMethod(concept),
         // Platskrav (§5 A) stämplas MEDVETET inte här: detta är en concept-nivå-
         // assignment (en per objekt, ej per artikel), så en enskild artikels
         // locationRequirement har ingen entydig innebörd. Objektet är obligatoriskt
@@ -2475,14 +2479,21 @@ app.post("/api/order-concepts/:id/execute", asyncHandler(async (req, res) => {
     // aktiverar abonnemanget (nästa fakturadatum + summor).
     const conceptMethod = getOrderConceptMethod(concept);
 
+    // Task #1187: ett abonnemang med leveransschema/intervall genererar utförbara
+    // uppgifter som kvittas mot avgiften vid slutförande. Ett avgifts-abonnemang utan
+    // schema skapar inga uppgifter (oförändrat beteende).
+    const subscriptionHasSchedule =
+      conceptMethod === "subscription" && buildScheduleDateTargets(concept) !== null;
+
     // Task #976: artikelträff — avgör för vilka inpekade objekt den länkade artikeln
     // FAKTISKT träffar (metadata-/formel-drivet antal > 0). Endast träff-objekt ska
     // expanderas, prissättas och räknas. Beräknas en gång och konsumeras av call_off-
-    // loopen, schema-generatorn och pre-task-loopen. Abonnemang skapar inga uppgifter
-    // och berörs inte. Tjänsten faller tillbaka på "alla träffar" när inget antalsläge
-    // är metadata-drivet (legacy-beteende bevaras).
+    // loopen, schema-generatorn och pre-task-loopen. Ett avgifts-abonnemang (utan
+    // schema) skapar inga uppgifter och berörs inte; ett schemalagt abonnemang beräknar
+    // träffar precis som schema. Tjänsten faller tillbaka på "alla träffar" när inget
+    // antalsläge är metadata-drivet (legacy-beteende bevaras).
     let hits: ConceptArticleHits | null = null;
-    if (conceptMethod !== "subscription") {
+    if (conceptMethod !== "subscription" || subscriptionHasSchedule) {
       hits = await resolveConceptArticleHits({
         tenantId,
         concept,
@@ -2514,7 +2525,7 @@ app.post("/api/order-concepts/:id/execute", asyncHandler(async (req, res) => {
         concept,
         tenantId,
         matchingObjects: expansionObjects,
-        runPrePass: conceptMethod !== "subscription",
+        runPrePass: conceptMethod !== "subscription" || subscriptionHasSchedule,
       });
 
     if (conceptMethod === "subscription") {
@@ -2540,12 +2551,34 @@ app.post("/api/order-concepts/:id/execute", asyncHandler(async (req, res) => {
         nextRunDate: nextRun,
       });
 
+      // Task #1187: ett schemalagt abonnemang genererar utförbara uppgifter (stämplade
+      // billingMethod='subscription' via getOrderConceptMethod i generatorn). Uppgifterna
+      // kvittas till 0 mot abonnemangsavgiften när de slutförs (se materialiseraren).
+      // Ett avgifts-abonnemang utan schema skapar inga uppgifter (oförändrat).
+      let assignmentsCreated = 0;
+      if (subscriptionHasSchedule) {
+        const scheduleResult = await generateScheduleAssignments({
+          concept,
+          tenantId,
+          userId,
+          matchingObjects: expansionObjects,
+          linkedArticle,
+          linkedArticleId,
+          linkedPrice,
+          isFromMetadata,
+          customerIdForObject,
+          resolvePrice: resolvePriceMemo,
+          quantityByObjectId: hits?.quantityByObjectId,
+        });
+        assignmentsCreated = scheduleResult?.created.length ?? 0;
+      }
+
       return res.json({
         success: true,
         method: "subscription",
-        message: `Abonnemang aktiverat för ${matchingObjects.length} objekt (beräknad avgift ${monthlyTotal.toLocaleString("sv-SE")} kr). Nästa fakturering ${nextRun.toISOString().split("T")[0]}.`,
+        message: `Abonnemang aktiverat för ${matchingObjects.length} objekt (beräknad avgift ${monthlyTotal.toLocaleString("sv-SE")} kr)${assignmentsCreated > 0 ? `, ${assignmentsCreated} uppgifter schemalagda` : ""}. Nästa fakturering ${nextRun.toISOString().split("T")[0]}.`,
         objectsMatched: matchingObjects.length,
-        assignmentsCreated: 0,
+        assignmentsCreated,
         subscription: {
           computed: true,
           matchedObjects: matchingObjects.length,

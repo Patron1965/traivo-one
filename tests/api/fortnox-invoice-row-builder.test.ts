@@ -280,3 +280,46 @@ describe("buildFortnoxLogicalRowsForWorkOrder — pris/antal/filter", () => {
     expect(rows[0].chargeRow.ArticleNumber).toBe("FX-art-1");
   });
 });
+
+describe("buildFortnoxLogicalRowsForWorkOrder — enforceNetZero (Task #1187)", () => {
+  // Abonnemangstäckt WO: debiteringsrad + negativ kvittningsrad. Net-0-invarianten
+  // vid export skyddar mot dubbelfakturering om kvittningsraden tappas.
+  const covered = {
+    workOrder: { id: "wo-sub" },
+    lines: [
+      { articleId: "art-1", quantity: 1, resolvedPrice: 10000, notes: "Tömning" },
+      { articleId: "settle", quantity: 1, resolvedPrice: -10000, notes: "Kvittning – ingår i abonnemang" },
+    ],
+  };
+
+  it("passerar utan kast när debiterings- + kvittningsrad nettar till 0", async () => {
+    const rows = await buildFortnoxLogicalRowsForWorkOrder({
+      ...makeParams(covered),
+      enforceNetZero: true,
+    });
+    expect(rows).toHaveLength(2);
+    const net = rows.reduce(
+      (s, r) => s + Number(r.chargeRow.Price ?? 0) * Number(r.chargeRow.DeliveredQuantity ?? 0),
+      0,
+    );
+    expect(net).toBe(0);
+  });
+
+  it("kastar när kvittningsraden filtrerats bort men den positiva raden finns kvar", async () => {
+    // Ett payer-artikelfilter som bara släpper igenom debiteringsartikeln tappar
+    // kvittningsraden → net ≠ 0 → export måste avbrytas (fail-closed).
+    await expect(
+      buildFortnoxLogicalRowsForWorkOrder({
+        ...makeParams({ ...covered, articleFilter: ["art-1"] }),
+        enforceNetZero: true,
+      }),
+    ).rejects.toThrow(/nettar/);
+  });
+
+  it("utan enforceNetZero kastar det aldrig (invarianten är opt-in)", async () => {
+    const rows = await buildFortnoxLogicalRowsForWorkOrder(
+      makeParams({ ...covered, articleFilter: ["art-1"] }),
+    );
+    expect(rows).toHaveLength(1);
+  });
+});
