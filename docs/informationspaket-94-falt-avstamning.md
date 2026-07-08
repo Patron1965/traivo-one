@@ -186,7 +186,8 @@ Beteckningar för "Hur det fylls": **D** = ren data · **M** = metadata-katalog 
 - Begränsningstyp per objekt/kund (19), Ej förbrukas-flagga (33), Visas på faktura /
   faktureras till kund som artikelflaggor (26, 27), Visade fält editable per fält (42),
   Geo-oberoende-flagga (48), "Hur objektet hittades"-klartext (54), Fastighetsägare per
-  plats (66), Affärsstatus-kedjan (90), Prismaskering på följesedel (91).
+  plats (66), Affärsstatus-kedjan (90 — utredd i `docs/adr-affarsstatus-kedjan.md`),
+  Prismaskering på följesedel (91).
 
 **Status-lucka:**
 - **"Överbokad"** som egen uppgiftsstatus (fält 88) → åtgärd **D** (överbokning som status + krockvarning).
