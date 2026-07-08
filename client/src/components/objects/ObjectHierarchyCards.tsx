@@ -317,6 +317,7 @@ export function ObjectHierarchyCards({
         objectId={objectId}
         objectName={object.name || object.objectNumber || "objektet"}
         excludeIds={kopplaMode === "parent" ? parentExcludeIds : childExcludeIds}
+        objectTypeLabels={objectTypeLabels}
       />
     </>
   );

@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
-  Layers, AlertTriangle, Cog, Link as LinkIcon, ClipboardList, Calendar, Users, Info, ListFilter,
+  Cog, Link as LinkIcon, Calendar, Users, Info, ListFilter,
 } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -18,7 +18,6 @@ import {
 } from "@/components/ObjectMetadataForm";
 import { ObjectSystemGeneratedPanel } from "@/components/ObjectSystemGeneratedPanel";
 import { MetadataCarousel } from "./MetadataCarousel";
-import { MetadataAnchorNav, type MetadataNavSection } from "./MetadataAnchorNav";
 import { ObjectSystemOrdersList } from "./ObjectSystemOrdersList";
 import {
   groupEntriesByArea,
@@ -127,34 +126,6 @@ export function ObjectMetadataBody({
     [visibleGroups],
   );
 
-  // Vid aktivt områdesfilter fokuseras vyn på valda områden — övriga
-  // system-/order-sektioner döljs så listan visar bara det man filtrerat på.
-  const sections: MetadataNavSection[] = [
-    ...visibleGroups.map((g) => ({
-      key: `area-${anchorSlug(g.area)}`,
-      anchorId: `meta-area-${anchorSlug(g.area)}`,
-      label: g.label,
-      count: g.items.length,
-      icon: Layers,
-    })),
-    ...(!filterActive && legacyEntries.length
-      ? [{
-          key: "legacy",
-          anchorId: "meta-area-legacy",
-          label: "Objektfält (under migrering)",
-          count: legacyEntries.length,
-          icon: AlertTriangle,
-        }]
-      : []),
-    ...(!filterActive
-      ? [
-          { key: "system", anchorId: "meta-area-system", label: "Systemgenererad metadata", count: 0, icon: Cog },
-          { key: "assignments", anchorId: "meta-area-assignments", label: "Orderkoncept-uppgifter", count: objectAssignments.length, icon: LinkIcon },
-          { key: "orders", anchorId: "meta-area-orders", label: "Systemkopplade ordrar", count: 0, icon: ClipboardList },
-        ]
-      : []),
-  ];
-
   const renderField = (entry: MetadataFormEntry) => (
     <MetadataCarousel
       key={entry.id}
@@ -172,12 +143,7 @@ export function ObjectMetadataBody({
   );
 
   return (
-    <div className="flex flex-col gap-6 lg:flex-row">
-      <aside className="lg:w-60 lg:shrink-0">
-        <MetadataAnchorNav sections={sections} />
-      </aside>
-
-      <div className="min-w-0 flex-1 space-y-6">
+    <div className="space-y-6">
         <div className="flex items-center justify-between gap-2">
           <h2 className="text-sm font-medium text-muted-foreground" data-testid="text-metadata-count">
             {filterActive ? `${visibleCount} av ${entries.length}` : entries.length} metadatafält
@@ -411,7 +377,6 @@ export function ObjectMetadataBody({
         </section>
         </>
         )}
-      </div>
 
       <Dialog open={!!previewUrl} onOpenChange={(o) => !o && setPreviewUrl(null)}>
         <DialogContent className="max-w-3xl">

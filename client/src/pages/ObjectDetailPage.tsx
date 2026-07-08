@@ -4,8 +4,7 @@ import { useRoute, useLocation } from "wouter";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { ObjectHistoryArchiveTab } from "@/components/ObjectHistoryArchiveTab";
-import { ObjectVignetteSection } from "@/components/ObjectVignetteSection";
+import { ObjectArchiveControl } from "@/components/objects/ObjectArchiveControl";
 import { ObjectHeaderPanel } from "@/components/ObjectHeaderPanel";
 import { type MetadataFormEntry, type MetadataFormType, type MetadataRelatedParent, type MetadataRelatedChild } from "@/components/ObjectMetadataForm";
 import { buildLegacyObjectFieldEntries, type LegacyFieldInput } from "@/lib/legacy-object-fields";
@@ -1270,11 +1269,6 @@ export default function ObjectDetailPage() {
             )}
           </h1>
           <div className="flex items-center gap-2 mt-2 flex-wrap">
-            {objectTypeLabel && (
-              <Badge variant="secondary" data-testid="badge-object-type">
-                {objectTypeLabel}
-              </Badge>
-            )}
             {/* Task #1158: arkivering (soft-delete via deletedAt) är read-only i
                 huvudet — objektets driftstatus (active/inactive/pending) redigeras
                 separat via väljaren nedan (befintlig PATCH /api/objects/:id). */}
@@ -1399,6 +1393,12 @@ export default function ObjectDetailPage() {
                 {accessTypeLabels[obj.accessType]?.label}
               </Badge>
             )}
+            {/* Arkivera/återställ flyttat hit från separat kort längre ner. */}
+            <ObjectArchiveControl
+              objectId={objectId}
+              isArchived={!!(obj as any).deletedAt}
+              canRestore={user?.role === "admin" || user?.role === "owner"}
+            />
           </div>
           {/* Task #1128: släktskap direkt i headern — redigerbar förälder + underordnade. */}
           <div className="flex items-center gap-x-4 gap-y-1 mt-2 flex-wrap text-sm">
@@ -1473,7 +1473,16 @@ export default function ObjectDetailPage() {
             </button>
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* Snabbmeny (ersätter tidigare sticky-navigering): hoppa till sektion. */}
+          <div className="flex items-center gap-1" data-testid="object-detail-quicknav">
+            <Button variant="ghost" size="sm" onClick={() => scrollToSection("metadata")} data-testid="nav-metadata">
+              Metadata
+            </Button>
+            <Button variant="ghost" size="sm" onClick={() => scrollToSection("linked-tasks")} data-testid="nav-linked-tasks">
+              Uppgifter
+            </Button>
+          </div>
           {(user?.role === "admin" || user?.role === "owner" || user?.role === "planner") && (
             <Button
               size="sm"
@@ -1503,8 +1512,6 @@ export default function ObjectDetailPage() {
         metadata={metadata}
         canEdit={user?.role === "admin" || user?.role === "owner"}
       />
-
-      <ObjectVignetteSection objectId={obj.id} />
 
       {customerIdForSearch && (
         <div className="relative" data-testid="object-tree-search">
@@ -1611,32 +1618,20 @@ export default function ObjectDetailPage() {
           onMoveObject={openMoveDialog}
           onCopy={() => { setCopyName(obj.name || obj.objectNumber || ""); setCopyMode("single"); setCopyDialogOpen(true); }}
         />
-        <ObjectHistoryArchiveTab objectId={objectId} isArchived={!!resolvedObject?.deletedAt} />
       </section>
-
-      {/* Snabbnavigering — tre ankarsektioner: Huvud, Metadata, Kopplade uppgifter. */}
-      <nav
-        className="sticky top-0 z-30 -mx-4 md:-mx-6 px-4 md:px-6 flex flex-wrap items-center gap-1 border-b py-3 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80"
-        aria-label="Snabbnavigering"
-        data-testid="object-detail-section-nav"
-      >
-        <Button variant="ghost" size="sm" onClick={() => scrollToSection("huvud")} data-testid="nav-huvud">Huvud</Button>
-        <Button variant="ghost" size="sm" onClick={() => scrollToSection("metadata")} data-testid="nav-metadata">Metadata</Button>
-        <Button variant="ghost" size="sm" onClick={() => scrollToSection("linked-tasks")} data-testid="nav-linked-tasks">
-          Kopplade uppgifter
-        </Button>
-      </nav>
 
       <div className="space-y-8" data-testid="object-detail-sections">
         {/* ==================== (2) METADATA: editor + samlingskaruseller ==================== */}
         <section id="object-section-metadata" className="space-y-4 scroll-mt-4">
           {(() => {
             const selectedTemplate = importTemplates.find((t) => t.id === selectedTemplateId);
+            // Historik slås ihop per fält (PO): visa historik-knappen på ALLA
+            // katalog-backade fält (ej bara kronologiskVisning), nyast först.
             const renderHistory = (entry: MetadataFormEntry) =>
-              entry.katalog?.kronologiskVisning ? (
+              entry.metadataKatalogId ? (
                 <MetadataHistorikButton
                   objectId={objectId}
-                  katalogId={entry.metadataKatalogId || ""}
+                  katalogId={entry.metadataKatalogId}
                   katalogNamn={entry.katalog?.namn || ""}
                 />
               ) : null;

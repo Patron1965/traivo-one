@@ -14,6 +14,7 @@ import { Loader2, Link as LinkIcon, Plus, Pencil } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { rawDisplayValue, type MetadataFormEntry } from "@/components/ObjectMetadataForm";
+import { isCompositeValue } from "./metadata-carousel-utils";
 
 type EditAction = "source" | "instance";
 
@@ -104,27 +105,54 @@ export function InheritedEditDialog({
 
   const [action, setAction] = useState<EditAction | null>(null);
   const [value, setValue] = useState("");
+  // Kompositfält (t.ex. Kontakt = namn/titel/tel/e-post): redigera per medlem
+  // och skriv tillbaka som ETT JSON-värde (servern JSON.parse:ar json-datatyp).
+  const compositeObj =
+    datatyp === "json" && isCompositeValue(entry.vardeJson)
+      ? (entry.vardeJson as Record<string, unknown>)
+      : null;
+  const isComposite = !!compositeObj;
+  const compositeKeys = compositeObj ? Object.keys(compositeObj) : [];
+  const [compositeValues, setCompositeValues] = useState<Record<string, string>>({});
 
   // Återställ vid öppning: direkt → hoppa direkt till redigering; ärvt → visa val.
   useEffect(() => {
     if (open) {
       setValue(initialValueFor(entry));
       setAction(isInherited ? null : "source");
+      if (compositeObj) {
+        const seed: Record<string, string> = {};
+        for (const [k, v] of Object.entries(compositeObj)) {
+          seed[k] = v == null ? "" : String(v);
+        }
+        setCompositeValues(seed);
+      } else {
+        setCompositeValues({});
+      }
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, entry, isInherited]);
 
   const mutation = useMutation({
     mutationFn: async () => {
+      const varde = isComposite
+        ? JSON.stringify(
+            compositeKeys.reduce<Record<string, string>>((acc, k) => {
+              acc[k] = compositeValues[k] ?? "";
+              return acc;
+            }, {}),
+          )
+        : value;
       if (action === "instance") {
         await apiRequest("POST", `/api/objects/${objectId}/metadata/new-instance`, {
           metadataTypNamn: katalogNamn,
-          varde: value,
+          varde,
           level: objectId,
         });
       } else {
         await apiRequest("PATCH", `/api/objects/${objectId}/metadata/edit-source`, {
           vardeId: entry.id,
-          varde: value,
+          varde,
         });
       }
     },
@@ -226,15 +254,33 @@ export function InheritedEditDialog({
                 Ny lokal instans — källvärdet lämnas orört.
               </div>
             )}
-            <div className="space-y-2">
-              <Label>Värde</Label>
-              <ValueInput
-                datatyp={datatyp}
-                allowedValues={allowedValues}
-                value={value}
-                onChange={setValue}
-              />
-            </div>
+            {isComposite ? (
+              <div className="space-y-3" data-testid="edit-composite-fields">
+                {compositeKeys.map((k) => (
+                  <div key={k} className="space-y-1.5">
+                    <Label className="text-xs capitalize">{k}</Label>
+                    <Input
+                      value={compositeValues[k] ?? ""}
+                      onChange={(e) =>
+                        setCompositeValues((prev) => ({ ...prev, [k]: e.target.value }))
+                      }
+                      placeholder="Ange värde"
+                      data-testid={`input-edit-composite-${k}`}
+                    />
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <Label>Värde</Label>
+                <ValueInput
+                  datatyp={datatyp}
+                  allowedValues={allowedValues}
+                  value={value}
+                  onChange={setValue}
+                />
+              </div>
+            )}
           </div>
         )}
 
@@ -249,7 +295,11 @@ export function InheritedEditDialog({
             </Button>
             <Button
               onClick={() => mutation.mutate()}
-              disabled={!value || mutation.isPending}
+              disabled={
+                (isComposite
+                  ? !compositeKeys.some((k) => (compositeValues[k] ?? "").trim() !== "")
+                  : !value) || mutation.isPending
+              }
               data-testid="button-save-edit-metadata"
             >
               {mutation.isPending ? (

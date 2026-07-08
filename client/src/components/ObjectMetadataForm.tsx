@@ -5,7 +5,9 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Command, CommandInput, CommandList, CommandEmpty, CommandGroup, CommandItem } from "@/components/ui/command";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useToast } from "@/hooks/use-toast";
@@ -19,7 +21,7 @@ import {
   Link as LinkIcon, Plus, Loader2, Type, Hash, ToggleLeft, Pencil,
   Calendar, Braces, MapPin, FileIcon, Eye, Layers, Server, Tag, AlignLeft,
   SlidersHorizontal, Users, ClipboardList, AlertTriangle, LayoutGrid, ChevronRight,
-  Star, GitFork, Network, Package,
+  Star, GitFork, Network, Package, Check, ChevronsUpDown,
 } from "lucide-react";
 import { KallaBadge, KallaLegend, deriveEntryKalla } from "@/lib/metadata-kalla";
 
@@ -1430,6 +1432,7 @@ export function MetadataAddButton({
   const { uploadFile, isUploading } = useUpload();
   const { order: areaOrder, areaLabel } = useMetadataAreas();
   const [open, setOpen] = useState(false);
+  const [typeOpen, setTypeOpen] = useState(false);
   const [selectedType, setSelectedType] = useState("");
   const [value, setValue] = useState("");
   const [familyValues, setFamilyValues] = useState<Record<string, string>>({});
@@ -1629,27 +1632,64 @@ export function MetadataAddButton({
             <div className="space-y-2">
               <Label>Metadatatyp *</Label>
               {addableTypes.length > 0 ? (
-                <Select value={selectedType} onValueChange={(v) => { setSelectedType(v); setValue(""); setUploadedName(""); }}>
-                  <SelectTrigger data-testid="select-metadata-type">
-                    <SelectValue placeholder="Välj typ..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {dropdownGroups.map((g) => (
-                      <SelectGroup key={g.area}>
-                        <SelectLabel data-testid={`select-group-${g.area}`}>{g.label}</SelectLabel>
-                        {g.rows.map(({ type: t, isChild }) => (
-                          <SelectItem
-                            key={t.id || t.namn}
-                            value={t.namn}
-                            className={isChild ? "pl-12" : undefined}
-                          >
-                            {isChild ? metadataDisplayName(t) : metadataTypeOptionLabel(t)}
-                          </SelectItem>
+                <Popover open={typeOpen} onOpenChange={setTypeOpen}>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      role="combobox"
+                      aria-expanded={typeOpen}
+                      className="w-full justify-between font-normal"
+                      data-testid="select-metadata-type"
+                    >
+                      <span className="truncate">
+                        {selectedMetaType ? metadataDisplayName(selectedMetaType) : "Välj typ..."}
+                      </span>
+                      <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+                    <Command>
+                      <CommandInput placeholder="Sök fält..." data-testid="input-search-metadata-type" />
+                      <CommandList>
+                        <CommandEmpty>Inga fält hittades.</CommandEmpty>
+                        {dropdownGroups.map((g) => (
+                          <CommandGroup key={g.area} heading={g.label}>
+                            {g.rows.map(({ type: t, isChild }) => {
+                              const dn = isChild ? metadataDisplayName(t) : metadataTypeOptionLabel(t);
+                              const typLabel =
+                                (METADATA_DATATYPE_LABELS as Record<string, string>)[t.datatyp ?? "string"] ??
+                                (t.datatyp ?? "");
+                              return (
+                                <CommandItem
+                                  key={t.id || t.namn}
+                                  value={`${dn} ${t.namn} ${typLabel} ${g.label}`}
+                                  onSelect={() => {
+                                    setSelectedType(t.namn);
+                                    setValue("");
+                                    setUploadedName("");
+                                    setTypeOpen(false);
+                                  }}
+                                  className={isChild ? "pl-8" : undefined}
+                                  data-testid={`option-metadata-type-${t.namn}`}
+                                >
+                                  <Check
+                                    className={`mr-2 h-4 w-4 shrink-0 ${
+                                      selectedType === t.namn ? "opacity-100" : "opacity-0"
+                                    }`}
+                                  />
+                                  <span className="flex-1 truncate">{dn}</span>
+                                  <span className="ml-2 text-[10px] text-muted-foreground shrink-0">
+                                    {typLabel}
+                                  </span>
+                                </CommandItem>
+                              );
+                            })}
+                          </CommandGroup>
                         ))}
-                      </SelectGroup>
-                    ))}
-                  </SelectContent>
-                </Select>
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
               ) : (
                 <Input
                   value={selectedType}

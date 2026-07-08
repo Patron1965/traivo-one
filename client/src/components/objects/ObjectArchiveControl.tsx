@@ -1,30 +1,16 @@
-// Task #552 (B) + (C): Historik-fönster + arkivera-knapp för enskilt objekt.
-// Historik hämtas från befintlig endpoint /api/metadata/objects/:id/historik.
-// Arkivering körs mot ny endpoint med preflight-dialog.
+// Arkivera/återställ-åtgärd flyttad till objekthuvudet (ersätter tidigare
+// separata "Arkivering"-kort). Behåller preflight-dialog + orsak + force-flöde.
+// Återställ-knappen gate:as till admin/owner eftersom POST /restore = requireAdmin.
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
-import { AlertTriangle, Archive, RotateCcw, History } from "lucide-react";
-import { SubObjectImportPanel } from "./SubObjectImportPanel";
-
-type HistoryEntry = {
-  id: string;
-  gammaltVarde: string | null;
-  nyttVarde: string | null;
-  andradAv: string | null;
-  andradVid: string;
-  andringsMetod: string | null;
-  metadataNamn?: string | null;
-  metadataKatalogNamn?: string | null;
-};
+import { AlertTriangle, Archive, RotateCcw } from "lucide-react";
 
 type Preflight = {
   hasDescendants: number;
@@ -35,17 +21,20 @@ type Preflight = {
   warnings: string[];
 };
 
-export function ObjectHistoryArchiveTab({ objectId, isArchived }: { objectId: string; isArchived?: boolean }) {
+export function ObjectArchiveControl({
+  objectId,
+  isArchived,
+  canRestore,
+}: {
+  objectId: string;
+  isArchived?: boolean;
+  canRestore?: boolean;
+}) {
   const [, setLocation] = useLocation();
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [reason, setReason] = useState("");
-
-  const { data: history = [] } = useQuery<HistoryEntry[]>({
-    queryKey: ["/api/metadata/objects", objectId, "historik"],
-    enabled: !!objectId,
-  });
 
   const preflightQ = useQuery<Preflight>({
     queryKey: ["/api/objects", objectId, "archive-preflight"],
@@ -85,78 +74,33 @@ export function ObjectHistoryArchiveTab({ objectId, isArchived }: { objectId: st
   const pre = preflightQ.data;
   const blocked = (pre?.blockers.length ?? 0) > 0;
 
+  if (isArchived) {
+    if (!canRestore) return null;
+    return (
+      <Button
+        variant="outline"
+        size="sm"
+        className="h-7 gap-1.5"
+        onClick={() => restoreMut.mutate()}
+        disabled={restoreMut.isPending}
+        data-testid="button-restore-object"
+      >
+        <RotateCcw className="h-3.5 w-3.5" /> Återställ
+      </Button>
+    );
+  }
+
   return (
-    <div className="space-y-4">
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-lg">
-            <History className="h-4 w-4" /> Metadata-historik
-          </CardTitle>
-          <CardDescription>Alla metadata-ändringar för detta objekt, senaste först.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          {history.length === 0 ? (
-            <p className="text-sm text-muted-foreground">Ingen historik ännu.</p>
-          ) : (
-            <div className="space-y-2 max-h-[480px] overflow-y-auto">
-              {history.map(h => (
-                <div key={h.id} className="border rounded p-3 text-sm" data-testid={`row-history-${h.id}`}>
-                  <div className="flex items-center justify-between gap-2 flex-wrap">
-                    <div className="flex items-center gap-2">
-                      <Badge variant="outline">{h.metadataNamn ?? h.metadataKatalogNamn ?? "-"}</Badge>
-                      <Badge variant="secondary" className="text-xs">{h.andringsMetod ?? "manuell"}</Badge>
-                    </div>
-                    <span className="text-xs text-muted-foreground">
-                      {new Date(h.andradVid).toLocaleString("sv-SE")} · {h.andradAv ?? "-"}
-                    </span>
-                  </div>
-                  <div className="mt-2 text-xs font-mono">
-                    <span className="text-muted-foreground">{h.gammaltVarde ?? "(tomt)"}</span>
-                    <span className="mx-2">→</span>
-                    <span>{h.nyttVarde ?? "(tomt)"}</span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      {!isArchived && <SubObjectImportPanel parentId={objectId} />}
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-lg">
-            <Archive className="h-4 w-4" /> Arkivering
-          </CardTitle>
-          <CardDescription>
-            Arkivering ersätter radering. Objektet döljs men data och historik bevaras.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          {isArchived ? (
-            <>
-              <p className="text-sm">Detta objekt är arkiverat.</p>
-              <Button
-                variant="outline"
-                onClick={() => restoreMut.mutate()}
-                disabled={restoreMut.isPending}
-                data-testid="button-restore-object"
-              >
-                <RotateCcw className="h-4 w-4 mr-2" /> Återställ
-              </Button>
-            </>
-          ) : (
-            <Button
-              variant="destructive"
-              onClick={() => setDialogOpen(true)}
-              data-testid="button-open-archive-dialog"
-            >
-              <Archive className="h-4 w-4 mr-2" /> Arkivera objekt
-            </Button>
-          )}
-        </CardContent>
-      </Card>
+    <>
+      <Button
+        variant="outline"
+        size="sm"
+        className="h-7 gap-1.5 text-muted-foreground"
+        onClick={() => setDialogOpen(true)}
+        data-testid="button-open-archive-dialog"
+      >
+        <Archive className="h-3.5 w-3.5" /> Arkivera
+      </Button>
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="max-w-md">
@@ -224,6 +168,6 @@ export function ObjectHistoryArchiveTab({ objectId, isArchived }: { objectId: st
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+    </>
   );
 }
