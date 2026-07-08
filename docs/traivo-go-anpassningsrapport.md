@@ -317,6 +317,9 @@ api-match-report listade som "bonus" (`metadata-context`/`metadata-update`,
 5. **Dokumentationsstädning:** ska handbokens §9 (antal) och §6 (två metadata-system)
    uppdateras/tas bort nu när de är inaktuella? (Rekommenderas — annars fortsätter de
    vilseleda.)
+6. **Design/branding (§13):** ska Go **matcha** Traivo One:s palett/utseende, eller
+   **behålla** "Plannix" egen identitet? (De funktionella statusfärgerna/etiketterna bör
+   kopieras oavsett — de handlar om igenkänning, inte varumärke.)
 
 ---
 
@@ -340,15 +343,69 @@ api-match-report listade som "bonus" (`metadata-context`/`metadata-update`,
 - [ ] Behandla systemgenererade/härledda metadatavärden som read-only (§3.3).
 - [ ] Hämta terminologi/etiketter från `GET /api/mobile/terminology`; hårdkoda inte (§9).
 - [ ] Kommunicera fakturastatus korrekt ("utförd ≠ fakturerad").
+- [ ] Kopiera statusfärger + status-etiketter (`status-colors.ts`) så en order ser
+      likadan ut i fält som på kontoret (kräver samma tema-tokens + font — §13).
 - [ ] Åtgärda Kategori A-namnbytena (#1–#3) — enradare.
 
 ### Kan (efter beslut)
 - [ ] Område-gruppering/filter i fält (kräver `area` på `metadata-context`) — §3.2/§11.
+- [ ] Matcha Traivo-paletten/mörkt läge fullt ut (branding-beslut §11/§13).
 - [ ] Kategori B (#4–#8) enligt beslut i §11.
 - [ ] Utförandekoder/ikoner enligt beslut i §11.
 
 ---
 
-*Rapport verifierad mot `server/routes/mobile/*` 2026-07-08. Vid framtida ändringar i
-mobil-ytan — uppdatera denna rapport och de refererade dokumenten så att Traivo One och
-Traivo Go hålls i synk. Referensimplementation: `client/src/components/SimpleFieldApp.tsx`.*
+## 13. Design-/layout-paritet (vad Go kan kopiera för samma utseende)
+
+Mobil-endpoints skickar **ingen** styling — Go bestämmer själv sitt utseende. Vill ni
+att fält-appen ska kännas som "samma system" som kontoret finns fyra saker att kopiera
+från Traivo One (webben). De tre första är funktionella (igenkänning) och bör kopieras
+oavsett branding; den fjärde är ett varumärkesval.
+
+### 13.1 Statusfärger + status-etiketter (viktigast)
+`client/src/lib/status-colors.ts` är **enda källan** för hur en order-/utförandestatus
+ser ut och heter i UI:t. Den mappar t.ex. utförandestatus till svenska 8-stegs-etiketter
+och färg:
+
+| Steg | Etikett | Färgspråk |
+|---|---|---|
+| 1 | Orderlagd | grön kontur (ej startad) |
+| 2 | Grovplanerad | warning (gul) |
+| 3 | Finplanerad / Skickad | warning |
+| 4–7 | På väg / På plats / Avslutad / Kontrollerad | chart-4 (neutralt "pågår/klart") |
+| 8 | Fakturerad | muted (grå) |
+| 0 | Avviker | destructive (röd) |
+
+Plus badge-mappningar för order-, leverans-, faktura-, prioritet- och objektstatus.
+**Kopiera denna fil** så att en order ser likadan ut i fält som på kontoret. *OBS:* den
+använder tema-tokens (`chart-1..5`, `warning`, `destructive`, `muted`) → den fungerar
+bara om Go också har samma färg-tokens (13.2).
+
+### 13.2 Färg-tokens (tema)
+CSS-variablerna i `client/src/index.css` (ljust **och** mörkt läge) + token-uppsättningen
+i `tailwind.config.ts`. Traivo-paletten:
+
+- Deep Ocean Blue `#1B4B6B` · Arctic Ice `#E8F4F8` · Mountain Gray `#6B7C8C`
+- Northern Teal `#4A9B9B` · Midnight Navy `#2C3E50` · Aurora Green `#7DBFB0`
+
+**Regel (samma som i Traivo One):** använd **alltid** tokens
+(`bg-destructive`/`bg-warning`/`chart-*`/`muted`), **aldrig** råa färger som
+`bg-red-500`.
+
+### 13.3 Font + mörkt/ljust läge
+- **Font:** Inter (Google Fonts-länken i `client/index.html`).
+- **Mörkt/ljust läge:** `.dark`-klass-mönstret på `<html>` + tema-tokens ovan.
+
+### 13.4 Logga/varumärke — VAL, inte "kopiera rakt av"
+Go är rebrandad **"Plannix"** (egen logga/namn). Logga och appnamn ska alltså **inte**
+kopieras från Traivo One. Om ni vill att Go ändå ska kännas som samma familj — kopiera
+paletten (13.2); vill ni hålla Plannix egen identitet — behåll er palett men kopiera
+ändå statusfärgerna/etiketterna (13.1) för igenkänning. Beslut: §11 punkt 6.
+
+---
+
+*Rapport verifierad mot `server/routes/mobile/*` + `client/src/lib/status-colors.ts`,
+`client/src/index.css`, `tailwind.config.ts` 2026-07-08. Vid framtida ändringar i
+mobil-ytan eller temat — uppdatera denna rapport och de refererade dokumenten så att
+Traivo One och Traivo Go hålls i synk. Referensimplementation:
+`client/src/components/SimpleFieldApp.tsx`.*
