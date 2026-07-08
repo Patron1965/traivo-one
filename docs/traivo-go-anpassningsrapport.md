@@ -54,7 +54,7 @@ Det finns tre olika komponenter som ofta blandas ihop. Håll isär dem:
 | Komponent | Vad det är | Auth | Endpoints |
 |---|---|---|---|
 | **Traivo One** | Backend + webbapp (detta repo) | Replit-session / cookie | alla `/api/*` |
-| **Traivo Go** | Fristående chaufförsapp (eget repo, rebrandad "Plannix" i UI) | **Bearer-token** | **endast `/api/mobile/*`** |
+| **Traivo Go** | Fristående chaufförsapp (eget repo) | **Bearer-token** | **endast `/api/mobile/*`** |
 | **SimpleFieldApp** | In-repo mobil-UI på `/mobile` (referens/fallback) | hybrid: session + mintar mobil-token | `/api/mobile/*` + `/api/*` |
 
 **Varför det spelar roll för Go:**
@@ -317,9 +317,6 @@ api-match-report listade som "bonus" (`metadata-context`/`metadata-update`,
 5. **Dokumentationsstädning:** ska handbokens §9 (antal) och §6 (två metadata-system)
    uppdateras/tas bort nu när de är inaktuella? (Rekommenderas — annars fortsätter de
    vilseleda.)
-6. **Design/branding (§13):** ska Go **matcha** Traivo One:s palett/utseende, eller
-   **behålla** "Plannix" egen identitet? (De funktionella statusfärgerna/etiketterna bör
-   kopieras oavsett — de handlar om igenkänning, inte varumärke.)
 
 ---
 
@@ -349,7 +346,7 @@ api-match-report listade som "bonus" (`metadata-context`/`metadata-update`,
 
 ### Kan (efter beslut)
 - [ ] Område-gruppering/filter i fält (kräver `area` på `metadata-context`) — §3.2/§11.
-- [ ] Matcha Traivo-paletten/mörkt läge fullt ut (branding-beslut §11/§13).
+- [ ] Matcha Traivo-paletten/mörkt läge fullt ut (§13).
 - [ ] Kategori B (#4–#8) enligt beslut i §11.
 - [ ] Utförandekoder/ikoner enligt beslut i §11.
 
@@ -357,10 +354,10 @@ api-match-report listade som "bonus" (`metadata-context`/`metadata-update`,
 
 ## 13. Design-/layout-paritet (vad Go kan kopiera för samma utseende)
 
-Mobil-endpoints skickar **ingen** styling — Go bestämmer själv sitt utseende. Vill ni
-att fält-appen ska kännas som "samma system" som kontoret finns fyra saker att kopiera
-från Traivo One (webben). De tre första är funktionella (igenkänning) och bör kopieras
-oavsett branding; den fjärde är ett varumärkesval.
+Mobil-endpoints skickar **ingen** styling — Go bestämmer själv sitt utseende. Eftersom
+Traivo Go är en del av Traivo-familjen bör fält-appen kännas som "samma system" som
+kontoret. Det finns fyra saker att ta från Traivo One (webben): de tre första är
+funktionella (igenkänning), den fjärde är namn/logga.
 
 ### 13.1 Statusfärger + status-etiketter (viktigast)
 `client/src/lib/status-colors.ts` är **enda källan** för hur en order-/utförandestatus
@@ -396,11 +393,11 @@ i `tailwind.config.ts`. Traivo-paletten:
 - **Font:** Inter (Google Fonts-länken i `client/index.html`).
 - **Mörkt/ljust läge:** `.dark`-klass-mönstret på `<html>` + tema-tokens ovan.
 
-### 13.4 Logga/varumärke — VAL, inte "kopiera rakt av"
-Go är rebrandad **"Plannix"** (egen logga/namn). Logga och appnamn ska alltså **inte**
-kopieras från Traivo One. Om ni vill att Go ändå ska kännas som samma familj — kopiera
-paletten (13.2); vill ni hålla Plannix egen identitet — behåll er palett men kopiera
-ändå statusfärgerna/etiketterna (13.1) för igenkänning. Beslut: §11 punkt 6.
+### 13.4 Logga/varumärke
+Chaufförsappen heter **"Traivo Go"** och är en del av Traivo-familjen (inget separat
+varumärke). Använd därför Traivo-paletten (13.2) och namnet/loggan "Traivo Go" — utgå
+från `@assets/traivo_logo_transparent.png` tills en egen "Traivo Go"-logga tas fram.
+Statusfärgerna/etiketterna (13.1) kopieras för igenkänning mellan fält och kontor.
 
 ---
 

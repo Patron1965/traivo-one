@@ -2,7 +2,7 @@
 
 > Syfte: gör så att mobilappen **Traivo Go** (GitHub: `Patron1965/traivo-go`) och backenden **Traivo One** matchar varandra till 100 %.
 > Källa till sanning = Traivo One:s faktiska mobil-routes (`server/routes/mobile/*` + `server/routes/urgentJobRoutes.ts`).
-> Analyserad app-commit: `main` (rebrandad till "Plannix" i UI, men anropar fortfarande `/api/mobile/*`).
+> Analyserad app-commit: `main` (Traivo Go; anropar `/api/mobile/*`).
 
 ---
 
