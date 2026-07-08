@@ -17,6 +17,7 @@ import { SubStepsExpander } from "./DndComponents";
 import { WorkOrderMetadataPanel } from "../WorkOrderMetadataPanel";
 import { useLocalizedObjectName } from "@/lib/object-name";
 import { LocationRequirementBadge } from "@/components/LocationRequirementBadge";
+import { TaskRoleBadge } from "@/components/TaskRoleBadge";
 
 interface JobCardProps {
   job: WorkOrderWithObject;
@@ -142,11 +143,7 @@ export const JobCard = memo(function JobCard({
                 {(job.metadata as Record<string, string>).teamName}
               </Badge>
             )}
-            {job.creationMethod === "automatic" && (
-              <Badge className="text-[9px] h-4 bg-warning/15 text-warning dark:bg-warning/15 border-warning/30" data-testid={`pickup-badge-${job.id}`}>
-                Plockuppgift
-              </Badge>
-            )}
+            <TaskRoleBadge task={job} className="h-4" testIdSuffix={job.id} />
             <LocationRequirementBadge order={job} compact testIdSuffix={job.id} />
             {(job.objectAccessCode || job.objectKeyNumber) && (
               <div className="flex items-center gap-2 mt-0.5">

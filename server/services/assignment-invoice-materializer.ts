@@ -208,6 +208,11 @@ export async function ensureWorkOrderForAssignmentExecution(
     taskLatitude: assignment.latitude ?? undefined,
     taskLongitude: assignment.longitude ?? undefined,
     executionCode: assignment.executionCode ?? undefined,
+    // Task #1186: bevara systemrollen (hämtning/leverans/retur) på den projicerade
+    // WO:n så att avrops-logistikuppgifter förblir visuellt urskiljbara i planerare
+    // + mobilapp. Assignments bär bara logisticsRole (admin/logistik-artiklar
+    // materialiseras direkt till work_orders, förbi projektionen). Additivt.
+    logisticsRole: assignment.logisticsRole ?? undefined,
     creationMethod: "assignment_invoice",
     // Task #1124 — koppling + fast-pris-natur (stabil; resten av paketet fryses
     // först vid klarmarkering i fas 2).

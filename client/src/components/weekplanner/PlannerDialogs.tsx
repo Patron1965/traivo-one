@@ -10,6 +10,7 @@ import { format, startOfWeek } from "date-fns";
 import { sv } from "date-fns/locale";
 import type { Resource, WorkOrderWithObject } from "@shared/schema";
 import type { ViewMode, PendingSchedule, AutoFillAssignment, AutoFillDiag } from "./types";
+import { TaskRoleBadge } from "@/components/TaskRoleBadge";
 
 interface SendScheduleDialogProps {
   open: boolean;
@@ -654,9 +655,7 @@ export const DepChainDialog = memo(function DepChainDialog(props: DepChainDialog
                           {item.workOrder.scheduledStartTime && ` ${item.workOrder.scheduledStartTime}`}
                         </span>
                       )}
-                      {item.workOrder.creationMethod === "automatic" && (
-                        <Badge className="text-[10px] bg-warning/15 text-warning dark:bg-warning/15">Plockuppgift</Badge>
-                      )}
+                      <TaskRoleBadge task={item.workOrder} testIdSuffix={item.workOrder.id} />
                     </div>
                   </div>
                 </div>

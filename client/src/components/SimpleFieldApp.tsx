@@ -67,6 +67,7 @@ import {
 } from "@/lib/field-job-list";
 import { VoiceInput } from "@/components/VoiceInput";
 import { FocusTimeline, FocusCTA, ExpandableDetail, OrderStatusBadge, getTimelineStep, useFocusMode } from "@/components/FocusMode";
+import { TaskRoleBadge } from "@/components/TaskRoleBadge";
 import { OutboxCenter } from "@/components/OutboxCenter";
 import { EnkelUppgiftWizard } from "@/components/EnkelUppgiftWizard";
 import { TimelineView } from "@/components/TimelineView";
@@ -1612,6 +1613,7 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
                   <p className="font-medium">{job.title}</p>
                   <span className="text-[10px] text-muted-foreground font-mono" data-testid={`text-ordernr-${job.id}`}>#{job.id.slice(0, 8)}</span>
                   {getPriorityBadge(job.priority)}
+                  <TaskRoleBadge task={job} testIdSuffix={job.id} />
                   {dependencyData[job.id]?.isLocked && (
                     <Badge variant="outline" className="text-[10px] border-destructive/30 text-destructive gap-0.5">
                       <Lock className="h-3 w-3" />
@@ -1740,6 +1742,7 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
               <h1 className="text-lg font-semibold truncate">{selectedJob.title}</h1>
               {getPriorityBadge(selectedJob.priority)}
               <OrderStatusBadge status={selectedJob.orderStatus} />
+              <TaskRoleBadge task={selectedJob} testIdSuffix={selectedJob.id} />
             </div>
             <p className="text-sm text-muted-foreground truncate">{localizedObjectName(selectedJob.objectName, selectedJob.objectNameTranslations)}</p>
           </div>
