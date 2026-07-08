@@ -228,3 +228,9 @@ id = "vxpccQylox0FmstsjTU-s"
 uri = "file://docs/traivo-go-att-gora.md"
 type = "text"
 title = "Traivo Go — Att göra (överlämning)"
+
+[[outputs]]
+id = "MgLXcEQHgP3PfBjubFZ3u"
+uri = "file://docs/Arbetsmodell-for-Replit.pdf"
+type = "pdf"
+title = "Arbetsmodell för Replit — spelbok för nya bygg"

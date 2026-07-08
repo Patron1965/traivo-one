@@ -177,15 +177,20 @@ a { color: #4A9B9B; text-decoration: none; }
 .footer { position: fixed; bottom: 6mm; right: 12mm; font-size: 8pt; color: #6B7C8C; }
 `;
 
+const docTitle = process.env.PDF_TITLE || "Kinab pilot — Startguide";
+const docBadge = process.env.PDF_BADGE || "TRAIVO";
+const docSubtitle = process.env.PDF_SUBTITLE || "Pilotstart parallellt med Modus";
+const docFooter = process.env.PDF_FOOTER || "Traivo · Kinab pilot startguide";
+
 const fullHtml = `<!doctype html>
 <html lang="sv">
-<head><meta charset="utf-8"><title>Kinab pilot — Startguide</title>
+<head><meta charset="utf-8"><title>${escapeHtml(docTitle)}</title>
 <style>${css}</style>
 </head>
 <body>
-<div class="header"><span class="badge">TRAIVO</span><span style="color:#6B7C8C;font-size:10pt;">Pilotstart parallellt med Modus</span></div>
+<div class="header"><span class="badge">${escapeHtml(docBadge)}</span><span style="color:#6B7C8C;font-size:10pt;">${escapeHtml(docSubtitle)}</span></div>
 ${html}
-<div class="footer">Traivo · Kinab pilot startguide</div>
+<div class="footer">${escapeHtml(docFooter)}</div>
 </body></html>`;
 
 const browser = await chromium.launch();
