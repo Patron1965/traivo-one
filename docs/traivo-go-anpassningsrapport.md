@@ -20,8 +20,7 @@ Denna rapport är verifierad mot koden 2026-07-08.
 ## 0. Sammanfattning för Mats (icke-teknisk)
 
 Traivo One (systemet i webben) har byggts på en hel del sedan chaufförsappens
-handbok skrevs (23 juni). De viktigaste sakerna som chaufförsappen behöver anpassa
-sig efter:
+handbok skrevs (23 juni). Det viktigaste chaufförsappen behöver anpassa sig efter:
 
 1. **Antal går nu att redigera i fält.** Handboken sa "antal går inte att ändra i
    fält" — det stämmer inte längre. Systemet stödjer nu att chauffören justerar antal
@@ -29,13 +28,19 @@ sig efter:
    Go bör visa **en enkel antals-ruta per rad** och låta servern bestämma när den får
    redigeras — inte bygga egen logik.
 2. **Metadata visas och fylls i grupperat.** Fält som hör ihop (t.ex. allt under
-   "Kontakt") kommer nu färdiggrupperade från servern. Go ska visa dem under sin rubrik
-   i stället för som en lång platt lista.
-3. **"Utförd" betyder inte "fakturerad".** Ett jobb kan vara klart i fält men ändå
+   "Kontakt") kommer nu färdiggrupperade från servern. Go ska visa dem grupperat i
+   stället för som en lång platt lista.
+3. **Föraren ser bara riktiga arbetsorder.** Systemets nya "orderkoncept" och "avrop"
+   omvandlas först till vanliga arbetsorder — det är enbart dessa chauffören ser. Det
+   **förenklar** appen: en enda ordermodell, inga specialfall.
+4. **"Utförd" betyder inte "fakturerad".** Ett jobb kan vara klart i fält men ändå
    inte gå till faktura (fryst pris, faktureringsbroms, samlingsfaktura). Go måste
    säga rätt sak i appen.
-4. **Utförandekoder/ikoner finns nu som register i webben**, men mobil-ytan skickar
-   bara en enkel kod-text. Här finns ett **beslut** att ta (se §7).
+5. **Webbens meny lades om i juli** (t.ex. borttagen startöversikt, dolda rapporter).
+   Det är en **webb-ändring** och påverkar inte chaufförsappens data — men Go bör hämta
+   sina benämningar (objekt/resurs osv.) från servern så orden hålls lika.
+6. **Utförandekoder/ikoner** finns nu som register i webben, men mobil-ytan skickar
+   bara en enkel kod-text. Här finns ett **beslut** att ta (se §8/§11).
 
 Resten av rapporten är teknisk och riktar sig till Go-teamet. **Inga kodändringar
 görs i fältappen som en del av detta uppdrag — detta är en ren rapport/överlämning.**
@@ -108,22 +113,24 @@ Tillåts när `takenQuantityEditable=true`.
   att appen släpps om; dubblerad logik driver isär.
 - **"Taget antal" är en separat, valfri registrering** (för svinn/retur), inte samma
   sak som antalsjustering. Håll dem åtskilda i UI:t.
-- **Fakturalås = allt låst.** När ordern är `consolidated`/`exported` blir både
-  `editableQuantity` och `takenQuantityEditable` `false`. Rita då read-only. *Varför:*
-  fakturaintegritet — servern avvisar annars med fel.
+- **Fakturalås = allt låst.** När ordern är `consolidated`/`exported` (eller redan
+  ligger på en konsoliderad faktura) blir både `editableQuantity` och
+  `takenQuantityEditable` `false`. Rita då read-only. *Varför:* fakturaintegritet —
+  servern avvisar annars med fel.
 
 ---
 
-## 3. NYTT/UTÖKAT: Visa & lämna metadata i fält (område/familj-gruppering)
+## 3. NYTT/UTÖKAT: Metadata i fält — familj-gruppering, områdesfilter, "allt är metadata"
 
 `metadata-context` returnerar nu även `showMetadataFields[]` och
 `leaveMetadataFields[]` — den nya modellen för "visa aktuellt metadatavärde" resp.
 "lämna in ett nytt värde vid utförande".
 
-**Grupp-expansion (nytt):** Varje rad bär `groupField`. När en artikel pekar på ett
-**grupp-/familjefält** (t.ex. "Kontakt") expanderar servern det till dess barnfält
-**före** värdeuppslag — grupp-föräldern bär aldrig ett eget värde. `groupField` är
-förälderns namn så att appen kan **gruppera barnen visuellt under en rubrik**.
+### 3.1 Familj-/grupp-expansion (`groupField`)
+När en artikel pekar på ett **grupp-/familjefält** (t.ex. "Kontakt") expanderar servern
+det till dess barnfält **före** värdeuppslag — grupp-föräldern bär aldrig ett eget
+värde. `groupField` är förälderns namn så att appen kan **gruppera barnen visuellt
+under en rubrik**.
 
 | `showMetadataFields[]` | `leaveMetadataFields[]` |
 |---|---|
@@ -134,25 +141,67 @@ förälderns namn så att appen kan **gruppera barnen visuellt under en rubrik**
 **Skriv tillbaka:** `POST /api/mobile/tasks/:id/metadata-update` —
 `{ articleId, metadataLabel, newValue, inspectionStatus?, inspectionComment?, inspectionPhoto? }`.
 
-### Vad Go ska förenkla/anpassa — och varför
-- **Gruppera på `groupField`.** Rendera barnfält under en rubrik med förälderns namn i
-  stället för en lång platt lista. *Varför:* det speglar hur fälten är tänkta att fyllas i.
+**Vad Go ska göra:**
+- **Gruppera på `groupField`** i stället för en lång platt lista. *Varför:* speglar hur
+  fälten är tänkta att fyllas i.
 - **Skicka alltid barnets `metadataField`, aldrig förälderns.** Grupp-föräldern har
-  inget värde och skrivningen avvisas (IDOR-skydd: fältet måste vara konfigurerat som
+  inget värde; skrivningen avvisas (IDOR-skydd: fältet måste vara konfigurerat som
   uppdaterbart på någon av orderns artiklar).
-- **Obligatoriska `leaveMetadataFields` (`required=true`) blockerar klarmarkering.**
-  Statusbytet till "utförd" returnerar 400 med en lista över saknade fält (se handbokens
-  leaveMetadata-400-flöde) — samla in dem först och skicka `leaveMetadataValues` i
-  status-anropet.
-- **Metadata-systemet är numera enbart det svenska** (`metadata_katalog`/`_varden`/
-  `_historik`). *Varför:* handbokens §6-varning om "två parallella metadata-system
-  (engelskt + svenskt)" är **inaktuell** — det engelska systemet är borttaget. Ni
-  behöver inte längre bekymra er om vilket system en endpoint träffar; mobil-ytan
-  skriver alltid det svenska via rätt värde-ursprung.
+- **Obligatoriska `leaveMetadataFields` (`required=true`) blockerar klarmarkering** —
+  se §6 (400-flödet).
+
+### 3.2 Områdesfilter (område) — WEBB-ONLY idag, mobil-gap
+I webben grupperas och filtreras metadata numera även per **område** (`area` på
+metadata-katalogen, t.ex. "Söderort", annars "annat") — se objekt-360-vyn och
+tenant-config. Det ligger **ovanpå** familj-grupperingen: område = grov indelning,
+familj/`groupField` = fält som hör ihop.
+
+**Mobil-läget just nu:** `metadata-context` exponerar `groupField` (familj) men **inte**
+`area`/område. Go kan alltså gruppera på familj men **kan inte** filtrera/gruppera på
+område förrän backend lägger till `area` på metadata-context-raderna.
+
+**Vad Go ska göra:** gruppera på familj nu; behandla område-filter som **beslut** (§11).
+Om fältappen behöver område-indelning/filter → additiv backend-ändring (lägg `area` på
+raderna); annars är område en webb-only bekvämlighet som Go kan hoppa över.
+
+### 3.3 "Allt är metadata" + endast svenska katalogen
+- **Modellen (Steg 1, presentation-only):** i webben projiceras legacy objekt-kolumner
+  (adress, position, systemgenererade fält m.m.) som **read-only metadata-rader** med
+  en KÄLLA-tagg (D=data/M=metadata/S=system/SYS). Det är ingen migrering — bara ett
+  enhetligt sätt att visa fälten. **För Go:** behandla härledda/systemgenererade värden
+  som **read-only** (låst render, inte DB-lås). Erbjud bara skrivning där `canUpdate`/
+  `required` säger det; redigera aldrig ett systemhärlett värde via metadata-vägen.
+- **Bara det svenska metadata-systemet finns kvar.** *Varför:* handbokens §6-varning om
+  "två parallella metadata-system (engelskt + svenskt)" är **inaktuell** — det engelska
+  systemet är borttaget. Mobil-ytan skriver alltid det svenska; ni behöver inte längre
+  fundera på vilket system en endpoint träffar.
 
 ---
 
-## 4. Order/artikel-fält från v2 (recap — fortfarande giltigt)
+## 4. Datamodell för föraren: Go ser BARA `work_orders`
+
+Detta är en **grundregel** som förenklar Go rejält.
+
+- Traivo One skapar arbete via **orderkoncept** (abonnemang/schema) och **avrop**
+  (call_off). Beroende på koncepttyp landar expansionen i `assignments` och/eller
+  `work_orders`, eller går direkt till fakturering (abonnemang). **Avrop (call_off)
+  hamnar i `assignments` och projiceras aldrig automatiskt till `work_orders`.**
+- **Alla mobil-order-endpoints läser `work_orders`** (`my-orders`, `orders/:id`,
+  `v2/orders/:id`). Följd: en uppgift syns i fält **först när den finns som work_order**.
+  Uppgifter som bara ligger i `assignments` (inkl. avrop) är (medvetet) osynliga för
+  föraren tills en assignment→work_order-projektion sker.
+- Koncept-authorad data (t.ex. leveransrestriktioner, koncept-fält) bär `work_orders`
+  **inte** som join — den beräknas per objekt vid läsning och visas på jobbkortet.
+
+**Vad Go ska göra:**
+- **Lita enbart på mobil-order-endpoints** (work_orders-härledda). Bygg **ingen** egen
+  hämtning av orderkoncept eller avrop — de hör inte hemma i fält-appen.
+- Om en uppgift "saknas" är den (korrekt) inte projicerad än — det är inte ett appfel.
+- *Varför förenkling:* en enda ordermodell, inga koncept-/avrops-specialfall i klienten.
+
+---
+
+## 5. Order/artikel-fält från v2 (recap — fortfarande giltigt)
 
 Detaljerna finns i `integration-rapport.md §3` och `v2-handover.md`. Kort:
 `GET /api/mobile/v2/orders/:id` bär `frozen.*`, `bomChecklist`, `dependencyStatus`/
@@ -163,7 +212,7 @@ Detaljerna finns i `integration-rapport.md §3` och `v2-handover.md`. Kort:
 
 ---
 
-## 5. Utförd ≠ fakturerad + klarmarkering
+## 6. Utförd ≠ fakturerad + klarmarkering
 
 - **Fakturastatus:** en utförd order kan vara fryst (`frozen.isFrozen`), bromsad
   (`invoiceBrake`) eller köad (`invoiceQueueState` = `held`/`consolidated`/`exported`).
@@ -172,7 +221,7 @@ Detaljerna finns i `integration-rapport.md §3` och `v2-handover.md`. Kort:
 - **Klarmarkering — servern sköter statusfälten åt er.** Skicka bara `status:"utford"`
   (eller `"completed"`) till `PATCH /api/mobile/orders/:id/status`. Servern sätter då
   **både** `orderStatus="utford"` och `executionStatus="completed"` och kör
-  obligatorisk-kontrollen (obligatoriska `leaveMetadataFields`, 400-flödet i §3).
+  obligatorisk-kontrollen (obligatoriska `leaveMetadataFields`, 400-flödet i §3.1).
   Skicka **inget** eget `executionStatus`-fält — det finns ingen sådan parameter.
 - **OBS offline-sync-lucka:** klarmarkering via offline-sync (`POST /api/mobile/sync`
   med `status_update`) kör **inte** obligatorisk-kontrollen. Vill ni att 400-flödet för
@@ -180,7 +229,7 @@ Detaljerna finns i `integration-rapport.md §3` och `v2-handover.md`. Kort:
 
 ---
 
-## 6. Recap: säkerhetshärdning + orderkoncept-effekter (oförändrat)
+## 7. Recap: säkerhetshärdning + orderkoncept-effekter (oförändrat)
 
 Fortfarande giltigt från `integration-rapport.md §2 + §4`:
 - **Webb-rutter är låsta bakom `requirePlanner`.** Om Go någonstans råkar anropa
@@ -190,11 +239,11 @@ Fortfarande giltigt från `integration-rapport.md §2 + §4`:
 - **Orderkoncept-genererade order** kan landa på olika datum (`intervalFlexDays`), ha
   kund härledd per objekt (`customerMetadataField`), och leveransrestriktioner
   (soft/hard). Effekterna syns på ordern; själva koncept-fälten exponeras medvetet
-  inte på `/api/mobile/*`.
+  inte på `/api/mobile/*` (jfr §4).
 
 ---
 
-## 7. Utförandekoder & ikoner — LÄGE + BESLUT
+## 8. Utförandekoder & ikoner — LÄGE + BESLUT
 
 **Nuläge i backend:** Traivo One har byggt ett riktigt **utförandekod-register** +
 central ikon-renderare (RegistryIcon) i webben. **Men mobil-ytan exponerar bara en
@@ -205,13 +254,36 @@ alltså rå kod-text, utan register-namn eller ikon.
 **Konsekvens för Go:** appen kan visa en kort kod men **kan inte** rendera korrekt
 etikett/ikon från registret idag.
 
-> **Beslut som behövs (se §9):** ska vi lägga till en mobil-endpoint som exponerar
+> **Beslut som behövs (se §11):** ska vi lägga till en mobil-endpoint som exponerar
 > utförandekod-registret (kod → namn + ikon) så att Go kan visa riktiga etiketter/ikoner,
 > eller räcker den korta koden i fält?
 
 ---
 
-## 8. Status på de 8 kända avvikelserna (`api-match-report.md`)
+## 9. Navigations- & terminologiändringar (juli 2026)
+
+Webbnavigeringen lades om i juli 2026: startöversikten ("Dashboard") togs bort (start =
+"Idag"), rapport-/analyssidor **dolda** ur menyn (ska ersättas av en filterstyrd
+Excel-export från Grovplaneringen), Ekonomi-menyn samlades kring Fortnox/ekonomi,
+AI-menyn parkerades och en ny "Snabborder" tillkom. **Allt detta är webb-only och
+ändrar inte `/api/mobile/*`.**
+
+**Relevans/anpassning för Go:**
+- **Hämta terminologi från `GET /api/mobile/terminology`** (redan listad som "bonus" i
+  api-match-report). Den returnerar sammanslagen terminologi (system-default + bransch +
+  tenant-labels som `labelKey → labelValue`, t.ex. objekt/resurs/fordon). **Hårdkoda
+  inte** etiketter i appen — läs dem härifrån så att Go följer samma benämningar som
+  webben efter omläggningen.
+- **Spegla inte parkerade/dolda webbkoncept** (Dashboard, rapporter, AI-motorer) i Go.
+  Fält-appen ska hålla sig till utförande-flödet: dagens jobb, order, utförande,
+  material, tidrapport, dagrapport.
+- Nya planeringsbegrepp — "Grovplanering" (master: skapad→fakturerad) och
+  "Veckoplanering" (fin: 168h-schema per team) — är **planerarens** ytor. Go behöver dem
+  inte; om Go visar planeringsrelaterad text bör den vara konsekvent med terminologin.
+
+---
+
+## 10. Status på de 8 kända avvikelserna (`api-match-report.md`)
 
 Backend är **oförändrad** för de 8 punkterna — de gäller fortfarande. Snabb påminnelse:
 
@@ -225,47 +297,55 @@ Backend är **oförändrad** för de 8 punkterna — de gäller fortfarande. Sna
 
 **Tillägg sedan den rapporten:** `metadata-context` exponerar nu **även**
 antals-endpoints (`quantity-update`, `taken-quantity-update`) utöver det som
-api-match-report listade som "bonus" (`metadata-context`/`metadata-update`). Rör
-**inte** `/api/v1/`-omskrivningen — den är fortsatt korrekt.
+api-match-report listade som "bonus" (`metadata-context`/`metadata-update`,
+`terminology`). Rör **inte** `/api/v1/`-omskrivningen — den är fortsatt korrekt.
 
 ---
 
-## 9. Beslutspunkter för Mats
+## 11. Beslutspunkter för Mats
 
 1. **Antal i fält — går vi live i Go nu?** Backend är klart. Ska Go bygga in
    antals-/taget-antal-UI i nästa release, eller vänta?
-2. **Utförandekoder/ikoner (§7):** exponera registret på `/api/mobile/*` för riktiga
+2. **Områdesfilter (§3.2):** behöver fält-appen område-indelning/filter på metadata? Om
+   ja → additiv backend-ändring (lägg `area` på `metadata-context`-raderna). Om nej →
+   webb-only, Go hoppar över det.
+3. **Utförandekoder/ikoner (§8):** exponera registret på `/api/mobile/*` för riktiga
    etiketter/ikoner, eller nöja oss med kort kod i fält?
-3. **Kategori B-avvikelserna (#4–#8):** för varje — bygga endpoint i backend, eller
+4. **Kategori B-avvikelserna (#4–#8):** för varje — bygga endpoint i backend, eller
    peka om appen till befintlig (enklast/billigast)? Rekommendationen i api-match-report
    är "peka om appen" för alla utom om kö/stream verkligen behövs.
-4. **Dokumentationsstädning:** ska handbokens §9 (antal) och §6 (två metadata-system)
+5. **Dokumentationsstädning:** ska handbokens §9 (antal) och §6 (två metadata-system)
    uppdateras/tas bort nu när de är inaktuella? (Rekommenderas — annars fortsätter de
    vilseleda.)
 
 ---
 
-## 10. Prioriterad checklista för Go-teamet
+## 12. Prioriterad checklista för Go-teamet
 
 ### Måste (fakturaintegritet + korrekt fältdata)
 - [ ] Ta bort antaganden om att "antal inte kan ändras i fält" (handbok §9).
 - [ ] Implementera antals-UI via `metadata-context`: visa redigerbart fält **endast**
       vid `editableQuantity=true`, dölj vid `hideQuantityInApp=true`, read-only vid
       fakturalås. Skriv via `quantity-update`.
+- [ ] Lita **enbart** på mobil-order-endpoints (work_orders-härledda); ingen egen
+      koncept-/avropshämtning (§4).
 - [ ] Klarmarkera via `PATCH /api/mobile/orders/:id/status` med `status:"utford"` —
-      servern sätter statusfälten och kör obligatorisk-kontrollen (§5).
+      servern sätter statusfälten och kör obligatorisk-kontrollen (§6).
 - [ ] Skicka in obligatoriska `leaveMetadataFields` vid klarmarkering (400-flödet); undvik
-      offline-sync-vägen för slutförande om det gate:t måste gälla (§5).
+      offline-sync-vägen för slutförande om det gate:t måste gälla (§6).
 
 ### Bör (rätt fältupplevelse)
 - [ ] Registrera "taget antal" via `taken-quantity-update` (svinn/retur).
 - [ ] Gruppera metadata på `groupField`; skicka barnets `metadataField` vid skrivning.
+- [ ] Behandla systemgenererade/härledda metadatavärden som read-only (§3.3).
+- [ ] Hämta terminologi/etiketter från `GET /api/mobile/terminology`; hårdkoda inte (§9).
 - [ ] Kommunicera fakturastatus korrekt ("utförd ≠ fakturerad").
 - [ ] Åtgärda Kategori A-namnbytena (#1–#3) — enradare.
 
 ### Kan (efter beslut)
-- [ ] Kategori B (#4–#8) enligt beslut i §9.
-- [ ] Utförandekoder/ikoner enligt beslut i §9.
+- [ ] Område-gruppering/filter i fält (kräver `area` på `metadata-context`) — §3.2/§11.
+- [ ] Kategori B (#4–#8) enligt beslut i §11.
+- [ ] Utförandekoder/ikoner enligt beslut i §11.
 
 ---
 
