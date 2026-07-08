@@ -1,0 +1,56 @@
+{
+  "sessionId": "a098ba585",
+  "exportedAt": "2026-07-08T17:44:46.709Z",
+  "summary": "### Key Topics Discussed\n- Adressering och metadatahantering för underobjekt\n- Definition av fördjupad adressinformation\n- Systemlåst funktionalitet\n- Hantering av geografisk information (ytor och sträckningar)\n\n### Decisions Made\n- Adresser ärvs alltid från huvudobjekt till underobjekt tills dess underobjektet får en egen uppdaterad adress.\n- Samma logik gällande ärvning gäller för metadata.\n- Fördjupad adressinformation bör inkludera koordinater, what's your words och beskrivning av avdelning, port och våning. Postnummer och postort är inte nödvändigt då det är samma som för grundadressen.\n- Systemlåsta metadatafält ska definieras utifrån en metadatatitel och vara greppbara i olika lägen. Fler metadatafält kan behöva vara systemlåsta i framtiden.\n- Systemet bör ta höjd för att hantera geografisk information som ytor (t.ex. plan, gräsmatta) och sträckningar (t.ex. väglinjer, kabellinjer).\n\n### Important Points & Insights\n- Adresser ärvs uppifrån och ner och gäller tills en annan adress skriver över dem på en lägre nivå.\n- En gatuadress kan ingå i den fördjupade adressen för ordningens skull, men koordinater är viktigare.\n- För geografiska ytor, som en gräsmatta, kommer en transportadress att kopplas till huvudobjektet, medan den fördjupade informationen (t.ex. polylinjer) definierar ytans exakta position.\n- Exempel på användning för städning: Huvudadressen för en lokal kan vara fastighetens portadress, medan den fördjupade positionen specificerar exakt plats (t.ex. utrymme ett på första våningen till vänster).\n\n### Open Questions/Pending Items\n- Det finns en fundering kring hanteringen av systemlåsta metadatafält och hur de ska definieras och grupperas i framtiden. Det är möjligt att det kan behövas fler systemlåsta metadatafält framöver.",
+  "conversation": [],
+  "transcripts": [
+    {
+      "text": "Och då, mm, eh, då kommer lite svar här på tre frågor du har. Ja, som... Ja. Ja. Eh, fråga nummer ett då, arr till underobjekt. Ja, det är väldigt enkelt. Adresser, oavsett om det är då grundadressen eller den tilläggsadressen, ärvs alltid till undervarande objekt tills dess det undervarande objektet får en uppdaterad adress. Så adresser ärvs-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm ...uppifrån och ner och, eh, de gäller tills dess det kommer en annan adress som, eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Skriver över dem, så att säga, på den lägre nivån då. I samma logik för metadata som finns hela tiden då. Och den fördjupade adressen, det är, det är rätt då att det kanske inte är nödvändigt att ha post, postnummer och postort för det är ju samma. Men däremot så ska det finnas då fält som man lägger till då, eh, framför allt koordinaterna. Eh, i-i-i... Inte nödvändigtvis en gataadress, fast för ordningens skull kan väl det också stå med där. Men koordinater och what's your words och beskrivning, då avdelning, port och våning då som en fördjupad information där. Och med systemlåst...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Menas då i det här fallet att det här skall ju då betraktas som metadatafält, precis som vanligt, och att de då är definierade utifrån en, en metadata titel och är greppbara i o-o-olika lägen. Men det enda som är då unikt med det här är ju då att de här är systemlåsta då. Och det kommer säkert kunna bli fler metadatafält som kan behöva vara systemlåsta också. Och, eh, sen så, eh, eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Vad var det jag tänkte på här? Jo...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Eh, när det gäller då geografin här också, ska vi då ta höjd för att den här geografin ska kunna hantera då ytor och sträckningar, det vill säga, eh, väglinjer och, och, eh, gat-- eh, kabellinjer, alltså, alltså sträck i, i, i kartans riktning då i olika, olika längd, olika riktningar och ytor då, typ en plan eller gräsmatta, oformlig, för att kunna hantera sen. Så det, det, det bör systemet då ta höjd för så att vi har den logiken då-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm ...i, i kartan. Och då blir ju det också på samma sätt då. Så att alltså, om du har en, en gräsmatta som ska klippas eller tas om hand, då är det en yta. Men den kommer ju då att ha en, en, en transportadress, alltså dit man åker för att ta sig till den här, till det här objektet eller gräsytan då. Sen kommer ju då på den fördjupade informationen då så kommer det ju då att vara då en, en, en, en information, polylinjer eller liknande som ringar in då var den här ytan är någonstans då.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och samma sak om man skulle använda det här systemet som ett städsystem då. Så, så, så blir det ju då att om du har en, en fastighet då, så har du, eh, tio stycken lokaler i fastigheten som ska städas. Ja, då kommer ju huvudadressen till varje lokal förmodligen att vara, vara portadressen till fastigheten då. Men den fördjupade, eh, positionen och ytan kommer ju att vara då att, att utrymme ett kommer att vara på första våningen till vänster, till exempel då. Och det är då på...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    }
+  ]
+}
