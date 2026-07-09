@@ -1632,7 +1632,7 @@ export function MetadataAddButton({
             <div className="space-y-2">
               <Label>Metadatatyp *</Label>
               {addableTypes.length > 0 ? (
-                <Popover open={typeOpen} onOpenChange={setTypeOpen}>
+                <Popover open={typeOpen} onOpenChange={setTypeOpen} modal={false}>
                   <PopoverTrigger asChild>
                     <Button
                       variant="outline"
@@ -1647,7 +1647,11 @@ export function MetadataAddButton({
                       <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                     </Button>
                   </PopoverTrigger>
-                  <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+                  <PopoverContent
+                    className="w-[--radix-popover-trigger-width] p-0"
+                    align="start"
+                    onCloseAutoFocus={(e) => e.preventDefault()}
+                  >
                     <Command>
                       <CommandInput placeholder="Sök fält..." data-testid="input-search-metadata-type" />
                       <CommandList>
