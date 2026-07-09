@@ -1,0 +1,69 @@
+Svar A Svar – Betalare, kund och metadataområdet Ekonomi
+Ja, betalare/kund skall hanteras via metadataområdet Ekonomi när informationen behöver finnas på objektet.
+Det skall däremot inte finnas någon separat objektlogik för object_payers, payer-relationer eller liknande.
+1. Systemdefinierat metadataområde: Ekonomi
+Metadataområdet Ekonomi skall vara systemdefinierat, på samma sätt som metadataområdet Geografi.
+Det innebär att vissa metadatafält skall vara fördefinierade av systemet.
+Exempel:
+    •    Kund
+    •    Kundnummer
+    •    Eventuell betalare
+    •    Eventuellt betalarnummer
+    •    Fakturareferens
+    •    Kostnadsställe
+    •    Projekt
+Dessa fält är metadata på objektet, inte egna objektrelationer.
+2. Kund och kundnummer
+Inledningsvis skall kund och kundnummer kunna anges manuellt på objektets metadatafält.
+På sikt skall systemet kunna söka i kundregistret och välja kund därifrån.
+Då skall metadatafältet inte bara vara text, utan en referens till kundregistret.
+3. Orderkoncept och snabborder
+I normalfallet väljs kund direkt i:
+    •    orderkoncept
+    •    snabborder
+Då sätts kund och kundnummer direkt på uppgiftspaketet.
+Om kund istället skall hämtas dynamiskt från objektet, skall orderkonceptet eller snabbordern kunna peka på metadatafältet i Ekonomi.
+Exempel:
+    •    hämta Kund från objektets metadata
+    •    hämta Kundnummer från objektets metadata
+4. Metadata som pekar på sidoregister
+Detta är en generell metadatafunktion.
+Ett metadatafält skall kunna peka på ett sidoregister.
+Exempel:
+    •    Kundfält pekar på kundregistret
+    •    Kontaktperson pekar på kontaktregistret
+    •    Artikel pekar på artikelregistret
+    •    Utförare pekar på utförarregistret
+Användaren skall då kunna söka i sidoregistret och välja en post.
+Det valda värdet sparas som metadatareferens.
+5. Integrationer
+Kundregistret kan i sin tur vara kopplat till ekonomisystem via API.
+Exempel:
+    •    Fortnox
+    •    annat ekonomisystem
+Kontaktregistret kan i sin tur vara kopplat till telefonväxel via API.
+Exempel:
+    •    T-Link
+    •    annan telefonväxel
+Metadata skall alltså kunna bära en referens till ett sidoregister, men själva sidoregistret ansvarar för integrationen mot externa system.
+6. Kontaktpersoner
+Samma logik skall användas för kontaktpersoner.
+Kontaktpersoner skall inte vara en separat object_contacts-tabell.
+De skall hanteras som metadata av katalogtyp.
+Metadatafältet kan antingen innehålla manuellt registrerad kontaktinformation eller peka mot kontaktregistret.
+Exempel:
+Metadataområde: Kontakt
+    •    Kontaktperson
+    •    Namn
+    •    Titel
+    •    Telefon
+    •    E-post
+På sikt skall kontaktperson kunna väljas från kontaktregistret, som i sin tur kan vara kopplat till T-Link.
+7. Slutsats
+Godkänt att använda metadataområdet Ekonomi för kund/betalare på objektet, men endast enligt metadataarkitekturen.
+Det skall inte finnas object_payers eller separat payer-logik.
+Kund och kundnummer kan:
+    •    anges direkt i orderkoncept eller snabborder
+    •    hämtas dynamiskt från objektets metadata
+    •    på sikt väljas från kundregistret genom ett metadatafält som pekar på sidoregister
+Samma princip skall användas för kontaktpersoner och andra fält som behöver peka mot sidoregister.
