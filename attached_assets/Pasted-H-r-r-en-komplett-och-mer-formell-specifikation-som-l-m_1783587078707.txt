@@ -1,0 +1,355 @@
+Här är en komplett och mer formell specifikation som lämpar sig att skicka till Replit som utvecklingsinstruktion.
+Arkitekturbeslut – Objektmodell och metadata (ersätter tidigare implementation)
+Detta dokument utgör ett styrande arkitekturbeslut för den fortsatta utvecklingen av systemet.
+1. Rensa bort tidigare implementation
+All kod, datamodeller, komponenter, användargränssnitt och logik som hanterar objektinformation på annat sätt än den objektmodell som nu är beslutad skall tas bort.
+Detta omfattar all information som idag är direkt kopplad till objekt utanför följande tre huvudområden:
+    1    Objektinformation
+    2    Metadata (egen eller ärvd)
+    3    Kopplade uppgifter (visade med samma logik som Uppgiftsnavet)
+All annan informationshantering på objektnivå skall rensas bort.
+Systemet är ännu inte driftsatt, vilket innebär att denna rensning inte påverkar någon kunddata eller produktionsmiljö. Det är därför viktigt att genomföra denna förenkling nu innan ytterligare funktioner byggs ovanpå en felaktig struktur.
+
+2. Objektets informationsmodell
+Objektet får endast bestå av följande delar:
+Objektinformation
+    •    Systemgenererat objektnummer
+    •    Objektnamn
+    •    Objektstatus
+    ◦    Aktiv
+    ◦    Arkiverad
+Objekt skall kunna raderas endast om:
+    •    objektet aldrig har använts
+    •    inga metadata finns
+    •    inga uppgifter finns
+    •    inga relationer finns
+    •    ingen historik finns
+Har objektet använts skall det istället arkiveras.
+
+3. Relationer
+Objekt skall endast känna till:
+    •    Förälder
+    •    Barn
+Ingen annan typ av objektkoppling skall förekomma.
+
+4. Metadata
+All övrig information skall lagras som metadata.
+Detta är en grundläggande arkitekturprincip och skall genomsyra hela systemet.
+Metadata skall alltid tillhöra ett definierat metadataområde.
+Exempel:
+    •    Kontakt
+    •    Geografi
+    •    Teknisk information
+    •    Drift
+    •    Bilder
+    •    Dokument
+    •    Ekonomi
+Varje metadataområde består av ett antal metadatafält.
+
+5. Metadatafält
+Varje metadatafält definieras centralt och skall ha en fast datatyp.
+Exempel på datatyper:
+    •    Alfanumerisk text
+    •    Numeriskt värde
+    •    Datum
+    •    Tid
+    •    Ja/Nej
+    •    Valbar lista
+    •    Bild
+    •    Dokument
+    •    Fil
+    •    Longitud/Latitud
+    •    Telefon
+    •    E-post
+    •    URL
+Datatyperna skall styra både lagring, validering och presentation.
+
+6. Metadatafältets egenskaper
+Varje metadatafält skall dessutom definiera om det är:
+Enkelvärde
+Endast ett aktivt värde får finnas.
+Exempel:
+    •    Antal
+    •    Typ
+    •    Modell
+    •    Färg
+    •    Storlek
+När ett nytt värde registreras skall tidigare värde automatiskt:
+    •    arkiveras
+    •    tidsstämplas
+    •    behålla sin historik
+
+Katalogvärde
+Flera aktiva poster får finnas samtidigt.
+Exempel:
+    •    Kontaktpersoner
+    •    Bilder
+    •    Dokument
+    •    Telefonnummer
+    •    E-postadresser
+Alla aktiva poster skall visas i karusellen.
+Arkiverade poster skall fortfarande kunna visas.
+
+7. Metadatastatus
+Varje enskild metadatapost skall ha egen status.
+Status är:
+    •    Aktiv
+    •    Arkiverad
+Detta gäller oberoende av objektets status.
+Ett aktivt objekt kan alltså innehålla både aktiva och arkiverade metadata.
+
+8. Arkivering av metadata
+Metadata skall aldrig raderas vid normal användning.
+Metadata skall kunna:
+    •    skapas
+    •    uppdateras
+    •    arkiveras
+    •    återaktiveras
+Endast systemadministratör skall kunna permanent radera metadata när detta är lämpligt.
+
+9. Informationsflagga
+Varje metadata skall ha en informationsflagga.
+Flaggan skall innehålla minst:
+    •    Status
+    •    Skapat datum
+    •    Skapat tid
+    •    Systemfunktion
+    •    Användare
+    •    Ursprung
+    •    Version
+Om metadata skapats från en uppgift skall dessutom följande sparas:
+    •    Uppgift
+    •    Order
+    •    Orderkoncept
+    •    Import
+    •    Integration
+    •    Annan källa
+
+10. Spårbarhet
+Alla källreferenser skall vara klickbara.
+Användaren skall kunna öppna:
+    •    uppgiften
+    •    ordern
+    •    orderkonceptet
+    •    importen
+    •    integrationsloggen
+Det skall alltid vara möjligt att följa informationens ursprung.
+
+11. Presentation
+Metadata skall visas som karuseller.
+Karusellen skall:
+    •    alltid visa senaste aktiva posten först
+    •    kunna bläddras
+    •    visa historiska poster
+    •    visa flera aktiva poster när metadatafältet tillåter detta
+Samma presentationsmodell skall användas genomgående i hela systemet.
+
+12. Kopplade uppgifter
+Den sista delen av objektet skall vara Kopplade uppgifter.
+Den skall använda exakt samma komponent som Uppgiftsnavet.
+Ingen separat implementation skall finnas.
+Skillnaden är endast att filtret automatiskt begränsas till aktuellt objekt.
+Om objektet har barn skall samtliga uppgifter i hela objektgrenen inkluderas.
+Exempel:
+BRF Hönshuset
+    •    Miljörum A
+    •    Miljörum B
+    •    Garage
+    •    Tvättstuga
+När användaren öppnar BRF Hönshuset skall uppgifter från samtliga underliggande objekt visas automatiskt.
+
+13. Viktig arkitekturprincip
+Det är mycket viktigt att denna modell nu används konsekvent i hela systemet.
+Objekt skall inte innehålla specialbyggda informationsfält eller separata informationsmoduler.
+All information utöver objektets grunddata skall lagras som metadata enligt den definierade metadataarkitekturen.
+Detta skapar:
+    •    en enklare kodbas
+    •    färre specialfall
+    •    bättre återanvändning
+    •    bättre sökbarhet
+    •    bättre historik
+    •    full spårbarhet
+    •    ett betydligt mer skalbart system.
+
+
+Jag tror också att detta dokument bör kompletteras med ett separat "Metadata Framework Specification", där ni en gång för alla definierar hur metadataområden, metadatafält, datatyper, arv, katalogfält och historik fungerar. Den specifikationen blir sannolikt en av de viktigaste arkitekturhandlingarna i hela Modus, eftersom nästan alla övriga moduler kommer att bygga på den.
+
+
+Här är en utvecklad text som kan läggas till som egen sektion eller skickas som separat instruktion.
+Metadata Framework Specification
+Systemet bör kompletteras med en separat och styrande specifikation för metadataarkitekturen: Metadata Framework Specification.
+Syftet är att en gång för alla definiera hur Modus hanterar information som inte är objektets grunddata. Detta dokument skall vara överordnat all specialbyggd informationslogik i systemet.
+Varför detta behövs
+Metadata kommer att vara en av de viktigaste grundfunktionerna i Modus. Nästan all information som beskriver objekt, kunder, uppgifter, order, bilder, dokument, geografiska uppgifter, kontaktpersoner och tekniska egenskaper kommer att bygga på samma metadata-logik.
+Utan en tydlig gemensam modell finns risk för att systemet får:
+    •    dubbla informationsstrukturer
+    •    specialbyggda fält
+    •    svårunderhållen kod
+    •    inkonsekvent historik
+    •    svag spårbarhet
+    •    problem vid export, filtrering och integrationer
+Vad specifikationen skall definiera
+Specifikationen skall tydligt beskriva följande delar:
+1. Metadataområden
+Ett metadataområde är en logisk grupp av metadatafält.
+Exempel:
+    •    Kontakt
+    •    Geografi
+    •    Teknisk information
+    •    Bilder
+    •    Filer
+    •    Drift
+    •    Ekonomi
+    •    Kundspecifik information
+Varje metadatafält skall alltid tillhöra ett metadataområde.
+2. Metadatafält
+Ett metadatafält är en definierad informationsplats.
+Exempel:
+    •    Namn
+    •    Telefon
+    •    E-post
+    •    Antal
+    •    Typ
+    •    Modell
+    •    Gatuadress
+    •    Latitud
+    •    Longitud
+    •    Bild
+    •    Dokument
+Varje fält skall definieras centralt och kunna återanvändas.
+3. Datatyper
+Varje metadatafält skall ha en tydlig datatyp.
+Exempel:
+    •    Alfanumerisk text
+    •    Numeriskt värde
+    •    Datum
+    •    Tid
+    •    Ja/Nej
+    •    Valbar lista
+    •    Bild
+    •    Fil
+    •    Dokument
+    •    E-post
+    •    Telefon
+    •    URL
+    •    Longitud/Latitud
+Datatypen skall styra:
+    •    hur information lagras
+    •    hur information valideras
+    •    hur information visas
+    •    hur information kan filtreras
+    •    hur information kan exporteras
+4. Enkelvärde eller katalogvärde
+Varje metadatafält skall definieras som antingen:
+Enkelvärde
+Endast ett aktivt värde får finnas åt gången.
+Exempel:
+    •    Antal
+    •    Typ
+    •    Modell
+    •    Färg
+    •    Storlek
+När ett nytt värde registreras arkiveras det tidigare värdet automatiskt.
+Katalogvärde
+Flera aktiva poster får finnas samtidigt.
+Exempel:
+    •    Kontaktpersoner
+    •    Bilder
+    •    Dokument
+    •    Telefonnummer
+    •    E-postadresser
+Flera aktiva poster skall kunna visas samtidigt i karusell.
+5. Status
+Varje metadatapost skall ha egen status:
+    •    Aktiv
+    •    Arkiverad
+Detta gäller oberoende av objektets status.
+Ett aktivt objekt kan därför innehålla både aktiva och arkiverade metadata.
+6. Historik
+Systemet skall aldrig skriva över metadata utan historik.
+När ett metadatafält uppdateras skall tidigare värde sparas som arkiverad historik.
+Historiken skall visa:
+    •    tidigare värde
+    •    nytt värde
+    •    tidpunkt
+    •    användare
+    •    systemfunktion
+    •    källa
+    •    eventuell kopplad uppgift eller order
+7. Arv
+Metadata skall kunna ärvas från överordnade objekt.
+Det skall alltid framgå om metadata är:
+    •    egen
+    •    ärvd från förälder
+    •    ärvd från högre nivå i objektgrenen
+Ärvd metadata skall inte förväxlas med egen metadata.
+Systemet skall kunna visa båda delarna tydligt.
+8. Källspårning
+Varje metadatapost skall ha en informationsflagga.
+Flaggan skall visa:
+    •    när posten skapades
+    •    av vilken systemfunktion
+    •    av vilken användare
+    •    från vilken källa informationen kommer
+    •    om den är kopplad till uppgift, order eller orderkoncept
+Källreferenser skall vara klickbara.
+Användaren skall kunna öppna ursprunglig:
+    •    uppgift
+    •    order
+    •    orderkoncept
+    •    import
+    •    integration
+    •    annan källa
+9. Presentation
+Metadata skall visas med samma presentationslogik i hela systemet.
+Grundprincip:
+    •    senaste aktiva post visas först
+    •    flera aktiva poster visas i karusell
+    •    historiska poster kan bläddras fram
+    •    varje kort visar informationsflagga
+    •    arkiverade poster är tydligt markerade
+10. Administration
+Metadata Framework Specification skall också beskriva hur metadata administreras.
+Administratör skall kunna:
+    •    skapa metadataområden
+    •    skapa metadatafält
+    •    välja datatyp
+    •    välja enkelvärde eller katalogvärde
+    •    styra om fältet är obligatoriskt
+    •    styra om fältet är kundunikt
+    •    styra om fältet skall visas i listor
+    •    styra om fältet skall kunna ärvas
+    •    arkivera metadatafält
+    •    arkivera metadataområden
+11. Kundunika fält
+Systemet skall stödja kundunika metadatafält utan att ny kod behöver skrivas.
+Exempel:
+En kund vill ha fältet “Kostnadsställe”.
+En annan kund vill ha fältet “Fastighetsbeteckning”.
+En tredje kund vill ha fältet “Intern referens”.
+Alla dessa skall kunna skapas i metadataadministrationen och därefter användas i objektmodellen.
+12. Integrationer och export
+Eftersom metadata är systemets gemensamma informationsmodell skall samma struktur användas vid:
+    •    import
+    •    export
+    •    API
+    •    integrationer
+    •    rapporter
+    •    filtrering
+    •    sökning
+Det innebär att specialbyggda exportfält och separata informationsstrukturer skall undvikas.
+Grundprincip
+Metadata Framework Specification skall vara en av Modus viktigaste arkitekturhandlingar.
+Den skall säkerställa att all framtida utveckling bygger på samma informationsmodell.
+Detta ger systemet:
+    •    skalbarhet
+    •    konsekvent historik
+    •    full spårbarhet
+    •    lägre kodkomplexitet
+    •    enklare integrationer
+    •    bättre kundanpassning
+    •    bättre filtrering
+    •    bättre export
+    •    bättre långsiktig förvaltning
+All ny funktionalitet i Modus skall därför kontrolleras mot denna specifikation innan den byggs.
+Det här gör metadata till ett ramverk i systemet, inte bara “extra fält”. Det är rätt väg om Modus skall kunna bära många kunder, objektgrenar, uppgifter, orderkoncept och historik utan att behöva byggas om varje gång.
