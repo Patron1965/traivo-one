@@ -1,0 +1,96 @@
+5. Krav – Gemensam karusellvisning för all metadata
+Det skall skapas en flexibel och generell karusellkomponent för visning av metadata.
+Denna komponent skall användas konsekvent på alla ytor där metadata visas, inklusive objektvy, objekt-360, administrativa vyer och övriga systemvyer.
+Metadata skall inte visas med separata speciallösningar, listor eller tabeller om detta bryter mot den gemensamma metadataarkitekturen.
+1. Samma komponent för alla metadatatyper
+Karusellkomponenten skall med samma modulära layout kunna visa:
+    •    enskilda datafält
+    •    grupperade metadatafält
+    •    katalogposter
+    •    bilder
+    •    filer
+    •    dokument
+    •    historiska värden
+Exempel på grupperad metadata:
+Kontakt
+    •    Namn
+    •    Titel
+    •    Telefon
+    •    E-post
+Exempel på enkel metadata:
+Antal
+    •    12
+Exempel på bildmetadata:
+    •    objektbild
+    •    efterbild
+    •    skadebild
+2. Gemensam informationsflagga
+Alla metadatakort skall ha samma informationsflagga.
+Flaggan skall visa:
+    •    status: aktiv, arkiverad, historisk eller ersatt
+    •    skapad datum och tid
+    •    senast ändrad datum och tid
+    •    källa
+    •    systemfunktion
+    •    användare
+    •    om informationen är egen eller ärvd
+    •    från vilket objekt informationen ärvdes
+    •    eventuell kopplad uppgift
+    •    eventuell order
+    •    eventuellt orderkoncept
+    •    annan relevant källinformation
+Källor skall vara klickbara där det är möjligt.
+3. Katalogfält
+För metadatafält av katalogtyp skall karusellen kunna visa flera aktiva poster.
+Exempel:
+    •    flera kontaktpersoner
+    •    flera bilder
+    •    flera dokument
+    •    flera telefonnummer
+    •    flera e-postadresser
+Användaren skall kunna bläddra mellan både:
+    •    aktiva poster
+    •    arkiverade poster
+    •    historiska poster
+Senaste aktiva post skall visas först.
+4. Enkelvärdesfält
+För metadatafält där endast ett aktivt värde tillåts skall karusellen visa det aktuella aktiva värdet först.
+Tidigare värden skall inte tas bort utan visas som arkiverade eller ersatta historiska poster.
+Exempel:
+Antal
+Aktivt värde:
+    •    12
+Historiska värden:
+    •    10
+    •    8
+5. Arkivering med anonymisering eller maskning
+För att stödja sekretess- och GDPR-krav skall metadata kunna arkiveras med anonymisering eller maskning.
+Det innebär att posten finns kvar för historik och spårbarhet, men att hela eller delar av innehållet kan döljas.
+Exempel:
+Personnamn:
+    •    “Anna Andersson” kan arkiveras som “Anonymiserad kontakt”
+Telefonnummer:
+    •    “070-123 45 67” kan visas som “070-*** ** **”
+E-post:
+    •    “mailto:namn@example.com” kan visas som “mailto:anonymiserad@example.com”
+Systemet skall därför stödja:
+    •    vanlig arkivering
+    •    arkivering med partiell maskning
+    •    arkivering med full anonymisering
+Flaggan och historiken skall finnas kvar även när innehållet maskeras.
+6. Verifiering av befintliga vyer
+Det skall verifieras UI-yta för UI-yta att metadata visas enligt denna modell.
+Det gäller särskilt:
+    •    objektvy
+    •    objekt-360
+    •    metadataadministration
+    •    objektadministration
+    •    historikvyer
+    •    uppgiftskopplade vyer
+    •    mobilvy
+    •    export-/förhandsgranskningsvyer där metadata presenteras
+Där metadata idag visas som separata listor, tabeller eller specialkomponenter skall detta ersättas med den gemensamma karusellkomponenten, om det inte finns ett uttryckligt funktionellt skäl för annan presentation.
+7. Grundprincip
+Metadata skall ha en gemensam visuell och funktionell presentationsmodell i hela systemet.
+Karusellen är standardkomponenten för metadata.
+Den skall hantera både aktiva, ärvda, historiska, arkiverade, ersatta, maskerade och anonymiserade metadata på ett enhetligt sätt.

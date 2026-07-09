@@ -1,0 +1,95 @@
+6. Förtydligande – Enkelvärde, katalogvärde och uppdatering av metadata
+Följande skall gälla för alla metadatafält och alla skrivvägar i systemet.
+1. Metadatafält skall uttryckligen definieras som enkelvärde eller katalogvärde
+Varje metadatafält skall i metadataadministrationen ha en tydlig central egenskap som anger om fältet är:
+    •    Enkelvärde
+    •    Katalogvärde
+Nuvarande teknisk egenskap, exempelvis allowDuplicates, skall inte vara den enda styrande eller synliga definitionen. Begreppen enkelvärde och katalogvärde skall användas tydligt i UI, dokumentation och systemlogik.
+
+2. Enkelvärde
+Ett enkelvärde är metadata där endast ett aktivt värde kan gälla.
+Exempel:
+    •    Antal
+    •    Adress
+    •    Typ
+    •    Modell
+    •    Storlek
+    •    Tömningsdag
+    •    Hämtintervall
+När systemet, en administratör, kund eller utförare pekar på ett sådant metadatafält skall systemet alltid visa det aktiva värdet.
+Om värdet uppdateras skall tidigare aktivt värde inte skrivas över.
+Tidigare aktivt värde skall automatiskt:
+    •    arkiveras
+    •    tidsstämplas
+    •    behålla sin informationsflagga
+    •    behålla källa och historik
+Det nya värdet blir därefter det enda aktiva värdet.
+Detta skall gälla oavsett vilken del av systemet som gör uppdateringen.
+
+3. Katalogvärde
+Ett katalogvärde är metadata där flera aktiva poster kan finnas samtidigt.
+Exempel:
+    •    Kontakter
+    •    Bilder
+    •    Dokument
+    •    Filer
+    •    Telefonnummer
+    •    E-postadresser
+När systemet pekar på ett metadatafält av katalogtyp skall systemet normalt visa den senaste aktiva posten.
+Exempel:
+    •    senaste kontaktposten
+    •    senaste bilden
+    •    senaste dokumentet
+Om en ny post läggs till skall den bli den mest aktuella posten och visas först.
+Tidigare aktiva poster skall ligga kvar och vara åtkomliga i karusellen.
+
+4. Karusell för fördjupad hantering
+När användaren öppnar ett metadatafält skall karusellen visa hela innehållet för fältet.
+Användaren skall kunna:
+    •    visa aktiva poster
+    •    visa arkiverade poster
+    •    lägga till ny post
+    •    uppdatera post
+    •    arkivera post
+    •    återaktivera post där detta är tillåtet
+    •    se historik
+    •    se informationsflagga
+För katalogfält skall karusellen visa:
+    1    aktiva poster i tidsordning, senaste först
+    2    arkiverade poster i tidsordning, senaste först
+För enkelvärdesfält skall karusellen visa:
+    1    aktuellt aktivt värde
+    2    tidigare arkiverade/ersatta värden i tidsordning
+
+5. Bilder som exempel
+Om metadatafältet gäller bild på objektet skall systemet normalt visa den senaste aktiva bilden.
+Om en ny bild laddas upp av administratör, kund eller utförare skall den nya bilden bli den mest aktuella bilden och visas först.
+Tidigare bilder skall inte tas bort.
+De skall finnas kvar i karusellen med respektive informationsflagga, källa, koppling, status och historik.
+
+6. Alla skrivvägar skall följa samma regel
+Det skall verifieras att samtliga skrivvägar följer denna logik.
+Det gäller exempelvis:
+    •    objektvy
+    •    objekt-360
+    •    metadataadministration
+    •    uppgiftsflöde
+    •    utförarvy
+    •    import
+    •    API
+    •    integrationer
+    •    mobilvy
+    •    kundvy
+Ingen skrivväg får skriva över ett tidigare värde utan att först arkivera det när fältet är ett enkelvärde.
+Ingen skrivväg får behandla katalogvärden som enkelvärden.
+
+7. Hård systemregel
+Automatisk arkivering vid nytt värde för enkelvärdesfält skall vara en hård systemregel.
+Det skall inte vara beroende av vilken UI-komponent, API-endpoint eller systemfunktion som uppdaterar värdet.
+Systemet skall därför säkerställa detta centralt i metadatahanteringen, inte i enskilda vyer.
+
+Slutsats
+Metadatafältens beteende skall styras av den centrala definitionen i metadataadministrationen.
+Enkelvärde betyder att endast ett aktivt värde får finnas och att tidigare värde alltid arkiveras vid uppdatering.
+Katalogvärde betyder att flera aktiva poster får finnas och att systemet normalt visar den senaste aktiva posten, medan övriga poster finns kvar i karusellen.
+Detta skall implementeras och verifieras för alla metadatafält och alla skrivvägar.

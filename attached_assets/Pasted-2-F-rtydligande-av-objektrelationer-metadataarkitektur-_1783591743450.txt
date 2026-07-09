@@ -1,0 +1,109 @@
+2. Förtydligande av objektrelationer, metadataarkitektur och raderingsregler
+Tack för genomgången. Nedanstående är ett förtydligande av den arkitektur som skall gälla framåt och skall ersätta tidigare beslut där de inte överensstämmer med den nu beslutade modellen.
+1. Objektmodellen skall förenklas
+Målet är inte att vidareutveckla den nuvarande relationsmodellen utan att förenkla den.
+Den tidigare implementationen med object_payers, cluster_id och andra specialrelationer skall därför tas bort.
+Begreppet kluster är inte en egen datamodell.
+Ett kluster är endast en benämning på en sammanhängande objektstruktur som byggs upp av relationerna:
+    •    Förälder
+    •    Barn
+Det skall därför inte finnas någon separat klusterlogik eller särskild klustertabell.
+På samma sätt skall object_payers inte vara en del av objektmodellen. Betalare, fakturamottagare och liknande information är verksamhetsinformation och skall istället hanteras genom metadata eller via order-, kund- eller avtalsmodellen där informationen hör hemma.
+2. Multipla föräldrar skall behållas
+Den enda delen av den nuvarande modellen som skall behållas är stödet för flera föräldrar.
+Ett objekt skall därför kunna ha:
+    •    flera barn
+    •    en eller flera föräldrar
+En av dessa skall kunna markeras som Primär förälder eller Huvudförälder.
+Detta är inte en separat relationsmodell utan en naturlig utökning av den generella förälder/barn-strukturen.
+3. Metadata är den gemensamma informationsmodellen
+All beskrivande information skall hanteras genom metadata.
+Metadata skall kunna ärvas från en eller flera föräldrar.
+Varje metadatapost skall alltid visa:
+    •    om den är egen eller ärvd
+    •    från vilket objekt den kommer
+    •    när den skapades
+    •    av vilken systemfunktion
+    •    av vilken användare
+    •    eventuell kopplad uppgift
+    •    eventuell order
+    •    eventuellt orderkoncept
+    •    annan möjlig källa
+Källinformationen skall vara klickbar när det är möjligt.
+4. Synkronisering av metadata
+Metadata skall inte betraktas som kopior utan som en sammanhängande informationskedja.
+Så länge arv inte har brutits skall samma metadata hållas synkroniserad genom hela objektstrukturen.
+Om samma metadatafält finns på flera nivåer eller via flera föräldrar skall systemet automatiskt identifiera om värden skiljer sig åt.
+Hur detta hanteras skall inte vara hårdkodat utan styras av metadatafältets definition i metadataadministrationen.
+Varje metadatafält skall därför definiera sin synkroniseringsregel.
+Exempel:
+Enkelvärde
+Exempel:
+    •    Antal
+    •    Tömningsdag
+    •    Hämtintervall
+    •    Typ
+    •    Modell
+För dessa metadatafält gäller att endast ett aktivt värde får finnas inom en obruten arvskedja.
+Senast uppdaterade värde blir aktivt.
+Tidigare värden arkiveras automatiskt.
+Synkronisering sker automatiskt uppåt, nedåt och mellan objekt som delar samma arvskedja.
+Katalogvärde
+Exempel:
+    •    Kontaktpersoner
+    •    Telefonnummer
+    •    Bilder
+    •    Dokument
+    •    Certifikat
+Flera aktiva poster får finnas samtidigt.
+Ingen automatisk ersättning sker.
+Samtliga aktiva poster visas i karusellen tillsammans med information om källa och historik.
+5. Brytning av arv
+Det skall vara möjligt att bryta arv för ett enskilt metadatafält eller för en hel objektgren.
+När ett arv bryts upphör den automatiska synkroniseringen endast för det aktuella metadatafältet.
+Övriga metadata fortsätter att följa den gemensamma arvskedjan.
+Detta gör det möjligt att skapa lokala avvikelser utan att förlora den övergripande informationsstrukturen.
+6. Metadataadministrationen skall styra beteendet
+Hur metadata fungerar skall inte avgöras av specialkod.
+Det skall istället definieras i metadataadministrationen.
+För varje metadatafält skall administratören kunna definiera bland annat:
+    •    datatyp
+    •    metadataområde
+    •    om fältet är enkelvärde eller katalogvärde
+    •    om arv tillåts
+    •    om arv får brytas
+    •    vilken synkroniseringsregel som gäller
+    •    om flera aktiva värden tillåts
+    •    om tidigare värden skall arkiveras
+    •    om fältet skall visas i karuseller
+    •    om fältet skall vara sökbart och filtrerbart
+Detta gör metadataarkitekturen generell och eliminerar behovet av specialbyggda lösningar.
+7. Raderingsregeln skall implementeras
+Det stämmer att denna regel ännu inte finns implementerad.
+Den skall införas som en tvingande systemregel.
+Permanent radering skall endast tillåtas om objektet är helt oanvänt.
+Objektet får då inte ha:
+    •    metadata
+    •    uppgifter
+    •    historik
+    •    relationer
+    •    barn
+    •    föräldrar
+    •    bilder
+    •    filer
+    •    order
+    •    orderkoncept
+    •    annan spårbar information
+Om någon sådan koppling finns skall permanent radering nekas.
+Objektet skall istället arkiveras.
+Denna kontroll skall vara en hård regel i systemet och inte bero på användarens behörighet eller arbetsflöde.
+Sammanfattning
+Den fortsatta utvecklingen skall utgå från en förenklad och generell arkitektur:
+    •    Objektet innehåller endast objektinformation och relationer.
+    •    Relationer består enbart av förälder och barn, med stöd för flera föräldrar och en primär förälder.
+    •    Kluster är inte en egen datamodell utan en benämning på en objektstruktur.
+    •    Betalare och andra verksamhetsrelationer skall inte byggas in i objektmodellen.
+    •    All beskrivande information skall hanteras genom metadata.
+    •    Metadataadministrationen skall styra hur varje metadatafält fungerar, inklusive arv, synkronisering, historik och konflikthantering.
+    •    Radering av objekt skall endast vara möjlig om objektet är helt oanvänt, annars skall det arkiveras.
+Detta ersätter tidigare arkitekturbeslut där de står i konflikt med denna modell och skall ligga till grund för all fortsatt utveckling av objekt- och metadatahanteringen.

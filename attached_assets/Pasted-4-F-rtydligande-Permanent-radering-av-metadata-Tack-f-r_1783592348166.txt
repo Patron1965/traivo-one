@@ -1,0 +1,68 @@
+4. Förtydligande – Permanent radering av metadata
+Tack för analysen. Här vill jag förtydliga den tänkta arkitekturen eftersom syftet inte är att skapa en generell funktion för permanent radering av metadata.
+Grundprincipen är att metadata utgör en del av systemets historik och spårbarhet. Därför skall metadata normalt aldrig permanent raderas.
+Normal hantering
+Den normala livscykeln för metadata skall vara:
+    •    Skapa
+    •    Uppdatera
+    •    Arkivera
+    •    Eventuellt återaktivera
+Detta gäller både metadatafält av enkelvärdestyp och katalogtyp.
+Historiken skall alltid bevaras.
+Enkelvärden
+För metadatafält där endast ett aktivt värde är tillåtet, exempelvis:
+    •    Antal
+    •    Typ
+    •    Storlek
+    •    Modell
+    •    Tömningsdag
+    •    Hämtintervall
+skall tidigare värden automatiskt arkiveras när ett nytt värde registreras.
+Inga historiska värden skall tas bort.
+Katalogvärden
+För metadatafält där flera aktiva poster tillåts, exempelvis:
+    •    Kontaktpersoner
+    •    Telefonnummer
+    •    E-post
+    •    Bilder
+    •    Dokument
+    •    Certifikat
+skall varje post kunna:
+    •    skapas
+    •    uppdateras
+    •    arkiveras
+    •    återaktiveras
+Ingen historisk information skall tas bort.
+Permanent radering
+Permanent radering skall inte vara en normal administrativ funktion.
+Inte heller systemadministratören skall använda permanent radering som ett sätt att "städa" historiken.
+Permanent borttagning skall endast kunna användas i mycket speciella situationer, exempelvis:
+    •    felregistrerad testdata
+    •    importer som avbrutits innan de tagits i bruk
+    •    tekniska fel där metadata aldrig blivit en del av systemets historik
+Sådan funktion kan finnas som ett tekniskt serviceverktyg men skall inte ingå i normal systemadministration och inte exponeras i användargränssnittet.
+Historik och spårbarhet
+Metadata är en del av systemets revisionsspår.
+Varje metadatapost skall därför kunna följas över tid.
+Informationsflaggan skall alltid kunna visa:
+    •    skapad datum och tid
+    •    skapad av systemfunktion
+    •    skapad av användare
+    •    källa
+    •    uppgift
+    •    order
+    •    orderkoncept
+    •    ursprungsobjekt
+    •    eventuell ärvd relation
+Denna historik skall inte kunna förstöras genom permanent radering.
+Slutsats
+Om nuvarande implementation redan bygger på att metadata arkiveras istället för att permanent raderas ligger den helt i linje med den arkitektur som eftersträvas.
+Någon generell administrativ funktion för permanent radering av metadata skall därför inte införas.
+Fokus skall istället ligga på en konsekvent modell där metadata kan:
+    •    skapas
+    •    uppdateras
+    •    ärvas
+    •    synkroniseras
+    •    arkiveras
+    •    återaktiveras
+med full historik och full spårbarhet under hela objektets livscykel.
