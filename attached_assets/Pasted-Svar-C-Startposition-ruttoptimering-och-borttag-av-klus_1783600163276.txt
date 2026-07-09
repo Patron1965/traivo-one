@@ -1,0 +1,193 @@
+Svar C – Startposition, ruttoptimering och borttag av klusterlogik
+
+Nuvarande resonemang bygger på fel utgångspunkt och skall ersättas.
+
+Det finns ingen informationsbärare som heter kluster. Klusterlogik, cluster_id och liknande reservpositioner skall tas bort.
+
+Systemet skall inte ruttoptimera utifrån kluster, teamets GPS-historik eller teammedlemmars privata positioner.
+
+1. Grundprincip
+
+Planeringen skall utgå från uppgifterna, inte från kluster.
+
+Varje uppgift har ett uppgiftspaket med bland annat:
+
+geografisk position
+produktionstid
+tidstyp
+möjlig leveranstid
+planerad leveranstid
+utförandetyp
+kopplat objekt
+metadata
+status
+
+Det är uppgiftspaketet som är informationsbäraren.
+
+2. Geografisk position kommer från uppgiften
+
+För uppgifter med geografisk koppling skall geografisk position alltid komma från uppgiftspaketet, som i sin tur uppdateras av Geografimotorn från objektets metadata.
+
+Geografimotorn skall leverera:
+
+primär plats
+sekundär plats
+latitud
+longitud
+
+Primär plats är dit det går att köra.
+
+Sekundär plats är den faktiska utförandeplatsen, exempelvis inne i en parkmiljö, ett gårdsområde eller en större byggnad där vanlig väg-/gatulogik inte räcker.
+
+3. Uppgifter utan geografisk koppling
+
+Uppgifter utan geografisk koppling skall inte ruttoptimeras.
+
+För dessa uppgifter är tidsfönster, produktionstid och tidstyp de viktiga planeringsparametrarna.
+
+Dessa hanteras av Tidsmotorn och placeras i veckoplanen utan körvägsberäkning.
+
+4. Utförarens plats är föregående uppgifts plats
+
+I planeringen är utförarens position alltid den senast planerade eller utförda uppgiftens plats.
+
+Det gäller oavsett tidstyp.
+
+Exempel på uppgifter/tidstyper:
+
+produktion
+egen tid
+lunchrast
+nattvila
+helgvila
+resa
+lager/plock
+intern tid
+annan registrerad tidstyp
+
+Om uppgiften har geografisk plats blir denna plats startpunkt för nästa geografiska uppgift.
+
+5. Ruttoptimering Light
+
+Ruttoptimering Light skall fungera så här:
+
+Planeraren drar in en uppgift eller uppgiftsklump i veckoplanen.
+
+Systemet tittar på föregående uppgift i planen.
+
+Om både föregående och nästa uppgift har geografisk position frågar systemet kart-/rutt-API om:
+
+körsträcka
+restid
+föreslagen färdväg
+
+Systemet summerar därefter:
+
+restid
+produktionstid
+övrig tid
+
+Detta sker uppgift för uppgift eller stopp för stopp.
+
+Systemet skall inte behöva någon separat team-startposition om veckoplanen redan innehåller en föregående uppgift.
+
+6. Start på dagen eller veckan
+
+Om första planerade uppgiften saknar föregående geografisk uppgift skall användaren kunna lägga in en startuppgift.
+
+Exempel:
+
+start från depå
+start från hemadress
+start från hotell
+start från nattvila
+start från helgvila
+start från lager
+start från annan plats
+
+Denna startpunkt skall själv vara en uppgift eller tidspost med geografisk position.
+
+Den skall inte vara ett separat specialfält på teamet.
+
+7. Teamets GPS-position är inte planeringsgrund
+
+Teamledarens eller teammedlemmars aktuella GPS-position kan visas upplysningsvis.
+
+Det kan vara användbart för:
+
+realtidsvy
+kundinformation
+intern uppföljning
+avvikelsehantering
+säkerhet
+planerarens lägesbild
+
+Men GPS-positionen skall inte vara den primära logiken för ruttoptimering.
+
+Planeringen skall bygga på uppgiftens plats och den planerade ordningen i veckoplanen.
+
+8. Klumpningsmotorn
+
+Klumpningsmotorn skall inte bygga på kluster.
+
+Den skall klumpa ihop uppgifter baserat på:
+
+geografisk närhet
+samma eller kompatibel möjlig utförandetid
+samma eller kompatibel utförandetyp
+samma adress eller samma sida av gatan
+ungefärlig radie, exempelvis cirka 30 meter
+
+Parametrarna skall kunna trimmas.
+
+En klump är inte ett objektkluster.
+
+En klump är ett planeringsstopp bestående av flera uppgifter.
+
+9. Stop
+
+Ett stop är en planeringsenhet.
+
+Det kan bestå av:
+
+en uppgift
+flera uppgifter på samma plats
+flera uppgifter i samma tidfönster
+flera uppgifter av samma eller kompatibel utförandetyp
+
+Stopet bygger på uppgiftspaket, inte på objektkluster.
+
+10. Om position saknas
+
+För uppgifter som kräver geografisk planering skall position finnas i uppgiftspaketet.
+
+Om position saknas skall det behandlas som en datakvalitetsbrist.
+
+Systemet skall då visa en tydlig varning:
+
+Uppgiften saknar geografisk position och kan inte ruttberäknas.
+
+Planeraren skall kunna komplettera eller korrigera positionen via metadata.
+
+11. Svar på frågan
+
+Nej, lösningen skall inte vara att team utan position hoppas över.
+
+Nej, lösningen skall inte vara att införa klustrets mittpunkt som reserv.
+
+Nej, lösningen skall inte i första hand vara teamets GPS-position, teamledarens position eller första teammedlemmens position.
+
+Rätt lösning är:
+
+planeringen utgår från uppgiftens plats
+föregående uppgift ger startpunkt
+första uppgiften föregås vid behov av en startuppgift
+geografiska uppgifter skall ha position via metadata och Geografimotorn
+uppgifter utan geografisk koppling planeras av Tidsmotorn utan ruttoptimering
+klusterlogik tas bort
+
+Slutsats
+
+Bygg om logiken så att ruttoptimering, planering och restidsberäkning alltid utgår från uppgiftspaketet och uppgifternas geografiska positioner.
+
+Det är uppgiften, inte teamet och inte klustret, som är planeringens informationsbärare.
