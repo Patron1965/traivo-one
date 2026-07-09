@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   Contact, Image as ImageIcon, ClipboardList, MapPin, Target, Plus,
-  Trash2, Phone, Mail, Pencil, Calendar, CalendarClock, CircleSlash,
+  Trash2, Phone, Mail, Calendar, CalendarClock, CircleSlash,
   Link as LinkIcon, Users, Map as MapIcon, Zap,
 } from "lucide-react";
 import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
@@ -15,7 +15,6 @@ import {
 } from "@/components/ui/dialog";
 import { KallaBadge } from "@/lib/metadata-kalla";
 import { getWorkOrderStatusBadge } from "@/lib/status-colors";
-import { objectLocationTypeLabel, objectLocationTypeBadgeClass } from "@/lib/object-location";
 import { useMapConfig } from "@/hooks/use-map-config";
 import { PolylineEditor } from "@/components/PolylineEditor";
 import type { ServiceObject } from "@shared/schema";
@@ -91,12 +90,48 @@ interface SystemUnperformedTask {
   impossibleAt: string | null;
   executionCode: string | null;
 }
+// Speglar SystemGeoField (server/metadata-queries.ts) — de äkta, systemlåsta
+// geografi-metadatafälten (P1 standardadress + P2 fördjupad position).
+// Delad cache-nyckel med ObjectHeaderPanel/ObjectSystemGeneratedPanel.
+interface GeoFieldLite {
+  value: string | null;
+  point: { lat: number; lng: number } | null;
+  source: "own" | "inherited" | "missing";
+  fromObject: { id: string; namn: string } | null;
+}
 interface SystemGeneratedMetadata {
   pointedInConcepts: PointedInConcept[];
   tasksHistory: SystemTaskHistory[];
   tasksFuture: SystemTaskFuture[];
   unperformedTasks: SystemUnperformedTask[];
+  standardAddress?: {
+    gatuadress: GeoFieldLite;
+    postnummer: GeoFieldLite;
+    postort: GeoFieldLite;
+    koordinater: GeoFieldLite;
+  };
+  advancedPosition?: {
+    fordjupadPosition: GeoFieldLite;
+    avdelningPortVaning: GeoFieldLite;
+  };
 }
+
+const geoFieldRow = (label: string, field: GeoFieldLite | undefined) => {
+  if (!field || (field.value == null && field.source === "missing")) return null;
+  return (
+    <div className="flex items-center justify-between gap-2 text-xs" data-testid={`text-geo-${label.toLowerCase()}`}>
+      <span className="text-muted-foreground">{label}</span>
+      <span className="flex items-center gap-1 min-w-0">
+        <span className="truncate text-right">{field.value ?? "—"}</span>
+        {field.source === "inherited" && field.fromObject && (
+          <Badge variant="outline" className="text-[10px] px-1 py-0 font-normal shrink-0" title={`Ärvd från ${field.fromObject.namn}`}>
+            Ärvd
+          </Badge>
+        )}
+      </span>
+    </div>
+  );
+};
 
 type LinkedTaskItem =
   | { kind: "future"; data: SystemTaskFuture }
@@ -185,6 +220,8 @@ export function ObjectDomainGrid({
     ...unperformed.map((d): LinkedTaskItem => ({ kind: "unperformed", data: d })),
   ];
 
+  const standardAddress = data?.standardAddress;
+  const advancedPosition = data?.advancedPosition;
   const hasCoordinates = obj?.latitude != null && obj?.longitude != null;
   const hasEntrance = obj?.entranceLatitude != null && obj?.entranceLongitude != null;
 
@@ -510,7 +547,7 @@ export function ObjectDomainGrid({
           renderItem={renderProduction}
         />
 
-        {/* Geografi (karta i dialog) */}
+        {/* Geografi (äkta metadatafält: standardadress P1 + fördjupad position P2) */}
         <Card className={`${GRID_CARD}`} data-testid="card-location">
           <CardHeader className="pb-3">
             <div className="flex items-center justify-between gap-2">
@@ -518,31 +555,36 @@ export function ObjectDomainGrid({
                 <MapPin className="h-4 w-4" /> Geografi
                 <KallaBadge kalla="SYS" />
               </CardTitle>
-              <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={onEditGeo} data-testid="button-edit-location">
-                <Pencil className="h-4 w-4" />
-              </Button>
             </div>
           </CardHeader>
-          <CardContent className="space-y-2">
-            <Badge variant="outline" className={objectLocationTypeBadgeClass(obj)} data-testid="badge-location-type">
-              {objectLocationTypeLabel(obj)}
-            </Badge>
-            {obj?.address && (
-              <div className="text-sm break-words" data-testid="text-location-address">{obj.address}</div>
-            )}
-            {hasCoordinates ? (
-              <div className="text-xs text-muted-foreground tabular-nums" data-testid="text-location-coords">
-                {Number(obj.latitude).toFixed(5)}, {Number(obj.longitude).toFixed(5)}
-                {hasEntrance && " • entré satt"}
+          <CardContent className="space-y-3">
+            <div className="space-y-1.5">
+              {geoFieldRow("Gatuadress", standardAddress?.gatuadress)}
+              {geoFieldRow("Postnummer", standardAddress?.postnummer)}
+              {geoFieldRow("Postort", standardAddress?.postort)}
+              {standardAddress?.koordinater?.point && (
+                <div className="flex items-center justify-between gap-2 text-xs" data-testid="text-location-coords">
+                  <span className="text-muted-foreground">Koordinater</span>
+                  <span className="tabular-nums">
+                    {standardAddress.koordinater.point.lat.toFixed(5)}, {standardAddress.koordinater.point.lng.toFixed(5)}
+                  </span>
+                </div>
+              )}
+            </div>
+            {(advancedPosition?.fordjupadPosition?.point || advancedPosition?.avdelningPortVaning?.value) && (
+              <div className="pt-2 border-t space-y-1.5">
+                <div className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                  Fördjupad position (ej ruttbar)
+                </div>
+                {geoFieldRow("Avdelning/Port/Våning", advancedPosition?.avdelningPortVaning)}
               </div>
-            ) : (
-              <div className="text-xs text-muted-foreground">Inga koordinater tillgängliga.</div>
             )}
             <Button
               variant="outline"
               size="sm"
               className="mt-1 w-full"
               onClick={() => setMapOpen(true)}
+              disabled={!hasCoordinates}
               data-testid="button-show-map"
             >
               <MapIcon className="h-3.5 w-3.5 mr-1" /> Visa på karta

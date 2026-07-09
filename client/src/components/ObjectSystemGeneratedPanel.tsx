@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import {
   ChevronDown,
   ClipboardList,
@@ -9,7 +9,6 @@ import {
   Cog,
   Building,
   MapPin,
-  MapPinned,
   Navigation,
   Target,
   CalendarClock,
@@ -18,16 +17,7 @@ import {
 } from "lucide-react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { apiRequest, queryClient } from "@/lib/queryClient";
-import { useToast } from "@/hooks/use-toast";
-import {
-  isValidWhat3words,
-  normalizeWhat3words,
-  WHAT3WORDS_FORMAT_ERROR,
-} from "@shared/what3words";
 
 // Task #1085: Systemgenererad metadata-vy. Ersätter de gamla
 // "Ordrar/Rating/Felanmälningar"-sektionerna och samlar de systemgenererade
@@ -209,147 +199,6 @@ function Field({ label, value, testId }: { label: string; value: React.ReactNode
   );
 }
 
-// Task #1110: What3words är ett SEKUNDÄRT, manuellt redigerbart platsfält
-// (icke-system metadata). Egen sektion med inline-editering.
-function What3wordsSection({
-  objectId,
-  value,
-}: {
-  objectId: string;
-  value: string | null;
-}) {
-  const { toast } = useToast();
-  const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState(value ?? "");
-  const [error, setError] = useState<string | null>(null);
-
-  const trimmedDraft = draft.trim();
-  // Task #1118: spegla serverns formatvalidering inline. Tomt = giltigt (rensar).
-  const formatInvalid = trimmedDraft.length > 0 && !isValidWhat3words(trimmedDraft);
-
-  const mutation = useMutation({
-    mutationFn: async (next: string) => {
-      const res = await apiRequest("POST", `/api/objects/${objectId}/what3words`, {
-        what3words: next,
-      });
-      return res.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({
-        queryKey: ["/api/objects", objectId, "system-generated-metadata"],
-      });
-      setEditing(false);
-      setError(null);
-      toast({ title: "What3words sparad" });
-    },
-    onError: (err: Error) => {
-      setError(err.message || WHAT3WORDS_FORMAT_ERROR);
-    },
-  });
-
-  const handleSave = () => {
-    const next = trimmedDraft ? normalizeWhat3words(trimmedDraft) : "";
-    if (next && !isValidWhat3words(next)) {
-      setError(WHAT3WORDS_FORMAT_ERROR);
-      return;
-    }
-    setError(null);
-    mutation.mutate(next);
-  };
-
-  return (
-    <Collapsible defaultOpen={false}>
-      <CollapsibleTrigger
-        className="flex w-full items-center justify-between gap-2 rounded-md border px-3 py-2 text-sm hover:bg-accent"
-        data-testid="trigger-system-what3words"
-      >
-        <span className="flex items-center gap-2 font-medium min-w-0">
-          <MapPinned className="h-4 w-4" />
-          <span className="truncate">What3words</span>
-        </span>
-        <ChevronDown className="h-4 w-4" />
-      </CollapsibleTrigger>
-      <CollapsibleContent className="px-1 py-2">
-        {editing ? (
-          <div className="px-2 py-1">
-            <div className="flex items-center gap-2">
-              <Input
-                value={draft}
-                onChange={(e) => {
-                  setDraft(e.target.value);
-                  if (error) setError(null);
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && !formatInvalid && !mutation.isPending) {
-                    handleSave();
-                  }
-                }}
-                placeholder="t.ex. filled.count.soap"
-                className="h-8"
-                aria-invalid={formatInvalid || !!error}
-                data-testid="input-what3words"
-              />
-              <Button
-                size="sm"
-                onClick={handleSave}
-                disabled={mutation.isPending || formatInvalid}
-                data-testid="button-save-what3words"
-              >
-                {mutation.isPending ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  "Spara"
-                )}
-              </Button>
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={() => {
-                  setDraft(value ?? "");
-                  setError(null);
-                  setEditing(false);
-                }}
-                disabled={mutation.isPending}
-                data-testid="button-cancel-what3words"
-              >
-                Avbryt
-              </Button>
-            </div>
-            {(formatInvalid || error) && (
-              <p
-                className="mt-1 text-xs text-destructive"
-                data-testid="error-what3words"
-              >
-                {error ?? WHAT3WORDS_FORMAT_ERROR}
-              </p>
-            )}
-          </div>
-        ) : (
-          <div className="flex items-center justify-between gap-2 px-2 py-1">
-            <span
-              className="text-sm font-medium break-words"
-              data-testid="text-what3words"
-            >
-              {value ?? "—"}
-            </span>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => {
-                setDraft(value ?? "");
-                setEditing(true);
-              }}
-              data-testid="button-edit-what3words"
-            >
-              {value ? "Ändra" : "Lägg till"}
-            </Button>
-          </div>
-        )}
-      </CollapsibleContent>
-    </Collapsible>
-  );
-}
-
 interface Props {
   objectId: string;
 }
@@ -430,8 +279,6 @@ export function ObjectSystemGeneratedPanel({ objectId }: Props) {
           </div>
         )}
       </Section>
-
-      <What3wordsSection objectId={objectId} value={position.what3words} />
 
       <Section
         title="Fastighetsägare"

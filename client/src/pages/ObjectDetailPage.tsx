@@ -43,7 +43,6 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import "leaflet/dist/leaflet.css";
 import type { ServiceObject, WorkOrder, ImportTemplate } from "@shared/schema";
 import { objectStatusBadge as statusColors, workOrderStatusBadge as workOrderStatusColors, getObjectStatusBadge } from "@/lib/status-colors";
-import { OBJECT_LOCATION_TYPE_LABELS, objectLocationTypeLabel, objectLocationTypeBadgeClass } from "@/lib/object-location";
 import type { LucideIcon } from "lucide-react";
 
 // Task #1158: objektets driftstatus (ej arkivering) — samma trippel som
@@ -858,9 +857,6 @@ export default function ObjectDetailPage() {
       serialNumber: resolvedObject.serialNumber || "",
       manufacturer: resolvedObject.manufacturer || "",
       condition: resolvedObject.condition || "",
-      locationType: resolvedObject.locationType || "auto",
-      latitude: resolvedObject.latitude ?? "",
-      longitude: resolvedObject.longitude ?? "",
     });
     setEditDialogOpen(true);
   };
@@ -1832,53 +1828,6 @@ export default function ObjectDetailPage() {
                   </Select>
                 </div>
                 <div className="space-y-2">
-                  <Label>Platstyp</Label>
-                  <Select
-                    value={(editForm.locationType as string) || "auto"}
-                    onValueChange={(v) => setEditForm({ ...editForm, locationType: v })}
-                  >
-                    <SelectTrigger data-testid="select-edit-locationType">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="auto">Automatisk (härled från koordinater)</SelectItem>
-                      <SelectItem value="pinpoint">{OBJECT_LOCATION_TYPE_LABELS.pinpoint}</SelectItem>
-                      <SelectItem value="area">{OBJECT_LOCATION_TYPE_LABELS.area}</SelectItem>
-                      <SelectItem value="none">{OBJECT_LOCATION_TYPE_LABELS.none}</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <p className="text-xs text-muted-foreground">
-                    Exakt position = ruttbar punkt. Område = visas på karta men ruttas ej.
-                    Ingen geografi = objekt utan plats (t.ex. tjänst/abonnemang).
-                  </p>
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-2">
-                    <Label>Latitud</Label>
-                    <Input
-                      type="number"
-                      step="any"
-                      inputMode="decimal"
-                      value={editForm.latitude == null ? "" : String(editForm.latitude)}
-                      onChange={(e) => setEditForm({ ...editForm, latitude: e.target.value })}
-                      placeholder="t.ex. 59.3293"
-                      data-testid="input-edit-latitude"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Longitud</Label>
-                    <Input
-                      type="number"
-                      step="any"
-                      inputMode="decimal"
-                      value={editForm.longitude == null ? "" : String(editForm.longitude)}
-                      onChange={(e) => setEditForm({ ...editForm, longitude: e.target.value })}
-                      placeholder="t.ex. 18.0686"
-                      data-testid="input-edit-longitude"
-                    />
-                  </div>
-                </div>
-                <div className="space-y-2">
                   <Label>Anteckningar</Label>
                   <Textarea
                     value={editForm.notes}
@@ -2005,24 +1954,6 @@ export default function ObjectDetailPage() {
                   payload.objectType = editForm.objectType;
                   payload.status = editForm.status;
                   payload.notes = editForm.notes;
-                  // Task #990: platstyp + position. "auto" ⇒ null (server härleder).
-                  payload.locationType = editForm.locationType === "auto" || !editForm.locationType
-                    ? null
-                    : editForm.locationType;
-                  const rawLat = typeof editForm.latitude === "string" ? editForm.latitude.trim() : editForm.latitude;
-                  const rawLng = typeof editForm.longitude === "string" ? editForm.longitude.trim() : editForm.longitude;
-                  const lat = rawLat === "" || rawLat == null ? null : Number(rawLat);
-                  const lng = rawLng === "" || rawLng == null ? null : Number(rawLng);
-                  if ((lat !== null && !Number.isFinite(lat)) || (lng !== null && !Number.isFinite(lng))) {
-                    toast({ title: "Ogiltiga koordinater", description: "Latitud och longitud måste vara giltiga tal.", variant: "destructive" });
-                    return;
-                  }
-                  if ((lat === null) !== (lng === null)) {
-                    toast({ title: "Ofullständig position", description: "Ange både latitud och longitud, eller lämna båda tomma.", variant: "destructive" });
-                    return;
-                  }
-                  payload.latitude = lat;
-                  payload.longitude = lng;
                 }
                 if (editSection === "access") {
                   payload.accessType = editForm.accessType;
