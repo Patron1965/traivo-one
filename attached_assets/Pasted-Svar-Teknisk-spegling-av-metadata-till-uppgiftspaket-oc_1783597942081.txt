@@ -1,0 +1,144 @@
+Svar – Teknisk spegling av metadata till uppgiftspaket och motorer
+
+Ja, principen med en teknisk spegel kan godkännas, men bara med en viktig precisering:
+
+Metadata är fortfarande originalet och den enda redigerbara sanningen.
+
+Däremot behöver systemet, av planerings- och prestandaskäl, kunna ha en dold teknisk kopia av vissa värden som motorerna använder. Denna kopia får inte betraktas som verksamhetsinformation och får aldrig redigeras direkt av användare.
+
+1. Metadata är originalet
+
+Adress, position, tidsfönster, åtkomst, antal, typ och andra objektuppgifter skall fortfarande ligga som metadata.
+
+Det är där informationen:
+
+visas
+redigeras
+ärvs
+arkiveras
+historiseras
+
+Ingen parallell användarredigerbar informationsö får finnas.
+
+2. Uppgiftspaketet är arbetskopian
+
+Planering, rutt, leverans och utförande skall utgå från informationen i uppgiftspaketet.
+
+Det innebär att när en uppgift skapas fylls uppgiftspaketet med aktuell information, exempelvis:
+
+adress
+position
+leveranstid
+planerad leveranstid
+antal
+tidsfönster
+artikelinformation
+kund- och fakturainformation
+
+Uppgiftspaketet är alltså den operativa arbetskopian för just den uppgiften.
+
+3. Metadataändringar skall uppdatera kopplade uppgifter
+
+När metadata ändras av administratör, kund, utförare, API eller annan funktion skall systemet automatiskt bedöma vilka framtida eller öppna uppgifter som påverkas.
+
+Exempel:
+
+ändrad adress
+ändrad GPS-position
+ändrat antal
+ändrat tidsfönster
+nattkörning
+tvingande körning
+ändrad åtkomstinformation
+
+Dessa ändringar skall skickas vidare till kopplade uppgifter så att deras uppgiftspaket uppdateras.
+
+Detta är särskilt viktigt för:
+
+abonnemangsuppgifter
+repeterade framtida uppgifter
+redan skapade men ännu inte utförda uppgifter
+grovplanerade uppgifter
+finplanerade uppgifter där ändringen påverkar tid, plats eller utförande
+
+4. Motorerna skall läsa uppgiftspaketet
+
+Ur planeringsperspektiv skall motorerna inte behöva tolka hela metadatahistoriken varje gång.
+
+Motorerna skall arbeta mot uppgiftspaketets aktuella operativa värden.
+
+Exempel:
+
+Geografimotorn skriver uppgiftens bästa aktuella plats till uppgiftspaketet.
+
+Ruttmotorn använder därefter platsen i uppgiftspaketet.
+
+Tidsmotorn använder leveranstider och tidsfönster i uppgiftspaketet.
+
+Fakturamotorn använder fakturaunderlaget i uppgiftspaketet.
+
+Detta är rätt arbetslogik.
+
+5. Teknisk snabbkopia är tillåten
+
+Det är godkänt att systemet har dolda tekniska spegelfält eller index för prestanda.
+
+Detta gäller exempelvis:
+
+koordinater
+beräknad plats
+tidsfönster
+ställtid
+sökindex
+sorteringsfält
+planeringsfält
+
+Men dessa fält är endast maskinteknik.
+
+De skall:
+
+vara dolda för användaren
+aldrig vara direkt redigerbara
+automatiskt uppdateras från metadata
+aldrig betraktas som originaldata
+aldrig ha egen historiklogik vid sidan av metadata
+aldrig skapa en parallell informationsmodell
+
+6. Utförarens plats är uppgiftens plats
+
+I systemet är det uppgifter som bär planeringen.
+
+Utförarens plats är därför alltid kopplad till den uppgift som utföraren befinner sig på.
+
+Det kan vara:
+
+produktion
+egen tid
+resa
+rast
+nattvila
+helgvila
+lager/plock
+annan tidstyp
+
+Vid resa mellan två geografiska uppgifter är resans position dynamisk:
+
+start = föregående uppgift
+slut = nästa uppgift
+väg = beräknad resväg mellan dessa
+
+7. Slutsats
+
+Principen godkänns under följande villkor:
+
+Metadata är originalet.
+
+Uppgiftspaketet är den operativa arbetskopian.
+
+Motorerna läser uppgiftspaketet och tekniska index/speglar.
+
+Tekniska spegelfält får finnas för prestanda, men de får inte bli användarredigerbara informationsfält.
+
+När metadata ändras skall berörda framtida och öppna uppgifter uppdateras automatiskt.
+
+Detta ger både korrekt arkitektur och tillräcklig prestanda för planering, rutt, utförande och fakturering.
