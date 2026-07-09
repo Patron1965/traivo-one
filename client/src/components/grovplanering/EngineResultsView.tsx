@@ -167,7 +167,7 @@ export function EngineResultsView({ data }: EngineResultsViewProps) {
         title: "Beslut sparat",
         description:
           payload.target === "clump"
-            ? `Klumpuppgiftens föreslagna tid ${verb}.`
+            ? `Stoppets föreslagna tid ${verb}.`
             : `Uppgiftens föreslagna tid ${verb}.`,
       });
     },
@@ -448,7 +448,7 @@ export function EngineResultsView({ data }: EngineResultsViewProps) {
               <Layers className="h-4 w-4 shrink-0 text-chart-4" />
               <div>
                 <div className="font-semibold">
-                  Klumpuppgift · {formatCount(clump.memberCount)} uppgifter
+                  Stopp · {formatCount(clump.memberCount)} uppgifter
                 </div>
                 <div className="flex items-center gap-1 text-xs text-muted-foreground">
                   <MapPin className="h-3 w-3" />
@@ -508,7 +508,7 @@ export function EngineResultsView({ data }: EngineResultsViewProps) {
         <p className="max-w-md text-sm">
           Kör tids- &amp; geografimotorn för att generera föreslagna slottider.
           Motorn väger ihop kundönskad tid, tidsregler och utförandekoder samt
-          grupperar närliggande uppgifter till klumpuppgifter.
+          grupperar närliggande uppgifter till stopp.
         </p>
       </div>
     );
@@ -520,7 +520,7 @@ export function EngineResultsView({ data }: EngineResultsViewProps) {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Uppgift / klump</TableHead>
+              <TableHead>Uppgift / stopp</TableHead>
               <TableHead>
                 <SortHeader label="Föreslagen tid" sk="time" />
               </TableHead>

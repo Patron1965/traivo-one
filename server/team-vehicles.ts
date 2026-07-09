@@ -1,4 +1,27 @@
-import type { Cluster, Resource, Team, TeamMember } from "@shared/schema";
+import type { Resource, Team, TeamMember, WorkOrder } from "@shared/schema";
+import { buildStartTaskPointMap } from "@shared/start-task";
+
+/**
+ * Task #1216: Bygger startpunkts-kartan (teamId/resourceId → lat/lng) från
+ * startuppgifter (orderType="startpunkt") för en given dag. Startuppgifter är
+ * den ENDA planeringsgrunden för fordonets startposition — team-/teamledar-/
+ * medlems-/GPS- och klustercentrum-positioner används aldrig.
+ */
+export function buildStartPointsForDate(
+  workOrders: Pick<WorkOrder, "orderType" | "teamId" | "resourceId" | "taskLatitude" | "taskLongitude" | "scheduledStartTime" | "scheduledDate">[],
+  date?: string | null,
+): Map<string, { lat: number; lng: number }> {
+  const relevant = date
+    ? workOrders.filter((wo) => {
+        if (!wo.scheduledDate) return false;
+        const d = wo.scheduledDate instanceof Date
+          ? wo.scheduledDate.toISOString().split("T")[0]
+          : String(wo.scheduledDate).split("T")[0];
+        return d === date;
+      })
+    : workOrders;
+  return buildStartTaskPointMap(relevant);
+}
 
 /**
  * Bygger en map från teamId → lista av aktiva medlemmars resourceIds.
@@ -40,19 +63,20 @@ export function buildTeamMemberMap(
  * Resource per team där:
  *   - id           = team.id  (så att VRP-resultatet refererar till teamet)
  *   - name         = team.name
- *   - location     = teamledarens hem (eller första aktiva medlemmens)
+ *   - location     = teamets STARTUPPGIFT för dagen (Task #1216) — aldrig
+ *                    teamledarens/medlemmens hem, team-GPS eller klustercentrum
  *   - executionCodes = unionen av alla aktiva medlemmars koder
  *
- * Team utan aktiva medlemmar hoppas över.
+ * Team utan startuppgift med position hoppas över (loggas) — de kan inte
+ * ruttberäknas. GPS-positioner är enbart realtidsinformation.
  */
 export function buildTeamVehicles(
   teams: Team[],
   teamMembers: TeamMember[],
   resources: Resource[],
-  clusters: Cluster[] = [],
+  startPoints: Map<string, { lat: number; lng: number }> = new Map(),
 ): Resource[] {
   const resourceMap = new Map(resources.map((r) => [r.id, r]));
-  const clusterMap = new Map(clusters.map((c) => [c.id, c]));
   const now = new Date();
 
   const membersByTeam = new Map<string, TeamMember[]>();
@@ -83,27 +107,13 @@ export function buildTeamVehicles(
       representative = memberResources[0];
     }
 
-    // Fallback: hämta hem-koordinater från team.lastPosition eller cluster center
-    // så att teams utan medlemmar/leader fortfarande kan vara fordon i VRP.
-    let fallbackLat: number | null = null;
-    let fallbackLng: number | null = null;
-    const teamAny = team as any;
-    if (typeof teamAny.lastPositionLat === "number" && typeof teamAny.lastPositionLng === "number") {
-      fallbackLat = teamAny.lastPositionLat;
-      fallbackLng = teamAny.lastPositionLng;
-    } else if (team.clusterId) {
-      const cluster = clusterMap.get(team.clusterId);
-      const geo = (cluster?.geoData as any) || {};
-      const lat = cluster?.centerLatitude ?? geo.centerLat ?? null;
-      const lng = (cluster as any)?.centerLongitude ?? geo.centerLng ?? null;
-      if (typeof lat === "number" && typeof lng === "number") {
-        fallbackLat = lat;
-        fallbackLng = lng;
-      }
-    }
-
-    if (!representative && (fallbackLat === null || fallbackLng === null)) {
-      // Team saknar både medlem/leader och fallback-koordinater — kan inte ruttas
+    // Task #1216: fordonets position kommer ENBART från teamets startuppgift.
+    // Inga fallbackar till teamledar-/medlemshem, team-GPS eller klustercentrum.
+    const startPoint = startPoints.get(team.id) ?? null;
+    if (!startPoint) {
+      console.log(
+        `[team-vehicles] Team "${team.name}" (${team.id}) saknar startuppgift med position — hoppas över i VRP`,
+      );
       continue;
     }
 
@@ -126,8 +136,8 @@ export function buildTeamVehicles(
       email: null,
       pin: null,
       homeLocation: null,
-      homeLatitude: fallbackLat,
-      homeLongitude: fallbackLng,
+      homeLatitude: startPoint.lat,
+      homeLongitude: startPoint.lng,
       currentLatitude: null,
       currentLongitude: null,
       lastPositionUpdate: null,
@@ -148,9 +158,13 @@ export function buildTeamVehicles(
       id: team.id,
       name: team.name,
       executionCodes: Array.from(allCodes),
-      // Använd fallback-koordinater om representanten saknar koordinater
-      homeLatitude: representative?.homeLatitude ?? fallbackLat,
-      homeLongitude: representative?.homeLongitude ?? fallbackLng,
+      // Task #1216: startuppgiftens position är fordonets startpunkt —
+      // representantens hemkoordinater används ALDRIG som planeringsgrund.
+      homeLatitude: startPoint.lat,
+      homeLongitude: startPoint.lng,
+      // GPS är enbart realtidsinformation — nollställ på det syntetiska fordonet.
+      currentLatitude: null,
+      currentLongitude: null,
     };
 
     teamVehicles.push(teamVehicle);

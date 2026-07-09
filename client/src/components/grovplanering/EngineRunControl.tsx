@@ -91,7 +91,7 @@ export function EngineRunControl({ lastRunAt, onRan }: EngineRunControlProps) {
       const r = data.result;
       toast({
         title: "Motorn kördes",
-        description: `${r.taskSlots} slottider på ${r.processedAssignments} uppgifter, ${r.clumpGroups} klumpuppgifter.${
+        description: `${r.taskSlots} slottider på ${r.processedAssignments} uppgifter, ${r.clumpGroups} stopp.${
           r.unschedulableAssignments > 0
             ? ` ${r.unschedulableAssignments} kunde inte placeras.`
             : ""

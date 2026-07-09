@@ -10,6 +10,7 @@ import { asyncHandler } from "../asyncHandler";
 import { AppError, NotFoundError, ValidationError, ConflictError, ForbiddenError, UnauthorizedError } from "../errors";
 import { isAuthenticated } from "../replit_integrations/auth";
 import { type ServiceObject, type WorkOrderLine } from "@shared/schema";
+import { resolveLocationRequirement } from "@shared/location-requirement";
 import { getISOWeek } from "./helpers";
 import { notificationService } from "../notifications";
 import { getBatchDistances, haversineDistanceKm, type BatchPair } from "../distance-matrix-service";
@@ -1161,7 +1162,7 @@ app.post("/api/ai/optimize-routes", requirePlanner, asyncHandler(async (req, res
 app.post("/api/ai/optimize-vrp", requirePlanner, asyncHandler(async (req, res) => {
     const { optimizeRoutesVRP, DEFAULT_BREAK_CONFIG } = await import("../route-optimizer");
     const { createOptimizationJob, ASYNC_THRESHOLD } = await import("../optimization-job-runner");
-    const { buildTeamVehicles, buildTeamMemberMap } = await import("../team-vehicles");
+    const { buildTeamVehicles, buildTeamMemberMap, buildStartPointsForDate } = await import("../team-vehicles");
     const { date, clusterId, breakConfig: reqBreakConfig, constraints } = req.body;
     
     const tenantId = getTenantIdWithFallback(req);
@@ -1175,10 +1176,12 @@ app.post("/api/ai/optimize-vrp", requirePlanner, asyncHandler(async (req, res) =
       storage.getAllTeamMembers(tenantId),
     ]);
 
-    const teamVehicles = buildTeamVehicles(teams, teamMembersAll, resources);
+    // Task #1216: fordonens startpositioner kommer från dagens startuppgifter.
+    const startPoints = buildStartPointsForDate(workOrders, date ?? null);
+    const teamVehicles = buildTeamVehicles(teams, teamMembersAll, resources, startPoints);
     const teamMemberMap = buildTeamMemberMap(teams, teamMembersAll);
     if (teamVehicles.length === 0) {
-      throw new ValidationError("Inga aktiva team med medlemmar hittades. Skapa ett team med minst en medlem för att kunna köra ruttoptimering.", { success: false });
+      throw new ValidationError("Inga ruttbara team hittades. Lägg in en startuppgift (Hem/Hotell/Depå/Lager/Nattvila/Helgvila) med position för teamet i veckoplanen för att kunna ruttberäkna.", { success: false });
     }
     
     let filteredOrders = workOrders;
@@ -1200,6 +1203,10 @@ app.post("/api/ai/optimize-vrp", requirePlanner, asyncHandler(async (req, res) =
     filteredOrders = filteredOrders.filter(o => 
       o.orderStatus !== "utford" && o.orderStatus !== "fakturerad"
     );
+
+    // Task #1216: uppgifter utan geografisk koppling planeras av tidsmotorn,
+    // aldrig av VRP:n.
+    filteredOrders = filteredOrders.filter(o => resolveLocationRequirement(o) !== "ingen");
 
     const tenantSettings = (tenant?.settings as Record<string, unknown>) || {};
     const breakConfig = reqBreakConfig ?? tenantSettings.breakConfig ?? DEFAULT_BREAK_CONFIG;

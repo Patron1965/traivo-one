@@ -143,7 +143,7 @@ async function executeORToolsJob(jobId: string, input: VRPJobInput): Promise<VRP
   const { isServiceAvailable, callOptimizationService, convertORToolsToVRPResult } = await import("./services/optimizationQueue");
   const { enrichVRPRequestWithConstraints } = await import("./vrp-constraints");
   const { storage } = await import("./storage");
-  const { buildTeamVehicles, buildTeamMemberMap } = await import("./team-vehicles");
+  const { buildTeamVehicles, buildTeamMemberMap, buildStartPointsForDate } = await import("./team-vehicles");
 
   const tenantId = input.tenantId;
   await updateProgress(jobId, 10);
@@ -157,7 +157,9 @@ async function executeORToolsJob(jobId: string, input: VRPJobInput): Promise<VRP
     storage.getAllTeamMembers(tenantId),
   ]);
 
-  const teamVehicles = buildTeamVehicles(teams, teamMembersAll, resources, clusters);
+  // Task #1216: fordonens startpositioner kommer från dagens startuppgifter.
+  const startPoints = buildStartPointsForDate(workOrders, input.date ?? null);
+  const teamVehicles = buildTeamVehicles(teams, teamMembersAll, resources, startPoints);
   const teamMemberMap = buildTeamMemberMap(teams, teamMembersAll);
 
   await updateProgress(jobId, 20);
@@ -270,17 +272,24 @@ async function executeORToolsJob(jobId: string, input: VRPJobInput): Promise<VRP
     };
   });
 
+  // Task #1216: inga koordinat-gissningar — team utan startuppgiftsposition
+  // deltar inte i optimeringen (fail closed, ingen default-depå).
   const baseAgents = teamVehicles
+    .filter(r => {
+      const ok = r.homeLatitude != null && r.homeLongitude != null;
+      if (!ok) console.log(`[optimization-job] Hoppar över team ${r.name} (${r.id}) — saknar startuppgiftsposition`);
+      return ok;
+    })
     .map(r => ({
-      start_location: [r.homeLongitude || 18.07, r.homeLatitude || 59.33] as [number, number],
-      end_location: [r.homeLongitude || 18.07, r.homeLatitude || 59.33] as [number, number],
+      start_location: [r.homeLongitude!, r.homeLatitude!] as [number, number],
+      end_location: [r.homeLongitude!, r.homeLatitude!] as [number, number],
       time_windows: [[28800, 61200]] as [number, number][],
       id: r.id,
       description: r.name,
     }));
 
   if (baseAgents.length === 0) {
-    throw new Error("Inga aktiva team med medlemmar hittades. Skapa ett team med minst en medlem för att köra ruttoptimering.");
+    throw new Error("Inga ruttbara team hittades. Lägg in en startuppgift (Hem/Hotell/Depå/Lager/Nattvila/Helgvila) med position för teamet i veckoplanen för att köra ruttoptimering.");
   }
 
   await updateProgress(jobId, 40);
@@ -397,7 +406,7 @@ async function executeORToolsJob(jobId: string, input: VRPJobInput): Promise<VRP
 async function executeVRPJob(jobId: string, input: VRPJobInput): Promise<VRPOptimizationResult> {
   const { storage } = await import("./storage");
   const { optimizeRoutesVRP, DEFAULT_BREAK_CONFIG } = await import("./route-optimizer");
-  const { buildTeamVehicles, buildTeamMemberMap } = await import("./team-vehicles");
+  const { buildTeamVehicles, buildTeamMemberMap, buildStartPointsForDate } = await import("./team-vehicles");
 
   const tenantId = input.tenantId;
 
@@ -412,10 +421,12 @@ async function executeVRPJob(jobId: string, input: VRPJobInput): Promise<VRPOpti
     storage.getAllTeamMembers(tenantId),
   ]);
 
-  const teamVehicles = buildTeamVehicles(teams, teamMembersAll, resources, clusters);
+  // Task #1216: fordonens startpositioner kommer från dagens startuppgifter.
+  const startPoints = buildStartPointsForDate(workOrders, input.date ?? null);
+  const teamVehicles = buildTeamVehicles(teams, teamMembersAll, resources, startPoints);
   const teamMemberMap = buildTeamMemberMap(teams, teamMembersAll);
   if (teamVehicles.length === 0) {
-    throw new Error("Inga ruttbara team hittades. Varje aktivt team behöver minst en medlem, en team-leader, eller koppling till ett kluster med koordinater för att kunna ruttas.");
+    throw new Error("Inga ruttbara team hittades. Lägg in en startuppgift (Hem/Hotell/Depå/Lager/Nattvila/Helgvila) med position för teamet i veckoplanen för att kunna ruttberäkna.");
   }
 
   await updateProgress(jobId, 25);
@@ -439,6 +450,10 @@ async function executeVRPJob(jobId: string, input: VRPJobInput): Promise<VRPOpti
   filteredOrders = filteredOrders.filter(o =>
     o.orderStatus !== "utford" && o.orderStatus !== "fakturerad"
   );
+
+  // Task #1216: uppgifter utan geografisk koppling (admin/utbildning/start m.m.)
+  // planeras av tidsmotorn — de ska aldrig in i VRP:n.
+  filteredOrders = filteredOrders.filter(o => resolveLocationRequirement(o) !== "ingen");
 
   // Respektera leveranspreferenser även i fallback-VRP-vägen: ordrar med
   // strict priority som faller på blockerade datum exkluderas helt så de

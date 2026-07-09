@@ -9,7 +9,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Separator } from "@/components/ui/separator";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { ChevronLeft, ChevronRight, Plus, AlertTriangle, Sparkles, Undo2, Redo2, CalendarDays, Calendar, CalendarRange, Clock, MapPin, Navigation, Wand2, TrendingUp, Activity, UsersRound, ZoomIn, ZoomOut, Trash2, ArrowRight, ChevronDown, ChevronUp, Crosshair, ExternalLink, ShieldCheck, Send, Inbox, Target, X, Search } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, AlertTriangle, Sparkles, Undo2, Redo2, CalendarDays, Calendar, CalendarRange, Clock, MapPin, Navigation, Wand2, TrendingUp, Activity, UsersRound, ZoomIn, ZoomOut, Trash2, ArrowRight, ChevronDown, ChevronUp, Crosshair, ExternalLink, ShieldCheck, Send, Inbox, Target, X, Search, Home } from "lucide-react";
 import type { Resource, ResourceProfile, ResourceProfileAssignment } from "@shared/schema";
 import type { ViewMode, PlannerDisplayMode } from "./types";
 import type { PopoutView, SyncRole, AssignSlot } from "./usePlannerSync";
@@ -38,6 +38,7 @@ interface PlannerToolbarProps {
   selectedTeamIds?: string[];
   setSelectedTeamIds?: (ids: string[]) => void;
   onAddJob?: () => void;
+  onAddStartTask?: () => void;
   onAutoFill: () => void;
   onClearAll: () => void;
   onCarryOver?: () => void;
@@ -202,7 +203,7 @@ export const PlannerToolbar = memo(function PlannerToolbar(props: PlannerToolbar
     zoomLevel, setZoomLevel,
     resources, visibleResources, hiddenResourceIds, setHiddenResourceIds,
     weekRowMode, teamsData = [], selectedTeamIds = [], setSelectedTeamIds,
-    onAddJob, onAutoFill, onClearAll, onCarryOver, onUrgentJob, showAIPanel, onToggleAIPanel,
+    onAddJob, onAddStartTask, onAutoFill, onClearAll, onCarryOver, onUrgentJob, showAIPanel, onToggleAIPanel,
     weekGoals, weekTravelTotal,
     visibleDates, getResourceDayHours,
     jobConflictCount, filteredScheduledCount, unscheduledCount,
@@ -485,6 +486,16 @@ export const PlannerToolbar = memo(function PlannerToolbar(props: PlannerToolbar
             </TooltipTrigger>
             <TooltipContent side="top">Nytt orderkoncept (N)</TooltipContent>
           </Tooltip>
+          {onAddStartTask && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button variant="outline" size="icon" className="h-8 w-8" onClick={onAddStartTask} data-testid="button-add-start-task">
+                  <Home className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="top">Ny startuppgift (rutt-startpunkt)</TooltipContent>
+            </Tooltip>
+          )}
           <Tooltip>
             <TooltipTrigger asChild>
               <Button variant="outline" size="icon" className="h-8 w-8" onClick={onAutoFill} data-testid="button-auto-fill-week">

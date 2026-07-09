@@ -12,6 +12,8 @@ import { computeDateFilterParams, buildUnscheduledQueryString } from "./dateFilt
 import { HOURS_IN_DAY, DAY_START_HOUR, DAY_END_HOUR } from "./types";
 import type { WhatIfResult } from "./WhatIfPreview";
 import { haversineDistanceKm as haversineKm, estimateTravelMinutes as estimateTravelMinutesGeo } from "@/lib/geo";
+import { isStartTask, startTaskTypeLabel } from "@shared/start-task";
+import { requiresPhysicalLocation } from "@shared/location-requirement";
 
 // Plannerns ursprungliga semantik: minst 5 minuter per ben även för
 // 0 km (samlokaliserade jobb), för att matcha det överlappsskydd och
@@ -601,47 +603,34 @@ export function usePlannerData() {
       ok: false, reason, baseLabel, baseSource, outKm: 0, outMin: 0, backKm: 0, backMin: 0, totalKm: 0, totalMin: 0, firstLabel: "", lastLabel: "", jobCount: 0,
     });
 
-    // 1. Lös utgångspunkt (bas).
+    const dayJobs = (kind === "team" ? getJobsForTeamAndDay(rowId, day) : getJobsForResourceAndDay(rowId, day));
+
+    // 1. Lös utgångspunkt (bas). Task #1216: dagens STARTUPPGIFT är alltid
+    // första handen — aldrig teamledar-/medlemshem, GPS eller klustercentrum.
     let baseLat: number | null = null, baseLng: number | null = null, baseLabel = "", baseSource = "";
-    if (kind === "resource") {
+    const startTasks = dayJobs
+      .filter(j => isStartTask(j) && j.taskLatitude != null && j.taskLongitude != null)
+      .sort((a, b) => (a.scheduledStartTime || "99:99").localeCompare(b.scheduledStartTime || "99:99"));
+    if (startTasks.length > 0) {
+      const st = startTasks[0];
+      const typeLabel = startTaskTypeLabel((st.metadata as Record<string, string> | null)?.startType);
+      baseLat = st.taskLatitude!; baseLng = st.taskLongitude!;
+      baseLabel = st.title || `Startuppgift: ${typeLabel}`;
+      baseSource = `Startuppgift (${typeLabel})`;
+    } else if (kind === "resource") {
       const res = resources.find(r => r.id === rowId);
-      if (res) {
-        if (res.homeLatitude != null && res.homeLongitude != null) {
-          baseLat = res.homeLatitude; baseLng = res.homeLongitude; baseLabel = res.name || "Hemadress"; baseSource = "Hemadress";
-        } else if (res.currentLatitude != null && res.currentLongitude != null) {
-          baseLat = res.currentLatitude; baseLng = res.currentLongitude; baseLabel = res.name || "Senaste position"; baseSource = "Senaste position";
-        }
-      }
-    } else {
-      // Team: teamledarens hem → någon medlems hem → medlems senaste position → klustercentrum.
-      const members = teamMembersData.filter(tm => tm.teamId === rowId);
-      const ordered = [...members].sort((a, b) => (b.role === "leader" ? 1 : 0) - (a.role === "leader" ? 1 : 0));
-      for (const m of ordered) {
-        const res = resources.find(r => r.id === m.resourceId);
-        if (!res) continue;
-        if (res.homeLatitude != null && res.homeLongitude != null) {
-          baseLat = res.homeLatitude; baseLng = res.homeLongitude;
-          baseLabel = res.name || "Teammedlem"; baseSource = m.role === "leader" ? "Teamledarens hemadress" : "Teammedlems hemadress";
-          break;
-        }
-        if (baseLat == null && res.currentLatitude != null && res.currentLongitude != null) {
-          baseLat = res.currentLatitude; baseLng = res.currentLongitude;
-          baseLabel = res.name || "Teammedlem"; baseSource = "Teammedlems senaste position";
-        }
-      }
-      if (baseLat == null) {
-        const team = teamsData.find(t => t.id === rowId);
-        const cl = team?.clusterId ? clusters.find(c => c.id === team.clusterId) : undefined;
-        if (cl && cl.centerLatitude != null && cl.centerLongitude != null) {
-          baseLat = cl.centerLatitude; baseLng = cl.centerLongitude; baseLabel = cl.name || "Kluster"; baseSource = "Klustercentrum";
-        }
+      if (res && res.homeLatitude != null && res.homeLongitude != null) {
+        baseLat = res.homeLatitude; baseLng = res.homeLongitude; baseLabel = res.name || "Hemadress"; baseSource = "Hemadress";
       }
     }
+    // Team utan startuppgift: ingen bas — visas som datakvalitetsbrist (no-base).
 
     if (baseLat == null || baseLng == null) return empty("no-base");
 
-    // 2. Lokaliserade, schemalagda jobb för raden/dagen, sorterade på starttid.
-    const jobs = (kind === "team" ? getJobsForTeamAndDay(rowId, day) : getJobsForResourceAndDay(rowId, day))
+    // 2. Lokaliserade, schemalagda jobb för raden/dagen (exkl. startuppgifter),
+    //    sorterade på starttid.
+    const jobs = dayJobs
+      .filter(j => !isStartTask(j))
       .map(j => ({ j, lat: (j.taskLatitude ?? j.objectLatitude) as number | null | undefined, lng: (j.taskLongitude ?? j.objectLongitude) as number | null | undefined }))
       .filter(x => x.j.scheduledStartTime && x.lat != null && x.lng != null)
       .sort((a, b) => (a.j.scheduledStartTime || "").localeCompare(b.j.scheduledStartTime || ""));
@@ -663,7 +652,7 @@ export function usePlannerData() {
       lastLabel: last.j.objectName || last.j.title || "Sista jobbet",
       jobCount: jobs.length,
     };
-  }, [resources, teamMembersData, teamsData, clusters, getJobsForTeamAndDay, getJobsForResourceAndDay]);
+  }, [resources, getJobsForTeamAndDay, getJobsForResourceAndDay]);
 
   const teamRows = useMemo(() => {
     const rows: Array<{ id: string; name: string; color: string | null; isUncategorized: boolean; isResourceFallback: boolean; resourceId: string | null; memberCount: number }> = [];
@@ -801,6 +790,11 @@ export function usePlannerData() {
 
   const detectConflictsForJob = useCallback((job: WorkOrderWithObject, resourceId: string, dateStr: string, startTime?: string | null): string[] => {
     const reasons: string[] = [];
+    // Task #1216 (steg 3): datakvalitetsvarning — uppgifter med platskrav utan
+    // geografisk position kan inte ingå i ruttberäkningen.
+    if (requiresPhysicalLocation(job) && ((job.taskLatitude ?? job.objectLatitude) == null || (job.taskLongitude ?? job.objectLongitude) == null)) {
+      reasons.push("⚠ Uppgiften saknar geografisk position och kan inte ruttberäknas");
+    }
     const dateObj = new Date(dateStr + "T12:00:00Z");
     const dayNames = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
     const jobDay = dayNames[dateObj.getUTCDay()];

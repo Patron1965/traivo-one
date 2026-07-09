@@ -1,4 +1,5 @@
 import type { WorkOrder, Resource, ServiceObject, Cluster } from "@shared/schema";
+import { isStartTask } from "@shared/start-task";
 import { resolveLocationRequirement } from "@shared/location-requirement";
 import { getBatchDistances } from "./distance-matrix-service";
 import type { VRPConstraintOptions } from "./vrp-constraints";
@@ -416,12 +417,17 @@ export async function optimizeRoutesVRP(
   }
 
   const objectMap = new Map(objects.map(o => [o.id, o]));
-  const clusterMap = new Map(clusters.map(c => [c.id, c]));
 
   const validJobs: Array<{ order: WorkOrder; job: GeoapifyJob; index: number }> = [];
   let jobIndex = 0;
 
   for (const order of workOrders) {
+    // Task #1216: startuppgifter är kedjans startpunkt, inte ett rutt-jobb.
+    if (isStartTask(order)) continue;
+    // Task #1216: uppgifter utan geografisk koppling (admin/utbildning m.m.)
+    // planeras av tidsmotorn — central gate oavsett anropsväg.
+    if (resolveLocationRequirement(order) === "ingen") continue;
+
     let coords: [number, number] | null = null;
 
     const obj = objectMap.get(order.objectId);
@@ -433,11 +439,11 @@ export async function optimizeRoutesVRP(
         const navCoords = getNavigationCoordinates(obj);
         coords = navCoords ? [navCoords.lng, navCoords.lat] : null;
       }
-    } else if (order.clusterId) {
-      const cluster = clusterMap.get(order.clusterId);
-      if (cluster?.centerLatitude && cluster?.centerLongitude) {
-        coords = [cluster.centerLongitude, cluster.centerLatitude];
-      }
+    } else if (order.taskLatitude != null && order.taskLongitude != null) {
+      // Task #1216: uppgiftens egen position (utan objekt). Klustercentrum
+      // används ALDRIG som positionsgissning — uppgifter utan position flaggas
+      // som datakvalitetsbrist i planeringen istället.
+      coords = [order.taskLongitude, order.taskLatitude];
     }
 
     if (!coords) continue;
@@ -492,10 +498,19 @@ export async function optimizeRoutesVRP(
 
   const effectiveBreak = breakConfig?.enabled !== false ? (breakConfig || DEFAULT_BREAK_CONFIG) : null;
 
-  const agents: GeoapifyAgent[] = resources.map((resource, idx) => {
-    const startCoord: [number, number] = resource.homeLatitude && resource.homeLongitude
-      ? [resource.homeLongitude, resource.homeLatitude]
-      : [20.263, 63.826]; // Umeå default
+  // Task #1216: agenter utan startposition hoppas över — ingen default-position
+  // (t.ex. Umeå) får någonsin gissas. Team-fordon får sin position från dagens
+  // startuppgift (buildTeamVehicles); resurser från hemkoordinater.
+  const routableResources = resources.filter((resource) => {
+    const ok = resource.homeLatitude != null && resource.homeLongitude != null;
+    if (!ok) {
+      console.log(`[route-optimizer] Resurs/team "${resource.name}" (${resource.id}) saknar startposition — hoppas över i VRP`);
+    }
+    return ok;
+  });
+
+  const agents: GeoapifyAgent[] = routableResources.map((resource, idx) => {
+    const startCoord: [number, number] = [resource.homeLongitude!, resource.homeLatitude!];
 
     const agent: GeoapifyAgent = {
       start_location: startCoord,
@@ -587,12 +602,14 @@ export async function optimizeRoutesVRP(
       for (const gc of geoClusters) {
         const agentsPerCluster = Math.max(1, Math.floor(enrichedAgents.length / geoClusters.length));
         const assigned: number[] = [];
+        // Task #1216: ingen default-koordinat — agent utan start_location
+        // rankas sist (Infinity) istället för att få en gissad position.
         const agentDistances = enrichedAgents.map((a, idx) => {
           const agentObj = a as { start_location?: [number, number] };
-          const loc = agentObj.start_location || [20.263, 63.826];
+          const loc = agentObj.start_location;
           return {
             idx,
-            dist: haversineDistanceKm(gc.centroid.lat, gc.centroid.lng, loc[1], loc[0]),
+            dist: loc ? haversineDistanceKm(gc.centroid.lat, gc.centroid.lng, loc[1], loc[0]) : Infinity,
           };
         }).sort((a, b) => a.dist - b.dist);
 

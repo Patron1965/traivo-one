@@ -5,7 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { AlertTriangle, Clock, X, Link2, ArrowRight, Key, DoorOpen, UsersRound, MoreVertical, Zap, Info, CalendarClock, CalendarX2 } from "lucide-react";
+import { AlertTriangle, Clock, X, Link2, ArrowRight, Key, DoorOpen, UsersRound, MoreVertical, Zap, Info, CalendarClock, CalendarX2, MapPin } from "lucide-react";
+import { Link } from "wouter";
 import type { WorkOrderWithObject } from "@shared/schema";
 import type { DeliveryRestrictionNote } from "@shared/delivery-restrictions";
 import { ExecutionCodeBadge } from "./ExecutionCodeBadge";
@@ -248,6 +249,17 @@ export const JobCard = memo(function JobCard({
                         {reason}
                       </p>
                     ))}
+                    {job.objectId && jobConflicts[job.id].some(r => r.includes("saknar geografisk position")) && (
+                      <Link
+                        href={`/objects/${job.objectId}`}
+                        className="text-xs text-primary underline flex items-center gap-1"
+                        onClick={(e) => e.stopPropagation()}
+                        data-testid={`link-complete-metadata-${job.id}`}
+                      >
+                        <MapPin className="h-3 w-3 shrink-0" />
+                        Komplettera position i objektets metadata
+                      </Link>
+                    )}
                   </div>
                 </TooltipContent>
               </Tooltip>

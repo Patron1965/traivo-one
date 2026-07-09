@@ -34,7 +34,7 @@ import type { InsertSlotTime } from "@shared/schema";
 // ---------------------------------------------------------------------------
 
 /** Default-grupperingsradie (meter) när tenant inte konfigurerat egen i planning_parameters. */
-export const DEFAULT_GROUPING_RADIUS_METERS = 150;
+export const DEFAULT_GROUPING_RADIUS_METERS = 30;
 /** Default: gatusidesberoende PÅ (udda/jämna husnummer hamnar i var sin grupp). */
 export const DEFAULT_STREET_SIDE_GROUPING = true;
 /** Default arbetstakt i procent (100 = normal takt). */

@@ -32,6 +32,7 @@ import { ResourceFilterBar } from "./weekplanner/ResourceFilterBar";
 import { usePlannerData } from "./weekplanner/usePlannerData";
 import { usePlannerDnd } from "./weekplanner/usePlannerDnd";
 import { UrgentJobDialog } from "./UrgentJobDialog";
+import { StartTaskDialog } from "./weekplanner/StartTaskDialog";
 import { WhatIfPreview } from "./weekplanner/WhatIfPreview";
 import { usePlannerSync, openPlannerPopout, type AssignSlot, type PopoutView, type SyncedState, type RemoteDragInfo } from "./weekplanner/usePlannerSync";
 import type { WorkOrderWithObject } from "@shared/schema";
@@ -249,6 +250,7 @@ export function WeekPlanner({ onAddJob, onSelectJob, onSelectedJobIdsChange, sho
   const d = usePlannerData();
   const zoom = zoomLevels[d.zoomLevel];
   const [urgentDialogOpen, setUrgentDialogOpen] = useState(false);
+  const [startTaskDialogOpen, setStartTaskDialogOpen] = useState(false);
   const [conflictListOpen, setConflictListOpen] = useState(false);
   const [slaRiskOpen, setSlaRiskOpen] = useState(false);
   const [orderSearchOpen, setOrderSearchOpen] = useState(false);
@@ -844,7 +846,8 @@ export function WeekPlanner({ onAddJob, onSelectJob, onSelectedJobIdsChange, sho
             hiddenResourceIds={d.hiddenResourceIds} setHiddenResourceIds={d.setHiddenResourceIds}
             weekRowMode={d.weekRowMode} teamsData={d.teamsData}
             selectedTeamIds={d.selectedTeamIds} setSelectedTeamIds={d.setSelectedTeamIds}
-            onAddJob={onAddJob} onAutoFill={() => { d.setAutoFillDialogOpen(true); }}
+            onAddJob={onAddJob} onAddStartTask={() => setStartTaskDialogOpen(true)}
+            onAutoFill={() => { d.setAutoFillDialogOpen(true); }}
             onClearAll={() => d.setClearDialogOpen(true)}
             onCarryOver={d.handleCarryOver}
             onUrgentJob={handleOpenUrgentDialog}
@@ -1161,6 +1164,14 @@ export function WeekPlanner({ onAddJob, onSelectJob, onSelectedJobIdsChange, sho
         onCancel={d.handleWhatIfCancel}
       />
       <UrgentJobDialog open={urgentDialogOpen} onClose={() => setUrgentDialogOpen(false)} preselectedOrder={urgentPreselectedOrder} />
+
+      <StartTaskDialog
+        open={startTaskDialogOpen}
+        onOpenChange={setStartTaskDialogOpen}
+        resources={d.resources}
+        teamsData={d.teamsData}
+        defaultDate={d.currentWeekStart}
+      />
       <BulkScheduleDialog
         open={bulkScheduleOpen}
         onOpenChange={(o) => {

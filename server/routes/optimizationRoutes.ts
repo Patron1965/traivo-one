@@ -54,17 +54,18 @@ async function buildOptimizationPayload(
   tenantId: string,
   constraintOptions?: VRPConstraintOptions,
 ): Promise<{ stops: OptimizationStop[]; vehicles: OptimizationVehicle[]; constraintsApplied: string[] }> {
-  const { buildTeamVehicles, buildTeamMemberMap } = await import("../team-vehicles");
-  const [workOrders, resources, objects, teams, teamMembersAll, clusters] = await Promise.all([
+  const { buildTeamVehicles, buildTeamMemberMap, buildStartPointsForDate } = await import("../team-vehicles");
+  const [workOrders, resources, objects, teams, teamMembersAll] = await Promise.all([
     storage.getWorkOrders(tenantId),
     storage.getResources(tenantId),
     storage.getObjects(tenantId),
     storage.getTeams(tenantId),
     storage.getAllTeamMembers(tenantId),
-    storage.getClusters(tenantId),
   ]);
 
-  const teamVehicles = buildTeamVehicles(teams, teamMembersAll, resources, clusters);
+  // Task #1216: fordonens startpositioner kommer från dagens startuppgifter.
+  const startPoints = buildStartPointsForDate(workOrders, date);
+  const teamVehicles = buildTeamVehicles(teams, teamMembersAll, resources, startPoints);
   const teamMemberMap = buildTeamMemberMap(teams, teamMembersAll);
 
   const objectMap = new Map(objects.map(o => [o.id, o]));
@@ -103,10 +104,17 @@ async function buildOptimizationPayload(
     };
   });
 
+  // Task #1216: inga koordinat-gissningar — team utan startuppgiftsposition
+  // deltar inte i optimeringen (fail closed, ingen default-depå).
   const baseAgents = teamVehicles
+    .filter(r => {
+      const ok = r.homeLatitude != null && r.homeLongitude != null;
+      if (!ok) console.log(`[optimization] Hoppar över team ${r.name} (${r.id}) — saknar startuppgiftsposition`);
+      return ok;
+    })
     .map(r => ({
-      start_location: [r.homeLongitude || 18.07, r.homeLatitude || 59.33] as [number, number],
-      end_location: [r.homeLongitude || 18.07, r.homeLatitude || 59.33] as [number, number],
+      start_location: [r.homeLongitude!, r.homeLatitude!] as [number, number],
+      end_location: [r.homeLongitude!, r.homeLatitude!] as [number, number],
       time_windows: [[28800, 61200]] as [number, number][],
       id: r.id,
       description: r.name,
@@ -233,7 +241,7 @@ export async function registerOptimizationRoutes(app: Express) {
     }
 
     const { optimizeRoutesVRP, DEFAULT_BREAK_CONFIG } = await import("../route-optimizer");
-    const { buildTeamVehicles, buildTeamMemberMap } = await import("../team-vehicles");
+    const { buildTeamVehicles, buildTeamMemberMap, buildStartPointsForDate } = await import("../team-vehicles");
     const [workOrders, resources, objects, clusters, teams, teamMembersAll] = await Promise.all([
       storage.getWorkOrders(tenantId),
       storage.getResources(tenantId),
@@ -243,10 +251,12 @@ export async function registerOptimizationRoutes(app: Express) {
       storage.getAllTeamMembers(tenantId),
     ]);
 
-    const teamVehicles = buildTeamVehicles(teams, teamMembersAll, resources, clusters);
+    // Task #1216: fordonens startpositioner kommer från dagens startuppgifter.
+    const startPoints = buildStartPointsForDate(workOrders, req.body.date ?? null);
+    const teamVehicles = buildTeamVehicles(teams, teamMembersAll, resources, startPoints);
     const teamMemberMap = buildTeamMemberMap(teams, teamMembersAll);
     if (teamVehicles.length === 0) {
-      throw new ValidationError("Inga ruttbara team hittades. Varje aktivt team behöver minst en medlem, en team-leader, eller koppling till ett kluster med koordinater för att kunna ruttas.");
+      throw new ValidationError("Inga ruttbara team hittades. Lägg in en startuppgift (Hem/Hotell/Depå/Lager/Nattvila/Helgvila) med position för teamet i veckoplanen för att kunna ruttberäkna.");
     }
 
     let filteredOrders = workOrders;
