@@ -858,29 +858,48 @@ export default function ObjectsPage() {
 
   // ── Fil 2 – Kopplade objekt: en rad per förälderkoppling (multi-förälder-stöd).
   // Huvudobjekt = objektets eget nummer, Koppling uppåt = förälderns nummer.
+  // Rotobjekt (utan förälder inom exporturvalet) får ÄNDÅ en rad med tom
+  // "Koppling uppåt" — annars saknas de helt i filen trots att de är giltiga
+  // objekt (Mats-rapporterat: BRF Hönshuset syntes inte i "2-kopplade objekt").
   const buildKoppladeObjektFileRows = async (
     allObjects: ServiceObject[],
   ): Promise<(string | number)[][]> => {
     const headers = ["Huvudobjekt", "Namn", "Koppling uppåt", "Släktnamn"];
-    const objById = new Map(allObjects.map(o => [o.id, o]));
     const numberById = new Map(allObjects.map(o => [o.id, o.objectNumber || ""]));
 
     const res = await fetch(`/api/objects/parents-export`, { credentials: "include" });
     if (!res.ok) throw new Error("Kunde inte hämta förälderkopplingar");
     const links: { objectId: string; parentId: string; isPrimary: boolean }[] = await res.json();
 
-    const rows: (string | number)[][] = [];
+    const linksByChild = new Map<string, { objectId: string; parentId: string; isPrimary: boolean }[]>();
     for (const link of links) {
-      const child = objById.get(link.objectId);
-      if (!child) continue; // förälder-/barn utanför aktiva filter
-      const parentNumber = numberById.get(link.parentId);
-      if (!parentNumber) continue; // förälder ej i exporturvalet
-      rows.push([
-        child.objectNumber || "",
-        child.name,
-        parentNumber,
-        slaktnamnOf(child),
-      ]);
+      const arr = linksByChild.get(link.objectId) ?? [];
+      arr.push(link);
+      linksByChild.set(link.objectId, arr);
+    }
+
+    const rows: (string | number)[][] = [];
+    for (const child of allObjects) {
+      const childLinks = (linksByChild.get(child.id) ?? [])
+        .filter(link => numberById.has(link.parentId)); // förälder ej i exporturvalet → hoppa
+      if (childLinks.length === 0) {
+        // Rotobjekt (eller förälder utanför urvalet) — en rad med tom uppåt-koppling.
+        rows.push([
+          child.objectNumber || "",
+          child.name,
+          "",
+          slaktnamnOf(child),
+        ]);
+        continue;
+      }
+      for (const link of childLinks) {
+        rows.push([
+          child.objectNumber || "",
+          child.name,
+          numberById.get(link.parentId) || "",
+          slaktnamnOf(child),
+        ]);
+      }
     }
     return [headers, ...rows];
   };
