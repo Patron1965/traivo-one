@@ -35,6 +35,8 @@ interface ObjectContactLite {
   email?: string | null;
   role?: string | null;
   inherited?: boolean;
+  createdAt?: string | Date | null;
+  inheritedFromObjectName?: string | null;
 }
 interface ObjectImageLite {
   id: string;
@@ -42,6 +44,8 @@ interface ObjectImageLite {
   imageUrl?: string | null;
   title?: string | null;
   description?: string | null;
+  createdAt?: string | Date | null;
+  imageDate?: string | Date | null;
 }
 interface ObjectWorkOrderLite {
   id: string;
@@ -142,6 +146,13 @@ const fmtDate = (v: string | Date | null | undefined): string | null => {
   const d = new Date(v);
   if (Number.isNaN(d.getTime())) return null;
   return d.toLocaleDateString("sv-SE");
+};
+
+const fmtTime = (v: string | Date | null | undefined): string | null => {
+  if (!v) return null;
+  const d = new Date(v);
+  if (Number.isNaN(d.getTime())) return null;
+  return d.toLocaleTimeString("sv-SE", { hour: "2-digit", minute: "2-digit" });
 };
 
 const contactTypeLabel = (c: ObjectContactLite): string =>
@@ -494,7 +505,14 @@ export function ObjectDomainGrid({
           hideWhenEmpty={false}
           emptyText="Inga bilder uppladdade."
           testidPrefix="images"
-          getFooter={() => ({ kalla: "M" })}
+          getFooter={(img) => ({
+            kalla: "M",
+            rows: [
+              { label: "Datum", value: fmtDate(img.createdAt ?? img.imageDate) },
+              { label: "Tid", value: fmtTime(img.createdAt ?? img.imageDate) },
+              { label: "Ursprung", value: "Manuellt uppladdad på objektet" },
+            ],
+          })}
           getSearchText={(img) => `${img.description ?? ""} ${img.title ?? ""}`}
           headerAction={
             <Button variant="outline" size="sm" onClick={onAddImage} data-testid="button-add-image">
@@ -524,7 +542,19 @@ export function ObjectDomainGrid({
           hideWhenEmpty={false}
           emptyText="Inga kontakter."
           testidPrefix="contacts"
-          getFooter={(c) => ({ kalla: c.inherited ? "S" : "M", who: c.inherited ? "Ärvd" : undefined })}
+          getFooter={(c) => ({
+            kalla: c.inherited ? "S" : "M",
+            rows: [
+              { label: "Datum", value: fmtDate(c.createdAt) },
+              { label: "Tid", value: fmtTime(c.createdAt) },
+              {
+                label: "Ursprung",
+                value: c.inherited
+                  ? `Ärvd${c.inheritedFromObjectName ? ` från ${c.inheritedFromObjectName}` : ""}`
+                  : "Manuellt tillagd på objektet",
+              },
+            ],
+          })}
           headerAction={
             <Button variant="outline" size="sm" onClick={onAddContact} data-testid="button-add-contact">
               <Plus className="h-3.5 w-3.5 mr-1" /> Lägg till

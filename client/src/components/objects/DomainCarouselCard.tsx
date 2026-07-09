@@ -12,6 +12,12 @@ export interface DomainCardFooter {
   time?: string | Date | null;
   who?: string | null;
   kalla?: Kalla;
+  /**
+   * Strukturerad info-panel (Datum/Tid/Utförare/Källa/Ursprung m.fl.) enligt
+   * mockup. När satt ersätter den den enkla "tid • vem"-raden. Rader med
+   * `value == null` renderas inte (visa aldrig fabricerade fält).
+   */
+  rows?: Array<{ label: string; value: ReactNode | null | undefined }>;
 }
 
 export interface DomainCarouselCardProps<T> {
@@ -100,6 +106,7 @@ export function DomainCarouselCard<T>({
   const footerTime = footer ? fmtDate(footer.time) : null;
   if (footerTime) footerParts.push(footerTime);
   if (footer?.who) footerParts.push(footer.who);
+  const rows = footer?.rows?.filter((r) => r.value != null && r.value !== "") ?? [];
 
   const toggleExpanded = () => {
     setExpanded((v) => {
@@ -183,14 +190,34 @@ export function DomainCarouselCard<T>({
           <div className="space-y-2" data-testid={`carousel-${testidPrefix}`}>
             {cur && <div>{renderItem(cur)}</div>}
 
-            {(footerParts.length > 0 || footer?.kalla) && (
+            {rows.length > 0 ? (
               <div
-                className="flex items-center gap-1.5 text-xs text-muted-foreground"
+                className="rounded-md border bg-muted/30 divide-y text-xs"
                 data-testid={`footer-${testidPrefix}`}
               >
-                {footerParts.length > 0 && <span>{footerParts.join(" • ")}</span>}
-                {footer?.kalla && <KallaBadge kalla={footer.kalla} />}
+                {rows.map((r, i) => (
+                  <div key={i} className="flex items-center justify-between gap-3 px-2.5 py-1.5">
+                    <span className="text-muted-foreground">{r.label}</span>
+                    <span className="font-medium text-right">{r.value}</span>
+                  </div>
+                ))}
+                {footer?.kalla && (
+                  <div className="flex items-center justify-between gap-3 px-2.5 py-1.5">
+                    <span className="text-muted-foreground">Källa</span>
+                    <KallaBadge kalla={footer.kalla} />
+                  </div>
+                )}
               </div>
+            ) : (
+              (footerParts.length > 0 || footer?.kalla) && (
+                <div
+                  className="flex items-center gap-1.5 text-xs text-muted-foreground"
+                  data-testid={`footer-${testidPrefix}`}
+                >
+                  {footerParts.length > 0 && <span>{footerParts.join(" • ")}</span>}
+                  {footer?.kalla && <KallaBadge kalla={footer.kalla} />}
+                </div>
+              )
             )}
 
             {count > 1 && count <= 7 && (
