@@ -7,7 +7,7 @@ import { formatZodError, verifyTenantOwnership, DEFAULT_TENANT_ID } from "./help
 import { getTenantIdWithFallback } from "../tenant-middleware";
 import { asyncHandler } from "../asyncHandler";
 import { NotFoundError, ValidationError, ForbiddenError, ConflictError } from "../errors";
-import { validateParentMetadataLink, softDeleteMetadataType, getObjectWithAllMetadata, getDisplayValue, getMetadataKatalogUsage, getMetadataDefinitionsCompat, getMetadataDefinitionCompat, katalogToDefinitionCompat, mapEnglishDataTypeToDatatyp, createMetadata, updateMetadata, deleteMetadata, ensurePackageMetadataKatalog, findMetadataTypeByIdentity } from "../metadata-queries";
+import { validateParentMetadataLink, softDeleteMetadataType, getObjectWithAllMetadata, getDisplayValue, getMetadataKatalogUsage, getMetadataDefinitionsCompat, getMetadataDefinitionCompat, katalogToDefinitionCompat, mapEnglishDataTypeToDatatyp, createMetadata, updateMetadata, deleteMetadata, ensurePackageMetadataKatalog, findMetadataTypeByIdentity, setMetadataInheritanceFlags } from "../metadata-queries";
 import { requireAdmin, requirePlanner } from "../tenant-middleware";
 import { isReasoningModel } from "../ai-model-capabilities";
 import { objects, workOrders, metadataVarden, apiUsageLogs, apiBudgets, invitations, insertObjectPayerSchema, metadataKatalog, insertMetadataKatalogSchema, workOrderLines, articles, weeklyReportNotes, weeklyReportActionItemSchema, type WeeklyReportActionItem, objectPayers } from "@shared/schema";
@@ -2392,10 +2392,8 @@ app.post("/api/objects/:objectId/metadata", asyncHandler(async (req, res) => {
       skapadAv: userId,
     });
     if (breaksInheritance !== undefined) {
-      const [row] = await db.update(metadataVarden)
-        .set({ stoppaVidareArvning: breaksInheritance })
-        .where(and(eq(metadataVarden.id, created.id), eq(metadataVarden.tenantId, tenantId)))
-        .returning();
+      // Task #1213: flagg-skrivning via centrala skrivlagret.
+      const row = await setMetadataInheritanceFlags(created.id, tenantId, { stoppaVidareArvning: breaksInheritance });
       if (row) created = row;
     }
     res.status(201).json({
@@ -2436,13 +2434,9 @@ app.patch("/api/objects/:objectId/metadata/:id", asyncHandler(async (req, res) =
       await updateMetadata(req.params.id, value, tenantId, userId);
     }
     if (breaksInheritance !== undefined) {
-      await db.update(metadataVarden)
-        .set({ stoppaVidareArvning: breaksInheritance, uppdateradAv: userId ?? undefined })
-        .where(and(
-          eq(metadataVarden.id, req.params.id),
-          eq(metadataVarden.objektId, req.params.objectId),
-          eq(metadataVarden.tenantId, tenantId),
-        ));
+      // Task #1213: flagg-skrivning via centrala skrivlagret (ägarskap mot
+      // objektet är redan verifierat ovan).
+      await setMetadataInheritanceFlags(req.params.id, tenantId, { stoppaVidareArvning: breaksInheritance }, userId ?? undefined);
     }
     const [updated] = await db.select().from(metadataVarden)
       .where(and(eq(metadataVarden.id, req.params.id), eq(metadataVarden.tenantId, tenantId)));
@@ -3107,6 +3101,7 @@ app.post("/api/reports/sales-intelligence", requireAdmin, asyncHandler(async (re
       .where(and(
         eq(metadataVarden.tenantId, tenantId),
         eq(metadataVarden.raderad, false),
+        eq(metadataVarden.status, "aktiv"),
         sql`${metadataVarden.objektId} IS NOT NULL`,
       ))
       .groupBy(metadataVarden.objektId);

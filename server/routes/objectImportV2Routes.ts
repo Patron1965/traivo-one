@@ -459,6 +459,7 @@ export function registerObjectImportV2Routes(app: Express): void {
               .where(
                 and(
                   eq(metadataVarden.tenantId, tenantId),
+                  eq(metadataVarden.status, "aktiv"),
                   eq(metadataVarden.metadataKatalogId, extKatalog.id),
                   inArray(metadataVarden.vardeString, extIds),
                 ),
@@ -541,7 +542,7 @@ export function registerObjectImportV2Routes(app: Express): void {
             })
             .from(metadataVarden)
             .innerJoin(metadataKatalog, eq(metadataKatalog.id, metadataVarden.metadataKatalogId))
-            .where(and(eq(metadataVarden.tenantId, tenantId), inArray(metadataVarden.objektId, targetIds)));
+            .where(and(eq(metadataVarden.tenantId, tenantId), eq(metadataVarden.status, "aktiv"), inArray(metadataVarden.objektId, targetIds)));
           for (const e of existing) {
             if (e.allowDuplicates || !e.objektId) continue;
             if (!existingByObject.has(e.objektId)) existingByObject.set(e.objektId, new Set());
@@ -852,6 +853,7 @@ export function registerObjectImportV2Routes(app: Express): void {
               .where(
                 and(
                   eq(metadataVarden.tenantId, tenantId),
+                  eq(metadataVarden.status, "aktiv"),
                   eq(metadataVarden.metadataKatalogId, extKatalog.id),
                   inArray(metadataVarden.vardeString, externalIds),
                 ),

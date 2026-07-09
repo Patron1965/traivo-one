@@ -4099,6 +4099,7 @@ app.get("/api/import/health-stats", asyncHandler(async (req, res) => {
         .where(and(
           eq(metadataVarden.tenantId, tenantId),
           eq(metadataVarden.raderad, false),
+          eq(metadataVarden.status, "aktiv"),
           sql`${metadataVarden.objektId} IS NOT NULL`,
         )),
       db.select({ count: sql<number>`count(*)::int` })
@@ -4106,6 +4107,7 @@ app.get("/api/import/health-stats", asyncHandler(async (req, res) => {
         .where(and(
           eq(metadataVarden.tenantId, tenantId),
           eq(metadataVarden.raderad, false),
+          eq(metadataVarden.status, "aktiv"),
           sql`${metadataVarden.objektId} IS NOT NULL`,
           sql`(${metadataVarden.vardeString} IS NULL OR ${metadataVarden.vardeString} = '')`,
           isNull(metadataVarden.vardeInteger),
@@ -5842,6 +5844,7 @@ app.post("/api/import/modus/objects/enrich/preview", requireAdmin, upload.single
     if (typeIds.length > 0) {
       const existing = await db.select().from(metadataVarden).where(and(
         eq(metadataVarden.tenantId, tenantId),
+        eq(metadataVarden.status, "aktiv"),
         inArray(metadataVarden.objektId, matchedObjectIds),
         inArray(metadataVarden.metadataKatalogId, typeIds),
       ));
@@ -6154,6 +6157,7 @@ async function runEnrichApplyJob(params: {
     if (matchedObjectIds.length > 0 && typeIds.length > 0) {
       const existing = await db.select().from(metadataVarden).where(and(
         eq(metadataVarden.tenantId, tenantId),
+        eq(metadataVarden.status, "aktiv"),
         inArray(metadataVarden.objektId, matchedObjectIds),
         inArray(metadataVarden.metadataKatalogId, typeIds),
       ));

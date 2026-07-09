@@ -799,6 +799,7 @@ app.post("/api/objects/:id/what3words", asyncHandler(async (req, res) => {
   }
 
   // Hitta ev. befintligt LOKALT värde på detta objekt (ej ärvt).
+  // Task #1213: endast AKTIVA rader — arkiverade kloner får aldrig uppdateras.
   const [localRow] = await db
     .select({ id: metadataVarden.id })
     .from(metadataVarden)
@@ -806,6 +807,7 @@ app.post("/api/objects/:id/what3words", asyncHandler(async (req, res) => {
       eq(metadataVarden.objektId, req.params.id),
       eq(metadataVarden.metadataKatalogId, katalog.id),
       eq(metadataVarden.tenantId, tenantId),
+      eq(metadataVarden.status, "aktiv"),
     ))
     .limit(1);
 
@@ -954,6 +956,7 @@ app.post("/api/objects/:id/metadata/new-instance", asyncHandler(async (req, res)
       INNER JOIN chain c ON c.id = mv.objekt_id AND c.depth > 0
       WHERE mv.tenant_id = ${tenantId}
         AND mv.metadata_katalog_id = ${katalog.id}
+        AND mv.status = 'aktiv'
         AND COALESCE(mv.raderad, FALSE) = FALSE
         AND mv.arvs_nedat = TRUE
       LIMIT 1

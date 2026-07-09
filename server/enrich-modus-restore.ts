@@ -5,7 +5,7 @@ import {
   importBatches,
   metadataVarden,
 } from "@shared/schema";
-import { updateMetadata } from "./metadata-queries";
+import { updateMetadata, rollbackDeleteMetadataRows } from "./metadata-queries";
 import { NotFoundError, ValidationError } from "./errors";
 
 export interface RestoreEnrichModusResult {
@@ -71,16 +71,9 @@ export async function restoreEnrichModusBatch({
       const after = (entry.changes as any)?.after;
 
       if (before === null || before === undefined) {
-        const del = await tx
-          .delete(metadataVarden)
-          .where(
-            and(
-              eq(metadataVarden.id, entry.resourceId),
-              eq(metadataVarden.tenantId, tenantId),
-            ),
-          )
-          .returning({ id: metadataVarden.id });
-        if (del.length > 0) {
+        // Task #1213: rollback-radering via centrala skrivlagret.
+        const delCount = await rollbackDeleteMetadataRows(tx, tenantId, [entry.resourceId]);
+        if (delCount > 0) {
           deleted++;
           restoreAudit.push({
             tenantId,

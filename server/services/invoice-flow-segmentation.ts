@@ -248,10 +248,12 @@ export async function computeBillingSegmentForObject(
       ON bv.objekt_id = c.id AND bv.tenant_id = ${tenantId}
       AND bv.metadata_katalog_id = ${ids.breakId ?? null}
       AND COALESCE(bv.raderad, false) = false
+            AND bv.status = 'aktiv'
     LEFT JOIN metadata_varden gv
       ON gv.objekt_id = c.id AND gv.tenant_id = ${tenantId}
       AND gv.metadata_katalog_id = ${ids.groupingId ?? null}
       AND COALESCE(gv.raderad, false) = false
+            AND gv.status = 'aktiv'
     ORDER BY c.lvl ASC
   `);
 
@@ -307,6 +309,7 @@ export async function computeBillingSegmentsForSubtree(
           WHERE bv.objekt_id = o.id AND bv.tenant_id = ${tenantId}
             AND bv.metadata_katalog_id = ${ids.breakId ?? null}
             AND COALESCE(bv.raderad, false) = false
+            AND bv.status = 'aktiv'
             AND (
               bv.varde_boolean = true
               OR lower(btrim(bv.varde_string)) IN ('ja','yes','true','sant','1','x')
@@ -323,6 +326,7 @@ export async function computeBillingSegmentsForSubtree(
           WHERE gv.objekt_id = o.id AND gv.tenant_id = ${tenantId}
             AND gv.metadata_katalog_id = ${ids.groupingId ?? null}
             AND COALESCE(gv.raderad, false) = false
+            AND gv.status = 'aktiv'
           LIMIT 1
         ) AS self_group
       FROM objects o
@@ -335,6 +339,7 @@ export async function computeBillingSegmentsForSubtree(
           WHERE bv.objekt_id = c.id AND bv.tenant_id = ${tenantId}
             AND bv.metadata_katalog_id = ${ids.breakId ?? null}
             AND COALESCE(bv.raderad, false) = false
+            AND bv.status = 'aktiv'
             AND (
               bv.varde_boolean = true
               OR lower(btrim(bv.varde_string)) IN ('ja','yes','true','sant','1','x')
@@ -351,6 +356,7 @@ export async function computeBillingSegmentsForSubtree(
           WHERE gv.objekt_id = c.id AND gv.tenant_id = ${tenantId}
             AND gv.metadata_katalog_id = ${ids.groupingId ?? null}
             AND COALESCE(gv.raderad, false) = false
+            AND gv.status = 'aktiv'
           LIMIT 1
         ) AS self_group
       FROM objects c

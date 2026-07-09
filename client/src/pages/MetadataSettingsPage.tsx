@@ -562,11 +562,9 @@ export default function MetadataSettingsPage() {
                                       {type.allowedValues.length} fasta val
                                     </Badge>
                                   )}
-                                  {type.allowDuplicates && (
-                                    <Badge variant="outline" className="text-[10px]" data-testid={`badge-duplicates-${type.namn}`}>
-                                      Dubbletter
-                                    </Badge>
-                                  )}
+                                  <Badge variant="outline" className="text-[10px]" data-testid={`badge-klassning-${type.namn}`}>
+                                    {type.allowDuplicates ? 'Katalogvärde' : 'Enkelvärde'}
+                                  </Badge>
                                   {type.kronologiskVisning && (
                                     <Badge variant="outline" className="text-[10px]" data-testid={`badge-kronologisk-${type.namn}`}>
                                       <Clock className="h-2.5 w-2.5 mr-0.5" />Historik
@@ -1219,13 +1217,25 @@ function MetadataTypeForm({ initialData, onSubmit, isPending, allTypes, customer
 
         <div className="flex items-center justify-between">
           <div>
-            <Label>Tillåt dubbletter</Label>
-            <p className="text-xs text-muted-foreground">Flera värden av samma fält på ett objekt (t.ex. flera ytor)</p>
+            <Label>Katalogvärde (flera värden)</Label>
+            <p className="text-xs text-muted-foreground">Av = enkelvärde: nytt värde arkiverar automatiskt det gamla. På = katalogvärde: flera värden av samma fält kan finnas samtidigt (t.ex. flera ytor).</p>
           </div>
           <Switch
             checked={allowDuplicates}
             onCheckedChange={setAllowDuplicates}
             data-testid="switch-type-duplicates"
+          />
+        </div>
+
+        <div className="flex items-center justify-between opacity-60">
+          <div>
+            <Label>Tillåt uppdatering uppåt/syskon</Label>
+            <p className="text-xs text-muted-foreground">Förberedd egenskap – aktiveras i en senare etapp och kan inte slås på ännu.</p>
+          </div>
+          <Switch
+            checked={false}
+            disabled
+            data-testid="switch-type-tillat-uppat"
           />
         </div>
 

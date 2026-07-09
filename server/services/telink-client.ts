@@ -462,6 +462,8 @@ async function readCurrentValue(
         eq(metadataVarden.tenantId, tenantId),
         eq(metadataVarden.objektId, objectId),
         eq(metadataVarden.metadataKatalogId, katalogId),
+        // Task #1213: arkiverade kloner ska aldrig läsas som "eget värde".
+        eq(metadataVarden.status, "aktiv"),
       ),
     )
     .limit(1);

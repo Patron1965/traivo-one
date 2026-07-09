@@ -114,8 +114,8 @@ app.get("/api/clusters/tree", asyncHandler(async (req, res) => {
       .innerJoin(metadataKatalog, eq(metadataVarden.metadataKatalogId, metadataKatalog.id))
       .where(
         scope === "top"
-          ? and(eq(metadataVarden.tenantId, tenantId), eq(metadataVarden.raderad, false), inArray(metadataVarden.objektId, objIds))
-          : and(eq(metadataVarden.tenantId, tenantId), eq(metadataVarden.raderad, false)),
+          ? and(eq(metadataVarden.tenantId, tenantId), eq(metadataVarden.raderad, false), eq(metadataVarden.status, "aktiv"), inArray(metadataVarden.objektId, objIds))
+          : and(eq(metadataVarden.tenantId, tenantId), eq(metadataVarden.raderad, false), eq(metadataVarden.status, "aktiv")),
       );
 
     const metaByObject = new Map<string, Record<string, string>>();

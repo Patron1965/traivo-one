@@ -52,7 +52,7 @@ export async function evaluateDynamicCluster(
 
   // Hämta alla metadata-värden för dessa katalog-ids
   const allMeta = katalog.length > 0
-    ? await db.select().from(metadataVarden).where(and(eq(metadataVarden.tenantId, tenantId), inArray(metadataVarden.metadataKatalogId, katalog.map(k => k.id))))
+    ? await db.select().from(metadataVarden).where(and(eq(metadataVarden.tenantId, tenantId), eq(metadataVarden.status, "aktiv"), inArray(metadataVarden.metadataKatalogId, katalog.map(k => k.id))))
     : [];
   const metaByObject = new Map<string, Map<string, any>>();
   for (const m of allMeta) {

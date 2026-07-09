@@ -63,6 +63,9 @@ export interface MetadataFormEntry {
   sortIndex?: number | null;
   // Multi-instans: alla värden i katalog-gruppen (endast satt för allowDuplicates-fält).
   instances?: MetadataInstance[];
+  // Task #1213: multi-förälder-arv — flera föräldrar har OLIKA ärvbara värden.
+  inheritanceConflict?: boolean;
+  conflictSources?: { fromObjectName: string | null; value: string | null }[];
 }
 
 export interface MetadataFormType {
@@ -279,7 +282,7 @@ export function MetadataValue({
 }
 
 /** Enhetlig KÄLLA/ARV-indikator (5 tillstånd: direkt / ärvt / ärvt-men-överskrivet
- *  / systemgenererat / mjukraderat). Återanvänds av rad-rendering + mall-vyn. */
+ *  / systemgenererat / arkiverat). Återanvänds av rad-rendering + mall-vyn. */
 export function MetadataSourceBadge({ entry }: { entry: MetadataFormEntry }) {
   const isSystem = isReadonlyOrigin(entry.metod);
   const isSoftDeleted = !!entry.softDeleted || !!entry.raderad;
@@ -288,8 +291,36 @@ export function MetadataSourceBadge({ entry }: { entry: MetadataFormEntry }) {
   const isInherited = entry.source === "inherited" || isInheritedRemoval;
   const inheritedName = entry.inheritedFromName || entry.fromObject?.namn;
 
+  const hasConflict = !!entry.inheritanceConflict;
+  const conflictSources = entry.conflictSources ?? [];
+
   return (
     <>
+      {hasConflict && (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Badge
+              variant="outline"
+              className="text-[10px] cursor-help inline-flex items-center gap-1 border-warning text-warning"
+              data-testid={`badge-metadata-conflict-${entry.id}`}
+            >
+              <AlertTriangle className="h-3 w-3" /> Arvskonflikt
+            </Badge>
+          </TooltipTrigger>
+          <TooltipContent className="max-w-xs">
+            <p className="font-medium">Olika värden ärvs från flera föräldrar</p>
+            <p className="text-xs">Primär förälder-gren visas. Krockande källor:</p>
+            <ul className="mt-1 text-xs list-disc pl-4">
+              {conflictSources.map((c, i) => (
+                <li key={i}>
+                  {c.fromObjectName ?? "Okänt objekt"}: {c.value ?? "—"}
+                </li>
+              ))}
+            </ul>
+          </TooltipContent>
+        </Tooltip>
+      )}
+
       {isSoftDeleted && (
         <Tooltip>
           <TooltipTrigger asChild>
@@ -298,13 +329,13 @@ export function MetadataSourceBadge({ entry }: { entry: MetadataFormEntry }) {
               className="text-[10px] cursor-help inline-flex items-center gap-1 border-muted-foreground/40 text-muted-foreground"
               data-testid={`badge-metadata-deleted-${entry.id}`}
             >
-              <Trash2 className="h-3 w-3" /> Borttagen
+              <Trash2 className="h-3 w-3" /> Arkiverad
             </Badge>
           </TooltipTrigger>
           <TooltipContent>
             {isInheritedRemoval
               ? `Ärvt värde borttaget${inheritedName ? ` (från ${inheritedName})` : ""}`
-              : "Mjukraderad – kan återställas"}
+              : "Arkiverad – kan återställas"}
           </TooltipContent>
         </Tooltip>
       )}
@@ -404,10 +435,18 @@ export function MetadataSourceLegend() {
     {
       node: (
         <Badge variant="outline" className="text-[10px] inline-flex items-center gap-1 border-muted-foreground/40 text-muted-foreground">
-          <Trash2 className="h-3 w-3" /> Borttagen
+          <Trash2 className="h-3 w-3" /> Arkiverad
         </Badge>
       ),
-      text: "Mjukraderad – kan återställas",
+      text: "Arkiverad – kan återställas",
+    },
+    {
+      node: (
+        <Badge variant="outline" className="text-[10px] inline-flex items-center gap-1 border-warning text-warning">
+          <AlertTriangle className="h-3 w-3" /> Arvskonflikt
+        </Badge>
+      ),
+      text: "Olika värden ärvs från flera föräldrar – primär gren visas",
     },
   ];
   return (

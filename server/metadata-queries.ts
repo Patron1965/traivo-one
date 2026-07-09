@@ -611,13 +611,18 @@ export async function getObjectsMetadataValuesForCatalog(
   const result: Record<string, Record<string, string>> = {};
   if (objectIds.length === 0 || katalogIds.length === 0) return result;
 
+  // Task #1213: arv traverserar ALLA föräldrar via object_parents (union med
+  // legacy objects.parent_id-kanten), med path-array som cykelskydd. Primär
+  // gren vinner vid lika nivå (primary_branch DESC i rangordningen). Endast
+  // AKTIVA rader deltar; arkiverade/anonymiserade poster syns aldrig här.
   const query = sql`
     WITH RECURSIVE parent_chain AS (
       SELECT
         id AS root_id,
         id,
-        parent_id,
         0 as level,
+        TRUE as primary_branch,
+        ARRAY[id]::varchar[] as path,
         ARRAY[]::varchar[] as blocked_katalog_ids
       FROM objects
       WHERE id = ANY(ARRAY[${sql.join(objectIds.map((id) => sql`${id}`), sql`, `)}]) AND tenant_id = ${tenantId}
@@ -627,8 +632,9 @@ export async function getObjectsMetadataValuesForCatalog(
       SELECT
         pc.root_id,
         o.id,
-        o.parent_id,
         pc.level + 1,
+        (pc.primary_branch AND edges.is_primary) as primary_branch,
+        pc.path || o.id,
         pc.blocked_katalog_ids || COALESCE(
           (SELECT ARRAY_AGG(mv.metadata_katalog_id)
            FROM metadata_varden mv
@@ -637,13 +643,21 @@ export async function getObjectsMetadataValuesForCatalog(
              AND mv.tenant_id = ${tenantId}),
           ARRAY[]::varchar[]
         )
-      FROM objects o
-      INNER JOIN parent_chain pc ON o.id = pc.parent_id
-      WHERE o.tenant_id = ${tenantId}
+      FROM (
+        SELECT op.object_id, op.parent_id, op.is_primary
+        FROM object_parents op WHERE op.tenant_id = ${tenantId}
+        UNION
+        SELECT o2.id, o2.parent_id, TRUE
+        FROM objects o2 WHERE o2.tenant_id = ${tenantId} AND o2.parent_id IS NOT NULL
+      ) edges
+      INNER JOIN parent_chain pc ON edges.object_id = pc.id
+      INNER JOIN objects o ON o.id = edges.parent_id AND o.tenant_id = ${tenantId}
+      WHERE NOT (o.id = ANY(pc.path))
     ),
-    metadata_with_context AS (
-      SELECT
+    metadata_candidates AS (
+      SELECT DISTINCT ON (pc.root_id, mv.id)
         pc.root_id,
+        mv.id,
         mv.objekt_id,
         mv.metadata_katalog_id,
         mv.varde_string,
@@ -656,21 +670,27 @@ export async function getObjectsMetadataValuesForCatalog(
         mv.raderad,
         mk.datatyp as katalog_datatyp,
         pc.level,
-        ROW_NUMBER() OVER (
-          PARTITION BY pc.root_id, mv.metadata_katalog_id
-          ORDER BY pc.level ASC
-        ) as rn
+        pc.primary_branch
       FROM parent_chain pc
       INNER JOIN metadata_varden mv ON mv.objekt_id = pc.id
       INNER JOIN metadata_katalog mk ON mv.metadata_katalog_id = mk.id
       WHERE
         (
-          mv.objekt_id = pc.root_id
-          OR (mv.arvs_nedat = TRUE AND COALESCE(mv.niva_las, FALSE) = FALSE AND COALESCE(mv.raderad, FALSE) = FALSE AND NOT (mv.metadata_katalog_id = ANY(pc.blocked_katalog_ids)))
+          (mv.objekt_id = pc.root_id AND (mv.status = 'aktiv' OR COALESCE(mv.raderad, FALSE) = TRUE))
+          OR (mv.status = 'aktiv' AND mv.arvs_nedat = TRUE AND COALESCE(mv.niva_las, FALSE) = FALSE AND COALESCE(mv.raderad, FALSE) = FALSE AND NOT (mv.metadata_katalog_id = ANY(pc.blocked_katalog_ids)))
         )
         AND mv.tenant_id = ${tenantId}
         AND mk.tenant_id = ${tenantId}
         AND mv.metadata_katalog_id = ANY(ARRAY[${sql.join(katalogIds.map((id) => sql`${id}`), sql`, `)}])
+      ORDER BY pc.root_id, mv.id, pc.level ASC, pc.primary_branch DESC
+    ),
+    metadata_with_context AS (
+      SELECT *,
+        ROW_NUMBER() OVER (
+          PARTITION BY root_id, metadata_katalog_id
+          ORDER BY level ASC, primary_branch DESC
+        ) as rn
+      FROM metadata_candidates
     )
     SELECT * FROM metadata_with_context
     ORDER BY root_id, metadata_katalog_id, rn
@@ -814,13 +834,17 @@ export async function getObjectWithAllMetadata(
 
   // Build parent chain with stoppaVidareArvning tracking
   // The CTE now tracks which metadata types should be blocked from further inheritance
+  // Task #1213: arv traverserar ALLA föräldrar via object_parents (union med
+  // legacy objects.parent_id-kanten), med path-array som cykelskydd. Primär
+  // gren vinner vid lika nivå (primary_branch DESC i rangordningen).
   const parentChainQuery = sql`
     WITH RECURSIVE parent_chain AS (
       SELECT
         id,
-        parent_id,
         name,
         0 as level,
+        TRUE as primary_branch,
+        ARRAY[id]::varchar[] as path,
         ARRAY[]::varchar[] as blocked_katalog_ids
       FROM objects
       WHERE id = ${objektId} AND tenant_id = ${tenantId}
@@ -829,9 +853,10 @@ export async function getObjectWithAllMetadata(
 
       SELECT
         o.id,
-        o.parent_id,
         o.name,
         pc.level + 1,
+        (pc.primary_branch AND edges.is_primary) as primary_branch,
+        pc.path || o.id,
         -- Accumulate blocked katalog IDs when we encounter stoppaVidareArvning
         pc.blocked_katalog_ids || COALESCE(
           (SELECT ARRAY_AGG(mv.metadata_katalog_id) 
@@ -841,12 +866,19 @@ export async function getObjectWithAllMetadata(
              AND mv.tenant_id = ${tenantId}),
           ARRAY[]::varchar[]
         )
-      FROM objects o
-      INNER JOIN parent_chain pc ON o.id = pc.parent_id
-      WHERE o.tenant_id = ${tenantId}
+      FROM (
+        SELECT op.object_id, op.parent_id, op.is_primary
+        FROM object_parents op WHERE op.tenant_id = ${tenantId}
+        UNION
+        SELECT o2.id, o2.parent_id, TRUE
+        FROM objects o2 WHERE o2.tenant_id = ${tenantId} AND o2.parent_id IS NOT NULL
+      ) edges
+      INNER JOIN parent_chain pc ON edges.object_id = pc.id
+      INNER JOIN objects o ON o.id = edges.parent_id AND o.tenant_id = ${tenantId}
+      WHERE NOT (o.id = ANY(pc.path))
     ),
-    metadata_with_context AS (
-      SELECT
+    metadata_candidates AS (
+      SELECT DISTINCT ON (mv.id)
         mv.id,
         mv.objekt_id,
         mv.metadata_katalog_id,
@@ -865,6 +897,7 @@ export async function getObjectWithAllMetadata(
         mv.uppdaterad_av,
         mv.metod,
         mv.raderad,
+        mv.status,
         mv.created_at,
         mv.updated_at,
         mk.id as katalog_id,
@@ -889,15 +922,11 @@ export async function getObjectWithAllMetadata(
         pc.level,
         pc.name as from_objekt_namn,
         pc.blocked_katalog_ids,
+        pc.primary_branch,
         CASE
           WHEN mv.objekt_id = ${objektId} THEN 'local'
           ELSE 'inherited'
-        END as source,
-        -- Rank by level (0 = local object, higher = further ancestor)
-        ROW_NUMBER() OVER (
-          PARTITION BY mv.metadata_katalog_id 
-          ORDER BY pc.level ASC
-        ) as rn
+        END as source
       FROM parent_chain pc
       INNER JOIN metadata_varden mv ON mv.objekt_id = pc.id
       INNER JOIN metadata_katalog mk ON mv.metadata_katalog_id = mk.id
@@ -906,9 +935,13 @@ export async function getObjectWithAllMetadata(
         -- Task #710: mjuk-raderade förälder-rader (raderad=TRUE) ärvs aldrig nedåt —
         -- ett borttaget värde ska inte flöda till barn. Lokala rader (inkl. tombstones)
         -- behålls alltid så att den strukna markeringen kan visas på objektets egen nivå.
+        -- Task #1213: statusmodell — endast AKTIVA rader deltar i visning/arv.
+        -- Lokalt: status='aktiv' ELLER raderad=TRUE (mjuk-raderade/tombstones visas
+        -- strukna på egen nivå). Arkiverade poster (status='arkiverad', raderad=FALSE)
+        -- och anonymiserade syns aldrig här — de hör hemma i historik/arkiv-vyer.
         (
-          mv.objekt_id = ${objektId} 
-          OR (mv.arvs_nedat = TRUE AND COALESCE(mv.niva_las, FALSE) = FALSE AND COALESCE(mv.raderad, FALSE) = FALSE AND NOT (mv.metadata_katalog_id = ANY(pc.blocked_katalog_ids)))
+          (mv.objekt_id = ${objektId} AND (mv.status = 'aktiv' OR COALESCE(mv.raderad, FALSE) = TRUE))
+          OR (mv.status = 'aktiv' AND mv.arvs_nedat = TRUE AND COALESCE(mv.niva_las, FALSE) = FALSE AND COALESCE(mv.raderad, FALSE) = FALSE AND NOT (mv.metadata_katalog_id = ANY(pc.blocked_katalog_ids)))
         )
         AND mv.tenant_id = ${tenantId}
         AND mk.tenant_id = ${tenantId}
@@ -917,6 +950,19 @@ export async function getObjectWithAllMetadata(
         -- tidigare "Kontakt" under Grunduppgifter) in bredvid den aktiva familjen
         -- → samma fält syns i två områden = metadata "blandas" mellan områden.
         AND mk.deleted_at IS NULL
+      -- Diamant-dedup: samma mv-rad nåbar via flera grenar → behåll närmaste
+      -- (lägst nivå), primär gren först vid lika nivå.
+      ORDER BY mv.id, pc.level ASC, pc.primary_branch DESC
+    ),
+    metadata_with_context AS (
+      SELECT *,
+        -- Rank by level (0 = local object, higher = further ancestor);
+        -- primär gren vinner vid lika nivå (Task #1213 multi-förälder-arv).
+        ROW_NUMBER() OVER (
+          PARTITION BY metadata_katalog_id
+          ORDER BY level ASC, primary_branch DESC
+        ) as rn
+      FROM metadata_candidates
     )
     -- Task #644: behåll ALLA berättigade nivåer (ej bara rn=1). Skalära fält tar
     -- fortfarande närmaste värdet (rn=1) i JS nedan, men sammansatta json-fält
@@ -982,6 +1028,38 @@ export async function getObjectWithAllMetadata(
     const inheritedFromName =
       hasLocalShadow || softDeleted ? (inheritedRow?.from_objekt_namn ?? null) : null;
 
+    // Task #1213: konfliktdetektering vid multi-förälder-arv. Om flera ärvda
+    // rader på SAMMA (närmaste) nivå från olika grenar har olika värden flaggas
+    // konflikt — primär gren vinner i visningen, men UI:t ska varna.
+    const inheritedWithValue = group.filter(
+      (r) => r.source === "inherited" && rawRowDisplay(r) != null,
+    );
+    let inheritanceConflict = false;
+    let conflictSources: { fromObjectName: string | null; value: string | null }[] | undefined;
+    if (inheritedWithValue.length > 1) {
+      const minLevel = Math.min(...inheritedWithValue.map((r) => r.level ?? 0));
+      const atMinLevel = inheritedWithValue.filter((r) => (r.level ?? 0) === minLevel);
+      const distinctValues = new Set(atMinLevel.map((r) => rawRowDisplay(r)));
+      // Konflikt kräver att värdena kommer från OLIKA källobjekt (olika grenar).
+      // Ett enskilt förälder-objekt med flera värden (allowDuplicates) är INTE
+      // en arvskonflikt — det är multi-instans-data från samma källa.
+      const distinctSources = new Set(atMinLevel.map((r) => r.objekt_id ?? r.from_objekt_namn));
+      if (atMinLevel.length > 1 && distinctValues.size > 1 && distinctSources.size > 1) {
+        inheritanceConflict = true;
+        const seen = new Set<string>();
+        conflictSources = [];
+        for (const r of atMinLevel) {
+          const key = `${r.objekt_id ?? r.from_objekt_namn}::${rawRowDisplay(r)}`;
+          if (seen.has(key)) continue;
+          seen.add(key);
+          conflictSources.push({
+            fromObjectName: r.from_objekt_namn ?? null,
+            value: rawRowDisplay(r),
+          });
+        }
+      }
+    }
+
     // Sammansatta json-fält: merga underfält över alla nivåer (närmaste först).
     // Övriga datatyper: använd närmaste värdet oförändrat.
     const resolvedVardeJson =
@@ -1031,6 +1109,12 @@ export async function getObjectWithAllMetadata(
       skapadAv: nearest.skapad_av,
       uppdateradAv: nearest.uppdaterad_av,
       metod: nearest.metod ?? 'manuell',
+      status: nearest.status ?? 'aktiv',
+      raderadAv: null,
+      raderadVid: null,
+      arkiveradAv: null,
+      arkiveradVid: null,
+      konverteradFranHistorikId: null,
       createdAt: nearest.created_at,
       updatedAt: nearest.updated_at,
       katalog: {
@@ -1069,6 +1153,9 @@ export async function getObjectWithAllMetadata(
       softDeleted,
       raderad: nearest.raderad === true,
       instances,
+      // Task #1213: konflikt vid multi-förälder-arv
+      inheritanceConflict: inheritanceConflict || undefined,
+      conflictSources,
     });
   }
 
@@ -1197,6 +1284,13 @@ export async function getObjectWithAllMetadata(
           arvsNedat: false,
           stoppaVidareArvning: false,
           nivaLas: false,
+          raderad: false,
+          status: 'aktiv',
+          raderadAv: null,
+          raderadVid: null,
+          arkiveradAv: null,
+          arkiveradVid: null,
+          konverteradFranHistorikId: null,
           koppladTillMetadataId: null,
           skapadAv: null,
           uppdateradAv: null,
@@ -1429,27 +1523,13 @@ export async function createMetadata(data: {
     WHERE mv.tenant_id = ${data.tenantId}
       AND mv.metadata_katalog_id = ${metadataTyp.id}
       AND mv.niva_las = TRUE
+      AND mv.status = 'aktiv'
+      AND COALESCE(mv.raderad, FALSE) = FALSE
     LIMIT 1
   `);
   if ((lockCheck.rows as any[]).length > 0) {
     throw new Error(`Nivå-lås: värdet för "${metadataTyp.namn}" är låst av en förälder och kan inte överskridas på denna nivå.`);
   }
-  // PDF §14: dubblettkontroll (allowDuplicates=false → max ett lokalt värde per objekt)
-  if (!metadataTyp.allowDuplicates) {
-    const [duplicate] = await db
-      .select({ id: metadataVarden.id })
-      .from(metadataVarden)
-      .where(and(
-        eq(metadataVarden.objektId, data.objektId),
-        eq(metadataVarden.metadataKatalogId, metadataTyp.id),
-        eq(metadataVarden.tenantId, data.tenantId)
-      ))
-      .limit(1);
-    if (duplicate) {
-      throw new Error(`Dubblett: "${metadataTyp.namn}" finns redan på objektet. Tillåt dubbletter i katalogen om flera värden behövs.`);
-    }
-  }
-
   const vardeFields: Record<string, string | number | boolean | Date | Record<string, unknown> | null> = {
     vardeString: null,
     vardeInteger: null,
@@ -1516,6 +1596,75 @@ export async function createMetadata(data: {
       break;
     default:
       throw new Error(`Unknown datatype: ${metadataTyp.datatyp}`);
+  }
+
+  // Task #1213 (G1): hård auto-arkivering på enkelvärdesfält — oavsett vilken
+  // väg skrivningen kommer. Finns redan en AKTIV lokal rad för katalogen kastas
+  // INTE längre "Dubblett"; i stället arkiveras det gamla värdet som fullvärdig
+  // post och den befintliga raden uppdateras in-place (id-stabilt). En aktiv
+  // tombstone (raderad=true utan eget värde) återanvänds på samma sätt — den
+  // får det nya värdet och raderad-markeringen nollas.
+  if (!metadataTyp.allowDuplicates) {
+    const existingRows = await db
+      .select()
+      .from(metadataVarden)
+      .where(and(
+        eq(metadataVarden.objektId, data.objektId),
+        eq(metadataVarden.metadataKatalogId, metadataTyp.id),
+        eq(metadataVarden.tenantId, data.tenantId)
+      ));
+    const target = existingRows
+      .filter((r) => r.status === 'aktiv')
+      .sort((a, b) => (b.createdAt?.getTime() ?? 0) - (a.createdAt?.getTime() ?? 0))[0];
+    if (target) {
+      // Spegla updateMetadata:s read-only-skydd: värden med system-/tjänst-
+      // ursprung får bara ersättas av ett automatiskt ursprung.
+      if (isReadonlyOrigin(target.metod) && !isAutomaticOrigin(data.metod)) {
+        throw new Error(`"${metadataTyp.namn}" sattes av ${target.metod === 'system' ? 'systemet' : 'en tjänst'} och kan inte redigeras manuellt.`);
+      }
+      const oldValue = getDisplayValue(target);
+      const newDisplayProbe = getDisplayValue({ ...target, ...vardeFields } as MetadataVarden);
+      if (oldValue !== null && oldValue !== newDisplayProbe) {
+        await insertArchivedClone(target, data.skapadAv);
+      }
+      const [replaced] = await db
+        .update(metadataVarden)
+        .set({
+          ...vardeFields,
+          arvsNedat: data.arvsNedat ?? target.arvsNedat,
+          nivaLas: data.nivaLas ?? target.nivaLas,
+          koppladTillMetadataId: data.koppladTillMetadataId ?? target.koppladTillMetadataId,
+          uppdateradAv: data.skapadAv,
+          metod: data.metod ?? 'manuell',
+          status: 'aktiv',
+          raderad: false,
+          raderadAv: null,
+          raderadVid: null,
+          updatedAt: new Date(),
+        })
+        .where(and(eq(metadataVarden.id, target.id), eq(metadataVarden.tenantId, data.tenantId)))
+        .returning();
+
+      await db.insert(metadataHistorik).values({
+        tenantId: data.tenantId,
+        metadataVardenId: replaced.id,
+        objektId: data.objektId,
+        metadataKatalogId: metadataTyp.id,
+        gammaltVarde: oldValue,
+        nyttVarde: getDisplayValue(replaced),
+        andradAv: data.skapadAv ?? 'system',
+        andringsMetod: data.metod ?? 'manuell',
+      });
+
+      try {
+        const { enqueueMetadataChange } = await import("./services/metadata-change-jobs");
+        enqueueMetadataChange(data.tenantId, data.objektId);
+      } catch (err) {
+        console.error("[metadata-queries] enqueueMetadataChange failed (create/replace):", err);
+      }
+
+      return replaced;
+    }
   }
 
   const [newMetadata] = await db.insert(metadataVarden).values({
@@ -1713,6 +1862,8 @@ export async function writeObjectImportMetadataBatch(args: {
       FROM ancestors a
       INNER JOIN metadata_varden mv ON mv.objekt_id = a.id
       WHERE mv.tenant_id = ${tenantId} AND mv.niva_las = TRUE
+        AND mv.status = 'aktiv'
+        AND COALESCE(mv.raderad, FALSE) = FALSE
     `);
     const locked = new Set<string>();
     for (const r of lockRes.rows as any[]) if (r.katalog_id) locked.add(String(r.katalog_id));
@@ -1739,6 +1890,9 @@ export async function writeObjectImportMetadataBatch(args: {
       .filter((p) => !p.katalog.allowDuplicates)
       .map((p) => p.katalog.id);
     if (noDupKatalogIds.length) {
+      // Task #1213: endast AKTIVA rader räknas som befintliga — arkiverade
+      // poster (ersatta värden/historik-konverteringar) blockerar aldrig en ny
+      // skrivning och får inte fångas som "gammalt värde".
       const existing = await db
         .select()
         .from(metadataVarden)
@@ -1746,24 +1900,55 @@ export async function writeObjectImportMetadataBatch(args: {
           eq(metadataVarden.objektId, objektId),
           eq(metadataVarden.tenantId, tenantId),
           inArray(metadataVarden.metadataKatalogId, noDupKatalogIds),
+          eq(metadataVarden.status, 'aktiv'),
         ));
       const existingSet = new Set(existing.map((e) => e.metadataKatalogId));
       if (existingSet.size) {
         if (overwriteExisting) {
-          // Fånga gamla värden per katalog (för historik) och radera dem så att
-          // den nya inserten blir det enda ersättande värdet.
+          // Fånga gamla värden per katalog (för historik) och ARKIVERA dem
+          // (Task #1213 G1: fullvärdiga arkiverade poster i stället för DELETE)
+          // så att den nya inserten blir det enda AKTIVA ersättande värdet.
+          // Set-baserat: rader med eget värde blir status='arkiverad'
+          // (raderad=false, arvs_nedat=false → deltar aldrig i arv/visning);
+          // tombstones utan eget värde raderas hårt (ren negativ-markering
+          // som ersätts av det nya importerade värdet).
           for (const row of existing) {
             if (!overwrittenOldValues.has(row.metadataKatalogId)) {
               overwrittenOldValues.set(row.metadataKatalogId, getDisplayValue(row as MetadataVarden));
             }
           }
-          await db
-            .delete(metadataVarden)
-            .where(and(
-              eq(metadataVarden.objektId, objektId),
-              eq(metadataVarden.tenantId, tenantId),
-              inArray(metadataVarden.metadataKatalogId, Array.from(existingSet)),
-            ));
+          const rowsWithValue = existing
+            .filter((r) => getDisplayValue(r as MetadataVarden) !== null)
+            .map((r) => r.id);
+          const tombstoneRows = existing
+            .filter((r) => getDisplayValue(r as MetadataVarden) === null)
+            .map((r) => r.id);
+          if (rowsWithValue.length) {
+            await db
+              .update(metadataVarden)
+              .set({
+                status: 'arkiverad',
+                arkiveradAv: skapadAv ?? 'import',
+                arkiveradVid: new Date(),
+                arvsNedat: false,
+                stoppaVidareArvning: false,
+                raderad: false,
+                raderadAv: null,
+                raderadVid: null,
+              })
+              .where(and(
+                eq(metadataVarden.tenantId, tenantId),
+                inArray(metadataVarden.id, rowsWithValue),
+              ));
+          }
+          if (tombstoneRows.length) {
+            await db
+              .delete(metadataVarden)
+              .where(and(
+                eq(metadataVarden.tenantId, tenantId),
+                inArray(metadataVarden.id, tombstoneRows),
+              ));
+          }
         } else {
           for (let i = prepared.length - 1; i >= 0; i--) {
             if (!prepared[i].katalog.allowDuplicates && existingSet.has(prepared[i].katalog.id)) {
@@ -2006,6 +2191,73 @@ export async function resolveQuickFieldConfig(
 }
 
 // ============================================================================
+// Task #1213 (G1): ARKIVERING AV ERSATTA VÄRDEN — enkelvärdesfält
+// ----------------------------------------------------------------------------
+// När ett enkelvärdesfält (allowDuplicates=false) får ett NYTT värde arkiveras
+// det gamla värdet som en FULLVÄRDIG arkiverad post: en klonad rad med
+// status='arkiverad' (raderad=false, arvs_nedat=false → deltar aldrig i arv
+// eller närmaste-värde-visning). Den befintliga raden uppdateras därefter
+// in-place så att metadata_varden.id förblir stabilt för alla referenser
+// (koppladTillMetadataId, historik-pekare, klient-cachar).
+// ============================================================================
+
+async function insertArchivedClone(
+  existing: MetadataVarden,
+  arkiveradAv: string | undefined,
+): Promise<void> {
+  await db.insert(metadataVarden).values({
+    tenantId: existing.tenantId,
+    objektId: existing.objektId,
+    workOrderId: existing.workOrderId,
+    metadataKatalogId: existing.metadataKatalogId,
+    vardeString: existing.vardeString,
+    vardeInteger: existing.vardeInteger,
+    vardeDecimal: existing.vardeDecimal,
+    vardeBoolean: existing.vardeBoolean,
+    vardeDatetime: existing.vardeDatetime,
+    vardeJson: existing.vardeJson,
+    vardeReferens: existing.vardeReferens,
+    arvsNedat: false,
+    stoppaVidareArvning: false,
+    nivaLas: false,
+    koppladTillMetadataId: existing.koppladTillMetadataId,
+    skapadAv: existing.skapadAv,
+    uppdateradAv: arkiveradAv,
+    metod: existing.metod,
+    raderad: false,
+    status: 'arkiverad',
+    arkiveradAv: arkiveradAv ?? 'system',
+    arkiveradVid: new Date(),
+    // Bevara ursprunglig skapandetid så den arkiverade posten sorterar rätt
+    // i tidslinjer ("värdet gällde från createdAt till arkiveradVid").
+    createdAt: existing.createdAt,
+  });
+}
+
+// Task #1213: läs arkiverade poster (status='arkiverad') för ett objekt.
+// Fullvärdiga arkiverade poster = ersatta enkelvärden, mjuk-borttagna egna
+// värden och konverterade historikrader. Sorteras nyast-arkiverad först.
+export async function getArchivedMetadataPosts(
+  objektId: string,
+  tenantId: string,
+): Promise<Array<MetadataVarden & { katalog: MetadataKatalog | null }>> {
+  const rows = await db
+    .select()
+    .from(metadataVarden)
+    .leftJoin(metadataKatalog, eq(metadataVarden.metadataKatalogId, metadataKatalog.id))
+    .where(and(
+      eq(metadataVarden.objektId, objektId),
+      eq(metadataVarden.tenantId, tenantId),
+      eq(metadataVarden.status, 'arkiverad'),
+    ))
+    .orderBy(desc(metadataVarden.arkiveradVid), desc(metadataVarden.updatedAt));
+  return rows.map((r) => ({
+    ...r.metadata_varden,
+    katalog: r.metadata_katalog ?? null,
+  }));
+}
+
+// ============================================================================
 // UPPDATERA METADATA
 // ============================================================================
 
@@ -2138,12 +2390,20 @@ export async function updateMetadata(
 
   const oldValue = getDisplayValue(existing);
 
+  // Task #1213 (G1): nytt värde på ett enkelvärdesfält → gamla värdet arkiveras
+  // som fullvärdig post innan raden uppdateras in-place (id-stabilt).
+  const newDisplayProbe = getDisplayValue({ ...existing, ...vardeFields } as MetadataVarden);
+  if (!metadataTyp.allowDuplicates && oldValue !== null && oldValue !== newDisplayProbe) {
+    await insertArchivedClone(existing, uppdateradAv);
+  }
+
   const [updated] = await db
     .update(metadataVarden)
     .set({
       ...vardeFields,
       uppdateradAv,
       metod: metod ?? 'manuell',
+      status: 'aktiv',
       updatedAt: new Date(),
     })
     .where(and(eq(metadataVarden.id, metadataId), eq(metadataVarden.tenantId, tenantId)))
@@ -2221,6 +2481,51 @@ export async function deleteMetadata(
 }
 
 // ============================================================================
+// Task #1213: CENTRALT SKRIVLAGER — flagg-uppdatering & rollback-radering
+// ----------------------------------------------------------------------------
+// Alla metadata-writes ska gå via detta modul-API. Routes/services får inte
+// köra egna db.update/db.delete direkt mot metadata_varden.
+// ============================================================================
+
+// Uppdaterar arvs-flaggor (arvsNedat / stoppaVidareArvning) på en befintlig
+// metadata-post. Tenant-scoped; rör aldrig värdefält eller status.
+export async function setMetadataInheritanceFlags(
+  metadataId: string,
+  tenantId: string,
+  flags: { arvsNedat?: boolean; stoppaVidareArvning?: boolean },
+  uppdateradAv?: string,
+): Promise<MetadataVarden | undefined> {
+  const [updated] = await db
+    .update(metadataVarden)
+    .set({
+      ...(flags.arvsNedat !== undefined ? { arvsNedat: flags.arvsNedat } : {}),
+      ...(flags.stoppaVidareArvning !== undefined ? { stoppaVidareArvning: flags.stoppaVidareArvning } : {}),
+      ...(uppdateradAv !== undefined ? { uppdateradAv } : {}),
+      updatedAt: new Date(),
+    })
+    .where(and(eq(metadataVarden.id, metadataId), eq(metadataVarden.tenantId, tenantId)))
+    .returning();
+  return updated;
+}
+
+// Hård-raderar metadata-rader som ett led i en ROLLBACK/ÅNGRA-operation
+// (import-ångra, enrich-återställning). Detta är avsiktligt en riktig DELETE —
+// raderna skapades av den operation som ångras och ska inte lämna arkivspår.
+// Accepterar tx (drizzle-transaktion) eller db. Returnerar antal raderade.
+export async function rollbackDeleteMetadataRows(
+  executor: Pick<typeof db, 'delete'>,
+  tenantId: string,
+  ids: string[],
+): Promise<number> {
+  if (ids.length === 0) return 0;
+  const del = await executor
+    .delete(metadataVarden)
+    .where(and(inArray(metadataVarden.id, ids), eq(metadataVarden.tenantId, tenantId)))
+    .returning({ id: metadataVarden.id });
+  return del.length;
+}
+
+// ============================================================================
 // Task #710: MJUK-RADERING & ÅTERSTÄLLNING AV OBJEKT-METADATA (Session 7 §4)
 // ============================================================================
 
@@ -2284,9 +2589,21 @@ export async function softDeleteObjectMetadata(
     if (existingRows.length > 0) {
       for (const existing of existingRows) {
         if (existing.raderad === true) continue; // redan mjuk-raderad — idempotent
+        if (existing.status !== 'aktiv') continue; // arkiverad/anonymiserad post — rör ej
+        // Task #1213: mjuk-borttag av eget värde = logisk status 'arkiverad'
+        // (fullvärdig arkiverad post); raderad-flaggan behålls som teknisk
+        // mekanik för struken-visning + restore-vägen.
         await tx
           .update(metadataVarden)
-          .set({ raderad: true, raderadAv: actor, raderadVid: new Date(), uppdateradAv: actor })
+          .set({
+            raderad: true,
+            raderadAv: actor,
+            raderadVid: new Date(),
+            uppdateradAv: actor,
+            status: 'arkiverad',
+            arkiveradAv: actor,
+            arkiveradVid: new Date(),
+          })
           .where(and(eq(metadataVarden.id, existing.id), eq(metadataVarden.tenantId, tenantId)));
 
         await tx.insert(metadataHistorik).values({
@@ -2385,7 +2702,15 @@ export async function restoreObjectMetadata(
       } else {
         await tx
           .update(metadataVarden)
-          .set({ raderad: false, raderadAv: null, raderadVid: null, uppdateradAv: actor })
+          .set({
+            raderad: false,
+            raderadAv: null,
+            raderadVid: null,
+            uppdateradAv: actor,
+            status: 'aktiv',
+            arkiveradAv: null,
+            arkiveradVid: null,
+          })
           .where(and(eq(metadataVarden.id, existing.id), eq(metadataVarden.tenantId, tenantId)));
         await tx.insert(metadataHistorik).values({
           tenantId,
@@ -2881,6 +3206,7 @@ export async function getInheritanceTree(
     LEFT JOIN metadata_varden mv ON mv.objekt_id = t.id 
       AND mv.metadata_katalog_id = ${metadataKatalogId}
       AND mv.tenant_id = ${tenantId}
+      AND (mv.status = 'aktiv' OR COALESCE(mv.raderad, FALSE) = TRUE)
     ORDER BY t.path
   `;
 
@@ -3129,10 +3455,12 @@ export async function getCrossFertilizedMetadata(
     INNER JOIN metadata_katalog mk_base ON mv_base.metadata_katalog_id = mk_base.id
     LEFT JOIN metadata_varden mv_related ON mv_related.kopplad_till_metadata_id = mv_base.id
     LEFT JOIN metadata_katalog mk_related ON mv_related.metadata_katalog_id = mk_related.id
+      AND mv_related.status = 'aktiv'
     WHERE
       mv_base.objekt_id = ${objektId}
       AND mk_base.namn = ${baseMetadataTypNamn}
       AND mv_base.tenant_id = ${tenantId}
+      AND mv_base.status = 'aktiv'
   `;
 
   const result = await db.execute(query);
@@ -3268,6 +3596,8 @@ export async function findObjectsWithMetadata(
     INNER JOIN metadata_katalog mk ON mv.metadata_katalog_id = mk.id
     WHERE mk.namn = ${metadataTypNamn}
       AND o.tenant_id = ${tenantId}
+      AND mv.status = 'aktiv'
+      AND COALESCE(mv.raderad, FALSE) = FALSE
   `;
 
   if (varde !== undefined) {
@@ -3278,6 +3608,8 @@ export async function findObjectsWithMetadata(
       INNER JOIN metadata_katalog mk ON mv.metadata_katalog_id = mk.id
       WHERE mk.namn = ${metadataTypNamn}
         AND o.tenant_id = ${tenantId}
+        AND mv.status = 'aktiv'
+        AND COALESCE(mv.raderad, FALSE) = FALSE
         AND (
           mv.varde_string = ${String(varde)}
           OR CAST(mv.varde_integer AS TEXT) = ${String(varde)}

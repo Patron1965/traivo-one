@@ -117,6 +117,7 @@ async function readOwnKoordinaterRow(
       WHERE tenant_id = ${tenantId}
         AND objekt_id = ${objektId}
         AND metadata_katalog_id = ${koordinaterId}
+        AND status = 'aktiv'
         AND COALESCE(raderad, FALSE) = FALSE
       ORDER BY updated_at DESC NULLS LAST
       LIMIT 1
@@ -377,6 +378,7 @@ export async function backfillColumnsToMetadata(
       await db.execute(sql`
         SELECT metadata_katalog_id FROM metadata_varden
         WHERE tenant_id = ${tenantId} AND objekt_id = ${obj.id}
+          AND status = 'aktiv'
           AND COALESCE(raderad, FALSE) = FALSE
           AND metadata_katalog_id = ANY(ARRAY[${sql.join(katalogIds.map((k) => sql`${k}`), sql`, `)}])
       `)

@@ -1499,6 +1499,7 @@ function buildRoughUnplannedSearchCondition(tenantId: string, search: string): S
         JOIN metadata_katalog mk ON mk.id = mv.metadata_katalog_id
         WHERE mv.objekt_id = ${workOrders.objectId}
           AND mv.tenant_id = ${tenantId}
+          AND mv.status = 'aktiv'
           AND mv.raderad = false
           AND (
             mv.varde_string ILIKE ${like}
@@ -2532,7 +2533,7 @@ export class DatabaseStorage implements IStorage {
       } else if (filters.issue === "empty-metadata") {
         // Task #992-cleanup: kanoniska svenska metadata_varden (ej mjuk-raderade).
         // "Tomt" = objektet har minst en aktiv värde-rad utan någon typad värde-kolumn satt.
-        whereConditions = and(whereConditions, sql`EXISTS (SELECT 1 FROM metadata_varden mv WHERE mv.objekt_id = ${objects.id} AND mv.tenant_id = ${tenantId} AND mv.raderad = false AND (mv.varde_string IS NULL OR mv.varde_string = '') AND mv.varde_integer IS NULL AND mv.varde_decimal IS NULL AND mv.varde_boolean IS NULL AND mv.varde_datetime IS NULL AND mv.varde_json IS NULL AND mv.varde_referens IS NULL)`);
+        whereConditions = and(whereConditions, sql`EXISTS (SELECT 1 FROM metadata_varden mv WHERE mv.objekt_id = ${objects.id} AND mv.tenant_id = ${tenantId} AND mv.status = 'aktiv' AND mv.raderad = false AND (mv.varde_string IS NULL OR mv.varde_string = '') AND mv.varde_integer IS NULL AND mv.varde_decimal IS NULL AND mv.varde_boolean IS NULL AND mv.varde_datetime IS NULL AND mv.varde_json IS NULL AND mv.varde_referens IS NULL)`);
       }
     }
     
@@ -5671,6 +5672,8 @@ export class DatabaseStorage implements IStorage {
           JOIN ${objects} o ON o.id = mv.objekt_id AND o.tenant_id = ${tenantId}
           WHERE mk.tenant_id = ${tenantId}
             AND lower(mk.namn) = ${metaName}
+            AND mv.status = 'aktiv'
+            AND mv.raderad = false
         `;
         
         if (isNumeric) {

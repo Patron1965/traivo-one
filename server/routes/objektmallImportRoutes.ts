@@ -500,7 +500,7 @@ export async function buildExportWorkbook(
     const metaRows = await db
       .select()
       .from(metadataVarden)
-      .where(and(eq(metadataVarden.tenantId, tenantId), eq(metadataVarden.raderad, false)));
+      .where(and(eq(metadataVarden.tenantId, tenantId), eq(metadataVarden.raderad, false), eq(metadataVarden.status, "aktiv")));
     for (const m of metaRows) {
       if (!m.objektId || !defById.has(m.metadataKatalogId)) continue;
       const val = getDisplayValue(m);
@@ -1295,6 +1295,7 @@ async function validateAll(
         .where(
           and(
             eq(metadataVarden.tenantId, tenantId),
+            eq(metadataVarden.status, "aktiv"),
             inArray(metadataVarden.metadataKatalogId, Array.from(externalIdKatalogIds)),
           ),
         );
@@ -1537,6 +1538,7 @@ async function validateAll(
         .where(
           and(
             eq(metadataVarden.tenantId, tenantId),
+            eq(metadataVarden.status, "aktiv"),
             inArray(metadataVarden.objektId, targetIds),
             inArray(metadataVarden.metadataKatalogId, definitionKatalogIds),
           ),
@@ -1928,6 +1930,7 @@ async function commitImport(
         .where(
           and(
             eq(metadataVarden.tenantId, tenantId),
+            eq(metadataVarden.status, "aktiv"),
             eq(metadataVarden.objektId, objId),
             eq(metadataVarden.metadataKatalogId, katId),
           ),

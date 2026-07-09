@@ -4804,6 +4804,13 @@ export const metadataKatalog = pgTable("metadata_katalog", {
   arBeraknad: boolean("ar_beraknad").default(false).notNull(),
   formel: text("formel"),
 
+  // Task #1213: förberedd egenskap för framtida uppåt-/syskon-synk av värden.
+  // INERT i v1 — ingen runtime läser den ännu; exponeras endast (avstängd) i
+  // kataloginställningarna. Expand-contract: default false, befintliga fält
+  // opåverkade. När motorstödet byggs (senare etapp) styr flaggan om en ändring
+  // på ett barn får propageras uppåt till förälder/syskon.
+  tillatUppdateringUppat: boolean("tillat_uppdatering_uppat").default(false).notNull(),
+
   createdAt: timestamp("created_at").defaultNow().notNull(),
 
   // Task #716: arkivering (soft-delete) istället för permanent radering.
@@ -5048,6 +5055,25 @@ export const metadataVarden = pgTable("metadata_varden", {
   raderadAv: varchar("raderad_av", { length: 100 }),
   raderadVid: timestamp("raderad_vid"),
 
+  // === Task #1213: LOGISK STATUS (Aktiv/Arkiverad/Anonymiserad) ===
+  // Varje metadatapost har exakt EN logisk status:
+  //  - 'aktiv'        = gällande värde (default)
+  //  - 'arkiverad'    = fullvärdig arkiverad post (ersatt värde på enkelvärdes-
+  //                     fält, mjuk-borttaget eget värde, eller konverterad
+  //                     historikrad). Arkiverade poster deltar ALDRIG i
+  //                     arvsupplösning eller närmaste-värde-visning.
+  //  - 'anonymiserad' = värdet är avpersonifierat (Etapp 6 bygger UI; statusen
+  //                     finns i datamodellen redan nu).
+  // `raderad`-flaggan behålls som TEKNISK mekanik för brutet arv (tombstone som
+  // stryker ett ärvt värde) och för struken-visning av mjuk-borttagna egna
+  // värden — men användarens terminologi är status (ordet "raderad" borta ur UI).
+  status: varchar("status", { length: 20 }).default("aktiv").notNull(),
+  arkiveradAv: varchar("arkiverad_av", { length: 100 }),
+  arkiveradVid: timestamp("arkiverad_vid"),
+  // Idempotens-spår för historik→arkiverad-post-konverteringen (migration 0127):
+  // satt = raden skapades från metadata_historik-raden med detta id.
+  konverteradFranHistorikId: varchar("konverterad_fran_historik_id"),
+
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 }, (table) => [
@@ -5056,8 +5082,14 @@ export const metadataVarden = pgTable("metadata_varden", {
   index("idx_metadata_varden_objekt_katalog").on(table.objektId, table.metadataKatalogId),
   index("idx_metadata_varden_koppling").on(table.koppladTillMetadataId),
   index("idx_metadata_varden_work_order").on(table.workOrderId),
-  index("idx_metadata_varden_work_order_katalog").on(table.workOrderId, table.metadataKatalogId)
+  index("idx_metadata_varden_work_order_katalog").on(table.workOrderId, table.metadataKatalogId),
+  index("idx_metadata_varden_status").on(table.objektId, table.status),
+  uniqueIndex("uq_metadata_varden_konv_historik").on(table.konverteradFranHistorikId),
 ]);
+
+// Task #1213: giltiga logiska statusar för metadata-poster.
+export const METADATA_VARDE_STATUS = ["aktiv", "arkiverad", "anonymiserad"] as const;
+export type MetadataVardeStatus = typeof METADATA_VARDE_STATUS[number];
 
 // Relationer för det nya metadata-systemet
 export const metadataKatalogRelations = relations(metadataKatalog, ({ one, many }) => ({
@@ -5153,6 +5185,12 @@ export interface MetadataVardenWithKatalog extends MetadataVarden {
   // fält). Nearest/collapse för skalära fält är oförändrat; detta är ett additivt
   // fält så klienten kan bläddra flera värden (t.ex. flera kontakter) i karusell.
   instances?: MetadataInstance[];
+  // === Task #1213: multi-förälder-arv (object_parents) ===
+  // inheritanceConflict: flera föräldrar på samma (närmaste) nivå har OLIKA
+  // ärvbara värden för fältet — primär gren vinner i visningen men UI:t varnar.
+  inheritanceConflict?: boolean;
+  // Källorna som krockar (objektnamn + visningsvärde), för konflikt-tooltip.
+  conflictSources?: { fromObjectName: string | null; value: string | null }[];
 }
 
 // Multi-instans-rad för ett duplicerbart katalogfält (för karusell-bläddring).

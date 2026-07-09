@@ -33,6 +33,7 @@ import {
   getObjectMetadataHistorik,
   getMetadataDefinitionHistory,
   getLatestChangedAtForObjectMetadata,
+  getArchivedMetadataPosts,
   propagateMetadataDown,
   getPropagationPreview,
   getInheritanceTree,
@@ -50,6 +51,7 @@ import {
   restoreMetadataType,
   listArchivedMetadataTypes,
   findMetadataTypeByIdentity,
+  setMetadataInheritanceFlags,
 } from "./metadata-queries";
 import { getTenantIdWithFallback, requireAdmin } from "./tenant-middleware";
 
@@ -1086,6 +1088,24 @@ metadataRouter.get("/objects/:objectId/position", async (req: Request, res: Resp
   }
 });
 
+// Task #1213: arkiverade poster (status='arkiverad') för ett objekt —
+// ersatta enkelvärden, mjuk-borttagna egna värden och konverterade historikrader.
+metadataRouter.get("/objects/:objectId/archived-posts", async (req: Request, res: Response) => {
+  try {
+    const tenantId = getTenantIdWithFallback(req);
+    if (!tenantId) {
+      return res.status(401).json({ error: "Ingen tenant hittad" });
+    }
+
+    const { objectId } = req.params;
+    const posts = await getArchivedMetadataPosts(objectId, tenantId);
+    res.json(posts);
+  } catch (error) {
+    console.error("Error fetching archived metadata posts:", error);
+    res.status(500).json({ error: "Kunde inte hämta arkiverade poster" });
+  }
+});
+
 metadataRouter.get("/objects/:objectId/tree", async (req: Request, res: Response) => {
   try {
     const tenantId = getTenantIdWithFallback(req);
@@ -1273,15 +1293,8 @@ metadataRouter.patch("/:id/inheritance", async (req: Request, res: Response) => 
     const { id } = req.params;
     const { arvsNedat, stoppaVidareArvning } = req.body;
 
-    const [updated] = await db
-      .update(metadataVarden)
-      .set({
-        arvsNedat: arvsNedat !== undefined ? arvsNedat : undefined,
-        stoppaVidareArvning: stoppaVidareArvning !== undefined ? stoppaVidareArvning : undefined,
-        updatedAt: new Date(),
-      })
-      .where(and(eq(metadataVarden.id, id), eq(metadataVarden.tenantId, tenantId)))
-      .returning();
+    // Task #1213: alla metadata-writes går via det centrala skrivlagret.
+    const updated = await setMetadataInheritanceFlags(id, tenantId, { arvsNedat, stoppaVidareArvning });
 
     if (!updated) {
       return res.status(404).json({ error: "Metadata hittades inte" });

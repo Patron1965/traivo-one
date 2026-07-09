@@ -107,3 +107,4 @@
 - [Överbokning-overlay & matchningsorsak](overbooking-and-match-reason.md) — överbokad = planerar-overlay på resurs-dag (aldrig i deriveUppgiftStatus); match_reason på work_orders+assignments, fångas vid koncept-expansion.
 - [Informationspaket 94-fält](informationspaket-94-falt-avstamning.md) — CSV=94 atomära fält (riktig parser, ej `;`-split); kontraktet buntar till ~42 medvetet; INFORMATIONSPAKET_FALT saknar kod-konsumenter → ej filterbart literalt.
 - [Geo-fält synk metadata→kolumner](geo-field-sync-metadata-columns.md) — metadata=källan, objekt-kolumner=enkelriktad ruttbar cache; present-value-only; arvs-medveten läsning + location-json-fälla.
+- [Metadata status & multi-förälder-arv](metadata-status-multiparent.md) — status-aktiv-filter i alla läspaths; konflikt kräver OLIKA källobjekt (ej multi-värden från samma förälder); G1-arkivklon = fullvärdig rad.

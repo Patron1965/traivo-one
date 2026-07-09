@@ -18,6 +18,7 @@
 
 import { and, desc, eq, gte, isNull, or, sql } from "drizzle-orm";
 import { db } from "../db";
+import { rollbackDeleteMetadataRows } from "../metadata-queries";
 import {
   importActions,
   importBatches,
@@ -572,13 +573,8 @@ export async function undoImportBatch(args: {
               idsToDelete = [];
             }
           }
-          if (idsToDelete.length > 0) {
-            const del = await tx
-              .delete(metadataVarden)
-              .where(and(sql`${metadataVarden.id} = ANY(${idsToDelete})`, eq(metadataVarden.tenantId, tenantId)))
-              .returning({ id: metadataVarden.id });
-            metadataRemoved += del.length;
-          }
+          // Task #1213: rollback-radering via centrala skrivlagret.
+          metadataRemoved += await rollbackDeleteMetadataRows(tx, tenantId, idsToDelete);
           await markUndone(action.id);
         } else {
           await markBlocked(action, `Okänd åtgärdstyp: ${action.actionType}`);
