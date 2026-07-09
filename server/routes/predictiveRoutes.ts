@@ -352,6 +352,17 @@ export async function registerPredictiveRoutes(app: Express) {
 
     const title = `Prediktivt underh\u00e5ll \u2014 ${obj.name}`;
 
+    // Task #1215: fyll uppgiftspaketet (arbetskopian) — direkt-insert utanför storage.
+    const { buildUppgiftspaket } = await import("../services/uppgiftspaket");
+    const uppgiftspaket = await buildUppgiftspaket({
+      tenantId,
+      objectId,
+      kundId: obj.customerId ?? null,
+    }).catch((err) => {
+      console.error("[uppgiftspaket] fyllnad vid predictive create-order misslyckades:", err);
+      return undefined;
+    });
+
     const [order] = await db.insert(workOrders).values({
       tenantId,
       objectId,
@@ -364,6 +375,7 @@ export async function registerPredictiveRoutes(app: Express) {
       executionStatus: "not_planned",
       creationMethod: "automatic",
       metadata: { generatedBy: "predictive-maintenance", analyzedAt: new Date().toISOString() },
+      uppgiftspaket,
     }).returning({ id: workOrders.id });
     invalidateWorkflowCaches(tenantId);
 

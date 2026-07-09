@@ -1191,7 +1191,19 @@ app.post("/api/annual-planning/apply-distribution", asyncHandler(async (req, res
           },
         };
 
-        const [created] = await db.insert(workOrders).values(orderData).returning();
+        // Task #1215: fyll uppgiftspaketet (arbetskopian) — direkt-insert utanför storage.
+        const { buildUppgiftspaket } = await import("../services/uppgiftspaket");
+        const uppgiftspaket = await buildUppgiftspaket({
+          tenantId,
+          objectId: assignedObjectId,
+          tidsfonsterStart: scheduledDate,
+          kundId: customerIdForOrder ?? null,
+        }).catch((err) => {
+          console.error("[uppgiftspaket] fyllnad vid AI-distribution misslyckades:", err);
+          return undefined;
+        });
+
+        const [created] = await db.insert(workOrders).values({ ...orderData, uppgiftspaket }).returning();
         totalCreated++;
         didMutateWorkOrders = true;
 

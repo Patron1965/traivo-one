@@ -109,3 +109,4 @@
 - [Geo-fält synk metadata→kolumner](geo-field-sync-metadata-columns.md) — metadata=källan, objekt-kolumner=enkelriktad ruttbar cache; present-value-only; arvs-medveten läsning + location-json-fälla.
 - [Metadata status & multi-förälder-arv](metadata-status-multiparent.md) — status-aktiv-filter i alla läspaths; konflikt kräver OLIKA källobjekt (ej multi-värden från samma förälder); G1-arkivklon = fullvärdig rad.
 - [Systemområden adopt-or-create](systemomraden-ensure-adoption.md) — ensureSystemomradenFalt adopterar befintliga katalograder (aldrig namn/datatyp/värden); dubblettnamn/annan förälder = conflict-skip; UI-lås visar bara isSystem, systemlast stoppas serverside.
+- [Uppgiftspaketet (arbetskopia)](uppgiftspaket-arbetskopia.md) — jsonb på WO+assignments; frozen-gate ENBART via deriveUppgiftStatus+isUppgiftFrozen; nya skapandevägar MÅSTE fylla paketet; spegelsynk present-value-only.

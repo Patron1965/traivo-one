@@ -301,6 +301,90 @@ export const INFORMATIONSPAKET_FALT: InformationspaketFalt[] = [
  *     Admin-/påminnelseuppgifter ("ring kund") backas av admin-artiklar
  *     (taskCategory="admin"); produktion/resa/ställ/egentid = uppgiftstyper.
  */
+/* ============================================================
+ * ETAPP 3 · UPPGIFTSPAKETET (operativ arbetskopia)
+ * ============================================================
+ * Uppgiftspaketet är den denormaliserade ARBETSKOPIAN som motorerna läser i
+ * stället för att slå upp objektet live. Det fylls vid uppgiftsskapande
+ * (buildUppgiftspaket, server/services/uppgiftspaket.ts) och uppdateras
+ * automatiskt för ÖPPNA/FRAMTIDA uppgifter när objektets metadata ändras
+ * (metadata-change-jobs). Frysta uppgifter (se isUppgiftFrozen) röres ALDRIG —
+ * deras paket är frysta fakta.
+ *
+ * Lagras i work_orders.uppgiftspaket + assignments.uppgiftspaket (jsonb,
+ * nullable — expand-contract: legacy-rader utan paket beter sig som idag).
+ */
+export const UPPGIFTSPAKET_VERSION = 1 as const;
+
+/** Primär plats = KÖRBAR position (geografimotorns ruttkontrakt). */
+export interface UppgiftspaketPrimarPlats {
+  /** Sammansatt adress (gatuadress, postnr, postort) — null om okänd. */
+  adress: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  /** Sann ENBART om motorn säkert kan rutta till en exakt punkt. */
+  ruttbar: boolean;
+  /** Effektiv platstyp från objektets platsmodell. */
+  platstyp: "pinpoint" | "area" | "none";
+  /** Läsbart skäl när ruttbar=false (diagnos). */
+  orsak?: string;
+}
+
+/** Sekundär plats = UTFÖRANDEPLATS (Fördjupad position — aldrig ruttbar). */
+export interface UppgiftspaketSekundarPlats {
+  /** Normaliserad punkt om Fördjupad position är en punkt; null för polygon/sträckning. */
+  punkt: { lat: number; lng: number } | null;
+  /** Rå location-json (punkt/polygon/sträckning) från metadatafältet. */
+  geometri: unknown | null;
+  /** Avdelning/Port/Våning — beskrivande utförandeplats-text. */
+  beskrivning: string | null;
+}
+
+export interface UppgiftspaketAtkomst {
+  typ: string | null;
+  portkod: string | null;
+  nyckelnummer: string | null;
+  info: unknown | null;
+}
+
+export interface Uppgiftspaket {
+  version: number;
+  /** ISO-tidsstämpel för senaste fyllnad/uppdatering. */
+  uppdateradVid: string;
+  /** Vem som senast skrev paketet. */
+  uppdateradAv: "skapande" | "propagering";
+  /** Geografimotorns kontrakt: primär (körbar) + sekundär (utförandeplats). Null för objektlösa uppgifter. */
+  position: {
+    primar: UppgiftspaketPrimarPlats;
+    sekundar: UppgiftspaketSekundarPlats | null;
+  } | null;
+  /** Önskad leveranstid/tidsfönster (ISO) — snapshot vid skapande. */
+  tidsfonster: { start: string | null; slut: string | null } | null;
+  /** Aktuellt antal (hålls i synk av antals-propageringen). */
+  antal: number | null;
+  /** Artikelinfo-snapshot (utförandekod/tidskod/enhet). */
+  artikel: { utforandekod: string | null; tidskod: string | null } | null;
+  /** Kund-/fakturainformation. */
+  kund: { kundId: string | null; frystFakturamottagareId: string | null } | null;
+  /** Åtkomstinfo från objektet (resolved, arvs-medveten). */
+  atkomst: UppgiftspaketAtkomst | null;
+}
+
+/**
+ * Frysta fakta-gaten: uppgifter vars kanoniska status nått "utford" eller senare
+ * (inkl. terminala lägen) får ALDRIG sina paket/speglar uppdaterade av
+ * propageringen. Härledningen sker via deriveUppgiftStatus() — den enda mappningen.
+ */
+export function isUppgiftFrozen(status: UppgiftStatus): boolean {
+  return (
+    status === "utford" ||
+    status === "fakturakontroll" ||
+    status === "fakturerad" ||
+    status === "omojlig_att_utfora" ||
+    status === "avbruten"
+  );
+}
+
 export type UppgiftKallaSkapare =
   | "orderkoncept"
   | "snabborder"

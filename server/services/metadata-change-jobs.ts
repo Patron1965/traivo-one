@@ -4,12 +4,17 @@
 //  2. Framtida ogjorda uppgifters antal (artiklar med quantityMode='matches_field')
 //  3. Dynamisk kluster-tillhörighet (avvecklad, se nedan)
 //
+//  4. Objektets ruttbara geo-kolumner (enkelriktad cache, geo-field-sync)
+//  5. Uppgiftspaketet (Task #1215): full arbetskopie-uppdatering + spegelsynk
+//     för öppna/framtida uppgifter i BÅDA lagren (work_orders + assignments)
+//
 // Designval: fire-and-forget, debounced per tenant. Vi blockerar inte
 // metadata-skrivningen, men loggar misslyckanden. Större batchar (CSV-import)
 // kan kalla `enqueueMetadataChange` med `force: true` för att alltid köra
-// efterbehandling. OBS: bulk-import går via batch-writers (writeObjectImportMetadataBatch
-// m.fl.) som INTE enqueue:ar hit — därför träffar uppgifts-omräkningen nedan bara
-// enskilda redigeringar (createMetadata/updateMetadata), aldrig massimport.
+// efterbehandling. Bulk-import täcks också: batch-writern
+// (writeObjectImportMetadataBatch i metadata-queries.ts) enqueue:ar hit per
+// berört objekt, så både enskilda redigeringar OCH massimport träffar
+// efterbehandlingen ovan.
 import { db } from "../db";
 import { workOrders, assignments } from "@shared/schema";
 import { and, eq, inArray, isNull, notInArray } from "drizzle-orm";
@@ -109,8 +114,26 @@ async function runMetadataChangeJob(tenantId: string, objectIds: string[]): Prom
     console.error(`[metadata-change-jobs] geo-field sync failed:`, err);
   }
 
+  // 5. Uppgiftspaketet (Task #1215): full uppdatering av arbetskopian + tekniska
+  //    spegelkolumner för alla ÖPPNA/FRAMTIDA uppgifter kopplade till de ändrade
+  //    objekten (inkl. subträd — barn ärver metadata). Körs EFTER geo-synken (steg 4)
+  //    så att objektets ruttbara kolumn-cache är färsk när paketet byggs. Frysta
+  //    uppgifter (deriveUppgiftStatus + isUppgiftFrozen) röres aldrig.
+  let paketWo = 0;
+  let paketAssignments = 0;
+  if (DYNAMIC_TASK_PROPAGATION_ENABLED) {
+    try {
+      const { propagateUppgiftspaket } = await import("./uppgiftspaket");
+      const r = await propagateUppgiftspaket(tenantId, objectIds);
+      paketWo = r.workOrdersUpdated;
+      paketAssignments = r.assignmentsUpdated;
+    } catch (err) {
+      console.error(`[metadata-change-jobs] uppgiftspaket propagation failed:`, err);
+    }
+  }
+
   const ms = Date.now() - start;
-  console.log(`[metadata-change-jobs] tenant=${tenantId} objects=${objectIds.length} recalc=${recalcCount} clusterDelta=${clusterAssigned} taskQty=${taskQtyUpdated} geoSynced=${geoSynced} ms=${ms}`);
+  console.log(`[metadata-change-jobs] tenant=${tenantId} objects=${objectIds.length} recalc=${recalcCount} clusterDelta=${clusterAssigned} taskQty=${taskQtyUpdated} geoSynced=${geoSynced} paketWo=${paketWo} paketAssignments=${paketAssignments} ms=${ms}`);
 }
 
 // Räknar om antal + cachade totaler för icke-finaliserade assignments vars artikel

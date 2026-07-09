@@ -3,6 +3,7 @@ import { pgTable, text, varchar, integer, serial, timestamp, date, jsonb, boolea
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 import type { FrozenTimeRulePackage } from "./delivery-restrictions";
+import type { Uppgiftspaket } from "./uppgift-contract";
 
 export const tenants = pgTable("tenants", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -486,6 +487,12 @@ export const workOrders = pgTable("work_orders", {
   frozenAt: timestamp("frozen_at"),
   // Snapshot av relevanta metadata-värden vid expansion (för audit/omräkning).
   metadataSnapshot: jsonb("metadata_snapshot"),
+  // === Task #1215 (Etapp 3): Uppgiftspaketet — operativ arbetskopia ===
+  // Fylls vid skapande (server/services/uppgiftspaket.ts) och uppdateras av
+  // metadata-propageringen för öppna/framtida uppgifter. Frysta uppgifter
+  // (isUppgiftFrozen via deriveUppgiftStatus) röres aldrig. Nullable
+  // (expand-contract): legacy-rader utan paket beter sig som idag.
+  uppgiftspaket: jsonb("uppgiftspaket").$type<Uppgiftspaket>(),
   // === ADR v3 §2.3 (Task #556): Frozen fakturamottagare ===
   // Vinnande mottagare bestäms vid expansion och fryses här. Fortnox-export
   // läser dessa fält och faller tillbaka till object_payers/objects.customer_id
@@ -3583,6 +3590,10 @@ export const assignments = pgTable("assignments", {
   // konceptet (vilka villkor som matchade), snapshotad vid expansion. Nullable
   // (expand-contract): historiska/manuella uppgifter saknar värdet och visar "—".
   matchReason: text("match_reason"),
+  // === Task #1215 (Etapp 3): Uppgiftspaketet — operativ arbetskopia ===
+  // Se work_orders.uppgiftspaket. 1 logisk uppgift spänner över assignments +
+  // work_orders (uppgiftskontrakt v1) — paketet finns därför på BÅDA lagren.
+  uppgiftspaket: jsonb("uppgiftspaket").$type<Uppgiftspaket>(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   deletedAt: timestamp("deleted_at"),
 }, (table) => [

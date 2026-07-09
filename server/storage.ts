@@ -231,6 +231,8 @@ import {
   type HookObjectContext,
 } from "./association-service";
 import { getObjectWithAllMetadata } from "./metadata-queries";
+import { buildUppgiftspaket } from "./services/uppgiftspaket";
+import type { InsertAssignment as InsertAssignmentType } from "@shared/schema";
 import { haversineDistanceKm } from "./distance-matrix-service";
 import type { AssociationCondition } from "@shared/schema";
 
@@ -4527,6 +4529,46 @@ export class DatabaseStorage implements IStorage {
     return result?.count || 0;
   }
 
+  // Task #1215 (Etapp 3): fyll uppgiftspaketet (arbetskopian) best-effort vid
+  // skapande — får ALDRIG blockera inserten. Delas av alla skapande-paths som
+  // går via storage; direkta db.insert-callers anropar buildUppgiftspaket själva.
+  private async fillWorkOrderUppgiftspaket(values: InsertWorkOrder): Promise<void> {
+    if (values.uppgiftspaket || !values.tenantId) return;
+    try {
+      values.uppgiftspaket = await buildUppgiftspaket({
+        tenantId: values.tenantId,
+        objectId: values.objectId ?? null,
+        tidsfonsterStart: values.plannedWindowStart ?? values.desiredDeliveryStart ?? null,
+        tidsfonsterSlut: values.plannedWindowEnd ?? values.desiredDeliveryEnd ?? null,
+        antal: values.frozenQuantity ?? null,
+        utforandekod: values.executionCode ?? null,
+        tidskod: values.frozenTimeCode ?? null,
+        kundId: values.customerId ?? null,
+        frystFakturamottagareId: values.frozenInvoiceRecipientId ?? null,
+      });
+    } catch (err) {
+      console.error("[uppgiftspaket] fyllnad vid createWorkOrder misslyckades:", err);
+    }
+  }
+
+  private async fillAssignmentUppgiftspaket(values: InsertAssignmentType): Promise<void> {
+    if (values.uppgiftspaket || !values.tenantId) return;
+    try {
+      values.uppgiftspaket = await buildUppgiftspaket({
+        tenantId: values.tenantId,
+        objectId: values.objectId ?? null,
+        tidsfonsterStart: values.plannedWindowStart ?? null,
+        tidsfonsterSlut: values.plannedWindowEnd ?? null,
+        antal: values.quantity ?? null,
+        utforandekod: values.executionCode ?? null,
+        tidskod: values.frozenTimeCode ?? null,
+        kundId: values.customerId ?? null,
+      });
+    } catch (err) {
+      console.error("[uppgiftspaket] fyllnad vid createAssignment misslyckades:", err);
+    }
+  }
+
   async createWorkOrder(insertWorkOrder: InsertWorkOrder): Promise<WorkOrder> {
     const values = { ...insertWorkOrder };
     if (values.objectId && (values.taskLatitude == null || values.taskLongitude == null)) {
@@ -4554,6 +4596,7 @@ export class DatabaseStorage implements IStorage {
       );
       values.teamId = inferred;
     }
+    await this.fillWorkOrderUppgiftspaket(values);
     const [workOrder] = await db.insert(workOrders).values(values).returning();
     if (workOrder?.tenantId) invalidateWorkflowCaches(workOrder.tenantId);
     return workOrder;
@@ -4586,6 +4629,8 @@ export class DatabaseStorage implements IStorage {
         values.clusterId ?? null,
       );
     }
+    // Uppgiftspaket-fyllnad är en read-baserad härledning → före transaktionen.
+    await this.fillWorkOrderUppgiftspaket(values);
 
     const result = await db.transaction(async (tx) => {
       // Snabborder: mynta löpande "SO-<n>" per tenant under transaktionsbundet
@@ -8276,7 +8321,9 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createAssignment(assignment: InsertAssignment): Promise<Assignment> {
-    const [result] = await db.insert(assignments).values(assignment).returning();
+    const values = { ...assignment };
+    await this.fillAssignmentUppgiftspaket(values);
+    const [result] = await db.insert(assignments).values(values).returning();
     if (result?.tenantId) invalidateWorkflowCaches(result.tenantId);
     return result;
   }
