@@ -1,0 +1,304 @@
+Jag har strukturerat beskrivningen till en teknisk funktionsspecifikation med tydliga avsnitt.
+
+Objekt och kopplad information
+
+Syfte
+
+Objektet är den centrala informationsbäraren i systemet. All information som beskriver ett fysiskt eller logiskt objekt lagras eller ärvs via objektstrukturen. Objektet utgör också navet för historik, metadata och kopplade uppgifter.
+
+⸻
+
+1. Objektets huvudinformation
+
+Varje objekt innehåller följande grunduppgifter:
+
+Systemgenererat objektnummer (unik identitet)
+Objektnamn
+Objektstatus
+Aktiv
+Arkiverad
+
+Radering av objekt
+
+Objekt bör normalt inte kunna raderas eftersom de kan vara kopplade till historik, uppgifter, fakturering och annan dokumentation.
+
+Rekommenderad princip:
+
+Aktiva objekt kan arkiveras.
+Arkiverade objekt kan återaktiveras.
+Permanent radering skall endast vara möjlig för systemadministratör och endast om objektet saknar kopplingar till historik eller andra systemobjekt.
+
+⸻
+
+2. Listpresentation
+
+Vid visning av objekt i listor (på skärm eller export till fil) visas alltid:
+
+Objektnummer
+Objektnamn
+Status
+
+Därefter visas tre valbara metadatafält som administratören själv bestämmer.
+
+Exempel:
+
+Kontaktperson
+Telefonnummer
+Skostorlek
+
+Vilka metadatafält som visas skall vara konfigurerbara.
+
+⸻
+
+3. Bildmetadata
+
+Användaren skall kunna välja ett metadatafält av typen Bild.
+
+Vid markering eller klick visas den senast lagrade bilden för objektet.
+
+Exempel:
+
+Objektfoto
+Efterbild
+Ritning
+Skylt
+Översiktsbild
+
+⸻
+
+4. Objektstruktur
+
+Varje objekt skall kunna ingå i en trädstruktur.
+
+Objektet skall därför innehålla:
+
+Förälder
+Barn
+
+Användaren skall enkelt kunna:
+
+koppla nytt barn
+koppla ny förälder
+flytta objekt
+skapa nya objekt i aktuell gren
+
+⸻
+
+5. Metadata
+
+Metadata redovisas efter objektets grundinformation.
+
+Varje metadata skall tydligt visa om informationen är:
+
+egen metadata
+ärvd metadata från överordnat objekt
+
+Det skall alltid framgå var informationen kommer ifrån.
+
+⸻
+
+6. Geografisk metadata
+
+Metadataområdet Geografi innehåller vissa fasta systemfält.
+
+Exempel:
+
+Gatuadress
+Postnummer
+Ort
+Longitud
+Latitud
+
+Utöver dessa skall användaren kunna skapa egna geografiska metadatafält genom Metadataadministrationen.
+
+Systemet skall därför stödja:
+
+fasta systemfält
+fria kundunika metadatafält
+
+med exakt samma logik som övriga metadataområden.
+
+⸻
+
+7. Metadataadministration
+
+Metadataadministrationen skall stödja:
+
+fria metadatafält
+kundunika metadatafält
+valfri gruppering
+olika datatyper
+arv mellan objekt
+valbara listfält
+
+Samma princip skall gälla för samtliga metadataområden.
+
+⸻
+
+8. Karusellvisning av metadata
+
+Metadata visas som informationskort i en karusell.
+
+Motivet är att ett metadatafält kan innehålla:
+
+flera aktiva poster
+historiska poster
+
+Karusellen visar alltid den senaste eller mest aktuella posten först.
+
+Användaren kan därefter bläddra mellan:
+
+flera kontaktpersoner
+flera bilder
+historiska antal
+tidigare värden
+övriga metadata
+
+Exempel:
+
+Kontakt
+
+Namn
+Titel
+Telefon
+E-post
+Skostorlek
+
+Finns endast en post visas ett enda kort.
+
+⸻
+
+9. Historiska metadata
+
+Karusellen används även för historiska metadata.
+
+Exempel:
+
+Antal
+
+10 kärl
+12 kärl
+15 kärl
+14 kärl
+
+Användaren kan enkelt följa förändringen över tid.
+
+Detta gäller alla metadatafält där historik lagras.
+
+⸻
+
+10. Informationsflagga
+
+Varje informationskort i karusellen skall innehålla en informationsflagga.
+
+Flaggan skall visa:
+
+Aktiv eller Arkiverad
+Skapad datum
+Skapad tid
+Skapad av systemfunktion
+Skapad av användare
+Källsystem
+Kopplad uppgift
+Orderkoncept
+Kund
+Referenser
+Leveransinformation
+Övriga bakgrundsuppgifter
+
+Informationsflaggan fungerar som metadata för metadata.
+
+⸻
+
+11. Informationspaket
+
+All metadata skall kunna spåras tillbaka till det informationspaket som skapade informationen.
+
+Informationspaketet består av den kompletta mängden information (cirka 94 informationsposter) som hör till den aktuella uppgiften.
+
+Exempel på källor:
+
+Order
+Orderkoncept
+Objekt
+Kund
+Utförd uppgift
+Import
+Integration
+Manuell registrering
+
+På detta sätt blir varje metadata fullt spårbar.
+
+⸻
+
+12. Kopplade uppgifter
+
+Objektets sista informationsområde är Kopplade uppgifter.
+
+Detta använder exakt samma funktion som Uppgiftsnavet.
+
+Skillnaden är att filtret automatiskt begränsas till det aktuella objektet.
+
+Samma filterfunktioner skall finnas som i Uppgiftsnavet.
+
+Exempel:
+
+Status
+Datum
+Utförare
+Kund
+Artikel
+Uppgiftstyp
+Prioritet
+Tidsperiod
+
+⸻
+
+13. Summering av objektgrenar
+
+Vid visning av ett objekt skall samtliga uppgifter i objektets gren visas.
+
+Exempel:
+
+BRF Hönshuset
+
+Barn:
+
+Miljörum A
+Miljörum B
+Garage
+Tvättstuga
+
+Om en uppgift finns registrerad på “Miljörum A” skall den även visas när användaren öppnar objektet BRF Hönshuset.
+
+Detta innebär att objektets uppgiftslista alltid omfattar:
+
+objektets egna uppgifter
+samtliga uppgifter på alla underliggande barnobjekt
+
+Detta ger en komplett överblick över hela objektstrukturen från valfri nivå.
+
+⸻
+
+Grundprincip
+
+Objektet är systemets informationsnav.
+
+Objektet innehåller inte bara sina egna data utan fungerar även som sammanhållande punkt för:
+
+metadata
+historik
+bilder
+kontakter
+geografisk information
+relationer
+uppgifter
+order
+orderkoncept
+kunder
+källinformation
+spårbarhet
+
+All information skall kunna följas bakåt till sin källa och framåt till de uppgifter och processer som använder informationen.
+
+Jag skulle dessutom rekommendera att ni formellt inför begreppet “Informationspaket” i Traivo. Det är ett starkt koncept som beskriver att varje uppgift genererar ett komplett paket med metadata, historik, bilder, referenser och spårbarhet, vilket sedan kan återanvändas på objekt-, order-, kund- och uppgiftsnivå. Det blir ett tydligt arkitekturbegrepp för hela systemet.

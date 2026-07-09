@@ -1,0 +1,38 @@
+{
+  "sessionId": "c429566e3",
+  "exportedAt": "2026-07-09T07:54:15.131Z",
+  "summary": "### Key Topics Discussed\n- Status of objects\n- Deletion and archiving of objects\n- Handling of 'pending' status for objects\n\n### Decisions Made\n- Objects should generally not be deleted due to links to historical data (tasks, invoices, documentation).\n- Soft deletion will be implemented, setting the object status to \"archived\" instead of actual deletion.\n- An archived object cannot be worked on, tasks cannot be linked to it, and its information cannot be updated.\n\n### Action Items\n- Implement a soft deletion mechanism for objects, changing their status to \"archived\" rather than complete removal.\n- Replit needs to justify the necessity of a 'pending' status for objects.\n\n### Important Points & Insights\n- Deleting objects can break historical data connections.\n- Archiving maintains data integrity while removing objects from active use, allowing historical data to still be viewed.\n- An active object can be worked on and tasks can be linked to it.\n- Archived objects should still be retrievable and reactivatable.\n\n### Open Questions/Pending Items\n- Replit needs to motivate why a 'pending' status for objects is necessary, as currently only 'active' and 'archived' statuses are recognized.",
+  "conversation": [],
+  "transcripts": [
+    {
+      "text": "Okej, du...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Svara på frågan. Ja, angående då status på objekt då och radering och arkivering av objekt. Objekt bör normalt inte kunna raderas eftersom det kan vara kopplat till historik, det vill säga framför allt uppgifter och i förlängningen fakturor och annan dokumentation. Vilket innebär ju då att det blir då en mjuk radering så att de intar då statusen arkiverad. Och då ska de inte vara",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "synliga och anbämbbara, men man ska kunna hitta dem arkiverade och kunna, eh, återaktivera dem då. Eh, Replit har föreslagit också väntande, men Replit får i såna fall motivera varför den statusen behövs. För att så som jag ser det så finns det bara två lägen. Antingen är ett objekt aktivt och det innebär att det går att jobba med den och koppla på uppgifter. Eller så är den arkiverad och då-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. Går inte att jobba med den och det går inte att koppla uppgifter och det går inte att uppdatera information på det. Men däremot gammal information finns på den som man kan gå in och titta att ja, det här var ett återvinningsrum, eh, som nu inte finns längre och det återvinningsrummet har vi tvättat tjugo gånger historiskt ända tills den dagen det revs- Mm. Och ersattes av ett nytt.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Klart.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    }
+  ]
+}

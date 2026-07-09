@@ -10,6 +10,7 @@ import {
   ensureTeamInTenant,
   ensureCustomerInTenant,
   ensureObjectInTenant,
+  ensureObjectNotArchived,
   ensureClusterInTenant,
   ensureResourceIdsInTenant,
 } from "./helpers";
@@ -1110,7 +1111,7 @@ app.post("/api/work-orders", asyncHandler(async (req, res) => {
   if (data.resourceId) await ensureResourceInTenant(data.resourceId, tenantId);
   if (data.teamId) await ensureTeamInTenant(data.teamId, tenantId);
   if (data.customerId) await ensureCustomerInTenant(data.customerId, tenantId);
-  if (data.objectId) await ensureObjectInTenant(data.objectId, tenantId);
+  if (data.objectId) ensureObjectNotArchived(await ensureObjectInTenant(data.objectId, tenantId));
   if (data.clusterId) await ensureClusterInTenant(data.clusterId, tenantId);
 
   if (data.articleId && data.objectId) {
@@ -1300,7 +1301,7 @@ app.post("/api/work-orders/with-lines", requirePlanner, asyncHandler(async (req,
   if (data.resourceId) await ensureResourceInTenant(data.resourceId, tenantId);
   if (data.teamId) await ensureTeamInTenant(data.teamId, tenantId);
   if (data.customerId) await ensureCustomerInTenant(data.customerId, tenantId);
-  if (data.objectId) await ensureObjectInTenant(data.objectId, tenantId);
+  if (data.objectId) ensureObjectNotArchived(await ensureObjectInTenant(data.objectId, tenantId));
   if (data.clusterId) await ensureClusterInTenant(data.clusterId, tenantId);
 
   const prefFlags = await computeOutsidePreferredWindow(
@@ -2450,7 +2451,7 @@ app.post("/api/work-orders/:workOrderId/objects", asyncHandler(async (req, res) 
     throw new ValidationError("objectId is required");
   }
 
-  await ensureObjectInTenant(objectId, tenantId);
+  ensureObjectNotArchived(await ensureObjectInTenant(objectId, tenantId));
 
   const existingObjects = await storage.getWorkOrderObjects(req.params.workOrderId);
   const isDuplicate = existingObjects.some(o => o.objectId === objectId);

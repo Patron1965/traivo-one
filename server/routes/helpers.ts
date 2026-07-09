@@ -3,7 +3,7 @@ import { randomBytes } from "crypto";
 import { z } from "zod";
 import { getTenantIdWithFallback } from "../tenant-middleware";
 import { storage } from "../storage";
-import { NotFoundError, UnauthorizedError } from "../errors";
+import { NotFoundError, UnauthorizedError, ValidationError } from "../errors";
 import type { Resource, Team, Customer, ServiceObject, Cluster } from "@shared/schema";
 
 declare global {
@@ -81,6 +81,18 @@ export function ensureCustomerInTenant(id: string | null | undefined, tenantId: 
 
 export function ensureObjectInTenant(id: string | null | undefined, tenantId: string): Promise<ServiceObject> {
   return ensureTenantOwnership((oid: string) => storage.getObject(oid), id, tenantId, "Objekt");
+}
+
+/**
+ * Arkiverade objekt (deletedAt satt) kan inte kopplas till NYA uppgifter.
+ * Historiska uppgifter som redan är kopplade påverkas inte. Kalla efter
+ * ensureObjectInTenant() på alla vägar som skapar/lägger till en ny koppling.
+ */
+export function ensureObjectNotArchived(object: ServiceObject): ServiceObject {
+  if ((object as any).deletedAt) {
+    throw new ValidationError("Objektet är arkiverat och kan inte kopplas till nya uppgifter.");
+  }
+  return object;
 }
 
 export function ensureClusterInTenant(id: string | null | undefined, tenantId: string): Promise<Cluster> {

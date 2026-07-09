@@ -1102,6 +1102,9 @@ app.patch("/api/objects/:id", asyncHandler(async (req, res) => {
   if (!verifyTenantOwnership(existing, tenantId)) {
     throw new NotFoundError("Objekt");
   }
+  if ((existing as any).deletedAt) {
+    throw new ValidationError("Objektet är arkiverat och kan inte redigeras. Återställ objektet först.");
+  }
   const updateSchema = insertObjectSchema.partial().omit({ tenantId: true });
   const parseResult = updateSchema.safeParse(req.body);
   if (!parseResult.success) {

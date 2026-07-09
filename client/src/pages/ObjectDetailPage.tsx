@@ -42,11 +42,13 @@ import { DomainCarouselCard } from "@/components/objects/DomainCarouselCard";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import "leaflet/dist/leaflet.css";
 import type { ServiceObject, WorkOrder, ImportTemplate } from "@shared/schema";
-import { objectStatusBadge as statusColors, workOrderStatusBadge as workOrderStatusColors, getObjectStatusBadge } from "@/lib/status-colors";
+import { objectStatusBadge as statusColors, workOrderStatusBadge as workOrderStatusColors } from "@/lib/status-colors";
 import type { LucideIcon } from "lucide-react";
 
-// Task #1158: objektets driftstatus (ej arkivering) — samma trippel som
-// redigeringsdialogen skriver (SelectItem active/inactive/pending).
+// Objektets enda två livscykel-lägen är Aktiv/Arkiverad (arkivering hanteras
+// via deletedAt + ObjectArchiveControl). Denna karta behålls enbart för att
+// visa historiska statusändringar från audit-loggen (gammalt active/inactive/
+// pending-fält), inte för att sätta ny status.
 const OBJECT_STATUS_LABELS: Record<string, string> = {
   active: "Aktiv",
   inactive: "Inaktiv",
@@ -369,8 +371,6 @@ export default function ObjectDetailPage() {
   const { user } = useAuth();
   const isAdmin = user?.role === "admin" || user?.role === "owner";
   const canUseTemplates = isAdmin || user?.role === "planner";
-  // Task #1158: planerare (samt admin/owner) får byta objektstatus direkt i huvudet.
-  const canEditObjectStatus = isAdmin || user?.role === "planner";
 
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [editSection, setEditSection] = useState<"overview" | "access" | "equipment">("overview");
@@ -1289,29 +1289,9 @@ export default function ObjectDetailPage() {
                   </TooltipContent>
                 </Tooltip>
               );
-            })() : canEditObjectStatus ? (
-              <Select
-                value={(obj.status as string) || "active"}
-                onValueChange={(v) => updateObjectMutation.mutate({ status: v } as Partial<ServiceObject>)}
-                disabled={updateObjectMutation.isPending}
-              >
-                <SelectTrigger
-                  className={`h-7 w-auto gap-1.5 border-0 px-2 py-0 text-xs font-medium ${getObjectStatusBadge(obj.status)}`}
-                  data-testid="select-object-status"
-                >
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {Object.entries(OBJECT_STATUS_LABELS).map(([val, label]) => (
-                    <SelectItem key={val} value={val} data-testid={`option-status-${val}`}>
-                      {label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            ) : (
-              <Badge className={getObjectStatusBadge(obj.status)} data-testid="badge-status">
-                {OBJECT_STATUS_LABELS[(obj.status as string) || "active"] ?? obj.status}
+            })() : (
+              <Badge className={statusColors.active} data-testid="badge-status">
+                Aktiv
               </Badge>
             )}
             {statusHistory?.latest && !(obj as any).deletedAt && (
@@ -1815,19 +1795,6 @@ export default function ObjectDetailPage() {
                   </Select>
                 </div>
                 <div className="space-y-2">
-                  <Label>Status</Label>
-                  <Select value={editForm.status} onValueChange={(v) => setEditForm({ ...editForm, status: v })}>
-                    <SelectTrigger data-testid="select-edit-status">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="active">Aktiv</SelectItem>
-                      <SelectItem value="inactive">Inaktiv</SelectItem>
-                      <SelectItem value="pending">Väntande</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
                   <Label>Anteckningar</Label>
                   <Textarea
                     value={editForm.notes}
@@ -1952,7 +1919,6 @@ export default function ObjectDetailPage() {
                   payload.name = editForm.name;
                   payload.objectNumber = editForm.objectNumber;
                   payload.objectType = editForm.objectType;
-                  payload.status = editForm.status;
                   payload.notes = editForm.notes;
                 }
                 if (editSection === "access") {
