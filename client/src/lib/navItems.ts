@@ -113,8 +113,8 @@ export function getOrdrarItems(t: (key: string, fallback: string) => string, tl?
 
 export function getPlaneringItems(tl?: (key: string) => string): NavItem[] {
   return [
-    { title: "Grovplanering", url: "/grovplanering", icon: CalendarDays, description: "Master: alla uppgifter från skapad till fakturerad — sök, sortera och filtrera via filterbibliotek" },
-    { title: "Veckoplanering", url: "/veckoplan", icon: CalendarDays, description: "Fin: 168h-veckoschema per team med kalender, ruttoptimerad tur och summering" },
+    { title: "Uppgiftsnav", url: "/grovplanering", icon: CalendarDays, description: "Master: alla uppgifter från skapad till fakturerad — sök, sortera och filtrera via filterbibliotek" },
+    { title: "Veckoplan", url: "/veckoplan", icon: CalendarDays, description: "Fin: 168h-veckoschema per team med kalender, ruttoptimerad tur och summering" },
   ];
 }
 

@@ -585,7 +585,7 @@ export default function GrovplaneringPage() {
     <div className="space-y-4 p-4 md:p-6">
       <PageHeader
         icon={CalendarRange}
-        title="Grovplanering"
+        title="Uppgiftsnav"
         description="Filtrera, gruppera och tilldela uppgifter till team och veckor."
       />
 

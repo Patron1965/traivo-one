@@ -3,7 +3,7 @@ import { CalendarDays, ArrowRight } from "lucide-react";
 
 const primaryTools = [
   {
-    title: "Grovplanering",
+    title: "Uppgiftsnav",
     description:
       "Master: alla uppgifter från skapad till fakturerad. Sök, sortera och filtrera via filterbibliotek och tilldela till team.",
     icon: CalendarDays,
@@ -11,7 +11,7 @@ const primaryTools = [
     testId: "hub-card-grovplanering",
   },
   {
-    title: "Veckoplanering",
+    title: "Veckoplan",
     description:
       "Fin: 168-timmars veckoschema per team med ej planerade jobb, kalender, ruttoptimerad tur och summering.",
     icon: CalendarDays,

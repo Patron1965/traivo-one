@@ -385,7 +385,7 @@ export default function Step7ReviewSave({
       queryClient.invalidateQueries({ queryKey: ["/api/assignments"] });
       setReceipt(data ?? {});
       const n = data?.created ?? data?.assignmentsCreated;
-      let description = n != null ? `${n} uppdrag skickade till grovplaneringen.` : "Konceptet kördes.";
+      let description = n != null ? `${n} uppdrag skickade till uppgiftsnavet.` : "Konceptet kördes.";
       if (data?.objectsMissed != null && data.objectsMissed > 0) {
         description += ` ${data.objectsMissed} objekt utan träff hoppades över.`;
       }
@@ -463,7 +463,7 @@ export default function Step7ReviewSave({
             <p className="text-sm" data-testid="receipt-headline">
               {receipt.subscription
                 ? "Abonnemanget aktiverades."
-                : `${(receipt.created ?? receipt.assignmentsCreated ?? 0).toLocaleString("sv-SE")} uppdrag genererades och skickades till grovplaneringen.`}
+                : `${(receipt.created ?? receipt.assignmentsCreated ?? 0).toLocaleString("sv-SE")} uppdrag genererades och skickades till uppgiftsnavet.`}
             </p>
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
               {(receipt.assignmentsCreated ?? receipt.created) != null && (
@@ -488,7 +488,7 @@ export default function Step7ReviewSave({
             {receipt.message && <p className="text-xs text-muted-foreground" data-testid="receipt-message">{receipt.message}</p>}
             <div className="flex flex-wrap gap-2 pt-1">
               <Button onClick={() => navigate("/grovplanering")} data-testid="button-go-rough-planning">
-                Gå till grovplanering
+                Gå till uppgiftsnavet
               </Button>
               <Button variant="outline" onClick={() => navigate("/order-concepts")} data-testid="button-go-concepts">
                 Till orderkoncept

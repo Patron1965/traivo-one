@@ -429,7 +429,7 @@ export default function DistrictsAdminPage() {
       <PageHeader
         icon={Globe}
         title="Distrikt"
-        description="Hantera geografiska distrikt och zoner (postnummer/polygon) för grovplanering"
+        description="Hantera geografiska distrikt och zoner (postnummer/polygon) för uppgiftsnavet"
         testId="text-districts-title"
       >
         <Button onClick={openCreateDistrict} data-testid="button-create-district">
@@ -633,7 +633,7 @@ export default function DistrictsAdminPage() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>{editingDistrict ? "Redigera distrikt" : "Nytt distrikt"}</DialogTitle>
-            <DialogDescription>Geografiskt distrikt för gruppering och grovplanering.</DialogDescription>
+            <DialogDescription>Geografiskt distrikt för gruppering och uppgiftsnavet.</DialogDescription>
           </DialogHeader>
           <Form {...districtForm}>
             <form
