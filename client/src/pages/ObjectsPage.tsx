@@ -29,7 +29,8 @@ import {
   Map as MapIcon, List, Copy, Upload, Clock, Key, Keyboard, Users, DoorOpen,
   Check, X, FileSpreadsheet, Download, BarChart3, MoreHorizontal, AlertTriangle, AlertCircle, ChevronDown, ChevronUp, XCircle,
   Image, GitFork, Globe, ShieldAlert, ShieldCheck, ShieldX, Package, Info, Camera,
-  ArrowUp, ArrowDown, ArrowUpDown, Network, Pencil, FolderPlus, Archive, Columns3
+  ArrowUp, ArrowDown, ArrowUpDown, Network, Pencil, FolderPlus, Archive, Columns3,
+  Phone, Mail
 } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -48,7 +49,7 @@ import { ObjectDisplayNames } from "@/components/ObjectDisplayNames";
 import { ObjectInheritedMetadataPanel } from "@/components/ObjectInheritedMetadataPanel";
 import { ObjectSystemGeneratedPanel } from "@/components/ObjectSystemGeneratedPanel";
 import { useLocalizedObjectName } from "@/lib/object-name";
-import { OBJECT_LOCATION_TYPE_LABELS, effectiveObjectLocationType, objectLocationTypeBadgeClass } from "@/lib/object-location";
+import { OBJECT_LOCATION_TYPE_LABELS } from "@/lib/object-location";
 import { ObjectImagesDialog } from "@/components/ObjectImagesGallery";
 import { AddressSearch } from "@/components/AddressSearch";
 import { CustomerCombobox, CustomerMultiCombobox, useCustomerLookup } from "@/components/CustomerCombobox";
@@ -693,18 +694,42 @@ export default function ObjectsPage() {
     return metadataCatalog.filter((t) => selected.has(t.id));
   }, [metadataCatalog, selectedMetadataColumns]);
 
+  // Objektets kontaktuppgifter (Kontaktperson_Namn/Telefon/Epost) är standard-
+  // katalogfält som ärvs neråt (standardArvs=true). De visas alltid i objekt-
+  // huvudet — oberoende av det fria kolumnvalet — så att "vem kontaktar man
+  // för det här objektet" alltid syns utan manuell konfiguration.
+  const contactMetadataFields = useMemo(() => {
+    const wanted: Record<string, string> = {
+      Kontaktperson_Namn: "Kontakt",
+      Kontaktperson_Telefon: "Tel",
+      Kontaktperson_Epost: "E-post",
+    };
+    return Object.entries(wanted)
+      .map(([namn, label]) => {
+        const field = metadataCatalog.find((t) => t.namn === namn);
+        return field ? { ...field, displayLabel: label } : null;
+      })
+      .filter((f): f is MetadataCatalogType & { displayLabel: string } => f != null);
+  }, [metadataCatalog]);
+
   const metadataObjectIds = useMemo(() => filteredObjects.map((o) => o.id), [filteredObjects]);
 
+  const metadataBatchKatalogIds = useMemo(() => {
+    const ids = new Set(selectedMetadataColumns);
+    for (const f of contactMetadataFields) ids.add(f.id);
+    return Array.from(ids);
+  }, [selectedMetadataColumns, contactMetadataFields]);
+
   const { data: metadataValuesData } = useQuery<{ values: Record<string, Record<string, string>> }>({
-    queryKey: ["/api/metadata/objects/values-batch", selectedMetadataColumns, metadataObjectIds],
+    queryKey: ["/api/metadata/objects/values-batch", metadataBatchKatalogIds, metadataObjectIds],
     queryFn: async () => {
       const res = await apiRequest("POST", "/api/metadata/objects/values-batch", {
         objectIds: metadataObjectIds,
-        katalogIds: selectedMetadataColumns,
+        katalogIds: metadataBatchKatalogIds,
       });
       return res.json();
     },
-    enabled: selectedMetadataColumns.length > 0 && metadataObjectIds.length > 0,
+    enabled: metadataBatchKatalogIds.length > 0 && metadataObjectIds.length > 0,
     staleTime: 30000,
   });
   const metadataValues = metadataValuesData?.values ?? {};
@@ -1322,18 +1347,6 @@ export default function ObjectsPage() {
                   <TooltipContent>Adress</TooltipContent>
                 </Tooltip>
               )}
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Badge
-                    variant="outline"
-                    className={`gap-1 px-1.5 py-0 text-[10px] font-normal cursor-help ${objectLocationTypeBadgeClass(obj as any)}`}
-                    data-testid={`badge-location-type-${obj.id}`}
-                  >
-                    {OBJECT_LOCATION_TYPE_LABELS[effectiveObjectLocationType(obj as any)]}
-                  </Badge>
-                </TooltipTrigger>
-                <TooltipContent>Platstyp för ruttning/karta</TooltipContent>
-              </Tooltip>
               {(obj as any).entranceLatitude && (obj as any).entranceLongitude && (
                 <Tooltip>
                   <TooltipTrigger asChild>
@@ -1410,6 +1423,31 @@ export default function ObjectsPage() {
                 </span>
               )}
             </div>
+
+            {/* Kontaktuppgifter (Kontakt/Tel/E-post) — fasta, ärvda systemfält,
+                alltid synliga oberoende av det fria kolumnvalet. Visas bara om
+                minst ett av fälten har ett (eget eller ärvt) värde. */}
+            {contactMetadataFields.some(f => metadataValues[obj.id]?.[f.id]) && (
+              <div className="flex items-center gap-x-4 gap-y-1 mt-1.5 flex-wrap" data-testid={`contact-fields-${obj.id}`}>
+                {contactMetadataFields.map(field => {
+                  const value = metadataValues[obj.id]?.[field.id];
+                  if (!value) return null;
+                  const Icon = field.namn === "Kontaktperson_Telefon" ? Phone
+                    : field.namn === "Kontaktperson_Epost" ? Mail
+                    : Users;
+                  return (
+                    <span
+                      key={field.id}
+                      className="inline-flex items-center gap-1 text-xs"
+                      data-testid={`contact-field-${field.namn}-${obj.id}`}
+                    >
+                      <Icon className="h-3 w-3 text-muted-foreground" />
+                      <span className="font-medium text-foreground">{value}</span>
+                    </span>
+                  );
+                })}
+              </div>
+            )}
 
             {/* Task #859: valda metadatakolumner som etikett/värde-chips */}
             {selectedMetadataFields.length > 0 && !metadataColumnsCollapsed && (
