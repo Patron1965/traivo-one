@@ -22,7 +22,7 @@ export type ConceptLike = {
 };
 
 export type CustomerResolution =
-  | { status: "ok"; customerId: string; customerName: string; matchedBy: "number" | "name" | "hardcoded"; rawValue: string }
+  | { status: "ok"; customerId: string; customerName: string; matchedBy: "id" | "number" | "name" | "hardcoded"; rawValue: string }
   // FROM_METADATA: inget fält valt på konceptet
   | { status: "no_field" }
   // FROM_METADATA: fältet saknar värde på objektet
@@ -90,6 +90,12 @@ export async function resolveConceptCustomerForObject(
     }
     if (!raw) return { status: "missing_value" };
 
+    // 0) Exakt på kund-id (Task #1214: referensfält som "Kund" lagrar kundens id
+    //    i vardeReferens — matcha direkt mot tenantens kundregister).
+    const byId = lookup.byId.get(raw.trim());
+    if (byId) {
+      return { status: "ok", customerId: byId.id, customerName: byId.name, matchedBy: "id", rawValue: raw };
+    }
     // 1) Exakt på kundnummer.
     const byNum = lookup.byNumber.get(normNumber(raw));
     if (byNum) {

@@ -31,6 +31,8 @@ export const METADATA_AREA_OPTIONS: MetadataAreaOption[] = [
   { value: "beskrivning", label: "Beskrivningar" },
   { value: "bilagor", label: "Bilagor" },
   { value: "kärl", label: "Kärl" },
+  { value: "individ", label: "Individ" },
+  { value: "bild", label: "Bild" },
   { value: "importerad", label: "Importerad" },
   { value: "annat", label: "Övrigt" },
 ];

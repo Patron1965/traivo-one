@@ -26,6 +26,7 @@ import {
   getAllMetadataTypes,
   seedDefaultMetadataTypes,
   ensureSystemlastaFalt,
+  ensureSystemomradenFalt,
   getWorkOrderMetadata,
   createWorkOrderMetadata,
   deleteWorkOrderMetadata,
@@ -84,6 +85,13 @@ metadataRouter.get("/types", async (req: Request, res: Response) => {
     } catch (geoErr) {
       console.warn("[metadata] systemlåst geo-seed misslyckades (fortsätter):", geoErr);
     }
+    // Task #1214: systemdefinierade metadataområden (Ekonomi/Kontakt/Åtkomst/
+    // Tid/Individ/Kärl/Bild) — samma idempotenta adopt-or-create-väg.
+    try {
+      await ensureSystemomradenFalt(tenantId);
+    } catch (omrErr) {
+      console.warn("[metadata] systemområdes-seed misslyckades (fortsätter):", omrErr);
+    }
     // Task #663: returnera varje typ berikad med dess kundlås-kopplingar
     // (customerIds[]). Med ?customerId=... filtreras katalogen hierarki-medvetet
     // (generella fält + fält kopplade till kunden eller någon förälder) för
@@ -109,6 +117,7 @@ metadataRouter.post("/types/seed", async (req: Request, res: Response) => {
 
     await seedDefaultMetadataTypes(tenantId);
     await ensureSystemlastaFalt(tenantId);
+    await ensureSystemomradenFalt(tenantId);
     res.json({ message: "Standardmetadatatyper skapade" });
   } catch (error) {
     console.error("Error seeding metadata types:", error);

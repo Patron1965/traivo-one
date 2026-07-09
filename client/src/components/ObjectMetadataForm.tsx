@@ -7,6 +7,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SelectGroup, SelectLabel } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useToast } from "@/hooks/use-toast";
 import { useUpload } from "@/hooks/use-upload";
@@ -19,7 +21,7 @@ import {
   Link as LinkIcon, Plus, Loader2, Type, Hash, ToggleLeft, Pencil,
   Calendar, Braces, MapPin, FileIcon, Eye, Layers, Server, Tag, AlignLeft,
   SlidersHorizontal, Users, ClipboardList, AlertTriangle, LayoutGrid, ChevronRight,
-  Star, GitFork, Network, Package,
+  Star, GitFork, Network, Package, ChevronsUpDown, Check,
 } from "lucide-react";
 import { KallaBadge, KallaLegend, deriveEntryKalla } from "@/lib/metadata-kalla";
 
@@ -33,6 +35,8 @@ export interface MetadataFormKatalog {
   kronologiskVisning?: boolean;
   allowDuplicates?: boolean;
   allowedValues?: string[] | null;
+  // Task #1214: referensfält pekar på ett register (t.ex. 'customers').
+  referensTabell?: string | null;
 }
 
 export interface MetadataFormEntry {
@@ -45,6 +49,8 @@ export interface MetadataFormEntry {
   vardeBoolean?: boolean | null;
   vardeDatetime?: string | null;
   vardeJson?: unknown;
+  // Task #1214: referensfält lagrar registrets id (t.ex. kund-id) här.
+  vardeReferens?: string | null;
   metod?: string | null;
   lastChangedAt?: string | null;
   source?: "inherited" | "direct" | string;
@@ -84,6 +90,8 @@ export interface MetadataFormType {
   parentMetadataId?: string | null;
   arBeraknad?: boolean | null;
   allowDuplicates?: boolean | null;
+  // Task #1214: referensfält pekar på ett register (t.ex. 'customers').
+  referensTabell?: string | null;
 }
 
 // Skrivskyddade systemfält från objektet (riktiga kolumner — inga påhittade fält).
@@ -199,6 +207,7 @@ export function rawDisplayValue(entry: MetadataFormEntry): string | null {
   if (entry.vardeBoolean != null) return entry.vardeBoolean ? "Ja" : "Nej";
   if (entry.vardeDatetime) return new Date(entry.vardeDatetime).toLocaleDateString("sv-SE");
   if (entry.vardeJson != null) return JSON.stringify(entry.vardeJson);
+  if (entry.vardeReferens != null && entry.vardeReferens !== "") return entry.vardeReferens;
   return null;
 }
 
@@ -271,6 +280,22 @@ export function MetadataValue({
     );
   }
 
+  // Task #1214: kund-referensfält visar kundens NAMN (inte det råa kund-id:t).
+  // Övriga referensfält (utan register-koppling) faller igenom till textvisning.
+  if (
+    datatyp === "referens" &&
+    entry.katalog?.referensTabell === "customers" &&
+    entry.vardeReferens
+  ) {
+    return (
+      <CustomerRefValue
+        customerId={entry.vardeReferens}
+        entryId={entry.id}
+        strike={isSoftDeleted}
+      />
+    );
+  }
+
   return (
     <span
       className={`text-sm font-medium break-words ${isSoftDeleted ? "line-through text-muted-foreground" : ""}`}
@@ -278,6 +303,104 @@ export function MetadataValue({
     >
       {value ?? "—"}
     </span>
+  );
+}
+
+// Task #1214: lätt kund-shape för referensväljaren/visningen (GET /api/customers).
+interface CustomerLite {
+  id: string;
+  name: string;
+  customerNumber?: string | null;
+}
+
+/** Visar kundnamnet för ett kund-referensvärde (vardeReferens = kund-id). */
+function CustomerRefValue({
+  customerId,
+  entryId,
+  strike,
+}: {
+  customerId: string;
+  entryId: string;
+  strike?: boolean;
+}) {
+  const { data: customer, isLoading } = useQuery<CustomerLite>({
+    queryKey: ["/api/customers", customerId],
+  });
+  return (
+    <span
+      className={`text-sm font-medium break-words ${strike ? "line-through text-muted-foreground" : ""}`}
+      data-testid={`metadata-value-${entryId}`}
+    >
+      {isLoading ? "…" : customer?.name ?? customerId}
+    </span>
+  );
+}
+
+/** Sök-och-välj mot kundregistret (Referensväljare v1 — endast 'customers'). */
+function CustomerRefPicker({
+  value,
+  onChange,
+  disabled,
+}: {
+  value: string;
+  onChange: (customerId: string) => void;
+  disabled?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const { data: customers = [], isLoading } = useQuery<CustomerLite[]>({
+    queryKey: ["/api/customers"],
+  });
+  const selected = customers.find((c) => c.id === value);
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          type="button"
+          variant="outline"
+          role="combobox"
+          aria-expanded={open}
+          disabled={disabled}
+          className="w-full justify-between font-normal"
+          data-testid="button-customer-ref-picker"
+        >
+          <span className="truncate">
+            {selected
+              ? `${selected.name}${selected.customerNumber ? ` (${selected.customerNumber})` : ""}`
+              : "Sök och välj kund..."}
+          </span>
+          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+        <Command>
+          <CommandInput placeholder="Sök kund..." data-testid="input-customer-ref-search" />
+          <CommandList>
+            <CommandEmpty>{isLoading ? "Hämtar kunder..." : "Ingen kund hittades."}</CommandEmpty>
+            <CommandGroup>
+              {customers.map((c) => (
+                <CommandItem
+                  key={c.id}
+                  value={`${c.name} ${c.customerNumber ?? ""}`}
+                  onSelect={() => {
+                    onChange(c.id);
+                    setOpen(false);
+                  }}
+                  data-testid={`option-customer-ref-${c.id}`}
+                >
+                  <Check className={`mr-2 h-4 w-4 ${c.id === value ? "opacity-100" : "opacity-0"}`} />
+                  <span className="flex-1 truncate">{c.name}</span>
+                  {c.customerNumber && (
+                    <span className="ml-2 text-xs text-muted-foreground shrink-0">
+                      {c.customerNumber}
+                    </span>
+                  )}
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
   );
 }
 
@@ -1804,6 +1927,10 @@ export function MetadataAddButton({
                     </p>
                   )}
                 </div>
+              ) : datatyp === "referens" && selectedMetaType?.referensTabell === "customers" ? (
+                // Task #1214 Referensväljare v1: kundfält väljs via sök-och-välj
+                // mot kundregistret (värdet = kund-id, lagras i vardeReferens).
+                <CustomerRefPicker value={value} onChange={setValue} disabled={!selectedType} />
               ) : hasAllowedValues ? (
                 <Select value={value} onValueChange={setValue} disabled={!selectedType}>
                   <SelectTrigger data-testid="select-metadata-value">

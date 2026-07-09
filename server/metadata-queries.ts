@@ -4464,6 +4464,242 @@ export async function ensureSystemlastaFalt(tenantId: string): Promise<EnsureSys
 }
 
 // ============================================================================
+// Task #1214 (Etapp 2): SYSTEMOMRÅDEN — systemdefinierade metadataområden
+// ----------------------------------------------------------------------------
+// Generalisering av Geografi-systemlast-mönstret till fler områden: Ekonomi,
+// Kontakt, Åtkomst, Tid, Individ, Kärl och Bild. Samma semantik som
+// ensureSystemlastaFalt (adopt-or-create, skiftlägesokänslig namn-matchning
+// bland AKTIVA rader, systemlast=true låser STRUKTUR men aldrig VÄRDEN), plus:
+//   • referensTabell — referensfält (Kund→customers, Artikelkoppling→articles);
+//     sätts vid nyskapande och fylls på vid adoption om den saknas.
+//   • allowDuplicates — flervärdesfält (kontaktpersonens underfält, Bilder);
+//     flippas till true vid adoption (aldrig true→false).
+//   • parentKey — familje-barn (Kontaktperson-rubriken + Namn/Titel/Telefon/
+//     E-post); barnets parentMetadataId sätts till den kanoniska rubrik-raden.
+//     Pekar barnet redan på en ANNAN förälder → konflikt (hoppar över).
+//   • adoptIsSystem — Kundnummer/Fakturareferens finns som isSystem (värdelåsta,
+//     auto-ifyllda vid import) i standardkatalogen; de adopteras in i Ekonomi-
+//     området UTAN att isSystem röras (värdelåset behålls som det är).
+// Rör ALDRIG namn/datatyp/metadata_varden. Idempotent (andra körningen no-op).
+// ============================================================================
+
+export interface SystemomradeFaltDef {
+  key: string;            // lower(namn) — kanonisk identitet för matchning
+  namn: string;           // föredraget namn vid nyskapande (immutabel universell nyckel)
+  visningsnamn: string;
+  datatyp: string;
+  standardArvs: boolean;
+  sortOrder: number;
+  icon: string;
+  beskrivning: string;
+  area: string;           // metadataområde (grupperingsnyckel)
+  referensTabell?: string;   // endast för datatyp 'referens'
+  allowDuplicates?: boolean; // flervärdesfält
+  parentKey?: string;        // key till rubrik-förälder i samma lista (familje-barn)
+  adoptIsSystem?: boolean;   // tillåt adoption av isSystem-rad (isSystem behålls orörd)
+  arLogisk?: boolean;        // default true (bild-/filfält: false, som Vinjetbild)
+}
+
+export const SYSTEMOMRADEN_FALT: SystemomradeFaltDef[] = [
+  // --- Ekonomi ---
+  { key: 'kund', namn: 'Kund', visningsnamn: 'Kund', datatyp: 'referens', referensTabell: 'customers', standardArvs: true, sortOrder: 1, icon: 'Building2', beskrivning: 'Kund kopplad till objektet (referens till kundregistret).', area: 'ekonomi' },
+  { key: 'kundnummer', namn: 'Kundnummer', visningsnamn: 'Kundnummer', datatyp: 'string', standardArvs: true, sortOrder: 2, icon: 'Hash', beskrivning: 'Kundnummer för matchning mot kundregistret.', area: 'ekonomi', adoptIsSystem: true },
+  { key: 'betalare', namn: 'Betalare', visningsnamn: 'Betalare', datatyp: 'string', standardArvs: true, sortOrder: 3, icon: 'Wallet', beskrivning: 'Betalare (om annan än kunden).', area: 'ekonomi' },
+  { key: 'betalarnummer', namn: 'Betalarnummer', visningsnamn: 'Betalarnummer', datatyp: 'string', standardArvs: true, sortOrder: 4, icon: 'Hash', beskrivning: 'Betalarens kundnummer.', area: 'ekonomi' },
+  { key: 'fakturareferens', namn: 'Fakturareferens', visningsnamn: 'Fakturareferens', datatyp: 'string', standardArvs: true, sortOrder: 5, icon: 'FileText', beskrivning: 'Referens som anges på fakturan.', area: 'ekonomi', adoptIsSystem: true },
+  { key: 'kostnadsställe', namn: 'Kostnadsställe', visningsnamn: 'Kostnadsställe', datatyp: 'string', standardArvs: true, sortOrder: 6, icon: 'Landmark', beskrivning: 'Kostnadsställe för fakturering/bokföring.', area: 'ekonomi' },
+  { key: 'projekt', namn: 'Projekt', visningsnamn: 'Projekt', datatyp: 'string', standardArvs: true, sortOrder: 7, icon: 'FolderKanban', beskrivning: 'Projekt för fakturering/bokföring.', area: 'ekonomi' },
+  // --- Kontakt (flervärdes-familj: rubrik + underfält) ---
+  { key: 'kontaktperson', namn: 'Kontaktperson', visningsnamn: 'Kontaktperson', datatyp: 'rubrik', standardArvs: true, sortOrder: 1, icon: 'Users', beskrivning: 'Kontaktperson för objektet (grupperar Namn/Titel/Telefon/E-post).', area: 'kontakt' },
+  { key: 'namn', namn: 'Namn', visningsnamn: 'Namn', datatyp: 'string', standardArvs: true, sortOrder: 2, icon: 'Type', beskrivning: 'Kontaktpersonens namn.', area: 'kontakt', parentKey: 'kontaktperson', allowDuplicates: true },
+  { key: 'titel', namn: 'Titel', visningsnamn: 'Titel', datatyp: 'string', standardArvs: true, sortOrder: 3, icon: 'BadgeCheck', beskrivning: 'Kontaktpersonens titel/roll.', area: 'kontakt', parentKey: 'kontaktperson', allowDuplicates: true },
+  { key: 'telefon', namn: 'Telefon', visningsnamn: 'Telefon', datatyp: 'string', standardArvs: true, sortOrder: 4, icon: 'Phone', beskrivning: 'Kontaktpersonens telefonnummer.', area: 'kontakt', parentKey: 'kontaktperson', allowDuplicates: true },
+  { key: 'e-post', namn: 'E-post', visningsnamn: 'E-post', datatyp: 'string', standardArvs: true, sortOrder: 5, icon: 'Mail', beskrivning: 'Kontaktpersonens e-postadress.', area: 'kontakt', parentKey: 'kontaktperson', allowDuplicates: true },
+  // --- Åtkomst ---
+  { key: 'åtkomsttyp', namn: 'Åtkomsttyp', visningsnamn: 'Åtkomsttyp', datatyp: 'string', standardArvs: true, sortOrder: 1, icon: 'KeyRound', beskrivning: 'Typ av åtkomst (t.ex. nyckel, tagg, kod, port).', area: 'atkomst' },
+  { key: 'åtkomstkod', namn: 'Åtkomstkod', visningsnamn: 'Åtkomstkod', datatyp: 'string', standardArvs: true, sortOrder: 2, icon: 'Key', beskrivning: 'Kod för åtkomst till objektet/området.', area: 'atkomst' },
+  { key: 'nyckelnummer', namn: 'Nyckelnummer', visningsnamn: 'Nyckelnummer', datatyp: 'string', standardArvs: true, sortOrder: 3, icon: 'Hash', beskrivning: 'Nyckelnummer/nyckel-id.', area: 'atkomst' },
+  { key: 'åtkomstinfo', namn: 'Åtkomstinfo', visningsnamn: 'Åtkomstinfo', datatyp: 'string', standardArvs: true, sortOrder: 4, icon: 'Info', beskrivning: 'Fri åtkomstinformation (instruktioner, kontaktväg m.m.).', area: 'atkomst' },
+  // --- Tid ---
+  { key: 'tidsfönster', namn: 'Tidsfönster', visningsnamn: 'Tidsfönster', datatyp: 'json', standardArvs: true, sortOrder: 1, icon: 'Clock', beskrivning: 'Tillåtna tidsfönster för utförande (JSON).', area: 'tid' },
+  { key: 'tidsrestriktioner', namn: 'Tidsrestriktioner', visningsnamn: 'Tidsrestriktioner', datatyp: 'json', standardArvs: true, sortOrder: 2, icon: 'CalendarClock', beskrivning: 'Tidsrestriktioner/begränsningar för utförande (JSON).', area: 'tid' },
+  // --- Individ (individspecifikt — ärvs inte) ---
+  { key: 'serienummer', namn: 'Serienummer', visningsnamn: 'Serienummer', datatyp: 'string', standardArvs: false, sortOrder: 1, icon: 'Barcode', beskrivning: 'Individens serienummer.', area: 'individ' },
+  { key: 'tillverkare', namn: 'Tillverkare', visningsnamn: 'Tillverkare', datatyp: 'string', standardArvs: false, sortOrder: 2, icon: 'Factory', beskrivning: 'Tillverkare/fabrikat.', area: 'individ' },
+  { key: 'inköpsdatum', namn: 'Inköpsdatum', visningsnamn: 'Inköpsdatum', datatyp: 'datetime', standardArvs: false, sortOrder: 3, icon: 'Calendar', beskrivning: 'Datum då individen köptes in.', area: 'individ' },
+  { key: 'garanti', namn: 'Garanti', visningsnamn: 'Garanti', datatyp: 'datetime', standardArvs: false, sortOrder: 4, icon: 'ShieldCheck', beskrivning: 'Garanti giltig t.o.m.', area: 'individ' },
+  { key: 'besiktning', namn: 'Besiktning', visningsnamn: 'Besiktning', datatyp: 'datetime', standardArvs: false, sortOrder: 5, icon: 'ClipboardCheck', beskrivning: 'Senaste/nästa besiktningsdatum.', area: 'individ' },
+  { key: 'skick', namn: 'Skick', visningsnamn: 'Skick', datatyp: 'string', standardArvs: false, sortOrder: 6, icon: 'Activity', beskrivning: 'Individens skick/kondition.', area: 'individ' },
+  { key: 'artikelkoppling', namn: 'Artikelkoppling', visningsnamn: 'Artikelkoppling', datatyp: 'referens', referensTabell: 'articles', standardArvs: false, sortOrder: 7, icon: 'Package', beskrivning: 'Koppling till artikel i artikelregistret.', area: 'individ' },
+  // --- Kärl / Kapacitet ---
+  { key: 'antal kärl', namn: 'Antal kärl', visningsnamn: 'Antal kärl', datatyp: 'integer', standardArvs: false, sortOrder: 1, icon: 'Container', beskrivning: 'Antal kärl på platsen.', area: 'kärl' },
+  { key: 'serviceperioder', namn: 'Serviceperioder', visningsnamn: 'Serviceperioder', datatyp: 'string', standardArvs: true, sortOrder: 2, icon: 'CalendarRange', beskrivning: 'Serviceperioder (t.ex. vecka/månad/säsong).', area: 'kärl' },
+  { key: 'ställtid', namn: 'Ställtid', visningsnamn: 'Ställtid', datatyp: 'integer', standardArvs: true, sortOrder: 3, icon: 'Timer', beskrivning: 'Ställtid i minuter.', area: 'kärl' },
+  // --- Bild ---
+  { key: 'bilder', namn: 'Bilder', visningsnamn: 'Bilder', datatyp: 'image', standardArvs: false, sortOrder: 1, icon: 'Image', beskrivning: 'Bilder kopplade till objektet (flera tillåtna).', area: 'bild', allowDuplicates: true, arLogisk: false },
+  { key: 'vinjetbild', namn: 'Vinjetbild', visningsnamn: 'Vinjettbild', datatyp: 'image', standardArvs: false, sortOrder: 2, icon: 'ImagePlus', beskrivning: 'Utpekad vinjettbild för objektet.', area: 'bild', arLogisk: false },
+];
+
+export interface EnsureSystemomradenResult {
+  created: string[];
+  adopted: string[];
+  alreadyOk: string[];
+  conflicts: Array<{ namn: string; reason: string }>;
+}
+
+export async function ensureSystemomradenFalt(tenantId: string): Promise<EnsureSystemomradenResult> {
+  const result: EnsureSystemomradenResult = { created: [], adopted: [], alreadyOk: [], conflicts: [] };
+
+  const rows = await db
+    .select({
+      id: metadataKatalog.id,
+      namn: metadataKatalog.namn,
+      datatyp: metadataKatalog.datatyp,
+      area: metadataKatalog.area,
+      sortOrder: metadataKatalog.sortOrder,
+      standardArvs: metadataKatalog.standardArvs,
+      systemlast: metadataKatalog.systemlast,
+      isSystem: metadataKatalog.isSystem,
+      visningsnamn: metadataKatalog.visningsnamn,
+      referensTabell: metadataKatalog.referensTabell,
+      allowDuplicates: metadataKatalog.allowDuplicates,
+      parentMetadataId: metadataKatalog.parentMetadataId,
+      deletedAt: metadataKatalog.deletedAt,
+    })
+    .from(metadataKatalog)
+    .where(eq(metadataKatalog.tenantId, tenantId));
+
+  // Kanoniskt katalog-id per def-key (fylls på under körningen: rubrik-föräldrar
+  // ligger före sina barn i listan så barnens parentMetadataId kan resolvas).
+  const idByKey = new Map<string, string>();
+
+  for (const def of SYSTEMOMRADEN_FALT) {
+    const activeMatches = rows.filter(
+      (r) => r.deletedAt === null && r.namn.toLowerCase() === def.key,
+    );
+
+    // Resolva kanonisk förälder för familje-barn. Saknas föräldern (konflikt på
+    // rubrik-raden) hoppas barnet över så vi aldrig skapar föräldralösa barn.
+    let parentId: string | null = null;
+    if (def.parentKey) {
+      parentId = idByKey.get(def.parentKey) ?? null;
+      if (!parentId) {
+        result.conflicts.push({
+          namn: def.namn,
+          reason: `Familje-föräldern "${def.parentKey}" kunde inte etableras — hoppar över barnfältet.`,
+        });
+        continue;
+      }
+    }
+
+    if (activeMatches.length === 0) {
+      const [inserted] = await db
+        .insert(metadataKatalog)
+        .values({
+          tenantId,
+          namn: def.namn,
+          visningsnamn: def.visningsnamn,
+          datatyp: def.datatyp,
+          arLogisk: def.arLogisk ?? true,
+          standardArvs: def.standardArvs,
+          kategori: def.area,
+          area: def.area,
+          beskrivning: def.beskrivning,
+          sortOrder: def.sortOrder,
+          icon: def.icon,
+          isSystem: false,
+          systemlast: true,
+          referensTabell: def.referensTabell ?? null,
+          allowDuplicates: def.allowDuplicates ?? false,
+          parentMetadataId: parentId,
+        })
+        .returning({ id: metadataKatalog.id });
+      idByKey.set(def.key, inserted.id);
+      result.created.push(def.namn);
+      continue;
+    }
+
+    if (activeMatches.length > 1) {
+      result.conflicts.push({
+        namn: def.namn,
+        reason: `Flera aktiva fält matchar "${def.key}" (${activeMatches.length} st) — tvetydigt, hoppar över adoption.`,
+      });
+      continue;
+    }
+
+    const existing = activeMatches[0];
+
+    // isSystem-fält är värdelåsta — adopteras bara när def:en explicit tillåter
+    // det (Kundnummer/Fakturareferens behåller sitt värdelås orört).
+    if (existing.isSystem && !def.adoptIsSystem) {
+      result.conflicts.push({
+        namn: existing.namn,
+        reason: `Fältet är isSystem (värdelåst) — adopteras ej.`,
+      });
+      continue;
+    }
+
+    if ((existing.datatyp ?? '').toLowerCase() !== def.datatyp.toLowerCase()) {
+      result.conflicts.push({
+        namn: existing.namn,
+        reason: `Datatyp "${existing.datatyp}" ≠ kanonisk "${def.datatyp}" — hoppar över (byter aldrig datatyp på fält i bruk).`,
+      });
+      continue;
+    }
+
+    // Barn som redan pekar på en ANNAN förälder omföräldras aldrig tyst.
+    if (def.parentKey && existing.parentMetadataId && existing.parentMetadataId !== parentId) {
+      result.conflicts.push({
+        namn: existing.namn,
+        reason: `Fältet tillhör redan en annan familj — omföräldras ej.`,
+      });
+      continue;
+    }
+
+    idByKey.set(def.key, existing.id);
+
+    const wantReferensTabell = def.referensTabell ?? null;
+    const needsReferensTabell =
+      wantReferensTabell !== null && (existing.referensTabell ?? null) === null;
+    const needsAllowDuplicates = def.allowDuplicates === true && existing.allowDuplicates !== true;
+    const needsParent = def.parentKey ? existing.parentMetadataId !== parentId : false;
+
+    const alreadyOk =
+      existing.systemlast === true &&
+      existing.area === def.area &&
+      existing.sortOrder === def.sortOrder &&
+      existing.standardArvs === def.standardArvs &&
+      (existing.visningsnamn ?? '').length > 0 &&
+      !needsReferensTabell &&
+      !needsAllowDuplicates &&
+      !needsParent;
+    if (alreadyOk) {
+      result.alreadyOk.push(existing.namn);
+      continue;
+    }
+
+    await db
+      .update(metadataKatalog)
+      .set({
+        systemlast: true,
+        area: def.area,
+        kategori: def.area,
+        sortOrder: def.sortOrder,
+        standardArvs: def.standardArvs,
+        visningsnamn:
+          (existing.visningsnamn ?? '').length > 0 ? existing.visningsnamn : def.visningsnamn,
+        ...(needsReferensTabell ? { referensTabell: wantReferensTabell } : {}),
+        ...(needsAllowDuplicates ? { allowDuplicates: true } : {}),
+        ...(needsParent ? { parentMetadataId: parentId } : {}),
+      })
+      .where(and(eq(metadataKatalog.id, existing.id), eq(metadataKatalog.tenantId, tenantId)));
+    result.adopted.push(existing.namn);
+  }
+
+  return result;
+}
+
+// ============================================================================
 // T005: LÄS OBJEKTETS GEO-FÄLT (arvs-medvetet) FÖR OBJEKTHUVUD / SYSTEM-METADATA
 // ----------------------------------------------------------------------------
 // Exponerar den kanoniska systemlåsta geografimodellen som TVÅ grupper —
