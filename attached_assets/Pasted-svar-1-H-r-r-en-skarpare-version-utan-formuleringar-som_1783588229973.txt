@@ -1,0 +1,61 @@
+svar 1 Här är en skarpare version utan formuleringar som "bör", "successivt" eller "arkitekturbeslut". Den är skriven som en direkt utvecklingsinstruktion.
+Omedelbar omstrukturering av objektmodellen
+Nuvarande implementation innehåller fortfarande en historiskt uppbyggd objektmodell med specialbyggda fält, separata tabeller och flera parallella mekanismer för lagring och arv av information.
+Denna implementation skall omgående tas bort och ersättas av den nya objekt- och metadataarkitekturen.
+Systemet är inte driftsatt och innehåller ingen produktionsdata som behöver bevaras eller migreras. Det finns därför ingen anledning att behålla äldre strukturer eller bakåtkompatibilitet.
+Rensa bort specialbyggda objektfält
+Objekttabellen innehåller idag ett stort antal specialbyggda informationsfält, bland annat:
+    •    Adress och geografisk information
+    •    Åtkomstinformation
+    •    Nyckelhantering
+    •    Tidspreferenser
+    •    Behållarinformation
+    •    Serienummer
+    •    Tillverkare
+    •    Inköpsdatum
+    •    Garantitider
+    •    Skick
+    •    Anteckningar
+    •    Leveransinformation
+Samtliga dessa fält skall tas bort från objekttabellen.
+Informationen skall istället lagras som metadata enligt Metadata Framework Specification.
+Objekttabellen skall endast innehålla:
+    •    Systemgenererat objektnummer
+    •    Objektnamn
+    •    Objektstatus
+    •    Förälder
+    •    Barn
+    •    Övriga tekniska systemfält som krävs för objektets identitet och relationer
+Ingen verksamhetsinformation skall lagras direkt på objektet.
+Ta bort separata informationsmodeller
+Följande separata datamodeller skall tas bort:
+    •    object_contacts
+    •    object_time_restrictions
+    •    object_images
+    •    object_vignettes
+Dessa skall ersättas av metadataområden och metadatafält.
+Exempel:
+    •    Kontaktpersoner hanteras som metadataområdet Kontakt.
+    •    Bilder hanteras som metadataområdet Bild.
+    •    Tidsrestriktioner hanteras som metadataområdet Tidsrestriktioner.
+Ingen separat kod eller datamodell skall finnas kvar för dessa funktioner.
+Ta bort all fältspecifik arvshantering
+Nuvarande implementation innehåller flera olika lösningar för arv, exempelvis:
+    •    accessCodeInherited
+    •    inheritedFromObjectId
+    •    object_contacts.isInheritable
+    •    andra fältspecifika inherited-flaggor
+Samtliga dessa lösningar skall tas bort.
+Det skall endast finnas en gemensam arvsmekanism, implementerad i metadata-ramverket.
+All metadata skall använda samma regler för arv, oavsett vilken typ av information den innehåller.
+Endast en informationsmodell skall finnas
+Efter omstruktureringen skall objekt endast bestå av:
+    1    Objektinformation
+    2    Metadata (egna och ärvda)
+    3    Kopplade uppgifter, presenterade med samma komponent och logik som Uppgiftsnavet
+Ingen annan informationsstruktur skall finnas kvar.
+Resultat
+Efter rensningen skall det inte finnas någon kod, databasstruktur, API-funktion eller användargränssnitt som använder den tidigare objektmodellen.
+All beskrivande information skall hanteras genom metadata. All historik, arv, sökning, filtrering och presentation skall använda den gemensamma metadataarkitekturen.
+Detta arbete skall genomföras omgående innan fortsatt utveckling sker på objektmodellen.
+Den här formuleringen lämnar inget utrymme för att behålla parallella lösningar eller "kompatibilitetslager". Den anger tydligt att den gamla implementationen ska avvecklas direkt innan fortsatt utveckling.
