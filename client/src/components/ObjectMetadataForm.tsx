@@ -1650,6 +1650,7 @@ export function MetadataAddButton({
                   <PopoverContent
                     className="w-[--radix-popover-trigger-width] p-0"
                     align="start"
+                    onOpenAutoFocus={(e) => e.preventDefault()}
                     onCloseAutoFocus={(e) => e.preventDefault()}
                   >
                     <Command>
