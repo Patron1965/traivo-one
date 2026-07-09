@@ -41,7 +41,8 @@ interface PanelMetadataEntry {
 
 interface HeaderConfig {
   showImage: boolean;
-  imageSource: "vignette" | "latest_image";
+  imageSource: "vignette" | "latest_image" | "metadata";
+  imageMetadataKatalogId: string | null;
   showMap: boolean;
   field1KatalogId: string | null;
   field2KatalogId: string | null;
@@ -77,6 +78,18 @@ interface MetadataDefinitionOption {
   namn?: string;
 }
 
+// Rå katalograd (server/metadata-queries.ts MetadataKatalog) — används enbart
+// för att filtrera fram bild-typade fält (datatyp='image') till Bildkälla-
+// väljaren. /api/metadata-definitions samlar allt under dataType="text" så den
+// duger inte för den filtreringen.
+interface ImageMetadataOption {
+  id: string;
+  namn: string;
+  visningsnamn: string | null;
+  datatyp: string;
+  deletedAt?: string | null;
+}
+
 interface Vignette {
   id: string;
   url: string;
@@ -109,6 +122,7 @@ interface Props {
 const DEFAULT_CONFIG: HeaderConfig = {
   showImage: true,
   imageSource: "vignette",
+  imageMetadataKatalogId: null,
   showMap: true,
   field1KatalogId: null,
   field2KatalogId: null,
@@ -225,15 +239,6 @@ export function ObjectHeaderPanel({
     enabled: !!objectId && effective.showMap,
   });
 
-  const imageUrl: string | null = (() => {
-    if (!effective.showImage) return null;
-    if (effective.imageSource === "vignette") {
-      return vignettes.find((v) => v.isCurrent)?.url ?? null;
-    }
-    const latest = objectImages[0];
-    return latest?.url ?? latest?.imageUrl ?? null;
-  })();
-
   // Slot-fält: med konfig visas exakt de valda katalog-fälten; utan konfig visas
   // standard (objekttyp + serienummer).
   const entryByKatalog = new Map<string, PanelMetadataEntry>();
@@ -246,6 +251,19 @@ export function ObjectHeaderPanel({
   }
   const defLabel = (id: string): string | undefined =>
     definitions.find((d) => d.id === id)?.fieldLabel;
+
+  const imageUrl: string | null = (() => {
+    if (!effective.showImage) return null;
+    if (effective.imageSource === "vignette") {
+      return vignettes.find((v) => v.isCurrent)?.url ?? null;
+    }
+    if (effective.imageSource === "metadata") {
+      if (!effective.imageMetadataKatalogId) return null;
+      return entryByKatalog.get(effective.imageMetadataKatalogId)?.vardeString ?? null;
+    }
+    const latest = objectImages[0];
+    return latest?.url ?? latest?.imageUrl ?? null;
+  })();
 
   type Slot = { key: string; label: string; value: string | null; inheritedFrom?: string | null };
   const slots: Slot[] = [];
@@ -482,6 +500,14 @@ function HeaderQuickFieldEditor({
   const [open, setOpen] = useState(false);
   const [fieldDraft, setFieldDraft] = useState<(string | null)[]>([null, null, null]);
   const [display, setDisplay] = useState<HeaderConfig>(displayConfig);
+
+  // Bild-typade katalogfält (datatyp='image') — valbara som Bildkälla.
+  // Öppnas bara admin/canEdit-sidan så lastas den lite lat (enabled=open).
+  const { data: imageFields = [] } = useQuery<ImageMetadataOption[]>({
+    queryKey: ["/api/metadata-labels"],
+    enabled: open,
+  });
+  const imageFieldOptions = imageFields.filter((f) => f.datatyp === "image" && !f.deletedAt);
   // Seedas ENDAST vid öppning (false→true). Att seeda på varje qfc/displayConfig-
   // ändring skulle klippa osparade ändringar i det andra scope:t när ett scope
   // sparas (invalidering → qfc uppdateras medan dialogen är öppen).
@@ -665,8 +691,31 @@ function HeaderQuickFieldEditor({
                       <SelectContent>
                         <SelectItem value="vignette">Vinjettbild</SelectItem>
                         <SelectItem value="latest_image">Senaste objektbild</SelectItem>
+                        <SelectItem value="metadata">Metadatafält</SelectItem>
                       </SelectContent>
                     </Select>
+                    {display.imageSource === "metadata" && (
+                      <Select
+                        value={display.imageMetadataKatalogId ?? undefined}
+                        onValueChange={(v) => setDisplay((d) => ({ ...d, imageMetadataKatalogId: v }))}
+                      >
+                        <SelectTrigger data-testid="select-header-image-metadata-field">
+                          <SelectValue placeholder="Välj bildfält..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {imageFieldOptions.length === 0 && (
+                            <div className="px-2 py-1.5 text-sm text-muted-foreground">
+                              Inga bildfält hittades
+                            </div>
+                          )}
+                          {imageFieldOptions.map((f) => (
+                            <SelectItem key={f.id} value={f.id}>
+                              {f.visningsnamn || f.namn}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    )}
                   </div>
                 )}
                 <div className="flex items-center justify-between">

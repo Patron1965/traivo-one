@@ -555,7 +555,8 @@ app.get("/api/object-header-config/:objectType", asyncHandler(async (req, res) =
 
 const objectHeaderConfigBodySchema = z.object({
   showImage: z.boolean().optional(),
-  imageSource: z.enum(["vignette", "latest_image"]).optional(),
+  imageSource: z.enum(["vignette", "latest_image", "metadata"]).optional(),
+  imageMetadataKatalogId: z.string().nullable().optional(),
   showMap: z.boolean().optional(),
   field1KatalogId: z.string().nullable().optional(),
   field2KatalogId: z.string().nullable().optional(),
@@ -571,7 +572,7 @@ app.put("/api/object-header-config/:objectType", requireAdmin, asyncHandler(asyn
   const body = objectHeaderConfigBodySchema.parse(req.body);
 
   // Säkerhet: varje inpekat katalog-id måste tillhöra denna tenant.
-  const katalogIds = [body.field1KatalogId, body.field2KatalogId, body.field3KatalogId]
+  const katalogIds = [body.field1KatalogId, body.field2KatalogId, body.field3KatalogId, body.imageMetadataKatalogId]
     .filter((v): v is string => typeof v === "string" && v.length > 0);
   if (katalogIds.length > 0) {
     const owned = await db
@@ -594,6 +595,7 @@ app.put("/api/object-header-config/:objectType", requireAdmin, asyncHandler(asyn
     objectType,
     showImage: body.showImage ?? true,
     imageSource: body.imageSource ?? "vignette",
+    imageMetadataKatalogId: body.imageMetadataKatalogId ?? null,
     showMap: body.showMap ?? true,
     field1KatalogId: body.field1KatalogId ?? null,
     field2KatalogId: body.field2KatalogId ?? null,
@@ -609,6 +611,7 @@ app.put("/api/object-header-config/:objectType", requireAdmin, asyncHandler(asyn
       set: {
         showImage: values.showImage,
         imageSource: values.imageSource,
+        imageMetadataKatalogId: values.imageMetadataKatalogId,
         showMap: values.showMap,
         field1KatalogId: values.field1KatalogId,
         field2KatalogId: values.field2KatalogId,

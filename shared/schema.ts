@@ -4858,8 +4858,12 @@ export const objectHeaderConfigs = pgTable("object_header_configs", {
   tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
   objectType: text("object_type").notNull(),
   showImage: boolean("show_image").default(true).notNull(),
-  // 'vignette' (aktuell vinjettbild) | 'latest_image' (senaste objektbild)
+  // 'vignette' (aktuell vinjettbild) | 'latest_image' (senaste objektbild) |
+  // 'metadata' (valfritt bild-metadatafält, se imageMetadataKatalogId)
   imageSource: varchar("image_source", { length: 20 }).default("vignette").notNull(),
+  // Endast satt när imageSource='metadata' — pekar in ett metadata_katalog-fält
+  // med datatyp='image' vars värde (vardeString) visas som objekthuvudets bild.
+  imageMetadataKatalogId: varchar("image_metadata_katalog_id").references(() => metadataKatalog.id, { onDelete: "set null" }),
   showMap: boolean("show_map").default(true).notNull(),
   field1KatalogId: varchar("field1_katalog_id").references(() => metadataKatalog.id, { onDelete: "set null" }),
   field2KatalogId: varchar("field2_katalog_id").references(() => metadataKatalog.id, { onDelete: "set null" }),
