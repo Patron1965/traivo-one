@@ -1,0 +1,134 @@
+Förtydligande – Korrigering av logikfel kring kluster, teamposition och ruttoptimering
+Efter att ha läst ert resonemang ser jag att det finns ett grundläggande logikfel i hur planeringsmotorn idag verkar vara uppbyggd.
+Problemet är att planeringen fortfarande utgår från begrepp som kluster, teamets position eller teamledarens GPS-position.
+Detta är inte den arkitektur som Modus skall byggas på.
+Det finns ingen informationsbärare som heter "Kluster"
+Begreppet kluster skall inte finnas som datamodell, register eller informationsbärare.
+Kluster är endast ett vardagligt namn för en grupp objekt som råkar höra ihop genom objektstrukturen.
+Systemet skall därför inte innehålla:
+    •    cluster_id
+    •    klusterposition
+    •    klustercentrum
+    •    kluster-GPS
+    •    kluster som planeringsobjekt
+Den logiken skall tas bort.
+Uppgiften är informationsbäraren
+Planeringen bygger inte på objekt.
+Planeringen bygger inte på team.
+Planeringen bygger inte på kluster.
+Planeringen bygger på uppgiften.
+Varje uppgift har ett komplett uppgiftspaket med bland annat:
+    •    geografisk position
+    •    produktionstid
+    •    leveranstid
+    •    planerad leveranstid
+    •    status
+    •    objekt
+    •    metadata
+    •    artikel
+    •    tidstyp
+Det är detta informationspaket som används av samtliga informationsmotorer.
+Geografisk information
+Den geografiska positionen kommer alltid från objektets metadata.
+Geografimotorn sammanställer:
+    •    adress
+    •    GPS
+    •    What3Words
+    •    fastighetsinformation
+    •    primär plats
+    •    sekundär plats
+och skriver resultatet till uppgiftspaketet.
+Det är därför uppgiftspaketet som innehåller den geografiska information som planeringsmotorn skall använda.
+Inte objektet.
+Inte teamet.
+Inte något kluster.
+Teamets position
+Teamet har ingen egen planeringsposition.
+Utförarens eller teamets aktuella position definieras alltid av den uppgift som utförs.
+Det innebär att:
+Produktion
+↓
+är uppgiftens position.
+Lunch
+↓
+är lunchuppgiftens position.
+Nattvila
+↓
+är nattvilans position.
+Lager
+↓
+är lageruppgiftens position.
+Resa
+↓
+är den dynamiska positionen mellan två uppgifter.
+Det finns alltså ingen separat "teamposition" som planeringen skall utgå från.
+Ruttoptimering Light
+Ruttoptimeringen fungerar inte genom att först hitta ett team och sedan hitta en plats.
+Den fungerar tvärtom.
+Planeraren bygger veckoplanen genom att lägga in uppgifter.
+Systemet tittar då på:
+Föregående uppgift
+↓
+Nästa uppgift
+↓
+Kartmotor
+↓
+Restid
+↓
+Summering av:
+    •    restid
+    •    produktionstid
+    •    övriga tidstyper
+Varje ny uppgift bygger alltså vidare på den föregående uppgiften.
+Det finns därför inget behov av någon separat startposition för teamet.
+Första uppgiften
+Om veckoplanen saknar föregående geografisk uppgift skall planeraren lägga in en startuppgift.
+Exempel:
+    •    Hem
+    •    Hotell
+    •    Depå
+    •    Lager
+    •    Nattvila
+    •    Helgvila
+Detta är fortfarande en uppgift.
+Inte ett specialfält på teamet.
+Klumpningsmotorn
+Klumpningsmotorn skall inte skapa kluster.
+Den skall skapa stopp.
+Ett stopp består av en eller flera uppgifter.
+Klumpning skall baseras på:
+    •    geografisk närhet
+    •    ungefär 30 meters radie
+    •    samma sida av gatan
+    •    samma eller närliggande möjliga leveranstid
+    •    samma eller kompatibel utförandetyp
+Dessa parametrar skall kunna justeras och trimmas.
+Klumpen är alltså en tillfällig planeringsenhet och inte ett objekt eller ett register.
+Uppgifter utan geografisk koppling
+Alla uppgifter behöver inte ha geografisk position.
+Exempel:
+    •    administration
+    •    utbildning
+    •    telefonmöte
+    •    egen tid
+Dessa planeras av Tidsmotorn.
+Ingen ruttoptimering skall göras.
+GPS för team
+Det är naturligtvis möjligt att visa teamets aktuella GPS-position i realtid.
+Det kan användas för:
+    •    kundinformation
+    •    uppföljning
+    •    säkerhet
+    •    översikt
+Detta är dock endast information.
+Den används inte som grund för planeringen.
+Sammanfattning
+Jag vill därför att logiken byggs om enligt följande principer:
+    •    Ta bort all logik som bygger på cluster_id eller kluster som informationsbärare.
+    •    Ta bort all logik där teamets eller teamledarens GPS-position används som planeringsgrund.
+    •    Låt Geografimotorn sammanställa objektets metadata och skriva den geografiska informationen till uppgiftspaketet.
+    •    Låt samtliga informationsmotorer arbeta mot uppgiftspaketet.
+    •    Låt planeringen alltid utgå från föregående uppgift i veckoplanen.
+    •    Låt Ruttoptimering Light beräkna restid mellan två uppgifter, inte mellan ett team och en uppgift.
+    •    Låt Klumpningsmotorn skapa tillfälliga stopp, inte permanenta kluster.
+Detta är den arkitektur som hela Modus skall byggas på och den skall genomsyra både datamodell, informationsmotorer och planeringslogik.
