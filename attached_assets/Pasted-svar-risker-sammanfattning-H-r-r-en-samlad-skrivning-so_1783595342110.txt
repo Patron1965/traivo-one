@@ -1,0 +1,148 @@
+svar risker sammanfattning Här är en samlad skrivning som svar till Replit.
+Förtydligande – Systemet är inte driftsatt och register/logik skall städas upp
+Systemet är inte driftsatt. Det finns därför ingen produktionsmiljö eller skarp kunddata som skall skyddas genom bakåtkompatibilitet med felaktig historisk logik.
+Nuvarande register och logik skall därför städas upp innan fortsatt utveckling. Den felaktiga historiska objektlogiken får inte ligga kvar och störa exempelvis orderkonceptet, uppgiftsskapandet, metadatahanteringen eller uppgiftsflödet.
+Huvudprincip
+Allt skall baseras på följande huvudlogik:
+    1    Objekt
+    2    Logiskt påhakad metadata
+    3    Egen eller ärvd metadata
+    4    Kopplade uppgiftspaket
+    5    Uppgiftsnavet som samlad vy över alla uppgifter
+Objektet skall inte bära verksamhetsinformation i specialfält. Objektet skall vara bärare av identitet, relationer och metadata.
+Huvudregister
+Bortsett från sidoregister som kundregister, artikelregister, ikonregister och utförarregister är huvudregistren:
+    •    Objekt
+    •    Uppgifter
+Övrig information skall stödja dessa huvudregister, inte skapa parallella informationsöar.
+Uppgiftspaketet
+Varje uppgift bygger på ett uppgiftspaket med de definierade informationsfälten, helt eller delvis ifyllda beroende på uppgiftstyp, status och källa.
+Uppgifter kan skapas av:
+    •    Orderkoncept
+    •    Snabborder
+    •    Enkel uppgift
+    •    Uppgiftsmotorer
+    •    Metadataanalysator
+    •    Systemskapade reseuppgifter
+    •    Systemskapade plockuppgifter
+    •    Felanmälan eller förbättringsförslag
+    •    Kundportal eller extern länk/QR-flöde
+De 11 motorerna
+Uppgifterna stöds av motorerna som tillför information till uppgiftspaketet, uppdaterar metadata och kan skapa nya uppgifter.
+Motorerna skall inte bygga på gamla specialfält i objekttabellen. De skall läsa och skriva mot den nya metadataarkitekturen.
+Orderkonceptet
+Orderkonceptet är en avancerad uppgiftsskapare.
+Orderkonceptet skall:
+    •    peka artiklar mot objekt eller objektgrenar
+    •    använda artikelns fasthakningslogik
+    •    använda metadata-villkor
+    •    hämta önskad metadata från objekt
+    •    lämna ny eller uppdaterad metadata när uppgiften utförs
+    •    styra kund, faktureringsmodell, repetition och leveranstider
+    •    kunna använda inskrivna värden på orderkonceptet
+    •    kunna använda dynamiska värden från metadatafält
+Om gamla objektfält, gamla kontakttabeller, gamla bildtabeller eller gamla åtkomstfält ligger kvar riskerar orderkonceptet att läsa fel källa, skapa fel uppgifter eller lämna metadata på fel plats.
+Detta är inte acceptabelt.
+Snabborder och enkel uppgift
+Snabborder skall kunna skapa uppgifter manuellt genom att användaren väljer exempelvis:
+    •    kund
+    •    leveranstid
+    •    referenser
+    •    objekt eller leveransplats
+    •    artikel
+    •    antal manuellt eller via metadatafält
+En enkel uppgift skall kunna skapas med eller utan kund och med eller utan objektkoppling.
+Exempel:
+“Installera en extra krok för redskap i förrådet.”
+Uppgiften skall hamna i Uppgiftsnavet och därefter kunna tilldelas utförare, produktionsenhet, administratör eller kund.
+Uppgiftsnavet
+Uppgiftsnavet är huvudvyn för alla uppgifter.
+Samma logik och filtermodell skall användas i light-versioner på:
+    •    objekt
+    •    utförare
+    •    kundportal
+Skillnaden är endast vilket filter som automatiskt används.
+Exempel:
+    •    objektvyn visar uppgifter kopplade till objektet och dess underliggande objekt
+    •    utförarvyn visar utförarens tilldelade uppgifter
+    •    kundportalen visar uppgifter kopplade till kundens objektgren eller användarkoppling
+Utförarens veckoplan
+Utföraren skall ha:
+    •    veckoplan om 168 timmar
+    •    egen tid
+    •    tilldelade uppgifter
+    •    planerade uppgifter
+    •    oplanerade uppgifter
+    •    uppgifter med eller utan geografisk position
+    •    att göra-lista
+Veckoplanen skall kunna hantera dubbelbokning och överbokning.
+Om två uppgifter läggs på samma tid skall systemet varna och uppgiften får status dubbelbokad.
+Om produktionstid läggs på tid som inte är ledig skall systemet varna och uppgiften får status överbokad.
+Ruttoptimering light
+När uppgifter läggs ut på veckoplanen skall ruttoptimering light kunna titta på föregående uppgifts geografiska position.
+Föregående post kan vara:
+    •    egen tid
+    •    produktion
+    •    resa
+    •    annan tidstyp enligt registret
+Systemet skall använda position och tidstyp som stöd för planering, men utan att skapa en separat parallell ruttmodell.
+Metadata-inmatning och metadataanalysator
+Systemet skall stödja metadata-skapare där användaren kan aktivera eller skapa uppgifter kopplade till ett objekt eller en gren.
+Exempel:
+    •    felanmälan
+    •    foto
+    •    förbättringsförslag
+    •    rating av återvinningsrum
+    •    annan användarinmatad information
+Detta kan delas via länk eller QR-kod.
+Metadataanalysatorn skall kunna analysera metadata i ett objekt eller objektkluster och skapa en uppgift baserad på artikel, villkor och metadata.
+Villkorslogik
+Samma villkorslogik skall återkomma i:
+    •    metadataanalysatorn
+    •    artikeln
+    •    orderkonceptet
+    •    Uppgiftsnavets filter
+    •    objektets uppgiftsvy
+    •    utförarens uppgiftsvy
+    •    kundportalens uppgiftsvy
+Villkor skall kunna peka på ett eller flera metadatafält.
+Exempel:
+    •    Kontakt.Namn = Anna
+    •    Skostorlek > 38
+    •    Kärltyp = Standard
+    •    Storlek > 660 liter
+    •    Status skiljt från Arkiverad
+    •    Fält innehåller viss text
+Systemet skall stödja operatorer som:
+    •    =
+    •    
+    •    <
+    •    =
+
+    •    <=
+    •    innehåller
+    •    skiljt från
+Flera villkor skall kunna kombineras.
+Svar på riskpunkten från Replit
+Det stämmer att de gamla informationsöarna i objects och separata tabeller som object_contacts, object_time_restrictions, object_images och object_vignettes sannolikt ligger kvar och stör.
+Men eftersom systemet inte är driftsatt skall detta inte behandlas som en tung migrering av skarp data.
+Det skall behandlas som en nödvändig upprensning av felaktig arkitektur innan fortsatt utveckling.
+Den nya modellen skall vara:
+    •    objekt
+    •    metadata
+    •    ärvning
+    •    uppgifter
+    •    uppgiftspaket
+    •    uppgiftsmotorer
+    •    orderkoncept
+    •    Uppgiftsnav
+Inte parallella specialtabeller.
+Multi-förälder och betalare
+Multi-förälder skall behållas inom förälder/barn-logiken.
+Ett objekt kan ha flera föräldrar och en primär förälder.
+Däremot skall object_payers, cluster_id och separat klusterlogik inte vara egna objektmodeller.
+Betalare, fakturareferenser och faktureringsstyrning hör hemma i kund-, order-, orderkoncept-, avtals- eller metadataflödet, inte som separat objektlogik.
+Instruktion
+Gå vidare med att kartlägga exakt vilka UI-ytor, routes, storage-funktioner, API:er och komponenter som pekar på de gamla specialtabellerna och specialfälten.
+Syftet är att skapa en komplett rensningslista.
+Den listan skall användas för att ta bort den gamla objektlogiken och säkerställa att orderkoncept, uppgiftspaket, metadata, uppgiftsmotorer och Uppgiftsnavet endast arbetar mot den nya beslutade modellen.
