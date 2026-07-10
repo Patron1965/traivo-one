@@ -67,6 +67,7 @@ import { registerResendWebhookRoutes } from "./routes/resendWebhookRoutes";
 import { registerTelinkRoutes } from "./routes/telinkRoutes";
 import { registerFilterRoutes } from "./routes/filterRoutes";
 import { telinkSyncScheduler } from "./services/telink-sync-scheduler";
+import { fortnoxSyncScheduler } from "./services/fortnox-sync-scheduler";
 
 async function ensureDefaultTenant() {
   // Only auto-create the legacy demo tenant if the database has no tenants at all.
@@ -636,6 +637,9 @@ export async function registerRoutes(
   // Task #582: Telink-koppling + auto-ärende vid kontaktbyte
   registerTelinkRoutes(app);
   telinkSyncScheduler.start();
+
+  // Task #1243: Schemalagd kund-/artikelsynk mot Fortnox (env-gated)
+  fortnoxSyncScheduler.start();
 
   registerRouteGeometryRoutes(app);
 

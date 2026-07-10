@@ -32,7 +32,7 @@ import {
   type BillingSegment,
 } from "../services/invoice-flow-segmentation";
 import { inArray } from "drizzle-orm";
-import { exportConsolidatedInvoiceToFortnox } from "../fortnox-client";
+import { exportConsolidatedInvoiceToFortnox } from "../services/fortnox-export-service";
 
 const policyInputSchema = insertInvoiceConsolidationPolicySchema
   .extend({

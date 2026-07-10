@@ -36,6 +36,12 @@ export type ReferenceConceptLike = {
   // Radreferenser
   invoiceRowReferenceFields?: string[] | null;
   includeExecutorFreetext?: boolean | null;
+  // Task #1243: fakturahuvud-fält (hårdkodade per koncept, ingen metadata-variant).
+  deliveryMethod?: string | null;
+  transportMethod?: string | null;
+  currency?: string | null;
+  paymentTerms?: string | null;
+  invoiceLanguage?: string | null;
 };
 
 export type InvoiceRowReference = { label: string; value: string };
@@ -47,6 +53,12 @@ export type ResolvedInvoiceReferences = {
   customerInvoiceReference: string | null;
   rowReferences: InvoiceRowReference[];
   includeExecutorFreetext: boolean;
+  // Task #1243: hårdkodade fakturahuvud-fält (pass-through, ingen resolvning).
+  deliveryMethod: string | null;
+  transportMethod: string | null;
+  currency: string | null;
+  paymentTerms: string | null;
+  invoiceLanguage: string | null;
   // Icke-blockerande varningar (t.ex. FROM_METADATA-fält utan värde på objektet).
   warnings: string[];
 };
@@ -162,6 +174,11 @@ export async function resolveInvoiceReferencesForObject(
     customerInvoiceReference,
     rowReferences,
     includeExecutorFreetext: concept.includeExecutorFreetext ?? true,
+    deliveryMethod: clean(concept.deliveryMethod),
+    transportMethod: clean(concept.transportMethod),
+    currency: clean(concept.currency),
+    paymentTerms: clean(concept.paymentTerms),
+    invoiceLanguage: clean(concept.invoiceLanguage),
     warnings,
   };
 }

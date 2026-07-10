@@ -58,6 +58,7 @@ import {
   Download,
   Search,
   CheckCheck,
+  ChevronDown,
 } from "lucide-react";
 import type { Customer, Article, Resource, Team } from "@shared/schema";
 
@@ -100,6 +101,26 @@ interface FortnoxInvoiceExport {
   sourceType: string | null;
   sourceId: string | null;
   exportedAt: string | null;
+  createdAt: string;
+  retryCount: number | null;
+  apiCallCount: number | null;
+  totalWaitMs: number | null;
+  errorCode: string | null;
+  triggeredByUserId: string | null;
+}
+
+interface FortnoxExportLogEntry {
+  id: string;
+  exportId: string;
+  attemptNumber: number;
+  action: string;
+  result: string;
+  httpStatus: number | null;
+  errorCode: string | null;
+  errorMessage: string | null;
+  waitMs: number | null;
+  durationMs: number | null;
+  userId: string | null;
   createdAt: string;
 }
 
@@ -216,6 +237,17 @@ export default function FortnoxSettingsPage() {
 
   const { data: exports = [], isLoading: exportsLoading } = useQuery<FortnoxInvoiceExport[]>({
     queryKey: ["/api/fortnox/exports"],
+  });
+
+  const [expandedExportId, setExpandedExportId] = useState<string | null>(null);
+  const { data: exportLogEntries = [], isLoading: exportLogLoading } = useQuery<FortnoxExportLogEntry[]>({
+    queryKey: ["/api/fortnox/exports", expandedExportId, "log"],
+    queryFn: async () => {
+      const res = await fetch(`/api/fortnox/exports/${expandedExportId}/log`, { credentials: "include" });
+      if (!res.ok) throw new Error("Kunde inte hämta exportloggen");
+      return res.json();
+    },
+    enabled: !!expandedExportId,
   });
 
   const { data: customers = [] } = useQuery<Customer[]>({
@@ -690,40 +722,126 @@ export default function FortnoxSettingsPage() {
               ) : (
                 <ScrollArea className="h-[300px]">
                   <div className="space-y-2">
-                    {exports.slice(0, 20).map(exp => (
+                    {exports.slice(0, 20).map(exp => {
+                      const isExpanded = expandedExportId === exp.id;
+                      return (
                       <div
                         key={exp.id}
-                        className="flex items-center justify-between p-3 rounded-md border"
+                        className="rounded-md border"
                         data-testid={`export-${exp.id}`}
                       >
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span className="font-medium">
-                              {exp.sourceType === "manual" ? "Manuell rad" : exp.sourceType === "credit" ? "Kreditfaktura" : exp.workOrderId ? `Order: ${exp.workOrderId.slice(0, 8)}...` : "Okänd källa"}
-                            </span>
-                            <Badge
-                              variant={
-                                exp.status === "exported" ? "default" :
-                                exp.status === "failed" ? "destructive" :
-                                "secondary"
-                              }
-                            >
-                              {exp.status === "exported" ? "Exporterad" :
-                               exp.status === "failed" ? "Misslyckades" :
-                               exp.status === "pending" ? "Väntar" : exp.status}
-                            </Badge>
+                        <button
+                          type="button"
+                          className="w-full flex items-center justify-between p-3 text-left hover-elevate active-elevate-2"
+                          onClick={() => setExpandedExportId(isExpanded ? null : exp.id)}
+                          data-testid={`button-toggle-export-${exp.id}`}
+                        >
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="font-medium">
+                                {exp.sourceType === "manual" ? "Manuell rad" : exp.sourceType === "credit" ? "Kreditfaktura" : exp.workOrderId ? `Order: ${exp.workOrderId.slice(0, 8)}...` : "Okänd källa"}
+                              </span>
+                              <Badge
+                                variant={
+                                  exp.status === "exported" ? "default" :
+                                  exp.status === "failed" ? "destructive" :
+                                  "secondary"
+                                }
+                              >
+                                {exp.status === "exported" ? "Exporterad" :
+                                 exp.status === "failed" ? "Misslyckades" :
+                                 exp.status === "pending" ? "Väntar" : exp.status}
+                              </Badge>
+                              {!!exp.retryCount && (
+                                <Badge variant="outline" data-testid={`badge-retries-${exp.id}`}>
+                                  {exp.retryCount} {exp.retryCount === 1 ? "omförsök" : "omförsök"}
+                                </Badge>
+                              )}
+                              {exp.errorCode && (
+                                <Badge variant="outline" className="font-mono text-xs" data-testid={`badge-errorcode-${exp.id}`}>
+                                  {exp.errorCode}
+                                </Badge>
+                              )}
+                            </div>
+                            <p className="text-sm text-muted-foreground">
+                              {exp.fortnoxInvoiceNumber && `Faktura: ${exp.fortnoxInvoiceNumber} | `}
+                              {exp.totalAmount && `${exp.totalAmount.toLocaleString()} kr | `}
+                              {typeof exp.apiCallCount === "number" && `${exp.apiCallCount} API-anrop | `}
+                              {typeof exp.totalWaitMs === "number" && exp.totalWaitMs > 0 && `${(exp.totalWaitMs / 1000).toFixed(1)}s väntetid | `}
+                              {new Date(exp.createdAt).toLocaleDateString("sv-SE")}
+                            </p>
+                            {exp.errorMessage && (
+                              <p className="text-sm text-destructive mt-1">{exp.errorMessage}</p>
+                            )}
                           </div>
-                          <p className="text-sm text-muted-foreground">
-                            {exp.fortnoxInvoiceNumber && `Faktura: ${exp.fortnoxInvoiceNumber} | `}
-                            {exp.totalAmount && `${exp.totalAmount.toLocaleString()} kr | `}
-                            {new Date(exp.createdAt).toLocaleDateString("sv-SE")}
-                          </p>
-                          {exp.errorMessage && (
-                            <p className="text-sm text-destructive mt-1">{exp.errorMessage}</p>
-                          )}
-                        </div>
+                          <ChevronDown className={`h-4 w-4 text-muted-foreground shrink-0 transition-transform ${isExpanded ? "rotate-180" : ""}`} />
+                        </button>
+                        {isExpanded && (
+                          <div className="border-t p-3 bg-muted/30" data-testid={`export-log-detail-${exp.id}`}>
+                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs mb-3">
+                              <div>
+                                <p className="text-muted-foreground">Omförsök</p>
+                                <p className="font-medium">{exp.retryCount ?? 0}</p>
+                              </div>
+                              <div>
+                                <p className="text-muted-foreground">API-anrop</p>
+                                <p className="font-medium">{exp.apiCallCount ?? 0}</p>
+                              </div>
+                              <div>
+                                <p className="text-muted-foreground">Total väntetid</p>
+                                <p className="font-medium">{((exp.totalWaitMs ?? 0) / 1000).toFixed(1)}s</p>
+                              </div>
+                              <div>
+                                <p className="text-muted-foreground">Utlöst av</p>
+                                <p className="font-medium truncate">{exp.triggeredByUserId ? exp.triggeredByUserId.slice(0, 8) : "System"}</p>
+                              </div>
+                            </div>
+                            {exportLogLoading ? (
+                              <div className="flex items-center justify-center py-4">
+                                <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                              </div>
+                            ) : exportLogEntries.length === 0 ? (
+                              <p className="text-xs text-muted-foreground">Inga loggposter för denna export</p>
+                            ) : (
+                              <div className="space-y-1.5">
+                                {exportLogEntries.map(entry => (
+                                  <div
+                                    key={entry.id}
+                                    className="flex items-start gap-2 text-xs p-2 rounded border bg-background"
+                                    data-testid={`export-log-entry-${entry.id}`}
+                                  >
+                                    <Badge
+                                      variant={entry.result === "success" ? "default" : entry.result === "error" ? "destructive" : "secondary"}
+                                      className="shrink-0"
+                                    >
+                                      #{entry.attemptNumber}
+                                    </Badge>
+                                    <div className="flex-1 min-w-0">
+                                      <p className="font-medium">
+                                        {entry.action} — {entry.result}
+                                        {entry.httpStatus ? ` (HTTP ${entry.httpStatus})` : ""}
+                                      </p>
+                                      <p className="text-muted-foreground">
+                                        {new Date(entry.createdAt).toLocaleString("sv-SE")}
+                                        {typeof entry.durationMs === "number" && ` | ${entry.durationMs}ms`}
+                                        {typeof entry.waitMs === "number" && entry.waitMs > 0 && ` | väntade ${entry.waitMs}ms`}
+                                        {entry.userId && ` | av ${entry.userId.slice(0, 8)}`}
+                                      </p>
+                                      {entry.errorMessage && (
+                                        <p className="text-destructive mt-1">
+                                          {entry.errorCode ? `[${entry.errorCode}] ` : ""}{entry.errorMessage}
+                                        </p>
+                                      )}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        )}
                       </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </ScrollArea>
               )}

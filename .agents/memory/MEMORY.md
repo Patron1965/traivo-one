@@ -114,6 +114,7 @@
 - [VRP startuppgifter & no-fallback](vrp-start-tasks-no-fallback.md) — VRP-start ENBART från startuppgifter (orderType=startpunkt); team/GPS/kluster/default-koordinater förbjudna som planeringsgrund; fail closed.
 - [Leveranspreferenser enbart kundnivå](delivery-prefs-customer-only.md) — objekt-prefs borttagna; tidsmotorn läser kundens prefs via primär kund genom storage-metoder (mockbart); Map-iteration kräver Array.from (TS2802).
 - [GDPR metadata-anonymisering](gdpr-metadata-anonymization.md) — irreversibel anonymisering är lokal-only + fail-closed; måste förstöra ALLA kopior (varden+historik+uppgiftspaket+speglar), aldrig bara primärraden.
+- [Fortnox client vs export-service layering](fortnox-export-service-layering.md) — fortnox-client.ts = ren API-yta; idempotens/retry/logg-orkestrering hör hemma i fortnox-export-service.ts, aldrig tillbaka i klienten.
 - [Tidskodregistrets regelmotor](time-code-rule-engine.md) — delad resolver (payroll/ekonomi/GPS/behörighet/fakturerbart) i time-code-rules.ts; Fortnox-export fail-closed på economyExport; OB förblir manuellt.
 - [Active-task guard](active-task-guard.md) — closeOtherActiveWork auto-avslutar tidigare aktiv work_order/work_entry vid ny start; best-effort, exkluderar travelTimeEntries/personalTasks (ej live-timer).
 - [Verklig tid-fördelning (klump)](actual-time-distribution.md) — distributeActualTime = largest-remainder-split på estimatedDuration; klump=explicit workOrderIds[] (ingen tabell ännu); actualDurationManual låser rad vid omkörning.

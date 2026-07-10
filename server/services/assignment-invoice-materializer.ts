@@ -541,6 +541,12 @@ async function freezeReferencesOnWorkOrder(
       frozenCustomerReference: resolved.customerReference,
       frozenCustomerInvoiceReference: resolved.customerInvoiceReference,
       frozenInvoiceRowReferences: frozenRows ?? null,
+      // Task #1243: fakturahuvud-fält frysta i samma steg som referenserna.
+      frozenDeliveryMethod: resolved.deliveryMethod,
+      frozenTransportMethod: resolved.transportMethod,
+      frozenCurrency: resolved.currency,
+      frozenPaymentTerms: resolved.paymentTerms,
+      frozenInvoiceLanguage: resolved.invoiceLanguage,
     })
     .where(and(eq(workOrders.id, workOrderId), eq(workOrders.tenantId, tenantId)));
 }

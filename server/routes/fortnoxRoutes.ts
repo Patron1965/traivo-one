@@ -662,7 +662,8 @@ export async function registerFortnoxRoutes(app: Express) {
 // FORTNOX INTEGRATION
 // ============================================
 
-const { createFortnoxClient, exportWorkOrderToFortnox } = await import("../fortnox-client");
+const { createFortnoxClient } = await import("../fortnox-client");
+const { exportWorkOrderToFortnox } = await import("../services/fortnox-export-service");
 
 // Fortnox OAuth Authorization
 app.get("/api/fortnox/authorize", asyncHandler(async (req, res) => {
@@ -723,7 +724,7 @@ app.get("/api/fortnox/status", asyncHandler(async (req, res) => {
 // Process Fortnox Export (send to Fortnox API)
 app.post("/api/fortnox/exports/:id/process", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
-    const result = await exportWorkOrderToFortnox(tenantId, req.params.id);
+    const result = await exportWorkOrderToFortnox(tenantId, req.params.id, (req as any).session?.userId ?? null);
     
     if (result.success) {
       res.json({ success: true, invoiceNumber: result.invoiceNumber });
@@ -823,6 +824,13 @@ app.get("/api/fortnox/exports", asyncHandler(async (req, res) => {
     const status = req.query.status as string | undefined;
     const exports = await storage.getFortnoxInvoiceExports(tenantId, status);
     res.json(exports);
+}));
+
+// Task #1243: Rik exportlogg (försök, väntetid, API-anrop, användare, felkod, slutstatus) — auditerbar i UI.
+app.get("/api/fortnox/exports/:id/log", asyncHandler(async (req, res) => {
+    const tenantId = getTenantIdWithFallback(req);
+    const entries = await storage.getFortnoxExportLogEntries(req.params.id, tenantId);
+    res.json(entries);
 }));
 
 app.post("/api/fortnox/exports", asyncHandler(async (req, res) => {

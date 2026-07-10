@@ -44,6 +44,7 @@ import {
   type FortnoxConfig, type InsertFortnoxConfig,
   type FortnoxMapping, type InsertFortnoxMapping,
   type FortnoxInvoiceExport, type InsertFortnoxInvoiceExport,
+  type FortnoxExportLogEntry, type InsertFortnoxExportLogEntry,
   type ManualInvoiceLine, type InsertManualInvoiceLine,
   type TaskDesiredTimewindow, type InsertTaskDesiredTimewindow,
   type TaskDependency, type InsertTaskDependency,
@@ -117,7 +118,7 @@ import {
   inspectionMetadata, checklistTemplates, driverNotifications, offlineSyncLog,
   fuelLogs, maintenanceLogs, objectParents, objectArticles,
   resourceProfiles, resourceProfileAssignments,
-  fortnoxConfig, fortnoxMappings, fortnoxInvoiceExports, manualInvoiceLines,
+  fortnoxConfig, fortnoxMappings, fortnoxInvoiceExports, fortnoxExportLogEntries, manualInvoiceLines,
   users, tenants, customers, customerRelationships, objects, resources, workOrders, setupTimeLogs, procurements,
   articles, articleTypeDefinitions, executionCodeDefinitions, timeCodeDefinitions, iconDefinitions, priceLists, priceListArticles, resourceArticles, workOrderLines, simulationScenarios,
   vehicles, equipment, resourceVehicles, resourceEquipment, resourceAvailability,
@@ -796,6 +797,13 @@ export interface IStorage {
   getFortnoxInvoiceExport(id: string): Promise<FortnoxInvoiceExport | undefined>;
   createFortnoxInvoiceExport(invoiceExport: InsertFortnoxInvoiceExport): Promise<FortnoxInvoiceExport>;
   updateFortnoxInvoiceExport(id: string, tenantId: string, data: Partial<InsertFortnoxInvoiceExport>): Promise<FortnoxInvoiceExport | undefined>;
+  // Task #1243: atomisk claim (pending|failed -> processing) — förhindrar dubbel-export
+  // vid samtidiga/upprepade anrop (t.ex. timeout+retry). Returnerar undefined om
+  // exporten redan är under bearbetning/klar (annan status) — anroparen ska då
+  // behandla det som "redan hanterat", inte som fel.
+  claimFortnoxInvoiceExportForProcessing(id: string, tenantId: string): Promise<FortnoxInvoiceExport | undefined>;
+  createFortnoxExportLogEntry(entry: InsertFortnoxExportLogEntry): Promise<FortnoxExportLogEntry>;
+  getFortnoxExportLogEntries(exportId: string, tenantId: string): Promise<FortnoxExportLogEntry[]>;
   
   // Manual Invoice Lines
   getManualInvoiceLines(tenantId: string, customerId?: string, status?: string): Promise<ManualInvoiceLine[]>;
@@ -6939,6 +6947,29 @@ export class DatabaseStorage implements IStorage {
       .where(and(eq(fortnoxInvoiceExports.id, id), eq(fortnoxInvoiceExports.tenantId, tenantId)))
       .returning();
     return result || undefined;
+  }
+
+  async claimFortnoxInvoiceExportForProcessing(id: string, tenantId: string): Promise<FortnoxInvoiceExport | undefined> {
+    const [result] = await db.update(fortnoxInvoiceExports)
+      .set({ status: "processing", retryCount: sql`${fortnoxInvoiceExports.retryCount} + 1` })
+      .where(and(
+        eq(fortnoxInvoiceExports.id, id),
+        eq(fortnoxInvoiceExports.tenantId, tenantId),
+        inArray(fortnoxInvoiceExports.status, ["pending", "failed"]),
+      ))
+      .returning();
+    return result || undefined;
+  }
+
+  async createFortnoxExportLogEntry(entry: InsertFortnoxExportLogEntry): Promise<FortnoxExportLogEntry> {
+    const [result] = await db.insert(fortnoxExportLogEntries).values(entry).returning();
+    return result;
+  }
+
+  async getFortnoxExportLogEntries(exportId: string, tenantId: string): Promise<FortnoxExportLogEntry[]> {
+    return db.select().from(fortnoxExportLogEntries)
+      .where(and(eq(fortnoxExportLogEntries.exportId, exportId), eq(fortnoxExportLogEntries.tenantId, tenantId)))
+      .orderBy(fortnoxExportLogEntries.createdAt);
   }
 
   // ============================================

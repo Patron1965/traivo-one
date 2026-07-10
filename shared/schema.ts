@@ -507,6 +507,17 @@ export const workOrders = pgTable("work_orders", {
   frozenOurDesignation: text("frozen_our_designation"),
   frozenCustomerReference: text("frozen_customer_reference"),
   frozenCustomerInvoiceReference: text("frozen_customer_invoice_reference"),
+  // === Task #1243: frysta fakturahuvud-fält (leveranssätt/transportsätt/valuta/
+  // betalningsvillkor/språk) ===
+  // Fryses från orderConcepts vid samma tillfälle som referenserna ovan (se
+  // freezeReferencesOnWorkOrder) och mappas till Fortnox WayOfDelivery/
+  // TermsOfDelivery/Currency/TermsOfPayment/Language vid export. NULL = ingen
+  // koncept-konfiguration → Fortnox-default används (back-compat).
+  frozenDeliveryMethod: text("frozen_delivery_method"),
+  frozenTransportMethod: text("frozen_transport_method"),
+  frozenCurrency: text("frozen_currency"),
+  frozenPaymentTerms: text("frozen_payment_terms"),
+  frozenInvoiceLanguage: text("frozen_invoice_language"),
   // Frysta radreferenser (Fortnox-native rader): { rows: [{label, value}],
   // includeExecutorFreetext }. Resolvas vid skapande (call_off/schedule publish)
   // från konceptets invoiceRowReferenceFields + objektets metadata och fryses här
@@ -2712,7 +2723,7 @@ export const fortnoxInvoiceExports = pgTable("fortnox_invoice_exports", {
   tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
   workOrderId: varchar("work_order_id"),
   fortnoxInvoiceNumber: varchar("fortnox_invoice_number"),
-  // pending, exported, failed, cancelled, credited
+  // pending, processing, exported, failed, cancelled, credited
   status: varchar("status", { length: 20 }).default("pending").notNull(),
   costCenter: varchar("cost_center"),
   project: varchar("project"),
@@ -2727,11 +2738,45 @@ export const fortnoxInvoiceExports = pgTable("fortnox_invoice_exports", {
   customerId: varchar("customer_id"),
   exportedAt: timestamp("exported_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
+  // === Task #1243: rikt exportlogg-spårningsfält ===
+  // Räknare för hela exportens livstid (kan innehålla flera anrop/attempts).
+  // ExternalInvoiceReference2 mot Fortnox = detta exportId (id), vilket
+  // gör att en efterföljande retry kan hitta en redan skapad faktura (idempotens).
+  retryCount: integer("retry_count").default(0).notNull(),
+  apiCallCount: integer("api_call_count").default(0).notNull(),
+  totalWaitMs: integer("total_wait_ms").default(0).notNull(),
+  errorCode: varchar("error_code", { length: 40 }),
+  triggeredByUserId: varchar("triggered_by_user_id"),
 }, (table) => [
   index("idx_fortnox_exports_tenant").on(table.tenantId),
   index("idx_fortnox_exports_work_order").on(table.workOrderId),
   index("idx_fortnox_exports_status").on(table.status),
 ]);
+
+// Task #1243: attempt-nivå audit-logg per export (retries, väntetid, API-anrop,
+// felkoder) — en rad per faktiskt HTTP-anrop/försök mot Fortnox, för fullt
+// auditerbar spårbarhet i UI utöver summeringsfälten på exportraden ovan.
+export const fortnoxExportLogEntries = pgTable("fortnox_export_log_entries", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
+  exportId: varchar("export_id").references(() => fortnoxInvoiceExports.id).notNull(),
+  attemptNumber: integer("attempt_number").notNull(),
+  action: varchar("action", { length: 40 }).notNull(), // create_invoice, credit_invoice, idempotency_check, ...
+  result: varchar("result", { length: 20 }).notNull(), // success, error, retry, skipped
+  httpStatus: integer("http_status"),
+  errorCode: varchar("error_code", { length: 40 }),
+  errorMessage: text("error_message"),
+  waitMs: integer("wait_ms").default(0),
+  durationMs: integer("duration_ms"),
+  userId: varchar("user_id"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_fortnox_export_log_export").on(table.exportId),
+  index("idx_fortnox_export_log_tenant").on(table.tenantId),
+]);
+export const insertFortnoxExportLogEntrySchema = createInsertSchema(fortnoxExportLogEntries).omit({ id: true, createdAt: true });
+export type FortnoxExportLogEntry = typeof fortnoxExportLogEntries.$inferSelect;
+export type InsertFortnoxExportLogEntry = z.infer<typeof insertFortnoxExportLogEntrySchema>;
 
 // Manuella fakturarader (ej kopplade till arbetsordrar)
 export const manualInvoiceLines = pgTable("manual_invoice_lines", {
@@ -3207,6 +3252,16 @@ export const orderConcepts = pgTable("order_concepts", {
   invoiceRowReferenceFields: text("invoice_row_reference_fields").array(),
   // Inkludera utförarens fritext (per WO) som egen fakturarad. Default true.
   includeExecutorFreetext: boolean("include_executor_freetext").default(true),
+  // === Task #1243: fakturahuvud-fält som fryses per WO vid expansion och
+  // skickas till Fortnox (WayOfDelivery/TermsOfDelivery/Currency/TermsOfPayment/
+  // Language). Fritext — tenanten anger Fortnox-kodvärden direkt (t.ex.
+  // leveranssätt="normal", betalningsvillkor="30", språk="SV"). NULL = Fortnox
+  // använder kundens/kontots default (back-compat, dagens beteende).
+  deliveryMethod: text("delivery_method"),
+  transportMethod: text("transport_method"),
+  currency: text("currency"),
+  paymentTerms: text("payment_terms"),
+  invoiceLanguage: text("invoice_language"),
   // Steg 3 — faktureringsmodell + abonnemangsregler + sampackning
   invoiceMethod: text("invoice_method"), // 'afterwards' | 'scheduled' | 'subscription'
   subscriptionAdjustmentDate: timestamp("subscription_adjustment_date"), // valfritt årligt justeringsdatum (tomt = löpande)
@@ -4338,6 +4393,13 @@ export const customerInvoices = pgTable("customer_invoices", {
   ourDesignation: text("our_designation"),
   customerReference: text("customer_reference"),
   customerInvoiceReference: text("customer_invoice_reference"),
+  // === Task #1243: samma fakturahuvud-fält som work_orders.frozen* (se där) —
+  // speglar den vinnande WO-batchens värden för konsoliderad export/audit.
+  deliveryMethod: text("delivery_method"),
+  transportMethod: text("transport_method"),
+  invoiceCurrency: text("invoice_currency"),
+  paymentTerms: text("payment_terms"),
+  invoiceLanguage: text("invoice_language"),
 }, (table) => [
   index("idx_customer_invoices_tenant_state").on(table.tenantId, table.state),
   index("idx_customer_invoices_recipient").on(table.invoiceRecipientId),

@@ -332,6 +332,11 @@ export interface FortnoxHeaderRefs {
   YourReference?: string;
   YourOrderNumber?: string;
   Remarks?: string;
+  WayOfDelivery?: string;
+  TermsOfDelivery?: string;
+  Currency?: string;
+  TermsOfPayment?: string;
+  Language?: string;
 }
 
 export function buildFortnoxHeaderRefs(input: {
@@ -340,6 +345,12 @@ export function buildFortnoxHeaderRefs(input: {
   customerReference?: string | null;
   customerInvoiceReference?: string | null;
   fallbackYourReference?: string | null;
+  // Task #1243: fakturahuvud-fält (frysta koncept-värden) → Fortnox-koder.
+  deliveryMethod?: string | null;
+  transportMethod?: string | null;
+  currency?: string | null;
+  paymentTerms?: string | null;
+  invoiceLanguage?: string | null;
 }): FortnoxHeaderRefs {
   const slice50 = (v: string | null | undefined): string | undefined => {
     const t = (v ?? "").toString().trim();
@@ -359,6 +370,22 @@ export function buildFortnoxHeaderRefs(input: {
 
   const remarks = (input.ourDesignation ?? "").toString().trim();
   if (remarks) out.Remarks = remarks.slice(0, 200);
+
+  // Task #1243: NULL = utelämna fältet, Fortnox använder kontots/kundens default.
+  const wayOfDelivery = slice50(input.deliveryMethod);
+  if (wayOfDelivery) out.WayOfDelivery = wayOfDelivery;
+
+  const termsOfDelivery = slice50(input.transportMethod);
+  if (termsOfDelivery) out.TermsOfDelivery = termsOfDelivery;
+
+  const currency = slice50(input.currency);
+  if (currency) out.Currency = currency;
+
+  const termsOfPayment = slice50(input.paymentTerms);
+  if (termsOfPayment) out.TermsOfPayment = termsOfPayment;
+
+  const language = slice50(input.invoiceLanguage);
+  if (language) out.Language = language;
 
   return out;
 }
