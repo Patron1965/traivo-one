@@ -155,6 +155,7 @@ import {
   // Task #785 — Veckoplanering: datafundament
   weeklyPlans, weeklyPlanTasks, personalTasks, personalTaskSchedules,
   travelTimeEntries, weeklyPlanWarnings, geographicDistricts, districtZones,
+  planningReservations, type PlanningReservation, type InsertPlanningReservation,
   preTasks, execTypePreTaskRules, disruptions,
   slotTimes, type SlotTime, type InsertSlotTime,
   type WeeklyPlan, type InsertWeeklyPlan,
@@ -1289,6 +1290,12 @@ export interface IStorage {
   createTravelTimeEntry(data: InsertTravelTimeEntry): Promise<TravelTimeEntry>;
   updateTravelTimeEntry(tenantId: string, id: string, data: Partial<InsertTravelTimeEntry>): Promise<TravelTimeEntry | undefined>;
   deleteTravelTimeEntry(tenantId: string, id: string): Promise<void>;
+  // Planeringsreservationer ("reservtid", Task #1238)
+  getPlanningReservations(tenantId: string, opts?: { weeklyPlanId?: string; teamId?: string; resourceId?: string }): Promise<PlanningReservation[]>;
+  getPlanningReservation(tenantId: string, id: string): Promise<PlanningReservation | undefined>;
+  createPlanningReservation(data: InsertPlanningReservation): Promise<PlanningReservation>;
+  updatePlanningReservation(tenantId: string, id: string, data: Partial<InsertPlanningReservation>): Promise<PlanningReservation | undefined>;
+  deletePlanningReservation(tenantId: string, id: string): Promise<void>;
   // Veckoplan-varningar
   getWeeklyPlanWarnings(tenantId: string, weeklyPlanId: string): Promise<WeeklyPlanWarning[]>;
   getWeeklyPlanWarning(tenantId: string, id: string): Promise<WeeklyPlanWarning | undefined>;
@@ -10363,6 +10370,34 @@ export class DatabaseStorage implements IStorage {
   }
   async deleteTravelTimeEntry(tenantId: string, id: string): Promise<void> {
     await db.delete(travelTimeEntries).where(and(eq(travelTimeEntries.id, id), eq(travelTimeEntries.tenantId, tenantId)));
+  }
+
+  // Planeringsreservationer ("reservtid", Task #1238) — INTE riktiga uppgifter.
+  async getPlanningReservations(tenantId: string, opts?: { weeklyPlanId?: string; teamId?: string; resourceId?: string }): Promise<PlanningReservation[]> {
+    const conds: Condition[] = [eq(planningReservations.tenantId, tenantId)];
+    if (opts?.weeklyPlanId) conds.push(eq(planningReservations.weeklyPlanId, opts.weeklyPlanId));
+    if (opts?.teamId) conds.push(eq(planningReservations.teamId, opts.teamId));
+    if (opts?.resourceId) conds.push(eq(planningReservations.resourceId, opts.resourceId));
+    return db.select().from(planningReservations).where(and(...conds))
+      .orderBy(planningReservations.plannedDate, planningReservations.startAt);
+  }
+  async getPlanningReservation(tenantId: string, id: string): Promise<PlanningReservation | undefined> {
+    const [row] = await db.select().from(planningReservations)
+      .where(and(eq(planningReservations.id, id), eq(planningReservations.tenantId, tenantId)));
+    return row || undefined;
+  }
+  async createPlanningReservation(data: InsertPlanningReservation): Promise<PlanningReservation> {
+    const [row] = await db.insert(planningReservations).values(data).returning();
+    return row;
+  }
+  async updatePlanningReservation(tenantId: string, id: string, data: Partial<InsertPlanningReservation>): Promise<PlanningReservation | undefined> {
+    const { tenantId: _t, ...patch } = data as Partial<InsertPlanningReservation>;
+    const [row] = await db.update(planningReservations).set({ ...patch, updatedAt: new Date() })
+      .where(and(eq(planningReservations.id, id), eq(planningReservations.tenantId, tenantId))).returning();
+    return row || undefined;
+  }
+  async deletePlanningReservation(tenantId: string, id: string): Promise<void> {
+    await db.delete(planningReservations).where(and(eq(planningReservations.id, id), eq(planningReservations.tenantId, tenantId)));
   }
 
   // Veckoplan-varningar

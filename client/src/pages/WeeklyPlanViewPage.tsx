@@ -55,6 +55,7 @@ import {
   ChevronDown,
   ChevronUp,
   Repeat,
+  CalendarClock,
 } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { EgentidScheduleDialog } from "@/components/EgentidScheduleDialog";
@@ -149,11 +150,29 @@ interface EnrichedTask extends WeeklyPlanTask {
   locationName: string | null;
 }
 
+// Task #1238: reservtid — ren overlay (aldrig work_orders/personal_tasks).
+// remainingMinutes krymper automatiskt när riktiga block läggs i fönstret.
+interface PlanningReservationWithConsumption {
+  id: string;
+  weeklyPlanId: string;
+  teamId: string | null;
+  resourceId: string | null;
+  label: string;
+  plannedDate: string | null;
+  startAt: string;
+  endAt: string;
+  notes: string | null;
+  totalMinutes: number;
+  consumedMinutes: number;
+  remainingMinutes: number;
+}
+
 interface WeeklyPlanDetail extends WeeklyPlan {
   tasks: EnrichedTask[];
   personalTasks: PersonalTask[];
   travelEntries: TravelTimeEntry[];
   warnings: WeeklyPlanWarning[];
+  reservations: PlanningReservationWithConsumption[];
   taskCount: number;
   objectCount: number;
 }
@@ -601,6 +620,22 @@ export default function WeeklyPlanViewPage() {
   const visibleDays = dailyBooking.filter((d) => d.day <= 4 || d.bookedMinutes > 0);
   const dailyMaxMinutes = Math.max(1, ...visibleDays.map((d) => Math.max(d.bookedMinutes, d.capacityMinutes)));
   const dailyCapacityRef = Math.round(contractedMinutes / 5);
+
+  // Task #1238: reservtid — planeringsreservation/overlay, ALDRIG riktiga uppgifter.
+  // Krymper automatiskt (remainingMinutes) via server-beräknad overlap mot verkliga block.
+  const reservations: PlanningReservationWithConsumption[] = Array.isArray(plan?.reservations) ? plan.reservations : [];
+  const reservationTotalMinutes = reservations.reduce((sum, r) => sum + r.totalMinutes, 0);
+  const reservationRemainingMinutes = reservations.reduce((sum, r) => sum + r.remainingMinutes, 0);
+  const reservationsByDay = dayDates.map((dateStr, idx) => {
+    const dayReservations = reservations.filter((r) => r.plannedDate === dateStr);
+    return {
+      day: idx,
+      date: dateStr,
+      totalMinutes: dayReservations.reduce((sum, r) => sum + r.totalMinutes, 0),
+      remainingMinutes: dayReservations.reduce((sum, r) => sum + r.remainingMinutes, 0),
+      reservations: dayReservations,
+    };
+  }).filter((d) => d.totalMinutes > 0);
 
   const donutSegments = TIME_CATEGORY_ORDER.map((key) => ({
     key,
@@ -1214,6 +1249,48 @@ export default function WeeklyPlanViewPage() {
                   )}
                 </CardContent>
               </Card>
+
+              {/* Reservtid (Task #1238): planeringsreservation/overlay — ej riktiga uppgifter */}
+              {reservations.length > 0 && (
+                <Card className="md:col-span-1 xl:col-span-2" data-testid="card-reservations">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-base flex items-center gap-2">
+                      Reservtid
+                      <Badge variant="outline" data-testid="badge-reservation-count">{reservations.length}</Badge>
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    <div className="divide-y divide-border/60">
+                      <KpiRow icon={CalendarClock} label="Total reserverad tid" value={formatHoursDec(reservationTotalMinutes)} testId="kpi-reservation-total" />
+                      <KpiRow icon={Clock} label="Kvarvarande (ej förbrukad)" value={formatHoursDec(reservationRemainingMinutes)} testId="kpi-reservation-remaining" />
+                    </div>
+                    {reservationsByDay.length > 0 && (
+                      <div className="border-t pt-3" data-testid="section-reservation-daily">
+                        <p className="mb-2 text-xs font-medium text-muted-foreground">Reservtid per dag</p>
+                        <div className="space-y-1.5">
+                          {reservationsByDay.map((d) => {
+                            const consumedPct = d.totalMinutes > 0 ? Math.round(((d.totalMinutes - d.remainingMinutes) / d.totalMinutes) * 100) : 0;
+                            return (
+                              <div key={d.date} className="flex items-center gap-2" data-testid={`row-reservation-day-${d.day}`}>
+                                <span className="w-9 shrink-0 text-[10px] text-muted-foreground">{WEEKDAY_ABBR[d.day]}</span>
+                                <div className="relative h-3 flex-1 overflow-hidden rounded bg-muted/40">
+                                  <div className="absolute inset-y-0 left-0 bg-chart-4/60" style={{ width: `${consumedPct}%` }} />
+                                </div>
+                                <span className="w-24 shrink-0 text-right text-[10px] tabular-nums text-muted-foreground">
+                                  {formatHoursDec(d.remainingMinutes)} kvar av {formatHoursDec(d.totalMinutes)}
+                                </span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                        <p className="mt-2 text-[10px] text-muted-foreground">
+                          Reservtid är en planeringsreservation, ej ett bokat uppdrag — krymper automatiskt när riktiga block läggs i fönstret.
+                        </p>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              )}
 
               {/* Resor */}
               <Card className="md:col-span-1 xl:col-span-2">

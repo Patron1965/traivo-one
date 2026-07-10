@@ -107,9 +107,12 @@ export const executionStatusOrder = [
   "on_site", "completed", "inspected", "invoiced",
 ];
 
+// HOURS_IN_DAY = kapacitetsdenominator (8h arbetsdag) — RÖR EJ, oberoende av
+// den synliga timaxeln. Task #1238: 168h-vyn (24h×7 dagar) — DAY_START/END_HOUR
+// styr bara vilka timmar som visas/går att placera uppgifter på i dagsvyn.
 export const HOURS_IN_DAY = 8;
-export const DAY_START_HOUR = 7;
-export const DAY_END_HOUR = 17;
+export const DAY_START_HOUR = 0;
+export const DAY_END_HOUR = 23;
 
 export const timeBlockColors: Record<TimeBlockCategory, string> = {
   production: "bg-chart-2/15 dark:bg-chart-2/15",

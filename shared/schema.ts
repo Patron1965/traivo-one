@@ -7767,6 +7767,39 @@ export type TravelTimeEntry = typeof travelTimeEntries.$inferSelect;
 export const insertTravelTimeEntrySchema = createInsertSchema(travelTimeEntries).omit({ id: true, createdAt: true });
 export type InsertTravelTimeEntry = z.infer<typeof insertTravelTimeEntrySchema>;
 
+// Task #1238: Planeringsreservationer ("reservtid") — en reserverad tidslucka i
+// 168h-vyn (t.ex. "förbehåll för OB-jobb torsdag kväll"). INTE en riktig uppgift:
+// skapar aldrig work_orders/personal_tasks-rader och syns aldrig i produktions-,
+// löne- eller faktureringsflöden. Renderas som en overlay/reservation-band i
+// kalendern och krymper automatiskt när riktiga uppgifter (weekly_plan_tasks/
+// personal_tasks) läggs in i fönstret — se computeReservationConsumption i
+// weeklyPlanEngine.ts (beräknas on-read, lagras aldrig som "förbrukat").
+export const planningReservations = pgTable("planning_reservations", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
+  weeklyPlanId: varchar("weekly_plan_id").references(() => weeklyPlans.id, { onDelete: "cascade" }).notNull(),
+  teamId: varchar("team_id").references(() => teams.id),
+  resourceId: varchar("resource_id").references(() => resources.id, { onDelete: "cascade" }),
+  label: text("label").notNull(),
+  plannedDate: date("planned_date"),
+  startAt: timestamp("start_at").notNull(),
+  endAt: timestamp("end_at").notNull(),
+  notes: text("notes"),
+  metadata: jsonb("metadata").default({}),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_planning_reservations_tenant").on(table.tenantId),
+  index("idx_planning_reservations_plan").on(table.weeklyPlanId),
+  index("idx_planning_reservations_resource").on(table.resourceId),
+  index("idx_planning_reservations_plan_date").on(table.weeklyPlanId, table.plannedDate),
+]);
+
+export type PlanningReservation = typeof planningReservations.$inferSelect;
+export const insertPlanningReservationSchema = createInsertSchema(planningReservations)
+  .omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertPlanningReservation = z.infer<typeof insertPlanningReservationSchema>;
+
 // Veckoplan-varningar — strukturerade varningar/avvikelser från motor-lagret.
 export const weeklyPlanWarnings = pgTable("weekly_plan_warnings", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),

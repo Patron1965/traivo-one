@@ -31,6 +31,7 @@ import type {
   WeeklyPlanWarning,
   PreTask,
   Article,
+  PlanningReservation,
 } from "@shared/schema";
 
 // =============================================================================
@@ -415,6 +416,79 @@ function round2(n: number): number {
 }
 function round4(n: number): number {
   return Math.round(n * 10000) / 10000;
+}
+
+// =============================================================================
+// 1b. Reservtid ("planning_reservations", Task #1238)
+//
+// En reservation är ENDAST en visuell/planeringsmässig markering av ledig
+// kapacitet i 168h-vyn — den skapar aldrig work_orders/personal_tasks och
+// deltar aldrig i tidskonflikt-/168h-/spilltidsberäkningarna ovan. Den krymper
+// automatiskt (remainingMinutes) när riktiga block (produktionsuppgifter,
+// personliga block, restidsposter) läggs inuti reservationens tidsfönster.
+// =============================================================================
+
+export interface ReservationConsumption {
+  id: string;
+  totalMinutes: number;
+  consumedMinutes: number;
+  remainingMinutes: number;
+}
+
+function overlapMinutes(aStart: number, aEnd: number, bStart: number, bEnd: number): number {
+  const start = Math.max(aStart, bStart);
+  const end = Math.min(aEnd, bEnd);
+  return end > start ? (end - start) / 60000 : 0;
+}
+
+/**
+ * Beräknar hur många minuter av varje reservation som redan är "upptagna" av
+ * riktiga block, och hur mycket som återstår. Rena överlapp summeras utan
+ * hänsyn till dubbelöverlappande block (worst-case krympning — reservationen
+ * krymper minst lika mycket som verkligheten kräver, aldrig mindre).
+ */
+export function computeReservationConsumption(
+  reservations: PlanningReservation[],
+  tasks: WeeklyPlanTask[],
+  personalTasks: PersonalTask[],
+  travelEntries: TravelTimeEntry[],
+): ReservationConsumption[] {
+  const realIntervals: Array<{ start: number; end: number }> = [];
+  for (const t of tasks) {
+    if (t.plannedStartTime && t.plannedEndTime) {
+      realIntervals.push({
+        start: new Date(t.plannedStartTime).getTime(),
+        end: new Date(t.plannedEndTime).getTime(),
+      });
+    }
+  }
+  for (const pt of personalTasks) {
+    if (pt.startAt && pt.endAt) {
+      realIntervals.push({ start: new Date(pt.startAt).getTime(), end: new Date(pt.endAt).getTime() });
+    }
+  }
+  // travelTimeEntries saknar exakt klockslag (endast plannedDate + travelMinutes)
+  // och kan därför inte tidsöverlappas mot en reservation minut-för-minut —
+  // exkluderas medvetet ur krympningen (produktions-/personliga block räcker
+  // för att fånga huvudscenariot: riktig uppgift läggs i reservationsfönstret).
+  void travelEntries;
+
+  return reservations.map((r) => {
+    const start = new Date(r.startAt).getTime();
+    const end = new Date(r.endAt).getTime();
+    const totalMinutes = Math.max(0, (end - start) / 60000);
+    let consumedMinutes = 0;
+    for (const iv of realIntervals) {
+      consumedMinutes += overlapMinutes(start, end, iv.start, iv.end);
+    }
+    consumedMinutes = Math.min(totalMinutes, Math.round(consumedMinutes));
+    return {
+      id: r.id,
+      totalMinutes: Math.round(totalMinutes),
+      consumedMinutes,
+      remainingMinutes: Math.round(totalMinutes) - consumedMinutes,
+    };
+  });
 }
 
 // =============================================================================

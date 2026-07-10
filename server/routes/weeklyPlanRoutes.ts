@@ -28,6 +28,7 @@ import {
   insertPersonalTaskSchema,
   insertPersonalTaskScheduleSchema,
   insertTravelTimeEntrySchema,
+  insertPlanningReservationSchema,
   insertPreTaskSchema,
   insertExecTypePreTaskRuleSchema,
 } from "@shared/schema";
@@ -40,6 +41,7 @@ import {
   DEFAULT_PLAN_ENGINE_CONFIG,
   resolvePersonalTaskArticleFields,
   personalTaskMinutes,
+  computeReservationConsumption,
 } from "../planning/weeklyPlanEngine";
 import {
   getGrovplaneringGrid,
@@ -470,12 +472,21 @@ export function registerWeeklyPlanRoutes(app: Express) {
     const tenantId = getTenantIdWithFallback(req);
     const plan = await storage.getWeeklyPlan(tenantId, req.params.id);
     if (!plan) throw new NotFoundError("Veckoplan");
-    const [tasks, personalTasks, travelEntries, warnings] = await Promise.all([
+    const [tasks, personalTasks, travelEntries, warnings, reservations] = await Promise.all([
       storage.getWeeklyPlanTasks(tenantId, plan.id),
       storage.getPersonalTasks(tenantId, { weeklyPlanId: plan.id }),
       storage.getTravelTimeEntries(tenantId, plan.id),
       storage.getWeeklyPlanWarnings(tenantId, plan.id),
+      storage.getPlanningReservations(tenantId, { weeklyPlanId: plan.id }),
     ]);
+    // Task #1238: reservtid är en overlay — krymps mot riktiga block, skapar
+    // aldrig egna work_orders/personal_tasks.
+    const reservationConsumption = computeReservationConsumption(reservations, tasks, personalTasks, travelEntries);
+    const consumptionMap = new Map(reservationConsumption.map((c) => [c.id, c]));
+    const enrichedReservations = reservations.map((r) => ({
+      ...r,
+      ...(consumptionMap.get(r.id) ?? { totalMinutes: 0, consumedMinutes: 0, remainingMinutes: 0 }),
+    }));
     // Berika varje uppgift med work-order-/objektfakta (namn, ordervärde,
     // koordinater, plats) så att översikten kan visa jobbnamn, ordervärde-tabell
     // och platser utan separata klient-anrop. Serverberäknade nyckeltal
@@ -504,6 +515,7 @@ export function registerWeeklyPlanRoutes(app: Express) {
       personalTasks,
       travelEntries,
       warnings,
+      reservations: enrichedReservations,
       taskCount: enrichedTasks.length,
       objectCount,
     });
@@ -728,6 +740,62 @@ export function registerWeeklyPlanRoutes(app: Express) {
     if (!existing) throw new NotFoundError("Personligt block");
     await storage.deletePersonalTask(tenantId, req.params.id);
     if (existing.weeklyPlanId) await recomputeWeeklyPlan(tenantId, existing.weeklyPlanId);
+    res.status(204).end();
+  }));
+
+  // Planeringsreservationer / "reservtid" (Task #1238) — ren overlay, skapar
+  // aldrig work_orders/personal_tasks. Krymps mot riktiga block vid läsning
+  // (se computeReservationConsumption i motor-lagret).
+  const reservationCreateSchema = insertPlanningReservationSchema
+    .omit({ tenantId: true, weeklyPlanId: true });
+  const reservationPatchSchema = reservationCreateSchema.partial();
+
+  app.get("/api/weekly-plans/:planId/reservations", ...guard, asyncHandler(async (req, res) => {
+    const tenantId = getTenantIdWithFallback(req);
+    const plan = await storage.getWeeklyPlan(tenantId, req.params.planId);
+    if (!plan) throw new NotFoundError("Veckoplan");
+    const [reservations, tasks, personalTasksForPlan, travelEntries] = await Promise.all([
+      storage.getPlanningReservations(tenantId, { weeklyPlanId: plan.id }),
+      storage.getWeeklyPlanTasks(tenantId, plan.id),
+      storage.getPersonalTasks(tenantId, { weeklyPlanId: plan.id }),
+      storage.getTravelTimeEntries(tenantId, plan.id),
+    ]);
+    const consumption = computeReservationConsumption(reservations, tasks, personalTasksForPlan, travelEntries);
+    const consumptionMap = new Map(consumption.map((c) => [c.id, c]));
+    res.json(reservations.map((r) => ({
+      ...r,
+      ...(consumptionMap.get(r.id) ?? { totalMinutes: 0, consumedMinutes: 0, remainingMinutes: 0 }),
+    })));
+  }));
+
+  app.post("/api/weekly-plans/:planId/reservations", ...guard, asyncHandler(async (req, res) => {
+    const tenantId = getTenantIdWithFallback(req);
+    const plan = await storage.getWeeklyPlan(tenantId, req.params.planId);
+    if (!plan) throw new NotFoundError("Veckoplan");
+    const data = parseBody(reservationCreateSchema, req.body);
+    const created = await storage.createPlanningReservation({
+      ...data,
+      tenantId,
+      weeklyPlanId: plan.id,
+      teamId: data.teamId ?? plan.teamId,
+    });
+    res.status(201).json(created);
+  }));
+
+  app.patch("/api/planning-reservations/:id", ...guard, asyncHandler(async (req, res) => {
+    const tenantId = getTenantIdWithFallback(req);
+    const existing = await storage.getPlanningReservation(tenantId, req.params.id);
+    if (!existing) throw new NotFoundError("Reservtid");
+    const data = parseBody(reservationPatchSchema, req.body);
+    const row = await storage.updatePlanningReservation(tenantId, req.params.id, data);
+    res.json(row);
+  }));
+
+  app.delete("/api/planning-reservations/:id", ...guard, asyncHandler(async (req, res) => {
+    const tenantId = getTenantIdWithFallback(req);
+    const existing = await storage.getPlanningReservation(tenantId, req.params.id);
+    if (!existing) throw new NotFoundError("Reservtid");
+    await storage.deletePlanningReservation(tenantId, req.params.id);
     res.status(204).end();
   }));
 
