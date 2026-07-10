@@ -1307,6 +1307,8 @@ export interface IStorage {
   clearEngineSlotTimes(tenantId: string, source: string, opts: { assignmentIds?: string[]; windowStart?: Date; windowEnd?: Date }): Promise<number>;
   setSlotTimePlannerDecision(tenantId: string, opts: { assignmentIds?: string[]; assignmentGroupKey?: string; decision: string | null; decidedBy: string | null }): Promise<number>;
   getTenantGroupingRadiusMeters(tenantId: string): Promise<number | null>;
+  getTenantEngineDefaults(tenantId: string): Promise<PlanningParameter | undefined>;
+  upsertTenantEngineDefaults(tenantId: string, data: Partial<InsertPlanningParameter>): Promise<PlanningParameter>;
   getCustomersDeliveryPreferences(customerIds: string[]): Promise<Map<string, unknown>>;
   getObjectsPrimaryCustomerIds(objectIds: string[]): Promise<Map<string, string | null>>;
 
@@ -10084,6 +10086,40 @@ export class DatabaseStorage implements IStorage {
       ))
       .limit(1);
     return row?.radius ?? null;
+  }
+
+  // Task #1234 (Motor-/regeladministration): den generella tenant-raden
+  // (customer_id IS NULL AND object_id IS NULL) bär motor-defaults för
+  // klumpmotor/restidsmotor/planeringsmotor. undefined = ingen rad ännu.
+  async getTenantEngineDefaults(tenantId: string): Promise<PlanningParameter | undefined> {
+    const [row] = await db.select().from(planningParameters)
+      .where(and(
+        eq(planningParameters.tenantId, tenantId),
+        isNull(planningParameters.customerId),
+        isNull(planningParameters.objectId),
+      ))
+      .limit(1);
+    return row || undefined;
+  }
+
+  // Skapar eller uppdaterar den generella tenant-raden med motor-parametrar.
+  // Övriga fält (SLA m.m.) på en redan existerande rad rörs inte.
+  async upsertTenantEngineDefaults(
+    tenantId: string,
+    data: Partial<InsertPlanningParameter>,
+  ): Promise<PlanningParameter> {
+    const existing = await this.getTenantEngineDefaults(tenantId);
+    if (existing) {
+      const [result] = await db.update(planningParameters)
+        .set(data)
+        .where(and(eq(planningParameters.id, existing.id), eq(planningParameters.tenantId, tenantId)))
+        .returning();
+      return result;
+    }
+    const [result] = await db.insert(planningParameters)
+      .values({ ...data, tenantId, customerId: null, objectId: null })
+      .returning();
+    return result;
   }
   // Etapp 5: leveranspreferenser bor enbart på kundnivå — batch-läsning för
   // tidsmotorn (rå JSONB; anroparen validerar via deliveryPreferencesSchema).

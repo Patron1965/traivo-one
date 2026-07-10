@@ -45,6 +45,7 @@ const ImportTemplatesPage = lazy(() => import("@/pages/admin/ImportTemplatesPage
 const ArticleTypesPage = lazy(() => import("@/pages/admin/ArticleTypesPage"));
 const ExecutionCodesPage = lazy(() => import("@/pages/admin/ExecutionCodesPage"));
 const TimeCodesPage = lazy(() => import("@/pages/admin/TimeCodesPage"));
+const EngineAdminPage = lazy(() => import("@/pages/admin/EngineAdminPage"));
 const IconsPage = lazy(() => import("@/pages/admin/IconsPage"));
 const ProcurementsPage = lazy(() => import("@/pages/ProcurementsPage"));
 const OptimizationPrepPage = lazy(() => import("@/pages/OptimizationPrepPage"));
@@ -217,6 +218,7 @@ function Router() {
         <Route path="/article-types">{() => <ProtectedRoute component={ArticleTypesPage} path="/article-types" />}</Route>
         <Route path="/execution-codes">{() => <ProtectedRoute component={ExecutionCodesPage} path="/execution-codes" />}</Route>
         <Route path="/time-codes">{() => <ProtectedRoute component={TimeCodesPage} path="/time-codes" />}</Route>
+        <Route path="/engine-admin">{() => <ProtectedRoute component={EngineAdminPage} path="/engine-admin" />}</Route>
         <Route path="/icons">{() => <ProtectedRoute component={IconsPage} path="/icons" />}</Route>
         <Route path="/system-overview">{() => <ProtectedRoute component={SystemOverviewPage} path="/system-overview" />}</Route>
         <Route path="/settings">{() => <ProtectedRoute component={SettingsPage} path="/settings" />}</Route>

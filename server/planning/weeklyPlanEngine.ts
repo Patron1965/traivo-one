@@ -65,12 +65,33 @@ export const DEFAULT_PLAN_ENGINE_CONFIG: PlanEngineConfig = {
 
 const WEEK_TOTAL_MINUTES = 168 * 60; // 10080
 
-function resolveConfig(plan: WeeklyPlan): PlanEngineConfig {
+// Task #1234 (Motor-/regeladministration): tenant-nivåns planeringsmotor-
+// defaults (planning_parameters-raden utan kund/objekt-scope). Best-effort —
+// saknad rad eller fel faller tillbaka på DEFAULT_PLAN_ENGINE_CONFIG. Ett
+// plans metadata.config vinner alltid över tenant-raden.
+async function resolveConfig(tenantId: string, plan: WeeklyPlan): Promise<PlanEngineConfig> {
+  let base: PlanEngineConfig = DEFAULT_PLAN_ENGINE_CONFIG;
+  try {
+    const row = await storage.getTenantEngineDefaults(tenantId);
+    if (row) {
+      base = {
+        costPerKmOre: row.costPerKmOre ?? base.costPerKmOre,
+        co2KgPerKm: row.co2KgPerKm ?? base.co2KgPerKm,
+        defaultSpeedKmh: row.defaultSpeedKmh ?? base.defaultSpeedKmh,
+        nightRestMinMinutes: row.nightRestMinMinutes ?? base.nightRestMinMinutes,
+        weekendRestMinMinutes: row.weekendRestMinMinutes ?? base.weekendRestMinMinutes,
+        travelShareThreshold: row.travelShareThreshold ?? base.travelShareThreshold,
+        defaultContractedHours: row.defaultContractedHours ?? base.defaultContractedHours,
+      };
+    }
+  } catch {
+    /* faller tillbaka på DEFAULT_PLAN_ENGINE_CONFIG */
+  }
   const override = (plan.metadata as Record<string, unknown> | null)?.["config"];
   if (override && typeof override === "object") {
-    return { ...DEFAULT_PLAN_ENGINE_CONFIG, ...(override as Partial<PlanEngineConfig>) };
+    return { ...base, ...(override as Partial<PlanEngineConfig>) };
   }
-  return DEFAULT_PLAN_ENGINE_CONFIG;
+  return base;
 }
 
 // =============================================================================
@@ -1077,7 +1098,7 @@ export async function recomputeWeeklyPlan(
 ): Promise<RecomputeResult | null> {
   const plan = await storage.getWeeklyPlan(tenantId, weeklyPlanId);
   if (!plan) return null;
-  const config = resolveConfig(plan);
+  const config = await resolveConfig(tenantId, plan);
 
   // Task #1153: lös upp restidsmotor-parametrar en gång (team → tenant → default)
   // och återanvänd för både restidsberäkning och produktionstids-aggregering.

@@ -632,6 +632,7 @@ export async function runTimeGeoEngine(
   const teamConfig = options.teamId
     ? await resolveTeamGroupingConfig(tenantId, options.teamId)
     : null;
+  const tenantClumpDefaults = teamConfig ? null : await resolveTenantClumpDefaults(tenantId);
   const groupingRadiusMeters =
     options.groupingRadiusMeters ??
     teamConfig?.radiusMeters ??
@@ -639,8 +640,10 @@ export async function runTimeGeoEngine(
   const streetSideGrouping =
     options.streetSideGrouping ??
     teamConfig?.streetSideGrouping ??
+    tenantClumpDefaults?.streetSideGrouping ??
     DEFAULT_STREET_SIDE_GROUPING;
-  const workPacePercent = teamConfig?.workPacePercent ?? DEFAULT_WORK_PACE_PERCENT;
+  const workPacePercent =
+    teamConfig?.workPacePercent ?? tenantClumpDefaults?.workPacePercent ?? DEFAULT_WORK_PACE_PERCENT;
 
   // (1) Hämta råa, oplanerade assignments. scheduledDate kan vara null → hämta
   // utan datumfilter och filtrera i minnet (datumfiltret träffar inte null).
@@ -957,8 +960,39 @@ async function resolveGroupingRadiusMeters(tenantId: string): Promise<number> {
   return DEFAULT_GROUPING_RADIUS_METERS;
 }
 
-async function resolveDailyCapacityMinutes(_tenantId: string): Promise<number> {
-  return DEFAULT_DAILY_CAPACITY_MINUTES;
+// Task #1234 (Motor-/regeladministration): tenant-nivåns klumpmotor-defaults
+// (planning_parameters-raden utan kund/objekt-scope). Best-effort — fel eller
+// saknad rad faller tillbaka på motorns hårdkodade DEFAULT_*-konstanter.
+async function resolveTenantClumpDefaults(tenantId: string): Promise<{
+  dailyCapacityMinutes: number;
+  streetSideGrouping: boolean;
+  workPacePercent: number;
+}> {
+  try {
+    const row = await storage.getTenantEngineDefaults(tenantId);
+    const dailyCapacityMinutes =
+      typeof row?.dailyCapacityMinutes === "number" && Number.isFinite(row.dailyCapacityMinutes) && row.dailyCapacityMinutes > 0
+        ? row.dailyCapacityMinutes
+        : DEFAULT_DAILY_CAPACITY_MINUTES;
+    const streetSideGrouping =
+      typeof row?.streetSideGrouping === "boolean" ? row.streetSideGrouping : DEFAULT_STREET_SIDE_GROUPING;
+    const workPacePercent =
+      typeof row?.workPacePercent === "number" && Number.isFinite(row.workPacePercent) && row.workPacePercent > 0
+        ? row.workPacePercent
+        : DEFAULT_WORK_PACE_PERCENT;
+    return { dailyCapacityMinutes, streetSideGrouping, workPacePercent };
+  } catch {
+    return {
+      dailyCapacityMinutes: DEFAULT_DAILY_CAPACITY_MINUTES,
+      streetSideGrouping: DEFAULT_STREET_SIDE_GROUPING,
+      workPacePercent: DEFAULT_WORK_PACE_PERCENT,
+    };
+  }
+}
+
+async function resolveDailyCapacityMinutes(tenantId: string): Promise<number> {
+  const defaults = await resolveTenantClumpDefaults(tenantId);
+  return defaults.dailyCapacityMinutes;
 }
 
 /** Team-/utförarprofilens grupperings- & ruttoptimerings-premisser. */
@@ -982,6 +1016,7 @@ export async function resolveTeamGroupingConfig(
   teamId: string,
 ): Promise<TeamGroupingConfig> {
   const tenantRadius = await resolveGroupingRadiusMeters(tenantId);
+  const tenantDefaults = await resolveTenantClumpDefaults(tenantId);
   try {
     const team = await storage.getTeam(teamId);
     if (team && team.tenantId === tenantId) {
@@ -996,10 +1031,10 @@ export async function resolveTeamGroupingConfig(
         Number.isFinite(team.workPacePercent) &&
         team.workPacePercent > 0
           ? team.workPacePercent
-          : DEFAULT_WORK_PACE_PERCENT;
+          : tenantDefaults.workPacePercent;
       return {
         radiusMeters: radius,
-        streetSideGrouping: team.streetSideGrouping ?? DEFAULT_STREET_SIDE_GROUPING,
+        streetSideGrouping: team.streetSideGrouping ?? tenantDefaults.streetSideGrouping,
         workPacePercent: pace,
       };
     }
@@ -1008,8 +1043,8 @@ export async function resolveTeamGroupingConfig(
   }
   return {
     radiusMeters: tenantRadius,
-    streetSideGrouping: DEFAULT_STREET_SIDE_GROUPING,
-    workPacePercent: DEFAULT_WORK_PACE_PERCENT,
+    streetSideGrouping: tenantDefaults.streetSideGrouping,
+    workPacePercent: tenantDefaults.workPacePercent,
   };
 }
 

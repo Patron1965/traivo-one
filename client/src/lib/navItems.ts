@@ -37,6 +37,7 @@ import {
   Workflow,
   Shapes,
   Zap,
+  Cog,
   type LucideIcon,
 } from "lucide-react";
 import { translate } from "./i18n";
@@ -177,6 +178,7 @@ export function getAdminItems(tl?: (key: string) => string): NavItem[] {
     // Drift & data
     { title: l("nav.api-costs"), url: "/api-costs", icon: Activity, description: l("nav.api-costs.desc"), subSection: "Drift & data" },
     { title: "Datakvalitet för prognoser", url: "/ml-data-quality", icon: Activity, description: "Datakvalitet för automatisk tidsberäkning", subSection: "Drift & data" },
+    { title: "Motor- & regeladministration", url: "/engine-admin", icon: Cog, description: "Konfigurera klumpmotor, restidsmotor, tidstypsregister och planeringsmotor utan kodändring", adminOnly: true, subSection: "Drift & data" },
     { title: "Arkiv", url: "/archive", icon: Archive, description: "Arkiverade objekt, ordrar, bilder, kontakter och metadatatyper — sök, filtrera och återställ", subSection: "Drift & data" },
     { title: "Återställ vilande kunder", url: "/restore-dormant-customers", icon: Database, description: "Sök fram en vilande kund och återställ den från dev till prod (platform-owner)", subSection: "Drift & data" },
     // Plattform (owner)

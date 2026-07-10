@@ -1979,6 +1979,91 @@ app.delete("/api/planning-parameters/:id", asyncHandler(async (req, res) => {
     res.status(204).send();
 }));
 
+// ============== MOTOR-/REGELADMINISTRATION (Task #1234) ==============
+// Samlad admin-yta för klumpmotor/restidsmotor/planeringsmotor-defaults.
+// Bär endast den generella tenant-raden i planning_parameters (customer_id
+// IS NULL AND object_id IS NULL) — SLA/kund-/objekt-scopade rader hanteras
+// via /api/planning-parameters ovan och rörs inte här. Motorernas hårdkodade
+// defaults (time-geo-engine.ts, weeklyPlanEngine.ts) exponeras read-only så
+// UI:t kan visa vad som gäller när ett fält är tomt.
+const ENGINE_CONFIG_DEFAULTS = {
+  groupingRadiusMeters: 30,
+  streetSideGrouping: true,
+  workPacePercent: 100,
+  dailyCapacityMinutes: 8 * 60,
+  speedCapKmh: null as number | null,
+  travelTimeFactor: null as number | null,
+  productionTimeFactor: null as number | null,
+  winterFactor: null as number | null,
+  winterStart: null as string | null,
+  winterEnd: null as string | null,
+  costPerKmOre: 250,
+  co2KgPerKm: 0.25,
+  defaultSpeedKmh: 50,
+  nightRestMinMinutes: 11 * 60,
+  weekendRestMinMinutes: 36 * 60,
+  travelShareThreshold: 0.35,
+  defaultContractedHours: 40,
+};
+
+const engineConfigFieldSchema = z.object({
+  groupingRadiusMeters: z.coerce.number().int().min(1).max(5000).nullable().optional(),
+  streetSideGrouping: z.boolean().nullable().optional(),
+  workPacePercent: z.coerce.number().min(1).max(500).nullable().optional(),
+  dailyCapacityMinutes: z.coerce.number().int().min(1).max(1440).nullable().optional(),
+  speedCapKmh: z.coerce.number().min(1).max(300).nullable().optional(),
+  travelTimeFactor: z.coerce.number().min(0.1).max(10).nullable().optional(),
+  productionTimeFactor: z.coerce.number().min(0.1).max(10).nullable().optional(),
+  winterFactor: z.coerce.number().min(0.1).max(10).nullable().optional(),
+  winterStart: z.string().max(10).nullable().optional(),
+  winterEnd: z.string().max(10).nullable().optional(),
+  costPerKmOre: z.coerce.number().int().min(0).max(100000).nullable().optional(),
+  co2KgPerKm: z.coerce.number().min(0).max(50).nullable().optional(),
+  defaultSpeedKmh: z.coerce.number().min(1).max(300).nullable().optional(),
+  nightRestMinMinutes: z.coerce.number().int().min(0).max(10080).nullable().optional(),
+  weekendRestMinMinutes: z.coerce.number().int().min(0).max(10080).nullable().optional(),
+  travelShareThreshold: z.coerce.number().min(0).max(1).nullable().optional(),
+  defaultContractedHours: z.coerce.number().min(0).max(168).nullable().optional(),
+});
+
+app.get("/api/engine-config", requireAdmin, asyncHandler(async (req, res) => {
+  const tenantId = getTenantIdWithFallback(req);
+  const row = await storage.getTenantEngineDefaults(tenantId);
+  res.json({
+    id: row?.id ?? null,
+    values: {
+      groupingRadiusMeters: row?.groupingRadiusMeters ?? null,
+      streetSideGrouping: row?.streetSideGrouping ?? null,
+      workPacePercent: row?.workPacePercent ?? null,
+      dailyCapacityMinutes: row?.dailyCapacityMinutes ?? null,
+      speedCapKmh: row?.speedCapKmh ?? null,
+      travelTimeFactor: row?.travelTimeFactor ?? null,
+      productionTimeFactor: row?.productionTimeFactor ?? null,
+      winterFactor: row?.winterFactor ?? null,
+      winterStart: row?.winterStart ?? null,
+      winterEnd: row?.winterEnd ?? null,
+      costPerKmOre: row?.costPerKmOre ?? null,
+      co2KgPerKm: row?.co2KgPerKm ?? null,
+      defaultSpeedKmh: row?.defaultSpeedKmh ?? null,
+      nightRestMinMinutes: row?.nightRestMinMinutes ?? null,
+      weekendRestMinMinutes: row?.weekendRestMinMinutes ?? null,
+      travelShareThreshold: row?.travelShareThreshold ?? null,
+      defaultContractedHours: row?.defaultContractedHours ?? null,
+    },
+    defaults: ENGINE_CONFIG_DEFAULTS,
+  });
+}));
+
+app.put("/api/engine-config", requireAdmin, asyncHandler(async (req, res) => {
+  const tenantId = getTenantIdWithFallback(req);
+  const parseResult = engineConfigFieldSchema.safeParse(req.body);
+  if (!parseResult.success) {
+    throw parseResult.error;
+  }
+  const row = await storage.upsertTenantEngineDefaults(tenantId, parseResult.data);
+  res.json(row);
+}));
+
 // ============== RESOURCE VEHICLES ==============
 app.get("/api/resources/:resourceId/vehicles", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);

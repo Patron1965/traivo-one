@@ -1478,6 +1478,23 @@ export const planningParameters = pgTable("planning_parameters", {
   winterFactor: real("winter_factor"),
   winterStart: text("winter_start"),
   winterEnd: text("winter_end"),
+  // Task #1234 (Motor-/regeladministration): resterande klumpmotor-defaults på
+  // tenant-nivå. Nullable → motorns hårdkodade DEFAULT_*-konstanter
+  // (server/services/time-geo-engine.ts) används. Team-profilen vinner alltid
+  // (se resolveTeamGroupingConfig), sedan denna tenant-rad, sist motor-defaulten.
+  streetSideGrouping: boolean("street_side_grouping"),
+  workPacePercent: real("work_pace_percent"),
+  dailyCapacityMinutes: integer("daily_capacity_minutes"),
+  // Task #1234: planeringsmotor-defaults på tenant-nivå. Nullable → DEFAULT_
+  // PLAN_ENGINE_CONFIG (server/planning/weeklyPlanEngine.ts). Per-plan
+  // metadata.config vinner alltid över denna rad.
+  costPerKmOre: integer("cost_per_km_ore"),
+  co2KgPerKm: real("co2_kg_per_km"),
+  defaultSpeedKmh: real("default_speed_kmh"),
+  nightRestMinMinutes: integer("night_rest_min_minutes"),
+  weekendRestMinMinutes: integer("weekend_rest_min_minutes"),
+  travelShareThreshold: real("travel_share_threshold"),
+  defaultContractedHours: real("default_contracted_hours"),
   notes: text("notes"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
