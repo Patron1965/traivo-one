@@ -12,5 +12,6 @@
 
 CREATE INDEX IF NOT EXISTS idx_work_orders_tenant_customer
   ON work_orders (tenant_id, customer_id);
-CREATE INDEX IF NOT EXISTS idx_clusters_tenant_root_customer
-  ON clusters (tenant_id, root_customer_id);
+-- NOTE: idx_clusters_tenant_root_customer removed — the clusters table was
+-- dropped in migration 0129 (Etapp 5, objektmodell-rensning). Recreating an
+-- index on a non-existent table breaks the post-merge migration replay.

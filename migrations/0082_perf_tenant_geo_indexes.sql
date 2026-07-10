@@ -5,11 +5,20 @@
 
 CREATE INDEX IF NOT EXISTS idx_metadata_varden_tenant ON metadata_varden (tenant_id);
 CREATE INDEX IF NOT EXISTS idx_metadata_historik_tenant ON metadata_historik (tenant_id);
-CREATE INDEX IF NOT EXISTS idx_object_payers_tenant ON object_payers (tenant_id);
 CREATE INDEX IF NOT EXISTS idx_article_components_tenant ON article_components (tenant_id);
 CREATE INDEX IF NOT EXISTS idx_price_lists_tenant ON price_lists (tenant_id);
-CREATE INDEX IF NOT EXISTS idx_object_contacts_tenant ON object_contacts (tenant_id);
-CREATE INDEX IF NOT EXISTS idx_object_images_tenant ON object_images (tenant_id);
+-- object_payers/object_contacts/object_images droppades i 0129 (Etapp 5) — guarda.
+DO $$ BEGIN
+  IF to_regclass('public.object_payers') IS NOT NULL THEN
+    CREATE INDEX IF NOT EXISTS idx_object_payers_tenant ON object_payers (tenant_id);
+  END IF;
+  IF to_regclass('public.object_contacts') IS NOT NULL THEN
+    CREATE INDEX IF NOT EXISTS idx_object_contacts_tenant ON object_contacts (tenant_id);
+  END IF;
+  IF to_regclass('public.object_images') IS NOT NULL THEN
+    CREATE INDEX IF NOT EXISTS idx_object_images_tenant ON object_images (tenant_id);
+  END IF;
+END $$;
 CREATE INDEX IF NOT EXISTS idx_equipment_tenant ON equipment (tenant_id);
 CREATE INDEX IF NOT EXISTS idx_teams_tenant ON teams (tenant_id);
 CREATE INDEX IF NOT EXISTS idx_task_dependencies_tenant ON task_dependencies (tenant_id);

@@ -43,9 +43,14 @@ CREATE INDEX IF NOT EXISTS "idx_invoice_consolidation_policies_customer"
 -- Migration 0047 introducerade dessa men låg aldrig i post-merge-replayen, så
 -- fresh/prod-DB saknade dem. Återupprepas här (idempotent) och 0047 läggs till
 -- i replay-listan så framtida miljöer också får dem.
-ALTER TABLE "object_payers" ADD COLUMN IF NOT EXISTS "import_batch_id" text;
+-- object_payers droppades i migration 0129 (Etapp 5). Guarda mot saknad tabell.
+DO $$ BEGIN
+  IF to_regclass('public.object_payers') IS NOT NULL THEN
+    ALTER TABLE "object_payers" ADD COLUMN IF NOT EXISTS "import_batch_id" text;
+    CREATE INDEX IF NOT EXISTS "idx_object_payers_import_batch"
+      ON "object_payers" ("import_batch_id");
+  END IF;
+END $$;
 ALTER TABLE "invoice_recipients" ADD COLUMN IF NOT EXISTS "import_batch_id" text;
-CREATE INDEX IF NOT EXISTS "idx_object_payers_import_batch"
-  ON "object_payers" ("import_batch_id");
 CREATE INDEX IF NOT EXISTS "idx_invoice_recipients_import_batch"
   ON "invoice_recipients" ("import_batch_id");
