@@ -629,8 +629,11 @@ export function registerWeeklyPlanRoutes(app: Express) {
   // ==========================================================================
   // startAt/endAt är timestamp-kolumner → drizzle-zod ger z.date(), men HTTP-klienten
   // skickar ISO-strängar. Coerce till Date här (PATCH ärver via .partial()).
+  // Task #1235: articleId/cachedCostOre är motor-ägda härledda fält (resolveTimeCategoryArticle/
+  // computePersonalTaskCostFromArticle) — de får ALDRIG accepteras från klienten (mass-assignment
+  // skulle låta en klient förfalska kostnad/artikelkoppling som sedan läses av KPI/statistik).
   const personalCreateSchema = insertPersonalTaskSchema
-    .omit({ tenantId: true, weeklyPlanId: true })
+    .omit({ tenantId: true, weeklyPlanId: true, articleId: true, cachedCostOre: true })
     .extend({
       startAt: z.coerce.date().nullish(),
       endAt: z.coerce.date().nullish(),
@@ -778,12 +781,14 @@ export function registerWeeklyPlanRoutes(app: Express) {
   // ==========================================================================
   // Restidsposter
   // ==========================================================================
-  // isAuto/correction är motor-ägda (rebuild + framkalkylering) — får aldrig sättas av klient.
+  // isAuto/correction/articleId är motor-ägda (rebuild + framkalkylering/resolveTravelArticle)
+  // — får aldrig sättas av klient (Task #1235: articleId härleds enbart av recomputeTravelForPlan).
   const travelCreateSchema = insertTravelTimeEntrySchema.omit({
     tenantId: true,
     weeklyPlanId: true,
     isAuto: true,
     correction: true,
+    articleId: true,
   });
   const travelPatchSchema = travelCreateSchema.partial();
 
