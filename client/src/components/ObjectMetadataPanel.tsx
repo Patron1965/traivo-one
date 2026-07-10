@@ -49,6 +49,9 @@ interface MetadataEntry {
   skapadAv: string | null;
   uppdateradAv: string | null;
   metod: string | null;
+  // Task #1218: statusmodell (aktiv/arkiverad/anonymiserad). Anonymiserade poster
+  // ligger kvar som bevis men värdet är oåterkalleligt förstört (null).
+  status?: string | null;
   createdAt: string;
   updatedAt: string;
   katalog: MetadataKatalog;
@@ -1044,6 +1047,9 @@ export function ObjectMetadataPanel({ object, trigger }: ObjectMetadataPanelProp
   const groupedMetadata = useMemo(() => {
     const groups: Record<string, MetadataEntry[]> = {};
     for (const m of metadata) {
+      // Task #1218: fält markerade "visas ej i karusell" döljs även i denna
+      // presentationsvy — paritet med objekt-360-karusellen (tekniska/interna fält).
+      if ((m.katalog as any).visasIKarusell === false) continue;
       const key = (m.katalog as any).area || "annat";
       if (!groups[key]) groups[key] = [];
       groups[key].push(m);
@@ -1355,6 +1361,12 @@ export function ObjectMetadataPanel({ object, trigger }: ObjectMetadataPanelProp
                                 <Lock className="h-3 w-3 text-muted-foreground shrink-0" />
                               )}
                               {getSourceBadge(entry)}
+                              {entry.status === 'anonymiserad' && (
+                                <Badge variant="outline" className="text-[10px] px-1.5 py-0 gap-1 border-destructive/50 text-destructive shrink-0" data-testid={`badge-anonymiserad-${entry.id}`}>
+                                  <Lock className="h-3 w-3" />
+                                  Anonymiserad
+                                </Badge>
+                              )}
                             </div>
                             <div className="flex items-center gap-0.5 shrink-0">
                               {entry.source !== 'computed' && (
@@ -1363,7 +1375,7 @@ export function ObjectMetadataPanel({ object, trigger }: ObjectMetadataPanelProp
                                   <InheritanceTreeDialog objectId={object.id} metadataKatalogId={entry.metadataKatalogId} metadataName={entry.katalog.namn} />
                                 </>
                               )}
-                              {entry.source === 'local' && entry.arvsNedat && !isReadonlyOrigin(entry) && (
+                              {entry.source === 'local' && entry.arvsNedat && !isReadonlyOrigin(entry) && entry.status !== 'anonymiserad' && (
                                 <PropagationPreviewDialog
                                   objectId={object.id}
                                   metadataKatalogId={entry.metadataKatalogId}
@@ -1372,7 +1384,7 @@ export function ObjectMetadataPanel({ object, trigger }: ObjectMetadataPanelProp
                                   isPropagating={propagateMutation.isPending}
                                 />
                               )}
-                              {entry.source === 'local' && !isReadonlyOrigin(entry) && (
+                              {entry.source === 'local' && !isReadonlyOrigin(entry) && entry.status !== 'anonymiserad' && (
                                 <>
                                   <Tooltip>
                                     <TooltipTrigger asChild>

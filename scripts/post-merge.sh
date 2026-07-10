@@ -96,7 +96,8 @@ if command -v psql >/dev/null 2>&1 && [ -n "$DATABASE_URL" ]; then
            migrations/0126_match_reason.sql \
            migrations/0127_metadata_status_klassning.sql \
            migrations/0128_uppgiftspaket.sql \
-           migrations/0129_etapp5_rensningen.sql; do
+           migrations/0129_etapp5_rensningen.sql \
+           migrations/0130_etapp6_karusell_anonymisering.sql; do
     if [ -f "$f" ]; then
       echo "[post-merge] Applying $f"
       psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f "$f"

@@ -746,6 +746,20 @@ export default function ObjectDetailPage() {
     },
   });
 
+  // Task #1218: GDPR-anonymisering av ett metadata-fält (oåterkalleligt).
+  const anonymizeMetadataMutation = useMutation({
+    mutationFn: async (katalogId: string) => {
+      await apiRequest("POST", `/api/metadata/objects/${objectId}/field/${katalogId}/anonymize`, { confirm: true });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/metadata/objects", objectId] });
+      toast({ title: "Fältet anonymiserat", description: "Värdet är oåterkalleligt raderat i alla kopior." });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Kunde inte anonymisera metadata", description: error.message, variant: "destructive" });
+    },
+  });
+
   const openEditDialog = () => {
     if (!resolvedObject) return;
     setEditForm({
@@ -1492,6 +1506,9 @@ export default function ObjectDetailPage() {
                     onRestore={(katalogId) => restoreMetadataMutation.mutate(katalogId)}
                     softDeletePending={softDeleteMetadataMutation.isPending}
                     restorePending={restoreMetadataMutation.isPending}
+                    canAnonymize={isAdmin}
+                    onAnonymize={(katalogId) => anonymizeMetadataMutation.mutate(katalogId)}
+                    anonymizePending={anonymizeMetadataMutation.isPending}
                     renderHistoryButton={renderHistory}
                     objectAssignments={objectAssignments}
                     navigate={navigate}

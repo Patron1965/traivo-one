@@ -2230,6 +2230,8 @@ app.patch("/api/metadata-labels/:id", requireAdmin, asyncHandler(async (req, res
       displayNumber: z.number().int().nullable().optional(),
       allowDuplicates: z.boolean().optional(),
       kronologiskVisning: z.boolean().optional(),
+      // Task #1218: styr om fältet visas i metadata-karusellen på objekt-ytor.
+      visasIKarusell: z.boolean().optional(),
     });
     const parsed = updateSchema.parse(req.body);
     

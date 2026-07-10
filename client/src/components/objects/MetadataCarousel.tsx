@@ -4,9 +4,20 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
 import {
   Pencil, Trash2, RotateCcw, AlertTriangle, ChevronLeft, ChevronRight, Link as LinkIcon,
+  ShieldOff, Lock,
 } from "lucide-react";
 import type { MetadataInstance } from "@shared/schema";
 import { KallaBadge, deriveEntryKalla } from "@/lib/metadata-kalla";
@@ -112,6 +123,10 @@ export interface MetadataCarouselProps {
   onRestore: (katalogId: string) => void;
   softDeletePending: boolean;
   restorePending: boolean;
+  /** Task #1218: admin-only GDPR-anonymisering av fältet. */
+  canAnonymize?: boolean;
+  onAnonymize?: (katalogId: string) => void;
+  anonymizePending?: boolean;
   onPreviewImage: (url: string) => void;
   renderHistoryButton?: (entry: MetadataFormEntry) => ReactNode;
 }
@@ -130,24 +145,42 @@ export function MetadataCarousel({
   onRestore,
   softDeletePending,
   restorePending,
+  canAnonymize,
+  onAnonymize,
+  anonymizePending,
   onPreviewImage,
   renderHistoryButton,
 }: MetadataCarouselProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [editOpen, setEditOpen] = useState(false);
+  const [anonymizeOpen, setAnonymizeOpen] = useState(false);
 
   const datatyp = entry.katalog?.datatyp ?? type?.datatyp ?? "string";
   const dtMeta = DATATYPE_META[datatyp] ?? DATATYPE_META.string;
   const DtIcon = dtMeta.icon;
   const isSystem = isReadonlyOrigin(entry.metod);
   const isSoftDeleted = !!entry.softDeleted || !!entry.raderad;
+  // Task #1218: anonymiserat fält är oåterkalleligt låst (ingen edit/delete/restore).
+  const isAnonymized = entry.status === "anonymiserad";
   const isUploadField = UPLOAD_DATATYPES.has(datatyp);
   const kind = selectRenderKind(entry);
   const kalla = deriveEntryKalla(entry);
   const lastChanged = entry.lastChangedAt ? new Date(entry.lastChangedAt) : null;
   // Bild/fil-fält redigeras via MetadataUploadButton, inte via värde-dialogen.
-  const canEdit = !isSystem && !isSoftDeleted && !isUploadField;
+  const canEdit = !isSystem && !isSoftDeleted && !isUploadField && !isAnonymized;
+  // Anonymisering endast för admin, på LOKALA (icke-ärvda) icke-system/ej redan
+  // anonymiserade fält. Ärvda värden måste anonymiseras på källobjektet — servern
+  // fail-closar (409) om inget lokalt värde finns, men vi döljer knappen också.
+  const isInherited = entry.source === "inherited";
+  const showAnonymize =
+    !!canAnonymize &&
+    !!onAnonymize &&
+    !isSystem &&
+    !isSoftDeleted &&
+    !isAnonymized &&
+    !isInherited &&
+    !!entry.metadataKatalogId;
 
   return (
     <Card
@@ -176,9 +209,20 @@ export function MetadataCarousel({
           <KallaBadge kalla={kalla} />
           <MetadataSourceBadge entry={entry} />
 
+          {isAnonymized && (
+            <Badge
+              variant="outline"
+              className="gap-1 text-muted-foreground"
+              data-testid={`badge-anonymized-${entry.id}`}
+            >
+              <Lock className="h-3 w-3" />
+              Anonymiserad
+            </Badge>
+          )}
+
           {(
             <>
-              {isUploadField && !isSystem && !isSoftDeleted && (
+              {isUploadField && !isSystem && !isSoftDeleted && !isAnonymized && (
                 <MetadataUploadButton
                   objectId={objectId}
                   entry={entry}
@@ -219,7 +263,7 @@ export function MetadataCarousel({
                   <RotateCcw className="h-3.5 w-3.5" />
                 </Button>
               ) : (
-                !isSystem && (
+                !isSystem && !isAnonymized && (
                   <Button
                     variant="ghost"
                     size="sm"
@@ -233,13 +277,35 @@ export function MetadataCarousel({
                   </Button>
                 )
               )}
+
+              {showAnonymize && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 w-7 p-0 text-destructive hover:text-destructive"
+                  onClick={() => setAnonymizeOpen(true)}
+                  disabled={anonymizePending}
+                  data-testid={`button-anonymize-metadata-${entry.id}`}
+                  aria-label="Anonymisera (GDPR)"
+                >
+                  <ShieldOff className="h-3.5 w-3.5" />
+                </Button>
+              )}
             </>
           )}
         </div>
       </CardHeader>
 
       <CardContent className="pt-0">
-        {kind === "instances" && entry.instances ? (
+        {isAnonymized ? (
+          <div
+            className="flex items-center gap-2 text-sm text-muted-foreground italic"
+            data-testid={`text-anonymized-value-${entry.id}`}
+          >
+            <Lock className="h-3.5 w-3.5 shrink-0" />
+            Värdet är oåterkalleligt anonymiserat
+          </div>
+        ) : kind === "instances" && entry.instances ? (
           <InstancesCarousel instances={entry.instances} />
         ) : kind === "composite" ? (
           <CompositeValue value={entry.vardeJson} />
@@ -256,6 +322,38 @@ export function MetadataCarousel({
           open={editOpen}
           onOpenChange={setEditOpen}
         />
+      )}
+
+      {showAnonymize && (
+        <AlertDialog open={anonymizeOpen} onOpenChange={setAnonymizeOpen}>
+          <AlertDialogContent data-testid={`dialog-anonymize-${entry.id}`}>
+            <AlertDialogHeader>
+              <AlertDialogTitle className="flex items-center gap-2">
+                <ShieldOff className="h-4 w-4 text-destructive" />
+                Anonymisera "{entry.katalog?.namn || type?.namn || "fältet"}"?
+              </AlertDialogTitle>
+              <AlertDialogDescription>
+                Detta raderar värdet <strong>oåterkalleligt</strong> i alla kopior — aktiva och
+                arkiverade värden, historik samt frysta uppgifter. Åtgärden kan inte ångras och
+                det finns ingen återställning. Fältet finns kvar med status "Anonymiserad".
+                Vem och när loggas, men aldrig det raderade värdet.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel data-testid={`button-cancel-anonymize-${entry.id}`}>
+                Avbryt
+              </AlertDialogCancel>
+              <AlertDialogAction
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                onClick={() => onAnonymize?.(entry.metadataKatalogId || "")}
+                disabled={anonymizePending}
+                data-testid={`button-confirm-anonymize-${entry.id}`}
+              >
+                Anonymisera oåterkalleligt
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       )}
     </Card>
   );

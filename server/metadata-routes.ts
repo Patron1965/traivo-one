@@ -16,9 +16,11 @@ import {
   deleteMetadata,
   softDeleteObjectMetadata,
   restoreObjectMetadata,
+  anonymizeObjectMetadataField,
   setObjectMetadataOrder,
   ReadonlyMetadataError,
   InvalidMetadataInputError,
+  NoLocalMetadataToAnonymizeError,
   getCrossFertilizedMetadata,
   getGeographicPosition,
   getClusterTree,
@@ -426,6 +428,8 @@ const createMetadataTypeSchema = z.object({
     .transform((v) => (v === undefined ? undefined : v.length > 0 ? v : null)),
   // Task #579: aktivera kronologisk tidslinje per fält (Lyftkrok, Antal, etc).
   kronologiskVisning: z.boolean().optional().default(false),
+  // Task #1218: styr om fältet visas i metadata-karusellen på objekt-ytor.
+  visasIKarusell: z.boolean().optional(),
   // Task #666: beräknat fält. När arBeraknad=true måste fältet ha en formel som
   // refererar syskonfält inom samma familj (kräver parentMetadataId). Formeln
   // tillåter endast de fyra räknesätten + parenteser. Tom/blank formel → null.
@@ -1239,6 +1243,10 @@ metadataRouter.put("/:id", async (req: Request, res: Response) => {
         details: error.errors 
       });
     }
+    // GDPR: försök att ändra ett anonymiserat värde avvisas som terminal-tillstånd.
+    if (error.message?.includes('anonymiserat')) {
+      return res.status(409).json({ error: error.message });
+    }
     // Return 400 for validation errors (invalid values, not found, etc.)
     if (error.message?.includes('Invalid') ||
         error.message?.includes('not found') ||
@@ -1479,6 +1487,59 @@ metadataRouter.post(
       }
       console.error("Error restoring metadata:", error);
       res.status(500).json({ error: "Kunde inte återställa metadata" });
+    }
+  },
+);
+
+// Task #1218 (Etapp 6): GDPR-anonymisering av ett metadata-fält på ett objekt.
+// Oåterkalleligt — förstör värdet i aktiva/arkiverade poster, historik och alla
+// tekniska kopior (uppgiftspaket + spegelkolumner). Endast admin/owner, och
+// klienten måste skicka explicit bekräftelse. Loggar VEM/NÄR — aldrig VAD.
+const anonymizeSchema = z.object({
+  confirm: z.literal(true, {
+    errorMap: () => ({ message: "Anonymisering kräver explicit bekräftelse (confirm: true)" }),
+  }),
+});
+
+metadataRouter.post(
+  "/objects/:objectId/field/:katalogId/anonymize",
+  requireAdmin,
+  async (req: Request, res: Response) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      if (!tenantId) {
+        return res.status(401).json({ error: "Ingen tenant hittad" });
+      }
+      const { objectId, katalogId } = req.params;
+      anonymizeSchema.parse(req.body ?? {});
+      // Aktör härleds ALLTID från den autentiserade identiteten (audit-integritet).
+      const actor = (req as any).user?.claims?.sub;
+      if (!actor) {
+        return res.status(401).json({ error: "Ingen autentiserad användare" });
+      }
+
+      const check = await assertObjectAndKatalogInTenant(objectId, katalogId, tenantId);
+      if (!check.ok) return res.status(check.status!).json({ error: check.error });
+      // Systemfält (auto-ursprung) får aldrig anonymiseras — serverside-spegling av
+      // UI:t. Utan denna guard kan en admin kringgå UI-restriktionen via direkt API.
+      if (check.isSystem) {
+        return res.status(403).json({ error: "Systemfält kan inte anonymiseras" });
+      }
+
+      const result = await anonymizeObjectMetadataField(objectId, katalogId, tenantId, actor);
+      res.json(result);
+    } catch (error: any) {
+      if (error instanceof ZodError) {
+        return res.status(400).json({ error: "Valideringsfel", details: error.errors });
+      }
+      if (error instanceof NoLocalMetadataToAnonymizeError) {
+        return res.status(409).json({ error: error.message });
+      }
+      if (error instanceof InvalidMetadataInputError) {
+        return res.status(404).json({ error: error.message });
+      }
+      console.error("Error anonymizing metadata:", error);
+      res.status(500).json({ error: "Kunde inte anonymisera metadata" });
     }
   },
 );

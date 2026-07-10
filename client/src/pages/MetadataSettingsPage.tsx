@@ -78,6 +78,7 @@ import {
   Search,
   X,
   Archive,
+  EyeOff,
 } from "lucide-react";
 
 import { getLucideIconByName } from "@/lib/icon-registry";
@@ -103,6 +104,7 @@ interface MetadataKatalog {
   allowedValues: string[] | null;
   allowDuplicates: boolean;
   kronologiskVisning: boolean;
+  visasIKarusell: boolean;
   parentMetadataId: string | null;
   // Task #666: beräknat fält — när true räknas värdet ut från en formel som
   // refererar syskonfält i samma familj. Lagrar inget eget värde.
@@ -570,6 +572,11 @@ export default function MetadataSettingsPage() {
                                       <Clock className="h-2.5 w-2.5 mr-0.5" />Historik
                                     </Badge>
                                   )}
+                                  {type.visasIKarusell === false && (
+                                    <Badge variant="outline" className="text-[10px] text-muted-foreground" data-testid={`badge-karusell-doljd-${type.namn}`}>
+                                      <EyeOff className="h-2.5 w-2.5 mr-0.5" />Dold i karusell
+                                    </Badge>
+                                  )}
                                   {type.arBeraknad && (
                                     <Badge variant="outline" className="text-[10px]" data-testid={`badge-computed-${type.namn}`}>
                                       <Calculator className="h-2.5 w-2.5 mr-0.5" />
@@ -792,6 +799,7 @@ function MetadataTypeForm({ initialData, onSubmit, isPending, allTypes, customer
   };
   const [allowDuplicates, setAllowDuplicates] = useState(initialData?.allowDuplicates ?? false);
   const [kronologiskVisning, setKronologiskVisning] = useState(initialData?.kronologiskVisning ?? false);
+  const [visasIKarusell, setVisasIKarusell] = useState(initialData?.visasIKarusell ?? true);
   const [parentMetadataId, setParentMetadataId] = useState(initialData?.parentMetadataId || '');
   // Task #666: beräknat fält. Ett beräknat fält tillhör en familj och har en formel
   // som refererar syskonfält (t.ex. "langd * bredd"). Värdet räknas ut readonly.
@@ -869,6 +877,7 @@ function MetadataTypeForm({ initialData, onSubmit, isPending, allTypes, customer
       allowedValues: isLista && allowedValues.length > 0 ? allowedValues : null,
       allowDuplicates,
       kronologiskVisning,
+      visasIKarusell,
       parentMetadataId: parentMetadataId || null,
       arBeraknad: parentMetadataId ? arBeraknad : false,
       formel: parentMetadataId && arBeraknad ? (formel.trim() || null) : null,
@@ -1248,6 +1257,18 @@ function MetadataTypeForm({ initialData, onSubmit, isPending, allTypes, customer
             checked={kronologiskVisning}
             onCheckedChange={setKronologiskVisning}
             data-testid="switch-type-kronologisk"
+          />
+        </div>
+
+        <div className="flex items-center justify-between">
+          <div>
+            <Label>Visas i karusell</Label>
+            <p className="text-xs text-muted-foreground">Visa fältet i metadata-karusellen på objektytorna</p>
+          </div>
+          <Switch
+            checked={visasIKarusell}
+            onCheckedChange={setVisasIKarusell}
+            data-testid="switch-type-karusell"
           />
         </div>
       </div>

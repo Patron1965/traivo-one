@@ -33,6 +33,8 @@ export interface MetadataFormKatalog {
   datatyp?: string;
   area?: string | null;
   kronologiskVisning?: boolean;
+  // Task #1218: styr om fältet visas i metadata-karusellen (default true).
+  visasIKarusell?: boolean;
   allowDuplicates?: boolean;
   allowedValues?: string[] | null;
   // Task #1214: referensfält pekar på ett register (t.ex. 'customers').
@@ -52,6 +54,8 @@ export interface MetadataFormEntry {
   // Task #1214: referensfält lagrar registrets id (t.ex. kund-id) här.
   vardeReferens?: string | null;
   metod?: string | null;
+  // Task #1213/#1218: värde-status ('aktiv' | 'arkiverad' | 'anonymiserad' ...).
+  status?: string | null;
   lastChangedAt?: string | null;
   source?: "inherited" | "direct" | string;
   fromObject?: { namn?: string } | null;

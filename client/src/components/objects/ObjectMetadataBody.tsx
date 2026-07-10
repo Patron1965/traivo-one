@@ -45,6 +45,9 @@ export interface ObjectMetadataBodyProps {
   onRestore: (katalogId: string) => void;
   softDeletePending: boolean;
   restorePending: boolean;
+  canAnonymize?: boolean;
+  onAnonymize?: (katalogId: string) => void;
+  anonymizePending?: boolean;
   renderHistoryButton?: (entry: MetadataFormEntry) => ReactNode;
   legacyEntries: MetadataFormEntry[];
   onEditLegacyField: (group: string) => void;
@@ -84,6 +87,9 @@ export function ObjectMetadataBody({
   onRestore,
   softDeletePending,
   restorePending,
+  canAnonymize,
+  onAnonymize,
+  anonymizePending,
   renderHistoryButton,
   legacyEntries,
   onEditLegacyField,
@@ -111,9 +117,16 @@ export function ObjectMetadataBody({
     return m;
   }, [types]);
 
+  // Task #1218: fält med visasIKarusell===false döljs från karusell-ytan
+  // (default true → äldre fält utan flaggan visas fortsatt).
+  const carouselEntries = useMemo(
+    () => entries.filter((e) => e.katalog?.visasIKarusell !== false),
+    [entries],
+  );
+
   const groups = useMemo(
-    () => groupEntriesByArea(entries, areas),
-    [entries, areas],
+    () => groupEntriesByArea(carouselEntries, areas),
+    [carouselEntries, areas],
   );
 
   const filterActive = areaFilter.size > 0;
@@ -136,6 +149,9 @@ export function ObjectMetadataBody({
       onRestore={onRestore}
       softDeletePending={softDeletePending}
       restorePending={restorePending}
+      canAnonymize={canAnonymize}
+      onAnonymize={onAnonymize}
+      anonymizePending={anonymizePending}
       onPreviewImage={setPreviewUrl}
       renderHistoryButton={renderHistoryButton}
       onEditLegacyField={onEditLegacyField}
@@ -146,7 +162,7 @@ export function ObjectMetadataBody({
     <div className="space-y-6">
         <div className="flex items-center justify-between gap-2">
           <h2 className="text-sm font-medium text-muted-foreground" data-testid="text-metadata-count">
-            {filterActive ? `${visibleCount} av ${entries.length}` : entries.length} metadatafält
+            {filterActive ? `${visibleCount} av ${carouselEntries.length}` : carouselEntries.length} metadatafält
           </h2>
           <div className="flex items-center gap-2">
             {groups.length > 0 && (

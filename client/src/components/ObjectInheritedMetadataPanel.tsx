@@ -26,7 +26,7 @@ interface MetadataEntry {
   vardeJson?: unknown;
   vardeReferens?: string | null;
   fromObject?: { id: string; namn: string; level: number } | null;
-  katalog?: { namn: string; datatyp?: string | null; area?: string | null } | null;
+  katalog?: { namn: string; datatyp?: string | null; area?: string | null; visasIKarusell?: boolean | null } | null;
 }
 
 function displayValue(m: MetadataEntry): string {
@@ -64,7 +64,12 @@ export function ObjectInheritedMetadataPanel({ objectId }: Props) {
     enabled: !!objectId,
   });
 
-  const all = data?.metadata ?? [];
+  // Task #1218: fält markerade "visas ej i karusell" döljs även här — paritet med
+  // objekt-360-karusellen (tekniska/interna fält visas inte i presentationsytorna).
+  const all = useMemo(
+    () => (data?.metadata ?? []).filter((m) => m.katalog?.visasIKarusell !== false),
+    [data],
+  );
   const inherited = useMemo(() => all.filter((m) => m.source === "inherited"), [all]);
   const blocked = useMemo(
     () => all.filter((m) => m.source === "local" && m.stoppaVidareArvning === true),

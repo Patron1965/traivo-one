@@ -66,6 +66,18 @@ export class InvalidMetadataInputError extends Error {
   }
 }
 
+// Task #1218: anonymisering får ENDAST ske på lokala (icke-ärvda) värden.
+// Kastas när målet inte har någon lokal metadata_varden-rad (t.ex. rent ärvt
+// fält på ett barn) — annars rapporteras falsk framgång utan att något raderas.
+export class NoLocalMetadataToAnonymizeError extends Error {
+  constructor(
+    message = 'Fältet har inget lokalt värde att anonymisera. Ärvda värden måste anonymiseras på källobjektet.',
+  ) {
+    super(message);
+    this.name = 'NoLocalMetadataToAnonymizeError';
+  }
+}
+
 export function getDisplayValue(existing: MetadataVarden): string | null {
   return existing.vardeString ?? 
     (existing.vardeInteger != null ? String(existing.vardeInteger) : null) ??
@@ -922,6 +934,7 @@ export async function getObjectWithAllMetadata(
         mk.is_system as katalog_is_system,
         mk.is_required as katalog_is_required,
         mk.kronologisk_visning as katalog_kronologisk_visning,
+        mk.visas_i_karusell as katalog_visas_i_karusell,
         pc.level,
         pc.name as from_objekt_namn,
         pc.blocked_katalog_ids,
@@ -941,9 +954,11 @@ export async function getObjectWithAllMetadata(
         -- Task #1213: statusmodell — endast AKTIVA rader deltar i visning/arv.
         -- Lokalt: status='aktiv' ELLER raderad=TRUE (mjuk-raderade/tombstones visas
         -- strukna på egen nivå). Arkiverade poster (status='arkiverad', raderad=FALSE)
-        -- och anonymiserade syns aldrig här — de hör hemma i historik/arkiv-vyer.
+        -- syns aldrig här — de hör hemma i historik/arkiv-vyer.
+        -- Task #1218: ANONYMISERADE lokala rader visas (utan värde) så att posten
+        -- kan renderas med status "Anonymiserad"; de ärvs ALDRIG nedåt.
         (
-          (mv.objekt_id = ${objektId} AND (mv.status = 'aktiv' OR COALESCE(mv.raderad, FALSE) = TRUE))
+          (mv.objekt_id = ${objektId} AND (mv.status IN ('aktiv', 'anonymiserad') OR COALESCE(mv.raderad, FALSE) = TRUE))
           OR (mv.status = 'aktiv' AND mv.arvs_nedat = TRUE AND COALESCE(mv.niva_las, FALSE) = FALSE AND COALESCE(mv.raderad, FALSE) = FALSE AND NOT (mv.metadata_katalog_id = ANY(pc.blocked_katalog_ids)))
         )
         AND mv.tenant_id = ${tenantId}
@@ -1141,6 +1156,7 @@ export async function getObjectWithAllMetadata(
         isSystem: nearest.katalog_is_system ?? false,
         isRequired: nearest.katalog_is_required ?? false,
         kronologiskVisning: nearest.katalog_kronologisk_visning ?? false,
+        visasIKarusell: nearest.katalog_visas_i_karusell ?? true,
         createdAt: nearest.created_at,
       } as any,
       source: nearest.source,
@@ -2293,6 +2309,14 @@ export async function updateMetadata(
     throw new Error(`Metadata type not found for this tenant`);
   }
 
+  // GDPR: anonymiserade rader är oåterkalleliga — värdet är förstört för alltid.
+  // Ingen redigeringsväg får återuppliva dem (skriva nytt värde eller auto-återställa
+  // status till 'aktiv'). Anonymiseringens egen underhållsväg går via
+  // anonymizeObjectMetadataField (direkt db.update), aldrig genom updateMetadata.
+  if (existing.status === 'anonymiserad') {
+    throw new Error(`"${metadataTyp.namn}" är anonymiserat och kan inte ändras — anonymisering är oåterkallelig.`);
+  }
+
   // Task #666: beräknade fält är readonly — värdet härleds vid läsning från
   // formeln och får aldrig lagras manuellt.
   if (metadataTyp.arBeraknad) {
@@ -2728,6 +2752,176 @@ export async function restoreObjectMetadata(
       }
     }
   });
+}
+
+// ============================================================================
+// Task #1218 (Etapp 6): GDPR-ANONYMISERING AV ETT METADATA-FÄLT PÅ ETT OBJEKT
+// ----------------------------------------------------------------------------
+// Oåterkalleligt: förstör värdet i ALLA kopior —
+//  1. metadata_varden: alla rader för (objekt, katalog) oavsett status (aktiva,
+//     arkiverade, tombstones) — värdefälten nollas, status='anonymiserad'.
+//  2. metadata_historik: gammalt_varde/nytt_varde nollas för (objekt, katalog).
+//  3. Audit-rad i historiken: VEM/NÄR — aldrig VAD (andringsMetod='anonymisering').
+//  4. Uppgiftspaket-kopior (work_orders + assignments, ÄVEN frysta) + tekniska
+//     spegelkolumner scrubbas om fältet matar paketet (åtkomst-/geo-fält).
+//  5. Geo-spegelkolumner på objects (address/postalCode/city/koordinater).
+// Ingen restore-väg finns eller får byggas.
+// ============================================================================
+
+// Katalog-namn (lowercase) som matar uppgiftspaketets åtkomst-del.
+const ANON_ATKOMST_NAMN = new Set(['åtkomsttyp', 'åtkomstkod', 'nyckelnummer', 'åtkomstinfo']);
+// Katalog-namn (lowercase) som matar position/geo-speglar.
+const ANON_GEO_NAMN = new Set([
+  'gatuadress', 'postnummer', 'postort', 'koordinater',
+  'fördjupad position', 'avdelning/port/våning',
+]);
+// Geo-strängfält → objekt-kolumn (speglar GEO_COLUMN_MAP i geo-field-sync).
+const ANON_GEO_OBJECT_COLUMN: Record<string, string> = {
+  gatuadress: 'address',
+  postnummer: 'postal_code',
+  postort: 'city',
+};
+
+export interface AnonymizeResult {
+  anonymizedRows: number;
+  historikRowsScrubbed: number;
+}
+
+export async function anonymizeObjectMetadataField(
+  objektId: string,
+  metadataKatalogId: string,
+  tenantId: string,
+  anonymiseradAv: string,
+): Promise<AnonymizeResult> {
+  const [katalog] = await db
+    .select()
+    .from(metadataKatalog)
+    .where(and(eq(metadataKatalog.id, metadataKatalogId), eq(metadataKatalog.tenantId, tenantId)))
+    .limit(1);
+  if (!katalog) {
+    throw new InvalidMetadataInputError('Metadatadefinition hittades inte');
+  }
+
+  const now = new Date();
+  let anonymizedRows = 0;
+  let historikRowsScrubbed = 0;
+
+  await db.transaction(async (tx) => {
+    // Lås ALLA lokala rader för katalogen (alla statusar) i deterministisk ordning.
+    const locked = await tx.execute(sql`
+      SELECT id FROM metadata_varden
+      WHERE objekt_id = ${objektId}
+        AND metadata_katalog_id = ${metadataKatalogId}
+        AND tenant_id = ${tenantId}
+      ORDER BY created_at ASC, id ASC
+      FOR UPDATE
+    `);
+    const ids = (locked.rows as Array<{ id: string }>).map((r) => r.id);
+
+    // Fail closed: inget lokalt värde ⇒ anonymisera INGET (ingen historik-scrub,
+    // ingen audit-rad, inga spegel-scrubbar) och rapportera aldrig falsk framgång.
+    // Ärvda värden måste anonymiseras på källobjektet.
+    if (ids.length === 0) {
+      throw new NoLocalMetadataToAnonymizeError();
+    }
+
+    await tx
+      .update(metadataVarden)
+      .set({
+        vardeString: null,
+        vardeInteger: null,
+        vardeDecimal: null,
+        vardeBoolean: null,
+        vardeDatetime: null,
+        vardeJson: null,
+        vardeReferens: null,
+        status: 'anonymiserad',
+        anonymiseradAv,
+        anonymiseradVid: now,
+        uppdateradAv: anonymiseradAv,
+        updatedAt: now,
+      })
+      .where(and(inArray(metadataVarden.id, ids), eq(metadataVarden.tenantId, tenantId)));
+    anonymizedRows = ids.length;
+
+    // Historiken: förstör gamla/nya värden för fältet på objektet.
+    const scrubbed = await tx.execute(sql`
+      UPDATE metadata_historik
+      SET gammalt_varde = NULL, nytt_varde = NULL
+      WHERE objekt_id = ${objektId}
+        AND metadata_katalog_id = ${metadataKatalogId}
+        AND tenant_id = ${tenantId}
+        AND (gammalt_varde IS NOT NULL OR nytt_varde IS NOT NULL)
+    `);
+    historikRowsScrubbed = scrubbed.rowCount ?? 0;
+
+    // Audit-rad: VEM och NÄR — aldrig VAD.
+    await tx.insert(metadataHistorik).values({
+      tenantId,
+      metadataVardenId: ids[0] ?? null,
+      objektId,
+      metadataKatalogId,
+      gammaltVarde: null,
+      nyttVarde: null,
+      andradAv: anonymiseradAv,
+      andringsMetod: 'anonymisering',
+    });
+  });
+
+  const namnKey = (katalog.namn ?? '').toLowerCase();
+
+  // GDPR-completeness: alla DURABLA/icke-automatiskt-ombyggda kopior av värdet
+  // MÅSTE förstöras som del av success-kontraktet. Om någon av dessa misslyckas
+  // KASTAR vi (→ non-200) så anonymiseringen aldrig rapporteras klar medan
+  // personuppgifter ligger kvar i en kopia. Den primära raden är redan
+  // committad+nullad, så en retry är idempotent (låser om den nu nullade raden).
+
+  // Geo-spegelkolumner på objektet. Enkelriktad cache, men rebuild sker inte
+  // automatiskt till NULL — måste därför scrubbas här (obligatoriskt).
+  const objectColumn = ANON_GEO_OBJECT_COLUMN[namnKey];
+  if (objectColumn) {
+    await db.execute(sql`
+      UPDATE objects SET ${sql.raw(`"${objectColumn}"`)} = NULL
+      WHERE id = ${objektId} AND tenant_id = ${tenantId}
+    `);
+  }
+  if (namnKey === 'koordinater') {
+    await db.execute(sql`
+      UPDATE objects SET latitude = NULL, longitude = NULL,
+        entrance_latitude = NULL, entrance_longitude = NULL
+      WHERE id = ${objektId} AND tenant_id = ${tenantId}
+    `);
+  }
+
+  const { scrubUppgiftspaketForAnonymization, propagateUppgiftspaket } = await import(
+    './services/uppgiftspaket'
+  );
+  const scrubAtkomst = ANON_ATKOMST_NAMN.has(namnKey);
+  const scrubPosition = ANON_GEO_NAMN.has(namnKey);
+
+  // Uppgiftspaket-kopior (jsonb på work_orders + assignments i HELA subträdet,
+  // inkl. FRYSTA uppgifter) är durabla kopior som INTE byggs om från källan.
+  // Obligatorisk scrub — kastar vidare vid fel (surfaced som non-200).
+  if (scrubAtkomst || scrubPosition) {
+    await scrubUppgiftspaketForAnonymization(tenantId, objektId, {
+      atkomst: scrubAtkomst,
+      position: scrubPosition,
+    });
+  }
+
+  // Rebuild av ÖPPNA uppgifters paket från den nu-nullade källan är en cache-lik
+  // projektion (öppna paket byggs ändå om vid nästa propagering/läsning) →
+  // best-effort; får inte fälla en redan komplett anonymisering.
+  try {
+    await propagateUppgiftspaket(tenantId, [objektId]);
+  } catch (err) {
+    console.error(
+      `[metadata-queries] uppgiftspaket-rebuild (öppna) efter anonymisering misslyckades (objekt ${objektId}):`,
+      err,
+    );
+  }
+
+  return { anonymizedRows, historikRowsScrubbed };
 }
 
 // Sätter per-objekt sorteringsordning för metadata-fält (ordnad lista av

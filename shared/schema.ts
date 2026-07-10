@@ -4517,6 +4517,11 @@ export const metadataKatalog = pgTable("metadata_katalog", {
   // på ett barn får propageras uppåt till förälder/syskon.
   tillatUppdateringUppat: boolean("tillat_uppdatering_uppat").default(false).notNull(),
 
+  // Task #1218 (Etapp 6): styr om fältet visas i metadata-karusellen på
+  // objekt-360/mobil/export. Default true (back-compat: allt syns). Fältet
+  // finns alltid kvar i admin/katalog oavsett flaggan.
+  visasIKarusell: boolean("visas_i_karusell").default(true).notNull(),
+
   createdAt: timestamp("created_at").defaultNow().notNull(),
 
   // Task #716: arkivering (soft-delete) istället för permanent radering.
@@ -4776,6 +4781,10 @@ export const metadataVarden = pgTable("metadata_varden", {
   status: varchar("status", { length: 20 }).default("aktiv").notNull(),
   arkiveradAv: varchar("arkiverad_av", { length: 100 }),
   arkiveradVid: timestamp("arkiverad_vid"),
+  // Task #1218 (Etapp 6): GDPR-anonymisering — loggar VEM/NÄR, aldrig VAD.
+  // Värdefälten nollas oåterkalleligt när status='anonymiserad'.
+  anonymiseradAv: varchar("anonymiserad_av", { length: 100 }),
+  anonymiseradVid: timestamp("anonymiserad_vid"),
   // Idempotens-spår för historik→arkiverad-post-konverteringen (migration 0127):
   // satt = raden skapades från metadata_historik-raden med detta id.
   konverteradFranHistorikId: varchar("konverterad_fran_historik_id"),

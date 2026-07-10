@@ -490,3 +490,55 @@ export async function propagateUppgiftspaket(
 
   return { workOrdersUpdated, assignmentsUpdated };
 }
+
+// ============================================================================
+// Task #1218 (Etapp 6): GDPR-ANONYMISERING — scrubba paket-kopior
+// ----------------------------------------------------------------------------
+// Anonymisering måste träffa ALLA kopior — även FRYSTA uppgifter som
+// propageringen medvetet aldrig rör. Denna scrub nollar de berörda paket-
+// delarna (åtkomst och/eller position) + tekniska spegelkolumner på SAMTLIGA
+// uppgifter (öppna + frysta) i objektets subträd. Öppna uppgifter byggs
+// därefter om av caller via propagateUppgiftspaket (från den nu anonymiserade
+// källan) — frysta behåller det scrubbade paketet.
+// ============================================================================
+
+export interface ScrubUppgiftspaketOpts {
+  /** Nolla paketets åtkomst-del (portkod/nyckelnummer/info/typ). */
+  atkomst?: boolean;
+  /** Nolla paketets position-del + spegelkolumner (address/lat/lng). */
+  position?: boolean;
+}
+
+export async function scrubUppgiftspaketForAnonymization(
+  tenantId: string,
+  objectId: string,
+  opts: ScrubUppgiftspaketOpts,
+): Promise<void> {
+  if (!opts.atkomst && !opts.position) return;
+  const objectIds = await expandToSubtree(tenantId, [objectId]);
+  if (objectIds.length === 0) return;
+
+  for (const ids of chunk(objectIds, IN_CHUNK_SIZE)) {
+    const idList = sql.join(ids.map((id) => sql`${id}`), sql`, `);
+
+    // work_orders: paket-jsonb + taskLatitude/taskLongitude-speglar.
+    await db.execute(sql`
+      UPDATE work_orders SET
+        uppgiftspaket = CASE WHEN uppgiftspaket IS NULL THEN NULL ELSE
+          ${opts.atkomst ? sql`jsonb_set(` : sql``}${opts.position ? sql`jsonb_set(` : sql``}uppgiftspaket${opts.position ? sql`, '{position}', 'null'::jsonb)` : sql``}${opts.atkomst ? sql`, '{atkomst}', 'null'::jsonb)` : sql``}
+        END
+        ${opts.position ? sql`, task_latitude = NULL, task_longitude = NULL` : sql``}
+      WHERE tenant_id = ${tenantId} AND object_id IN (${idList})
+    `);
+
+    // assignments: paket-jsonb + address/latitude/longitude-speglar.
+    await db.execute(sql`
+      UPDATE assignments SET
+        uppgiftspaket = CASE WHEN uppgiftspaket IS NULL THEN NULL ELSE
+          ${opts.atkomst ? sql`jsonb_set(` : sql``}${opts.position ? sql`jsonb_set(` : sql``}uppgiftspaket${opts.position ? sql`, '{position}', 'null'::jsonb)` : sql``}${opts.atkomst ? sql`, '{atkomst}', 'null'::jsonb)` : sql``}
+        END
+        ${opts.position ? sql`, address = NULL, latitude = NULL, longitude = NULL` : sql``}
+      WHERE tenant_id = ${tenantId} AND object_id IN (${idList})
+    `);
+  }
+}
