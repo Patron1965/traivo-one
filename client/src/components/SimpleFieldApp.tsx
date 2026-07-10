@@ -136,27 +136,44 @@ function formatDeviationMinutes(minutes: number): string {
 // medlemmar i utförarappen. Skapar/ändrar aldrig avvikelser, visar bara
 // befintliga fine-planning-signaler (egen uppgift/frånvaro/egen resa).
 function TeamDeviationsPanel({ mobileApiCall }: { mobileApiCall: (method: string, url: string, body?: unknown) => Promise<Response> }) {
+  const [teams, setTeams] = useState<Array<{ id: string; name?: string }>>([]);
+  const [selectedTeamId, setSelectedTeamId] = useState<string>("");
   const [summary, setSummary] = useState<TeamDeviationSummaryItem | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
 
+  // Hämta ALLA team resursen tillhör — en fältarbetare kan vara medlem i fler
+  // än ett team, och panelen ska inte tyst välja det första utan låta
+  // användaren byta om det finns fler.
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
         const teamsRes = await mobileApiCall("GET", "/api/mobile/my-team");
-        const teamsData: Array<{ id: string }> = await teamsRes.json();
-        const teamId = teamsData[0]?.id;
-        if (!teamId) {
-          if (!cancelled) { setSummary(null); setLoading(false); }
-          return;
-        }
+        const teamsData: Array<{ id: string; name?: string }> = await teamsRes.json();
+        if (cancelled) return;
+        setTeams(teamsData);
+        setSelectedTeamId((prev) => prev || teamsData[0]?.id || "");
+        if (teamsData.length === 0) setLoading(false);
+      } catch {
+        if (!cancelled) { setError(true); setLoading(false); }
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [mobileApiCall]);
+
+  useEffect(() => {
+    if (!selectedTeamId) return;
+    let cancelled = false;
+    setLoading(true);
+    (async () => {
+      try {
         const now = new Date();
         const week = getISOWeek(now);
         const isoYear = getISOWeekYear(now);
         const res = await mobileApiCall(
           "GET",
-          `/api/mobile/teams/${teamId}/deviations?year=${isoYear}&week=${week}`,
+          `/api/mobile/teams/${selectedTeamId}/deviations?year=${isoYear}&week=${week}`,
         );
         const data = await res.json();
         if (!cancelled) setSummary(data);
@@ -167,18 +184,32 @@ function TeamDeviationsPanel({ mobileApiCall }: { mobileApiCall: (method: string
       }
     })();
     return () => { cancelled = true; };
-  }, [mobileApiCall]);
+  }, [mobileApiCall, selectedTeamId]);
 
   const membersWithDeviation = summary?.members.filter((m) => m.hasDeviation) ?? [];
   const hasAnyDeviation = membersWithDeviation.length > 0 || (summary?.teamAbsenceMinutes ?? 0) > 0;
 
   return (
     <Card className="border-chart-4/20 dark:border-chart-4/80" data-testid="panel-team-deviations">
-      <CardHeader className="pb-2">
+      <CardHeader className="pb-2 space-y-2">
         <CardTitle className="text-sm flex items-center gap-2">
           <Users className="h-4 w-4 text-chart-4" />
           Avvikelser i teamet denna vecka
         </CardTitle>
+        {teams.length > 1 && (
+          <Select value={selectedTeamId} onValueChange={setSelectedTeamId}>
+            <SelectTrigger className="h-8 text-xs" data-testid="select-field-deviation-team">
+              <SelectValue placeholder="Välj team" />
+            </SelectTrigger>
+            <SelectContent>
+              {teams.map((t) => (
+                <SelectItem key={t.id} value={t.id} data-testid={`option-field-deviation-team-${t.id}`}>
+                  {t.name || t.id}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
       </CardHeader>
       <CardContent className="space-y-2">
         {loading && <p className="text-xs text-muted-foreground">Laddar...</p>}

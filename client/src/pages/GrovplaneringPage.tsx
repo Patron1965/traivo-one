@@ -673,7 +673,7 @@ export default function GrovplaneringPage() {
         />
       </div>
 
-      <TeamDeviationsPanel teams={teams.map((t) => ({ id: t.id, name: t.name }))} />
+      <TeamDeviationsPanel teams={teams.map((t) => ({ id: t.id, name: t.name }))} periodAnchor={applied.from} />
 
       {/* Filterpanel */}
       <RoughFilterPanel

@@ -44,11 +44,21 @@ function formatMinutes(minutes: number): string {
   return `${h} h ${m} min`;
 }
 
-export function TeamDeviationsPanel({ teams }: { teams: TeamOption[] }) {
-  const now = useMemo(() => new Date(), []);
+export function TeamDeviationsPanel({ teams, periodAnchor }: { teams: TeamOption[]; periodAnchor?: string }) {
   const [teamId, setTeamId] = useState<string>(teams[0]?.id ?? "");
-  const [year] = useState(() => getISOWeekYear(now));
-  const [week] = useState(() => getISOWeek(now));
+
+  // Följer den valda planeringsperioden i Uppgiftsnavets filter (RoughFilterPanel
+  // anchor/period), inte "idag" — annars visar panelen fel vecka när planeraren
+  // tittar på en annan period.
+  const anchorDate = useMemo(() => {
+    if (periodAnchor) {
+      const parsed = new Date(periodAnchor);
+      if (!Number.isNaN(parsed.getTime())) return parsed;
+    }
+    return new Date();
+  }, [periodAnchor]);
+  const year = getISOWeekYear(anchorDate);
+  const week = getISOWeek(anchorDate);
 
   const { data, isLoading } = useQuery<TeamDeviationSummary>({
     queryKey: [`/api/weekly-plans/team/${teamId}/deviations`, year, week],
