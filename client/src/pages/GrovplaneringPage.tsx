@@ -83,7 +83,7 @@ import {
 import type { Team, GeographicDistrict } from "@shared/schema";
 import { AdvancedFilterBar } from "@/components/filters/AdvancedFilterBar";
 import { GROVPLANERING_FILTER_FIELDS } from "@/lib/filter-fields-grovplanering";
-import { emptyFilterGroup, evaluateFilterGroup, type FilterGroup } from "@shared/filter-engine";
+import { emptyFilterGroup, evaluateFilterGroup, visibleFieldsForRole, type FilterGroup } from "@shared/filter-engine";
 import { useAuth } from "@/hooks/use-auth";
 
 interface AppliedFilter {
@@ -285,6 +285,8 @@ export default function GrovplaneringPage() {
   });
 
   const [advancedFilter, setAdvancedFilter] = useState<FilterGroup>(() => emptyFilterGroup());
+  const { user: currentUser } = useAuth() as { user?: { role?: string | null } };
+  const currentRole = currentUser?.role ?? null;
 
   const [selected, setSelected] = useState<Map<string, GridTaskRow>>(new Map());
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
@@ -321,13 +323,22 @@ export default function GrovplaneringPage() {
   const rawGroups: GridGroup[] = data?.groups ?? [];
   const groups: GridGroup[] = useMemo(() => {
     if (advancedFilter.conditions.length === 0) return rawGroups;
+    // Säkerhet: evaluera ENBART mot fält den inloggade rollen får se/söka på —
+    // annars kan ett sparat/delat filter läcka ekonomifält till roller som
+    // inte ska ha åtkomst (villkoret skulle annars fortfarande matcha).
+    const allowedFields = visibleFieldsForRole(GROVPLANERING_FILTER_FIELDS, currentRole);
+    const allowedKeys = new Set(allowedFields.map((f) => f.key));
+    const safeFilter: FilterGroup = {
+      ...advancedFilter,
+      conditions: advancedFilter.conditions.filter((c) => allowedKeys.has(c.field)),
+    };
     return rawGroups
       .map((g) => ({
         ...g,
-        tasks: g.tasks.filter((t) => evaluateFilterGroup(t, advancedFilter, GROVPLANERING_FILTER_FIELDS)),
+        tasks: g.tasks.filter((t) => evaluateFilterGroup(t, safeFilter, allowedFields)),
       }))
       .filter((g) => g.tasks.length > 0);
-  }, [rawGroups, advancedFilter]);
+  }, [rawGroups, advancedFilter, currentRole]);
   const total = advancedFilter.conditions.length === 0 ? (data?.pagination.total ?? 0) : groups.reduce((n, g) => n + g.tasks.length, 0);
   const summary = data?.summary ?? EMPTY_KPIS;
 
@@ -423,8 +434,6 @@ export default function GrovplaneringPage() {
   // som rutnätet (samma query-params) — servern paginerar inte exporten.
   const [exporting, setExporting] = useState(false);
   const [columnDialogOpen, setColumnDialogOpen] = useState(false);
-  const { user: currentUser } = useAuth() as { user?: { role?: string | null } };
-  const currentRole = currentUser?.role ?? null;
   const [exportColumns, setExportColumns] = useState<ExportColumnKey[]>(
     () => loadExportColumns(),
   );

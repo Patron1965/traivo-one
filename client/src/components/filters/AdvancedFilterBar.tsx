@@ -197,14 +197,59 @@ export function AdvancedFilterBar<TRow>({ scope, fields, value, onChange }: Adva
                       ))}
                     </SelectContent>
                   </Select>
-                  {cond.operator !== "is_empty" && cond.operator !== "is_not_empty" && (
+                  {(cond.operator === "in" || cond.operator === "not_in") && (
                     <Input
                       className="h-8 flex-1"
-                      value={typeof cond.value === "string" || typeof cond.value === "number" ? String(cond.value) : ""}
-                      onChange={(e) => updateCondition(idx, { value: e.target.value })}
+                      placeholder="Värde 1, värde 2, ..."
+                      value={Array.isArray(cond.value) ? cond.value.join(", ") : ""}
+                      onChange={(e) =>
+                        updateCondition(idx, {
+                          value: e.target.value
+                            .split(",")
+                            .map((v) => v.trim())
+                            .filter((v) => v.length > 0),
+                        })
+                      }
                       data-testid={`input-filter-value-${idx}`}
                     />
                   )}
+                  {cond.operator === "between" && (
+                    <div className="flex items-center gap-1 flex-1">
+                      <Input
+                        className="h-8"
+                        placeholder="Från"
+                        value={Array.isArray(cond.value) ? String(cond.value[0] ?? "") : ""}
+                        onChange={(e) => {
+                          const to = Array.isArray(cond.value) ? cond.value[1] ?? "" : "";
+                          updateCondition(idx, { value: [e.target.value, to] });
+                        }}
+                        data-testid={`input-filter-value-from-${idx}`}
+                      />
+                      <span className="text-xs text-muted-foreground">–</span>
+                      <Input
+                        className="h-8"
+                        placeholder="Till"
+                        value={Array.isArray(cond.value) ? String(cond.value[1] ?? "") : ""}
+                        onChange={(e) => {
+                          const from = Array.isArray(cond.value) ? cond.value[0] ?? "" : "";
+                          updateCondition(idx, { value: [from, e.target.value] });
+                        }}
+                        data-testid={`input-filter-value-to-${idx}`}
+                      />
+                    </div>
+                  )}
+                  {cond.operator !== "is_empty" &&
+                    cond.operator !== "is_not_empty" &&
+                    cond.operator !== "in" &&
+                    cond.operator !== "not_in" &&
+                    cond.operator !== "between" && (
+                      <Input
+                        className="h-8 flex-1"
+                        value={typeof cond.value === "string" || typeof cond.value === "number" ? String(cond.value) : ""}
+                        onChange={(e) => updateCondition(idx, { value: e.target.value })}
+                        data-testid={`input-filter-value-${idx}`}
+                      />
+                    )}
                   <Button variant="ghost" size="icon" onClick={() => removeCondition(idx)} data-testid={`button-remove-condition-${idx}`}>
                     <Trash2 className="h-4 w-4" />
                   </Button>
