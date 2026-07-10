@@ -22,6 +22,7 @@ import { storage } from "../storage";
 // — ingen direkt getRouteSummary/ad-hoc-fetch längre (gotcha: enda källan = mapProvider).
 import { getRoutingDistance } from "../distance-matrix-service";
 import { getStartOfISOWeek } from "../routes/helpers";
+import { ValidationError } from "../errors";
 import type {
   WeeklyPlan,
   WeeklyPlanTask,
@@ -1177,11 +1178,36 @@ export async function resolvePersonalTaskArticleFields(
   tenantId: string,
   timeCategory: string,
   effectiveMinutes: number,
-): Promise<{ articleId: string | null; cachedCostOre: number | null }> {
-  const article = await resolveTimeCategoryArticle(tenantId, timeCategory);
+  explicitArticleId?: string | null,
+): Promise<{ articleId: string | null; cachedCostOre: number | null; timeCategory: string }> {
+  let article: Article | null = null;
+  let resolvedTimeCategory = timeCategory;
+  if (explicitArticleId) {
+    // Task #1242 (allmän uppgiftseditor): användaren väljer artikel direkt i stället för att
+    // gå via en fast tidskategori-lista. Enda tillåtna artiklar här är de som redan driver
+    // icke-produktionstid (internal_time/restid) — produktionsartiklar hanteras via
+    // work_orders (samma pipeline som övriga produktionsuppgifter), inte personal_tasks.
+    const candidate = await storage.getArticle(explicitArticleId);
+    if (!candidate || candidate.tenantId !== tenantId) {
+      throw new ValidationError("Artikeln kunde inte hittas för denna tenant");
+    }
+    if (candidate.articleType !== "internal_time" && candidate.articleType !== "restid") {
+      throw new ValidationError(
+        `Artikeln "${candidate.name}" kan inte användas för ett personligt block (kräver artikeltyp internal_time/restid)`,
+      );
+    }
+    if (!candidate.timeCodeKey) {
+      throw new ValidationError(`Artikeln "${candidate.name}" saknar tidskod (timeCodeKey) och kan inte väljas här`);
+    }
+    article = candidate;
+    resolvedTimeCategory = candidate.timeCodeKey;
+  } else {
+    article = await resolveTimeCategoryArticle(tenantId, timeCategory);
+  }
   return {
     articleId: article?.id ?? null,
     cachedCostOre: article && effectiveMinutes > 0 ? computePersonalTaskCostFromArticle(article, effectiveMinutes) : null,
+    timeCategory: resolvedTimeCategory,
   };
 }
 
@@ -1736,12 +1762,26 @@ export async function materializeSchedulesForPlan(
 
   const created: PersonalTask[] = [];
   for (const sched of applicable) {
-    // dayOfWeek: 0=mån..6=sön. Null = alla arbetsdagar (mån-fre = 0..4).
-    const days = sched.dayOfWeek != null ? [sched.dayOfWeek] : [0, 1, 2, 3, 4];
+    // Task #1242: generaliserad återkommande-modell. recurrenceType null = legacy-beteende
+    // (dayOfWeek styr ensam, null=alla arbetsdagar mån-fre). "daily" = alla 7 dagar.
+    // "weekly" = de veckodagar som anges i daysOfWeek (0=mån..6=sön), fallback till alla
+    // arbetsdagar om listan saknas/är tom (undviker att en tom lista tyst genererar 0 rader).
+    let days: number[];
+    if (sched.recurrenceType === "daily") {
+      days = [0, 1, 2, 3, 4, 5, 6];
+    } else if (sched.recurrenceType === "weekly") {
+      days = sched.daysOfWeek && sched.daysOfWeek.length > 0 ? sched.daysOfWeek : [0, 1, 2, 3, 4];
+    } else {
+      days = sched.dayOfWeek != null ? [sched.dayOfWeek] : [0, 1, 2, 3, 4];
+    }
     for (const dow of days) {
       const date = new Date(weekStart);
       date.setDate(weekStart.getDate() + dow);
       const plannedDate = toISODate(date);
+      // Task #1242: valfritt datumintervall avgränsar regeln (inclusive, sträng-jämförelse
+      // fungerar för ISO "YYYY-MM-DD").
+      if (sched.startDate && plannedDate < sched.startDate) continue;
+      if (sched.endDate && plannedDate > sched.endDate) continue;
       const key = `${sched.id}::${plannedDate}`;
       if (existingKeys.has(key)) continue; // idempotent
 
@@ -1761,16 +1801,17 @@ export async function materializeSchedulesForPlan(
         startAt,
         endAt,
       } as any);
-      const { articleId, cachedCostOre } = await resolvePersonalTaskArticleFields(
+      const { articleId, cachedCostOre, timeCategory } = await resolvePersonalTaskArticleFields(
         tenantId,
         sched.timeCategory,
         effectiveMinutes,
+        sched.articleId,
       );
       const pt = await storage.createPersonalTask({
         tenantId,
         weeklyPlanId,
         teamId: plan.teamId,
-        timeCategory: sched.timeCategory,
+        timeCategory,
         title: sched.title,
         description: sched.description ?? null,
         plannedDate,

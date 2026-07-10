@@ -107,6 +107,7 @@ import type {
   PersonalTask,
   TravelTimeEntry,
   WeeklyPlanWarning,
+  Article,
 } from "@shared/schema";
 import { useLocation } from "wouter";
 import { RouteDayMap, type RouteMapJob, type RouteMapCommute } from "@/components/ui/map";
@@ -480,14 +481,17 @@ export default function WeeklyPlanViewPage() {
     onSettled: () => invalidatePlan(),
   });
 
-  // Manuellt tidsblock (matrast, egentid, interntid, vila, övertid) — skapar ett
-  // personal_task som motorn bokför och kalendern renderar.
+  // Manuellt tidsblock (matrast, egentid, interntid, vila, övertid, eller valfri
+  // artikelbaserad uppgift) — skapar ett personal_task som motorn bokför och
+  // kalendern renderar. Task #1242: articleId är ett fritt val, ej kostnad —
+  // servern härleder timeCategory/cachedCostOre själv.
   const createPersonalTask = useMutation({
-    mutationFn: async (vars: { category: string; title: string; date: string; startMinutes: number; duration: number }) => {
+    mutationFn: async (vars: TaskEditorVars) => {
       const start = toIso(vars.date, vars.startMinutes);
       const end = toIso(vars.date, vars.startMinutes + vars.duration);
       await apiRequest("POST", `/api/weekly-plans/${planId}/personal-tasks`, {
-        timeCategory: vars.category,
+        timeCategory: vars.articleId ? undefined : vars.category,
+        selectedArticleId: vars.articleId || undefined,
         title: vars.title,
         plannedDate: vars.date,
         startAt: start,
@@ -498,9 +502,59 @@ export default function WeeklyPlanViewPage() {
     onSuccess: () => {
       invalidatePlan();
       setAddTimeOpen(false);
-      toast({ title: "Tid tillagd i schemat" });
+      toast({ title: "Uppgift tillagd i schemat" });
     },
-    onError: (e: Error) => toast({ title: "Kunde inte lägga till tid", description: e.message, variant: "destructive" }),
+    onError: (e: Error) => toast({ title: "Kunde inte lägga till uppgift", description: e.message, variant: "destructive" }),
+  });
+
+  // Task #1242: återkommande regel — skapar ett personal_task_schedule och
+  // materialiserar direkt så veckoplanen visar resultatet utan extra klick.
+  const createPersonalTaskSchedule = useMutation({
+    mutationFn: async (vars: TaskEditorVars) => {
+      await apiRequest("POST", "/api/personal-task-schedules", {
+        teamId: effectiveTeamId,
+        timeCategory: vars.category || "personal_time",
+        articleId: vars.articleId || null,
+        title: vars.title,
+        recurrenceType: vars.recurrenceType,
+        daysOfWeek: vars.recurrenceType === "weekly" ? vars.daysOfWeek : null,
+        startDate: vars.date,
+        endDate: vars.endDate || null,
+        startTime: minutesToHHMM(vars.startMinutes),
+        durationMinutes: vars.duration,
+        isCommute: false,
+        isActive: true,
+      });
+      if (planId) await apiRequest("POST", `/api/weekly-plans/${planId}/materialize-schedules`, {});
+    },
+    onSuccess: () => {
+      invalidatePlan();
+      setAddTimeOpen(false);
+      toast({ title: "Återkommande uppgift skapad" });
+    },
+    onError: (e: Error) => toast({ title: "Kunde inte skapa återkommande uppgift", description: e.message, variant: "destructive" }),
+  });
+
+  // Task #1242: produktionsartikel (articleType="tjanst") → admin-jobb (work order
+  // utan objekt/kund, INTERN-kund som fallback) — samma pipeline som andra jobb.
+  const createProductionTask = useMutation({
+    mutationFn: async (vars: TaskEditorVars) => {
+      await apiRequest("POST", "/api/work-orders/with-lines", {
+        workOrder: {
+          title: vars.title,
+          taskCategory: "admin",
+          teamId: effectiveTeamId || undefined,
+          scheduledDate: vars.date,
+        },
+        lines: [{ articleId: vars.articleId, quantity: 1 }],
+      });
+    },
+    onSuccess: () => {
+      invalidatePlan();
+      setAddTimeOpen(false);
+      toast({ title: "Uppgift skapad" });
+    },
+    onError: (e: Error) => toast({ title: "Kunde inte skapa uppgift", description: e.message, variant: "destructive" }),
   });
 
   const moveBlock = useMutation({
@@ -1413,9 +1467,10 @@ export default function WeeklyPlanViewPage() {
       <AddTimeDialog
         open={addTimeOpen}
         defaultDate={selectedDay}
-        saving={createPersonalTask.isPending}
+        saving={createPersonalTask.isPending || createPersonalTaskSchedule.isPending || createProductionTask.isPending}
         onClose={() => setAddTimeOpen(false)}
-        onSave={(vars) => createPersonalTask.mutate(vars)}
+        onSaveOnce={(vars) => (vars.kind === "production" ? createProductionTask.mutate(vars) : createPersonalTask.mutate(vars))}
+        onSaveRecurring={(vars) => createPersonalTaskSchedule.mutate(vars)}
       />
 
       <EgentidScheduleDialog
@@ -2102,56 +2157,145 @@ const ADDABLE_TIME_CATEGORIES: TimeCategoryKey[] = [
   "overtime",
 ];
 
+const WEEKDAY_LABELS = ["Mån", "Tis", "Ons", "Tors", "Fre", "Lör", "Sön"];
+
+// Task #1242: allmän uppgiftseditor. Ersätter den låsta ADDABLE_TIME_CATEGORIES-listan
+// med fritt artikelval — produktionsartiklar (tjanst) blir admin-jobb, interntid/restid-
+// artiklar blir personal_tasks. Legacy-kategorierna finns kvar som fallback utan artikel.
+export type TaskEditorVars = {
+  articleId: string;
+  category: string;
+  title: string;
+  date: string;
+  startMinutes: number;
+  duration: number;
+  recurrenceType: "none" | "daily" | "weekly";
+  daysOfWeek: number[];
+  endDate: string;
+  kind: "production" | "time";
+};
+
 function AddTimeDialog({
   open,
   defaultDate,
   saving,
   onClose,
-  onSave,
+  onSaveOnce,
+  onSaveRecurring,
 }: {
   open: boolean;
   defaultDate: string | null;
   saving: boolean;
   onClose: () => void;
-  onSave: (vars: { category: string; title: string; date: string; startMinutes: number; duration: number }) => void;
+  onSaveOnce: (vars: TaskEditorVars) => void;
+  onSaveRecurring: (vars: TaskEditorVars) => void;
 }) {
   const [category, setCategory] = useState<string>("break_meal");
+  const [articleId, setArticleId] = useState<string>("");
   const [title, setTitle] = useState(TIME_CATEGORY_STYLES.break_meal.label);
   const [date, setDate] = useState("");
   const [time, setTime] = useState("08:00");
   const [duration, setDuration] = useState("60");
+  const [recurrenceType, setRecurrenceType] = useState<"none" | "daily" | "weekly">("none");
+  const [daysOfWeek, setDaysOfWeek] = useState<number[]>([]);
+  const [endDate, setEndDate] = useState("");
+
+  const { data: articles = [] } = useQuery<Article[]>({
+    queryKey: ["/api/articles"],
+    enabled: open,
+  });
+  // Alla artikeltyper är valbara: "tjanst" (produktion → admin-jobb),
+  // "internal_time"/"restid" (personal_task). Övriga artikeltyper (material m.m.)
+  // döljs här — de saknar mening som fristående kalenderuppgift.
+  const selectableArticles = useMemo(
+    () => articles.filter((a) => ["tjanst", "internal_time", "restid"].includes(a.articleType)),
+    [articles],
+  );
+  const selectedArticle = useMemo(
+    () => selectableArticles.find((a) => a.id === articleId),
+    [selectableArticles, articleId],
+  );
+  const isProduction = selectedArticle?.articleType === "tjanst";
 
   // Återställ fälten varje gång dialogen öppnas.
   useEffect(() => {
     if (open) {
       setCategory("break_meal");
+      setArticleId("");
       setTitle(TIME_CATEGORY_STYLES.break_meal.label);
       setDate(defaultDate ?? "");
       setTime("08:00");
       setDuration("60");
+      setRecurrenceType("none");
+      setDaysOfWeek([]);
+      setEndDate("");
     }
   }, [open, defaultDate]);
 
   // Default-etiketter — låter oss byta benämning automatiskt så länge användaren
   // inte skrivit en egen text.
   const knownLabels = useMemo(
-    () => new Set(ADDABLE_TIME_CATEGORIES.map((k) => TIME_CATEGORY_STYLES[k].label)),
-    [],
+    () =>
+      new Set([
+        ...ADDABLE_TIME_CATEGORIES.map((k) => TIME_CATEGORY_STYLES[k].label),
+        ...articles.map((a) => a.name),
+      ]),
+    [articles],
   );
 
   const handleCategoryChange = (next: string) => {
     setCategory(next);
+    setArticleId("");
     const label = getTimeCategoryStyle(next).label;
     setTitle((prev) => (prev.trim() === "" || knownLabels.has(prev.trim()) ? label : prev));
   };
 
-  const handleSave = () => {
-    if (!date) return;
+  const handleArticleChange = (next: string) => {
+    setArticleId(next);
+    const article = selectableArticles.find((a) => a.id === next);
+    if (article) {
+      setTitle((prev) => (prev.trim() === "" || knownLabels.has(prev.trim()) ? article.name : prev));
+    }
+  };
+
+  const toggleDayOfWeek = (day: number) => {
+    setDaysOfWeek((prev) => (prev.includes(day) ? prev.filter((d) => d !== day) : [...prev, day].sort()));
+  };
+
+  const buildVars = (): TaskEditorVars | null => {
+    if (!date) return null;
     const [h, m] = time.split(":").map((n) => parseInt(n, 10));
     const startMinutes = (h || 0) * 60 + (m || 0);
     const dur = Math.max(1, parseInt(duration, 10) || 0);
-    const finalTitle = title.trim() || getTimeCategoryStyle(category).label;
-    onSave({ category, title: finalTitle, date, startMinutes, duration: dur });
+    const finalTitle = title.trim() || selectedArticle?.name || getTimeCategoryStyle(category).label;
+    return {
+      articleId,
+      category,
+      title: finalTitle,
+      date,
+      startMinutes,
+      duration: dur,
+      recurrenceType,
+      daysOfWeek,
+      endDate,
+      kind: isProduction ? "production" : "time",
+    };
+  };
+
+  const handleSave = () => {
+    const vars = buildVars();
+    if (!vars) return;
+    if (isProduction) {
+      // Produktionsartiklar (admin-jobb) stödjer i denna version bara enstaka
+      // förekomster — jobbet lever i work_orders, inte i schema-motorn.
+      onSaveOnce(vars);
+      return;
+    }
+    if (vars.recurrenceType === "none") {
+      onSaveOnce(vars);
+    } else {
+      onSaveRecurring(vars);
+    }
   };
 
   return (
@@ -2160,37 +2304,55 @@ function AddTimeDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Plus className="h-4 w-4" />
-            Lägg till tid
+            Ny uppgift
           </DialogTitle>
           <DialogDescription>
-            Skapa ett manuellt tidsblock (matrast, egentid, interntid, vila eller övertid). Sparas och triggar serveromräkning.
+            Skapa en uppgift baserad på artikel (produktion, restid, interntid, frånvaro m.m.) eller ett fristående tidsblock. Sparas och triggar serveromräkning.
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-3">
           <div className="space-y-1.5">
-            <Label htmlFor="add-time-category">Typ av tid</Label>
-            <Select value={category} onValueChange={handleCategoryChange}>
-              <SelectTrigger id="add-time-category" data-testid="select-add-time-category">
-                <SelectValue />
+            <Label htmlFor="add-time-article">Artikel (valfritt)</Label>
+            <Select value={articleId || "__none__"} onValueChange={(v) => handleArticleChange(v === "__none__" ? "" : v)}>
+              <SelectTrigger id="add-time-article" data-testid="select-add-time-article">
+                <SelectValue placeholder="Ingen artikel — använd tidskategori" />
               </SelectTrigger>
               <SelectContent>
-                {ADDABLE_TIME_CATEGORIES.map((key) => (
-                  <SelectItem key={key} value={key} data-testid={`option-time-category-${key}`}>
-                    <span className="flex items-center gap-2">
-                      <span className={`h-2.5 w-2.5 rounded-full ${TIME_CATEGORY_STYLES[key].dot}`} />
-                      {TIME_CATEGORY_STYLES[key].label}
-                    </span>
+                <SelectItem value="__none__">Ingen artikel — använd tidskategori</SelectItem>
+                {selectableArticles.map((a) => (
+                  <SelectItem key={a.id} value={a.id} data-testid={`option-article-${a.id}`}>
+                    {a.name} {a.articleType === "tjanst" ? "(produktion)" : ""}
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
           </div>
+          {!articleId && (
+            <div className="space-y-1.5">
+              <Label htmlFor="add-time-category">Typ av tid</Label>
+              <Select value={category} onValueChange={handleCategoryChange}>
+                <SelectTrigger id="add-time-category" data-testid="select-add-time-category">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {ADDABLE_TIME_CATEGORIES.map((key) => (
+                    <SelectItem key={key} value={key} data-testid={`option-time-category-${key}`}>
+                      <span className="flex items-center gap-2">
+                        <span className={`h-2.5 w-2.5 rounded-full ${TIME_CATEGORY_STYLES[key].dot}`} />
+                        {TIME_CATEGORY_STYLES[key].label}
+                      </span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
           <div className="space-y-1.5">
             <Label htmlFor="add-time-title">Benämning</Label>
             <Input id="add-time-title" value={title} onChange={(e) => setTitle(e.target.value)} data-testid="input-add-time-title" />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="add-time-date">Dag</Label>
+            <Label htmlFor="add-time-date">{recurrenceType === "none" ? "Dag" : "Startdatum"}</Label>
             <Input id="add-time-date" type="date" value={date} onChange={(e) => setDate(e.target.value)} data-testid="input-add-time-date" />
           </div>
           <div className="grid grid-cols-2 gap-3">
@@ -2203,11 +2365,48 @@ function AddTimeDialog({
               <Input id="add-time-duration" type="number" min={1} value={duration} onChange={(e) => setDuration(e.target.value)} data-testid="input-add-time-duration" />
             </div>
           </div>
+          {!isProduction && (
+            <div className="space-y-1.5 border-t pt-3">
+              <Label htmlFor="add-time-recurrence">Upprepning</Label>
+              <Select value={recurrenceType} onValueChange={(v) => setRecurrenceType(v as "none" | "daily" | "weekly")}>
+                <SelectTrigger id="add-time-recurrence" data-testid="select-add-time-recurrence">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Ingen — enstaka tillfälle</SelectItem>
+                  <SelectItem value="daily">Varje dag</SelectItem>
+                  <SelectItem value="weekly">Valda veckodagar</SelectItem>
+                </SelectContent>
+              </Select>
+              {recurrenceType === "weekly" && (
+                <div className="flex flex-wrap gap-1.5 pt-1">
+                  {WEEKDAY_LABELS.map((label, idx) => (
+                    <Button
+                      key={idx}
+                      type="button"
+                      size="sm"
+                      variant={daysOfWeek.includes(idx) ? "default" : "outline"}
+                      onClick={() => toggleDayOfWeek(idx)}
+                      data-testid={`button-weekday-${idx}`}
+                    >
+                      {label}
+                    </Button>
+                  ))}
+                </div>
+              )}
+              {recurrenceType !== "none" && (
+                <div className="space-y-1.5 pt-1">
+                  <Label htmlFor="add-time-end-date">Slutdatum (valfritt)</Label>
+                  <Input id="add-time-end-date" type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} data-testid="input-add-time-end-date" />
+                </div>
+              )}
+            </div>
+          )}
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={onClose} data-testid="button-cancel-add-time">Avbryt</Button>
           <Button onClick={handleSave} disabled={saving || !date} data-testid="button-save-add-time">
-            Lägg till
+            {recurrenceType === "none" || isProduction ? "Lägg till" : "Skapa återkommande"}
           </Button>
         </DialogFooter>
       </DialogContent>

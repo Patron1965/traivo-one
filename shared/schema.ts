@@ -7727,12 +7727,25 @@ export const personalTaskSchedules = pgTable("personal_task_schedules", {
   locationName: text("location_name"),
   active: boolean("active").default(true).notNull(),
   sourceRule: text("source_rule"),
+  // Task #1242 (Kalendereditor): generaliserad återkommande-modell. Nullable/expand-contract
+  // — null bevarar legacy-beteendet (dayOfWeek styr ensam, null=alla arbetsdagar mån-fre).
+  // "daily" = alla 7 dagar. "weekly" = de dagar som anges i daysOfWeek (0=mån..6=sön).
+  recurrenceType: text("recurrence_type"),
+  daysOfWeek: integer("days_of_week").array(),
+  // Valfritt datumintervall som avgränsar när regeln gäller (inclusive). Null = ingen gräns.
+  startDate: date("start_date"),
+  endDate: date("end_date"),
+  // Task #1242: låter en regel peka direkt på en artikel (allmän uppgiftseditor) i stället
+  // för att enbart matchas indirekt via timeCategory===article.timeCodeKey. Nullable —
+  // saknas koppling faller materialiseringen tillbaka på timeCategory-matchning som idag.
+  articleId: varchar("article_id").references(() => articles.id, { onDelete: "set null" }),
   metadata: jsonb("metadata").default({}),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 }, (table) => [
   index("idx_personal_task_schedules_tenant").on(table.tenantId),
   index("idx_personal_task_schedules_team").on(table.teamId),
+  index("idx_personal_task_schedules_article").on(table.articleId),
 ]);
 
 export type PersonalTaskSchedule = typeof personalTaskSchedules.$inferSelect;

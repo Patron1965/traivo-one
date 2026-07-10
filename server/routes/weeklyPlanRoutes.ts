@@ -674,9 +674,15 @@ export function registerWeeklyPlanRoutes(app: Express) {
   // Task #1235: articleId/cachedCostOre är motor-ägda härledda fält (resolveTimeCategoryArticle/
   // computePersonalTaskCostFromArticle) — de får ALDRIG accepteras från klienten (mass-assignment
   // skulle låta en klient förfalska kostnad/artikelkoppling som sedan läses av KPI/statistik).
+  // Task #1242 (allmän uppgiftseditor): `selectedArticleId` är ett NYTT, säkert klientfält
+  // — servern slår upp artikeln själv och härleder timeCategory/cachedCostOre från den
+  // (samma anti-spoofing-princip som tidigare: klienten väljer VILKEN artikel, aldrig kostnaden).
+  // timeCategory blir därför valfri i schemat när selectedArticleId skickas (härleds server-side).
   const personalCreateSchema = insertPersonalTaskSchema
     .omit({ tenantId: true, weeklyPlanId: true, articleId: true, cachedCostOre: true })
     .extend({
+      timeCategory: z.string().optional(),
+      selectedArticleId: z.string().nullish(),
       startAt: z.coerce.date().nullish(),
       endAt: z.coerce.date().nullish(),
     });
@@ -693,18 +699,14 @@ export function registerWeeklyPlanRoutes(app: Express) {
     const tenantId = getTenantIdWithFallback(req);
     const plan = await storage.getWeeklyPlan(tenantId, req.params.planId);
     if (!plan) throw new NotFoundError("Veckoplan");
-    const data = parseBody(personalCreateSchema, req.body);
-    // Task #1237: tidskodens permissionLevel styr vem som får registrera denna
-    // tidskategori (t.ex. en OB-kod uppgraderad till "planner"/"admin" av behörig admin).
-    const timeCodeDefs = await storage.getTimeCodeDefinitions(tenantId);
-    const timeCodeRuleMap = buildTimeCodeRuleMap(timeCodeDefs);
-    const timeCodeRule = resolveTimeCodeRule(timeCodeRuleMap, data.timeCategory);
-    if (!isRoleAllowedForTimeCode(timeCodeRule, req.tenantRole)) {
-      throw new ValidationError(`Tidskoden "${data.timeCategory}" kräver högre behörighet`);
+    const { selectedArticleId, ...data } = parseBody(personalCreateSchema, req.body);
+    if (!selectedArticleId && !data.timeCategory) {
+      throw new ValidationError("timeCategory eller selectedArticleId krävs");
     }
     // Task #1235: gör blocket artikelbaserat om tenanten har en internal_time-
-    // artikel för denna tidskategori (timeCodeKey===timeCategory). Ingen matchande
-    // artikel ⇒ oförändrat fristående-block-beteende (back-compat).
+    // artikel för denna tidskategori (timeCodeKey===timeCategory), eller Task #1242:
+    // härled artikel/kategori direkt från en användarvald artikel (allmän uppgiftseditor).
+    // Ingen matchande artikel ⇒ oförändrat fristående-block-beteende (back-compat).
     // Effektiv varaktighet: explicit durationMinutes, annars start/slut-diff (samma
     // regel som personalTaskMinutes() i motorn/summeringen) — annars tappas kostnaden
     // tyst för block som bara sätter startAt/endAt.
@@ -713,13 +715,25 @@ export function registerWeeklyPlanRoutes(app: Express) {
       startAt: data.startAt ?? null,
       endAt: data.endAt ?? null,
     } as any);
-    const { articleId, cachedCostOre } = await resolvePersonalTaskArticleFields(
+    const { articleId, cachedCostOre, timeCategory } = await resolvePersonalTaskArticleFields(
       tenantId,
-      data.timeCategory,
+      data.timeCategory ?? "",
       effectiveMinutes,
+      selectedArticleId,
     );
+    // Task #1237: tidskodens permissionLevel styr vem som får registrera denna
+    // tidskategori (t.ex. en OB-kod uppgraderad till "planner"/"admin" av behörig admin).
+    // Körs på den SERVER-härledda kategorin (efter ev. artikelval) så att en artikel inte
+    // kan användas för att kringgå behörighetsgränsen för dess egen tidskod.
+    const timeCodeDefs = await storage.getTimeCodeDefinitions(tenantId);
+    const timeCodeRuleMap = buildTimeCodeRuleMap(timeCodeDefs);
+    const timeCodeRule = resolveTimeCodeRule(timeCodeRuleMap, timeCategory);
+    if (!isRoleAllowedForTimeCode(timeCodeRule, req.tenantRole)) {
+      throw new ValidationError(`Tidskoden "${timeCategory}" kräver högre behörighet`);
+    }
     const created = await storage.createPersonalTask({
       ...data,
+      timeCategory,
       tenantId,
       weeklyPlanId: plan.id,
       teamId: data.teamId ?? plan.teamId,
@@ -734,16 +748,18 @@ export function registerWeeklyPlanRoutes(app: Express) {
     const tenantId = getTenantIdWithFallback(req);
     const existing = await storage.getPersonalTask(tenantId, req.params.id);
     if (!existing) throw new NotFoundError("Personligt block");
-    const data = parseBody(personalPatchSchema, req.body);
+    const { selectedArticleId, ...data } = parseBody(personalPatchSchema, req.body);
     // Task #1235: räkna om artikel-koppling/kostnad om kategori ELLER varaktighet
     // (durationMinutes såväl som startAt/endAt) ändras — annars blir cachedCostOre
     // stale/null för block som styrs via start/slut-tider snarare än durationMinutes.
+    // Task #1242: en ny selectedArticleId räknar också om (härleder ev. ny timeCategory).
     const patch: typeof data & { articleId?: string | null; cachedCostOre?: number | null } = { ...data };
     if (
       data.timeCategory !== undefined ||
       data.durationMinutes !== undefined ||
       data.startAt !== undefined ||
-      data.endAt !== undefined
+      data.endAt !== undefined ||
+      selectedArticleId !== undefined
     ) {
       const category = data.timeCategory ?? existing.timeCategory;
       const effectiveMinutes = personalTaskMinutes({
@@ -751,13 +767,15 @@ export function registerWeeklyPlanRoutes(app: Express) {
         startAt: data.startAt !== undefined ? data.startAt : existing.startAt,
         endAt: data.endAt !== undefined ? data.endAt : existing.endAt,
       } as any);
-      const { articleId, cachedCostOre } = await resolvePersonalTaskArticleFields(
+      const { articleId, cachedCostOre, timeCategory } = await resolvePersonalTaskArticleFields(
         tenantId,
         category,
         effectiveMinutes,
+        selectedArticleId ?? undefined,
       );
       patch.articleId = articleId;
       patch.cachedCostOre = cachedCostOre;
+      patch.timeCategory = timeCategory;
     }
     const row = await storage.updatePersonalTask(tenantId, req.params.id, patch);
     if (existing.weeklyPlanId) await recomputeWeeklyPlan(tenantId, existing.weeklyPlanId);
