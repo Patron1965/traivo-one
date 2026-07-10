@@ -1,0 +1,364 @@
+Specifikation till Replit – Veckoplan, tidstyper, planerad tid, verklig tid och varningslogik
+
+1. Grundprincip
+
+Veckoplanen är utförarens eller utförarteamets operativa plan för 168 timmar.
+
+Varje vecka består alltid av exakt:
+
+168 timmar totalt
+fördelade på olika tidstyper
+kopplade till uppgifter, resor, egen tid, vila eller reservtid
+Systemet skall alltid kunna redovisa både:
+
+planerad tid
+verklig tid
+avvikelse mellan plan och utfall
+2. Uppgifter i veckoplanen
+
+När en uppgift eller klump av uppgifter läggs in i veckoplanen skapas automatiskt planerad utförandetid.
+
+Den planerade tiden baseras på:
+
+dag
+starttid
+sluttid
+artikelns produktionstid
+antal
+eventuell ställtid
+eventuell restid
+tidstyp
+leveranstid
+tidsfönster
+geografisk position
+3. Tidstyper
+
+Alla uppgifter och tider skall klassas enligt tidstyp.
+
+Exempel:
+
+Produktionstid
+Restid
+Inställelserestid
+Ställtid
+Egen tid
+Nattvila
+Helgvila
+Rast
+Administration
+Avisering
+Reservtid
+Övertid
+OB-tid
+Tidstyperna skall administreras i register.
+
+Varje tidstyp skall ha regler för:
+
+om den får dubbelbokas
+om den får överlappa annan tidstyp
+om den räknas som arbetstid
+om den räknas som vila
+om den räknas som produktion
+om den skall exporteras till lön
+om den påverkar ruttplanering
+om den kräver geografisk position
+4. Dubbelbokning och överbokning
+
+Systemet skall varna om:
+
+två uppgifter dubbelbokas
+produktionstid kolliderar med annan produktionstid
+restid kolliderar med produktionstid
+planerad tid inkräktar på egen tid
+planerad tid inkräktar på nattvila eller helgvila
+ställtid inte får plats
+uppgift läggs utanför tillåtet tidsfönster
+Vissa tidstyper skall kunna tillåtas överlappa.
+
+Exempel:
+
+En administrativ avisering utan geografisk koppling kan tillåtas ligga samtidigt som en resa.
+
+Produktionstid skall däremot normalt inte kunna ligga samtidigt som restid.
+
+5. Hårda och mjuka tidsfönster
+
+Systemet skall varna om planerad tid avviker från:
+
+önskad leveranstid
+hårt tidsfönster
+mjukt tidsfönster
+kundspecifika tidskrav
+artikelns tidskrav
+orderkonceptets tidskrav
+Hårda tidsfönster skall ge stark varning eller spärr beroende på regel.
+
+Mjuka tidsfönster skall ge planeringsvarning men kunna accepteras.
+
+6. Restid
+
+Restid skapas automatiskt mellan två geografiska uppgifter.
+
+Restiden beräknas från:
+
+föregående uppgifts plats
+nästa uppgifts plats
+Restid blir en egen uppgift/tidspost i veckoplanen.
+
+Om föregående eller nästa uppgift saknar geografisk position skall systemet inte ruttberäkna utan varna.
+
+7. Klumpar av uppgifter
+
+En klump består av flera uppgifter som Klumpningsmotorn har sammanfört till ett stopp.
+
+Kriterier kan vara:
+
+samma plats
+cirka 30 meters radie
+samma sida av gatan
+kompatibel utförandetid
+samma eller kompatibel utförandetyp
+När en klump läggs på veckoplanen planeras hela klumpens totala produktionstid.
+
+Samtidigt skall varje enskild uppgift i klumpen behålla sin egen artikel, tid, status och historik.
+
+8. Verklig tid
+
+När uppgifter utförs skall systemet skapa verklig utförandetid.
+
+Verklig tid skall kunna jämföras med planerad tid.
+
+Systemet skall visa:
+
+planerad start
+planerat slut
+verklig start
+verkligt slut
+planerad tid
+verklig tid
+avvikelse
+9. Verklig tid i klump
+
+Om en klump avrapporteras gemensamt och systemet inte känner till verklig tid per enskild uppgift, skall den verkliga totala tiden fördelas proportionellt enligt den kalkylerade tiden.
+
+Exempel:
+
+Planerad tid:
+
+Uppgift A: 20 minuter
+Uppgift B: 40 minuter
+Total planerad tid: 60 minuter
+
+Verklig tid: 90 minuter
+
+Fördelning:
+
+Uppgift A: 30 minuter
+Uppgift B: 60 minuter
+Utföraren skall kunna justera verklig start- och sluttid manuellt per uppgift om mer exakt redovisning behövs.
+
+10. Tilläggsartiklar
+
+Utföraren skall kunna skapa tilläggsartikel kopplad till objekt, uppgift eller klump.
+
+Exempel:
+
+väntetid
+extra ställtid
+bomkörning
+hinder
+tilläggsarbete
+kundorsakad försening
+övrig avvikelse
+Tilläggsartikeln skall skapa en egen uppgiftspost eller uppgiftsrad med egen status, tidstyp, artikel och eventuell faktureringslogik.
+
+11. Tid per antal
+
+Om artikelns tid är beroende av antal skall tiden uppdateras dynamiskt.
+
+Exempel:
+
+Artikel:
+
+5 minuter per styck
+Antal:
+
+10
+Produktionstid:
+
+50 minuter
+Om antal ändras skall produktionstid uppdateras automatiskt.
+
+Detta gäller både planerad tid och kalkylerad tid.
+
+12. Editor för egen tid, vila och arbetstid
+
+Utförare och planerare skall ha en editor för att skapa och ändra tidsposter.
+
+Exempel:
+
+starttid per dag
+sluttid per dag
+nattvila
+helgvila
+rast
+oplanerad arbetstid
+reservtid
+intern tid
+utbildning
+administration
+Editorn skall stödja repetering.
+
+Exempel:
+
+nattvila varje vardag
+helgvila varje helg
+arbetstid måndag–fredag
+återkommande raster
+helgdagar
+Repetering skall kunna skapas:
+
+för viss period
+för flera veckor
+tills vidare
+13. Reservtid
+
+Oplanerad arbetstid skall automatiskt kunna definieras som reservtid.
+
+Reservtid är tid som finns tillgänglig men ännu inte är bokad på specifik uppgift.
+
+Reservtid skall kunna användas för att lägga in nya uppgifter.
+
+14. 168-timmarsprincipen
+
+Varje vecka skall alltid summeras till 168 timmar.
+
+Tiden delas upp i exempelvis:
+
+arbetstid
+produktionstid
+restid
+ställtid
+reservtid
+egen tid
+nattvila
+helgvila
+rast
+övertid
+OB-tid
+Systemet skall alltid kunna visa hur veckan är fördelad.
+
+15. Veckosumma, flex och övertid
+
+Om planerad eller verklig arbetstid överstiger normal arbetstid, exempelvis 40 timmar, skall systemet kunna summera detta som:
+
+flextid
+övertid
+OB-tid
+annan tid enligt tidstypsregistret
+Detta skall kunna exporteras till rapporter och lönesystem via API.
+
+16. Dynamisk förlängning av tid
+
+Om en planerad tid inte följs skall systemet kunna justera utfallet.
+
+Exempel:
+
+Planerad helgvila slutar måndag 07:00.
+
+Första resa påbörjas 07:15.
+
+Om utföraren inte registrerar annan uppgift mellan 07:00 och 07:15 skall helgvilan automatiskt förlängas till 07:15.
+
+Samma princip skall gälla för andra tidstyper.
+
+Tom tid skall inte uppstå utan skall klassas enligt regel.
+
+17. Varningslogik för tempo
+
+Veckoplanen skall visa planerat utfall mot verkligt utfall.
+
+Systemet skall varna om:
+
+arbetet går snabbare än planerat
+arbetet går långsammare än planerat
+nästa uppgift riskerar att bli försenad
+tidsfönster riskerar att missas
+vila riskerar att påverkas
+arbetsdag riskerar att bli för lång
+planerad restid inte räcker
+18. Att lägga ut uppgifter i veckoplanen
+
+När uppgifter tilldelats utförare eller team skall de visas i en lista.
+
+Listan skall kunna sorteras efter:
+
+planerad eller önskad utförandetid
+geografisk närhet
+uppgiftstyp
+status
+kund
+objekt
+klump/stopp
+Samma urval skall även kunna visas på karta.
+
+Utföraren eller planeraren skall kunna plocka uppgifter eller klumpar från lista eller karta och lägga in dem i veckoplanen.
+
+19. To-do-lista
+
+Uppgifter utan geografisk koppling eller utan tid skall visas i separat to-do-lista.
+
+Dessa behöver inte ruttoptimeras.
+
+De skall fortfarande kunna planeras in i veckoplanen om användaren vill.
+
+20. Automatisk restidsberäkning vid planering
+
+När en uppgift eller klump läggs in i veckoplanen skall systemet automatiskt beräkna restid från föregående geografiska uppgift.
+
+Systemet skall därefter summera:
+
+restid
+produktionstid
+ställtid
+övrig tid
+Varje ny uppgift som läggs till skall påverka tidskedjan efteråt.
+
+21. Byte av tidskod
+
+Det skall vara möjligt att ändra tidskod på uppgifter eller klumpar.
+
+Exempel:
+
+Första resan från helgvila kan klassas som inställelseresa.
+
+Sista resan till nästa helgvila kan klassas som annan restid.
+
+En produktionsuppgift kan klassas som:
+
+normal arbetstid
+övertid
+OB-tid
+jourtid
+Detta skall styras av tidstypsregistret och behörighet.
+
+22. Grundkrav till Replit
+
+Veckoplanen skall inte vara en enkel kalender.
+
+Den skall vara en tidsmotorstyrd 168-timmarsplan där varje minut tillhör en tidstyp, uppgift eller reservklass.
+
+Systemet skall kunna:
+
+planera tid
+mäta verklig tid
+jämföra plan mot utfall
+varna för konflikter
+skapa restid automatiskt
+hantera uppgiftsklumpar
+hantera egen tid och vila
+hantera övertid och flextid
+exportera tid till rapporter och lönesystem
+Detta skall byggas enligt systemets huvudlogik:
+
+Uppgiftspaket → Tidstyp → Veckoplan → Planerad tid → Verklig tid → Avvikelse → Rapport/lön/API

@@ -1,0 +1,280 @@
+Här är en sammanslagen och utökad version som binder ihop Uppgiftsnavet, filter, tilldelning, veckoplan och teamlogiken till en sammanhängande specifikation.
+
+Specifikation – Uppgiftsnavet, filter, tilldelning, team och veckoplan
+
+1. Grundprincip
+
+Uppgiftsnavet är systemets centrala arbetslista och innehåller samtliga uppgifter i systemet, oavsett hur de skapats.
+
+Uppgifter kan exempelvis komma från:
+
+Orderkoncept
+Snabborder
+Enkel uppgift
+Metadataanalysator
+Uppgiftsmotorer
+Felanmälningar
+Kundportal
+API
+Systemskapade uppgifter (exempelvis resor eller plockuppgifter)
+Alla uppgifter bygger på samma standardiserade uppgiftspaket och hanteras med samma logik.
+
+Samma filtermotor skall användas i:
+
+Uppgiftsnavet
+Objektets uppgiftsvy
+Kundportalen
+Utförarens tilldelade uppgifter
+Utförarappen
+Planeringsvyn
+Skillnaden mellan vyerna är endast vilket grundfilter som används.
+
+
+2. Filter
+
+Filtret skall kunna använda samtliga informationsfält i uppgiftspaketet samt kopplad metadata.
+
+Det skall bland annat kunna filtrera på:
+
+Uppgiftstyp
+Artikel
+Kund
+Objekt
+Objektgren
+Utförare
+Team
+Status
+Tidstyp
+Leveranstid
+Vecka
+Faktureringsstatus
+Projekt
+Kostnadsställe
+Samtliga metadatafält
+Avancerade villkor skall stödjas.
+
+Exempel:
+
+Status = Tilldelad
+Artikelområde = RBK
+Kontakt.Namn = Anna
+Antal > 10
+Geografi.Ort innehåller Stockholm
+Leveranstid mellan två datum
+Operatorer skall minst stödja:
+
+=
+≠
+●
+<
+=
+<=
+innehåller
+börjar med
+slutar med
+är tomt
+är inte tomt
+Villkor skall kunna kombineras med OCH och ELLER.
+
+Alla filter skall kunna sparas, delas och organiseras i kategorier.
+
+
+3. Efter filtrering – urval för planering
+
+När filtret har tagit fram ett urval skall nästa steg vara att välja vilka uppgifter eller stopp (klumpar) som skall planeras.
+
+Planeraren skall kunna markera:
+
+enskilda uppgifter
+flera uppgifter
+hela stopp
+flera stopp
+Under markeringen skall systemet kontinuerligt summera urvalet.
+
+Summeringen skall bland annat visa:
+
+antal uppgifter
+antal stopp
+total planerad produktionstid
+total ställtid
+antal objekt
+antal kunder
+uppskattad total arbetstid
+I detta läge är restiden ännu inte exakt beräknad.
+
+Restiden uppskattas först när uppgifterna placeras i veckoplanen.
+
+
+4. Val av team och vecka
+
+När ett urval har gjorts skall planeraren välja:
+
+Team
+Vecka
+Systemet skall då visa:
+
+tillgänglig arbetstid för aktuell vecka
+redan bokad produktionstid
+redan bokad restid
+redan bokad egen tid
+semester
+sjukfrånvaro
+nattvila
+helgvila
+annan upptagen tid
+Planeraren skall direkt kunna se hur mycket ledig kapacitet som återstår.
+
+
+5. Leveranstidsstöd
+
+Systemet skall samtidigt analysera vilka veckor som är möjliga utifrån uppgifternas leveranstider.
+
+Exempel:
+
+Vecka 34
+
+✔ möjlig
+
+Vecka 35
+
+✔ möjlig
+
+Vecka 36
+
+⚠ flera uppgifter passerar önskad leveranstid
+
+Vecka 37
+
+✖ ej möjlig
+
+Detta ger planeraren ett snabbt beslutsstöd innan tilldelning.
+
+
+6. Framtida utveckling
+
+I den första versionen sker planeringen manuellt med hjälp av:
+
+Filter
+Summeringar
+Veckoplan
+Ruttoptimering Light
+På sikt skall systemet kunna erbjuda automatisk:
+
+urvalsoptimering
+teamtilldelning
+veckoplanering
+ruttoptimering
+kapacitetsbalansering
+Den manuella planeringsmodellen skall därför byggas så att den senare kan ersättas eller kompletteras av automatiska algoritmer utan att informationsmodellen ändras.
+
+
+7. Teamlogik
+
+En utförare kan bestå av:
+
+en person
+ett team
+Normalt består ett team av två personer som arbetar tillsammans.
+
+I den första versionen betraktas teamet som en gemensam produktionsresurs.
+
+Teamet består normalt av:
+
+personal
+fordon
+maskiner
+utrustning
+Systemet planerar därför mot teamet och inte mot varje individ.
+
+
+8. Produktionstid
+
+Produktionstiden kommer från artikelns tidsverk.
+
+När en uppgift skapas överförs denna tid automatiskt till uppgiften.
+
+Om antal ändras uppdateras produktionstiden automatiskt.
+
+
+9. Teamets medlemmar
+
+När ett team skapas skall man kunna välja:
+
+en
+två
+eller flera personer
+Normalt följer samtliga teammedlemmar samma schema.
+
+Produktionstid, restid och egen tid registreras då lika för samtliga personer.
+
+
+10. Avvikelse för en enskild person
+
+Om en person exempelvis blir sjuk skall systemet kunna registrera individuell tid för just den personen.
+
+Exempel:
+
+Person A
+
+Sjuk 08:00–16:00
+
+Person B
+
+Arbetar enligt plan
+
+Teamet kan då fortsätta planeras samtidigt som rätt tidsredovisning skapas för respektive individ.
+
+
+11. Projekt och kostnadsställe
+
+Två olika ekonomiska dimensioner skall kunna följa uppgifterna.
+
+Projekt
+
+Projekt följer normalt människorna eller arbetsledaren.
+
+Det används för att följa vilka personer eller team som utfört uppdrag.
+
+Kostnadsställe
+
+Kostnadsställe följer normalt utrustningen.
+
+Exempel:
+
+fordon
+tvättbil
+servicebil
+maskin
+Detta gör det möjligt att följa vilka resurser som använts.
+
+
+12. Spårbarhet
+
+Efter utfört arbete skall det kunna utläsas:
+
+vilket team som utförde arbetet
+vilka personer som ingick
+vilket fordon som användes
+vilken utrustning som användes
+vilket projekt arbetet tillhörde
+vilket kostnadsställe som belastades
+Denna information skall kunna exporteras till ekonomisystem, rapporter och lönesystem via API.
+
+
+13. Sammanfattning
+
+Planeringsflödet skall vara:
+
+Uppgifter skapas.
+Uppgifterna visas i Uppgiftsnavet.
+Planeraren filtrerar fram lämpligt urval.
+Systemet summerar produktionstid och kapacitet.
+Systemet visar möjliga leveransveckor.
+Planeraren väljer team och vecka.
+Systemet visar ledig kapacitet.
+Uppgifterna dras in i veckoplanen.
+Ruttoptimering Light beräknar restider mellan uppgifterna.
+Veckoplanen varnar för dubbelbokningar, överbokningar och konflikter mot leveranstider eller tidsfönster.
+Utföraren genomför arbetet och verkliga tider registreras.
+Tid, kostnader och resurser exporteras till ekonomi- och lönesystem.
+Denna modell bygger helt på Modus huvudarkitektur där uppgiftspaketet är den centrala informationsbäraren, medan filter, informationsmotorer, veckoplan och teamlogik arbetar mot samma gemensamma informationsmodell.
