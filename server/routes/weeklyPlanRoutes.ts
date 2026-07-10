@@ -39,6 +39,7 @@ import {
   DEFAULT_PLAN_ENGINE_CONFIG,
   resolveTimeCategoryArticle,
   computePersonalTaskCostFromArticle,
+  personalTaskMinutes,
 } from "../planning/weeklyPlanEngine";
 import {
   getGrovplaneringGrid,
@@ -652,6 +653,14 @@ export function registerWeeklyPlanRoutes(app: Express) {
     // artikel för denna tidskategori (timeCodeKey===timeCategory). Ingen matchande
     // artikel ⇒ oförändrat fristående-block-beteende (back-compat).
     const article = await resolveTimeCategoryArticle(tenantId, data.timeCategory);
+    // Effektiv varaktighet: explicit durationMinutes, annars start/slut-diff (samma
+    // regel som personalTaskMinutes() i motorn/summeringen) — annars tappas kostnaden
+    // tyst för block som bara sätter startAt/endAt.
+    const effectiveMinutes = personalTaskMinutes({
+      durationMinutes: data.durationMinutes ?? null,
+      startAt: data.startAt ?? null,
+      endAt: data.endAt ?? null,
+    } as any);
     const created = await storage.createPersonalTask({
       ...data,
       tenantId,
@@ -659,9 +668,7 @@ export function registerWeeklyPlanRoutes(app: Express) {
       teamId: data.teamId ?? plan.teamId,
       articleId: article?.id ?? null,
       cachedCostOre:
-        article && data.durationMinutes != null
-          ? computePersonalTaskCostFromArticle(article, data.durationMinutes)
-          : null,
+        article && effectiveMinutes > 0 ? computePersonalTaskCostFromArticle(article, effectiveMinutes) : null,
     });
     await recomputeWeeklyPlan(tenantId, plan.id);
     res.status(201).json(created);
@@ -672,14 +679,26 @@ export function registerWeeklyPlanRoutes(app: Express) {
     const existing = await storage.getPersonalTask(tenantId, req.params.id);
     if (!existing) throw new NotFoundError("Personligt block");
     const data = parseBody(personalPatchSchema, req.body);
-    // Task #1235: räkna om artikel-koppling/kostnad om kategori eller varaktighet ändras.
+    // Task #1235: räkna om artikel-koppling/kostnad om kategori ELLER varaktighet
+    // (durationMinutes såväl som startAt/endAt) ändras — annars blir cachedCostOre
+    // stale/null för block som styrs via start/slut-tider snarare än durationMinutes.
     const patch: typeof data & { articleId?: string | null; cachedCostOre?: number | null } = { ...data };
-    if (data.timeCategory !== undefined || data.durationMinutes !== undefined) {
+    if (
+      data.timeCategory !== undefined ||
+      data.durationMinutes !== undefined ||
+      data.startAt !== undefined ||
+      data.endAt !== undefined
+    ) {
       const category = data.timeCategory ?? existing.timeCategory;
-      const duration = data.durationMinutes !== undefined ? data.durationMinutes : existing.durationMinutes;
+      const effectiveMinutes = personalTaskMinutes({
+        durationMinutes: data.durationMinutes !== undefined ? data.durationMinutes : existing.durationMinutes,
+        startAt: data.startAt !== undefined ? data.startAt : existing.startAt,
+        endAt: data.endAt !== undefined ? data.endAt : existing.endAt,
+      } as any);
       const article = await resolveTimeCategoryArticle(tenantId, category);
       patch.articleId = article?.id ?? null;
-      patch.cachedCostOre = article && duration != null ? computePersonalTaskCostFromArticle(article, duration) : null;
+      patch.cachedCostOre =
+        article && effectiveMinutes > 0 ? computePersonalTaskCostFromArticle(article, effectiveMinutes) : null;
     }
     const row = await storage.updatePersonalTask(tenantId, req.params.id, patch);
     if (existing.weeklyPlanId) await recomputeWeeklyPlan(tenantId, existing.weeklyPlanId);

@@ -114,4 +114,4 @@
 - [VRP startuppgifter & no-fallback](vrp-start-tasks-no-fallback.md) — VRP-start ENBART från startuppgifter (orderType=startpunkt); team/GPS/kluster/default-koordinater förbjudna som planeringsgrund; fail closed.
 - [Leveranspreferenser enbart kundnivå](delivery-prefs-customer-only.md) — objekt-prefs borttagna; tidsmotorn läser kundens prefs via primär kund genom storage-metoder (mockbart); Map-iteration kräver Array.from (TS2802).
 - [GDPR metadata-anonymisering](gdpr-metadata-anonymization.md) — irreversibel anonymisering är lokal-only + fail-closed; måste förstöra ALLA kopior (varden+historik+uppgiftspaket+speglar), aldrig bara primärraden.
-- [Artikelbaserad restid/intern tid](article-based-time-tasks.md) — restid/vila/lunch/semester/sjukdom/utbildning/admin görs artikeldrivna via personal_tasks/travel_time_entries.articleId, ej work_orders-migrering; fallback=legacy om ingen artikel matchar.
+- [Artikelbaserad restid/intern tid](article-based-time-tasks.md) — icke-produktionstid artikeldrivs via nullable articleId på lätta länktabeller, ej work_orders-migrering; effektiv varaktighet måste räknas likadant överallt (duration ELLER start/slut).

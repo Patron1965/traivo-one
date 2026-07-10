@@ -206,7 +206,7 @@ async function loadWorkOrderFacts(
   return map;
 }
 
-function personalTaskMinutes(t: PersonalTask): number {
+export function personalTaskMinutes(t: PersonalTask): number {
   if (t.durationMinutes != null) return t.durationMinutes;
   if (t.startAt && t.endAt) {
     return Math.max(0, Math.round((new Date(t.endAt).getTime() - new Date(t.startAt).getTime()) / 60000));
@@ -823,7 +823,12 @@ export async function resolveTravelEngineParams(
  */
 export async function resolveTravelArticle(
   tenantId: string,
-  opts: { vehicleType?: string | null; avgSpeedKmh?: number | null } = {},
+  opts: {
+    vehicleType?: string | null;
+    avgSpeedKmh?: number | null;
+    roadType?: string | null;
+    distanceKm?: number | null;
+  } = {},
 ): Promise<Article | null> {
   const all = await storage.getArticles(tenantId);
   const candidates = all.filter((a) => a.articleType === "restid" && a.travelMinutesPerKm != null);
@@ -835,6 +840,10 @@ export async function resolveTravelArticle(
     let score = 0;
     if (a.travelVehicleTypes && a.travelVehicleTypes.length > 0) {
       if (!opts.vehicleType || !a.travelVehicleTypes.includes(opts.vehicleType)) continue;
+      score += 2;
+    }
+    if (a.travelRoadTypes && a.travelRoadTypes.length > 0) {
+      if (!opts.roadType || !a.travelRoadTypes.includes(opts.roadType)) continue;
       score += 2;
     }
     if (a.travelMinSpeedKmh != null || a.travelMaxSpeedKmh != null) {
@@ -850,6 +859,50 @@ export async function resolveTravelArticle(
     }
   }
   return best;
+}
+
+/**
+ * Task #1235: härleder en grov vägtyp ur medelfart för matchning mot
+ * articles.travelRoadTypes ("stad" | "landsvag" | "motorvag"). Rent
+ * heuristiskt (ingen vägdata från routing-providern) — display/matchnings-
+ * signal, ej framkalkylerad sanning.
+ */
+export function estimateRoadType(avgSpeedKmh: number): "stad" | "landsvag" | "motorvag" {
+  if (avgSpeedKmh > 70) return "motorvag";
+  if (avgSpeedKmh > 35) return "landsvag";
+  return "stad";
+}
+
+/**
+ * Task #1235: härleder fordonstypen som driver en plans resor — teamledarens
+ * (fallback: första aktiva medlems) primära fordon via resource_vehicles.
+ * Ingen koppling ⇒ null (resolveTravelArticle faller tillbaka på artiklar
+ * utan fordonsvillkor, eller vidare till legacy-beteende).
+ */
+export async function resolveTeamVehicleType(teamId: string | null): Promise<string | null> {
+  if (!teamId) return null;
+  const team = await storage.getTeam(teamId);
+  if (!team) return null;
+  const candidateResourceIds: string[] = [];
+  if (team.leaderId) candidateResourceIds.push(team.leaderId);
+  const members = await storage.getTeamMembers(teamId);
+  for (const m of members) {
+    if (m.resourceId && !candidateResourceIds.includes(m.resourceId)) candidateResourceIds.push(m.resourceId);
+  }
+  if (candidateResourceIds.length === 0) return null;
+  const resourceVehicles = await storage.getResourceVehiclesByResourceIds(candidateResourceIds);
+  if (resourceVehicles.length === 0) return null;
+  // Föredra teamledarens/första kandidatens primära fordon, annars första hittade.
+  for (const resourceId of candidateResourceIds) {
+    const rv =
+      resourceVehicles.find((r) => r.resourceId === resourceId && r.isPrimary) ??
+      resourceVehicles.find((r) => r.resourceId === resourceId);
+    if (rv) {
+      const vehicle = await storage.getVehicle(rv.vehicleId);
+      if (vehicle) return vehicle.vehicleType;
+    }
+  }
+  return null;
 }
 
 /**
@@ -1063,11 +1116,15 @@ export async function recomputeTravelForPlan(
   await rebuildTravelEntriesForPlan(tenantId, weeklyPlanId);
 
   // (2) Lös upp motor-parametrar (om inte redan gjort av recomputeWeeklyPlan).
+  const plan = await storage.getWeeklyPlan(tenantId, weeklyPlanId);
   let resolvedParams = params;
   if (!resolvedParams) {
-    const plan = await storage.getWeeklyPlan(tenantId, weeklyPlanId);
     resolvedParams = await resolveTravelEngineParams(tenantId, plan?.teamId ?? null);
   }
+  // Task #1235 (Motor 12): fordonstyp som driver planens resor — behövs för att matcha
+  // articles.travelVehicleTypes. Ingen koppling ⇒ null (artikel-matchning degraderar
+  // till hastighet/vägtyp eller villkorslös fallback-artikel).
+  const teamVehicleType = await resolveTeamVehicleType(plan?.teamId ?? null);
 
   const entries = await storage.getTravelTimeEntries(tenantId, weeklyPlanId);
   const taskIds = new Set<string>();
@@ -1134,7 +1191,13 @@ export async function recomputeTravelForPlan(
     // tid/kostnad än de generiska hastighetstak/faktor-konstanterna. Ingen matchande
     // artikel ⇒ oförändrat legacy-beteende (back-compat).
     const avgSpeedKmh = raw.durationMin > 0 ? raw.distanceKm / (raw.durationMin / 60) : 0;
-    const travelArticle = await resolveTravelArticle(tenantId, { avgSpeedKmh });
+    const roadType = estimateRoadType(avgSpeedKmh);
+    const travelArticle = await resolveTravelArticle(tenantId, {
+      avgSpeedKmh,
+      roadType,
+      vehicleType: teamVehicleType,
+      distanceKm: raw.distanceKm,
+    });
     const articleResult = travelArticle ? computeTravelFromArticle(travelArticle, raw.distanceKm) : null;
 
     let minutes: number;
