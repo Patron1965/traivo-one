@@ -55,3 +55,21 @@ kolumn-muterande raw-satser vars kolumn en senare migration tar bort — samma
 aldrig bevara data i post-merge/deploy-flödet — databevarandet måste i praktiken redan
 vara gjort i ett tidigare expand-/dual-write-steg. Backfillen i contract-migrationen är
 bara en best-effort säkerhetsnät för legacy-rader.
+
+## DROP TABLE gäller ALLA tidigare migrationer som rör tabellen — även CREATE INDEX
+
+Samma db:push-pre-drop-fälla gäller när en migration DROPPAR en hel TABELL (inte bara
+en kolumn). Alla TIDIGARE replay-migrationer som gör `CREATE INDEX` / `ALTER TABLE
+ADD COLUMN` på den tabellen failar hårt vid replay (`relation "..." does not exist`),
+eftersom db:push hinner droppa tabellen först. `CREATE INDEX IF NOT EXISTS` skyddar bara
+mot dubbel-index, INTE mot saknad tabell.
+
+**Regel:** Guarda varje sats i tidigare migrationer som rör en senare-droppad tabell med
+`DO $$ BEGIN IF to_regclass('public.<tabell>') IS NOT NULL THEN <sats> END IF; END $$;`.
+`to_regclass` returnerar NULL för saknad tabell (kastar inte), och satsen inuti den
+ej-tagna IF-grenen planeras aldrig. Fresh-setup: db:push bygger nya schemat (utan
+tabellen) → guard skippar → 0129 `DROP TABLE IF EXISTS` = no-op. Konsekvent i alla miljöer.
+
+**Symptom:** post-merge exit 3, stderr `ERROR: relation "clusters" does not exist` på en
+GAMMAL migration (t.ex. 0029) långt före drop-migrationen (0129). Kändes först vid Etapp
+5-merge när clusters/object_payers/object_contacts/object_images droppades.
