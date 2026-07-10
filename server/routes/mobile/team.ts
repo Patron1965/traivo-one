@@ -8,6 +8,7 @@ import {
   resources, teams, teamMembers, resourceProfileAssignments,
   notificationService,
 } from "./shared";
+import { getStartOfISOWeek } from "../helpers";
 
 const myProfilesHandler = asyncHandler(async (req: MobileAuthenticatedRequest, res: Response) => {
   const resourceId = req.mobileResourceId;
@@ -151,10 +152,52 @@ const resourceSearchHandler = asyncHandler(async (req: MobileAuthenticatedReques
   res.json(results);
 });
 
+// Individuella avvikelser i team (Task #1241) — läsande, för teamets egen vy
+// i utförarappen. Scopeas alltid till den inloggade resursens egna team.
+const teamDeviationsSchema = z.object({
+  year: z.coerce.number().int().min(2000).max(2100),
+  week: z.coerce.number().int().min(1).max(53),
+});
+
+const myTeamDeviationsHandler = asyncHandler(async (req: MobileAuthenticatedRequest, res: Response) => {
+  const resourceId = req.mobileResourceId;
+  const resource = await storage.getResource(resourceId);
+  if (!resource) throw new NotFoundError("Resurs hittades inte");
+
+  const parsed = teamDeviationsSchema.safeParse({ year: req.query.year, week: req.query.week });
+  if (!parsed.success) {
+    const formatted = formatZodError(parsed.error);
+    throw new ValidationError(formatted.error, formatted.details);
+  }
+
+  const membership = await db.select().from(teamMembers).where(eq(teamMembers.resourceId, resourceId));
+  const teamId = req.params.teamId;
+  if (!membership.some((m) => m.teamId === teamId)) {
+    throw new ForbiddenError("Du tillhör inte detta team");
+  }
+
+  const weekStart = getStartOfISOWeek(parsed.data.year, parsed.data.week);
+  const weekEnd = new Date(weekStart);
+  weekEnd.setDate(weekEnd.getDate() + 6);
+  weekEnd.setHours(23, 59, 59, 999);
+
+  const result = await storage.getTeamDeviationsForWeek(
+    resource.tenantId,
+    teamId,
+    weekStart,
+    weekEnd,
+    parsed.data.year,
+    parsed.data.week,
+  );
+  if (!result) throw new NotFoundError("Team");
+  res.json(result);
+});
+
 export function registerTeamRoutes(app: Express) {
   // Original /api/mobile/* routes
   app.get("/api/mobile/my-profiles", isMobileAuthenticated, myProfilesHandler);
   app.get("/api/mobile/my-team", isMobileAuthenticated, myTeamHandler);
+  app.get("/api/mobile/teams/:teamId/deviations", isMobileAuthenticated, myTeamDeviationsHandler);
   app.post("/api/mobile/teams", isMobileAuthenticated, createTeamHandler);
   app.post("/api/mobile/teams/:id/invite", isMobileAuthenticated, inviteHandler);
   app.post("/api/mobile/teams/:id/accept", isMobileAuthenticated, acceptHandler);

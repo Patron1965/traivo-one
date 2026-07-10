@@ -57,6 +57,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { RoughSummaryCard } from "@/components/grovplanering/RoughSummaryCard";
+import { TeamDeviationsPanel } from "@/components/grovplanering/TeamDeviationsPanel";
 import {
   RoughFilterPanel,
   createDefaultFilter,
@@ -671,6 +672,8 @@ export default function GrovplaneringPage() {
           testIdPrefix="summary-selection"
         />
       </div>
+
+      <TeamDeviationsPanel teams={teams.map((t) => ({ id: t.id, name: t.name }))} />
 
       {/* Filterpanel */}
       <RoughFilterPanel

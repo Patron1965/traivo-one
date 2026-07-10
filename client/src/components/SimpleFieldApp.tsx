@@ -19,7 +19,7 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import type { Resource, Vehicle, Equipment } from "@shared/schema";
-import { startOfDay, endOfDay, format } from "date-fns";
+import { startOfDay, endOfDay, format, getISOWeek, getISOWeekYear } from "date-fns";
 import { sv } from "date-fns/locale";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useLocalizedObjectName } from "@/lib/object-name";
@@ -104,6 +104,113 @@ interface DeviationReportItem {
   description: string;
   status: string;
   reportedAt?: string;
+}
+
+interface TeamMemberDeviationItem {
+  resourceId: string;
+  resourceName: string;
+  ownTasks: Array<{ id: string; title: string; minutes: number }>;
+  ownTasksMinutes: number;
+  ownTravelMinutes: number;
+  totalDeviationMinutes: number;
+  hasDeviation: boolean;
+}
+
+interface TeamDeviationSummaryItem {
+  members: TeamMemberDeviationItem[];
+  teamAbsences: Array<{ id: string; title: string; minutes: number }>;
+  teamAbsenceMinutes: number;
+  totalCapacityImpactMinutes: number;
+}
+
+function formatDeviationMinutes(minutes: number): string {
+  if (minutes <= 0) return "0 min";
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  if (h === 0) return `${m} min`;
+  if (m === 0) return `${h} h`;
+  return `${h} h ${m} min`;
+}
+
+// Individuella avvikelser i team (Task #1241) — läsande vy för teamets
+// medlemmar i utförarappen. Skapar/ändrar aldrig avvikelser, visar bara
+// befintliga fine-planning-signaler (egen uppgift/frånvaro/egen resa).
+function TeamDeviationsPanel({ mobileApiCall }: { mobileApiCall: (method: string, url: string, body?: unknown) => Promise<Response> }) {
+  const [summary, setSummary] = useState<TeamDeviationSummaryItem | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const teamsRes = await mobileApiCall("GET", "/api/mobile/my-team");
+        const teamsData: Array<{ id: string }> = await teamsRes.json();
+        const teamId = teamsData[0]?.id;
+        if (!teamId) {
+          if (!cancelled) { setSummary(null); setLoading(false); }
+          return;
+        }
+        const now = new Date();
+        const week = getISOWeek(now);
+        const isoYear = getISOWeekYear(now);
+        const res = await mobileApiCall(
+          "GET",
+          `/api/mobile/teams/${teamId}/deviations?year=${isoYear}&week=${week}`,
+        );
+        const data = await res.json();
+        if (!cancelled) setSummary(data);
+      } catch {
+        if (!cancelled) setError(true);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [mobileApiCall]);
+
+  const membersWithDeviation = summary?.members.filter((m) => m.hasDeviation) ?? [];
+  const hasAnyDeviation = membersWithDeviation.length > 0 || (summary?.teamAbsenceMinutes ?? 0) > 0;
+
+  return (
+    <Card className="border-chart-4/20 dark:border-chart-4/80" data-testid="panel-team-deviations">
+      <CardHeader className="pb-2">
+        <CardTitle className="text-sm flex items-center gap-2">
+          <Users className="h-4 w-4 text-chart-4" />
+          Avvikelser i teamet denna vecka
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-2">
+        {loading && <p className="text-xs text-muted-foreground">Laddar...</p>}
+        {!loading && error && <p className="text-xs text-muted-foreground">Kunde inte hämta avvikelser.</p>}
+        {!loading && !error && !hasAnyDeviation && (
+          <p className="text-xs text-muted-foreground" data-testid="text-no-team-deviations">
+            Inga avvikelser från teamplanen just nu.
+          </p>
+        )}
+        {!loading && !error && hasAnyDeviation && (
+          <div className="space-y-2">
+            <p className="text-xs font-medium text-warning" data-testid="text-team-capacity-impact">
+              Kapacitetspåverkan: {formatDeviationMinutes(summary?.totalCapacityImpactMinutes ?? 0)}
+            </p>
+            {membersWithDeviation.map((m) => (
+              <div key={m.resourceId} className="text-xs border-l-2 border-chart-4 pl-2" data-testid={`row-team-deviation-${m.resourceId}`}>
+                <span className="font-medium">{m.resourceName}</span>
+                {m.ownTasksMinutes > 0 && <span className="text-muted-foreground"> · egen uppgift ({formatDeviationMinutes(m.ownTasksMinutes)})</span>}
+                {m.ownTravelMinutes > 0 && <span className="text-muted-foreground"> · egen resa ({formatDeviationMinutes(m.ownTravelMinutes)})</span>}
+              </div>
+            ))}
+            {summary && summary.teamAbsences.length > 0 && (
+              <div className="text-xs border-l-2 border-muted pl-2" data-testid="row-team-absence">
+                <span className="font-medium">Team</span>
+                <span className="text-muted-foreground"> · borta ({formatDeviationMinutes(summary.teamAbsenceMinutes)})</span>
+              </div>
+            )}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
 }
 
 function MyReportsPanel({ mobileApiCall }: { mobileApiCall: (method: string, url: string, body?: unknown) => Promise<Response> }) {
@@ -431,6 +538,7 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
   const [changePhotoDragOver, setChangePhotoDragOver] = useState(false);
   const [impossiblePhotoDragOver, setImpossiblePhotoDragOver] = useState(false);
   const [showMyReportsPanel, setShowMyReportsPanel] = useState(false);
+  const [showTeamDeviationsPanel, setShowTeamDeviationsPanel] = useState(false);
   const [showSettingsPanel, setShowSettingsPanel] = useState(false);
   const { theme, toggleTheme } = useTheme();
 
@@ -3838,6 +3946,15 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
             >
               <Flag className={`h-4 w-4 ${showMyReportsPanel ? "text-chart-4" : "text-muted-foreground"}`} />
             </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-8 px-2 gap-1"
+              onClick={() => setShowTeamDeviationsPanel(!showTeamDeviationsPanel)}
+              data-testid="button-toggle-team-deviations"
+            >
+              <Users className={`h-4 w-4 ${showTeamDeviationsPanel ? "text-chart-4" : "text-muted-foreground"}`} />
+            </Button>
             {resourceId && (
               <Button
                 variant="ghost"
@@ -3891,6 +4008,10 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
 
         {showMyReportsPanel && (
           <MyReportsPanel mobileApiCall={mobileApiCall} />
+        )}
+
+        {showTeamDeviationsPanel && (
+          <TeamDeviationsPanel mobileApiCall={mobileApiCall} />
         )}
 
         {showSettingsPanel && (

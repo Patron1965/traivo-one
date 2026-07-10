@@ -6256,6 +6256,67 @@ export class DatabaseStorage implements IStorage {
     return db.select().from(teamMembers).where(eq(teamMembers.teamId, teamId));
   }
 
+  // Individuella avvikelser i team (Task #1241) — läsande aggregat, se
+  // computeTeamMemberDeviations i weeklyPlanEngine.ts för definitionen.
+  async getTeamDeviationsForWeek(tenantId: string, teamId: string, weekStart: Date, weekEnd: Date, isoYear: number, isoWeek: number) {
+    const [team] = await db.select().from(teams).where(and(eq(teams.id, teamId), eq(teams.tenantId, tenantId)));
+    if (!team) return undefined;
+
+    const [membersRaw, weekOrders, plans] = await Promise.all([
+      db.select({ resourceId: teamMembers.resourceId, resourceName: resources.name })
+        .from(teamMembers)
+        .innerJoin(resources, eq(teamMembers.resourceId, resources.id))
+        .where(eq(teamMembers.teamId, teamId)),
+      db.select({
+        id: workOrders.id,
+        resourceId: workOrders.resourceId,
+        title: workOrders.title,
+        scheduledDate: workOrders.scheduledDate,
+        estimatedDuration: workOrders.estimatedDuration,
+      }).from(workOrders)
+        .where(and(
+          eq(workOrders.tenantId, tenantId),
+          eq(workOrders.teamId, teamId),
+          isNotNull(workOrders.resourceId),
+          gte(workOrders.scheduledDate, weekStart),
+          lte(workOrders.scheduledDate, weekEnd),
+        )),
+      db.select().from(weeklyPlans).where(and(
+        eq(weeklyPlans.tenantId, tenantId),
+        eq(weeklyPlans.teamId, teamId),
+        eq(weeklyPlans.year, isoYear),
+        eq(weeklyPlans.weekNumber, isoWeek),
+      )),
+    ]);
+
+    const plan = plans[0];
+    const [teamPersonalTasks, travelEntries] = plan
+      ? await Promise.all([
+          db.select().from(personalTasks).where(and(eq(personalTasks.tenantId, tenantId), eq(personalTasks.weeklyPlanId, plan.id))),
+          db.select().from(travelTimeEntries).where(and(eq(travelTimeEntries.tenantId, tenantId), eq(travelTimeEntries.weeklyPlanId, plan.id))),
+        ])
+      : [[], []];
+
+    const taskIds = travelEntries.flatMap((e) => [e.fromTaskId, e.toTaskId]).filter((id): id is string => !!id);
+    const workOrderResourceMap = new Map<string, string | null>();
+    if (taskIds.length > 0) {
+      const relatedOrders = await db.select({ id: workOrders.id, resourceId: workOrders.resourceId })
+        .from(workOrders)
+        .where(and(eq(workOrders.tenantId, tenantId), inArray(workOrders.id, taskIds)));
+      for (const o of relatedOrders) workOrderResourceMap.set(o.id, o.resourceId);
+    }
+
+    const { computeTeamMemberDeviations } = await import("./planning/weeklyPlanEngine");
+    return computeTeamMemberDeviations(
+      teamId,
+      membersRaw,
+      weekOrders,
+      teamPersonalTasks,
+      travelEntries,
+      workOrderResourceMap,
+    );
+  }
+
   // Task #991: Enhetlig läsmodell för utförarregistret. Aggregerar (utan att fysiskt
   // slå ihop tabeller) personer, fordon/utrustning och team till en hierarkisk vy där
   // team är grupperande förälder. Kostnadsställe + projekt exponeras enhetligt per nod.

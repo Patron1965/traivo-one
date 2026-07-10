@@ -216,6 +216,122 @@ export function personalTaskMinutes(t: PersonalTask): number {
 }
 
 // =============================================================================
+// Individuella avvikelser i team (Task #1241)
+// -----------------------------------------------------------------------------
+// Läsande aggregat: en teammedlem "avviker" från teamets huvudplan när hen
+// har en egen uppgift (arbetsorder med resourceId satt till just den medlemmen,
+// istället för att köras på teamets gemensamma plan), är borta (manuellt
+// tillagd personal_task, dvs isGenerated=false — autogenererade rutinblock som
+// lunch/inställelse räknas inte som avvikelse) eller kör en egen resa (travel_time_entry
+// vars from/to-uppgift är individuellt tilldelad). Skapar ALDRIG data — bara läser
+// befintliga fine-planning-signaler och summerar deras kapacitetspåverkan.
+// =============================================================================
+
+export interface TeamDeviationWorkOrderFact {
+  id: string;
+  resourceId: string | null;
+  title: string;
+  scheduledDate: Date | string | null;
+  estimatedDuration: number | null;
+}
+
+export interface TeamMemberDeviation {
+  resourceId: string;
+  resourceName: string;
+  ownTasks: Array<{ id: string; title: string; scheduledDate: Date | string | null; minutes: number }>;
+  ownTasksMinutes: number;
+  absences: Array<{ id: string; title: string; plannedDate: string | null; minutes: number; timeCategory: string }>;
+  absenceMinutes: number;
+  ownTravelMinutes: number;
+  totalDeviationMinutes: number;
+  hasDeviation: boolean;
+}
+
+export interface TeamDeviationSummary {
+  teamId: string;
+  members: TeamMemberDeviation[];
+  // Manuellt tillagda team-nivå-frånvaroblock (personal_tasks, isGenerated=false)
+  // som inte kan knytas till en specifik medlem i dagens datamodell.
+  teamAbsences: Array<{ id: string; title: string; plannedDate: string | null; minutes: number; timeCategory: string }>;
+  teamAbsenceMinutes: number;
+  // Summerad kapacitetspåverkan för hela teamet under perioden (minskar teamets
+  // gemensamt tillgängliga tid, se spilltidMinutes i computeWeeklyPlanSummary).
+  totalCapacityImpactMinutes: number;
+}
+
+export function computeTeamMemberDeviations(
+  teamId: string,
+  members: Array<{ resourceId: string; resourceName: string }>,
+  individualWorkOrders: TeamDeviationWorkOrderFact[],
+  teamPersonalTasks: PersonalTask[],
+  travelEntries: TravelTimeEntry[],
+  workOrderResourceMap: Map<string, string | null>,
+): TeamDeviationSummary {
+  const woByResource = new Map<string, TeamDeviationWorkOrderFact[]>();
+  for (const wo of individualWorkOrders) {
+    if (!wo.resourceId) continue;
+    const list = woByResource.get(wo.resourceId) ?? [];
+    list.push(wo);
+    woByResource.set(wo.resourceId, list);
+  }
+
+  // Manuellt tillagda (icke-autogenererade) personal_tasks kan idag inte knytas
+  // till en enskild medlem i schemat (personal_tasks saknar resourceId) — de
+  // redovisas som team-nivå-frånvaro och räknas in i den samlade kapacitetspåverkan.
+  const manualAbsences = teamPersonalTasks.filter((t) => !t.isGenerated);
+  const teamAbsenceMinutes = manualAbsences.reduce((sum, t) => sum + personalTaskMinutes(t), 0);
+
+  // Egen resa: travelMinutes för poster kopplade till en individuellt tilldelad
+  // uppgift (från- eller till-uppgiften har resourceId satt).
+  const travelMinutesByResource = new Map<string, number>();
+  for (const entry of travelEntries) {
+    const fromResource = entry.fromTaskId ? workOrderResourceMap.get(entry.fromTaskId) : null;
+    const toResource = entry.toTaskId ? workOrderResourceMap.get(entry.toTaskId) : null;
+    const resourceId = fromResource || toResource;
+    if (!resourceId) continue;
+    travelMinutesByResource.set(resourceId, (travelMinutesByResource.get(resourceId) ?? 0) + (entry.travelMinutes ?? 0));
+  }
+
+  const memberDeviations: TeamMemberDeviation[] = members.map((m) => {
+    const ownWos = woByResource.get(m.resourceId) ?? [];
+    const ownTasks = ownWos.map((wo) => ({
+      id: wo.id,
+      title: wo.title,
+      scheduledDate: wo.scheduledDate,
+      minutes: wo.estimatedDuration ?? 0,
+    }));
+    const ownTasksMinutes = ownTasks.reduce((s, t) => s + t.minutes, 0);
+    const ownTravelMinutes = travelMinutesByResource.get(m.resourceId) ?? 0;
+    const totalDeviationMinutes = ownTasksMinutes + ownTravelMinutes;
+    return {
+      resourceId: m.resourceId,
+      resourceName: m.resourceName,
+      ownTasks,
+      ownTasksMinutes,
+      absences: [],
+      absenceMinutes: 0,
+      ownTravelMinutes,
+      totalDeviationMinutes,
+      hasDeviation: totalDeviationMinutes > 0,
+    };
+  });
+
+  return {
+    teamId,
+    members: memberDeviations,
+    teamAbsences: manualAbsences.map((t) => ({
+      id: t.id,
+      title: t.title,
+      plannedDate: t.plannedDate,
+      minutes: personalTaskMinutes(t),
+      timeCategory: t.timeCategory,
+    })),
+    teamAbsenceMinutes,
+    totalCapacityImpactMinutes: teamAbsenceMinutes + memberDeviations.reduce((s, m) => s + m.totalDeviationMinutes, 0),
+  };
+}
+
+// =============================================================================
 // 1. KPI- & valideringsmotor
 // =============================================================================
 

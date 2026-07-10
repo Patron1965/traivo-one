@@ -89,6 +89,36 @@ export function registerWeeklyPlanRoutes(app: Express) {
     districtId: z.string().min(1).optional(),
   });
 
+  // Individuella avvikelser i team (Task #1241) — läsande, ingen mutation.
+  const teamDeviationsSchema = z.object({
+    year: z.coerce.number().int().min(2000).max(2100),
+    week: z.coerce.number().int().min(1).max(53),
+  });
+
+  app.get("/api/weekly-plans/team/:teamId/deviations", ...guard, asyncHandler(async (req, res) => {
+    const tenantId = getTenantIdWithFallback(req);
+    const parsed = teamDeviationsSchema.safeParse({ year: req.query.year, week: req.query.week });
+    if (!parsed.success) {
+      const formatted = formatZodError(parsed.error);
+      throw new ValidationError(formatted.error, formatted.details);
+    }
+    const { getStartOfISOWeek } = await import("./helpers");
+    const weekStart = getStartOfISOWeek(parsed.data.year, parsed.data.week);
+    const weekEnd = new Date(weekStart);
+    weekEnd.setDate(weekEnd.getDate() + 6);
+    weekEnd.setHours(23, 59, 59, 999);
+    const result = await storage.getTeamDeviationsForWeek(
+      tenantId,
+      req.params.teamId,
+      weekStart,
+      weekEnd,
+      parsed.data.year,
+      parsed.data.week,
+    );
+    if (!result) throw new NotFoundError("Team");
+    res.json(result);
+  }));
+
   app.get("/api/rough-planning/summary", ...guard, asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const parsed = roughSummarySchema.safeParse({
