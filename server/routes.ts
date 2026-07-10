@@ -65,6 +65,7 @@ import { registerUrgentJobRoutes } from "./routes/urgentJobRoutes";
 import { registerRealtimeTestRoutes } from "./routes/realtime-test";
 import { registerResendWebhookRoutes } from "./routes/resendWebhookRoutes";
 import { registerTelinkRoutes } from "./routes/telinkRoutes";
+import { registerFilterRoutes } from "./routes/filterRoutes";
 import { telinkSyncScheduler } from "./services/telink-sync-scheduler";
 
 async function ensureDefaultTenant() {
@@ -601,6 +602,7 @@ export async function registerRoutes(
   registerPlannerRoutes(app);
   registerWeeklyPlanRoutes(app);
   registerKPIRoutes(app);
+  registerFilterRoutes(app);
   registerResendWebhookRoutes(app);
   const { registerPlatformAdminRoutes } = await import("./routes/platformAdminRoutes");
   registerPlatformAdminRoutes(app);

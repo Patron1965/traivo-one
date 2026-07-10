@@ -8020,6 +8020,38 @@ export const insertSlotTimeSchema = createInsertSchema(slotTimes).omit({ id: tru
 export type InsertSlotTime = z.infer<typeof insertSlotTimeSchema>;
 
 // ============================================================================
+// Task #1240: Delad filtermotor — sparade/delade/roll-scopade filter.
+// Ett filter (villkorsträd, se shared/filter-engine.ts) sparat mot en yta
+// (uppgiftsnav/objektnav/portal/utforarapp/administration). isShared=true gör
+// filtret synligt för alla i tenanten (inte bara skaparen); roles begränsar
+// vilka roller som får se det delade filtret (tom lista = alla roller).
+// ============================================================================
+export const savedFilters = pgTable("saved_filters", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
+  userId: varchar("user_id").notNull(),
+  scope: text("scope").notNull(),
+  name: text("name").notNull(),
+  definition: jsonb("definition").notNull(),
+  isShared: boolean("is_shared").default(false).notNull(),
+  roles: text("roles").array().default(sql`'{}'::text[]`).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_saved_filters_tenant_scope").on(table.tenantId, table.scope),
+  index("idx_saved_filters_tenant_user").on(table.tenantId, table.userId),
+]);
+
+export type SavedFilter = typeof savedFilters.$inferSelect;
+export const insertSavedFilterSchema = createInsertSchema(savedFilters)
+  .omit({ id: true, tenantId: true, userId: true, createdAt: true, updatedAt: true })
+  .extend({
+    definition: z.record(z.any()),
+    roles: z.array(z.string()).optional().default([]),
+  });
+export type InsertSavedFilter = z.infer<typeof insertSavedFilterSchema>;
+
+// ============================================================================
 // Task #991: Enhetligt utförarregister (läsmodell)
 // En samlad vy där personer, fordon/utrustning och team visas tillsammans, med
 // team som grupperande förälder. Ren läs-/aggregeringsmodell — inga nya tabeller,

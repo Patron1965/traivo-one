@@ -158,6 +158,7 @@ import {
   planningReservations, type PlanningReservation, type InsertPlanningReservation,
   preTasks, execTypePreTaskRules, disruptions,
   slotTimes, type SlotTime, type InsertSlotTime,
+  savedFilters, type SavedFilter, type InsertSavedFilter,
   type WeeklyPlan, type InsertWeeklyPlan,
   type WeeklyPlanTask, type InsertWeeklyPlanTask,
   type PersonalTask, type InsertPersonalTask,
@@ -1243,6 +1244,12 @@ export interface IStorage {
   getResourceVehiclesByResourceIds(resourceIds: string[]): Promise<ResourceVehicle[]>;
   getResourceArticlesByResourceIds(resourceIds: string[]): Promise<ResourceArticle[]>;
   createPlanningDecisionLog(log: { tenantId: string; userId?: string; weekStart: string; weekEnd: string; summary: unknown; moveCount: number; violationCount: number; riskScore: number; totalOrdersScheduled: number }): Promise<void>;
+
+  // ============== Task #1240: Delad filtermotor — sparade filter ==============
+  getSavedFilters(tenantId: string, scope: string, userId: string): Promise<SavedFilter[]>;
+  createSavedFilter(tenantId: string, userId: string, data: InsertSavedFilter): Promise<SavedFilter>;
+  updateSavedFilter(tenantId: string, userId: string, id: string, data: Partial<InsertSavedFilter>): Promise<SavedFilter | undefined>;
+  deleteSavedFilter(tenantId: string, userId: string, id: string): Promise<void>;
 
   // ============== Task #785: Veckoplanering – datafundament ==============
   // Alla queries är tenant-scopade; alla UPDATE/DELETE har tenant_id i WHERE.
@@ -9938,6 +9945,34 @@ export class DatabaseStorage implements IStorage {
   async deleteGeographicDistrict(tenantId: string, id: string): Promise<void> {
     await db.update(geographicDistricts).set({ deletedAt: new Date(), updatedAt: new Date() })
       .where(and(eq(geographicDistricts.id, id), eq(geographicDistricts.tenantId, tenantId)));
+  }
+
+  // ============== Task #1240: Delad filtermotor — sparade filter ==============
+  // Synliga för en användare inom en yta: egna filter + delade filter (isShared)
+  // vars roles-lista är tom eller innehåller inget krav (rollfiltrering görs av
+  // anropande route utifrån den inloggades roll, se filterRoutes.ts).
+  async getSavedFilters(tenantId: string, scope: string, userId: string): Promise<SavedFilter[]> {
+    return db.select().from(savedFilters)
+      .where(and(
+        eq(savedFilters.tenantId, tenantId),
+        eq(savedFilters.scope, scope),
+        or(eq(savedFilters.userId, userId), eq(savedFilters.isShared, true)),
+      ))
+      .orderBy(savedFilters.name);
+  }
+  async createSavedFilter(tenantId: string, userId: string, data: InsertSavedFilter): Promise<SavedFilter> {
+    const [row] = await db.insert(savedFilters).values({ ...data, tenantId, userId }).returning();
+    return row;
+  }
+  async updateSavedFilter(tenantId: string, userId: string, id: string, data: Partial<InsertSavedFilter>): Promise<SavedFilter | undefined> {
+    const [row] = await db.update(savedFilters).set({ ...data, updatedAt: new Date() })
+      .where(and(eq(savedFilters.id, id), eq(savedFilters.tenantId, tenantId), eq(savedFilters.userId, userId)))
+      .returning();
+    return row || undefined;
+  }
+  async deleteSavedFilter(tenantId: string, userId: string, id: string): Promise<void> {
+    await db.delete(savedFilters)
+      .where(and(eq(savedFilters.id, id), eq(savedFilters.tenantId, tenantId), eq(savedFilters.userId, userId)));
   }
 
   // Distrikt-zoner

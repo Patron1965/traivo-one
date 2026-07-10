@@ -81,6 +81,10 @@ import {
   type RoughStatus,
 } from "@/lib/rough-planning";
 import type { Team, GeographicDistrict } from "@shared/schema";
+import { AdvancedFilterBar } from "@/components/filters/AdvancedFilterBar";
+import { GROVPLANERING_FILTER_FIELDS } from "@/lib/filter-fields-grovplanering";
+import { emptyFilterGroup, evaluateFilterGroup, type FilterGroup } from "@shared/filter-engine";
+import { useAuth } from "@/hooks/use-auth";
 
 interface AppliedFilter {
   districtIds: string[];
@@ -280,6 +284,8 @@ export default function GrovplaneringPage() {
     return persisted ? deriveApplied(persisted) : EMPTY_APPLIED;
   });
 
+  const [advancedFilter, setAdvancedFilter] = useState<FilterGroup>(() => emptyFilterGroup());
+
   const [selected, setSelected] = useState<Map<string, GridTaskRow>>(new Map());
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
 
@@ -310,8 +316,19 @@ export default function GrovplaneringPage() {
     placeholderData: keepPreviousData,
   });
 
-  const groups: GridGroup[] = data?.groups ?? [];
-  const total = data?.pagination.total ?? 0;
+  // Task #1240: klient-sidan finfiltrering ovanpå serverns grov-filter/gruppering,
+  // via den delade filtermotorn. Grupper utan kvarvarande rader döljs helt.
+  const rawGroups: GridGroup[] = data?.groups ?? [];
+  const groups: GridGroup[] = useMemo(() => {
+    if (advancedFilter.conditions.length === 0) return rawGroups;
+    return rawGroups
+      .map((g) => ({
+        ...g,
+        tasks: g.tasks.filter((t) => evaluateFilterGroup(t, advancedFilter, GROVPLANERING_FILTER_FIELDS)),
+      }))
+      .filter((g) => g.tasks.length > 0);
+  }, [rawGroups, advancedFilter]);
+  const total = advancedFilter.conditions.length === 0 ? (data?.pagination.total ?? 0) : groups.reduce((n, g) => n + g.tasks.length, 0);
   const summary = data?.summary ?? EMPTY_KPIS;
 
   // Motorns förslag (Task #1039) — läses on-demand, separat från work_order-rutnätet.
@@ -406,6 +423,8 @@ export default function GrovplaneringPage() {
   // som rutnätet (samma query-params) — servern paginerar inte exporten.
   const [exporting, setExporting] = useState(false);
   const [columnDialogOpen, setColumnDialogOpen] = useState(false);
+  const { user: currentUser } = useAuth() as { user?: { role?: string | null } };
+  const currentRole = currentUser?.role ?? null;
   const [exportColumns, setExportColumns] = useState<ExportColumnKey[]>(
     () => loadExportColumns(),
   );
@@ -615,6 +634,14 @@ export default function GrovplaneringPage() {
         onApply={applyFilters}
         onClear={clearFilters}
         isFetching={isFetching}
+      />
+
+      {/* Avancerat filter (Task #1240) — delad filtermotor, sparade/delade filter */}
+      <AdvancedFilterBar
+        scope="uppgiftsnav"
+        fields={GROVPLANERING_FILTER_FIELDS}
+        value={advancedFilter}
+        onChange={setAdvancedFilter}
       />
 
       {/* Motorns körkontroll — intill filtret (Task #1039) */}
@@ -1002,7 +1029,11 @@ export default function GrovplaneringPage() {
             </DialogDescription>
           </DialogHeader>
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-            {EXPORT_COLUMNS.map((col) => {
+            {EXPORT_COLUMNS.filter(
+              (col) =>
+                (col.key !== "value" && col.key !== "cost") ||
+                ["owner", "admin", "planner"].includes(currentRole ?? ""),
+            ).map((col) => {
               const checked = exportColumns.includes(col.key);
               return (
                 <label
