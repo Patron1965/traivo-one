@@ -1,0 +1,54 @@
+1. Veckoplan, tidstyper, planerad/verklig tid
+Byggt och fungerar:
+    •    Klumpmotorn (grupperar på plats, ~30 m, gatsida, kompatibel typ – varje uppgift behåller sin egen artikel, tid, status och historik).
+    •    Automatisk restid mellan geografiska uppgifter, med varning när position saknas.
+    •    Planerad tid ur dag, tid, artikeltid, antal och ställtid – uppdateras automatiskt när antalet ändras.
+    •    Verklig tid med jämförelse plan mot utfall.
+    •    Tidstyps-/tidskodsregister med prioritets- och överlappsregler.
+Delvis byggt:
+    •    168-timmarsmodellen finns i beräkningsmotorn, men vyn visar fortfarande mest arbetstid – inte hela dygnet sömlöst.
+    •    Tidstyps-registret saknar den fulla regeluppsättningen (lön-export, påverkar rutt, kräver position, räknas som vila/produktion).
+    •    Veckosummor och övertid finns, men OB-tid och löne-export via API saknas.
+    •    Tempo-varningar finns för SLA-risk och "nästa uppgift i fara", men inte live-jämförelsen snabbare/långsammare än plan.
+    •    Byte av tidskod går i datan, men behörighets- och regelstyrningen är inte klar.
+Inte byggt än:
+    •    Proportionell fördelning av verklig tid inom en klump.
+    •    Dynamisk förlängning av tid ("ingen tom tid" – t.ex. att vila töjs till första resan).
+    •    Reservtid som automatiskt skapas ur oplanerad tid och går att boka nya uppgifter på.
+
+2. Uppgiftsnav, filter, tilldelning och team
+Byggt och fungerar:
+    •    Uppgiftsnavet som en central lista för uppgifter från alla källor.
+    •    Markera urval + löpande summering (tid, stopp, objekt, kunder).
+    •    Val av team och vecka med ledig kapacitet, samt leveranstidsstöd (vilka veckor som är möjliga).
+    •    To-do-lista för uppgifter utan geografi/tid.
+    •    Produktionstid från artikel som uppdateras med antalet.
+    •    Hela ekonomi- och spårbarhetskedjan: projekt (följer personal), kostnadsställe (följer utrustning), samt vilket team/person/fordon/utrustning som utfört arbetet – förberett för export.
+Delvis byggt:
+    •    Filtermotorn finns, men är byggd på flera ställen i stället för en enda gemensam motor i alla vyer.
+    •    Team planeras som en enhet, men det saknas en samlad vy för individuell avvikelse (t.ex. en person sjuk medan teamet fortsätter).
+    •    Tilläggsartiklar kan skapas, men koppling till klump och full faktureringslogik är inte klar.
+    •    Tids-editorn finns, men utan repetition (återkommande vila/arbetstid/raster).
+    •    Sortering finns, men karta och lista för samma urval sida vid sida saknas i navet.
+Inte byggt än:
+    •    Filter på alla metadatafält.
+    •    Avancerade operatorer samt sparade/delade filter i kategorier.
+
+3. Fortnox-integrationen (avstämd mot utvecklarunderlag v3.0)
+Ansvarsfördelningen stämmer exakt: Fortnox är master för kunder och artiklar, Traivo är master för order, produktion, metadata och fakturaunderlag. Inloggning sker via OAuth2 (Authorization Code Flow) med säker lagring och automatisk förnyelse.
+Byggt och fungerar:
+    •    Rate limit-hantering: Hanterar Fortnox gränser med kö, backoff och automatiska omförsök, inklusive korrekt hantering av "för många anrop" (429).
+    •    Pagination: Kund- och artikelhämtning bläddrar igenom alla sidor (500 per sida).
+    •    Validering före export: Kontrollerar att kunden finns/är kopplad, att artiklarna är kopplade, samt att pris och antal är numeriska. Saknas något stoppas exporten.
+    •    Fakturahuvud: Skickar kundnummer, er referens, vår referens, ert ordernr (= Traivos order/orderkoncept), anmärkning, samt kostnadsställe och projekt.
+    •    Tre radtyper: Artikelrad, informationsrad ur metadata, och fritextrad – inklusive fältarbetarens egna kommentar från appen som blir en textrad på fakturan.
+    •    Pris: Traivos pris har alltid företräde framför Fortnox standardpris.
+    •    Felhantering + återkoppling: 400/429/5xx hanteras med omförsök, och vid lyckad export sparas Fortnox faktura-ID/fakturanummer tillbaka och ordern markeras som exporterad.
+Delvis byggt:
+    •    Idempotens (skydd mot dubbelfaktura): Skydd finns – en order som redan exporterats skickas inte igen – men skyddet ligger i vår egen databas, inte som en idempotensnyckel skickad mot Fortnox.
+Inte byggt än:
+    •    Inkrementell + automatisk synk: Kund- och artikelsynken hämtar i dag alltid allt och körs manuellt; inkrementell synk via lastmodified och schemalagd körning saknas.
+    •    Extra fakturahuvud-fält: externt fakturareferens-fält, leveranssätt, transportsätt och valuta skickas inte i dag (Fortnox standard används för valuta).
+
+Sammanfattning
+Fortnox-delen är i praktiken klar och robust – det som återstår där är främst inkrementell/automatisk kund- och artikelsynk plus några extra fakturafält. Veckoplanen och uppgiftsnavet har grunden, uppgiftspaketet, motorerna och planeringsflödet på plats, men punkterna under "inte byggt än" (och flera under "delvis byggt") behöver byggas klart innan systemet motsvarar specarna fullt ut.

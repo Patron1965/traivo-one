@@ -1,0 +1,283 @@
+1. Veckoplan, tidstyper, planerad/verklig tid
+
+Byggt och fungerar
+
+Klumpmotorn (grupperar på plats, ~30 m, gatsida, kompatibel typ – varje uppgift behåller sin egen artikel, tid, status och historik)
+
+Kommentar och förtydligande
+
+Beskrivningen är i huvudsak korrekt men behöver kompletteras.
+
+Klumpmotorn ska betraktas som en egen motor med:
+
+beskrivning
+beslutsparametrar
+regelverk
+
+Klumpmotorns uppgift är inte enbart att gruppera uppgifter inom ett visst geografiskt avstånd.
+
+Motorn ska analysera om flera uppgifter ekonomiskt och produktionsmässigt kan betraktas som ett gemensamt produktionsstopp.
+
+Följande parametrar ska vara inställningsbara:
+
+klumpningsradie
+samma sida av gata
+maximal gångsträcka
+kompatibel artikelgrupp
+kompatibel utförartyp
+leveransfönster
+ekonomisk prioritering
+
+Klumpmotorn ska dessutom skapa en gemensam primär position samtidigt som varje underuppgift behåller sin sekundära position.
+
+Bekräftelse önskas: Vilka av ovanstående parametrar är idag konfigurerbara?
+
+⸻
+
+Automatisk restid mellan geografiska uppgifter
+
+Kommentar och förtydligande
+
+Jag tror att denna punkt behöver beskrivas annorlunda.
+
+Restid ska inte beräknas mellan geografiska uppgifter generellt.
+
+Restid ska beräknas mellan två planerade produktionsstopp.
+
+Restidsberäkningen ska därför utgöra en egen motor (Ruttoptimering Light).
+
+Motorn ska:
+
+anropa navigationsmotor (Google Maps eller motsvarande)
+skapa en artikelbaserad uppgift “Restid”
+tilldela korrekt tidskod
+placera reseuppgiften mellan två stopp
+
+Restiden blir därmed en vanlig uppgift och följer samma logik som övriga uppgifter.
+
+Bekräftelse önskas: Är restiden idag en faktisk uppgift med artikelnummer eller endast ett beräknat tidsvärde?
+
+⸻
+
+Planerad tid ur dag, tid, artikeltid, antal och ställtid
+
+Kommentar
+
+Beskrivningen stämmer.
+
+Jag vill dock förtydliga att planerad tid alltid ska beräknas dynamiskt utifrån:
+
+artikelns tidsverk
+antal
+ställtid
+eventuell restid
+
+Om någon parameter ändras ska planeringstiden räknas om automatiskt.
+
+Systemet ska dessutom kunna hantera artiklar utan tidsverk där verklig tid registreras direkt mellan start och stopp.
+
+Bekräftelse önskas: Är båda modellerna implementerade?
+
+⸻
+
+Verklig tid med jämförelse plan mot utfall
+
+Kommentar
+
+Stämmer.
+
+Jag vill komplettera med följande.
+
+När en uppgift avslutas eller när nästa uppgift startas ska föregående uppgift automatiskt avslutas.
+
+Endast en aktiv uppgift får vara igång samtidigt.
+
+Verklig tid registreras automatiskt.
+
+Om flera uppgifter avslutas samtidigt inom en klump ska verklig tid fördelas proportionellt utifrån planerad tid.
+
+Utföraren eller administratören ska därefter kunna justera den verkliga tiden manuellt.
+
+Bekräftelse önskas: Finns denna automatiska avslutslogik implementerad?
+
+⸻
+
+Tidstyps-/tidskodsregister med prioritets- och överlappsregler
+
+Kommentar
+
+Jag ser detta som en egen regelmotor.
+
+Varje artikel ska vara kopplad till en tidstyp.
+
+Tidstypsregistret ska styra:
+
+överlappningar
+prioritet
+arbetstid
+vila
+resa
+administration
+övertid
+OB
+export till lön
+export till ekonomi
+
+Dessutom ska behörighet styra vilka tidstyper och artikelgrupper olika användare får ändra.
+
+Bekräftelse önskas: Finns detta regelverk definierat eller återstår delar?
+
+⸻
+
+Delvis byggt
+
+168-timmarsmodellen
+
+Kommentar
+
+Denna modell är central i Trivos arkitektur.
+
+Hela veckan ska betraktas som en sammanhängande planeringsyta.
+
+Även:
+
+nattvila
+helgvila
+lunch
+semester
+sjukdom
+jour
+
+ska representeras av uppgifter med artikelnummer och tidskod.
+
+Systemet ska därmed kunna analysera:
+
+överbokning
+reservtid
+ledig tid
+övertid
+
+Bekräftelse önskas: Är målet att hela 168-timmarsvyn ska visualiseras i planeringsvyn?
+
+⸻
+
+Tidstypsregistret
+
+Kommentar
+
+Regelverket bör kompletteras med:
+
+behörigheter
+artikelgrupper
+GPS-krav
+fakturerbarhet
+exportregler
+konteringsregler
+
+⸻
+
+Veckosummor och övertid
+
+Kommentar
+
+På sikt bör även:
+
+kvalificerad övertid
+enkel övertid
+OB
+nattarbete
+
+kunna hanteras via regelverket.
+
+⸻
+
+Tempo-varningar
+
+Kommentar
+
+Jag föreslår att detta utvecklas till en dynamisk indikator.
+
+Systemet ska visa:
+
+snabbare än plan
+enligt plan
+långsammare än plan
+
+med tydlig färgindikering.
+
+⸻
+
+Byte av tidskod
+
+Kommentar
+
+Byte av tidskod ska styras både av:
+
+behörighet
+artikelgrupp
+regelverk
+
+Utföraren ska endast kunna välja de tidskoder och artikelgrupper som administratören tillåtit.
+
+⸻
+
+Inte byggt än
+
+Proportionell fördelning av verklig tid inom en klump
+
+Kommentar
+
+Detta bör vara standard.
+
+Manuell justering ska alltid kunna göras.
+
+⸻
+
+Dynamisk förlängning av tid
+
+Kommentar
+
+Jag föreslår att funktionen byter namn till Dynamisk tidshantering.
+
+När en uppgift avslutas eller nästa uppgift startas ska föregående uppgift avslutas automatiskt.
+
+Systemet ska kunna hantera två typer av artiklar:
+
+artiklar med tidsverk
+artiklar utan tidsverk
+
+För artiklar utan tidsverk blir den verkliga tiden den tid som förflyter mellan start och stopp.
+
+Exempel:
+
+restid
+väntetid
+service utan tidsverk
+administration
+
+⸻
+
+Reservtid som automatiskt skapas
+
+Kommentar
+
+Jag föreslår att detta definieras som Dynamisk reservtid.
+
+Reservtid ska automatiskt skapas när inga andra aktiviteter finns planerade.
+
+Reservtiden ska kunna skapas:
+
+per dag
+per vecka
+
+Reservtid ska klassificeras som:
+
+Reservtid
+Oplanerad tid
+Slasktid
+
+och ska senare kunna ersättas av nya artikelbaserade uppgifter.
+
+Bekräftelse önskas: Är detta den avsedda implementationen eller finns en annan lösning planerad?
+
+⸻

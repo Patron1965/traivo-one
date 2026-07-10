@@ -1,0 +1,214 @@
+Tilläg punkt 1
+
+Jag skulle lägga detta som ett tillägg direkt efter punkt 1 i utvecklarnas dokument. Då blir det inte en omskrivning av deras text, utan ett arkitekturförtydligande som beskriver hur systemet är tänkt att fungera.
+
+⸻
+
+Tillägg och arkitekturförtydligande till punkt 1 – Veckoplan, tidstyper, planerad/verklig tid
+
+Efter genomgång av punkt 1 vill jag komplettera med ett antal grundläggande designprinciper som beskriver den avsedda arkitekturen bakom veckoplaneringen.
+
+Motorarkitektur
+
+Veckoplaneringen består inte enbart av ett antal funktioner utan av ett antal självständiga motorer.
+
+Varje motor ska innehålla:
+
+en beskrivning av motorns syfte,
+ett antal konfigurerbara beslutsparametrar,
+ett definierat regelverk.
+
+Exempel på motorer inom veckoplaneringen är:
+
+Klumpmotorn
+Ruttoptimering Light
+Tidstypsmotorn
+Veckoplaneringsmotorn
+Utförarmotorn
+
+Samtliga motorer ska kunna konfigureras utan programmering.
+
+⸻
+
+Klumpmotorn
+
+Klumpmotorns uppgift är att analysera om flera uppgifter kan utföras som ett gemensamt produktionsstopp.
+
+Bedömningen ska bland annat baseras på:
+
+geografiskt avstånd,
+samma sida av gatan,
+kompatibel artikeltyp,
+kompatibel utförartyp,
+leveransfönster,
+ekonomisk lämplighet.
+
+Klumpmotorn ska automatiskt skapa en gemensam primär position samtidigt som varje underuppgift behåller sin egen sekundära position.
+
+Det är viktigt att klumpen endast är ett planeringsbegrepp. Samtliga underuppgifter ska behålla:
+
+artikel,
+status,
+historik,
+ekonomi,
+spårbarhet.
+
+⸻
+
+Ruttoptimering Light
+
+Restid ska inte betraktas som ett tidsvärde utan som en egen artikelbaserad uppgift.
+
+När två planerade produktionsstopp placeras efter varandra ska Ruttoptimering Light:
+
+beräkna optimal färdväg,
+hämta restid från vald kartmotor,
+skapa en artikelbaserad uppgift för restid,
+tilldela korrekt tidskod,
+placera reseuppgiften mellan stoppen.
+
+Resan blir därmed en vanlig uppgift och omfattas av samma regelverk som övriga aktiviteter.
+
+⸻
+
+Grundläggande modell
+
+En grundprincip i Trivo är att all aktivitet representeras av en artikel och en uppgift.
+
+Det gäller exempelvis:
+
+produktion,
+restid,
+väntetid,
+administration,
+förbättringsförslag,
+felanmälningar,
+avvikelser,
+utbildning,
+raster,
+vila.
+
+Denna princip gör att hela systemet använder samma logik för planering, uppföljning, ekonomi och statistik.
+
+⸻
+
+Planerad och verklig tid
+
+Planerad tid ska alltid beräknas dynamiskt utifrån:
+
+artikelns tidsverk,
+antal,
+ställtid,
+eventuell restid.
+
+När någon parameter ändras ska planeringstiden omedelbart räknas om.
+
+Verklig tid registreras automatiskt från uppgiftens start till dess att uppgiften avslutas eller nästa uppgift startas.
+
+Endast en aktiv uppgift ska kunna vara igång samtidigt.
+
+⸻
+
+Dynamiska artikeluppgifter
+
+Systemet ska stödja två typer av uppgifter.
+
+Artiklar med tidsverk
+
+Planerad tid beräknas utifrån artikelns tidsverk och antal.
+
+Artiklar utan tidsverk
+
+Vissa uppgifter ska sakna planerad tidsåtgång.
+
+Exempel:
+
+restid,
+väntetid,
+administration,
+servicearbete utan tidsverk,
+akuta insatser.
+
+För dessa uppgifter registreras endast verklig tid mellan start och stopp.
+
+⸻
+
+Proportionell tidsfördelning
+
+När en hel klump kvitteras samtidigt ska verklig tid som standard fördelas proportionellt mellan underuppgifterna utifrån deras planerade tider.
+
+Om verkligheten avviker ska utföraren eller administratören kunna justera respektive uppgifts verkliga tid manuellt.
+
+⸻
+
+Tidstyper och behörigheter
+
+Tidstypsregistret ska fungera som en regelmotor.
+
+Regelverket ska styra:
+
+vilka tidstyper som får överlappa,
+vilka artikelgrupper olika användare får skapa,
+vilka tidskoder som får ändras,
+hur tider exporteras till lön och ekonomi.
+
+Behörigheterna ska därför kunna begränsas både på tidskodsnivå och artikelgruppsnivå.
+
+⸻
+
+168-timmarsmodellen
+
+Hela veckan ska betraktas som en sammanhängande planeringsyta.
+
+Även:
+
+nattvila,
+helgvila,
+lunch,
+semester,
+sjukdom,
+jour,
+
+ska representeras av artikelbaserade uppgifter.
+
+Detta gör att systemet automatiskt kan identifiera:
+
+överbokning,
+reservtid,
+ledig tid,
+övertid,
+konflikter mellan arbete och vila.
+
+⸻
+
+Dynamisk reservtid
+
+Jag föreslår att begreppet “Ingen tom tid” ersätts med Dynamisk reservtid.
+
+När ingen aktivitet finns planerad ska systemet automatiskt skapa en reservtidsuppgift.
+
+Reservtiden ska kunna skapas:
+
+per dag,
+per vecka.
+
+Reservtiden ska klassificeras som exempelvis:
+
+Reservtid,
+Oplanerad tid,
+Slasktid.
+
+Den ska därefter kunna ersättas av nya artikelbaserade uppgifter när planeringen förändras.
+
+⸻
+
+Begäran om bekräftelse
+
+Jag önskar att utvecklarna bekräftar ovanstående arkitekturprinciper och för respektive del anger:
+
+Om funktionen redan är implementerad.
+Om den endast är delvis implementerad.
+Om implementationen avviker från den avsedda arkitekturen.
+Hur eventuell återstående implementation planeras.
+
+Detta säkerställer att veckoplaneringen utvecklas i enlighet med Trivos ursprungliga motorarkitektur och att systemet förblir konfigurerbart, konsekvent och långsiktigt förvaltningsbart.
