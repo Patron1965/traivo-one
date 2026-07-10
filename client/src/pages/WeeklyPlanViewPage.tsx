@@ -179,7 +179,7 @@ interface WeeklyPlanDetail extends WeeklyPlan {
 
 interface ScheduleBlock {
   id: string;
-  kind: "task" | "personal";
+  kind: "task" | "personal" | "reservation";
   category: TimeCategoryKey | string;
   title: string;
   date: string | null;
@@ -307,6 +307,29 @@ function personalToBlock(pt: PersonalTask): ScheduleBlock {
     durationMinutes: duration || 30,
     locked: false,
     locationName: pt.locationName ?? null,
+  };
+}
+
+// Task #1238: reservtid som overlay-block i dagens sekvens — ren
+// planeringsreservation (aldrig work_orders/personal_tasks), skiljs visuellt
+// från riktiga block. remainingMinutes krymper server-side vid overlap.
+function reservationToBlock(r: PlanningReservationWithConsumption): ScheduleBlock {
+  const date = r.plannedDate ?? localDateString(r.startAt);
+  const startMinutes = localMinutes(r.startAt);
+  const durationMinutes = Math.max(
+    0,
+    Math.round((new Date(r.endAt).getTime() - new Date(r.startAt).getTime()) / 60000),
+  );
+  return {
+    id: r.id,
+    kind: "reservation",
+    category: "reservation",
+    title: r.label,
+    date,
+    startMinutes,
+    durationMinutes: durationMinutes || 60,
+    locked: false,
+    locationName: null,
   };
 }
 
@@ -714,14 +737,25 @@ export default function WeeklyPlanViewPage() {
   }, [plan, selectedDay]);
 
   // Dagens block i sekvens (tidssatta först, sedan otidsatta).
+  // Reservtid läggs in som egna overlay-block, tidssatta som riktiga block, så
+  // att de visas på sin faktiska plats i dagens kalender (Task #1238).
+  const dayReservationBlocks = useMemo<ScheduleBlock[]>(
+    () => reservations.filter((r) => r.plannedDate === selectedDay).map(reservationToBlock),
+    [reservations, selectedDay],
+  );
+  const reservationById = useMemo(() => {
+    const m = new Map<string, PlanningReservationWithConsumption>();
+    reservations.forEach((r) => m.set(r.id, r));
+    return m;
+  }, [reservations]);
   const daySequence = useMemo(() => {
-    const dayBlocks = blocks.filter((b) => b.date === selectedDay);
+    const dayBlocks = [...blocks.filter((b) => b.date === selectedDay), ...dayReservationBlocks];
     const timed = dayBlocks
       .filter((b) => b.startMinutes != null)
       .sort((a, b) => a.startMinutes! - b.startMinutes!);
     const untimed = dayBlocks.filter((b) => b.startMinutes == null);
     return [...timed, ...untimed];
-  }, [blocks, selectedDay]);
+  }, [blocks, selectedDay, dayReservationBlocks]);
 
   const saveEgentid = useMutation({
     mutationFn: async (vars: {
@@ -1029,6 +1063,7 @@ export default function WeeklyPlanViewPage() {
                         jobNumberById={jobNumberById}
                         taskByBlockId={taskByBlockId}
                         personalById={personalById}
+                        reservationById={reservationById}
                         selectedBlockId={selectedBlockId}
                         onSelectBlock={setSelectedBlockId}
                         onOpenJob={(taskId) => setLocation(`/work-orders/${taskId}`)}
@@ -2214,6 +2249,7 @@ function DayDetailPanel({
   jobNumberById,
   taskByBlockId,
   personalById,
+  reservationById,
   selectedBlockId,
   onSelectBlock,
   onOpenJob,
@@ -2229,6 +2265,7 @@ function DayDetailPanel({
   jobNumberById: Map<string, number>;
   taskByBlockId: Map<string, EnrichedTask>;
   personalById: Map<string, PersonalTask>;
+  reservationById: Map<string, PlanningReservationWithConsumption>;
   selectedBlockId: string | null;
   onSelectBlock: (id: string) => void;
   onOpenJob: (taskId: string) => void;
@@ -2380,6 +2417,34 @@ function DayDetailPanel({
                   onCancel={onCancelEgentid}
                   onSave={onSaveEgentid}
                 />
+              )}
+            </div>
+          );
+        }
+
+        // Reservtid (Task #1238): planeringsreservation/overlay — visas i sin
+        // faktiska tidsposition men skiljs tydligt från riktiga block (streckad
+        // kant, ingen "flytta jobb"/redigera-uppgift). Krymper server-side.
+        if (b.kind === "reservation") {
+          const reservation = reservationById.get(b.id);
+          return (
+            <div
+              key={b.id}
+              className="flex items-center gap-2 rounded-md border border-dashed border-chart-4/60 bg-chart-4/5 px-2.5 py-1.5 text-xs"
+              data-testid={`reservation-row-${b.id}`}
+            >
+              <CalendarClock className="h-3.5 w-3.5 shrink-0 text-chart-4" />
+              <div className="min-w-0 flex-1">
+                <span className="truncate font-medium">{b.title}</span>
+                {reservation?.notes && (
+                  <div className="truncate text-[10px] text-muted-foreground">{reservation.notes}</div>
+                )}
+              </div>
+              {range && <span className="tabular-nums text-muted-foreground">{range}</span>}
+              {reservation && (
+                <span className="tabular-nums text-muted-foreground whitespace-nowrap">
+                  {formatHoursDec(reservation.remainingMinutes)} kvar
+                </span>
               )}
             </div>
           );
