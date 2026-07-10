@@ -1,0 +1,142 @@
+API-specifikation – Integration mellan Trivo och Fortnox
+
+Översikt
+
+För att säkerställa en enkel, robust och spårbar integration mellan Trivo och Fortnox används tre separata API-flöden. Två av dessa är enkelriktade från Fortnox till Trivo och ett är enkelriktat från Trivo till Fortnox.
+
+Grundprincipen är att Fortnox är masterregister för kunder och artiklar. Trivo använder dessa identiteter för att skapa fakturaunderlag som sedan skickas tillbaka till Fortnox för fakturering.
+
+
+API 1 – Kundregister
+
+Riktning: Fortnox → Trivo
+
+Syfte
+
+Synkronisera kundregistret så att Trivo alltid arbetar med samma kundidentiteter som ekonomisystemet.
+
+Primära fält
+
+Kundnummer (unik nyckel)
+Kundnamn
+Övriga fält
+
+Fortnox kan skicka ytterligare information, exempelvis:
+
+adress
+postnummer
+ort
+organisationsnummer
+kontaktuppgifter
+övriga ekonomirelaterade uppgifter
+Dessa behöver inte användas av Trivo utan kan lagras eller ignoreras.
+
+Resultat
+
+Det unika kundnumret används senare vid överföring av fakturaunderlag så att fakturan automatiskt hamnar hos rätt kund i Fortnox.
+
+
+API 2 – Artikelregister
+
+Riktning: Fortnox → Trivo
+
+Syfte
+
+Synkronisera artikelregistret mellan systemen.
+
+Primära fält
+
+Artikelnummer (unik nyckel)
+Artikelbeskrivning
+Övriga fält
+
+Fortnox kan även överföra exempelvis:
+
+artikelgrupp
+konteringsinformation
+momskod
+standardpris
+övriga artikelparametrar
+Trivo behöver endast artikelnummer och beskrivning för sitt arbete.
+
+Resultat
+
+Artikelnumret används senare när fakturarader skapas och säkerställer att Fortnox konterar försäljningen enligt artikelns ordinarie regler.
+
+
+API 3 – Fakturaunderlag
+
+Riktning: Trivo → Fortnox
+
+Syfte
+
+Överföra färdigt fakturaunderlag från Trivo till Fortnox.
+
+Fakturahuvud
+
+Följande information skickas:
+
+Kund
+
+Kundnummer (hämtat från Fortnox)
+Leverantör/System
+
+Referenser från Trivo/KINAB.
+
+Trivo-referenser
+
+Minst två interna referenser:
+
+ansvarig handläggare/beställare eller motsvarande
+Trivos unika ordernummer/orderkonceptnummer
+Dessa används för spårbarhet och återkoppling.
+
+
+Fakturarader
+
+Varje fakturarad består av:
+
+Artikelnummer
+Artikelbeskrivning
+Antal
+À-pris
+Artikelnummer
+
+Artikelnumret kommer ursprungligen från Fortnox och används för att styra:
+
+kontering
+artikelgrupp
+moms
+övriga ekonomiregler
+Pris
+
+Det pris som skickas från Trivo har företräde framför ett eventuellt standardpris som finns registrerat i Fortnox.
+
+Antal
+
+Antalet fungerar som multiplikator och tillsammans med à-priset beräknas radbeloppet.
+
+
+Fritextrader
+
+Utöver artikelstyrda fakturarader ska Trivo kunna skicka rena fritextrader.
+
+Exempel:
+
+Tvätt utförd enligt överenskommelse
+
+eller
+
+Vårdtvätt Fastighet Hönshusudden 2, Storgatan 22, Standardtvätt
+
+Fritextraden innehåller endast en textsträng (cirka samma maximala längd som en artikelbeskrivning, omkring 50 tecken). Texten genereras av Trivo utifrån systemets metadata, men Fortnox behandlar den enbart som en informationsrad utan någon intern struktur.
+
+
+Arkitekturprincip
+
+Integrationerna bygger på följande ansvarsfördelning:
+
+Fortnox är master för kundregister.
+Fortnox är master för artikelregister.
+Trivo är master för produktionsdata, order och fakturaunderlag.
+Denna ansvarsfördelning säkerställer att kund- och artikelidentiteter alltid är identiska mellan systemen samtidigt som Trivo ansvarar för att skapa det affärsmässiga innehållet i fakturan.
