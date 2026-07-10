@@ -37,8 +37,7 @@ import {
   generatePreTasksForWorkOrder,
   convertPersonalTimeToOrdered,
   DEFAULT_PLAN_ENGINE_CONFIG,
-  resolveTimeCategoryArticle,
-  computePersonalTaskCostFromArticle,
+  resolvePersonalTaskArticleFields,
   personalTaskMinutes,
 } from "../planning/weeklyPlanEngine";
 import {
@@ -655,7 +654,6 @@ export function registerWeeklyPlanRoutes(app: Express) {
     // Task #1235: gör blocket artikelbaserat om tenanten har en internal_time-
     // artikel för denna tidskategori (timeCodeKey===timeCategory). Ingen matchande
     // artikel ⇒ oförändrat fristående-block-beteende (back-compat).
-    const article = await resolveTimeCategoryArticle(tenantId, data.timeCategory);
     // Effektiv varaktighet: explicit durationMinutes, annars start/slut-diff (samma
     // regel som personalTaskMinutes() i motorn/summeringen) — annars tappas kostnaden
     // tyst för block som bara sätter startAt/endAt.
@@ -664,14 +662,18 @@ export function registerWeeklyPlanRoutes(app: Express) {
       startAt: data.startAt ?? null,
       endAt: data.endAt ?? null,
     } as any);
+    const { articleId, cachedCostOre } = await resolvePersonalTaskArticleFields(
+      tenantId,
+      data.timeCategory,
+      effectiveMinutes,
+    );
     const created = await storage.createPersonalTask({
       ...data,
       tenantId,
       weeklyPlanId: plan.id,
       teamId: data.teamId ?? plan.teamId,
-      articleId: article?.id ?? null,
-      cachedCostOre:
-        article && effectiveMinutes > 0 ? computePersonalTaskCostFromArticle(article, effectiveMinutes) : null,
+      articleId,
+      cachedCostOre,
     });
     await recomputeWeeklyPlan(tenantId, plan.id);
     res.status(201).json(created);
@@ -698,10 +700,13 @@ export function registerWeeklyPlanRoutes(app: Express) {
         startAt: data.startAt !== undefined ? data.startAt : existing.startAt,
         endAt: data.endAt !== undefined ? data.endAt : existing.endAt,
       } as any);
-      const article = await resolveTimeCategoryArticle(tenantId, category);
-      patch.articleId = article?.id ?? null;
-      patch.cachedCostOre =
-        article && effectiveMinutes > 0 ? computePersonalTaskCostFromArticle(article, effectiveMinutes) : null;
+      const { articleId, cachedCostOre } = await resolvePersonalTaskArticleFields(
+        tenantId,
+        category,
+        effectiveMinutes,
+      );
+      patch.articleId = articleId;
+      patch.cachedCostOre = cachedCostOre;
     }
     const row = await storage.updatePersonalTask(tenantId, req.params.id, patch);
     if (existing.weeklyPlanId) await recomputeWeeklyPlan(tenantId, existing.weeklyPlanId);

@@ -948,6 +948,25 @@ export function computePersonalTaskCostFromArticle(
   return Math.round(durationMinutes * (article.cost ?? 0));
 }
 
+/**
+ * Centraliserad artikel-/kostnadshärledning för ett personligt block. ENDA
+ * platsen som får sätta articleId/cachedCostOre — måste anropas från VARJE
+ * skapande/uppdaterande väg (route create/patch, schemaläggning/materialisering,
+ * kategori-konvertering), annars blir kopplingen/kostnaden stale eller saknas
+ * tyst för block som inte går via route-handlerns kod.
+ */
+export async function resolvePersonalTaskArticleFields(
+  tenantId: string,
+  timeCategory: string,
+  effectiveMinutes: number,
+): Promise<{ articleId: string | null; cachedCostOre: number | null }> {
+  const article = await resolveTimeCategoryArticle(tenantId, timeCategory);
+  return {
+    articleId: article?.id ?? null,
+    cachedCostOre: article && effectiveMinutes > 0 ? computePersonalTaskCostFromArticle(article, effectiveMinutes) : null,
+  };
+}
+
 /** mm-dd ur ett datum (sträng "YYYY-MM-DD" eller Date). */
 function toMmDd(d: string | Date): string {
   if (typeof d === "string") return d.slice(5, 10);
@@ -1383,8 +1402,20 @@ export async function convertPersonalTimeToOrdered(
   const task = await storage.getPersonalTask(tenantId, personalTaskId);
   if (!task) return undefined;
   const existingMeta = (task.metadata as Record<string, unknown> | null) ?? {};
+  const effectiveMinutes = personalTaskMinutes({
+    durationMinutes: task.durationMinutes,
+    startAt: task.startAt,
+    endAt: task.endAt,
+  } as any);
+  const { articleId, cachedCostOre } = await resolvePersonalTaskArticleFields(
+    tenantId,
+    opts.toCategory,
+    effectiveMinutes,
+  );
   const updated = await storage.updatePersonalTask(tenantId, personalTaskId, {
     timeCategory: opts.toCategory,
+    articleId,
+    cachedCostOre,
     metadata: {
       ...existingMeta,
       allowOverlap: opts.allowOverlap ?? true,
@@ -1507,6 +1538,16 @@ export async function materializeSchedulesForPlan(
         }
       }
 
+      const effectiveMinutes = personalTaskMinutes({
+        durationMinutes: sched.durationMinutes ?? null,
+        startAt,
+        endAt,
+      } as any);
+      const { articleId, cachedCostOre } = await resolvePersonalTaskArticleFields(
+        tenantId,
+        sched.timeCategory,
+        effectiveMinutes,
+      );
       const pt = await storage.createPersonalTask({
         tenantId,
         weeklyPlanId,
@@ -1524,6 +1565,8 @@ export async function materializeSchedulesForPlan(
         locationName: sched.locationName ?? null,
         isGenerated: true,
         sourceRule: sched.id,
+        articleId,
+        cachedCostOre,
         metadata: {},
       });
       created.push(pt);
