@@ -101,7 +101,8 @@ if command -v psql >/dev/null 2>&1 && [ -n "$DATABASE_URL" ]; then
            migrations/0131_artikelbaserad_tid.sql \
            migrations/0132_verklig_tid_auto_avslut.sql \
            migrations/0133_tidstyp_regelmotor.sql \
-           migrations/0134_planning_reservations.sql; do
+           migrations/0134_planning_reservations.sql \
+           migrations/0135_saved_filters.sql; do
     if [ -f "$f" ]; then
       echo "[post-merge] Applying $f"
       psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f "$f"

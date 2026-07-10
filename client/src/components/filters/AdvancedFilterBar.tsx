@@ -64,6 +64,8 @@ const OPERATORS_BY_TYPE: Record<string, FilterOperator[]> = {
   multiselect: ["in", "not_in", "is_empty", "is_not_empty"],
 };
 
+const SHARE_ROLE_OPTIONS = ["owner", "admin", "planner", "technician", "user", "viewer"] as const;
+
 interface SavedFilterRow {
   id: string;
   name: string;
@@ -86,7 +88,10 @@ export function AdvancedFilterBar<TRow>({ scope, fields, value, onChange }: Adva
   const visibleFields = visibleFieldsForRole(fields, role);
   const [open, setOpen] = useState(false);
   const [saveName, setSaveName] = useState("");
-  const [shareOpen, setShareOpen] = useState(false);
+  const [shareRoles, setShareRoles] = useState<string[]>([]);
+
+  const toggleShareRole = (r: string, checked: boolean) =>
+    setShareRoles((prev) => (checked ? [...prev, r] : prev.filter((x) => x !== r)));
 
   const { data: savedFilters = [] } = useQuery<SavedFilterRow[]>({
     queryKey: ["/api/saved-filters", scope],
@@ -95,21 +100,23 @@ export function AdvancedFilterBar<TRow>({ scope, fields, value, onChange }: Adva
   });
 
   const saveMutation = useMutation({
-    mutationFn: async (params: { name: string; isShared: boolean }) =>
+    mutationFn: async (params: { name: string; isShared: boolean; roles: string[] }) =>
       (
         await apiRequest("POST", "/api/saved-filters", {
           scope,
           name: params.name,
           definition: { scope, name: params.name, group: value },
           isShared: params.isShared,
-          roles: [],
+          // Tom roles-lista = synligt för alla delade-mottagare (se filterRoutes.ts);
+          // en icke-tom lista begränsar delningen till dessa roller.
+          roles: params.isShared ? params.roles : [],
         })
       ).json(),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/saved-filters", scope] });
       toast({ title: "Filtret sparades" });
       setSaveName("");
-      setShareOpen(false);
+      setShareRoles([]);
     },
     onError: (err: Error) =>
       toast({ title: "Kunde inte spara filtret", description: err.message, variant: "destructive" }),
@@ -263,6 +270,23 @@ export function AdvancedFilterBar<TRow>({ scope, fields, value, onChange }: Adva
 
             <div className="border-t pt-3 space-y-2">
               <Label className="text-xs uppercase text-muted-foreground">Spara filter</Label>
+              <div className="flex items-center gap-3 flex-wrap">
+                {SHARE_ROLE_OPTIONS.map((r) => (
+                  <label key={r} className="flex items-center gap-1 text-xs text-muted-foreground" data-testid={`label-share-role-${r}`}>
+                    <Checkbox
+                      checked={shareRoles.includes(r)}
+                      onCheckedChange={(checked) => toggleShareRole(r, checked === true)}
+                      data-testid={`checkbox-share-role-${r}`}
+                    />
+                    {r}
+                  </label>
+                ))}
+              </div>
+              <p className="text-[11px] text-muted-foreground">
+                {shareRoles.length === 0
+                  ? "Ingen roll vald = delas med alla roller"
+                  : `Delas endast med: ${shareRoles.join(", ")}`}
+              </p>
               <div className="flex items-center gap-2">
                 <Input
                   placeholder="Namn på filtret"
@@ -275,7 +299,7 @@ export function AdvancedFilterBar<TRow>({ scope, fields, value, onChange }: Adva
                   size="sm"
                   variant="outline"
                   disabled={!saveName || saveMutation.isPending}
-                  onClick={() => saveMutation.mutate({ name: saveName, isShared: false })}
+                  onClick={() => saveMutation.mutate({ name: saveName, isShared: false, roles: [] })}
                   data-testid="button-save-filter"
                 >
                   <Save className="h-4 w-4" />
@@ -284,9 +308,9 @@ export function AdvancedFilterBar<TRow>({ scope, fields, value, onChange }: Adva
                   size="sm"
                   variant="outline"
                   disabled={!saveName || saveMutation.isPending}
-                  onClick={() => saveMutation.mutate({ name: saveName, isShared: true })}
+                  onClick={() => saveMutation.mutate({ name: saveName, isShared: true, roles: shareRoles })}
                   data-testid="button-save-filter-shared"
-                  title="Dela med alla i verksamheten"
+                  title={shareRoles.length > 0 ? `Dela med roller: ${shareRoles.join(", ")}` : "Dela med alla i verksamheten"}
                 >
                   <Share2 className="h-4 w-4" />
                 </Button>
