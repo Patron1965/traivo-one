@@ -180,6 +180,13 @@ async function resolveWoSegment(
     ourDesignation: wo.frozenOurDesignation,
     customerReference: wo.frozenCustomerReference,
     customerInvoiceReference: wo.frozenCustomerInvoiceReference,
+    // Task #1243: fakturahuvud-fält vävs in i segment-nyckeln så WOs med olika
+    // värden aldrig konsolideras till samma faktura (se composeSegmentKeyWithReferences).
+    deliveryMethod: (wo as any).frozenDeliveryMethod,
+    transportMethod: (wo as any).frozenTransportMethod,
+    currency: (wo as any).frozenCurrency,
+    paymentTerms: (wo as any).frozenPaymentTerms,
+    invoiceLanguage: (wo as any).frozenInvoiceLanguage,
   });
   return { segment, segmentKey };
 }
@@ -700,6 +707,13 @@ export async function runConsolidationForTenant(
             ourDesignation: group.wos[0]?.frozenOurDesignation ?? null,
             customerReference: group.wos[0]?.frozenCustomerReference ?? null,
             customerInvoiceReference: group.wos[0]?.frozenCustomerInvoiceReference ?? null,
+            // Task #1243: fakturahuvud-fält — segment-nyckeln garanterar redan att alla
+            // WOs i gruppen delar samma värden (se resolveWoSegment), så wos[0] räcker.
+            deliveryMethod: (group.wos[0] as any)?.frozenDeliveryMethod ?? null,
+            transportMethod: (group.wos[0] as any)?.frozenTransportMethod ?? null,
+            invoiceCurrency: (group.wos[0] as any)?.frozenCurrency ?? null,
+            paymentTerms: (group.wos[0] as any)?.frozenPaymentTerms ?? null,
+            invoiceLanguage: (group.wos[0] as any)?.frozenInvoiceLanguage ?? null,
             consolidationPeriodStart: periodStart,
             consolidationPeriodEnd: now,
             releasedBy: opts.force ? opts.releasedBy ?? null : null,

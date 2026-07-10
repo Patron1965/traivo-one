@@ -134,6 +134,7 @@ function classifyErrorCode(err: unknown): string {
   if (/rate limit/i.test(msg)) return "RATE_LIMITED";
   if (/not connected|authorization required/i.test(msg)) return "NOT_CONNECTED";
   if (/timeout/i.test(msg)) return "TIMEOUT";
+  if (err instanceof IdempotencyCheckFailedError) return "IDEMPOTENCY_CHECK_FAILED";
   return "UNKNOWN";
 }
 
@@ -157,6 +158,18 @@ async function persistMetrics(
 // via ExternalInvoiceReference2 (=exportId) innan en ny faktura skapas. Detta
 // täcker fallet där Fortnox skapade fakturan men svaret aldrig nådde oss
 // (timeout/nätverksfel) och exporten sedan görs om.
+// Fail-closed: om uppslaget mot Fortnox misslyckas (nätverksfel, timeout, oväntat
+// svar) vet vi INTE om en tidigare export redan skapade fakturan. Att då ändå
+// fortsätta till createInvoice riskerar en dubblettfaktura — kastar därför vidare
+// så anropande kod avbryter exporten istället för att gissa. Claim-steget skyddar
+// bara mot SAMTIDIGA körningar, inte mot detta osäkra tillstånd.
+class IdempotencyCheckFailedError extends Error {
+  constructor(cause: unknown) {
+    super(`Kunde inte verifiera mot Fortnox om fakturan redan finns (idempotenskontroll misslyckades): ${cause instanceof Error ? cause.message : String(cause)}`);
+    this.name = "IdempotencyCheckFailedError";
+  }
+}
+
 async function findExistingInvoiceForExport(
   client: FortnoxClient,
   exportId: string,
@@ -166,11 +179,7 @@ async function findExistingInvoiceForExport(
     const hit = await client.findInvoiceByExternalReference2(exportId, metrics);
     return hit?.DocumentNumber ?? null;
   } catch (err) {
-    // Idempotenskontrollen är best-effort — om Fortnox inte stöder filtret eller
-    // svarar med fel, fortsätter vi till vanlig createInvoice (fail-open här är
-    // säkert eftersom claim-steget redan förhindrar samtidiga körningar).
-    console.warn("[fortnox-idempotency] kunde inte slå upp ExternalInvoiceReference2:", err);
-    return null;
+    throw new IdempotencyCheckFailedError(err);
   }
 }
 

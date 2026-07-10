@@ -6950,8 +6950,15 @@ export class DatabaseStorage implements IStorage {
   }
 
   async claimFortnoxInvoiceExportForProcessing(id: string, tenantId: string): Promise<FortnoxInvoiceExport | undefined> {
+    // Task #1243: retryCount ska spegla verkliga OMFÖRSÖK (audit-UI:t visar
+    // "antal omförsök"), inte det första försöket. Öka bara när statusen redan
+    // var "failed" — dvs vi provar igen efter ett tidigare fel. Ett rent
+    // förstaförsök (status="pending") lämnar retryCount vid sitt startvärde (0).
     const [result] = await db.update(fortnoxInvoiceExports)
-      .set({ status: "processing", retryCount: sql`${fortnoxInvoiceExports.retryCount} + 1` })
+      .set({
+        status: "processing",
+        retryCount: sql`CASE WHEN ${fortnoxInvoiceExports.status} = 'failed' THEN ${fortnoxInvoiceExports.retryCount} + 1 ELSE ${fortnoxInvoiceExports.retryCount} END`,
+      })
       .where(and(
         eq(fortnoxInvoiceExports.id, id),
         eq(fortnoxInvoiceExports.tenantId, tenantId),

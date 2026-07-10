@@ -87,6 +87,15 @@ export function composeSegmentKeyWithReferences(
     ourDesignation?: string | null;
     customerReference?: string | null;
     customerInvoiceReference?: string | null;
+    // Task #1243: frysta fakturahuvud-fält (leveranssätt/transportsätt/valuta/
+    // betalningsvillkor/språk) skickas EN gång per konsoliderad faktura till
+    // Fortnox — precis som referenserna ovan får WOs med olika värden här
+    // ALDRIG konsolideras till samma faktura.
+    deliveryMethod?: string | null;
+    transportMethod?: string | null;
+    currency?: string | null;
+    paymentTerms?: string | null;
+    invoiceLanguage?: string | null;
   },
 ): string | null {
   // Skydda nyckelstrukturen: ersätt avgränsare i värdet.
@@ -96,10 +105,20 @@ export function composeSegmentKeyWithReferences(
   const od = refs.ourDesignation?.trim();
   const yr = refs.customerReference?.trim();
   const yo = refs.customerInvoiceReference?.trim();
+  const dm = refs.deliveryMethod?.trim();
+  const tm = refs.transportMethod?.trim();
+  const cu = refs.currency?.trim();
+  const pt = refs.paymentTerms?.trim();
+  const il = refs.invoiceLanguage?.trim();
   if (or) parts.push(`or:${enc(or)}`);
   if (od) parts.push(`od:${enc(od)}`);
   if (yr) parts.push(`yr:${enc(yr)}`);
   if (yo) parts.push(`yo:${enc(yo)}`);
+  if (dm) parts.push(`dm:${enc(dm)}`);
+  if (tm) parts.push(`tm:${enc(tm)}`);
+  if (cu) parts.push(`cu:${enc(cu)}`);
+  if (pt) parts.push(`pt:${enc(pt)}`);
+  if (il) parts.push(`il:${enc(il)}`);
   if (parts.length === 0) return baseKey;
   const refKey = parts.join("|");
   return baseKey ? `${baseKey}|${refKey}` : refKey;
