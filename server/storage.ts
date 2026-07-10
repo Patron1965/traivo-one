@@ -4955,20 +4955,28 @@ export class DatabaseStorage implements IStorage {
   // Standardtidskoder subsumerar de tidigare time_category-värdena (nycklarna bevaras) och
   // lägger till interna koder + ställtid. groupKey driver rapport/lön; priority driver
   // finplaneringens överlapp (1 = aldrig överlapp).
-  private static readonly DEFAULT_TIME_CODES: { key: string; label: string; groupKey: string; priority: number }[] = [
-    { key: "production", label: "Produktionstid", groupKey: "produktion", priority: 1 },
-    { key: "overtime", label: "Övertid", groupKey: "produktion", priority: 1 },
-    { key: "travel_between_jobs", label: "Restid mellan jobb", groupKey: "stalltid", priority: 1 },
-    { key: "setup", label: "Ställtid / rigg", groupKey: "stalltid", priority: 1 },
-    { key: "internal_training", label: "Utbildning", groupKey: "internt", priority: 2 },
-    { key: "internal_repair", label: "Reparation & underhåll", groupKey: "internt", priority: 2 },
-    { key: "internal_cleaning", label: "Städning (intern)", groupKey: "internt", priority: 2 },
-    { key: "internal_admin", label: "Administration", groupKey: "internt", priority: 2 },
-    { key: "travel_commute", label: "Inställelseresa / pendling", groupKey: "egentid", priority: 3 },
-    { key: "break_meal", label: "Rast & lunch", groupKey: "egentid", priority: 3 },
-    { key: "personal_time", label: "Egentid", groupKey: "egentid", priority: 3 },
-    { key: "rest_night", label: "Nattvila", groupKey: "egentid", priority: 3 },
-    { key: "rest_weekend", label: "Helgvila", groupKey: "egentid", priority: 3 },
+  // Task #1237: regelmotor-defaults. payrollExport/economyExport default true (bakåt-
+  // kompatibelt), requiresGps/billable satta konservativt (fältnära produktion/ställtid/
+  // resa=true, internt/egentid=false). permissionLevel="all" för alla seed-koder — OB-
+  // hantering (t.ex. höja övertids permissionLevel) görs manuellt av admin, ej auto-satt här.
+  private static readonly DEFAULT_TIME_CODES: {
+    key: string; label: string; groupKey: string; priority: number;
+    payrollExport?: boolean; economyExport?: boolean; requiresGps?: boolean;
+    permissionLevel?: string; billable?: boolean;
+  }[] = [
+    { key: "production", label: "Produktionstid", groupKey: "produktion", priority: 1, requiresGps: true, billable: true },
+    { key: "overtime", label: "Övertid", groupKey: "produktion", priority: 1, billable: true },
+    { key: "travel_between_jobs", label: "Restid mellan jobb", groupKey: "stalltid", priority: 1, requiresGps: true },
+    { key: "setup", label: "Ställtid / rigg", groupKey: "stalltid", priority: 1, requiresGps: true },
+    { key: "internal_training", label: "Utbildning", groupKey: "internt", priority: 2, economyExport: false },
+    { key: "internal_repair", label: "Reparation & underhåll", groupKey: "internt", priority: 2, economyExport: false },
+    { key: "internal_cleaning", label: "Städning (intern)", groupKey: "internt", priority: 2, economyExport: false },
+    { key: "internal_admin", label: "Administration", groupKey: "internt", priority: 2, economyExport: false },
+    { key: "travel_commute", label: "Inställelseresa / pendling", groupKey: "egentid", priority: 3, economyExport: false },
+    { key: "break_meal", label: "Rast & lunch", groupKey: "egentid", priority: 3, economyExport: false },
+    { key: "personal_time", label: "Egentid", groupKey: "egentid", priority: 3, economyExport: false },
+    { key: "rest_night", label: "Nattvila", groupKey: "egentid", priority: 3, economyExport: false },
+    { key: "rest_weekend", label: "Helgvila", groupKey: "egentid", priority: 3, economyExport: false },
   ];
 
   async getTimeCodeDefinitions(tenantId: string): Promise<TimeCodeDefinition[]> {
@@ -4995,6 +5003,12 @@ export class DatabaseStorage implements IStorage {
           priority: data.priority ?? existing.priority,
           iconKey: data.iconKey ?? existing.iconKey,
           sortOrder: data.sortOrder ?? existing.sortOrder,
+          payrollExport: data.payrollExport ?? existing.payrollExport,
+          economyExport: data.economyExport ?? existing.economyExport,
+          requiresGps: data.requiresGps ?? existing.requiresGps,
+          permissionLevel: data.permissionLevel ?? existing.permissionLevel,
+          billable: data.billable ?? existing.billable,
+          exportRules: data.exportRules ?? existing.exportRules,
           deletedAt: null,
         })
         .where(eq(timeCodeDefinitions.id, existing.id))
@@ -5038,7 +5052,20 @@ export class DatabaseStorage implements IStorage {
       .where(eq(timeCodeDefinitions.tenantId, tenantId));
     const existingKeys = new Set(existing.map((r) => r.key));
     const toInsert = DatabaseStorage.DEFAULT_TIME_CODES
-      .map((t, i) => ({ tenantId, key: t.key, label: t.label, groupKey: t.groupKey, priority: t.priority, sortOrder: i, isSystem: false }))
+      .map((t, i) => ({
+        tenantId,
+        key: t.key,
+        label: t.label,
+        groupKey: t.groupKey,
+        priority: t.priority,
+        sortOrder: i,
+        isSystem: false,
+        payrollExport: t.payrollExport ?? true,
+        economyExport: t.economyExport ?? true,
+        requiresGps: t.requiresGps ?? false,
+        permissionLevel: t.permissionLevel ?? "all",
+        billable: t.billable ?? false,
+      }))
       .filter((t) => !existingKeys.has(t.key));
     if (toInsert.length > 0) {
       await db.insert(timeCodeDefinitions).values(toInsert);

@@ -19,6 +19,7 @@ import {
   requireTenantWithFallback,
   requireRole,
 } from "../tenant-middleware";
+import { buildTimeCodeRuleMap, resolveTimeCodeRule, isRoleAllowedForTimeCode } from "../services/time-code-rules";
 import {
   insertGeographicDistrictSchema,
   insertDistrictZoneSchema,
@@ -651,6 +652,14 @@ export function registerWeeklyPlanRoutes(app: Express) {
     const plan = await storage.getWeeklyPlan(tenantId, req.params.planId);
     if (!plan) throw new NotFoundError("Veckoplan");
     const data = parseBody(personalCreateSchema, req.body);
+    // Task #1237: tidskodens permissionLevel styr vem som får registrera denna
+    // tidskategori (t.ex. en OB-kod uppgraderad till "planner"/"admin" av behörig admin).
+    const timeCodeDefs = await storage.getTimeCodeDefinitions(tenantId);
+    const timeCodeRuleMap = buildTimeCodeRuleMap(timeCodeDefs);
+    const timeCodeRule = resolveTimeCodeRule(timeCodeRuleMap, data.timeCategory);
+    if (!isRoleAllowedForTimeCode(timeCodeRule, req.tenantRole)) {
+      throw new ValidationError(`Tidskoden "${data.timeCategory}" kräver högre behörighet`);
+    }
     // Task #1235: gör blocket artikelbaserat om tenanten har en internal_time-
     // artikel för denna tidskategori (timeCodeKey===timeCategory). Ingen matchande
     // artikel ⇒ oförändrat fristående-block-beteende (back-compat).

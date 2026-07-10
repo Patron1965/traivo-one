@@ -10,7 +10,19 @@ import type { Express } from "express";
   } from "./shared";
   import type { Resource } from "./shared";
   import { closeOtherActiveWork } from "../../services/active-task-guard";
+  import { buildTimeCodeRuleMap, resolveTimeCodeRule } from "../../services/time-code-rules";
   import type { Request, Response } from "express";
+
+  // Task #1237: work_entries.entryType är en grov kategori (work/travel/setup/break/rest),
+  // grövre än time_code_definitions.key. Mappa till en representativ tidskod för att slå
+  // upp requiresGps/permissionLevel tills entryType görs 1:1 med tidskodregistret.
+  const ENTRY_TYPE_TO_TIME_CODE: Record<string, string> = {
+    work: "production",
+    travel: "travel_between_jobs",
+    setup: "setup",
+    break: "break_meal",
+    rest: "rest_night",
+  };
 
   // Decorate a work-session payload with Traivo-Go-compatible aliases so the
   // mobile client gets `startedAt`, `totalPausedSeconds` and `entries` in
@@ -268,9 +280,21 @@ app.post("/api/mobile/work-sessions/:id/resume", isMobileAuthenticated, workSess
       startTime: z.string(),
       endTime: z.string().optional(),
       note: z.string().optional(),
+      latitude: z.number().optional(),
+      longitude: z.number().optional(),
     });
     const parsed = schema.safeParse(req.body);
     if (!parsed.success) throw new ValidationError(formatZodError(parsed.error).error);
+
+    // Task #1237: kräv GPS-koordinater när tidskoden (mappad från entryType) har
+    // requiresGps=true i registret. Fail closed — hellre en tydlig 400 än tyst saknad GPS.
+    const timeCodeDefs = await storage.getTimeCodeDefinitions(resource.tenantId);
+    const timeCodeRuleMap = buildTimeCodeRuleMap(timeCodeDefs);
+    const mappedTimeCodeKey = ENTRY_TYPE_TO_TIME_CODE[parsed.data.type];
+    const timeCodeRule = resolveTimeCodeRule(timeCodeRuleMap, mappedTimeCodeKey);
+    if (timeCodeRule.requiresGps && (parsed.data.latitude == null || parsed.data.longitude == null)) {
+      throw new ValidationError(`Tidstypen "${parsed.data.type}" kräver GPS-position`);
+    }
 
     const entryId = `we-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
     const startTime = new Date(parsed.data.startTime);
@@ -286,6 +310,8 @@ app.post("/api/mobile/work-sessions/:id/resume", isMobileAuthenticated, workSess
       startTime,
       endTime,
       durationMinutes,
+      latitude: parsed.data.latitude ?? null,
+      longitude: parsed.data.longitude ?? null,
       notes: parsed.data.note || null,
     });
 

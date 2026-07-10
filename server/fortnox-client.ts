@@ -9,6 +9,7 @@ import {
   type FortnoxLogicalRow,
 } from "./services/fortnox-invoice-row-builder";
 import { deriveFortnoxCodesForWorkOrder } from "./services/fortnox-code-derivation";
+import { buildTimeCodeRuleMap, resolveTimeCodeRule } from "./services/time-code-rules";
 
 // Task #1203 (informationspaket fält 26 & 27): berika orderrader med artikelns
 // permanenta fakturaflaggor innan de skickas till radbyggaren. showOnInvoice=false
@@ -546,6 +547,20 @@ export async function exportWorkOrderToFortnox(
       };
     }
 
+    // Task #1237: tidskodregistrets economyExport-flagga styr om en tidsbaserad WO
+    // (frozenTimeCode satt från artikelns timeCodeKey vid frysning) får ekonomiexporteras.
+    const frozenTimeCodeKey = (workOrder as any).frozenTimeCode as string | null | undefined;
+    if (frozenTimeCodeKey) {
+      const timeCodeDefs = await storage.getTimeCodeDefinitions(tenantId);
+      const timeCodeRule = resolveTimeCodeRule(buildTimeCodeRuleMap(timeCodeDefs), frozenTimeCodeKey);
+      if (!timeCodeRule.economyExport) {
+        return {
+          success: false,
+          error: `Tidskoden "${frozenTimeCodeKey}" är markerad utan ekonomiexport och kan inte faktureras.`,
+        };
+      }
+    }
+
     const workOrderLines = await enrichLinesWithArticleInvoiceFlags(
       await storage.getWorkOrderLines(invoiceExport.workOrderId),
     );
@@ -981,11 +996,23 @@ export async function exportConsolidatedInvoiceToFortnox(
     // identiska frysta huvudreferenser konsolideras ihop — denna vakt fångar en
     // ev. integritetsbrist innan en felaktig referens skickas till Fortnox.
     const referenceMismatches: string[] = [];
+    const economyExportBlocked: string[] = [];
+    const timeCodeDefs = await storage.getTimeCodeDefinitions(tenantId);
+    const timeCodeRuleMap = buildTimeCodeRuleMap(timeCodeDefs);
     for (const woId of woIds) {
       const wo = await storage.getWorkOrder(woId);
       if (!wo || wo.tenantId !== tenantId) continue;
       if (wo.objectId) {
         invoicedObjects.push({ objectId: wo.objectId, title: wo.title ?? "Arbetsorder" });
+      }
+
+      // Task #1237: tidskodregistrets economyExport-flagga gäller även samlingsfakturor.
+      const frozenTimeCodeKey = (wo as any).frozenTimeCode as string | null | undefined;
+      if (frozenTimeCodeKey) {
+        const timeCodeRule = resolveTimeCodeRule(timeCodeRuleMap, frozenTimeCodeKey);
+        if (!timeCodeRule.economyExport) {
+          economyExportBlocked.push(`${woId} (tidskod "${frozenTimeCodeKey}")`);
+        }
       }
 
       const woRefPairs: Array<[string, string | null | undefined, string | null | undefined]> = [
@@ -1041,6 +1068,14 @@ export async function exportConsolidatedInvoiceToFortnox(
         error:
           "Referens-konflikt i samlingsfaktura (frysta huvudreferenser skiljer mellan arbetsordrar): " +
           referenceMismatches.join("; "),
+      };
+    }
+    if (economyExportBlocked.length > 0) {
+      return {
+        success: false,
+        error:
+          "Samlingsfakturan innehåller arbetsordrar med tidskod utan ekonomiexport: " +
+          economyExportBlocked.join("; "),
       };
     }
     const invoiceRows = collapseFortnoxLogicalRows(allLogicalRows);

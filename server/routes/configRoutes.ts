@@ -13,6 +13,7 @@ import { notificationService } from "../notifications";
 import { TASK_TYPE_KEYS, TASK_TYPE_LABELS } from "../grovplanering-grid";
 import { parseFormula } from "../metadata-formula";
 import { getAllMetadataTypes } from "../metadata-queries";
+import { buildTimeCodeRuleMap, resolveTimeCodeRule } from "../services/time-code-rules";
 
 // Validerar artikelns antals-formel (Antalskälla "Formel") vid spara. Kastar
 // ValidationError (400, svenska) vid syntaxfel, tom formel, eller referens till ett
@@ -1401,6 +1402,15 @@ app.get("/api/payroll-export", asyncHandler(async (req, res) => {
     const allResources = await storage.getResources(tenantId);
     const resourceMap = new Map(allResources.map(r => [r.id, r]));
 
+    // Task #1237: regelmotorn styr vilka tidstyper som ska med i löneunderlaget.
+    // entryType (work/travel/setup/break/rest) är grövre än time_code_definitions.key
+    // — mappa till en representativ tidskod (samma mappning som mobile work-entries).
+    const timeCodeDefs = await storage.getTimeCodeDefinitions(tenantId);
+    const timeCodeRuleMap = buildTimeCodeRuleMap(timeCodeDefs);
+    const ENTRY_TYPE_TO_TIME_CODE: Record<string, string> = {
+      work: "production", travel: "travel_between_jobs", setup: "setup", break: "break_meal", rest: "rest_night",
+    };
+
     const rows: string[] = ["Resurs;Vecka;År;Arbetstid (min);Restid (min);Ställtid (min);Rast (min);Vila (min);Total (min);Total (h);Budgettimmar;Anställningstyp"];
 
     const byResource = new Map<string, { work: number; travel: number; setup: number; break_time: number; rest: number; total: number }>();
@@ -1409,6 +1419,9 @@ app.get("/api/payroll-export", asyncHandler(async (req, res) => {
       const entries = await storage.getWorkEntries(session.id);
       const s = byResource.get(session.resourceId)!;
       for (const entry of entries) {
+        const mappedKey = ENTRY_TYPE_TO_TIME_CODE[entry.entryType];
+        const rule = resolveTimeCodeRule(timeCodeRuleMap, mappedKey);
+        if (!rule.payrollExport) continue;
         const mins = entry.durationMinutes || (entry.endTime && entry.startTime ? Math.round((new Date(entry.endTime).getTime() - new Date(entry.startTime).getTime()) / 60000) : 0);
         switch (entry.entryType) {
           case "work": s.work += mins; break;

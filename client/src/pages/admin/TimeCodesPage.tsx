@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Table,
   TableBody,
@@ -44,7 +45,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { type TimeCodeDefinition, timeCodeGroupKeys } from "@shared/schema";
+import { type TimeCodeDefinition, timeCodeGroupKeys, timeCodePermissionLevels } from "@shared/schema";
 import { RegistryIcon, useIcons, resolveIconByKey } from "@/lib/icon-registry";
 
 interface TimeCodeFormData {
@@ -54,6 +55,11 @@ interface TimeCodeFormData {
   priority: number;
   iconKey: string;
   sortOrder: number;
+  payrollExport: boolean;
+  economyExport: boolean;
+  requiresGps: boolean;
+  billable: boolean;
+  permissionLevel: string;
 }
 
 const NO_ICON_VALUE = "_none";
@@ -65,6 +71,18 @@ const emptyForm: TimeCodeFormData = {
   priority: 2,
   iconKey: "",
   sortOrder: 0,
+  payrollExport: true,
+  economyExport: true,
+  requiresGps: false,
+  billable: false,
+  permissionLevel: "all",
+};
+
+const PERMISSION_LEVEL_LABELS: Record<string, string> = {
+  all: "Alla",
+  technician: "Tekniker och uppåt",
+  planner: "Planerare och uppåt",
+  admin: "Endast administratör",
 };
 
 const GROUP_LABELS: Record<string, string> = {
@@ -189,6 +207,11 @@ export default function TimeCodesPage() {
       priority: t.priority,
       iconKey: t.iconKey || "",
       sortOrder: t.sortOrder,
+      payrollExport: t.payrollExport ?? true,
+      economyExport: t.economyExport ?? true,
+      requiresGps: t.requiresGps ?? false,
+      billable: t.billable ?? false,
+      permissionLevel: t.permissionLevel ?? "all",
     });
     setKeyTouched(true);
     setDialogOpen(true);
@@ -209,6 +232,11 @@ export default function TimeCodesPage() {
       priority: formData.priority,
       iconKey,
       sortOrder: formData.sortOrder,
+      payrollExport: formData.payrollExport,
+      economyExport: formData.economyExport,
+      requiresGps: formData.requiresGps,
+      billable: formData.billable,
+      permissionLevel: formData.permissionLevel,
     };
     if (editing) {
       updateMutation.mutate({ id: editing.id, data: shared });
@@ -269,6 +297,7 @@ export default function TimeCodesPage() {
                   <TableHead className="w-32">Grupp</TableHead>
                   <TableHead className="w-24 text-right">Prioritet</TableHead>
                   <TableHead className="w-24 text-right">Sortering</TableHead>
+                  <TableHead className="w-40">Regler</TableHead>
                   <TableHead className="w-28 text-right">Åtgärder</TableHead>
                 </TableRow>
               </TableHeader>
@@ -304,6 +333,27 @@ export default function TimeCodesPage() {
                       </TableCell>
                       <TableCell className="text-right tabular-nums" data-testid={`text-priority-${t.key}`}>{t.priority}</TableCell>
                       <TableCell className="text-right tabular-nums">{t.sortOrder}</TableCell>
+                      <TableCell>
+                        <div className="flex flex-wrap gap-1" data-testid={`badges-rules-${t.key}`}>
+                          {t.payrollExport === false && (
+                            <Badge variant="outline" className="text-xs">Ej lön</Badge>
+                          )}
+                          {t.economyExport === false && (
+                            <Badge variant="outline" className="text-xs">Ej ekonomi</Badge>
+                          )}
+                          {t.requiresGps && (
+                            <Badge variant="outline" className="text-xs">GPS</Badge>
+                          )}
+                          {t.billable && (
+                            <Badge variant="outline" className="text-xs">Fakturerbar</Badge>
+                          )}
+                          {t.permissionLevel && t.permissionLevel !== "all" && (
+                            <Badge variant="outline" className="text-xs">
+                              {PERMISSION_LEVEL_LABELS[t.permissionLevel] ?? t.permissionLevel}
+                            </Badge>
+                          )}
+                        </div>
+                      </TableCell>
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-1">
                           <Button
@@ -463,6 +513,77 @@ export default function TimeCodesPage() {
                   onChange={(e) => setFormData((prev) => ({ ...prev, sortOrder: parseInt(e.target.value, 10) || 0 }))}
                   data-testid="input-time-code-sort"
                 />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="permissionLevel">Behörighetsnivå</Label>
+                <Select
+                  value={formData.permissionLevel}
+                  onValueChange={(v) => setFormData((prev) => ({ ...prev, permissionLevel: v }))}
+                >
+                  <SelectTrigger id="permissionLevel" data-testid="select-time-code-permission">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {timeCodePermissionLevels.map((level) => (
+                      <SelectItem key={level} value={level} data-testid={`option-permission-${level}`}>
+                        {PERMISSION_LEVEL_LABELS[level] ?? level}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  Styr vilka roller som får registrera denna tidskod (t.ex. personliga uppgifter i veckoplaneringen).
+                </p>
+              </div>
+              <div className="space-y-3 rounded-md border p-3">
+                <Label>Regler</Label>
+                <div className="flex items-center gap-2">
+                  <Checkbox
+                    id="payrollExport"
+                    checked={formData.payrollExport}
+                    onCheckedChange={(v) => setFormData((prev) => ({ ...prev, payrollExport: !!v }))}
+                    data-testid="checkbox-payroll-export"
+                  />
+                  <Label htmlFor="payrollExport" className="font-normal cursor-pointer">
+                    Ingår i löneexport
+                  </Label>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Checkbox
+                    id="economyExport"
+                    checked={formData.economyExport}
+                    onCheckedChange={(v) => setFormData((prev) => ({ ...prev, economyExport: !!v }))}
+                    data-testid="checkbox-economy-export"
+                  />
+                  <Label htmlFor="economyExport" className="font-normal cursor-pointer">
+                    Ingår i ekonomiexport (fakturering till Fortnox)
+                  </Label>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Checkbox
+                    id="requiresGps"
+                    checked={formData.requiresGps}
+                    onCheckedChange={(v) => setFormData((prev) => ({ ...prev, requiresGps: !!v }))}
+                    data-testid="checkbox-requires-gps"
+                  />
+                  <Label htmlFor="requiresGps" className="font-normal cursor-pointer">
+                    Kräver GPS-position vid registrering (mobil)
+                  </Label>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Checkbox
+                    id="billable"
+                    checked={formData.billable}
+                    onCheckedChange={(v) => setFormData((prev) => ({ ...prev, billable: !!v }))}
+                    data-testid="checkbox-billable"
+                  />
+                  <Label htmlFor="billable" className="font-normal cursor-pointer">
+                    Fakturerbar tid
+                  </Label>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  OB-tillägg hanteras manuellt (admin väljer OB-artikel/tidskod) — ingen automatisk beräkning.
+                </p>
               </div>
             </div>
             <DialogFooter>

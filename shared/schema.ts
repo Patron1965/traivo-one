@@ -1058,6 +1058,13 @@ export const executionCodeDefinitions = pgTable("execution_code_definitions", {
 //   groupKey: produktion | stalltid | internt | egentid
 //   priority: 1 = högst (aldrig överlapp, t.ex. produktion/restid) ... 3 = lägst (egentid,
 //             får överbokas). En egentid kan höjas till prio 1 (t.ex. läkarbesök).
+// Task #1237: tidstypsregistret som regelmotor. permissionLevel = lägsta tenant-roll
+// som får REGISTRERA/ÄNDRA tid med denna kod (hierarki technician < planner < admin;
+// "all" = ingen begränsning). OB-hantering är UTANFÖR scope — hanteras manuellt genom
+// artikel-/tidskodsbyte av behörig användare, ingen automatisk OB-beräkning här.
+export const timeCodePermissionLevels = ["all", "technician", "planner", "admin"] as const;
+export type TimeCodePermissionLevel = typeof timeCodePermissionLevels[number];
+
 export const timeCodeDefinitions = pgTable("time_code_definitions", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
@@ -1071,6 +1078,25 @@ export const timeCodeDefinitions = pgTable("time_code_definitions", {
   iconKey: text("icon_key"),
   sortOrder: integer("sort_order").default(0).notNull(),
   isSystem: boolean("is_system").default(false).notNull(),
+  // === Task #1237: regelmotor-flaggor ===
+  // Ska tid med denna kod tas med i löneexporten (server/routes/configRoutes.ts
+  // GET /api/payroll-export)? true = default (oförändrat beteende för befintliga koder).
+  payrollExport: boolean("payroll_export").default(true).notNull(),
+  // Ska tid med denna kod tas med i ekonomiexporten (Fortnox-underlag)? true = default.
+  economyExport: boolean("economy_export").default(true).notNull(),
+  // Kräver registrering av denna tidskod en GPS-position (fältappen)? false = default
+  // (bakåtkompatibelt — endast koder som admin uttryckligen märker upp kräver GPS).
+  requiresGps: boolean("requires_gps").default(false).notNull(),
+  // Lägsta tenant-roll som får registrera/ändra tid med denna kod. "all" = ingen
+  // begränsning (default, bakåtkompatibelt).
+  permissionLevel: text("permission_level").default("all").notNull(),
+  // Är tid med denna kod fakturerbar (styr ev. framtida debitering av internt arbete)?
+  // false = default (de flesta interna/egentids-koder är ej fakturerbara).
+  billable: boolean("billable").default(false).notNull(),
+  // Fritt formulerade export-regler (t.ex. externt lönekonto/kod, mappning mot
+  // Fortnox-konto). Nullable — tolkas av export-lagret, ingen hård kontraktsvalidering
+  // ännu (expand-contract; strukturen får växa utan schemaändring).
+  exportRules: jsonb("export_rules"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   deletedAt: timestamp("deleted_at"),
 }, (table) => [
@@ -1085,6 +1111,12 @@ export const insertTimeCodeDefinitionSchema = createInsertSchema(timeCodeDefinit
   label: z.string().trim().min(1, "Visningsnamn krävs").max(80, "Visningsnamnet får vara högst 80 tecken"),
   groupKey: z.enum(timeCodeGroupKeys).default("internt"),
   priority: z.coerce.number().int().min(1).max(3).default(2),
+  payrollExport: z.coerce.boolean().default(true),
+  economyExport: z.coerce.boolean().default(true),
+  requiresGps: z.coerce.boolean().default(false),
+  permissionLevel: z.enum(timeCodePermissionLevels).default("all"),
+  billable: z.coerce.boolean().default(false),
+  exportRules: z.record(z.unknown()).nullable().optional(),
 });
 export type InsertTimeCodeDefinition = z.infer<typeof insertTimeCodeDefinitionSchema>;
 
