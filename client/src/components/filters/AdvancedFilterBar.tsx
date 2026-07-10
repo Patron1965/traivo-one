@@ -224,6 +224,7 @@ export function AdvancedFilterBar<TRow>({ scope, fields, value, onChange }: Adva
                     <div className="flex items-center gap-1 flex-1">
                       <Input
                         className="h-8"
+                        type={def?.type === "date" ? "date" : "text"}
                         placeholder="Från"
                         value={Array.isArray(cond.value) ? String(cond.value[0] ?? "") : ""}
                         onChange={(e) => {
@@ -235,6 +236,7 @@ export function AdvancedFilterBar<TRow>({ scope, fields, value, onChange }: Adva
                       <span className="text-xs text-muted-foreground">–</span>
                       <Input
                         className="h-8"
+                        type={def?.type === "date" ? "date" : "text"}
                         placeholder="Till"
                         value={Array.isArray(cond.value) ? String(cond.value[1] ?? "") : ""}
                         onChange={(e) => {
@@ -252,6 +254,7 @@ export function AdvancedFilterBar<TRow>({ scope, fields, value, onChange }: Adva
                     cond.operator !== "between" && (
                       <Input
                         className="h-8 flex-1"
+                        type={def?.type === "date" ? "date" : "text"}
                         value={typeof cond.value === "string" || typeof cond.value === "number" ? String(cond.value) : ""}
                         onChange={(e) => updateCondition(idx, { value: e.target.value })}
                         data-testid={`input-filter-value-${idx}`}

@@ -85,9 +85,22 @@ function toComparable(v: FilterValue | Date | undefined): string | number | bool
   return v ?? null;
 }
 
+// Datumfält: värdet i UI/definition-string ("2026-07-10") måste tolkas som
+// epoch-ms innan numerisk jämförelse — annars blir Number("2026-07-10")=NaN
+// och alla gt/gte/lt/lte/between-jämförelser mot ett datumfält blir false.
+function toNumeric(v: unknown, isDate: boolean): number {
+  if (isDate) {
+    if (v instanceof Date) return v.getTime();
+    const parsed = typeof v === "string" || typeof v === "number" ? Date.parse(String(v)) : NaN;
+    return parsed;
+  }
+  return Number(v);
+}
+
 function evaluateCondition<TRow>(row: TRow, cond: FilterCondition, fields: FilterFieldDef<TRow>[]): boolean {
   const def = fields.find((f) => f.key === cond.field);
   if (!def) return true; // okänt fält blockerar aldrig (fail-open för att inte tappa rader vid fält-drift)
+  const isDate = def.type === "date";
   const raw = def.getValue(row);
   const value = toComparable(raw);
   const target = cond.value;
@@ -98,25 +111,29 @@ function evaluateCondition<TRow>(row: TRow, cond: FilterCondition, fields: Filte
     case "is_not_empty":
       return !(value === null || value === "" || (Array.isArray(raw) && raw.length === 0));
     case "eq":
-      return value === toComparable(target as FilterValue);
+      return isDate
+        ? toNumeric(value, true) === toNumeric(target, true)
+        : value === toComparable(target as FilterValue);
     case "neq":
-      return value !== toComparable(target as FilterValue);
+      return isDate
+        ? toNumeric(value, true) !== toNumeric(target, true)
+        : value !== toComparable(target as FilterValue);
     case "contains":
       return String(value ?? "").toLowerCase().includes(String(target ?? "").toLowerCase());
     case "not_contains":
       return !String(value ?? "").toLowerCase().includes(String(target ?? "").toLowerCase());
     case "gt":
-      return value !== null && Number(value) > Number(target);
+      return value !== null && toNumeric(value, isDate) > toNumeric(target, isDate);
     case "gte":
-      return value !== null && Number(value) >= Number(target);
+      return value !== null && toNumeric(value, isDate) >= toNumeric(target, isDate);
     case "lt":
-      return value !== null && Number(value) < Number(target);
+      return value !== null && toNumeric(value, isDate) < toNumeric(target, isDate);
     case "lte":
-      return value !== null && Number(value) <= Number(target);
+      return value !== null && toNumeric(value, isDate) <= toNumeric(target, isDate);
     case "between": {
       if (!Array.isArray(target) || target.length !== 2 || value === null) return false;
-      const n = Number(value);
-      return n >= Number(target[0]) && n <= Number(target[1]);
+      const n = toNumeric(value, isDate);
+      return n >= toNumeric(target[0], isDate) && n <= toNumeric(target[1], isDate);
     }
     case "in":
       return Array.isArray(target) ? target.map(String).includes(String(value)) : false;

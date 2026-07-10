@@ -306,14 +306,24 @@ export default function GrovplaneringPage() {
   });
 
   // Rutnät.
-  const gridUrl = buildGridUrl(applied, groupBy, offset, pageSize);
+  const hasAdvancedFilter = advancedFilter.conditions.length > 0;
+  // Task #1240: när avancerat filter är aktivt måste vi filtrera mot HELA den
+  // grovfiltrerade mängden, inte bara den redan sid-beskurna 20-raders-sidan —
+  // annars missar filtret matchande rader utanför nuvarande sida och
+  // totalsumman/sidantalet blir missvisande. Servern (GET /api/rough-planning/grid)
+  // tak:ar limit på 200; det täcker den typiska grovplaneringsvolymen per
+  // grov-filter men är en känd gräns tills en server-side filterevaluator finns
+  // (uppföljning: full 94-fälts-motor server-side, se follow-up #1251).
+  const fetchLimit = hasAdvancedFilter ? 200 : pageSize;
+  const fetchOffset = hasAdvancedFilter ? 0 : offset;
+  const gridUrl = buildGridUrl(applied, groupBy, fetchOffset, fetchLimit);
   const {
     data,
     isLoading,
     isError,
     isFetching,
   } = useQuery<GridResponse>({
-    queryKey: ["/api/rough-planning/grid", applied, groupBy, offset, pageSize],
+    queryKey: ["/api/rough-planning/grid", applied, groupBy, fetchOffset, fetchLimit],
     queryFn: async () => (await apiRequest("GET", gridUrl)).json(),
     placeholderData: keepPreviousData,
   });
@@ -321,8 +331,8 @@ export default function GrovplaneringPage() {
   // Task #1240: klient-sidan finfiltrering ovanpå serverns grov-filter/gruppering,
   // via den delade filtermotorn. Grupper utan kvarvarande rader döljs helt.
   const rawGroups: GridGroup[] = data?.groups ?? [];
-  const groups: GridGroup[] = useMemo(() => {
-    if (advancedFilter.conditions.length === 0) return rawGroups;
+  const filteredGroups: GridGroup[] = useMemo(() => {
+    if (!hasAdvancedFilter) return rawGroups;
     // Säkerhet: evaluera ENBART mot fält den inloggade rollen får se/söka på —
     // annars kan ett sparat/delat filter läcka ekonomifält till roller som
     // inte ska ha åtkomst (villkoret skulle annars fortfarande matcha).
@@ -338,8 +348,37 @@ export default function GrovplaneringPage() {
         tasks: g.tasks.filter((t) => evaluateFilterGroup(t, safeFilter, allowedFields)),
       }))
       .filter((g) => g.tasks.length > 0);
-  }, [rawGroups, advancedFilter, currentRole]);
-  const total = advancedFilter.conditions.length === 0 ? (data?.pagination.total ?? 0) : groups.reduce((n, g) => n + g.tasks.length, 0);
+  }, [rawGroups, advancedFilter, currentRole, hasAdvancedFilter]);
+
+  const total = hasAdvancedFilter
+    ? filteredGroups.reduce((n, g) => n + g.tasks.length, 0)
+    : (data?.pagination.total ?? 0);
+
+  // Vid avancerat filter pagineras klient-sidan ovanpå den fullständigt
+  // finfiltrerade mängden (se ovan) — annars styr servern fortfarande sidan.
+  const groups: GridGroup[] = useMemo(() => {
+    if (!hasAdvancedFilter) return filteredGroups;
+    let remainingSkip = offset;
+    let remainingTake = pageSize;
+    const page: GridGroup[] = [];
+    for (const g of filteredGroups) {
+      if (remainingTake <= 0) break;
+      let tasks = g.tasks;
+      if (remainingSkip > 0) {
+        if (remainingSkip >= tasks.length) {
+          remainingSkip -= tasks.length;
+          continue;
+        }
+        tasks = tasks.slice(remainingSkip);
+        remainingSkip = 0;
+      }
+      const taken = tasks.slice(0, remainingTake);
+      remainingTake -= taken.length;
+      if (taken.length > 0) page.push({ ...g, tasks: taken });
+    }
+    return page;
+  }, [filteredGroups, hasAdvancedFilter, offset, pageSize]);
+
   const summary = data?.summary ?? EMPTY_KPIS;
 
   // Motorns förslag (Task #1039) — läses on-demand, separat från work_order-rutnätet.
@@ -650,7 +689,10 @@ export default function GrovplaneringPage() {
         scope="uppgiftsnav"
         fields={GROVPLANERING_FILTER_FIELDS}
         value={advancedFilter}
-        onChange={setAdvancedFilter}
+        onChange={(g) => {
+          setAdvancedFilter(g);
+          setOffset(0);
+        }}
       />
 
       {/* Motorns körkontroll — intill filtret (Task #1039) */}
