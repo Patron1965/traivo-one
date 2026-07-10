@@ -631,7 +631,7 @@ app.post("/api/mobile/orders/actual-time/distribute", isMobileAuthenticated, asy
   const resourceId = req.mobileResourceId;
   const schema = z.object({
     workOrderIds: z.array(z.string()).min(1),
-    totalActualMinutes: z.number().min(0),
+    totalActualMinutes: z.number().int().min(0),
   });
   const parsed = schema.safeParse(req.body);
   if (!parsed.success) throw new ValidationError(formatZodError(parsed.error).error);

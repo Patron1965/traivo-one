@@ -2930,7 +2930,7 @@ app.post("/api/work-orders/actual-time/distribute", requirePlanner, asyncHandler
   const userId = (req as any).user?.claims?.sub ?? (req as any).user?.id ?? null;
   const schema = z.object({
     workOrderIds: z.array(z.string()).min(1),
-    totalActualMinutes: z.number().min(0),
+    totalActualMinutes: z.number().int().min(0),
     groupKey: z.string().optional(),
   });
   const parsed = schema.safeParse(req.body);
@@ -2958,7 +2958,7 @@ app.post("/api/work-orders/actual-time/adjust", requirePlanner, asyncHandler(asy
   const schema = z.object({
     allocations: z.array(z.object({
       workOrderId: z.string(),
-      actualDuration: z.number().min(0),
+      actualDuration: z.number().int().min(0),
     })).min(1),
   });
   const parsed = schema.safeParse(req.body);
