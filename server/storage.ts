@@ -6306,6 +6306,21 @@ export class DatabaseStorage implements IStorage {
       for (const o of relatedOrders) workOrderResourceMap.set(o.id, o.resourceId);
     }
 
+    // Individuell frånvaro per medlem (semester/sjuk/utbildning/annat) kommer från
+    // resource_availability — den enda platsen i modellen där en avvikelse redan är
+    // knuten till en specifik resurs, snarare än teamet i stort.
+    const memberResourceIds = membersRaw.map((m) => m.resourceId);
+    const memberAbsences = memberResourceIds.length > 0
+      ? await db.select().from(resourceAvailability)
+          .where(and(
+            eq(resourceAvailability.tenantId, tenantId),
+            inArray(resourceAvailability.resourceId, memberResourceIds),
+            eq(resourceAvailability.isAvailable, false),
+            gte(resourceAvailability.date, weekStart),
+            lte(resourceAvailability.date, weekEnd),
+          ))
+      : [];
+
     const { computeTeamMemberDeviations } = await import("./planning/weeklyPlanEngine");
     return computeTeamMemberDeviations(
       teamId,
@@ -6314,6 +6329,7 @@ export class DatabaseStorage implements IStorage {
       teamPersonalTasks,
       travelEntries,
       workOrderResourceMap,
+      memberAbsences,
     );
   }
 

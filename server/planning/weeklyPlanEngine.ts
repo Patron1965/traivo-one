@@ -32,6 +32,7 @@ import type {
   PreTask,
   Article,
   PlanningReservation,
+  ResourceAvailability,
 } from "@shared/schema";
 
 // =============================================================================
@@ -266,6 +267,7 @@ export function computeTeamMemberDeviations(
   teamPersonalTasks: PersonalTask[],
   travelEntries: TravelTimeEntry[],
   workOrderResourceMap: Map<string, string | null>,
+  memberAbsences: ResourceAvailability[] = [],
 ): TeamDeviationSummary {
   const woByResource = new Map<string, TeamDeviationWorkOrderFact[]>();
   for (const wo of individualWorkOrders) {
@@ -292,6 +294,24 @@ export function computeTeamMemberDeviations(
     travelMinutesByResource.set(resourceId, (travelMinutesByResource.get(resourceId) ?? 0) + (entry.travelMinutes ?? 0));
   }
 
+  // Individuell frånvaro (semester/sjuk/utbildning/annat): resource_availability
+  // är den enda platsen i datamodellen där en "borta"-signal redan är knuten till
+  // en specifik medlem (isAvailable=false), snarare än teamet i stort.
+  const STANDARD_WORKDAY_MINUTES = 480;
+  const absenceMinutesFor = (a: ResourceAvailability): number => {
+    if (a.isFullDay || !a.startTime || !a.endTime) return STANDARD_WORKDAY_MINUTES;
+    const [sh, sm] = a.startTime.split(":").map(Number);
+    const [eh, em] = a.endTime.split(":").map(Number);
+    if ([sh, sm, eh, em].some((n) => Number.isNaN(n))) return STANDARD_WORKDAY_MINUTES;
+    return Math.max(0, (eh * 60 + em) - (sh * 60 + sm));
+  };
+  const absencesByResource = new Map<string, ResourceAvailability[]>();
+  for (const a of memberAbsences) {
+    const list = absencesByResource.get(a.resourceId) ?? [];
+    list.push(a);
+    absencesByResource.set(a.resourceId, list);
+  }
+
   const memberDeviations: TeamMemberDeviation[] = members.map((m) => {
     const ownWos = woByResource.get(m.resourceId) ?? [];
     const ownTasks = ownWos.map((wo) => ({
@@ -302,14 +322,22 @@ export function computeTeamMemberDeviations(
     }));
     const ownTasksMinutes = ownTasks.reduce((s, t) => s + t.minutes, 0);
     const ownTravelMinutes = travelMinutesByResource.get(m.resourceId) ?? 0;
-    const totalDeviationMinutes = ownTasksMinutes + ownTravelMinutes;
+    const ownAbsences = (absencesByResource.get(m.resourceId) ?? []).map((a) => ({
+      id: a.id,
+      title: a.availabilityType,
+      plannedDate: a.date ? new Date(a.date).toISOString().slice(0, 10) : null,
+      minutes: absenceMinutesFor(a),
+      timeCategory: a.availabilityType,
+    }));
+    const absenceMinutes = ownAbsences.reduce((s, a) => s + a.minutes, 0);
+    const totalDeviationMinutes = ownTasksMinutes + ownTravelMinutes + absenceMinutes;
     return {
       resourceId: m.resourceId,
       resourceName: m.resourceName,
       ownTasks,
       ownTasksMinutes,
-      absences: [],
-      absenceMinutes: 0,
+      absences: ownAbsences,
+      absenceMinutes,
       ownTravelMinutes,
       totalDeviationMinutes,
       hasDeviation: totalDeviationMinutes > 0,

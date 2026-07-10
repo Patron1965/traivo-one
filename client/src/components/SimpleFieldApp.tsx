@@ -111,6 +111,8 @@ interface TeamMemberDeviationItem {
   resourceName: string;
   ownTasks: Array<{ id: string; title: string; minutes: number }>;
   ownTasksMinutes: number;
+  absences: Array<{ id: string; title: string; minutes: number }>;
+  absenceMinutes: number;
   ownTravelMinutes: number;
   totalDeviationMinutes: number;
   hasDeviation: boolean;
@@ -229,6 +231,7 @@ function TeamDeviationsPanel({ mobileApiCall }: { mobileApiCall: (method: string
                 <span className="font-medium">{m.resourceName}</span>
                 {m.ownTasksMinutes > 0 && <span className="text-muted-foreground"> · egen uppgift ({formatDeviationMinutes(m.ownTasksMinutes)})</span>}
                 {m.ownTravelMinutes > 0 && <span className="text-muted-foreground"> · egen resa ({formatDeviationMinutes(m.ownTravelMinutes)})</span>}
+                {m.absenceMinutes > 0 && <span className="text-muted-foreground" data-testid={`text-field-member-absence-${m.resourceId}`}> · frånvaro ({formatDeviationMinutes(m.absenceMinutes)})</span>}
               </div>
             ))}
             {summary && summary.teamAbsences.length > 0 && (

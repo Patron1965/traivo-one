@@ -1,7 +1,7 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { getISOWeek, getISOWeekYear } from "date-fns";
-import { AlertTriangle, Plane, Briefcase } from "lucide-react";
+import { AlertTriangle, Plane, Briefcase, CalendarOff } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -22,6 +22,8 @@ interface TeamMemberDeviation {
   resourceName: string;
   ownTasks: Array<{ id: string; title: string; scheduledDate: string | null; minutes: number }>;
   ownTasksMinutes: number;
+  absences: Array<{ id: string; title: string; plannedDate: string | null; minutes: number; timeCategory: string }>;
+  absenceMinutes: number;
   ownTravelMinutes: number;
   totalDeviationMinutes: number;
   hasDeviation: boolean;
@@ -46,6 +48,14 @@ function formatMinutes(minutes: number): string {
 
 export function TeamDeviationsPanel({ teams, periodAnchor }: { teams: TeamOption[]; periodAnchor?: string }) {
   const [teamId, setTeamId] = useState<string>(teams[0]?.id ?? "");
+
+  // teams kan komma asynkront (tomt vid mount, fylls senare) — auto-välj första
+  // teamet så fort listan blir tillgänglig om inget redan är valt.
+  useEffect(() => {
+    if (!teamId && teams.length > 0) {
+      setTeamId(teams[0].id);
+    }
+  }, [teams, teamId]);
 
   // Följer den valda planeringsperioden i Uppgiftsnavets filter (RoughFilterPanel
   // anchor/period), inte "idag" — annars visar panelen fel vecka när planeraren
@@ -140,6 +150,14 @@ export function TeamDeviationsPanel({ teams, periodAnchor }: { teams: TeamOption
                   <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                     <Plane className="h-3.5 w-3.5 shrink-0" />
                     <span>Egen resa: {formatMinutes(m.ownTravelMinutes)}</span>
+                  </div>
+                )}
+                {m.absences.length > 0 && (
+                  <div className="flex items-start gap-1.5 text-xs text-muted-foreground" data-testid={`row-member-absence-${m.resourceId}`}>
+                    <CalendarOff className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+                    <span>
+                      Frånvaro: {m.absences.map((a) => a.title).join(", ")} ({formatMinutes(m.absenceMinutes)})
+                    </span>
                   </div>
                 )}
               </div>
