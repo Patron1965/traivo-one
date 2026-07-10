@@ -19,6 +19,7 @@ import type { Express } from "express";
   import { reverseGeocode, buildAddressString } from "../../services/geocoding";
   import { logWorkOrderTransition, getTaskEvents } from "../../services/task-event-log";
   import { closeOtherActiveWork } from "../../services/active-task-guard";
+  import { resolveStopPositions } from "../../services/stop-positions";
 
   // Löser effektiv produktionstid (minuter) ur redan hämtade listrader.
   // Prioritet: resurs-specifik (giltig) → generisk lista (giltig) → artikelns
@@ -313,6 +314,11 @@ app.get("/api/mobile/orders/:id", isMobileAuthenticated, asyncHandler(async (req
       order.plannedWindowEnd instanceof Date ? order.plannedWindowEnd.toISOString() :
       (order.plannedWindowEnd as string | null) || null;
 
+    // Task #1239: klump/stopp-medlemmarnas individuella positioner + klumpens
+    // egna primära navigeringsposition, för fältappens karta (alla positioner
+    // samtidigt + per-position korrigering/GPS-fångst återanvänds oförändrat).
+    const stopPositions = await resolveStopPositions(order);
+
     res.json({
       ...order,
       objectName: object?.name,
@@ -351,6 +357,7 @@ app.get("/api/mobile/orders/:id", isMobileAuthenticated, asyncHandler(async (req
       timeRestrictions: restrictions,
       object: object ? { id: object.id, name: object.name, address: object.address, latitude: object.latitude, longitude: object.longitude } : null,
       customer: customer ? { id: customer.id, name: customer.name, customerNumber: customer.customerNumber } : null,
+      stopPositions,
     });
 }));
 

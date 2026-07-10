@@ -26,6 +26,7 @@ import { deriveFortnoxCodesWithSourceForWorkOrder } from "../services/fortnox-co
 import { getObjectMetadataImages } from "../services/object-system-metadata";
 import { logWorkOrderTransition, getTaskEvents } from "../services/task-event-log";
 import { distributeActualTime, adjustActualTimeDistribution, ActualTimeDistributionError } from "../services/actual-time-distribution";
+import { resolveStopPositions } from "../services/stop-positions";
 
 /** Räknar ut outsidePreferredWindow-flaggan + priority utifrån objektets/kundens
  * effektiva leveranspreferens och plannedWindowStart/End. */
@@ -308,6 +309,19 @@ app.get("/api/work-orders/:id", asyncHandler(async (req, res) => {
     isCancelled: !!verified.deletedAt,
     cancellation,
   });
+}));
+
+// Task #1239: klump/stopp-medlemmarnas individuella positioner + klumpens egna
+// primära navigeringsposition (skild från varje medlems position), för
+// fältappens kartvy över ett stopp (alla positioner samtidigt, per-position
+// korrigering/GPS-fångst återanvänder befintlig /api/mobile/objects/:id/location).
+app.get("/api/work-orders/:id/stop-positions", asyncHandler(async (req, res) => {
+  const tenantId = getTenantIdWithFallback(req);
+  const workOrder = await storage.getWorkOrder(req.params.id);
+  const verified = verifyTenantOwnership(workOrder, tenantId);
+  if (!verified) throw new NotFoundError("Arbetsorder");
+  const stopPositions = await resolveStopPositions(verified);
+  res.json(stopPositions);
 }));
 
 // Task #1005: Visa vilket kostnadsställe/projekt en genererad uppgift faktiskt

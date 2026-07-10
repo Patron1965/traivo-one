@@ -1146,6 +1146,21 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
     );
   }, [correctLocationMutation, toast]);
 
+  // Task #1239: klump/stopp-medlemmarnas positioner + klumpens egna primära
+  // navigeringsposition. Hämtas endast när ett jobb är valt; återanvänder
+  // befintlig korrigerings-/GPS-mutation ovan per medlemsobjekt (ingen ombyggnad).
+  const { data: stopPositions } = useQuery<{
+    primary: { latitude: number | null; longitude: number | null; address: string | null } | null;
+    members: Array<{ assignmentId: string; objectId: string | null; latitude: number | null; longitude: number | null; address: string | null }>;
+  } | null>({
+    queryKey: ["/api/work-orders", selectedJob?.id, "stop-positions"],
+    queryFn: async () => {
+      const res = await apiRequest("GET", `/api/work-orders/${selectedJob!.id}/stop-positions`);
+      return res.json();
+    },
+    enabled: !!selectedJob?.id,
+  });
+
   const completeJobMutation = useMutation({
     mutationFn: async ({ id, signaturePath }: { id: string; signaturePath?: string }) => {
       const elapsed = Math.ceil(elapsedSeconds / 60);
@@ -2031,6 +2046,59 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
                     )}
                     <span className="ml-1">Använd min position</span>
                   </Button>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Task #1239: klumpstopp — visar alla medlemmars positioner + stoppets
+              egna primära navigeringsposition samtidigt. Korrigering/GPS-fångst
+              per position återanvänder den befintliga objekt-mutationen ovan. */}
+          {stopPositions && stopPositions.members.length > 1 && (
+            <Card data-testid="card-stop-positions">
+              <CardContent className="py-3 space-y-2">
+                <div className="flex items-center gap-1.5">
+                  <MapPin className="h-4 w-4 text-chart-3 shrink-0" />
+                  <p className="text-xs font-medium">Klumpstopp — {stopPositions.members.length} positioner</p>
+                </div>
+                {stopPositions.primary?.address && (
+                  <p className="text-[11px] text-muted-foreground">
+                    Navigerar till stoppets gemensamma position: {stopPositions.primary.address}
+                  </p>
+                )}
+                <div className="space-y-1.5">
+                  {stopPositions.members.map((member, idx) => (
+                    <div
+                      key={member.assignmentId}
+                      className="flex items-center justify-between gap-2 rounded border p-2"
+                      data-testid={`row-stop-position-${member.assignmentId}`}
+                    >
+                      <div className="min-w-0">
+                        <p className="text-xs font-medium">Position {idx + 1}</p>
+                        <p className="text-[11px] text-muted-foreground truncate">
+                          {member.address || (member.latitude && member.longitude
+                            ? `${member.latitude.toFixed(5)}, ${member.longitude.toFixed(5)}`
+                            : "Ingen position ännu")}
+                        </p>
+                      </div>
+                      {member.objectId && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="shrink-0"
+                          disabled={correctingLocation || correctLocationMutation.isPending}
+                          onClick={() => handleCorrectObjectLocation(member.objectId!)}
+                          data-testid={`button-correct-stop-position-${member.assignmentId}`}
+                        >
+                          {(correctingLocation || correctLocationMutation.isPending) ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <MapPin className="h-4 w-4" />
+                          )}
+                        </Button>
+                      )}
+                    </div>
+                  ))}
                 </div>
               </CardContent>
             </Card>

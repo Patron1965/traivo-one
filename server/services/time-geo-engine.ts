@@ -84,6 +84,16 @@ export interface TimeGeoEngineOptions {
   streetSideGrouping?: boolean;
   /** Override av daglig kapacitet (minuter). */
   dailyCapacityMinutes?: number;
+  /** Task #1239: override av maximal gångsträcka (meter) mellan klumpmedlemmar.
+   * Annars team-profil → tenant-konfig → motorns default. */
+  maxWalkingDistanceMeters?: number;
+  /** Task #1239: override av kompatibilitetsgrupper (utförandekoder som får
+   * klumpas trots olika kod). Annars tenant-konfig → ingen (strikt exakt-kod). */
+  compatibilityGroups?: string[][];
+  /** Task #1239: vilka utförandekoder resursen/teamet är kompetent för. Styr om
+   * en tvärkod-klump (kompatibilitetsgrupp) faktiskt får bildas. NULL/utelämnad
+   * = okänd kompetens (back-compat, ingen gate). */
+  allowedExecutionCodes?: string[] | null;
   /** Max assignments som bearbetas (prestandagräns). */
   maxAssignments?: number;
   /** Max kandidat-slottider per uppgift. */
@@ -121,6 +131,11 @@ export interface ClumpGroupSummary {
   windowStart: string;
   windowEnd: string;
   slotType: SlotType;
+  /** Task #1239: klumpens/stoppets egna primära navigeringsposition (ankarets). */
+  anchorAssignmentId: string;
+  primaryLatitude: number | null;
+  primaryLongitude: number | null;
+  primaryAddress: string | null;
 }
 
 export interface SlotCandidate {
@@ -451,24 +466,95 @@ export interface TaskGroup {
   timeKey: string;
   groupingBasis: "address" | "geo" | "standalone";
   members: GroupableTask[];
+  /** Task #1239: "ankaret" — medlemmen med högst ekonomiskt värde (valueOre),
+   * vars position blir klumpens/stoppets egna primära navigeringsposition. */
+  anchorAssignmentId: string;
 }
 
 /**
- * Grupperar uppgifter till klumpuppgifter. Identitet = utförandekod + tidsvillkor
+ * Task #1239: löser den kanoniska kompatibilitets-nyckeln för en utförandekod
+ * givet konfigurerade kompatibilitetsgrupper. Koder i samma grupp får en
+ * gemensam nyckel (sorterad, join:ad) så att de kan klumpas ihop trots olika
+ * kod. Koder som inte förekommer i någon grupp behåller sin egen kod som
+ * nyckel (back-compat: exakt kod-match krävs som idag).
+ */
+export function resolveCompatibilityKey(
+  executionCode: string,
+  compatibilityGroups: string[][] | null | undefined,
+): string {
+  if (!compatibilityGroups || compatibilityGroups.length === 0) return executionCode;
+  for (const group of compatibilityGroups) {
+    if (group.includes(executionCode)) {
+      return [...group].sort().join("+");
+    }
+  }
+  return executionCode;
+}
+
+/**
+ * Task #1239: avgör om en klump med flera OLIKA utförandekoder (kompatibilitets-
+ * klumpad) är tillåten givet resursens/teamets kompetens. Kräver kompetens för
+ * VARJE distinkt kod i klumpen. `allowedExecutionCodes` = null/undefined
+ * (okänd kompetens) → tillåt (back-compat, motorn har historiskt inte gate:at
+ * på kompetens); tom array → ingen kompetens alls → blockera tvärkod-klumpar
+ * (uppgifterna splittras tillbaka till separata grupper per kod).
+ */
+function hasCompetenceForCodes(
+  codes: Set<string>,
+  allowedExecutionCodes: string[] | null | undefined,
+): boolean {
+  if (allowedExecutionCodes == null) return true;
+  if (codes.size <= 1) return true;
+  const allowed = new Set(allowedExecutionCodes);
+  for (const c of Array.from(codes)) {
+    if (!allowed.has(c)) return false;
+  }
+  return true;
+}
+
+function pickAnchor(members: GroupableTask[]): GroupableTask {
+  let anchor = members[0];
+  for (const m of members) {
+    if (m.valueOre > anchor.valueOre) anchor = m;
+  }
+  return anchor;
+}
+
+/**
+ * Grupperar uppgifter till klumpuppgifter. Identitet = kompatibilitets-nyckel
+ * (utförandekod, ev. slagen ihop via `compatibilityGroups`) + tidsvillkor
  * (timeKey) + härledd adress. Sidesmedveten (default): udda/jämnt husnummer ger
  * var sin grupp. Med `streetSideGrouping=false` (team-profil) slås båda sidor av
  * samma gata ihop. Saknas gatuadress men finns position → greedy-kluster inom
- * `radiusMeters`. Saknas både adress och position → fristående.
+ * min(`radiusMeters`, `maxWalkingDistanceMeters`), med den ekonomiskt mest
+ * värdefulla uppgiften som klustrets ankare/frö (Task #1239: ekonomisk
+ * prioritering styr FORMATIONEN, inte bara efterhandssummeringen). Saknas
+ * både adress och position → fristående. Tvärkod-klumpar (kompatibilitets-
+ * grupper) kräver att `allowedExecutionCodes` (teamets/resursens kompetens)
+ * täcker samtliga koder i klumpen — annars splittras klumpen tillbaka per kod.
  */
 export function groupTasks(
   tasks: GroupableTask[],
   radiusMeters: number,
   streetSideGrouping: boolean = DEFAULT_STREET_SIDE_GROUPING,
+  options: {
+    compatibilityGroups?: string[][] | null;
+    allowedExecutionCodes?: string[] | null;
+    maxWalkingDistanceMeters?: number | null;
+  } = {},
 ): TaskGroup[] {
-  // Partitionera på (utförandekod, tidsvillkor).
+  const compatibilityGroups = options.compatibilityGroups ?? null;
+  const allowedExecutionCodes = options.allowedExecutionCodes ?? null;
+  const effectiveRadiusMeters =
+    typeof options.maxWalkingDistanceMeters === "number" && options.maxWalkingDistanceMeters > 0
+      ? Math.min(radiusMeters, options.maxWalkingDistanceMeters)
+      : radiusMeters;
+
+  // Partitionera på (kompatibilitets-nyckel, tidsvillkor).
   const partitions = new Map<string, GroupableTask[]>();
   for (const t of tasks) {
-    const pk = `${t.executionCode}||${t.timeKey}`;
+    const compatKey = resolveCompatibilityKey(t.executionCode, compatibilityGroups);
+    const pk = `${compatKey}||${t.timeKey}`;
     const arr = partitions.get(pk);
     if (arr) arr.push(t);
     else partitions.set(pk, [t]);
@@ -490,6 +576,7 @@ export function groupTasks(
         timeKey: t.timeKey,
         groupingBasis: basis,
         members: [t],
+        anchorAssignmentId: t.assignmentId,
       });
   };
 
@@ -513,15 +600,19 @@ export function groupTasks(
       }
     }
 
+    // Task #1239: ekonomiskt högst värderade uppgiften klustras först — den
+    // blir kluster-fröet (och senare ankaret för primärposition).
+    const geoOrdered = [...geoOnly].sort((a, b) => b.valueOre - a.valueOre);
+
     // Greedy radie-klustring för adresslösa men positionerade uppgifter.
     let clusterIdx = 0;
     const assigned = new Set<string>();
-    for (const seed of geoOnly) {
+    for (const seed of geoOrdered) {
       if (assigned.has(seed.assignmentId)) continue;
       const key = `${pk}||geo:${clusterIdx++}`;
       addMember(key, "geo", seed);
       assigned.add(seed.assignmentId);
-      for (const other of geoOnly) {
+      for (const other of geoOrdered) {
         if (assigned.has(other.assignmentId)) continue;
         const distM =
           haversineDistanceKm(
@@ -530,7 +621,7 @@ export function groupTasks(
             other.latitude as number,
             other.longitude as number,
           ) * 1000;
-        if (distM <= radiusMeters) {
+        if (distM <= effectiveRadiusMeters) {
           addMember(key, "geo", other);
           assigned.add(other.assignmentId);
         }
@@ -543,7 +634,41 @@ export function groupTasks(
     }
   }
 
-  return Array.from(groups.values());
+  // Task #1239: (a) sätt ankaret = medlemmen med högst ekonomiskt värde i varje
+  // grupp; (b) validera kompetens för tvärkod-klumpar — otillräcklig kompetens
+  // splittrar klumpen tillbaka till en grupp per distinkt utförandekod.
+  const result: TaskGroup[] = [];
+  for (const g of Array.from(groups.values())) {
+    const distinctCodes = new Set(g.members.map((m) => m.executionCode));
+    if (!hasCompetenceForCodes(distinctCodes, allowedExecutionCodes)) {
+      const byCode = new Map<string, GroupableTask[]>();
+      for (const m of g.members) {
+        const arr = byCode.get(m.executionCode);
+        if (arr) arr.push(m);
+        else byCode.set(m.executionCode, [m]);
+      }
+      for (const [code, ms] of Array.from(byCode.entries())) {
+        result.push({
+          groupKey: `${g.groupKey}||split:${code}`,
+          executionCode: code,
+          timeKey: g.timeKey,
+          groupingBasis: g.groupingBasis,
+          members: ms,
+          anchorAssignmentId: pickAnchor(ms).assignmentId,
+        });
+      }
+      continue;
+    }
+    g.anchorAssignmentId = pickAnchor(g.members).assignmentId;
+    // Task #1239: klumpens executionCode-etikett vid tvärkod-klump = ankarets
+    // egen kod (mest ekonomiskt relevanta), inte första-tillagda medlemmens.
+    g.executionCode = distinctCodes.size > 1
+      ? (g.members.find((m) => m.assignmentId === g.anchorAssignmentId)?.executionCode ?? g.executionCode)
+      : g.executionCode;
+    result.push(g);
+  }
+
+  return result;
 }
 
 /** Samma användbarhetstest som object-location men för rena tal (assignment-snapshot). */
@@ -562,6 +687,10 @@ export function summarizeGroup(group: TaskGroup): {
   windowStart: Date;
   windowEnd: Date;
   slotType: SlotType;
+  anchorAssignmentId: string;
+  primaryLatitude: number | null;
+  primaryLongitude: number | null;
+  primaryAddress: string | null;
 } {
   let summedValueOre = 0;
   let summedCostOre = 0;
@@ -575,6 +704,10 @@ export function summarizeGroup(group: TaskGroup): {
     if (m.windowStart < windowStart) windowStart = m.windowStart;
     if (m.windowEnd > windowEnd) windowEnd = m.windowEnd;
   }
+  // Task #1239: klumpens/stoppets egna primära navigeringsposition = ankarets
+  // (ekonomiskt mest värdefulla medlemmens) position — skild från varje
+  // medlemsuppgifts egen position.
+  const anchor = group.members.find((m) => m.assignmentId === group.anchorAssignmentId) ?? group.members[0];
   return {
     summedValueOre,
     summedCostOre,
@@ -582,6 +715,10 @@ export function summarizeGroup(group: TaskGroup): {
     windowStart,
     windowEnd,
     slotType: group.members[0].slotType,
+    anchorAssignmentId: anchor.assignmentId,
+    primaryLatitude: anchor.latitude,
+    primaryLongitude: anchor.longitude,
+    primaryAddress: anchor.address,
   };
 }
 
@@ -644,6 +781,19 @@ export async function runTimeGeoEngine(
     DEFAULT_STREET_SIDE_GROUPING;
   const workPacePercent =
     teamConfig?.workPacePercent ?? tenantClumpDefaults?.workPacePercent ?? DEFAULT_WORK_PACE_PERCENT;
+  // Task #1239: maximal gångsträcka + kompatibilitetsgrupper + kompetens.
+  // Samma 3-tier-kedja: explicit override → team-profil → tenant-konfig → ingen gräns/grupp.
+  const maxWalkingDistanceMeters =
+    options.maxWalkingDistanceMeters ??
+    teamConfig?.maxWalkingDistanceMeters ??
+    tenantClumpDefaults?.maxWalkingDistanceMeters ??
+    null;
+  const compatibilityGroups =
+    options.compatibilityGroups ?? tenantClumpDefaults?.executionCodeCompatibilityGroups ?? null;
+  const allowedExecutionCodes =
+    options.allowedExecutionCodes !== undefined
+      ? options.allowedExecutionCodes
+      : (teamConfig?.allowedExecutionCodes ?? null);
 
   // (1) Hämta råa, oplanerade assignments. scheduledDate kan vara null → hämta
   // utan datumfilter och filtrera i minnet (datumfiltret träffar inte null).
@@ -733,7 +883,11 @@ export async function runTimeGeoEngine(
       windowEnd: chosen.windowEnd,
     };
   });
-  const groups = groupTasks(groupable, groupingRadiusMeters, streetSideGrouping);
+  const groups = groupTasks(groupable, groupingRadiusMeters, streetSideGrouping, {
+    compatibilityGroups,
+    allowedExecutionCodes,
+    maxWalkingDistanceMeters,
+  });
 
   // Karta uppgift → gruppnyckel (endast för grupper ≥2 = riktiga klumpuppgifter).
   const groupKeyByAssignment = new Map<string, string>();
@@ -754,6 +908,10 @@ export async function runTimeGeoEngine(
       windowStart: sum.windowStart.toISOString(),
       windowEnd: sum.windowEnd.toISOString(),
       slotType: sum.slotType,
+      anchorAssignmentId: sum.anchorAssignmentId,
+      primaryLatitude: sum.primaryLatitude,
+      primaryLongitude: sum.primaryLongitude,
+      primaryAddress: sum.primaryAddress,
     });
   }
 
@@ -806,6 +964,10 @@ export async function runTimeGeoEngine(
       rank: 0,
       score: null,
       source: ENGINE_SOURCE,
+      primaryLatitude: c.primaryLatitude,
+      primaryLongitude: c.primaryLongitude,
+      primaryAddress: c.primaryAddress,
+      primaryAssignmentId: c.anchorAssignmentId,
       metadata: {
         kind: "clump",
         executionCode: c.executionCode,
@@ -815,6 +977,7 @@ export async function runTimeGeoEngine(
         summedValueOre: c.summedValueOre,
         summedCostOre: c.summedCostOre,
         summedDurationMinutes: c.summedDurationMinutes,
+        anchorAssignmentId: c.anchorAssignmentId,
       },
     });
   }
@@ -855,11 +1018,13 @@ function applyDailyCapacity(
   dailyCapacityMinutes: number,
   periodEnd: Date,
 ): void {
-  // Sortera efter bästa kandidat-poäng (högst först), sedan längst uppgift först.
+  // Sortera efter bästa kandidat-poäng (högst först), sedan ekonomiskt värde
+  // (Task #1239: ekonomisk prioritering vinner tidigare dagsplats/kapacitet vid
+  // jämn poäng — inte bara en efterhandssummering), sedan längst uppgift först.
   const order = [...prepared].sort((a, b) => {
     const sa = a.candidates[0]?.score ?? -Infinity;
     const sb = b.candidates[0]?.score ?? -Infinity;
-    return sb - sa || b.durationMinutes - a.durationMinutes;
+    return sb - sa || b.valueOre - a.valueOre || b.durationMinutes - a.durationMinutes;
   });
 
   const dayLoad = new Map<string, number>();
@@ -967,6 +1132,8 @@ async function resolveTenantClumpDefaults(tenantId: string): Promise<{
   dailyCapacityMinutes: number;
   streetSideGrouping: boolean;
   workPacePercent: number;
+  maxWalkingDistanceMeters: number | null;
+  executionCodeCompatibilityGroups: string[][] | null;
 }> {
   try {
     const row = await storage.getTenantEngineDefaults(tenantId);
@@ -980,12 +1147,30 @@ async function resolveTenantClumpDefaults(tenantId: string): Promise<{
       typeof row?.workPacePercent === "number" && Number.isFinite(row.workPacePercent) && row.workPacePercent > 0
         ? row.workPacePercent
         : DEFAULT_WORK_PACE_PERCENT;
-    return { dailyCapacityMinutes, streetSideGrouping, workPacePercent };
+    const maxWalkingDistanceMeters =
+      typeof row?.maxWalkingDistanceMeters === "number" &&
+      Number.isFinite(row.maxWalkingDistanceMeters) &&
+      row.maxWalkingDistanceMeters > 0
+        ? row.maxWalkingDistanceMeters
+        : null;
+    const executionCodeCompatibilityGroups =
+      Array.isArray(row?.executionCodeCompatibilityGroups) && row.executionCodeCompatibilityGroups.length > 0
+        ? (row.executionCodeCompatibilityGroups as string[][])
+        : null;
+    return {
+      dailyCapacityMinutes,
+      streetSideGrouping,
+      workPacePercent,
+      maxWalkingDistanceMeters,
+      executionCodeCompatibilityGroups,
+    };
   } catch {
     return {
       dailyCapacityMinutes: DEFAULT_DAILY_CAPACITY_MINUTES,
       streetSideGrouping: DEFAULT_STREET_SIDE_GROUPING,
       workPacePercent: DEFAULT_WORK_PACE_PERCENT,
+      maxWalkingDistanceMeters: null,
+      executionCodeCompatibilityGroups: null,
     };
   }
 }
@@ -1003,6 +1188,11 @@ export interface TeamGroupingConfig {
   streetSideGrouping: boolean;
   /** Arbetstakt i procent (100 = normal takt). */
   workPacePercent: number;
+  /** Task #1239: maximal gångsträcka (meter) för teamets klumpar. Null = ingen team-specifik gräns. */
+  maxWalkingDistanceMeters: number | null;
+  /** Task #1239: unionen av utförandekoder teamets aktiva medlemmar har kompetens
+   * för (via resources.executionCodes). Null = kunde inte härledas (back-compat, ingen gate). */
+  allowedExecutionCodes: string[] | null;
 }
 
 /**
@@ -1032,10 +1222,19 @@ export async function resolveTeamGroupingConfig(
         team.workPacePercent > 0
           ? team.workPacePercent
           : tenantDefaults.workPacePercent;
+      const maxWalkingDistanceMeters =
+        typeof team.maxWalkingDistanceMeters === "number" &&
+        Number.isFinite(team.maxWalkingDistanceMeters) &&
+        team.maxWalkingDistanceMeters > 0
+          ? team.maxWalkingDistanceMeters
+          : null;
+      const allowedExecutionCodes = await resolveTeamAllowedExecutionCodes(teamId);
       return {
         radiusMeters: radius,
         streetSideGrouping: team.streetSideGrouping ?? tenantDefaults.streetSideGrouping,
         workPacePercent: pace,
+        maxWalkingDistanceMeters,
+        allowedExecutionCodes,
       };
     }
   } catch {
@@ -1045,7 +1244,34 @@ export async function resolveTeamGroupingConfig(
     radiusMeters: tenantRadius,
     streetSideGrouping: tenantDefaults.streetSideGrouping,
     workPacePercent: tenantDefaults.workPacePercent,
+    maxWalkingDistanceMeters: null,
+    allowedExecutionCodes: null,
   };
+}
+
+/**
+ * Task #1239: härleder ett teams samlade utförandekod-kompetens = unionen av
+ * aktiva medlemmars `resources.executionCodes`. Ingen medlem har kompetens-
+ * data registrerad → null (okänd, back-compat: ingen gate på tvärkod-klumpar).
+ */
+async function resolveTeamAllowedExecutionCodes(teamId: string): Promise<string[] | null> {
+  try {
+    const members = await storage.getTeamMembers(teamId);
+    if (!members || members.length === 0) return null;
+    const codes = new Set<string>();
+    let anyResourceHadCodes = false;
+    for (const m of members) {
+      if (m.validTo && new Date(m.validTo) < new Date()) continue;
+      const resource = await storage.getResource(m.resourceId);
+      if (resource?.executionCodes && resource.executionCodes.length > 0) {
+        anyResourceHadCodes = true;
+        for (const c of resource.executionCodes) codes.add(c);
+      }
+    }
+    return anyResourceHadCodes ? Array.from(codes) : null;
+  } catch {
+    return null;
+  }
 }
 
 // ---------------------------------------------------------------------------

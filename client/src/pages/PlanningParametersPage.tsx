@@ -115,6 +115,8 @@ export default function PlanningParametersPage() {
       advanceNotificationDays: 0,
       requiresConfirmation: false,
       priorityFactor: 1.0,
+      maxWalkingDistanceMeters: null,
+      economicPriorityWeight: null,
       notes: "",
     },
   });
@@ -181,6 +183,8 @@ export default function PlanningParametersPage() {
       advanceNotificationDays: 0,
       requiresConfirmation: false,
       priorityFactor: 1.0,
+      maxWalkingDistanceMeters: null,
+      economicPriorityWeight: null,
       notes: "",
     });
     setEditingParam(null);
@@ -204,6 +208,8 @@ export default function PlanningParametersPage() {
       advanceNotificationDays: param.advanceNotificationDays || 0,
       requiresConfirmation: param.requiresConfirmation || false,
       priorityFactor: param.priorityFactor || 1.0,
+      maxWalkingDistanceMeters: param.maxWalkingDistanceMeters ?? null,
+      economicPriorityWeight: param.economicPriorityWeight ?? null,
       notes: param.notes || "",
     });
     setSelectedTimeSlots(param.allowedTimeSlots || []);
@@ -551,6 +557,53 @@ export default function PlanningParametersPage() {
                     </FormControl>
                     <FormDescription>
                       1.0 = normal prioritet. Högre värde = högre prioritet vid optimering.
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="maxWalkingDistanceMeters"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Maximal gångsträcka (meter)</FormLabel>
+                    <FormControl>
+                      <Input
+                        type="number"
+                        {...field}
+                        value={field.value ?? ""}
+                        onChange={(e) => field.onChange(e.target.value === "" ? null : Number(e.target.value))}
+                        data-testid="input-max-walking-distance"
+                      />
+                    </FormControl>
+                    <FormDescription>
+                      Begränsar hur långt tekniker får gå mellan uppgifter i en klump (stopp). Lämna tom för att använda systemets standardvärde.
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="economicPriorityWeight"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Ekonomisk prioriteringsvikt</FormLabel>
+                    <FormControl>
+                      <Input
+                        type="number"
+                        step="0.1"
+                        {...field}
+                        value={field.value ?? ""}
+                        onChange={(e) => field.onChange(e.target.value === "" ? null : Number(e.target.value))}
+                        data-testid="input-economic-priority-weight"
+                      />
+                    </FormControl>
+                    <FormDescription>
+                      Styr hur mycket ordervärde påverkar klumpning och dagskapacitet. 0 = ingen påverkan, högre värde = ordervärde väger tyngre.
                     </FormDescription>
                     <FormMessage />
                   </FormItem>

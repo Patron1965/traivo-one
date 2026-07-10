@@ -1457,6 +1457,10 @@ export const teams = pgTable("teams", {
   streetSideGrouping: boolean("street_side_grouping"),
   // Arbetstakt i procent (100 = normal takt). Premiss som finplaneringen konsumerar.
   workPacePercent: integer("work_pace_percent"),
+  // Task #1239: Maximal gångsträcka (meter) mellan medlemmar i samma klump/stopp.
+  // NULL → tenant-default (planning_parameters) → motorns hårdkodade default.
+  // Team-värdet vinner alltid (se resolveTeamGroupingConfig).
+  maxWalkingDistanceMeters: integer("max_walking_distance_meters"),
   // === Task #1153: Restidsmotor — tunga fordon & tidskorrigering ===
   // Team-grundparametrar för finplaneringens restidsmotor. Alla nullable/expand-only:
   // NULL → tenant-default (planning_parameters) → motorns default. Team-värdet vinner.
@@ -1539,6 +1543,21 @@ export const planningParameters = pgTable("planning_parameters", {
   streetSideGrouping: boolean("street_side_grouping"),
   workPacePercent: real("work_pace_percent"),
   dailyCapacityMinutes: integer("daily_capacity_minutes"),
+  // Task #1239: Maximal gångsträcka (meter) mellan medlemmar i samma klump/stopp.
+  // Tenant-default; team-raden (teams.maxWalkingDistanceMeters) vinner alltid.
+  // NULL → motorns hårdkodade DEFAULT_MAX_WALKING_DISTANCE_METERS används.
+  maxWalkingDistanceMeters: integer("max_walking_distance_meters"),
+  // Task #1239: kompatibla utförandekoder som FÅR klumpas ihop trots olika kod
+  // (t.ex. ["klipp","trim"]). Array av grupper (varje grupp = lista med koder som
+  // är sinsemellan utbytbara/kompatibla). Koder som inte förekommer i någon grupp
+  // klumpas bara med exakt samma kod (nuvarande beteende, back-compat). NULL/[] →
+  // ingen tvärkompatibilitet (motorns nuvarande strikta beteende).
+  executionCodeCompatibilityGroups: jsonb("execution_code_compatibility_groups").$type<string[][]>(),
+  // Task #1239: vikt (0..1) för hur mycket ekonomiskt värde (valueOre) ska styra
+  // vilken uppgift som blir ankare/prioriteras vid klumpning och trängd kapacitet.
+  // NULL → default 1.0 (ekonomiskt värde avgör ankare vid oavgjort/kapacitetskonflikt,
+  // vilket är dagens implicita beteende gjort explicit). 0 = av (ren geografi/ordning).
+  economicPriorityWeight: real("economic_priority_weight"),
   // Task #1234: planeringsmotor-defaults på tenant-nivå. Nullable → DEFAULT_
   // PLAN_ENGINE_CONFIG (server/planning/weeklyPlanEngine.ts). Per-plan
   // metadata.config vinner alltid över denna rad.
@@ -2021,6 +2040,7 @@ export const insertTeamSchema = createInsertSchema(teams).omit({ id: true, creat
   groupingRadiusMeters: z.number().int().min(1).max(100000).nullish(),
   workPacePercent: z.number().int().min(1).max(1000).nullish(),
   streetSideGrouping: z.boolean().nullish(),
+  maxWalkingDistanceMeters: z.number().int().min(1).max(100000).nullish(),
 });
 export const insertTeamMemberSchema = createInsertSchema(teamMembers).omit({ id: true, createdAt: true });
 export const insertPlanningParameterSchema = createInsertSchema(planningParameters).omit({ id: true, createdAt: true });
@@ -7971,6 +7991,15 @@ export const slotTimes = pgTable("slot_times", {
   decidedBy: varchar("decided_by"),
   // Förklaring/extra (motivering, viktning) — fri jsonb.
   metadata: jsonb("metadata").default({}),
+  // Task #1239: klumpens/stoppets EGEN primära navigeringsposition — skild från
+  // varje medlemsuppgifts egen position. NULL för rena uppgifts-slottider (bara
+  // relevant på grupp-rader, dvs assignmentGroupKey satt). Sätts av motorn till
+  // "ankarets" (högst ekonomiskt värde) position, om ingen manuell override finns.
+  primaryLatitude: real("primary_latitude"),
+  primaryLongitude: real("primary_longitude"),
+  primaryAddress: text("primary_address"),
+  // Vilken medlemsuppgift som gav upphov till primärpositionen (ankaret).
+  primaryAssignmentId: varchar("primary_assignment_id").references(() => assignments.id, { onDelete: "set null" }),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
   deletedAt: timestamp("deleted_at"),

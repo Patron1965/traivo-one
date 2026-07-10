@@ -259,6 +259,63 @@ describe("groupTasks", () => {
     expect(groups[0].groupingBasis).toBe("standalone");
     expect(groups[0].members.length).toBe(1);
   });
+
+  // Task #1239: kompatibilitetsgrupper, kompetensgate, gångsträcka, ankare.
+  it("klumpar olika utförandekoder ihop när de ingår i samma kompatibilitetsgrupp", () => {
+    const tasks = [
+      task({ assignmentId: "1", address: "Storgatan 2", executionCode: "tvatt" }),
+      task({ assignmentId: "2", address: "Storgatan 4", executionCode: "fonster" }),
+    ];
+    const groups = groupTasks(tasks, 150, true, {
+      compatibilityGroups: [["tvatt", "fonster"]],
+    });
+    expect(groups.length).toBe(1);
+    expect(groups[0].members.map((m) => m.assignmentId).sort()).toEqual(["1", "2"]);
+  });
+
+  it("splittrar tvärkod-klump tillbaka per kod när kompetens saknas", () => {
+    const tasks = [
+      task({ assignmentId: "1", address: "Storgatan 2", executionCode: "tvatt", valueOre: 1000 }),
+      task({ assignmentId: "2", address: "Storgatan 4", executionCode: "fonster", valueOre: 500 }),
+    ];
+    const groups = groupTasks(tasks, 150, true, {
+      compatibilityGroups: [["tvatt", "fonster"]],
+      allowedExecutionCodes: ["tvatt"],
+    });
+    expect(groups.length).toBe(2);
+    expect(groups.every((g) => g.members.length === 1)).toBe(true);
+  });
+
+  it("tillåter tvärkod-klump när kompetens täcker alla koder", () => {
+    const tasks = [
+      task({ assignmentId: "1", address: "Storgatan 2", executionCode: "tvatt" }),
+      task({ assignmentId: "2", address: "Storgatan 4", executionCode: "fonster" }),
+    ];
+    const groups = groupTasks(tasks, 150, true, {
+      compatibilityGroups: [["tvatt", "fonster"]],
+      allowedExecutionCodes: ["tvatt", "fonster"],
+    });
+    expect(groups.length).toBe(1);
+  });
+
+  it("begränsar geo-klustring till maximal gångsträcka", () => {
+    const tasks = [
+      task({ assignmentId: "1", latitude: 59.3293, longitude: 18.0686 }),
+      task({ assignmentId: "2", latitude: 59.3294, longitude: 18.0687 }), // ~13 m
+    ];
+    const groups = groupTasks(tasks, 150, true, { maxWalkingDistanceMeters: 5 });
+    expect(groups.length).toBe(2);
+    expect(groups.every((g) => g.members.length === 1)).toBe(true);
+  });
+
+  it("väljer ankaret = ekonomiskt mest värdefulla medlemmen", () => {
+    const tasks = [
+      task({ assignmentId: "1", address: "Storgatan 2", valueOre: 1000 }),
+      task({ assignmentId: "2", address: "Storgatan 4", valueOre: 9000 }),
+    ];
+    const groups = groupTasks(tasks, 150);
+    expect(groups[0].anchorAssignmentId).toBe("2");
+  });
 });
 
 describe("summarizeGroup", () => {
