@@ -743,6 +743,11 @@ export default function WeeklyPlanViewPage() {
     () => reservations.filter((r) => r.plannedDate === selectedDay).map(reservationToBlock),
     [reservations, selectedDay],
   );
+  // Reservationer för hela veckan (168h-vyn), oavsett vald dag.
+  const weekReservationBlocks = useMemo<ScheduleBlock[]>(
+    () => reservations.map(reservationToBlock),
+    [reservations],
+  );
   const reservationById = useMemo(() => {
     const m = new Map<string, PlanningReservationWithConsumption>();
     reservations.forEach((r) => m.set(r.id, r));
@@ -992,6 +997,7 @@ export default function WeeklyPlanViewPage() {
                   <WeekCalendar
                     dayDates={dayDates}
                     blocks={blocks}
+                    reservationBlocks={weekReservationBlocks}
                     selectedDay={selectedDay}
                     onSelectDay={setSelectedDay}
                     onDropOnDay={handleDropOnDay}
@@ -1552,6 +1558,7 @@ function Donut({
 function WeekCalendar({
   dayDates,
   blocks,
+  reservationBlocks,
   selectedDay,
   onSelectDay,
   onDropOnDay,
@@ -1559,6 +1566,7 @@ function WeekCalendar({
 }: {
   dayDates: string[];
   blocks: ScheduleBlock[];
+  reservationBlocks?: ScheduleBlock[];
   selectedDay: string | null;
   onSelectDay: (date: string) => void;
   onDropOnDay: (date: string, e: React.DragEvent) => void;
@@ -1593,6 +1601,9 @@ function WeekCalendar({
           const dayBlocks = blocks.filter((b) => b.date === date);
           const timed = dayBlocks.filter((b) => b.startMinutes != null);
           const untimed = dayBlocks.filter((b) => b.startMinutes == null);
+          const dayReservations = (reservationBlocks ?? []).filter(
+            (b) => b.date === date && b.startMinutes != null,
+          );
           const isWeekend = idx >= 5;
           return (
             <div
@@ -1633,6 +1644,25 @@ function WeekCalendar({
                     style={{ top: `${h * HOUR_PX}px` }}
                   />
                 ))}
+                {dayReservations.map((b) => {
+                  const top = (b.startMinutes! / 60) * HOUR_PX;
+                  const height = Math.max((b.durationMinutes / 60) * HOUR_PX, 14);
+                  const range = blockTimeRange(b);
+                  return (
+                    <div
+                      key={b.id}
+                      className="absolute left-0.5 right-0.5 z-0 rounded border-2 border-dashed border-chart-4/70 bg-chart-4/10 px-1 py-0.5 text-left text-[9px] leading-tight overflow-hidden pointer-events-none"
+                      style={{ top: `${top}px`, height: `${height}px` }}
+                      title={`${b.title}${range ? ` • ${range}` : ""}`}
+                      data-testid={`reservation-block-${b.id}`}
+                    >
+                      <span className="flex items-center gap-1 font-medium truncate text-chart-4">
+                        <CalendarClock className="h-2.5 w-2.5 shrink-0" />
+                        <span className="truncate">{b.title}</span>
+                      </span>
+                    </div>
+                  );
+                })}
                 {timed.map((b) => {
                   const style = getTimeCategoryStyle(b.category);
                   const Icon = CATEGORY_ICON[b.category] ?? Briefcase;
@@ -1646,7 +1676,7 @@ function WeekCalendar({
                       draggable={!b.locked}
                       onDragStart={(e) => e.dataTransfer.setData("text/plain", b.id)}
                       onClick={() => onSelectBlock(b)}
-                      className={`absolute left-0.5 right-0.5 rounded px-1 py-0.5 text-left text-[10px] leading-tight overflow-hidden ${style.block} ${b.locked ? "cursor-not-allowed" : "cursor-grab hover-elevate"}`}
+                      className={`absolute left-0.5 right-0.5 z-10 rounded px-1 py-0.5 text-left text-[10px] leading-tight overflow-hidden ${style.block} ${b.locked ? "cursor-not-allowed" : "cursor-grab hover-elevate"}`}
                       style={{ top: `${top}px`, height: `${height}px` }}
                       title={`${b.title}${range ? ` • ${range}` : ""}${b.locationName ? ` • ${b.locationName}` : ""}`}
                       data-testid={`block-${b.id}`}
