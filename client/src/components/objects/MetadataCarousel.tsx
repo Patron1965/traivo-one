@@ -114,7 +114,6 @@ export interface MetadataCarouselProps {
   restorePending: boolean;
   onPreviewImage: (url: string) => void;
   renderHistoryButton?: (entry: MetadataFormEntry) => ReactNode;
-  onEditLegacyField?: (group: string) => void;
 }
 
 /**
@@ -133,7 +132,6 @@ export function MetadataCarousel({
   restorePending,
   onPreviewImage,
   renderHistoryButton,
-  onEditLegacyField,
 }: MetadataCarouselProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -144,13 +142,12 @@ export function MetadataCarousel({
   const DtIcon = dtMeta.icon;
   const isSystem = isReadonlyOrigin(entry.metod);
   const isSoftDeleted = !!entry.softDeleted || !!entry.raderad;
-  const isLegacy = !!entry.legacyColumn;
   const isUploadField = UPLOAD_DATATYPES.has(datatyp);
   const kind = selectRenderKind(entry);
-  const kalla = isLegacy ? "M" : deriveEntryKalla(entry);
+  const kalla = deriveEntryKalla(entry);
   const lastChanged = entry.lastChangedAt ? new Date(entry.lastChangedAt) : null;
   // Bild/fil-fält redigeras via MetadataUploadButton, inte via värde-dialogen.
-  const canEdit = !isSystem && !isLegacy && !isSoftDeleted && !isUploadField;
+  const canEdit = !isSystem && !isSoftDeleted && !isUploadField;
 
   return (
     <Card
@@ -179,37 +176,7 @@ export function MetadataCarousel({
           <KallaBadge kalla={kalla} />
           <MetadataSourceBadge entry={entry} />
 
-          {isLegacy ? (
-            <>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Badge
-                    variant="outline"
-                    className="text-[10px] cursor-help inline-flex items-center gap-1 border-warning text-warning"
-                    data-testid={`badge-metadata-migrating-${entry.id}`}
-                  >
-                    <AlertTriangle className="h-3 w-3" /> Under migrering
-                  </Badge>
-                </TooltipTrigger>
-                <TooltipContent>
-                  Objektkolumn på väg in i metadata-katalogen. Data ligger kvar i
-                  kolumnen (routing/VRP/mobil/Fortnox läser den) tills migreringen är klar.
-                </TooltipContent>
-              </Tooltip>
-              {onEditLegacyField && entry.legacyEditGroup && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-7 w-7 p-0"
-                  onClick={() => onEditLegacyField(entry.legacyEditGroup!)}
-                  data-testid={`button-edit-legacy-${entry.legacyColumn}`}
-                  aria-label="Redigera"
-                >
-                  <Pencil className="h-3.5 w-3.5" />
-                </Button>
-              )}
-            </>
-          ) : (
+          {(
             <>
               {isUploadField && !isSystem && !isSoftDeleted && (
                 <MetadataUploadButton

@@ -53,13 +53,6 @@ type ObjectRowForPaket = {
   addressDescriptor: string | null;
   polylineData: unknown;
   locationType: string | null;
-  accessType: string | null;
-  accessCode: string | null;
-  keyNumber: string | null;
-  accessInfo: unknown;
-  resolvedAccessCode: string | null;
-  resolvedKeyNumber: string | null;
-  resolvedAccessInfo: unknown;
 };
 
 async function getObjectRowForPaket(
@@ -79,13 +72,6 @@ async function getObjectRowForPaket(
       addressDescriptor: objects.addressDescriptor,
       polylineData: objects.polylineData,
       locationType: objects.locationType,
-      accessType: objects.accessType,
-      accessCode: objects.accessCode,
-      keyNumber: objects.keyNumber,
-      accessInfo: objects.accessInfo,
-      resolvedAccessCode: objects.resolvedAccessCode,
-      resolvedKeyNumber: objects.resolvedKeyNumber,
-      resolvedAccessInfo: objects.resolvedAccessInfo,
     })
     .from(objects)
     .where(and(eq(objects.id, objectId), eq(objects.tenantId, tenantId)))
@@ -171,19 +157,35 @@ function toIso(v: Date | string | null | undefined): string | null {
   return Number.isNaN(d.getTime()) ? null : d.toISOString();
 }
 
-function buildAtkomst(obj: ObjectRowForPaket): UppgiftspaketAtkomst | null {
-  const portkod = obj.resolvedAccessCode ?? obj.accessCode ?? null;
-  const nyckelnummer = obj.resolvedKeyNumber ?? obj.keyNumber ?? null;
-  const rawInfo = obj.resolvedAccessInfo ?? obj.accessInfo ?? null;
-  const info =
-    rawInfo != null && typeof rawInfo === "object" && Object.keys(rawInfo as object).length === 0
-      ? null
-      : rawInfo;
-  const typ = obj.accessType ?? null;
-  if (portkod == null && nyckelnummer == null && info == null && (typ == null || typ === "open")) {
+/**
+ * Åtkomst hämtas ur Åtkomst-metadatat (Etapp 5): Åtkomsttyp/Åtkomstkod/
+ * Nyckelnummer/Åtkomstinfo, arvs-medvetet (närmast-vinner). Best-effort:
+ * läsfel får aldrig fälla paketbygget — åtkomst blir då null.
+ */
+async function buildAtkomst(
+  tenantId: string,
+  objectId: string,
+): Promise<UppgiftspaketAtkomst | null> {
+  try {
+    const { getObjectAtkomstFields } = await import("../metadata-queries");
+    const f = await getObjectAtkomstFields(objectId, tenantId);
+    const typ = f.typ;
+    const portkod = f.portkod;
+    const nyckelnummer = f.nyckelnummer;
+    const info = f.info;
+    if (
+      portkod == null &&
+      nyckelnummer == null &&
+      info == null &&
+      (typ == null || typ === "open")
+    ) {
+      return null;
+    }
+    return { typ, portkod, nyckelnummer, info };
+  } catch (err) {
+    console.error(`[uppgiftspaket] åtkomst kunde inte läsas för objekt ${objectId}:`, err);
     return null;
   }
-  return { typ, portkod, nyckelnummer, info };
 }
 
 /** Bygger ett komplett uppgiftspaket. Kastar ALDRIG för saknat objekt — position blir null. */
@@ -197,7 +199,7 @@ export async function buildUppgiftspaket(args: BuildUppgiftspaketArgs): Promise<
     if (obj) {
       const geografi = await resolveUppgiftGeografi(args.tenantId, args.objectId, obj);
       if (geografi) position = { primar: geografi.primar, sekundar: geografi.sekundar };
-      atkomst = buildAtkomst(obj);
+      atkomst = await buildAtkomst(args.tenantId, args.objectId);
     }
   }
 
@@ -307,7 +309,7 @@ export async function propagateUppgiftspaket(
         const geografi = await resolveUppgiftGeografi(tenantId, objectId, obj);
         base = {
           position: geografi ? { primar: geografi.primar, sekundar: geografi.sekundar } : null,
-          atkomst: buildAtkomst(obj),
+          atkomst: await buildAtkomst(tenantId, objectId),
         };
       } else {
         base = { position: null, atkomst: null };

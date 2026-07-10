@@ -5,7 +5,8 @@ import { eq, and, gte, lte, isNull, sql, desc, inArray } from "drizzle-orm";
 import { primaryPayerCustomerIdSql, objectHasPrimaryCustomerSql, getObjectPrimaryCustomerId } from "../services/object-customer";
 import { z } from "zod";
 import { getTenantIdWithFallback } from "../tenant-middleware";
-import { annualGoals, workOrders, workOrderLines, subscriptions, orderConcepts, customers, objects, articles, clusters, resources, objectTimeRestrictions, insertAnnualGoalSchema, insertWorkOrderSchema, type FlexibleFrequency, type Season } from "@shared/schema";
+import { annualGoals, workOrders, workOrderLines, subscriptions, orderConcepts, customers, objects, articles, resources, insertAnnualGoalSchema, insertWorkOrderSchema, type FlexibleFrequency, type Season } from "@shared/schema";
+import { getTimeRestrictionsForObjects } from "../services/object-time-restrictions";
 import { asyncHandler } from "../asyncHandler";
 import { NotFoundError, ValidationError } from "../errors";
 import { storage } from "../storage";
@@ -21,7 +22,6 @@ function buildGoalScopeConditions(
   yearEnd: Date,
   objectId: string | null,
   customerId: string | null,
-  clusterId: string | null,
 ): SQL[] {
   const conditions: SQL[] = [
     eq(workOrders.tenantId, tenantId),
@@ -32,8 +32,6 @@ function buildGoalScopeConditions(
 
   if (objectId) {
     conditions.push(eq(workOrders.objectId, objectId));
-  } else if (clusterId) {
-    conditions.push(sql`${workOrders.objectId} IN (SELECT id FROM objects WHERE cluster_id = ${clusterId})`);
   } else if (customerId) {
     conditions.push(eq(workOrders.customerId, customerId));
   }
@@ -53,7 +51,6 @@ app.get("/api/annual-goals", asyncHandler(async (req, res) => {
       tenantId: annualGoals.tenantId,
       customerId: annualGoals.customerId,
       objectId: annualGoals.objectId,
-      clusterId: annualGoals.clusterId,
       articleType: annualGoals.articleType,
       targetCount: annualGoals.targetCount,
       year: annualGoals.year,
@@ -66,12 +63,10 @@ app.get("/api/annual-goals", asyncHandler(async (req, res) => {
       customerName: customers.name,
       objectName: objects.name,
       objectAddress: objects.address,
-      clusterName: clusters.name,
     })
     .from(annualGoals)
     .leftJoin(customers, eq(annualGoals.customerId, customers.id))
     .leftJoin(objects, eq(annualGoals.objectId, objects.id))
-    .leftJoin(clusters, eq(annualGoals.clusterId, clusters.id))
     .where(and(
       eq(annualGoals.tenantId, tenantId),
       eq(annualGoals.year, year),
@@ -87,7 +82,7 @@ app.get("/api/annual-goals", asyncHandler(async (req, res) => {
   const yearProgress = Math.max(0, Math.min(dayOfYear / totalDaysInYear, 1));
 
   const enriched = await Promise.all(goals.map(async (goal) => {
-    const baseConditions = buildGoalScopeConditions(tenantId, yearStart, yearEnd, goal.objectId, goal.customerId, goal.clusterId);
+    const baseConditions = buildGoalScopeConditions(tenantId, yearStart, yearEnd, goal.objectId, goal.customerId);
 
     const [completedResult] = await db
       .select({ count: sql<number>`count(distinct ${workOrders.id})::int` })
@@ -148,12 +143,12 @@ app.post("/api/annual-goals", asyncHandler(async (req, res) => {
   const tenantId = getTenantIdWithFallback(req);
   const data = insertAnnualGoalSchema.parse({ ...req.body, tenantId });
 
-  const scopeCount = [data.customerId, data.objectId, data.clusterId].filter(Boolean).length;
+  const scopeCount = [data.customerId, data.objectId].filter(Boolean).length;
   if (scopeCount === 0) {
-    throw new ValidationError("Välj exakt en av kund, objekt eller kluster");
+    throw new ValidationError("Välj exakt en av kund eller objekt");
   }
   if (scopeCount > 1) {
-    throw new ValidationError("Välj exakt en av kund, objekt eller kluster — inte flera samtidigt");
+    throw new ValidationError("Välj exakt en av kund eller objekt — inte båda samtidigt");
   }
 
   if (data.targetCount < 1) {
@@ -168,11 +163,6 @@ app.post("/api/annual-goals", asyncHandler(async (req, res) => {
     const [obj] = await db.select({ id: objects.id }).from(objects).where(and(eq(objects.id, data.objectId), eq(objects.tenantId, tenantId)));
     if (!obj) throw new NotFoundError("Objekt hittades inte i din organisation");
   }
-  if (data.clusterId) {
-    const [cl] = await db.select({ id: clusters.id }).from(clusters).where(and(eq(clusters.id, data.clusterId), eq(clusters.tenantId, tenantId)));
-    if (!cl) throw new NotFoundError("Kluster hittades inte i din organisation");
-  }
-
   const [goal] = await db.insert(annualGoals).values(data).returning();
   res.status(201).json(goal);
 }));
@@ -189,7 +179,6 @@ app.put("/api/annual-goals/:id", asyncHandler(async (req, res) => {
   const updateSchema = z.object({
     customerId: z.string().nullable().optional(),
     objectId: z.string().nullable().optional(),
-    clusterId: z.string().nullable().optional(),
     articleType: z.string().min(1).optional(),
     targetCount: z.number().min(1).optional(),
     year: z.number().min(2020).max(2050).optional(),
@@ -201,13 +190,12 @@ app.put("/api/annual-goals/:id", asyncHandler(async (req, res) => {
 
   const mergedCustomerId = updateData.customerId !== undefined ? updateData.customerId : existing.customerId;
   const mergedObjectId = updateData.objectId !== undefined ? updateData.objectId : existing.objectId;
-  const mergedClusterId = updateData.clusterId !== undefined ? updateData.clusterId : existing.clusterId;
-  const scopeCount = [mergedCustomerId, mergedObjectId, mergedClusterId].filter(Boolean).length;
+  const scopeCount = [mergedCustomerId, mergedObjectId].filter(Boolean).length;
   if (scopeCount === 0) {
-    throw new ValidationError("Välj exakt en av kund, objekt eller kluster");
+    throw new ValidationError("Välj exakt en av kund eller objekt");
   }
   if (scopeCount > 1) {
-    throw new ValidationError("Välj exakt en av kund, objekt eller kluster — inte flera samtidigt");
+    throw new ValidationError("Välj exakt en av kund eller objekt — inte båda samtidigt");
   }
 
   if (mergedCustomerId) {
@@ -218,11 +206,6 @@ app.put("/api/annual-goals/:id", asyncHandler(async (req, res) => {
     const [obj] = await db.select({ id: objects.id }).from(objects).where(and(eq(objects.id, mergedObjectId), eq(objects.tenantId, tenantId)));
     if (!obj) throw new NotFoundError("Objekt hittades inte i din organisation");
   }
-  if (mergedClusterId) {
-    const [cl] = await db.select({ id: clusters.id }).from(clusters).where(and(eq(clusters.id, mergedClusterId), eq(clusters.tenantId, tenantId)));
-    if (!cl) throw new NotFoundError("Kluster hittades inte i din organisation");
-  }
-
   const [updated] = await db
     .update(annualGoals)
     .set(updateData)
@@ -345,35 +328,7 @@ app.post("/api/annual-goals/generate-from-subscriptions", asyncHandler(async (re
       yearlyCount = (oc.timesPerPeriod || 1) * (periodMultiplier[oc.periodType] || 1);
     }
 
-    if (oc.targetClusterId) {
-      const [existingClusterGoal] = await db
-        .select({ id: annualGoals.id })
-        .from(annualGoals)
-        .where(and(
-          eq(annualGoals.tenantId, tenantId),
-          eq(annualGoals.year, year),
-          eq(annualGoals.clusterId, oc.targetClusterId),
-          eq(annualGoals.articleType, art.articleType),
-          isNull(annualGoals.deletedAt),
-        ));
-
-      if (existingClusterGoal) {
-        skipped++;
-      } else {
-        await db.insert(annualGoals).values({
-          tenantId,
-          customerId: oc.customerId,
-          clusterId: oc.targetClusterId,
-          articleType: art.articleType,
-          targetCount: yearlyCount,
-          year,
-          sourceType: "order_concept",
-          sourceId: oc.id,
-          status: "active",
-        });
-        created++;
-      }
-    } else if (oc.customerId) {
+    if (oc.customerId) {
       const customerObjects = await db
         .select({ id: objects.id, customerId: primaryPayerCustomerIdSql() })
         .from(objects)
@@ -433,7 +388,6 @@ interface GoalDistributionProposal {
   goalId: string;
   customerName: string | null;
   objectName: string | null;
-  clusterName: string | null;
   articleType: string;
   targetCount: number;
   completedCount: number;
@@ -446,7 +400,7 @@ interface GoalDistributionProposal {
 
 app.post("/api/annual-planning/ai-distribute", asyncHandler(async (req, res) => {
   const tenantId = getTenantIdWithFallback(req);
-  const { year, customerId, clusterId, startMonth, endMonth } = req.body;
+  const { year, customerId, startMonth, endMonth } = req.body;
 
   const targetYear = year || new Date().getFullYear();
   const periodStart = startMonth || 1;
@@ -463,7 +417,6 @@ app.post("/api/annual-planning/ai-distribute", asyncHandler(async (req, res) => 
     isNull(annualGoals.deletedAt),
   ];
   if (customerId) goalConditions.push(eq(annualGoals.customerId, customerId));
-  if (clusterId) goalConditions.push(eq(annualGoals.clusterId, clusterId));
 
   const goalsData = await db
     .select({
@@ -471,7 +424,6 @@ app.post("/api/annual-planning/ai-distribute", asyncHandler(async (req, res) => 
       tenantId: annualGoals.tenantId,
       customerId: annualGoals.customerId,
       objectId: annualGoals.objectId,
-      clusterId: annualGoals.clusterId,
       articleType: annualGoals.articleType,
       targetCount: annualGoals.targetCount,
       year: annualGoals.year,
@@ -479,12 +431,10 @@ app.post("/api/annual-planning/ai-distribute", asyncHandler(async (req, res) => 
       sourceId: annualGoals.sourceId,
       customerName: customers.name,
       objectName: objects.name,
-      clusterName: clusters.name,
     })
     .from(annualGoals)
     .leftJoin(customers, eq(annualGoals.customerId, customers.id))
     .leftJoin(objects, eq(annualGoals.objectId, objects.id))
-    .leftJoin(clusters, eq(annualGoals.clusterId, clusters.id))
     .where(and(...goalConditions));
 
   if (goalsData.length === 0) {
@@ -505,7 +455,7 @@ app.post("/api/annual-planning/ai-distribute", asyncHandler(async (req, res) => 
   const proposals: GoalDistributionProposal[] = [];
 
   for (const goal of goalsData) {
-    const scopeConditions = buildGoalScopeConditions(tenantId, yearStart, yearEnd, goal.objectId, goal.customerId, goal.clusterId);
+    const scopeConditions = buildGoalScopeConditions(tenantId, yearStart, yearEnd, goal.objectId, goal.customerId);
 
     const [completedResult] = await db
       .select({ count: sql<number>`count(distinct ${workOrders.id})::int` })
@@ -643,21 +593,10 @@ app.post("/api/annual-planning/ai-distribute", asyncHandler(async (req, res) => 
       const custObjs = await db.select({ id: objects.id }).from(objects)
         .where(and(eq(objects.tenantId, tenantId), objectHasPrimaryCustomerSql(goal.customerId), isNull(objects.deletedAt)));
       goalObjectIds = custObjs.map(o => o.id);
-    } else if (goal.clusterId) {
-      const clusterObjs = await db.select({ id: objects.id }).from(objects)
-        .where(and(eq(objects.tenantId, tenantId), sql`${objects.clusterId} = ${goal.clusterId}`, isNull(objects.deletedAt)));
-      goalObjectIds = clusterObjs.map(o => o.id);
     }
 
     if (goalObjectIds.length > 0) {
-      const restrictions = await db
-        .select()
-        .from(objectTimeRestrictions)
-        .where(and(
-          eq(objectTimeRestrictions.tenantId, tenantId),
-          inArray(objectTimeRestrictions.objectId, goalObjectIds),
-          eq(objectTimeRestrictions.isActive, true),
-        ));
+      const restrictions = await getTimeRestrictionsForObjects(tenantId, goalObjectIds);
       if (restrictions.length > 0) {
         const restrictionData = restrictions as TimeRestriction[];
         const restrictedMonths = new Set<number>();
@@ -696,7 +635,6 @@ app.post("/api/annual-planning/ai-distribute", asyncHandler(async (req, res) => 
       goalId: goal.id,
       customerName: goal.customerName,
       objectName: goal.objectName,
-      clusterName: goal.clusterName,
       articleType: goal.articleType,
       targetCount: goal.targetCount,
       completedCount,
@@ -744,7 +682,7 @@ app.post("/api/annual-planning/ai-distribute", asyncHandler(async (req, res) => 
   let aiSummary = "";
   try {
     const goalsSummary = proposals.slice(0, 20).map(p => ({
-      scope: p.customerName || p.objectName || p.clusterName || "Okänd",
+      scope: p.customerName || p.objectName || "Okänd",
       articleType: p.articleType,
       target: p.targetCount,
       completed: p.completedCount,
@@ -961,21 +899,12 @@ app.post("/api/annual-planning/apply-distribution", asyncHandler(async (req, res
 
     let objectId = goal.objectId;
     let customerIdForOrder = goal.customerId;
-    const clusterId = goal.clusterId;
 
     if (!objectId && customerIdForOrder) {
       const [firstObj] = await db
         .select({ id: objects.id })
         .from(objects)
         .where(and(eq(objects.tenantId, tenantId), objectHasPrimaryCustomerSql(customerIdForOrder), isNull(objects.deletedAt)))
-        .limit(1);
-      if (firstObj) objectId = firstObj.id;
-    }
-    if (!objectId && clusterId) {
-      const [firstObj] = await db
-        .select({ id: objects.id })
-        .from(objects)
-        .where(and(eq(objects.tenantId, tenantId), sql`${objects.clusterId} = ${clusterId}`, isNull(objects.deletedAt)))
         .limit(1);
       if (firstObj) objectId = firstObj.id;
     }
@@ -1002,12 +931,6 @@ app.post("/api/annual-planning/apply-distribution", asyncHandler(async (req, res
         .from(objects)
         .where(and(eq(objects.tenantId, tenantId), objectHasPrimaryCustomerSql(customerIdForOrder), isNull(objects.deletedAt)));
       targetObjectIds = custObjects.map(o => o.id);
-    } else if (clusterId) {
-      const clusterObjects = await db
-        .select({ id: objects.id })
-        .from(objects)
-        .where(and(eq(objects.tenantId, tenantId), sql`${objects.clusterId} = ${clusterId}`, isNull(objects.deletedAt)));
-      targetObjectIds = clusterObjects.map(o => o.id);
     }
     if (targetObjectIds.length === 0 && objectId) {
       targetObjectIds = [objectId];
@@ -1046,14 +969,9 @@ app.post("/api/annual-planning/apply-distribution", asyncHandler(async (req, res
     const completedOrders = existingOrders.filter(o => o.executionStatus === "completed");
     const movableOrders = existingOrders.filter(o => o.executionStatus !== "completed");
 
-    const objectRestrictions = targetObjectIds.length > 0 ? await db
-      .select()
-      .from(objectTimeRestrictions)
-      .where(and(
-        eq(objectTimeRestrictions.tenantId, tenantId),
-        inArray(objectTimeRestrictions.objectId, targetObjectIds),
-        eq(objectTimeRestrictions.isActive, true),
-      )) : [];
+    const objectRestrictions = targetObjectIds.length > 0
+      ? await getTimeRestrictionsForObjects(tenantId, targetObjectIds)
+      : [];
 
     const completedByMonth = new Array(12).fill(0);
     for (const o of completedOrders) {
@@ -1171,7 +1089,6 @@ app.post("/api/annual-planning/apply-distribution", asyncHandler(async (req, res
           tenantId,
           customerId: customerIdForOrder!,
           objectId: assignedObjectId,
-          clusterId: clusterId || undefined,
           title: `${goal.articleType} — AI-planerad (${targetYear}-${String(mi + 1).padStart(2, "0")})`,
           orderType: "service",
           priority: "normal",

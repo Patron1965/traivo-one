@@ -240,18 +240,10 @@ export default function ProcurementsPage() {
   const saveObjects = () => {
     if (!selectedProcurement) return;
     
-    const totalContainers = selectedObjectIds.reduce((sum, id) => {
-      const obj = objectMapForCalc.get(id);
-      if (!obj) return sum;
-      return sum + (obj.containerCount || 0) + (obj.containerCountK2 || 0) + 
-             (obj.containerCountK3 || 0) + (obj.containerCountK4 || 0);
-    }, 0);
-
     updateMutation.mutate({
       id: selectedProcurement.id,
       data: {
         objectIds: selectedObjectIds,
-        containerCountTotal: totalContainers,
       }
     });
   };
@@ -831,8 +823,6 @@ export default function ProcurementsPage() {
                 <div className="space-y-2">
                   {displayObjects.map((obj) => {
                     const isSelected = selectedObjectIds.includes(obj.id);
-                    const containerTotal = (obj.containerCount || 0) + (obj.containerCountK2 || 0) + 
-                                          (obj.containerCountK3 || 0) + (obj.containerCountK4 || 0);
                     
                     return (
                       <div 
@@ -868,9 +858,6 @@ export default function ProcurementsPage() {
                             <p className="text-sm text-muted-foreground">{obj.address}, {obj.city}</p>
                           )}
                         </div>
-                        {containerTotal > 0 && (
-                          <span className="text-sm text-muted-foreground">{containerTotal} kärl</span>
-                        )}
                       </div>
                     );
                   })}
@@ -879,14 +866,7 @@ export default function ProcurementsPage() {
             </ScrollArea>
             <div className="mt-4 pt-4 border-t">
               <p className="text-sm text-muted-foreground">
-                Valda: {selectedObjectIds.length} objekt, totalt {
-                  selectedObjectIds.reduce((sum, id) => {
-                    const obj = objectMapForCalc.get(id);
-                    if (!obj) return sum;
-                    return sum + (obj.containerCount || 0) + (obj.containerCountK2 || 0) + 
-                           (obj.containerCountK3 || 0) + (obj.containerCountK4 || 0);
-                  }, 0)
-                } kärl
+                Valda: {selectedObjectIds.length} objekt
               </p>
             </div>
           </div>

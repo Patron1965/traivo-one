@@ -31,7 +31,6 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import type { Customer, ServiceObject, Article, PriceList } from "@shared/schema";
 import { ARTICLE_HOOK_LEVEL_LABELS, getOrderTypeLabel } from "@shared/schema";
 import { CoupledFieldInput, type OrderTypeMetadataField } from "./CoupledFieldInput";
-import { BillingCustomerDialog } from "@/components/BillingCustomerDialog";
 
 interface JobModalProps {
   open: boolean;
@@ -80,8 +79,6 @@ export function JobModal({ open, onClose, onSubmit }: JobModalProps) {
   const [objectSearch, setObjectSearch] = useState("");
   const [objectPopoverOpen, setObjectPopoverOpen] = useState(false);
   const [selectedObjectName, setSelectedObjectName] = useState("");
-  const [showBillingDialog, setShowBillingDialog] = useState(false);
-  const [pendingObjectId, setPendingObjectId] = useState("");
   const [selectedArticleIds, setSelectedArticleIds] = useState<Set<string>>(new Set());
 
   const [fromPopoverOpen, setFromPopoverOpen] = useState(false);
@@ -557,15 +554,7 @@ export function JobModal({ open, onClose, onSubmit }: JobModalProps) {
                                 try {
                                   const res = await fetch(`/api/objects/${obj.id}/billing-customers`);
                                   if (res.ok) {
-                                    const billing = await res.json() as { multiPayer?: boolean; defaultCustomerId?: string | null };
-                                    if (billing?.multiPayer) {
-                                      // Sätt objectId direkt så den persisteras även om dialogen avbryts;
-                                      // BillingCustomerDialog uppdaterar bara customerId vid bekräftelse.
-                                      setFormData(prev => ({ ...prev, objectId: obj.id }));
-                                      setPendingObjectId(obj.id);
-                                      setShowBillingDialog(true);
-                                      return;
-                                    }
+                                    const billing = await res.json() as { defaultCustomerId?: string | null };
                                     if (billing?.defaultCustomerId) {
                                       setFormData(prev => ({ ...prev, objectId: obj.id, customerId: billing.defaultCustomerId as string }));
                                       return;
@@ -957,19 +946,6 @@ export function JobModal({ open, onClose, onSubmit }: JobModalProps) {
       </AlertDialogContent>
     </AlertDialog>
 
-    <BillingCustomerDialog
-      open={showBillingDialog}
-      onClose={() => {
-        setShowBillingDialog(false);
-        setPendingObjectId("");
-      }}
-      objectId={pendingObjectId}
-      onSelect={(customerId) => {
-        setFormData(prev => ({ ...prev, customerId }));
-        setShowBillingDialog(false);
-        setPendingObjectId("");
-      }}
-    />
   </>
   );
 }

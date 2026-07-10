@@ -1,5 +1,5 @@
 import OpenAI from "openai";
-import type { WorkOrder, Resource, Cluster, SetupTimeLog, ServiceObject, TaskDesiredTimewindow, StructuralArticle, Article, InsertWorkOrder, InsertTaskDependency } from "@shared/schema";
+import type { WorkOrder, Resource, SetupTimeLog, ServiceObject, TaskDesiredTimewindow, StructuralArticle, Article, InsertWorkOrder, InsertTaskDependency } from "@shared/schema";
 import { fetchWeatherForecast, type WeatherImpact } from "./weather-service";
 import { storage } from "./storage";
 import { buildSystemPrompt, PLANNING_PERSONA_ADDITIONS } from "./ai/persona";
@@ -101,7 +101,6 @@ export interface PlanningKPIs {
 export function calculatePlanningKPIs(
   workOrders: WorkOrder[],
   resources: Resource[],
-  clusters: Cluster[],
   setupTimeLogs: SetupTimeLog[] = []
 ): PlanningKPIs {
   const now = new Date();
@@ -142,8 +141,7 @@ export function calculatePlanningKPIs(
   // Konvertera till KPI-format med trend (förenklad - alltid "stable" utan historik)
   const setupTimeByClusterKPI: Record<string, { avg: number; count: number; trend: "up" | "down" | "stable" }> = {};
   Object.entries(setupTimeByCluster).forEach(([clusterId, data]) => {
-    const cluster = clusters.find(c => c.id === clusterId);
-    const key = cluster?.name || clusterId.slice(0, 8);
+    const key = clusterId.slice(0, 8);
     setupTimeByClusterKPI[key] = {
       avg: data.count > 0 ? Math.round(data.total / data.count) : 0,
       count: data.count,
@@ -206,8 +204,7 @@ export function calculatePlanningKPIs(
   const ordersPerCluster: Record<string, number> = {};
   allActiveOrders.forEach(o => {
     if (o.clusterId) {
-      const cluster = clusters.find(c => c.id === o.clusterId);
-      const key = cluster?.name || o.clusterId.slice(0, 8);
+      const key = o.clusterId.slice(0, 8);
       ordersPerCluster[key] = (ordersPerCluster[key] || 0) + 1;
     }
   });
@@ -314,7 +311,6 @@ export interface PlanningSuggestion {
 export interface PlanningContext {
   workOrders: WorkOrder[];
   resources: Resource[];
-  clusters: Cluster[];
   weekStart: string;
   weekEnd: string;
   setupTimeLogs?: SetupTimeLog[];
@@ -384,7 +380,7 @@ function buildContextPrompt(context: PlanningContext): string {
     });
 
   // Calculate KPIs if not provided
-  const kpis = context.kpis || calculatePlanningKPIs(context.workOrders, context.resources, context.clusters, context.setupTimeLogs || []);
+  const kpis = context.kpis || calculatePlanningKPIs(context.workOrders, context.resources, context.setupTimeLogs || []);
   const kpiSection = formatKPIsForPrompt(kpis);
 
   return `
@@ -589,13 +585,6 @@ interface ResourceCapacity {
   serviceArea: string[]; // Postnummer resursen täcker
 }
 
-function resourceServesCluster(resource: Resource, cluster: Cluster): boolean {
-  // Matcha via postnummer
-  const resourceArea = resource.serviceArea || [];
-  const clusterPostals = cluster.postalCodes || [];
-  return resourceArea.some(postal => clusterPostals.includes(postal));
-}
-
 function calculateResourceCapacity(
   resources: Resource[],
   scheduledOrders: WorkOrder[],
@@ -652,18 +641,11 @@ function findBestSlot(
   order: WorkOrder,
   capacities: ResourceCapacity[],
   weekDays: string[],
-  clusters: Cluster[],
   resources: Resource[],
   timeWindows?: TaskDesiredTimewindow[]
 ): { resourceId: string; date: string; score: number; timeWindowMatched?: boolean } | null {
   const orderDuration = getOrderDuration(order) / 60;
-  const orderClusterId = order.clusterId;
   const orderPriority = getOrderPriority(order);
-  
-  // Hitta klustret som ordern tillhör
-  const orderCluster = orderClusterId 
-    ? clusters.find(c => c.id === orderClusterId) 
-    : null;
   
   let bestSlot: { resourceId: string; date: string; score: number; timeWindowMatched?: boolean } | null = null;
   
@@ -675,21 +657,12 @@ function findBestSlot(
       if (availableHours < orderDuration) continue;
       
       // Beräkna poäng baserat på:
-      // 1. Områdesmatchning (resursens serviceArea matchar klustrets postnummer)
-      // 2. Ledig kapacitet (mer ledig tid = jämnare fördelning)
-      // 3. Tidigt i veckan för akuta ordrar
-      // 4. Tidsfönstermatchning
+      // 1. Ledig kapacitet (mer ledig tid = jämnare fördelning)
+      // 2. Tidigt i veckan för akuta ordrar
+      // 3. Tidsfönstermatchning
       
       let score = 50; // Baspoäng
       let dayTimeWindowMatched = false;
-      
-      // Områdesmatchning: +30 poäng om resursen betjänar klustret
-      if (orderCluster) {
-        const resource = resources.find(r => r.id === cap.id);
-        if (resource && resourceServesCluster(resource, orderCluster)) {
-          score += 30;
-        }
-      }
       
       // Balanserad belastning: +0-20 poäng baserat på ledig kapacitet
       const loadRatio = (cap.dailyLoad[day] || 0) / cap.hoursPerDay;
@@ -772,17 +745,12 @@ export async function autoScheduleOrders(
     weekDays
   );
   
-  // Sortera ordrar: akuta först, sedan efter kluster
+  // Sortera ordrar: akuta först
   const sortedOrders = [...unscheduledOrders].sort((a, b) => {
     const priorityOrder: Record<string, number> = { urgent: 0, high: 1, normal: 2, low: 3 };
     const aPriority = priorityOrder[getOrderPriority(a)] ?? 2;
     const bPriority = priorityOrder[getOrderPriority(b)] ?? 2;
-    if (aPriority !== bPriority) return aPriority - bPriority;
-    
-    // Sedan efter kluster för att gruppera
-    const aCluster = a.clusterId || "zzz";
-    const bCluster = b.clusterId || "zzz";
-    return aCluster.localeCompare(bCluster);
+    return aPriority - bPriority;
   });
   
   const assignments: ScheduleAssignment[] = [];
@@ -791,7 +759,7 @@ export async function autoScheduleOrders(
     // Hämta tidsfönster för denna order om tillgängliga
     const orderTimeWindows = context.timeWindows?.[order.id] || [];
     
-    const slot = findBestSlot(order, capacities, weekDays, context.clusters, context.resources, orderTimeWindows);
+    const slot = findBestSlot(order, capacities, weekDays, context.resources, orderTimeWindows);
     
     if (slot) {
       // Uppdatera kapaciteten
@@ -802,12 +770,9 @@ export async function autoScheduleOrders(
       }
       
       const resource = context.resources.find(r => r.id === slot.resourceId);
-      const cluster = context.clusters.find(c => c.id === order.clusterId);
       
       // Bygg förklaring - lägg bara till tidsfönsterinfo om det faktiskt matchade
-      let reason = cluster 
-        ? `Placerad hos ${resource?.name || "resurs"} i kluster ${cluster.name}`
-        : `Placerad hos ${resource?.name || "resurs"} baserat på tillgänglighet`;
+      let reason = `Placerad hos ${resource?.name || "resurs"} baserat på tillgänglighet`;
       
       if (slot.timeWindowMatched) {
         reason += ` (tidsfönster respekterat)`;
@@ -823,22 +788,13 @@ export async function autoScheduleOrders(
     }
   }
   
-  // Beräkna effektivitet baserat på områdesmatchning och balans
-  const clusterMatches = assignments.filter(a => {
-    const order = unscheduledOrders.find(o => o.id === a.workOrderId);
-    const resource = context.resources.find(r => r.id === a.resourceId);
-    if (!order?.clusterId || !resource) return false;
-    const cluster = context.clusters.find(c => c.id === order.clusterId);
-    return cluster && resourceServesCluster(resource, cluster);
-  }).length;
-  
   const efficiency = assignments.length > 0
-    ? Math.round(50 + (clusterMatches / assignments.length) * 50)
+    ? Math.round(50 + (assignments.length / unscheduledOrders.length) * 50)
     : 0;
   
   return {
     assignments,
-    summary: `Schemalade ${assignments.length} av ${unscheduledOrders.length} ordrar. ${clusterMatches} ordrar matchade kluster.`,
+    summary: `Schemalade ${assignments.length} av ${unscheduledOrders.length} ordrar.`,
     totalOrdersScheduled: assignments.length,
     estimatedEfficiency: efficiency
   };
@@ -1052,10 +1008,10 @@ export async function aiEnhancedSchedule(
       }
 
       if (weatherEnabled) {
-        const withCenter = context.clusters.find(c => c.centerLatitude != null && c.centerLongitude != null);
-        if (withCenter && withCenter.centerLatitude != null && withCenter.centerLongitude != null) {
-          plannerLat = withCenter.centerLatitude;
-          plannerLon = withCenter.centerLongitude;
+        const objWithCoords = (context.objects || []).find(o => o.latitude != null && o.longitude != null);
+        if (objWithCoords && objWithCoords.latitude != null && objWithCoords.longitude != null) {
+          plannerLat = Number(objWithCoords.latitude);
+          plannerLon = Number(objWithCoords.longitude);
         }
       }
     }
@@ -1290,41 +1246,24 @@ export async function aiEnhancedSchedule(
 
   let enhancedSummary = baseResult.summary;
   try {
-    const clusterCounts: Record<string, number> = {};
-    baseResult.assignments.forEach(a => {
-      const order = context.workOrders.find(o => o.id === a.workOrderId);
-      const clusterId = order?.clusterId || "inget";
-      clusterCounts[clusterId] = (clusterCounts[clusterId] || 0) + 1;
-    });
-    
-    const clusterInfo = context.clusters
-      .filter(c => clusterCounts[c.id])
-      .map(c => `- ${c.name}: ${clusterCounts[c.id]} ordrar`)
-      .join("\n");
-    
     const prompt = `
 Du är en expert på fältserviceoptimering för ett avfallshanteringsföretag.
 Analysera denna automatiska schemaläggning och ge förbättringsförslag.
 
 RESURSER (${context.resources.length} st):
 ${context.resources.map(r => `- ${r.name}, serviceArea: ${(r.serviceArea || []).join(", ") || "alla områden"}`).join("\n")}
-
-KLUSTER-DISTRIBUTION:
-${clusterInfo || "Inga kluster-tilldelningar"}
 ${weatherInfo}
 
 SCHEMALÄGGNING (${baseResult.assignments.length} ordrar fördelade):
 ${baseResult.assignments.slice(0, 20).map(a => {
   const order = context.workOrders.find(o => o.id === a.workOrderId);
-  const cluster = context.clusters.find(c => c.id === order?.clusterId);
-  return `- ${a.scheduledDate}: ${order?.title?.slice(0, 30) || "Order"} → ${context.resources.find(r => r.id === a.resourceId)?.name || "Resurs"} (kluster: ${cluster?.name || "-"})`;
+  return `- ${a.scheduledDate}: ${order?.title?.slice(0, 30) || "Order"} → ${context.resources.find(r => r.id === a.resourceId)?.name || "Resurs"}`;
 }).join("\n")}${baseResult.assignments.length > 20 ? `\n... och ${baseResult.assignments.length - 20} till` : ""}
 
 Svara ENDAST med JSON:
 {
   "optimizationTips": ["förslag1", "förslag2"],
   "weatherConsiderations": ["väderrelaterat tips om relevant"],
-  "clusterOptimizations": ["klusterrelaterat förslag"],
   "potentialIssues": ["problem om det finns"],
   "efficiencyBoost": 5
 }
@@ -1439,17 +1378,12 @@ async function autoScheduleOrdersWithWeather(
     weatherImpacts
   );
   
-  // Sortera ordrar: akuta först, sedan efter kluster
+  // Sortera ordrar: akuta först
   const sortedOrders = [...unscheduledOrders].sort((a, b) => {
     const priorityOrder: Record<string, number> = { urgent: 0, high: 1, normal: 2, low: 3 };
     const aPriority = priorityOrder[getOrderPriority(a)] ?? 2;
     const bPriority = priorityOrder[getOrderPriority(b)] ?? 2;
-    if (aPriority !== bPriority) return aPriority - bPriority;
-    
-    // Sedan efter kluster för att gruppera
-    const aCluster = a.clusterId || "zzz";
-    const bCluster = b.clusterId || "zzz";
-    return aCluster.localeCompare(bCluster);
+    return aPriority - bPriority;
   });
   
   const assignments: ScheduleAssignment[] = [];
@@ -1458,7 +1392,7 @@ async function autoScheduleOrdersWithWeather(
     // Hämta tidsfönster för denna order om tillgängliga
     const orderTimeWindows = context.timeWindows?.[order.id] || [];
     
-    const slot = findBestSlotWithWeather(order, capacities, weekDays, context.clusters, context.resources, weatherImpacts, orderTimeWindows);
+    const slot = findBestSlotWithWeather(order, capacities, weekDays, context.resources, weatherImpacts, orderTimeWindows);
     
     if (slot) {
       // Uppdatera kapaciteten
@@ -1469,12 +1403,9 @@ async function autoScheduleOrdersWithWeather(
       }
       
       const resource = context.resources.find(r => r.id === slot.resourceId);
-      const cluster = context.clusters.find(c => c.id === order.clusterId);
       const weatherImpact = weatherImpacts.find(w => w.date === slot.date);
       
-      let reason = cluster 
-        ? `${resource?.name || "Resurs"} i kluster ${cluster.name}`
-        : `${resource?.name || "Resurs"} baserat på tillgänglighet`;
+      let reason = `${resource?.name || "Resurs"} baserat på tillgänglighet`;
       
       if (slot.timeWindowMatched) {
         reason += ` (tidsfönster respekterat)`;
@@ -1494,15 +1425,6 @@ async function autoScheduleOrdersWithWeather(
     }
   }
   
-  // Beräkna effektivitet baserat på områdesmatchning, balans och väder
-  const clusterMatches = assignments.filter(a => {
-    const order = unscheduledOrders.find(o => o.id === a.workOrderId);
-    const resource = context.resources.find(r => r.id === a.resourceId);
-    if (!order?.clusterId || !resource) return false;
-    const cluster = context.clusters.find(c => c.id === order.clusterId);
-    return cluster && resourceServesCluster(resource, cluster);
-  }).length;
-  
   // Räkna dagar med bra väder
   const goodWeatherDays = assignments.filter(a => {
     const impact = weatherImpacts.find(w => w.date === a.scheduledDate);
@@ -1514,7 +1436,7 @@ async function autoScheduleOrdersWithWeather(
     : 0;
   
   const efficiency = assignments.length > 0
-    ? Math.round(50 + (clusterMatches / assignments.length) * 40 + weatherBonus)
+    ? Math.round(50 + 40 + weatherBonus)
     : 0;
   
   const weatherWarning = weatherImpacts.some(w => w.impactLevel === "high" || w.impactLevel === "severe")
@@ -1523,7 +1445,7 @@ async function autoScheduleOrdersWithWeather(
   
   return {
     assignments,
-    summary: `Schemalade ${assignments.length} av ${unscheduledOrders.length} ordrar. ${clusterMatches} matchade kluster.${weatherWarning}`,
+    summary: `Schemalade ${assignments.length} av ${unscheduledOrders.length} ordrar.${weatherWarning}`,
     totalOrdersScheduled: assignments.length,
     estimatedEfficiency: Math.min(100, efficiency)
   };
@@ -1574,18 +1496,12 @@ function findBestSlotWithWeather(
   order: WorkOrder,
   capacities: ResourceCapacity[],
   weekDays: string[],
-  clusters: Cluster[],
   resources: Resource[],
   weatherImpacts: WeatherImpact[],
   timeWindows?: TaskDesiredTimewindow[]
 ): { resourceId: string; date: string; score: number; timeWindowMatched?: boolean } | null {
   const orderDuration = getOrderDuration(order) / 60;
-  const orderClusterId = order.clusterId;
   const orderPriority = getOrderPriority(order);
-  
-  const orderCluster = orderClusterId 
-    ? clusters.find(c => c.id === orderClusterId) 
-    : null;
   
   let bestSlot: { resourceId: string; date: string; score: number; timeWindowMatched?: boolean } | null = null;
   
@@ -1603,14 +1519,6 @@ function findBestSlotWithWeather(
       
       let score = 50; // Baspoäng
       let dayTimeWindowMatched = false;
-      
-      // Områdesmatchning: +30 poäng om resursen betjänar klustret
-      if (orderCluster) {
-        const resource = resources.find(r => r.id === cap.id);
-        if (resource && resourceServesCluster(resource, orderCluster)) {
-          score += 30;
-        }
-      }
       
       // Balanserad belastning: +0-20 poäng baserat på ledig kapacitet
       const loadRatio = (cap.dailyLoad[day] || 0) / effectiveHoursPerDay;
@@ -1675,8 +1583,6 @@ export interface SetupTimeInsight {
   description: string;
   objectId?: string;
   objectName?: string;
-  clusterId?: string;
-  clusterName?: string;
   currentEstimate?: number;
   actualAverage?: number;
   sampleSize?: number;
@@ -1704,13 +1610,12 @@ const DRIFT_THRESHOLD_PERCENT = 20; // 20% avvikelse = drift
 export function analyzeSetupTimeLogs(
   logs: SetupTimeLog[],
   objects: ServiceObject[],
-  clusters: Cluster[]
+  setupEstimates?: Map<string, number>
 ): SetupTimeAnalysisResult {
   const insights: SetupTimeInsight[] = [];
   const recommendedUpdates: SetupTimeAnalysisResult["recommendedUpdates"] = [];
   
   const objectMap = new Map(objects.map(o => [o.id, o]));
-  const clusterMap = new Map(clusters.map(c => [c.id, c]));
   
   // Gruppera loggar per objekt
   const logsByObject: Record<string, SetupTimeLog[]> = {};
@@ -1728,8 +1633,6 @@ export function analyzeSetupTimeLogs(
     const object = objectMap.get(objectId);
     if (!object) return;
     
-    const cluster = object.clusterId ? clusterMap.get(object.clusterId) : null;
-    
     if (objectLogs.length < MIN_SAMPLES_FOR_ANALYSIS) {
       return; // Inte tillräckligt med data
     }
@@ -1741,7 +1644,7 @@ export function analyzeSetupTimeLogs(
     const avg = durations.reduce((a, b) => a + b, 0) / durations.length;
     const variance = durations.reduce((sum, d) => sum + Math.pow(d - avg, 2), 0) / durations.length;
     const stdDev = Math.sqrt(variance);
-    const currentEstimate = object.avgSetupTime || 0;
+    const currentEstimate = setupEstimates?.get(objectId) || 0;
     
     // Beräkna drift (skillnad mellan estimat och faktiskt)
     const driftPercent = currentEstimate > 0 
@@ -1768,8 +1671,6 @@ export function analyzeSetupTimeLogs(
         description: `${object.name}: Estimat ${currentEstimate} min vs faktiskt snitt ${avg.toFixed(1)} min (${driftPercent > 0 ? "+" : ""}${driftPercent.toFixed(0)}%)`,
         objectId,
         objectName: object.name,
-        clusterId: cluster?.id,
-        clusterName: cluster?.name,
         currentEstimate,
         actualAverage: avg,
         sampleSize: objectLogs.length,
@@ -1796,8 +1697,6 @@ export function analyzeSetupTimeLogs(
         description: `${object.name}: Stabil ställtid (${avg.toFixed(1)}±${stdDev.toFixed(1)} min) över ${objectLogs.length} jobb.`,
         objectId,
         objectName: object.name,
-        clusterId: cluster?.id,
-        clusterName: cluster?.name,
         currentEstimate,
         actualAverage: avg,
         sampleSize: objectLogs.length
@@ -1823,36 +1722,6 @@ export function analyzeSetupTimeLogs(
   const overallAccuracy = objectsWithData > 0 
     ? Math.max(0, Math.min(100, 100 - (totalDriftScore / objectsWithData)))
     : 100;
-  
-  // Kluster-analys
-  const clusterStats: Record<string, { total: number; count: number; logs: number }> = {};
-  logs.forEach(log => {
-    const object = objectMap.get(log.objectId);
-    if (!object?.clusterId) return;
-    if (!clusterStats[object.clusterId]) {
-      clusterStats[object.clusterId] = { total: 0, count: 0, logs: 0 };
-    }
-    clusterStats[object.clusterId].total += log.durationMinutes;
-    clusterStats[object.clusterId].logs++;
-    clusterStats[object.clusterId].count = clusterStats[object.clusterId].logs;
-  });
-  
-  Object.entries(clusterStats).forEach(([clusterId, stats]) => {
-    if (stats.logs >= 10) {
-      const cluster = clusterMap.get(clusterId);
-      const avgTime = stats.total / stats.logs;
-      insights.push({
-        id: `cluster-avg-${clusterId}`,
-        type: "suggestion",
-        severity: "low",
-        title: `Klustersnitt: ${cluster?.name || clusterId}`,
-        description: `Genomsnittlig ställtid i klustret: ${avgTime.toFixed(1)} min (${stats.logs} mätningar).`,
-        clusterId,
-        clusterName: cluster?.name,
-        sampleSize: stats.logs
-      });
-    }
-  });
   
   return {
     insights: insights.sort((a, b) => {
@@ -1913,13 +1782,10 @@ interface OrderHistoryData {
 
 export async function generatePredictivePlanning(
   workOrders: WorkOrder[],
-  clusters: Cluster[],
   resources: Resource[],
   weeksAhead: number = 4
 ): Promise<PredictivePlanningResult> {
-  const clusterMap = new Map(clusters.map(c => [c.id, c]));
-  
-  // Analysera historisk data per kluster och vecka
+  // Analysera historisk data per område och vecka
   const historyByClusterWeek = new Map<string, OrderHistoryData[]>();
   
   workOrders.forEach(order => {
@@ -1958,8 +1824,9 @@ export async function generatePredictivePlanning(
   const currentWeek = getWeekNumber(now);
   const currentYear = now.getFullYear();
   
-  clusters.forEach(cluster => {
-    const history = historyByClusterWeek.get(cluster.id) || [];
+  const clusterIds = Array.from(historyByClusterWeek.keys());
+  clusterIds.forEach(clusterKey => {
+    const history = historyByClusterWeek.get(clusterKey) || [];
     if (history.length < 2) return;
     
     // Beräkna historiskt snitt och trend
@@ -2003,8 +1870,8 @@ export async function generatePredictivePlanning(
       const suggestedResources = Math.ceil(predictedMinutes / (480 * 5)); // 5 dagar
       
       forecasts.push({
-        clusterId: cluster.id,
-        clusterName: cluster.name,
+        clusterId: clusterKey,
+        clusterName: clusterKey.slice(0, 8),
         weekNumber: targetWeek,
         year: targetYear,
         predictedOrders,
@@ -2019,36 +1886,15 @@ export async function generatePredictivePlanning(
     // Generera rekommendationer
     if (trend === "increasing" && trendPercent > 20) {
       recommendations.push({
-        id: `trend-${cluster.id}`,
+        id: `trend-${clusterKey}`,
         type: "trend_alert",
         severity: "medium",
-        title: `Ökande volym i ${cluster.name}`,
+        title: `Ökande volym i område ${clusterKey.slice(0, 8)}`,
         description: `Ordervolymen ökar med ${Math.round(trendPercent)}%. Överväg att allokera fler resurser.`,
-        clusterId: cluster.id,
-        clusterName: cluster.name,
+        clusterId: clusterKey,
+        clusterName: clusterKey.slice(0, 8),
         actionable: true
       });
-    }
-    
-    // Varning för kapacitetsbrist
-    const latestForecast = forecasts.filter(f => f.clusterId === cluster.id).slice(-1)[0];
-    if (latestForecast && cluster.postalCodes && cluster.postalCodes.length > 0) {
-      const matchingResources = resources.filter(r => 
-        r.serviceArea?.some(area => cluster.postalCodes?.includes(area)) ?? false
-      );
-      
-      if (matchingResources.length < latestForecast.suggestedResources) {
-        recommendations.push({
-          id: `capacity-${cluster.id}`,
-          type: "capacity_warning",
-          severity: "high",
-          title: `Resursbrist i ${cluster.name}`,
-          description: `Prognos kräver ${latestForecast.suggestedResources} resurser, men endast ${matchingResources.length} finns tillgängliga.`,
-          clusterId: cluster.id,
-          clusterName: cluster.name,
-          actionable: true
-        });
-      }
     }
   });
   
@@ -2067,8 +1913,8 @@ export async function generatePredictivePlanning(
       return severityOrder[a.severity] - severityOrder[b.severity];
     }),
     summary: forecasts.length > 0
-      ? `Genererade ${forecasts.length} prognoser för ${clusters.length} kluster. ${recommendations.length} rekommendationer.`
-      : "Otillräcklig historisk data för prognoser. Minst 2 veckors data per kluster krävs.",
+      ? `Genererade ${forecasts.length} prognoser för ${clusterIds.length} områden. ${recommendations.length} rekommendationer.`
+      : "Otillräcklig historisk data för prognoser. Minst 2 veckors data per område krävs.",
     dataQuality,
     weeksAnalyzed: totalWeeksData
   };
@@ -2555,7 +2401,6 @@ export function generateGoogleMapsUrl(stops: RouteStop[]): string {
 export interface ConversationalPlannerContext {
   workOrders: WorkOrder[];
   resources: Resource[];
-  clusters: Cluster[];
   weekStart: string;
   weekEnd: string;
 }
@@ -2596,7 +2441,7 @@ export async function processConversationalPlannerQueryV2(
   context: ConversationalPlannerContext,
   conversationHistory: Array<{ role: string; content: string }> = []
 ): Promise<ConversationalPlannerResponse> {
-  const { workOrders, resources, clusters, weekStart, weekEnd } = context;
+  const { workOrders, resources, weekStart, weekEnd } = context;
   const resourceMap = new Map(resources.map(r => [r.id, r.name]));
 
   const tools: any[] = [
@@ -2835,11 +2680,10 @@ export async function processConversationalPlannerQuery(
   query: string,
   context: ConversationalPlannerContext
 ): Promise<ConversationalPlannerResponse> {
-  const { workOrders, resources, clusters, weekStart, weekEnd } = context;
+  const { workOrders, resources, weekStart, weekEnd } = context;
   
   // Build context summary for AI
   const resourceMap = new Map(resources.map(r => [r.id, r.name]));
-  const clusterMap = new Map(clusters.map(c => [c.id, c.name]));
   
   // Get orders for the week
   const weekOrders = workOrders.filter(o => {
@@ -2876,10 +2720,6 @@ PLANNERINGSDATA (${weekStart} - ${weekEnd}):
 
 RESURSER:
 ${resources.map(r => `- ${r.name} (${r.id.slice(0, 8)}): ${ordersByResource[r.id] || 0} ordrar`).join("\n")}
-
-KLUSTER:
-${clusters.slice(0, 10).map(c => `- ${c.name}`).join("\n")}
-${clusters.length > 10 ? `...och ${clusters.length - 10} fler` : ""}
 `;
 
   const systemPrompt = `Du är en AI-planeringsassistent för Traivo fältserviceplattform. Du hjälper planerare att hantera arbetsordrar och resurser genom naturligt språk.
@@ -3040,12 +2880,10 @@ export interface AIAssistedPlanResult {
 
 export async function parseNaturalLanguageConstraints(
   instruction: string,
-  resources: Resource[],
-  clusters: Cluster[]
+  resources: Resource[]
 ): Promise<PlanningConstraints> {
   try {
     const resourceList = resources.map(r => `${r.name} (${r.id.slice(0, 8)})`).join(", ");
-    const clusterList = clusters.map(c => c.name).join(", ");
 
     const response = await callOpenAI({
       model: getContextModel(),
@@ -3055,7 +2893,6 @@ export async function parseNaturalLanguageConstraints(
           content: `Du är en planeringstolk. Konvertera planeringsinstruktioner till strukturerade constraints.
 
 Tillgängliga resurser: ${resourceList}
-Tillgängliga kluster/områden: ${clusterList}
 
 Returnera ALLTID JSON med denna struktur:
 {
@@ -3090,7 +2927,6 @@ export async function generatePlanExplanation(
   constraints: PlanningConstraints
 ): Promise<{ explanation: string; warnings: string[]; metrics: AIAssistedPlanResult["metrics"] }> {
   const resourceMap = new Map(context.resources.map(r => [r.id, r.name]));
-  const clusterMap = new Map(context.clusters.map(c => [c.id, c.name]));
 
   const ordersByResource: Record<string, number> = {};
   const ordersByDay: Record<string, number> = {};
@@ -3168,8 +3004,7 @@ export async function aiAssistedSchedule(
   if (naturalLanguageInstruction) {
     constraints = await parseNaturalLanguageConstraints(
       naturalLanguageInstruction,
-      context.resources,
-      context.clusters
+      context.resources
     );
     if (constraints.priorityRules?.length) constraintsApplied.push(`Prioriteringsregler: ${constraints.priorityRules.join(", ")}`);
     if (constraints.areaFocus?.length) constraintsApplied.push(`Fokusområden: ${constraints.areaFocus.join(", ")}`);

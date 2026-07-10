@@ -40,7 +40,6 @@ import { registerWorkOrderRoutes } from "./routes/workOrderRoutes";
 import { registerImportRoutes } from "./routes/importRoutes";
 import { registerOnboardingRoutes } from "./routes/onboardingRoutes";
 import { registerConfigRoutes } from "./routes/configRoutes";
-import { registerClusterRoutes } from "./routes/clusterRoutes";
 import { registerAIRoutes } from "./routes/aiRoutes";
 import { registerOptimizationRoutes } from "./routes/optimizationRoutes";
 import { runTimeGeoEngine } from "./services/time-geo-engine";
@@ -63,7 +62,6 @@ import { registerFeedbackLoopRoutes } from "./routes/feedbackLoopRoutes";
 import { registerETANotificationRoutes } from "./routes/etaNotificationRoutes";
 import { registerFeatureRoutes } from "./routes/featureRoutes";
 import { registerUrgentJobRoutes } from "./routes/urgentJobRoutes";
-import { registerCapacityForecastRoutes, capacityForecastScheduler } from "./routes/capacityForecastRoutes";
 import { registerRealtimeTestRoutes } from "./routes/realtime-test";
 import { registerResendWebhookRoutes } from "./routes/resendWebhookRoutes";
 import { registerTelinkRoutes } from "./routes/telinkRoutes";
@@ -105,7 +103,6 @@ export async function registerRoutes(
   fortnoxMappingCleanupScheduler.start();
   auditCleanupScheduler.start();
   carryOverNotificationScheduler.start();
-  capacityForecastScheduler.start();
   prodHealthCheckScheduler.start();
   githubMirrorScheduler.start();
 
@@ -566,8 +563,6 @@ export async function registerRoutes(
   // Task #716: admin-arkiv (arkiverade objekt/ordrar/bilder/kontakter/metadatatyper + återställning)
   const { registerArchiveRoutes } = await import("./routes/archiveRoutes");
   registerArchiveRoutes(app);
-  const { registerImportPayersRoutes } = await import("./routes/importPayersRoutes");
-  registerImportPayersRoutes(app);
   registerCustomerRoutes(app);
   registerResourceRoutes(app);
   registerWorkOrderRoutes(app);
@@ -592,7 +587,6 @@ export async function registerRoutes(
   registerInventoryRoutes(app);
   const { registerSession11Routes } = await import("./routes/session11Routes");
   await registerSession11Routes(app);
-  registerClusterRoutes(app);
   registerAIRoutes(app);
   registerOptimizationRoutes(app);
   const { registerMlRoutes } = await import("./routes/mlRoutes");
@@ -628,7 +622,6 @@ export async function registerRoutes(
   registerETANotificationRoutes(app);
   registerUrgentJobRoutes(app);
   registerSlaRiskRoutes(app);
-  registerCapacityForecastRoutes(app);
   registerProdHealthCheckRoutes(app);
   registerGithubMirrorRoutes(app);
   // Task #558: Fakturakö + konsoliderings-policy

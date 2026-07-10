@@ -26,7 +26,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { useToast } from "@/hooks/use-toast";
 import { 
   Search, Plus, Filter, Loader2, ChevronRight, ChevronLeft, Building2, MapPin, Trash2, 
-  Map as MapIcon, List, Copy, Upload, Clock, Key, Keyboard, Users, DoorOpen,
+  Map as MapIcon, List, Copy, Upload, Clock, Users, DoorOpen,
   Check, X, FileSpreadsheet, Download, BarChart3, MoreHorizontal, AlertTriangle, AlertCircle, ChevronDown, ChevronUp, XCircle,
   Image, GitFork, Globe, ShieldAlert, ShieldCheck, ShieldX, Package, Info, Camera,
   ArrowUp, ArrowDown, ArrowUpDown, Network, Pencil, FolderPlus, Archive, Columns3,
@@ -50,7 +50,6 @@ import { ObjectInheritedMetadataPanel } from "@/components/ObjectInheritedMetada
 import { ObjectSystemGeneratedPanel } from "@/components/ObjectSystemGeneratedPanel";
 import { useLocalizedObjectName } from "@/lib/object-name";
 import { OBJECT_LOCATION_TYPE_LABELS } from "@/lib/object-location";
-import { ObjectImagesDialog } from "@/components/ObjectImagesGallery";
 import { AddressSearch } from "@/components/AddressSearch";
 import { CustomerCombobox, CustomerMultiCombobox, useCustomerLookup } from "@/components/CustomerCombobox";
 import { GeocodedObjectsMap, ObjectsMapTab } from "@/components/ObjectsMapView";
@@ -63,13 +62,6 @@ import {
   CONDITION_OPERATORS,
   type ConditionFilter,
 } from "@/components/orderkoncept/shared/ConditionFilter";
-
-const accessTypeLabels: Record<string, { label: string; icon: typeof Key }> = {
-  open: { label: "Öppet", icon: DoorOpen },
-  code: { label: "Kod", icon: Keyboard },
-  key: { label: "Nyckel/bricka", icon: Key },
-  meeting: { label: "Personligt möte", icon: Users },
-};
 
 const PAGE_SIZE = 100;
 
@@ -140,12 +132,8 @@ export default function ObjectsPage() {
     const c = params.get("customerId") || params.get("customer");
     return c ? [c] : [];
   });
-  const [clusterFilter, setClusterFilterRaw] = useState("all");
   const [expandedAreas, setExpandedAreas] = useState<Set<string>>(new Set());
   const [viewMode, setViewMode] = useState<"list" | "map" | "tree">("list");
-  const [editingObject, setEditingObject] = useState<ServiceObject | null>(null);
-  const [editField, setEditField] = useState<"accessCode" | null>(null);
-  const [editValue, setEditValue] = useState("");
   const [copyDialogOpen, setCopyDialogOpen] = useState(false);
   const [objectToCopy, setObjectToCopy] = useState<ServiceObject | null>(null);
   const [copyName, setCopyName] = useState("");
@@ -156,7 +144,6 @@ export default function ObjectsPage() {
   const setCustomerFilter = (v: string[]) => { setCustomerFilterRaw(v); setCurrentPage(0); };
   const addCustomerFilter = (id: string) => { if (!customerFilter.includes(id)) { setCustomerFilter([...customerFilter, id]); } };
   const removeCustomerFilter = (id: string) => { setCustomerFilter(customerFilter.filter(c => c !== id)); };
-  const setClusterFilter = (v: string) => { setClusterFilterRaw(v); setCurrentPage(0); };
   // Task #990: platstyp-filter (all/pinpoint/area/none) — server-side.
   const [locationTypeFilter, setLocationTypeFilterRaw] = useState<string>("all");
   const setLocationTypeFilter = (v: string) => { setLocationTypeFilterRaw(v); setCurrentPage(0); };
@@ -187,7 +174,7 @@ export default function ObjectsPage() {
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [servicePatternDialog, setServicePatternDialog] = useState<{ open: boolean; loading: boolean; data?: { summary: string; patterns: { label: string; value: string }[]; anomalies: { objectId: string; objectName: string; reason: string }[] } }>({ open: false, loading: false });
   const [maintenanceDialog, setMaintenanceDialog] = useState<{ open: boolean; loading: boolean; data?: { overdue: { objectName: string; predictedDate: string; daysUntil: number; confidence: number }[]; upcoming: { objectName: string; predictedDate: string; daysUntil: number; confidence: number }[]; summary: string; totalPredicted: number } }>({ open: false, loading: false });
-  const [overflowPanel, setOverflowPanel] = useState<{ objectId: string; panel: "images" | "parents" } | null>(null);
+  const [overflowPanel, setOverflowPanel] = useState<{ objectId: string; panel: "parents" } | null>(null);
   const [expandedDisplayNames, setExpandedDisplayNames] = useState<Set<string>>(new Set());
   const toggleDisplayNames = (id: string) => {
     setExpandedDisplayNames(prev => {
@@ -242,7 +229,7 @@ export default function ObjectsPage() {
   });
 
   const { data: objectsData, isLoading, isError: objectsIsError, error: objectsError, refetch: objectsRefetch } = useQuery<{ objects: ServiceObject[]; total: number }>({
-    queryKey: ["/api/objects", "paginated", currentPage, debouncedSearch, customerFilter, JSON.stringify(activeConditions), clusterFilter, reportedFilter, interimFilter, issueFilter, locationTypeFilter, taskTypeFilter, taskCustomerFilter, taskCompletedFrom, taskCompletedTo],
+    queryKey: ["/api/objects", "paginated", currentPage, debouncedSearch, customerFilter, JSON.stringify(activeConditions), reportedFilter, interimFilter, issueFilter, locationTypeFilter, taskTypeFilter, taskCustomerFilter, taskCompletedFrom, taskCompletedTo],
     queryFn: async () => {
       const params = new URLSearchParams({
         limit: PAGE_SIZE.toString(),
@@ -256,9 +243,6 @@ export default function ObjectsPage() {
       }
       if (activeConditions.length > 0) {
         params.append("conditions", JSON.stringify(activeConditions));
-      }
-      if (clusterFilter !== "all") {
-        params.append("clusterId", clusterFilter);
       }
       if (reportedFilter) {
         params.append("reported", "true");
@@ -361,7 +345,6 @@ export default function ObjectsPage() {
     filteredCount: number;
     estimatedCost: number;
     byCity: Array<{ city: string; count: number }>;
-    byCluster: Array<{ clusterId: string; clusterName: string; count: number }>;
     googleAvailable: boolean;
   }>({
     queryKey: ["/api/objects/batch-geocode/preview", batchGeoCity, batchGeoLimit],
@@ -436,8 +419,6 @@ export default function ObjectsPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/objects"], exact: false });
       toast({ title: "Objekt uppdaterat" });
-      setEditingObject(null);
-      setEditField(null);
     },
     onError: (error: Error) => {
       toast({ title: "Kunde inte uppdatera objektet", description: error.message, variant: "destructive" });
@@ -772,7 +753,6 @@ export default function ObjectsPage() {
   const clearAllFilters = () => {
     setConditionFilters([]);
     setCustomerFilter([]);
-    setClusterFilter("all");
     setReportedFilter(false);
     setInterimFilter(false);
     setIssueFilter(null);
@@ -791,18 +771,6 @@ export default function ObjectsPage() {
     return base.filter(o => o.latitude && o.longitude);
   }, [filteredObjects, selectedIds]);
   const mapPositions = useMemo<[number, number][]>(() => objectsWithCoords.map(o => [o.latitude!, o.longitude!]), [objectsWithCoords]);
-
-  const handleQuickEdit = useCallback((obj: ServiceObject, field: "accessCode") => {
-    setEditingObject(obj);
-    setEditField(field);
-    setEditValue(obj.accessCode || "");
-  }, []);
-
-  const saveQuickEdit = useCallback(() => {
-    if (!editingObject || !editField) return;
-    const data = { accessCode: editValue };
-    updateObjectMutation.mutate({ id: editingObject.id, data });
-  }, [editingObject, editField, editValue, updateObjectMutation]);
 
   const handleCopyObject = useCallback((obj: ServiceObject) => {
     setObjectToCopy(obj);
@@ -833,13 +801,12 @@ export default function ObjectsPage() {
     if (debouncedSearch) params.append("search", debouncedSearch);
     if (customerFilter.length > 0) params.append("customerId", customerFilter.join(","));
     if (activeConditions.length > 0) params.append("conditions", JSON.stringify(activeConditions));
-    if (clusterFilter !== "all") params.append("clusterId", clusterFilter);
     if (reportedFilter) params.append("reported", "true");
     if (interimFilter) params.append("interim", "true");
     if (issueFilter) params.append("issue", issueFilter);
     if (locationTypeFilter !== "all") params.append("locationType", locationTypeFilter);
     return params;
-  }, [debouncedSearch, customerFilter, activeConditions, clusterFilter, reportedFilter, interimFilter, issueFilter, locationTypeFilter]);
+  }, [debouncedSearch, customerFilter, activeConditions, reportedFilter, interimFilter, issueFilter, locationTypeFilter]);
 
   const downloadCSV = (filename: string, rows: (string | number)[][]) => {
     const csv = rows.map(row => row.map(sanitizeCSVCell).join(",")).join("\n");
@@ -1210,8 +1177,6 @@ export default function ObjectsPage() {
     const isExpanded = expandedAreas.has(obj.id);
     const hasChildren = children.length > 0;
     const customerName = customerMap.get(obj.customerId ?? "") || "";
-    const AccessIcon = accessTypeLabels[obj.accessType || "open"]?.icon || DoorOpen;
-    const isEditing = editingObject?.id === obj.id;
 
     return (
       <div key={obj.id} className="border-b last:border-b-0">
@@ -1309,31 +1274,6 @@ export default function ObjectsPage() {
                   </TooltipContent>
                 </Tooltip>
               )}
-              {obj.accessType && obj.accessType !== "open" && (
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Badge variant="outline" className="text-xs gap-1 cursor-help">
-                      <AccessIcon className="h-3 w-3" />
-                      {isEditing && editField === "accessCode" ? (
-                        <Input 
-                          value={editValue}
-                          onChange={(e) => setEditValue(e.target.value)}
-                          className="h-5 w-16 text-xs px-1"
-                          onClick={(e) => e.stopPropagation()}
-                          data-testid="input-quick-edit-code"
-                        />
-                      ) : (
-                        <span>{obj.accessCode || obj.keyNumber || accessTypeLabels[obj.accessType]?.label}</span>
-                      )}
-                    </Badge>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    Tillgång: {accessTypeLabels[obj.accessType]?.label}
-                    {obj.accessCode && ` - Kod: ${obj.accessCode}`}
-                    {obj.keyNumber && ` - Nyckel: ${obj.keyNumber}`}
-                  </TooltipContent>
-                </Tooltip>
-              )}
             </div>
             <div className="flex items-center gap-4 text-xs text-muted-foreground mt-1 flex-wrap">
               {obj.address && (
@@ -1385,17 +1325,6 @@ export default function ObjectsPage() {
                     </span>
                   </TooltipTrigger>
                   <TooltipContent>Kommun / Kund — klicka för att filtrera</TooltipContent>
-                </Tooltip>
-              )}
-              {(obj.containerCount || 0) > 0 && (
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <span className="flex items-center gap-1 cursor-help">
-                      <Trash2 className="h-3 w-3" />
-                      {obj.containerCount} kärl
-                    </span>
-                  </TooltipTrigger>
-                  <TooltipContent>Antal kärl (K1)</TooltipContent>
                 </Tooltip>
               )}
               {/* Task #859: förälder/barn-relation. Barn på samma sida ligger redan
@@ -1472,51 +1401,8 @@ export default function ObjectsPage() {
           </div>
 
           <div className="flex items-center gap-1 shrink-0">
-            <div className="text-right mr-2">
-              {(obj.avgSetupTime || 0) > 0 ? (
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <div className="cursor-help">
-                      <div className="text-sm font-medium" data-testid={`text-setup-time-${obj.id}`}>{obj.avgSetupTime} min</div>
-                      <div className="text-xs text-muted-foreground">ställtid</div>
-                    </div>
-                  </TooltipTrigger>
-                  <TooltipContent>Beräknad genomsnittlig ställtid</TooltipContent>
-                </Tooltip>
-              ) : null}
-            </div>
-
-            {isEditing ? (
+            {(
               <>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button size="icon" variant="ghost" onClick={(e) => { e.stopPropagation(); saveQuickEdit(); }} data-testid="button-save-edit">
-                      <Check className="h-4 w-4 text-chart-2" />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent><p>Spara</p></TooltipContent>
-                </Tooltip>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button size="icon" variant="ghost" onClick={(e) => { e.stopPropagation(); setEditingObject(null); setEditField(null); }} data-testid="button-cancel-edit">
-                      <X className="h-4 w-4 text-destructive" />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent><p>Avbryt</p></TooltipContent>
-                </Tooltip>
-              </>
-            ) : (
-              <>
-                {obj.accessType && obj.accessType !== "open" && (
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button size="icon" variant="ghost" onClick={(e) => { e.stopPropagation(); handleQuickEdit(obj, "accessCode"); }} data-testid={`button-edit-code-${obj.id}`}>
-                        <Keyboard className="h-4 w-4" />
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent><p>Redigera kod</p></TooltipContent>
-                  </Tooltip>
-                )}
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <Button
@@ -1548,10 +1434,6 @@ export default function ObjectsPage() {
                     <DropdownMenuItem onClick={() => handleCopyObject(obj)} data-testid={`menu-copy-${obj.id}`}>
                       <Copy className="h-4 w-4 mr-2" />
                       Kopiera
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => setOverflowPanel({ objectId: obj.id, panel: "images" })} data-testid={`menu-images-${obj.id}`}>
-                      <Image className="h-4 w-4 mr-2" />
-                      Bilder
                     </DropdownMenuItem>
                     <DropdownMenuItem onClick={() => setOverflowPanel({ objectId: obj.id, panel: "parents" })} data-testid={`menu-parents-${obj.id}`}>
                       <GitFork className="h-4 w-4 mr-2" />
@@ -2351,7 +2233,7 @@ export default function ObjectsPage() {
               {deleteTarget && (childrenMap.get(deleteTarget.id)?.length ?? 0) > 0 ? (
                 <>Objektet <span className="font-medium">{deleteTarget?.name}</span> har {childrenMap.get(deleteTarget.id)?.length} underordnade objekt. Ta bort eller flytta dessa först.</>
               ) : (
-                <>Detta tar bort <span className="font-medium">{deleteTarget?.name}</span>. Åtgärden kan inte ångras.</>
+                <>Detta raderar <span className="font-medium">{deleteTarget?.name}</span> permanent. Radering är endast möjlig om objektet är helt oanvänt (inga uppgifter, ingen historik, inga underobjekt) — annars kan objektet bara arkiveras. Åtgärden kan inte ångras.</>
               )}
             </AlertDialogDescription>
           </AlertDialogHeader>
@@ -2890,8 +2772,6 @@ export default function ObjectsPage() {
         if (!panelObj) return null;
         const closePanel = () => setOverflowPanel(null);
         switch (overflowPanel.panel) {
-          case "images":
-            return <ObjectImagesDialog object={panelObj} controlled open onOpenChange={(v) => { if (!v) closePanel(); }} />;
           case "parents":
             return <ObjectParentsPanel object={panelObj} controlled open onOpenChange={(v) => { if (!v) closePanel(); }} />;
           default:

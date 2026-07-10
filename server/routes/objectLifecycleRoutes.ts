@@ -2,8 +2,6 @@
 // (A) släktnamn:  GET/PUT /api/tenants/me/display-name-rules, GET /api/objects/:id/display-name
 // (C) arkivering: GET /api/objects/:id/archive-preflight, POST /api/objects/:id/archive,
 //                 POST /api/objects/:id/restore, GET /api/objects/archived
-// (E) dynamiska kluster: GET/PUT /api/clusters/:id/dynamic-rules,
-//                 POST /api/clusters/:id/apply-dynamic-rules
 import type { Express } from "express";
 import { asyncHandler } from "../asyncHandler";
 import { NotFoundError, ValidationError, ConflictError } from "../errors";
@@ -12,7 +10,7 @@ import { storage } from "../storage";
 import { verifyTenantOwnership, formatZodError } from "./helpers";
 import { z } from "zod";
 import { db } from "../db";
-import { clusters, objects, importBatches, displayNameRulesSchema, clusterDynamicRulesSchema } from "@shared/schema";
+import { objects, importBatches, displayNameRulesSchema } from "@shared/schema";
 import { and, eq } from "drizzle-orm";
 import {
   computeDisplayName,
@@ -141,36 +139,6 @@ export function registerObjectLifecycleRoutes(app: Express): void {
     res.json({ ok: true });
   }));
 
-  // === (E) DYNAMISKA KLUSTER ================================================
-  app.get("/api/clusters/:id/dynamic-rules", asyncHandler(async (req, res) => {
-    const tenantId = getTenantIdWithFallback(req);
-    const [c] = await db.select().from(clusters).where(and(eq(clusters.id, req.params.id), eq(clusters.tenantId, tenantId)));
-    if (!c) throw new NotFoundError("Kluster");
-    res.set("Cache-Control", "no-cache, must-revalidate");
-    res.json({
-      dynamicRules: c.dynamicRules ?? null,
-      lastAppliedAt: c.dynamicRulesLastAppliedAt ?? null,
-    });
-  }));
-
-  app.put("/api/clusters/:id/dynamic-rules", asyncHandler(async (req, res) => {
-    const tenantId = getTenantIdWithFallback(req);
-    const [c] = await db.select().from(clusters).where(and(eq(clusters.id, req.params.id), eq(clusters.tenantId, tenantId)));
-    if (!c) throw new NotFoundError("Kluster");
-    const schema = z.object({ dynamicRules: clusterDynamicRulesSchema.nullable() });
-    const parsed = schema.safeParse(req.body);
-    if (!parsed.success) throw new ValidationError(formatZodError(parsed.error).message ?? "Ogiltiga regler");
-    await db.update(clusters).set({ dynamicRules: parsed.data.dynamicRules as any }).where(and(eq(clusters.id, req.params.id), eq(clusters.tenantId, tenantId)));
-    res.json({ ok: true });
-  }));
-
-  // Dynamiska kluster-regler är avvecklade (Task #856). Automatisk om-tilldelning
-  // av objekt till kluster via regler körs inte längre. Endpointen behålls för
-  // bakåtkompatibilitet men returnerar ett avvecklat-svar utan att ändra data.
-  app.post("/api/clusters/:id/apply-dynamic-rules", asyncHandler(async (req, res) => {
-    throw new ValidationError("Dynamiska kluster-regler är avvecklade och utvärderas inte längre.");
-  }));
-
   // === (F) ITERATIV UNDEROBJEKT-IMPORT ======================================
   // Lägg till barnobjekt under en befintlig parent i en omgång.
   // Body: { rows: [...], dryRun?: boolean }
@@ -183,8 +151,6 @@ export function registerObjectLifecycleRoutes(app: Express): void {
     address: z.string().max(200).optional(),
     city: z.string().max(120).optional(),
     postalCode: z.string().max(20).optional(),
-    accessType: z.string().max(32).optional(),
-    accessCode: z.string().max(32).optional(),
   });
   const importChildrenSchema = z.object({
     rows: z.array(childRowSchema).min(1).max(500),
@@ -240,9 +206,7 @@ export function registerObjectLifecycleRoutes(app: Express): void {
       try {
         const obj = await storage.createObject({
           tenantId,
-          customerId: parent.customerId,
           parentId: parent.id,
-          clusterId: parent.clusterId ?? null,
           name: r.name,
           objectNumber: r.objectNumber ?? null,
           objectType: r.objectType ?? parent.objectType ?? "byggnad",
@@ -250,8 +214,6 @@ export function registerObjectLifecycleRoutes(app: Express): void {
           address: r.address ?? parent.address ?? null,
           city: r.city ?? parent.city ?? null,
           postalCode: r.postalCode ?? parent.postalCode ?? null,
-          accessType: (r.accessType as any) ?? parent.accessType ?? null,
-          accessCode: r.accessCode ?? parent.accessCode ?? null,
           importBatchId: childBatchId,
         } as any);
         created.push(obj.id);

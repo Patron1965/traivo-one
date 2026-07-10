@@ -41,7 +41,7 @@ interface PanelMetadataEntry {
 
 interface HeaderConfig {
   showImage: boolean;
-  imageSource: "vignette" | "latest_image" | "metadata";
+  imageSource: "metadata";
   imageMetadataKatalogId: string | null;
   showMap: boolean;
   field1KatalogId: string | null;
@@ -90,25 +90,10 @@ interface ImageMetadataOption {
   deletedAt?: string | null;
 }
 
-interface Vignette {
-  id: string;
-  url: string;
-  isCurrent: boolean;
-}
-
-interface ObjectImageLite {
-  id: string;
-  url?: string;
-  imageUrl?: string;
-  createdAt?: string;
-  uploadedAt?: string;
-}
-
 interface Props {
   objectId: string;
   objectType?: string | null;
   objectTypeLabel?: string;
-  serialNumber?: string | null;
   latitude?: number | string | null;
   longitude?: number | string | null;
   entranceLatitude?: number | string | null;
@@ -121,7 +106,7 @@ interface Props {
 
 const DEFAULT_CONFIG: HeaderConfig = {
   showImage: true,
-  imageSource: "vignette",
+  imageSource: "metadata",
   imageMetadataKatalogId: null,
   showMap: true,
   field1KatalogId: null,
@@ -186,7 +171,7 @@ interface SystemGeoResponse {
 }
 
 export function ObjectHeaderPanel({
-  objectId, objectType, objectTypeLabel, serialNumber,
+  objectId, objectType, objectTypeLabel,
   latitude, longitude, entranceLatitude, entranceLongitude,
   name, objectNumber, metadata, canEdit,
 }: Props) {
@@ -223,15 +208,6 @@ export function ObjectHeaderPanel({
   // config = per-objekttyp-standard; används nu ENBART för bild/karta-visningen.
   const effective: HeaderConfig = config ?? DEFAULT_CONFIG;
 
-  const { data: vignettes = [] } = useQuery<Vignette[]>({
-    queryKey: ["/api/objects", objectId, "vignettes"],
-    enabled: !!objectId && effective.showImage && effective.imageSource === "vignette",
-  });
-  const { data: objectImages = [] } = useQuery<ObjectImageLite[]>({
-    queryKey: ["/api/objects", objectId, "images"],
-    enabled: !!objectId && effective.showImage && effective.imageSource === "latest_image",
-  });
-
   // Fördjupad position (P2) + Avdelning/Port/Våning-descriptor. Delad cache-nyckel
   // med ObjectSystemGeneratedPanel (route: /api/objects/:id/system-generated-metadata). Display-only.
   const { data: geoData } = useQuery<SystemGeoResponse>({
@@ -254,15 +230,8 @@ export function ObjectHeaderPanel({
 
   const imageUrl: string | null = (() => {
     if (!effective.showImage) return null;
-    if (effective.imageSource === "vignette") {
-      return vignettes.find((v) => v.isCurrent)?.url ?? null;
-    }
-    if (effective.imageSource === "metadata") {
-      if (!effective.imageMetadataKatalogId) return null;
-      return entryByKatalog.get(effective.imageMetadataKatalogId)?.vardeString ?? null;
-    }
-    const latest = objectImages[0];
-    return latest?.url ?? latest?.imageUrl ?? null;
+    if (!effective.imageMetadataKatalogId) return null;
+    return entryByKatalog.get(effective.imageMetadataKatalogId)?.vardeString ?? null;
   })();
 
   type Slot = { key: string; label: string; value: string | null; inheritedFrom?: string | null };
@@ -278,7 +247,6 @@ export function ObjectHeaderPanel({
     }
   } else {
     slots.push({ key: "objtype", label: "Objekttyp", value: objectTypeLabel || objectType || null });
-    if (serialNumber) slots.push({ key: "serial", label: "Serienummer", value: serialNumber });
   }
 
   const lat = toNum(latitude) ?? toNum(entranceLatitude);
@@ -680,21 +648,8 @@ function HeaderQuickFieldEditor({
                 </div>
                 {display.showImage && (
                   <div className="space-y-1.5">
-                    <Label>Bildkälla</Label>
-                    <Select
-                      value={display.imageSource}
-                      onValueChange={(v) => setDisplay((d) => ({ ...d, imageSource: v as HeaderConfig["imageSource"] }))}
-                    >
-                      <SelectTrigger data-testid="select-header-image-source">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="vignette">Vinjettbild</SelectItem>
-                        <SelectItem value="latest_image">Senaste objektbild</SelectItem>
-                        <SelectItem value="metadata">Metadatafält</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    {display.imageSource === "metadata" && (
+                    <Label>Bildfält (metadata)</Label>
+                    {(
                       <Select
                         value={display.imageMetadataKatalogId ?? undefined}
                         onValueChange={(v) => setDisplay((d) => ({ ...d, imageMetadataKatalogId: v }))}

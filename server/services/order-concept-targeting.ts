@@ -21,8 +21,7 @@ export { matchesFilter };
 //
 // ADR v3: koncept pekar in OBJEKT/GRENAR (gren-rot-id:n i target_object_ids).
 // Upplösning sker live via getObjectSubtreeIds (primär parent_id-kedja,
-// tenant-scopat, exkl. soft-deletade). Legacy kluster-koncept faller tillbaka
-// på target_cluster_ids / target_cluster_id (expand-contract).
+// tenant-scopat, exkl. soft-deletade). Etapp 5: kluster-inpekning borttagen.
 // ============================================================================
 
 export type ConditionFilterInput = {
@@ -33,13 +32,11 @@ export type ConditionFilterInput = {
 
 export type ResolveTargetOptions = {
   tenantId: string;
-  /** Gren-ROT-objekt-id:n (ADR v3). Föredras framför kluster när satt. */
+  /** Gren-ROT-objekt-id:n (ADR v3). */
   objectIds?: string[] | null;
-  /** Legacy kluster-id:n (bakåtkomp). Används bara när objectIds saknas. */
-  clusterIds?: string[] | null;
   /**
-   * När varken objectIds eller clusterIds finns: returnera alla tenant-objekt
-   * (execute-beteende) i stället för tom lista (preview-beteende).
+   * När objectIds saknas: returnera alla tenant-objekt (execute-beteende)
+   * i stället för tom lista (preview-beteende).
    */
   fallbackAllObjects?: boolean;
 };
@@ -47,13 +44,13 @@ export type ResolveTargetOptions = {
 /**
  * Resolvar de konkreta målobjekten för ett koncept (eller en ad-hoc-selektion).
  *
- * Prioritet: objektgrenar (subträd via getObjectSubtreeIds) → legacy kluster →
- * ev. alla objekt. Alla grenar är tenant-scopade och exkluderar soft-deletade.
+ * Prioritet: objektgrenar (subträd via getObjectSubtreeIds) → ev. alla objekt.
+ * Alla grenar är tenant-scopade och exkluderar soft-deletade.
  */
 export async function resolveTargetObjects(
   opts: ResolveTargetOptions,
 ): Promise<ServiceObject[]> {
-  const { tenantId, objectIds, clusterIds, fallbackAllObjects } = opts;
+  const { tenantId, objectIds, fallbackAllObjects } = opts;
 
   // 1. Objekt-/gren-inpekning (ADR v3) — föredras.
   if (objectIds && objectIds.length > 0) {
@@ -67,19 +64,7 @@ export async function resolveTargetObjects(
     return all.filter((o) => idSet.has(o.id));
   }
 
-  // 2. Legacy kluster-inpekning (bakåtkomp).
-  if (clusterIds && clusterIds.length > 0) {
-    const objectMap = new Map<string, ServiceObject>();
-    for (const clusterId of clusterIds) {
-      const clusterObjects = await storage.getClusterObjects(clusterId);
-      for (const obj of clusterObjects) {
-        if (obj.tenantId === tenantId) objectMap.set(obj.id, obj);
-      }
-    }
-    return Array.from(objectMap.values());
-  }
-
-  // 3. Inget mål valt.
+  // 2. Inget mål valt.
   if (fallbackAllObjects) return await storage.getObjects(tenantId);
   return [];
 }
@@ -246,26 +231,16 @@ export async function buildMatchReasonsForObjects(
 }
 
 /**
- * Härledar gren-rot-id:n (ADR v3) respektive legacy kluster-id:n från ett
- * koncept, med samma fallback-kedja överallt:
- *   target_object_ids → target_cluster_ids → target_cluster_id.
+ * Härledar gren-rot-id:n (ADR v3) från ett koncept (target_object_ids).
  */
 export function deriveConceptTargets(concept: {
   targetObjectIds?: string[] | null;
-  targetClusterIds?: string[] | null;
-  targetClusterId?: string | null;
-}): { objectIds: string[]; clusterIds: string[] } {
+}): { objectIds: string[] } {
   const objectIds =
     Array.isArray(concept.targetObjectIds) && concept.targetObjectIds.length > 0
       ? concept.targetObjectIds
       : [];
-  const clusterIds =
-    Array.isArray(concept.targetClusterIds) && concept.targetClusterIds.length > 0
-      ? concept.targetClusterIds
-      : concept.targetClusterId
-        ? [concept.targetClusterId]
-        : [];
-  return { objectIds, clusterIds };
+  return { objectIds };
 }
 
 /**
@@ -277,17 +252,14 @@ export async function resolveConceptMatchingObjects(
   tenantId: string,
   concept: {
     targetObjectIds?: string[] | null;
-    targetClusterIds?: string[] | null;
-    targetClusterId?: string | null;
   },
   filters: ConditionFilterInput[],
   opts?: { fallbackAllObjects?: boolean },
 ): Promise<{ targetObjects: ServiceObject[]; matchingObjects: ServiceObject[] }> {
-  const { objectIds, clusterIds } = deriveConceptTargets(concept);
+  const { objectIds } = deriveConceptTargets(concept);
   const targetObjects = await resolveTargetObjects({
     tenantId,
     objectIds,
-    clusterIds,
     fallbackAllObjects: opts?.fallbackAllObjects ?? false,
   });
   const matchingObjects = await filterObjectsByConditions(tenantId, targetObjects, filters);

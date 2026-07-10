@@ -220,20 +220,15 @@ export async function runProdHealthCheck(
               AND NOT EXISTS (SELECT 1 FROM objects p WHERE p.id = o.parent_id)`,
     },
     {
-      // ADR v3 / Task #565: kund-koppling går via object_payers — legacy
-      // objects.customer_id är på väg ut (Task #560 DROP). Probet kollar
-      // istället att alla primär-payer-customer_id pekar på existerande kund.
-      name: "orphans: object_payers.customer_id (primary)",
-      sql: `SELECT count(*)::int AS c FROM object_payers op
-            JOIN objects o ON o.id = op.object_id
-            WHERE o.tenant_id = $1 AND op.is_primary = true
-              AND NOT EXISTS (SELECT 1 FROM customers c WHERE c.id = op.customer_id)`,
-    },
-    {
-      name: "orphans: clusters.root_customer_id",
-      sql: `SELECT count(*)::int AS c FROM clusters cl
-            WHERE cl.tenant_id = $1 AND cl.root_customer_id IS NOT NULL
-              AND NOT EXISTS (SELECT 1 FROM customers cu WHERE cu.id = cl.root_customer_id)`,
+      // Etapp 5: kund-koppling bärs av Ekonomi-metadatat 'Kund' (varde_referens).
+      // Probet kollar att alla aktiva kund-referenser pekar på existerande kund.
+      name: "orphans: metadata 'Kund' varde_referens",
+      sql: `SELECT count(*)::int AS c FROM metadata_varden mv
+            JOIN metadata_katalog mk ON mk.id = mv.metadata_katalog_id
+              AND lower(mk.namn) = 'kund' AND mk.deleted_at IS NULL
+            WHERE mv.tenant_id = $1 AND mv.varde_referens IS NOT NULL
+              AND COALESCE(mv.raderad, false) = false
+              AND NOT EXISTS (SELECT 1 FROM customers c WHERE c.id = mv.varde_referens)`,
     },
     {
       name: "orphans: price_lists.customer_id",

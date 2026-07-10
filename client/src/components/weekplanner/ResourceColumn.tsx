@@ -13,12 +13,11 @@ interface ResourceColumnProps {
   summary?: { totalHours: number; weeklyCapacity: number; pct: number };
   onResourceClick: (resourceId: string) => void;
   onSendSchedule: (resource: Resource) => void;
-  isClusterMatch?: boolean;
   /** Period currently shown in the planner — used to color the publish indicator. */
   currentPeriod?: { start: string; end: string };
 }
 
-export const ResourceColumn = memo(function ResourceColumn({ resource, summary, onResourceClick, onSendSchedule, isClusterMatch, currentPeriod }: ResourceColumnProps) {
+export const ResourceColumn = memo(function ResourceColumn({ resource, summary, onResourceClick, onSendSchedule, currentPeriod }: ResourceColumnProps) {
   const { data: profiles = [] } = useQuery<ResourceProfile[]>({ queryKey: ["/api/resource-profiles"] });
   const { data: assignments = [] } = useQuery<ResourceProfileAssignment[]>({
     queryKey: ["/api/resource-profiles", "all-assignments"],
@@ -37,7 +36,7 @@ export const ResourceColumn = memo(function ResourceColumn({ resource, summary, 
 
   return (
     <div
-      className={`p-2 border-r cursor-pointer hover-elevate transition-colors group flex flex-col justify-between ${isClusterMatch ? "bg-chart-2/10 dark:bg-chart-2/15 ring-1 ring-chart-2/40 dark:ring-chart-2/50" : "bg-card"}`}
+      className="p-2 border-r cursor-pointer hover-elevate transition-colors group flex flex-col justify-between bg-card"
       onClick={() => onResourceClick(resource.id)}
       data-testid={`resource-cell-${resource.id}`}
     >

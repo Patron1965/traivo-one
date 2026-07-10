@@ -1869,7 +1869,8 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
   }
 
   if (view === "job" && selectedJob) {
-    const accessInfo = (selectedObject?.accessInfo || {}) as {
+    // Etapp 5: åtkomstinfo bor i metadata-systemet; objektkolumnen är borttagen.
+    const accessInfo = {} as {
       gateCode?: string;
       keyLocation?: string;
       parking?: string;
@@ -1885,7 +1886,6 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
             jobTitle: selectedJob.title,
             objectName: selectedJob.objectName ?? undefined,
             objectAddress: selectedJob.objectAddress ?? undefined,
-            accessInfo: (selectedObject?.accessInfo as { gateCode?: string; keyLocation?: string; parking?: string; specialInstructions?: string } | undefined),
           }}
         />
         
@@ -3935,7 +3935,6 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
           jobTitle: selectedJob.title,
           objectName: selectedJob.objectName ?? undefined,
           objectAddress: selectedJob.objectAddress ?? undefined,
-          accessInfo: (selectedObject?.accessInfo as { gateCode?: string; keyLocation?: string; parking?: string; specialInstructions?: string } | undefined),
         } : undefined}
       />
 

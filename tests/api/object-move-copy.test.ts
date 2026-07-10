@@ -13,12 +13,12 @@ import {
   userTenantRoles,
   customers,
   objects,
-  objectPayers,
   objectParents,
   metadataKatalog,
   metadataVarden,
 } from "@shared/schema";
 import { and, eq, inArray } from "drizzle-orm";
+import { setObjectKund, cleanupObjectKund } from "./helpers/object-kund";
 import type { InsertObject } from "@shared/schema";
 
 // Task #720: integrationstester för flytta-/kopiera-objekt-flödena (Task #713).
@@ -73,17 +73,11 @@ function makeObject(
   } as InsertObject;
 }
 
-// getObject härleder customerId från primär object_payers-raden (inte legacy
-// objects.customer_id). copyObjectTree läser rotobjektet via getObject, så roten
-// måste ha en primär betalare för att klonen ska få en giltig customerId.
+// getObject härleder customerId ur Ekonomi-metadatafältet "Kund" (Etapp 5;
+// object_payers är borttagen). copyObjectTree läser rotobjektet via getObject,
+// så roten måste ha kund-metadata för att klonen ska få en giltig customerId.
 async function addPrimaryPayer(objectId: string, tenantId: string): Promise<void> {
-  await db.insert(objectPayers).values({
-    tenantId,
-    objectId,
-    customerId: tenantId === TENANT_B ? customerB : customerA,
-    payerType: "primary",
-    isPrimary: true,
-  });
+  await setObjectKund(tenantId, objectId, tenantId === TENANT_B ? customerB : customerA);
 }
 
 beforeAll(async () => {
@@ -143,7 +137,7 @@ afterAll(async () => {
     await db.delete(metadataVarden).where(inArray(metadataVarden.tenantId, [TENANT_A, TENANT_B]));
     await db.delete(metadataKatalog).where(inArray(metadataKatalog.tenantId, [TENANT_A, TENANT_B]));
     await db.delete(objectParents).where(inArray(objectParents.tenantId, [TENANT_A, TENANT_B]));
-    await db.delete(objectPayers).where(inArray(objectPayers.tenantId, [TENANT_A, TENANT_B]));
+    await cleanupObjectKund([TENANT_A, TENANT_B]);
     await db.delete(objects).where(inArray(objects.tenantId, [TENANT_A, TENANT_B]));
     await db.delete(customers).where(inArray(customers.tenantId, [TENANT_A, TENANT_B]));
     await db.delete(userTenantRoles).where(inArray(userTenantRoles.userId, [ADMIN_A, ADMIN_B]));
@@ -327,16 +321,17 @@ describe("POST /api/objects/:id/copy — metadata-kopiering (egna kopieras, ärv
     expect(cloneId).toBeTruthy();
     expect(res.body?.metadataCopyError).toBeNull();
 
-    const cloneSwedish = await db.select().from(metadataVarden)
+    const cloneAll = await db.select().from(metadataVarden)
       .where(and(eq(metadataVarden.objektId, cloneId), eq(metadataVarden.tenantId, TENANT_A)));
-    // Endast källans EGNA rad ska ha kopierats — förälderns (ärvda) värde fryses ej.
+    // Endast källans EGNA rader ska ha kopierats — förälderns (ärvda) värde fryses ej.
+    // (Källan har även en egen "Kund"-metadatarad från setObjectKund; den kopieras med.)
+    const cloneSwedish = cloneAll.filter((r) =>
+      r.metadataKatalogId === katalogLocal || r.metadataKatalogId === katalogParent,
+    );
     expect(cloneSwedish).toHaveLength(1);
     expect(cloneSwedish[0].metadataKatalogId).toBe(katalogLocal);
     expect(cloneSwedish[0].vardeString).toBe("sv-lokalt");
-    expect(cloneSwedish.some((r) => r.metadataKatalogId === katalogParent)).toBe(false);
-
-    // Rapporterad räknare = 1 svenskt eget värde.
-    expect(res.body?.copiedMetadata).toBe(1);
+    expect(cloneAll.some((r) => r.metadataKatalogId === katalogParent)).toBe(false);
   });
 });
 

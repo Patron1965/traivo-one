@@ -11,7 +11,7 @@ import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { AlertTriangle, MapPin, Loader2, RefreshCw, Building2, Layers, ExternalLink, Save, X, Play, Bell, Plus, Trash2, Check } from "lucide-react";
+import { AlertTriangle, MapPin, Loader2, RefreshCw, Building2, ExternalLink, Save, X, Play, Bell, Plus, Trash2, Check } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 
 interface MissingItem {
@@ -23,15 +23,12 @@ interface MissingItem {
   postalCode: string | null;
   customerId: string | null;
   customerName: string | null;
-  clusterId: string | null;
-  clusterName: string | null;
 }
 
 interface MissingResponse {
   summary: { missingCount: number; totalWithAddress: number; totalObjects: number };
   items: MissingItem[];
   byCustomer: { customerId: string; customerName: string; count: number }[];
-  byCluster: { clusterId: string; clusterName: string; count: number }[];
 }
 
 interface TrendResponse {
@@ -581,7 +578,6 @@ export default function MissingCoordinatesPage() {
         <TabsList>
           <TabsTrigger value="list" data-testid="tab-list">Lista ({items.length})</TabsTrigger>
           <TabsTrigger value="byCustomer" data-testid="tab-by-customer">Per kund ({data?.byCustomer.length ?? 0})</TabsTrigger>
-          <TabsTrigger value="byCluster" data-testid="tab-by-cluster">Per kluster ({data?.byCluster.length ?? 0})</TabsTrigger>
           <TabsTrigger value="notifications" data-testid="tab-notifications">
             <Bell className="h-4 w-4 mr-1" />Notiser
           </TabsTrigger>
@@ -660,8 +656,7 @@ export default function MissingCoordinatesPage() {
                         <span className="font-medium truncate" data-testid={`text-name-${item.id}`}>{item.name}</span>
                         {item.objectNumber && <Badge variant="outline" data-testid={`badge-number-${item.id}`}>#{item.objectNumber}</Badge>}
                         {item.customerName && <Badge variant="secondary" data-testid={`badge-customer-${item.id}`}><Building2 className="h-3 w-3 mr-1" />{item.customerName}</Badge>}
-                        {item.clusterName && <Badge variant="secondary" data-testid={`badge-cluster-${item.id}`}><Layers className="h-3 w-3 mr-1" />{item.clusterName}</Badge>}
-                        {dirty && <Badge variant="destructive" data-testid={`badge-dirty-${item.id}`}>Ändrad</Badge>}
+                                                {dirty && <Badge variant="destructive" data-testid={`badge-dirty-${item.id}`}>Ändrad</Badge>}
                         {hasCoords && (
                           <Badge variant="default" className="bg-chart-2/15 hover:bg-chart-2/15" data-testid={`badge-suggestion-${item.id}`}>
                             <Check className="h-3 w-3 mr-1" />Förslag valt
@@ -943,21 +938,6 @@ export default function MissingCoordinatesPage() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="byCluster">
-          <Card>
-            <CardContent className="p-0">
-              {(data?.byCluster || []).map((g) => (
-                <div key={g.clusterId} className="flex items-center justify-between p-3 border-b last:border-0" data-testid={`row-cluster-${g.clusterId}`}>
-                  <div className="flex items-center gap-2"><Layers className="h-4 w-4 text-muted-foreground" />{g.clusterName}</div>
-                  <Badge variant="outline">{g.count}</Badge>
-                </div>
-              ))}
-              {(data?.byCluster || []).length === 0 && (
-                <div className="p-8 text-center text-muted-foreground">Inga objekt utan koordinater.</div>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
       </Tabs>
     </div>
   );

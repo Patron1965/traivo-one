@@ -5,7 +5,7 @@ import { formatZodError, verifyTenantOwnership } from "./helpers";
 import { getTenantIdWithFallback, requireAdmin } from "../tenant-middleware";
 import { geocodeAddress, searchDestinations, batchGeocode, isGoogleGeocodingAvailable, reverseGeocode, lookupCityFromPostalCode, autocompleteAddress } from "../services/geocoding";
 import { createInheritanceProcessor } from "../inheritance-processor";
-import { objects, workOrders, workOrderObjects, objectArticles, objectContacts, objectImages, objectParents, objectPayers, objectTimeRestrictions, geocodingMissingSnapshots } from "@shared/schema";
+import { objects, objectParents, geocodingMissingSnapshots } from "@shared/schema";
 import { asyncHandler } from "../asyncHandler";
 import { NotFoundError, ValidationError } from "../errors";
 import { db } from "../db";
@@ -48,9 +48,6 @@ function applyBatchGeoFilters(objects: ServiceObject[], filters: Record<string, 
   if (typeof filters.city === "string") {
     const cityLower = filters.city.toLowerCase();
     targets = targets.filter(o => o.city && o.city.toLowerCase() === cityLower);
-  }
-  if (typeof filters.clusterId === "string") {
-    targets = targets.filter(o => o.clusterId === filters.clusterId);
   }
   if (typeof filters.postalCode === "string") {
     targets = targets.filter(o => o.postalCode && o.postalCode.startsWith(filters.postalCode as string));
@@ -209,13 +206,10 @@ app.post("/api/objects/geocoded", asyncHandler(async (req, res) => {
   const allObjects = await storage.getObjects(tenantId);
   const geocoded = allObjects.filter(o => o.latitude && o.longitude);
 
-  const { city, clusterId, limit } = req.body || {};
+  const { city, limit } = req.body || {};
   let matched = geocoded;
   if (city) {
     matched = matched.filter(o => (o.city || "").toLowerCase() === city.toLowerCase());
-  }
-  if (clusterId) {
-    matched = matched.filter(o => o.clusterId === clusterId);
   }
   const maxResults = Math.min(typeof limit === "number" ? limit : 500, 2000);
   const filtered = maxResults > 0 ? matched.slice(0, maxResults) : [];
@@ -269,29 +263,11 @@ app.post("/api/objects/batch-geocode/preview", asyncHandler(async (req, res) => 
     .map(([city, count]) => ({ city, count }))
     .sort((a, b) => b.count - a.count);
 
-  const clusters = await storage.getClusters(tenantId);
-  const clusterMap = new Map<string, { name: string; count: number }>();
-  for (const obj of needsGeo) {
-    if (obj.clusterId) {
-      const existing = clusterMap.get(obj.clusterId);
-      if (existing) {
-        existing.count++;
-      } else {
-        const cluster = clusters.find(c => c.id === obj.clusterId);
-        clusterMap.set(obj.clusterId, { name: cluster?.name || obj.clusterId, count: 1 });
-      }
-    }
-  }
-  const byCluster = Array.from(clusterMap.entries())
-    .map(([clusterId, { name, count }]) => ({ clusterId, clusterName: name, count }))
-    .sort((a, b) => b.count - a.count);
-
   res.json({
     totalNeedsGeo: needsGeo.length,
     filteredCount: targets.length,
     estimatedCost: +(targets.length * costPerRequest).toFixed(2),
     byCity,
-    byCluster,
     googleAvailable: isGoogleGeocodingAvailable(),
   });
 }));
@@ -555,7 +531,7 @@ app.get("/api/object-header-config/:objectType", asyncHandler(async (req, res) =
 
 const objectHeaderConfigBodySchema = z.object({
   showImage: z.boolean().optional(),
-  imageSource: z.enum(["vignette", "latest_image", "metadata"]).optional(),
+  imageSource: z.enum(["latest_image", "metadata"]).optional(),
   imageMetadataKatalogId: z.string().nullable().optional(),
   showMap: z.boolean().optional(),
   field1KatalogId: z.string().nullable().optional(),
@@ -594,7 +570,7 @@ app.put("/api/object-header-config/:objectType", requireAdmin, asyncHandler(asyn
     tenantId,
     objectType,
     showImage: body.showImage ?? true,
-    imageSource: body.imageSource ?? "vignette",
+    imageSource: body.imageSource ?? "metadata",
     imageMetadataKatalogId: body.imageMetadataKatalogId ?? null,
     showMap: body.showMap ?? true,
     field1KatalogId: body.field1KatalogId ?? null,
@@ -1107,34 +1083,19 @@ app.get("/api/objects/:id/resolved", asyncHandler(async (req, res) => {
   if (!verifyTenantOwnership(existing, tenantId)) {
     throw new NotFoundError("Objekt");
   }
-  const processor = await createInheritanceProcessor(tenantId);
-  const objectWithInheritance = await processor.getObjectWithResolvedValues(req.params.id);
-  if (!objectWithInheritance) throw new NotFoundError("Objekt");
-  // Task #552 (A): composed display name baserat på per-tenant regler. Faller
-  // tillbaka till object.name om regler saknas.
+  // Etapp 5 (Task #1217): resolved*-specialfälten är borttagna — metadata är
+  // enda arvskällan. Endpointen behålls (ObjectDetailPage läser den) men
+  // returnerar objektet + composed displayName.
+  const objectWithDisplayName: Record<string, unknown> = { ...existing };
   try {
     const { computeDisplayName } = await import("../services/display-name");
     const language = typeof req.query.language === "string" ? req.query.language : undefined;
     const displayName = await computeDisplayName(req.params.id, tenantId, undefined, language);
-    (objectWithInheritance as any).displayName = displayName ?? (objectWithInheritance as any).name;
+    objectWithDisplayName.displayName = displayName ?? existing!.name;
   } catch (err) {
-    (objectWithInheritance as any).displayName = (objectWithInheritance as any).name;
+    objectWithDisplayName.displayName = existing!.name;
   }
-  res.json(objectWithInheritance);
-}));
-
-// Effektiva (resolved) leveranspreferenser för objektet. Leveranspreferenser är
-// objekt-egna — det finns inget kund-arv (ADR v3). Returnerar objektets egna
-// prefs (source="object") eller tomt (source="none").
-app.get("/api/objects/:id/delivery-preferences", asyncHandler(async (req, res) => {
-  const tenantId = getTenantIdWithFallback(req);
-  const existing = await storage.getObject(req.params.id);
-  if (!verifyTenantOwnership(existing, tenantId)) {
-    throw new NotFoundError("Objekt");
-  }
-  const resolved = await storage.resolveDeliveryPreferences(req.params.id);
-  res.set("Cache-Control", "no-cache, must-revalidate");
-  res.json(resolved);
+  res.json(objectWithDisplayName);
 }));
 
 // Task #619: alla släktnamn (ett per förälderkedja via object_parents).
@@ -1237,103 +1198,12 @@ app.get("/api/objects/:id/deviations", asyncHandler(async (req, res) => {
   res.json(deviations);
 }));
 
-// ============================================
-// VINJETBILD (task #580 — PDF §14.5)
-// Flow: klient hämtar signerad URL via POST /api/uploads/request-url, laddar
-// upp filen, bekräftar via POST /api/uploads/confirm (sätter tenant-ACL), och
-// kallar sedan POST /api/objects/:id/vignette med objektpath:en. Tidigare
-// aktiv vinjet markeras som superseded (soft) — bilden finns kvar i storage
-// och visas i historik-strip.
-// ============================================
-app.get("/api/objects/:id/vignettes", asyncHandler(async (req, res) => {
-  const tenantId = getTenantIdWithFallback(req);
-  const existing = await storage.getObject(req.params.id);
-  if (!verifyTenantOwnership(existing, tenantId)) {
-    throw new NotFoundError("Objekt");
-  }
-  const vignettes = await storage.getObjectVignettes(tenantId, req.params.id);
-  res.json(vignettes.map((v) => ({
-    id: v.id,
-    storagePath: v.storagePath,
-    url: `/api/storage/serve${v.storagePath}`,
-    uploadedBy: v.uploadedBy,
-    uploadedAt: v.uploadedAt,
-    supersededAt: v.supersededAt,
-    isCurrent: v.supersededAt === null,
-  })));
-}));
-
-app.post("/api/objects/:id/vignette", asyncHandler(async (req, res) => {
-  const tenantId = getTenantIdWithFallback(req);
-  const existing = await storage.getObject(req.params.id);
-  if (!verifyTenantOwnership(existing, tenantId)) {
-    throw new NotFoundError("Objekt");
-  }
-  const schema = z.object({
-    objectPath: z.string().regex(/^\/objects\/[a-zA-Z0-9/_-]+$/, "Ogiltig objektsökväg"),
-  });
-  const parsed = schema.safeParse(req.body);
-  if (!parsed.success) throw new ValidationError(formatZodError(parsed.error));
-
-  // Verifiera att uppladdningen är bekräftad (har ACL-policy med rätt tenant-ägare).
-  // Annars kan en klient hänvisa till en annan tenants bild eller en orphan.
-  const { ObjectStorageService, ObjectPermission } = await import("../replit_integrations/object_storage/objectStorage").then(async (mod) => ({
-    ObjectStorageService: mod.ObjectStorageService,
-    ObjectPermission: (await import("../replit_integrations/object_storage/objectAcl")).ObjectPermission,
-  }));
-  const oss = new ObjectStorageService();
-  const file = await oss.getObjectEntityFile(parsed.data.objectPath);
-  const userId = (req as any).user?.claims?.sub as string | undefined;
-  const canAccess = await oss.canAccessObjectEntity({
-    userId,
-    tenantId,
-    objectFile: file,
-    requestedPermission: ObjectPermission.READ,
-  });
-  if (!canAccess) {
-    throw new ValidationError("Bilden saknar bekräftad uppladdning eller tillhör en annan tenant. Kör /api/uploads/confirm först.");
-  }
-
-  const created = await storage.replaceObjectVignette({
-    tenantId,
-    objectId: req.params.id,
-    storagePath: parsed.data.objectPath,
-    uploadedBy: userId ?? null,
-  });
-  res.status(201).json({
-    id: created.id,
-    storagePath: created.storagePath,
-    url: `/api/storage/serve${created.storagePath}`,
-    uploadedBy: created.uploadedBy,
-    uploadedAt: created.uploadedAt,
-    supersededAt: created.supersededAt,
-    isCurrent: true,
-  });
-}));
-
-app.post("/api/objects/:id/recalculate-inheritance", asyncHandler(async (req, res) => {
-  const tenantId = getTenantIdWithFallback(req);
-  const existing = await storage.getObject(req.params.id);
-  if (!verifyTenantOwnership(existing, tenantId)) {
-    throw new NotFoundError("Objekt");
-  }
-  const processor = await createInheritanceProcessor(tenantId);
-  await processor.updateResolvedValues(req.params.id);
-  const descendantsUpdated = await processor.updateDescendants(req.params.id);
-  res.json({
-    success: true,
-    message: `Uppdaterade ärvning för objektet och ${descendantsUpdated} ättlingar`
-  });
-}));
-
 // === Missing coordinates admin: list, retry, trend ===
 app.get("/api/objects/missing-coordinates", asyncHandler(async (req, res) => {
   const tenantId = getTenantIdWithFallback(req);
   const allObjects = await storage.getObjects(tenantId);
   const customers = await storage.getCustomers(tenantId);
-  const clusters = await storage.getClusters(tenantId);
   const customerById = new Map(customers.map(c => [c.id, c]));
-  const clusterById = new Map(clusters.map(c => [c.id, c]));
 
   const withAddress = allObjects.filter(o => o.address && o.address.trim() !== "");
   const missing = withAddress.filter(o => o.latitude == null || o.longitude == null);
@@ -1347,8 +1217,6 @@ app.get("/api/objects/missing-coordinates", asyncHandler(async (req, res) => {
     postalCode: o.postalCode,
     customerId: o.customerId,
     customerName: customerById.get(o.customerId)?.name || null,
-    clusterId: o.clusterId,
-    clusterName: o.clusterId ? clusterById.get(o.clusterId)?.name || null : null,
   }));
 
   const byCustomer = new Map<string, { customerId: string; customerName: string; count: number }>();
@@ -1358,14 +1226,6 @@ app.get("/api/objects/missing-coordinates", asyncHandler(async (req, res) => {
     if (existing) existing.count++;
     else byCustomer.set(key, { customerId: key, customerName: it.customerName || "(okänd kund)", count: 1 });
   }
-  const byCluster = new Map<string, { clusterId: string; clusterName: string; count: number }>();
-  for (const it of items) {
-    const key = it.clusterId || "(inget kluster)";
-    const existing = byCluster.get(key);
-    if (existing) existing.count++;
-    else byCluster.set(key, { clusterId: key, clusterName: it.clusterName || "(inget kluster)", count: 1 });
-  }
-
   // Snapshot today's count (idempotent per day per tenant)
   const today = new Date().toISOString().slice(0, 10);
   try {
@@ -1397,7 +1257,6 @@ app.get("/api/objects/missing-coordinates", asyncHandler(async (req, res) => {
     },
     items,
     byCustomer: Array.from(byCustomer.values()).sort((a, b) => b.count - a.count),
-    byCluster: Array.from(byCluster.values()).sort((a, b) => b.count - a.count),
   });
 }));
 
@@ -1871,21 +1730,6 @@ app.post("/api/objects/import-modus", asyncHandler(async (req, res) => {
     unmatchedCustomers: summary.unmatchedCustomers,
     skippedRows: summary.skippedRows,
     errors: errors.slice(0, 50),
-  });
-}));
-
-app.post("/api/clusters/:id/process-inheritance", asyncHandler(async (req, res) => {
-  const tenantId = getTenantIdWithFallback(req);
-  const cluster = await storage.getCluster(req.params.id);
-  if (!verifyTenantOwnership(cluster, tenantId)) {
-    throw new NotFoundError("Kluster");
-  }
-  const processor = await createInheritanceProcessor(tenantId);
-  const result = await processor.processClusterHierarchy(req.params.id);
-  res.json({
-    success: true,
-    processed: result.processed,
-    errors: result.errors
   });
 }));
 

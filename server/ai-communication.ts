@@ -4,7 +4,7 @@ import { storage } from "./storage";
 import { trackOpenAIResponse } from "./api-usage-tracker";
 import { isReasoningModel } from "./ai-model-capabilities";
 import { db } from "./db";
-import { customerCommunications, objectContacts } from "@shared/schema";
+import { customerCommunications } from "@shared/schema";
 import { eq, and, desc, gte, lte } from "drizzle-orm";
 
 const openai = new OpenAI({
@@ -130,23 +130,18 @@ export async function handleWorkOrderStatusChange(
 
     const customer = await storage.getCustomer(workOrder.customerId);
 
-    const contacts = await db.select().from(objectContacts)
-      .where(and(
-        eq(objectContacts.objectId, workOrder.objectId),
-        eq(objectContacts.tenantId, tenantId)
-      ));
-
-    const primaryContacts = contacts.filter(c => c.contactType === "primary");
-    const recipientContacts = primaryContacts.length > 0 ? primaryContacts : contacts;
+    // Etapp 5: kontakter läses ur Kontakt-metadatat (inte object_contacts).
+    const { getObjectKontaktPersons } = await import("./metadata-queries");
+    const kontakter = await getObjectKontaktPersons(workOrder.objectId, tenantId);
 
     const recipients: { name?: string; email?: string; phone?: string }[] = [];
 
-    for (const contact of recipientContacts) {
-      if (contact.email || contact.phone) {
+    for (const contact of kontakter) {
+      if (contact.epost || contact.telefon) {
         recipients.push({
-          name: contact.name || undefined,
-          email: contact.email || undefined,
-          phone: contact.phone || undefined,
+          name: contact.namn || undefined,
+          email: contact.epost || undefined,
+          phone: contact.telefon || undefined,
         });
       }
     }
@@ -332,23 +327,18 @@ export async function sendETAUpdate(
 
     const customer = await storage.getCustomer(workOrder.customerId);
 
-    const contacts = await db.select().from(objectContacts)
-      .where(and(
-        eq(objectContacts.objectId, workOrder.objectId),
-        eq(objectContacts.tenantId, tenantId)
-      ));
-
-    const primaryContacts = contacts.filter(c => c.contactType === "primary");
-    const recipientContacts = primaryContacts.length > 0 ? primaryContacts : contacts;
+    // Etapp 5: kontakter läses ur Kontakt-metadatat (inte object_contacts).
+    const { getObjectKontaktPersons } = await import("./metadata-queries");
+    const kontakter = await getObjectKontaktPersons(workOrder.objectId, tenantId);
 
     const recipients: { name?: string; email?: string; phone?: string }[] = [];
 
-    for (const contact of recipientContacts) {
-      if (contact.email || contact.phone) {
+    for (const contact of kontakter) {
+      if (contact.epost || contact.telefon) {
         recipients.push({
-          name: contact.name || undefined,
-          email: contact.email || undefined,
-          phone: contact.phone || undefined,
+          name: contact.namn || undefined,
+          email: contact.epost || undefined,
+          phone: contact.telefon || undefined,
         });
       }
     }

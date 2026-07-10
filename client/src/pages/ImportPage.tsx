@@ -21,7 +21,7 @@ import {
   Loader2, Download, Eye, X, FileUp, Check, Clock, FileSpreadsheet, Database,
   ArrowRight, Info, Settings, ChevronDown, ChevronUp, ListChecks, History, Undo2,
   SkipForward, Ban, BarChart3, ClipboardList, Tag, AlertTriangle, Merge, Copy, Link2,
-  FilePlus, Receipt, Wallet, RefreshCw, Layers
+  FilePlus, Receipt, RefreshCw, Layers
 } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PageTabs, IMPORT_TABS } from "@/components/layout/PageTabs";
@@ -38,7 +38,7 @@ import { ObjectImportV2Flow } from "@/components/import/ObjectImportV2Flow";
 import { ImportTypeHistory } from "@/components/import/ImportTypeHistory";
 import { BatchDetailsDialog as SharedBatchDetailsDialog } from "@/components/import/BatchDetailsDialog";
 import { ComingSoonPanel } from "@/components/import/ComingSoonPanel";
-import { PayerOrRecipientImportFlow } from "@/components/import/PayerOrRecipientImportFlow";
+import { RecipientImportFlow } from "@/components/import/RecipientImportFlow";
 import { ObjectsDiffPanel } from "@/components/import/ObjectsDiffPanel";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import Papa from "papaparse";
@@ -342,7 +342,6 @@ function ImportHistorySection() {
         if (rb.objects) parts.push(`${rb.objects} objekt`);
         if (rb.workOrders) parts.push(`${rb.workOrders} ordrar`);
         if (rb.customers) parts.push(`${rb.customers} kunder`);
-        if (rb.objectPayers) parts.push(`${rb.objectPayers} betalare`);
         if (rb.invoiceRecipients) parts.push(`${rb.invoiceRecipients} fakturamottagare`);
         toast({
           title: "Import ångrad",
@@ -489,17 +488,14 @@ function ImportHistorySection() {
               : isCleanup
                 ? "Återställ sanering?"
                 : "Ångra import?";
-            const isPayers = !!confirmBatchId && confirmBatchId.startsWith("import-payers-");
             const isRecipients = !!confirmBatchId && confirmBatchId.startsWith("import-recipients-");
             const description = isEnrich
               ? "Metadata-värden som denna berikning skapade tas bort, och värden som ändrades återställs till sitt tidigare värde via audit-loggen. Inga objekt raderas."
               : isCleanup
                 ? "Sanerade fält (namn, föräldrakopplingar, adresser) återställs till sina tidigare värden via audit-loggen. Inga objekt raderas."
-                : isPayers
-                  ? "Alla betalare (object_payers) som importerades i denna batch tas bort. Manuellt registrerade betalare påverkas inte."
-                  : isRecipients
-                    ? "Alla fakturamottagare som importerades i denna batch markeras som borttagna. Eventuella frusna arbetsordrar som refererar mottagaren behåller sin historik."
-                    : "Alla objekt, ordrar och kunder som importerades i denna batch kommer att inaktiveras. Data raderas inte permanent men syns inte längre i systemet.";
+                : isRecipients
+                  ? "Alla fakturamottagare som importerades i denna batch markeras som borttagna. Eventuella frusna arbetsordrar som refererar mottagaren behåller sin historik."
+                  : "Alla objekt, ordrar och kunder som importerades i denna batch kommer att inaktiveras. Data raderas inte permanent men syns inte längre i systemet.";
             const buttonLabel = isEnrich
               ? "Återställ berikning"
               : isCleanup
@@ -2156,13 +2152,13 @@ export default function ImportPage() {
 
   type ActiveTab =
     | "modus" | "enrich" | "manual" | "fortnox" | "mapped"
-    | "customerlist" | "children" | "payers" | "recipients" | "diff"
+    | "customerlist" | "children" | "recipients" | "diff"
     | "wizard" | "objectsv2"
     | "history" | "quality";
   const initialTab: ActiveTab = ((): ActiveTab => {
     const validTabs: ActiveTab[] = [
       "modus", "enrich", "manual", "fortnox", "mapped",
-      "customerlist", "children", "payers", "recipients", "diff",
+      "customerlist", "children", "recipients", "diff",
       "wizard", "objectsv2",
       "history", "quality",
     ];
@@ -2174,7 +2170,7 @@ export default function ImportPage() {
   // Task #564 + #578: normalisera activeTab när importMode ändras
   const visibleTabsForMode = useCallback((mode: ImportMode | null): ActiveTab[] => {
     const migration: ActiveTab[] = ["modus", "enrich", "manual", "fortnox", "mapped"];
-    const ongoing: ActiveTab[] = ["customerlist", "children", "payers", "recipients", "diff"];
+    const ongoing: ActiveTab[] = ["customerlist", "children", "recipients", "diff"];
     const wizard: ActiveTab[] = ["wizard", "objectsv2"];
     const always: ActiveTab[] = ["history", "quality"];
     if (mode === "migration") return [...migration, ...always];
@@ -3096,10 +3092,6 @@ export default function ImportPage() {
               <TabsTrigger value="children" className="flex items-center gap-2" data-testid="tab-children-import">
                 <FilePlus className="h-4 w-4" />
                 Underobjekt
-              </TabsTrigger>
-              <TabsTrigger value="payers" className="flex items-center gap-2" data-testid="tab-payers-import">
-                <Wallet className="h-4 w-4" />
-                Betalare
               </TabsTrigger>
               <TabsTrigger value="recipients" className="flex items-center gap-2" data-testid="tab-recipients-import">
                 <Receipt className="h-4 w-4" />
@@ -4847,9 +4839,9 @@ export default function ImportPage() {
                 <p>
                   Kolumnen <code className="px-1 bg-muted rounded">kund</code> i objektmallen sätter
                   bara <em>skapande-tenant</em> och historisk koppling — den auktoritativa
-                  betalar-/fakturarelationen ligger i <code className="px-1 bg-muted rounded">object_payers</code> och
+                  betalar-/fakturarelationen ligger i Ekonomi-metadata och
                   <code className="px-1 bg-muted rounded"> work_orders.customer_id</code>. För nya
-                  betalare/fakturamottagare, använd "Lägg till löpande" → Betalare / Fakturamottagare.
+                  fakturamottagare, använd "Lägg till löpande" → Fakturamottagare.
                 </p>
               </div>
             </CardContent>
@@ -5071,12 +5063,8 @@ export default function ImportPage() {
           <ChildObjectImportFlow initialParentId={urlParent} />
         </TabsContent>
 
-        <TabsContent value="payers" className="space-y-6">
-          <PayerOrRecipientImportFlow kind="payers" />
-        </TabsContent>
-
         <TabsContent value="recipients" className="space-y-6">
-          <PayerOrRecipientImportFlow kind="recipients" />
+          <RecipientImportFlow />
         </TabsContent>
 
         <TabsContent value="diff" className="space-y-6">

@@ -1,5 +1,6 @@
 import type { Express, Request, Response, NextFunction } from "express";
 import { storage } from "../storage";
+import { getTimeRestrictionsForTenant } from "../services/object-time-restrictions";
 import { invalidateWorkflowCaches } from "../services/dashboardCache";
 import { db } from "../db";
 import { eq, sql, desc, and, gte, isNull, inArray } from "drizzle-orm";
@@ -311,7 +312,6 @@ app.post("/api/ai/field-assistant", requirePlanner, asyncHandler(async (req, res
             id: o.id,
             namn: o.name,
             adress: o.address,
-            portkod: o.accessCode,
             typ: o.objectType
           })));
         }
@@ -322,12 +322,13 @@ app.post("/api/ai/field-assistant", requirePlanner, asyncHandler(async (req, res
           if (!obj) return JSON.stringify({ error: "Objektet hittades inte" });
           
           const customer = obj.customerId ? await storage.getCustomer(obj.customerId) : null;
+          const { getObjectAtkomstFields } = await import("../metadata-queries");
+          const atkomst = await getObjectAtkomstFields(obj.id, tenantId);
           
           return JSON.stringify({
             namn: obj.name,
             adress: obj.address,
-            portkod: obj.accessCode,
-            anteckningar: obj.notes,
+            portkod: atkomst.portkod,
             kund: customer?.name,
             typ: obj.objectType,
             lat: obj.latitude,
@@ -350,12 +351,11 @@ app.post("/api/ai/field-assistant", requirePlanner, asyncHandler(async (req, res
         }
         
         case "get_system_stats": {
-          const [orders, resources, objects, customers, clusters] = await Promise.all([
+          const [orders, resources, objects, customers] = await Promise.all([
             storage.getWorkOrders(tenantId),
             storage.getResources(tenantId),
             storage.getObjects(tenantId),
-            storage.getCustomers(tenantId),
-            storage.getClusters(tenantId)
+            storage.getCustomers(tenantId)
           ]);
           
           const completed = orders.filter(o => o.orderStatus === "utford").length;
@@ -365,8 +365,7 @@ app.post("/api/ai/field-assistant", requirePlanner, asyncHandler(async (req, res
             ordrar: { totalt: orders.length, klara: completed, väntande: pending },
             resurser: { totalt: resources.length, aktiva: resources.filter(r => r.status === "active").length },
             objekt: objects.length,
-            kunder: customers.length,
-            kluster: clusters.length
+            kunder: customers.length
           });
         }
         
@@ -793,15 +792,14 @@ app.post("/api/ai/planning-suggestions", requirePlanner, asyncHandler(async (req
     const guard = await aiBudgetGuard(req, res, "planning");
     if (guard.blocked) return;
     const tenantId = guard.tenantId;
-    const [workOrders, resources, clusters, setupTimeLogs] = await Promise.all([
+    const [workOrders, resources, setupTimeLogs] = await Promise.all([
       storage.getWorkOrders(tenantId),
       storage.getResources(tenantId),
-      storage.getClusters(tenantId),
       storage.getSetupTimeLogs(tenantId),
     ]);
     
     // Pre-calculate KPIs so they can be reused
-    const kpis = calculatePlanningKPIs(workOrders, resources, clusters, setupTimeLogs);
+    const kpis = calculatePlanningKPIs(workOrders, resources, setupTimeLogs);
     
     const resolvedWeekStart = weekStart || new Date().toISOString().split("T")[0];
     const resolvedWeekEnd = weekEnd || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
@@ -819,7 +817,6 @@ app.post("/api/ai/planning-suggestions", requirePlanner, asyncHandler(async (req
       generatePlanningSuggestions({
         workOrders,
         resources,
-        clusters,
         weekStart: resolvedWeekStart,
         weekEnd: resolvedWeekEnd,
         setupTimeLogs,
@@ -846,14 +843,13 @@ app.get("/api/ai/planning-analysis", requirePlanner, asyncHandler(async (req, re
     weekEnd.setDate(weekStart.getDate() + 4);
     weekEnd.setHours(23, 59, 59, 999);
 
-    const [workOrders, resources, clusters, setupTimeLogs] = await Promise.all([
+    const [workOrders, resources, setupTimeLogs] = await Promise.all([
       storage.getWorkOrders(tenantId),
       storage.getResources(tenantId),
-      storage.getClusters(tenantId),
       storage.getSetupTimeLogs(tenantId),
     ]);
 
-    const kpis = calculatePlanningKPIs(workOrders, resources, clusters, setupTimeLogs);
+    const kpis = calculatePlanningKPIs(workOrders, resources, setupTimeLogs);
 
     const activeOrders = workOrders.filter(o => o.orderStatus !== "fakturerad" && !o.deletedAt);
     const weekOrders = activeOrders.filter(o => {
@@ -996,14 +992,13 @@ app.get("/api/ai/kpis", requirePlanner, asyncHandler(async (req, res) => {
     const { calculatePlanningKPIs } = await import("../ai-planner");
     const tenantId = getTenantIdWithFallback(req);
     
-    const [workOrders, resources, clusters, setupTimeLogs] = await Promise.all([
+    const [workOrders, resources, setupTimeLogs] = await Promise.all([
       storage.getWorkOrders(tenantId),
       storage.getResources(tenantId),
-      storage.getClusters(tenantId),
       storage.getSetupTimeLogs(tenantId),
     ]);
     
-    const kpis = calculatePlanningKPIs(workOrders, resources, clusters, setupTimeLogs);
+    const kpis = calculatePlanningKPIs(workOrders, resources, setupTimeLogs);
     res.json(kpis);
 }));
 
@@ -1044,10 +1039,9 @@ app.post("/api/ai/auto-schedule", requirePlanner, asyncHandler(async (req, res) 
     const resolvedWeekStart = weekStart || new Date().toISOString().split("T")[0];
     const resolvedWeekEnd = weekEnd || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
 
-    const [workOrders, resources, clusters, setupTimeLogs, objects] = await Promise.all([
+    const [workOrders, resources, setupTimeLogs, objects] = await Promise.all([
       storage.getWorkOrders(tenantId),
       storage.getResources(tenantId),
-      storage.getClusters(tenantId),
       storage.getSetupTimeLogs(tenantId),
       storage.getObjects(tenantId),
     ]);
@@ -1063,7 +1057,7 @@ app.post("/api/ai/auto-schedule", requirePlanner, asyncHandler(async (req, res) 
       storage.getVehicleSchedulesByTenant(tenantId),
       storage.getResourceVehiclesByResourceIds(resourceIds),
       storage.getTaskDependencyInstances(tenantId),
-      storage.getObjectTimeRestrictionsByTenant(tenantId),
+      getTimeRestrictionsForTenant(tenantId),
       storage.getResourceArticlesByResourceIds(resourceIds),
     ]);
 
@@ -1102,7 +1096,6 @@ app.post("/api/ai/auto-schedule", requirePlanner, asyncHandler(async (req, res) 
         aiEnhancedSchedule({
           workOrders,
           resources,
-          clusters,
           weekStart: resolvedWeekStart,
           weekEnd: resolvedWeekEnd,
           setupTimeLogs,
@@ -1163,14 +1156,13 @@ app.post("/api/ai/optimize-vrp", requirePlanner, asyncHandler(async (req, res) =
     const { optimizeRoutesVRP, DEFAULT_BREAK_CONFIG } = await import("../route-optimizer");
     const { createOptimizationJob, ASYNC_THRESHOLD } = await import("../optimization-job-runner");
     const { buildTeamVehicles, buildTeamMemberMap, buildStartPointsForDate } = await import("../team-vehicles");
-    const { date, clusterId, breakConfig: reqBreakConfig, constraints } = req.body;
+    const { date, breakConfig: reqBreakConfig, constraints } = req.body;
     
     const tenantId = getTenantIdWithFallback(req);
-    const [workOrders, resources, objects, clusters, tenant, teams, teamMembersAll] = await Promise.all([
+    const [workOrders, resources, objects, tenant, teams, teamMembersAll] = await Promise.all([
       storage.getWorkOrders(tenantId),
       storage.getResources(tenantId),
       storage.getObjects(tenantId),
-      storage.getClusters(tenantId),
       storage.getTenant(tenantId),
       storage.getTeams(tenantId),
       storage.getAllTeamMembers(tenantId),
@@ -1194,10 +1186,6 @@ app.post("/api/ai/optimize-vrp", requirePlanner, asyncHandler(async (req, res) =
           : String(o.scheduledDate).split("T")[0];
         return orderDate === date;
       });
-    }
-    
-    if (clusterId) {
-      filteredOrders = filteredOrders.filter(o => o.clusterId === clusterId);
     }
     
     filteredOrders = filteredOrders.filter(o => 
@@ -1229,7 +1217,6 @@ app.post("/api/ai/optimize-vrp", requirePlanner, asyncHandler(async (req, res) =
       const jobId = await createOptimizationJob(tenantId, "vrp", {
         tenantId,
         date,
-        clusterId,
         breakConfig,
         constraintOptions,
       });
@@ -1237,7 +1224,7 @@ app.post("/api/ai/optimize-vrp", requirePlanner, asyncHandler(async (req, res) =
       return;
     }
     
-    const result = await optimizeRoutesVRP(filteredOrders, teamVehicles, objects, clusters, breakConfig, { ...constraintOptions, teamMemberMap });
+    const result = await optimizeRoutesVRP(filteredOrders, teamVehicles, objects, breakConfig, { ...constraintOptions, teamMemberMap });
     res.json(result);
 }));
 
@@ -1271,11 +1258,10 @@ app.get("/api/ai/route-recommendations", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const date = req.query.date as string || new Date().toISOString().split("T")[0];
     
-    const [workOrders, resources, objects, clusters] = await Promise.all([
+    const [workOrders, resources, objects] = await Promise.all([
       storage.getWorkOrders(tenantId),
       storage.getResources(tenantId),
       storage.getObjects(tenantId),
-      storage.getClusters(tenantId),
     ]);
     
     // Get weather for default location (Umeå)
@@ -1623,16 +1609,14 @@ app.post("/api/ai/workload-analysis", requirePlanner, asyncHandler(async (req, r
     const { weekStart, weekEnd } = req.body;
     
     const tenantId = getTenantIdWithFallback(req);
-    const [workOrders, resources, clusters] = await Promise.all([
+    const [workOrders, resources] = await Promise.all([
       storage.getWorkOrders(tenantId),
       storage.getResources(tenantId),
-      storage.getClusters(tenantId),
     ]);
     
     const analysis = analyzeWorkloadImbalances({
       workOrders,
       resources,
-      clusters,
       weekStart: weekStart || new Date().toISOString().split("T")[0],
       weekEnd: weekEnd || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
     });
@@ -1651,10 +1635,9 @@ app.post("/api/ai/planner-chat", requirePlanner, asyncHandler(async (req, res) =
     const guard = await aiBudgetGuard(req, res, "planning");
     if (guard.blocked) return;
     const tenantId = guard.tenantId;
-    const [workOrders, resources, clusters] = await Promise.all([
+    const [workOrders, resources] = await Promise.all([
       storage.getWorkOrders(tenantId),
       storage.getResources(tenantId),
-      storage.getClusters(tenantId),
     ]);
     
     const today = new Date().toISOString().split("T")[0];
@@ -1665,7 +1648,6 @@ app.post("/api/ai/planner-chat", requirePlanner, asyncHandler(async (req, res) =
       processConversationalPlannerQueryV2(query, {
         workOrders,
         resources,
-        clusters,
         weekStart: weekStart || today,
         weekEnd: weekEnd || weekEndDefault,
       }, conversationHistory || [])
@@ -1736,15 +1718,22 @@ app.post("/api/ai/planner-chat/execute", requirePlanner, asyncHandler(async (req
 // AI Setup Time Insights
 app.get("/api/ai/setup-insights", requirePlanner, asyncHandler(async (req, res) => {
     const { analyzeSetupTimeLogs } = await import("../ai-planner");
+    const { getObjectsMetadataValueByKatalogNamn } = await import("../metadata-queries");
     
     const tenantId = getTenantIdWithFallback(req);
-    const [logs, objects, clusters] = await Promise.all([
+    const [logs, objects] = await Promise.all([
       storage.getSetupTimeLogs(tenantId),
       storage.getObjects(tenantId),
-      storage.getClusters(tenantId),
     ]);
+    const loggedObjectIds = Array.from(new Set(logs.map(l => l.objectId)));
+    const stalltidByObject = await getObjectsMetadataValueByKatalogNamn(tenantId, loggedObjectIds, "Ställtid");
+    const estimates = new Map<string, number>();
+    for (const [objectId, value] of Object.entries(stalltidByObject)) {
+      const n = parseInt(value, 10);
+      if (Number.isFinite(n)) estimates.set(objectId, n);
+    }
     
-    const analysis = analyzeSetupTimeLogs(logs, objects, clusters);
+    const analysis = analyzeSetupTimeLogs(logs, objects, estimates);
     res.json(analysis);
 }));
 
@@ -1766,13 +1755,22 @@ app.post("/api/ai/apply-setup-updates", requirePlanner, asyncHandler(async (req,
       throw new ValidationError("Inga giltiga uppdateringar");
     }
     
+    const tenantIdForSetup = getTenantIdWithFallback(req);
+    const { writeSystemMetadataOnObject } = await import("../metadata-queries");
     const results = await Promise.all(
       validUpdates.map(async (update: { objectId: string; suggestedEstimate: number }) => {
         try {
-          const updated = await storage.updateObject(update.objectId, { 
-            avgSetupTime: Math.round(update.suggestedEstimate)
-          });
-          return { objectId: update.objectId, success: !!updated };
+          const obj = await storage.getObject(update.objectId);
+          if (!obj || obj.tenantId !== tenantIdForSetup) {
+            return { objectId: update.objectId, success: false };
+          }
+          const written = await writeSystemMetadataOnObject(
+            update.objectId,
+            "Ställtid",
+            String(Math.round(update.suggestedEstimate)),
+            tenantIdForSetup,
+          );
+          return { objectId: update.objectId, success: !!written };
         } catch (e) {
           console.error(`Failed to update object ${update.objectId}:`, e);
           return { objectId: update.objectId, success: false };
@@ -1795,14 +1793,10 @@ app.get("/api/ai/predictive-planning", requirePlanner, asyncHandler(async (req, 
     const { generatePredictivePlanning } = await import("../ai-planner");
     const tenantId = getTenantIdWithFallback(req);
     const workOrders = await storage.getWorkOrders(tenantId, undefined, undefined, true, 5000);
-    const clusters = await storage.getClusters(tenantId);
     const resources = await storage.getResources(tenantId);
-    
-    const validClusters = clusters.filter(c => c.postalCodes && c.postalCodes.length > 0);
     
     const result = await generatePredictivePlanning(
       workOrders, 
-      validClusters.length > 0 ? validClusters : clusters, 
       resources, 
       Math.min(weeksAhead, 12)
     );
@@ -1855,19 +1849,9 @@ app.get("/api/weather/forecast", asyncHandler(async (req, res) => {
     let locationName: string | undefined;
 
     if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
-      const clusters = await storage.getClusters(tenantId);
-      const active = clusters.filter(c => c.centerLatitude != null && c.centerLongitude != null);
-      if (active.length > 0) {
-        latitude = active.reduce((s, c) => s + (c.centerLatitude as number), 0) / active.length;
-        longitude = active.reduce((s, c) => s + (c.centerLongitude as number), 0) / active.length;
-        locationName = active.length === 1
-          ? active[0].name
-          : `Mittpunkt över ${active.length} kluster`;
-      } else {
-        latitude = 59.3293;
-        longitude = 18.0686;
-        locationName = "Stockholm (standard)";
-      }
+      latitude = 59.3293;
+      longitude = 18.0686;
+      locationName = "Stockholm (standard)";
     }
 
     const rawDays = parseInt(req.query.days as string);
@@ -1901,27 +1885,6 @@ app.get("/api/weather/forecast", asyncHandler(async (req, res) => {
       forecasts,
       impacts,
       location: { ...result.location, name: locationName ?? result.location.name },
-    });
-}));
-
-// Weather impact for specific cluster
-app.get("/api/weather/cluster/:clusterId", asyncHandler(async (req, res) => {
-    const tenantId = getTenantIdWithFallback(req);
-    const cluster = await storage.getCluster(req.params.clusterId);
-    if (!cluster || !verifyTenantOwnership(cluster, tenantId)) {
-      throw new NotFoundError("Kluster hittades inte");
-    }
-    
-    const latitude = cluster.centerLatitude || 59.3293;
-    const longitude = cluster.centerLongitude || 18.0686;
-    const days = parseInt(req.query.days as string) || 7;
-    
-    const { fetchWeatherForecast } = await import("../weather-service");
-    const result = await fetchWeatherForecast(latitude, longitude, Math.min(days, 14));
-    
-    res.json({
-      ...result,
-      location: { ...result.location, name: cluster.name }
     });
 }));
 
@@ -2113,13 +2076,11 @@ app.post("/api/ai/suggest-placement", isAuthenticated, asyncHandler(async (req: 
     if (!workOrder) throw new NotFoundError("Arbetsorder hittades inte");
     await verifyTenantOwnership(workOrder.tenantId, tenantId, "work_order");
 
-    // Ladda effektiva leveranspreferenser så placering kan respektera slottider.
+    // Etapp 5: objekt-egna leveranspreferenser borttagna — alltid tomma.
     const { EMPTY_DELIVERY_PREFERENCES } = await import("@shared/schema");
     type DeliveryPrefs = import("@shared/schema").DeliveryPreferences;
     type ResolvedPrefs = { effective: DeliveryPrefs; source: "object" | "none" };
-    const deliveryPrefs: ResolvedPrefs = workOrder.objectId
-      ? await storage.resolveDeliveryPreferences(workOrder.objectId)
-      : { effective: EMPTY_DELIVERY_PREFERENCES, source: "none" };
+    const deliveryPrefs: ResolvedPrefs = { effective: EMPTY_DELIVERY_PREFERENCES, source: "none" };
 
     const allResources = await storage.getResources(tenantId);
     const activeResources = allResources.filter(r => r.status === "active" && r.resourceType === "person");
@@ -2206,13 +2167,6 @@ app.post("/api/ai/suggest-placement", isAuthenticated, asyncHandler(async (req: 
               score += 10;
               reasons.push(`Nära resursens utgångsplats (${homeDist.toFixed(1)} km fågelväg)`);
             }
-          }
-        }
-
-        if (resource.serviceArea && resource.serviceArea.length > 0 && workOrder.clusterId) {
-          if (resource.serviceArea.includes(workOrder.clusterId)) {
-            score += 15;
-            reasons.push("Resurs tilldelad detta område");
           }
         }
 
@@ -2501,13 +2455,12 @@ app.post("/api/ai/suggest-resource-for-new-order", requirePlanner, asyncHandler(
     const obj = await storage.getObject(objectId);
     if (!obj) throw new NotFoundError("Objekt hittades inte");
 
-    const [allResources, allOrders, clusters, resourceAvailability, vehicleSchedules, timeRestrictions] = await Promise.all([
+    const [allResources, allOrders, resourceAvailability, vehicleSchedules, timeRestrictions] = await Promise.all([
       storage.getResources(tenantId),
       storage.getWorkOrders(tenantId),
-      storage.getClusters(tenantId),
       storage.getResourceAvailabilityByTenant(tenantId),
       storage.getVehicleSchedulesByTenant(tenantId),
-      storage.getObjectTimeRestrictionsByTenant(tenantId),
+      getTimeRestrictionsForTenant(tenantId),
     ]);
 
     const activeResources = allResources.filter(r => r.status === "active" && r.resourceType === "person");
@@ -2601,20 +2554,6 @@ app.post("/api/ai/suggest-resource-for-new-order", requirePlanner, asyncHandler(
           }
         }
 
-        if (resource.serviceArea && resource.serviceArea.length > 0 && obj.clusterId) {
-          const cluster = clusters.find(c => c.id === obj.clusterId);
-          if (cluster) {
-            const clusterPostals = cluster.postalCodes || [];
-            if (resource.serviceArea.some(p => clusterPostals.includes(p))) {
-              score += 30;
-              reasons.push(`Klustermatchning (${cluster.name})`);
-            } else {
-              score -= 10;
-              reasons.push("Utanför klustrets serviceområde");
-            }
-          }
-        }
-
         if (priority === "urgent" || priority === "high") {
           const dayIndex = weekDays.indexOf(day);
           score += Math.max(0, 10 - dayIndex * 2);
@@ -2662,10 +2601,9 @@ app.post("/api/ai/auto-distribute-today", requirePlanner, asyncHandler(async (re
     const tenantId = getTenantIdWithFallback(req);
     const today = new Date().toISOString().split("T")[0];
 
-    const [allOrders, allResources, clusters, objects] = await Promise.all([
+    const [allOrders, allResources, objects] = await Promise.all([
       storage.getWorkOrders(tenantId),
       storage.getResources(tenantId),
-      storage.getClusters(tenantId),
       storage.getObjects(tenantId),
     ]);
 
@@ -2693,7 +2631,7 @@ app.post("/api/ai/auto-distribute-today", requirePlanner, asyncHandler(async (re
       storage.getVehicleSchedulesByTenant(tenantId),
       storage.getResourceVehiclesByResourceIds(resourceIds),
       storage.getTaskDependencyInstances(tenantId),
-      storage.getObjectTimeRestrictionsByTenant(tenantId),
+      getTimeRestrictionsForTenant(tenantId),
       storage.getResourceArticlesByResourceIds(resourceIds),
     ]);
 
@@ -2829,20 +2767,6 @@ app.post("/api/ai/auto-distribute-today", requirePlanner, asyncHandler(async (re
           }
         }
 
-        if (resource.serviceArea && resource.serviceArea.length > 0 && order.clusterId) {
-          const cluster = clusters.find(c => c.id === order.clusterId);
-          if (cluster) {
-            const clusterPostals = cluster.postalCodes || [];
-            if (resource.serviceArea.some(p => clusterPostals.includes(p))) {
-              score += 30;
-              reasons.push(`Klustermatchning (${cluster.name})`);
-            } else {
-              score -= 10;
-              reasons.push("Utanför klustrets serviceområde");
-            }
-          }
-        }
-
         if (orderArticleIds.size > 0) {
           if (!resourceArticleMap[resource.id]?.size) {
             score -= 10;
@@ -2927,7 +2851,7 @@ app.post("/api/ai/auto-distribute-today/apply", requirePlanner, asyncHandler(asy
       storage.getVehicleSchedulesByTenant(tenantId),
       storage.getResourceVehiclesByResourceIds(resourceIds),
       storage.getTaskDependencyInstances(tenantId),
-      storage.getObjectTimeRestrictionsByTenant(tenantId),
+      getTimeRestrictionsForTenant(tenantId),
       storage.getResourceArticlesByResourceIds(resourceIds),
     ]);
 

@@ -237,7 +237,7 @@ function formatMetadataValue(row: {
  */
 async function computePointedInConceptByObject(
   tenantId: string,
-  objectRows: { id: string; clusterId: string | null }[],
+  objectRows: { id: string }[],
   concepts: ConceptRow[],
 ): Promise<Map<string, string>> {
   const result = new Map<string, string>();
@@ -256,18 +256,14 @@ async function computePointedInConceptByObject(
 
   for (const concept of concepts) {
     if ((concept as any).deletedAt) continue;
-    const { objectIds, clusterIds } = deriveConceptTargets(concept as any);
+    const { objectIds } = deriveConceptTargets(concept as any);
 
-    // Objekt i konceptets inpekade gren (subträd) eller legacy-kluster.
-    const inScope: { id: string; clusterId: string | null }[] = [];
+    // Objekt i konceptets inpekade gren (subträd).
+    const inScope: { id: string }[] = [];
     if (objectIds.length > 0) {
       const subtrees = await Promise.all(objectIds.map((r) => getSubtree(r)));
       for (const obj of objectRows) {
         if (subtrees.some((s) => s.has(obj.id))) inScope.push(obj);
-      }
-    } else if (clusterIds.length > 0) {
-      for (const obj of objectRows) {
-        if (obj.clusterId && clusterIds.includes(obj.clusterId)) inScope.push(obj);
       }
     }
     if (inScope.length === 0) continue;
@@ -334,7 +330,6 @@ export async function getObjectInfoPackageTree(
       address: objects.address,
       city: objects.city,
       postalCode: objects.postalCode,
-      clusterId: objects.clusterId,
     })
     .from(objects)
     .where(and(eq(objects.tenantId, tenantId), inArray(objects.id, objectIds)));
@@ -345,7 +340,7 @@ export async function getObjectInfoPackageTree(
   const conceptById = new Map(concepts.map((c) => [c.id, c]));
   const pointedConceptByObject = await computePointedInConceptByObject(
     tenantId,
-    objectRows.map((o) => ({ id: o.id, clusterId: o.clusterId })),
+    objectRows.map((o) => ({ id: o.id })),
     concepts,
   );
 

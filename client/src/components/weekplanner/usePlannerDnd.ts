@@ -49,12 +49,12 @@ interface UsePlannerDndOptions {
   detectTeamConflictsForJob?: (job: WorkOrderWithObject, teamId: string, dateStr: string) => string[];
   setPendingSchedule: (schedule: { jobId: string; resourceId: string; scheduledDate: string; scheduledStartTime?: string; conflicts: string[] } | null) => void;
   setConflictDialogOpen: (open: boolean) => void;
-  executeSchedule: (jobId: string, resourceId: string, dateStr: string, startTime?: string, clusterOverride?: boolean) => void;
+  executeSchedule: (jobId: string, resourceId: string, dateStr: string, startTime?: string) => void;
   executeTeamSchedule?: (jobId: string, teamId: string, dateStr: string) => void;
   toast: (opts: { title: string; description?: string; variant?: "default" | "destructive" }) => void;
   selectedJobIds?: Set<string>;
   clearSelection?: () => void;
-  setWhatIfPending?: (pending: { jobId: string; jobTitle: string; resourceId: string; scheduledDate: string; scheduledStartTime?: string; clusterOverride?: boolean; bulkJobs?: Array<{ jobId: string; startTime: string }> } | null) => void;
+  setWhatIfPending?: (pending: { jobId: string; jobTitle: string; resourceId: string; scheduledDate: string; scheduledStartTime?: string; bulkJobs?: Array<{ jobId: string; startTime: string }> } | null) => void;
   setWhatIfOpen?: (open: boolean) => void;
   fetchWhatIf?: (workOrderId: string, toResourceId: string, scheduledDate: string, scheduledStartTime?: string, fromResourceId?: string | null, fromDate?: string | null) => void;
   // F2: hoppa mellan veckor mitt i ett drag genom att hovra kant-zonerna.

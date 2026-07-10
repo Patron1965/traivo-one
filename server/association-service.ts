@@ -1,7 +1,7 @@
 import { db } from "./db";
 import { eq, and, isNull, sql } from "drizzle-orm";
 import { articles, objects, metadataKatalog, metadataVarden, type AssociationCondition } from "@shared/schema";
-import { getObjectWithAllMetadata } from "./metadata-queries";
+import { getObjectWithAllMetadata, getObjectAtkomstFields } from "./metadata-queries";
 
 // Task #835: utökade operatorer. greater/less = numerisk jämförelse om båda är tal,
 // annars lexikografisk. has_value = fältet har ett (icke-tomt) värde ("ungefärlig träff").
@@ -168,18 +168,19 @@ export async function getMatchingArticlesForObject(
     );
 
   // Task #835: hämta objektets intrinsiska fält för hook_level-villkor.
+  // Etapp 5: åtkomstkod läses ur metadata (systemområdet Åtkomst), ej objektkolumn.
   const [objRow] = await db
     .select({
       objectType: objects.objectType,
       hierarchyLevel: objects.hierarchyLevel,
-      accessCode: objects.accessCode,
     })
     .from(objects)
     .where(and(eq(objects.id, objectId), eq(objects.tenantId, tenantId)));
+  const atkomst = await getObjectAtkomstFields(objectId, tenantId, objMeta ?? undefined);
   const hookCtx: HookObjectContext = {
     objectType: objRow?.objectType || "",
     hierarchyLevel: objRow?.hierarchyLevel || "",
-    accessCode: objRow?.accessCode ?? null,
+    accessCode: atkomst.portkod,
   };
 
   const findMeta = (label: string) =>

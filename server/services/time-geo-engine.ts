@@ -20,6 +20,7 @@
 // ============================================================================
 
 import { storage } from "../storage";
+import { deliveryPreferencesSchema } from "@shared/schema";
 import { haversineDistanceKm } from "../distance-matrix-service";
 import {
   softPreferenceScore,
@@ -911,17 +912,37 @@ async function resolveDeliveryPrefsByObject(objectIds: string[]) {
     string,
     { weeklyWindows: WeeklyWindow[]; blockedHours: BlockedHour[]; blockedDates: string[] }
   >();
-  for (const objectId of objectIds) {
-    try {
-      const { effective } = await storage.resolveDeliveryPreferences(objectId);
-      map.set(objectId, {
-        weeklyWindows: effective.weeklyWindows,
-        blockedHours: effective.blockedHours,
-        blockedDates: effective.blockedDates,
-      });
-    } catch {
-      map.set(objectId, { weeklyWindows: [], blockedHours: [], blockedDates: [] });
+  const empty = () => ({
+    weeklyWindows: [] as WeeklyWindow[],
+    blockedHours: [] as BlockedHour[],
+    blockedDates: [] as string[],
+  });
+  for (const objectId of objectIds) map.set(objectId, empty());
+  // Etapp 5: objekt-egna leveranspreferenser är borttagna — den enda källan är
+  // kundnivån (customers.deliveryPreferences), härledd via objektets primära kund.
+  try {
+    const customerByObject = await storage.getObjectsPrimaryCustomerIds(objectIds);
+    const customerIds = Array.from(new Set(Array.from(customerByObject.values()).filter((c): c is string => !!c)));
+    if (customerIds.length === 0) return map;
+    const rawPrefs = await storage.getCustomersDeliveryPreferences(customerIds);
+    const prefsByCustomer = new Map<string, { weeklyWindows: WeeklyWindow[]; blockedHours: BlockedHour[]; blockedDates: string[] }>();
+    for (const [id, raw] of Array.from(rawPrefs.entries())) {
+      const parsed = deliveryPreferencesSchema.nullish().safeParse(raw);
+      if (parsed.success && parsed.data) {
+        prefsByCustomer.set(id, {
+          weeklyWindows: parsed.data.weeklyWindows,
+          blockedHours: parsed.data.blockedHours,
+          blockedDates: parsed.data.blockedDates,
+        });
+      }
     }
+    for (const objectId of objectIds) {
+      const customerId = customerByObject.get(objectId);
+      const prefs = customerId ? prefsByCustomer.get(customerId) : undefined;
+      if (prefs) map.set(objectId, prefs);
+    }
+  } catch {
+    // Best-effort: utan kund-prefs körs motorn med standardfönster.
   }
   return map;
 }

@@ -35,8 +35,6 @@ const translations: Record<string, Record<Language, string>> = {
   "nav.resources": { sv: "Resurser", en: "Resources" },
   "nav.resources.desc": { sv: "Personal", en: "Personnel" },
   "nav.vehicles": { sv: "Fordon", en: "Vehicles" },
-  "nav.clusters": { sv: "Kluster", en: "Clusters" },
-  "nav.clusters.desc": { sv: "Arbetsområden", en: "Work areas" },
   "nav.articles": { sv: "Artiklar", en: "Articles" },
   "nav.articles.desc": { sv: "Produkter och tjänster", en: "Products and services" },
   "nav.price-lists": { sv: "Prislistor", en: "Price Lists" },
@@ -334,7 +332,6 @@ const translations: Record<string, Record<Language, string>> = {
   "page.resources.new": { sv: "Ny resurs", en: "New resource" },
 
   "page.vehicles.title": { sv: "Fordon", en: "Vehicles" },
-  "page.clusters.title": { sv: "Kluster", en: "Clusters" },
   "page.articles.title": { sv: "Artiklar", en: "Articles" },
   "page.subscriptions.title": { sv: "Abonnemang", en: "Subscriptions" },
   "page.assignments.title": { sv: "Uppdrag", en: "Assignments" },

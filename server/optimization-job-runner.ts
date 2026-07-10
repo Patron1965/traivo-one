@@ -18,7 +18,6 @@ export { ASYNC_THRESHOLD };
 interface VRPJobInput {
   tenantId: string;
   date?: string;
-  clusterId?: string;
   breakConfig: BreakConfig | Record<string, unknown>;
   constraintOptions: VRPConstraintOptions;
 }
@@ -148,11 +147,10 @@ async function executeORToolsJob(jobId: string, input: VRPJobInput): Promise<VRP
   const tenantId = input.tenantId;
   await updateProgress(jobId, 10);
 
-  const [workOrders, resources, objects, clusters, teams, teamMembersAll] = await Promise.all([
+  const [workOrders, resources, objects, teams, teamMembersAll] = await Promise.all([
     storage.getWorkOrders(tenantId),
     storage.getResources(tenantId),
     storage.getObjects(tenantId),
-    storage.getClusters(tenantId),
     storage.getTeams(tenantId),
     storage.getAllTeamMembers(tenantId),
   ]);
@@ -180,9 +178,6 @@ async function executeORToolsJob(jobId: string, input: VRPJobInput): Promise<VRP
       return orderDate === input.date;
     });
   }
-  if (input.clusterId) {
-    filteredOrders = filteredOrders.filter(o => o.clusterId === input.clusterId);
-  }
 
   const validOrders = filteredOrders.filter(o => {
     // Task #990: bara ruttbara objekt (pinpoint + giltig koordinat) ska in i VRP.
@@ -192,18 +187,9 @@ async function executeORToolsJob(jobId: string, input: VRPJobInput): Promise<VRP
 
   await updateProgress(jobId, 30);
 
-  // Lös effektiva (objekt-egna) leveranspreferenser per order så att VRP kan
-  // respektera slottider. strict => hård tidsfönster + bonus-prioritet,
-  // preferred => behåller standard-fönster men flaggas via prioritetsökning.
-  const { storage: _storage } = await import("./storage");
+  // Etapp 5: objekt-egna leveranspreferenser borttagna — prefs-kartan är alltid tom.
   type ResolvedPref = { effective: import("@shared/schema").DeliveryPreferences; source: "object" | "none" };
   const prefsByOrder = new Map<string, ResolvedPref>();
-  for (const o of validOrders) {
-    if (o.objectId) {
-      const resolved = await _storage.resolveDeliveryPreferences(o.objectId);
-      prefsByOrder.set(o.id, resolved as ResolvedPref);
-    }
-  }
 
   const toSec = (s: string) => {
     const [h, m] = s.split(":").map(Number);
@@ -412,11 +398,10 @@ async function executeVRPJob(jobId: string, input: VRPJobInput): Promise<VRPOpti
 
   await updateProgress(jobId, 10);
 
-  const [workOrders, resources, objects, clusters, teams, teamMembersAll] = await Promise.all([
+  const [workOrders, resources, objects, teams, teamMembersAll] = await Promise.all([
     storage.getWorkOrders(tenantId),
     storage.getResources(tenantId),
     storage.getObjects(tenantId),
-    storage.getClusters(tenantId),
     storage.getTeams(tenantId),
     storage.getAllTeamMembers(tenantId),
   ]);
@@ -443,9 +428,6 @@ async function executeVRPJob(jobId: string, input: VRPJobInput): Promise<VRPOpti
     });
   }
 
-  if (input.clusterId) {
-    filteredOrders = filteredOrders.filter(o => o.clusterId === input.clusterId);
-  }
 
   filteredOrders = filteredOrders.filter(o =>
     o.orderStatus !== "utford" && o.orderStatus !== "fakturerad"
@@ -455,29 +437,7 @@ async function executeVRPJob(jobId: string, input: VRPJobInput): Promise<VRPOpti
   // planeras av tidsmotorn — de ska aldrig in i VRP:n.
   filteredOrders = filteredOrders.filter(o => resolveLocationRequirement(o) !== "ingen");
 
-  // Respektera leveranspreferenser även i fallback-VRP-vägen: ordrar med
-  // strict priority som faller på blockerade datum exkluderas helt så de
-  // inte kan placeras orealistiskt. (preferred-pri hanteras via OR-tools).
-  const filteredWithPrefs: typeof filteredOrders = [];
-  for (const o of filteredOrders) {
-    if (!o.objectId || !o.scheduledDate) {
-      filteredWithPrefs.push(o);
-      continue;
-    }
-    const { effective, source } = await storage.resolveDeliveryPreferences(o.objectId);
-    if (source === "none" || effective.priority !== "strict") {
-      filteredWithPrefs.push(o);
-      continue;
-    }
-    const dateObj = o.scheduledDate instanceof Date ? o.scheduledDate : new Date(o.scheduledDate);
-    const isoDate = dateObj.toISOString().slice(0, 10);
-    if ((effective.blockedDates || []).includes(isoDate)) {
-      console.log(`[vrp-fallback] Exkluderar order ${o.id} pga strict blockedDate ${isoDate}`);
-      continue;
-    }
-    filteredWithPrefs.push(o);
-  }
-  filteredOrders = filteredWithPrefs;
+  // Etapp 5: objekt-egna leveranspreferenser borttagna — ingen strict-exkludering.
 
   await updateProgress(jobId, 40);
 
@@ -487,7 +447,6 @@ async function executeVRPJob(jobId: string, input: VRPJobInput): Promise<VRPOpti
     filteredOrders,
     teamVehicles,
     objects,
-    clusters,
     breakConfig,
     input.constraintOptions
       ? { ...input.constraintOptions, teamMemberMap }

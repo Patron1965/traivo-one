@@ -9,7 +9,6 @@ import {
   users,
   userTenantRoles,
   customers,
-  clusters,
   objects,
   objectParents,
   objectImportSessions,
@@ -18,7 +17,7 @@ import {
   metadataVarden,
   metadataHistorik,
 } from "@shared/schema";
-import { eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 
 // Task #828 (code-review finding #4): API-nivå E2E över hela validate→execute-
 // flödet genom de RIKTIGA route-handlers (inte bara core-logiken). Monteras bakom
@@ -152,10 +151,12 @@ afterAll(async () => {
   await db.delete(objectImportSessions).where(eq(objectImportSessions.tenantId, TENANT));
   await db.delete(objectParents).where(eq(objectParents.tenantId, TENANT));
   await db.delete(objects).where(eq(objects.tenantId, TENANT));
-  await db.delete(clusters).where(eq(clusters.tenantId, TENANT));
   await db.delete(customers).where(eq(customers.tenantId, TENANT));
   await db.delete(userTenantRoles).where(eq(userTenantRoles.tenantId, TENANT));
   await db.delete(users).where(eq(users.id, ADMIN));
+  // Ångra-stämplar (import_actions) refererar tenant med NO ACTION-FK.
+  await db.execute(sql`DELETE FROM import_actions WHERE tenant_id = ${TENANT}`);
+  await db.execute(sql`DELETE FROM import_batches WHERE tenant_id = ${TENANT}`);
   await db.delete(tenants).where(eq(tenants.id, TENANT));
 }, 30000);
 
@@ -197,7 +198,7 @@ describe("Import 2.0 execute — API-nivå E2E", () => {
     const butikRows = await db
       .select()
       .from(objects)
-      .where(eq(objects.objectNumber, "MALL-10"));
+      .where(and(eq(objects.tenantId, TENANT), eq(objects.objectNumber, "MALL-10")));
     expect(butikRows).toHaveLength(1);
     expect(butikRows[0].name).toBe("Hemköp Centrum"); // ej "Pantkärl"/"Matavfallskärl"
   });

@@ -7,7 +7,6 @@ import { Button } from "@/components/ui/button";
 import { ObjectArchiveControl } from "@/components/objects/ObjectArchiveControl";
 import { ObjectHeaderPanel } from "@/components/ObjectHeaderPanel";
 import { type MetadataFormEntry, type MetadataFormType, type MetadataRelatedParent, type MetadataRelatedChild } from "@/components/ObjectMetadataForm";
-import { buildLegacyObjectFieldEntries, type LegacyFieldInput } from "@/lib/legacy-object-fields";
 import { ObjectTemplateMetadataForm, type TemplateMetadataType } from "@/components/ObjectTemplateMetadataForm";
 import { ObjectSystemGeneratedPanel } from "@/components/ObjectSystemGeneratedPanel";
 import { TelinkSyncButton } from "@/components/TelinkSyncButton";
@@ -199,13 +198,6 @@ interface ObjectContact {
   inherited?: boolean;
 }
 
-interface ObjectImage {
-  id: string;
-  url?: string;
-  imageUrl?: string;
-  title?: string;
-  description?: string;
-}
 
 type WorkOrderListItem = Partial<Omit<WorkOrder, "id" | "scheduledDate">> & {
   id: string;
@@ -262,17 +254,6 @@ interface ObjectEditForm {
   objectType?: string;
   hierarchyLevel?: string;
   status?: string;
-  notes?: string;
-  accessType?: string;
-  accessCode?: string;
-  keyNumber?: string;
-  containerCount?: number | string;
-  containerCountK2?: number | string;
-  containerCountK3?: number | string;
-  containerCountK4?: number | string;
-  serialNumber?: string;
-  manufacturer?: string;
-  condition?: string;
   locationType?: string | null;
   latitude?: number | string | null;
   longitude?: number | string | null;
@@ -292,12 +273,6 @@ const objectTypeLabels: Record<string, string> = {
   underjord: "Underjordsbehållare",
 };
 
-const accessTypeLabels: Record<string, { label: string; icon: typeof Key }> = {
-  open: { label: "Öppet", icon: DoorOpen },
-  code: { label: "Kod", icon: Keyboard },
-  key: { label: "Nyckel/bricka", icon: Key },
-  meeting: { label: "Personligt möte", icon: Users },
-};
 
 const CONTACT_TYPES = [
   { value: "primary", label: "Primär kontakt" },
@@ -373,9 +348,6 @@ export default function ObjectDetailPage() {
   const canUseTemplates = isAdmin || user?.role === "planner";
 
   const [editDialogOpen, setEditDialogOpen] = useState(false);
-  const [editSection, setEditSection] = useState<"overview" | "access" | "equipment">("overview");
-  const [contactDialogOpen, setContactDialogOpen] = useState(false);
-  const [imageDialogOpen, setImageDialogOpen] = useState(false);
   const didInitialScroll = useRef(false);
 
   const [editForm, setEditForm] = useState<ObjectEditForm>({});
@@ -388,8 +360,6 @@ export default function ObjectDetailPage() {
   const [copyDialogOpen, setCopyDialogOpen] = useState(false);
   const [copyName, setCopyName] = useState("");
   const [copyMode, setCopyMode] = useState<"single" | "branch">("single");
-  const [contactForm, setContactForm] = useState({ name: "", contactType: "primary", phone: "", email: "", role: "" });
-  const [imageForm, setImageForm] = useState({ imageUrl: "", imageType: "photo", description: "" });
   const [searchInput, setSearchInput] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
@@ -537,15 +507,6 @@ export default function ObjectDetailPage() {
     enabled: !!objectId && !isCreate,
   });
 
-  const { data: images = [] } = useQuery<ObjectImage[]>({
-    queryKey: ["/api/objects", objectId, "images"],
-    queryFn: async () => {
-      const res = await fetch(`/api/objects/${objectId}/images`);
-      if (!res.ok) return [];
-      return res.json();
-    },
-    enabled: !!objectId && !isCreate,
-  });
 
 
   const { data: parentRelations = [] } = useQuery<ParentRelation[]>({
@@ -711,61 +672,9 @@ export default function ObjectDetailPage() {
     },
   });
 
-  const addContactMutation = useMutation({
-    mutationFn: async (data: Partial<ObjectContact>) => {
-      await apiRequest("POST", `/api/objects/${objectId}/contacts`, data);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/objects", objectId, "contacts"] });
-      toast({ title: "Kontakt tillagd" });
-      setContactDialogOpen(false);
-      setContactForm({ name: "", contactType: "primary", phone: "", email: "", role: "" });
-    },
-    onError: (error: Error) => {
-      toast({ title: "Kunde inte lägga till kontakt", description: error.message, variant: "destructive" });
-    },
-  });
 
-  const deleteContactMutation = useMutation({
-    mutationFn: async (contactId: string) => {
-      await apiRequest("DELETE", `/api/objects/${objectId}/contacts/${contactId}`);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/objects", objectId, "contacts"] });
-      toast({ title: "Kontakt borttagen" });
-    },
-    onError: (error: Error) => {
-      toast({ title: "Kunde inte ta bort kontakt", description: error.message, variant: "destructive" });
-    },
-  });
 
-  const addImageMutation = useMutation({
-    mutationFn: async (data: Partial<ObjectImage>) => {
-      await apiRequest("POST", `/api/objects/${objectId}/images`, data);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/objects", objectId, "images"] });
-      toast({ title: "Bild tillagd" });
-      setImageDialogOpen(false);
-      setImageForm({ imageUrl: "", imageType: "photo", description: "" });
-    },
-    onError: (error: Error) => {
-      toast({ title: "Kunde inte lägga till bild", description: error.message, variant: "destructive" });
-    },
-  });
 
-  const deleteImageMutation = useMutation({
-    mutationFn: async (imageId: string) => {
-      await apiRequest("DELETE", `/api/objects/${objectId}/images/${imageId}`);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/objects", objectId, "images"] });
-      toast({ title: "Bild borttagen" });
-    },
-    onError: (error: Error) => {
-      toast({ title: "Kunde inte ta bort bild", description: error.message, variant: "destructive" });
-    },
-  });
 
 
   const addMetadataMutation = useMutation({
@@ -837,26 +746,14 @@ export default function ObjectDetailPage() {
     },
   });
 
-  const openEditDialog = (section: "overview" | "access" | "equipment") => {
+  const openEditDialog = () => {
     if (!resolvedObject) return;
-    setEditSection(section);
     setEditForm({
       name: resolvedObject.name || "",
       objectNumber: resolvedObject.objectNumber || "",
       objectType: resolvedObject.objectType || "",
       hierarchyLevel: resolvedObject.hierarchyLevel || "",
       status: resolvedObject.status || "active",
-      notes: resolvedObject.notes || "",
-      accessType: resolvedObject.accessType || "open",
-      accessCode: resolvedObject.accessCode || "",
-      keyNumber: resolvedObject.keyNumber || "",
-      containerCount: resolvedObject.containerCount || 0,
-      containerCountK2: resolvedObject.containerCountK2 || 0,
-      containerCountK3: resolvedObject.containerCountK3 || 0,
-      containerCountK4: resolvedObject.containerCountK4 || 0,
-      serialNumber: resolvedObject.serialNumber || "",
-      manufacturer: resolvedObject.manufacturer || "",
-      condition: resolvedObject.condition || "",
     });
     setEditDialogOpen(true);
   };
@@ -1064,7 +961,6 @@ export default function ObjectDetailPage() {
                 name: createName,
                 parentId: createParentId || undefined,
                 objectType: "fastighet",
-                accessType: "open",
               },
               metadata: createMetadataFields,
             })}
@@ -1156,74 +1052,8 @@ export default function ObjectDetailPage() {
     };
   };
 
-  const AccessIcon = accessTypeLabels[obj.accessType || "open"]?.icon || DoorOpen;
-
   const objectTypeLabel = (obj.objectType && objectTypeLabels[obj.objectType]) || obj.objectType || "";
 
-  const containerCounts = [
-    { label: "K1", value: obj.containerCount },
-    { label: "K2", value: obj.containerCountK2 },
-    { label: "K3", value: obj.containerCountK3 },
-    { label: "K4", value: obj.containerCountK4 },
-  ].filter(c => c.value && c.value > 0);
-
-  // Task #1128 Fas 1 (P1 / "allt är metadata"): objektkolumner som ännu inte
-  // flyttats till metadatamodellen projiceras som syntetiska metadata-poster
-  // (KÄLLA=M + "Under migrering") och renderas genom den enhetliga
-  // metadata-ytan i stället för i ett separat hårdkodat kort. Presentation-only
-  // (expand-contract) — kolumnerna matar fortfarande routing/VRP/mobil/Fortnox.
-  const legacyFieldEntries: MetadataFormEntry[] = (() => {
-    // Tillgångsinformation kan vara objekt eller sträng — samma normalisering
-    // som det gamla kortet använde.
-    let accessInfoStr: string | null = null;
-    const accessInfoRaw = obj.resolvedAccessInfo || obj.accessInfo;
-    if (accessInfoRaw) {
-      if (typeof accessInfoRaw === "object") {
-        const parts = Object.entries(accessInfoRaw as Record<string, unknown>)
-          .filter(([, v]) => v !== null && v !== undefined && v !== "")
-          .map(([k, v]) => `${k}: ${String(v)}`);
-        accessInfoStr = parts.length ? parts.join(" · ") : null;
-      } else {
-        const s = String(accessInfoRaw).trim();
-        accessInfoStr = s === "" || s === "{}" ? null : s;
-      }
-    }
-    const portkod = obj.resolvedAccessCode || obj.accessCode;
-    const nyckel = obj.resolvedKeyNumber || obj.keyNumber;
-    // accessType har DB-default "open" — behandla det som "inget värde".
-    const hasRealAccessType = Boolean(obj.accessType && obj.accessType !== "open");
-    const codeInfo = getInheritanceInfo("accessCode");
-    const keyInfo = getInheritanceInfo("keyNumber");
-    const accessInfoData = getInheritanceInfo("accessInfo");
-    const fmtDate = (d: string | Date | null | undefined) =>
-      d ? new Date(d).toLocaleDateString("sv-SE") : null;
-    const inputs: LegacyFieldInput[] = [
-      {
-        column: "accessType",
-        namn: "Tillgångstyp",
-        value: hasRealAccessType && obj.accessType
-          ? accessTypeLabels[obj.accessType]?.label || obj.accessType
-          : null,
-        editGroup: "access",
-      },
-      { column: "accessCode", namn: "Portkod", value: portkod, editGroup: "access", inherited: codeInfo.inherited, inheritedFromName: codeInfo.sourceName },
-      { column: "keyNumber", namn: "Nyckelnummer", value: nyckel, editGroup: "access", inherited: keyInfo.inherited, inheritedFromName: keyInfo.sourceName },
-      { column: "accessInfo", namn: "Övrig tillgångsinformation", value: accessInfoStr, editGroup: "access", inherited: accessInfoData.inherited, inheritedFromName: accessInfoData.sourceName },
-      ...containerCounts.map((c) => ({
-        column: `containerCount${c.label}`,
-        namn: `Behållarantal ${c.label}`,
-        value: c.value,
-        editGroup: "equipment" as const,
-      })),
-      { column: "serialNumber", namn: "Serienummer", value: obj.serialNumber, editGroup: "equipment" },
-      { column: "manufacturer", namn: "Tillverkare", value: obj.manufacturer, editGroup: "equipment" },
-      { column: "purchaseDate", namn: "Inköpsdatum", value: fmtDate(obj.purchaseDate as any), editGroup: "equipment" },
-      { column: "warrantyExpiry", namn: "Garanti utgår", value: fmtDate(obj.warrantyExpiry as any), editGroup: "equipment" },
-      { column: "lastInspection", namn: "Senaste inspektion", value: fmtDate(obj.lastInspection as any), editGroup: "equipment" },
-      { column: "notes", namn: "Anteckningar", value: obj.notes, editGroup: "overview" },
-    ];
-    return buildLegacyObjectFieldEntries(inputs);
-  })();
 
   return (
     <div className="p-4 md:p-6 max-w-6xl mx-auto space-y-6" data-testid="object-detail-page">
@@ -1363,12 +1193,6 @@ export default function ObjectDetailPage() {
                 </PopoverContent>
               </Popover>
             )}
-            {obj.accessType && obj.accessType !== "open" && (
-              <Badge variant="outline" className="gap-1" data-testid="badge-access-type">
-                <AccessIcon className="h-3 w-3" />
-                {accessTypeLabels[obj.accessType]?.label}
-              </Badge>
-            )}
             {/* Arkivera/återställ flyttat hit från separat kort längre ner. */}
             <ObjectArchiveControl
               objectId={objectId}
@@ -1478,7 +1302,6 @@ export default function ObjectDetailPage() {
         objectId={obj.id}
         objectType={obj.objectType}
         objectTypeLabel={objectTypeLabel}
-        serialNumber={(obj as any).serialNumber}
         latitude={obj.latitude}
         longitude={obj.longitude}
         entranceLatitude={obj.entranceLatitude}
@@ -1670,8 +1493,6 @@ export default function ObjectDetailPage() {
                     softDeletePending={softDeleteMetadataMutation.isPending}
                     restorePending={restoreMetadataMutation.isPending}
                     renderHistoryButton={renderHistory}
-                    legacyEntries={legacyFieldEntries}
-                    onEditLegacyField={(group) => openEditDialog(group as "overview" | "access" | "equipment")}
                     objectAssignments={objectAssignments}
                     navigate={navigate}
                   />
@@ -1686,14 +1507,7 @@ export default function ObjectDetailPage() {
             objectId={objectId}
             obj={obj}
             contacts={contacts as any}
-            images={images as any}
-            onAddContact={() => setContactDialogOpen(true)}
-            onDeleteContact={(id) => deleteContactMutation.mutate(id)}
-            contactDeletePending={deleteContactMutation.isPending}
-            onAddImage={() => setImageDialogOpen(true)}
-            onDeleteImage={(id) => deleteImageMutation.mutate(id)}
-            imageDeletePending={deleteImageMutation.isPending}
-            onEditGeo={() => openEditDialog("overview")}
+            onEditGeo={() => openEditDialog()}
             navigate={navigate}
           />
         </section>
@@ -1723,15 +1537,8 @@ export default function ObjectDetailPage() {
             objectId={objectId}
             obj={obj}
             contacts={contacts as any}
-            images={images as any}
             workOrders={workOrders as any}
-            onAddContact={() => setContactDialogOpen(true)}
-            onDeleteContact={(id) => deleteContactMutation.mutate(id)}
-            contactDeletePending={deleteContactMutation.isPending}
-            onAddImage={() => setImageDialogOpen(true)}
-            onDeleteImage={(id) => deleteImageMutation.mutate(id)}
-            imageDeletePending={deleteImageMutation.isPending}
-            onEditGeo={() => openEditDialog("overview")}
+            onEditGeo={() => openEditDialog()}
             navigate={navigate}
           />
         </section>
@@ -1744,15 +1551,12 @@ export default function ObjectDetailPage() {
         <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>
-              {editSection === "overview" ? "Redigera grundinformation" :
-               editSection === "access" ? "Redigera tillgångsinformation" :
-               "Redigera utrustning"}
+              Redigera grundinformation
             </DialogTitle>
             <DialogDescription>Uppdatera objektets information nedan.</DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-2 max-h-[60vh] overflow-y-auto">
-            {editSection === "overview" && (
-              <>
+            <>
                 <div className="space-y-2">
                   <Label>Objektnamn</Label>
                   <Input
@@ -1794,119 +1598,7 @@ export default function ObjectDetailPage() {
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="space-y-2">
-                  <Label>Anteckningar</Label>
-                  <Textarea
-                    value={editForm.notes}
-                    onChange={(e) => setEditForm({ ...editForm, notes: e.target.value })}
-                    data-testid="input-edit-notes"
-                  />
-                </div>
               </>
-            )}
-            {editSection === "access" && (
-              <>
-                <div className="space-y-2">
-                  <Label>Tillgångstyp</Label>
-                  <Select value={editForm.accessType} onValueChange={(v) => setEditForm({ ...editForm, accessType: v })}>
-                    <SelectTrigger data-testid="select-edit-accessType">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {Object.entries(accessTypeLabels).map(([val, { label }]) => (
-                        <SelectItem key={val} value={val}>{label}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label>Portkod</Label>
-                  <Input
-                    value={editForm.accessCode}
-                    onChange={(e) => setEditForm({ ...editForm, accessCode: e.target.value })}
-                    data-testid="input-edit-accessCode"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Nyckelnummer</Label>
-                  <Input
-                    value={editForm.keyNumber}
-                    onChange={(e) => setEditForm({ ...editForm, keyNumber: e.target.value })}
-                    data-testid="input-edit-keyNumber"
-                  />
-                </div>
-              </>
-            )}
-            {editSection === "equipment" && (
-              <>
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-2">
-                    <Label>K1 antal</Label>
-                    <Input
-                      type="number"
-                      min="0"
-                      value={editForm.containerCount}
-                      onChange={(e) => setEditForm({ ...editForm, containerCount: parseInt(e.target.value) || 0 })}
-                      data-testid="input-edit-containerCount"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>K2 antal</Label>
-                    <Input
-                      type="number"
-                      min="0"
-                      value={editForm.containerCountK2}
-                      onChange={(e) => setEditForm({ ...editForm, containerCountK2: parseInt(e.target.value) || 0 })}
-                      data-testid="input-edit-containerCountK2"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>K3 antal</Label>
-                    <Input
-                      type="number"
-                      min="0"
-                      value={editForm.containerCountK3}
-                      onChange={(e) => setEditForm({ ...editForm, containerCountK3: parseInt(e.target.value) || 0 })}
-                      data-testid="input-edit-containerCountK3"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>K4 antal</Label>
-                    <Input
-                      type="number"
-                      min="0"
-                      value={editForm.containerCountK4}
-                      onChange={(e) => setEditForm({ ...editForm, containerCountK4: parseInt(e.target.value) || 0 })}
-                      data-testid="input-edit-containerCountK4"
-                    />
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <Label>Serienummer</Label>
-                  <Input
-                    value={editForm.serialNumber}
-                    onChange={(e) => setEditForm({ ...editForm, serialNumber: e.target.value })}
-                    data-testid="input-edit-serialNumber"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Tillverkare</Label>
-                  <Input
-                    value={editForm.manufacturer}
-                    onChange={(e) => setEditForm({ ...editForm, manufacturer: e.target.value })}
-                    data-testid="input-edit-manufacturer"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Skick</Label>
-                  <Input
-                    value={editForm.condition}
-                    onChange={(e) => setEditForm({ ...editForm, condition: e.target.value })}
-                    data-testid="input-edit-condition"
-                  />
-                </div>
-              </>
-            )}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setEditDialogOpen(false)} data-testid="button-cancel-edit">
@@ -1914,27 +1606,11 @@ export default function ObjectDetailPage() {
             </Button>
             <Button
               onClick={() => {
-                const payload: ObjectEditForm = {};
-                if (editSection === "overview") {
-                  payload.name = editForm.name;
-                  payload.objectNumber = editForm.objectNumber;
-                  payload.objectType = editForm.objectType;
-                  payload.notes = editForm.notes;
-                }
-                if (editSection === "access") {
-                  payload.accessType = editForm.accessType;
-                  payload.accessCode = editForm.accessCode;
-                  payload.keyNumber = editForm.keyNumber;
-                }
-                if (editSection === "equipment") {
-                  payload.containerCount = editForm.containerCount;
-                  payload.containerCountK2 = editForm.containerCountK2;
-                  payload.containerCountK3 = editForm.containerCountK3;
-                  payload.containerCountK4 = editForm.containerCountK4;
-                  payload.serialNumber = editForm.serialNumber;
-                  payload.manufacturer = editForm.manufacturer;
-                  payload.condition = editForm.condition;
-                }
+                const payload: ObjectEditForm = {
+                  name: editForm.name,
+                  objectNumber: editForm.objectNumber,
+                  objectType: editForm.objectType,
+                };
                 updateObjectMutation.mutate(payload as Partial<ServiceObject>);
               }}
               disabled={updateObjectMutation.isPending}
@@ -2059,135 +1735,6 @@ export default function ObjectDetailPage() {
         </DialogContent>
       </Dialog>
 
-      {/* ==================== LÄGG TILL KONTAKT ==================== */}
-      <Dialog open={contactDialogOpen} onOpenChange={setContactDialogOpen}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>Lägg till kontakt</DialogTitle>
-            <DialogDescription>Fyll i kontaktuppgifterna nedan.</DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 py-2">
-            <div className="space-y-2">
-              <Label>Namn *</Label>
-              <Input
-                value={contactForm.name}
-                onChange={(e) => setContactForm({ ...contactForm, name: e.target.value })}
-                placeholder="Kontaktnamn"
-                data-testid="input-contact-name"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>Typ</Label>
-              <Select value={contactForm.contactType} onValueChange={(v) => setContactForm({ ...contactForm, contactType: v })}>
-                <SelectTrigger data-testid="select-contact-type">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {CONTACT_TYPES.map(t => (
-                    <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label>Roll</Label>
-              <Input
-                value={contactForm.role}
-                onChange={(e) => setContactForm({ ...contactForm, role: e.target.value })}
-                placeholder="t.ex. Vaktmästare"
-                data-testid="input-contact-role"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>Telefon</Label>
-              <Input
-                value={contactForm.phone}
-                onChange={(e) => setContactForm({ ...contactForm, phone: e.target.value })}
-                placeholder="070-123 45 67"
-                data-testid="input-contact-phone"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>E-post</Label>
-              <Input
-                value={contactForm.email}
-                onChange={(e) => setContactForm({ ...contactForm, email: e.target.value })}
-                placeholder="kontakt@example.com"
-                data-testid="input-contact-email"
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setContactDialogOpen(false)} data-testid="button-cancel-contact">
-              Avbryt
-            </Button>
-            <Button
-              onClick={() => addContactMutation.mutate(contactForm)}
-              disabled={!contactForm.name || addContactMutation.isPending}
-              data-testid="button-save-contact"
-            >
-              {addContactMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Plus className="h-4 w-4 mr-1" />}
-              Lägg till
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* ==================== LÄGG TILL BILD ==================== */}
-      <Dialog open={imageDialogOpen} onOpenChange={setImageDialogOpen}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>Lägg till bild</DialogTitle>
-            <DialogDescription>Ange bildlänk och valfri beskrivning.</DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 py-2">
-            <div className="space-y-2">
-              <Label>Bild-URL *</Label>
-              <Input
-                value={imageForm.imageUrl}
-                onChange={(e) => setImageForm({ ...imageForm, imageUrl: e.target.value })}
-                placeholder="https://..."
-                data-testid="input-image-url"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>Typ</Label>
-              <Select value={imageForm.imageType} onValueChange={(v) => setImageForm({ ...imageForm, imageType: v })}>
-                <SelectTrigger data-testid="select-image-type">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {IMAGE_TYPES.map(t => (
-                    <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label>Beskrivning</Label>
-              <Input
-                value={imageForm.description}
-                onChange={(e) => setImageForm({ ...imageForm, description: e.target.value })}
-                placeholder="Valfri beskrivning"
-                data-testid="input-image-description"
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setImageDialogOpen(false)} data-testid="button-cancel-image">
-              Avbryt
-            </Button>
-            <Button
-              onClick={() => addImageMutation.mutate(imageForm)}
-              disabled={!imageForm.imageUrl || addImageMutation.isPending}
-              data-testid="button-save-image"
-            >
-              {addImageMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Plus className="h-4 w-4 mr-1" />}
-              Lägg till
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
 
       {/* Snabborder: rik direktorder (kund + fakturareferenser + löpande SO-nr +

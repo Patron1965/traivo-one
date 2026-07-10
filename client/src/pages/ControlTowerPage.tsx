@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Gauge, AlertTriangle, Users, ClipboardList, TrendingUp, ChevronLeft, ChevronRight, ShieldAlert, Eye, EyeOff } from "lucide-react";
-import { SlaRiskClusterGrid, SlaRiskJobsList } from "@/components/SlaRiskPanel";
+import { SlaRiskJobsList } from "@/components/SlaRiskPanel";
 import { format, parseISO } from "date-fns";
 import { sv } from "date-fns/locale";
 
@@ -525,13 +525,8 @@ export default function ControlTowerPage() {
           <div className="flex items-center gap-2">
             <ShieldAlert className="h-4 w-4 text-destructive" />
             <h3 className="text-sm font-semibold">SLA-tidigvarning — kommande 7 dagar</h3>
-            <span className="text-xs text-muted-foreground">Aggregerad risk per kluster och topp-25 risker</span>
+            <span className="text-xs text-muted-foreground">Topp-25 risker</span>
           </div>
-          <Card>
-            <CardContent className="p-4">
-              <SlaRiskClusterGrid days={7} />
-            </CardContent>
-          </Card>
           <Card>
             <CardContent className="p-4">
               <p className="text-xs uppercase text-muted-foreground font-semibold mb-3">Topp-25 risker</p>

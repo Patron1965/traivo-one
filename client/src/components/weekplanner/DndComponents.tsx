@@ -66,7 +66,6 @@ export function DroppableCell({ id, children, className = "", dropFitInfo, style
   const { setNodeRef, isOver } = useDroppable({ id });
   const hasConflict = isOver && dragOverConflicts && dragOverConflicts.length > 0;
   const hasHardBlock = hasConflict && dragOverConflicts!.some(c => c.startsWith("[BLOCK]"));
-  const isClusterOnly = hasConflict && !hasHardBlock && dragOverConflicts!.every(c => c.includes("Kluster"));
   // Remote drag highlight tier (only when no local drag interaction is happening on this cell)
   const remoteHighlight = !isOver && !hasConflict && remoteDragActive
     ? remoteHovered
@@ -76,14 +75,14 @@ export function DroppableCell({ id, children, className = "", dropFitInfo, style
   return (
     <div
       ref={setNodeRef}
-      className={`${className} ${hasConflict ? (hasHardBlock ? "bg-destructive/15 dark:bg-destructive/15 ring-2 ring-destructive/60 cursor-not-allowed" : isClusterOnly ? "bg-warning/10 dark:bg-warning/15 ring-2 ring-warning/50" : "bg-destructive/10 dark:bg-destructive/15 ring-2 ring-destructive/50") : isOver ? dropFitInfo ? `${dropFitInfo.bg} ring-2 ${dropFitInfo.bg.includes("ring-") ? "" : "ring-primary"}` : "bg-primary/10 ring-2 ring-primary/30" : remoteHighlight}`}
+      className={`${className} ${hasConflict ? (hasHardBlock ? "bg-destructive/15 dark:bg-destructive/15 ring-2 ring-destructive/60 cursor-not-allowed" : "bg-destructive/10 dark:bg-destructive/15 ring-2 ring-destructive/50") : isOver ? dropFitInfo ? `${dropFitInfo.bg} ring-2 ${dropFitInfo.bg.includes("ring-") ? "" : "ring-primary"}` : "bg-primary/10 ring-2 ring-primary/30" : remoteHighlight}`}
       style={style}
       data-testid={`droppable-cell-${id}`}
       data-remote-drag-active={remoteDragActive ? "true" : undefined}
       data-remote-hovered={remoteHovered ? "true" : undefined}
     >
       {hasConflict && (
-        <div className={`text-[10px] font-bold mb-1 flex items-center gap-1 ${hasHardBlock ? "text-destructive" : isClusterOnly ? "text-warning" : "text-destructive"}`} data-testid={`drag-conflict-${id}`}>
+        <div className={`text-[10px] font-bold mb-1 flex items-center gap-1 ${hasHardBlock ? "text-destructive" : "text-destructive"}`} data-testid={`drag-conflict-${id}`}>
           {hasHardBlock ? <Ban className="h-3 w-3 shrink-0" /> : <AlertTriangle className="h-3 w-3 shrink-0 text-warning" />}
           <span className="truncate">{(dragOverConflicts![0] || "").replace("[BLOCK] ", "")}</span>
         </div>

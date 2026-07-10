@@ -66,8 +66,6 @@ import { format, addDays } from "date-fns";
 import { sv } from "date-fns/locale";
 import type { Subscription, Customer, Article, ServiceObject } from "@shared/schema";
 import { PageHelp, HelpTooltip } from "@/components/ui/help-tooltip";
-import { ObjectContactsPanel } from "@/components/ObjectContactsPanel";
-import { ObjectImagesGallery } from "@/components/ObjectImagesGallery";
 
 const periodicityOptions = [
   { value: "vecka", label: "Varje vecka" },
@@ -823,14 +821,6 @@ export default function SubscriptionsPage() {
             <Tabs defaultValue="info" className="flex-1 overflow-hidden flex flex-col">
               <TabsList className="shrink-0">
                 <TabsTrigger value="info">Information</TabsTrigger>
-                <TabsTrigger value="contacts" data-testid="tab-object-contacts">
-                  <Phone className="h-3 w-3 mr-1" />
-                  Kontakter
-                </TabsTrigger>
-                <TabsTrigger value="images" data-testid="tab-object-images">
-                  <Image className="h-3 w-3 mr-1" />
-                  Bilder
-                </TabsTrigger>
               </TabsList>
 
               <TabsContent value="info" className="flex-1 overflow-auto mt-4">
@@ -848,38 +838,8 @@ export default function SubscriptionsPage() {
                       <div className="text-sm text-muted-foreground">Stad</div>
                       <div className="font-medium">{selectedObject.city || "-"}</div>
                     </div>
-                    <div>
-                      <div className="text-sm text-muted-foreground">Tillgångstyp</div>
-                      <Badge variant="secondary">{selectedObject.accessType || "open"}</Badge>
-                    </div>
-                    {selectedObject.accessCode && (
-                      <div>
-                        <div className="text-sm text-muted-foreground">Åtkomstkod</div>
-                        <div className="font-medium">{selectedObject.accessCode}</div>
-                      </div>
-                    )}
                   </div>
-                  {selectedObject.notes && (
-                    <div>
-                      <div className="text-sm text-muted-foreground">Anteckningar</div>
-                      <div className="text-sm mt-1 p-3 bg-muted rounded-md">{selectedObject.notes}</div>
-                    </div>
-                  )}
                 </div>
-              </TabsContent>
-
-              <TabsContent value="contacts" className="flex-1 overflow-auto mt-4">
-                <ObjectContactsPanel
-                  objectId={selectedObject.id}
-                  tenantId={selectedObject.tenantId}
-                />
-              </TabsContent>
-
-              <TabsContent value="images" className="flex-1 overflow-auto mt-4">
-                <ObjectImagesGallery
-                  objectId={selectedObject.id}
-                  tenantId={selectedObject.tenantId}
-                />
               </TabsContent>
             </Tabs>
           )}

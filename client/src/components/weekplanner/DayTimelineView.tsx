@@ -23,7 +23,6 @@ interface DayTimelineViewProps {
   zoom: { dayH: number; weekH: number; monthH: number; scale: number };
   jobCardProps: Omit<React.ComponentProps<typeof JobCard>, 'job' | 'compact'>;
   dragOverConflicts?: Record<string, string[]>;
-  clusterMatchedResourceIds?: Set<string>;
   showConstraintLayer?: boolean;
   constraintMap?: Map<string, ConstraintCell>;
   remoteDragActive?: boolean;
@@ -35,7 +34,7 @@ export const DayTimelineView = memo(function DayTimelineView(props: DayTimelineV
     currentDate, visibleResources, timeRestrictions,
     getJobsForResourceAndDay, getResourceDayHours, getCapacityPercentage,
     getDropFitClass, activeDragJob, travelTimesForDay, zoom, jobCardProps,
-    dragOverConflicts, clusterMatchedResourceIds,
+    dragOverConflicts,
     showConstraintLayer, constraintMap, remoteDragActive, remoteHoveredDropId,
   } = props;
 
@@ -63,7 +62,7 @@ export const DayTimelineView = memo(function DayTimelineView(props: DayTimelineV
             const dayHours = getResourceDayHours(resource.id, day);
             const capacityPct = getCapacityPercentage(dayHours);
             return (
-              <div key={resource.id} className={`p-2 border-r last:border-r-0 flex flex-col items-center justify-center gap-0.5 min-w-0 transition-colors ${activeDragJob && clusterMatchedResourceIds?.has(resource.id) ? "bg-chart-2/10 dark:bg-chart-2/15 ring-1 ring-inset ring-chart-2/40" : ""}`}>
+              <div key={resource.id} className="p-2 border-r last:border-r-0 flex flex-col items-center justify-center gap-0.5 min-w-0 transition-colors">
                 <div className="flex items-center gap-1.5">
                   <Avatar className="h-5 w-5 shrink-0">
                     <AvatarFallback className="text-[10px]">{resource.initials || resource.name.split(" ").map(n => n[0]).join("")}</AvatarFallback>

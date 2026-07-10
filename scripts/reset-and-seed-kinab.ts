@@ -198,7 +198,6 @@ async function main() {
     UNION ALL SELECT 'objects', COUNT(*)::int FROM objects
     UNION ALL SELECT 'work_orders', COUNT(*)::int FROM work_orders
     UNION ALL SELECT 'resources', COUNT(*)::int FROM resources
-    UNION ALL SELECT 'clusters', COUNT(*)::int FROM clusters
     UNION ALL SELECT 'sessions', COUNT(*)::int FROM sessions
   `);
   for (const row of counts.rows as Array<{ t: string; c: number }>) {

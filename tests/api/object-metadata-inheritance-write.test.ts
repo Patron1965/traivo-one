@@ -13,7 +13,6 @@ import {
   userTenantRoles,
   customers,
   objects,
-  objectPayers,
   objectParents,
   metadataKatalog,
   metadataVarden,
@@ -137,7 +136,6 @@ afterAll(async () => {
     await db.delete(metadataVarden).where(inArray(metadataVarden.tenantId, [TENANT]));
     await db.delete(metadataKatalog).where(inArray(metadataKatalog.tenantId, [TENANT]));
     await db.delete(objectParents).where(inArray(objectParents.tenantId, [TENANT]));
-    await db.delete(objectPayers).where(inArray(objectPayers.tenantId, [TENANT]));
     await db.delete(objects).where(inArray(objects.tenantId, [TENANT]));
     await db.delete(customers).where(inArray(customers.tenantId, [TENANT]));
     await db.delete(userTenantRoles).where(inArray(userTenantRoles.userId, [ADMIN]));

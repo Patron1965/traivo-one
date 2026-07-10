@@ -51,12 +51,6 @@ function buildCloneInsert(
     postalCode: src.postalCode ?? undefined,
     latitude: src.latitude ?? undefined,
     longitude: src.longitude ?? undefined,
-    accessType: src.accessType ?? undefined,
-    accessCode: src.accessCode ?? undefined,
-    keyNumber: src.keyNumber ?? undefined,
-    accessInfo: src.accessInfo ?? undefined,
-    containerCount: src.containerCount ?? undefined,
-    avgSetupTime: src.avgSetupTime ?? undefined,
     status: "active",
   };
 }

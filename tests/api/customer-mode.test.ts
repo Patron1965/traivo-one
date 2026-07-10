@@ -2,6 +2,7 @@ import { describe, it, expect, beforeAll } from "vitest";
 import { storage } from "../../server/storage";
 import { randomId } from "./helpers";
 import type { InsertObject } from "@shared/schema";
+import { setObjectKund } from "./helpers/object-kund";
 
 const TENANT_ID = "default-tenant";
 
@@ -37,14 +38,7 @@ describe("CustomerMode — HARDCODED / FROM_METADATA", () => {
       objectLevel: 2,
     } as InsertObject);
     objectWithCust1 = obj1.id;
-    await storage.createObjectPayer({
-      tenantId: TENANT_ID,
-      objectId: obj1.id,
-      customerId: customer1Id,
-      payerType: "primary",
-      isPrimary: true,
-      priority: 1,
-    } as any);
+    await setObjectKund(TENANT_ID, obj1.id, customer1Id);
 
     const obj2 = await storage.createObject({
       tenantId: TENANT_ID,
@@ -55,14 +49,7 @@ describe("CustomerMode — HARDCODED / FROM_METADATA", () => {
       objectLevel: 2,
     } as InsertObject);
     objectWithCust2 = obj2.id;
-    await storage.createObjectPayer({
-      tenantId: TENANT_ID,
-      objectId: obj2.id,
-      customerId: customer2Id,
-      payerType: "primary",
-      isPrimary: true,
-      priority: 1,
-    } as any);
+    await setObjectKund(TENANT_ID, obj2.id, customer2Id);
   });
 
   describe("Schema defaults", () => {

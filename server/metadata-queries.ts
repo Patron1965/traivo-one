@@ -25,7 +25,7 @@ import {
   OrderTypeMetadataLink,
   MetadataDefinition,
 } from "@shared/schema";
-import { primaryPayerCustomerIdSql } from "./services/object-customer";
+import { primaryPayerCustomerIdSql, getObjectPrimaryCustomerId } from "./services/object-customer";
 import { parseCoordinateJson } from "./services/object-location";
 
 // Task #663: katalogtyp berikad med dess kundlås-kopplingar (tom array = generellt
@@ -832,6 +832,9 @@ export async function getObjectWithAllMetadata(
 
   if (!objekt) return null;
 
+  // Etapp 5: objektets kund härleds ur Ekonomi-metadatat ("Kund"), inte kolumn.
+  const objektCustomerId = await getObjectPrimaryCustomerId(objektId);
+
   // Build parent chain with stoppaVidareArvning tracking
   // The CTE now tracks which metadata types should be blocked from further inheritance
   // Task #1213: arv traverserar ALLA föräldrar via object_parents (union med
@@ -1167,8 +1170,8 @@ export async function getObjectWithAllMetadata(
   const hasAnyLock = Array.from(customerLinks.values()).some((l) => l.length > 0);
   let filteredMetadata = metadataWithKatalog;
   if (hasAnyLock) {
-    const scope = objekt.customerId
-      ? await getCustomerSelfAndAncestorIds(tenantId, objekt.customerId)
+    const scope = objektCustomerId
+      ? await getCustomerSelfAndAncestorIds(tenantId, objektCustomerId)
       : new Set<string>();
     filteredMetadata = metadataWithKatalog.filter((m) =>
       isMetadataAllowedForCustomerScope(customerLinks.get(m.metadataKatalogId), scope),
@@ -1210,8 +1213,8 @@ export async function getObjectWithAllMetadata(
     }
 
     // Kundlås-scope för beräknade fält (samma regel som för lagrade fält ovan).
-    const computedScope = objekt.customerId
-      ? await getCustomerSelfAndAncestorIds(tenantId, objekt.customerId)
+    const computedScope = objektCustomerId
+      ? await getCustomerSelfAndAncestorIds(tenantId, objektCustomerId)
       : new Set<string>();
 
     // Numeriska syskonvärden per familj (parentMetadataId → { fältnamn: nummer }).
@@ -4858,6 +4861,210 @@ export async function getObjectGeoFields(
       avdelningPortVaning: byKeyDef('avdelning/port/våning'),
     },
   };
+}
+
+// ============================================================================
+// ÅTKOMST-METADATA (Etapp 5) — ersätter objects.access*/key_number-kolumnerna.
+// Arvs-medveten läsning (närmast-vinner) av systemområdet "Åtkomst":
+// Åtkomsttyp / Åtkomstkod / Nyckelnummer / Åtkomstinfo. Delar
+// getObjectWithAllMetadata-resolutionen (tombstones/multi-förälder hanteras där).
+// ============================================================================
+
+export interface ObjectAtkomstFields {
+  typ: string | null;
+  portkod: string | null;
+  nyckelnummer: string | null;
+  info: string | null;
+}
+
+const ATKOMST_KEYS = {
+  typ: 'åtkomsttyp',
+  portkod: 'åtkomstkod',
+  nyckelnummer: 'nyckelnummer',
+  info: 'åtkomstinfo',
+} as const;
+
+// Arvs-medveten läsning av ETT katalogfält (per namn) för flera objekt.
+// Returnerar { objektId: visningsvärde } — objekt utan värde utelämnas.
+export async function getObjectsMetadataValueByKatalogNamn(
+  tenantId: string,
+  objectIds: string[],
+  katalogNamn: string,
+): Promise<Record<string, string>> {
+  const out: Record<string, string> = {};
+  if (objectIds.length === 0) return out;
+  const res = await db.execute(sql`
+    SELECT id FROM metadata_katalog
+    WHERE tenant_id = ${tenantId} AND LOWER(namn) = LOWER(${katalogNamn}) AND deleted_at IS NULL
+    LIMIT 1
+  `);
+  const row = (res.rows as any[])[0];
+  if (!row) return out;
+  const katalogId = String(row.id);
+  const values = await getObjectsMetadataValuesForCatalog(tenantId, objectIds, [katalogId]);
+  for (const objectId of Object.keys(values)) {
+    const v = values[objectId]?.[katalogId];
+    if (v !== undefined && v !== null && String(v).trim().length > 0) out[objectId] = String(v);
+  }
+  return out;
+}
+
+export async function getObjectAtkomstFields(
+  objektId: string,
+  tenantId: string,
+  preloaded?: Awaited<ReturnType<typeof getObjectWithAllMetadata>>,
+): Promise<ObjectAtkomstFields> {
+  const owm = preloaded ?? (await getObjectWithAllMetadata(objektId, tenantId));
+  const result: ObjectAtkomstFields = { typ: null, portkod: null, nyckelnummer: null, info: null };
+  if (!owm) return result;
+  const byKey = new Map<string, MetadataVardenWithKatalog>();
+  const wanted = new Set<string>(Object.values(ATKOMST_KEYS));
+  for (const m of owm.metadata) {
+    const k = (m.katalog?.namn ?? '').toLowerCase();
+    if (wanted.has(k) && !byKey.has(k)) byKey.set(k, m);
+  }
+  const readString = (key: string): string | null => {
+    const entry = byKey.get(key);
+    if (!entry) return null;
+    if (entry.source === 'local' && entry.raderad === true) return null;
+    const v = entry.vardeString ?? null;
+    return v && v.trim().length > 0 ? v : null;
+  };
+  result.typ = readString(ATKOMST_KEYS.typ);
+  result.portkod = readString(ATKOMST_KEYS.portkod);
+  result.nyckelnummer = readString(ATKOMST_KEYS.nyckelnummer);
+  result.info = readString(ATKOMST_KEYS.info);
+  return result;
+}
+
+// ============================================================================
+// KONTAKT-METADATA (Etapp 5) — ersätter object_contacts-tabellen.
+// Läser kontaktpersonsfamiljen (rubrik "Kontaktperson" + underfälten
+// Namn/Titel/Telefon/E-post, flervärdes) arvs-medvetet. Multi-instansdata
+// exponeras via `instances` från getObjectWithAllMetadata.
+// ============================================================================
+
+export interface ObjectKontaktPerson {
+  namn: string | null;
+  titel: string | null;
+  telefon: string | null;
+  epost: string | null;
+}
+
+const KONTAKT_SUBFIELD_KEYS = ['namn', 'titel', 'telefon', 'e-post'] as const;
+
+/**
+ * Kontaktpersoner för ett objekt (egna + ärvda). Underfälten (Namn/Titel/
+ * Telefon/E-post) är parallella flervärdesrader — personer paras ihop i
+ * skapandeordning (created_at, sedan id). Rader vars alla fält är tomma
+ * filtreras bort.
+ */
+export async function getObjectKontaktPersons(
+  objektId: string,
+  tenantId: string,
+): Promise<ObjectKontaktPerson[]> {
+  const owm = await getObjectWithAllMetadata(objektId, tenantId);
+  if (!owm) return [];
+
+  const valuesByKey = new Map<string, string[]>();
+  for (const key of KONTAKT_SUBFIELD_KEYS) valuesByKey.set(key, []);
+
+  for (const m of owm.metadata) {
+    const k = (m.katalog?.namn ?? '').toLowerCase();
+    if (!valuesByKey.has(k)) continue;
+    // Endast Kontakt-områdets fält (skydd mot namnkrock med andra områden).
+    if ((m.katalog?.area ?? '') !== 'kontakt') continue;
+    const list = valuesByKey.get(k)!;
+    if (m.instances && m.instances.length > 0) {
+      const sorted = [...m.instances].sort((a, b) => String(a.id).localeCompare(String(b.id)));
+      for (const inst of sorted) {
+        const v = (inst.displayValue ?? '').trim();
+        list.push(v);
+      }
+    } else if (!(m.source === 'local' && m.raderad === true)) {
+      const v = (m.vardeString ?? '').trim();
+      if (v) list.push(v);
+    }
+  }
+
+  const maxLen = Math.max(...KONTAKT_SUBFIELD_KEYS.map((k) => valuesByKey.get(k)!.length), 0);
+  const persons: ObjectKontaktPerson[] = [];
+  for (let i = 0; i < maxLen; i++) {
+    const namn = valuesByKey.get('namn')![i] || null;
+    const titel = valuesByKey.get('titel')![i] || null;
+    const telefon = valuesByKey.get('telefon')![i] || null;
+    const epost = valuesByKey.get('e-post')![i] || null;
+    if (namn || titel || telefon || epost) persons.push({ namn, titel, telefon, epost });
+  }
+  return persons;
+}
+
+/**
+ * Skriv en kontaktperson till objektets Kontakt-metadata (add-semantik,
+ * flervärdes). Idempotent per identiskt värde och underfält. Best-effort:
+ * saknas något katalogfält hoppas det över.
+ */
+export async function writeObjectKontaktPerson(
+  objektId: string,
+  tenantId: string,
+  person: { namn?: string | null; titel?: string | null; telefon?: string | null; epost?: string | null },
+  andradAv?: string | null,
+): Promise<void> {
+  const katalogRows = await db
+    .select()
+    .from(metadataKatalog)
+    .where(and(
+      eq(metadataKatalog.tenantId, tenantId),
+      isNull(metadataKatalog.deletedAt),
+      eq(metadataKatalog.area, 'kontakt'),
+    ));
+  const katByKey = new Map(katalogRows.map((k) => [(k.namn ?? '').toLowerCase(), k]));
+  const writes: Array<[string, string | null | undefined]> = [
+    ['namn', person.namn],
+    ['titel', person.titel],
+    ['telefon', person.telefon],
+    ['e-post', person.epost],
+  ];
+  for (const [key, raw] of writes) {
+    const value = (raw ?? '').trim();
+    if (!value) continue;
+    const katalog = katByKey.get(key);
+    if (!katalog) continue;
+    await writeImportedMetadataValue(db, {
+      tenantId,
+      objektId,
+      katalog,
+      rawValue: value,
+      andradAv: andradAv ?? 'system',
+    });
+  }
+}
+
+/**
+ * Alla e-postadresser i objektets Kontakt-metadata (egna + ärvda, dedupade).
+ * Används av kundnotifieringar för mottagarlistan.
+ */
+export async function getObjectKontaktEmails(
+  objektId: string,
+  tenantId: string,
+): Promise<string[]> {
+  const owm = await getObjectWithAllMetadata(objektId, tenantId);
+  if (!owm) return [];
+  const emails = new Set<string>();
+  for (const m of owm.metadata) {
+    const k = (m.katalog?.namn ?? '').toLowerCase();
+    if (k !== 'e-post') continue;
+    if (m.instances && m.instances.length > 0) {
+      for (const inst of m.instances) {
+        const v = (inst.displayValue ?? '').trim();
+        if (v && v.includes('@')) emails.add(v);
+      }
+    } else {
+      const v = (m.vardeString ?? '').trim();
+      if (v && v.includes('@') && !(m.source === 'local' && m.raderad === true)) emails.add(v);
+    }
+  }
+  return Array.from(emails);
 }
 
 // ============================================================================

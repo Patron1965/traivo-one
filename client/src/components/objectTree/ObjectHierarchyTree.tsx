@@ -1,7 +1,7 @@
 /**
  * ObjectHierarchyTree — återanvändbar trädvy med samma logik och utseende som
- * ClusterTreeExplorer's trädvy (arbetsbilden). Används av Step4Inspection i
- * selektionsläge (clusterId-väljaren) och kan återanvändas på fler ställen.
+ * Objektträdets trädvy. Används av Step4Inspection i objekt/gren-
+ * selektionsläge och av ObjectsPage, och kan återanvändas på fler ställen.
  */
 import { useState, useMemo, useCallback, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
@@ -25,7 +25,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { getWorkOrderStatusBadge } from "@/lib/status-colors";
 
-// ─── Shared types (identical to ClusterTreeExplorer) ─────────────────────────
+// ─── Shared types ─────────────────────────────────────────────────────────────
 
 export interface TreeNode {
   id: string;
@@ -33,7 +33,6 @@ export interface TreeNode {
   parentId: string | null;
   hierarchyLevel: string | null;
   objectType: string;
-  clusterId: string | null;
   latitude: number | null;
   longitude: number | null;
   entranceLatitude: number | null;
@@ -41,7 +40,6 @@ export interface TreeNode {
   address: string | null;
   postalCode: string | null;
   city: string | null;
-  accessType: string | null;
   childCount: number;
   customerId: string | null;
   customerName: string | null;
@@ -58,7 +56,7 @@ interface ParsedToken {
   value: string;
 }
 
-// ─── Search helpers (identical to ClusterTreeExplorer) ───────────────────────
+// ─── Search helpers ───────────────────────────────────────────────────────────
 
 export function parseSearch(input: string): ParsedToken[] {
   return input
@@ -120,15 +118,10 @@ export function matchToken(n: TreeNode, blob: string, t: ParsedToken): boolean {
 const ROW_HEIGHT = 40;
 
 interface ObjectHierarchyTreeProps {
-  /** Selection mode: provide these to enable cluster-selection behavior (Step 4). */
-  selectedClusterIds?: Set<string>;
-  onToggleCluster?: (clusterId: string) => void;
-  /** Map from clusterId → color hex for color dots in selection mode. */
-  clusterColors?: Map<string, string>;
   /**
    * Objekt/gren-selektionsläge (ADR v3): ange dessa för att aktivera
    * objekt/gren-väljaren (Step 4). När ett objekt väljs inkluderas hela dess
-   * gren (alla underobjekt) implicit. Ömsesidigt uteslutande med cluster-läget.
+   * gren (alla underobjekt) implicit.
    */
   selectedObjectIds?: Set<string>;
   onToggleObject?: (objectId: string) => void;
@@ -154,9 +147,6 @@ interface ObjectHierarchyTreeProps {
 type TreeScope = "all" | "top";
 
 export function ObjectHierarchyTree({
-  selectedClusterIds,
-  onToggleCluster,
-  clusterColors,
   selectedObjectIds,
   onToggleObject,
   height = 400,
@@ -164,7 +154,6 @@ export function ObjectHierarchyTree({
   enableScopeModes = false,
   conditionMatchedIds = null,
 }: ObjectHierarchyTreeProps) {
-  const selectionMode = !!selectedClusterIds && !!onToggleCluster;
   const objectSelectionMode = !!selectedObjectIds && !!onToggleObject;
 
   const [searchInput, setSearchInput] = useState("");
@@ -176,9 +165,9 @@ export function ObjectHierarchyTree({
   const topMode = enableScopeModes && scope === "top";
 
   const { data, isLoading, isError, refetch, isFetching } = useQuery<{ nodes: TreeNode[] }>({
-    queryKey: topMode ? ["/api/clusters/tree", "top"] : ["/api/clusters/tree"],
+    queryKey: topMode ? ["/api/objects/hierarchy-tree", "top"] : ["/api/objects/hierarchy-tree"],
     queryFn: async () => {
-      const url = topMode ? "/api/clusters/tree?scope=top" : "/api/clusters/tree";
+      const url = topMode ? "/api/objects/hierarchy-tree?scope=top" : "/api/objects/hierarchy-tree";
       const res = await fetch(url, { credentials: "include" });
       if (!res.ok) throw new Error("Kunde inte hämta objektträdet");
       return res.json();
@@ -350,10 +339,6 @@ export function ObjectHierarchyTree({
       // direkta barn-räknare (node.childCount) så rötterna ändå visar antal.
       const desc = descendantCount.get(node.id) || node.childCount || 0;
       const isMatch = matchedIds.has(node.id);
-      const clusterColor = clusterColors?.get(node.clusterId ?? "") ?? null;
-      const clusterSelected = selectionMode && node.clusterId
-        ? selectedClusterIds!.has(node.clusterId)
-        : false;
       // Objekt/gren-läge: explicit vald gren-rot vs. implicit medföljande ättling.
       const objectSelected = objectSelectionMode ? selectedObjectIds!.has(node.id) : false;
       const objectImplicit = objectSelectionMode
@@ -364,7 +349,7 @@ export function ObjectHierarchyTree({
       const conditionMiss = conditionMatchedIds != null
         && (objectSelected || objectImplicit)
         && !conditionMatchedIds.has(node.id);
-      const rowHighlight = clusterSelected || objectSelected
+      const rowHighlight = objectSelected
         ? "bg-accent/40"
         : objectImplicit
           ? "bg-accent/15"
@@ -395,17 +380,6 @@ export function ObjectHierarchyTree({
             <div className="shrink-0 h-6 w-6" />
           )}
 
-          {/* Cluster-selektion: kryssruta (legacy back-compat) */}
-          {selectionMode && node.clusterId && (
-            <Checkbox
-              checked={clusterSelected}
-              onCheckedChange={() => onToggleCluster!(node.clusterId!)}
-              className="shrink-0"
-              data-testid={`checkbox-cluster-node-${node.id}`}
-              aria-label={`Välj kluster för ${node.name}`}
-            />
-          )}
-
           {/* Objekt/gren-selektion: kryssruta. Implicit-medföljande ättlingar
               visas ikryssade men låsta (de styrs av sin valda förälder). */}
           {objectSelectionMode && (
@@ -419,26 +393,13 @@ export function ObjectHierarchyTree({
             />
           )}
 
-          {/* Cluster color indicator */}
-          {clusterColor && (
-            <span
-              className="h-2.5 w-2.5 rounded-full shrink-0"
-              style={{ backgroundColor: clusterColor }}
-              title={`Kluster: ${node.clusterId}`}
-            />
-          )}
-
-          {/* Node content — identical layout to ClusterTreeExplorer */}
+          {/* Node content */}
           <button
             type="button"
             onClick={() => {
               if (objectSelectionMode) {
                 // Implicit-medföljande ättlingar går ej att av-/välja enskilt.
                 if (!objectImplicit) onToggleObject!(node.id);
-                return;
-              }
-              if (selectionMode && node.clusterId) {
-                onToggleCluster!(node.clusterId);
                 return;
               }
               onNodeClick?.(node);
@@ -489,10 +450,6 @@ export function ObjectHierarchyTree({
       filterActive,
       toggleNode,
       onNodeClick,
-      selectionMode,
-      selectedClusterIds,
-      onToggleCluster,
-      clusterColors,
       objectSelectionMode,
       selectedObjectIds,
       onToggleObject,
@@ -503,7 +460,7 @@ export function ObjectHierarchyTree({
 
   return (
     <div className="space-y-3">
-      {/* Search bar — identical to ClusterTreeExplorer */}
+      {/* Search bar */}
       <div className="relative">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
         <Input
@@ -585,7 +542,7 @@ export function ObjectHierarchyTree({
         </Badge>
       </div>
 
-      {/* Tree list — identical virtual list rendering as ClusterTreeExplorer */}
+      {/* Tree list — virtual list rendering */}
       <Card className="overflow-hidden">
         <CardContent className="p-0">
           {isLoading ? (

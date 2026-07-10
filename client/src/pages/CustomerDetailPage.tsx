@@ -21,14 +21,14 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { PageHeader } from "@/components/layout/PageHeader";
 import { QueryErrorState } from "@/components/ErrorBoundary";
 import {
-  ArrowLeft, Building2, Layers, Package, ClipboardList, Phone, Mail, MapPin,
+  ArrowLeft, Building2, Package, ClipboardList, Phone, Mail, MapPin,
   ChevronDown, ChevronRight, Users, Home, Container, Trash2, TreePine, Map as MapIcon,
   Repeat, Receipt, GitBranch, Hash, FileText, AlertTriangle, Loader2, Search, X, RefreshCw,
   Pyramid, DoorClosed, ArrowUp, ArrowDown, ArrowUpDown, TrendingUp, TrendingDown,
   Send, Clock,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
-import { MapContainer, TileLayer, Circle, Popup, useMap, useMapEvents } from "react-leaflet";
+import { MapContainer, TileLayer, useMap, useMapEvents } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import "leaflet.markercluster/dist/MarkerCluster.css";
@@ -37,17 +37,6 @@ import "leaflet.markercluster";
 import { useMapConfig } from "@/hooks/use-map-config";
 import { useAuth } from "@/hooks/use-auth";
 import type { Customer, DeliveryPreferences } from "@shared/schema";
-
-interface CustomerStatsCluster {
-  id: string;
-  name: string;
-  color: string | null;
-  status: string;
-  objectCount: number;
-  centerLatitude: number | null;
-  centerLongitude: number | null;
-  radiusKm: number | null;
-}
 
 interface CustomerStats {
   objectsByLevel: Record<string, number>;
@@ -58,17 +47,14 @@ interface CustomerStats {
   totalOrders: number;
   activeSubscriptions: number;
   invoicedLast12Months: number;
-  clusters: CustomerStatsCluster[];
 }
 
 interface TreeNode {
   id: string;
   name: string;
   parentId: string | null;
-  clusterId: string | null;
   hierarchyLevel: string | null;
   address: string | null;
-  accessInfoInherited: boolean | null;
   hasCoords: boolean;
   childCount: number;
 }
@@ -102,7 +88,6 @@ interface SearchHit {
   objectNumber: string | null;
   address: string | null;
   hierarchyLevel: string | null;
-  clusterId: string | null;
   parentId: string | null;
   path: Array<{ id: string; name: string; hierarchyLevel: string | null }>;
 }
@@ -114,7 +99,6 @@ interface MapPoint {
   latitude: number;
   longitude: number;
   hierarchyLevel: string | null;
-  clusterId: string | null;
 }
 
 const HIERARCHY_LEVELS: Record<string, { label: string; icon: typeof Building2; color: string; hex: string }> = {
@@ -126,47 +110,9 @@ const HIERARCHY_LEVELS: Record<string, { label: string; icon: typeof Building2; 
   objekt: { label: "Objekt", icon: Package, color: "text-muted-foreground", hex: "#6B7C8C" },
 };
 
-interface ClusterGroup {
-  id: string | null;
-  name: string;
-  color: string | null;
-  roots: TreeNode[];
-}
-
-function groupRootsByCluster(
-  roots: TreeNode[],
-  clusters: CustomerStatsCluster[],
-): ClusterGroup[] {
-  const byCluster = new Map<string, TreeNode[]>();
-  const orphans: TreeNode[] = [];
-  for (const r of roots) {
-    if (r.clusterId) {
-      const arr = byCluster.get(r.clusterId) || [];
-      arr.push(r);
-      byCluster.set(r.clusterId, arr);
-    } else {
-      orphans.push(r);
-    }
-  }
-  const groups: ClusterGroup[] = clusters
-    .filter((c) => byCluster.has(c.id))
-    .map((c) => ({ id: c.id, name: c.name, color: c.color, roots: byCluster.get(c.id)! }));
-  Array.from(byCluster.entries()).forEach(([cid, list]) => {
-    if (!groups.find((g) => g.id === cid)) {
-      groups.push({ id: cid, name: "Kluster", color: null, roots: list });
-    }
-  });
-  if (orphans.length > 0) {
-    groups.push({ id: null, name: "Övriga objekt (utan kluster)", color: null, roots: orphans });
-  }
-  return groups;
-}
-
 interface SyncState {
   selectedObjectId: string | null;
-  selectedClusterId: string | null;
   hoveredObjectId: string | null;
-  hoveredClusterId: string | null;
 }
 
 type TreeSortField = "name" | "level" | "children" | "address";
@@ -288,17 +234,6 @@ function TreeRow({
           >
             {node.name}
           </Link>
-          {node.accessInfoInherited && (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <GitBranch className="h-3 w-3 text-chart-1" data-testid={`inherited-${node.id}`} />
-              </TooltipTrigger>
-              <TooltipContent side="top">
-                <p className="text-xs font-medium">Ärvda värden:</p>
-                <ul className="text-xs text-muted-foreground"><li>Åtkomstinfo</li></ul>
-              </TooltipContent>
-            </Tooltip>
-          )}
           <Badge variant="outline" className="text-[10px]">{info.label}</Badge>
           {node.address && (
             <span className="text-xs text-muted-foreground truncate max-w-[180px] hidden sm:inline">
@@ -1153,9 +1088,7 @@ export default function CustomerDetailPage() {
   const isAdmin = user?.role === "admin" || user?.role === "owner";
   const [sync, setSync] = useState<SyncState>({
     selectedObjectId: null,
-    selectedClusterId: null,
     hoveredObjectId: null,
-    hoveredClusterId: null,
   });
   const [mapBbox, setMapBbox] = useState<[number, number, number, number] | null>(null);
   const [mapZoom, setMapZoom] = useState<number>(11);
@@ -1199,12 +1132,8 @@ export default function CustomerDetailPage() {
 
   const setSelectedObject = (id: string | null) =>
     setSync((s) => ({ ...s, selectedObjectId: id }));
-  const setSelectedCluster = (id: string | null) =>
-    setSync((s) => ({ ...s, selectedClusterId: s.selectedClusterId === id ? null : id }));
   const setHoveredObject = (id: string | null) =>
     setSync((s) => ({ ...s, hoveredObjectId: id }));
-  const setHoveredCluster = (id: string | null) =>
-    setSync((s) => ({ ...s, hoveredClusterId: id }));
 
   const customerQuery = useQuery<Customer>({
     queryKey: ["/api/customers", customerId],
@@ -1244,11 +1173,9 @@ export default function CustomerDetailPage() {
   });
 
   const rootsQuery = useQuery<TreeNode[]>({
-    queryKey: ["/api/customers", customerId, "objects", "tree-roots", sync.selectedClusterId ?? "all"],
+    queryKey: ["/api/customers", customerId, "objects", "tree-roots"],
     queryFn: async () => {
-      const url = `/api/customers/${encodeURIComponent(customerId!)}/objects/tree-roots${
-        sync.selectedClusterId ? `?clusterId=${encodeURIComponent(sync.selectedClusterId)}` : ""
-      }`;
+      const url = `/api/customers/${encodeURIComponent(customerId!)}/objects/tree-roots`;
       const r = await fetch(url, { credentials: "include" });
       if (!r.ok) throw new Error("Kunde inte hämta hierarki");
       return r.json();
@@ -1273,9 +1200,6 @@ export default function CustomerDetailPage() {
   });
 
   const jumpToHit = (hit: SearchHit) => {
-    if (sync.selectedClusterId) {
-      setSync((s) => ({ ...s, selectedClusterId: null }));
-    }
     const ancestorIds = hit.path
       .filter((p) => p.id !== hit.id)
       .map((p) => p.id);
@@ -1295,11 +1219,10 @@ export default function CustomerDetailPage() {
       customerId,
       "objects",
       "coordinates",
-      sync.selectedClusterId ?? "all",
       bboxKey,
       zoomBucket,
     ];
-  }, [customerId, sync.selectedClusterId, mapBbox, zoomBucket]);
+  }, [customerId, mapBbox, zoomBucket]);
 
   type CoordsResponse =
     | { mode: "points"; points: MapPoint[]; total: number }
@@ -1309,7 +1232,6 @@ export default function CustomerDetailPage() {
     queryKey: coordsQueryKey,
     queryFn: async () => {
       const params = new URLSearchParams();
-      if (sync.selectedClusterId) params.set("clusterId", sync.selectedClusterId);
       if (mapBbox) params.set("bbox", mapBbox.join(","));
       params.set("limit", "2000");
       params.set("zoom", String(zoomBucket));
@@ -1339,7 +1261,6 @@ export default function CustomerDetailPage() {
         latitude: o.latitude,
         longitude: o.longitude,
         hierarchyLevel: o.hierarchyLevel ?? null,
-        clusterId: o.clusterId ?? null,
       };
     },
     enabled: !!customerId && !!sync.selectedObjectId,
@@ -1347,18 +1268,10 @@ export default function CustomerDetailPage() {
   });
 
   const roots = rootsQuery.data || [];
-  const clusterGroups = useMemo(
-    () => groupRootsByCluster(roots, statsQuery.data?.clusters || []),
-    [roots, statsQuery.data?.clusters],
-  );
   const coordsData = coordsQuery.data;
   const mapPoints: MapPoint[] = coordsData?.mode === "points" ? coordsData.points : [];
   const mapAggregates: MapAggregate[] = coordsData?.mode === "aggregates" ? coordsData.aggregates : [];
   const mapTotalInView = coordsData?.total ?? 0;
-  const clustersWithGeo = useMemo(
-    () => (statsQuery.data?.clusters || []).filter((c) => c.centerLatitude && c.centerLongitude),
-    [statsQuery.data?.clusters],
-  );
   const flyTarget = selectedPointQuery.data || null;
 
   if (!customerId) return null;
@@ -1381,9 +1294,7 @@ export default function CustomerDetailPage() {
     </div>
   );
 
-  const initialCenter: [number, number] = clustersWithGeo[0]
-    ? [clustersWithGeo[0].centerLatitude!, clustersWithGeo[0].centerLongitude!]
-    : mapPoints[0]
+  const initialCenter: [number, number] = mapPoints[0]
     ? [mapPoints[0].latitude, mapPoints[0].longitude]
     : mapAggregates[0]
     ? [mapAggregates[0].latitude, mapAggregates[0].longitude]
@@ -1455,16 +1366,6 @@ export default function CustomerDetailPage() {
           )}
 
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-            <Card>
-              <CardContent className="p-4">
-                <div className="text-xs text-muted-foreground flex items-center gap-1">
-                  <Layers className="h-3.5 w-3.5" /> Kluster
-                </div>
-                <div className="text-2xl font-semibold mt-1" data-testid="stat-clusters">
-                  {stats?.clusters.length ?? 0}
-                </div>
-              </CardContent>
-            </Card>
             <Card>
               <CardContent className="p-4">
                 <div className="text-xs text-muted-foreground flex items-center gap-1">
@@ -1611,62 +1512,6 @@ export default function CustomerDetailPage() {
               </CardContent>
             </Card>
 
-            <Card className="lg:col-span-2">
-              <CardHeader>
-                <CardTitle className="text-base flex items-center gap-2">
-                  <Layers className="h-4 w-4" /> Kluster
-                  {sync.selectedClusterId && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="ml-auto h-6 text-xs"
-                      onClick={() => setSelectedCluster(sync.selectedClusterId)}
-                      data-testid="button-clear-cluster-filter"
-                    >
-                      Rensa filter
-                    </Button>
-                  )}
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                {!stats || stats.clusters.length === 0 ? (
-                  <div className="text-sm text-muted-foreground py-4 text-center" data-testid="text-empty-clusters">
-                    Inga kluster där denna kund är rotkund ännu.
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                    {stats.clusters.map((cl) => {
-                      const isSelected = sync.selectedClusterId === cl.id;
-                      const isHovered = sync.hoveredClusterId === cl.id;
-                      return (
-                        <div
-                          key={cl.id}
-                          onClick={() => setSelectedCluster(cl.id)}
-                          onMouseEnter={() => setHoveredCluster(cl.id)}
-                          onMouseLeave={() => setHoveredCluster(null)}
-                          className={`flex items-center gap-2 p-3 rounded-md border hover-elevate cursor-pointer ${
-                            isSelected ? "ring-2 ring-primary" : isHovered ? "bg-muted" : ""
-                          }`}
-                          data-testid={`card-cluster-${cl.id}`}
-                        >
-                          <div
-                            className="w-3 h-3 rounded-full shrink-0"
-                            style={{ backgroundColor: cl.color || "#3b82f6" }}
-                          />
-                          <div className="flex-1 min-w-0">
-                            <div className="text-sm font-medium truncate">{cl.name}</div>
-                            <div className="text-xs text-muted-foreground">{cl.objectCount} objekt</div>
-                          </div>
-                          {cl.status !== "active" && (
-                            <Badge variant="outline" className="text-[10px]">{cl.status}</Badge>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
           </div>
 
           {customerId && (
@@ -1795,7 +1640,7 @@ export default function CustomerDetailPage() {
                         <Skeleton key={i} className="h-8 w-full" />
                       ))}
                     </div>
-                  ) : clusterGroups.length === 0 ? (
+                  ) : roots.length === 0 ? (
                     <div className="text-sm text-muted-foreground py-8 text-center" data-testid="text-empty-tree">
                       Inga objekt registrerade på denna kund ännu.
                     </div>
@@ -1816,56 +1661,24 @@ export default function CustomerDetailPage() {
                           Antal barn <SortIcon field="children" />
                         </button>
                       </div>
-                      {clusterGroups.map((g) => {
-                        const isSelected = sync.selectedClusterId === g.id;
-                        const isHovered = sync.hoveredClusterId === g.id;
-                        return (
-                          <div
-                            key={g.id ?? "no-cluster"}
-                            className={`border rounded-md ${isSelected ? "ring-2 ring-primary" : isHovered ? "ring-1 ring-muted-foreground/40" : ""}`}
-                            data-testid={`group-cluster-${g.id ?? "none"}`}
-                            onMouseEnter={() => g.id && setHoveredCluster(g.id)}
-                            onMouseLeave={() => g.id && setHoveredCluster(null)}
-                          >
-                            <div className="flex items-center gap-2 px-3 py-2 bg-muted/50 border-b">
-                              <Layers className="h-4 w-4 text-muted-foreground" />
-                              {g.id ? (
-                                <button
-                                  onClick={() => setSelectedCluster(g.id!)}
-                                  className="text-sm font-semibold hover:underline flex items-center gap-1.5"
-                                  data-testid={`button-select-cluster-${g.id}`}
-                                >
-                                  {g.color && (
-                                    <span className="inline-block w-2.5 h-2.5 rounded-full" style={{ backgroundColor: g.color }} />
-                                  )}
-                                  {g.name}
-                                </button>
-                              ) : (
-                                <span className="text-sm font-semibold">{g.name}</span>
-                              )}
-                              <Badge variant="secondary" className="text-[10px] ml-auto">
-                                {g.roots.length} rot{g.roots.length === 1 ? "" : "ter"}
-                              </Badge>
-                            </div>
-                            <div className="p-2 space-y-0.5">
-                              {sortTreeNodes(g.roots, sortConfig).map((n) => (
-                                <TreeRow
-                                  key={n.id}
-                                  node={n}
-                                  level={0}
-                                  customerId={customerId}
-                                  sync={sync}
-                                  expanded={expanded}
-                                  onToggleExpand={toggleExpand}
-                                  onSelectObject={setSelectedObject}
-                                  onHoverObject={setHoveredObject}
-                                  sortConfig={sortConfig}
-                                />
-                              ))}
-                            </div>
-                          </div>
-                        );
-                      })}
+                      <div className="border rounded-md" data-testid="group-tree-roots">
+                        <div className="p-2 space-y-0.5">
+                          {sortTreeNodes(roots, sortConfig).map((n) => (
+                            <TreeRow
+                              key={n.id}
+                              node={n}
+                              level={0}
+                              customerId={customerId}
+                              sync={sync}
+                              expanded={expanded}
+                              onToggleExpand={toggleExpand}
+                              onSelectObject={setSelectedObject}
+                              onHoverObject={setHoveredObject}
+                              sortConfig={sortConfig}
+                            />
+                          ))}
+                        </div>
+                      </div>
                     </div>
                   )}
                 </CardContent>
@@ -1877,7 +1690,7 @@ export default function CustomerDetailPage() {
                 <CardContent className="p-0 overflow-hidden rounded-md">
                   {coordsQuery.isLoading && mapPoints.length === 0 && mapAggregates.length === 0 ? (
                     <Skeleton className="h-[500px] w-full" />
-                  ) : mapPoints.length === 0 && mapAggregates.length === 0 && clustersWithGeo.length === 0 ? (
+                  ) : mapPoints.length === 0 && mapAggregates.length === 0 ? (
                     <div className="h-[500px] flex flex-col items-center justify-center text-muted-foreground text-sm gap-2" data-testid="text-empty-map">
                       <MapIcon className="h-8 w-8 opacity-40" />
                       Inga objekt med koordinater att visa.
@@ -1905,7 +1718,7 @@ export default function CustomerDetailPage() {
                         }}
                       >
                         <TileLayer url={mapConfig.tileUrl} attribution={mapConfig.attribution} />
-                        <MapBoundsFitter points={mapPoints} refitKey={sync.selectedClusterId ?? "all"} />
+                        <MapBoundsFitter points={mapPoints} refitKey="all" />
                         <ViewportTracker
                           onChange={(bbox, zoom) => {
                             setMapBbox(bbox);
@@ -1913,39 +1726,6 @@ export default function CustomerDetailPage() {
                           }}
                         />
                         <FlyToPoint point={flyTarget} />
-                        {clustersWithGeo.map((cl) => {
-                          const isSelected = sync.selectedClusterId === cl.id;
-                          const isHovered = sync.hoveredClusterId === cl.id;
-                          const baseColor = cl.color || "#3b82f6";
-                          return (
-                            <Circle
-                              key={`circle-${cl.id}`}
-                              center={[cl.centerLatitude!, cl.centerLongitude!]}
-                              radius={(cl.radiusKm || 5) * 1000}
-                              pathOptions={{
-                                color: isSelected ? "#f59e0b" : baseColor,
-                                fillColor: baseColor,
-                                fillOpacity: isSelected ? 0.18 : isHovered ? 0.14 : 0.08,
-                                weight: isSelected ? 3 : isHovered ? 2.5 : 2,
-                              }}
-                              eventHandlers={{
-                                click: () => setSelectedCluster(cl.id),
-                                mouseover: () => setHoveredCluster(cl.id),
-                                mouseout: () => setHoveredCluster(null),
-                              }}
-                            >
-                              <Popup>
-                                <div className="space-y-1">
-                                  <div className="font-medium">{cl.name}</div>
-                                  <div className="text-xs">{cl.objectCount} objekt · radie {cl.radiusKm ?? 5} km</div>
-                                  <Link href={`/clusters/${cl.id}`} className="text-xs text-primary hover:underline">
-                                    Öppna kluster →
-                                  </Link>
-                                </div>
-                              </Popup>
-                            </Circle>
-                          );
-                        })}
                         {coordsData?.mode === "aggregates" ? (
                           <ServerClusterLayer
                             aggregates={mapAggregates}

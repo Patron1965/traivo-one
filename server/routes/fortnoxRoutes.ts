@@ -1,5 +1,6 @@
 import type { Express } from "express";
 import { storage } from "../storage";
+import { getTimeRestrictionsForObjects, getTimeRestrictionsForTenant } from "../services/object-time-restrictions";
 import { db } from "../db";
 import { eq, sql, desc, and, gte, isNull, inArray } from "drizzle-orm";
 import { z } from "zod";
@@ -7,7 +8,7 @@ import { formatZodError, verifyTenantOwnership, DEFAULT_TENANT_ID, ensureResourc
 import { getTenantIdWithFallback } from "../tenant-middleware";
 import { asyncHandler } from "../asyncHandler";
 import { NotFoundError, ValidationError, ForbiddenError, describeFortnoxMappingConflict } from "../errors";
-import { objects, workOrders, articles, customers, fortnoxMappings, objectContacts, importBatches, assignments, type InsertWorkOrder, type ServiceObject, type Assignment } from "@shared/schema";
+import { objects, workOrders, articles, customers, fortnoxMappings, importBatches, assignments, type InsertWorkOrder, type ServiceObject, type Assignment } from "@shared/schema";
 import {
   shouldSplitForStockPickup,
   resolveStockLocation,
@@ -95,7 +96,6 @@ async function createStockPickupAssignment(opts: {
     orderConceptId: concept.id,
     objectId: obj.id,
     customerId: customerId ?? undefined,
-    clusterId: obj.clusterId || undefined,
     title: `Hämta: ${linkedArticle.name}`,
     description: stock.address ? `Hämtas på lagerplats: ${stock.address}` : undefined,
     status: "not_planned",
@@ -287,7 +287,6 @@ export async function generateScheduleAssignments(opts: {
         orderConceptId: concept.id,
         objectId: obj.id,
         customerId: effectiveCustomerId ?? undefined,
-        clusterId: obj.clusterId || undefined,
         title: concept.name,
         description: concept.description || undefined,
         status: "not_planned",
@@ -874,44 +873,6 @@ app.patch("/api/fortnox/exports/:id", asyncHandler(async (req, res) => {
 }));
 
 // ============================================
-// OBJECT IMAGES - Bildgalleri per objekt
-// ============================================
-
-app.get("/api/objects/:objectId/images", asyncHandler(async (req, res) => {
-    const tenantId = getTenantIdWithFallback(req);
-    if (!await verifyObjectTenant(req.params.objectId, tenantId)) {
-      throw new ForbiddenError("Åtkomst nekad");
-    }
-    const images = await storage.getObjectImages(req.params.objectId);
-    res.json(images);
-}));
-
-app.post("/api/objects/:objectId/images", asyncHandler(async (req, res) => {
-    const tenantId = getTenantIdWithFallback(req);
-    if (!await verifyObjectTenant(req.params.objectId, tenantId)) {
-      throw new ForbiddenError("Åtkomst nekad");
-    }
-    const data = insertObjectImageSchema.parse({
-      ...req.body,
-      tenantId,
-      objectId: req.params.objectId
-    });
-    const image = await storage.createObjectImage(data);
-    res.status(201).json(image);
-}));
-
-app.delete("/api/objects/:objectId/images/:id", asyncHandler(async (req, res) => {
-    const tenantId = getTenantIdWithFallback(req);
-    if (!await verifyObjectTenant(req.params.objectId, tenantId)) {
-      throw new ForbiddenError("Åtkomst nekad");
-    }
-    // Task #716: arkivering (soft-delete) istället för permanent radering.
-    const archivedBy = req.session?.user?.id ?? null;
-    await storage.deleteObjectImage(req.params.id, req.params.objectId, tenantId, { archivedBy });
-    res.status(204).send();
-}));
-
-// ============================================
 // OBJECT CONTACTS - Kontakter med arvslogik
 // ============================================
 
@@ -920,56 +881,17 @@ app.get("/api/objects/:objectId/contacts", asyncHandler(async (req, res) => {
     if (!await verifyObjectTenant(req.params.objectId, tenantId)) {
       throw new ForbiddenError("Åtkomst nekad");
     }
-    const withInheritance = req.query.inheritance === "true";
-    const contacts = withInheritance
-      ? await storage.getObjectContactsWithInheritance(req.params.objectId, tenantId)
-      : await storage.getObjectContacts(req.params.objectId);
-    res.json(contacts);
-}));
-
-app.post("/api/objects/:objectId/contacts", asyncHandler(async (req, res) => {
-    const tenantId = getTenantIdWithFallback(req);
-    if (!await verifyObjectTenant(req.params.objectId, tenantId)) {
-      throw new ForbiddenError("Åtkomst nekad");
-    }
-    const data = insertObjectContactSchema.parse({
-      ...req.body,
-      tenantId,
-      objectId: req.params.objectId
-    });
-    const contact = await storage.createObjectContact(data);
-    res.status(201).json(contact);
-}));
-
-app.patch("/api/objects/:objectId/contacts/:id", asyncHandler(async (req, res) => {
-    const tenantId = getTenantIdWithFallback(req);
-    if (!await verifyObjectTenant(req.params.objectId, tenantId)) {
-      throw new ForbiddenError("Åtkomst nekad");
-    }
-    const updateSchema = z.object({
-      name: z.string().optional(),
-      phone: z.string().nullable().optional(),
-      email: z.string().nullable().optional(),
-      role: z.string().nullable().optional(),
-      contactType: z.string().optional(),
-      isInheritable: z.boolean().optional(),
-      notes: z.string().nullable().optional(),
-    });
-    const updateData = updateSchema.parse(req.body);
-    const contact = await storage.updateObjectContact(req.params.id, req.params.objectId, tenantId, updateData);
-    if (!contact) throw new NotFoundError("Kontakt hittades inte");
-    res.json(contact);
-}));
-
-app.delete("/api/objects/:objectId/contacts/:id", asyncHandler(async (req, res) => {
-    const tenantId = getTenantIdWithFallback(req);
-    if (!await verifyObjectTenant(req.params.objectId, tenantId)) {
-      throw new ForbiddenError("Åtkomst nekad");
-    }
-    // Task #716: arkivering (soft-delete) istället för permanent radering.
-    const archivedBy = req.session?.user?.id ?? null;
-    await storage.deleteObjectContact(req.params.id, req.params.objectId, tenantId, { archivedBy });
-    res.status(204).send();
+    // Etapp 5: kontakter läses ur Kontakt-metadatat (alltid arvs-medvetet).
+    const { getObjectKontaktPersons } = await import("../metadata-queries");
+    const kontakter = await getObjectKontaktPersons(req.params.objectId, tenantId);
+    res.json(kontakter.map((k, idx) => ({
+      id: `${req.params.objectId}-kontakt-${idx}`,
+      objectId: req.params.objectId,
+      name: k.namn,
+      role: k.titel,
+      phone: k.telefon,
+      email: k.epost,
+    })));
 }));
 
 // ============================================
@@ -1117,7 +1039,7 @@ app.post("/api/auto-plan-week", asyncHandler(async (req, res) => {
     }
 
     const allObjectIds = [...new Set(allWorkOrders.map(wo => wo.objectId).filter(Boolean) as string[])];
-    const timeRestrictions = await storage.getObjectTimeRestrictionsByObjectIds(tenantId, allObjectIds);
+    const timeRestrictions = await getTimeRestrictionsForObjects(tenantId, allObjectIds);
     const restrictionsByObject = new Map<string, typeof timeRestrictions>();
     for (const r of timeRestrictions) {
       if (!restrictionsByObject.has(r.objectId)) restrictionsByObject.set(r.objectId, []);
@@ -1779,7 +1701,9 @@ app.delete("/api/work-orders/:workOrderId/information/:id", asyncHandler(async (
 }));
 
 // ============================================
-// OBJECT TIME RESTRICTIONS (C9) - Tidsbegränsningar
+// TIDSRESTRIKTIONER (Etapp 5) — metadata-backad läsvy
+// Källa: metadata-fältet "Tidsrestriktioner" (area 'tid'). Skrivning sker via
+// vanliga metadata-endpoints; gamla POST/PATCH/DELETE-endpoints är borttagna.
 // ============================================
 
 app.get("/api/objects/:objectId/time-restrictions", asyncHandler(async (req, res) => {
@@ -1787,82 +1711,24 @@ app.get("/api/objects/:objectId/time-restrictions", asyncHandler(async (req, res
     if (!await verifyObjectTenant(req.params.objectId, tenantId)) {
       throw new ForbiddenError("Åtkomst nekad");
     }
-    const restrictions = await storage.getObjectTimeRestrictions(req.params.objectId);
+    const restrictions = await getTimeRestrictionsForObjects(tenantId, [req.params.objectId]);
     res.json(restrictions);
 }));
 
 app.get("/api/time-restrictions", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const objectIds = req.query.objectIds ? (req.query.objectIds as string).split(",") : [];
-    let restrictions;
-    if (objectIds.length > 0) {
-      restrictions = await storage.getObjectTimeRestrictionsByObjectIds(tenantId, objectIds);
-    } else {
-      restrictions = await storage.getObjectTimeRestrictionsByTenant(tenantId);
-    }
+    const restrictions = objectIds.length > 0
+      ? await getTimeRestrictionsForObjects(tenantId, objectIds)
+      : await getTimeRestrictionsForTenant(tenantId);
     res.json(restrictions);
-}));
-
-app.post("/api/objects/:objectId/time-restrictions", asyncHandler(async (req, res) => {
-    const tenantId = getTenantIdWithFallback(req);
-    const restrictionSchema = z.object({
-      restrictionType: z.string(),
-      description: z.string().nullable().optional(),
-      weekdays: z.array(z.number()).optional(),
-      startTime: z.string().nullable().optional(),
-      endTime: z.string().nullable().optional(),
-      isBlockingAllDay: z.boolean().optional(),
-      preference: z.enum(["favorable", "unfavorable"]).optional(),
-      reason: z.string().nullable().optional(),
-    });
-    const parsed = restrictionSchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json(formatZodError(parsed.error));
-    const { restrictionType, description, weekdays, startTime, endTime, isBlockingAllDay, preference, reason } = parsed.data;
-
-    const obj = await storage.getObject(req.params.objectId);
-    if (!obj || obj.tenantId !== tenantId) throw new NotFoundError("Objekt hittades inte");
-
-    const restriction = await storage.createObjectTimeRestriction({
-      tenantId,
-      objectId: req.params.objectId,
-      restrictionType,
-      description: description || null,
-      weekdays: weekdays || [],
-      startTime: startTime || null,
-      endTime: endTime || null,
-      isBlockingAllDay: isBlockingAllDay ?? true,
-      preference: preference || "unfavorable",
-      reason: reason || null,
-      isActive: true,
-    });
-    res.json(restriction);
-}));
-
-app.patch("/api/time-restrictions/:id", asyncHandler(async (req, res) => {
-    const tenantId = getTenantIdWithFallback(req);
-    const updateSchema = z.object({
-      restrictionType: z.string().optional(),
-      description: z.string().nullable().optional(),
-      weekdays: z.array(z.number()).optional(),
-      startTime: z.string().nullable().optional(),
-      endTime: z.string().nullable().optional(),
-      isBlockingAllDay: z.boolean().optional(),
-      preference: z.enum(["favorable", "unfavorable"]).optional(),
-      reason: z.string().nullable().optional(),
-      isActive: z.boolean().optional(),
-    });
-    const parsed = updateSchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json(formatZodError(parsed.error));
-    const restriction = await storage.updateObjectTimeRestriction(req.params.id, tenantId, parsed.data);
-    if (!restriction) throw new NotFoundError("Hittades inte");
-    res.json(restriction);
 }));
 
 app.get("/api/slot-preferences/aggregate", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const objectIds = req.query.objectIds ? (req.query.objectIds as string).split(",") : [];
     if (objectIds.length === 0) return res.json([]);
-    const restrictions = await storage.getObjectTimeRestrictionsByObjectIds(tenantId, objectIds);
+    const restrictions = await getTimeRestrictionsForObjects(tenantId, objectIds);
     const objectNames = new Map<string, string>();
     for (const oid of objectIds) {
       const obj = await storage.getObject(oid);
@@ -1873,12 +1739,6 @@ app.get("/api/slot-preferences/aggregate", asyncHandler(async (req, res) => {
       objectName: objectNames.get(r.objectId) || r.objectId,
     }));
     res.json(aggregated);
-}));
-
-app.delete("/api/time-restrictions/:id", asyncHandler(async (req, res) => {
-    const tenantId = getTenantIdWithFallback(req);
-    await storage.deleteObjectTimeRestriction(req.params.id, tenantId);
-    res.json({ success: true });
 }));
 
 // C10 - Expand structural article into sub-step work orders
@@ -2768,7 +2628,6 @@ app.post("/api/order-concepts/:id/execute", asyncHandler(async (req, res) => {
         // Task #937: snapshota resolverad order-/faktureringskund (FROM_METADATA per objekt,
         // annars konceptets fasta kund).
         customerId: effectiveCustomerId ?? undefined,
-        clusterId: obj.clusterId || undefined,
         title: concept.name,
         description: concept.description || undefined,
         status: "not_planned",
@@ -2847,7 +2706,6 @@ app.post("/api/order-concepts/:id/execute", asyncHandler(async (req, res) => {
           tenantId,
           customerId: concept.customerId,
           objectId: null,
-          clusterId: concept.targetClusterId ?? null,
           taskCategory: ca.taskCategory ?? "admin",
           // §5 A — ärv platskrav från konceptartikeln (admin/logistik → normalt 'ingen').
           locationRequirement: ca.locationRequirement ?? null,
@@ -2913,7 +2771,6 @@ app.post("/api/order-concepts/:id/execute", asyncHandler(async (req, res) => {
             orderConceptId: concept.id,
             objectId: obj.id,
             customerId: preCustomerId ?? undefined,
-            clusterId: obj.clusterId || undefined,
             title: `${article.name} (föruppgift)`,
             description: concept.description || undefined,
             status: "not_planned",
@@ -3872,16 +3729,6 @@ app.post("/api/fortnox/full-import", asyncHandler(async (req, res) => {
     const errorMessages: string[] = [];
     const newObjectIdsForGeocoding: string[] = [];
 
-    const inferContactType = (position?: string | null): string => {
-      const p = (position || "").toLowerCase();
-      if (!p) return "primary";
-      if (/(faktur|ekonomi|billing|invoice)/.test(p)) return "billing";
-      if (/(tekn|drift|service|underh)/.test(p)) return "technical";
-      if (/(akut|jour|emergency|larm)/.test(p)) return "emergency";
-      if (/(lever|delivery|godsmott|portier|reception)/.test(p)) return "secondary";
-      return "primary";
-    };
-
     // === STEP 1: Customers ===
     const fortnoxCustomers = await client.getCustomers();
     const existingCustomerMappings = await storage.getFortnoxMappings(tenantId, "customer");
@@ -4149,24 +3996,19 @@ app.post("/api/fortnox/full-import", asyncHandler(async (req, res) => {
             continue;
           }
 
-          await db.transaction(async (tx) => {
-            const [created] = await tx.insert(objectContacts).values({
-              tenantId,
-              objectId,
-              name: name || email || phone || "Kontakt",
-              email,
-              phone,
-              role,
-              contactType: inferContactType(role),
-              isInheritable: true,
-              notes: cp.Comments ? String(cp.Comments) : null,
-            }).returning();
-            await tx.insert(fortnoxMappings).values({
-              tenantId,
-              entityType: "customer_contact",
-              unicornId: created.id,
-              fortnoxId: mappingFortnoxId,
-            });
+          // Etapp 5: kontakter skrivs som Kontakt-metadata (flervärdes-familjen).
+          const { writeObjectKontaktPerson } = await import("../metadata-queries");
+          await writeObjectKontaktPerson(objectId, tenantId, {
+            namn: name || email || phone || "Kontakt",
+            titel: role,
+            telefon: phone,
+            epost: email,
+          }, "fortnox-import");
+          await db.insert(fortnoxMappings).values({
+            tenantId,
+            entityType: "customer_contact",
+            unicornId: objectId,
+            fortnoxId: mappingFortnoxId,
           });
           contactFortnoxIds.add(mappingFortnoxId);
           contactSummary.created++;

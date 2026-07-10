@@ -32,12 +32,11 @@ import {
   objectImportRows,
   objectImportSessions,
   objectParents,
-  objectPayers,
   objects,
   type MetadataKatalog,
 } from "@shared/schema";
+import { ensurePrimaryPayer as ensurePrimaryCustomerMetadata } from "../services/object-customer";
 import { storage } from "../storage";
-import { ensureClusterForCustomer } from "../auto-cluster";
 import { writeObjectImportMetadataBatch } from "../metadata-queries";
 import {
   IMPORT_UNDO_WINDOW_MS,
@@ -692,11 +691,10 @@ export function registerObjectImportV2Routes(app: Express): void {
         throw new ValidationError("Inga kolumnmappningar — matcha kolumner och validera först.");
       }
 
-      // Standardkund (fallback) att hänga objekten på (objects.customer_id NOT
-      // NULL). Använd vald kund (tenant-verifierad) annars första aktiva kund.
-      // ADR v3: objekt är neutrala — verklig koppling sker via object_payers, så
-      // varje skapat objekt får dessutom en primär object_payer på resolverad
-      // kund (per-rad om en kund-kolumn är mappad, annars denna fallback).
+      // Standardkund (fallback). Använd vald kund (tenant-verifierad) annars
+      // första aktiva kund. Etapp 5: objekt är neutrala — kopplingen skrivs som
+      // Ekonomi-metadatat 'Kund' (per-rad om en kund-kolumn är mappad, annars
+      // denna fallback).
       const overwriteMetadata = parsed.data.overwriteMetadata === true;
       let customerId = parsed.data.customerId ?? null;
       if (customerId) {
@@ -750,18 +748,6 @@ export function registerObjectImportV2Routes(app: Express): void {
         if (name && customerByName.has(name)) return customerByName.get(name)!;
         return null;
       };
-
-      // Klustret beror på kunden — cacha per kund så fler kunder i samma fil får
-      // var sitt kluster utan att ensureClusterForCustomer körs en gång per rad.
-      const clusterByCustomer = new Map<string, string>();
-      const ensureCluster = async (custId: string): Promise<string> => {
-        const cached = clusterByCustomer.get(custId);
-        if (cached) return cached;
-        const cid = await ensureClusterForCustomer(tenantId, custId);
-        clusterByCustomer.set(custId, cid);
-        return cid;
-      };
-      const clusterId = await ensureCluster(fallbackCustomerId);
 
       // Atomisk gate mot dubbel-exekvering: gå till "importing" endast om
       // sessionen inte redan importerar (compare-and-set). Samtidiga/upprepade
@@ -1007,49 +993,17 @@ export function registerObjectImportV2Routes(app: Express): void {
           await db.insert(objectParents).values({ tenantId, objectId, parentId, isPrimary: true, relationContext: "primary" });
         };
 
-        // ADR v3: verklig kund-koppling sker via object_payers (objects.customer_id
-        // är under avveckling). Säkerställ en primär betalare på resolverad kund.
-        // En redan befintlig primär payer (manuellt satt / annan kund) lämnas
-        // orörd — vi klampar aldrig över en existerande kundkoppling vid re-import.
-        // Returnerar den NYSKAPADE payer-radens id (annars null). Ångra-funktionen
-        // stämplar id:t på create_object-åtgärden så undo kan radera exakt den raden
-        // (och blockera om en betalare kopplats efter importen).
+        // Etapp 5: kund-koppling skrivs som Ekonomi-metadatat 'Kund' (via
+        // ensurePrimaryPayer i object-customer). En redan befintlig/ärvd kund
+        // lämnas orörd — vi klampar aldrig över en existerande kundkoppling
+        // vid re-import. Returnerar den NYSKAPADE metadata-radens id (annars
+        // null) så Ångra kan radera exakt den raden.
         const ensurePrimaryPayer = async (
           objectId: string,
           custId: string,
-          isNew = false,
+          _isNew = false,
         ): Promise<string | null> => {
-          if (!isNew) {
-            const existing = await db
-              .select({ id: objectPayers.id })
-              .from(objectPayers)
-              .where(
-                and(
-                  eq(objectPayers.objectId, objectId),
-                  eq(objectPayers.isPrimary, true),
-                  eq(objectPayers.tenantId, tenantId),
-                ),
-              );
-            if (existing[0]) return null;
-          }
-          try {
-            const [ins] = await db
-              .insert(objectPayers)
-              .values({
-                tenantId,
-                objectId,
-                customerId: custId,
-                payerType: "primary",
-                isPrimary: true,
-                sharePercent: 100,
-                priority: 1,
-              })
-              .returning({ id: objectPayers.id });
-            return ins?.id ?? null;
-          } catch {
-            // Best-effort kund-koppling — fäll aldrig hela importen p.g.a. payer.
-            return null;
-          }
+          return ensurePrimaryCustomerMetadata(tenantId, objectId, custId);
         };
 
         const resolveParentId = (item: (typeof ordered)[number]): string | null => {
@@ -1175,7 +1129,6 @@ export function registerObjectImportV2Routes(app: Express): void {
               resolveOwnRowCustomerId(row) ??
               (parentId ? customerByObjectId.get(parentId) : undefined) ??
               fallbackCustomerId;
-            const rowClusterId = await ensureCluster(rowCustomerId);
 
             // Fail-closed (defense-in-depth): execute kan köras utan föregående
             // validate (endast mappningar krävs). Om en rad UTTRYCKLIGEN pekar ut
@@ -1383,9 +1336,8 @@ export function registerObjectImportV2Routes(app: Express): void {
                   : undefined;
               const createdObj = await storage.createObject({
                 tenantId,
-                // ADR v3: objects.customer_id borttagen — kundkopplingen skapas via
-                // ensurePrimaryPayer (object_payers) direkt efter create nedan.
-                clusterId: rowClusterId,
+                // Etapp 5: kundkopplingen skrivs som Ekonomi-metadata ('Kund')
+                // via ensurePrimaryPayer direkt efter create nedan.
                 parentId: parentId ?? null,
                 name: row.fields.name || "Namnlöst objekt",
                 // Ångra-funktion: koppla objektet till batchen för spårbarhet.
@@ -1490,7 +1442,6 @@ export function registerObjectImportV2Routes(app: Express): void {
             total_objects: created + updated,
           },
           customer_id: fallbackCustomerId,
-          cluster_id: clusterId,
           customers_linked: new Set(Array.from(customerByObjectId.values())).size,
           per_row_customer: perRowCustomer,
         };

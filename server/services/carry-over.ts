@@ -26,10 +26,6 @@ export interface CarryOverSummary {
 const COMPLETED_STATUSES = new Set(["utford", "fakturerad"]);
 const CANCELLED_STATUSES = new Set(["avbruten", "omojlig"]);
 
-function totalContainersForObject(obj: { containerCount?: number | null; containerCountK2?: number | null; containerCountK3?: number | null; containerCountK4?: number | null }): number {
-  return (obj.containerCount || 0) + (obj.containerCountK2 || 0) + (obj.containerCountK3 || 0) + (obj.containerCountK4 || 0);
-}
-
 function isRemaining(o: WorkOrder): boolean {
   if (o.completedAt) return false;
   if (o.orderStatus && COMPLETED_STATUSES.has(o.orderStatus)) return false;
@@ -81,11 +77,14 @@ export async function computeTenantCarryOver(
   const objectIds = Array.from(new Set(
     [...todayOrders, ...tomorrowOrders].map(o => o.objectId).filter((id): id is string => !!id),
   ));
+  // Etapp 5: kärl-antal läses ur metadata ('Antal kärl'), ej objektkolumner.
   const containerByObject = new Map<string, number>();
   if (objectIds.length > 0) {
-    const objs = await storage.getObjectsByIds(tenantId, objectIds);
-    for (const obj of objs) {
-      containerByObject.set(obj.id, totalContainersForObject(obj));
+    const { getObjectsMetadataValueByKatalogNamn } = await import("../metadata-queries");
+    const karlValues = await getObjectsMetadataValueByKatalogNamn(tenantId, objectIds, "Antal kärl");
+    for (const [objectId, value] of Object.entries(karlValues)) {
+      const n = parseInt(value, 10);
+      if (Number.isFinite(n)) containerByObject.set(objectId, n);
     }
   }
 

@@ -1,6 +1,6 @@
-// Task #566 — Frontend för massimport av betalare (object_payers) och
-// fakturamottagare (invoice_recipients). Återanvänder ChildObjectImportFlow:s
-// paste/CSV-mönster men kallar två separata endpoints.
+// Task #566 — Frontend för massimport av fakturamottagare (invoice_recipients).
+// Återanvänder ChildObjectImportFlow:s paste/CSV-mönster.
+// (Etapp 5: betalarimporten (object_payers) borttagen — betalare hanteras via Ekonomi-metadata.)
 import { useMemo, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
@@ -10,10 +10,8 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Eye, Upload, Wallet, Receipt, FileUp } from "lucide-react";
+import { Eye, Upload, Receipt, FileUp } from "lucide-react";
 import Papa from "papaparse";
-
-type ImportKind = "payers" | "recipients";
 
 type PreviewResult = {
   dryRun: true;
@@ -31,119 +29,79 @@ type CommitResult = {
   idempotent?: boolean;
 };
 
-const HEADERS: Record<ImportKind, readonly string[]> = {
-  payers: [
-    "objectNumber", "customerNumber", "payerType", "isPrimary",
-    "sharePercent", "validFrom", "validTo", "invoiceReference",
-    "fortnoxCustomerId", "notes",
-  ] as const,
-  recipients: [
-    "customerNumber", "level", "recipientName", "recipientEmail",
-    "recipientAddress", "recipientPostalCode", "recipientCity", "recipientReference", "fortnoxCustomerId",
-    "validFrom", "validTo", "priority", "breaksInheritance", "notes",
-  ] as const,
+const HEADERS = [
+  "customerNumber", "level", "recipientName", "recipientEmail",
+  "recipientAddress", "recipientPostalCode", "recipientCity", "recipientReference", "fortnoxCustomerId",
+  "validFrom", "validTo", "priority", "breaksInheritance", "notes",
+] as const;
+
+const HEADER_ALIASES: Record<string, string> = {
+  kundnummer: "customerNumber",
+  customernumber: "customerNumber",
+  niva: "level",
+  nivå: "level",
+  level: "level",
+  namn: "recipientName",
+  mottagare: "recipientName",
+  recipientname: "recipientName",
+  epost: "recipientEmail",
+  email: "recipientEmail",
+  recipientemail: "recipientEmail",
+  adress: "recipientAddress",
+  recipientaddress: "recipientAddress",
+  postnummer: "recipientPostalCode",
+  recipientpostalcode: "recipientPostalCode",
+  ort: "recipientCity",
+  stad: "recipientCity",
+  recipientcity: "recipientCity",
+  referens: "recipientReference",
+  recipientreference: "recipientReference",
+  fortnoxkundid: "fortnoxCustomerId",
+  fortnoxcustomerid: "fortnoxCustomerId",
+  startdatum: "validFrom",
+  validfrom: "validFrom",
+  slutdatum: "validTo",
+  validto: "validTo",
+  prioritet: "priority",
+  priority: "priority",
+  bryterarv: "breaksInheritance",
+  breaksinheritance: "breaksInheritance",
+  anteckningar: "notes",
+  notes: "notes",
 };
 
-const HEADER_ALIASES: Record<ImportKind, Record<string, string>> = {
-  payers: {
-    objektnummer: "objectNumber",
-    objectnumber: "objectNumber",
-    kundnummer: "customerNumber",
-    customernumber: "customerNumber",
-    typ: "payerType",
-    payertype: "payerType",
-    primar: "isPrimary",
-    primär: "isPrimary",
-    isprimary: "isPrimary",
-    andel: "sharePercent",
-    sharepercent: "sharePercent",
-    startdatum: "validFrom",
-    validfrom: "validFrom",
-    slutdatum: "validTo",
-    validto: "validTo",
-    fakturareferens: "invoiceReference",
-    invoicereference: "invoiceReference",
-    fortnoxkundid: "fortnoxCustomerId",
-    fortnoxcustomerid: "fortnoxCustomerId",
-    anteckningar: "notes",
-    notes: "notes",
-  },
-  recipients: {
-    kundnummer: "customerNumber",
-    customernumber: "customerNumber",
-    niva: "level",
-    nivå: "level",
-    level: "level",
-    namn: "recipientName",
-    mottagare: "recipientName",
-    recipientname: "recipientName",
-    epost: "recipientEmail",
-    email: "recipientEmail",
-    recipientemail: "recipientEmail",
-    adress: "recipientAddress",
-    recipientaddress: "recipientAddress",
-    postnummer: "recipientPostalCode",
-    recipientpostalcode: "recipientPostalCode",
-    ort: "recipientCity",
-    stad: "recipientCity",
-    recipientcity: "recipientCity",
-    referens: "recipientReference",
-    recipientreference: "recipientReference",
-    fortnoxkundid: "fortnoxCustomerId",
-    fortnoxcustomerid: "fortnoxCustomerId",
-    startdatum: "validFrom",
-    validfrom: "validFrom",
-    slutdatum: "validTo",
-    validto: "validTo",
-    prioritet: "priority",
-    priority: "priority",
-    bryterarv: "breaksInheritance",
-    breaksinheritance: "breaksInheritance",
-    anteckningar: "notes",
-    notes: "notes",
-  },
-};
+const BOOL_FIELDS = new Set(["breaksInheritance"]);
+const NUMBER_FIELDS = new Set(["priority"]);
 
-const BOOL_FIELDS: Record<ImportKind, Set<string>> = {
-  payers: new Set(["isPrimary"]),
-  recipients: new Set(["breaksInheritance"]),
-};
-const NUMBER_FIELDS: Record<ImportKind, Set<string>> = {
-  payers: new Set(["sharePercent"]),
-  recipients: new Set(["priority"]),
-};
-
-function coerceValue(field: string, value: string, kind: ImportKind): any {
-  if (BOOL_FIELDS[kind].has(field)) {
+function coerceValue(field: string, value: string): any {
+  if (BOOL_FIELDS.has(field)) {
     const v = value.trim().toLowerCase();
     return v === "true" || v === "1" || v === "ja" || v === "yes";
   }
-  if (NUMBER_FIELDS[kind].has(field)) {
+  if (NUMBER_FIELDS.has(field)) {
     const n = Number(value.replace(",", "."));
     return isNaN(n) ? undefined : n;
   }
   return value.trim();
 }
 
-function parsePastedRows(text: string, kind: ImportKind): Array<Record<string, any>> {
-  const headers = HEADERS[kind];
+function parsePastedRows(text: string): Array<Record<string, any>> {
   const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
   return lines
     .map(l => {
       const cells = l.includes("\t") ? l.split("\t") : l.split(",");
       const r: Record<string, any> = {};
-      headers.forEach((h, i) => {
+      HEADERS.forEach((h, i) => {
         if (cells[i] !== undefined && cells[i] !== "") {
-          r[h] = coerceValue(h, cells[i], kind);
+          r[h] = coerceValue(h, cells[i]);
         }
       });
       return r;
     })
-    .filter(r => kind === "payers" ? r.objectNumber && r.customerNumber : r.customerNumber && r.recipientName);
+    .filter(r => r.customerNumber && r.recipientName);
 }
 
-function parseCsvRows(text: string, kind: ImportKind): Array<Record<string, any>> {
-  const aliases = HEADER_ALIASES[kind];
+function parseCsvRows(text: string): Array<Record<string, any>> {
   const parsed = Papa.parse<Record<string, string>>(text, {
     header: true,
     skipEmptyLines: true,
@@ -153,17 +111,17 @@ function parseCsvRows(text: string, kind: ImportKind): Array<Record<string, any>
     .map(row => {
       const out: Record<string, any> = {};
       for (const [k, v] of Object.entries(row)) {
-        const key = aliases[k.toLowerCase().trim()] ?? (HEADERS[kind] as readonly string[]).find(h => h.toLowerCase() === k.toLowerCase().trim());
+        const key = HEADER_ALIASES[k.toLowerCase().trim()] ?? (HEADERS as readonly string[]).find(h => h.toLowerCase() === k.toLowerCase().trim());
         if (key && v != null && String(v).trim() !== "") {
-          out[key] = coerceValue(key, String(v), kind);
+          out[key] = coerceValue(key, String(v));
         }
       }
       return out;
     })
-    .filter(r => kind === "payers" ? r.objectNumber && r.customerNumber : r.customerNumber && r.recipientName);
+    .filter(r => r.customerNumber && r.recipientName);
 }
 
-export function PayerOrRecipientImportFlow({ kind }: { kind: ImportKind }) {
+export function RecipientImportFlow() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [mode, setMode] = useState<"paste" | "file">("paste");
@@ -172,21 +130,12 @@ export function PayerOrRecipientImportFlow({ kind }: { kind: ImportKind }) {
   const [fileName, setFileName] = useState("");
   const [preview, setPreview] = useState<PreviewResult | null>(null);
 
-  const endpoint = kind === "payers"
-    ? "/api/object-payers/import"
-    : "/api/invoice-recipients/import";
+  const endpoint = "/api/invoice-recipients/import";
+  const testIdRoot = "recipients";
 
-  const title = kind === "payers" ? "Importera betalare" : "Importera fakturamottagare";
-  const description = kind === "payers"
-    ? "Massimport av betalare per objekt (ADR v3 — object_payers). Validerar att objekt och kund finns, samt att primär betalare inte överlappar med befintlig period."
-    : "Massimport av fakturamottagare (ADR v3 — invoice_recipients). Validerar att kunden redan är registrerad som betalare i systemet.";
-  const Icon = kind === "payers" ? Wallet : Receipt;
-  const testIdRoot = kind === "payers" ? "payers" : "recipients";
-
-  const headers = HEADERS[kind];
   const currentRows = useMemo(
-    () => (mode === "paste" ? parsePastedRows(text, kind) : fileRows ?? []),
-    [mode, text, fileRows, kind],
+    () => (mode === "paste" ? parsePastedRows(text) : fileRows ?? []),
+    [mode, text, fileRows],
   );
 
   const mut = useMutation({
@@ -210,9 +159,6 @@ export function PayerOrRecipientImportFlow({ kind }: { kind: ImportKind }) {
         setFileName("");
         setPreview(null);
         queryClient.invalidateQueries({ queryKey: ["/api/import/history"] });
-        if (kind === "payers") {
-          queryClient.invalidateQueries({ queryKey: ["/api/objects"] });
-        }
       }
     },
     onError: (e: any) => toast({
@@ -225,7 +171,7 @@ export function PayerOrRecipientImportFlow({ kind }: { kind: ImportKind }) {
   const onFile = async (f: File) => {
     setFileName(f.name);
     const text = await f.text();
-    const rows = parseCsvRows(text, kind);
+    const rows = parseCsvRows(text);
     setFileRows(rows);
     setPreview(null);
     if (rows.length === 0) {
@@ -242,9 +188,11 @@ export function PayerOrRecipientImportFlow({ kind }: { kind: ImportKind }) {
       <Card>
         <CardHeader>
           <CardTitle className="text-base flex items-center gap-2">
-            <Icon className="h-4 w-4" /> {title}
+            <Receipt className="h-4 w-4" /> Importera fakturamottagare
           </CardTitle>
-          <CardDescription>{description}</CardDescription>
+          <CardDescription>
+            Massimport av fakturamottagare (ADR v3 — invoice_recipients). Validerar att kunden redan finns registrerad i systemet.
+          </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <Tabs value={mode} onValueChange={v => setMode(v as "paste" | "file")}>
@@ -255,7 +203,7 @@ export function PayerOrRecipientImportFlow({ kind }: { kind: ImportKind }) {
             <TabsContent value="paste" className="space-y-2 mt-3">
               <div className="text-xs text-muted-foreground">
                 Kolumner i ordning:{" "}
-                <code className="px-1 bg-muted rounded">{headers.join(", ")}</code>
+                <code className="px-1 bg-muted rounded">{HEADERS.join(", ")}</code>
               </div>
               <Textarea
                 value={text}
@@ -264,9 +212,7 @@ export function PayerOrRecipientImportFlow({ kind }: { kind: ImportKind }) {
                   setPreview(null);
                 }}
                 rows={8}
-                placeholder={kind === "payers"
-                  ? "GRN001-1\tTELGE001\tprimary\ttrue\t100\t2026-01-01"
-                  : "TELGE001\tcentral\tTelge Ekonomi\tekonomi@telge.se"}
+                placeholder={"TELGE001\tcentral\tTelge Ekonomi\tekonomi@telge.se"}
                 className="font-mono text-xs"
                 data-testid={`input-${testIdRoot}-import-rows`}
               />
@@ -277,7 +223,7 @@ export function PayerOrRecipientImportFlow({ kind }: { kind: ImportKind }) {
             <TabsContent value="file" className="space-y-2 mt-3">
               <div className="text-xs text-muted-foreground">
                 Förväntade kolumner (header):{" "}
-                <code className="px-1 bg-muted rounded">{headers.join(", ")}</code>{" "}
+                <code className="px-1 bg-muted rounded">{HEADERS.join(", ")}</code>{" "}
                 eller svenska motsvarigheter.
               </div>
               <div className="rounded-lg border border-dashed p-6 text-center">
@@ -348,9 +294,7 @@ export function PayerOrRecipientImportFlow({ kind }: { kind: ImportKind }) {
                 <div className="border rounded p-2 max-h-40 overflow-y-auto">
                   {preview.preview.slice(0, 20).map((p, i) => (
                     <div key={i} className="text-xs">
-                      {kind === "payers"
-                        ? `${p.objectNumber} → ${p.customerNumber}${p.isPrimary ? " (primär)" : ""}`
-                        : `${p.customerNumber} · ${p.level} · ${p.recipientName}`}
+                      {`${p.customerNumber} · ${p.level} · ${p.recipientName}`}
                     </div>
                   ))}
                   {preview.preview.length > 20 && (

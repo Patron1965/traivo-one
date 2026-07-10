@@ -53,8 +53,6 @@ interface ClusterNode {
   address?: string;
   city?: string;
   postalCode?: string;
-  accessCode?: string;
-  keyNumber?: string;
   latitude?: number;
   longitude?: number;
   hasChildren: boolean;
@@ -74,7 +72,7 @@ interface NodeStats {
   object: {
     id: string; name: string; hierarchyLevel: string; objectType?: string;
     address?: string; city?: string; postalCode?: string;
-    accessCode?: string; keyNumber?: string; notes?: string;
+    accessCode?: string; keyNumber?: string;
     extraParents: number;
   };
   descendantsCount: number;
@@ -443,16 +441,6 @@ function NodeSidePanel({ selectedId }: { selectedId: string | null }) {
               )}
             </div>
 
-            {statsQuery.data.object.notes && (
-              <div>
-                <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1 flex items-center gap-1.5">
-                  <FileText className="h-3 w-3" /> Anteckningar
-                </h4>
-                <p className="text-xs text-muted-foreground whitespace-pre-line">
-                  {statsQuery.data.object.notes}
-                </p>
-              </div>
-            )}
           </div>
         )}
       </QueryState>

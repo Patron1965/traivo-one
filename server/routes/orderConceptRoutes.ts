@@ -8,7 +8,7 @@ import { formatZodError, verifyTenantOwnership, DEFAULT_TENANT_ID } from "./help
 import { getTenantIdWithFallback } from "../tenant-middleware";
 import { asyncHandler } from "../asyncHandler";
 import { NotFoundError, ValidationError, ForbiddenError } from "../errors";
-import { objects, workOrders, customerCommunications, objectContacts, orderConceptArticles, orderConceptObjects, articleObjectMappings, conceptFilters, priceLists, deliverySchedules, assignments as assignmentsTable, articles, type InsertOrderConceptArticle } from "@shared/schema";
+import { objects, workOrders, customerCommunications, orderConceptArticles, orderConceptObjects, articleObjectMappings, conceptFilters, priceLists, deliverySchedules, assignments as assignmentsTable, articles, type InsertOrderConceptArticle } from "@shared/schema";
 import { getISOWeek, getStartOfISOWeek, getDateFromWeekdayInMonth } from "./helpers";
 import { getOrderConceptMethod } from "@shared/order-concept-method";
 import { computeConceptOrderValue } from "@shared/order-concept-value";
@@ -1708,8 +1708,11 @@ app.post("/api/notifications/send-schedule/:resourceId", asyncHandler(async (req
               if (obj) {
                 objectName = obj.name || undefined;
                 objectAddress = obj.address || undefined;
-                accessCode = obj.accessCode || undefined;
-                keyNumber = obj.keyNumber || undefined;
+                // Etapp 5: åtkomstfält läses ur metadata (systemområdet Åtkomst).
+                const { getObjectAtkomstFields } = await import("../metadata-queries");
+                const atkomst = await getObjectAtkomstFields(wo.objectId, tenantId);
+                accessCode = atkomst.portkod || undefined;
+                keyNumber = atkomst.nyckelnummer || undefined;
               }
             } catch { /* ignore */ }
           }
@@ -1869,19 +1872,14 @@ app.post("/api/work-orders/:workOrderId/auto-eta-sms", asyncHandler(async (req, 
     }
 
     const customer = await storage.getCustomer(workOrder.customerId);
-    const contacts = await db.select().from(objectContacts)
-      .where(and(
-        eq(objectContacts.objectId, workOrder.objectId),
-        eq(objectContacts.tenantId, tenantId)
-      ));
-
-    const primaryContacts = contacts.filter(c => c.contactType === "primary");
-    const recipientContacts = primaryContacts.length > 0 ? primaryContacts : contacts;
+    // Etapp 5: kontakter läses ur Kontakt-metadatat (inte object_contacts).
+    const { getObjectKontaktPersons } = await import("../metadata-queries");
+    const kontakter = await getObjectKontaktPersons(workOrder.objectId, tenantId);
     const phoneRecipients: { name: string; phone: string }[] = [];
 
-    for (const contact of recipientContacts) {
-      if (contact.phone) {
-        phoneRecipients.push({ name: contact.name || "", phone: contact.phone });
+    for (const contact of kontakter) {
+      if (contact.telefon) {
+        phoneRecipients.push({ name: contact.namn || "", phone: contact.telefon });
       }
     }
 
@@ -1994,15 +1992,13 @@ app.get("/api/order-concepts/price-lists/for-customer/:customerId", asyncHandler
     res.json({ suggestedPriceListId, suggestedSource, priceLists: active });
 }));
 
-// Steg 4: Förhandsvisa villkorsfilter mot valda kluster (X av Y matchar).
-// Tar clusterIds + filter i body så förhandsvisning fungerar innan konceptet sparats.
+// Steg 4: Förhandsvisa villkorsfilter mot valda grenar (X av Y matchar).
+// Tar objectIds + filter i body så förhandsvisning fungerar innan konceptet sparats.
 app.post("/api/order-concepts/condition-preview", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const schema = z.object({
-      // ADR v3: objectIds = valda gren-ROT-objekt-id:n (föredras). clusterIds
-      // behålls för bakåtkompatibilitet (legacy kluster-koncept).
+      // ADR v3: objectIds = valda gren-ROT-objekt-id:n.
       objectIds: z.array(z.string()).default([]),
-      clusterIds: z.array(z.string()).default([]),
       filters: z.array(z.object({
         metadataKey: z.string(),
         operator: z.string(),
@@ -2011,11 +2007,11 @@ app.post("/api/order-concepts/condition-preview", asyncHandler(async (req, res) 
     });
     const parsed = schema.safeParse(req.body);
     if (!parsed.success) throw new ValidationError(formatZodError(parsed.error).error);
-    const { objectIds, clusterIds, filters } = parsed.data;
+    const { objectIds, filters } = parsed.data;
 
-    // Resolva målobjekten (gren-subträd ELLER legacy kluster) och applicera
-    // villkoren via den delade modulen — identiskt med execute.
-    const objectList = await resolveTargetObjects({ tenantId, objectIds, clusterIds });
+    // Resolva målobjekten (gren-subträd) och applicera villkoren via den
+    // delade modulen — identiskt med execute.
+    const objectList = await resolveTargetObjects({ tenantId, objectIds });
     const total = objectList.length;
     // Strukturuppdelning för steg 4 (inpekning): hur många av de valda gren-rötterna
     // som faktiskt upplöstes (stale/borttagna id:n räknas inte) och hur många objekt
@@ -2051,7 +2047,6 @@ app.post("/api/order-concepts/customer-preview", asyncHandler(async (req, res) =
     const tenantId = getTenantIdWithFallback(req);
     const schema = z.object({
       objectIds: z.array(z.string()).default([]),
-      clusterIds: z.array(z.string()).default([]),
       filters: z.array(z.object({
         metadataKey: z.string(),
         operator: z.string(),
@@ -2061,9 +2056,9 @@ app.post("/api/order-concepts/customer-preview", asyncHandler(async (req, res) =
     });
     const parsed = schema.safeParse(req.body);
     if (!parsed.success) throw new ValidationError(formatZodError(parsed.error).error);
-    const { objectIds, clusterIds, filters, customerMetadataField } = parsed.data;
+    const { objectIds, filters, customerMetadataField } = parsed.data;
 
-    const objectList = await resolveTargetObjects({ tenantId, objectIds, clusterIds });
+    const objectList = await resolveTargetObjects({ tenantId, objectIds });
     const activeFilters = filters.filter((f) => f.metadataKey);
     const matchedObjects = await filterObjectsByConditions(tenantId, objectList, activeFilters);
 
@@ -2110,10 +2105,9 @@ app.post("/api/order-concepts/condition-test", asyncHandler(async (req, res) => 
     const tenantId = getTenantIdWithFallback(req);
     const schema = z.object({
       objectId: z.string().min(1),
-      // ADR v3: objectIds = valda gren-ROT-objekt-id:n. clusterIds = legacy.
+      // ADR v3: objectIds = valda gren-ROT-objekt-id:n.
       // Skickas in för scope-kontroll ("ingår objektet i vald inpekning?").
       objectIds: z.array(z.string()).default([]),
-      clusterIds: z.array(z.string()).default([]),
       filters: z.array(z.object({
         metadataKey: z.string(),
         operator: z.string(),
@@ -2122,7 +2116,7 @@ app.post("/api/order-concepts/condition-test", asyncHandler(async (req, res) => 
     });
     const parsed = schema.safeParse(req.body);
     if (!parsed.success) throw new ValidationError(formatZodError(parsed.error).error);
-    const { objectId, objectIds, clusterIds, filters } = parsed.data;
+    const { objectId, objectIds, filters } = parsed.data;
 
     // Tenant-scopad uppslagning (storage.getObject är INTE tenant-filtrerad).
     const object = await storage.getObject(objectId);
@@ -2133,8 +2127,8 @@ app.post("/api/order-concepts/condition-test", asyncHandler(async (req, res) => 
     // Ingår objektet i de valda grenarna? Resolvas bara när targeting angetts —
     // annars är scope-frågan inte tillämplig (null). Samma resolver som preview.
     let inTargetScope: boolean | null = null;
-    if (objectIds.length > 0 || clusterIds.length > 0) {
-      const targets = await resolveTargetObjects({ tenantId, objectIds, clusterIds });
+    if (objectIds.length > 0) {
+      const targets = await resolveTargetObjects({ tenantId, objectIds });
       inTargetScope = targets.some((o) => o.id === objectId);
     }
 
@@ -2230,7 +2224,7 @@ app.get("/api/order-concepts/:id/review-summary", asyncHandler(async (req, res) 
 
   // --- Inpekade grenar/kluster med matchade objekt ---
   // ADR v3: objekt-/gren-inpekning föredras; legacy kluster är fallback.
-  const { objectIds: targetObjectIds, clusterIds: targetClusterIds } = deriveConceptTargets(concept as any);
+  const { objectIds: targetObjectIds } = deriveConceptTargets(concept as any);
 
   const conceptFiltersRows = await storage.getConceptFilters(concept.id);
   const conceptFilterInputs = conceptFiltersRows.map((f: any) => ({
@@ -2266,29 +2260,6 @@ app.get("/api/order-concepts/:id/review-summary", asyncHandler(async (req, res) 
         clusterId: rootId,
         clusterName: (root as any).name ?? rootId,
         totalObjects: branchObjects.length,
-        matchedObjects: matchedObjects.length,
-        samples: matchedObjects.slice(0, 8).map((o: any) => ({
-          id: o.id,
-          name: o.name,
-          address: o.address ?? null,
-        })),
-      });
-    }
-  } else {
-    // Legacy kluster-inpekning (bakåtkomp, oförändrat beteende).
-    for (const clusterId of targetClusterIds) {
-      const cluster = await storage.getCluster(clusterId);
-      if (!cluster || (cluster as any).tenantId !== tenantId) continue;
-
-      const clusterObjects = await storage.getClusterObjects(clusterId);
-      const tenantObjects = clusterObjects.filter((o: any) => o.tenantId === tenantId);
-      const matchedObjects = await filterObjectsByConditions(tenantId, tenantObjects as any, conceptFilterInputs);
-
-      for (const o of matchedObjects) matchedIdSet.add((o as any).id);
-      clusterSummaries.push({
-        clusterId,
-        clusterName: (cluster as any).name,
-        totalObjects: tenantObjects.length,
         matchedObjects: matchedObjects.length,
         samples: matchedObjects.slice(0, 8).map((o: any) => ({
           id: o.id,
@@ -2920,9 +2891,6 @@ app.post("/api/order-concepts/:id/copy", asyncHandler(async (req, res) => {
     const source = verifyTenantOwnership(await storage.getOrderConcept(req.params.id), tenantId);
     if (!source) throw new NotFoundError("Orderkoncept hittades inte");
 
-    const targetClusterIds: string[] | undefined = Array.isArray(req.body?.targetClusterIds)
-      ? req.body.targetClusterIds
-      : undefined;
     const name: string = typeof req.body?.name === "string" && req.body.name.trim()
       ? req.body.name.trim()
       : `${source.name} (kopia)`;
@@ -2931,8 +2899,7 @@ app.post("/api/order-concepts/:id/copy", asyncHandler(async (req, res) => {
     const created = await copyConcept(source, tenantId, userId, {
       name,
       status: asTemplate ? "template" : "draft",
-      targetClusterIds,
-      copyObjects: !targetClusterIds,
+      copyObjects: true,
     });
     res.status(201).json(created);
 }));
@@ -3103,7 +3070,7 @@ async function copyConcept(
   source: any,
   tenantId: string,
   userId: string | undefined,
-  opts: { name: string; status: string; targetClusterIds?: string[]; copyObjects?: boolean },
+  opts: { name: string; status: string; copyObjects?: boolean },
 ) {
     const { id, createdAt, updatedAt, createdBy, ...rest } = source;
     const newConcept = await storage.createOrderConcept({
@@ -3112,7 +3079,6 @@ async function copyConcept(
       createdBy: userId,
       name: opts.name,
       status: opts.status,
-      ...(opts.targetClusterIds ? { targetClusterIds: opts.targetClusterIds } : {}),
     });
 
     // Kopiera villkorsfilter.

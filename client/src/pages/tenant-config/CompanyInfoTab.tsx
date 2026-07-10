@@ -150,79 +150,7 @@ export function CompanyInfoTab() {
         </CardContent>
       </Card>
 
-      <ClusterSettingsCard />
     </div>
   );
 }
 
-function ClusterSettingsCard() {
-  const { toast } = useToast();
-  const { data: clusterSettings } = useQuery<{ hardClusterBlocking: boolean }>({
-    queryKey: ["/api/cluster-settings"],
-  });
-
-  const toggleMutation = useMutation({
-    mutationFn: async (hardClusterBlocking: boolean) => {
-      await apiRequest("PATCH", "/api/cluster-settings", { hardClusterBlocking });
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/cluster-settings"] });
-      toast({ title: "Sparat", description: "Klusterinställningar uppdaterade" });
-    },
-    onError: (error: Error) => {
-      toast({ title: "Kunde inte spara inställningen", description: error.message, variant: "destructive" });
-    },
-  });
-
-  const isEnabled = clusterSettings?.hardClusterBlocking ?? true;
-
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <MapPin className="h-5 w-5" />
-          Verksamhetsområden (kluster)
-        </CardTitle>
-        <CardDescription>
-          Styr hur systemet hanterar tilldelning av order utanför en resurs verksamhetsområde
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="flex items-center justify-between">
-          <div className="space-y-0.5">
-            <Label htmlFor="hard-cluster-toggle" className="text-sm font-medium">
-              Hård blockering
-            </Label>
-            <p className="text-xs text-muted-foreground">
-              {isEnabled
-                ? "Order kan INTE tilldelas resurser utanför deras verksamhetsområde"
-                : "Varning visas men tilldelning tillåts med bekräftelse"}
-            </p>
-          </div>
-          <Switch
-            id="hard-cluster-toggle"
-            data-testid="switch-hard-cluster-blocking"
-            checked={isEnabled}
-            onCheckedChange={(checked) => toggleMutation.mutate(checked)}
-            disabled={toggleMutation.isPending}
-          />
-        </div>
-        <div className="rounded-md bg-muted/50 p-3">
-          <p className="text-xs text-muted-foreground">
-            {isEnabled ? (
-              <span className="flex items-center gap-1">
-                <Badge variant="destructive" className="text-[10px] px-1.5 py-0">BLOCKERAD</Badge>
-                Drag-and-drop och snabbtilldelning blockeras helt när order faller utanför resursens kluster
-              </span>
-            ) : (
-              <span className="flex items-center gap-1">
-                <Badge variant="secondary" className="text-[10px] px-1.5 py-0">VARNING</Badge>
-                En varningsdialog visas men planeraren kan välja att tilldela ändå
-              </span>
-            )}
-          </p>
-        </div>
-      </CardContent>
-    </Card>
-  );
-}

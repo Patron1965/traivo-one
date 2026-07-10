@@ -46,7 +46,6 @@ export function FloatingActionButton() {
       { id: "new-object", title: `Nytt ${objectLabel}`, url: "/objects", href: "/objects?create=true", icon: Package },
       { id: "new-order", title: "Ny order", url: "/order-concepts", href: "/order-concepts/new", icon: ClipboardList },
       { id: "new-customer", title: "Ny kund", url: "/customers", href: "/customers?create=true", icon: Users },
-      { id: "new-cluster", title: "Nytt kluster", url: "/clusters", href: "/clusters?create=true", icon: Target },
       { id: "quick-plan", title: "Snabbplanering", url: "/planner", icon: Calendar },
       { id: "new-vehicle", title: "Nytt fordon", url: "/vehicles", icon: Truck },
     ];

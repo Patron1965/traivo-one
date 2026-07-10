@@ -48,11 +48,6 @@ interface ObjectOption {
   displayName?: string | null;
 }
 
-interface ClusterOption {
-  id: string;
-  name: string;
-}
-
 interface ArticleOption {
   id: string;
   name: string;
@@ -106,7 +101,7 @@ interface Placement {
 }
 
 type Mode = "tillagg" | "ny";
-type Coupling = "objekt" | "kluster" | "ingen";
+type Coupling = "objekt" | "ingen";
 
 // G7: obundna uppgiftsmallar — snabbskapa fristående uppgifter utan objekt-/klusterkoppling.
 const UNBOUND_TASK_TEMPLATES: Array<{
@@ -136,7 +131,6 @@ interface DraftPayload {
   selectedCustomer: CustomerOption | null;
   coupling: Coupling;
   selectedObject: ObjectOption | null;
-  selectedCluster: ClusterOption | null;
   deliveryStart: string;
   deliveryEnd: string;
   articleLines: ArticleLine[];
@@ -206,7 +200,6 @@ export function EnkelUppgiftWizard({
   const [coupling, setCoupling] = useState<Coupling>("objekt");
   const [objectSearch, setObjectSearch] = useState("");
   const [selectedObject, setSelectedObject] = useState<ObjectOption | null>(null);
-  const [selectedCluster, setSelectedCluster] = useState<ClusterOption | null>(null);
 
   // Steg 4
   const [deliveryStart, setDeliveryStart] = useState("");
@@ -268,7 +261,6 @@ export function EnkelUppgiftWizard({
       setCoupling("objekt");
       setSelectedObject(null);
     }
-    setSelectedCluster(null);
   }, [presetObjectId, presetObjectName]);
 
   // Reset vid öppning (rensar även batch-listan så varje session börjar tomt).
@@ -321,17 +313,6 @@ export function EnkelUppgiftWizard({
     },
     enabled: open && step === 2 && coupling === "objekt" && debouncedObject.trim().length > 0,
     staleTime: 30000,
-  });
-
-  const { data: clusterResults } = useQuery<ClusterOption[]>({
-    queryKey: ["/api/clusters", "enkel-clusters"],
-    queryFn: async () => {
-      const res = await fetch(versionedUrl(`/api/clusters`), { credentials: "include" });
-      if (!res.ok) throw new Error("Kunde inte hämta kluster");
-      return (await res.json()) as ClusterOption[];
-    },
-    enabled: open && step === 2 && coupling === "kluster",
-    staleTime: 60000,
   });
 
   const { data: articleResults, isFetching: articlesFetching } = useQuery<ArticleOption[]>({
@@ -400,7 +381,6 @@ export function EnkelUppgiftWizard({
         return true;
       case 2:
         if (coupling === "objekt") return !!selectedObject;
-        if (coupling === "kluster") return !!selectedCluster;
         return true; // ingen koppling
       case 3:
         return true; // leveranstid valfri
@@ -409,7 +389,7 @@ export function EnkelUppgiftWizard({
       default:
         return true;
     }
-  }, [step, mode, selectedOrder, coupling, selectedObject, selectedCluster, hasLines]);
+  }, [step, mode, selectedOrder, coupling, selectedObject, hasLines]);
 
   // I tillägg-läge ärvs kund, koppling och leveranstid från ordern → hoppa över steg 1, 2 & 3.
   const skipStep = (s: number) => mode === "tillagg" && (s === 1 || s === 2 || s === 3);
@@ -479,7 +459,6 @@ export function EnkelUppgiftWizard({
     selectedCustomer,
     coupling,
     selectedObject,
-    selectedCluster,
     deliveryStart,
     deliveryEnd,
     articleLines,
@@ -488,7 +467,7 @@ export function EnkelUppgiftWizard({
     description,
     plannedNotes,
     placement: currentPlacement,
-  }), [mode, selectedOrder, kundType, selectedCustomer, coupling, selectedObject, selectedCluster, deliveryStart, deliveryEnd, articleLines, freeTextLines, title, description, plannedNotes, currentPlacement]);
+  }), [mode, selectedOrder, kundType, selectedCustomer, coupling, selectedObject, deliveryStart, deliveryEnd, articleLines, freeTextLines, title, description, plannedNotes, currentPlacement]);
 
   const addCurrentToBatch = useCallback(() => {
     if (!hasLines) return;
@@ -557,7 +536,6 @@ export function EnkelUppgiftWizard({
       };
       if (draft.kundType === "extern" && draft.selectedCustomer) payload.customerId = draft.selectedCustomer.id;
       if (draft.coupling === "objekt" && draft.selectedObject) payload.objectId = draft.selectedObject.id;
-      if (draft.coupling === "kluster" && draft.selectedCluster) payload.clusterId = draft.selectedCluster.id;
       if (draft.deliveryStart) payload.desiredDeliveryStart = draft.deliveryStart;
       if (draft.deliveryEnd) payload.desiredDeliveryEnd = draft.deliveryEnd;
       if (draft.description.trim()) payload.description = draft.description.trim();
@@ -786,8 +764,7 @@ export function EnkelUppgiftWizard({
                               setMode("ny");
                               setCoupling("ingen");
                               setSelectedObject(null);
-                              setSelectedCluster(null);
-                              setTitle(tpl.title);
+                                                        setTitle(tpl.title);
                               setDescription(tpl.description);
                             }}
                             className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs transition hover-elevate ${active ? "border-primary bg-primary/5 text-primary" : ""}`}
@@ -939,7 +916,7 @@ export function EnkelUppgiftWizard({
             {step === 2 && (
               <div className="space-y-4">
                 <div className="flex gap-2">
-                  {(["objekt", "kluster", "ingen"] as Coupling[]).map((c) => (
+                  {(["objekt", "ingen"] as Coupling[]).map((c) => (
                     <Button
                       key={c}
                       type="button"
@@ -948,7 +925,7 @@ export function EnkelUppgiftWizard({
                       onClick={() => setCoupling(c)}
                       data-testid={`button-coupling-${c}`}
                     >
-                      {c === "objekt" ? "Objekt" : c === "kluster" ? "Kluster" : "Ingen koppling"}
+                      {c === "objekt" ? "Objekt" : "Ingen koppling"}
                     </Button>
                   ))}
                 </div>
@@ -1011,37 +988,6 @@ export function EnkelUppgiftWizard({
                         Geografiska uppdrag kräver ett kopplat objekt.
                       </AlertDescription>
                     </Alert>
-                  </div>
-                )}
-
-                {coupling === "kluster" && (
-                  <div className="space-y-2">
-                    <Label>Välj kluster</Label>
-                    <div className="rounded-md border divide-y max-h-48 overflow-auto">
-                      {(clusterResults || []).map((c) => (
-                        <button
-                          key={c.id}
-                          type="button"
-                          onClick={() => setSelectedCluster(c)}
-                          className="flex w-full items-center justify-between px-3 py-2 text-sm hover:bg-accent text-left"
-                          data-testid={`option-cluster-${c.id}`}
-                        >
-                          <span className="truncate">{c.name}</span>
-                          {selectedCluster?.id === c.id && <Check className="h-4 w-4 shrink-0" />}
-                        </button>
-                      ))}
-                      {(clusterResults || []).length === 0 && (
-                        <div className="p-3 text-center text-xs text-muted-foreground">Inga kluster</div>
-                      )}
-                    </div>
-                    {selectedCluster && (
-                      <Alert variant="default" className="border-warning/40" data-testid="alert-cluster-guard">
-                        <AlertTriangle className="h-4 w-4" />
-                        <AlertDescription className="text-xs">
-                          Uppgiften gäller endast detta kluster och multipliceras inte nedåt i hierarkin.
-                        </AlertDescription>
-                      </Alert>
-                    )}
                   </div>
                 )}
 
@@ -1287,9 +1233,7 @@ export function EnkelUppgiftWizard({
                         ? selectedOrder?.title || "Order"
                         : coupling === "objekt"
                           ? selectedObject?.displayName || selectedObject?.name || "—"
-                          : coupling === "kluster"
-                            ? selectedCluster?.name || "—"
-                            : "Ingen koppling (internt)"
+                          : "Ingen koppling (internt)"
                     }
                   />
                   {mode === "tillagg" && selectedOrder && (

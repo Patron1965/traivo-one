@@ -553,11 +553,10 @@ export async function exportWorkOrderToFortnox(
       return { success: false, error: "No work order lines to invoice" };
     }
 
-    // ADR v3 §2.3 (Task #556): Om WO har frusen fakturamottagare vinner den
-    // över object_payers/objects.customer_id. payerId-override på exporten
-    // (manuell split) går alltid först. NULL = back-compat (gammalt beteende).
+    // ADR v3 §2.3: Om WO har frusen fakturamottagare vinner den över den
+    // metadata-härledda kunden. Frozen-kedjan är orörd i Etapp 5.
     let frozenRecipientFortnoxId: string | null = null;
-    if (!invoiceExport.payerId && (workOrder as any).frozenInvoiceRecipientId) {
+    if ((workOrder as any).frozenInvoiceRecipientId) {
       const frozenRec = await storage.getInvoiceRecipient(
         tenantId,
         (workOrder as any).frozenInvoiceRecipientId,
@@ -570,18 +569,11 @@ export async function exportWorkOrderToFortnox(
       }
     }
 
-    const objectPayers = invoiceExport.payerId 
-      ? [await storage.getObjectPayer(invoiceExport.payerId)]
-      : (workOrder.objectId ? await storage.getObjectPayers(workOrder.objectId) : []);
-
-    const validPayers = objectPayers.filter(Boolean);
-
-    // ADR v3 §2.3 (Task #556): När WO har frusen fakturamottagare overridar
-    // den object_payers — vi byter ut payer-listan mot en syntetisk payer
-    // som routas till mottagarens Fortnox-kund. payerId-override (manuell
-    // split) går alltid först och har redan begränsat validPayers ovan.
-    if (frozenRecipientFortnoxId && !invoiceExport.payerId) {
-      validPayers.length = 0;
+    // Etapp 5: betalarkällan är Ekonomi-metadatat 'Kund' (arvs-medvetet via
+    // primär förälder) — object_payers är borttagen. En (1) payer per objekt.
+    const validPayers: Array<{ id: string; customerId: string; sharePercent: number; articleTypes: string[] }> = [];
+    if (frozenRecipientFortnoxId) {
+      // Frusen fakturamottagare overridar den metadata-härledda kunden.
       validPayers.push({
         id: `frozen-recipient:${(workOrder as any).frozenInvoiceRecipientId}`,
         customerId: (workOrder as any).frozenInvoiceSourceCustomerId || workOrder.customerId,
@@ -589,19 +581,27 @@ export async function exportWorkOrderToFortnox(
         articleTypes: [],
         _frozenFortnoxId: frozenRecipientFortnoxId,
       } as any);
+    } else if (workOrder.objectId) {
+      const { getObjectPrimaryCustomerId } = await import("./services/object-customer");
+      const derivedCustomerId = await getObjectPrimaryCustomerId(workOrder.objectId);
+      if (derivedCustomerId) {
+        validPayers.push({
+          id: `kund-metadata:${workOrder.objectId}`,
+          customerId: derivedCustomerId,
+          sharePercent: 100,
+          articleTypes: [],
+        });
+      }
     }
 
-    // Tidigare fanns en fallback som plockade `obj.customerId` från legacy
-    // objects.customer_id-kolumnen om inga object_payers hittades. Den
-    // kolumnen är på väg ut (ADR v3 — objekt är neutrala) och får inte
-    // längre läsas. Saknas payer är det ett konfigurationsfel som måste
-    // åtgärdas explicit via object_payers (eller via frusen fakturamottagare
-    // på WO) innan WO kan faktureras.
+    // Saknas kund i metadatat är det ett konfigurationsfel som måste åtgärdas
+    // explicit (sätt Ekonomi-metadatat 'Kund' på objektet eller en gren ovanför,
+    // eller frys fakturamottagare på ordern) innan WO kan faktureras.
     if (!validPayers.length) {
       return {
         success: false,
         error:
-          "Ingen payer registrerad för objektet. Lägg till minst en betalare i object_payers innan fakturering.",
+          "Ingen kund kopplad till objektet. Sätt Ekonomi-metadatat 'Kund' på objektet (eller frys fakturamottagare på ordern) innan fakturering.",
       };
     }
 

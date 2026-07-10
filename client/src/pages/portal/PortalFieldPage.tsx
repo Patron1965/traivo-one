@@ -78,7 +78,6 @@ interface ObjectDetail {
   latitude: number | null;
   longitude: number | null;
   accessCode: string | null;
-  notes: string | null;
   metadata: { key: string; value: string | null }[];
   recentVisits: { id: string; scheduledDate: string | null; completedAt: string | null; status: string; description: string | null }[];
   changeRequests: { id: string; category: string; description: string; photos: string[] | null; status: string; createdAt: string; reviewNotes: string | null }[];

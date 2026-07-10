@@ -79,12 +79,8 @@ export function buildResetPhases(tenant: string): ResetPhase[] {
       tables: [
         ["order_concept_objects", `object_id IN (SELECT id FROM objects WHERE tenant_id = '${tenant}')`],
         ["portal_user_object_scopes", `object_id IN (SELECT id FROM objects WHERE tenant_id = '${tenant}')`],
-        ["object_contacts", `tenant_id = '${tenant}'`],
-        ["object_images", `tenant_id = '${tenant}'`],
         ["metadata_editor_submissions", `object_id IN (SELECT id FROM objects WHERE tenant_id = '${tenant}')`],
         ["object_articles", `tenant_id = '${tenant}'`],
-        ["object_payers", `tenant_id = '${tenant}'`],
-        ["object_time_restrictions", `tenant_id = '${tenant}'`],
         ["object_parents", `tenant_id = '${tenant}'`],
         ["metadata_historik", `tenant_id = '${tenant}'`],
         ["assignment_articles", `assignment_id IN (SELECT id FROM assignments WHERE tenant_id = '${tenant}')`],
@@ -122,7 +118,6 @@ export function buildResetPhases(tenant: string): ResetPhase[] {
         ["invoice_recipients", `tenant_id = '${tenant}'`],
         ["customer_import_mappings", `tenant_id = '${tenant}'`],
         ["import_sessions", `tenant_id = '${tenant}'`],
-        ["clusters", `tenant_id = '${tenant}'`],
         ["customer_invoices", `tenant_id = '${tenant}'`],
         ["customer_notification_settings", `tenant_id = '${tenant}'`],
         ["customer_portal_messages", `tenant_id = '${tenant}'`],
@@ -170,7 +165,6 @@ export function buildResetPhases(tenant: string): ResetPhase[] {
         ["time_logs", `resource_id IN (${demoIds})`],
         ["self_booking_slots", `resource_id IN (${demoIds})`],
         ["resources", `tenant_id = '${tenant}' AND id IN (${demoIds})`],
-        ["clusters", `tenant_id = '${tenant}' AND (id LIKE 'cluster-telge-%' OR id = 'cluster-kommun')`],
         [
           "fortnox_mappings",
           `tenant_id = '${tenant}' AND (

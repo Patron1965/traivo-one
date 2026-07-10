@@ -107,8 +107,10 @@ export async function searchDormantCustomers(opts: {
               c.customer_number,
               c.org_number,
               (SELECT count(*)::int FROM objects o
-                JOIN object_payers op ON op.object_id = o.id AND op.is_primary = true
-                WHERE op.customer_id = c.id AND o.tenant_id = $1 AND o.deleted_at IS NULL) AS object_count,
+                JOIN metadata_varden mv ON mv.objekt_id = o.id AND COALESCE(mv.raderad, false) = false
+                JOIN metadata_katalog mk ON mk.id = mv.metadata_katalog_id
+                  AND lower(mk.namn) = 'kund' AND mk.deleted_at IS NULL
+                WHERE mv.varde_referens = c.id AND o.tenant_id = $1 AND o.deleted_at IS NULL) AS object_count,
               (SELECT max(scheduled_date)::text FROM work_orders w
                 WHERE w.customer_id = c.id AND w.tenant_id = $1) AS last_wo_date,
               EXISTS(
@@ -164,8 +166,10 @@ async function preflightDormancy(
                    AND w.scheduled_date >= $2
               ) AS is_active,
               (SELECT count(*)::int FROM objects o
-                JOIN object_payers op ON op.object_id = o.id AND op.is_primary = true
-                WHERE op.customer_id = c.id AND o.tenant_id = $1 AND o.deleted_at IS NULL) AS object_count
+                JOIN metadata_varden mv ON mv.objekt_id = o.id AND COALESCE(mv.raderad, false) = false
+                JOIN metadata_katalog mk ON mk.id = mv.metadata_katalog_id
+                  AND lower(mk.namn) = 'kund' AND mk.deleted_at IS NULL
+                WHERE mv.varde_referens = c.id AND o.tenant_id = $1 AND o.deleted_at IS NULL) AS object_count
        FROM customers c
        WHERE c.tenant_id = $1
          AND c.id = ANY($3::text[])`,

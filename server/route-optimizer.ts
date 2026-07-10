@@ -1,4 +1,4 @@
-import type { WorkOrder, Resource, ServiceObject, Cluster } from "@shared/schema";
+import type { WorkOrder, Resource, ServiceObject } from "@shared/schema";
 import { isStartTask } from "@shared/start-task";
 import { resolveLocationRequirement } from "@shared/location-requirement";
 import { getBatchDistances } from "./distance-matrix-service";
@@ -396,7 +396,6 @@ export async function optimizeRoutesVRP(
   workOrders: WorkOrder[],
   resources: Resource[],
   objects: ServiceObject[],
-  clusters: Cluster[],
   breakConfig?: BreakConfig,
   constraintOptions?: VRPConstraintOptions,
 ): Promise<VRPOptimizationResult> {

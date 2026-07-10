@@ -52,7 +52,6 @@ import type { Customer } from "@shared/schema";
 
 interface CustomerAggregate {
   customerId: string;
-  clusterCount: number;
   objectCount: number;
   activeOrders: number;
 }
@@ -66,7 +65,6 @@ interface CustomersPage {
 
 interface CustomerTotals {
   customerCount: number;
-  clusterCount: number;
   objectCount: number;
   activeOrders: number;
 }

@@ -1,8 +1,9 @@
-import type { WorkOrder, Resource, ResourceAvailability, VehicleSchedule, TaskDependencyInstance, ObjectTimeRestriction, ResourceArticle, ResourceVehicle, WorkOrderLine, TeamMember, Cluster } from "@shared/schema";
+import type { WorkOrder, Resource, ResourceAvailability, VehicleSchedule, TaskDependencyInstance, ResourceArticle, ResourceVehicle, WorkOrderLine, TeamMember } from "@shared/schema";
+import type { ObjectTimeRestrictionView as ObjectTimeRestriction } from "../services/object-time-restrictions";
 
 export interface ConstraintViolation {
   type: "hard" | "soft";
-  category: "locked_order" | "dependency_chain" | "time_window" | "resource_availability" | "vehicle_schedule" | "competency" | "capacity" | "planned_window" | "team_membership" | "cluster_geographic";
+  category: "locked_order" | "dependency_chain" | "time_window" | "resource_availability" | "vehicle_schedule" | "competency" | "capacity" | "planned_window" | "team_membership";
   severity: "critical" | "warning";
   workOrderId: string;
   resourceId?: string;
@@ -26,8 +27,6 @@ export interface ConstraintContext {
   resourceArticles: ResourceArticle[];
   workOrderLines?: WorkOrderLine[];
   teamMembers?: TeamMember[];
-  clusters?: Cluster[];
-  hardClusterBlocking?: boolean;
 }
 
 export function validateSchedule(
@@ -47,7 +46,6 @@ export function validateSchedule(
     violations.push(...checkPlannedWindow(order, move));
     violations.push(...checkTeamMembership(order, move, ctx));
     violations.push(...checkCompetency(order, move, ctx));
-    violations.push(...checkClusterGeographic(order, move, ctx));
   }
 
   violations.push(...checkDependencyChains(moves, ctx));
@@ -375,40 +373,6 @@ function checkCapacityOverload(moves: ScheduleMove[], ctx: ConstraintContext): C
   return violations;
 }
 
-function checkClusterGeographic(order: WorkOrder, move: ScheduleMove, ctx: ConstraintContext): ConstraintViolation[] {
-  if (!order.clusterId || !ctx.clusters || ctx.clusters.length === 0) return [];
-
-  const cluster = ctx.clusters.find(c => c.id === order.clusterId);
-  if (!cluster) return [];
-
-  const normalize = (pc: string) => pc.replace(/\s/g, "").trim();
-  const clusterPostalCodes = (cluster.postalCodes || []).map(normalize).filter(Boolean);
-  if (clusterPostalCodes.length === 0) return [];
-
-  const resource = ctx.resources.find(r => r.id === move.resourceId);
-  if (!resource) return [];
-
-  const resourceServiceArea = (resource.serviceArea || []).map(normalize).filter(Boolean);
-  if (resourceServiceArea.length === 0) return [];
-
-  const resourceSet = new Set(resourceServiceArea);
-  const overlap = clusterPostalCodes.some(pc => resourceSet.has(pc));
-  if (!overlap) {
-    const isHard = ctx.hardClusterBlocking !== false;
-    return [{
-      type: isHard ? "hard" : "soft",
-      category: "cluster_geographic",
-      severity: isHard ? "critical" : "warning",
-      workOrderId: move.workOrderId,
-      resourceId: move.resourceId,
-      description: isHard
-        ? `🚫 ${resource.name || "Resurs"} arbetar inte i kluster "${cluster.name}" — tilldelning blockerad`
-        : `${resource.name || "Resurs"} arbetar normalt inte i kluster "${cluster.name}" — inget postnummeröverlappar`
-    }];
-  }
-
-  return [];
-}
 
 function formatDate(d: Date | string | null): string {
   if (!d) return "okänt datum";

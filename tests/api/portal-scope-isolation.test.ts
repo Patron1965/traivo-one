@@ -6,6 +6,7 @@ import { workOrders, customerIssueReports } from "@shared/schema";
 import { eq } from "drizzle-orm";
 import { randomId } from "./helpers";
 import type { InsertObject } from "@shared/schema";
+import { setObjectKund } from "./helpers/object-kund";
 
 const BASE_URL = process.env.TEST_BASE_URL || "http://localhost:5000";
 const TENANT_ID = "default-tenant";
@@ -79,14 +80,7 @@ describe("Portal scope isolation — kunder ser aldrig data utanför sin scope",
         hierarchyLevel: parentId ? "rum" : "fastighet",
         parentId: parentId ?? undefined,
       } as InsertObject);
-      await storage.createObjectPayer({
-        tenantId: TENANT_ID,
-        objectId: obj.id,
-        customerId,
-        payerType: "primary",
-        isPrimary: true,
-        priority: 1,
-      } as any);
+      await setObjectKund(TENANT_ID, obj.id, customerId);
       return obj.id;
     };
 

@@ -1,5 +1,6 @@
 import type { Express } from "express";
 import { storage } from "../storage";
+import { getTimeRestrictionsForObjects, getTimeRestrictionsForTenant } from "../services/object-time-restrictions";
 import { db } from "../db";
 import { eq, sql, desc, and, gte, lte, isNull, inArray } from "drizzle-orm";
 import { z } from "zod";
@@ -559,8 +560,6 @@ body{font-family:Inter,system-ui,sans-serif;background:#1a1a2e}
 <button class="btn-inactive" id="btn-week" onclick="setRange('week')">Vecka</button>
 <button class="btn-inactive" id="btn-hide" onclick="toggleJobs()">D&ouml;lj jobb</button>
 <button class="btn-route" id="btn-routes" onclick="toggleRoutes()">Rutter &#x2713;</button>
-<button class="btn-inactive" id="btn-czones" onclick="toggleClusterZones()">Klusterzoner</button>
-<button class="btn-inactive" id="btn-rzones" onclick="toggleResourceZones()">Verksamhet</button>
 </div>
 <div class="loading-routes" id="loading-routes"><div class="spinner"></div>H&auml;mtar v&auml;ggeometri...</div>
 <div class="toast-container" id="toast-container"></div>
@@ -580,19 +579,9 @@ var driverLayer = L.layerGroup().addTo(map);
 var jobCluster;
 try { jobCluster = L.markerClusterGroup({maxClusterRadius:40}).addTo(map); } catch(e) { jobCluster = L.layerGroup().addTo(map); }
 var routeLayer = L.layerGroup().addTo(map);
-var clusterZoneLayer = L.layerGroup().addTo(map);
-var resourceZoneLayer = L.layerGroup().addTo(map);
 let currentRange = 'today';
 let jobsVisible = true;
 let routesVisible = true;
-let clusterZonesVisible = (function(){try{return localStorage.getItem('traivo-show-cluster-zones')!=='false'}catch(e){return true}})();
-let resourceZonesVisible = (function(){try{return localStorage.getItem('traivo-show-resource-zones')!=='false'}catch(e){return true}})();
-(function(){
-  var cBtn=document.getElementById('btn-czones');
-  var rBtn=document.getElementById('btn-rzones');
-  if(cBtn){cBtn.className=clusterZonesVisible?'btn-active':'btn-inactive';cBtn.innerHTML='Klusterzoner'+(clusterZonesVisible?' \\u2713':'');}
-  if(rBtn){rBtn.className=resourceZonesVisible?'btn-active':'btn-inactive';rBtn.innerHTML='Verksamhet'+(resourceZonesVisible?' \\u2713':'');}
-})();
 function escHtml(s){if(!s)return '';return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
 let driversData = [];
 let jobsData = [];
@@ -1148,62 +1137,9 @@ bar.innerHTML = errorHtml
   +'<span class="info-stat">'+currentRange.replace('today','Idag').replace('week','Vecka')+'</span>';
 }
 
-function toggleClusterZones(){
-  clusterZonesVisible=!clusterZonesVisible;
-  try{localStorage.setItem('traivo-show-cluster-zones',String(clusterZonesVisible))}catch(e){}
-  var btn=document.getElementById('btn-czones');
-  btn.className=clusterZonesVisible?'btn-active':'btn-inactive';
-  btn.innerHTML='Klusterzoner'+(clusterZonesVisible?' \\u2713':'');
-  if(clusterZonesVisible){clusterZoneLayer.addTo(map)}else{map.removeLayer(clusterZoneLayer)}
-}
-function toggleResourceZones(){
-  resourceZonesVisible=!resourceZonesVisible;
-  try{localStorage.setItem('traivo-show-resource-zones',String(resourceZonesVisible))}catch(e){}
-  var btn=document.getElementById('btn-rzones');
-  btn.className=resourceZonesVisible?'btn-active':'btn-inactive';
-  btn.innerHTML='Verksamhet'+(resourceZonesVisible?' \\u2713':'');
-  if(resourceZonesVisible){resourceZoneLayer.addTo(map)}else{map.removeLayer(resourceZoneLayer)}
-}
-async function loadZones(){
-  try{
-    var res=await fetch('/api/clusters/zones',{credentials:'include'});
-    if(!res.ok)return;
-    var data=await res.json();
-    clusterZoneLayer.clearLayers();
-    resourceZoneLayer.clearLayers();
-    if(data.clusterZones){
-      data.clusterZones.forEach(function(z){
-        var popupHtml='<div style="min-width:160px"><b style="color:'+z.color+'">\\u2B22 '+escHtml(z.name)+'</b><br>'+z.objectCount+' objekt'+(z.postalCodes&&z.postalCodes.length>0?'<br><small>Postnr: '+z.postalCodes.slice(0,5).map(escHtml).join(', ')+(z.postalCodes.length>5?' +'+String(z.postalCodes.length-5):'')+'</small>':'')+'</div>';
-        if(z.polygon&&z.polygon.length>=3){
-          var poly=L.polygon(z.polygon,{color:z.color,fillColor:z.color,fillOpacity:0.12,weight:2,opacity:0.7});
-          poly.bindPopup(popupHtml);clusterZoneLayer.addLayer(poly);
-        }else if(z.center){
-          var circ=L.circle(z.center,{radius:500,color:z.color,fillColor:z.color,fillOpacity:0.15,weight:2});
-          circ.bindPopup(popupHtml);clusterZoneLayer.addLayer(circ);
-        }
-      });
-    }
-    if(data.resourceZones){
-      data.resourceZones.forEach(function(z){
-        var popupHtml='<div style="min-width:160px"><b style="color:'+z.color+'">\\ud83d\\udc64 '+escHtml(z.name)+'</b><br>'+z.objectCount+' objekt i omr\\u00e5det'+(z.serviceArea&&z.serviceArea.length>0?'<br><small>Postnr: '+z.serviceArea.slice(0,5).map(escHtml).join(', ')+(z.serviceArea.length>5?' +'+String(z.serviceArea.length-5):'')+'</small>':'')+'</div>';
-        if(z.polygon&&z.polygon.length>=3){
-          var poly=L.polygon(z.polygon,{color:z.color,fillColor:z.color,fillOpacity:0.08,weight:2,opacity:0.5,dashArray:'6,4'});
-          poly.bindPopup(popupHtml);resourceZoneLayer.addLayer(poly);
-        }else if(z.center){
-          var circ=L.circle(z.center,{radius:500,color:z.color,fillColor:z.color,fillOpacity:0.1,weight:2,dashArray:'6,4'});
-          circ.bindPopup(popupHtml);resourceZoneLayer.addLayer(circ);
-        }
-      });
-    }
-    if(!clusterZonesVisible)map.removeLayer(clusterZoneLayer);
-    if(!resourceZonesVisible)map.removeLayer(resourceZoneLayer);
-  }catch(e){console.error('Zone load error:',e)}
-}
-
 async function refresh() {
 var results = await Promise.all([loadDrivers(), loadJobs()]);
 await loadRoutes();
-await loadZones();
 updateInfoBar();
 }
 
@@ -1212,7 +1148,6 @@ refresh().catch(function(err){ console.error('Planner refresh error:', err); doc
 setInterval(loadDrivers, 15000);
 setInterval(function(){ loadJobs(); updateInfoBar(); }, 30000);
 setInterval(loadRoutes, 60000);
-setInterval(loadZones, 120000);
 <\/script>
 </body>
 </html>`;
@@ -1271,16 +1206,12 @@ app.post("/api/planning/what-if", requireTenantWithFallback, asyncHandler(async 
     const dependencyInstances = await storage.getTaskDependencyInstances(tenantId);
 
     const timeRestrictions = workOrder.objectId
-      ? await storage.getObjectTimeRestrictions(workOrder.objectId)
+      ? await getTimeRestrictionsForObjects(tenantId, [workOrder.objectId])
       : [];
 
     const resourceArticles = await storage.getResourceArticlesByResourceIds(resourceIds);
     const workOrderLines = await storage.getWorkOrderLines(workOrderId);
     const teamMembers = await storage.getAllTeamMembers(tenantId);
-    const clusters = await storage.getClusters(tenantId);
-    const tenant = await storage.getTenant(tenantId);
-    const tenantSettings = (tenant?.settings as Record<string, unknown>) || {};
-    const hardClusterBlocking = tenantSettings.hardClusterBlocking !== false;
 
     const move: ScheduleMove = {
       workOrderId,
@@ -1299,8 +1230,6 @@ app.post("/api/planning/what-if", requireTenantWithFallback, asyncHandler(async 
       resourceArticles,
       workOrderLines,
       teamMembers,
-      clusters,
-      hardClusterBlocking,
     };
 
     const violations = validateSchedule([move], ctx);
@@ -1446,11 +1375,7 @@ app.get("/api/planning/constraints", requireTenantWithFallback, asyncHandler(asy
     const allOrders = await storage.getWorkOrders(tenantId);
     const resourceArticles = await storage.getResourceArticlesByResourceIds(resourceIds);
     const teamMembers = await storage.getAllTeamMembers(tenantId);
-    const clusters = await storage.getClusters(tenantId);
-    const tenant = await storage.getTenant(tenantId);
-    const tenantSettings = (tenant?.settings as Record<string, unknown>) || {};
-    const hardClusterBlocking = tenantSettings.hardClusterBlocking !== false;
-    const allTimeRestrictions = await storage.getObjectTimeRestrictionsByTenant?.(tenantId) || [];
+    const allTimeRestrictions = await getTimeRestrictionsForTenant(tenantId);
     const allWorkOrderLines = await storage.getWorkOrderLinesByTenant?.(tenantId) || [];
     const dependencyInstances = await storage.getTaskDependencyInstances(tenantId);
 
@@ -1551,17 +1476,6 @@ app.get("/api/planning/constraints", requireTenantWithFallback, asyncHandler(asy
 
           if (order.lockedAt) {
             constraints.push({ category: "locked_order", severity: "critical", description: `"${order.title || order.id.slice(0, 8)}" är låst` });
-          }
-
-          if (order.clusterId && serviceAreaSet.size > 0 && clusters.length > 0) {
-            const cluster = clusters.find(c => c.id === order.clusterId);
-            if (cluster) {
-              const clusterPCs = (cluster.postalCodes || []).map((pc: string) => pc.replace(/\s/g, "").trim()).filter(Boolean);
-              if (clusterPCs.length > 0 && !clusterPCs.some((pc: string) => serviceAreaSet.has(pc))) {
-                const sev = hardClusterBlocking ? "critical" : "warning";
-                constraints.push({ category: "cluster_geographic", severity: sev as "critical" | "warning", description: `Arbetar inte i kluster "${cluster.name}"` });
-              }
-            }
           }
 
           if (order.objectId) {
@@ -1936,8 +1850,6 @@ app.get("/api/planning/heatmap", requireTenantWithFallback, asyncHandler(async (
 
     // Beräkna ruttbarhet per team för admin-diagnostik
     const teamMembersAll = await storage.getAllTeamMembers(tenantId);
-    const clustersForReadiness = await storage.getClusters(tenantId);
-    const clusterMap = new Map(clustersForReadiness.map(c => [c.id, c]));
     const memberCountByTeam = new Map<string, number>();
     for (const m of teamMembersAll) {
       memberCountByTeam.set(m.teamId, (memberCountByTeam.get(m.teamId) || 0) + 1);
@@ -1951,17 +1863,11 @@ app.get("/api/planning/heatmap", requireTenantWithFallback, asyncHandler(async (
       const leaderHasCoords = !!(leader && leader.homeLatitude != null && leader.homeLongitude != null);
       const teamAny = team as any;
       const hasLastPosition = typeof teamAny.lastPositionLat === "number" && typeof teamAny.lastPositionLng === "number";
-      const cluster = team.clusterId ? clusterMap.get(team.clusterId) : undefined;
-      const geo = (cluster?.geoData as any) || {};
-      const clusterLat = cluster?.centerLatitude ?? geo.centerLat ?? null;
-      const clusterLng = (cluster as any)?.centerLongitude ?? geo.centerLng ?? null;
-      const hasClusterCoords = typeof clusterLat === "number" && typeof clusterLng === "number";
 
-      const routable = hasMembers || leaderHasCoords || hasLastPosition || hasClusterCoords;
+      const routable = hasMembers || leaderHasCoords || hasLastPosition;
       const missing: string[] = [];
       if (!hasMembers) missing.push("medlemmar");
       if (!hasLeader) missing.push("team-leader");
-      if (!hasClusterCoords) missing.push("kluster-koordinater");
       if (!hasLastPosition) missing.push("senaste position");
 
       return {
@@ -1971,7 +1877,6 @@ app.get("/api/planning/heatmap", requireTenantWithFallback, asyncHandler(async (
         hasMembers,
         hasLeader,
         leaderHasCoords,
-        hasClusterCoords,
         hasLastPosition,
         routable,
         missing,

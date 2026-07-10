@@ -1,5 +1,6 @@
 import type { Express } from "express";
 import { storage } from "../storage";
+import { getTimeRestrictionsForObjects } from "../services/object-time-restrictions";
 import { db } from "../db";
 import { eq, and, desc, inArray, isNull, or, ilike, gte, lte } from "drizzle-orm";
 import { z } from "zod";
@@ -11,11 +12,10 @@ import {
   ensureCustomerInTenant,
   ensureObjectInTenant,
   ensureObjectNotArchived,
-  ensureClusterInTenant,
   ensureResourceIdsInTenant,
 } from "./helpers";
 import { getTenantIdWithFallback, requireAdmin, requirePlanner } from "../tenant-middleware";
-import { insertWorkOrderSchema, insertWorkOrderLineSchema, ORDER_STATUSES, type OrderStatus, articles, insertProcurementSchema, insertSetupTimeLogSchema, insertSimulationScenarioSchema, clusters, resources, orderConcepts, workOrderLines, fortnoxInvoiceExports, protocols, workOrders, customers, objects, objectPayers, slaRiskSnapshots, geographicDistricts, IMPOSSIBLE_REASON_LABELS, type ImpossibleReason, type OrderConcept, isOutsidePreferredWindow } from "@shared/schema";
+import { insertWorkOrderSchema, insertWorkOrderLineSchema, ORDER_STATUSES, type OrderStatus, articles, insertProcurementSchema, insertSetupTimeLogSchema, insertSimulationScenarioSchema, resources, orderConcepts, workOrderLines, fortnoxInvoiceExports, protocols, workOrders, customers, objects, slaRiskSnapshots, geographicDistricts, IMPOSSIBLE_REASON_LABELS, type ImpossibleReason, type OrderConcept, isOutsidePreferredWindow } from "@shared/schema";
 import type { WorkOrder, InsertWorkOrderLine } from "@shared/schema";
 import { handleWorkOrderStatusChange } from "../ai-communication";
 import { generatePreTasksForWorkOrder } from "../planning/weeklyPlanEngine";
@@ -23,6 +23,7 @@ import { notificationService } from "../notifications";
 import { asyncHandler } from "../asyncHandler";
 import { AppError, NotFoundError, ValidationError, ConflictError, ForbiddenError } from "../errors";
 import { deriveFortnoxCodesWithSourceForWorkOrder } from "../services/fortnox-code-derivation";
+import { getObjectMetadataImages } from "../services/object-system-metadata";
 import { logWorkOrderTransition, getTaskEvents } from "../services/task-event-log";
 
 /** Räknar ut outsidePreferredWindow-flaggan + priority utifrån objektets/kundens
@@ -32,13 +33,8 @@ async function computeOutsidePreferredWindow(
   plannedStart: Date | string | null | undefined,
   plannedEnd: Date | string | null | undefined,
 ): Promise<{ outsidePreferredWindow: boolean; deliveryPreferencePriority: string | null }> {
-  if (!objectId || !plannedStart) return { outsidePreferredWindow: false, deliveryPreferencePriority: null };
-  const { effective, source } = await storage.resolveDeliveryPreferences(objectId);
-  if (source === "none") return { outsidePreferredWindow: false, deliveryPreferencePriority: null };
-  return {
-    outsidePreferredWindow: isOutsidePreferredWindow(effective, plannedStart, plannedEnd),
-    deliveryPreferencePriority: effective.priority ?? "preferred",
-  };
+  // Etapp 5: objekt-egna leveranspreferenser borttagna — inget fönster att bryta.
+  return { outsidePreferredWindow: false, deliveryPreferencePriority: null };
 }
 import { getArticleMetadataForObject, writeArticleMetadataOnObject, writeSystemMetadataOnObject, findMissingRequiredLeaveMetadata, writeProvidedLeaveMetadataFields } from "../metadata-queries";
 import { resolveEffectiveArticleQuantity } from "../article-quantity-resolver";
@@ -115,10 +111,8 @@ async function validateWorkOrderScheduleChange(params: {
   const dependencyInstances = await storage.getTaskDependencyInstances(tenantId);
   const resourceArticles = await storage.getResourceArticlesByResourceIds(resourceIdsList);
   const teamMembers = await storage.getAllTeamMembers(tenantId);
-  const clustersList = await storage.getClusters(tenantId);
   const tenant = await storage.getTenant(tenantId);
   const tenantSettings = (tenant?.settings as Record<string, unknown>) || {};
-  const hardClusterBlocking = tenantSettings.hardClusterBlocking !== false;
 
   // Lös ut en resurs för flytten. Om ordern är team-tilldelad använder vi en
   // medlems resurs (samma som bulk-schedule). Saknas både resurs och team kör
@@ -130,7 +124,7 @@ async function validateWorkOrderScheduleChange(params: {
   }
 
   const timeRestrictions = workOrder.objectId
-    ? await storage.getObjectTimeRestrictions(workOrder.objectId)
+    ? await getTimeRestrictionsForObjects(tenantId, [workOrder.objectId])
     : [];
   const workOrderLines = await storage.getWorkOrderLines(workOrder.id);
 
@@ -162,8 +156,6 @@ async function validateWorkOrderScheduleChange(params: {
       resourceArticles,
       workOrderLines,
       teamMembers,
-      clusters: clustersList,
-      hardClusterBlocking,
     },
   );
 
@@ -172,7 +164,6 @@ async function validateWorkOrderScheduleChange(params: {
   const relevant = violations.filter(v =>
     v.workOrderId === workOrder.id ||
     v.category === "capacity" ||
-    v.category === "cluster_geographic" ||
     v.category === "dependency_chain"
   );
   const hard = Array.from(new Set(relevant.filter(v => v.type === "hard").map(v => v.description)));
@@ -446,7 +437,7 @@ app.get("/api/work-orders/:id/expand", asyncHandler(async (req, res) => {
     storage.getWorkOrderLines(verified.id),
     tenantSafeObjectId ? storage.getRecentWorkOrdersForObject(tenantId, tenantSafeObjectId, verified.id, 5) : Promise.resolve([]),
     storage.getCustomerCommunicationsByWorkOrder(tenantId, verified.id, 3),
-    tenantSafeObjectId ? storage.getObjectImages(tenantSafeObjectId) : Promise.resolve([]),
+    tenantSafeObjectId ? getObjectMetadataImages(tenantId, tenantSafeObjectId) : Promise.resolve([]),
     storage.getProtocols(tenantId, { workOrderId: verified.id }),
     db.select({
         deadlineAt: slaRiskSnapshots.deadlineAt,
@@ -692,10 +683,8 @@ app.post("/api/work-orders/bulk-schedule", asyncHandler(async (req, res) => {
   const dependencyInstances = await storage.getTaskDependencyInstances(tenantId);
   const resourceArticles = await storage.getResourceArticlesByResourceIds(resourceIdsList);
   const teamMembers = await storage.getAllTeamMembers(tenantId);
-  const clustersList = await storage.getClusters(tenantId);
   const tenant = await storage.getTenant(tenantId);
   const tenantSettings = (tenant?.settings as Record<string, unknown>) || {};
-  const hardClusterBlocking = tenantSettings.hardClusterBlocking !== false;
 
   const { validateSchedule } = await import("../planning/constraintEngine");
 
@@ -723,7 +712,7 @@ app.post("/api/work-orders/bulk-schedule", asyncHandler(async (req, res) => {
     let conflictReasons: string[] = [];
     if (effectiveResourceIdForCheck) {
       const timeRestrictions = wo.objectId
-        ? await storage.getObjectTimeRestrictions(wo.objectId)
+        ? await getTimeRestrictionsForObjects(tenantId, [wo.objectId])
         : [];
       const workOrderLines = await storage.getWorkOrderLines(id);
       const movesForCheck = [
@@ -743,17 +732,15 @@ app.post("/api/work-orders/bulk-schedule", asyncHandler(async (req, res) => {
           resourceArticles,
           workOrderLines,
           teamMembers,
-          clusters: clustersList,
-          hardClusterBlocking,
         }
       );
       conflictReasons = violations
         .filter(v => v.workOrderId === id)
         .map(v => (v.type === "hard" ? `[BLOCK] ${v.description}` : v.description));
-      // Capacity/cluster checks aggregate by resource+date across moves; surface
+      // Capacity checks aggregate by resource+date across moves; surface
       // those even when reported against a sibling pending move.
       const aggregateExtras = violations
-        .filter(v => v.workOrderId !== id && (v.category === "capacity" || v.category === "cluster_geographic"))
+        .filter(v => v.workOrderId !== id && v.category === "capacity")
         .map(v => (v.type === "hard" ? `[BLOCK] ${v.description}` : v.description));
       for (const extra of aggregateExtras) {
         if (!conflictReasons.includes(extra)) conflictReasons.push(extra);
@@ -1038,13 +1025,13 @@ app.post("/api/work-orders/quick-bulk", requirePlanner, asyncHandler(async (req,
     .where(and(eq(objects.tenantId, tenantId), inArray(objects.id, uniqueIds), isNull(objects.deletedAt)));
   const validIds = new Set(objRows.map(o => o.id));
 
+  // Etapp 5: primär kund härleds ur Ekonomi-metadatat 'Kund' (arvs-medvetet).
   const payerByObject = new Map<string, string>();
   if (validIds.size > 0) {
-    const payerRows = await db.select({ objectId: objectPayers.objectId, customerId: objectPayers.customerId })
-      .from(objectPayers)
-      .where(and(eq(objectPayers.tenantId, tenantId), eq(objectPayers.isPrimary, true), inArray(objectPayers.objectId, Array.from(validIds))));
-    for (const p of payerRows) {
-      if (!payerByObject.has(p.objectId)) payerByObject.set(p.objectId, p.customerId);
+    const { getObjectsPrimaryCustomerIds } = await import("../services/object-customer");
+    const resolved = await getObjectsPrimaryCustomerIds(Array.from(validIds));
+    for (const [objectId, customerId] of resolved) {
+      if (customerId) payerByObject.set(objectId, customerId);
     }
   }
 
@@ -1112,7 +1099,6 @@ app.post("/api/work-orders", asyncHandler(async (req, res) => {
   if (data.teamId) await ensureTeamInTenant(data.teamId, tenantId);
   if (data.customerId) await ensureCustomerInTenant(data.customerId, tenantId);
   if (data.objectId) ensureObjectNotArchived(await ensureObjectInTenant(data.objectId, tenantId));
-  if (data.clusterId) await ensureClusterInTenant(data.clusterId, tenantId);
 
   if (data.articleId && data.objectId) {
     const article = await storage.getArticle(data.articleId);
@@ -1302,7 +1288,6 @@ app.post("/api/work-orders/with-lines", requirePlanner, asyncHandler(async (req,
   if (data.teamId) await ensureTeamInTenant(data.teamId, tenantId);
   if (data.customerId) await ensureCustomerInTenant(data.customerId, tenantId);
   if (data.objectId) ensureObjectNotArchived(await ensureObjectInTenant(data.objectId, tenantId));
-  if (data.clusterId) await ensureClusterInTenant(data.clusterId, tenantId);
 
   const prefFlags = await computeOutsidePreferredWindow(
     data.objectId,
@@ -1407,7 +1392,6 @@ app.patch("/api/work-orders/:id", asyncHandler(async (req, res) => {
   const tenantId = getTenantIdWithFallback(req);
   const { tenantId: _, id, createdAt, deletedAt, ...updateData } = req.body;
 
-  const clusterOverride = updateData.clusterOverride;
   delete updateData.clusterOverride;
 
   // Ordernummer myntas server-side och får aldrig ändras/sättas via PATCH.
@@ -1439,7 +1423,6 @@ app.patch("/api/work-orders/:id", asyncHandler(async (req, res) => {
   if (updateData.teamId) await ensureTeamInTenant(updateData.teamId, tenantId);
   if (updateData.customerId) await ensureCustomerInTenant(updateData.customerId, tenantId);
   if (updateData.objectId) await ensureObjectInTenant(updateData.objectId, tenantId);
-  if (updateData.clusterId) await ensureClusterInTenant(updateData.clusterId, tenantId);
   if (updateData.districtId) {
     const district = await storage.getGeographicDistrict(tenantId, updateData.districtId);
     if (!district) throw new ValidationError("Distriktet finns inte i denna tenant");
@@ -1490,41 +1473,6 @@ app.patch("/api/work-orders/:id", asyncHandler(async (req, res) => {
           details: { hardConflicts: [], softConflicts: conflicts.soft, requiresConfirmation: true },
         });
       }
-    }
-  }
-
-  const isResourceChange = updateData.resourceId && updateData.resourceId !== existingOrder.resourceId;
-  const assignedResourceId = updateData.resourceId || existingOrder.resourceId;
-  const clusterId = existingOrder.clusterId;
-  if (assignedResourceId && clusterId && (isResourceChange || clusterOverride)) {
-    try {
-      const normalize = (pc: string) => pc.replace(/\s/g, "").trim();
-      const cluster = await db.query.clusters.findFirst({ where: and(eq(clusters.id, clusterId), eq(clusters.tenantId, tenantId)) });
-      const resource = await db.query.resources.findFirst({ where: and(eq(resources.id, assignedResourceId), eq(resources.tenantId, tenantId)) });
-      if (cluster && resource) {
-        const cpc = (cluster.postalCodes || []).map(normalize).filter(Boolean);
-        const rsa = (resource.serviceArea || []).map(normalize).filter(Boolean);
-        if (cpc.length > 0 && rsa.length > 0) {
-          const rsaSet = new Set(rsa);
-          const overlap = cpc.some(pc => rsaSet.has(pc));
-          if (!overlap) {
-            const tenant = await storage.getTenant(tenantId);
-            const tenantSettings = (tenant?.settings as Record<string, any>) || {};
-            const hardBlocking = tenantSettings.hardClusterBlocking !== false;
-            if (hardBlocking) {
-              return res.status(422).json({
-                error: "Klusterblockering",
-                message: `Resursen "${resource.name}" arbetar inte i kluster "${cluster.name}". Tilldelning blockerad av verksamhetsområdesregel.`,
-                clusterName: cluster.name,
-                resourceName: resource.name,
-              });
-            }
-            console.warn(`[cluster-override] Work order ${req.params.id} assigned to resource ${assignedResourceId} outside cluster "${cluster.name}". Override: ${clusterOverride ? 'explicit' : 'no override flag'}, hardBlocking: ${hardBlocking}`);
-          }
-        }
-      }
-    } catch (e) {
-      console.error("[cluster-validation] Error during cluster check:", e);
     }
   }
 

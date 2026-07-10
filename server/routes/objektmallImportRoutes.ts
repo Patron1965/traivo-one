@@ -173,16 +173,14 @@ type KnownObjectFields = {
   address?: string;
   city?: string;
   postalCode?: string;
-  notes?: string;
-  containerCount?: number;
 };
 
+// Etapp 5: notes/containerCount borttagna som objektkolumner — sådana rubriker
+// matchas nu som vanlig metadata (t.ex. katalogfältet "Antal kärl").
 const KNOWN_FIELD_ALIASES = {
   address: ["adress", "address", "gatuadress", "besöksadress"],
   city: ["stad", "ort", "city", "postort"],
   postalCode: ["postnummer", "postnr", "postal code", "postalcode", "zip"],
-  notes: ["anteckningar", "notering", "noteringar", "notes", "beskrivning", "description", "kommentar"],
-  containerCount: ["antal kärl", "antal karl", "antal", "container count", "containercount", "antal behållare", "kärl", "karl"],
 } as const;
 
 function extractKnownObjectFields(metadata: Record<string, string>): KnownObjectFields {
@@ -203,16 +201,9 @@ function extractKnownObjectFields(metadata: Record<string, string>): KnownObject
   const address = pick(KNOWN_FIELD_ALIASES.address);
   const city = pick(KNOWN_FIELD_ALIASES.city);
   const postalCode = pick(KNOWN_FIELD_ALIASES.postalCode);
-  const notes = pick(KNOWN_FIELD_ALIASES.notes);
-  const ccRaw = pick(KNOWN_FIELD_ALIASES.containerCount);
   if (address !== undefined) out.address = address;
   if (city !== undefined) out.city = city;
   if (postalCode !== undefined) out.postalCode = postalCode;
-  if (notes !== undefined) out.notes = notes;
-  if (ccRaw !== undefined) {
-    const n = parseInt(ccRaw.replace(/[^\d-]/g, ""), 10);
-    if (!Number.isNaN(n)) out.containerCount = n;
-  }
   return out;
 }
 
@@ -944,8 +935,6 @@ type ExistingObject = {
   address: string | null;
   city: string | null;
   postalCode: string | null;
-  notes: string | null;
-  containerCount: number | null;
   nameTranslations: Record<string, string> | null; // Task #634
 };
 
@@ -958,8 +947,6 @@ type ExistingObjectRow = {
   address: string | null;
   city: string | null;
   postalCode: string | null;
-  notes: string | null;
-  containerCount: number | null;
   nameTranslations: unknown;
 };
 
@@ -972,8 +959,6 @@ function toExistingObject(e: ExistingObjectRow): ExistingObject {
     address: e.address ?? null,
     city: e.city ?? null,
     postalCode: e.postalCode ?? null,
-    notes: e.notes ?? null,
-    containerCount: e.containerCount ?? null,
     nameTranslations: (e.nameTranslations as Record<string, string> | null) ?? null,
   };
 }
@@ -1225,8 +1210,6 @@ async function validateAll(
     address: objects.address,
     city: objects.city,
     postalCode: objects.postalCode,
-    notes: objects.notes,
-    containerCount: objects.containerCount,
     nameTranslations: objects.nameTranslations,
   } as const;
 
@@ -1619,17 +1602,6 @@ async function validateAll(
       }
       if (known.postalCode !== undefined && known.postalCode !== (target.postalCode ?? "")) {
         changedFields.push({ field: "postalCode", label: "Postnummer", from: target.postalCode ?? "", to: known.postalCode });
-      }
-      if (known.notes !== undefined && known.notes !== (target.notes ?? "")) {
-        changedFields.push({ field: "notes", label: "Anteckningar", from: target.notes ?? "", to: known.notes });
-      }
-      if (known.containerCount !== undefined && known.containerCount !== (target.containerCount ?? 0)) {
-        changedFields.push({
-          field: "containerCount",
-          label: "Antal kärl",
-          from: String(target.containerCount ?? 0),
-          to: String(known.containerCount),
-        });
       }
     }
     // Task #632: validera och statusbedöm dynamiska metadata-värden (definitions-
@@ -2062,8 +2034,6 @@ async function commitImport(
             address,
             city,
             postalCode,
-            notes: known.notes ?? null,
-            ...(known.containerCount !== undefined ? { containerCount: known.containerCount } : {}),
             // Task #634: språkmärkta visningsnamn (om angivna) — aldrig kolumn E.
             ...(Object.keys(res.nameTranslations).length ? { nameTranslations: res.nameTranslations } : {}),
             importBatchId: batchId,
@@ -2082,8 +2052,6 @@ async function commitImport(
         if (known.address !== undefined) set.address = known.address;
         if (known.city !== undefined) set.city = known.city;
         if (known.postalCode !== undefined) set.postalCode = known.postalCode;
-        if (known.notes !== undefined) set.notes = known.notes;
-        if (known.containerCount !== undefined) set.containerCount = known.containerCount;
         // Task #634: merge språkmärkta visningsnamn — endast angivna språk skrivs över,
         // övriga befintliga bevaras (partiell uppdatering).
         if (Object.keys(res.nameTranslations).length) {

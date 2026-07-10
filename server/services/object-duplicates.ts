@@ -3,10 +3,11 @@
 // (a) alltid filtreras på tenant_id (säkerhet) och (b) kan återanvändas av
 // importflödets förhandsvisning (Feature 2: dubblettvarning i importen).
 //
-// Kundkoppling tas via object_payers (primary) — inte legacy objects.customer_id (ADR v3).
+// Kundkoppling härleds ur Ekonomi-metadatat 'Kund' (Etapp 5) — inte legacy objects.customer_id.
 import { db } from "../db";
 import { sql, and, eq, inArray } from "drizzle-orm";
 import { objects } from "@shared/schema";
+import { primaryPayerCustomerIdSqlFor } from "./object-customer";
 
 export interface DuplicateMember {
   id: string;
@@ -15,7 +16,6 @@ export interface DuplicateMember {
   objectNumber: string | null;
   customerId: string | null;
   customerName: string | null;
-  clusterId: string | null;
   latitude: number | null;
   longitude: number | null;
   city: string | null;
@@ -65,8 +65,7 @@ export async function getObjectDuplicateSummary(tenantId: string): Promise<Dupli
       SELECT name, address, primary_customer_id, COUNT(*) as cnt
       FROM (
         SELECT o.name, o.address,
-          (SELECT op.customer_id FROM object_payers op
-            WHERE op.object_id = o.id AND op.is_primary = true LIMIT 1) AS primary_customer_id
+          ${primaryPayerCustomerIdSqlFor(sql.raw("o.id"))} AS primary_customer_id
         FROM objects o
         WHERE o.deleted_at IS NULL AND o.tenant_id = ${tenantId}
       ) s
@@ -88,18 +87,13 @@ export async function listObjectDuplicateGroups(
   limit: number,
 ): Promise<DuplicateGroup[]> {
   const offset = (page - 1) * limit;
-  const primaryPayerSubquery = sql`(
-    SELECT op.customer_id FROM object_payers op
-    WHERE op.object_id = o.id AND op.is_primary = true
-    LIMIT 1
-  )`;
+  const primaryPayerSubquery = primaryPayerCustomerIdSqlFor(sql.raw("o.id"));
 
   const groups = await db.execute(sql`
     SELECT name, address, primary_customer_id AS customer_id, COUNT(*) as cnt
     FROM (
       SELECT o.name, o.address,
-        (SELECT op.customer_id FROM object_payers op
-          WHERE op.object_id = o.id AND op.is_primary = true LIMIT 1) AS primary_customer_id
+        ${primaryPayerCustomerIdSqlFor(sql.raw("o.id"))} AS primary_customer_id
       FROM objects o
       WHERE o.deleted_at IS NULL AND o.tenant_id = ${tenantId}
     ) t
@@ -115,14 +109,17 @@ export async function listObjectDuplicateGroups(
       ? sql`${primaryPayerSubquery} = ${g.customer_id}`
       : sql`${primaryPayerSubquery} IS NULL`;
     const memberRows = await db.execute(sql`
-      SELECT o.id, o.name, o.address, o.object_number, ${primaryPayerSubquery} AS customer_id, o.cluster_id,
+      SELECT o.id, o.name, o.address, o.object_number, ${primaryPayerSubquery} AS customer_id,
              o.latitude, o.longitude, o.city, o.postal_code, o.object_type,
              o.created_at,
              (SELECT c.name FROM customers c WHERE c.id = ${primaryPayerSubquery}) as customer_name,
              (SELECT COUNT(*) FROM work_orders wo WHERE wo.object_id = o.id) as work_order_count,
              (SELECT COUNT(*) FROM work_order_objects woo WHERE woo.object_id = o.id) as linked_wo_count,
              (SELECT COUNT(*) FROM object_articles oa WHERE oa.object_id = o.id) as article_count,
-             (SELECT COUNT(*) FROM object_contacts oc WHERE oc.object_id = o.id) as contact_count
+             (SELECT COUNT(*) FROM metadata_varden mv
+                JOIN metadata_katalog mk ON mk.id = mv.metadata_katalog_id
+                  AND mk.area = 'kontakt' AND lower(mk.namn) = 'namn' AND mk.deleted_at IS NULL
+                WHERE mv.objekt_id = o.id AND COALESCE(mv.raderad, false) = false) as contact_count
       FROM objects o
       WHERE o.tenant_id = ${tenantId}
         AND o.name = ${g.name}
@@ -147,7 +144,6 @@ export async function listObjectDuplicateGroups(
         objectNumber: m.object_number as string | null,
         customerId: m.customer_id as string | null,
         customerName: m.customer_name as string | null,
-        clusterId: m.cluster_id as string | null,
         latitude: m.latitude as number | null,
         longitude: m.longitude as number | null,
         city: m.city as string | null,
@@ -306,8 +302,7 @@ const REASSIGN_FK_TABLES = [
 ];
 // Barn-tabeller som flyttas (object_id) till keep-objektet.
 const REASSIGN_CHILD_TABLES = [
-  "object_articles", "object_contacts", "object_images",
-  "object_payers", "object_time_restrictions", "object_parents",
+  "object_articles", "object_parents",
 ];
 
 export class DuplicateMergeOwnershipError extends Error {}

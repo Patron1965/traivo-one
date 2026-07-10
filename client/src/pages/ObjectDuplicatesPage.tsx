@@ -30,7 +30,6 @@ interface DuplicateMember {
   objectNumber: string | null;
   customerId: string | null;
   customerName: string | null;
-  clusterId: string | null;
   city: string | null;
   postalCode: string | null;
   objectType: string | null;

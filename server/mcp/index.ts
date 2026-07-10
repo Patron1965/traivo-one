@@ -43,21 +43,6 @@ mcpServer.resource(
   }
 );
 
-mcpServer.resource(
-  "clusters",
-  new ResourceTemplate("clusters://list", { list: undefined }),
-  async (uri) => {
-    const clusters = await storage.getClusters("kinab");
-    return {
-      contents: [{
-        uri: uri.href,
-        mimeType: "application/json",
-        text: JSON.stringify(clusters, null, 2),
-      }],
-    };
-  }
-);
-
 mcpServer.tool(
   "get_work_orders",
   "Hämta arbetsordrar för en viss dag eller period",
@@ -103,21 +88,6 @@ mcpServer.tool(
       content: [{
         type: "text" as const,
         text: JSON.stringify(resources, null, 2),
-      }],
-    };
-  }
-);
-
-mcpServer.tool(
-  "get_clusters",
-  "Hämta alla kluster med geografisk information",
-  {},
-  async () => {
-    const clusters = await storage.getClusters("kinab");
-    return {
-      content: [{
-        type: "text" as const,
-        text: JSON.stringify(clusters, null, 2),
       }],
     };
   }

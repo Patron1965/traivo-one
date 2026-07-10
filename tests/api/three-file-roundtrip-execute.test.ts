@@ -10,14 +10,12 @@ import {
   users,
   userTenantRoles,
   customers,
-  clusters,
   objects,
   objectParents,
   objectImportSessions,
   objectImportRows,
   importActions,
   importBatches,
-  objectPayers,
   metadataKatalog,
   metadataVarden,
   metadataHistorik,
@@ -121,6 +119,9 @@ async function readMetaValue(objektId: string, katalogId: string): Promise<strin
         eq(metadataVarden.tenantId, TENANT),
         eq(metadataVarden.objektId, objektId),
         eq(metadataVarden.metadataKatalogId, katalogId),
+        // Task #1213 G1: skriv-över ARKIVERAR gamla värden (status='arkiverad')
+        // i stället för DELETE — endast den aktiva raden är objektets värde.
+        eq(metadataVarden.status, "aktiv"),
       ),
     );
   return row?.vardeString ?? null;
@@ -198,10 +199,8 @@ afterAll(async () => {
   await db.delete(objectImportSessions).where(eq(objectImportSessions.tenantId, TENANT));
   await db.delete(importActions).where(eq(importActions.tenantId, TENANT));
   await db.delete(importBatches).where(eq(importBatches.tenantId, TENANT));
-  await db.delete(objectPayers).where(eq(objectPayers.tenantId, TENANT));
   await db.delete(objectParents).where(eq(objectParents.tenantId, TENANT));
   await db.delete(objects).where(eq(objects.tenantId, TENANT));
-  await db.delete(clusters).where(eq(clusters.tenantId, TENANT));
   await db.delete(customers).where(eq(customers.tenantId, TENANT));
   await db.delete(userTenantRoles).where(eq(userTenantRoles.tenantId, TENANT));
   await db.delete(users).where(eq(users.id, ADMIN));
@@ -319,7 +318,8 @@ describe("Tre-fils-export → återimport round-trip (Task #1177)", () => {
 
     // Adress skrivs nu över med det redigerade värdet.
     expect(await readMetaValue(butikId, adressKatId)).toBe("Nyaste vägen 9");
-    // Endast ett värde per ersättande katalogfält (inget dubblettvärde kvar).
+    // Endast ett AKTIVT värde per ersättande katalogfält — det gamla värdet
+    // finns kvar som arkiverad historikrad (G1), aldrig som aktiv dubblett.
     const rows = await db
       .select()
       .from(metadataVarden)
@@ -328,6 +328,7 @@ describe("Tre-fils-export → återimport round-trip (Task #1177)", () => {
           eq(metadataVarden.tenantId, TENANT),
           eq(metadataVarden.objektId, butikId),
           eq(metadataVarden.metadataKatalogId, adressKatId),
+          eq(metadataVarden.status, "aktiv"),
         ),
       );
     expect(rows).toHaveLength(1);

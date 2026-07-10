@@ -10,7 +10,7 @@ import { Inbox, AlertTriangle, Clock, ChevronLeft, ChevronRight, ChevronDown, Ch
 import { Calendar } from "@/components/ui/calendar";
 import { format, addDays, startOfWeek, getISOWeek } from "date-fns";
 import { sv } from "date-fns/locale";
-import type { WorkOrderWithObject, Customer, Cluster } from "@shared/schema";
+import type { WorkOrderWithObject, Customer } from "@shared/schema";
 import { EXECUTION_CODE_LABELS, EXECUTION_CODE_ICONS } from "@shared/schema";
 import { priorityDotColors, priorityLabels, priorityBadgeClasses } from "./types";
 import type { AssignSlot } from "./usePlannerSync";
@@ -66,8 +66,6 @@ interface UnscheduledSidebarProps {
   setFilterCustomer: (v: string) => void;
   filterPriority: string;
   setFilterPriority: (v: string) => void;
-  filterCluster: string;
-  setFilterCluster: (v: string) => void;
   filterTeam: string;
   setFilterTeam: (v: string) => void;
   filterExecutionCode: string;
@@ -87,17 +85,14 @@ interface UnscheduledSidebarProps {
   missingDateJobs: WorkOrderWithObject[];
   missingDateLoading: boolean;
   customers: Customer[];
-  clusters: Cluster[];
   teamsData: Array<{ id: string; name: string; clusterId: string | null; color: string | null }>;
   customerMap: Map<string, Customer>;
-  clusterMap: Map<string, Cluster>;
   selectedJob: string | null;
   onJobClick: (jobId: string) => void;
   onOpenAssignDialog: (job: WorkOrderWithObject, e: React.MouseEvent) => void;
   timewindowMap: Map<string, Array<{ workOrderId: string; dayOfWeek: string | null; startTime: string | null; endTime: string | null; weekNumber: number | null }>>;
   currentWeekStart?: Date;
   activeDragJob?: WorkOrderWithObject | null;
-  clusterMatchedResourceIds?: Set<string>;
   visibleResources?: Array<{ serviceArea?: string[] | null }>;
   expanded?: boolean;
   remoteSlot?: AssignSlot | null;
@@ -208,23 +203,20 @@ export const UnscheduledSidebar = memo(function UnscheduledSidebar(props: Unsche
     orderstockSearch, setOrderstockSearch, sidebarFiltersOpen, setSidebarFiltersOpen,
     sidebarActiveFilterCount, clearAllSidebarFilters, sidebarQuickStats,
     filterCustomer, setFilterCustomer, filterPriority, setFilterPriority,
-    filterCluster, setFilterCluster, filterTeam, setFilterTeam,
+    filterTeam, setFilterTeam,
     filterExecutionCode, setFilterExecutionCode,
     filterDateField, setFilterDateField, filterDatePeriod, setFilterDatePeriod,
     filterDateCustomFrom, setFilterDateCustomFrom, filterDateCustomTo, setFilterDateCustomTo, dateFilterActive,
     unscheduledMissingDateCount,
     missingDateExpanded, setMissingDateExpanded, missingDateJobs, missingDateLoading,
-    customers, clusters, teamsData, customerMap, clusterMap,
+    customers, teamsData, customerMap,
     selectedJob, onJobClick, onOpenAssignDialog, timewindowMap, currentWeekStart,
-    activeDragJob, clusterMatchedResourceIds, visibleResources,
+    activeDragJob, visibleResources,
     expanded = false, remoteSlot = null, onCrossWindowAssign,
     selectedJobIds,
   } = props;
   const bulkJobIds = selectedJobIds && selectedJobIds.size > 1 ? Array.from(selectedJobIds) : undefined;
 
-  const showDragNoMatch = !!(activeDragJob && activeDragJob.clusterId &&
-    clusterMatchedResourceIds && clusterMatchedResourceIds.size === 0 &&
-    visibleResources?.some(r => r.serviceArea && r.serviceArea.length > 0));
 
   const widthClass = expanded ? "w-full flex-1" : "w-[280px] border-r";
 
@@ -250,12 +242,6 @@ export const UnscheduledSidebar = memo(function UnscheduledSidebar(props: Unsche
               <Badge variant="secondary" className="text-xs">{unscheduledJobs.length}{unscheduledTotal > accumulatedCount ? ` / ${unscheduledTotal}` : ""}</Badge>
             </div>
           </div>
-          {showDragNoMatch && (
-            <div className="flex items-center gap-1.5 p-2 rounded-md bg-warning/10 dark:bg-warning/15 border border-warning/20 dark:border-warning/80" data-testid="sidebar-no-cluster-match-warning">
-              <AlertTriangle className="h-3.5 w-3.5 text-warning shrink-0" />
-              <span className="text-[10px] text-warning">Ingen resurs matchar klustret</span>
-            </div>
-          )}
           <div className="flex items-center gap-1.5 flex-wrap" data-testid="sidebar-quick-stats">
             {sidebarQuickStats.urgentCount > 0 && (
               <Badge variant="destructive" className="text-[10px] h-5 gap-1">
@@ -300,12 +286,6 @@ export const UnscheduledSidebar = memo(function UnscheduledSidebar(props: Unsche
               {filterPriority !== "all" && (
                 <Badge variant="secondary" className="text-[10px] gap-0.5 cursor-pointer" onClick={() => setFilterPriority("all")} data-testid="badge-sidebar-filter-priority">
                   {priorityLabels[filterPriority] || filterPriority}
-                  <X className="h-2.5 w-2.5" />
-                </Badge>
-              )}
-              {filterCluster !== "all" && (
-                <Badge variant="secondary" className="text-[10px] gap-0.5 cursor-pointer" onClick={() => setFilterCluster("all")} data-testid="badge-sidebar-filter-cluster">
-                  {filterCluster === "none" ? "Utan område" : clusters.find(c => c.id === filterCluster)?.name || "Område"}
                   <X className="h-2.5 w-2.5" />
                 </Badge>
               )}
@@ -463,23 +443,6 @@ export const UnscheduledSidebar = memo(function UnscheduledSidebar(props: Unsche
                   <SelectItem value="low">Låg</SelectItem>
                 </SelectContent>
               </Select>
-              <Select value={filterCluster} onValueChange={setFilterCluster}>
-                <SelectTrigger className="w-full h-8 text-xs" data-testid="select-unscheduled-cluster">
-                  <SelectValue placeholder="Alla områden" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Alla områden</SelectItem>
-                  <SelectItem value="none">Utan område</SelectItem>
-                  {clusters.map((cluster) => (
-                    <SelectItem key={cluster.id} value={cluster.id}>
-                      <span className="flex items-center gap-1.5">
-                        <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: cluster.color || "#3B82F6" }} />
-                        {cluster.name}
-                      </span>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
               {teamsData.length > 0 && (
                 <Select value={filterTeam} onValueChange={setFilterTeam}>
                   <SelectTrigger className="w-full h-8 text-xs" data-testid="select-unscheduled-team">
@@ -608,7 +571,6 @@ export const UnscheduledSidebar = memo(function UnscheduledSidebar(props: Unsche
               <>
               {unscheduledJobs.map((job) => {
                 const customer = customerMap.get(job.customerId);
-                const jobCluster = job.clusterId ? clusterMap.get(job.clusterId) : null;
                 const hasRealCustomer = customer && /[\p{L}\p{N}]/u.test(customer.name);
                 const customerLabel = hasRealCustomer ? customer!.name : "Okänd kund";
                 const addressLabel = job.objectName || "Okänt objekt";
@@ -653,13 +615,6 @@ export const UnscheduledSidebar = memo(function UnscheduledSidebar(props: Unsche
                           </div>
                         )}
                         <div className="text-[11px] text-muted-foreground truncate pl-3.5" title={addressLabel} data-testid={`unscheduled-job-address-${job.id}`}>{addressLabel}</div>
-                        {jobCluster && (
-                          <div className="flex items-center gap-1 text-[10px] text-muted-foreground" data-testid={`unscheduled-job-cluster-${job.id}`}>
-                            <MapPin className="h-2.5 w-2.5" />
-                            <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: jobCluster.color || "#3B82F6" }} />
-                            {jobCluster.name}
-                          </div>
-                        )}
                         {(job.objectAccessCode || job.objectKeyNumber) && (
                           <div className="flex items-center gap-2 mt-1">
                             {job.objectAccessCode && (

@@ -60,11 +60,6 @@ export interface MetadataFormEntry {
   inheritedFromName?: string | null;
   softDeleted?: boolean;
   raderad?: boolean;
-  // P1: syntetiska legacy-kolumnposter (projicerade objektkolumner "under migrering").
-  // Bär kolumnnyckel + redigeringsgrupp och saknar metadataKatalogId → kan aldrig
-  // hamna i metadata_varden spar-/raderingsvägarna.
-  legacyColumn?: string;
-  legacyEditGroup?: string;
   // Resolverad per-objekt sorteringsindex (lägre = högre upp).
   sortIndex?: number | null;
   // Multi-instans: alla värden i katalog-gruppen (endast satt för allowDuplicates-fält).
@@ -950,8 +945,6 @@ export function ObjectMetadataForm({
   onNavigateToObject,
   extraNavItems = [],
   extraSummaryTiles = [],
-  legacyEntries = [],
-  onEditLegacyField,
 }: {
   objectId: string;
   entries: MetadataFormEntry[];
@@ -978,12 +971,6 @@ export function ObjectMetadataForm({
   extraNavItems?: MetadataExtraNavItem[];
   /** Task #1138: extra brickor i 360-översikten med samma scroll-beteende. */
   extraSummaryTiles?: MetadataExtraTile[];
-  /** P1: syntetiska legacy-kolumnposter (objektkolumner "under migrering") som
-   *  renderas genom samma enhetliga metadata-rendering, märkta KÄLLA=M. */
-  legacyEntries?: MetadataFormEntry[];
-  /** P1: öppnar objektets befintliga redigeringsdialog för en legacy-grupp
-   *  (access/equipment/overview). Legacy-poster sparas ALDRIG via metadata-vägen. */
-  onEditLegacyField?: (group: string) => void;
 }) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -1129,16 +1116,13 @@ export function ObjectMetadataForm({
     if (systemRows.length > 0) {
       out.push({ key: "system", anchorId: "meta-system", label: "Systemgenererat", count: systemRows.length, icon: Server });
     }
-    if (legacyEntries.length > 0) {
-      out.push({ key: "legacy", anchorId: "meta-legacy-fields", label: "Objektfält (under migrering)", count: legacyEntries.length, icon: Package });
-    }
     // Task #1138: extra poster (t.ex. leveranspreferenser) — ankaret lever utanför
     // detta komponentträd men scrollToAnchor slår upp via document.getElementById.
     for (const e of extraNavItems) {
       out.push({ key: e.key, anchorId: e.anchorId, label: e.label, count: e.count ?? 0, icon: e.icon });
     }
     return out;
-  }, [namedGroups, ovrigtBuckets, systemRows, legacyEntries, extraNavItems]);
+  }, [namedGroups, ovrigtBuckets, systemRows, extraNavItems]);
 
   const scrollToAnchor = (id: string) => {
     const el = typeof document !== "undefined" ? document.getElementById(id) : null;
@@ -1156,9 +1140,7 @@ export function ObjectMetadataForm({
     const isSoftDeleted = !!m.softDeleted || !!m.raderad;
     const lastChanged = m.lastChangedAt ? new Date(m.lastChangedAt) : null;
     const isUploadField = UPLOAD_DATATYPES.has(datatyp);
-    const isLegacy = !!m.legacyColumn;
-    // Legacy-kolumner är objektets egen data ⇒ KÄLLA=M (aldrig SYS).
-    const kalla = isLegacy ? "M" : deriveEntryKalla(m);
+    const kalla = deriveEntryKalla(m);
 
     return (
       <div
@@ -1191,37 +1173,7 @@ export function ObjectMetadataForm({
             <KallaBadge kalla={kalla} />
             <MetadataSourceBadge entry={m} />
 
-            {isLegacy ? (
-              <>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Badge
-                      variant="outline"
-                      className="text-[10px] cursor-help inline-flex items-center gap-1 border-warning text-warning"
-                      data-testid={`badge-metadata-migrating-${m.id}`}
-                    >
-                      <AlertTriangle className="h-3 w-3" /> Under migrering
-                    </Badge>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    Objektkolumn på väg in i metadata-katalogen. Data ligger kvar i
-                    kolumnen (routing/VRP/mobil/Fortnox läser den) tills migreringen är klar.
-                  </TooltipContent>
-                </Tooltip>
-                {onEditLegacyField && m.legacyEditGroup && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-7 w-7 p-0"
-                    onClick={() => onEditLegacyField(m.legacyEditGroup!)}
-                    data-testid={`button-edit-legacy-${m.legacyColumn}`}
-                    aria-label="Redigera"
-                  >
-                    <Pencil className="h-3.5 w-3.5" />
-                  </Button>
-                )}
-              </>
-            ) : (
+            {(
               <>
                 {/* Ladda upp / byt bild eller fil */}
                 {isUploadField && !isSystem && !isSoftDeleted && (
@@ -1447,25 +1399,6 @@ export function ObjectMetadataForm({
           </Card>
         )}
 
-        {legacyEntries.length > 0 && (
-          <Card id="meta-legacy-fields" className="scroll-mt-24 border-warning/40" data-testid="metadata-area-legacy">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-semibold flex items-center justify-between">
-                <span className="flex items-center gap-2">
-                  <Package className="h-4 w-4 text-muted-foreground" /> Objektfält (under migrering)
-                </span>
-                <Badge variant="outline" className="text-[10px]">{legacyEntries.length}</Badge>
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="divide-y pt-0">
-              <p className="pb-2 text-xs text-muted-foreground">
-                Objektets egna fält (KÄLLA=M) som ännu bor i objektkolumner. De visas här som
-                metadata och redigeras via objektets redigeringsdialog tills de flyttats in i katalogen.
-              </p>
-              {legacyEntries.map((m) => renderMetadataRow(m))}
-            </CardContent>
-          </Card>
-        )}
       </div>
 
       {/* Bildförhandsvisning */}

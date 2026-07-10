@@ -50,7 +50,6 @@ interface WeekGridViewProps {
   onSendSchedule: (resource: Resource) => void;
   jobCardProps: Omit<React.ComponentProps<typeof JobCard>, 'job' | 'compact'>;
   dragOverConflicts?: Record<string, string[]>;
-  clusterMatchedResourceIds?: Set<string>;
   showConstraintLayer?: boolean;
   constraintMap?: Map<string, ConstraintCell>;
   remoteDragActive?: boolean;
@@ -403,7 +402,7 @@ export const WeekGridView = memo(function WeekGridView(props: WeekGridViewProps)
     visibleDates, visibleResources, filterBar, getJobsForResourceAndDay, getResourceDayHours,
     getCapacityPercentage, getCapacityColor, getCapacityBgColor, getDropFitClass,
     activeDragJob, restrictionsByObject, resourceWeekSummary, zoom, weatherByDate,
-    onResourceClick, onSendSchedule, jobCardProps, dragOverConflicts, clusterMatchedResourceIds,
+    onResourceClick, onSendSchedule, jobCardProps, dragOverConflicts,
     showConstraintLayer, constraintMap, remoteDragActive, remoteHoveredDropId,
     rowMode = "resource", teamRows = [], getJobsForTeamAndDay, getTeamDayHours, teamWeekSummary,
     hiddenUntiedTeamSummary, showingUntiedUnderFilter, onShowUntiedTeamRows, onHideUntiedTeamRows,
@@ -804,7 +803,7 @@ export const WeekGridView = memo(function WeekGridView(props: WeekGridViewProps)
           return (
             <div key={resource.id} className="grid grid-cols-[160px_repeat(5,minmax(0,1fr))] border-b">
               <div className="sticky left-0 bg-background z-10">
-                <ResourceColumn resource={resource} summary={summary} onResourceClick={onResourceClick} onSendSchedule={onSendSchedule} isClusterMatch={!!activeDragJob && clusterMatchedResourceIds?.has(resource.id)} currentPeriod={props.currentPeriod} />
+                <ResourceColumn resource={resource} summary={summary} onResourceClick={onResourceClick} onSendSchedule={onSendSchedule} currentPeriod={props.currentPeriod} />
               </div>
               {visibleDates.map((day, dayIndex) => {
                 const jobs = getJobsForResourceAndDay(resource.id, day);

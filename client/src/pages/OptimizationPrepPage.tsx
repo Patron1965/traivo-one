@@ -86,7 +86,6 @@ export default function OptimizationPrepPage() {
 
   const validationResults = useMemo((): ValidationResult[] => {
     const objectsWithCoords = objects.filter(o => o.latitude && o.longitude);
-    const objectsWithAccess = objects.filter(o => o.accessType);
     const assignedOrders = weekOrders.filter(o => o.resourceId);
     const ordersWithDuration = weekOrders.filter(o => o.estimatedDuration && o.estimatedDuration > 0);
 
@@ -100,16 +99,6 @@ export default function OptimizationPrepPage() {
         message: objectsWithCoords.length === objects.length 
           ? "Alla objekt har koordinater" 
           : `${objects.length - objectsWithCoords.length} objekt saknar koordinater`
-      },
-      {
-        category: "access",
-        label: "Tillgångsinformation",
-        status: objectsWithAccess.length === objects.length ? "ok" : objectsWithAccess.length > objects.length * 0.5 ? "warning" : "error",
-        count: objectsWithAccess.length,
-        total: objects.length,
-        message: objectsWithAccess.length === objects.length 
-          ? "Alla objekt har tillgångstyp" 
-          : `${objects.length - objectsWithAccess.length} objekt saknar tillgångsinfo`
       },
       {
         category: "assignment",
@@ -172,38 +161,6 @@ export default function OptimizationPrepPage() {
     });
     return Object.values(dist).sort((a, b) => b.count - a.count);
   }, [weekOrders, objectMap, customerMap]);
-
-  const accessTypeDistribution = useMemo(() => {
-    const dist: Record<string, number> = {};
-    weekOrders.forEach(order => {
-      const obj = objectMap.get(order.objectId);
-      const accessType = obj?.accessType || "open";
-      dist[accessType] = (dist[accessType] || 0) + 1;
-    });
-    return dist;
-  }, [weekOrders, objectMap]);
-
-  const containerSummary = useMemo(() => {
-    let k1 = 0, k2 = 0, k3 = 0, k4 = 0;
-    const uniqueObjects = new Set(weekOrders.map(o => o.objectId));
-    uniqueObjects.forEach(objId => {
-      const obj = objectMap.get(objId);
-      if (obj) {
-        k1 += obj.containerCount || 0;
-        k2 += obj.containerCountK2 || 0;
-        k3 += obj.containerCountK3 || 0;
-        k4 += obj.containerCountK4 || 0;
-      }
-    });
-    return { k1, k2, k3, k4, total: k1 + k2 + k3 + k4 };
-  }, [weekOrders, objectMap]);
-
-  const accessTypeLabels: Record<string, { label: string; icon: typeof Key; color: string }> = {
-    open: { label: "Öppen", icon: DoorOpen, color: "bg-chart-2/15 text-chart-2 border border-chart-2/30" },
-    code: { label: "Kod", icon: Keyboard, color: "bg-chart-1/15 text-chart-1 border border-chart-1/30" },
-    key: { label: "Nyckel", icon: Key, color: "bg-chart-4/15 text-chart-4 border border-chart-4/30" },
-    meeting: { label: "Möte", icon: Users, color: "bg-chart-5/15 text-chart-5 border border-chart-5/30" },
-  };
 
   const handlePreviousWeek = () => setSelectedWeek(prev => subWeeks(prev, 1));
   const handleNextWeek = () => setSelectedWeek(prev => addWeeks(prev, 1));
@@ -372,73 +329,6 @@ export default function OptimizationPrepPage() {
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader className="pb-3">
-            <div className="flex items-center justify-between gap-2 flex-wrap">
-              <div className="flex items-center gap-2">
-                <PieChart className="h-4 w-4 text-muted-foreground" />
-                <CardTitle className="text-base">Tillgångstyper & Kärl</CardTitle>
-              </div>
-              {containerSummary.total > 0 && (
-                <Badge variant="secondary" className="text-xs">
-                  <Package className="h-3 w-3 mr-1" />
-                  {containerSummary.total} kärl totalt
-                </Badge>
-              )}
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex flex-wrap gap-2">
-              {Object.entries(accessTypeDistribution).length === 0 ? (
-                <p className="text-sm text-muted-foreground">Inga jobb denna vecka</p>
-              ) : (
-                Object.entries(accessTypeDistribution).map(([type, count]) => {
-                  if (count === 0) return null;
-                  const config = accessTypeLabels[type] || { 
-                    label: type.charAt(0).toUpperCase() + type.slice(1), 
-                    icon: DoorOpen, 
-                    color: "bg-muted text-foreground" 
-                  };
-                  const Icon = config.icon;
-                  return (
-                    <div 
-                      key={type} 
-                      className={`flex items-center gap-2 px-3 py-2 rounded-md ${config.color}`}
-                    >
-                      <Icon className="h-4 w-4" />
-                      <span className="text-sm font-medium">{config.label}</span>
-                      <span className="text-sm font-bold">{count}</span>
-                    </div>
-                  );
-                })
-              )}
-            </div>
-
-            {containerSummary.total > 0 && (
-              <>
-                <Separator />
-                <div className="grid grid-cols-4 gap-2 text-center">
-                  <div className="p-2 bg-muted rounded-md">
-                    <div className="text-lg font-semibold">{containerSummary.k1}</div>
-                    <div className="text-[10px] text-muted-foreground">K1 Standard</div>
-                  </div>
-                  <div className="p-2 bg-muted rounded-md">
-                    <div className="text-lg font-semibold">{containerSummary.k2}</div>
-                    <div className="text-[10px] text-muted-foreground">K2 Pant</div>
-                  </div>
-                  <div className="p-2 bg-muted rounded-md">
-                    <div className="text-lg font-semibold">{containerSummary.k3}</div>
-                    <div className="text-[10px] text-muted-foreground">K3 Mat</div>
-                  </div>
-                  <div className="p-2 bg-muted rounded-md">
-                    <div className="text-lg font-semibold">{containerSummary.k4}</div>
-                    <div className="text-[10px] text-muted-foreground">K4 Övrigt</div>
-                  </div>
-                </div>
-              </>
-            )}
-          </CardContent>
-        </Card>
       </div>
 
       <Card>

@@ -2,7 +2,6 @@ import { db } from "../db";
 import { and, eq, gte, isNull, isNotNull, inArray, sql, desc } from "drizzle-orm";
 import {
   workOrders,
-  clusters,
   resources,
   planningParameters,
   slaRiskSnapshots,
@@ -16,13 +15,6 @@ import { notificationService } from "../notifications";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const COMPLETED_STATUSES = new Set(["utford", "avslutad", "completed", "cancelled", "avbruten"]);
-const SLA_LEVEL_DEFAULT_DAYS: Record<string, number> = {
-  express: 1,
-  premium: 3,
-  enterprise: 3,
-  standard: 14,
-};
-
 export const DEFAULT_SLA_SETTINGS: Omit<SlaRiskSettings, "tenantId" | "updatedAt"> = {
   warningDaysToBreach: 3,
   criticalDaysToBreach: 1,
@@ -116,14 +108,7 @@ export async function computeTenantSlaRisk(tenantId: string): Promise<{
     else genericParam = p;
   }
 
-  // 3. Clusters
-  const tenantClusters = await db
-    .select({ id: clusters.id, slaLevel: clusters.slaLevel, name: clusters.name })
-    .from(clusters)
-    .where(eq(clusters.tenantId, tenantId));
-  const clusterById = new Map(tenantClusters.map(c => [c.id, c]));
-
-  // 4. Resources for capacity
+  // 3. Resources for capacity
   const tenantResources = await db
     .select({ id: resources.id, weeklyHours: resources.weeklyHours, status: resources.status, deletedAt: resources.deletedAt })
     .from(resources)
@@ -216,11 +201,7 @@ export async function computeTenantSlaRisk(tenantId: string): Promise<{
       const param = (o.objectId && paramByObject.get(o.objectId))
         || (o.customerId && paramByCustomer.get(o.customerId))
         || genericParam;
-      let maxDays = param?.maxDaysToComplete ?? settings.defaultMaxDaysToComplete;
-      const cluster = o.clusterId ? clusterById.get(o.clusterId) : null;
-      if (!param && cluster?.slaLevel) {
-        maxDays = SLA_LEVEL_DEFAULT_DAYS[cluster.slaLevel] ?? maxDays;
-      }
+      const maxDays = param?.maxDaysToComplete ?? settings.defaultMaxDaysToComplete;
 
       const baseDate = o.createdAt || now;
       const deadlineAt = new Date(baseDate.getTime() + maxDays * DAY_MS);

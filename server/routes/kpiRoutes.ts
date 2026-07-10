@@ -1,4 +1,5 @@
 import type { Express } from "express";
+import { primaryPayerCustomerIdSql } from "../services/object-customer";
 import { storage } from "../storage";
 import { db } from "../db";
 import { eq, sql, desc, and, gte, isNull, inArray } from "drizzle-orm";
@@ -10,7 +11,7 @@ import { NotFoundError, ValidationError, ForbiddenError, ConflictError } from ".
 import { validateParentMetadataLink, softDeleteMetadataType, getObjectWithAllMetadata, getDisplayValue, getMetadataKatalogUsage, getMetadataDefinitionsCompat, getMetadataDefinitionCompat, katalogToDefinitionCompat, mapEnglishDataTypeToDatatyp, createMetadata, updateMetadata, deleteMetadata, ensurePackageMetadataKatalog, findMetadataTypeByIdentity, setMetadataInheritanceFlags } from "../metadata-queries";
 import { requireAdmin, requirePlanner } from "../tenant-middleware";
 import { isReasoningModel } from "../ai-model-capabilities";
-import { objects, workOrders, metadataVarden, apiUsageLogs, apiBudgets, invitations, insertObjectPayerSchema, metadataKatalog, insertMetadataKatalogSchema, workOrderLines, articles, weeklyReportNotes, weeklyReportActionItemSchema, type WeeklyReportActionItem, objectPayers } from "@shared/schema";
+import { objects, workOrders, metadataVarden, apiUsageLogs, apiBudgets, invitations, metadataKatalog, insertMetadataKatalogSchema, workOrderLines, articles, weeklyReportNotes, weeklyReportActionItemSchema, type WeeklyReportActionItem } from "@shared/schema";
 import { getISOWeek, getStartOfISOWeek } from "./helpers";
 import { sendEmail } from "../replit_integrations/resend";
 import { issueMagicLink } from "../replit_integrations/auth/magicLinkAuth";
@@ -52,12 +53,12 @@ app.get("/api/kpis/daily", asyncHandler(async (req, res) => {
           const objectIds = Array.from(new Set(orders.map(o => o.objectId).filter(Boolean) as string[]));
           const containerByObject = new Map<string, number>();
           if (objectIds.length > 0) {
-            // Hämta endast relevanta objekt — undvik full tenant-load på hot-path
-            const relevantObjects = await storage.getObjectsByIds(tenantId, objectIds);
-            for (const obj of relevantObjects) {
-              const total = (obj.containerCount || 0) + (obj.containerCountK2 || 0)
-                + (obj.containerCountK3 || 0) + (obj.containerCountK4 || 0);
-              containerByObject.set(obj.id, total);
+            // Etapp 5: kärl-antal läses ur metadata ('Antal kärl'), ej objektkolumner.
+            const { getObjectsMetadataValueByKatalogNamn } = await import("../metadata-queries");
+            const karlValues = await getObjectsMetadataValueByKatalogNamn(tenantId, objectIds, "Antal kärl");
+            for (const [objectId, value] of Object.entries(karlValues)) {
+              const n = parseInt(value, 10);
+              if (Number.isFinite(n)) containerByObject.set(objectId, n);
             }
           }
           const isDeviation = (o: typeof orders[number]) =>
@@ -337,12 +338,11 @@ app.get("/api/reports/weekly", requirePlanner, asyncHandler(async (req, res) => 
   nextWeekEnd.setDate(nextWeekEnd.getDate() + 6);
   nextWeekEnd.setHours(23, 59, 59, 999);
 
-  const [allTrendOrders, nextWeekOrders, resources, deviationsAll, clusters, teams, notesRow, feedbackSummary] = await Promise.all([
+  const [allTrendOrders, nextWeekOrders, resources, deviationsAll, teams, notesRow, feedbackSummary] = await Promise.all([
     storage.getWorkOrders(tenantId, trendFetchStart, weekEnd, true),
     storage.getWorkOrders(tenantId, nextWeekStart, nextWeekEnd, true),
     storage.getResources(tenantId),
     storage.getDeviationReports(tenantId, {}),
-    storage.getClusters(tenantId),
     storage.getTeams(tenantId),
     db.select().from(weeklyReportNotes).where(and(
       eq(weeklyReportNotes.tenantId, tenantId),
@@ -363,12 +363,27 @@ app.get("/api/reports/weekly", requirePlanner, asyncHandler(async (req, res) => 
   const filteredTrend = allTrendOrders.filter(matchesFilter);
   const filteredNext = nextWeekOrders.filter(matchesFilter);
 
+  // Etapp 5: kärl-antal per objekt läses ur metadata ('Antal kärl'), ej objektkolumner.
+  const containersByObjectId = new Map<string, number>();
+  {
+    const trendObjectIds = Array.from(new Set(
+      [...filteredTrend, ...filteredNext].map((o: any) => o.objectId).filter(Boolean) as string[]
+    ));
+    if (trendObjectIds.length > 0) {
+      const { getObjectsMetadataValueByKatalogNamn } = await import("../metadata-queries");
+      const karlValues = await getObjectsMetadataValueByKatalogNamn(tenantId, trendObjectIds, "Antal kärl");
+      for (const [objectId, value] of Object.entries(karlValues)) {
+        const n = parseInt(value, 10);
+        if (Number.isFinite(n)) containersByObjectId.set(objectId, n);
+      }
+    }
+  }
+
   // Bygg per-vecka KPI:er
   function periodStats(orders: any[]) {
     const completed = orders.filter(o => o.completedAt || o.orderStatus === "utford" || o.executionStatus === "completed");
     const containers = completed.reduce((s, o) => {
-      const obj = o.object;
-      const c = obj ? (obj.containerCount || 0) + (obj.containerCountK2 || 0) + (obj.containerCountK3 || 0) + (obj.containerCountK4 || 0) : 0;
+      const c = o.objectId ? (containersByObjectId.get(o.objectId) || 0) : 0;
       return s + c;
     }, 0);
     const revenue = completed.reduce((s, o) => s + (o.cachedValue || 0), 0);
@@ -506,7 +521,6 @@ app.get("/api/reports/weekly", requirePlanner, asyncHandler(async (req, res) => 
     weekEnd: weekEnd.toISOString().split("T")[0],
     filters: { teamId: teamFilter, clusterId: clusterFilter },
     teams: teams.map(t => ({ id: t.id, name: t.name })),
-    clusters: clusters.map(c => ({ id: c.id, name: c.name })),
     current: currentWeekStats,
     previous: previousWeekStats,
     trend: trendByWeek,
@@ -2477,164 +2491,17 @@ app.delete("/api/objects/:objectId/metadata/:id", asyncHandler(async (req, res) 
 // Hjälpare: överlappskontroll mellan giltighetsperioder (open-ended NULL = ±oändlighet).
 // Speglar logik i server/routes/importPayersRoutes.ts så enkelraderna får samma garanti
 // som CSV-importen: två primary-betalare per objekt får inte överlappa i tiden.
-function payerRangesOverlap(
-  aFrom: Date | null | undefined,
-  aTo: Date | null | undefined,
-  bFrom: Date | null | undefined,
-  bTo: Date | null | undefined,
-): boolean {
-  const aStart = aFrom ? new Date(aFrom).getTime() : -Infinity;
-  const aEnd = aTo ? new Date(aTo).getTime() : Infinity;
-  const bStart = bFrom ? new Date(bFrom).getTime() : -Infinity;
-  const bEnd = bTo ? new Date(bTo).getTime() : Infinity;
-  return aStart <= bEnd && bStart <= aEnd;
-}
-
-async function assertNoPrimaryOverlap(
-  tenantId: string,
-  objectId: string,
-  candidate: { isPrimary?: boolean | null; validFrom?: Date | null; validTo?: Date | null },
-  ignoreId?: string,
-): Promise<void> {
-  if (!candidate.isPrimary) return;
-  const existing = await db.select({
-    id: objectPayers.id,
-    validFrom: objectPayers.validFrom,
-    validTo: objectPayers.validTo,
-  })
-    .from(objectPayers)
-    .where(and(
-      eq(objectPayers.tenantId, tenantId),
-      eq(objectPayers.objectId, objectId),
-      eq(objectPayers.isPrimary, true),
-    ));
-  const conflict = existing.find(e =>
-    e.id !== ignoreId &&
-    payerRangesOverlap(candidate.validFrom ?? null, candidate.validTo ?? null, e.validFrom ?? null, e.validTo ?? null),
-  );
-  if (conflict) {
-    throw new ConflictError("Primär betalare överlappar med befintlig period för detta objekt");
-  }
-}
-
-app.get("/api/objects/:objectId/payers", asyncHandler(async (req, res) => {
-    const tenantId = getTenantIdWithFallback(req);
-    if (!await verifyObjectTenant(req.params.objectId, tenantId)) {
-      throw new ForbiddenError("Åtkomst nekad");
-    }
-    const payers = await storage.getObjectPayers(req.params.objectId);
-    res.json(payers);
-}));
-
-app.post("/api/objects/:objectId/payers", requireAdmin, asyncHandler(async (req, res) => {
-    const tenantId = getTenantIdWithFallback(req);
-    if (!await verifyObjectTenant(req.params.objectId, tenantId)) {
-      throw new ForbiddenError("Åtkomst nekad");
-    }
-    const body = { ...req.body };
-    if (typeof body.validFrom === "string") body.validFrom = new Date(body.validFrom);
-    if (typeof body.validTo === "string") body.validTo = new Date(body.validTo);
-    if (body.validFrom === "" || body.validFrom === null) body.validFrom = null;
-    if (body.validTo === "" || body.validTo === null) body.validTo = null;
-    const data = insertObjectPayerSchema.parse({
-      ...body,
-      tenantId,
-      objectId: req.params.objectId,
-    });
-    if (data.validFrom && data.validTo && new Date(data.validFrom).getTime() > new Date(data.validTo).getTime()) {
-      throw new ValidationError("Från-datum får inte vara efter Till-datum");
-    }
-    await assertNoPrimaryOverlap(tenantId, req.params.objectId, {
-      isPrimary: data.isPrimary ?? (data.payerType === "primary"),
-      validFrom: data.validFrom ?? null,
-      validTo: data.validTo ?? null,
-    });
-    const payer = await storage.createObjectPayer(data);
-    res.status(201).json(payer);
-}));
-
-app.patch("/api/objects/:objectId/payers/:id", requireAdmin, asyncHandler(async (req, res) => {
-    const tenantId = getTenantIdWithFallback(req);
-    if (!await verifyObjectTenant(req.params.objectId, tenantId)) {
-      throw new ForbiddenError("Åtkomst nekad");
-    }
-    const updateSchema = z.object({
-      customerId: z.string().optional(),
-      payerType: z.string().optional(),
-      isPrimary: z.boolean().optional(),
-      payerLabel: z.string().nullable().optional(),
-      sharePercent: z.number().optional(),
-      articleTypes: z.array(z.string()).optional(),
-      priority: z.number().optional(),
-      validFrom: z.string().nullable().optional().transform(v => v ? new Date(v) : null),
-      validTo: z.string().nullable().optional().transform(v => v ? new Date(v) : null),
-      invoiceReference: z.string().nullable().optional(),
-      fortnoxCustomerId: z.string().nullable().optional(),
-      notes: z.string().nullable().optional(),
-    });
-    const updateData = updateSchema.parse(req.body);
-    if (updateData.validFrom && updateData.validTo && updateData.validFrom.getTime() > updateData.validTo.getTime()) {
-      throw new ValidationError("Från-datum får inte vara efter Till-datum");
-    }
-    // Slå ihop befintliga värden med inkommande för att avgöra om resultatet skulle
-    // bli en överlappande primary-rad.
-    const [existing] = await db.select().from(objectPayers).where(and(
-      eq(objectPayers.id, req.params.id),
-      eq(objectPayers.objectId, req.params.objectId),
-      eq(objectPayers.tenantId, tenantId),
-    ));
-    if (!existing) throw new NotFoundError("Betalare hittades inte eller tillhör inte detta objekt");
-    const merged = {
-      isPrimary: updateData.isPrimary ?? existing.isPrimary,
-      validFrom: updateData.validFrom !== undefined ? updateData.validFrom : existing.validFrom,
-      validTo: updateData.validTo !== undefined ? updateData.validTo : existing.validTo,
-    };
-    await assertNoPrimaryOverlap(tenantId, req.params.objectId, merged, req.params.id);
-    const payer = await storage.updateObjectPayer(req.params.id, req.params.objectId, tenantId, updateData);
-    if (!payer) throw new NotFoundError("Betalare hittades inte eller tillhör inte detta objekt");
-    res.json(payer);
-}));
-
-app.delete("/api/objects/:objectId/payers/:id", requireAdmin, asyncHandler(async (req, res) => {
-    const tenantId = getTenantIdWithFallback(req);
-    if (!await verifyObjectTenant(req.params.objectId, tenantId)) {
-      throw new ForbiddenError("Åtkomst nekad");
-    }
-    await storage.deleteObjectPayer(req.params.id, req.params.objectId, tenantId);
-    res.status(204).send();
-}));
-
-// "Avsluta" en betalare = sätt validTo till nu istället för hard-delete.
-app.post("/api/objects/:objectId/payers/:id/end", requireAdmin, asyncHandler(async (req, res) => {
-    const tenantId = getTenantIdWithFallback(req);
-    if (!await verifyObjectTenant(req.params.objectId, tenantId)) {
-      throw new ForbiddenError("Åtkomst nekad");
-    }
-    const endAt = req.body?.endAt ? new Date(req.body.endAt) : new Date();
-    if (isNaN(endAt.getTime())) throw new ValidationError("Ogiltigt slutdatum");
-    const payer = await storage.updateObjectPayer(req.params.id, req.params.objectId, tenantId, { validTo: endAt });
-    if (!payer) throw new NotFoundError("Betalare hittades inte eller tillhör inte detta objekt");
-    res.json(payer);
-}));
-
 // ============== BILLING CUSTOMER SELECTION ==============
+// Etapp 5: en (1) kund per objekt, härledd ur Ekonomi-metadatat 'Kund'
+// (arvs-medvetet). Multi-payer-split är borttagen med object_payers.
 app.get("/api/objects/:objectId/billing-customers", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     if (!await verifyObjectTenant(req.params.objectId, tenantId)) {
       throw new ForbiddenError("Åtkomst nekad");
     }
-    const payers = await storage.getObjectPayers(req.params.objectId);
-    if (payers.length <= 1) {
-      const obj = await storage.getObject(req.params.objectId);
-      res.json({ multiPayer: false, defaultCustomerId: obj?.customerId || payers[0]?.customerId || null, payers });
-    } else {
-      const primaryPayer = payers.find(p => p.isPrimary);
-      res.json({
-        multiPayer: true,
-        defaultCustomerId: primaryPayer?.customerId || payers[0]?.customerId || null,
-        payers,
-      });
-    }
+    const { getObjectPrimaryCustomerId } = await import("../services/object-customer");
+    const customerId = await getObjectPrimaryCustomerId(req.params.objectId);
+    res.json({ multiPayer: false, defaultCustomerId: customerId ?? null, payers: [] });
 }));
 
 // ============== POLYLINE DATA ==============
@@ -2698,18 +2565,8 @@ function pointInPolygon(point: [number, number], polygon: [number, number][]): b
 // ============================================
 app.get("/api/route-feedback", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
-    const { resourceId, startDate, endDate, limit: limitStr, clusterId } = req.query as Record<string, string>;
+    const { resourceId, startDate, endDate, limit: limitStr } = req.query as Record<string, string>;
     const parsedLimit = limitStr ? Math.min(Math.max(parseInt(limitStr) || 50, 1), 200) : undefined;
-
-    let filteredResourceIds: string[] | undefined;
-    if (clusterId) {
-      const clusterObjects = await storage.getClusterObjects(clusterId);
-      const clusterOrders = await storage.getWorkOrders(tenantId);
-      const objectIds = new Set(clusterObjects.map(o => o.id));
-      filteredResourceIds = [...new Set(
-        clusterOrders.filter(o => o.objectId && objectIds.has(o.objectId) && o.resourceId).map(o => o.resourceId!)
-      )];
-    }
 
     const feedback = await storage.getRouteFeedback(tenantId, {
       resourceId: resourceId || undefined,
@@ -2718,13 +2575,9 @@ app.get("/api/route-feedback", asyncHandler(async (req, res) => {
       limit: parsedLimit,
     });
 
-    const filtered = filteredResourceIds
-      ? feedback.filter(f => filteredResourceIds!.includes(f.resourceId))
-      : feedback;
-
     const resources = await storage.getResources(tenantId);
     const resourceMap = new Map(resources.map(r => [r.id, r.name]));
-    const enriched = filtered.map(f => ({
+    const enriched = feedback.map(f => ({
       ...f,
       resourceName: resourceMap.get(f.resourceId) || f.resourceId,
     }));
@@ -2733,22 +2586,11 @@ app.get("/api/route-feedback", asyncHandler(async (req, res) => {
 
 app.get("/api/route-feedback/summary", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
-    const { startDate, endDate, clusterId } = req.query as Record<string, string>;
-
-    let areaResourceIds: string[] | undefined;
-    if (clusterId) {
-      const clusterObjects = await storage.getClusterObjects(clusterId);
-      const clusterOrders = await storage.getWorkOrders(tenantId);
-      const objectIds = new Set(clusterObjects.map(o => o.id));
-      areaResourceIds = [...new Set(
-        clusterOrders.filter(o => o.objectId && objectIds.has(o.objectId) && o.resourceId).map(o => o.resourceId!)
-      )];
-    }
+    const { startDate, endDate } = req.query as Record<string, string>;
 
     const summary = await storage.getRouteFeedbackSummary(tenantId, {
       startDate: startDate || undefined,
       endDate: endDate || undefined,
-      resourceIds: areaResourceIds,
     });
 
     const resources = await storage.getResources(tenantId);
@@ -3112,7 +2954,12 @@ app.post("/api/reports/sales-intelligence", requireAdmin, asyncHandler(async (re
     const metadataNoOrderIds = [...objectIdsWithMetadata].filter(id => !orderObjectIds.has(id));
     const objectMetadataGaps: ObjectMetadataGap[] = [];
     if (metadataNoOrderIds.length > 0) {
-      const gapObjectRows = await db.select()
+      const gapObjectRows = await db.select({
+          id: objects.id,
+          name: objects.name,
+          objectNumber: objects.objectNumber,
+          customerId: primaryPayerCustomerIdSql(),
+        })
         .from(objects)
         .where(and(eq(objects.tenantId, tenantId), inArray(objects.id, metadataNoOrderIds.slice(0, 50))));
       const customerNameMap = new Map(customers.map(c => [c.id, c.name]));
@@ -3121,7 +2968,7 @@ app.post("/api/reports/sales-intelligence", requireAdmin, asyncHandler(async (re
         objectMetadataGaps.push({
           objectName: obj.name,
           objectNumber: obj.objectNumber,
-          customerName: customerNameMap.get(obj.customerId) || "Okänd",
+          customerName: (obj.customerId ? customerNameMap.get(obj.customerId) : undefined) || "Okänd",
           metadataCount: metaCountMap.get(obj.id) || 0,
           hasOrders: false,
         });

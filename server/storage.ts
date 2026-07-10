@@ -32,7 +32,6 @@ import {
   type Team, type InsertTeam, type TaskType,
   type TeamMember, type InsertTeamMember,
   type PlanningParameter, type InsertPlanningParameter,
-  type Cluster, type InsertCluster,
   type ResourcePosition, type InsertResourcePosition,
   type OrderStatus,
   type BrandingTemplate, type InsertBrandingTemplate,
@@ -42,19 +41,13 @@ import {
   type IndustryPackage, type InsertIndustryPackage,
   type IndustryPackageData, type InsertIndustryPackageData,
   type TenantPackageInstallation, type InsertTenantPackageInstallation,
-  type ObjectPayer, type InsertObjectPayer,
   type FortnoxConfig, type InsertFortnoxConfig,
   type FortnoxMapping, type InsertFortnoxMapping,
   type FortnoxInvoiceExport, type InsertFortnoxInvoiceExport,
   type ManualInvoiceLine, type InsertManualInvoiceLine,
-  type ObjectImage, type InsertObjectImage,
-  type ObjectVignette, type InsertObjectVignette,
-  objectVignettes,
-  type ObjectContact, type InsertObjectContact,
   type TaskDesiredTimewindow, type InsertTaskDesiredTimewindow,
   type TaskDependency, type InsertTaskDependency,
   type TaskInformation, type InsertTaskInformation,
-  type ObjectTimeRestriction, type InsertObjectTimeRestriction,
   type StructuralArticle, type InsertStructuralArticle,
   type OrderConcept, type InsertOrderConcept,
   type ConceptFilter, type InsertConceptFilter,
@@ -128,12 +121,11 @@ import {
   users, tenants, customers, customerRelationships, objects, resources, workOrders, setupTimeLogs, procurements,
   articles, articleTypeDefinitions, executionCodeDefinitions, timeCodeDefinitions, iconDefinitions, priceLists, priceListArticles, resourceArticles, workOrderLines, simulationScenarios,
   vehicles, equipment, resourceVehicles, resourceEquipment, resourceAvailability,
-  vehicleSchedule, subscriptions, teams, teamMembers, taskTypes, planningParameters, clusters,
+  vehicleSchedule, subscriptions, teams, teamMembers, taskTypes, planningParameters,
   resourcePositions,
   brandingTemplates, tenantBranding, userTenantRoles, auditLogs,
   industryPackages, industryPackageData, tenantPackageInstallations,
-  objectPayers,
-  objectImages, objectContacts, taskDesiredTimewindows, taskDependencies, taskInformation, objectTimeRestrictions, structuralArticles,
+  taskDesiredTimewindows, taskDependencies, taskInformation, structuralArticles,
   orderConcepts, conceptFilters, plannerSearchFilters, articleComponents, invoiceRecalculationLog, assignments, assignmentArticles, subscriptionChanges,
   productionTimeLists, suppliers, supplierArticleLinks,
   type ProductionTimeList, type InsertProductionTimeList,
@@ -189,17 +181,20 @@ function asExecuteResult(r: unknown): ExecuteResult {
 }
 import {
   primaryPayerCustomerIdSql,
+  primaryPayerCustomerIdSqlFor,
   objectHasPrimaryCustomerSql,
   objectPrimaryCustomerInSql,
   objectHasNoPrimaryCustomerSql,
   objectHasLinkedTaskSql,
+  getObjectPrimaryCustomerId,
   type LinkedTaskFilter,
 } from "./services/object-customer";
+import { objectMetadataTextValueSql } from "./services/object-metadata-sql";
 
 /**
  * Returnerar en Drizzle "select-shape" för objects där `customerId` är
- * överlagrat med primär-payer-customer_id (från object_payers) istället
- * för den legacy-kolumn `objects.customer_id` som är på väg ut.
+ * överlagrat med primär-payer-customer_id (härlett ur Ekonomi-metadatat
+ * "Kund") istället för den legacy-kolumn `objects.customer_id` som är borta.
  *
  * Använd som `db.select(objectColumnsWithPrimaryCustomer()).from(objects)...`.
  */
@@ -230,7 +225,7 @@ import {
   extractDisplayValue as extractMetaDisplayValue,
   type HookObjectContext,
 } from "./association-service";
-import { getObjectWithAllMetadata } from "./metadata-queries";
+import { getObjectWithAllMetadata, getObjectAtkomstFields } from "./metadata-queries";
 import { buildUppgiftspaket } from "./services/uppgiftspaket";
 import type { InsertAssignment as InsertAssignmentType } from "@shared/schema";
 import { haversineDistanceKm } from "./distance-matrix-service";
@@ -257,10 +252,8 @@ export interface CustomerTreeNode {
   id: string;
   name: string;
   parentId: string | null;
-  clusterId: string | null;
   hierarchyLevel: string | null;
   address: string | null;
-  accessInfoInherited: boolean | null;
   hasCoords: boolean;
   childCount: number;
 }
@@ -272,7 +265,6 @@ export interface CustomerMapPoint {
   latitude: number;
   longitude: number;
   hierarchyLevel: string | null;
-  clusterId: string | null;
 }
 
 export interface CustomerObjectSearchHit {
@@ -281,7 +273,6 @@ export interface CustomerObjectSearchHit {
   objectNumber: string | null;
   address: string | null;
   hierarchyLevel: string | null;
-  clusterId: string | null;
   parentId: string | null;
   path: Array<{ id: string; name: string; hierarchyLevel: string | null }>;
 }
@@ -414,8 +405,8 @@ export interface IStorage {
   getCustomersPaginated(tenantId: string, limit: number, offset: number, search?: string, filters?: { hierarchyType?: string | "none"; rootsOnly?: boolean }): Promise<{ customers: Customer[]; total: number }>;
   getCustomersByIds(tenantId: string, ids: string[]): Promise<Customer[]>;
   getCustomer(id: string): Promise<Customer | undefined>;
-  getCustomerAggregates(tenantId: string, customerIds?: string[]): Promise<Array<{ customerId: string; clusterCount: number; objectCount: number; activeOrders: number }>>;
-  getCustomerTotals(tenantId: string): Promise<{ customerCount: number; clusterCount: number; objectCount: number; activeOrders: number }>;
+  getCustomerAggregates(tenantId: string, customerIds?: string[]): Promise<Array<{ customerId: string; objectCount: number; activeOrders: number }>>;
+  getCustomerTotals(tenantId: string): Promise<{ customerCount: number; objectCount: number; activeOrders: number }>;
   getCustomerStats(tenantId: string, customerId: string): Promise<{
     objectsByLevel: Record<string, number>;
     totalObjects: number;
@@ -425,10 +416,6 @@ export interface IStorage {
     totalOrders: number;
     activeSubscriptions: number;
     invoicedLast12Months: number;
-    clusters: Array<{
-      id: string; name: string; color: string | null; status: string; objectCount: number;
-      centerLatitude: number | null; centerLongitude: number | null; radiusKm: number | null;
-    }>;
   }>;
   createCustomer(customer: InsertCustomer): Promise<Customer>;
   resolveInternalCustomer(tenantId: string): Promise<Customer>;
@@ -479,7 +466,7 @@ export interface IStorage {
   
   /** Föredragen API: hämtar samtliga objekt för en tenant. */
   getObjects(tenantId: string): Promise<ServiceObject[]>;
-  getObjectsPaginated(tenantId: string, limit: number, offset: number, search?: string, customerIds?: string[], filters?: { objectType?: string; hierarchyLevel?: string; isInterimObject?: boolean; issue?: string; clusterId?: string; reported?: boolean; locationType?: string; linkedTask?: LinkedTaskFilter }): Promise<{ objects: ServiceObject[]; total: number }>;
+  getObjectsPaginated(tenantId: string, limit: number, offset: number, search?: string, customerIds?: string[], filters?: { objectType?: string; hierarchyLevel?: string; isInterimObject?: boolean; issue?: string; reported?: boolean; locationType?: string; linkedTask?: LinkedTaskFilter }): Promise<{ objects: ServiceObject[]; total: number }>;
   getObjectsByIds(tenantId: string, ids: string[]): Promise<ServiceObject[]>;
   getObjectsWithIssues(tenantId: string, options?: { issueType?: string; status?: string; customerId?: string; limit?: number }): Promise<{
     totalObjectsWithIssues: number;
@@ -496,20 +483,15 @@ export interface IStorage {
   getObject(id: string): Promise<ServiceObject | undefined>;
   getObjectByObjectNumber(tenantId: string, objectNumber: string): Promise<ServiceObject | undefined>;
   getObjectsByCustomer(customerId: string, tenantId?: string): Promise<ServiceObject[]>;
-  getCustomerObjectTreeRoots(customerId: string, tenantId: string, clusterId?: string | null): Promise<CustomerTreeNode[]>;
+  getCustomerObjectTreeRoots(customerId: string, tenantId: string): Promise<CustomerTreeNode[]>;
   getCustomerObjectTreeChildren(customerId: string, tenantId: string, parentId: string): Promise<CustomerTreeNode[]>;
-  getCustomerObjectMapPoints(customerId: string, tenantId: string, opts?: { bbox?: [number, number, number, number]; clusterId?: string | null; limit?: number }): Promise<CustomerMapPoint[]>;
+  getCustomerObjectMapPoints(customerId: string, tenantId: string, opts?: { bbox?: [number, number, number, number]; limit?: number }): Promise<CustomerMapPoint[]>;
   searchCustomerObjects(customerId: string, tenantId: string, query: string, limit?: number): Promise<CustomerObjectSearchHit[]>;
   searchObjectsForParent(tenantId: string, query: string, opts?: { excludeObjectId?: string; limit?: number }): Promise<ObjectParentSearchHit[]>;
-  getCustomerObjectMapData(customerId: string, tenantId: string, opts: { bbox?: [number, number, number, number]; clusterId?: string | null; zoom: number; limit?: number }): Promise<CustomerMapData>;
+  getCustomerObjectMapData(customerId: string, tenantId: string, opts: { bbox?: [number, number, number, number]; zoom: number; limit?: number }): Promise<CustomerMapData>;
   createObject(object: InsertObject, tx?: DbTransaction): Promise<ServiceObject>;
   updateObject(id: string, object: Partial<InsertObject>): Promise<ServiceObject | undefined>;
   deleteObject(id: string): Promise<void>;
-  resolveDeliveryPreferences(objectId: string): Promise<{
-    effective: DeliveryPreferences;
-    source: "object" | "none";
-  }>;
-  
   getResources(tenantId: string): Promise<Resource[]>;
   getResourcesPaginated(tenantId: string, limit: number, offset: number, search?: string): Promise<{ resources: Resource[]; total: number }>;
   getResource(id: string): Promise<Resource | undefined>;
@@ -736,25 +718,6 @@ export interface IStorage {
   // Recalculate work order totals for many orders at once
   recalculateWorkOrderTotalsBulk(workOrderIds: string[]): Promise<{ recalculated: number; changed: number }>;
   
-  // Clusters - navet i verksamheten
-  getClusters(tenantId: string): Promise<Cluster[]>;
-  getCluster(id: string): Promise<Cluster | undefined>;
-  getClusterWithStats(id: string): Promise<Cluster & { 
-    objectCount: number; 
-    activeOrders: number; 
-    monthlyValue: number;
-    avgSetupTime: number;
-  } | undefined>;
-  createCluster(cluster: InsertCluster): Promise<Cluster>;
-  updateCluster(id: string, cluster: Partial<InsertCluster>): Promise<Cluster | undefined>;
-  deleteCluster(id: string): Promise<void>;
-  
-  // Cluster aggregations
-  getClusterObjects(clusterId: string): Promise<ServiceObject[]>;
-  getClusterWorkOrders(clusterId: string, options?: { startDate?: Date; endDate?: Date }): Promise<WorkOrder[]>;
-  getClusterSubscriptions(clusterId: string): Promise<Subscription[]>;
-  updateClusterCaches(clusterId: string): Promise<Cluster | undefined>;
-  
   // System Dashboard - Branding Templates
   getBrandingTemplates(): Promise<BrandingTemplate[]>;
   getBrandingTemplate(id: string): Promise<BrandingTemplate | undefined>;
@@ -801,13 +764,6 @@ export interface IStorage {
   getActiveResourcePositions(tenantId: string): Promise<Resource[]>;
   getAllActiveResourcePositions(): Promise<Resource[]>;
   
-  // Object Payers
-  getObjectPayers(objectId: string): Promise<ObjectPayer[]>;
-  getObjectPayer(id: string): Promise<ObjectPayer | undefined>;
-  createObjectPayer(payer: InsertObjectPayer): Promise<ObjectPayer>;
-  updateObjectPayer(id: string, objectId: string, tenantId: string, data: Partial<InsertObjectPayer>): Promise<ObjectPayer | undefined>;
-  deleteObjectPayer(id: string, objectId: string, tenantId: string): Promise<void>;
-  
   // Fortnox Config
   getFortnoxConfig(tenantId: string): Promise<FortnoxConfig | undefined>;
   createFortnoxConfig(config: InsertFortnoxConfig): Promise<FortnoxConfig>;
@@ -846,27 +802,6 @@ export interface IStorage {
   updateManualInvoiceLine(id: string, tenantId: string, data: Partial<InsertManualInvoiceLine>): Promise<ManualInvoiceLine | undefined>;
   deleteManualInvoiceLine(id: string, tenantId: string): Promise<void>;
   
-  // Object Images
-  getObjectImages(objectId: string): Promise<ObjectImage[]>;
-  getObjectImage(id: string): Promise<ObjectImage | undefined>;
-  createObjectImage(image: InsertObjectImage): Promise<ObjectImage>;
-  deleteObjectImage(id: string, objectId: string, tenantId: string, opts?: { archivedBy?: string | null; archivedReason?: string | null }): Promise<void>;
-  restoreObjectImage(id: string, tenantId: string): Promise<ObjectImage | undefined>;
-  listArchivedObjectImages(tenantId: string): Promise<Array<ObjectImage & { objectName: string | null; objectNumber: string | null }>>;
-  // Vinjetbilder (task #580): aktuell + historik per objekt.
-  getObjectVignettes(tenantId: string, objectId: string): Promise<ObjectVignette[]>;
-  getCurrentObjectVignette(tenantId: string, objectId: string): Promise<ObjectVignette | undefined>;
-  replaceObjectVignette(input: InsertObjectVignette): Promise<ObjectVignette>;
-  
-  // Object Contacts (with inheritance support)
-  getObjectContacts(objectId: string): Promise<ObjectContact[]>;
-  getObjectContactsWithInheritance(objectId: string, tenantId: string): Promise<ObjectContact[]>;
-  createObjectContact(contact: InsertObjectContact): Promise<ObjectContact>;
-  updateObjectContact(id: string, objectId: string, tenantId: string, data: Partial<InsertObjectContact>): Promise<ObjectContact | undefined>;
-  deleteObjectContact(id: string, objectId: string, tenantId: string, opts?: { archivedBy?: string | null; archivedReason?: string | null }): Promise<void>;
-  restoreObjectContact(id: string, tenantId: string): Promise<ObjectContact | undefined>;
-  listArchivedObjectContacts(tenantId: string): Promise<Array<ObjectContact & { objectName: string | null; objectNumber: string | null }>>;
-  
   // Task Desired Timewindows
   getTaskTimewindows(workOrderId: string): Promise<TaskDesiredTimewindow[]>;
   getTaskTimewindowsBatch(workOrderIds: string[]): Promise<Record<string, TaskDesiredTimewindow[]>>;
@@ -890,13 +825,6 @@ export interface IStorage {
   updateTaskInformation(id: string, workOrderId: string, tenantId: string, data: Partial<InsertTaskInformation>): Promise<TaskInformation | undefined>;
   deleteTaskInformation(id: string, workOrderId: string, tenantId: string): Promise<void>;
   
-  // Object Time Restrictions (C9)
-  getObjectTimeRestrictions(objectId: string): Promise<ObjectTimeRestriction[]>;
-  getObjectTimeRestrictionsByTenant(tenantId: string): Promise<ObjectTimeRestriction[]>;
-  getObjectTimeRestrictionsByObjectIds(tenantId: string, objectIds: string[]): Promise<ObjectTimeRestriction[]>;
-  createObjectTimeRestriction(restriction: InsertObjectTimeRestriction): Promise<ObjectTimeRestriction>;
-  updateObjectTimeRestriction(id: string, tenantId: string, data: Partial<InsertObjectTimeRestriction>): Promise<ObjectTimeRestriction | undefined>;
-  deleteObjectTimeRestriction(id: string, tenantId: string): Promise<void>;
 
   // Structural Articles
   getStructuralArticles(tenantId: string): Promise<StructuralArticle[]>;
@@ -1379,6 +1307,8 @@ export interface IStorage {
   clearEngineSlotTimes(tenantId: string, source: string, opts: { assignmentIds?: string[]; windowStart?: Date; windowEnd?: Date }): Promise<number>;
   setSlotTimePlannerDecision(tenantId: string, opts: { assignmentIds?: string[]; assignmentGroupKey?: string; decision: string | null; decidedBy: string | null }): Promise<number>;
   getTenantGroupingRadiusMeters(tenantId: string): Promise<number | null>;
+  getCustomersDeliveryPreferences(customerIds: string[]): Promise<Map<string, unknown>>;
+  getObjectsPrimaryCustomerIds(objectIds: string[]): Promise<Map<string, string | null>>;
 
   // Pre-tasks
   getPreTasks(tenantId: string, opts?: { workOrderId?: string; status?: string }): Promise<PreTask[]>;
@@ -1466,8 +1396,8 @@ const ROUGH_UNPLANNED_SELECT = {
   objectName: objects.name,
   objectNameTranslations: objects.nameTranslations,
   objectAddress: objects.address,
-  objectAccessCode: objects.resolvedAccessCode,
-  objectKeyNumber: objects.resolvedKeyNumber,
+  objectAccessCode: objectMetadataTextValueSql("Åtkomstkod"),
+  objectKeyNumber: objectMetadataTextValueSql("Nyckelnummer"),
   objectLatitude: objects.latitude,
   objectLongitude: objects.longitude,
   customerName: customers.name,
@@ -1591,7 +1521,6 @@ export class DatabaseStorage implements IStorage {
       await bump("invitations.used_by", tx.update(invitations).set({ usedBy: null }).where(eq(invitations.usedBy, id)));
       await bump("audit_logs.user_id", tx.update(auditLogs).set({ userId: null }).where(eq(auditLogs.userId, id)));
       await bump("tenant_package_installations.installed_by", tx.update(tenantPackageInstallations).set({ installedBy: null }).where(eq(tenantPackageInstallations.installedBy, id)));
-      await bump("object_images.uploaded_by", tx.update(objectImages).set({ uploadedBy: null }).where(eq(objectImages.uploadedBy, id)));
       await bump("task_information.created_by", tx.update(taskInformation).set({ createdBy: null }).where(eq(taskInformation.createdBy, id)));
       await bump("order_concepts.created_by", tx.update(orderConcepts).set({ createdBy: null }).where(eq(orderConcepts.createdBy, id)));
       await bump("assignments.created_by", tx.update(assignments).set({ createdBy: null }).where(eq(assignments.createdBy, id)));
@@ -1654,7 +1583,6 @@ export class DatabaseStorage implements IStorage {
       countOne("customer_portal_messages.sender_user_id", sql`SELECT COUNT(*)::int AS count FROM customer_portal_messages WHERE sender_user_id = ${id}`),
       countOne("deviation_reports.reported_by", sql`SELECT COUNT(*)::int AS count FROM deviation_reports WHERE reported_by = ${id}`),
       countOne("qr_code_links.created_by", sql`SELECT COUNT(*)::int AS count FROM qr_code_links WHERE created_by = ${id}`),
-      countOne("object_images.uploaded_by", sql`SELECT COUNT(*)::int AS count FROM object_images WHERE uploaded_by = ${id}`),
       countOne("fortnox_contract_suggestions.reviewed_by", sql`SELECT COUNT(*)::int AS count FROM fortnox_contract_suggestions WHERE reviewed_by = ${id}`),
     ]);
     return impact;
@@ -1959,7 +1887,7 @@ export class DatabaseStorage implements IStorage {
       ));
   }
 
-  async getCustomerAggregates(tenantId: string, customerIds?: string[]): Promise<Array<{ customerId: string; clusterCount: number; objectCount: number; activeOrders: number }>> {
+  async getCustomerAggregates(tenantId: string, customerIds?: string[]): Promise<Array<{ customerId: string; objectCount: number; activeOrders: number }>> {
     if (customerIds && customerIds.length === 0) {
       return [];
     }
@@ -1969,31 +1897,19 @@ export class DatabaseStorage implements IStorage {
     const objIdFilter = customerIds && customerIds.length > 0
       ? sql` AND customer_id IN (${sql.join(customerIds.map(id => sql`${id}`), sql`, `)})`
       : sql``;
-    const opCustomerFilter = customerIds && customerIds.length > 0
-      ? sql` AND op.customer_id IN (${sql.join(customerIds.map(id => sql`${id}`), sql`, `)})`
-      : sql``;
-    const clusterIdFilter = customerIds && customerIds.length > 0
-      ? sql` AND root_customer_id IN (${sql.join(customerIds.map(id => sql`${id}`), sql`, `)})`
-      : sql``;
+    // Etapp 5: objektantal per kund härleds ur Ekonomi-metadatat ("Kund"),
+    // inte gamla object_payers-tabellen.
     const result = await db.execute(sql`
       SELECT
         c.id as customer_id,
-        COALESCE(cl.cluster_count, 0)::int as cluster_count,
         COALESCE(o.object_count, 0)::int as object_count,
         COALESCE(wo.active_orders, 0)::int as active_orders
       FROM customers c
       LEFT JOIN (
-        SELECT root_customer_id, COUNT(*) as cluster_count
-        FROM clusters
-        WHERE tenant_id = ${tenantId} AND deleted_at IS NULL AND root_customer_id IS NOT NULL${clusterIdFilter}
-        GROUP BY root_customer_id
-      ) cl ON cl.root_customer_id = c.id
-      LEFT JOIN (
-        SELECT op.customer_id, COUNT(*) as object_count
-        FROM object_payers op
-        JOIN objects o2 ON o2.id = op.object_id AND o2.deleted_at IS NULL
-        WHERE o2.tenant_id = ${tenantId} AND op.is_primary = true${opCustomerFilter}
-        GROUP BY op.customer_id
+        SELECT ${primaryPayerCustomerIdSqlFor(sql.raw('"objects"."id"'))} AS customer_id, COUNT(*) as object_count
+        FROM objects
+        WHERE tenant_id = ${tenantId} AND deleted_at IS NULL
+        GROUP BY 1
       ) o ON o.customer_id = c.id
       LEFT JOIN (
         SELECT customer_id, COUNT(*) as active_orders
@@ -2004,35 +1920,32 @@ export class DatabaseStorage implements IStorage {
       ) wo ON wo.customer_id = c.id
       WHERE c.tenant_id = ${tenantId} AND c.deleted_at IS NULL${idFilter}
     `);
-    interface AggRow { customer_id: string; cluster_count: number; object_count: number; active_orders: number }
+    interface AggRow { customer_id: string; object_count: number; active_orders: number }
     return (result.rows as AggRow[]).map(r => ({
       customerId: r.customer_id,
-      clusterCount: Number(r.cluster_count) || 0,
       objectCount: Number(r.object_count) || 0,
       activeOrders: Number(r.active_orders) || 0,
     }));
   }
 
-  async getCustomerTotals(tenantId: string): Promise<{ customerCount: number; clusterCount: number; objectCount: number; activeOrders: number }> {
+  async getCustomerTotals(tenantId: string): Promise<{ customerCount: number; objectCount: number; activeOrders: number }> {
     const result = await db.execute(sql`
       SELECT
         (SELECT COUNT(*)::int FROM customers WHERE tenant_id = ${tenantId} AND deleted_at IS NULL) as customer_count,
-        (SELECT COUNT(*)::int FROM clusters WHERE tenant_id = ${tenantId} AND deleted_at IS NULL AND root_customer_id IS NOT NULL) as cluster_count,
         (SELECT COUNT(*)::int FROM objects WHERE tenant_id = ${tenantId} AND deleted_at IS NULL) as object_count,
         (SELECT COUNT(*)::int FROM work_orders WHERE tenant_id = ${tenantId} AND deleted_at IS NULL AND order_status NOT IN ('utford', 'fakturerad')) as active_orders
     `);
-    interface TotalsRow { customer_count: number; cluster_count: number; object_count: number; active_orders: number }
+    interface TotalsRow { customer_count: number; object_count: number; active_orders: number }
     const row = (result.rows as TotalsRow[])[0];
     return {
       customerCount: Number(row?.customer_count) || 0,
-      clusterCount: Number(row?.cluster_count) || 0,
       objectCount: Number(row?.object_count) || 0,
       activeOrders: Number(row?.active_orders) || 0,
     };
   }
 
   async getCustomerStats(tenantId: string, customerId: string) {
-    // Kundkoppling läses via object_payers (primary), inte legacy
+    // Kundkoppling läses via Ekonomi-metadatat "Kund", inte legacy
     // objects.customer_id — ADR v3. Snöret/KPI på kundöversikten aggregeras över
     // HELA kund-hierarkin (kund + ättlingar) så att en koncern visar rollup av
     // alla regioners/lokalers objekt, ordrar och abonnemang. Leaf-kund (inga
@@ -2040,14 +1953,10 @@ export class DatabaseStorage implements IStorage {
     const descendants = await this.getCustomerDescendants(tenantId, customerId);
     const customerIds = [customerId, ...descendants];
     const customerIdList = sql.join(customerIds.map((id) => sql`${id}`), sql`, `);
-    const objectIsForCustomerSql = sql`EXISTS (
-      SELECT 1 FROM object_payers op
-      WHERE op.object_id = objects.id
-        AND op.tenant_id = ${tenantId}
-        AND op.is_primary = true
-        AND op.customer_id IN (${customerIdList})
-    )`;
-    const [levelsRes, ordersRes, subsRes, invoicedRes, clusterRes] = await Promise.all([
+    // Etapp 5: kundkopplingen härleds ur Ekonomi-metadatat ("Kund"), inte
+    // gamla object_payers-tabellen.
+    const objectIsForCustomerSql = sql`(${primaryPayerCustomerIdSqlFor(sql.raw('"objects"."id"'))} IN (${customerIdList}))`;
+    const [levelsRes, ordersRes, subsRes, invoicedRes] = await Promise.all([
       db.execute(sql`
         SELECT COALESCE(hierarchy_level, 'fastighet') as level, COUNT(*)::int as count
         FROM objects
@@ -2076,30 +1985,12 @@ export class DatabaseStorage implements IStorage {
           AND order_status = 'fakturerad'
           AND scheduled_date >= NOW() - INTERVAL '12 months'
       `),
-      db.execute(sql`
-        SELECT cl.id, cl.name, cl.color, cl.status,
-          cl.center_latitude, cl.center_longitude, cl.radius_km,
-          COALESCE(oc.object_count, 0)::int as object_count
-        FROM clusters cl
-        LEFT JOIN (
-          SELECT cluster_id, COUNT(*) as object_count
-          FROM objects
-          WHERE tenant_id = ${tenantId} AND ${objectIsForCustomerSql} AND deleted_at IS NULL
-          GROUP BY cluster_id
-        ) oc ON oc.cluster_id = cl.id
-        WHERE cl.tenant_id = ${tenantId} AND cl.deleted_at IS NULL AND cl.root_customer_id IN (${customerIdList})
-        ORDER BY cl.name
-      `),
     ]);
 
     interface LevelRow { level: string; count: number }
     interface OrdersRow { active_orders: number; completed_orders: number; invoiced_orders: number; total_orders: number }
     interface SubsRow { active_subscriptions: number }
     interface InvRow { invoiced_total: string | number }
-    interface ClusterRow {
-      id: string; name: string; color: string | null; status: string; object_count: number;
-      center_latitude: number | null; center_longitude: number | null; radius_km: number | null;
-    }
 
     const objectsByLevel: Record<string, number> = {};
     for (const r of levelsRes.rows as LevelRow[]) {
@@ -2108,16 +1999,6 @@ export class DatabaseStorage implements IStorage {
     const orders = (ordersRes.rows as OrdersRow[])[0] || { active_orders: 0, completed_orders: 0, invoiced_orders: 0, total_orders: 0 };
     const subs = (subsRes.rows as SubsRow[])[0] || { active_subscriptions: 0 };
     const inv = (invoicedRes.rows as InvRow[])[0] || { invoiced_total: 0 };
-    const clustersData = (clusterRes.rows as ClusterRow[]).map(r => ({
-      id: r.id,
-      name: r.name,
-      color: r.color,
-      status: r.status,
-      objectCount: Number(r.object_count) || 0,
-      centerLatitude: r.center_latitude !== null ? Number(r.center_latitude) : null,
-      centerLongitude: r.center_longitude !== null ? Number(r.center_longitude) : null,
-      radiusKm: r.radius_km !== null ? Number(r.radius_km) : null,
-    }));
     const totalObjects = Object.values(objectsByLevel).reduce((a, b) => a + b, 0);
 
     return {
@@ -2129,7 +2010,6 @@ export class DatabaseStorage implements IStorage {
       totalOrders: Number(orders.total_orders) || 0,
       activeSubscriptions: Number(subs.active_subscriptions) || 0,
       invoicedLast12Months: Number(inv.invoiced_total) || 0,
-      clusters: clustersData,
     };
   }
 
@@ -2294,12 +2174,14 @@ export class DatabaseStorage implements IStorage {
         WHERE c.tenant_id = ${tenantId} AND c.deleted_at IS NULL AND s.depth < 32
       ),
       obj_stats AS (
-        SELECT op.customer_id, COUNT(*)::int as object_count
-        FROM object_payers op
-        JOIN objects o ON o.id = op.object_id AND o.deleted_at IS NULL
-        WHERE o.tenant_id = ${tenantId} AND op.is_primary = true
-          AND op.customer_id IN (SELECT cid FROM subtree)
-        GROUP BY op.customer_id
+        SELECT k.customer_id, COUNT(*)::int as object_count
+        FROM (
+          SELECT ${primaryPayerCustomerIdSqlFor(sql.raw('o.id'))} AS customer_id
+          FROM objects o
+          WHERE o.tenant_id = ${tenantId} AND o.deleted_at IS NULL
+        ) k
+        WHERE k.customer_id IN (SELECT cid FROM subtree)
+        GROUP BY k.customer_id
       ),
       wo_stats AS (
         SELECT customer_id,
@@ -2458,7 +2340,7 @@ export class DatabaseStorage implements IStorage {
     return db.select(objectColumnsWithPrimaryCustomer()).from(objects).where(and(eq(objects.tenantId, tenantId), isNull(objects.deletedAt)));
   }
 
-  async getObjectsPaginated(tenantId: string, limit: number, offset: number, search?: string, customerIds?: string[], filters?: { objectType?: string; hierarchyLevel?: string; isInterimObject?: boolean; issue?: string; clusterId?: string; reported?: boolean; locationType?: string; linkedTask?: LinkedTaskFilter }): Promise<{ objects: ServiceObject[]; total: number }> {
+  async getObjectsPaginated(tenantId: string, limit: number, offset: number, search?: string, customerIds?: string[], filters?: { objectType?: string; hierarchyLevel?: string; isInterimObject?: boolean; issue?: string; reported?: boolean; locationType?: string; linkedTask?: LinkedTaskFilter }): Promise<{ objects: ServiceObject[]; total: number }> {
     const { sql, count } = await import("drizzle-orm");
     
     let whereConditions = and(eq(objects.tenantId, tenantId), isNull(objects.deletedAt));
@@ -2483,9 +2365,6 @@ export class DatabaseStorage implements IStorage {
       whereConditions = and(whereConditions, eq(objects.isInterimObject, filters.isInterimObject));
     }
 
-    if (filters?.clusterId) {
-      whereConditions = and(whereConditions, eq(objects.clusterId, filters.clusterId));
-    }
 
     // Task #990: platstyp-filter. Måste spegla resolveEffectiveObjectLocationType
     // exakt — explicit kolumnvärde vinner, annars härleds typen för legacy-rader
@@ -2582,10 +2461,7 @@ export class DatabaseStorage implements IStorage {
     const statusFilter = status ? sql` AND dr.status = ${status}` : sql``;
     const issueTypeFilter = issueType ? sql` AND COALESCE(dr.category, 'other') = ${issueType}` : sql``;
     const customerFilter = customerId
-      ? sql` AND EXISTS (
-          SELECT 1 FROM object_payers op
-          WHERE op.object_id = o.id AND op.is_primary = true AND op.customer_id = ${customerId}
-        )`
+      ? sql` AND (${primaryPayerCustomerIdSqlFor(sql.raw('o.id'))} = ${customerId})`
       : sql``;
 
     // Aggregate per (object, category) using a single SQL query.
@@ -2720,7 +2596,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getObjectsByCustomer(customerId: string, tenantId?: string): Promise<ServiceObject[]> {
-    // Källan för "tillhör kund X" är object_payers (primary), inte legacy
+    // Källan för "tillhör kund X" är Ekonomi-metadatat "Kund", inte legacy
     // objects.customer_id. tenantId krävs egentligen för att garantera
     // tenant-isolation; vi tar ändå emot den som optional för bakåtkomp.
     const conditions = [objectHasPrimaryCustomerSql(customerId), isNull(objects.deletedAt)];
@@ -2728,42 +2604,30 @@ export class DatabaseStorage implements IStorage {
     return db.select(objectColumnsWithPrimaryCustomer()).from(objects).where(and(...conditions));
   }
 
-  async getCustomerObjectTreeRoots(customerId: string, tenantId: string, clusterId?: string | null): Promise<CustomerTreeNode[]> {
-    const clusterFilter = clusterId === undefined
-      ? sql``
-      : clusterId === null
-      ? sql`AND o.cluster_id IS NULL`
-      : sql`AND o.cluster_id = ${clusterId}`;
+  async getCustomerObjectTreeRoots(customerId: string, tenantId: string): Promise<CustomerTreeNode[]> {
     const result = await db.execute(sql`
       SELECT
         o.id,
         o.name,
         o.parent_id AS "parentId",
-        o.cluster_id AS "clusterId",
         o.hierarchy_level AS "hierarchyLevel",
         o.address,
-        o.access_info_inherited AS "accessInfoInherited",
         (o.latitude IS NOT NULL AND o.longitude IS NOT NULL) AS "hasCoords",
         (
           SELECT COUNT(*)::int FROM objects c
           WHERE c.parent_id = o.id AND c.deleted_at IS NULL
         ) AS "childCount"
       FROM objects o
-      WHERE EXISTS (
-          SELECT 1 FROM object_payers op
-          WHERE op.object_id = o.id AND op.is_primary = true AND op.customer_id = ${customerId}
-        )
+      WHERE (${primaryPayerCustomerIdSqlFor(sql.raw('o.id'))} = ${customerId})
         AND o.tenant_id = ${tenantId}
         AND o.deleted_at IS NULL
-        ${clusterFilter}
         AND (
           o.parent_id IS NULL
           OR NOT EXISTS (
             SELECT 1 FROM objects p
-            JOIN object_payers pp ON pp.object_id = p.id AND pp.is_primary = true
             WHERE p.id = o.parent_id
-              AND pp.customer_id = ${customerId}
               AND p.deleted_at IS NULL
+              AND ${primaryPayerCustomerIdSqlFor(sql.raw('p.id'))} = ${customerId}
           )
         )
       ORDER BY o.name
@@ -2777,10 +2641,8 @@ export class DatabaseStorage implements IStorage {
         o.id,
         o.name,
         o.parent_id AS "parentId",
-        o.cluster_id AS "clusterId",
         o.hierarchy_level AS "hierarchyLevel",
         o.address,
-        o.access_info_inherited AS "accessInfoInherited",
         (o.latitude IS NOT NULL AND o.longitude IS NOT NULL) AS "hasCoords",
         (
           SELECT COUNT(*)::int FROM objects c
@@ -2788,10 +2650,7 @@ export class DatabaseStorage implements IStorage {
         ) AS "childCount"
       FROM objects o
       WHERE o.parent_id = ${parentId}
-        AND EXISTS (
-          SELECT 1 FROM object_payers op
-          WHERE op.object_id = o.id AND op.is_primary = true AND op.customer_id = ${customerId}
-        )
+        AND (${primaryPayerCustomerIdSqlFor(sql.raw('o.id'))} = ${customerId})
         AND o.tenant_id = ${tenantId}
         AND o.deleted_at IS NULL
       ORDER BY o.name
@@ -2802,17 +2661,12 @@ export class DatabaseStorage implements IStorage {
   async getCustomerObjectMapPoints(
     customerId: string,
     tenantId: string,
-    opts?: { bbox?: [number, number, number, number]; clusterId?: string | null; limit?: number },
+    opts?: { bbox?: [number, number, number, number]; limit?: number },
   ): Promise<CustomerMapPoint[]> {
     const limit = Math.max(1, Math.min(5000, opts?.limit ?? 3000));
     const bboxFilter = opts?.bbox
       ? sql`AND o.longitude BETWEEN ${opts.bbox[0]} AND ${opts.bbox[2]} AND o.latitude BETWEEN ${opts.bbox[1]} AND ${opts.bbox[3]}`
       : sql``;
-    const clusterFilter = opts?.clusterId === undefined
-      ? sql``
-      : opts.clusterId === null
-      ? sql`AND o.cluster_id IS NULL`
-      : sql`AND o.cluster_id = ${opts.clusterId}`;
     const result = await db.execute(sql`
       SELECT
         o.id,
@@ -2820,19 +2674,14 @@ export class DatabaseStorage implements IStorage {
         o.address,
         o.latitude,
         o.longitude,
-        o.hierarchy_level AS "hierarchyLevel",
-        o.cluster_id AS "clusterId"
+        o.hierarchy_level AS "hierarchyLevel"
       FROM objects o
-      WHERE EXISTS (
-          SELECT 1 FROM object_payers op
-          WHERE op.object_id = o.id AND op.is_primary = true AND op.customer_id = ${customerId}
-        )
+      WHERE (${primaryPayerCustomerIdSqlFor(sql.raw('o.id'))} = ${customerId})
         AND o.tenant_id = ${tenantId}
         AND o.deleted_at IS NULL
         AND o.latitude IS NOT NULL
         AND o.longitude IS NOT NULL
         ${bboxFilter}
-        ${clusterFilter}
       ORDER BY o.id
       LIMIT ${limit}
     `);
@@ -2863,13 +2712,9 @@ export class DatabaseStorage implements IStorage {
         o.object_number AS "objectNumber",
         o.address,
         o.hierarchy_level AS "hierarchyLevel",
-        o.cluster_id AS "clusterId",
         o.parent_id AS "parentId"
       FROM objects o
-      WHERE EXISTS (
-          SELECT 1 FROM object_payers op
-          WHERE op.object_id = o.id AND op.is_primary = true AND op.customer_id = ${customerId}
-        )
+      WHERE (${primaryPayerCustomerIdSqlFor(sql.raw('o.id'))} = ${customerId})
         AND o.tenant_id = ${tenantId}
         AND o.deleted_at IS NULL
         AND (
@@ -2921,10 +2766,7 @@ export class DatabaseStorage implements IStorage {
         JOIN objects p ON p.id = c.parent_id
         WHERE p.tenant_id = ${tenantId}
           AND p.deleted_at IS NULL
-          AND EXISTS (
-            SELECT 1 FROM object_payers op
-            WHERE op.object_id = p.id AND op.is_primary = true AND op.customer_id = ${customerId}
-          )
+          AND (${primaryPayerCustomerIdSqlFor(sql.raw('p.id'))} = ${customerId})
       )
       SELECT leaf_id AS "leafId", id, name, hierarchy_level AS "hierarchyLevel", depth
       FROM chain
@@ -3083,7 +2925,7 @@ export class DatabaseStorage implements IStorage {
   async getCustomerObjectMapData(
     customerId: string,
     tenantId: string,
-    opts: { bbox?: [number, number, number, number]; clusterId?: string | null; zoom: number; limit?: number },
+    opts: { bbox?: [number, number, number, number]; zoom: number; limit?: number },
   ): Promise<CustomerMapData> {
     const limit = Math.max(1, Math.min(5000, opts.limit ?? 2000));
     const zoom = Math.max(0, Math.min(22, opts.zoom));
@@ -3092,25 +2934,16 @@ export class DatabaseStorage implements IStorage {
     const bboxFilter = opts.bbox
       ? sql`AND o.longitude BETWEEN ${opts.bbox[0]} AND ${opts.bbox[2]} AND o.latitude BETWEEN ${opts.bbox[1]} AND ${opts.bbox[3]}`
       : sql``;
-    const clusterFilter = opts.clusterId === undefined
-      ? sql``
-      : opts.clusterId === null
-      ? sql`AND o.cluster_id IS NULL`
-      : sql`AND o.cluster_id = ${opts.clusterId}`;
 
     const totalRow = await db.execute(sql`
       SELECT COUNT(*)::int AS total
       FROM objects o
-      WHERE EXISTS (
-          SELECT 1 FROM object_payers op
-          WHERE op.object_id = o.id AND op.is_primary = true AND op.customer_id = ${customerId}
-        )
+      WHERE (${primaryPayerCustomerIdSqlFor(sql.raw('o.id'))} = ${customerId})
         AND o.tenant_id = ${tenantId}
         AND o.deleted_at IS NULL
         AND o.latitude IS NOT NULL
         AND o.longitude IS NOT NULL
         ${bboxFilter}
-        ${clusterFilter}
     `);
     const total = Number((totalRow.rows[0] as { total?: number } | undefined)?.total ?? 0);
 
@@ -3122,20 +2955,15 @@ export class DatabaseStorage implements IStorage {
           o.address,
           o.latitude,
           o.longitude,
-          o.hierarchy_level AS "hierarchyLevel",
-          o.cluster_id AS "clusterId"
+          o.hierarchy_level AS "hierarchyLevel"
         FROM objects o
-        WHERE EXISTS (
-            SELECT 1 FROM object_payers op
-            WHERE op.object_id = o.id AND op.is_primary = true AND op.customer_id = ${customerId}
-          )
+        WHERE (${primaryPayerCustomerIdSqlFor(sql.raw('o.id'))} = ${customerId})
           AND o.tenant_id = ${tenantId}
           AND o.deleted_at IS NULL
           AND o.latitude IS NOT NULL
           AND o.longitude IS NOT NULL
           ${bboxFilter}
-          ${clusterFilter}
-        ORDER BY o.id
+          ORDER BY o.id
         LIMIT ${limit}
       `);
       const points = (result.rows as unknown as CustomerMapPoint[]) || [];
@@ -3159,17 +2987,13 @@ export class DatabaseStorage implements IStorage {
             o.latitude,
             o.longitude
           FROM objects o
-          WHERE EXISTS (
-              SELECT 1 FROM object_payers op
-              WHERE op.object_id = o.id AND op.is_primary = true AND op.customer_id = ${customerId}
-            )
+          WHERE (${primaryPayerCustomerIdSqlFor(sql.raw('o.id'))} = ${customerId})
             AND o.tenant_id = ${tenantId}
             AND o.deleted_at IS NULL
             AND o.latitude IS NOT NULL
             AND o.longitude IS NOT NULL
             ${bboxFilter}
-            ${clusterFilter}
-        )
+            )
         SELECT
           gx,
           gy,
@@ -3244,7 +3068,7 @@ export class DatabaseStorage implements IStorage {
     if (insertObject.objectNumber && String(insertObject.objectNumber).trim() !== "") {
       const runner = tx ?? db;
       const [object] = await runner.insert(objects).values(insertObject).returning();
-      return object;
+      return { ...object, customerId: null };
     }
     // Auto-generera sekventiellt systemnummer concurrency-safe: ett advisory-lås
     // per tenant serialiserar MAX+1-beräkningen så två samtidiga skapanden inte
@@ -3256,7 +3080,7 @@ export class DatabaseStorage implements IStorage {
       );
       const objectNumber = await this.computeNextObjectNumber(insertObject.tenantId, txn);
       const [object] = await txn.insert(objects).values({ ...insertObject, objectNumber }).returning();
-      return object;
+      return { ...object, customerId: null };
     };
     // Om en yttre transaktion redan finns (t.ex. atomär gren-kopiering) återanvänds
     // den så hela trädet skapas eller rullas tillbaka som en enhet — annars öppnas
@@ -3267,31 +3091,12 @@ export class DatabaseStorage implements IStorage {
 
   async updateObject(id: string, data: Partial<InsertObject>): Promise<ServiceObject | undefined> {
     const [object] = await db.update(objects).set(data).where(eq(objects.id, id)).returning();
-    return object || undefined;
+    if (!object) return undefined;
+    return { ...object, customerId: await getObjectPrimaryCustomerId(object.id) };
   }
 
   async deleteObject(id: string): Promise<void> {
     await db.update(objects).set({ deletedAt: new Date() }).where(eq(objects.id, id));
-  }
-
-  // Leveranspreferenser är objekt-EGNA. Det finns ingen arvsmekanism från kunden
-  // till objektet (ADR v3 / objekt-neutralitet) — kund-kopplingen uppstår bara via
-  // orderkonceptet, inte som ett metadata-arv. Returnerar därför objektets egna
-  // prefs (source="object") eller tomt (source="none"), aldrig kundens.
-  async resolveDeliveryPreferences(objectId: string): Promise<{
-    effective: DeliveryPreferences;
-    source: "object" | "none";
-  }> {
-    const obj = await this.getObject(objectId);
-    if (!obj) return { effective: EMPTY_DELIVERY_PREFERENCES, source: "none" };
-
-    if (!obj.deliveryPreferences || typeof obj.deliveryPreferences !== "object") {
-      return { effective: EMPTY_DELIVERY_PREFERENCES, source: "none" };
-    }
-    const parsed = deliveryPreferencesSchema.safeParse(obj.deliveryPreferences);
-    if (parsed.success) return { effective: parsed.data, source: "object" };
-
-    return { effective: EMPTY_DELIVERY_PREFERENCES, source: "none" };
   }
 
   async getResources(tenantId: string): Promise<Resource[]> {
@@ -3428,8 +3233,8 @@ export class DatabaseStorage implements IStorage {
       objectName: objects.name,
       objectNameTranslations: objects.nameTranslations,
       objectAddress: objects.address,
-      objectAccessCode: objects.resolvedAccessCode,
-      objectKeyNumber: objects.resolvedKeyNumber,
+      objectAccessCode: objectMetadataTextValueSql("Åtkomstkod"),
+      objectKeyNumber: objectMetadataTextValueSql("Nyckelnummer"),
       objectLatitude: objects.latitude,
       objectLongitude: objects.longitude,
       customerName: customers.name,
@@ -3571,8 +3376,8 @@ export class DatabaseStorage implements IStorage {
       objectName: objects.name,
       objectNameTranslations: objects.nameTranslations,
       objectAddress: objects.address,
-      objectAccessCode: objects.resolvedAccessCode,
-      objectKeyNumber: objects.resolvedKeyNumber,
+      objectAccessCode: objectMetadataTextValueSql("Åtkomstkod"),
+      objectKeyNumber: objectMetadataTextValueSql("Nyckelnummer"),
       objectLatitude: objects.latitude,
       objectLongitude: objects.longitude,
       customerName: customers.name,
@@ -3982,8 +3787,8 @@ export class DatabaseStorage implements IStorage {
       objectName: objects.name,
       objectNameTranslations: objects.nameTranslations,
       objectAddress: objects.address,
-      objectAccessCode: objects.resolvedAccessCode,
-      objectKeyNumber: objects.resolvedKeyNumber,
+      objectAccessCode: objectMetadataTextValueSql("Åtkomstkod"),
+      objectKeyNumber: objectMetadataTextValueSql("Nyckelnummer"),
       objectLatitude: objects.latitude,
       objectLongitude: objects.longitude,
       customerName: customers.name,
@@ -4129,8 +3934,8 @@ export class DatabaseStorage implements IStorage {
       objectName: objects.name,
       objectNameTranslations: objects.nameTranslations,
       objectAddress: objects.address,
-      objectAccessCode: objects.resolvedAccessCode,
-      objectKeyNumber: objects.resolvedKeyNumber,
+      objectAccessCode: objectMetadataTextValueSql("Åtkomstkod"),
+      objectKeyNumber: objectMetadataTextValueSql("Nyckelnummer"),
       objectLatitude: objects.latitude,
       objectLongitude: objects.longitude,
       customerName: customers.name,
@@ -4231,8 +4036,8 @@ export class DatabaseStorage implements IStorage {
       objectName: objects.name,
       objectNameTranslations: objects.nameTranslations,
       objectAddress: objects.address,
-      objectAccessCode: objects.resolvedAccessCode,
-      objectKeyNumber: objects.resolvedKeyNumber,
+      objectAccessCode: objectMetadataTextValueSql("Åtkomstkod"),
+      objectKeyNumber: objectMetadataTextValueSql("Nyckelnummer"),
       objectLatitude: objects.latitude,
       objectLongitude: objects.longitude,
       customerName: customers.name,
@@ -4368,8 +4173,8 @@ export class DatabaseStorage implements IStorage {
       objectName: objects.name,
       objectNameTranslations: objects.nameTranslations,
       objectAddress: objects.address,
-      objectAccessCode: objects.resolvedAccessCode,
-      objectKeyNumber: objects.resolvedKeyNumber,
+      objectAccessCode: objectMetadataTextValueSql("Åtkomstkod"),
+      objectKeyNumber: objectMetadataTextValueSql("Nyckelnummer"),
       objectLatitude: objects.latitude,
       objectLongitude: objects.longitude,
       customerName: customers.name,
@@ -4915,10 +4720,12 @@ export class DatabaseStorage implements IStorage {
     // Task #835: konsoliderad matchning via associationRules. Hook-kontexten delas med
     // legacyHookMatch (extraherad ordagrant) → paritet by construction. Artiklar utan regler
     // (ej migrerade) faller tillbaka på legacy hookLevel/hookConditions med samma matchare.
+    // Etapp 5: åtkomstkod läses ur metadata (systemområdet Åtkomst).
+    const atkomstForHook = await getObjectAtkomstFields(objectId, tenantId);
     const hookCtx: HookObjectContext = {
       objectType: object.objectType || '',
       hierarchyLevel: object.hierarchyLevel || '',
-      accessCode: object.accessCode ?? null,
+      accessCode: atkomstForHook.portkod,
     };
 
     // Hämta objektets metadata bara om någon artikel faktiskt har metadata-villkor (perf).
@@ -6596,108 +6403,6 @@ export class DatabaseStorage implements IStorage {
     await db.delete(planningParameters).where(eq(planningParameters.id, id));
   }
 
-  // ============== CLUSTERS - NAVET I VERKSAMHETEN ==============
-  async getClusters(tenantId: string): Promise<Cluster[]> {
-    return db.select().from(clusters).where(and(eq(clusters.tenantId, tenantId), isNull(clusters.deletedAt)));
-  }
-
-  async getCluster(id: string): Promise<Cluster | undefined> {
-    const [cluster] = await db.select().from(clusters).where(and(eq(clusters.id, id), isNull(clusters.deletedAt)));
-    return cluster || undefined;
-  }
-
-  async getClusterWithStats(id: string): Promise<Cluster & { 
-    objectCount: number; 
-    activeOrders: number; 
-    monthlyValue: number;
-    avgSetupTime: number;
-  } | undefined> {
-    const cluster = await this.getCluster(id);
-    if (!cluster) return undefined;
-
-    // Count objects in cluster
-    const objectsInCluster = await db.select().from(objects)
-      .where(and(eq(objects.clusterId, id), isNull(objects.deletedAt)));
-    
-    // Count active orders (not completed or invoiced)
-    const activeOrdersList = await db.select().from(workOrders)
-      .where(and(
-        eq(workOrders.clusterId, id),
-        isNull(workOrders.deletedAt),
-        or(
-          eq(workOrders.orderStatus, 'skapad'),
-          eq(workOrders.orderStatus, 'planerad_pre'),
-          eq(workOrders.orderStatus, 'planerad_resurs'),
-          eq(workOrders.orderStatus, 'planerad_las')
-        )
-      ));
-    
-    // Sum monthly value from subscriptions
-    const subs = await db.select().from(subscriptions)
-      .where(and(eq(subscriptions.clusterId, id), isNull(subscriptions.deletedAt), eq(subscriptions.status, 'active')));
-    const monthlyValue = subs.reduce((sum, s) => sum + (s.cachedMonthlyValue || 0), 0);
-    
-    // Calculate average setup time from logs
-    const setupLogs = await db.select().from(setupTimeLogs)
-      .where(sql`${setupTimeLogs.objectId} IN (SELECT id FROM objects WHERE cluster_id = ${id})`);
-    const avgSetupTime = setupLogs.length > 0 
-      ? Math.round(setupLogs.reduce((sum, l) => sum + l.durationMinutes, 0) / setupLogs.length)
-      : 0;
-
-    return {
-      ...cluster,
-      objectCount: objectsInCluster.length,
-      activeOrders: activeOrdersList.length,
-      monthlyValue,
-      avgSetupTime
-    };
-  }
-
-  async createCluster(cluster: InsertCluster): Promise<Cluster> {
-    const [result] = await db.insert(clusters).values(cluster).returning();
-    return result;
-  }
-
-  async updateCluster(id: string, data: Partial<InsertCluster>): Promise<Cluster | undefined> {
-    const [result] = await db.update(clusters).set(data).where(eq(clusters.id, id)).returning();
-    return result || undefined;
-  }
-
-  async deleteCluster(id: string): Promise<void> {
-    await db.update(clusters).set({ deletedAt: new Date() }).where(eq(clusters.id, id));
-  }
-
-  async getClusterObjects(clusterId: string): Promise<ServiceObject[]> {
-    return db.select().from(objects).where(and(eq(objects.clusterId, clusterId), isNull(objects.deletedAt)));
-  }
-
-  async getClusterWorkOrders(clusterId: string, options?: { startDate?: Date; endDate?: Date }): Promise<WorkOrder[]> {
-    const conditions = [eq(workOrders.clusterId, clusterId), isNull(workOrders.deletedAt)];
-    if (options?.startDate) {
-      conditions.push(gte(workOrders.scheduledDate, options.startDate));
-    }
-    if (options?.endDate) {
-      conditions.push(lte(workOrders.scheduledDate, options.endDate));
-    }
-    return db.select().from(workOrders).where(and(...conditions));
-  }
-
-  async getClusterSubscriptions(clusterId: string): Promise<Subscription[]> {
-    return db.select().from(subscriptions).where(and(eq(subscriptions.clusterId, clusterId), isNull(subscriptions.deletedAt)));
-  }
-
-  async updateClusterCaches(clusterId: string): Promise<Cluster | undefined> {
-    const stats = await this.getClusterWithStats(clusterId);
-    if (!stats) return undefined;
-    
-    return this.updateCluster(clusterId, {
-      cachedObjectCount: stats.objectCount,
-      cachedActiveOrders: stats.activeOrders,
-      cachedMonthlyValue: stats.monthlyValue,
-      cachedAvgSetupTime: stats.avgSetupTime
-    });
-  }
-
   // System Dashboard - Branding Templates
   async getBrandingTemplates(): Promise<BrandingTemplate[]> {
     return db.select().from(brandingTemplates).orderBy(brandingTemplates.name);
@@ -6997,46 +6702,6 @@ export class DatabaseStorage implements IStorage {
       ));
   }
 
-  // Object Payers
-  async getObjectPayers(objectId: string): Promise<ObjectPayer[]> {
-    return db.select()
-      .from(objectPayers)
-      .where(eq(objectPayers.objectId, objectId));
-  }
-
-  async getObjectPayer(id: string): Promise<ObjectPayer | undefined> {
-    const [payer] = await db.select()
-      .from(objectPayers)
-      .where(eq(objectPayers.id, id));
-    return payer || undefined;
-  }
-
-  async createObjectPayer(payer: InsertObjectPayer): Promise<ObjectPayer> {
-    const [result] = await db.insert(objectPayers).values(payer).returning();
-    return result;
-  }
-
-  async updateObjectPayer(id: string, objectId: string, tenantId: string, data: Partial<InsertObjectPayer>): Promise<ObjectPayer | undefined> {
-    const [result] = await db.update(objectPayers)
-      .set(data)
-      .where(and(
-        eq(objectPayers.id, id),
-        eq(objectPayers.objectId, objectId),
-        eq(objectPayers.tenantId, tenantId)
-      ))
-      .returning();
-    return result || undefined;
-  }
-
-  async deleteObjectPayer(id: string, objectId: string, tenantId: string): Promise<void> {
-    await db.delete(objectPayers)
-      .where(and(
-        eq(objectPayers.id, id),
-        eq(objectPayers.objectId, objectId),
-        eq(objectPayers.tenantId, tenantId)
-      ));
-  }
-
   // Fortnox Config
   async getFortnoxConfig(tenantId: string): Promise<FortnoxConfig | undefined> {
     const [config] = await db.select().from(fortnoxConfig).where(eq(fortnoxConfig.tenantId, tenantId));
@@ -7192,246 +6857,6 @@ export class DatabaseStorage implements IStorage {
   async deleteManualInvoiceLine(id: string, tenantId: string): Promise<void> {
     await db.delete(manualInvoiceLines)
       .where(and(eq(manualInvoiceLines.id, id), eq(manualInvoiceLines.tenantId, tenantId)));
-  }
-
-  // ============================================
-  // Object Images
-  // ============================================
-  
-  async getObjectImages(objectId: string): Promise<ObjectImage[]> {
-    return db.select().from(objectImages)
-      .where(and(
-        eq(objectImages.objectId, objectId),
-        isNull(objectImages.deletedAt),
-      ))
-      .orderBy(desc(objectImages.imageDate));
-  }
-
-  async getObjectImage(id: string): Promise<ObjectImage | undefined> {
-    const [image] = await db.select().from(objectImages).where(eq(objectImages.id, id));
-    return image || undefined;
-  }
-
-  async createObjectImage(image: InsertObjectImage): Promise<ObjectImage> {
-    const [result] = await db.insert(objectImages).values(image).returning();
-    return result;
-  }
-
-  // Task #716: arkivering (soft-delete) istället för hard-delete. Sätter deleted_at
-  // så bilden döljs från galleriet men finns kvar och kan återställas via admin-arkivet.
-  async deleteObjectImage(
-    id: string,
-    objectId: string,
-    tenantId: string,
-    opts?: { archivedBy?: string | null; archivedReason?: string | null },
-  ): Promise<void> {
-    await db.update(objectImages)
-      .set({
-        deletedAt: new Date(),
-        archivedBy: opts?.archivedBy ?? null,
-        archivedReason: opts?.archivedReason ?? null,
-      })
-      .where(and(
-        eq(objectImages.id, id),
-        eq(objectImages.objectId, objectId),
-        eq(objectImages.tenantId, tenantId),
-        isNull(objectImages.deletedAt),
-      ));
-  }
-
-  // Task #716: återställ en arkiverad bild (nollar deleted_at + arkivmetadata).
-  async restoreObjectImage(id: string, tenantId: string): Promise<ObjectImage | undefined> {
-    const [result] = await db.update(objectImages)
-      .set({ deletedAt: null, archivedBy: null, archivedReason: null })
-      .where(and(
-        eq(objectImages.id, id),
-        eq(objectImages.tenantId, tenantId),
-      ))
-      .returning();
-    return result || undefined;
-  }
-
-  // Task #716: lista arkiverade bilder för admin-arkivet, berikade med objektnamn.
-  async listArchivedObjectImages(tenantId: string): Promise<Array<ObjectImage & { objectName: string | null; objectNumber: string | null }>> {
-    const rows = await db.select({
-      image: objectImages,
-      objectName: objects.name,
-      objectNumber: objects.objectNumber,
-    })
-      .from(objectImages)
-      .leftJoin(objects, eq(objectImages.objectId, objects.id))
-      .where(and(
-        eq(objectImages.tenantId, tenantId),
-        isNotNull(objectImages.deletedAt),
-      ))
-      .orderBy(desc(objectImages.deletedAt));
-    return rows.map(r => ({ ...r.image, objectName: r.objectName, objectNumber: r.objectNumber }));
-  }
-
-  // ============================================
-  // Object Vignettes (task #580 — PDF §14.5)
-  // En "aktuell" rad per objekt (supersededAt IS NULL) + historiska versioner.
-  // ============================================
-
-  async getObjectVignettes(tenantId: string, objectId: string): Promise<ObjectVignette[]> {
-    return db.select().from(objectVignettes)
-      .where(and(eq(objectVignettes.tenantId, tenantId), eq(objectVignettes.objectId, objectId)))
-      .orderBy(desc(objectVignettes.uploadedAt));
-  }
-
-  async getCurrentObjectVignette(tenantId: string, objectId: string): Promise<ObjectVignette | undefined> {
-    const [row] = await db.select().from(objectVignettes)
-      .where(and(
-        eq(objectVignettes.tenantId, tenantId),
-        eq(objectVignettes.objectId, objectId),
-        isNull(objectVignettes.supersededAt),
-      ))
-      .limit(1);
-    return row || undefined;
-  }
-
-  // Atomiskt byte: markerar nuvarande aktiva som superseded och inserter ny aktiv.
-  // Partial unique-index (idx_object_vignettes_active_unique) garanterar att två
-  // samtidiga byten inte kan ge två aktiva — andra transaktionen failas och retryas.
-  async replaceObjectVignette(input: InsertObjectVignette): Promise<ObjectVignette> {
-    return db.transaction(async (tx) => {
-      const now = new Date();
-      await tx.update(objectVignettes)
-        .set({ supersededAt: now })
-        .where(and(
-          eq(objectVignettes.tenantId, input.tenantId),
-          eq(objectVignettes.objectId, input.objectId),
-          isNull(objectVignettes.supersededAt),
-        ));
-      const [row] = await tx.insert(objectVignettes).values({
-        ...input,
-        uploadedAt: now,
-        supersededAt: null,
-      }).returning();
-      return row;
-    });
-  }
-
-  // ============================================
-  // Object Contacts (with inheritance support)
-  // ============================================
-  
-  async getObjectContacts(objectId: string): Promise<ObjectContact[]> {
-    return db.select().from(objectContacts).where(and(
-      eq(objectContacts.objectId, objectId),
-      isNull(objectContacts.deletedAt),
-    ));
-  }
-
-  async getObjectContactsWithInheritance(objectId: string, tenantId: string): Promise<ObjectContact[]> {
-    const result: ObjectContact[] = [];
-    const seenTypes = new Set<string>();
-    
-    const ancestorChain: string[] = [objectId];
-    let currentObj = await this.getObject(objectId);
-    
-    if (currentObj?.tenantId !== tenantId) {
-      return [];
-    }
-    
-    while (currentObj?.parentId) {
-      const parentObj = await this.getObject(currentObj.parentId);
-      if (!parentObj || parentObj.tenantId !== tenantId) {
-        break;
-      }
-      ancestorChain.push(currentObj.parentId);
-      currentObj = parentObj;
-    }
-    
-    for (const ancestorId of ancestorChain) {
-      const contacts = await db.select().from(objectContacts)
-        .where(and(
-          eq(objectContacts.objectId, ancestorId),
-          eq(objectContacts.tenantId, tenantId),
-          isNull(objectContacts.deletedAt),
-        ));
-      
-      for (const contact of contacts) {
-        const typeKey = contact.contactType || 'primary';
-        if (!seenTypes.has(typeKey)) {
-          if (ancestorId === objectId) {
-            result.push(contact);
-          } else if (contact.isInheritable) {
-            result.push({ ...contact, inheritedFromObjectId: ancestorId });
-          }
-          seenTypes.add(typeKey);
-        }
-      }
-    }
-    
-    return result;
-  }
-
-  async createObjectContact(contact: InsertObjectContact): Promise<ObjectContact> {
-    const [result] = await db.insert(objectContacts).values(contact).returning();
-    return result;
-  }
-
-  async updateObjectContact(id: string, objectId: string, tenantId: string, data: Partial<InsertObjectContact>): Promise<ObjectContact | undefined> {
-    const [result] = await db.update(objectContacts)
-      .set(data)
-      .where(and(
-        eq(objectContacts.id, id),
-        eq(objectContacts.objectId, objectId),
-        eq(objectContacts.tenantId, tenantId)
-      ))
-      .returning();
-    return result || undefined;
-  }
-
-  // Task #716: arkivering (soft-delete) istället för hard-delete.
-  async deleteObjectContact(
-    id: string,
-    objectId: string,
-    tenantId: string,
-    opts?: { archivedBy?: string | null; archivedReason?: string | null },
-  ): Promise<void> {
-    await db.update(objectContacts)
-      .set({
-        deletedAt: new Date(),
-        archivedBy: opts?.archivedBy ?? null,
-        archivedReason: opts?.archivedReason ?? null,
-      })
-      .where(and(
-        eq(objectContacts.id, id),
-        eq(objectContacts.objectId, objectId),
-        eq(objectContacts.tenantId, tenantId),
-        isNull(objectContacts.deletedAt),
-      ));
-  }
-
-  // Task #716: återställ en arkiverad kontakt.
-  async restoreObjectContact(id: string, tenantId: string): Promise<ObjectContact | undefined> {
-    const [result] = await db.update(objectContacts)
-      .set({ deletedAt: null, archivedBy: null, archivedReason: null })
-      .where(and(
-        eq(objectContacts.id, id),
-        eq(objectContacts.tenantId, tenantId),
-      ))
-      .returning();
-    return result || undefined;
-  }
-
-  // Task #716: lista arkiverade kontakter för admin-arkivet, berikade med objektnamn.
-  async listArchivedObjectContacts(tenantId: string): Promise<Array<ObjectContact & { objectName: string | null; objectNumber: string | null }>> {
-    const rows = await db.select({
-      contact: objectContacts,
-      objectName: objects.name,
-      objectNumber: objects.objectNumber,
-    })
-      .from(objectContacts)
-      .leftJoin(objects, eq(objectContacts.objectId, objects.id))
-      .where(and(
-        eq(objectContacts.tenantId, tenantId),
-        isNotNull(objectContacts.deletedAt),
-      ))
-      .orderBy(desc(objectContacts.deletedAt));
-    return rows.map(r => ({ ...r.contact, objectName: r.objectName, objectNumber: r.objectNumber }));
   }
 
   // ============================================
@@ -7592,49 +7017,6 @@ export class DatabaseStorage implements IStorage {
   // ============================================
   // Object Time Restrictions (C9)
   // ============================================
-
-  async getObjectTimeRestrictions(objectId: string): Promise<ObjectTimeRestriction[]> {
-    return db.select().from(objectTimeRestrictions)
-      .where(eq(objectTimeRestrictions.objectId, objectId));
-  }
-
-  async getObjectTimeRestrictionsByTenant(tenantId: string): Promise<ObjectTimeRestriction[]> {
-    return db.select().from(objectTimeRestrictions)
-      .where(eq(objectTimeRestrictions.tenantId, tenantId));
-  }
-
-  async getObjectTimeRestrictionsByObjectIds(tenantId: string, objectIds: string[]): Promise<ObjectTimeRestriction[]> {
-    if (objectIds.length === 0) return [];
-    return db.select().from(objectTimeRestrictions)
-      .where(and(
-        eq(objectTimeRestrictions.tenantId, tenantId),
-        inArray(objectTimeRestrictions.objectId, objectIds),
-        eq(objectTimeRestrictions.isActive, true)
-      ));
-  }
-
-  async createObjectTimeRestriction(restriction: InsertObjectTimeRestriction): Promise<ObjectTimeRestriction> {
-    const [result] = await db.insert(objectTimeRestrictions).values(restriction).returning();
-    return result;
-  }
-
-  async updateObjectTimeRestriction(id: string, tenantId: string, data: Partial<InsertObjectTimeRestriction>): Promise<ObjectTimeRestriction | undefined> {
-    const [result] = await db.update(objectTimeRestrictions)
-      .set(data)
-      .where(and(
-        eq(objectTimeRestrictions.id, id),
-        eq(objectTimeRestrictions.tenantId, tenantId)
-      ))
-      .returning();
-    return result || undefined;
-  }
-
-  async deleteObjectTimeRestriction(id: string, tenantId: string): Promise<void> {
-    await db.delete(objectTimeRestrictions).where(and(
-      eq(objectTimeRestrictions.id, id),
-      eq(objectTimeRestrictions.tenantId, tenantId)
-    ));
-  }
 
   // ============================================
   // Structural Articles
@@ -8045,7 +7427,7 @@ export class DatabaseStorage implements IStorage {
     // Vi rör inte befintliga frozen_invoice_* om de redan är satta (omfrysning
     // behåller operatorvalet). När inget är satt: kör resolvern och frys det
     // resolvern hittar — eller lämna NULL (Fortnox faller då tillbaka på
-    // object_payers/objects.customer_id som tidigare).
+    // kund-härledningen via Ekonomi-metadatat).
     const recipientUpdate: Record<string, unknown> = {};
     if (!wo.frozenInvoiceRecipientId && wo.customerId) {
       try {
@@ -10189,7 +9571,8 @@ export class DatabaseStorage implements IStorage {
 
     const [moved] = await db.select().from(objects)
       .where(and(eq(objects.id, objectId), eq(objects.tenantId, tenantId)));
-    return moved || undefined;
+    if (!moved) return undefined;
+    return { ...moved, customerId: await getObjectPrimaryCustomerId(moved.id) };
   }
 
   async getResourceProfiles(tenantId: string): Promise<ResourceProfile[]> {
@@ -10701,6 +10084,22 @@ export class DatabaseStorage implements IStorage {
       ))
       .limit(1);
     return row?.radius ?? null;
+  }
+  // Etapp 5: leveranspreferenser bor enbart på kundnivå — batch-läsning för
+  // tidsmotorn (rå JSONB; anroparen validerar via deliveryPreferencesSchema).
+  async getCustomersDeliveryPreferences(customerIds: string[]): Promise<Map<string, unknown>> {
+    const map = new Map<string, unknown>();
+    if (customerIds.length === 0) return map;
+    const rows = await db
+      .select({ id: customers.id, prefs: customers.deliveryPreferences })
+      .from(customers)
+      .where(inArray(customers.id, customerIds));
+    for (const row of rows) map.set(row.id, row.prefs ?? null);
+    return map;
+  }
+  async getObjectsPrimaryCustomerIds(objectIds: string[]): Promise<Map<string, string | null>> {
+    const { getObjectsPrimaryCustomerIds } = await import("./services/object-customer");
+    return getObjectsPrimaryCustomerIds(objectIds);
   }
   async updateSlotTime(tenantId: string, id: string, data: Partial<InsertSlotTime>): Promise<SlotTime | undefined> {
     const { tenantId: _t, ...patch } = data as Partial<InsertSlotTime>;

@@ -317,12 +317,11 @@ export function WeekPlanner({ onAddJob, onSelectJob, onSelectedJobIdsChange, sho
     filters: {
       customer: d.filterCustomer,
       priority: d.filterPriority,
-      cluster: d.filterCluster,
       team: d.filterTeam,
       executionCode: d.filterExecutionCode,
       search: d.orderstockSearch,
     },
-  }), [d.currentWeekStart, d.currentDate, d.viewMode, d.selectedJob, d.filterCustomer, d.filterPriority, d.filterCluster, d.filterTeam, d.filterExecutionCode, d.orderstockSearch]);
+  }), [d.currentWeekStart, d.currentDate, d.viewMode, d.selectedJob, d.filterCustomer, d.filterPriority, d.filterTeam, d.filterExecutionCode, d.orderstockSearch]);
 
   const applyRemoteState = useCallback((s: SyncedState) => {
     if (s.weekStart) {
@@ -338,7 +337,6 @@ export function WeekPlanner({ onAddJob, onSelectJob, onSelectedJobIdsChange, sho
     if (s.filters) {
       if (s.filters.customer !== d.filterCustomer) d.setFilterCustomer(s.filters.customer);
       if (s.filters.priority !== d.filterPriority) d.setFilterPriority(s.filters.priority);
-      if (s.filters.cluster !== d.filterCluster) d.setFilterCluster(s.filters.cluster);
       if (s.filters.team !== d.filterTeam) d.setFilterTeam(s.filters.team);
       if (s.filters.executionCode !== d.filterExecutionCode) d.setFilterExecutionCode(s.filters.executionCode);
       if (s.filters.search !== d.orderstockSearch) d.setOrderstockSearch(s.filters.search);
@@ -809,7 +807,6 @@ export function WeekPlanner({ onAddJob, onSelectJob, onSelectedJobIdsChange, sho
             sidebarQuickStats={d.sidebarQuickStats}
             filterCustomer={d.filterCustomer} setFilterCustomer={d.setFilterCustomer}
             filterPriority={d.filterPriority} setFilterPriority={d.setFilterPriority}
-            filterCluster={d.filterCluster} setFilterCluster={d.setFilterCluster}
             filterTeam={d.filterTeam} setFilterTeam={d.setFilterTeam}
             filterExecutionCode={d.filterExecutionCode} setFilterExecutionCode={d.setFilterExecutionCode}
             filterDateField={d.filterDateField} setFilterDateField={d.setFilterDateField}
@@ -820,13 +817,12 @@ export function WeekPlanner({ onAddJob, onSelectJob, onSelectedJobIdsChange, sho
             unscheduledMissingDateCount={d.unscheduledMissingDateCount}
             missingDateExpanded={d.missingDateExpanded} setMissingDateExpanded={d.setMissingDateExpanded}
             missingDateJobs={d.missingDateJobs} missingDateLoading={d.missingDateLoading}
-            customers={d.customers} clusters={d.clusters} teamsData={d.teamsData}
-            customerMap={d.customerMap} clusterMap={d.clusterMap}
+            customers={d.customers} teamsData={d.teamsData}
+            customerMap={d.customerMap}
             selectedJob={d.selectedJob} onJobClick={handleJobClickWithCallback} onOpenAssignDialog={d.handleOpenAssignDialog}
             timewindowMap={d.timewindowMap}
             currentWeekStart={d.currentWeekStart}
             activeDragJob={d.activeDragJob}
-            clusterMatchedResourceIds={d.clusterMatchedResourceIds}
             visibleResources={d.visibleResources}
             expanded={effectiveDisplayMode === "orderlager-only"}
             remoteSlot={remoteSelectedSlot}
@@ -899,14 +895,6 @@ export function WeekPlanner({ onAddJob, onSelectJob, onSelectedJobIdsChange, sho
             </Button>
           </div>
 
-          {d.activeDragJob && d.activeDragJob.clusterId && d.clusterMatchedResourceIds.size === 0 && d.visibleResources.some(r => r.serviceArea && r.serviceArea.length > 0) && (
-            <div className="flex items-center gap-2 px-3 py-2 bg-warning/10 dark:bg-warning/15 border-b border-warning/20 dark:border-warning/80 animate-in fade-in slide-in-from-top-1 duration-200" data-testid="drag-no-cluster-match-warning">
-              <AlertTriangle className="h-4 w-4 text-warning shrink-0" />
-              <span className="text-xs text-warning">
-                Ingen synlig resurs matchar klustret för detta jobb. Kontrollera resursernas serviceområden.
-              </span>
-            </div>
-          )}
 
           {(d.viewMode === "day" || d.viewMode === "week") && (
             <ResourceFilterBar
@@ -940,8 +928,7 @@ export function WeekPlanner({ onAddJob, onSelectJob, onSelectedJobIdsChange, sho
               travelTimesForDay={d.travelTimesForDay} zoom={zoom}
               jobCardProps={jobCardProps}
               dragOverConflicts={dnd.dragOverConflicts}
-              clusterMatchedResourceIds={d.clusterMatchedResourceIds}
-              showConstraintLayer={d.showConstraintLayer}
+                showConstraintLayer={d.showConstraintLayer}
               constraintMap={d.constraintMap}
               remoteDragActive={!!remoteDrag.jobId}
               remoteHoveredDropId={remoteHoveredDropId}
@@ -959,8 +946,7 @@ export function WeekPlanner({ onAddJob, onSelectJob, onSelectedJobIdsChange, sho
               onResourceClick={d.handleResourceClick} onSendSchedule={d.handleSendSchedule}
               jobCardProps={jobCardProps}
               dragOverConflicts={dnd.dragOverConflicts}
-              clusterMatchedResourceIds={d.clusterMatchedResourceIds}
-              showConstraintLayer={d.showConstraintLayer}
+                showConstraintLayer={d.showConstraintLayer}
               constraintMap={d.constraintMap}
               remoteDragActive={!!remoteDrag.jobId}
               remoteHoveredDropId={remoteHoveredDropId}
@@ -1115,7 +1101,6 @@ export function WeekPlanner({ onAddJob, onSelectJob, onSelectedJobIdsChange, sho
         resources={d.resources}
         teams={d.teamsData}
         prefill={d.jobToAssign ? { date: d.assignDate, target: "resource", resourceId: null, teamId: null } : null}
-        recommendationContext={d.jobToAssign ? { objectId: d.jobToAssign.objectId, clusterId: d.jobToAssign.clusterId } : null}
         title="Tilldela resurs"
         description={d.jobToAssign ? `Välj resurs och datum för: ${d.jobToAssign.title}` : undefined}
         onSuccess={() => { d.setAssignDialogOpen(false); }}

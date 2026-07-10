@@ -42,11 +42,14 @@ async function getNotificationRecipients(
   }
   
   if (obj) {
-    const contacts = await storage.getObjectContacts(obj.id);
-    for (const contact of contacts) {
-      if (contact.email && (contact.contactType === "primary" || contact.contactType === "technical")) {
-        emails.push(contact.email);
-      }
+    // Etapp 5: kontakter bor i Kontakt-metadatat (familjen Kontaktperson →
+    // E-post), inte i den borttagna object_contacts-tabellen.
+    try {
+      const { getObjectKontaktEmails } = await import("./metadata-queries");
+      const kontaktEmails = await getObjectKontaktEmails(obj.id, tenantId);
+      emails.push(...kontaktEmails);
+    } catch (err) {
+      console.error(`[customer-notifications] kunde inte läsa Kontakt-metadata för objekt ${obj.id}:`, err);
     }
   }
   

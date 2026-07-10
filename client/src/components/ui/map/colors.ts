@@ -11,18 +11,6 @@ export const RESOURCE_STATUS_COLORS: Record<string, string> = {
   idle: "#6b7280",
 };
 
-export const ACCESS_TYPE_COLORS: Record<string, string> = {
-  open: "#22c55e",
-  code: "#3b82f6",
-  key: "#f97316",
-  meeting: "#a855f7",
-};
-
-export function getAccessColor(accessType: string | null | undefined): string {
-  if (!accessType) return "#6b7280";
-  return ACCESS_TYPE_COLORS[accessType] ?? "#6b7280";
-}
-
 export function getResourceStatusColor(status: string | null | undefined, isStale = false): string {
   if (isStale) return "#6b7280";
   if (!status) return "#6b7280";

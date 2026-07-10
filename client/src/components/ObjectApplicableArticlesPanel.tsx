@@ -321,11 +321,6 @@ export function ObjectApplicableArticlesPanel({ object, controlled, open: contro
           <p className="text-xs text-muted-foreground">
             <strong>Hierarkinivå:</strong> {object.hierarchyLevel || "-"}
           </p>
-          {object.accessCode && (
-            <p className="text-xs text-muted-foreground">
-              <strong>Accesskod:</strong> {object.accessCode}
-            </p>
-          )}
         </div>
       </SheetContent>
     </Sheet>

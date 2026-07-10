@@ -11,6 +11,7 @@ import {
 import { and, eq } from "drizzle-orm";
 import { randomId } from "./helpers";
 import type { InsertObject } from "@shared/schema";
+import { setObjectKund } from "./helpers/object-kund";
 
 const BASE_URL = process.env.TEST_BASE_URL || "http://localhost:5000";
 const TENANT_ID = "default-tenant";
@@ -109,14 +110,7 @@ describe("Portal light-utförandevy — kvittering är fail-closed (Task #715)",
         objectLevel: 2,
         hierarchyLevel: "fastighet",
       } as InsertObject);
-      await storage.createObjectPayer({
-        tenantId: TENANT_ID,
-        objectId: obj.id,
-        customerId: payerCustomerId,
-        payerType: "primary",
-        isPrimary: true,
-        priority: 1,
-      } as any);
+      await setObjectKund(TENANT_ID, obj.id, payerCustomerId);
       return obj.id;
     };
 

@@ -1,8 +1,8 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
-  Contact, Image as ImageIcon, ClipboardList, MapPin, Target, Plus,
-  Trash2, Phone, Mail, Calendar, CalendarClock, CircleSlash,
+  Contact, Image as ImageIcon, ClipboardList, MapPin, Target,
+  Phone, Mail, Calendar, CalendarClock, CircleSlash,
   Link as LinkIcon, Users, Map as MapIcon, Zap,
 } from "lucide-react";
 import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
@@ -105,6 +105,7 @@ interface GeoFieldLite {
 }
 interface SystemGeneratedMetadata {
   pointedInConcepts: PointedInConcept[];
+  images: ObjectImageLite[];
   tasksHistory: SystemTaskHistory[];
   tasksFuture: SystemTaskFuture[];
   unperformedTasks: SystemUnperformedTask[];
@@ -180,14 +181,7 @@ export interface ObjectDomainGridProps {
   objectId: string;
   obj: any;
   contacts: ObjectContactLite[];
-  images: ObjectImageLite[];
   workOrders?: ObjectWorkOrderLite[];
-  onAddContact: () => void;
-  onDeleteContact: (id: string) => void;
-  contactDeletePending: boolean;
-  onAddImage: () => void;
-  onDeleteImage: (id: string) => void;
-  imageDeletePending: boolean;
   onEditGeo: () => void;
   navigate: (path: string) => void;
 }
@@ -197,14 +191,7 @@ export function ObjectDomainGrid({
   objectId,
   obj,
   contacts,
-  images,
   workOrders = [],
-  onAddContact,
-  onDeleteContact,
-  contactDeletePending,
-  onAddImage,
-  onDeleteImage,
-  imageDeletePending,
   onEditGeo,
   navigate,
 }: ObjectDomainGridProps) {
@@ -217,6 +204,9 @@ export function ObjectDomainGrid({
   });
 
   const concepts = data?.pointedInConcepts ?? [];
+  // Etapp 5: bilder läses ur metadata-systemet (datatyp='image') via
+  // system-generated-metadata — object_images-tabellen är borttagen.
+  const images = data?.images ?? [];
   const history = data?.tasksHistory ?? [];
   const future = data?.tasksFuture ?? [];
   const unperformed = data?.unperformedTasks ?? [];
@@ -242,18 +232,6 @@ export function ObjectDomainGrid({
         <span className="font-medium text-sm truncate">{c.name}</span>
         <div className="flex items-center gap-1">
           {c.inherited && <Badge variant="outline" className="text-[10px]">Ärvd</Badge>}
-          {!c.inherited && (
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-7 w-7 p-0 text-destructive hover:text-destructive"
-              onClick={() => onDeleteContact(c.id)}
-              disabled={contactDeletePending}
-              data-testid={`button-delete-contact-${c.id}`}
-            >
-              <Trash2 className="h-3.5 w-3.5" />
-            </Button>
-          )}
         </div>
       </div>
       <div className="text-xs text-muted-foreground">{contactTypeLabel(c)}</div>
@@ -280,16 +258,6 @@ export function ObjectDomainGrid({
           onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
         />
       </div>
-      <Button
-        variant="destructive"
-        size="sm"
-        className="absolute top-1 right-1 h-7 w-7 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
-        onClick={() => onDeleteImage(img.id)}
-        disabled={imageDeletePending}
-        data-testid={`button-delete-image-${img.id}`}
-      >
-        <Trash2 className="h-3.5 w-3.5" />
-      </Button>
       {img.description && (
         <div className="text-xs text-muted-foreground mt-1 truncate">{img.description}</div>
       )}
@@ -510,15 +478,10 @@ export function ObjectDomainGrid({
             rows: [
               { label: "Datum", value: fmtDate(img.createdAt ?? img.imageDate) },
               { label: "Tid", value: fmtTime(img.createdAt ?? img.imageDate) },
-              { label: "Ursprung", value: "Manuellt uppladdad på objektet" },
+              { label: "Ursprung", value: "Bild-metadata på objektet" },
             ],
           })}
           getSearchText={(img) => `${img.description ?? ""} ${img.title ?? ""}`}
-          headerAction={
-            <Button variant="outline" size="sm" onClick={onAddImage} data-testid="button-add-image">
-              <Plus className="h-3.5 w-3.5 mr-1" /> Lägg till
-            </Button>
-          }
           renderItem={renderImage}
         />
       </div>
@@ -555,11 +518,6 @@ export function ObjectDomainGrid({
               },
             ],
           })}
-          headerAction={
-            <Button variant="outline" size="sm" onClick={onAddContact} data-testid="button-add-contact">
-              <Plus className="h-3.5 w-3.5 mr-1" /> Lägg till
-            </Button>
-          }
           renderItem={renderContact}
         />
 

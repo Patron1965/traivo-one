@@ -12,9 +12,9 @@ import {
   userTenantRoles,
   customers,
   objects,
-  objectPayers,
 } from "@shared/schema";
 import { inArray } from "drizzle-orm";
+import { setObjectKund, cleanupObjectKund } from "./helpers/object-kund";
 import type { InsertObject } from "@shared/schema";
 
 // Task #735: regressionsvakt för objektträdets sök-gren och rekursiva
@@ -85,18 +85,13 @@ function makeObject(
   } as InsertObject;
 }
 
+// Etapp 5: object_payers borttagen — kund sätts via "Kund"-metadatat.
 async function addPrimaryPayer(
   tenantId: string,
   objectId: string,
   customerId: string,
 ): Promise<void> {
-  await db.insert(objectPayers).values({
-    tenantId,
-    objectId,
-    customerId,
-    payerType: "primary",
-    isPrimary: true,
-  });
+  await setObjectKund(tenantId, objectId, customerId);
 }
 
 beforeAll(async () => {
@@ -170,7 +165,7 @@ beforeAll(async () => {
 afterAll(async () => {
   await new Promise<void>((r) => server?.close(() => r()));
   try {
-    await db.delete(objectPayers).where(inArray(objectPayers.tenantId, [TENANT, TENANT2]));
+    await cleanupObjectKund([TENANT, TENANT2]);
     await db.delete(objects).where(inArray(objects.tenantId, [TENANT, TENANT2]));
     await db.delete(customers).where(inArray(customers.tenantId, [TENANT, TENANT2]));
     await db.delete(userTenantRoles).where(inArray(userTenantRoles.userId, [ADMIN, ADMIN2]));

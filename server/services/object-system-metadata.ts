@@ -13,7 +13,7 @@
 //   - Inpekade orderkoncept               → live-compute (delad villkorsmotor)
 //   - Kopplade uppgifter (historik)       → work_orders för objektet
 //   - Kopplade uppgifter (kommande)       → assignments (planeringslager)
-//   - Bilder                              → object_images
+//   - Bilder                              → metadata_varden (datatyp='image', Etapp 5)
 //   - Felanmälningar                      → public_issue_reports
 //   - Betyg                               → technician_ratings (via WO)
 import { storage } from "../storage";
@@ -23,6 +23,8 @@ import {
   assignments,
   customerCommunications,
   customers,
+  metadataKatalog,
+  metadataVarden,
   orderConcepts,
   resources,
   technicianRatings,
@@ -219,7 +221,7 @@ async function computePointedInConcepts(
   const matched: PointedInConcept[] = [];
   for (const concept of concepts) {
     if ((concept as any).deletedAt) continue;
-    const { objectIds, clusterIds } = deriveConceptTargets(concept as any);
+    const { objectIds } = deriveConceptTargets(concept as any);
 
     let inScope = false;
     if (objectIds.length > 0) {
@@ -230,10 +232,6 @@ async function computePointedInConcepts(
           break;
         }
       }
-    } else if (clusterIds.length > 0) {
-      // Legacy kluster-inpekning (under avveckling): billig medlemskoll via
-      // objektets clusterId i stället för att ladda hela klustret.
-      inScope = !!object.clusterId && clusterIds.includes(object.clusterId);
     }
     if (!inScope) continue;
 
@@ -425,6 +423,46 @@ async function computeRatings(
   }));
 }
 
+/**
+ * Etapp 5: Bilder läses ur metadata-systemet (metadata_varden med
+ * datatyp='image' i katalogen), inte ur gamla object_images-tabellen.
+ * Exporteras även för WO-expand-panelen (workOrderRoutes).
+ */
+export async function getObjectMetadataImages(
+  tenantId: string,
+  objectId: string,
+): Promise<SystemImage[]> {
+  const rows = await db
+    .select({
+      id: metadataVarden.id,
+      imageUrl: metadataVarden.vardeString,
+      typeName: metadataKatalog.visningsnamn,
+      fallbackName: metadataKatalog.namn,
+      updatedAt: metadataVarden.updatedAt,
+    })
+    .from(metadataVarden)
+    .innerJoin(metadataKatalog, eq(metadataVarden.metadataKatalogId, metadataKatalog.id))
+    .where(and(
+      eq(metadataVarden.tenantId, tenantId),
+      eq(metadataVarden.objektId, objectId),
+      eq(metadataVarden.raderad, false),
+      eq(metadataVarden.status, "aktiv"),
+      eq(metadataKatalog.datatyp, "image"),
+      isNull(metadataKatalog.deletedAt),
+    ))
+    .orderBy(desc(metadataVarden.updatedAt))
+    .limit(100);
+  return rows
+    .filter((r) => !!r.imageUrl)
+    .map((r) => ({
+      id: r.id,
+      imageUrl: r.imageUrl as string,
+      description: r.typeName ?? r.fallbackName ?? null,
+      imageType: r.fallbackName ?? null,
+      imageDate: toIso(r.updatedAt),
+    }));
+}
+
 async function computeInspections(
   tenantId: string,
   objectId: string,
@@ -563,20 +601,14 @@ export async function getObjectSystemGeneratedMetadata(
     computeTasksHistory(tenantId, objectId),
     computeTasksFuture(tenantId, objectId),
     computeUnperformedTasks(tenantId, objectId),
-    storage.getObjectImages(objectId),
+    getObjectMetadataImages(tenantId, objectId),
     storage.getPublicIssueReports(tenantId, { objectId }),
     computeRatings(tenantId, objectId),
     computeInspections(tenantId, objectId),
     computeCommunications(tenantId, objectId),
   ]);
 
-  const images: SystemImage[] = imagesRaw.map((img) => ({
-    id: img.id,
-    imageUrl: img.imageUrl,
-    description: img.description ?? null,
-    imageType: img.imageType ?? null,
-    imageDate: toIso(img.imageDate),
-  }));
+  const images: SystemImage[] = imagesRaw;
 
   const issueReports: SystemIssueReport[] = issuesRaw.map((it) => ({
     id: it.id,

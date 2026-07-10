@@ -334,11 +334,10 @@ export const ConflictDialog = memo(function ConflictDialog(props: ConflictDialog
             <div className="space-y-2">
               {pendingSchedule.conflicts.map((conflict, i) => {
                 const isHardBlock = conflict.startsWith("[BLOCK]");
-                const isClusterWarning = !isHardBlock && conflict.includes("Kluster");
                 const displayText = isHardBlock ? conflict.replace("[BLOCK] ", "") : conflict;
                 return (
-                <div key={i} className={`flex items-start gap-2 p-2 rounded border ${isHardBlock ? "bg-destructive/15 dark:bg-destructive/15 border-destructive/30 dark:border-destructive/70" : isClusterWarning ? "bg-warning/10 dark:bg-warning/15 border-warning/20 dark:border-warning/80" : "bg-destructive/10 dark:bg-destructive/15 border-destructive/20 dark:border-destructive/80"}`}>
-                  <AlertTriangle className={`h-4 w-4 shrink-0 mt-0.5 ${isHardBlock ? "text-destructive" : isClusterWarning ? "text-warning" : "text-destructive"}`} />
+                <div key={i} className={`flex items-start gap-2 p-2 rounded border ${isHardBlock ? "bg-destructive/15 dark:bg-destructive/15 border-destructive/30 dark:border-destructive/70" : "bg-destructive/10 dark:bg-destructive/15 border-destructive/20 dark:border-destructive/80"}`}>
+                  <AlertTriangle className={`h-4 w-4 shrink-0 mt-0.5 text-destructive`} />
                   <span className="text-sm">{displayText}</span>
                 </div>
                 );
@@ -497,9 +496,6 @@ export const AutoFillDialog = memo(function AutoFillDialog(props: AutoFillDialog
               {skipped > 0 && preview.length > 0 && (
                 <div className="text-xs text-muted-foreground space-y-0.5">
                   <p>{skipped} uppdrag ryms ej i schemat och förblir oplanerade i orderstocken.</p>
-                  {diag && diag.clusterSkipped > 0 && (
-                    <p className="text-warning">{diag.clusterSkipped} av dessa saknar matchande resurs för sitt kluster.</p>
-                  )}
                 </div>
               )}
               {geoSpread && Object.keys(geoSpread).length > 0 && (
@@ -578,9 +574,6 @@ export const AutoFillDialog = memo(function AutoFillDialog(props: AutoFillDialog
                                 );
                               })}
                             </div>
-                          )}
-                          {diag.clusterSkipped > 0 && (
-                            <p className="text-warning mt-1">{diag.clusterSkipped} uppdrag saknar matchande resurs för sitt kluster (geografiskt område).</p>
                           )}
                           <p className="mt-1">Prova att öka överbokningsprocenten eller byta till en annan vecka.</p>
                         </>

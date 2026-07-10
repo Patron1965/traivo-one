@@ -13,7 +13,6 @@ import {
   userTenantRoles,
   customers,
   objects,
-  objectPayers,
   objectParents,
 } from "@shared/schema";
 import { inArray } from "drizzle-orm";
@@ -96,7 +95,6 @@ afterAll(async () => {
   await new Promise<void>((r) => server?.close(() => r()));
   try {
     await db.delete(objectParents).where(inArray(objectParents.tenantId, [TENANT]));
-    await db.delete(objectPayers).where(inArray(objectPayers.tenantId, [TENANT]));
     await db.delete(objects).where(inArray(objects.tenantId, [TENANT]));
     await db.delete(customers).where(inArray(customers.tenantId, [TENANT]));
     await db.delete(userTenantRoles).where(inArray(userTenantRoles.userId, [ADMIN]));
@@ -139,7 +137,6 @@ describe("ObjectDetailPage spara-flöde — POST/PATCH /api/objects mot dev-DB",
         address: `${NS} Nya vägen 42`,
         city: "Nystad",
         postalCode: "22222",
-        notes: `${NS} sparad anteckning`,
       },
     });
     expect(res.status).toBe(200);
@@ -155,7 +152,6 @@ describe("ObjectDetailPage spara-flöde — POST/PATCH /api/objects mot dev-DB",
     expect(res.body?.address).toBe(`${NS} Nya vägen 42`);
     expect(res.body?.city).toBe("Nystad");
     expect(res.body?.postalCode).toBe("22222");
-    expect(res.body?.notes).toBe(`${NS} sparad anteckning`);
   });
 
   it("verifierar att ändringen faktiskt persisterats i DB", async () => {

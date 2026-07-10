@@ -16,7 +16,6 @@ const pagesWithDedicatedAI = [
   "/",
   "/planner",
   "/week-planner",
-  "/clusters",
   "/order-stock",
   "/dashboard",
   "/objects",

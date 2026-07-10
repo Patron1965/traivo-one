@@ -111,3 +111,4 @@
 - [Systemområden adopt-or-create](systemomraden-ensure-adoption.md) — ensureSystemomradenFalt adopterar befintliga katalograder (aldrig namn/datatyp/värden); dubblettnamn/annan förälder = conflict-skip; UI-lås visar bara isSystem, systemlast stoppas serverside.
 - [Uppgiftspaketet (arbetskopia)](uppgiftspaket-arbetskopia.md) — jsonb på WO+assignments; frozen-gate ENBART via deriveUppgiftStatus+isUppgiftFrozen; nya skapandevägar MÅSTE fylla paketet; spegelsynk present-value-only.
 - [VRP startuppgifter & no-fallback](vrp-start-tasks-no-fallback.md) — VRP-start ENBART från startuppgifter (orderType=startpunkt); team/GPS/kluster/default-koordinater förbjudna som planeringsgrund; fail closed.
+- [Leveranspreferenser enbart kundnivå](delivery-prefs-customer-only.md) — objekt-prefs borttagna; tidsmotorn läser kundens prefs via primär kund genom storage-metoder (mockbart); Map-iteration kräver Array.from (TS2802).

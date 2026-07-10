@@ -74,7 +74,7 @@ import {
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
-import type { OrderConcept, Cluster, Article, ConceptFilter } from "@shared/schema";
+import type { OrderConcept, Article, ConceptFilter } from "@shared/schema";
 import { ORDER_CONCEPT_SCENARIO_LABELS, BILLING_FREQUENCY_LABELS } from "@shared/schema";
 import { conceptMatchesScenarioTab, type ScenarioTab } from "@shared/order-concept-method";
 import { PageHelp } from "@/components/ui/help-tooltip";
@@ -177,10 +177,6 @@ export default function OrderConceptsPage() {
 
   const { data: concepts = [], isLoading } = useQuery<OrderConcept[]>({
     queryKey: ["/api/order-concepts"],
-  });
-
-  const { data: clusters = [] } = useQuery<Cluster[]>({
-    queryKey: ["/api/clusters"],
   });
 
   const { data: articlesList = [] } = useQuery<Article[]>({
@@ -501,7 +497,6 @@ export default function OrderConceptsPage() {
               <TableRow>
                 <TableHead>Namn</TableHead>
                 <TableHead>Scenario</TableHead>
-                <TableHead>Kluster</TableHead>
                 <TableHead>Artikel</TableHead>
                 <TableHead>Prioritet</TableHead>
                 <TableHead>Senast körd</TableHead>
@@ -530,15 +525,6 @@ export default function OrderConceptsPage() {
                       >
                         {ORDER_CONCEPT_SCENARIO_LABELS[scenario as keyof typeof ORDER_CONCEPT_SCENARIO_LABELS] || scenario}
                       </Badge>
-                    </TableCell>
-                    <TableCell>
-                      {concept.targetClusterId ? (
-                        <Badge variant="outline">
-                          {clusters.find((c) => c.id === concept.targetClusterId)?.name || "Okänt"}
-                        </Badge>
-                      ) : (
-                        <span className="text-muted-foreground">Alla objekt</span>
-                      )}
                     </TableCell>
                     <TableCell>
                       {concept.articleId ? (

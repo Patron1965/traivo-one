@@ -157,8 +157,6 @@ export const objects = pgTable("objects", {
   // (primär betalare) / `work_orders.customer_id`. API-kontraktet `object.customerId`
   // bevaras oförändrat som en overlay (se primaryPayerCustomerIdSql /
   // objectColumnsWithPrimaryCustomer i storage-läsvägarna).
-  // Kluster som objektet tillhör - kundbaserad hierarki
-  clusterId: varchar("cluster_id"),
   parentId: varchar("parent_id").references((): any => objects.id),
   name: text("name").notNull(),
   // Task #634: språkmärkta visningsnamn (t.ex. {sv,en,fi}) parallellt med det
@@ -189,45 +187,10 @@ export const objects = pgTable("objects", {
   // Se OBJECT_LOCATION_TYPES ovan och server/services/object-location.ts.
   locationType: text("location_type"),
   
-  // === ÅTKOMSTINFORMATION (kan ärvas) ===
-  accessType: text("access_type").default("open"),
-  accessCode: text("access_code"),
-  keyNumber: text("key_number"),
-  accessInfo: jsonb("access_info").default({}),
-  // Markerar om värdet är explicit satt eller ärvt från förälder
-  accessCodeInherited: boolean("access_code_inherited").default(false),
-  keyNumberInherited: boolean("key_number_inherited").default(false),
-  accessInfoInherited: boolean("access_info_inherited").default(false),
-  
-  // === TIDSPREFERENSER (kan ärvas) ===
-  preferredTime1: text("preferred_time_1"),
-  preferredTime2: text("preferred_time_2"),
-  preferredTimeInherited: boolean("preferred_time_inherited").default(false),
-  
-  // === KÄRLINFORMATION ===
-  containerCount: integer("container_count").default(0),
-  containerCountK2: integer("container_count_k2").default(0),
-  containerCountK3: integer("container_count_k3").default(0),
-  containerCountK4: integer("container_count_k4").default(0),
-  servicePeriods: jsonb("service_periods").default({}),
-  avgSetupTime: integer("avg_setup_time").default(0),
-  
-  // === INDIVIDHANTERING (för kärl) ===
-  serialNumber: text("serial_number"), // Unikt serienummer/individnummer
+  // Etapp 5 (Task #1217): åtkomst-/tidspreferens-/kärl-/individ-specialkolumnerna
+  // är borttagna — informationen bor nu i metadata_katalog/metadata_varden
+  // (t.ex. 'Åtkomsttyp', 'Åtkomstkod', 'Nyckelnummer', 'Antal kärl', 'Ställtid').
   articleId: varchar("article_id"), // Kopplad artikeltyp
-  manufacturer: text("manufacturer"), // Tillverkare
-  purchaseDate: timestamp("purchase_date"), // Inköpsdatum
-  warrantyExpiry: timestamp("warranty_expiry"), // Garantiutgång
-  lastInspection: timestamp("last_inspection"), // Senaste besiktning
-  condition: text("condition").default("good"), // good, fair, poor, damaged
-  
-  // === RESOLVED/BERÄKNADE VÄRDEN ===
-  // Dessa fylls i av ärvningsprocessorn med slutgiltiga värden
-  resolvedAccessCode: text("resolved_access_code"),
-  resolvedKeyNumber: text("resolved_key_number"),
-  resolvedAccessInfo: jsonb("resolved_access_info").default({}),
-  resolvedPreferredTime1: text("resolved_preferred_time_1"),
-  resolvedPreferredTime2: text("resolved_preferred_time_2"),
   // Djup i hierarkin (0 = rot, 1 = barn till rot, etc.)
   hierarchyDepth: integer("hierarchy_depth").default(0),
   // Fullständig sökväg i hierarkin (array av object IDs från rot)
@@ -238,11 +201,6 @@ export const objects = pgTable("objects", {
   polylineData: jsonb("polyline_data"),
   
   status: text("status").default("active").notNull(),
-  notes: text("notes"),
-  // Stående leveranspreferenser (slottider, blockerade tider, anteckningar) -
-  // primär källa per objekt; faller tillbaka till kundens preferens om null.
-  // Struktur valideras av deliveryPreferencesSchema.
-  deliveryPreferences: jsonb("delivery_preferences"),
   lastServiceDate: timestamp("last_service_date"),
   importBatchId: text("import_batch_id"),
   // === RECONCILIATION (årlig kundfastighetslista) ===
@@ -269,7 +227,6 @@ export const objects = pgTable("objects", {
   deletedAt: timestamp("deleted_at"),
 }, (table) => [
   index("idx_objects_tenant").on(table.tenantId),
-  index("idx_objects_cluster").on(table.clusterId),
   index("idx_objects_parent").on(table.parentId),
   index("idx_objects_object_number").on(table.objectNumber),
   index("idx_objects_interim").on(table.tenantId, table.isInterimObject),
@@ -360,8 +317,9 @@ export const workOrders = pgTable("work_orders", {
   // NULL härleds från taskCategory via resolveLocationRequirement(). Ärvs från
   // order_concept_articles vid expansion.
   locationRequirement: text("location_requirement"),
-  // Kluster som ordern tillhör (ärvs från objekt eller sätts manuellt)
-  clusterId: varchar("cluster_id").references(() => clusters.id, { onDelete: 'set null' }),
+  // Legacy-kluster (Etapp 5: clusters-tabellen borttagen; kolumnen behålls
+  // expand-contract för VRP/plumbing — ingen FK längre).
+  clusterId: varchar("cluster_id"),
   resourceId: varchar("resource_id").references(() => resources.id),
   // Team för förplanering (innan specifik resurs är tilldelad)
   teamId: varchar("team_id").references(() => teams.id),
@@ -1386,96 +1344,6 @@ export const resourcePositions = pgTable("resource_positions", {
   index("idx_resource_positions_resource_date").on(table.resourceId, table.recordedAt)
 ]);
 
-// Kluster - kundbaserad hierarki med dataärvning (inte primärt geografiskt)
-// Kunden sitter högst upp i trädstrukturen, data ärvs nedåt
-export const clusters = pgTable("clusters", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
-  // Rotkund som äger hierarkin - obligatorisk koppling
-  rootCustomerId: varchar("root_customer_id").references(() => customers.id),
-  name: text("name").notNull(),
-  description: text("description"),
-  // Ansvarigt team för klustret
-  primaryTeamId: varchar("primary_team_id"),
-  // SLA-nivå för klustret: standard, premium, enterprise
-  slaLevel: text("sla_level").default("standard"),
-  // Planerad servicefrekvens
-  defaultPeriodicity: text("default_periodicity").default("vecka"),
-  // Färgkod för visualisering
-  color: text("color").default("#3B82F6"),
-  
-  // === ÄRVNINGSKONFIGURATION ===
-  // Vilka fält som ärvs nedåt i hierarkin (fallande ärvning)
-  inheritableFields: text("inheritable_fields").array().default([
-    "accessCode", "keyNumber", "accessInfo", "preferredTime1", "preferredTime2"
-  ]),
-  // Standardvärden som ärvs om inget annat anges på objektnivå
-  defaultAccessInfo: jsonb("default_access_info").default({}),
-  defaultPreferredTime: text("default_preferred_time"),
-  
-  // === GEOGRAFISK DATA (valfritt - för ruttoptimering) ===
-  // Dessa fält används endast vid ruttoptimering, inte vid klusterhantering
-  geoData: jsonb("geo_data").default({}), // { centerLat, centerLng, radiusKm, postalCodes }
-  // Legacy-fält för bakåtkompatibilitet
-  centerLatitude: real("center_latitude"),
-  centerLongitude: real("center_longitude"),
-  radiusKm: real("radius_km").default(5),
-  postalCodes: text("postal_codes").array().default([]),
-  
-  // === CACHADE VÄRDEN ===
-  cachedObjectCount: integer("cached_object_count").default(0),
-  cachedActiveOrders: integer("cached_active_orders").default(0),
-  cachedMonthlyValue: integer("cached_monthly_value").default(0),
-  cachedAvgSetupTime: integer("cached_avg_setup_time").default(0),
-  // Antal nivåer i hierarkin (beräknas automatiskt)
-  cachedHierarchyDepth: integer("cached_hierarchy_depth").default(0),
-
-  // === DYNAMISKA KLUSTER-REGLER (task #552) ===
-  // Regelsats som matchar objekt mot detta kluster via metadata-värden eller
-  // adressfält. Saknas (null) = vanligt manuellt kluster.
-  // Struktur (validerad i clusterDynamicRulesSchema):
-  //   { match: "all" | "any", rules: [
-  //       { kind: "metadata", katalogNamn: string, operator: "eq"|"ne"|"contains"|"in", value: any }
-  //       | { kind: "postalPrefix", value: string }
-  //       | { kind: "city", value: string }
-  //     ] }
-  dynamicRules: jsonb("dynamic_rules"),
-  // Tidpunkt då dynamiska regler senast applicerades (för UI-info).
-  dynamicRulesLastAppliedAt: timestamp("dynamic_rules_last_applied_at"),
-
-  status: text("status").default("active").notNull(),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  deletedAt: timestamp("deleted_at"),
-}, (table) => [
-  index("idx_clusters_tenant").on(table.tenantId),
-  index("idx_clusters_tenant_status").on(table.tenantId, table.status),
-  index("idx_clusters_tenant_root_customer").on(table.tenantId, table.rootCustomerId),
-]);
-
-// Zod-schema för dynamiska kluster-regler. Används av API-validering och
-// klient-form.
-export const clusterDynamicRuleSchema = z.discriminatedUnion("kind", [
-  z.object({
-    kind: z.literal("metadata"),
-    katalogNamn: z.string().min(1),
-    operator: z.enum(["eq", "ne", "contains", "in"]).default("eq"),
-    value: z.union([z.string(), z.number(), z.boolean(), z.array(z.union([z.string(), z.number()]))]),
-  }),
-  z.object({
-    kind: z.literal("postalPrefix"),
-    value: z.string().min(1),
-  }),
-  z.object({
-    kind: z.literal("city"),
-    value: z.string().min(1),
-  }),
-]);
-export const clusterDynamicRulesSchema = z.object({
-  match: z.enum(["all", "any"]).default("all"),
-  rules: z.array(clusterDynamicRuleSchema).min(1).max(20),
-});
-export type ClusterDynamicRules = z.infer<typeof clusterDynamicRulesSchema>;
-
 // Tenant-konfiguration för "släktnamn"/hierarkiskt visningsnamn (task #552).
 // Sparas i `tenants.settings.displayNameRules` (jsonb) — ingen separat kolumn.
 export const displayNameRulesSchema = z.object({
@@ -1495,7 +1363,7 @@ export const teams = pgTable("teams", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
   // Kluster som teamet primärt ansvarar för
-  clusterId: varchar("cluster_id").references(() => clusters.id),
+  clusterId: varchar("cluster_id"),
   name: text("name").notNull(),
   description: text("description"),
   // Teamleadare
@@ -1723,7 +1591,6 @@ export const objectsRelations = relations(objects, ({ one, many }) => ({
   tenant: one(tenants, { fields: [objects.tenantId], references: [tenants.id] }),
   // Notera: ingen direkt `customer`-relation — kundkoppling går via
   // `object_payers` (primary @ tidpunkt). Se `server/services/object-customer.ts`.
-  cluster: one(clusters, { fields: [objects.clusterId], references: [clusters.id] }),
   parent: one(objects, { fields: [objects.parentId], references: [objects.id], relationName: "objectHierarchy" }),
   children: many(objects, { relationName: "objectHierarchy" }),
   workOrders: many(workOrders),
@@ -1775,22 +1642,11 @@ export const subscriptionsRelations = relations(subscriptions, ({ one }) => ({
   tenant: one(tenants, { fields: [subscriptions.tenantId], references: [tenants.id] }),
   customer: one(customers, { fields: [subscriptions.customerId], references: [customers.id] }),
   object: one(objects, { fields: [subscriptions.objectId], references: [objects.id] }),
-  cluster: one(clusters, { fields: [subscriptions.clusterId], references: [clusters.id] }),
   priceList: one(priceLists, { fields: [subscriptions.priceListId], references: [priceLists.id] }),
-}));
-
-export const clustersRelations = relations(clusters, ({ one, many }) => ({
-  tenant: one(tenants, { fields: [clusters.tenantId], references: [tenants.id] }),
-  rootCustomer: one(customers, { fields: [clusters.rootCustomerId], references: [customers.id] }),
-  objects: many(objects),
-  teams: many(teams),
-  workOrders: many(workOrders),
-  subscriptions: many(subscriptions),
 }));
 
 export const teamsRelations = relations(teams, ({ one, many }) => ({
   tenant: one(tenants, { fields: [teams.tenantId], references: [tenants.id] }),
-  cluster: one(clusters, { fields: [teams.clusterId], references: [clusters.id] }),
   leader: one(resources, { fields: [teams.leaderId], references: [resources.id] }),
   members: many(teamMembers),
 }));
@@ -1837,7 +1693,6 @@ export const workOrdersRelations = relations(workOrders, ({ one, many }) => ({
   tenant: one(tenants, { fields: [workOrders.tenantId], references: [tenants.id] }),
   customer: one(customers, { fields: [workOrders.customerId], references: [customers.id] }),
   object: one(objects, { fields: [workOrders.objectId], references: [objects.id] }),
-  cluster: one(clusters, { fields: [workOrders.clusterId], references: [clusters.id] }),
   resource: one(resources, { fields: [workOrders.resourceId], references: [resources.id] }),
   team: one(teams, { fields: [workOrders.teamId], references: [teams.id] }),
   simulationScenario: one(simulationScenarios, { fields: [workOrders.simulationScenarioId], references: [simulationScenarios.id] }),
@@ -1961,7 +1816,6 @@ export const insertCustomerRelationshipSchema = createInsertSchema(customerRelat
   });
 export const insertObjectSchema = createInsertSchema(objects).omit({ id: true, createdAt: true })
   .extend({
-    deliveryPreferences: deliveryPreferencesSchema.nullish(),
     // Task #634: språkmärkta visningsnamn (lang → namn), aldrig kolumn E.
     nameTranslations: z.record(z.string(), z.string()).nullish(),
     // Task #990: platstyp — endast giltiga enum-värden (legacy NULL tillåts).
@@ -2099,7 +1953,6 @@ export const insertTeamSchema = createInsertSchema(teams).omit({ id: true, creat
 });
 export const insertTeamMemberSchema = createInsertSchema(teamMembers).omit({ id: true, createdAt: true });
 export const insertPlanningParameterSchema = createInsertSchema(planningParameters).omit({ id: true, createdAt: true });
-export const insertClusterSchema = createInsertSchema(clusters).omit({ id: true, createdAt: true });
 export const insertResourcePositionSchema = createInsertSchema(resourcePositions).omit({ id: true, recordedAt: true });
 
 export type Tenant = typeof tenants.$inferSelect;
@@ -2261,8 +2114,6 @@ export type TeamMember = typeof teamMembers.$inferSelect;
 export type InsertTeamMember = z.infer<typeof insertTeamMemberSchema>;
 export type PlanningParameter = typeof planningParameters.$inferSelect;
 export type InsertPlanningParameter = z.infer<typeof insertPlanningParameterSchema>;
-export type Cluster = typeof clusters.$inferSelect;
-export type InsertCluster = z.infer<typeof insertClusterSchema>;
 export type ResourcePosition = typeof resourcePositions.$inferSelect;
 export type InsertResourcePosition = z.infer<typeof insertResourcePositionSchema>;
 
@@ -2813,39 +2664,6 @@ export const manualInvoiceLines = pgTable("manual_invoice_lines", {
 // ============================================
 
 // Betalare kopplade till objekt
-export const objectPayers = pgTable("object_payers", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
-  objectId: varchar("object_id").references(() => objects.id).notNull(),
-  customerId: varchar("customer_id").references(() => customers.id).notNull(),
-  // Typ av betalare: primary, secondary, split
-  payerType: varchar("payer_type", { length: 20 }).default("primary").notNull(),
-  isPrimary: boolean("is_primary").default(false).notNull(),
-  payerLabel: text("payer_label"),
-  // Andel i procent (för split-betalning)
-  sharePercent: integer("share_percent").default(100),
-  // Vilka artikeltyper denna betalare ansvarar för (tom = alla)
-  articleTypes: text("article_types").array().default([]),
-  // Prioritet vid konflikt (högre = prioriteras)
-  priority: integer("priority").default(1),
-  // Giltighet
-  validFrom: timestamp("valid_from"),
-  validTo: timestamp("valid_to"),
-  // Fakturareferens specifik för denna betalare
-  invoiceReference: text("invoice_reference"),
-  // Fortnox-koppling
-  fortnoxCustomerId: varchar("fortnox_customer_id"),
-  notes: text("notes"),
-  // Task #569: spårar vilken import-batch som skapade raden, så rollback kan
-  // hitta exakt vilka rader en batch lade till. NULL = ej importerad (manuell).
-  importBatchId: text("import_batch_id"),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-}, (table) => [
-  index("idx_object_payers_object").on(table.objectId),
-  index("idx_object_payers_customer").on(table.customerId),
-  index("idx_object_payers_import_batch").on(table.importBatchId),
-]);
-
 // ============================================
 // FAKTURAMOTTAGARE PER KUND (ADR v3 §2.3 — Task #556)
 // ============================================
@@ -2965,83 +2783,6 @@ export const METADATA_PROPAGATION_TYPES = [
 export type MetadataPropagationType = typeof METADATA_PROPAGATION_TYPES[number];
 
 // ============================================
-// OBJEKTBILDER - Bildgalleri per objekt
-// ============================================
-
-export const objectImages = pgTable("object_images", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
-  objectId: varchar("object_id").references(() => objects.id).notNull(),
-  imageUrl: text("image_url").notNull(),
-  imageDate: timestamp("image_date").defaultNow().notNull(),
-  description: text("description"),
-  // Typ: photo, document, drawing, manual
-  imageType: varchar("image_type", { length: 50 }).default("photo"),
-  uploadedBy: varchar("uploaded_by").references(() => users.id, { onDelete: 'set null' }),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  // Task #716: arkivering (soft-delete) istället för permanent radering.
-  // NULL = aktiv; satt = arkiverad och dold från normala vyer.
-  deletedAt: timestamp("deleted_at"),
-  archivedBy: varchar("archived_by"),
-  archivedReason: text("archived_reason"),
-}, (table) => [
-  index("idx_object_images_object").on(table.objectId),
-  index("idx_object_images_date").on(table.imageDate),
-]);
-
-// ============================================
-// VINJETBILDER - PDF §14.5: en aktuell vinjetbild per objekt + versionshistorik.
-// Soft-supersede istället för hard-delete så fältpersonal kan se tidigare bilder
-// och slitage kan dokumenteras över tid. Aktuell bild = rad med supersededAt IS NULL.
-// ============================================
-export const objectVignettes = pgTable("object_vignettes", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
-  objectId: varchar("object_id").references(() => objects.id, { onDelete: "cascade" }).notNull(),
-  // Object Storage entity-path (/objects/uploads/<uuid>). Serveras genom
-  // /api/storage/serve<storagePath> som validerar tenant-ACL.
-  storagePath: text("storage_path").notNull(),
-  uploadedBy: varchar("uploaded_by").references(() => users.id, { onDelete: "set null" }),
-  uploadedAt: timestamp("uploaded_at").defaultNow().notNull(),
-  // Sätts när bilden ersätts av en nyare version. NULL = aktuell vinjetbild.
-  supersededAt: timestamp("superseded_at"),
-}, (table) => [
-  index("idx_object_vignettes_tenant_object_uploaded").on(table.tenantId, table.objectId, table.uploadedAt),
-  // Partial unique-index för "max en aktuell per objekt" enforce:as i migration
-  // (Drizzle saknar partial-index-syntax — se 0051_object_vignettes.sql).
-]);
-
-// ============================================
-// OBJEKTKONTAKTER - Kontakter kopplade till objekt med arv
-// ============================================
-
-export const objectContacts = pgTable("object_contacts", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
-  objectId: varchar("object_id").references(() => objects.id).notNull(),
-  // Kontaktperson
-  name: text("name").notNull(),
-  phone: text("phone"),
-  email: text("email"),
-  role: text("role"), // Vaktmästare, Styrelseordförande, etc.
-  // Kontakttyp: primary, secondary, billing, technical, emergency
-  contactType: varchar("contact_type", { length: 50 }).default("primary"),
-  // Ärvd från annat objekt (null om egen)
-  inheritedFromObjectId: varchar("inherited_from_object_id").references(() => objects.id),
-  // Om true: ärvs till barnobjekt
-  isInheritable: boolean("is_inheritable").default(true),
-  notes: text("notes"),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  // Task #716: arkivering (soft-delete) istället för permanent radering.
-  deletedAt: timestamp("deleted_at"),
-  archivedBy: varchar("archived_by"),
-  archivedReason: text("archived_reason"),
-}, (table) => [
-  index("idx_object_contacts_object").on(table.objectId),
-  index("idx_object_contacts_type").on(table.contactType),
-]);
-
-// ============================================
 // UPPGIFT/ORDER TIDSFÖNSTER - Flera önskade leveranstider
 // ============================================
 
@@ -3147,29 +2888,29 @@ export const RESTRICTION_TYPE_LABELS: Record<string, string> = {
   other: "Annan",
 };
 
-export const objectTimeRestrictions = pgTable("object_time_restrictions", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
-  objectId: varchar("object_id").references(() => objects.id).notNull(),
-  restrictionType: text("restriction_type").notNull(),
-  description: text("description"),
-  weekdays: integer("weekdays").array().default([]),
-  startTime: text("start_time"),
-  endTime: text("end_time"),
-  isBlockingAllDay: boolean("is_blocking_all_day").default(false),
-  validFromDate: timestamp("valid_from_date"),
-  validToDate: timestamp("valid_to_date"),
-  recurrenceInterval: integer("recurrence_interval"),
-  recurrenceUnit: text("recurrence_unit"),
-  preference: text("preference").default("unfavorable").notNull(),
-  reason: text("reason"),
-  isActive: boolean("is_active").default(true),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-}, (table) => [
-  index("idx_obj_time_restrictions_object").on(table.objectId),
-  index("idx_obj_time_restrictions_tenant").on(table.tenantId),
-]);
-
+// Etapp 5 (Task #1217): tabellen object_time_restrictions är borttagen.
+// Källan är metadata-fältet "Tidsrestriktioner"; motorerna läser vyn
+// ObjectTimeRestrictionView (server/services/object-time-restrictions.ts).
+// Kompat-typ för klient/planner (speglar den gamla radformen):
+export interface ObjectTimeRestriction {
+  id: string;
+  tenantId: string;
+  objectId: string;
+  restrictionType: string;
+  description: string | null;
+  weekdays: number[] | null;
+  startTime: string | null;
+  endTime: string | null;
+  isBlockingAllDay: boolean | null;
+  validFromDate: Date | string | null;
+  validToDate: Date | string | null;
+  recurrenceInterval: number | null;
+  recurrenceUnit: string | null;
+  preference: string;
+  reason: string | null;
+  isActive: boolean | null;
+  createdAt: Date | string | null;
+}
 // ============================================
 // STRUKTURARTIKLAR - Artiklar som skapar beroendeuppgifter
 // ============================================
@@ -3230,8 +2971,6 @@ export const orderConcepts = pgTable("order_concepts", {
   tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
   name: text("name").notNull(),
   description: text("description"),
-  // Kluster som konceptet pekas in på (söker nedåt i hierarkin)
-  targetClusterId: varchar("target_cluster_id").references(() => clusters.id),
   // Huvudartikel som ska utföras
   articleId: varchar("article_id").references(() => articles.id),
   // Korsbefruktning: multiplicera med metadata-värde (t.ex. "containerCount")
@@ -3378,12 +3117,9 @@ export const orderConcepts = pgTable("order_concepts", {
   subscriptionAdjustmentDate: timestamp("subscription_adjustment_date"), // valfritt årligt justeringsdatum (tomt = löpande)
   invoiceConsolidation: text("invoice_consolidation").default("per_job"), // 'per_job' | 'weekly' | 'monthly' | 'department'
   departmentMetadataField: text("department_metadata_field"), // metadatafält för per-avdelning-sampackning
-  // Steg 4 — flera inpekningsgrenar (targetClusterId behålls för bakåtkomp/primär gren)
-  targetClusterIds: text("target_cluster_ids").array(),
   // Steg 4 (ADR v3) — objekt-/gren-inpekning: lagrar valda gren-ROT-objekt-id:n.
   // Upplöses live till subträd via getObjectSubtreeIds (primär parent_id-kedja,
-  // tenant-scopat). Föredras framför targetClusterIds när satt; nullable för
-  // expand-contract (legacy kluster-koncept saknar detta fält).
+  // tenant-scopat). Etapp 5: kluster-inpekning (targetClusterId/-Ids) är borttagen.
   targetObjectIds: text("target_object_ids").array(),
   // Steg 5 — leveranstid (tidsfönster eller intervall) + restriktioner
   deliveryTimeType: text("delivery_time_type"), // 'time_window' | 'interval'
@@ -3411,7 +3147,6 @@ export const orderConcepts = pgTable("order_concepts", {
   deletedAt: timestamp("deleted_at"),
 }, (table) => [
   index("idx_order_concepts_tenant").on(table.tenantId),
-  index("idx_order_concepts_cluster").on(table.targetClusterId),
   index("idx_order_concepts_customer").on(table.customerId),
   index("idx_order_concepts_status").on(table.status),
 ]);
@@ -3500,7 +3235,7 @@ export const assignments = pgTable("assignments", {
   // (object_payers).
   customerId: varchar("customer_id").references(() => customers.id),
   // Kluster för enkel filtrering
-  clusterId: varchar("cluster_id").references(() => clusters.id),
+  clusterId: varchar("cluster_id"),
   // Tilldelad resurs
   resourceId: varchar("resource_id").references(() => resources.id),
   // Team för förplanering
@@ -3799,7 +3534,6 @@ export type OrderConceptRunLog = typeof orderConceptRunLogs.$inferSelect;
 
 export const orderConceptsRelations = relations(orderConcepts, ({ one, many }) => ({
   tenant: one(tenants, { fields: [orderConcepts.tenantId], references: [tenants.id] }),
-  targetCluster: one(clusters, { fields: [orderConcepts.targetClusterId], references: [clusters.id] }),
   article: one(articles, { fields: [orderConcepts.articleId], references: [articles.id] }),
   createdByUser: one(users, { fields: [orderConcepts.createdBy], references: [users.id] }),
   filters: many(conceptFilters),
@@ -3814,7 +3548,6 @@ export const assignmentsRelations = relations(assignments, ({ one, many }) => ({
   tenant: one(tenants, { fields: [assignments.tenantId], references: [tenants.id] }),
   orderConcept: one(orderConcepts, { fields: [assignments.orderConceptId], references: [orderConcepts.id] }),
   object: one(objects, { fields: [assignments.objectId], references: [objects.id] }),
-  cluster: one(clusters, { fields: [assignments.clusterId], references: [clusters.id] }),
   resource: one(resources, { fields: [assignments.resourceId], references: [resources.id] }),
   team: one(teams, { fields: [assignments.teamId], references: [teams.id] }),
   createdByUser: one(users, { fields: [assignments.createdBy], references: [users.id] }),
@@ -3824,18 +3557,6 @@ export const assignmentsRelations = relations(assignments, ({ one, many }) => ({
 export const assignmentArticlesRelations = relations(assignmentArticles, ({ one }) => ({
   assignment: one(assignments, { fields: [assignmentArticles.assignmentId], references: [assignments.id] }),
   article: one(articles, { fields: [assignmentArticles.articleId], references: [articles.id] }),
-}));
-
-export const objectImagesRelations = relations(objectImages, ({ one }) => ({
-  tenant: one(tenants, { fields: [objectImages.tenantId], references: [tenants.id] }),
-  object: one(objects, { fields: [objectImages.objectId], references: [objects.id] }),
-  uploadedByUser: one(users, { fields: [objectImages.uploadedBy], references: [users.id] }),
-}));
-
-export const objectContactsRelations = relations(objectContacts, ({ one }) => ({
-  tenant: one(tenants, { fields: [objectContacts.tenantId], references: [tenants.id] }),
-  object: one(objects, { fields: [objectContacts.objectId], references: [objects.id] }),
-  inheritedFromObject: one(objects, { fields: [objectContacts.inheritedFromObjectId], references: [objects.id] }),
 }));
 
 export const taskDesiredTimewindowsRelations = relations(taskDesiredTimewindows, ({ one }) => ({
@@ -3857,11 +3578,6 @@ export const taskInformationRelations = relations(taskInformation, ({ one }) => 
   createdByUser: one(users, { fields: [taskInformation.createdBy], references: [users.id] }),
 }));
 
-export const objectTimeRestrictionsRelations = relations(objectTimeRestrictions, ({ one }) => ({
-  tenant: one(tenants, { fields: [objectTimeRestrictions.tenantId], references: [tenants.id] }),
-  object: one(objects, { fields: [objectTimeRestrictions.objectId], references: [objects.id] }),
-}));
-
 export const structuralArticlesRelations = relations(structuralArticles, ({ one }) => ({
   tenant: one(tenants, { fields: [structuralArticles.tenantId], references: [tenants.id] }),
   parentArticle: one(articles, { fields: [structuralArticles.parentArticleId], references: [articles.id] }),
@@ -3881,12 +3597,6 @@ export const fortnoxInvoiceExportsRelations = relations(fortnoxInvoiceExports, (
   workOrder: one(workOrders, { fields: [fortnoxInvoiceExports.workOrderId], references: [workOrders.id] }),
 }));
 
-export const objectPayersRelations = relations(objectPayers, ({ one }) => ({
-  tenant: one(tenants, { fields: [objectPayers.tenantId], references: [tenants.id] }),
-  object: one(objects, { fields: [objectPayers.objectId], references: [objects.id] }),
-  customer: one(customers, { fields: [objectPayers.customerId], references: [customers.id] }),
-}));
-
 // ============================================
 // INSERT SCHEMAS FOR NEW TABLES
 // ============================================
@@ -3895,16 +3605,11 @@ export const insertFortnoxConfigSchema = createInsertSchema(fortnoxConfig).omit(
 export const insertFortnoxMappingSchema = createInsertSchema(fortnoxMappings).omit({ id: true, createdAt: true });
 export const insertFortnoxInvoiceExportSchema = createInsertSchema(fortnoxInvoiceExports).omit({ id: true, createdAt: true });
 export const insertManualInvoiceLineSchema = createInsertSchema(manualInvoiceLines).omit({ id: true, createdAt: true });
-export const insertObjectPayerSchema = createInsertSchema(objectPayers).omit({ id: true, createdAt: true });
 export const insertInvoiceRecipientSchema = createInsertSchema(invoiceRecipients).omit({ id: true, createdAt: true, deletedAt: true });
-export const insertObjectImageSchema = createInsertSchema(objectImages).omit({ id: true, createdAt: true });
-export const insertObjectVignetteSchema = createInsertSchema(objectVignettes).omit({ id: true, uploadedAt: true, supersededAt: true });
-export const insertObjectContactSchema = createInsertSchema(objectContacts).omit({ id: true, createdAt: true });
 export const insertTaskDesiredTimewindowSchema = createInsertSchema(taskDesiredTimewindows).omit({ id: true, createdAt: true });
 export const insertTaskDependencySchema = createInsertSchema(taskDependencies).omit({ id: true, createdAt: true });
 export const insertTaskInformationSchema = createInsertSchema(taskInformation).omit({ id: true, createdAt: true });
 export const insertObjectParentSchema = createInsertSchema(objectParents).omit({ id: true, createdAt: true });
-export const insertObjectTimeRestrictionSchema = createInsertSchema(objectTimeRestrictions).omit({ id: true, createdAt: true });
 export const insertStructuralArticleSchema = createInsertSchema(structuralArticles).omit({ id: true, createdAt: true });
 
 // ============================================
@@ -3919,8 +3624,6 @@ export type FortnoxInvoiceExport = typeof fortnoxInvoiceExports.$inferSelect;
 export type InsertFortnoxInvoiceExport = z.infer<typeof insertFortnoxInvoiceExportSchema>;
 export type ManualInvoiceLine = typeof manualInvoiceLines.$inferSelect;
 export type InsertManualInvoiceLine = z.infer<typeof insertManualInvoiceLineSchema>;
-export type ObjectPayer = typeof objectPayers.$inferSelect;
-export type InsertObjectPayer = z.infer<typeof insertObjectPayerSchema>;
 export type InvoiceRecipient = typeof invoiceRecipients.$inferSelect;
 export type InsertInvoiceRecipient = z.infer<typeof insertInvoiceRecipientSchema>;
 // Task #992-cleanup: den engelska metadata_definitions/object_metadata-modellen är
@@ -3944,12 +3647,6 @@ export interface MetadataDefinition {
   deletedAt: Date | null;
   replacedByDefinitionId: string | null;
 }
-export type ObjectImage = typeof objectImages.$inferSelect;
-export type InsertObjectImage = z.infer<typeof insertObjectImageSchema>;
-export type ObjectVignette = typeof objectVignettes.$inferSelect;
-export type InsertObjectVignette = z.infer<typeof insertObjectVignetteSchema>;
-export type ObjectContact = typeof objectContacts.$inferSelect;
-export type InsertObjectContact = z.infer<typeof insertObjectContactSchema>;
 export type TaskDesiredTimewindow = typeof taskDesiredTimewindows.$inferSelect;
 export type InsertTaskDesiredTimewindow = z.infer<typeof insertTaskDesiredTimewindowSchema>;
 export type TaskDependency = typeof taskDependencies.$inferSelect;
@@ -3958,8 +3655,6 @@ export type TaskInformation = typeof taskInformation.$inferSelect;
 export type InsertTaskInformation = z.infer<typeof insertTaskInformationSchema>;
 export type ObjectParent = typeof objectParents.$inferSelect;
 export type InsertObjectParent = z.infer<typeof insertObjectParentSchema>;
-export type ObjectTimeRestriction = typeof objectTimeRestrictions.$inferSelect;
-export type InsertObjectTimeRestriction = z.infer<typeof insertObjectTimeRestrictionSchema>;
 export type StructuralArticle = typeof structuralArticles.$inferSelect;
 export type InsertStructuralArticle = z.infer<typeof insertStructuralArticleSchema>;
 
@@ -6840,7 +6535,6 @@ export const annualGoals = pgTable("annual_goals", {
   tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
   customerId: varchar("customer_id").references(() => customers.id),
   objectId: varchar("object_id").references(() => objects.id),
-  clusterId: varchar("cluster_id").references(() => clusters.id),
   articleType: text("article_type").notNull(),
   targetCount: integer("target_count").notNull(),
   year: integer("year").notNull(),
@@ -6855,14 +6549,12 @@ export const annualGoals = pgTable("annual_goals", {
   index("idx_annual_goals_tenant_year").on(table.tenantId, table.year),
   index("idx_annual_goals_customer").on(table.customerId),
   index("idx_annual_goals_object").on(table.objectId),
-  index("idx_annual_goals_cluster").on(table.clusterId),
 ]);
 
 export const annualGoalsRelations = relations(annualGoals, ({ one }) => ({
   tenant: one(tenants, { fields: [annualGoals.tenantId], references: [tenants.id] }),
   customer: one(customers, { fields: [annualGoals.customerId], references: [customers.id] }),
   object: one(objects, { fields: [annualGoals.objectId], references: [objects.id] }),
-  cluster: one(clusters, { fields: [annualGoals.clusterId], references: [clusters.id] }),
 }));
 
 export const insertAnnualGoalSchema = createInsertSchema(annualGoals).omit({ id: true, createdAt: true });
@@ -6892,27 +6584,6 @@ export const predictiveForecasts = pgTable("predictive_forecasts", {
 export const insertPredictiveForecastSchema = createInsertSchema(predictiveForecasts).omit({ id: true, createdAt: true, updatedAt: true });
 export type InsertPredictiveForecast = z.infer<typeof insertPredictiveForecastSchema>;
 export type PredictiveForecast = typeof predictiveForecasts.$inferSelect;
-
-// Kapacitetsprognos per kluster och vecka (#172)
-export const clusterCapacityForecast = pgTable("cluster_capacity_forecast", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
-  clusterId: varchar("cluster_id").references(() => clusters.id, { onDelete: 'cascade' }).notNull(),
-  weekStart: timestamp("week_start").notNull(),
-  demandHours: real("demand_hours").notNull().default(0),
-  capacityHours: real("capacity_hours").notNull().default(0),
-  gapHours: real("gap_hours").notNull().default(0),
-  weatherMultiplier: real("weather_multiplier").default(1.0),
-  computedAt: timestamp("computed_at").defaultNow().notNull(),
-}, (table) => [
-  index("idx_cluster_capacity_forecast_tenant_week").on(table.tenantId, table.weekStart),
-  index("idx_cluster_capacity_forecast_cluster").on(table.clusterId),
-  uniqueIndex("uq_cluster_capacity_forecast").on(table.tenantId, table.clusterId, table.weekStart),
-]);
-
-export const insertClusterCapacityForecastSchema = createInsertSchema(clusterCapacityForecast).omit({ id: true, computedAt: true });
-export type InsertClusterCapacityForecast = z.infer<typeof insertClusterCapacityForecastSchema>;
-export type ClusterCapacityForecast = typeof clusterCapacityForecast.$inferSelect;
 
 export type TimeSummaryResponse = {
   week: number;

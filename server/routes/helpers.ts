@@ -4,7 +4,7 @@ import { z } from "zod";
 import { getTenantIdWithFallback } from "../tenant-middleware";
 import { storage } from "../storage";
 import { NotFoundError, UnauthorizedError, ValidationError } from "../errors";
-import type { Resource, Team, Customer, ServiceObject, Cluster } from "@shared/schema";
+import type { Resource, Team, Customer, ServiceObject } from "@shared/schema";
 
 declare global {
   namespace Express {
@@ -93,10 +93,6 @@ export function ensureObjectNotArchived(object: ServiceObject): ServiceObject {
     throw new ValidationError("Objektet är arkiverat och kan inte kopplas till nya uppgifter.");
   }
   return object;
-}
-
-export function ensureClusterInTenant(id: string | null | undefined, tenantId: string): Promise<Cluster> {
-  return ensureTenantOwnership((cid: string) => storage.getCluster(cid), id, tenantId, "Kluster");
 }
 
 /**

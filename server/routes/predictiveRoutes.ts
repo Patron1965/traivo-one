@@ -95,7 +95,7 @@ export async function registerPredictiveRoutes(app: Express) {
       })
       .from(iotDevices)
       .innerJoin(objects, eq(objects.id, iotDevices.objectId))
-      .leftJoin(customers, sql`${customers.id} = (SELECT op.customer_id FROM object_payers op WHERE op.object_id = ${objects.id} AND op.is_primary = true LIMIT 1)`)
+      .leftJoin(customers, sql`${customers.id} = ${primaryPayerCustomerIdSql()}`)
       .where(and(
         eq(iotDevices.tenantId, tenantId),
         eq(iotDevices.status, "active"),
@@ -314,7 +314,7 @@ export async function registerPredictiveRoutes(app: Express) {
       })
       .from(predictiveForecasts)
       .innerJoin(objects, eq(objects.id, predictiveForecasts.objectId))
-      .leftJoin(customers, sql`${customers.id} = (SELECT op.customer_id FROM object_payers op WHERE op.object_id = ${objects.id} AND op.is_primary = true LIMIT 1)`)
+      .leftJoin(customers, sql`${customers.id} = ${primaryPayerCustomerIdSql()}`)
       .where(and(
         eq(predictiveForecasts.tenantId, tenantId),
         eq(predictiveForecasts.status, "active"),

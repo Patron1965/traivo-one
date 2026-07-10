@@ -8,7 +8,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { 
-  Loader2, TrendingUp, DollarSign, Users, MapPin, BarChart3, 
+  Loader2, TrendingUp, DollarSign, Users, BarChart3, 
   CheckCircle2, Clock, Truck, Target, ArrowUpRight, ArrowDownRight,
   AlertTriangle, Activity, Zap, FileText, Download, Building2,
   Timer, Gauge, ShieldAlert, CircleSlash, Award, Star, MessageSquare
@@ -22,7 +22,7 @@ import {
 } from "recharts";
 import { format, startOfDay, endOfDay, startOfWeek, endOfWeek, startOfMonth, endOfMonth, subMonths, eachDayOfInterval, differenceInMinutes } from "date-fns";
 import { sv } from "date-fns/locale";
-import type { WorkOrder, Customer, Resource, Cluster, DeviationReport } from "@shared/schema";
+import type { WorkOrder, Customer, Resource, DeviationReport } from "@shared/schema";
 import { DEVIATION_CATEGORY_LABELS, SEVERITY_LEVEL_LABELS } from "@shared/schema";
 import { PredictionAccuracyTab } from "@/components/reporting/PredictionAccuracyTab";
 
@@ -98,11 +98,6 @@ const RATING_COLORS = ["#ef4444", "#f97316", "#eab308", "#84cc16", "#22c55e"];
 function RouteFeedbackTab() {
   const [feedbackResourceFilter, setFeedbackResourceFilter] = useState<string>("all");
   const [feedbackDateRange, setFeedbackDateRange] = useState<string>("30d");
-  const [feedbackAreaFilter, setFeedbackAreaFilter] = useState<string>("all");
-
-  const { data: clusters } = useQuery<Cluster[]>({
-    queryKey: ["/api/clusters"],
-  });
 
   const dateParams = useMemo(() => {
     const end = new Date();
@@ -117,8 +112,7 @@ function RouteFeedbackTab() {
     };
   }, [feedbackDateRange]);
 
-  const clusterParam = feedbackAreaFilter !== "all" ? `&clusterId=${feedbackAreaFilter}` : "";
-  const summaryUrl = `/api/route-feedback/summary?startDate=${dateParams.startDate}&endDate=${dateParams.endDate}${clusterParam}`;
+  const summaryUrl = `/api/route-feedback/summary?startDate=${dateParams.startDate}&endDate=${dateParams.endDate}`;
   const { data: summary, isLoading, isError } = useQuery<{
     avgRating: number;
     totalCount: number;
@@ -130,7 +124,7 @@ function RouteFeedbackTab() {
     queryKey: [summaryUrl],
   });
 
-  const listUrl = `/api/route-feedback?limit=50&startDate=${dateParams.startDate}&endDate=${dateParams.endDate}${feedbackResourceFilter !== "all" ? `&resourceId=${feedbackResourceFilter}` : ""}${clusterParam}`;
+  const listUrl = `/api/route-feedback?limit=50&startDate=${dateParams.startDate}&endDate=${dateParams.endDate}${feedbackResourceFilter !== "all" ? `&resourceId=${feedbackResourceFilter}` : ""}`;
   const { data: recentFeedback } = useQuery<Array<{
     id: string;
     resourceName: string;
@@ -216,19 +210,6 @@ function RouteFeedbackTab() {
               <SelectItem value="all">Alla förare</SelectItem>
               {summary.byResource.map((r) => (
                 <SelectItem key={r.resourceId} value={r.resourceId}>{r.resourceName}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        )}
-        {clusters && clusters.length > 0 && (
-          <Select value={feedbackAreaFilter} onValueChange={setFeedbackAreaFilter}>
-            <SelectTrigger className="w-[200px]" data-testid="feedback-area-filter">
-              <SelectValue placeholder="Alla områden" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Alla områden</SelectItem>
-              {clusters.map((c) => (
-                <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
               ))}
             </SelectContent>
           </Select>
@@ -424,15 +405,10 @@ export default function ReportingDashboardPage() {
     queryKey: ["/api/resources"],
   });
 
-  const { data: clusters = [] } = useQuery<Cluster[]>({
-    queryKey: ["/api/clusters"],
-  });
-
   const { data: deviations = [] } = useQuery<DeviationReport[]>({
     queryKey: ["/api/deviation-reports"],
   });
 
-  const clusterMap = useMemo(() => new Map(clusters.map(c => [c.id, c])), [clusters]);
   const customerMap = useMemo(() => new Map(customers.map(c => [c.id, c])), [customers]);
   const resourceMap = useMemo(() => new Map(resources.map(r => [r.id, r])), [resources]);
 
@@ -642,37 +618,6 @@ export default function ReportingDashboardPage() {
       .sort((a, b) => b.orders - a.orders)
       .slice(0, 10);
   }, [filteredOrders, resourceMap, filteredDeviations]);
-
-  const clusterPerformance = useMemo(() => {
-    const data: Record<string, { name: string; orders: number; value: number; margin: number }> = {};
-
-    filteredOrders.forEach(wo => {
-      const clusterId = wo.clusterId || "ingen";
-      
-      if (!data[clusterId]) {
-        const cluster = clusterMap.get(clusterId);
-        data[clusterId] = {
-          name: cluster?.name || "Inget kluster",
-          orders: 0,
-          value: 0,
-          margin: 0
-        };
-      }
-
-      data[clusterId].orders += 1;
-      data[clusterId].value += wo.cachedValue ?? 0;
-      data[clusterId].margin += (wo.cachedValue ?? 0) - (wo.cachedCost ?? 0);
-    });
-
-    return Object.entries(data)
-      .map(([id, d]) => ({
-        id,
-        ...d,
-        marginPercent: d.value > 0 ? Math.round((d.margin / d.value) * 100) : 0
-      }))
-      .sort((a, b) => b.value - a.value)
-      .slice(0, 8);
-  }, [filteredOrders, clusterMap]);
 
   const customerTop = useMemo(() => {
     const data: Record<string, { name: string; orders: number; value: number }> = {};
@@ -989,7 +934,6 @@ export default function ReportingDashboardPage() {
           <TabsTrigger value="completed" data-testid="tab-completed">Slutförda</TabsTrigger>
           <TabsTrigger value="deviations" data-testid="tab-deviations">Avvikelser</TabsTrigger>
           <TabsTrigger value="resources" data-testid="tab-resources">Resurser</TabsTrigger>
-          <TabsTrigger value="areas" data-testid="tab-areas">Områden</TabsTrigger>
           <TabsTrigger value="customers" data-testid="tab-customers">Kunder</TabsTrigger>
           <TabsTrigger value="route-feedback" data-testid="tab-route-feedback">Rutt-feedback</TabsTrigger>
           <TabsTrigger value="prediction" data-testid="tab-prediction">Prediktionsnoggrannhet</TabsTrigger>
@@ -1093,27 +1037,6 @@ export default function ReportingDashboardPage() {
               </CardContent>
             </Card>
 
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-base flex items-center gap-2">
-                  <MapPin className="h-4 w-4" />
-                  Områdesprestanda
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="h-[180px]">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={clusterPerformance.slice(0, 5)} layout="vertical">
-                      <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                      <XAxis type="number" tick={{ fontSize: 11 }} />
-                      <YAxis dataKey="name" type="category" width={80} tick={{ fontSize: 10 }} />
-                      <RechartsTooltip contentStyle={CHART_TOOLTIP_STYLE} />
-                      <Bar dataKey="orders" name="Ordrar" fill="hsl(200, 70%, 50%)" radius={[0, 4, 4, 0]} />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
-              </CardContent>
-            </Card>
           </div>
         </TabsContent>
 
@@ -1649,40 +1572,6 @@ export default function ReportingDashboardPage() {
                 {resourcePerformance.length === 0 && (
                   <p className="text-muted-foreground text-center py-8">Ingen resursdata för vald period</p>
                 )}
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {/* === AREAS TAB === */}
-        <TabsContent value="areas" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">Kluster/Områden</CardTitle>
-              <CardDescription>Intäkter och marginaler per geografiskt område</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="h-[300px]">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={clusterPerformance}>
-                    <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                    <XAxis dataKey="name" tick={{ fontSize: 10 }} angle={-20} textAnchor="end" height={60} />
-                    <YAxis tick={{ fontSize: 11 }} />
-                    <RechartsTooltip contentStyle={CHART_TOOLTIP_STYLE} />
-                    <Legend />
-                    <Bar dataKey="value" name="Intäkt" fill="hsl(200, 70%, 50%)" radius={[4, 4, 0, 0]} />
-                    <Bar dataKey="margin" name="Marginal" fill="hsl(140, 70%, 45%)" radius={[4, 4, 0, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4">
-                {clusterPerformance.slice(0, 4).map(cluster => (
-                  <div key={cluster.id} className="text-center p-3 border rounded-lg">
-                    <p className="text-sm font-medium truncate">{cluster.name}</p>
-                    <p className="text-2xl font-bold text-primary">{cluster.marginPercent}%</p>
-                    <p className="text-xs text-muted-foreground">marginal</p>
-                  </div>
-                ))}
               </div>
             </CardContent>
           </Card>

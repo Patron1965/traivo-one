@@ -16,7 +16,6 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { format } from "date-fns";
 import { sv } from "date-fns/locale";
-import type { Cluster } from "@shared/schema";
 
 interface Recommendation {
   type: "weather" | "optimization" | "capacity" | "historical";
@@ -94,7 +93,6 @@ interface CurrentRouteJob {
 
 export default function RoutesPage() {
   const [selectedDate, setSelectedDate] = useState<string>(format(new Date(), "yyyy-MM-dd"));
-  const [selectedCluster, setSelectedCluster] = useState<string>("all");
   const [vrpResult, setVrpResult] = useState<VRPResult | null>(null);
   const [currentStats, setCurrentStats] = useState<CurrentRouteStats | null>(null);
   const [currentRoutes, setCurrentRoutes] = useState<CurrentRouteJob[]>([]);
@@ -102,10 +100,6 @@ export default function RoutesPage() {
   const [mapExpanded, setMapExpanded] = useState(false);
   const [, setLocation] = useLocation();
   const { toast } = useToast();
-
-  const { data: clusters = [] } = useQuery<Cluster[]>({
-    queryKey: ["/api/clusters"],
-  });
 
   const { data: recommendations, isLoading: recommendationsLoading } = useQuery<RouteRecommendations>({
     queryKey: ["/api/ai/route-recommendations", selectedDate],
@@ -135,9 +129,8 @@ export default function RoutesPage() {
 
   const vrpMutation = useMutation({
     mutationFn: async () => {
-      const body: { date?: string; clusterId?: string } = {};
+      const body: { date?: string } = {};
       if (selectedDate) body.date = selectedDate;
-      if (selectedCluster && selectedCluster !== "all") body.clusterId = selectedCluster;
 
       try {
         const statsRes = await apiRequest("GET", `/api/ai/route-recommendations?date=${selectedDate}`);
@@ -240,17 +233,6 @@ export default function RoutesPage() {
           className="w-[150px] h-9"
           data-testid="input-vrp-date"
         />
-        <Select value={selectedCluster} onValueChange={setSelectedCluster}>
-          <SelectTrigger className="w-[160px] h-9" data-testid="select-vrp-cluster">
-            <SelectValue placeholder="Alla kluster" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Alla kluster</SelectItem>
-            {clusters.map(c => (
-              <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
         <Tooltip>
           <TooltipTrigger asChild>
             <Button

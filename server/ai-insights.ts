@@ -23,14 +23,13 @@ export interface InsightCard {
 }
 
 export async function generateInsightCards(tenantId: string): Promise<InsightCard[]> {
-  const [workOrders, resources, clusters, setupTimeLogs] = await Promise.all([
+  const [workOrders, resources, setupTimeLogs] = await Promise.all([
     storage.getWorkOrders(tenantId),
     storage.getResources(tenantId),
-    storage.getClusters(tenantId),
     storage.getSetupTimeLogs(tenantId),
   ]);
 
-  const kpis = calculatePlanningKPIs(workOrders, resources, clusters, setupTimeLogs);
+  const kpis = calculatePlanningKPIs(workOrders, resources, setupTimeLogs);
 
   const today = new Date();
   const sevenDaysAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);

@@ -24,11 +24,9 @@ describe("Auto-inferens av teamId baserat på resourceId", () => {
   beforeAll(async () => {
     await storage.ensureTenant(TENANT, { name: "Team-infer test tenant" });
 
-    const cluster = await storage.createCluster({
-      tenantId: TENANT,
-      name: `cl-${randomId()}`,
-    });
-    clusterAId = cluster.id;
+    // Etapp 5: clusters-tabellen är borttagen — teams.cluster_id är en kvarlämnad
+    // fri identifierare (ingen FK). Ett literal-id räcker för inferens-testet.
+    clusterAId = `cl-${randomId()}`;
 
     const tA = await storage.createTeam({
       tenantId: TENANT,

@@ -1,4 +1,5 @@
 import type { Express } from "express";
+import { ensurePrimaryPayer } from "../services/object-customer";
 import { storage } from "../storage";
 import { db } from "../db";
 import { eq, sql, desc, and, gte, isNull, inArray } from "drizzle-orm";
@@ -9,11 +10,10 @@ import { asyncHandler } from "../asyncHandler";
 import { AppError, NotFoundError, ValidationError, UnauthorizedError, ForbiddenError, ConflictError } from "../errors";
 import { requireAdmin, requireRole } from "../tenant-middleware";
 import { insertPortalMessageSchema, insertSelfBookingSchema, insertVisitConfirmationSchema, insertTechnicianRatingSchema, insertQrCodeLinkSchema, insertSelfBookingSlotSchema, insertCustomerNotificationSettingsSchema, type InsertObject, taskMetadataUpdates } from "@shared/schema";
-import { getObjectWithAllMetadata, writeArticleMetadataOnObject, getDisplayValue } from "../metadata-queries";
+import { getObjectWithAllMetadata, writeArticleMetadataOnObject, getDisplayValue, getObjectAtkomstFields } from "../metadata-queries";
 import { notificationService } from "../notifications";
 import { sendEmail } from "../replit_integrations/resend";
 import { isModuleEnabled } from "../feature-flags";
-import { ensureClusterAndAssign } from "../auto-cluster";
 import { triggerGeocodeIfMissing } from "../services/geocoding";
 import { authLimiter } from "../middleware/rate-limit";
 
@@ -450,9 +450,6 @@ app.get("/api/portal/clusters", asyncHandler(async (req, res) => {
         address: obj.address,
         city: obj.city,
         postalCode: obj.postalCode,
-        accessCode: obj.accessCode,
-        keyNumber: obj.keyNumber,
-        accessInfo: obj.accessInfo,
         latitude: obj.latitude,
         longitude: obj.longitude,
         parentId: obj.parentId,
@@ -600,8 +597,6 @@ app.get("/api/portal/clusters/children", asyncHandler(async (req: any, res: any)
       address: o.address,
       city: o.city,
       postalCode: o.postalCode,
-      accessCode: o.accessCode,
-      keyNumber: o.keyNumber,
       latitude: o.latitude,
       longitude: o.longitude,
       hasChildren: hasChildrenSet.has(o.id),
@@ -831,6 +826,8 @@ app.get("/api/portal/clusters/:objectId/stats", asyncHandler(async (req: any, re
     openIssuesCount = 0;
   }
 
+  const atkomst = await getObjectAtkomstFields(targetObj.id, session.tenantId!);
+
   res.json({
     object: {
       id: targetObj.id,
@@ -840,11 +837,10 @@ app.get("/api/portal/clusters/:objectId/stats", asyncHandler(async (req: any, re
       address: targetObj.address,
       city: targetObj.city,
       postalCode: targetObj.postalCode,
-      accessCode: targetObj.accessCode,
-      keyNumber: targetObj.keyNumber,
+      accessCode: atkomst.portkod,
+      keyNumber: atkomst.nyckelnummer,
       latitude: targetObj.latitude,
       longitude: targetObj.longitude,
-      notes: targetObj.notes,
       extraParents: Math.max(0, (totalParentCount.get(targetObj.id) ?? 0) - 1),
     },
     descendantsCount: Math.max(0, descendants.size - 1),
@@ -1209,38 +1205,6 @@ const updatePortalDeliveryPrefsHandler = asyncHandler(async (req: ExpressRequest
 app.put("/api/portal/delivery-preferences", updatePortalDeliveryPrefsHandler);
 app.patch("/api/portal/delivery-preferences", updatePortalDeliveryPrefsHandler);
 
-// Objekt-nivå preferenser via portal — kunden kan se/sätta per objekt.
-app.get("/api/portal/objects/:objectId/delivery-preferences", asyncHandler(async (req, res) => {
-    const session = await requirePortalAuth(req, res);
-    if (!session) return;
-    const obj = await storage.getObject(req.params.objectId);
-    if (!obj || !verifyTenantOwnership(obj, session.tenantId!) || !isObjectOwnedByPortalCustomer(obj, session) || !isObjectInScope(session, obj.id)) {
-      throw new NotFoundError("Objekt");
-    }
-    // Leveranspreferenser är objekt-egna — inget kund-arv (ADR v3). Returnerar
-    // enbart objektets egna prefs (eller null när de saknas).
-    res.set("Cache-Control", "no-cache, must-revalidate");
-    res.json({ deliveryPreferences: obj.deliveryPreferences ?? null });
-}));
-
-const updatePortalObjectDeliveryPrefsHandler = asyncHandler(async (req: ExpressRequest, res: ExpressResponse) => {
-    const session = await requirePortalAuth(req, res);
-    if (!session) return;
-    const obj = await storage.getObject(req.params.objectId);
-    if (!obj || !verifyTenantOwnership(obj, session.tenantId!) || !isObjectOwnedByPortalCustomer(obj, session) || !isObjectInScope(session, obj.id)) {
-      throw new NotFoundError("Objekt");
-    }
-    const { deliveryPreferencesSchema } = await import("@shared/schema");
-    const parsed = deliveryPreferencesSchema.nullish().safeParse(req.body?.deliveryPreferences);
-    if (!parsed.success) {
-      return res.status(400).json(formatZodError(parsed.error));
-    }
-    await storage.updateObject(obj.id, { deliveryPreferences: parsed.data ?? null });
-    console.log(`[portal] Customer ${session.customerId} updated delivery preferences for object ${obj.id}`);
-    res.json({ deliveryPreferences: parsed.data ?? null });
-});
-app.put("/api/portal/objects/:objectId/delivery-preferences", updatePortalObjectDeliveryPrefsHandler);
-app.patch("/api/portal/objects/:objectId/delivery-preferences", updatePortalObjectDeliveryPrefsHandler);
 
 // ============================================
 // PORTAL - NOTIFICATION SETTINGS (Profil)
@@ -2290,7 +2254,6 @@ app.post("/api/public-issue-reports/:id/create-interim-object", requireAdmin, as
     const objectName = name || report.title || "Rapporterat objekt från felanmälan";
     const insertData: InsertObject = {
       tenantId,
-      customerId,
       parentId: parentId || null,
       name: objectName,
       objectType: objectType || "fastighet",
@@ -2300,17 +2263,10 @@ app.post("/api/public-issue-reports/:id/create-interim-object", requireAdmin, as
       longitude: report.longitude || null,
       isInterimObject: true,
       status: "active",
-      notes: `Skapat från felanmälan: ${report.title}`,
     };
     const interimObject = await storage.createObject(insertData);
-    
-    if (interimObject.customerId) {
-      try {
-        await ensureClusterAndAssign(tenantId, interimObject.customerId, interimObject.id);
-      } catch (err) {
-        console.error("Auto-cluster error on interim object:", err);
-      }
-    }
+    // Etapp 5: kund-koppling sker via Ekonomi-metadatat ("Kund"), inte objektkolumn.
+    await ensurePrimaryPayer(tenantId, interimObject.id, customerId);
 
     triggerGeocodeIfMissing(interimObject.id);
 
@@ -2407,8 +2363,7 @@ app.get("/api/portal/field/object/:id", asyncHandler(async (req, res) => {
       objectType: obj.objectType,
       latitude: obj.latitude,
       longitude: obj.longitude,
-      accessCode: obj.accessCode,
-      notes: obj.notes,
+      accessCode: (await getObjectAtkomstFields(obj.id, session.tenantId!, owm)).portkod,
       metadata,
       recentVisits: objectOrders,
       changeRequests: changeRequests.map(cr => ({

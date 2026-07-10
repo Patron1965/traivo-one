@@ -3,7 +3,7 @@
 // entitet before/after-snapshot som stämplas under import-exekvering (wizard +
 // Import 2.0). Undo:
 //   - create_object  → soft-delete (arkivera) objektet + rensa import-egna
-//                       primär object_parents/object_payers-rader.
+//                       primär object_parents/kund-metadata-rader.
 //   - update_object  → återställ skalär-fält + primär-förälder från beforeJson,
 //                       men ENDAST om objektets nuvarande tillstånd fortfarande
 //                       == afterJson (annars blockeras raden, fail-closed).
@@ -24,7 +24,6 @@ import {
   importBatches,
   metadataVarden,
   objectParents,
-  objectPayers,
   objects,
   type ImportAction,
 } from "@shared/schema";
@@ -115,7 +114,6 @@ type FkColumn = { table: string; column: string };
 // av ett skapat objekt — de raderas/ignoreras explicit i stället.
 const IGNORED_FK_COLUMNS = new Set<string>([
   "object_parents.object_id",
-  "object_payers.object_id",
   "metadata_varden.objekt_id",
   "metadata_historik.objekt_id",
   "object_import_rows.object_id",
@@ -452,29 +450,35 @@ export async function undoImportBatch(args: {
             );
             continue;
           }
-          // Payer-guardrail: importen äger en känd uppsättning payer-rader
-          // (afterJson.payerIds). Finns det payer-rader som importen INTE skapade
-          // → någon har kopplat en betalare efteråt → blockera (radera aldrig en
-          // payer-rad vi inte äger). Saknas payerIds (wizard skapar inga payers)
-          // blockerar vilken payer-rad som helst — fail-closed.
+          // Kund-guardrail (Etapp 5): importen äger en känd uppsättning
+          // 'Kund'-metadatarader (afterJson.payerIds = metadata_varden-id:n).
+          // Finns det aktiva kund-rader på objektet som importen INTE skapade
+          // → någon har kopplat en kund efteråt → blockera (radera aldrig en
+          // rad vi inte äger). Saknas payerIds blockerar vilken kund-rad som
+          // helst — fail-closed.
           const ownedPayerIds = new Set<string>(
             Array.isArray((action.afterJson as any)?.payerIds)
               ? (action.afterJson as any).payerIds.map((x: any) => String(x))
               : [],
           );
-          const currentPayers = await tx
-            .select({ id: objectPayers.id })
-            .from(objectPayers)
-            .where(and(eq(objectPayers.objectId, id), eq(objectPayers.tenantId, tenantId)));
-          if (currentPayers.some((p) => !ownedPayerIds.has(p.id))) {
+          const currentKundRows: any = await tx.execute(sql`
+            SELECT mv.id FROM metadata_varden mv
+            JOIN metadata_katalog mk ON mk.id = mv.metadata_katalog_id
+              AND lower(mk.namn) = 'kund' AND mk.deleted_at IS NULL
+            WHERE mv.objekt_id = ${id} AND mv.tenant_id = ${tenantId}
+              AND mv.varde_referens IS NOT NULL
+              AND COALESCE(mv.raderad, false) = false
+          `);
+          const currentKundIds: string[] = (currentKundRows.rows ?? currentKundRows).map((r: any) => String(r.id));
+          if (currentKundIds.some((rowId) => !ownedPayerIds.has(rowId))) {
             await markBlocked(
               action,
-              "Objektet har fått en ny betalarkoppling efter importen och kan inte arkiveras automatiskt.",
+              "Objektet har fått en ny kundkoppling efter importen och kan inte arkiveras automatiskt.",
             );
             continue;
           }
           // Alla guardrails passerade → arkivera (soft-delete) + städa import-egna
-          // relationer (primär object_parents + endast de payer-rader vi äger).
+          // relationer (primär object_parents + endast de kund-rader vi äger).
           await tx
             .update(objects)
             .set({ deletedAt: now })
@@ -483,14 +487,11 @@ export async function undoImportBatch(args: {
             .delete(objectParents)
             .where(and(eq(objectParents.objectId, id), eq(objectParents.tenantId, tenantId)));
           if (ownedPayerIds.size > 0) {
-            await tx
-              .delete(objectPayers)
-              .where(
-                and(
-                  sql`${objectPayers.id} = ANY(${Array.from(ownedPayerIds)})`,
-                  eq(objectPayers.tenantId, tenantId),
-                ),
-              );
+            await tx.execute(sql`
+              DELETE FROM metadata_varden
+              WHERE id = ANY(${Array.from(ownedPayerIds)})
+                AND tenant_id = ${tenantId}
+            `);
           }
           archived++;
           await markUndone(action.id);

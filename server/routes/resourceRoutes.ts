@@ -1,5 +1,8 @@
 import type { Express } from "express";
 import { storage } from "../storage";
+import { db } from "../db";
+import { and, eq, isNull } from "drizzle-orm";
+import { objects, resources } from "@shared/schema";
 import { z } from "zod";
 import { formatZodError, verifyTenantOwnership } from "./helpers";
 import { getTenantIdWithFallback, requireAdmin } from "../tenant-middleware";
@@ -41,6 +44,73 @@ app.get("/api/resources/active-positions", asyncHandler(async (req, res) => {
     status: r.trackingStatus,
     lastUpdate: r.lastPositionUpdate
   })));
+}));
+
+app.get("/api/resources/zones", asyncHandler(async (req, res) => {
+  const tenantId = getTenantIdWithFallback(req);
+
+  const allObjects = await db.select({
+    id: objects.id,
+    latitude: objects.latitude,
+    longitude: objects.longitude,
+    postalCode: objects.postalCode,
+  }).from(objects).where(and(eq(objects.tenantId, tenantId), isNull(objects.deletedAt)));
+
+  const computeConvexHull = (points: [number, number][]): [number, number][] => {
+    if (points.length < 3) return points;
+    const sorted = [...points].sort((a, b) => a[1] - b[1] || a[0] - b[0]);
+    const cross = (o: [number, number], a: [number, number], b: [number, number]) =>
+      (a[1] - o[1]) * (b[0] - o[0]) - (a[0] - o[0]) * (b[1] - o[1]);
+    const lower: [number, number][] = [];
+    for (const p of sorted) {
+      while (lower.length >= 2 && cross(lower[lower.length - 2], lower[lower.length - 1], p) <= 0) lower.pop();
+      lower.push(p);
+    }
+    const upper: [number, number][] = [];
+    for (const p of [...sorted].reverse()) {
+      while (upper.length >= 2 && cross(upper[upper.length - 2], upper[upper.length - 1], p) <= 0) upper.pop();
+      upper.push(p);
+    }
+    upper.pop();
+    lower.pop();
+    return lower.concat(upper);
+  };
+
+  const allResources = await db.select({
+    id: resources.id,
+    name: resources.name,
+    serviceArea: resources.serviceArea,
+    status: resources.status,
+  }).from(resources).where(and(eq(resources.tenantId, tenantId), isNull(resources.deletedAt)));
+
+  const RESOURCE_COLORS = ["#3b82f6", "#ef4444", "#22c55e", "#f59e0b", "#8b5cf6", "#ec4899", "#14b8a6", "#f97316", "#6366f1", "#84cc16"];
+
+  const resourceZones = allResources
+    .filter(r => r.status === "active" && r.serviceArea && r.serviceArea.length > 0)
+    .map((resource, idx) => {
+      const normalizedAreas = resource.serviceArea!.map(pc => pc.replace(/\s/g, ""));
+      const areaObjects = allObjects.filter(obj => {
+        if (!obj.latitude || !obj.longitude || !obj.postalCode) return false;
+        const objPC = obj.postalCode.replace(/\s/g, "");
+        return normalizedAreas.some(area => objPC === area || objPC.startsWith(area));
+      });
+      const coords = areaObjects.map(o => [o.latitude!, o.longitude!] as [number, number]);
+      const hull = computeConvexHull(coords);
+      return {
+        id: resource.id,
+        name: resource.name,
+        color: RESOURCE_COLORS[idx % RESOURCE_COLORS.length],
+        serviceArea: resource.serviceArea,
+        objectCount: areaObjects.length,
+        polygon: hull.length >= 3 ? hull : null,
+        center: coords.length > 0
+          ? [coords.reduce((s, c) => s + c[0], 0) / coords.length, coords.reduce((s, c) => s + c[1], 0) / coords.length]
+          : null,
+      };
+    })
+    .filter(z => z.polygon || z.center);
+
+  res.json({ resourceZones });
 }));
 
 app.get("/api/resources/:id", asyncHandler(async (req, res) => {

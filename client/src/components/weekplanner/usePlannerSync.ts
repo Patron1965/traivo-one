@@ -7,7 +7,6 @@ export type SyncRole = "main" | "popout-calendar" | "popout-orderlager";
 export interface SyncedFilters {
   customer: string;
   priority: string;
-  cluster: string;
   team: string;
   executionCode: string;
   search: string;

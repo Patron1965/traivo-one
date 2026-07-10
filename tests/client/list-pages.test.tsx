@@ -7,7 +7,6 @@ import { Component, Suspense, type ComponentType, type ReactNode } from "react";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { LanguageProvider } from "@/hooks/use-language";
 import ResourcesPage from "@/pages/ResourcesPage";
-import ClustersPage from "@/pages/ClustersPage";
 import ObjectsPage from "@/pages/ObjectsPage";
 import VehiclesPage from "@/pages/VehiclesPage";
 import ArticlesPage from "@/pages/ArticlesPage";
@@ -84,7 +83,6 @@ async function settle() {
 
 const cases: Array<[string, ComponentType<unknown>]> = [
   ["ResourcesPage", ResourcesPage],
-  ["ClustersPage", ClustersPage],
   ["ObjectsPage", ObjectsPage],
   ["VehiclesPage", VehiclesPage],
   ["ArticlesPage", ArticlesPage],

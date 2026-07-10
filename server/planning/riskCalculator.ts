@@ -33,18 +33,6 @@ export function calculateRiskScore(
     totalRiskPoints += Math.min(1, ordersWithoutHistory.length / Math.max(moves.length, 1));
   }
 
-  const objectMap = new Map(objects.map(o => [o.id, o]));
-  const ordersWithoutAccess = moves.filter(m => {
-    const order = allOrders.find(o => o.id === m.workOrderId);
-    if (!order?.objectId) return false;
-    const obj = objectMap.get(order.objectId);
-    return obj && !obj.accessCode && obj.accessType !== "open";
-  });
-  if (ordersWithoutAccess.length > 0) {
-    riskFactors.push(`${ordersWithoutAccess.length} objekt saknar portkod/åtkomstkod`);
-    totalRiskPoints += Math.min(1, ordersWithoutAccess.length / Math.max(moves.length, 1)) * 0.7;
-  }
-
   const resourceHistoryCount = new Map<string, number>();
   for (const order of allOrders) {
     if (order.resourceId && (order.orderStatus === "utford" || order.orderStatus === "fakturerad")) {

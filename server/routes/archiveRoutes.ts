@@ -29,18 +29,6 @@ export function registerArchiveRoutes(app: Express): void {
     res.json(rows);
   }));
 
-  app.get("/api/archive/images", requireAdmin, asyncHandler(async (req, res) => {
-    const tenantId = getTenantIdWithFallback(req);
-    const rows = await storage.listArchivedObjectImages(tenantId);
-    res.json(rows);
-  }));
-
-  app.get("/api/archive/contacts", requireAdmin, asyncHandler(async (req, res) => {
-    const tenantId = getTenantIdWithFallback(req);
-    const rows = await storage.listArchivedObjectContacts(tenantId);
-    res.json(rows);
-  }));
-
   app.get("/api/archive/metadata-types", requireAdmin, asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const rows = await listArchivedMetadataTypes(tenantId);
@@ -48,20 +36,6 @@ export function registerArchiveRoutes(app: Express): void {
   }));
 
   // === ÅTERSTÄLLNING ========================================================
-  app.post("/api/archive/images/:id/restore", requireAdmin, asyncHandler(async (req, res) => {
-    const tenantId = getTenantIdWithFallback(req);
-    const restored = await storage.restoreObjectImage(req.params.id, tenantId);
-    if (!restored) throw new NotFoundError("Arkiverad bild");
-    res.json(restored);
-  }));
-
-  app.post("/api/archive/contacts/:id/restore", requireAdmin, asyncHandler(async (req, res) => {
-    const tenantId = getTenantIdWithFallback(req);
-    const restored = await storage.restoreObjectContact(req.params.id, tenantId);
-    if (!restored) throw new NotFoundError("Arkiverad kontakt");
-    res.json(restored);
-  }));
-
   app.post("/api/archive/metadata-types/:id/restore", requireAdmin, asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const result = await restoreMetadataType(tenantId, req.params.id);

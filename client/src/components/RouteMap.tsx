@@ -10,7 +10,7 @@ import { format, startOfDay, endOfDay, addDays, startOfWeek, endOfWeek } from "d
 import { sv } from "date-fns/locale";
 import { Marker, Popup, Polyline } from "react-leaflet";
 import { useObjectsByIds } from "@/hooks/useObjectSearch";
-import { BaseMap, MapFitBounds, numberedDivIcon, entranceDivIcon, getAccessColor } from "@/components/ui/map";
+import { BaseMap, MapFitBounds, numberedDivIcon, entranceDivIcon } from "@/components/ui/map";
 import type { Resource, Team, WorkOrderWithObject, ServiceObject } from "@shared/schema";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -21,22 +21,6 @@ const createNumberedIcon = (number: number, color: string, stackCount?: number) 
   numberedDivIcon({ number, color, size: 28, badge: stackCount });
 
 const createEntranceIcon = () => entranceDivIcon(20);
-
-const getSetupTimeColor = (minutes: number) => {
-  if (minutes < 10) return "#22c55e";
-  if (minutes < 20) return "#f97316";
-  return "#ef4444";
-};
-
-// Re-export so call-sites (and the access legend) keep working.
-const getAccessTypeColor = getAccessColor;
-
-const accessTypeLabels: Record<string, { label: string; icon: typeof Key }> = {
-  open: { label: "Öppen", icon: DoorOpen },
-  code: { label: "Kod", icon: Keyboard },
-  key: { label: "Nyckel", icon: Key },
-  meeting: { label: "Möte", icon: Users },
-};
 
 interface RouteMapProps {
   onNavigate?: (jobId: string) => void;
@@ -69,7 +53,6 @@ export function RouteMap({ onNavigate, initialDate }: RouteMapProps) {
   const [viewMode, setViewMode] = useState<"day" | "week">("day");
   const [routeData, setRouteData] = useState<RouteData | null>(null);
   const [isLoadingRoute, setIsLoadingRoute] = useState(false);
-  const [showAccessCodes, setShowAccessCodes] = useState(false);
   const { toast } = useToast();
 
   const { data: resources = [], isLoading: resourcesLoading } = useQuery<Resource[]>({
@@ -263,16 +246,6 @@ export function RouteMap({ onNavigate, initialDate }: RouteMapProps) {
   const totalDistance = routeData?.distance ?? calculateDistance(jobPositions);
   const estimatedDriveTime = routeData?.duration ?? Math.round(totalDistance * 2);
 
-  const accessTypeGroups = useMemo(() => {
-    const groups: Record<string, number> = {};
-    displayJobs.forEach(job => {
-      const obj = objectMap.get(job.objectId ?? "");
-      const accessType = obj?.accessType || "open";
-      groups[accessType] = (groups[accessType] || 0) + 1;
-    });
-    return groups;
-  }, [displayJobs, objectMap]);
-
   const totalDayTime = totalWorkTime + estimatedDriveTime;
   const efficiencyPercent = totalDayTime > 0 ? Math.round((totalWorkTime / totalDayTime) * 100) : 0;
 
@@ -462,9 +435,7 @@ export function RouteMap({ onNavigate, initialDate }: RouteMapProps) {
               <div className="divide-y">
                 {displayJobs.map((job, index) => {
                   const obj = objectMap.get(job.objectId ?? "");
-                  const accessType = obj?.accessType || "open";
                   const hasCoords = obj?.latitude && obj?.longitude;
-                  const AccessIcon = accessTypeLabels[accessType]?.icon || DoorOpen;
 
                   return (
                     <div key={job.id}>
@@ -506,10 +477,6 @@ export function RouteMap({ onNavigate, initialDate }: RouteMapProps) {
                               </span>
                             )}
                             <span>{job.estimatedDuration || 0} min</span>
-                            <span className="flex items-center gap-1">
-                              <AccessIcon className="h-3 w-3" />
-                              {accessTypeLabels[accessType]?.label || accessType}
-                            </span>
                             {!hasCoords && (
                               <Badge variant="outline" className="text-[10px] text-chart-4 no-default-hover-elevate">
                                 Saknar koordinater
@@ -573,13 +540,7 @@ export function RouteMap({ onNavigate, initialDate }: RouteMapProps) {
               const obj = objectMap.get(job.objectId ?? "");
               if (!obj?.latitude || !obj?.longitude) return null;
               
-              const accessType = obj?.accessType || "open";
-              const markerColor = getAccessTypeColor(accessType);
-              
-              const totalContainers = (obj.containerCount || 0) + 
-                (obj.containerCountK2 || 0) + 
-                (obj.containerCountK3 || 0) + 
-                (obj.containerCountK4 || 0);
+              const markerColor = "#4A9B9B";
 
               const addrKey = `${obj.latitude.toFixed(4)},${obj.longitude.toFixed(4)}`;
               const stackCount = addressCounts.get(addrKey) || 1;
@@ -612,12 +573,6 @@ export function RouteMap({ onNavigate, initialDate }: RouteMapProps) {
 
                               {colocatedJobs.map((cj, ci) => {
                                 const co = objectMap.get(cj.objectId ?? "");
-                                const cSetup = co?.avgSetupTime || 0;
-                                const cAccess = co?.accessType || "open";
-                                const cContainers = (co?.containerCount || 0) +
-                                  (co?.containerCountK2 || 0) +
-                                  (co?.containerCountK3 || 0) +
-                                  (co?.containerCountK4 || 0);
                                 const cIdx = displayJobs.indexOf(cj);
 
                                 return (
@@ -631,31 +586,7 @@ export function RouteMap({ onNavigate, initialDate }: RouteMapProps) {
                                     <div className="text-sm text-gray-600">{co?.name || cj.objectName}</div>
 
                                     <div className="mt-1 space-y-0.5 text-sm">
-                                      <div className="flex items-center gap-2">
-                                        <span className="font-medium">Tillgång:</span>
-                                        <span>{accessTypeLabels[cAccess]?.label || cAccess}</span>
-                                        {showAccessCodes && co?.accessCode && (
-                                          <span className="px-1.5 py-0.5 bg-chart-1/15 text-chart-1 rounded text-xs font-mono">
-                                            {co.accessCode}
-                                          </span>
-                                        )}
-                                        {showAccessCodes && co?.keyNumber && (
-                                          <span className="px-1.5 py-0.5 bg-chart-4/15 text-chart-4 rounded text-xs font-mono">
-                                            Nyckel: {co.keyNumber}
-                                          </span>
-                                        )}
-                                      </div>
                                       <div><span className="font-medium">Arbetstid:</span> {cj.estimatedDuration} min</div>
-                                      {cContainers > 0 && (
-                                        <div>
-                                          <span className="font-medium">Objekt:</span>{" "}
-                                          {co?.containerCount ? `K1: ${co.containerCount}` : ""}
-                                          {co?.containerCountK2 ? ` K2: ${co.containerCountK2}` : ""}
-                                          {co?.containerCountK3 ? ` K3: ${co.containerCountK3}` : ""}
-                                          {co?.containerCountK4 ? ` K4: ${co.containerCountK4}` : ""}
-                                          <span className="text-gray-500 ml-1">({cContainers} st)</span>
-                                        </div>
-                                      )}
                                     </div>
                                     <Link
                                       href={`/work-orders/${cj.id}`}

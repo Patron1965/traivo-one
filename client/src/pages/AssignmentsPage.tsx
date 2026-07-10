@@ -62,7 +62,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { Link } from "wouter";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
-import type { Assignment, Resource, Cluster, ServiceObject, Article, AssignmentArticle } from "@shared/schema";
+import type { Assignment, Resource, ServiceObject, Article, AssignmentArticle } from "@shared/schema";
 import { ASSIGNMENT_STATUS_LABELS, type AssignmentStatus } from "@shared/schema";
 import { PageHelp } from "@/components/ui/help-tooltip";
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -126,10 +126,6 @@ export default function AssignmentsPage() {
 
   const { data: resources = [] } = useQuery<Resource[]>({
     queryKey: ["/api/resources"],
-  });
-
-  const { data: clusters = [] } = useQuery<Cluster[]>({
-    queryKey: ["/api/clusters"],
   });
 
   const { data: objects = [] } = useQuery<ServiceObject[]>({

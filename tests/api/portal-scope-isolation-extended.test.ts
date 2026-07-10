@@ -13,9 +13,9 @@ import {
   selfBookingSlots,
   customerChangeRequests,
   customerPortalMessages,
-  objectPayers,
 } from "@shared/schema";
 import { eq } from "drizzle-orm";
+import { setObjectKund, cleanupObjectKund } from "./helpers/object-kund";
 import { randomId } from "./helpers";
 import type { InsertObject } from "@shared/schema";
 
@@ -131,17 +131,12 @@ describe("Portal scope isolation (extended) — mutations & list-läsning respek
     rootOutOfScope = await mkObject(`PSE-RootOut ${randomId()}`, null);
     childOutOfScope = await mkObject(`PSE-ChildOut ${randomId()}`, rootOutOfScope);
 
-    // obj.customerId resolveras via object_payers (primary). Lägg en primary
-    // payer per objekt så att portal-routes auth-check `obj.customerId === session.customerId` håller.
-    await db.insert(objectPayers).values(
-      [rootInScope, childInScope, rootOutOfScope, childOutOfScope].map(objectId => ({
-        tenantId: TENANT_ID,
-        objectId,
-        customerId,
-        payerType: "primary",
-        isPrimary: true,
-      })),
-    );
+    // obj.customerId resolveras via "Kund"-metadatat (Etapp 5; object_payers
+    // borttagen). Sätt kund per objekt så portal-routes auth-check
+    // `obj.customerId === session.customerId` håller.
+    for (const objectId of [rootInScope, childInScope, rootOutOfScope, childOutOfScope]) {
+      await setObjectKund(TENANT_ID, objectId, customerId);
+    }
 
     const upcoming = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
     const past = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000);
@@ -550,34 +545,6 @@ describe("Portal scope isolation (extended) — mutations & list-läsning respek
   describe("GET /api/portal/field/object/:id", () => {
     it("limited scope: 404 för objekt utanför scope", async () => {
       const { status } = await authGet(`/api/portal/field/object/${childOutOfScope}`, limitedScopeToken);
-      expect(status).toBe(404);
-    });
-  });
-
-  describe("Delivery preferences per objekt", () => {
-    it("limited scope: GET 404 för objekt utanför scope", async () => {
-      const { status } = await authGet(
-        `/api/portal/objects/${childOutOfScope}/delivery-preferences`,
-        limitedScopeToken,
-      );
-      expect(status).toBe(404);
-    });
-
-    it("limited scope: PUT 404 för objekt utanför scope", async () => {
-      const { status } = await authPut(
-        `/api/portal/objects/${childOutOfScope}/delivery-preferences`,
-        limitedScopeToken,
-        { deliveryPreferences: null },
-      );
-      expect(status).toBe(404);
-    });
-
-    it("limited scope: PATCH 404 för objekt utanför scope", async () => {
-      const { status } = await authPatch(
-        `/api/portal/objects/${childOutOfScope}/delivery-preferences`,
-        limitedScopeToken,
-        { deliveryPreferences: null },
-      );
       expect(status).toBe(404);
     });
   });

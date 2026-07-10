@@ -25,7 +25,6 @@ import type {
   WorkOrder,
   Resource,
   ServiceObject,
-  ObjectTimeRestriction,
   TaskDesiredTimewindow,
   TaskDependencyInstance,
   TaskDependency,
@@ -34,6 +33,7 @@ import type {
   Vehicle,
 } from "@shared/schema";
 import { storage } from "./storage";
+import { getTimeRestrictionsForObjects, type ObjectTimeRestrictionView as ObjectTimeRestriction } from "./services/object-time-restrictions";
 import type { FrozenTimeRulePackage } from "@shared/delivery-restrictions";
 import {
   computeTimeRulePackagesByObject,
@@ -138,7 +138,7 @@ export async function enrichVRPRequestWithConstraints(
     timeRulePackages,
   ] = await Promise.all([
     options.respectTimeWindows !== false && objectIds.length > 0
-      ? storage.getObjectTimeRestrictionsByObjectIds(options.tenantId, objectIds)
+      ? getTimeRestrictionsForObjects(options.tenantId, objectIds)
       : Promise.resolve([] as ObjectTimeRestriction[]),
     options.respectTimeWindows !== false && workOrderIds.length > 0
       ? storage.getTaskTimewindowsBatch(workOrderIds)
@@ -296,7 +296,7 @@ async function loadSlotPreferences(
 ): Promise<Map<string, SlotPreferenceData[]>> {
   const result = new Map<string, SlotPreferenceData[]>();
   try {
-    const restrictions = await storage.getObjectTimeRestrictionsByObjectIds(tenantId, objectIds);
+    const restrictions = await getTimeRestrictionsForObjects(tenantId, objectIds);
     for (const r of restrictions) {
       if (!r.isActive || !r.preference || r.preference === "blocked") continue;
       if (!r.startTime) continue;
@@ -328,15 +328,7 @@ function applyPreferredTimesAsSoftConstraints(
     const obj = objectMap.get(order.objectId);
     if (!obj) continue;
 
-    const objRecord = obj as Record<string, unknown>;
-    const pref1 = (objRecord.resolvedPreferredTime1 as string | null)
-      || (objRecord.preferredTime1 as string | null);
-    const pref2 = (objRecord.resolvedPreferredTime2 as string | null)
-      || (objRecord.preferredTime2 as string | null);
-
     let prefCount = 0;
-    if (pref1) prefCount++;
-    if (pref2) prefCount++;
 
     const objSlots = slotPreferences.get(order.objectId);
     if (objSlots) {

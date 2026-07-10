@@ -525,7 +525,6 @@ export function registerMetadataEditorRoutes(app: Express) {
       if (!body.newObject?.name) throw new ValidationError("Objektnamn krävs");
       const insertData: InsertObject = {
         tenantId,
-        customerId: null,
         parentId: null,
         name: body.newObject.name,
         objectType: "fastighet",
@@ -535,7 +534,6 @@ export function registerMetadataEditorRoutes(app: Express) {
         longitude: body.newObject.longitude ?? body.longitude ?? null,
         isInterimObject: true,
         status: "active",
-        notes: "Skapat via metadata-lämnare (publik inlämning)",
       };
       const interim = await storage.createObject(insertData);
       objectId = interim.id;

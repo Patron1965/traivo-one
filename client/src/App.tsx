@@ -67,8 +67,6 @@ const InvoiceRecalculationLogPage = lazy(() => import("@/pages/InvoiceRecalculat
 const InvoiceQueuePage = lazy(() => import("@/pages/InvoiceQueuePage"));
 const OnboardingWizardPage = lazy(() => import("@/pages/OnboardingWizardPage"));
 const SystemOverviewPage = lazy(() => import("@/pages/SystemOverviewPage"));
-const ClustersPage = lazy(() => import("@/pages/ClustersPage"));
-const ClusterDetailPage = lazy(() => import("@/pages/ClusterDetailPage"));
 const EconomicsDashboardPage = lazy(() => import("@/pages/EconomicsDashboardPage"));
 const SetupTimeAnalysisPage = lazy(() => import("@/pages/SetupTimeAnalysisPage"));
 const PredictivePlanningPage = lazy(() => import("@/pages/PredictivePlanningPage"));
@@ -177,8 +175,6 @@ function Router() {
         <Route path="/veckoplanering">{() => <ProtectedRoute component={WeeklyPlanViewPage} path="/veckoplan" />}</Route>
         <Route path="/grovplanering">{() => <ProtectedRoute component={GrovplaneringPage} path="/grovplanering" />}</Route>
         <Route path="/distrikt">{() => <ProtectedRoute component={DistrictsAdminPage} path="/distrikt" />}</Route>
-        <Route path="/clusters">{() => <ProtectedRoute component={ClustersPage} path="/clusters" />}</Route>
-        <Route path="/clusters/:id">{() => <ProtectedRoute component={ClusterDetailPage} path="/clusters" />}</Route>
         <Route path="/routes">{() => <ProtectedRoute component={RoutesPage} path="/routes" />}</Route>
         <Route path="/optimization">{() => <ProtectedRoute component={OptimizationPrepPage} path="/optimization" />}</Route>
         <Route path="/objects/duplicates">{() => <ProtectedRoute component={ObjectDuplicatesPage} path="/objects" />}</Route>

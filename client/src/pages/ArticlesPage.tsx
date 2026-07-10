@@ -1125,7 +1125,6 @@ export default function ArticlesPage() {
                           <div><span className="text-muted-foreground">Namn:</span> {selectedObj.name}</div>
                           <div><span className="text-muted-foreground">Typ:</span> {selectedObj.objectType}</div>
                           <div><span className="text-muted-foreground">Hierarkinivå:</span> {selectedObj.hierarchyLevel || "Inte definierad"}</div>
-                          <div><span className="text-muted-foreground">Accesskod:</span> {selectedObj.accessCode || "Ingen"}</div>
                         </div>
                       </CardContent>
                     </Card>

@@ -7,7 +7,8 @@ const storageMocks = vi.hoisted(() => ({
   getAssignments: vi.fn(),
   getAssignmentArticlesForAssignments: vi.fn(),
   getArticles: vi.fn(),
-  resolveDeliveryPreferences: vi.fn(),
+  getObjectsPrimaryCustomerIds: vi.fn(),
+  getCustomersDeliveryPreferences: vi.fn(),
   getTenantGroupingRadiusMeters: vi.fn(),
   clearEngineSlotTimes: vi.fn(),
   createSlotTimes: vi.fn(),
@@ -318,15 +319,21 @@ describe("runTimeGeoEngine", () => {
       assignment({ id: "blocked", objectId: "o-blocked", address: "Storgatan 2" }),
       assignment({ id: "ok", objectId: "o-ok", address: "Storgatan 4", cachedValue: 5000 }),
     ]);
-    // o-blocked: alla dagar i perioden blockerade → 0 kandidater (oschemaläggbar).
-    // o-ok: inga begränsningar → fallback-standardfönster.
-    storageMocks.resolveDeliveryPreferences.mockImplementation(async (objectId: string) => ({
-      effective: {
-        weeklyWindows: [],
-        blockedHours: [],
-        blockedDates: objectId === "o-blocked" ? blockedKeys : [],
-      },
-    }));
+    // Etapp 5: leveranspreferenser bor på kundnivå — o-blocked hör till en kund
+    // med alla dagar i perioden blockerade → 0 kandidater (oschemaläggbar).
+    // o-ok: kund utan begränsningar → fallback-standardfönster.
+    storageMocks.getObjectsPrimaryCustomerIds.mockResolvedValue(
+      new Map([
+        ["o-blocked", "c-blocked"],
+        ["o-ok", "c-ok"],
+      ]),
+    );
+    storageMocks.getCustomersDeliveryPreferences.mockResolvedValue(
+      new Map([
+        ["c-blocked", { weeklyWindows: [], blockedHours: [], blockedDates: blockedKeys }],
+        ["c-ok", null],
+      ]),
+    );
 
     const result = await runTimeGeoEngine("t1", { periodStart, periodEnd });
 

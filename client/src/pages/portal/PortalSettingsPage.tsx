@@ -304,8 +304,6 @@ export default function PortalSettingsPage() {
           </CardContent>
         </Card>
 
-        <PortalObjectDeliveryPrefs portalFetch={portalFetch} />
-
         <Button 
           className="w-full" 
           size="lg" 
@@ -322,81 +320,5 @@ export default function PortalSettingsPage() {
         </Button>
       </main>
     </div>
-  );
-}
-
-type PortalObject = { id: string; name: string; address: string | null; city: string | null };
-
-function PortalObjectDeliveryPrefs({
-  portalFetch,
-}: {
-  portalFetch: (url: string, options?: RequestInit) => Promise<any>;
-}) {
-  const [selectedId, setSelectedId] = useState<string>("");
-  const objectsQuery = useQuery<PortalObject[]>({
-    queryKey: ["/api/portal/objects"],
-    queryFn: () => portalFetch("/api/portal/objects"),
-    enabled: !!getSessionToken(),
-  });
-  const prefsQuery = useQuery<{
-    deliveryPreferences: DeliveryPreferences | null;
-  }>({
-    queryKey: ["/api/portal/objects", selectedId, "delivery-preferences"],
-    queryFn: () => portalFetch(`/api/portal/objects/${selectedId}/delivery-preferences`),
-    enabled: !!selectedId,
-  });
-
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <CalendarClock className="h-5 w-5" />
-          Leveranspreferenser per objekt
-        </CardTitle>
-        <CardDescription>
-          Sätt specifika slottider och blockerade tider per objekt. Preferenserna gäller
-          enbart det valda objektet.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <div>
-          <Label htmlFor="portal-object-select">Välj objekt</Label>
-          <select
-            id="portal-object-select"
-            data-testid="select-portal-object"
-            className="w-full mt-1 px-3 py-2 border rounded-md bg-background text-foreground"
-            value={selectedId}
-            onChange={(e) => setSelectedId(e.target.value)}
-          >
-            <option value="">— Välj ett objekt —</option>
-            {(objectsQuery.data || []).map((o) => (
-              <option key={o.id} value={o.id}>
-                {o.name} {o.address ? `· ${o.address}` : ""}
-              </option>
-            ))}
-          </select>
-        </div>
-        {selectedId && prefsQuery.isLoading ? (
-          <div className="text-sm text-muted-foreground">Laddar…</div>
-        ) : selectedId ? (
-          (() => {
-            const ownPrefs = prefsQuery.data?.deliveryPreferences ?? null;
-            return (
-              <DeliveryPreferencesEditor
-                entityKind="portal"
-                initial={ownPrefs}
-                invalidateKeys={[["/api/portal/objects", selectedId, "delivery-preferences"]]}
-                customTransport={(method, body) =>
-                  portalFetch(`/api/portal/objects/${selectedId}/delivery-preferences`, {
-                    method,
-                    body: JSON.stringify(body),
-                  })
-                }
-              />
-            );
-          })()
-        ) : null}
-      </CardContent>
-    </Card>
   );
 }

@@ -2,7 +2,7 @@ import { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { format, addDays, startOfWeek, startOfMonth, isSameDay, getDaysInMonth, addMonths, startOfYear, endOfYear, startOfQuarter, endOfQuarter } from "date-fns";
 import { sv } from "date-fns/locale";
-import type { Resource, WorkOrderWithObject, Customer, TaskDependency, Cluster, ObjectTimeRestriction } from "@shared/schema";
+import type { Resource, WorkOrderWithObject, Customer, TaskDependency, ObjectTimeRestriction } from "@shared/schema";
 import type { DeliveryRestrictionNote } from "@shared/delivery-restrictions";
 import { RESTRICTION_TYPE_LABELS } from "@shared/schema";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -30,7 +30,6 @@ const PLANNER_FILTERS_KEY = "traivo-planner-filters";
 function loadSavedFilters(): {
   filterCustomer: string;
   filterPriority: string;
-  filterCluster: string;
   filterTeam: string;
   filterExecutionCode: string;
   hiddenResourceIds: string[];
@@ -75,7 +74,6 @@ export function usePlannerData() {
   const [showUnscheduled, setShowUnscheduled] = useState(saved?.showUnscheduled ?? true);
   const [filterCustomer, setFilterCustomer] = useState<string>(saved?.filterCustomer ?? "all");
   const [filterPriority, setFilterPriority] = useState<string>(saved?.filterPriority ?? "all");
-  const [filterCluster, setFilterCluster] = useState<string>(saved?.filterCluster ?? "all");
   const [filterTeam, setFilterTeam] = useState<string>(saved?.filterTeam ?? "all");
   const [filterExecutionCode, setFilterExecutionCode] = useState<string>(saved?.filterExecutionCode ?? "all");
   const [hiddenResourceIds, setHiddenResourceIds] = useState<Set<string>>(new Set(saved?.hiddenResourceIds ?? []));
@@ -127,7 +125,7 @@ export function usePlannerData() {
   const [autoFillPreview, setAutoFillPreview] = useState<Array<{ workOrderId: string; resourceId: string; scheduledDate: string; scheduledStartTime: string; title: string; address: string; estimatedDuration: number; priority: string }> | null>(null);
   const [autoFillApplying, setAutoFillApplying] = useState(false);
   const [autoFillSkipped, setAutoFillSkipped] = useState(0);
-  const [autoFillDiag, setAutoFillDiag] = useState<{ totalUnscheduled: number; capacityPerDay: Record<string, number>; maxMinutesPerDay: number; resourceCount: number; clusterSkipped: number } | null>(null);
+  const [autoFillDiag, setAutoFillDiag] = useState<{ totalUnscheduled: number; capacityPerDay: Record<string, number>; maxMinutesPerDay: number; resourceCount: number } | null>(null);
   const [clearDialogOpen, setClearDialogOpen] = useState(false);
   const [clearLoading, setClearLoading] = useState(false);
   const [zoomLevel, setZoomLevel] = useState<number>(saved?.zoomLevel ?? 0);
@@ -140,11 +138,11 @@ export function usePlannerData() {
 
   useEffect(() => {
     savePlannerFilters({
-      filterCustomer, filterPriority, filterCluster, filterTeam,
+      filterCustomer, filterPriority, filterTeam,
       filterExecutionCode, hiddenResourceIds: Array.from(hiddenResourceIds),
       zoomLevel, showUnscheduled, viewMode, weekRowMode, selectedTeamIds, showUntiedTeamRows,
     });
-  }, [filterCustomer, filterPriority, filterCluster, filterTeam, filterExecutionCode, hiddenResourceIds, zoomLevel, showUnscheduled, viewMode, weekRowMode, selectedTeamIds, showUntiedTeamRows]);
+  }, [filterCustomer, filterPriority, filterTeam, filterExecutionCode, hiddenResourceIds, zoomLevel, showUnscheduled, viewMode, weekRowMode, selectedTeamIds, showUntiedTeamRows]);
 
   const { data: teamsData = [] } = useQuery<Array<{ id: string; name: string; clusterId: string | null; color: string | null }>>({ queryKey: ["/api/teams"] });
   const { data: teamMembersData = [] } = useQuery<Array<{ id: string; teamId: string; resourceId: string; role: string | null }>>({ queryKey: ["/api/team-members"] });
@@ -267,24 +265,6 @@ export function usePlannerData() {
   const workOrders = useMemo(() => { const ids = new Set(scheduledWorkOrders.map(wo => wo.id)); return [...scheduledWorkOrders, ...accumulatedUnscheduled.filter(wo => !ids.has(wo.id))]; }, [scheduledWorkOrders, accumulatedUnscheduled]);
   const workOrdersLoading = scheduledLoading || unscheduledLoading;
   const { data: customers = [] } = useQuery<Customer[]>({ queryKey: ["/api/customers"] });
-  const { data: clusters = [] } = useQuery<Cluster[]>({ queryKey: ["/api/clusters"] });
-  const clusterMap = useMemo(() => new Map(clusters.map(c => [c.id, c])), [clusters]);
-  const clusterMatchedResourceIds = useMemo(() => {
-    const matched = new Set<string>();
-    if (!activeDragJob?.clusterId) return matched;
-    const cluster = clusters.find(c => c.id === activeDragJob.clusterId);
-    if (!cluster?.postalCodes?.length) return matched;
-    const clusterPostals = cluster.postalCodes;
-    for (const r of resources) {
-      if (!r.serviceArea?.length) continue;
-      if (r.serviceArea.some(p => clusterPostals.includes(p))) {
-        matched.add(r.id);
-      }
-    }
-    return matched;
-  }, [activeDragJob?.clusterId, clusters, resources]);
-  const { data: clusterSettings } = useQuery<{ hardClusterBlocking: boolean }>({ queryKey: ["/api/cluster-settings"], staleTime: 60000 });
-  const hardClusterBlocking = clusterSettings?.hardClusterBlocking !== false;
   const customerMap = useMemo(() => new Map(customers.map(c => [c.id, c])), [customers]);
 
   const workOrderIds = useMemo(() => workOrders.map(wo => wo.id), [workOrders]);
@@ -313,7 +293,7 @@ export function usePlannerData() {
   const workOrdersQueryKey = ["/api/work-orders", "scheduled", dateRange.startDate, dateRange.endDate];
 
   const updateWorkOrderMutation = useMutation({
-    mutationFn: async ({ id, resourceId, scheduledDate, scheduledStartTime, clusterOverride }: { id: string; resourceId: string; scheduledDate: string; scheduledStartTime?: string; clusterOverride?: boolean }) => { const payload: Record<string, unknown> = { resourceId, scheduledDate, orderStatus: "planerad_resurs" }; if (scheduledStartTime) payload.scheduledStartTime = scheduledStartTime; if (clusterOverride) payload.clusterOverride = "planner override"; return (await apiRequest("PATCH", `/api/work-orders/${id}`, payload)).json() as Promise<WorkOrderWithObject>; },
+    mutationFn: async ({ id, resourceId, scheduledDate, scheduledStartTime }: { id: string; resourceId: string; scheduledDate: string; scheduledStartTime?: string }) => { const payload: Record<string, unknown> = { resourceId, scheduledDate, orderStatus: "planerad_resurs" }; if (scheduledStartTime) payload.scheduledStartTime = scheduledStartTime; return (await apiRequest("PATCH", `/api/work-orders/${id}`, payload)).json() as Promise<WorkOrderWithObject>; },
     onMutate: async ({ id, resourceId, scheduledDate, scheduledStartTime }) => {
       await queryClient.cancelQueries({ queryKey: workOrdersQueryKey });
       const prev = queryClient.getQueryData<WorkOrderWithObject[]>(workOrdersQueryKey);
@@ -416,16 +396,15 @@ export function usePlannerData() {
     return jobs.filter(j => {
       if (filterCustomer !== "all" && j.customerId !== filterCustomer) return false;
       if (filterPriority !== "all" && j.priority !== filterPriority) return false;
-      if (filterCluster !== "all") { if (filterCluster === "none" ? j.clusterId : j.clusterId !== filterCluster) return false; }
       if (filterTeam !== "all") { if (j.teamId && j.teamId !== filterTeam) return false; if (!j.teamId && teamResourceIds && j.resourceId && !teamResourceIds.has(j.resourceId)) return false; }
       if (filterExecutionCode !== "all" && j.executionCode !== filterExecutionCode) return false;
       if (sl) { const t = (j.title || "").toLowerCase(); const o = (j.objectName || "").toLowerCase(); const c = (customerMap.get(j.customerId)?.name || "").toLowerCase(); if (!t.includes(sl) && !o.includes(sl) && !c.includes(sl)) return false; }
       return true;
     }).sort((a, b) => { const ap = priorityOrder[a.priority] ?? 99; const bp = priorityOrder[b.priority] ?? 99; if (ap !== bp) return ap - bp; return (a.plannedWindowEnd ? new Date(a.plannedWindowEnd).getTime() : Infinity) - (b.plannedWindowEnd ? new Date(b.plannedWindowEnd).getTime() : Infinity); });
-  }, [workOrders, filterCustomer, filterPriority, filterCluster, filterTeam, teamResourceIds, filterExecutionCode, orderstockSearch, customerMap]);
+  }, [workOrders, filterCustomer, filterPriority, filterTeam, teamResourceIds, filterExecutionCode, orderstockSearch, customerMap]);
 
-  const sidebarActiveFilterCount = [filterCustomer !== "all", filterPriority !== "all", filterCluster !== "all", filterTeam !== "all", filterExecutionCode !== "all", dateFilterActive].filter(Boolean).length;
-  const clearAllSidebarFilters = () => { setFilterCustomer("all"); setFilterPriority("all"); setFilterCluster("all"); setFilterTeam("all"); setFilterExecutionCode("all"); setOrderstockSearch(""); setFilterDateField("none"); setFilterDatePeriod("all"); setFilterDateCustomFrom(""); setFilterDateCustomTo(""); };
+  const sidebarActiveFilterCount = [filterCustomer !== "all", filterPriority !== "all", filterTeam !== "all", filterExecutionCode !== "all", dateFilterActive].filter(Boolean).length;
+  const clearAllSidebarFilters = () => { setFilterCustomer("all"); setFilterPriority("all"); setFilterTeam("all"); setFilterExecutionCode("all"); setOrderstockSearch(""); setFilterDateField("none"); setFilterDatePeriod("all"); setFilterDateCustomFrom(""); setFilterDateCustomTo(""); };
   const sidebarQuickStats = useMemo(() => { const all = workOrders.filter(j => !j.scheduledDate || (!j.resourceId && !j.teamId)); return { urgentCount: all.filter(j => j.priority === "urgent").length, highCount: all.filter(j => j.priority === "high").length, overdueCount: all.filter(j => j.plannedWindowEnd && new Date(j.plannedWindowEnd) < new Date()).length, totalHours: Math.round(all.reduce((s, j) => s + (j.estimatedDuration || 0) / 60, 0) * 10) / 10 }; }, [workOrders]);
 
   const scheduledJobs = useMemo(() => workOrders.filter(j => j.scheduledDate && j.resourceId), [workOrders]);
@@ -809,28 +788,8 @@ export function usePlannerData() {
     if (dependenciesData?.dependencies) { for (const dep of (dependenciesData.dependencies[job.id] || [])) { const p = workOrders.find(wo => wo.id === dep.dependsOnWorkOrderId); if (p) { if (!p.scheduledDate || p.executionStatus === "not_planned") reasons.push(`⚠ Beroende "${p.title}" ej planerad (varning)`); else if (new Date(p.scheduledDate) > dateObj) reasons.push(`⚠ Beroende "${p.title}" planerad efter (${format(new Date(p.scheduledDate), "d MMM", { locale: sv })})`); } } }
     const activeSet = new Set(["skapad", "planerad_pre", "planerad_resurs", "planerad_las"]);
     if (startTime) { const [jH, jM] = startTime.split(":").map(Number); const jS = jH * 60 + jM; const jE = jS + (job.estimatedDuration || 60); for (const other of scheduledJobs.filter(j => j.id !== job.id && j.resourceId === resourceId && j.scheduledDate && activeSet.has(j.orderStatus) && isSameDay(new Date(j.scheduledDate), dateObj))) { if (!other.scheduledStartTime) continue; const [oH, oM] = other.scheduledStartTime.split(":").map(Number); const oS = oH * 60 + oM; const oE = oS + (other.estimatedDuration || 60); let travelMin = 0; let travelKm = 0; const hasCoords = job.taskLatitude != null && job.taskLongitude != null && other.taskLatitude != null && other.taskLongitude != null; if (hasCoords) { const dist = haversineKm(job.taskLatitude!, job.taskLongitude!, other.taskLatitude!, other.taskLongitude!); if (dist >= 0.1) { travelKm = dist; travelMin = estimateTravelMinutes(dist); } } const jEWithTravel = jE + travelMin; const oEWithTravel = oE + travelMin; if (jS < oEWithTravel && jEWithTravel > oS) { if (travelMin > 0 && !(jS < oE && jE > oS)) { reasons.push(`Överlapp med "${other.title}" (${other.scheduledStartTime}) — ~${travelMin} min restid krävs (${Math.round(travelKm * 10) / 10} km)`); } else if (travelMin > 0) { reasons.push(`Överlapp med "${other.title}" (${other.scheduledStartTime}) + ~${travelMin} min restid`); } else { reasons.push(`Överlapp med "${other.title}" (${other.scheduledStartTime})`); } break; } } }
-    if (job.clusterId) {
-      const cluster = clusterMap.get(job.clusterId);
-      const resource = resources.find(r => r.id === resourceId);
-      if (cluster && resource) {
-        const normalize = (pc: string) => pc.replace(/\s/g, "").trim();
-        const clusterPostalCodes = (cluster.postalCodes || []).map(normalize).filter(Boolean);
-        const resourceServiceArea = (resource.serviceArea || []).map(normalize).filter(Boolean);
-        if (clusterPostalCodes.length > 0 && resourceServiceArea.length > 0) {
-          const resourceSet = new Set(resourceServiceArea);
-          const overlap = clusterPostalCodes.some(pc => resourceSet.has(pc));
-          if (!overlap) {
-            if (hardClusterBlocking) {
-              reasons.push(`[BLOCK] Kluster "${cluster.name}" — resursen arbetar inte i detta verksamhetsområde`);
-            } else {
-              reasons.push(`⚠ Kluster "${cluster.name}" — resursen arbetar normalt inte i detta område`);
-            }
-          }
-        }
-      }
-    }
     return reasons;
-  }, [scheduledJobs, timewindowMap, restrictionsByObject, dependenciesData, workOrders, clusterMap, resources, hardClusterBlocking]);
+  }, [scheduledJobs, timewindowMap, restrictionsByObject, dependenciesData, workOrders, resources]);
 
   const detectTeamConflictsForJob = useCallback((job: WorkOrderWithObject, teamId: string, dateStr: string): string[] => {
     const base = detectConflictsForJob(job, "__team__", dateStr, null);
@@ -870,12 +829,12 @@ export function usePlannerData() {
 
   const addToUndoStack = useCallback((action: PlannerAction) => { setUndoStack(prev => [...prev.slice(-19), action]); setRedoStack([]); }, []);
 
-  const executeSchedule = useCallback((jobId: string, resourceId: string, scheduledDate: string, scheduledStartTime?: string, clusterOverride?: boolean) => {
+  const executeSchedule = useCallback((jobId: string, resourceId: string, scheduledDate: string, scheduledStartTime?: string) => {
     const job = workOrders.find(j => j.id === jobId);
     if (!job) return;
     const previousTeamId = job.teamId ?? null;
     addToUndoStack({ type: "schedule", jobId, previousState: { resourceId: job.resourceId || null, teamId: previousTeamId, scheduledDate: job.scheduledDate ? format(new Date(job.scheduledDate), "yyyy-MM-dd") : null, scheduledStartTime: job.scheduledStartTime || null, orderStatus: job.orderStatus }, newState: { resourceId, teamId: previousTeamId, scheduledDate, scheduledStartTime: scheduledStartTime || null, orderStatus: "planerad_resurs" } });
-    updateWorkOrderMutation.mutate({ id: jobId, resourceId, scheduledDate, scheduledStartTime, clusterOverride });
+    updateWorkOrderMutation.mutate({ id: jobId, resourceId, scheduledDate, scheduledStartTime });
   }, [workOrders, addToUndoStack, updateWorkOrderMutation]);
 
   const executeTeamSchedule = useCallback((jobId: string, teamId: string, scheduledDate: string) => {
@@ -935,7 +894,6 @@ export function usePlannerData() {
     resourceId: string;
     scheduledDate: string;
     scheduledStartTime?: string;
-    clusterOverride?: boolean;
     bulkJobs?: Array<{ jobId: string; startTime: string }>;
   } | null>(null);
   const whatIfRequestIdRef = useRef(0);
@@ -979,14 +937,13 @@ export function usePlannerData() {
       setPendingSchedule(null);
       return;
     }
-    const hasClusterConflict = pendingSchedule.conflicts.some(c => c.includes("Kluster"));
     if (pendingSchedule.bulkJobs && pendingSchedule.bulkJobs.length > 0) {
       for (const bj of pendingSchedule.bulkJobs) {
-        executeSchedule(bj.jobId, pendingSchedule.resourceId, pendingSchedule.scheduledDate, bj.startTime, hasClusterConflict);
+        executeSchedule(bj.jobId, pendingSchedule.resourceId, pendingSchedule.scheduledDate, bj.startTime);
       }
       toast({ title: "Bulk-flytt klar trots varning", description: `${pendingSchedule.bulkJobs.length} order schemalagda trots konflikter.` });
     } else {
-      executeSchedule(pendingSchedule.jobId, pendingSchedule.resourceId, pendingSchedule.scheduledDate, pendingSchedule.scheduledStartTime, hasClusterConflict);
+      executeSchedule(pendingSchedule.jobId, pendingSchedule.resourceId, pendingSchedule.scheduledDate, pendingSchedule.scheduledStartTime);
       toast({ title: "Schemalagt trots varning", description: "Jobbet har schemalagts trots identifierade konflikter." });
     }
     setConflictDialogOpen(false);
@@ -1139,7 +1096,7 @@ export function usePlannerData() {
 
   const handleAutoFillPreview = async () => {
     setAutoFillLoading(true); setAutoFillPreview(null);
-    try { const ws = viewMode === "week" ? currentWeekStart : startOfWeek(currentDate, { weekStartsOn: 1 }); const data = await (await apiRequest("POST", "/api/auto-plan-week", { weekStartDate: format(ws, "yyyy-MM-dd"), resourceIds: resources.map(r => r.id), overbookingPercent: autoFillOverbooking, geoClusteringEnabled: autoFillGeoClustering, planningMode: autoFillPlanningMode })).json(); setAutoFillPreview(data.assignments || []); setAutoFillSkipped(data.totalSkipped || 0); setAutoFillDiag(data.totalUnscheduled != null ? { totalUnscheduled: data.totalUnscheduled, capacityPerDay: data.capacityPerDay || {}, maxMinutesPerDay: data.maxMinutesPerDay || 480, resourceCount: data.resourceCount || 0, clusterSkipped: data.clusterSkipped || 0 } : null); setAutoFillGeoSpread(data.geoSpreadPerDay || null); } catch (error) { toast({ title: "Kunde inte generera planering", description: error.message, variant: "destructive" }); } finally { setAutoFillLoading(false); }
+    try { const ws = viewMode === "week" ? currentWeekStart : startOfWeek(currentDate, { weekStartsOn: 1 }); const data = await (await apiRequest("POST", "/api/auto-plan-week", { weekStartDate: format(ws, "yyyy-MM-dd"), resourceIds: resources.map(r => r.id), overbookingPercent: autoFillOverbooking, geoClusteringEnabled: autoFillGeoClustering, planningMode: autoFillPlanningMode })).json(); setAutoFillPreview(data.assignments || []); setAutoFillSkipped(data.totalSkipped || 0); setAutoFillDiag(data.totalUnscheduled != null ? { totalUnscheduled: data.totalUnscheduled, capacityPerDay: data.capacityPerDay || {}, maxMinutesPerDay: data.maxMinutesPerDay || 480, resourceCount: data.resourceCount || 0 } : null); setAutoFillGeoSpread(data.geoSpreadPerDay || null); } catch (error) { toast({ title: "Kunde inte generera planering", description: error.message, variant: "destructive" }); } finally { setAutoFillLoading(false); }
   };
 
   const handleAutoFillApply = async () => {
@@ -1172,11 +1129,11 @@ export function usePlannerData() {
     if (!whatIfPending) return;
     if (whatIfPending.bulkJobs && whatIfPending.bulkJobs.length > 0) {
       for (const bj of whatIfPending.bulkJobs) {
-        executeSchedule(bj.jobId, whatIfPending.resourceId, whatIfPending.scheduledDate, bj.startTime, whatIfPending.clusterOverride);
+        executeSchedule(bj.jobId, whatIfPending.resourceId, whatIfPending.scheduledDate, bj.startTime);
       }
       toast({ title: "Bulk-flytt klar", description: `${whatIfPending.bulkJobs.length} order flyttade till ${whatIfPending.scheduledDate}` });
     } else {
-      executeSchedule(whatIfPending.jobId, whatIfPending.resourceId, whatIfPending.scheduledDate, whatIfPending.scheduledStartTime, whatIfPending.clusterOverride);
+      executeSchedule(whatIfPending.jobId, whatIfPending.resourceId, whatIfPending.scheduledDate, whatIfPending.scheduledStartTime);
       if (whatIfPending.scheduledStartTime) toast({ title: "Schemalagt", description: `Starttid ${whatIfPending.scheduledStartTime} tilldelad automatiskt` });
     }
     setWhatIfOpen(false);
@@ -1265,11 +1222,11 @@ export function usePlannerData() {
     viewMode, setViewMode, currentDate, setCurrentDate, currentWeekStart, setCurrentWeekStart,
     selectedJob, setSelectedJob, showUnscheduled, setShowUnscheduled,
     filterCustomer, setFilterCustomer, filterPriority, setFilterPriority,
-    filterCluster, setFilterCluster, filterTeam, setFilterTeam,
+    filterTeam, setFilterTeam,
     filterExecutionCode, setFilterExecutionCode,
     hiddenResourceIds, setHiddenResourceIds,
     orderstockSearch, setOrderstockSearch, sidebarFiltersOpen, setSidebarFiltersOpen,
-    zoomLevel, setZoomLevel, expandedSubSteps, activeDragJob, setActiveDragJob, clusterMatchedResourceIds,
+    zoomLevel, setZoomLevel, expandedSubSteps, activeDragJob, setActiveDragJob,
     activeResourceId, setActiveResourceId, activeResource, activeResourceJobs, activeResourceJobsByDay,
     undoStack, redoStack,
     routeViewResourceId, setRouteViewResourceId, routeJobOrder, setRouteJobOrder, isOptimizing,
@@ -1287,7 +1244,7 @@ export function usePlannerData() {
     resourceExecutionCodeFilter, setResourceExecutionCodeFilter,
     resourceOccupancyFilter, setResourceOccupancyFilter,
     allExecutionCodes, resourceActiveFilterCount, clearResourceFilters,
-    customers, clusters, clusterMap, customerMap, teamsData, teamMembersData,
+    customers, customerMap, teamsData, teamMembersData,
     weekRowMode, setWeekRowMode,
     selectedTeamIds, setSelectedTeamIds,
     showUntiedTeamRows, setShowUntiedTeamRows, hiddenUntiedTeamSummary,

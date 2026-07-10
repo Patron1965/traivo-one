@@ -28,12 +28,11 @@ import { canAccessMenu, isAdminRole, type NavMenuGroup } from "@/lib/role-config
 // Karta: URL → primärnyckel(ar) som sidan hämtar vid render.
 // Vid hover triggas prefetchQuery så datan finns i cache när användaren klickar.
 const PREFETCH_KEYS_BY_URL: Record<string, readonly (readonly unknown[])[]> = {
-  "/assignments": [["/api/assignments"], ["/api/work-orders"], ["/api/resources"], ["/api/clusters"], ["/api/objects", "lookup"]],
+  "/assignments": [["/api/assignments"], ["/api/work-orders"], ["/api/resources"], ["/api/objects", "lookup"]],
   "/order-stock": [["/api/work-orders"]],
   "/customers": [["/api/customers"]],
   "/articles": [["/api/articles"], ["/api/objects", "lookup"]],
   "/resources": [["/api/resources"], ["/api/objects", "lookup"]],
-  "/clusters": [["/api/clusters"]],
   "/vehicles": [["/api/vehicles"]],
   "/portal-messages": [["/api/portal-messages"]],
   "/work-sessions": [["/api/work-sessions"], ["/api/resources"], ["/api/teams"]],

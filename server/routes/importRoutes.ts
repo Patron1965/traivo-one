@@ -13,6 +13,7 @@ import multer from "multer";
 import Papa from "papaparse";
 import ExcelJS from "exceljs";
 import { importJobs, notifyImportProgress } from "./helpers";
+import { writeSystemMetadataOnObject } from "../metadata-queries";
 import { triggerGeocodeIfMissing } from "../services/geocoding";
 import { getMapProvider } from "../services/mapProvider";
 import { objects, workOrders, customers, workOrderLines, metadataKatalog, fortnoxMappings, customerServiceContracts, importBatches, auditLogs, customerImportMappings, type InsertFortnoxContractSuggestion, type InsertWorkOrder } from "@shared/schema";
@@ -20,7 +21,6 @@ import { normalizeAddressKey } from "@shared/address-normalize";
 import crypto from "crypto";
 import { createMetadata, updateMetadata, getAllMetadataTypes, seedKarlMetadataTypes, KARL_METADATA_DEFINITIONS, buildMetadataTypeLookup, deriveMetadataDotKey } from "../metadata-queries";
 import { metadataVarden } from "@shared/schema";
-import { ensureClusterForCustomer, updateClusterCache } from "../auto-cluster";
 import { restoreEnrichModusBatch } from "../enrich-modus-restore";
 import { invalidateAreaSearchCityCache } from "./plannerRoutes";
 import { getImportTemplate, IMPORT_TEMPLATES, type ImportTemplateDefinition } from "@shared/import-templates";
@@ -483,7 +483,6 @@ app.post("/api/import/objects", upload.single("file"), asyncHandler(async (req, 
     
     const imported: string[] = [];
     const errors: string[] = [];
-    const csvImportClusterIds = new Set<string>();
     
     // Sort by objectLevel to ensure parents are created first
     const rows = (result.data as Record<string, string>[]).sort((a, b) => {
@@ -520,14 +519,19 @@ app.post("/api/import/objects", upload.single("file"), asyncHandler(async (req, 
           postalCode: row.postalCode || row.postnummer || row.Postnummer || null,
           latitude: row.latitude || row.lat ? parseFloat(row.latitude || row.lat) : null,
           longitude: row.longitude || row.lng || row.lon ? parseFloat(row.longitude || row.lng || row.lon) : null,
-          accessType: row.accessType || row.tillgång || row.Tillgång || "open",
-          accessCode: row.accessCode || row.portkod || row.Portkod || null,
-          keyNumber: row.keyNumber || row.nyckelnummer || row.Nyckelnummer || null,
-          containerCount: row.containerCount || row.kärl ? parseInt(row.containerCount || row.kärl || "0") : 0,
-          containerCountK2: row.containerCountK2 || row.k2 ? parseInt(row.containerCountK2 || row.k2 || "0") : 0,
-          containerCountK3: row.containerCountK3 || row.k3 ? parseInt(row.containerCountK3 || row.k3 || "0") : 0,
-          containerCountK4: row.containerCountK4 || row.k4 ? parseInt(row.containerCountK4 || row.k4 || "0") : 0,
         };
+
+        // Etapp 5: åtkomst/kärl skrivs som metadata (systemområdena Åtkomst/Kärl),
+        // inte som objektkolumner. Best-effort efter skapandet.
+        const metadataWrites: Array<{ namn: string; value: string }> = [];
+        const csvAccessType = row.accessType || row.tillgång || row.Tillgång || null;
+        const csvAccessCode = row.accessCode || row.portkod || row.Portkod || null;
+        const csvKeyNumber = row.keyNumber || row.nyckelnummer || row.Nyckelnummer || null;
+        const csvKarl = row.containerCount || row.kärl || null;
+        if (csvAccessType) metadataWrites.push({ namn: "Åtkomsttyp", value: String(csvAccessType) });
+        if (csvAccessCode) metadataWrites.push({ namn: "Åtkomstkod", value: String(csvAccessCode) });
+        if (csvKeyNumber) metadataWrites.push({ namn: "Nyckelnummer", value: String(csvKeyNumber) });
+        if (csvKarl && Number.isFinite(parseInt(String(csvKarl)))) metadataWrites.push({ namn: "Antal kärl", value: String(parseInt(String(csvKarl))) });
         
         if (!objectData.name) {
           errors.push(`Rad saknar namn`);
@@ -539,12 +543,12 @@ app.post("/api/import/objects", upload.single("file"), asyncHandler(async (req, 
         // ADR v3: kund-koppling via primär payer (ej längre objects.customer_id).
         await ensurePrimaryPayer(tenantId, createdObject.id, customerId);
 
-        try {
-          const clusterId = await ensureClusterForCustomer(tenantId, customerId);
-          await storage.updateObject(createdObject.id, { clusterId });
-          csvImportClusterIds.add(clusterId);
-        } catch (clusterErr) {
-          console.error("Auto-cluster error:", clusterErr);
+        for (const mw of metadataWrites) {
+          try {
+            await writeSystemMetadataOnObject(createdObject.id, mw.namn, mw.value, tenantId, "import");
+          } catch (metaErr) {
+            console.error(`Metadata-skrivning misslyckades (${mw.namn}) för ${createdObject.id}:`, metaErr);
+          }
         }
 
         triggerGeocodeIfMissing(createdObject.id);
@@ -558,10 +562,6 @@ app.post("/api/import/objects", upload.single("file"), asyncHandler(async (req, 
         console.error("Object import error:", err);
         errors.push(`Kunde inte importera: ${row.name || row.namn || "okänd"}`);
       }
-    }
-    
-    for (const cId of csvImportClusterIds) {
-      updateClusterCache(cId).catch(e => console.error("Cluster cache update error:", e));
     }
     
     res.json({ imported: imported.length, errors });
@@ -657,7 +657,7 @@ app.get("/api/export/:type", asyncHandler(async (req, res) => {
       const customers = await storage.getCustomers(tenantId);
       const customerMap = new Map(customers.map(c => [c.id, c.name]));
       
-      headers = ["namn", "objektnummer", "typ", "nivå", "kund", "adress", "stad", "tillgång", "tillgångskod", "kärl"];
+      headers = ["namn", "objektnummer", "typ", "nivå", "kund", "adress", "stad"];
       data = objects.map(o => ({
         namn: o.name,
         objektnummer: o.objectNumber || "",
@@ -666,9 +666,6 @@ app.get("/api/export/:type", asyncHandler(async (req, res) => {
         kund: customerMap.get(o.customerId) || "",
         adress: o.address || "",
         stad: o.city || "",
-        tillgång: o.accessType || "open",
-        tillgångskod: o.accessCode || "",
-        kärl: o.containerCount || 0,
       }));
     } else {
       throw new ValidationError("Okänd exporttyp");
@@ -1242,7 +1239,6 @@ async function runModusObjectsImportJob(params: {
   const errors: string[] = [];
   const skipped: string[] = [];
   const modusIdMap = new Map<string, string>();
-  const modusOldClusterIds = new Set<string>();
   let rowsProcessed = 0;
   let phase: "startar" | "kunder" | "objekt" | "hierarki" | "metadata" | "klar" = "startar";
   let customersCreated = 0;
@@ -1364,10 +1360,10 @@ async function runModusObjectsImportJob(params: {
         else if (typLower.includes("serviceboende") || typLower.includes("boende")) objectType = "serviceboende";
         else if (typLower === "område" || typLower === "omrade" || typLower === "") objectType = "omrade";
         
-        // Determine access type from metadata
-        let accessType = "open";
-        let accessCode = null;
-        let keyNumber = null;
+        // Etapp 5: åtkomst/kärl skrivs som metadata (systemområdena Åtkomst/Kärl).
+        let accessType: string | null = null;
+        let accessCode: string | null = null;
+        let keyNumber: string | null = null;
         const nyckelEllerKod = row["Metadata - Nyckel eller kod"] || "";
         if (nyckelEllerKod) {
           if (nyckelEllerKod.toLowerCase().includes("nyckel")) {
@@ -1386,19 +1382,21 @@ async function runModusObjectsImportJob(params: {
         const antalStr = row["Metadata - Antal"] || "0";
         const containerCount = parseInt(antalStr.replace(/\D/g, "") || "0");
         
-        // Parse description for contact info
+        // Parse description for contact info (skrivs som Åtkomstinfo-metadata)
         const beskrivning = row["Beskrivning"] || "";
-        let accessInfo = {};
+        let accessInfoText: string | null = null;
         if (beskrivning) {
           const lines = beskrivning.split("\n");
           if (lines.length >= 2) {
-            accessInfo = {
-              contactPerson: lines[1]?.trim() || null,
-              phone: lines[2]?.trim() || null,
-              email: lines[3]?.trim() || null,
-            };
+            accessInfoText = lines.slice(1, 4).map((l: string) => l?.trim()).filter(Boolean).join(" | ") || null;
           }
         }
+        const modusMetadataWrites: Array<{ namn: string; value: string }> = [];
+        if (accessType) modusMetadataWrites.push({ namn: "Åtkomsttyp", value: accessType });
+        if (accessCode) modusMetadataWrites.push({ namn: "Åtkomstkod", value: accessCode });
+        if (keyNumber) modusMetadataWrites.push({ namn: "Nyckelnummer", value: keyNumber });
+        if (accessInfoText) modusMetadataWrites.push({ namn: "Åtkomstinfo", value: accessInfoText });
+        if (containerCount > 0) modusMetadataWrites.push({ namn: "Antal kärl", value: String(containerCount) });
         
         // Determine object level based on type hierarchy
         let objectLevel = 1; // Område = top level
@@ -1423,34 +1421,25 @@ async function runModusObjectsImportJob(params: {
           postalCode: row["Postnummer"] || null,
           latitude,
           longitude,
-          accessType,
-          accessCode,
-          keyNumber,
-          accessInfo,
-          containerCount,
         };
         
         const existingObject = await storage.getObjectByObjectNumber(tenantId, objectNumber);
         
-        let clusterId: string | undefined;
-        try {
-          clusterId = await ensureClusterForCustomer(tenantId, customerId);
-        } catch (clusterErr) {
-          console.error("Auto-cluster error:", clusterErr);
-        }
-
         if (existingObject) {
-          if (existingObject.clusterId && existingObject.clusterId !== clusterId) {
-            modusOldClusterIds.add(existingObject.clusterId);
-          }
           const { parentId: _p, ...updateFields } = objectFields;
           const updatedObject = await storage.updateObject(existingObject.id, {
             ...updateFields,
-            ...(clusterId ? { clusterId } : {}),
           });
           if (updatedObject) {
             // ADR v3: kund-koppling via primär payer (ej längre objects.customer_id).
             await ensurePrimaryPayer(tenantId, updatedObject.id, customerId);
+            for (const mw of modusMetadataWrites) {
+              try {
+                await writeSystemMetadataOnObject(updatedObject.id, mw.namn, mw.value, tenantId, "import");
+              } catch (metaErr) {
+                console.error(`Metadata-skrivning misslyckades (${mw.namn}):`, metaErr);
+              }
+            }
             modusIdMap.set(modusId, updatedObject.id);
             updated.push(name);
             if (updatedObject.address && (updatedObject.latitude == null || updatedObject.longitude == null)) {
@@ -1461,12 +1450,18 @@ async function runModusObjectsImportJob(params: {
           const createdObject = await storage.createObject({
             tenantId,
             ...objectFields,
-            ...(clusterId ? { clusterId } : {}),
             importBatchId,
           });
           if (createdObject?.city) invalidateAreaSearchCityCache(tenantId);
           // ADR v3: kund-koppling via primär payer (ej längre objects.customer_id).
           await ensurePrimaryPayer(tenantId, createdObject.id, customerId);
+          for (const mw of modusMetadataWrites) {
+            try {
+              await writeSystemMetadataOnObject(createdObject.id, mw.namn, mw.value, tenantId, "import");
+            } catch (metaErr) {
+              console.error(`Metadata-skrivning misslyckades (${mw.namn}):`, metaErr);
+            }
+          }
           modusIdMap.set(modusId, createdObject.id);
           created.push(name);
           triggerGeocodeIfMissing(createdObject.id);
@@ -1499,15 +1494,6 @@ async function runModusObjectsImportJob(params: {
           parentsUpdated++;
         }
       }
-    }
-
-    const affectedClusterIds = new Set<string>(modusOldClusterIds);
-    for (const [, objId] of modusIdMap) {
-      const obj = await storage.getObject(objId);
-      if (obj?.clusterId) affectedClusterIds.add(obj.clusterId);
-    }
-    for (const cId of affectedClusterIds) {
-      updateClusterCache(cId).catch(e => console.error("Cluster cache update error:", e));
     }
 
     // Fas 4: skriv metadata
@@ -4405,33 +4391,19 @@ app.post("/api/import/rollback/:batchId", requireAdmin, asyncHandler(async (req,
       RETURNING id
     `);
 
-    // Task #569: object_payers och invoice_recipients importeras via
-    // /api/object-payers/import respektive /api/invoice-recipients/import
-    // och stämplas med import_batch_id. object_payers saknar deleted_at och
-    // hard-deletas; invoice_recipients har deleted_at och soft-deletas så
+    // Task #569: invoice_recipients importeras via /api/invoice-recipients/import
+    // och stämplas med import_batch_id; de har deleted_at och soft-deletas så
     // ev. frusna WO som refererar id:t behåller läsbar historik.
-    const deletedPayers = await db.execute(sql`
-      DELETE FROM object_payers
-      WHERE import_batch_id = ${batchId} AND tenant_id = ${tenantId}
-      RETURNING id
-    `);
+    // (object_payers är borttagen i Etapp 5 — kund bärs av Ekonomi-metadatat.)
     const deletedRecipients = await db.execute(sql`
       UPDATE invoice_recipients SET deleted_at = NOW()
       WHERE import_batch_id = ${batchId} AND tenant_id = ${tenantId} AND deleted_at IS NULL
       RETURNING id
     `);
 
-    const payerIds = ((deletedPayers as any).rows || deletedPayers).map((r: any) => r.id);
     const recipientIds = ((deletedRecipients as any).rows || deletedRecipients).map((r: any) => r.id);
     const userId = (req as any).user?.id ?? null;
     const auditEntries: any[] = [];
-    for (const id of payerIds) {
-      auditEntries.push({
-        tenantId, userId, action: "rollback_import", resourceType: "object_payers", resourceId: id,
-        changes: { before: { rolledBack: false }, after: { rolledBack: true, deleted: true } },
-        metadata: { batchId, source: "import-rollback", batchType: "object-payers" },
-      });
-    }
     for (const id of recipientIds) {
       auditEntries.push({
         tenantId, userId, action: "rollback_import", resourceType: "invoice_recipients", resourceId: id,
@@ -4453,7 +4425,6 @@ app.post("/api/import/rollback/:batchId", requireAdmin, asyncHandler(async (req,
         objects: (deletedObjects.rows || deletedObjects).length,
         workOrders: (deletedOrders.rows || deletedOrders).length,
         customers: (deletedCustomers.rows || deletedCustomers).length,
-        objectPayers: payerIds.length,
         invoiceRecipients: recipientIds.length,
       },
     });
@@ -4485,7 +4456,6 @@ app.post("/api/import/modus/objects-mapped", upload.single("file"), asyncHandler
     const rows = result.data as Record<string, string>[];
     const imported: string[] = [];
     const errors: Array<{ row: number; column: string; error: string }> = [];
-    const mappedOldClusterIds = new Set<string>();
     
     const metadataMappings = Object.entries(columnMapping)
       .filter(([key]) => key.startsWith("meta:"))
@@ -4550,19 +4520,8 @@ app.post("/api/import/modus/objects-mapped", upload.single("file"), asyncHandler
             ))
           : [];
         
-        let clusterId: string | undefined;
-        try {
-          clusterId = await ensureClusterForCustomer(tenantId, customerId);
-        } catch (clusterErr) {
-          console.error("Auto-cluster error (mapped import):", clusterErr);
-        }
-        if (clusterId) objData.clusterId = clusterId;
-
         let objId: string;
         if (existing.length > 0) {
-          if (existing[0].clusterId && existing[0].clusterId !== clusterId) {
-            mappedOldClusterIds.add(existing[0].clusterId);
-          }
           await db.update(objects).set(objData).where(eq(objects.id, existing[0].id));
           objId = existing[0].id;
         } else {
@@ -4583,18 +4542,6 @@ app.post("/api/import/modus/objects-mapped", upload.single("file"), asyncHandler
       }
     }
     
-    const affectedClusterIdsMapped = new Set<string>(mappedOldClusterIds);
-    const allMappedObjs = await db.select({ id: objects.id, clusterId: objects.clusterId })
-      .from(objects).where(and(eq(objects.tenantId, tenantId), eq(objects.importBatchId, batchId)));
-    for (const o of allMappedObjs) {
-      if (o.clusterId) {
-        affectedClusterIdsMapped.add(o.clusterId);
-      }
-    }
-    for (const cId of affectedClusterIdsMapped) {
-      updateClusterCache(cId).catch(e => console.error("Cluster cache update error:", e));
-    }
-
     const { importBatches } = await import("@shared/schema");
     await db.insert(importBatches).values({
       tenantId,
@@ -5126,8 +5073,6 @@ app.get("/api/import/cleanup/names/preview", requireAdmin, asyncHandler(async (r
     objectNumber: objects.objectNumber,
     address: objects.address,
     parentId: objects.parentId,
-    accessInfo: objects.accessInfo,
-    notes: objects.notes,
   }).from(objects).where(and(
     eq(objects.tenantId, tenantId),
     isNull(objects.deletedAt),
@@ -5151,9 +5096,10 @@ app.get("/api/import/cleanup/names/preview", requireAdmin, asyncHandler(async (r
     if (!kind) return null;
     if (kindFilter !== "all" && kindFilter !== kind) return null;
     const parent = c.parentId ? parentMap.get(c.parentId) : null;
-    const targetField = kind === "phone" ? "accessInfo.phone"
-      : kind === "person" ? "accessInfo.contactPerson"
-      : kind === "instruction" ? "notes"
+    // Etapp 5: specialkolumnerna accessInfo/notes borttagna — all flyttad
+    // information hamnar i metadatafältet 'Åtkomstinfo'.
+    const targetField = kind === "phone" || kind === "person" || kind === "instruction"
+      ? "metadata.Åtkomstinfo"
       : "discard";
     return {
       id: c.id,
@@ -5190,7 +5136,6 @@ app.post("/api/import/cleanup/names/apply", requireAdmin, asyncHandler(async (re
     const targets = await tx.select({
       id: objects.id, name: objects.name, objectNumber: objects.objectNumber,
       address: objects.address, parentId: objects.parentId,
-      accessInfo: objects.accessInfo, notes: objects.notes,
     }).from(objects).where(and(
       eq(objects.tenantId, tenantId),
       eq(objects.hierarchyLevel, "karl"),
@@ -5209,6 +5154,9 @@ app.post("/api/import/cleanup/names/apply", requireAdmin, asyncHandler(async (re
     const parentMap = new Map(parentRows.map(p => [p.id, p.name]));
 
     const auditEntries: any[] = [];
+    // Etapp 5: flyttad info skrivs som metadata ('Åtkomstinfo') EFTER commit —
+    // metadata-skrivaren får aldrig tx-wrappas.
+    const metadataWrites: { objectId: string; text: string }[] = [];
     let updated = 0;
     let skipped = 0;
 
@@ -5218,16 +5166,10 @@ app.post("/api/import/cleanup/names/apply", requireAdmin, asyncHandler(async (re
 
       const parentName = t.parentId ? parentMap.get(t.parentId) || null : null;
       const newName = suggestNewName({ address: t.address, objectNumber: t.objectNumber, parentName });
-      const ai = (t.accessInfo as Record<string, any>) || {};
       const updates: Record<string, any> = { name: newName, importBatchId: batchId };
 
-      if (kind === "phone") {
-        updates.accessInfo = { ...ai, phone: t.name };
-      } else if (kind === "person") {
-        updates.accessInfo = { ...ai, contactPerson: t.name };
-      } else if (kind === "instruction") {
-        const existingNotes = t.notes ? `${t.notes}\n\n` : "";
-        updates.notes = `${existingNotes}Importerad anteckning: ${t.name}`;
+      if (kind === "phone" || kind === "person" || kind === "instruction") {
+        metadataWrites.push({ objectId: t.id, text: t.name });
       }
 
       // State-guard: uppdatera bara om namnet är oförändrat sedan vi läste det
@@ -5244,8 +5186,8 @@ app.post("/api/import/cleanup/names/apply", requireAdmin, asyncHandler(async (re
       auditEntries.push({
         tenantId, userId, action: "cleanup_names", resourceType: "objects", resourceId: t.id,
         changes: {
-          before: { name: t.name, accessInfo: ai, notes: t.notes },
-          after: { name: newName, kind, moveTo: kind === "phone" ? "accessInfo.phone" : kind === "person" ? "accessInfo.contactPerson" : kind === "instruction" ? "notes" : "discard" },
+          before: { name: t.name },
+          after: { name: newName, kind, moveTo: "metadata.Åtkomstinfo" },
         },
         metadata: { batchId, source: "cleanup-names" },
       });
@@ -5261,10 +5203,20 @@ app.post("/api/import/cleanup/names/apply", requireAdmin, asyncHandler(async (re
       metadata: { source: "cleanup-names", userId, skipped },
     });
 
-    return { updated, skipped, total: targets.length };
+    return { updated, skipped, total: targets.length, metadataWrites };
   });
 
-  res.json({ batchId, ...result });
+  // Etapp 5: skriv flyttad info som metadata EFTER commit (best-effort, aldrig i tx).
+  for (const mw of result.metadataWrites) {
+    try {
+      await writeSystemMetadataOnObject(mw.objectId, "Åtkomstinfo", mw.text, tenantId, "import");
+    } catch (err) {
+      console.error(`[cleanup-names] metadata-skrivning misslyckades för ${mw.objectId}:`, err);
+    }
+  }
+  const { metadataWrites: _mw, ...summary } = result;
+
+  res.json({ batchId, ...summary });
 }));
 
 // Steg 3: Föräldra-koppling — preview (förslag baserat på samma kund + adress + koordinat)
@@ -5628,8 +5580,6 @@ app.post("/api/import/cleanup/restore/:batchId", requireAdmin, asyncHandler(asyn
 
       const restoreFields: Record<string, any> = {};
       if ("name" in before) restoreFields.name = before.name;
-      if ("accessInfo" in before) restoreFields.accessInfo = before.accessInfo;
-      if ("notes" in before) restoreFields.notes = before.notes;
       if ("parentId" in before) restoreFields.parentId = before.parentId;
       if ("address" in before) restoreFields.address = before.address;
       if ("city" in before) restoreFields.city = before.city;
@@ -6352,7 +6302,7 @@ async function computeObjectsNotInExport(params: {
     createdAt: objects.createdAt,
   })
     .from(objects)
-    .leftJoin(customers, sql`${customers.id} = (SELECT op.customer_id FROM object_payers op WHERE op.object_id = ${objects.id} AND op.is_primary = true LIMIT 1)`)
+    .leftJoin(customers, sql`${customers.id} = ${primaryPayerCustomerIdSql()}`)
     .where(and(
       eq(objects.tenantId, tenantId),
       isNull(objects.deletedAt),
@@ -7283,7 +7233,6 @@ const OBJECTS_DIFF_COLUMNS: ObjectsDiffColumn[] = [
   { key: "address", header: "address" },
   { key: "city", header: "city" },
   { key: "postalCode", header: "postalCode" },
-  { key: "notes", header: "notes" },
 ];
 
 // Neutralisera formula-injection: prefixa farliga ledande tecken med apostrof.
@@ -7310,12 +7259,11 @@ async function loadObjectsForDiff(tenantId: string) {
       name: objects.name,
       hierarchyLevel: objects.hierarchyLevel,
       parentId: objects.parentId,
-      // ADR v3: objects.customer_id borttagen — härled primär kund via object_payers.
+      // Etapp 5: primär kund härleds ur Ekonomi-metadatat 'Kund'.
       customerId: primaryPayerCustomerIdSql(),
       address: objects.address,
       city: objects.city,
       postalCode: objects.postalCode,
-      notes: objects.notes,
     })
     .from(objects)
     .where(and(eq(objects.tenantId, tenantId), isNull(objects.deletedAt)));
@@ -7356,7 +7304,6 @@ async function loadObjectsForDiff(tenantId: string) {
     address: r.address,
     city: r.city,
     postalCode: r.postalCode,
-    notes: r.notes,
   }));
 }
 
@@ -7440,7 +7387,6 @@ app.get("/api/import/objects-diff/export", asyncHandler(async (req, res) => {
     address: "Gatuadress.",
     city: "Ort/stad.",
     postalCode: "Postnummer.",
-    notes: "Fria anteckningar.",
   };
   for (const c of OBJECTS_DIFF_COLUMNS) {
     readme.addRow([c.header, colDocs[c.key] ?? ""]).alignment = { wrapText: true, vertical: "top" };
@@ -7473,7 +7419,6 @@ interface UploadedObjectsDiffRow {
   address: string;
   city: string;
   postalCode: string;
-  notes: string;
   errors: string[];
 }
 
@@ -7503,7 +7448,6 @@ interface ObjectsDiffPreview {
     address: string;
     city: string;
     postalCode: string;
-    notes: string;
   }>;
   updated: Array<{
     id: string;
@@ -7552,7 +7496,6 @@ async function parseObjectsDiffUpload(
       address: normalizeStr(r.address),
       city: normalizeStr(r.city),
       postalCode: normalizeStr(r.postalCode),
-      notes: normalizeStr(r.notes),
       errors,
     });
   });
@@ -7618,7 +7561,6 @@ function computeObjectsDiff(
         address: row.address,
         city: row.city,
         postalCode: row.postalCode,
-        notes: row.notes,
       });
       createRows.push(row);
       continue;
@@ -7642,7 +7584,6 @@ function computeObjectsDiff(
       { field: "address", currentVal: match.address },
       { field: "city", currentVal: match.city },
       { field: "postalCode", currentVal: match.postalCode },
-      { field: "notes", currentVal: match.notes },
     ];
     for (const f of compareFields) {
       const after = row[f.field] as string;
@@ -7887,9 +7828,6 @@ app.post(
               case "postalCode":
                 patch.postalCode = after || null;
                 break;
-              case "notes":
-                patch.notes = after || null;
-                break;
             }
           }
           if (skipRow) continue;
@@ -7985,7 +7923,6 @@ app.post(
               address: row.address || null,
               city: row.city || null,
               postalCode: row.postalCode || null,
-              notes: row.notes || null,
               importBatchId: batchId,
             } as any);
             appliedCreated++;

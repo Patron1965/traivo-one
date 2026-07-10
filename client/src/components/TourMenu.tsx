@@ -2,7 +2,6 @@ import { useTour } from "@/hooks/use-tour";
 import {
   platformTour,
   plannerTour,
-  clusterTour,
   invoicingTour,
   fleetTour,
   reportingTour,
@@ -27,7 +26,7 @@ import type { TourDefinition } from "@/hooks/use-tour";
 
 const tourSections: { label: string; tours: TourDefinition[] }[] = [
   { label: "Kom igång", tours: [platformTour, tenantConfigTour] },
-  { label: "Planering", tours: [plannerTour, clusterTour, teamManagementTour] },
+  { label: "Planering", tours: [plannerTour, teamManagementTour] },
   { label: "Analys", tours: [reportingTour, invoicingTour, fleetTour] },
   { label: "Fält & Kund", tours: [fieldAppTour, customerPortalTour] },
 ];

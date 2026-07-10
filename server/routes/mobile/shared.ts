@@ -45,11 +45,16 @@ export async function enrichOrderForMobile(order: WorkOrder, storageRef: typeof 
   const object = order.objectId ? await storageRef.getObject(order.objectId) : null;
   const customer = order.customerId ? await storageRef.getCustomer(order.customerId) : null;
 
-  const [dependencies, lines, timeRestrictions] = await Promise.all([
+  const [dependencies, lines] = await Promise.all([
     storageRef.getTaskDependencies(order.id).catch(() => []),
     storageRef.getWorkOrderLines(order.id).catch(() => []),
-    order.objectId ? storageRef.getObjectTimeRestrictions(order.objectId).catch(() => []) : Promise.resolve([]),
   ]);
+
+  // Etapp 5: åtkomst + tidsfönster läses ur uppgiftspaketet (fryst arbetskopia),
+  // inte ur borttagna objekt-kolumner/object_time_restrictions.
+  const paket = (order.uppgiftspaket as Record<string, any> | null) || null;
+  const paketAtkomst = (paket?.atkomst as Record<string, any> | null) || null;
+  const paketTidsfonster = (paket?.tidsfonster as Record<string, any> | null) || null;
 
   const depDetails = await Promise.all(
     dependencies.map(async (dep: Record<string, unknown>) => {
@@ -100,10 +105,10 @@ export async function enrichOrderForMobile(order: WorkOrder, storageRef: typeof 
       }))
     : [];
 
-  const restrictions = timeRestrictions.length > 0
+  const restrictions = (paketTidsfonster?.start || paketTidsfonster?.slut)
     ? {
-        earliestPickup: timeRestrictions.find((r: Record<string, unknown>) => r.startTime)?.startTime as string || null,
-        latestPickup: timeRestrictions.find((r: Record<string, unknown>) => r.endTime)?.endTime as string || null,
+        earliestPickup: (paketTidsfonster?.start as string) || null,
+        latestPickup: (paketTidsfonster?.slut as string) || null,
         earliestDelivery: null,
         latestDelivery: null,
       }
@@ -159,7 +164,6 @@ export async function enrichOrderForMobile(order: WorkOrder, storageRef: typeof 
     estimatedDuration: order.estimatedDuration || 60,
     wasteType: object?.objectType || "",
     containerType: object?.name || "",
-    containerCount: object?.containerCount || 0,
     executionCodes,
     dependencies: depDetails,
     timeRestrictions: restrictions,
@@ -184,8 +188,8 @@ export async function enrichOrderForMobile(order: WorkOrder, storageRef: typeof 
     inspections,
     plannedNotes,
     actualStartTime: order.onSiteAt instanceof Date ? order.onSiteAt.toISOString() : (order.onSiteAt as string | null) || null,
-    objectAccessCode: object?.accessCode || null,
-    objectKeyNumber: object?.keyNumber || null,
+    objectAccessCode: (paketAtkomst?.portkod as string) || null,
+    objectKeyNumber: (paketAtkomst?.nyckelnummer as string) || null,
     scheduledStart: scheduledStartIso,
     scheduledEnd: scheduledEndIso,
     signatureUrl,

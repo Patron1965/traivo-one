@@ -82,32 +82,6 @@ export const plannerTour: TourDefinition = {
   ],
 };
 
-export const clusterTour: TourDefinition = {
-  id: "cluster-guide",
-  name: "Kluster och områden",
-  description: "Förstå hur kluster organiserar arbetet",
-  steps: [
-    {
-      target: '[data-testid="nav-dropdown-grunddata"]',
-      title: "Kluster",
-      description: "Kluster grupperar objekt i geografiska områden. Gå till Grunddata > Kluster för att hantera dina arbetsområden.",
-      placement: "bottom",
-    },
-    {
-      target: '[data-testid="nav-dropdown-grunddata"]',
-      title: "Anpassade färger",
-      description: "Varje kluster kan ha en egen färg som visas på kartor och i veckoplaneraren för enkel överblick.",
-      placement: "bottom",
-    },
-    {
-      target: '[data-testid="nav-dropdown-grunddata"]',
-      title: "Servicefrekvens",
-      description: "Ställ in hur ofta objekt i klustret ska besökas och vilken tid på dagen som föredras.",
-      placement: "bottom",
-    },
-  ],
-};
-
 export const invoicingTour: TourDefinition = {
   id: "invoicing-guide",
   name: "Fakturering",
@@ -371,7 +345,6 @@ export const fieldAppTour: TourDefinition = {
 export const allTours: TourDefinition[] = [
   platformTour,
   plannerTour,
-  clusterTour,
   invoicingTour,
   fleetTour,
   reportingTour,

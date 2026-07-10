@@ -12,9 +12,10 @@ import {
   userTenantRoles,
   customers,
   objects,
-  objectPayers,
+  metadataVarden,
 } from "@shared/schema";
-import { inArray } from "drizzle-orm";
+import { inArray, eq } from "drizzle-orm";
+import { setObjectKund, cleanupObjectKund } from "./helpers/object-kund";
 import type { InsertObject } from "@shared/schema";
 
 // Task #734: regressionsvakt för objektträdets child-count-badge.
@@ -77,16 +78,13 @@ function makeObject(
   } as InsertObject;
 }
 
-// childCount resolveras via primär object_payers-koppling när kundfilter används,
-// så varje objekt får en primär betalare (default = customerMain).
+// childCount resolveras via "Kund"-metadatat när kundfilter används (Etapp 5;
+// object_payers är borttagen), så varje objekt får kund-metadata (default = customerMain).
 async function addPrimaryPayer(objectId: string, customerId: string): Promise<void> {
-  await db.insert(objectPayers).values({
-    tenantId: TENANT,
-    objectId,
-    customerId,
-    payerType: "primary",
-    isPrimary: true,
-  });
+  await setObjectKund(TENANT, objectId, customerId);
+}
+async function removeObjectKund(objectId: string): Promise<void> {
+  await db.delete(metadataVarden).where(eq(metadataVarden.objektId, objectId));
 }
 
 beforeAll(async () => {
@@ -150,7 +148,7 @@ beforeAll(async () => {
 afterAll(async () => {
   await new Promise<void>((r) => server?.close(() => r()));
   try {
-    await db.delete(objectPayers).where(inArray(objectPayers.tenantId, [TENANT]));
+    await cleanupObjectKund([TENANT]);
     await db.delete(objects).where(inArray(objects.tenantId, [TENANT]));
     await db.delete(customers).where(inArray(customers.tenantId, [TENANT]));
     await db.delete(userTenantRoles).where(inArray(userTenantRoles.userId, [ADMIN]));
@@ -186,7 +184,7 @@ describe("GET /api/objects/tree — childCount på rot-nivå", () => {
   it("exkluderar barn som tillhör annan kund från childCount", async () => {
     // childB byter primär betalare till en annan kund → räknas inte med när
     // main-kunden filtreras. Verifierar att childCount-subqueryn ärver filtret.
-    await db.delete(objectPayers).where(inArray(objectPayers.objectId, [childBId]));
+    await removeObjectKund(childBId);
     await addPrimaryPayer(childBId, customerOther);
 
     const res = await req("GET", `/api/objects/tree?customerId=${customerMain}`, { userId: ADMIN });
@@ -196,7 +194,7 @@ describe("GET /api/objects/tree — childCount på rot-nivå", () => {
     expect(root.childCount).toBe(1);
 
     // Återställ för efterföljande test.
-    await db.delete(objectPayers).where(inArray(objectPayers.objectId, [childBId]));
+    await removeObjectKund(childBId);
     await addPrimaryPayer(childBId, customerMain);
   });
 });

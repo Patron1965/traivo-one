@@ -3,6 +3,7 @@
 // ordrar/abonnemang och lagrar metadata om vem som arkiverade + varför.
 // Soft-delete-state lagras fortfarande i `objects.deletedAt`.
 import { db } from "../db";
+import { primaryPayerCustomerIdSqlFor } from "./object-customer";
 import { objects, workOrders, subscriptions } from "@shared/schema";
 import { and, eq, isNull, ne, inArray } from "drizzle-orm";
 import { sql } from "drizzle-orm";
@@ -101,17 +102,81 @@ export async function restoreObject(objectId: string, tenantId: string): Promise
 }
 
 export async function listArchivedObjects(tenantId: string, limit = 200) {
-  // customer_id hämtas via primär object_payer (ADR v3) — inte legacy objects.customer_id.
+  // customer_id härleds ur Ekonomi-metadatat 'Kund' (Etapp 5) — inte legacy objects.customer_id.
   return db.execute(sql`
     SELECT o.id, o.name, o.object_number,
-      (SELECT op.customer_id FROM object_payers op
-        WHERE op.object_id = o.id AND op.is_primary = true
-        ORDER BY op.priority DESC NULLS LAST, op.created_at ASC
-        LIMIT 1) AS customer_id,
+      ${primaryPayerCustomerIdSqlFor(sql.raw("o.id"))} AS customer_id,
       o.deleted_at AS archived_at, o.archived_by, o.archived_reason
     FROM objects o
     WHERE o.tenant_id = ${tenantId} AND o.deleted_at IS NOT NULL
     ORDER BY o.deleted_at DESC
     LIMIT ${limit}
   `).then(r => r.rows);
+}
+
+// ============================================================
+// Raderingsregeln (Etapp 5, Task #1217): hård preflight — ett objekt får
+// endast RADERAS (hard delete) om det är helt oanvänt: inga uppgifter
+// (work_orders/assignments, även historiska), inga abonnemang och inga
+// barnobjekt. Annars är arkivering enda vägen.
+// ============================================================
+
+export type DeletePreflight = {
+  objectId: string;
+  children: number;
+  workOrders: number;
+  assignments: number;
+  subscriptions: number;
+  blockers: string[];
+};
+
+export async function deleteObjectPreflight(objectId: string, tenantId: string): Promise<DeletePreflight> {
+  const [counts] = await db.execute(sql`
+    SELECT
+      (SELECT COUNT(*)::int FROM objects
+        WHERE tenant_id = ${tenantId} AND parent_id = ${objectId}) AS children,
+      (SELECT COUNT(*)::int FROM object_parents
+        WHERE tenant_id = ${tenantId} AND parent_id = ${objectId}) AS alt_children,
+      (SELECT COUNT(*)::int FROM work_orders
+        WHERE tenant_id = ${tenantId} AND object_id = ${objectId}) AS work_orders,
+      (SELECT COUNT(*)::int FROM assignments
+        WHERE tenant_id = ${tenantId} AND object_id = ${objectId}) AS assignments,
+      (SELECT COUNT(*)::int FROM subscriptions
+        WHERE tenant_id = ${tenantId} AND object_id = ${objectId}) AS subscriptions
+  `).then(r => r.rows as any[]);
+
+  const children = Number(counts?.children ?? 0) + Number(counts?.alt_children ?? 0);
+  const workOrderCount = Number(counts?.work_orders ?? 0);
+  const assignmentCount = Number(counts?.assignments ?? 0);
+  const subscriptionCount = Number(counts?.subscriptions ?? 0);
+
+  const blockers: string[] = [];
+  if (children > 0) blockers.push(`${children} underobjekt`);
+  if (workOrderCount > 0) blockers.push(`${workOrderCount} uppgift${workOrderCount === 1 ? "" : "er"} (inkl. historik)`);
+  if (assignmentCount > 0) blockers.push(`${assignmentCount} planerad${assignmentCount === 1 ? "" : "e"} uppgift${assignmentCount === 1 ? "" : "er"}`);
+  if (subscriptionCount > 0) blockers.push(`${subscriptionCount} abonnemang`);
+
+  return {
+    objectId,
+    children,
+    workOrders: workOrderCount,
+    assignments: assignmentCount,
+    subscriptions: subscriptionCount,
+    blockers,
+  };
+}
+
+/**
+ * Hard-delete av ett helt oanvänt objekt. Rensar objektets egna kringdata
+ * (metadata, föräldralänkar, artikelkopplingar) och tar bort raden. Kastar
+ * aldrig själv vid FK-konflikt — anroparen fångar och hänvisar till arkivering.
+ */
+export async function hardDeleteUnusedObject(objectId: string, tenantId: string): Promise<void> {
+  await db.execute(sql`DELETE FROM metadata_historik WHERE tenant_id = ${tenantId} AND metadata_varden_id IN (
+    SELECT id FROM metadata_varden WHERE tenant_id = ${tenantId} AND objekt_id = ${objectId}
+  )`).catch(() => undefined);
+  await db.execute(sql`DELETE FROM metadata_varden WHERE tenant_id = ${tenantId} AND objekt_id = ${objectId}`);
+  await db.execute(sql`DELETE FROM object_parents WHERE tenant_id = ${tenantId} AND (object_id = ${objectId} OR parent_id = ${objectId})`);
+  await db.execute(sql`DELETE FROM object_articles WHERE tenant_id = ${tenantId} AND object_id = ${objectId}`);
+  await db.execute(sql`DELETE FROM objects WHERE tenant_id = ${tenantId} AND id = ${objectId}`);
 }

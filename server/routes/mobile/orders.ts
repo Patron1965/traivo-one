@@ -177,8 +177,8 @@ app.get("/api/mobile/my-orders", isMobileAuthenticated, asyncHandler(async (req:
         customerNotified: notifiedOrderIds.has(order.id),
         isTeamOrder: !!order.teamId,
         actualStartTime: order.onSiteAt instanceof Date ? order.onSiteAt.toISOString() : (order.onSiteAt as string | null) || null,
-        objectAccessCode: object?.accessCode || null,
-        objectKeyNumber: object?.keyNumber || null,
+        objectAccessCode: ((order.uppgiftspaket as Record<string, any> | null)?.atkomst?.portkod as string) || null,
+        objectKeyNumber: ((order.uppgiftspaket as Record<string, any> | null)?.atkomst?.nyckelnummer as string) || null,
         objectLatitude: object?.latitude || null,
         objectLongitude: object?.longitude || null,
         latitude: object?.latitude || null,
@@ -260,10 +260,12 @@ app.get("/api/mobile/orders/:id", isMobileAuthenticated, asyncHandler(async (req
       ? [{ id: order.executionCode, code: (order.executionCode as string).toUpperCase().substring(0, 4), name: order.executionCode }]
       : [];
 
-    const [dependencies, timeRestrictions] = await Promise.all([
-      storage.getTaskDependencies(orderId).catch(() => []),
-      order.objectId ? storage.getObjectTimeRestrictions(order.objectId).catch(() => []) : Promise.resolve([]),
-    ]);
+    const dependencies = await storage.getTaskDependencies(orderId).catch(() => []);
+
+    // Etapp 5: åtkomst + tidsfönster ur uppgiftspaketet (fryst arbetskopia).
+    const detailPaket = (order.uppgiftspaket as Record<string, any> | null) || null;
+    const detailAtkomst = (detailPaket?.atkomst as Record<string, any> | null) || null;
+    const detailTidsfonster = (detailPaket?.tidsfonster as Record<string, any> | null) || null;
 
     const depDetails = await Promise.all(
       dependencies.map(async (dep: Record<string, unknown>) => {
@@ -278,10 +280,10 @@ app.get("/api/mobile/orders/:id", isMobileAuthenticated, asyncHandler(async (req
       })
     );
 
-    const restrictions = timeRestrictions.length > 0
+    const restrictions = (detailTidsfonster?.start || detailTidsfonster?.slut)
       ? {
-          earliestPickup: timeRestrictions.find((r: Record<string, unknown>) => r.startTime)?.startTime as string || null,
-          latestPickup: timeRestrictions.find((r: Record<string, unknown>) => r.endTime)?.endTime as string || null,
+          earliestPickup: (detailTidsfonster?.start as string) || null,
+          latestPickup: (detailTidsfonster?.slut as string) || null,
           earliestDelivery: null,
           latestDelivery: null,
         }
@@ -321,12 +323,12 @@ app.get("/api/mobile/orders/:id", isMobileAuthenticated, asyncHandler(async (req
       address: object?.address || order.address || "",
       city: object?.city || "",
       postalCode: object?.postalCode || "",
-      accessCode: object?.accessCode,
-      keyNumber: object?.keyNumber,
-      objectAccessCode: object?.accessCode || null,
-      objectKeyNumber: object?.keyNumber || null,
-      objectNotes: object?.notes,
-      deliveryPreferenceNotes: order.objectId ? (await storage.resolveDeliveryPreferences(order.objectId)).effective.notes || null : null,
+      accessCode: detailAtkomst?.portkod ?? null,
+      keyNumber: detailAtkomst?.nyckelnummer ?? null,
+      objectAccessCode: (detailAtkomst?.portkod as string) || null,
+      objectKeyNumber: (detailAtkomst?.nyckelnummer as string) || null,
+      objectNotes: null,
+      deliveryPreferenceNotes: null,
       outsidePreferredWindow: order.outsidePreferredWindow ?? false,
       customerName: customer?.name,
       customerPhone: customer?.phone,
@@ -587,8 +589,8 @@ app.patch("/api/mobile/orders/:id/status", isMobileAuthenticated, asyncHandler(a
       customerName: customer?.name || null,
       objectName: object?.name || null,
       objectAddress: object?.address || null,
-      objectAccessCode: object?.accessCode || null,
-      objectKeyNumber: object?.keyNumber || null,
+      objectAccessCode: ((updatedOrder.uppgiftspaket as Record<string, any> | null)?.atkomst?.portkod as string) || null,
+      objectKeyNumber: ((updatedOrder.uppgiftspaket as Record<string, any> | null)?.atkomst?.nyckelnummer as string) || null,
       scheduledStart: statusScheduledStart,
       scheduledEnd: statusScheduledEnd,
       signatureUrl: statusVisitRows[0]?.signatureUrl || null,

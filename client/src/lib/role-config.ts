@@ -41,7 +41,6 @@ const PLANNER_ROUTES = new Set([
   "/veckoplan",
   "/grovplanering",
   "/distrikt",
-  "/clusters",
   "/customers",
   "/routes",
   "/optimization",

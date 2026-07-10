@@ -218,7 +218,6 @@ export async function registerOptimizationRoutes(app: Express) {
       const jobId = await createOptimizationJob(tenantId, "ortools-vrp", {
         tenantId,
         date: req.body.date,
-        clusterId: undefined,
         breakConfig: {},
         constraintOptions: constraints,
       });
@@ -231,7 +230,6 @@ export async function registerOptimizationRoutes(app: Express) {
       const jobId = await createOptimizationJob(tenantId, "vrp", {
         tenantId,
         date: req.body.date,
-        clusterId: undefined,
         breakConfig: {},
         constraintOptions: constraints,
       });
@@ -242,11 +240,10 @@ export async function registerOptimizationRoutes(app: Express) {
 
     const { optimizeRoutesVRP, DEFAULT_BREAK_CONFIG } = await import("../route-optimizer");
     const { buildTeamVehicles, buildTeamMemberMap, buildStartPointsForDate } = await import("../team-vehicles");
-    const [workOrders, resources, objects, clusters, teams, teamMembersAll] = await Promise.all([
+    const [workOrders, resources, objects, teams, teamMembersAll] = await Promise.all([
       storage.getWorkOrders(tenantId),
       storage.getResources(tenantId),
       storage.getObjects(tenantId),
-      storage.getClusters(tenantId),
       storage.getTeams(tenantId),
       storage.getAllTeamMembers(tenantId),
     ]);
@@ -275,7 +272,7 @@ export async function registerOptimizationRoutes(app: Express) {
     // §5 A / Task #381 — exkludera platskrav 'ingen' (admin/logistik utan objekt) från VRP.
     filteredOrders = filteredOrders.filter(o => resolveLocationRequirement(o) !== "ingen" && !!o.objectId);
 
-    const result = await optimizeRoutesVRP(filteredOrders, teamVehicles, objects, clusters, DEFAULT_BREAK_CONFIG, { ...constraints, teamMemberMap });
+    const result = await optimizeRoutesVRP(filteredOrders, teamVehicles, objects, DEFAULT_BREAK_CONFIG, { ...constraints, teamMemberMap });
 
     res.json(result);
   }));

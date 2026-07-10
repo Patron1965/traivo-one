@@ -1037,12 +1037,11 @@ app.post("/api/cases/:source/:id/create-order", requirePlanner, asyncHandler(asy
       throw new ValidationError("Kopplat objekt hittades inte");
     }
 
-    // Härled kund: body → object_payers (primär) → legacy objects.customerId
+    // Härled kund: body → Ekonomi-metadatat 'Kund' (Etapp 5, arvs-medvetet)
     let customerId: string | null = req.body?.customerId ?? null;
     if (!customerId) {
-      const payers = await storage.getObjectPayers(objectId);
-      const primary = payers.find((p) => p.isPrimary) || payers[0];
-      customerId = primary?.customerId ?? object.customerId ?? null;
+      const { getObjectPrimaryCustomerId } = await import("../services/object-customer");
+      customerId = (await getObjectPrimaryCustomerId(objectId)) ?? (object as any).customerId ?? null;
     }
     if (!customerId) {
       throw new ValidationError("Kunde inte härleda kund för objektet. Ange customerId.");
@@ -1079,7 +1078,6 @@ app.post("/api/cases/:source/:id/create-order", requirePlanner, asyncHandler(asy
       tenantId,
       orderConceptId: concept.id,
       objectId,
-      clusterId: object.clusterId || undefined,
       title,
       description,
       status: "not_planned",
@@ -2306,10 +2304,9 @@ app.post("/api/ai/assisted-plan", requirePlanner, asyncHandler(async (req, res) 
     const { aiAssistedSchedule, runWithAIContext } = await import("../ai-planner");
     const { weekStart, weekEnd, instruction } = req.body;
 
-    const [workOrders, resources, clusters, setupTimeLogs] = await Promise.all([
+    const [workOrders, resources, setupTimeLogs] = await Promise.all([
       storage.getWorkOrders(tenantId),
       storage.getResources(tenantId),
-      storage.getClusters(tenantId),
       storage.getSetupTimeLogs(tenantId),
     ]);
 
@@ -2322,7 +2319,6 @@ app.post("/api/ai/assisted-plan", requirePlanner, asyncHandler(async (req, res) 
       aiAssistedSchedule({
         workOrders,
         resources,
-        clusters,
         weekStart: weekStart || new Date().toISOString().split("T")[0],
         weekEnd: weekEnd || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
         setupTimeLogs,

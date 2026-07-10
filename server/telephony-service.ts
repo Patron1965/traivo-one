@@ -1,8 +1,8 @@
 import { db } from "./db";
 import { storage } from "./storage";
 import { eq, and, isNull, gte, lte, desc, sql } from "drizzle-orm";
-import { objectHasPrimaryCustomerSql } from "./services/object-customer";
-import { customers, objects, workOrders, clusters, metadataKatalog, metadataVarden, statusMessageTemplates } from "@shared/schema";
+import { objectHasPrimaryCustomerSql, primaryPayerCustomerIdSql } from "./services/object-customer";
+import { customers, objects, workOrders, metadataKatalog, metadataVarden, statusMessageTemplates } from "@shared/schema";
 
 function normalizePhone(phone: string): string {
   let cleaned = phone.replace(/[\s\-\(\)]/g, "");
@@ -63,7 +63,7 @@ export async function lookupCustomerByPhone(tenantId: string, phone: string) {
 
         if (objectIds.length > 0) {
           const matchedObjects = await db
-            .select()
+            .select({ customerId: primaryPayerCustomerIdSql() })
             .from(objects)
             .where(
               and(
@@ -128,24 +128,6 @@ export async function lookupCustomerByPhone(tenantId: string, phone: string) {
         .orderBy(desc(workOrders.scheduledDate))
         .limit(10);
 
-      const clusterIds = [
-        ...new Set(customerObjects.map((o) => o.clusterId).filter(Boolean)),
-      ];
-      let clusterInfo: Array<{
-        id: string;
-        name: string;
-        description: string | null;
-      }> = [];
-      if (clusterIds.length > 0) {
-        clusterInfo = await db
-          .select({
-            id: clusters.id,
-            name: clusters.name,
-            description: clusters.description,
-          })
-          .from(clusters)
-          .where(sql`${clusters.id} = ANY(${clusterIds})`);
-      }
 
       let areaInfo: string[] = [];
       const omrKatalogs = await db
@@ -194,7 +176,6 @@ export async function lookupCustomerByPhone(tenantId: string, phone: string) {
           city: o.city,
           objectType: o.objectType,
           status: o.status,
-          clusterId: o.clusterId,
         })),
         recentOrders: recentOrders.map((wo) => ({
           id: wo.id,
@@ -205,7 +186,6 @@ export async function lookupCustomerByPhone(tenantId: string, phone: string) {
           scheduledDate: wo.scheduledDate,
           resourceId: wo.resourceId,
         })),
-        clusters: clusterInfo,
         areas: areaInfo,
       };
     })

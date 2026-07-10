@@ -1,15 +1,14 @@
 import type { Express } from "express";
 import { storage } from "../storage";
 import { z } from "zod";
-import { insertCustomerSchema, insertCustomerRelationshipSchema, insertObjectSchema, objects, objectParents, customers, workOrders, workOrderLines, technicianRatings, resources, assignments, orderConcepts, CUSTOMER_HIERARCHY_TYPES, insertInvoiceRecipientSchema, INVOICE_RECIPIENT_LEVELS, type InvoiceRecipientLevel } from "@shared/schema";
+import { insertCustomerSchema, insertCustomerRelationshipSchema, insertObjectSchema, objects, objectParents, customers, workOrders, workOrderLines, technicianRatings, resources, teams, assignments, orderConcepts, metadataVarden, metadataKatalog, CUSTOMER_HIERARCHY_TYPES, insertInvoiceRecipientSchema, INVOICE_RECIPIENT_LEVELS, type InvoiceRecipientLevel } from "@shared/schema";
 import { formatZodError, verifyTenantOwnership } from "./helpers";
 import { getTenantIdWithFallback, requireAdmin } from "../tenant-middleware";
 import { asyncHandler } from "../asyncHandler";
-import { NotFoundError, ValidationError } from "../errors";
+import { NotFoundError, ValidationError, ConflictError } from "../errors";
 import { db } from "../db";
 import { eq, and, isNull, sql, or, inArray } from "drizzle-orm";
-import { primaryPayerCustomerIdSql, getObjectTreeLevel, objectHasPrimaryCustomerSql, ensurePrimaryPayer } from "../services/object-customer";
-import { ensureClusterAndAssign } from "../auto-cluster";
+import { primaryPayerCustomerIdSql, primaryPayerCustomerIdSqlFor, getObjectTreeLevel, objectHasPrimaryCustomerSql, ensurePrimaryPayer } from "../services/object-customer";
 import { triggerGeocodeIfMissing } from "../services/geocoding";
 import { copyObjectTree } from "../services/object-copy";
 import { signObjectQrToken } from "../dynamic-qr-token";
@@ -190,24 +189,6 @@ app.get("/api/customers/:id/stats", asyncHandler(async (req, res) => {
   if (!verifyTenantOwnership(customer, tenantId)) throw new NotFoundError("Kund");
   const stats = await storage.getCustomerStats(tenantId, req.params.id);
   res.json(stats);
-}));
-
-// Räkna om ärvda värden för alla objekt under kunden (kund + ättlingar).
-// Konsekvent med klustervyns "Räkna om arv". ADR v3: kundkoppling via primary payer.
-app.post("/api/customers/:id/recalculate-inheritance", asyncHandler(async (req, res) => {
-  const tenantId = getTenantIdWithFallback(req);
-  const customer = await storage.getCustomer(req.params.id);
-  if (!verifyTenantOwnership(customer, tenantId)) throw new NotFoundError("Kund");
-  const descendants = await storage.getCustomerDescendants(tenantId, req.params.id);
-  const customerIds = [req.params.id, ...descendants];
-  const processor = await createInheritanceProcessor(tenantId);
-  const result = await processor.processCustomerHierarchy(customerIds);
-  res.json({
-    success: true,
-    processed: result.processed,
-    errors: result.errors,
-    message: `Uppdaterade ärvda värden för ${result.processed} objekt`,
-  });
 }));
 
 // Lönsamhet per kund: aggregerar work_orders.cachedValue/cachedCost + månadstrend
@@ -510,7 +491,6 @@ app.get("/api/objects/lookup", asyncHandler(async (req, res) => {
       objectNumber: objects.objectNumber,
       hierarchyLevel: objects.hierarchyLevel,
       objectType: objects.objectType,
-      accessCode: objects.accessCode,
       customerId: primaryPayerCustomerIdSql(),
       parentId: objects.parentId,
     })
@@ -531,7 +511,6 @@ app.get("/api/objects", asyncHandler(async (req, res) => {
   const objectType = req.query.objectType as string || undefined;
   const hierarchyLevel = req.query.hierarchyLevel as string || undefined;
   const ids = req.query.ids as string || undefined;
-  const noCluster = req.query.noCluster === "true";
 
   if (ids) {
     const idArray = ids.split(",").filter(id => id.trim());
@@ -543,7 +522,6 @@ app.get("/api/objects", asyncHandler(async (req, res) => {
 
   const interim = req.query.interim as string || undefined;
   const issue = req.query.issue as string || undefined;
-  const clusterIdFilter = req.query.clusterId as string || undefined;
   const reported = req.query.reported === "true";
   // Task #990: platstyp-filter (pinpoint/area/none). Ogiltig param ignoreras.
   const locationTypeParam = req.query.locationType as string || undefined;
@@ -597,7 +575,7 @@ app.get("/api/objects", asyncHandler(async (req, res) => {
       }
     : undefined;
 
-  const hasFilters = objectType || hierarchyLevel || interim || issue || clusterIdFilter || reported || locationType || linkedTask;
+  const hasFilters = objectType || hierarchyLevel || interim || issue || reported || locationType || linkedTask;
   const paginated = req.query.paginated === "true";
 
   // Task #552 (A): Berika listsvar med composed displayName så att alla konsumenter
@@ -614,8 +592,8 @@ app.get("/api/objects", asyncHandler(async (req, res) => {
     }
   };
 
-  if (paginated || req.query.limit || req.query.offset || req.query.search || req.query.customerId || noCluster || hasFilters || hasConditions) {
-    const filters = hasFilters ? { objectType, hierarchyLevel, isInterimObject: interim === "true" ? true : interim === "false" ? false : undefined, issue, clusterId: clusterIdFilter, reported: reported || undefined, locationType, linkedTask } : undefined;
+  if (paginated || req.query.limit || req.query.offset || req.query.search || req.query.customerId || hasFilters || hasConditions) {
+    const filters = hasFilters ? { objectType, hierarchyLevel, isInterimObject: interim === "true" ? true : interim === "false" ? false : undefined, issue, reported: reported || undefined, locationType, linkedTask } : undefined;
 
     if (hasConditions) {
       // Villkorsfilter: hämta alla bas-filtrerade objekt, kör den DELADE
@@ -626,23 +604,13 @@ app.get("/api/objects", asyncHandler(async (req, res) => {
       const total = matched.length;
       const page = matched.slice(offset, offset + limit);
       const enriched = await enrichWithDisplayName(page as unknown as Array<Record<string, unknown>>);
-      if (noCluster) {
-        res.json(enriched.filter(obj => !(obj as any).clusterId));
-      } else {
-        res.json({ objects: enriched, total });
-      }
+      res.json({ objects: enriched, total });
       return;
     }
 
     const result = await storage.getObjectsPaginated(tenantId, limit, offset, search, customerIds, filters);
     const enriched = await enrichWithDisplayName(result.objects as Array<Record<string, unknown>>);
-
-    if (noCluster) {
-      const filtered = enriched.filter(obj => !(obj as any).clusterId);
-      res.json(filtered);
-    } else {
-      res.json({ ...result, objects: enriched });
-    }
+    res.json({ ...result, objects: enriched });
   } else {
     const objects = await storage.getObjects(tenantId);
     const enriched = await enrichWithDisplayName(objects as unknown as Array<Record<string, unknown>>);
@@ -702,7 +670,7 @@ app.get("/api/objects/tree", asyncHandler(async (req, res) => {
         customerName: customers.name,
       })
       .from(objects)
-      .leftJoin(customers, sql`${customers.id} = (SELECT op.customer_id FROM object_payers op WHERE op.object_id = ${objects.id} AND op.is_primary = true LIMIT 1)`)
+      .leftJoin(customers, sql`${customers.id} = ${primaryPayerCustomerIdSql()}`)
       .where(and(...conditions))
       .orderBy(objects.name)
       .limit(200);
@@ -733,6 +701,160 @@ app.get("/api/objects/tree", asyncHandler(async (req, res) => {
   res.json(nodes);
 }));
 
+// Fullt objektträd för ObjectHierarchyTree (Step4Inspection + ObjectsPage).
+// Ersätter gamla /api/clusters/tree (Etapp 5: klustermodellen borttagen).
+// scope=top laddar enbart toppnivå-objekt (lättare för stora tenants).
+app.get("/api/objects/hierarchy-tree", asyncHandler(async (req, res) => {
+  const tenantId = getTenantIdWithFallback(req);
+  const scope = req.query.scope === "top" ? "top" : "all";
+
+  const objRows = await db.select({
+    id: objects.id,
+    name: objects.name,
+    parentId: objects.parentId,
+    hierarchyLevel: objects.hierarchyLevel,
+    objectType: objects.objectType,
+    latitude: objects.latitude,
+    longitude: objects.longitude,
+    entranceLatitude: objects.entranceLatitude,
+    entranceLongitude: objects.entranceLongitude,
+    address: objects.address,
+    postalCode: objects.postalCode,
+    city: objects.city,
+    customerId: primaryPayerCustomerIdSql(),
+  }).from(objects).where(
+    scope === "top"
+      ? and(eq(objects.tenantId, tenantId), isNull(objects.deletedAt), isNull(objects.parentId))
+      : and(eq(objects.tenantId, tenantId), isNull(objects.deletedAt)),
+  );
+
+  // I toppnivå-läget begränsas berikningsfrågorna till de laddade rötterna.
+  const objIds = objRows.map(o => o.id);
+  const topScopeEmpty = scope === "top" && objIds.length === 0;
+
+  // Kundnamn för härledda kund-id:n (Ekonomi-metadatafältet "Kund")
+  const customerIds = Array.from(new Set(objRows.map(o => o.customerId).filter((v): v is string => !!v)));
+  const customerRows = customerIds.length > 0
+    ? await db.select({ id: customers.id, name: customers.name })
+        .from(customers)
+        .where(and(eq(customers.tenantId, tenantId), inArray(customers.id, customerIds)))
+    : [];
+  const customerNameById = new Map(customerRows.map(c => [c.id, c.name] as const));
+
+  // Arbetsordrar → utförare + orderstatus per objekt
+  const woRows = topScopeEmpty ? [] : await db.select({
+    objectId: workOrders.objectId,
+    orderStatus: workOrders.orderStatus,
+    resourceId: workOrders.resourceId,
+    teamId: workOrders.teamId,
+  }).from(workOrders).where(
+    scope === "top"
+      ? and(eq(workOrders.tenantId, tenantId), isNull(workOrders.deletedAt), inArray(workOrders.objectId, objIds))
+      : and(eq(workOrders.tenantId, tenantId), isNull(workOrders.deletedAt)),
+  );
+
+  const resourceRows = await db.select({ id: resources.id, name: resources.name })
+    .from(resources).where(eq(resources.tenantId, tenantId));
+  const teamRows = await db.select({ id: teams.id, name: teams.name })
+    .from(teams).where(eq(teams.tenantId, tenantId));
+  const resourceName = new Map(resourceRows.map(r => [r.id, r.name] as const));
+  const teamName = new Map(teamRows.map(t => [t.id, t.name] as const));
+
+  const woByObject = new Map<string, { statuses: Set<string>; execIds: Set<string>; execNames: Set<string> }>();
+  for (const wo of woRows) {
+    if (!wo.objectId) continue;
+    let agg = woByObject.get(wo.objectId);
+    if (!agg) { agg = { statuses: new Set(), execIds: new Set(), execNames: new Set() }; woByObject.set(wo.objectId, agg); }
+    if (wo.orderStatus) agg.statuses.add(wo.orderStatus);
+    if (wo.resourceId) { agg.execIds.add(wo.resourceId); const n = resourceName.get(wo.resourceId); if (n) agg.execNames.add(n); }
+    if (wo.teamId) { agg.execIds.add(wo.teamId); const n = teamName.get(wo.teamId); if (n) agg.execNames.add(n); }
+  }
+
+  // Direkt metadata per objekt (ej mjukraderad)
+  const metaRows = topScopeEmpty ? [] : await db.select({
+    objektId: metadataVarden.objektId,
+    namn: metadataKatalog.namn,
+    vardeString: metadataVarden.vardeString,
+    vardeInteger: metadataVarden.vardeInteger,
+    vardeDecimal: metadataVarden.vardeDecimal,
+    vardeBoolean: metadataVarden.vardeBoolean,
+    vardeDatetime: metadataVarden.vardeDatetime,
+    vardeJson: metadataVarden.vardeJson,
+  }).from(metadataVarden)
+    .innerJoin(metadataKatalog, and(
+      eq(metadataVarden.metadataKatalogId, metadataKatalog.id),
+      isNull(metadataKatalog.deletedAt),
+    ))
+    .where(
+      scope === "top"
+        ? and(eq(metadataVarden.tenantId, tenantId), eq(metadataVarden.raderad, false), eq(metadataVarden.status, "aktiv"), inArray(metadataVarden.objektId, objIds))
+        : and(eq(metadataVarden.tenantId, tenantId), eq(metadataVarden.raderad, false), eq(metadataVarden.status, "aktiv")),
+    );
+
+  const metaByObject = new Map<string, Record<string, string>>();
+  for (const r of metaRows) {
+    if (!r.objektId) continue;
+    let v: string | null = null;
+    if (r.vardeString != null) v = String(r.vardeString);
+    else if (r.vardeInteger != null) v = String(r.vardeInteger);
+    else if (r.vardeDecimal != null) v = String(r.vardeDecimal);
+    else if (r.vardeBoolean != null) v = r.vardeBoolean ? "Ja" : "Nej";
+    else if (r.vardeDatetime != null) v = new Date(r.vardeDatetime).toISOString().slice(0, 10);
+    else if (r.vardeJson != null) v = typeof r.vardeJson === "string" ? r.vardeJson : JSON.stringify(r.vardeJson);
+    if (v == null) continue;
+    let m = metaByObject.get(r.objektId);
+    if (!m) { m = {}; metaByObject.set(r.objektId, m); }
+    m[r.namn.toLowerCase()] = v;
+  }
+
+  // Direkta barn-räknare
+  const childCount = new Map<string, number>();
+  if (scope === "top") {
+    if (!topScopeEmpty) {
+      const ccRows = await db.select({
+        parentId: objects.parentId,
+        c: sql<number>`count(*)::int`,
+      }).from(objects)
+        .where(and(eq(objects.tenantId, tenantId), isNull(objects.deletedAt), inArray(objects.parentId, objIds)))
+        .groupBy(objects.parentId);
+      for (const r of ccRows) {
+        if (r.parentId) childCount.set(r.parentId, Number(r.c) || 0);
+      }
+    }
+  } else {
+    for (const o of objRows) {
+      if (o.parentId) childCount.set(o.parentId, (childCount.get(o.parentId) || 0) + 1);
+    }
+  }
+
+  const nodes = objRows.map(o => {
+    const agg = woByObject.get(o.id);
+    return {
+      id: o.id,
+      name: o.name,
+      parentId: o.parentId,
+      hierarchyLevel: o.hierarchyLevel,
+      objectType: o.objectType,
+      latitude: o.latitude,
+      longitude: o.longitude,
+      entranceLatitude: o.entranceLatitude,
+      entranceLongitude: o.entranceLongitude,
+      address: o.address,
+      postalCode: o.postalCode,
+      city: o.city,
+      childCount: childCount.get(o.id) || 0,
+      customerId: o.customerId,
+      customerName: o.customerId ? (customerNameById.get(o.customerId) ?? null) : null,
+      executorIds: agg ? Array.from(agg.execIds) : [],
+      executorNames: agg ? Array.from(agg.execNames) : [],
+      orderStatuses: agg ? Array.from(agg.statuses) : [],
+      metadata: metaByObject.get(o.id) || {},
+    };
+  });
+
+  res.json({ nodes });
+}));
+
 app.get("/api/objects/tree/:parentId/children", asyncHandler(async (req, res) => {
   const tenantId = getTenantIdWithFallback(req);
   const { parentId } = req.params;
@@ -750,12 +872,12 @@ app.get("/api/objects/tree/:parentId/descendants", asyncHandler(async (req, res)
   const { parentId } = req.params;
   const { customerId } = req.query;
 
-  // Kundkoppling via object_payers (primary) — inte legacy objects.customer_id.
+  // Kundkoppling härleds ur Ekonomi-metadatat 'Kund' (Etapp 5).
   const customerClause = (customerId && typeof customerId === "string")
-    ? sql` AND EXISTS (SELECT 1 FROM object_payers op WHERE op.object_id = objects.id AND op.is_primary = true AND op.customer_id = ${customerId})`
+    ? sql` AND ${primaryPayerCustomerIdSqlFor(sql.raw("objects.id"))} = ${customerId}`
     : sql``;
   const customerClauseR = (customerId && typeof customerId === "string")
-    ? sql` AND EXISTS (SELECT 1 FROM object_payers op WHERE op.object_id = o.id AND op.is_primary = true AND op.customer_id = ${customerId})`
+    ? sql` AND ${primaryPayerCustomerIdSqlFor(sql.raw("o.id"))} = ${customerId}`
     : sql``;
 
   const result = await db.execute(sql`
@@ -935,17 +1057,6 @@ app.post("/api/objects/:id/copy", asyncHandler(async (req, res) => {
 
   const result = await copyObjectTree(req.params.id, tenantId, mode, { name: requestedName });
 
-  for (const createdId of result.createdIds) {
-    const created = await storage.getObject(createdId);
-    if (created?.customerId) {
-      try {
-        await ensureClusterAndAssign(tenantId, created.customerId, created.id);
-      } catch (err) {
-        console.error("Auto-cluster error on object copy:", err);
-      }
-    }
-  }
-
   const updated = await storage.getObject(result.rootId);
   res.status(201).json({
     ...(updated || result.rootClone),
@@ -973,11 +1084,7 @@ app.get("/api/customers/:customerId/objects/tree-roots", asyncHandler(async (req
   if (!verifyTenantOwnership(customer, tenantId)) {
     throw new NotFoundError("Kund");
   }
-  let clusterId: string | null | undefined = undefined;
-  if (typeof req.query.clusterId === "string") {
-    clusterId = req.query.clusterId === "null" || req.query.clusterId === "" ? null : req.query.clusterId;
-  }
-  const roots = await storage.getCustomerObjectTreeRoots(req.params.customerId, tenantId, clusterId);
+  const roots = await storage.getCustomerObjectTreeRoots(req.params.customerId, tenantId);
   res.json(roots);
 }));
 
@@ -1016,10 +1123,6 @@ app.get("/api/customers/:customerId/objects/coordinates", asyncHandler(async (re
   if (!verifyTenantOwnership(customer, tenantId)) {
     throw new NotFoundError("Kund");
   }
-  let clusterId: string | null | undefined = undefined;
-  if (typeof req.query.clusterId === "string") {
-    clusterId = req.query.clusterId === "null" || req.query.clusterId === "" ? null : req.query.clusterId;
-  }
   let bbox: [number, number, number, number] | undefined;
   if (typeof req.query.bbox === "string") {
     const parts = req.query.bbox.split(",").map(Number);
@@ -1031,10 +1134,10 @@ app.get("/api/customers/:customerId/objects/coordinates", asyncHandler(async (re
   const zoomRaw = parseFloat(req.query.zoom as string);
   if (!Number.isFinite(zoomRaw)) {
     // Backward compatible: no zoom = legacy point list
-    const points = await storage.getCustomerObjectMapPoints(req.params.customerId, tenantId, { bbox, clusterId, limit });
+    const points = await storage.getCustomerObjectMapPoints(req.params.customerId, tenantId, { bbox, limit });
     return res.json(points);
   }
-  const data = await storage.getCustomerObjectMapData(req.params.customerId, tenantId, { bbox, clusterId, zoom: zoomRaw, limit });
+  const data = await storage.getCustomerObjectMapData(req.params.customerId, tenantId, { bbox, zoom: zoomRaw, limit });
   res.json(data);
 }));
 
@@ -1083,11 +1186,6 @@ app.post("/api/objects", asyncHandler(async (req, res) => {
 
   if (bodyCustomerId) {
     await ensurePrimaryPayer(tenantId, object.id, bodyCustomerId);
-    try {
-      await ensureClusterAndAssign(tenantId, bodyCustomerId, object.id);
-    } catch (err) {
-      console.error("Auto-cluster error on object create:", err);
-    }
   }
 
   triggerGeocodeIfMissing(object.id);
@@ -1314,13 +1412,36 @@ app.put("/api/objects/:id/reject", asyncHandler(async (req, res) => {
   res.json(object);
 }));
 
+// Raderingsregeln (Etapp 5, Task #1217): hård preflight — objekt raderas
+// (hard delete) ENDAST om helt oanvänt (inga uppgifter, ingen historik,
+// inga barn, inga abonnemang). Annars 409 med hänvisning till arkivering
+// (POST /api/objects/:id/archive).
 app.delete("/api/objects/:id", asyncHandler(async (req, res) => {
   const tenantId = getTenantIdWithFallback(req);
   const existing = await storage.getObject(req.params.id);
   if (!verifyTenantOwnership(existing, tenantId)) {
     throw new NotFoundError("Objekt");
   }
-  await storage.deleteObject(req.params.id);
+  const { deleteObjectPreflight, hardDeleteUnusedObject } = await import("../services/object-archive");
+  const preflight = await deleteObjectPreflight(req.params.id, tenantId);
+  if (preflight.blockers.length > 0) {
+    throw new ConflictError(
+      `Objektet kan inte raderas — det används av ${preflight.blockers.join(", ")}. Arkivera objektet istället.`,
+      { code: "delete_blocked", preflight },
+    );
+  }
+  try {
+    await hardDeleteUnusedObject(req.params.id, tenantId);
+  } catch (err: any) {
+    // FK-konflikt från kringdata som inte täcks av preflight → hänvisa till arkivering.
+    if (err?.code === "23503" || err?.cause?.code === "23503") {
+      throw new ConflictError(
+        "Objektet kan inte raderas — det refereras av annan data. Arkivera objektet istället.",
+        { code: "delete_blocked" },
+      );
+    }
+    throw err;
+  }
   res.status(204).send();
 }));
 

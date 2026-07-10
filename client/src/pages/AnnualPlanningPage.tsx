@@ -74,16 +74,14 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { CustomerCombobox } from "@/components/CustomerCombobox";
-import { ObjectCombobox, ClusterCombobox } from "@/components/AnnualPlanningCombos";
+import { ObjectCombobox } from "@/components/AnnualPlanningCombos";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
-import { CapacityForecastTab } from "@/components/dashboard/CapacityForecastTab";
 
 type AnnualGoalWithProgress = {
   id: string;
   tenantId: string;
   customerId: string | null;
   objectId: string | null;
-  clusterId: string | null;
   articleType: string;
   targetCount: number;
   year: number;
@@ -95,7 +93,6 @@ type AnnualGoalWithProgress = {
   customerName: string | null;
   objectName: string | null;
   objectAddress: string | null;
-  clusterName: string | null;
   completedCount: number;
   plannedCount: number;
   progressPercent: number;
@@ -108,7 +105,6 @@ type AnnualGoalWithProgress = {
 const goalFormSchema = z.object({
   customerId: z.string().optional(),
   objectId: z.string().optional(),
-  clusterId: z.string().optional(),
   articleType: z.string().min(1, "Artikeltyp krävs"),
   targetCount: z.coerce.number().min(1, "Målantal måste vara minst 1"),
   year: z.coerce.number().min(2020).max(2050),
@@ -134,7 +130,6 @@ interface AIProposal {
   goalId: string;
   customerName: string | null;
   objectName: string | null;
-  clusterName: string | null;
   articleType: string;
   targetCount: number;
   completedCount: number;
@@ -185,7 +180,6 @@ export default function AnnualPlanningPage() {
     defaultValues: {
       customerId: "",
       objectId: "",
-      clusterId: "",
       articleType: "tjanst",
       targetCount: 12,
       year: currentYear,
@@ -256,10 +250,9 @@ export default function AnnualPlanningPage() {
     avgProgress: goals.length > 0 ? Math.round(goals.reduce((sum, g) => sum + g.progressPercent, 0) / goals.length) : 0,
   }), [goals, onTrackGoals, atRiskGoals, behindGoals]);
 
-  type GoalSubmitPayload = Omit<GoalFormValues, "customerId" | "objectId" | "clusterId"> & {
+  type GoalSubmitPayload = Omit<GoalFormValues, "customerId" | "objectId"> & {
     customerId: string | null;
     objectId: string | null;
-    clusterId: string | null;
   };
 
   const createMutation = useMutation({
@@ -318,7 +311,6 @@ export default function AnnualPlanningPage() {
     mutationFn: async () => {
       const body: Record<string, unknown> = { year: selectedYear, startMonth: aiStartMonth, endMonth: aiEndMonth };
       if (aiScope !== "all" && aiScope.startsWith("customer:")) body.customerId = aiScope.replace("customer:", "");
-      if (aiScope !== "all" && aiScope.startsWith("cluster:")) body.clusterId = aiScope.replace("cluster:", "");
       const res = await apiRequest("POST", "/api/annual-planning/ai-distribute", body);
       return res.json();
     },
@@ -365,7 +357,6 @@ export default function AnnualPlanningPage() {
     form.reset({
       customerId: goal.customerId || "",
       objectId: goal.objectId || "",
-      clusterId: goal.clusterId || "",
       articleType: goal.articleType,
       targetCount: goal.targetCount,
       year: goal.year,
@@ -379,10 +370,9 @@ export default function AnnualPlanningPage() {
       ...data,
       customerId: data.customerId || null,
       objectId: data.objectId || null,
-      clusterId: data.clusterId || null,
     };
-    if (!normalized.customerId && !normalized.objectId && !normalized.clusterId) {
-      toast({ title: "Välj mål", description: "Välj exakt en av kund, objekt eller kluster.", variant: "destructive" });
+    if (!normalized.customerId && !normalized.objectId) {
+      toast({ title: "Välj mål", description: "Välj kund eller objekt.", variant: "destructive" });
       return;
     }
     if (editing) {
@@ -419,7 +409,7 @@ export default function AnnualPlanningPage() {
             <Download className="h-4 w-4 mr-2" />
             Generera från abonnemang
           </Button>
-          <Button onClick={() => { setEditing(null); form.reset({ customerId: "", objectId: "", clusterId: "", articleType: "tjanst", targetCount: 12, year: selectedYear, notes: "" }); setDialogOpen(true); }} data-testid="button-add-goal">
+          <Button onClick={() => { setEditing(null); form.reset({ customerId: "", objectId: "", articleType: "tjanst", targetCount: 12, year: selectedYear, notes: "" }); setDialogOpen(true); }} data-testid="button-add-goal">
             <Plus className="h-4 w-4 mr-2" />
             Nytt årsmål
           </Button>
@@ -472,10 +462,6 @@ export default function AnnualPlanningPage() {
           <TabsTrigger value="ai-distribute" data-testid="tab-ai-distribute">
             <Sparkles className="h-4 w-4 mr-2" />
             AI-fördelning
-          </TabsTrigger>
-          <TabsTrigger value="capacity-forecast" data-testid="tab-capacity-forecast">
-            <TrendingUp className="h-4 w-4 mr-2" />
-            Kapacitetsprognos
           </TabsTrigger>
         </TabsList>
 
@@ -568,9 +554,6 @@ export default function AnnualPlanningPage() {
                           <div className="font-medium">{goal.customerName || "—"}</div>
                           {goal.objectName && (
                             <div className="text-sm text-muted-foreground">{goal.objectName}</div>
-                          )}
-                          {goal.clusterName && (
-                            <div className="text-sm text-muted-foreground">Kluster: {goal.clusterName}</div>
                           )}
                         </div>
                       </TableCell>
@@ -795,7 +778,7 @@ export default function AnnualPlanningPage() {
                     <CardHeader className="pb-2">
                       <div className="flex items-center justify-between">
                         <CardTitle className="text-base">
-                          {proposal.customerName || proposal.clusterName || "—"}
+                          {proposal.customerName || "—"}
                           {proposal.objectName && <span className="text-muted-foreground font-normal ml-2">/ {proposal.objectName}</span>}
                         </CardTitle>
                         <Badge variant="outline">{ARTICLE_TYPE_LABELS[proposal.articleType] || proposal.articleType}</Badge>
@@ -865,10 +848,6 @@ export default function AnnualPlanningPage() {
             </Card>
           )}
         </TabsContent>
-
-        <TabsContent value="capacity-forecast" className="space-y-4 mt-4">
-          <CapacityForecastTab />
-        </TabsContent>
       </Tabs>
 
       <Dialog open={aiDistributeDialogOpen} onOpenChange={setAiDistributeDialogOpen}>
@@ -886,11 +865,10 @@ export default function AnnualPlanningPage() {
             <div className="space-y-2">
               <label className="text-sm font-medium">Omfattning</label>
               <Select
-                value={aiScope.startsWith("customer:") ? "customer" : aiScope.startsWith("cluster:") ? "cluster" : "all"}
+                value={aiScope.startsWith("customer:") ? "customer" : "all"}
                 onValueChange={(v) => {
                   if (v === "all") setAiScope("all");
                   else if (v === "customer") setAiScope("customer:");
-                  else if (v === "cluster") setAiScope("cluster:");
                 }}
               >
                 <SelectTrigger data-testid="select-ai-scope-type">
@@ -899,7 +877,6 @@ export default function AnnualPlanningPage() {
                 <SelectContent>
                   <SelectItem value="all">Alla mål</SelectItem>
                   <SelectItem value="customer">Specifik kund</SelectItem>
-                  <SelectItem value="cluster">Specifikt kluster</SelectItem>
                 </SelectContent>
               </Select>
               {aiScope.startsWith("customer:") && (
@@ -909,15 +886,6 @@ export default function AnnualPlanningPage() {
                   placeholder="Välj kund"
                   className="w-full"
                   testId="select-ai-scope-customer"
-                />
-              )}
-              {aiScope.startsWith("cluster:") && (
-                <ClusterCombobox
-                  value={aiScope.slice("cluster:".length) || null}
-                  onChange={(id) => setAiScope(id ? `cluster:${id}` : "cluster:")}
-                  placeholder="Välj kluster"
-                  className="w-full"
-                  testId="select-ai-scope-cluster"
                 />
               )}
             </div>
@@ -960,8 +928,7 @@ export default function AnnualPlanningPage() {
               onClick={() => aiDistributeMutation.mutate()}
               disabled={
                 aiDistributeMutation.isPending ||
-                aiScope === "customer:" ||
-                aiScope === "cluster:"
+                aiScope === "customer:"
               }
               data-testid="button-run-ai-distribute"
             >
@@ -1019,7 +986,7 @@ export default function AnnualPlanningPage() {
                       onChange={(id) => {
                         const val = id || "";
                         field.onChange(val);
-                        if (val) { form.setValue("objectId", ""); form.setValue("clusterId", ""); }
+                        if (val) { form.setValue("objectId", ""); }
                       }}
                       placeholder="Välj kund"
                       emptyOptionLabel="Ingen"
@@ -1040,34 +1007,13 @@ export default function AnnualPlanningPage() {
                       onChange={(id) => {
                         const val = id || "";
                         field.onChange(val);
-                        if (val) { form.setValue("customerId", ""); form.setValue("clusterId", ""); }
+                        if (val) { form.setValue("customerId", ""); }
                       }}
                       customerId={form.watch("customerId") || null}
                       placeholder="Välj objekt"
                       emptyOptionLabel="Inget"
                       className="w-full"
                       testId="select-goal-object"
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )} />
-
-              <FormField control={form.control} name="clusterId" render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Kluster / Objektgrupp</FormLabel>
-                  <FormControl>
-                    <ClusterCombobox
-                      value={field.value || null}
-                      onChange={(id) => {
-                        const val = id || "";
-                        field.onChange(val);
-                        if (val) { form.setValue("customerId", ""); form.setValue("objectId", ""); }
-                      }}
-                      placeholder="Välj kluster"
-                      emptyOptionLabel="Inget"
-                      className="w-full"
-                      testId="select-goal-cluster"
                     />
                   </FormControl>
                   <FormMessage />

@@ -1,4 +1,4 @@
-import type { Resource, WorkOrderWithObject, Customer, TaskDependency, Cluster, ObjectTimeRestriction } from "@shared/schema";
+import type { Resource, WorkOrderWithObject, Customer, TaskDependency, ObjectTimeRestriction } from "@shared/schema";
 import { haversineDistanceKm } from "@/lib/geo";
 
 export interface WeatherImpactDay {
@@ -62,7 +62,6 @@ export interface AutoFillDiag {
   capacityPerDay: Record<string, number>;
   maxMinutesPerDay: number;
   resourceCount: number;
-  clusterSkipped: number;
 }
 
 export interface PendingSchedule {
@@ -159,7 +158,6 @@ export const constraintCategoryLabels: Record<string, string> = {
   competency: "Kompetens",
   team_membership: "Team",
   time_window: "Tidsfönster",
-  cluster_geographic: "Kluster",
   locked_order: "Låst order",
   dependency_chain: "Beroende",
   planned_window: "Planfönster",

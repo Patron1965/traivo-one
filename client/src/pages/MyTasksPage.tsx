@@ -47,8 +47,6 @@ import type { WorkOrder, Resource, ServiceObject } from "@shared/schema";
 import { ProactiveTips } from "@/components/ProactiveTips";
 import { Activity, ChevronDown } from "lucide-react";
 import { EmptyState } from "@/components/EmptyState";
-import { ObjectContactsPanel } from "@/components/ObjectContactsPanel";
-import { ObjectImagesGallery } from "@/components/ObjectImagesGallery";
 import { useLanguage } from "@/hooks/use-language";
 import { enUS as enLocale } from "date-fns/locale";
 import { useAuth } from "@/hooks/use-auth";
@@ -302,7 +300,6 @@ function getRecentPageMap(tl: (key: string) => string): Record<string, { title: 
     "/objects": { title: tl("nav.objects"), icon: Building2, color: "text-chart-2" },
     "/resources": { title: tl("nav.resources"), icon: Users, color: "text-chart-5" },
     "/vehicles": { title: tl("nav.vehicles"), icon: Truck, color: "text-chart-4" },
-    "/clusters": { title: tl("nav.clusters"), icon: Target, color: "text-chart-3" },
     "/planner": { title: tl("nav.week-planner"), icon: Calendar, color: "text-chart-2" },
     "/order-stock": { title: tl("nav.order-stock"), icon: FileText, color: "text-chart-1" },
     "/routes": { title: tl("nav.route-planning"), icon: Route, color: "text-chart-4" },
@@ -813,14 +810,6 @@ export default function MyTasksPage() {
             <Tabs defaultValue="info" className="flex-1 overflow-hidden flex flex-col">
               <TabsList className="shrink-0">
                 <TabsTrigger value="info">Information</TabsTrigger>
-                <TabsTrigger value="contacts" data-testid="tab-object-contacts">
-                  <Phone className="h-3 w-3 mr-1" />
-                  Kontakter
-                </TabsTrigger>
-                <TabsTrigger value="images" data-testid="tab-object-images">
-                  <Image className="h-3 w-3 mr-1" />
-                  Bilder
-                </TabsTrigger>
               </TabsList>
 
               <TabsContent value="info" className="flex-1 overflow-auto mt-4">
@@ -838,38 +827,8 @@ export default function MyTasksPage() {
                       <div className="text-sm text-muted-foreground">Stad</div>
                       <div className="font-medium">{selectedObject.city || "-"}</div>
                     </div>
-                    <div>
-                      <div className="text-sm text-muted-foreground">Tillgångstyp</div>
-                      <Badge variant="secondary">{selectedObject.accessType || "open"}</Badge>
-                    </div>
-                    {selectedObject.accessCode && (
-                      <div>
-                        <div className="text-sm text-muted-foreground">Åtkomstkod</div>
-                        <div className="font-medium">{selectedObject.accessCode}</div>
-                      </div>
-                    )}
                   </div>
-                  {selectedObject.notes && (
-                    <div>
-                      <div className="text-sm text-muted-foreground">Anteckningar</div>
-                      <div className="text-sm mt-1 p-3 bg-muted rounded-md">{selectedObject.notes}</div>
-                    </div>
-                  )}
                 </div>
-              </TabsContent>
-
-              <TabsContent value="contacts" className="flex-1 overflow-auto mt-4">
-                <ObjectContactsPanel
-                  objectId={selectedObject.id}
-                  tenantId={selectedObject.tenantId}
-                />
-              </TabsContent>
-
-              <TabsContent value="images" className="flex-1 overflow-auto mt-4">
-                <ObjectImagesGallery
-                  objectId={selectedObject.id}
-                  tenantId={selectedObject.tenantId}
-                />
               </TabsContent>
             </Tabs>
           )}
