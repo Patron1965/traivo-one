@@ -1,0 +1,398 @@
+Svar 1
+
+Här är min sammanfattning och komplettering av dina kommentarer. Jag har skrivit den som ett styrdokument till utvecklarna, med fokus på arkitektur och nästa utvecklingssteg snarare än enbart en statusrapport.
+
+Ämne: Avstämning punkt 1–3 mot faktisk kod – komplettering, arkitektur och utvecklingsorder
+
+Hej,
+
+Tack för den genomförda kodgranskningen. Den visar tydligt att stora delar av Traivos grundarkitektur redan finns på plats, framför allt Fortnox-integrationen och de centrala motorerna. Samtidigt visar genomgången att flera viktiga delar fortfarande är implementerade på ett sätt som avviker från den arkitektur som systemet är tänkt att byggas kring.
+
+Den fortsatta utvecklingen skall därför inte enbart fokusera på att “fylla luckor”, utan även på att justera de delar där implementationen avviker från den övergripande systemlogiken.
+
+Övergripande arkitekturprincip
+
+Den viktigaste principen i Traivo är att systemet skall vara konsekvent.
+
+All verksamhet skall beskrivas med samma grundmodell.
+
+Allt som utförs under veckan är uppgifter.
+
+Det spelar ingen roll om det handlar om:
+
+produktion
+restid
+väntetid
+lunch
+vila
+utbildning
+sjukdom
+semester
+administration
+egen tid
+
+Allt skall representeras av artikelbaserade uppgifter.
+
+Det innebär att samma logik alltid används för:
+
+planering
+utförande
+tidsregistrering
+kostnadsberäkning
+lön
+fakturering
+statistik
+uppföljning
+historik
+AI-analys
+
+Undvik därför specialfall där vissa typer av arbete hanteras utanför uppgiftsmotorn.
+
+⸻
+
+1. Motorarkitekturen
+
+Motorerna skall utvecklas vidare till generella regelmotorer.
+
+Målet är att varje motor skall kunna trimmas och konfigureras av administratör utan programmering.
+
+Det innebär att samtliga parametrar skall kunna administreras från ett gemensamt administrationsgränssnitt.
+
+Exempel:
+
+klumpningsradie
+leveransfönster
+ekonomiska vikter
+gångavstånd
+artikelval
+fordonstyper
+hastigheter
+utförartyper
+geografiska regler
+AI-parametrar
+
+Motorerna får aldrig innehålla hårdkodade verksamhetsregler.
+
+⸻
+
+2. Klumpmotorn
+
+Nuvarande funktion är en bra grund men behöver utvecklas.
+
+Klumpningen skall alltid utgå från:
+
+artikelns utförandetyp
+utförarens kompetens
+teamets kompetens
+leveranstid
+geografi
+
+Om flera artikeltyper kan utföras av samma team skall de kunna klumpas.
+
+Finns särskilda kompetenskrav skall detta styra automatiskt.
+
+Klumpmotorn skall dessutom få stöd för:
+
+maximal gångsträcka
+ekonomisk optimering
+konfigurerbara parametrar
+
+utan ny programmering.
+
+⸻
+
+Klumpens geografi
+
+En klump skall få en egen primär navigeringsposition.
+
+Varje enskild uppgift skall samtidigt behålla sina egna koordinater.
+
+Dessutom skall varje uppgift kunna ha flera sekundära positioner.
+
+Exempel:
+
+Fastighet:
+
+Storgatan 22
+
+Primär position = infart
+
+Uppgift 1
+
+Container A
+
+Position 1
+
+Uppgift 2
+
+Container B
+
+Position 2
+
+Uppgift 3
+
+Miljörum
+
+Position 3
+
+När stoppet öppnas i utförarappen skall hela området visas på karta.
+
+Utföraren skall kunna justera objektens position direkt i kartan.
+
+Systemet skall även kunna uppdatera position automatiskt när användaren står vid objektet.
+
+Detta är en mycket viktig framtida kvalitetsfunktion.
+
+⸻
+
+3. Restidsmotorn (Motor 12)
+
+Den nuvarande lösningen avviker från grundarkitekturen.
+
+Restid skall inte vara en separat tidspost.
+
+Restid skall skapas som vanliga uppgifter.
+
+Motor 12 skall skapa reseuppgifter genom artikelregistret.
+
+Motorn skall välja artikel beroende på exempelvis:
+
+fordon
+vägtyp
+hastighet
+kilometer
+kostnadsmodell
+
+På detta sätt följer även resor:
+
+ekonomi
+kostnad
+statistik
+AI
+uppföljning
+historik
+
+precis som övriga uppgifter.
+
+⸻
+
+4. Tidshantering
+
+En grundprincip skall införas:
+
+Endast en aktiv uppgift åt gången.
+
+När nästa uppgift startas skall föregående automatiskt avslutas.
+
+Detta gäller oavsett uppgiftstyp.
+
+Efter avslut skall systemet kunna:
+
+fördela verklig tid proportionellt
+använda kalkylfördelning
+tillåta manuell justering
+
+Det skall fungera både på:
+
+enskilda uppgifter
+hela klumpar
+valda grupper av uppgifter
+
+⸻
+
+5. Tidstyper
+
+Tidstypsregistret skall utvecklas till en fullständig regelmotor.
+
+Registret skall bland annat styra:
+
+löneexport
+ekonomiexport
+GPS-krav
+behörighet
+OB-regler
+fakturerbarhet
+artikelgrupper
+exportregler
+
+OB-regler behöver tills vidare kunna hanteras genom manuellt byte av artikel eller tidskod av behörig administratör eller utförare.
+
+⸻
+
+6. 168-timmarsmodellen
+
+Veckoplanen skall visa hela veckan.
+
+24 timmar
+
+7 dygn
+
+168 timmar
+
+Inte endast arbetstid.
+
+Alla timmar skall kunna innehålla uppgifter.
+
+Det ger:
+
+bättre överblick
+enklare schemaläggning
+korrekt vilokontroll
+korrekt belastningsanalys
+
+⸻
+
+7. Reservtid
+
+Reservtid skall inte skapas som riktiga uppgifter.
+
+Den skall visas som en planeringsreservation.
+
+Den skall kunna:
+
+markeras i kalendern
+summeras per dag
+summeras per vecka
+
+När riktiga uppgifter läggs in skall reservtiden automatiskt minska.
+
+⸻
+
+8. Uppgiftsnavet
+
+Uppgiftsnavet skall bli den gemensamma arbetsytan.
+
+Samma filtermotor skall användas av:
+
+uppgiftsnav
+objektnav
+kundportal
+utförarapp
+administration
+
+Det skall vara möjligt att konfigurera:
+
+vilka fält som visas
+vilka fält som är sökbara
+vilka metadata som visas
+vilka metadata som döljs
+
+beroende på användarroll.
+
+Exempel:
+
+Kundportalen skall inte visa:
+
+produktionskostnad
+intern kalkyl
+intern produktionstid
+
+medan administrationen skall kunna se samtliga 94 fält.
+
+⸻
+
+9. Individuell planering inom team
+
+Team skall fortfarande vara grundprincipen.
+
+Men enskilda medlemmar skall kunna:
+
+få egna uppgifter
+få egna reseuppgifter
+registrera egen tid
+arbeta utanför teamets huvudplan
+
+utan att teamets planering bryts.
+
+Detta skall fungera både i utförarappen och i administrationen.
+
+⸻
+
+10. Kalendereditor
+
+Nuvarande tidseditor skall utvecklas till en generell uppgiftseditor.
+
+Utföraren skall kunna skapa:
+
+produktion
+resor
+utbildning
+semester
+sjukdom
+administration
+
+genom att välja artikel.
+
+Återkommande schema skall kunna skapas med repetitionsregler.
+
+⸻
+
+11. Filtermotorn
+
+Filtermotorn är idag den största funktionella luckan.
+
+Den skall utvecklas till en gemensam komponent.
+
+Den skall stödja:
+
+samtliga metadatafält
+samtliga 94 uppgiftsfält
+avancerade operatorer
+sparade filter
+delade filter
+rollstyrda filter
+
+Detta är en central del av hela Traivos användbarhet.
+
+⸻
+
+12. Fortnox
+
+Fortnox-integrationen bedöms i stort vara produktionsklar.
+
+Återstående arbete handlar framför allt om arkitektur och informationskvalitet.
+
+Prioriterade kompletteringar:
+
+fullständig loggning
+idempotens även mot Fortnox
+fler fakturahuvudfält
+schemalagd synkronisering
+renodlad API-klient utan affärslogik
+
+Dessutom skall orderkoncept och snabborder kunna bära samtliga fakturareferenser hela vägen till fakturan.
+
+Följande fält skall stödjas fullt ut:
+
+Er referens
+Vår referens
+Beställningsnummer
+Traivos ordernummer
+Leveranssätt
+Transportsätt
+Betalningsvillkor
+Valuta
+Språk
+Extern referens
+
+Artiklar som har samma “Er referens” och samma beställningsnummer skall som grundregel kunna samlas på samma faktura. Samlingsregeln skall därefter kunna påverkas av andra villkor, exempelvis att hela beställningen måste vara slutförd, objektsspecifika regler, dag-, vecko- eller månadsfakturering eller särskilda fakturasläppsregler.
+
+⸻
+
+Slutlig utvecklingsorder
+
+Nästa utvecklingsfas skall fokusera på att färdigställa Traivos grundarkitektur innan ytterligare funktioner byggs ovanpå den.
+
+Prioritet skall ges till de komponenter som påverkar hela systemet:
+
+Gemensam uppgiftsmodell där all tid representeras av artikelbaserade uppgifter.
+Restidsmotor enligt samma arkitektur som övriga uppgiftsmotorer.
+Automatiskt avslut av uppgifter och korrekt hantering av verklig tid.
+Regelmotor för tidstyper och motorparametrar utan krav på programmering.
+Gemensam filtermotor för samtliga moduler.
+Fullständig 168-timmarsmodell.
+Slutlig renodling av Fortnox-arkitekturen.
+
+När dessa grundprinciper är implementerade kommer övriga funktioner – AI-planering, avancerad ruttoptimering, automatiserad bemanning, ekonomisk optimering och framtida motorer – att kunna byggas ovanpå en konsekvent och långsiktigt hållbar plattform utan behov av omarbetningar i senare utvecklingsfaser.
+
+Jag tycker att denna version fungerar bättre som ett arkitektur- och styrdokument än som en ren statusrapport. Den förklarar varför ändringarna behövs och ger utvecklarna tydliga designprinciper, vilket minskar risken att de löser enskilda punkter på sätt som senare måste göras om.

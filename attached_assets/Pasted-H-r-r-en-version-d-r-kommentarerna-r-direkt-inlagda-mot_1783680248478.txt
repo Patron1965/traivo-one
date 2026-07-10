@@ -1,0 +1,295 @@
+Här är en version där kommentarerna är direkt inlagda mot utvecklarnas ursprungliga punkter och markerade som RÖD KOMMENTAR.
+
+Ämne: Avstämning punkt 1–3 mot faktisk kod – kommentarer och utvecklingsorder
+
+Hej,
+
+Tack för avstämningen. Nedan har vi lagt in direkta kommentarer till respektive punkt. Kommentarerna skall ses som kompletterande krav och styrande utvecklingsorder för nästa steg.
+
+Punkt 1 – Veckoplan, tidstyper, planerad/verklig tid
+
+Motorarkitekturen i stort
+
+🟡 Systemet är byggt kring fristående motorer, och flera parametrar ligger som inställningar i databasen.
+
+RÖD KOMMENTAR:
+Detta är rätt riktning, men varje motor måste kunna administreras från en gemensam regelyta utan programmering. Motorerna får inte innehålla hårdkodade verksamhetsregler. Parametrar som klumpning, restid, gångavstånd, artikelval, fordonstyp, hastighet, leveransfönster och ekonomiska vikter skall kunna ändras av administratör.
+
+⸻
+
+Klumpmotorn
+
+Klumpningsradie ✅
+Samma sida av gatan ✅
+Leveransfönster ✅
+
+RÖD KOMMENTAR:
+Bra grund. Dessa parametrar skall även kunna trimmas i motorinställningar.
+
+Kompatibel artikelgrupp / utförartyp 🟡
+
+RÖD KOMMENTAR:
+Grundregeln skall vara att artiklar med samma eller kompatibel utförandetyp kan klumpas. Om flera artikeltyper kan utföras av samma team skall de kunna klumpas. Om särskild kompetens krävs skall detta styras av utförartyp, teamkompetens och artikelns krav.
+
+Maximal gångsträcka ❌
+Ekonomisk prioritering ❌
+
+RÖD KOMMENTAR:
+Maximal gångsträcka skall finnas som parameter. Detta är relevant för att kunna avgöra vad som är ett rimligt stopp. Ekonomisk prioritering skall inte bara räknas fram, utan också kunna påverka klumpningen.
+
+Gemensam primär position + sekundär per underuppgift ❌
+
+RÖD KOMMENTAR:
+En klump/stopp skall ha en egen primär navigeringsposition, exempelvis infart eller lämplig framkörningsadress. Varje uppgift i klumpen skall behålla sin egen primära position och kunna ha sekundära positioner. I utförarappen skall stoppet kunna öppnas i kartvy där alla uppgifter i stoppet visas. Positioner skall kunna justeras manuellt på kartan eller uppdateras från appen när utföraren står vid objektet.
+
+Underuppgifter behåller artikel/status/historik/ekonomi/spårbarhet ✅
+
+RÖD KOMMENTAR:
+Detta är korrekt och måste bibehållas. Klumpen får inte förstöra spårbarheten för enskilda uppgifter.
+
+⸻
+
+Restid / Ruttoptimering Light
+
+🟡/❌ Restid är i dag en separat tidspost, inte en artikelbaserad uppgift.
+
+RÖD KOMMENTAR:
+Detta skall ändras. Restid skall vara en vanlig artikelbaserad uppgift. Restidsmotorn bör betraktas som Motor 12. Motorn skall skapa reseuppgifter baserat på artikelregister, fordonstyp, vägtyp, kilometer, hastighet och kostnadsmodell. Exempel: om vald researtikel motsvarar 1 km/minut och rutten är 10 km skall uppgiften få 10 minuter planerad tid samt rätt kostnad. Restid skall därmed följa samma logik som produktion, ekonomi, historik, statistik och AI-analys.
+
+⸻
+
+Verklig tid + automatiskt avslut
+
+Automatisk registrering start→stopp ✅
+Manuell justering ✅
+Automatiskt avslut av föregående uppgift ❌
+Proportionell fördelning i klump ❌
+
+RÖD KOMMENTAR:
+Detta är Prio 1. Systemet skall ha principen “en aktiv uppgift åt gången”. När en ny uppgift startas skall föregående uppgift automatiskt avslutas. Verklig tid skall kunna läggas mot en uppgift, flera uppgifter eller en hel klump. Fördelning skall kunna ske proportionellt enligt kalkyl eller justeras manuellt.
+
+⸻
+
+Tidstyps-/tidskodsregister
+
+🟡 Artikel↔tidskod finns. Saknas OB-regler, exportflaggor, GPS-krav och behörighet.
+
+RÖD KOMMENTAR:
+Tidstypsregistret skall utvecklas till en regelmotor. Det skall styra löneexport, ekonomiexport, GPS-krav, fakturerbarhet, behörighet per tidskod/artikelgrupp och OB-regler. OB kan tills vidare hanteras manuellt genom byte av artikel/tidskod av behörig användare.
+
+⸻
+
+168-timmarsmodellen
+
+🟡 Vila/lunch/semester/sjuk finns som tidsposter, men inte fullt artikelbaserade. Vyn visar inte hela dygnet.
+
+RÖD KOMMENTAR:
+All tid skall vara artikelbaserade uppgifter. Veckoplanen skall visa 24 timmar per dygn, 7 dagar per vecka, alltså 168 timmar. Produktion, resa, vila, lunch, sjukdom, semester och egen tid skall hanteras enligt samma uppgiftslogik.
+
+⸻
+
+Dynamisk reservtid
+
+❌ Endast beräknat mått.
+
+RÖD KOMMENTAR:
+Reservtid skall inte skapas som riktig artikelbaserad uppgift. Den skall visas som planeringsreservation i kalendern och summeras per dag/vecka. När riktiga uppgifter läggs in skall reservtiden minska.
+
+⸻
+
+Punkt 2 – Uppgiftsnav, filter, tilldelning, team
+
+1. Navet visar alla uppgifter + fält
+
+🟡 80 av 94 fält finns. Restid/klump visas inte som egna artikelbaserade uppgifter.
+
+RÖD KOMMENTAR:
+Alla uppgifter skall kunna visas i navet, inklusive reseuppgifter och klumpade uppgifter. När restid blir artikelbaserad skall den automatiskt ingå i samma logik.
+
+⸻
+
+2. Export med valbara kolumner
+
+✅ Finns delvis.
+
+RÖD KOMMENTAR:
+Exporten skall byggas ut så att alla 94 fält och relevanta metadata kan väljas. Rollstyrning behövs så att exempelvis kundportal inte kan exportera interna kostnader.
+
+⸻
+
+3. Teamleader som bärande identitet
+
+✅
+
+RÖD KOMMENTAR:
+Bra. Detta skall vara fortsatt grundmodell, men teamet måste även kunna hantera individuell avvikelse.
+
+⸻
+
+4. Uppgifter utan geografi/tid
+
+🟡 To-do-lista finns.
+
+RÖD KOMMENTAR:
+Dessa skall också vara artikelbaserade uppgifter. Alla uppgifter måste kunna planeras, utföras, tidsättas och följas upp även om de saknar geografi.
+
+⸻
+
+5. Verklig tid på tre sätt
+
+🟡 Auto och manuell finns. Proportionell i klump saknas.
+
+RÖD KOMMENTAR:
+Måste fungera. Detta är avgörande för korrekt lön, fakturering, statistik och efterkalkyl.
+
+⸻
+
+7. Gemensam filtermotor
+
+🟡 Logik finns separat i olika vyer.
+
+RÖD KOMMENTAR:
+Detta skall byggas om till en gemensam filtermotor för uppgiftsnav, objektnav, utförarapp, kundportal och administration. Samma urval skall kunna visas som lista, karta, klump och detaljvy.
+
+⸻
+
+8. Individuell avvikelse i team
+
+❌
+
+RÖD KOMMENTAR:
+En enskild medarbetare skall kunna få annan uppgift än teamet, exempelvis egen produktion, egen resa, sjukdom, utbildning eller annan tid. Detta skall kunna hanteras både i utförarappen och av administratör.
+
+⸻
+
+10. Tidseditor → kalendereditor
+
+❌
+
+RÖD KOMMENTAR:
+Tidseditorn skall bli en generell uppgiftseditor. Utförare och administratör skall kunna lägga till artikelbaserade uppgifter för produktion, resa och egen tid. Återkommande schema/repetition skall stödjas.
+
+⸻
+
+11. Samma urval som lista/karta/klump/detalj
+
+🟡 Karta + lista sida vid sida saknas.
+
+RÖD KOMMENTAR:
+Detta skall byggas både för uppgiftsnavet och utförarappen. Planeraren skall kunna se lista och karta samtidigt och arbeta med samma urval i båda vyerna.
+
+⸻
+
+12. Alla metadatafält filterbara
+
+❌
+
+RÖD KOMMENTAR:
+Alla metadata kopplade till uppgifter, artiklar och objekt skall kunna göras filterbara. Vilka fält som visas och är sökbara skall vara rollstyrt.
+
+⸻
+
+13. Avancerade operatorer + sparade/delade filter
+
+❌
+
+RÖD KOMMENTAR:
+Detta är centralt. Filter skall kunna sparas, delas och kopplas till roller. Avancerade operatorer behövs för praktisk planering.
+
+⸻
+
+Punkt 3 – Fortnox-integrationen
+
+2. Loggas omförsök/väntetider/orsak/resultat
+
+🟡 Delvis.
+
+RÖD KOMMENTAR:
+Exportloggen skall kompletteras med antal omförsök, väntetid, API-anrop, användare, felkod och slutstatus.
+
+⸻
+
+4. Extra fakturahuvudfält
+
+❌ Mest saknas.
+
+RÖD KOMMENTAR:
+Orderkoncept, snabborder och andra skapande funktioner skall kunna bära fakturahuvudfält hela vägen till Fortnox. Minimikrav:
+
+Er referens
+Vår referens
+Beställningsnummer
+Traivos ordernummer
+Leveranssätt
+Transportsätt
+Valuta
+Betalningsvillkor
+Språk
+Extern referens
+
+Artiklar med samma Er referens och samma beställningsnummer skall som grundregel kunna samlas på samma faktura, om inte andra regler styr fakturasläpp.
+
+⸻
+
+7. Exportloggens innehåll
+
+🟡 Delvis.
+
+RÖD KOMMENTAR:
+Loggen skall vara revisionsbar. Den skall visa vem som exporterat, vad som skickats, API-resultat, Fortnox-svar, felkoder, omförsök och eventuell manuell åtgärd.
+
+⸻
+
+8. Idempotens även mot Fortnox
+
+🟡 Finns i Traivo, saknas direkt mot Fortnox.
+
+RÖD KOMMENTAR:
+Det skall införas äkta skydd mot dubbel export även vid timeout, omförsök eller oklar status från Fortnox.
+
+⸻
+
+9. Fakturamotor skild från integrationen
+
+🟡 Delvis.
+
+RÖD KOMMENTAR:
+Affärslogik skall flyttas ut ur Fortnox-klienten. Fortnox-klienten skall vara ett rent API-lager. Fakturamotor, samlingsregler, radbyggande och validering skall ligga i Traivos affärslager.
+
+⸻
+
+Prioriterad utvecklingsorder
+
+Prio 1 – Korrekt tid, lön och fakturering
+
+Automatiskt avslut av föregående uppgift.
+En aktiv uppgift åt gången.
+Proportionell och manuell fördelning av verklig tid i klump.
+Tidstypsregister som regelmotor.
+OB och löneexport.
+
+Prio 2 – Arkitekturgrund
+
+Restid som artikelbaserad uppgift.
+All tid som artikelbaserade uppgifter.
+Full 168-timmarsvy.
+Gemensam motor-/regeladministration.
+Reservtid som planeringsmarkering.
+
+Prio 3 – Uppgiftsnav och planering
+
+Gemensam filtermotor.
+Filter på alla 94 fält och metadata.
+Karta och lista sida vid sida.
+Individuell avvikelse inom team.
+Kalendereditor med återkommande uppgifter.
+
+Prio 4 – Fortnox
+
+Fler fakturahuvudfält.
+Utökad exportlogg.
+Idempotens mot Fortnox.
+Schemalagd kund-/artikelsynk.
+Renodlad Fortnox-klient utan affärslogik.
+
+Slutsats: Nästa utvecklingsfas skall fokusera på att rätta arkitekturen så att alla tidstyper, uppgifter, resor, egen tid, filter och fakturaflöden följer samma grundmodell. Det är viktigare än att bygga fler isolerade funktioner ovanpå nuvarande avvikelser.
