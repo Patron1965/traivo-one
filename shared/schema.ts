@@ -345,6 +345,14 @@ export const workOrders = pgTable("work_orders", {
   plannedWindowEnd: timestamp("planned_window_end"),
   estimatedDuration: integer("estimated_duration").default(60),
   actualDuration: integer("actual_duration"),
+  // Task #1236: verklig tid för en klumpuppgift fördelas proportionerligt (mot
+  // estimatedDuration) över uppgifterna i klumpen — se server/services/
+  // actual-time-distribution.ts. actualTimeGroupKey är en opak nyckel (samma
+  // konvention som slot_times.assignmentGroupKey) som binder ihop uppgifterna i
+  // en fördelning; NULL = ej klumpfördelad (oförändrat beteende). manuell=true
+  // låser raden mot framtida auto-omfördelning tills fördelningen görs om.
+  actualTimeGroupKey: text("actual_time_group_key"),
+  actualDurationManual: boolean("actual_duration_manual").default(false).notNull(),
   setupTime: integer("setup_time"),
   setupReason: text("setup_reason"),
   // Tidsstämplar för statusflöde
@@ -584,6 +592,7 @@ export const workOrders = pgTable("work_orders", {
     .where(sql`source_assignment_id IS NOT NULL`),
   index("idx_work_orders_order_concept").on(table.tenantId, table.orderConceptId),
   index("idx_work_orders_tenant_status").on(table.tenantId, table.orderStatus),
+  index("idx_work_orders_actual_time_group").on(table.tenantId, table.actualTimeGroupKey),
   index("idx_work_orders_tenant_date").on(table.tenantId, table.scheduledDate),
   index("idx_work_orders_resource_date").on(table.resourceId, table.scheduledDate),
   index("idx_work_orders_tenant_deleted").on(table.tenantId, table.deletedAt),
@@ -2438,6 +2447,10 @@ export const TASK_EVENT_TYPES = [
   "arrived",              // verklig: på plats (onSiteAt)
   "completed",            // verklig: utförd (completedAt)
   "impossible",           // verklig: omöjlig att utföra (impossibleAt)
+  // Task #1236: en aktiv uppgift åt gången + klump-tidsfördelning.
+  "auto_completed",       // verklig: auto-avslutad för att en ny uppgift startades (samma resurs)
+  "actual_time_distributed", // verklig tid fördelad proportionerligt över klumpens uppgifter
+  "actual_time_adjusted", // verklig tid manuellt justerad av behörig användare
 ] as const;
 export type TaskEventType = (typeof TASK_EVENT_TYPES)[number];
 

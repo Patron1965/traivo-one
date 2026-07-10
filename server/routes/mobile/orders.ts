@@ -18,6 +18,7 @@ import type { Express } from "express";
   import { articleHasStockLocation, resolveStockLocation } from "../../services/logistics-task-expansion";
   import { reverseGeocode, buildAddressString } from "../../services/geocoding";
   import { logWorkOrderTransition, getTaskEvents } from "../../services/task-event-log";
+  import { closeOtherActiveWork } from "../../services/active-task-guard";
 
   // Löser effektiv produktionstid (minuter) ur redan hämtade listrader.
   // Prioritet: resurs-specifik (giltig) → generisk lista (giltig) → artikelns
@@ -387,6 +388,15 @@ app.patch("/api/mobile/orders/:id/status", isMobileAuthenticated, asyncHandler(a
       updateData.orderStatus = 'planerad_resurs';
       updateData.executionStatus = 'on_site';
       updateData.onSiteAt = new Date();
+      // Task #1236: en aktiv uppgift åt gången — auto-avsluta andra pågående
+      // uppgifter/tidsposter för samma resurs innan denna blir aktiv.
+      if (order.tenantId && resourceId) {
+        closeOtherActiveWork(order.tenantId, resourceId, {
+          exceptWorkOrderId: orderId,
+          actor: { type: "resource", id: resourceId },
+          reason: "new_order_started",
+        }).catch(err => console.error("[active-task-guard] failed on order start:", err));
+      }
     } else if (status === 'dispatched') {
       updateData.executionStatus = 'dispatched';
       if (!order.onWayAt) {
@@ -610,6 +620,45 @@ app.patch("/api/mobile/orders/:id/status", isMobileAuthenticated, asyncHandler(a
       orderId,
       data: { status, executionStatus: updateData.executionStatus }
     });
+}));
+
+// Task #1236: teknikern registrerar EN total verklig tid för ett fältbesök som
+// täckte flera uppgifter (klump) — fördelas proportionerligt mot uppgifternas
+// estimatedDuration. Kräver att ALLA angivna uppgifter tillhör den inloggade
+// resursen (mobil-ytan går utanför tenant-middleware — härled tenant ur
+// ordrarna, läs aldrig req.tenantId här).
+app.post("/api/mobile/orders/actual-time/distribute", isMobileAuthenticated, asyncHandler(async (req: MobileAuthenticatedRequest, res: Response) => {
+  const resourceId = req.mobileResourceId;
+  const schema = z.object({
+    workOrderIds: z.array(z.string()).min(1),
+    totalActualMinutes: z.number().min(0),
+  });
+  const parsed = schema.safeParse(req.body);
+  if (!parsed.success) throw new ValidationError(formatZodError(parsed.error).error);
+
+  const orders = await Promise.all(parsed.data.workOrderIds.map(id => storage.getWorkOrder(id)));
+  const missing = orders.some(o => !o);
+  if (missing) throw new NotFoundError("En eller flera uppgifter hittades inte");
+  const notOwned = orders.some(o => o!.resourceId !== resourceId);
+  if (notOwned) throw new ForbiddenError("Ej behörig till en eller flera uppgifter");
+  const tenantId = orders[0]!.tenantId;
+  if (orders.some(o => o!.tenantId !== tenantId)) {
+    throw new ValidationError("Uppgifterna tillhör olika tenants");
+  }
+
+  const { distributeActualTime, ActualTimeDistributionError } = await import("../../services/actual-time-distribution");
+  try {
+    const result = await distributeActualTime({
+      tenantId: tenantId!,
+      workOrderIds: parsed.data.workOrderIds,
+      totalActualMinutes: parsed.data.totalActualMinutes,
+      actor: { type: "resource", id: resourceId ?? null },
+    });
+    res.json({ allocations: result });
+  } catch (err) {
+    if (err instanceof ActualTimeDistributionError) throw new ValidationError(err.message);
+    throw err;
+  }
 }));
 
 // Task #989: fältmarkering "ej utlämnad / ska återtas" ⇒ skapa retur-uppgift till lager.

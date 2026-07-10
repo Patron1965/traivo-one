@@ -25,6 +25,7 @@ import { AppError, NotFoundError, ValidationError, ConflictError, ForbiddenError
 import { deriveFortnoxCodesWithSourceForWorkOrder } from "../services/fortnox-code-derivation";
 import { getObjectMetadataImages } from "../services/object-system-metadata";
 import { logWorkOrderTransition, getTaskEvents } from "../services/task-event-log";
+import { distributeActualTime, adjustActualTimeDistribution, ActualTimeDistributionError } from "../services/actual-time-distribution";
 
 /** Räknar ut outsidePreferredWindow-flaggan + priority utifrån objektets/kundens
  * effektiva leveranspreferens och plannedWindowStart/End. */
@@ -2920,6 +2921,59 @@ app.get("/api/invoice-recalculation-log", requireAdmin, asyncHandler(async (req,
   const offset = parseInt(req.query.offset as string) || 0;
   const rows = await storage.getInvoiceRecalculationLogs(tenantId, { workOrderId, limit, offset });
   res.json(rows);
+}));
+
+// Task #1236: proportionell fördelning av verklig tid över en klumps uppgifter
+// (angivna explicit via workOrderIds — ingen persisterad klump-tabell finns ännu).
+app.post("/api/work-orders/actual-time/distribute", requirePlanner, asyncHandler(async (req, res) => {
+  const tenantId = getTenantIdWithFallback(req);
+  const userId = (req as any).user?.claims?.sub ?? (req as any).user?.id ?? null;
+  const schema = z.object({
+    workOrderIds: z.array(z.string()).min(1),
+    totalActualMinutes: z.number().min(0),
+    groupKey: z.string().optional(),
+  });
+  const parsed = schema.safeParse(req.body);
+  if (!parsed.success) throw new ValidationError(formatZodError(parsed.error).error);
+  try {
+    const result = await distributeActualTime({
+      tenantId,
+      workOrderIds: parsed.data.workOrderIds,
+      totalActualMinutes: parsed.data.totalActualMinutes,
+      groupKey: parsed.data.groupKey,
+      actor: { type: "user", id: userId },
+    });
+    res.json({ allocations: result });
+  } catch (err) {
+    if (err instanceof ActualTimeDistributionError) throw new ValidationError(err.message);
+    throw err;
+  }
+}));
+
+// Manuell justering av en redan gjord fördelning (behörig=planner/admin/owner).
+// Låser de angivna raderna (actualDurationManual=true) mot framtida auto-fördelning.
+app.post("/api/work-orders/actual-time/adjust", requirePlanner, asyncHandler(async (req, res) => {
+  const tenantId = getTenantIdWithFallback(req);
+  const userId = (req as any).user?.claims?.sub ?? (req as any).user?.id ?? null;
+  const schema = z.object({
+    allocations: z.array(z.object({
+      workOrderId: z.string(),
+      actualDuration: z.number().min(0),
+    })).min(1),
+  });
+  const parsed = schema.safeParse(req.body);
+  if (!parsed.success) throw new ValidationError(formatZodError(parsed.error).error);
+  try {
+    await adjustActualTimeDistribution({
+      tenantId,
+      allocations: parsed.data.allocations,
+      actor: { type: "user", id: userId },
+    });
+    res.json({ success: true });
+  } catch (err) {
+    if (err instanceof ActualTimeDistributionError) throw new ValidationError(err.message);
+    throw err;
+  }
 }));
 
 }

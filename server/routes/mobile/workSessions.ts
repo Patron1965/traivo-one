@@ -9,6 +9,7 @@ import type { Express } from "express";
     notificationService,
   } from "./shared";
   import type { Resource } from "./shared";
+  import { closeOtherActiveWork } from "../../services/active-task-guard";
   import type { Request, Response } from "express";
 
   // Decorate a work-session payload with Traivo-Go-compatible aliases so the
@@ -287,6 +288,17 @@ app.post("/api/mobile/work-sessions/:id/resume", isMobileAuthenticated, workSess
       durationMinutes,
       notes: parsed.data.note || null,
     });
+
+    // Task #1236: en aktiv uppgift åt gången — om denna post är öppen (ingen
+    // endTime) är den nu den aktiva tidsposten; stäng ev. andra aktiva poster
+    // (andra öppna work_entries + pågående work_orders) för samma resurs.
+    if (!endTime && resource.tenantId) {
+      closeOtherActiveWork(resource.tenantId, resourceId, {
+        exceptWorkEntryId: entryId,
+        actor: { type: "resource", id: resourceId },
+        reason: "new_time_entry_started",
+      }).catch(err => console.error("[active-task-guard] failed on entry start:", err));
+    }
 
     res.json({ success: true, entryId });
 }));

@@ -411,6 +411,26 @@ export default function WorkOrderDetailPage() {
     },
   });
 
+  const [actualDurationDraft, setActualDurationDraft] = useState<string>("");
+  const [editingActualDuration, setEditingActualDuration] = useState(false);
+
+  const adjustActualTimeMutation = useMutation({
+    mutationFn: async (actualDuration: number) => {
+      const res = await apiRequest("POST", `/api/work-orders/actual-time/adjust`, {
+        allocations: [{ workOrderId, actualDuration }],
+      });
+      return res.json();
+    },
+    onSuccess: () => {
+      invalidateOrder(order?.objectId);
+      setEditingActualDuration(false);
+      toast({ title: "Sparat", description: "Verklig tid justerad manuellt." });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Kunde inte justera verklig tid", description: err.message, variant: "destructive" });
+    },
+  });
+
   const editMutation = useMutation({
     mutationFn: async (payload: Record<string, unknown>) => {
       const res = await apiRequest("PATCH", `/api/work-orders/${workOrderId}`, payload);
@@ -900,7 +920,64 @@ export default function WorkOrderDetailPage() {
             <InfoRow label="Schemalagd" value={fmtDate(order.scheduledDate)} icon={Calendar} />
             {order.scheduledStartTime && <InfoRow label="Starttid" value={order.scheduledStartTime} icon={Clock} />}
             <InfoRow label="Beräknad tid" value={order.estimatedDuration ? `${order.estimatedDuration} min` : null} icon={Clock} />
-            {order.actualDuration != null && <InfoRow label="Faktisk tid" value={`${order.actualDuration} min`} icon={Clock} />}
+            {order.actualDuration != null && (
+              editingActualDuration ? (
+                <div className="flex items-center gap-2 py-1">
+                  <span className="text-sm text-muted-foreground w-24 shrink-0">Faktisk tid</span>
+                  <Input
+                    type="number"
+                    min={0}
+                    className="h-8 w-24"
+                    value={actualDurationDraft}
+                    onChange={(e) => setActualDurationDraft(e.target.value)}
+                    data-testid="input-actual-duration"
+                  />
+                  <span className="text-sm text-muted-foreground">min</span>
+                  <Button
+                    size="sm"
+                    variant="default"
+                    disabled={adjustActualTimeMutation.isPending}
+                    onClick={() => {
+                      const val = parseInt(actualDurationDraft, 10);
+                      if (!Number.isNaN(val) && val >= 0) adjustActualTimeMutation.mutate(val);
+                    }}
+                    data-testid="button-save-actual-duration"
+                  >
+                    {adjustActualTimeMutation.isPending && <Loader2 className="h-3 w-3 mr-1 animate-spin" />}
+                    Spara
+                  </Button>
+                  <Button size="sm" variant="ghost" onClick={() => setEditingActualDuration(false)} data-testid="button-cancel-actual-duration">
+                    Avbryt
+                  </Button>
+                </div>
+              ) : (
+                <InfoRow
+                  label="Faktisk tid"
+                  value={
+                    <span className="inline-flex items-center gap-1.5">
+                      {order.actualDuration} min
+                      {order.actualTimeGroupKey && (
+                        <span className="text-xs text-muted-foreground">(klumpfördelad)</span>
+                      )}
+                      {isAdmin && (
+                        <button
+                          type="button"
+                          className="text-xs text-primary underline underline-offset-2"
+                          onClick={() => {
+                            setActualDurationDraft(String(order.actualDuration));
+                            setEditingActualDuration(true);
+                          }}
+                          data-testid="button-edit-actual-duration"
+                        >
+                          justera
+                        </button>
+                      )}
+                    </span>
+                  }
+                  icon={Clock}
+                />
+              )
+            )}
             <InfoRow label="Skapad" value={fmtDateTime(period?.createdAt ?? order.createdAt)} />
             {order.completedAt && <InfoRow label="Slutförd" value={fmtDateTime(order.completedAt)} />}
             {order.cachedValue ? <InfoRow label="Värde" value={formatSekFromOre(order.cachedValue)} /> : null}
