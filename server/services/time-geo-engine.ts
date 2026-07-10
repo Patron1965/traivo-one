@@ -48,6 +48,10 @@ export const DEFAULT_MAX_ASSIGNMENTS = 500;
 export const DEFAULT_MAX_CANDIDATES_PER_TASK = 5;
 /** Max antal dagar horisonten kan vara (prestandagräns). */
 export const MAX_HORIZON_DAYS = 120;
+/** Task #1239: default ekonomisk prioriteringsvikt (1.0 = dagens beteende,
+ * ordervärde påverkar ankarval/formation/dagsordning som redan implementerat).
+ * 0 = ekonomiskt värde ignoreras helt i dessa avväganden. */
+export const DEFAULT_ECONOMIC_PRIORITY_WEIGHT = 1.0;
 
 /** Källa-stämpel på alla rader motorn skriver (för idempotent omkörning). */
 export const ENGINE_SOURCE = "tidsmotor";
@@ -94,6 +98,11 @@ export interface TimeGeoEngineOptions {
    * en tvärkod-klump (kompatibilitetsgrupp) faktiskt får bildas. NULL/utelämnad
    * = okänd kompetens (back-compat, ingen gate). */
   allowedExecutionCodes?: string[] | null;
+  /** Task #1239: override av ekonomisk prioriteringsvikt (styr hur mycket
+   * ordervärde (valueOre) väger i klumpformation, ankarval och dagskapacitets-
+   * ordning). 0 = ingen ekonomisk påverkan (ren poäng/varaktighet). Annars
+   * tenant-konfig → motorns default (1.0). */
+  economicPriorityWeight?: number;
   /** Max assignments som bearbetas (prestandagräns). */
   maxAssignments?: number;
   /** Max kandidat-slottider per uppgift. */
@@ -512,10 +521,13 @@ function hasCompetenceForCodes(
   return true;
 }
 
-function pickAnchor(members: GroupableTask[]): GroupableTask {
+function pickAnchor(members: GroupableTask[], economicPriorityWeight: number): GroupableTask {
+  // Task #1239: vid vikt 0 är ekonomiskt värde helt inaktiverat som ankar-
+  // kriterium — första medlemmen (ursprunglig ordning) vinner deterministiskt.
+  if (economicPriorityWeight <= 0) return members[0];
   let anchor = members[0];
   for (const m of members) {
-    if (m.valueOre > anchor.valueOre) anchor = m;
+    if (m.valueOre * economicPriorityWeight > anchor.valueOre * economicPriorityWeight) anchor = m;
   }
   return anchor;
 }
@@ -541,10 +553,12 @@ export function groupTasks(
     compatibilityGroups?: string[][] | null;
     allowedExecutionCodes?: string[] | null;
     maxWalkingDistanceMeters?: number | null;
+    economicPriorityWeight?: number;
   } = {},
 ): TaskGroup[] {
   const compatibilityGroups = options.compatibilityGroups ?? null;
   const allowedExecutionCodes = options.allowedExecutionCodes ?? null;
+  const economicPriorityWeight = options.economicPriorityWeight ?? DEFAULT_ECONOMIC_PRIORITY_WEIGHT;
   const effectiveRadiusMeters =
     typeof options.maxWalkingDistanceMeters === "number" && options.maxWalkingDistanceMeters > 0
       ? Math.min(radiusMeters, options.maxWalkingDistanceMeters)
@@ -601,8 +615,13 @@ export function groupTasks(
     }
 
     // Task #1239: ekonomiskt högst värderade uppgiften klustras först — den
-    // blir kluster-fröet (och senare ankaret för primärposition).
-    const geoOrdered = [...geoOnly].sort((a, b) => b.valueOre - a.valueOre);
+    // blir kluster-fröet (och senare ankaret för primärposition). Vikten
+    // styr hur starkt detta gör sig gällande; vid 0 behålls ursprungsordningen
+    // (stabil sort — inget ekonomiskt inflytande på formationen).
+    const geoOrdered =
+      economicPriorityWeight > 0
+        ? [...geoOnly].sort((a, b) => b.valueOre * economicPriorityWeight - a.valueOre * economicPriorityWeight)
+        : geoOnly;
 
     // Greedy radie-klustring för adresslösa men positionerade uppgifter.
     let clusterIdx = 0;
@@ -654,12 +673,12 @@ export function groupTasks(
           timeKey: g.timeKey,
           groupingBasis: g.groupingBasis,
           members: ms,
-          anchorAssignmentId: pickAnchor(ms).assignmentId,
+          anchorAssignmentId: pickAnchor(ms, economicPriorityWeight).assignmentId,
         });
       }
       continue;
     }
-    g.anchorAssignmentId = pickAnchor(g.members).assignmentId;
+    g.anchorAssignmentId = pickAnchor(g.members, economicPriorityWeight).assignmentId;
     // Task #1239: klumpens executionCode-etikett vid tvärkod-klump = ankarets
     // egen kod (mest ekonomiskt relevanta), inte första-tillagda medlemmens.
     g.executionCode = distinctCodes.size > 1
@@ -794,6 +813,12 @@ export async function runTimeGeoEngine(
     options.allowedExecutionCodes !== undefined
       ? options.allowedExecutionCodes
       : (teamConfig?.allowedExecutionCodes ?? null);
+  // Task #1239: ekonomisk prioriteringsvikt — explicit override → tenant-
+  // konfig (planning_parameters.economicPriorityWeight) → motorns default.
+  const economicPriorityWeight =
+    options.economicPriorityWeight ??
+    tenantClumpDefaults?.economicPriorityWeight ??
+    DEFAULT_ECONOMIC_PRIORITY_WEIGHT;
 
   // (1) Hämta råa, oplanerade assignments. scheduledDate kan vara null → hämta
   // utan datumfilter och filtrera i minnet (datumfiltret träffar inte null).
@@ -863,7 +888,7 @@ export async function runTimeGeoEngine(
   // (5) Dynamisk om-passning: kapacitet (minuter) per dag. Bearbeta i prioritets-
   // ordning (bäst kandidat-poäng först). Välj första kandidaten vars dag har
   // kapacitet kvar; annars skjut till nästa kandidat/dag.
-  applyDailyCapacity(schedulable, dailyCapacityMinutes, periodEnd);
+  applyDailyCapacity(schedulable, dailyCapacityMinutes, periodEnd, economicPriorityWeight);
 
   // (6) Geo-gruppering på de VALDA slottiderna.
   const groupable: GroupableTask[] = schedulable.map((p) => {
@@ -887,6 +912,7 @@ export async function runTimeGeoEngine(
     compatibilityGroups,
     allowedExecutionCodes,
     maxWalkingDistanceMeters,
+    economicPriorityWeight,
   });
 
   // Karta uppgift → gruppnyckel (endast för grupper ≥2 = riktiga klumpuppgifter).
@@ -1017,14 +1043,19 @@ function applyDailyCapacity(
   prepared: PreparedAssignment[],
   dailyCapacityMinutes: number,
   periodEnd: Date,
+  economicPriorityWeight: number = DEFAULT_ECONOMIC_PRIORITY_WEIGHT,
 ): void {
   // Sortera efter bästa kandidat-poäng (högst först), sedan ekonomiskt värde
-  // (Task #1239: ekonomisk prioritering vinner tidigare dagsplats/kapacitet vid
-  // jämn poäng — inte bara en efterhandssummering), sedan längst uppgift först.
+  // viktat med economicPriorityWeight (Task #1239: ekonomisk prioritering
+  // vinner tidigare dagsplats/kapacitet vid jämn poäng — inte bara en
+  // efterhandssummering; vikt 0 = ekonomiskt värde ignoreras helt här),
+  // sedan längst uppgift först.
   const order = [...prepared].sort((a, b) => {
     const sa = a.candidates[0]?.score ?? -Infinity;
     const sb = b.candidates[0]?.score ?? -Infinity;
-    return sb - sa || b.valueOre - a.valueOre || b.durationMinutes - a.durationMinutes;
+    const economicDelta =
+      economicPriorityWeight > 0 ? b.valueOre * economicPriorityWeight - a.valueOre * economicPriorityWeight : 0;
+    return sb - sa || economicDelta || b.durationMinutes - a.durationMinutes;
   });
 
   const dayLoad = new Map<string, number>();
@@ -1134,6 +1165,7 @@ async function resolveTenantClumpDefaults(tenantId: string): Promise<{
   workPacePercent: number;
   maxWalkingDistanceMeters: number | null;
   executionCodeCompatibilityGroups: string[][] | null;
+  economicPriorityWeight: number;
 }> {
   try {
     const row = await storage.getTenantEngineDefaults(tenantId);
@@ -1157,12 +1189,17 @@ async function resolveTenantClumpDefaults(tenantId: string): Promise<{
       Array.isArray(row?.executionCodeCompatibilityGroups) && row.executionCodeCompatibilityGroups.length > 0
         ? (row.executionCodeCompatibilityGroups as string[][])
         : null;
+    const economicPriorityWeight =
+      typeof row?.economicPriorityWeight === "number" && Number.isFinite(row.economicPriorityWeight) && row.economicPriorityWeight >= 0
+        ? row.economicPriorityWeight
+        : DEFAULT_ECONOMIC_PRIORITY_WEIGHT;
     return {
       dailyCapacityMinutes,
       streetSideGrouping,
       workPacePercent,
       maxWalkingDistanceMeters,
       executionCodeCompatibilityGroups,
+      economicPriorityWeight,
     };
   } catch {
     return {
@@ -1171,6 +1208,7 @@ async function resolveTenantClumpDefaults(tenantId: string): Promise<{
       workPacePercent: DEFAULT_WORK_PACE_PERCENT,
       maxWalkingDistanceMeters: null,
       executionCodeCompatibilityGroups: null,
+      economicPriorityWeight: DEFAULT_ECONOMIC_PRIORITY_WEIGHT,
     };
   }
 }

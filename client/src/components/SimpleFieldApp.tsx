@@ -1,5 +1,7 @@
 import { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
+import { Marker, Popup } from "react-leaflet";
+import { BaseMap, MapFitBounds, numberedDivIcon, dotDivIcon } from "@/components/ui/map";
 import { usePullToRefresh } from "@/hooks/usePullToRefresh";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -1957,7 +1959,25 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
               hasAddress={!!selectedJob.objectAddress}
               onStart={handleStartJob}
               onNavigate={() => {
-                if (selectedJob.objectAddress) {
+                const primary = stopPositions?.primary;
+                if (primary?.latitude != null && primary?.longitude != null) {
+                  window.open(`https://maps.google.com?q=${primary.latitude},${primary.longitude}`);
+                  if (selectedJobId) {
+                    const pos = lastPositionRef.current;
+                    fetch(`/api/work-orders/${selectedJobId}/auto-eta-sms`, {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({
+                        technicianLat: pos?.lat || null,
+                        technicianLng: pos?.lng || null,
+                      }),
+                    }).then(r => r.json()).then(data => {
+                      if (data.success && !data.skipped) {
+                        toast({ title: "Kund-SMS skickat", description: `ETA: ca ${data.etaMinutes} min` });
+                      }
+                    }).catch(() => {});
+                  }
+                } else if (selectedJob.objectAddress) {
                   window.open(`https://maps.google.com?q=${encodeURIComponent(selectedJob.objectAddress + ", " + (selectedObject?.city || ""))}`);
                   if (selectedJobId) {
                     const pos = lastPositionRef.current;
@@ -2057,15 +2077,75 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
           {stopPositions && stopPositions.members.length > 1 && (
             <Card data-testid="card-stop-positions">
               <CardContent className="py-3 space-y-2">
-                <div className="flex items-center gap-1.5">
-                  <MapPin className="h-4 w-4 text-chart-3 shrink-0" />
-                  <p className="text-xs font-medium">Klumpstopp — {stopPositions.members.length} positioner</p>
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <MapPin className="h-4 w-4 text-chart-3 shrink-0" />
+                    <p className="text-xs font-medium">Klumpstopp — {stopPositions.members.length} positioner</p>
+                  </div>
+                  {stopPositions.primary?.latitude != null && stopPositions.primary?.longitude != null && (
+                    <Button
+                      size="sm"
+                      variant="default"
+                      className="shrink-0"
+                      onClick={() => {
+                        window.open(`https://maps.google.com?q=${stopPositions.primary!.latitude},${stopPositions.primary!.longitude}`);
+                      }}
+                      data-testid="button-navigate-stop-primary"
+                    >
+                      <Navigation className="h-4 w-4" />
+                      <span className="ml-1">Navigera</span>
+                    </Button>
+                  )}
                 </div>
                 {stopPositions.primary?.address && (
                   <p className="text-[11px] text-muted-foreground">
                     Navigerar till stoppets gemensamma position: {stopPositions.primary.address}
                   </p>
                 )}
+                {(() => {
+                  const mapPoints = stopPositions.members
+                    .map((m, idx) => ({ ...m, idx }))
+                    .filter((m) => m.latitude != null && m.longitude != null);
+                  const primaryPoint = stopPositions.primary?.latitude != null && stopPositions.primary?.longitude != null
+                    ? stopPositions.primary
+                    : null;
+                  const allPositions: Array<[number, number]> = [
+                    ...(primaryPoint ? [[primaryPoint.latitude as number, primaryPoint.longitude as number] as [number, number]] : []),
+                    ...mapPoints.map((m) => [m.latitude as number, m.longitude as number] as [number, number]),
+                  ];
+                  if (allPositions.length === 0) return null;
+                  const center = allPositions[0];
+                  return (
+                    <div className="rounded overflow-hidden border h-56 w-full" data-testid="map-stop-positions">
+                      <BaseMap center={center} zoom={16}>
+                        <MapFitBounds positions={allPositions} padding={[40, 40]} />
+                        {primaryPoint && (
+                          <Marker
+                            position={[primaryPoint.latitude as number, primaryPoint.longitude as number]}
+                            icon={numberedDivIcon({ number: "P", color: "#1B4B6B", size: 30 })}
+                          >
+                            <Popup>
+                              Stoppets primära position
+                              {primaryPoint.address ? ` — ${primaryPoint.address}` : ""}
+                            </Popup>
+                          </Marker>
+                        )}
+                        {mapPoints.map((m) => (
+                          <Marker
+                            key={m.assignmentId}
+                            position={[m.latitude as number, m.longitude as number]}
+                            icon={dotDivIcon({ color: "#4A9B9B", size: 16 })}
+                          >
+                            <Popup>
+                              Position {m.idx + 1}
+                              {m.address ? ` — ${m.address}` : ""}
+                            </Popup>
+                          </Marker>
+                        ))}
+                      </BaseMap>
+                    </div>
+                  );
+                })()}
                 <div className="space-y-1.5">
                   {stopPositions.members.map((member, idx) => (
                     <div
