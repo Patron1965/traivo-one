@@ -1,0 +1,245 @@
+Svar punkt 3
+
+Jag skulle formulera punkt 3 på samma sätt som de tidigare punkterna: utvecklarnas text följs direkt av dina kommentarer, kompletteringar och en begäran om bekräftelse.
+
+⸻
+
+Kommentarer och förtydliganden – Punkt 3: Fortnox-integrationen
+
+Övergripande kommentar
+
+Ansvarsfördelningen mellan systemen är korrekt och överensstämmer med tidigare API-specifikationer.
+
+Fortnox är master för kunder och artiklar.
+Traivo är master för order, produktion, metadata, planering och fakturaunderlag.
+
+OAuth2 med Authorization Code Flow, säker tokenlagring och automatisk tokenförnyelse är rätt arkitektur.
+
+Bekräftelse önskas: Att denna ansvarsfördelning är fastställd och inte kommer att förändras.
+
+⸻
+
+Byggt och fungerar
+
+Rate limit-hantering
+
+Kommentar
+
+Beskrivningen är korrekt.
+
+Jag vill komplettera med att köhanteringen även bör logga:
+
+antal omförsök
+väntetider
+felorsak
+slutligt resultat
+
+Detta för att underlätta felsökning och driftövervakning.
+
+Bekräftelse önskas: Sparas denna information i loggarna?
+
+⸻
+
+Pagination
+
+Kommentar
+
+Beskrivningen är korrekt.
+
+På sikt bör pagination kombineras med inkrementell synkronisering så att endast förändrade poster hämtas.
+
+⸻
+
+Validering före export
+
+Kommentar
+
+Jag vill komplettera med att valideringen även bör kontrollera:
+
+obligatoriska metadatafält
+fakturareferens
+korrekt faktureringsstatus
+att ordern inte redan ingår i ett annat fakturaunderlag
+att artikelns faktureringsregler följs
+
+Om någon validering misslyckas ska tydlig felinformation visas för användaren.
+
+Bekräftelse önskas: Vilka valideringsregler är idag implementerade utöver kund, artikel, pris och antal?
+
+⸻
+
+Fakturahuvud
+
+Kommentar
+
+Beskrivningen är korrekt.
+
+Jag vill komplettera med att följande fält också ska kunna sättas från Orderkoncept och Snabborder och följa med hela vägen till fakturaunderlaget:
+
+Extern fakturareferens
+Leveranssätt
+Transportsätt
+Valuta
+Betalningsvillkor (om aktuellt)
+Språk (om Fortnox stödjer detta)
+Eventuella kundspecifika fakturaparametrar
+
+Samtliga dessa fält ska kunna väljas som standardvärden i Orderkoncept och kunna ändras i Snabborder innan ordern skapas.
+
+Bekräftelse önskas: Kan dessa fält läggas till i Orderkoncept och Snabborder som valbara parametrar?
+
+⸻
+
+Tre radtyper
+
+Kommentar
+
+Beskrivningen är korrekt.
+
+Jag vill förtydliga att fakturarader ska kunna bestå av:
+
+artikelrader
+informationsrader
+fritextrader
+
+Dessutom ska metadata från utförandet kunna användas för att automatiskt skapa informationsrader när detta definierats i regelverket.
+
+Utförarens kommentarer ska kunna följa med till fakturan när kunden önskar detta.
+
+Bekräftelse önskas: Är informationsrader styrbara via metadataregler?
+
+⸻
+
+Pris
+
+Kommentar
+
+Beskrivningen är korrekt.
+
+Traivos pris ska alltid vara styrande när pris finns angivet i ordern.
+
+Om pris saknas ska definierat fallback-regelverk användas, exempelvis:
+
+Pris från order.
+Pris från kundens prislista.
+Pris från artikel.
+Manuell hantering.
+
+Bekräftelse önskas: Finns ett sådant prioriteringsregelverk implementerat?
+
+⸻
+
+Felhantering och återkoppling
+
+Kommentar
+
+Beskrivningen är korrekt.
+
+Jag vill komplettera med att exportloggen även bör innehålla:
+
+datum och tid
+användare
+API-anrop
+Fortnox-ID
+fakturanummer
+felkod
+feltext
+antal omförsök
+
+Detta blir viktigt för revision och support.
+
+⸻
+
+Delvis byggt
+
+Idempotens
+
+Kommentar
+
+Nuvarande lösning fungerar men bör kompletteras.
+
+Skyddet bör finnas både:
+
+i Traivos databas
+och mot Fortnox via idempotensnyckel eller motsvarande mekanism om API:t stödjer detta.
+
+Dessutom bör exportmotorn kunna upptäcka om en faktura redan skapats även efter återställning av databasen.
+
+Bekräftelse önskas: Är dubbelkontroll planerad även mot Fortnox?
+
+⸻
+
+Inte byggt än
+
+Inkrementell synkronisering
+
+Kommentar
+
+Jag instämmer i att detta bör prioriteras.
+
+Kund- och artikelsynk ska stödja:
+
+lastModified
+schemalagd synkronisering
+manuell synk
+loggning
+felrapportering
+
+Detta minskar belastningen både på Traivo och Fortnox.
+
+⸻
+
+Extra fakturahuvudfält
+
+Kommentar
+
+Jag vill komplettera denna punkt.
+
+Följande fält ska kunna definieras redan i Orderkoncept och Snabborder, eftersom de tillhör själva beställningen och inte faktureringen.
+
+Exempel:
+
+Extern fakturareferens
+Leveranssätt
+Transportsätt
+Valuta
+Betalningsvillkor
+Fakturakommentar
+Språk
+Kundspecifika fakturaparametrar
+
+Orderkonceptet ska kunna innehålla standardvärden.
+
+Snabborder ska kunna ändra dessa innan ordern skapas.
+
+Dessa värden ska därefter följa ordern genom hela processen fram till fakturering.
+
+Bekräftelse önskas: Är detta den planerade modellen?
+
+⸻
+
+Tillägg – Överensstämmelse med tidigare API-specifikation
+
+Jag önskar dessutom att utvecklarna stämmer av implementationen mot tidigare framtagna API-specifikationer för Traivo/Fortnox-integrationen.
+
+Speciellt önskar jag en bekräftelse på att följande principer fortfarande gäller:
+
+Traivo är master för produktion och fakturaunderlag.
+Fortnox är master för kunder och artiklar.
+All export bygger på artikelbaserade uppgifter.
+Metadata ska kunna påverka fakturaunderlaget enligt definierade regler.
+Fakturamotorn ska vara fristående från Fortnox-integrationen.
+API-lagret ska endast transportera data och inte innehålla affärslogik.
+
+⸻
+
+Sammanfattande begäran
+
+Jag önskar att utvecklarna för varje punkt ovan bekräftar:
+
+Att implementationen överensstämmer med tidigare API-specifikation.
+Vilka delar som redan är implementerade.
+Vilka delar som återstår.
+Om någon del avviker från den ursprungliga arkitekturen och i så fall varför.
+
+Detta säkerställer att Fortnox-integrationen förblir en generell integrationsmotor där Traivo äger affärslogiken, medan Fortnox används som ekonomisystem för kund-, artikel- och fakturahantering.

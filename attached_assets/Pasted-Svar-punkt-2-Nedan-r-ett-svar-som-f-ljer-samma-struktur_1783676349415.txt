@@ -1,0 +1,348 @@
+Svar punkt 2
+
+Nedan är ett svar som följer samma struktur som för punkt 1. Varje kommentar är direkt kopplad till utvecklarnas respektive punkt och avslutas med ett tydligt krav på bekräftelse.
+
+⸻
+
+Kommentarer och förtydliganden – Punkt 2: Uppgiftsnav, filter, tilldelning och team
+
+Byggt och fungerar
+
+Uppgiftsnavet som en central lista för uppgifter från alla källor
+
+Kommentar och förtydligande
+
+Beskrivningen är korrekt men behöver kompletteras.
+
+Uppgiftsnavet ska vara systemets centrala arbetsyta och innehålla samtliga uppgifter, oavsett vilken uppgiftsmotor som skapat dem.
+
+Navet ska visa samtliga relevanta data för uppgiften, inklusive de 94 standardfälten samt bland annat:
+
+status
+tilldelning
+team
+utförare
+klumptillhörighet
+orderkoncept/snabborder
+kund
+objekt
+artikelnummer
+tidstyp
+faktureringsstatus
+
+På sikt ska även uppgifter som skapas av Ruttoptimering Light, exempelvis restidsuppgifter, visas i navet på samma sätt som övriga uppgifter.
+
+Bekräftelse önskas: Kommer uppgiftsnavet att innehålla samtliga uppgifter från alla uppgiftsmotorer inklusive framtida automatiskt skapade uppgifter?
+
+⸻
+
+Markera urval + löpande summering (tid, stopp, objekt, kunder)
+
+Kommentar och förtydligande
+
+Urvalsfunktionen ska inte enbart användas för tilldelning.
+
+Den ska vara grunden för analys, uppföljning och export.
+
+Summeringar ska kunna göras på exempelvis:
+
+tid
+stopp
+objekt
+kunder
+artiklar
+orderkoncept
+team
+utförare
+klumpar
+
+Markerade urval ska kunna exporteras till CSV med valbara kolumner.
+
+Urvalet ska kunna användas för analyser kopplade till kunder, objekt, beställningar, orderkoncept, snabbordrar och andra uppgiftskapare.
+
+Bekräftelse önskas: Kommer urvalsfunktionen att stödja CSV-export och användas som ett generellt analysverktyg?
+
+⸻
+
+Val av team och vecka med ledig kapacitet samt leveranstidsstöd
+
+Kommentar och förtydligande
+
+Beskrivningen är korrekt.
+
+Jag vill dock förtydliga att ett team ska vara dynamiskt.
+
+Teamets identitet ska utgå från den person som definieras som teamleader.
+
+Övriga resurser ska kunna förändras utan att teamets identitet ändras.
+
+Det gäller exempelvis:
+
+medarbetare
+fordon
+utrustning
+
+Systemet ska därför kunna planera samma team även om bemanningen varierar.
+
+Bekräftelse önskas: Är teammodellen uppbyggd med teamleader som bärande identitet och dynamisk resurshantering?
+
+⸻
+
+To-do-lista för uppgifter utan geografi eller tid
+
+Kommentar och förtydligande
+
+Denna funktion är viktig framför allt i utförarappen.
+
+Utföraren ska kunna se uppgifter som saknar geografisk position och därför inte visas på kartan.
+
+En uppgift kan sakna:
+
+geografisk position
+önskad leveranstid
+
+men ska alltid innehålla:
+
+artikelnummer
+tidstyp
+
+Dessa uppgifter ska kunna planeras, tilldelas, utföras och följas upp på samma sätt som geografiska uppgifter.
+
+Bekräftelse önskas: Hanteras uppgifter utan geografi och leveranstid fullt ut i både nav och utförarapp?
+
+⸻
+
+Produktionstid från artikel som uppdateras med antalet
+
+Kommentar och förtydligande
+
+Beskrivningen är korrekt.
+
+Jag vill komplettera med att verklig tid ska kunna registreras på tre sätt:
+
+automatisk start/slut på uppgift
+proportionell fördelning inom klump
+manuell justering av utförare eller administratör
+
+Den verkliga tiden ska alltid kunna jämföras mot den planerade tiden.
+
+Bekräftelse önskas: Är samtliga tre modeller implementerade?
+
+⸻
+
+Hela ekonomi- och spårbarhetskedjan
+
+Kommentar och förtydligande
+
+Beskrivningen är korrekt.
+
+Spårbarheten ska omfatta hela kedjan från beställning till fakturering.
+
+Det innebär bland annat:
+
+kund
+objekt
+order
+uppgift
+artikel
+team
+person
+fordon
+utrustning
+projekt
+kostnadsställe
+
+Informationen ska kunna exporteras till ekonomi-, löne- och BI-system.
+
+Bekräftelse önskas: Är hela spårbarhetskedjan implementerad utan informationsförlust?
+
+⸻
+
+Delvis byggt
+
+Filtermotorn
+
+Kommentar och förtydligande
+
+Jag rekommenderar att filtermotorn utvecklas till en gemensam systemmotor.
+
+Samma filtermotor ska användas i:
+
+uppgiftsnav
+veckoplan
+kartvy
+objektregister
+kundregister
+fakturering
+statistik
+
+Filtermotorn ska kunna filtrera på:
+
+samtliga 94 datafält
+metadatafält
+status
+artikel
+artikelgrupp
+kund
+objekt
+order
+team
+utförare
+fordon
+utrustning
+klumpar
+tidstyper
+faktureringsstatus
+
+Filter ska kunna:
+
+sparas
+namnges
+grupperas i kategorier
+delas med andra användare
+användas som standardfilter
+
+Det ska dessutom vara möjligt att filtrera vidare inom ett redan aktivt filter.
+
+Bekräftelse önskas: Är ambitionen att skapa en gemensam filtermotor enligt ovan?
+
+⸻
+
+Team planeras som en enhet
+
+Kommentar och förtydligande
+
+Systemet behöver stödja individuell avvikelse inom ett team.
+
+Exempel:
+
+sjukfrånvaro
+byte av fordon
+byte av utrustning
+ersättare
+
+Teamet ska kunna fortsätta fungera även om enskilda resurser förändras.
+
+Det ska finnas en vy där planeraren tydligt ser hur avvikelsen påverkar kapaciteten.
+
+Bekräftelse önskas: Finns detta stöd planerat?
+
+⸻
+
+Tilläggsartiklar
+
+Kommentar och förtydligande
+
+Tilläggsartiklar ska kunna skapas under utförandet av en uppgift eller klump.
+
+Det viktigaste är att de kopplas till rätt:
+
+uppgift
+order
+faktura
+kund
+
+Detsamma gäller fritextrader.
+
+Normalt finns endast en kund per stopp, men systemet ska även hantera undantag där flera order eller fakturareferenser förekommer.
+
+Bekräftelse önskas: Hur säkerställs att tilläggsartiklar alltid hamnar på rätt fakturaunderlag?
+
+⸻
+
+Tidseditorn
+
+Kommentar och förtydligande
+
+Tidseditorn bör utvecklas till en kalendereditor.
+
+Den ska kunna skapa återkommande egentidsuppgifter baserade på artiklar och tidstyper.
+
+Exempel:
+
+arbetstid
+nattvila
+helgvila
+lunch
+raster
+semester
+jour
+sjukfrånvaro
+
+Kalendereditorn ska stödja repetition och återkommande scheman.
+
+Bekräftelse önskas: Är detta den planerade utvecklingen?
+
+⸻
+
+Sortering
+
+Kommentar och förtydligande
+
+Samma urval ska kunna visas som:
+
+karta
+lista
+klumpvy
+detaljerad uppgiftslista
+
+Karta och lista ska dessutom kunna visas sida vid sida.
+
+Bekräftelse önskas: Finns detta med i den fortsatta utvecklingsplanen?
+
+⸻
+
+Inte byggt än
+
+Filter på alla metadatafält
+
+Kommentar och förtydligande
+
+Samtliga metadatafält ska vara sök- och filterbara på samma sätt som standardfälten.
+
+Detta är en förutsättning för framtida analyser och AI-stöd.
+
+Bekräftelse önskas: Kommer samtliga metadatafält att indexeras och kunna filtreras?
+
+⸻
+
+Avancerade operatorer samt sparade/delade filter
+
+Kommentar och förtydligande
+
+Filtermotorn bör stödja avancerade operatorer såsom:
+
+lika med
+inte lika med
+innehåller
+innehåller inte
+större än
+mindre än
+mellan
+har värde
+saknar värde
+OCH/ELLER-grupper
+
+Filter ska kunna:
+
+sparas
+namnges
+grupperas i bibliotek
+delas med andra användare
+exporteras
+återanvändas i olika vyer
+
+Bekräftelse önskas: Är detta den funktionalitet som planeras för den slutliga filtermotorn?
+
+⸻
+
+Sammanfattande begäran
+
+Jag önskar att utvecklarna för respektive punkt bekräftar:
+
+Vad som redan är implementerat.
+Vad som endast är delvis implementerat.
+Om implementationen överensstämmer med ovanstående arkitekturprinciper.
+Om någon del är planerad att lösas på ett annat sätt och i så fall varför.
+
+Detta säkerställer att uppgiftsnavet utvecklas som ett gemensamt nav för planering, produktion, analys, uppföljning och fakturering, i enlighet med Trivos övergripande motorarkitektur.

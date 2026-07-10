@@ -1,0 +1,371 @@
+Tillägg 2
+
+Här är ett strukturerat tillägg kopplat till punkt 2 – Uppgiftsnav, filter, tilldelning och team:
+
+⸻
+
+Tillägg och förtydliganden – Punkt 2: Uppgiftsnav, filter, tilldelning och team
+
+Övergripande kommentar
+
+Uppgiftsnavet ska betraktas som Trivos centrala arbetsvy för alla uppgifter, oavsett källa, status, geografi, tilldelning eller klumptillhörighet.
+
+Navet ska inte enbart vara ett planeringsverktyg, utan även ett analys-, urvals-, export- och kontrollverktyg.
+
+⸻
+
+Uppgiftsnavet som central lista
+
+Uppgiftsnavet ska innehålla samtliga uppgifter från alla uppgiftskällor.
+
+Varje uppgift ska kunna visas med:
+
+samtliga 94 datafält
+status
+tilldelning
+team
+utförare
+fordon
+utrustning
+kund
+objekt
+orderkoncept/snabborder
+artikelnummer
+tidstyp
+klumptillhörighet
+koppling till eventuell faktura/order
+
+På sikt ska även uppgifter skapade av Ruttoptimering Light, exempelvis resor, visas i navet som vanliga artikelbaserade uppgifter.
+
+Bekräftelse önskas: Kommer navet att visa samtliga uppgifter och samtliga relevanta datafält, inklusive klump- och ruttoptimeringsuppgifter?
+
+⸻
+
+Urval, summering och export
+
+Markering av urval ska inte enbart användas för tilldelning.
+
+Urvalet ska även kunna användas för:
+
+analys
+planering
+kontroll
+felsökning
+export
+uppföljning
+
+Summering ska minst kunna göras på:
+
+tid
+stopp
+objekt
+kunder
+artiklar
+orderkoncept
+klumpar
+utförare
+team
+
+Urvalet ska kunna exporteras till CSV.
+
+CSV-exporten ska kunna användas för vidare analys av uppgifter kopplade till kunder, objekt, beställningar, orderkoncept, snabbordrar och andra uppgiftskapare.
+
+Bekräftelse önskas: Kommer urval i navet att kunna exporteras i CSV-format med valbara kolumner?
+
+⸻
+
+Team, vecka och kapacitet
+
+Beskrivningen om val av team, vecka, ledig kapacitet och leveranstidsstöd är korrekt.
+
+Det behöver dock kompletteras med att teamet inte enbart är en fast grupp.
+
+Ett team ska kunna bestå av:
+
+teamleader
+medarbetare
+fordon
+utrustning
+
+Den bärande identiteten i teamet ska vara den person som definieras som teamleader. Övriga resurser väljs till eller från beroende på planering och faktisk bemanning.
+
+Systemet behöver därför hantera att teamets sammansättning kan variera mellan dagar och uppdrag.
+
+Bekräftelse önskas: Är teammodellen byggd så att teamleader är bärande identitet och övriga resurser kan variera?
+
+⸻
+
+To-do-lista för uppgifter utan geografi eller tid
+
+To-do-listan ska framför allt stödja utförarappen.
+
+Utföraren ska kunna se uppgifter som inte syns på karta, exempelvis uppgifter utan geografisk koppling.
+
+En uppgift kan sakna:
+
+geografisk position
+önskad leveranstid
+planerad tid
+
+Men en uppgift ska alltid ha:
+
+artikelnummer
+tidstyp
+
+Detta innebär att uppgifter utan karta fortfarande måste kunna planeras, tilldelas, utföras och följas upp.
+
+Bekräftelse önskas: Hanteras uppgifter utan geografi och/eller leveranstid fullt ut i både nav och utförarapp?
+
+⸻
+
+Produktionstid från artikel
+
+Beskrivningen är korrekt.
+
+Produktionstid ska beräknas från artikelns tidsverk och antal.
+
+Verklig tid ska därefter kunna komma från:
+
+start/slut på uppgift
+proportionell fördelning inom klump
+manuell justering av utförare eller administratör
+
+Detta ska fungera konsekvent oavsett om uppgiften är fristående eller del av en klump.
+
+⸻
+
+Ekonomi- och spårbarhetskedja
+
+Beskrivningen är korrekt.
+
+Systemet ska kunna spåra:
+
+projekt
+kostnadsställe
+team
+person
+fordon
+utrustning
+utförare
+order
+kund
+objekt
+
+Detta ska vara förberett för export till ekonomi, lön, statistik och fakturering.
+
+⸻
+
+Delvis byggt
+
+Filtermotorn
+
+Filtermotorn bör inte byggas separat i olika vyer.
+
+Den ska vara en gemensam motor som används av:
+
+uppgiftsnav
+karta
+veckoplan
+fakturering
+ekonomi
+statistik
+objektregister
+kundregister
+
+Filtermotorn ska kunna hantera:
+
+alla 94 datafält
+alla metadatafält
+status
+artikel
+artikelgrupp
+kund
+objekt
+orderkoncept
+snabborder
+team
+utförare
+fordon
+utrustning
+klump
+geografiskt område
+leveransfönster
+tidstyp
+faktureringsstatus
+
+Filter ska kunna sparas i ett filterbibliotek.
+
+Varje sparat filter ska kunna ha:
+
+namn
+beskrivning
+kategori
+ägare
+behörighet
+delning med andra användare
+eventuell standardvy
+
+Det ska också gå att filtrera vidare inom ett redan skapat filter.
+
+Bekräftelse önskas: Kommer filtermotorn att byggas som en gemensam motor för alla vyer, inte som separata filterlösningar?
+
+⸻
+
+Individuell avvikelse inom team
+
+Team planeras som en enhet, men systemet måste kunna hantera individuell avvikelse.
+
+Exempel:
+
+en person blir sjuk
+ett fordon byts ut
+utrustning saknas
+en medarbetare ersätts
+teamleader kvarstår men teamets sammansättning ändras
+
+Det ska finnas en samlad vy där planeraren ser hur teamets kapacitet påverkas när en individ eller resurs faller bort.
+
+Teamet ska alltså inte kollapsa bara för att en medarbetare saknas.
+
+Bekräftelse önskas: Finns stöd för individuell avvikelse inom teamet och dynamiskt byte av person, fordon och utrustning?
+
+⸻
+
+Tilläggsartiklar och fritextrader
+
+Tilläggsartiklar kan uppstå under utförandet av en uppgift eller klump.
+
+De måste kunna kopplas till rätt:
+
+uppgift
+klump
+kund
+order
+faktura
+
+Det viktigaste är att tilläggsartikeln eller fritextraden hamnar på rätt fakturaunderlag.
+
+Normalt kommer ett stopp bara avse en kund, men systemet måste ändå kunna hantera undantag där flera order eller fakturareferenser förekommer inom samma stopp.
+
+Bekräftelse önskas: Finns full koppling från tilläggsartikel/fritextrad till rätt order och fakturaunderlag?
+
+⸻
+
+Tidseditor och återkommande egentid
+
+Tidseditorn behöver utvecklas till en kalendereditor för egentid.
+
+Den ska kunna skapa återkommande uppgifter baserade på artiklar och tidstyper.
+
+Exempel:
+
+arbetstid
+nattvila
+helgvila
+lunch
+rast
+semester
+jour
+sjukfrånvaro
+
+Dessa ska vara artikelbaserade uppgifter i 168-timmarsmodellen.
+
+Kalendereditorn ska stödja repetition, exempelvis:
+
+dagligen
+veckovis
+vardagar
+specifika veckodagar
+datumintervall
+
+Bekräftelse önskas: Kommer tidseditorn att utvecklas till en full kalendereditor för återkommande egentidsuppgifter?
+
+⸻
+
+Karta och lista sida vid sida
+
+Uppgiftsnavet ska kunna visa samma urval både som:
+
+lista
+karta
+klumpar
+detaljerade enskilda uppgifter
+
+Användaren ska kunna växla mellan vyerna eller se karta och lista sida vid sida.
+
+Urvalet ska vara identiskt oavsett vy.
+
+⸻
+
+Inte byggt än
+
+Filter på alla metadatafält
+
+Detta är ett centralt krav.
+
+Alla metadatafält ska vara filterbara.
+
+Det gäller både standardfält och kund-/objektspecifika metadatafält.
+
+⸻
+
+Avancerade operatorer
+
+Filtermotorn ska stödja avancerade operatorer, exempelvis:
+
+är lika med
+är inte lika med
+innehåller
+innehåller inte
+börjar med
+större än
+mindre än
+mellan två värden
+saknar värde
+har värde
+inom geografiskt område
+inom datumintervall
+kombinationer med OCH/ELLER
+
+⸻
+
+Sparade och delade filter
+
+Filter ska kunna sparas och delas.
+
+Exempel:
+
+“Alla ej planerade uppgifter”
+“Alla uppgifter utan geografi”
+“Alla uppgifter med SLA-risk”
+“Alla uppgifter för kund X”
+“Alla uppgifter utan artikel”
+“Alla uppgifter klara för fakturering”
+“Alla klumpar denna vecka”
+
+Filter ska kunna grupperas i kategorier, exempelvis:
+
+Planering
+Produktion
+Fakturering
+Kvalitet
+Avvikelser
+Kunduppföljning
+Administration
+
+⸻
+
+Sammanfattande krav
+
+Jag önskar att utvecklarna bekräftar följande:
+
+Att uppgiftsnavet ska innehålla alla uppgifter från alla källor.
+Att samtliga 94 datafält och metadatafält ska kunna visas och filtreras.
+Att uppgifter från Ruttoptimering Light ska visas som vanliga artikelbaserade uppgifter.
+Att urval ska kunna exporteras till CSV.
+Att filtermotorn ska vara gemensam för alla vyer.
+Att filter ska kunna sparas, kategoriseras och delas.
+Att team ska kunna hantera individuell avvikelse och variabel bemanning.
+Att tilläggsartiklar och fritextrader ska kopplas till rätt order/faktura.
+Att tidseditorn ska utvecklas till en kalendereditor för återkommande egentid.
+Att samma urval ska kunna visas som lista, karta, klumpvy eller detaljerad uppgiftslista.
