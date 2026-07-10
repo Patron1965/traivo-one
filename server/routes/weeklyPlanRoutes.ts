@@ -37,6 +37,8 @@ import {
   generatePreTasksForWorkOrder,
   convertPersonalTimeToOrdered,
   DEFAULT_PLAN_ENGINE_CONFIG,
+  resolveTimeCategoryArticle,
+  computePersonalTaskCostFromArticle,
 } from "../planning/weeklyPlanEngine";
 import {
   getGrovplaneringGrid,
@@ -646,11 +648,20 @@ export function registerWeeklyPlanRoutes(app: Express) {
     const plan = await storage.getWeeklyPlan(tenantId, req.params.planId);
     if (!plan) throw new NotFoundError("Veckoplan");
     const data = parseBody(personalCreateSchema, req.body);
+    // Task #1235: gör blocket artikelbaserat om tenanten har en internal_time-
+    // artikel för denna tidskategori (timeCodeKey===timeCategory). Ingen matchande
+    // artikel ⇒ oförändrat fristående-block-beteende (back-compat).
+    const article = await resolveTimeCategoryArticle(tenantId, data.timeCategory);
     const created = await storage.createPersonalTask({
       ...data,
       tenantId,
       weeklyPlanId: plan.id,
       teamId: data.teamId ?? plan.teamId,
+      articleId: article?.id ?? null,
+      cachedCostOre:
+        article && data.durationMinutes != null
+          ? computePersonalTaskCostFromArticle(article, data.durationMinutes)
+          : null,
     });
     await recomputeWeeklyPlan(tenantId, plan.id);
     res.status(201).json(created);
@@ -661,7 +672,16 @@ export function registerWeeklyPlanRoutes(app: Express) {
     const existing = await storage.getPersonalTask(tenantId, req.params.id);
     if (!existing) throw new NotFoundError("Personligt block");
     const data = parseBody(personalPatchSchema, req.body);
-    const row = await storage.updatePersonalTask(tenantId, req.params.id, data);
+    // Task #1235: räkna om artikel-koppling/kostnad om kategori eller varaktighet ändras.
+    const patch: typeof data & { articleId?: string | null; cachedCostOre?: number | null } = { ...data };
+    if (data.timeCategory !== undefined || data.durationMinutes !== undefined) {
+      const category = data.timeCategory ?? existing.timeCategory;
+      const duration = data.durationMinutes !== undefined ? data.durationMinutes : existing.durationMinutes;
+      const article = await resolveTimeCategoryArticle(tenantId, category);
+      patch.articleId = article?.id ?? null;
+      patch.cachedCostOre = article && duration != null ? computePersonalTaskCostFromArticle(article, duration) : null;
+    }
+    const row = await storage.updatePersonalTask(tenantId, req.params.id, patch);
     if (existing.weeklyPlanId) await recomputeWeeklyPlan(tenantId, existing.weeklyPlanId);
     res.json(row);
   }));

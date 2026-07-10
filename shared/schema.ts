@@ -812,6 +812,19 @@ export const articles = pgTable("articles", {
   // som (produktion/ställtid/internt/egentid). Nullable/fri text (expand-contract, back-compat).
   // Fryses per uppgift vid orderkoncept-expansion (assignments/work_orders.frozenTimeCode).
   timeCodeKey: text("time_code_key"),
+  // Task #1235: artikelbaserad tid. articleType "restid" | "internal_time" gör att
+  // artikeln driver kostnad/tid för icke-produktionsuppgifter (resa, vila, lunch,
+  // semester, sjukdom, utbildning, administration, egen tid) via samma artikelflöde
+  // som produktionsuppgifter — i stället för hårdkodade motorkonstanter.
+  // "restid" (Motor 12): cost = öre/km, travelMinutesPerKm = minuter/km. Valfria
+  // urvalsvillkor (fordonstyp/vägtyp/hastighetsintervall) avgör bästa artikelmatch
+  // för en given resa; ingen matchning ⇒ motorn faller tillbaka på tenant-konfig.
+  // "internal_time": cost tolkas som öre/minut (arbetskraftskostnad för tidstypen).
+  travelVehicleTypes: text("travel_vehicle_types").array().default([]),
+  travelRoadTypes: text("travel_road_types").array().default([]),
+  travelMinSpeedKmh: real("travel_min_speed_kmh"),
+  travelMaxSpeedKmh: real("travel_max_speed_kmh"),
+  travelMinutesPerKm: real("travel_minutes_per_km"),
   // Task #942: Valfri ikon-referens till ikonregistret (icon_definitions.key).
   // Nullable/fri text för back-compat — pekar inte hårt på en FK.
   iconKey: text("icon_key"),
@@ -7605,11 +7618,20 @@ export const personalTasks = pgTable("personal_tasks", {
   // true = autogenererad av en regel (personal_task_schedules/source_rule).
   isGenerated: boolean("is_generated").default(false).notNull(),
   sourceRule: text("source_rule"),
+  // Task #1235: artikelkoppling. Icke-produktionstid (vila/lunch/semester/sjukdom/
+  // utbildning/administration/egen tid) blir en "riktig" artikelbaserad uppgift genom
+  // att peka på en articleType="internal_time"-artikel (matchad via timeCodeKey===
+  // timeCategory). cachedCostOre speglar work_orders.cachedCost-mönstret så kostnads-
+  // beräkning/lön/fakturering/statistik kan läsa samma fält oavsett uppgiftstyp.
+  // Nullable (expand-contract): saknad koppling = fristående tidspost som tidigare.
+  articleId: varchar("article_id").references(() => articles.id, { onDelete: "set null" }),
+  cachedCostOre: integer("cached_cost_ore"),
   metadata: jsonb("metadata").default({}),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 }, (table) => [
   index("idx_personal_tasks_tenant").on(table.tenantId),
+  index("idx_personal_tasks_article").on(table.articleId),
   index("idx_personal_tasks_plan").on(table.weeklyPlanId),
   index("idx_personal_tasks_team").on(table.teamId),
   index("idx_personal_tasks_plan_date").on(table.weeklyPlanId, table.plannedDate),
@@ -7682,6 +7704,11 @@ export const travelTimeEntries = pgTable("travel_time_entries", {
   // True = auto-genererad job→job-post (rebuildTravelEntriesForPlan). Manuella ad-hoc-poster
   // (false) rörs aldrig av omräkning/rebuild.
   isAuto: boolean("is_auto").default(false).notNull(),
+  // Task #1235 (Motor 12/restidsmotor): artikeln (articleType="restid") som drev
+  // travelMinutes/travelCost för denna resa via resolveTravelArticle() i
+  // weeklyPlanEngine.ts. Null = ingen matchande tenant-artikel — motorn föll tillbaka
+  // på legacy config.costPerKmOre + haversine/routing-tid (oförändrat beteende).
+  articleId: varchar("article_id").references(() => articles.id, { onDelete: "set null" }),
   // Framkalkylering (transparens, display-only): rå tid/källa + tillämpat hastighetstak,
   // restidsfaktor och vinterfaktor. Se applyTravelCorrection i weeklyPlanEngine.
   correction: jsonb("correction"),

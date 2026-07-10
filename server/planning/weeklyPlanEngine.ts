@@ -30,6 +30,7 @@ import type {
   InsertTravelTimeEntry,
   WeeklyPlanWarning,
   PreTask,
+  Article,
 } from "@shared/schema";
 
 // =============================================================================
@@ -131,6 +132,10 @@ export interface WeeklyPlanSummary {
   // Värden
   totalValue: number; // öre
   totalTravelCost: number; // öre
+  // Task #1235: summerad artikelbaserad kostnad för icke-produktionsblock (vila/lunch/
+  // semester/sjukdom/utbildning/administration/egen tid) via personalTasks.cachedCostOre.
+  // 0 för tenants utan internal_time-artiklar (back-compat).
+  totalPersonalCostOre: number;
   taskCount: number;
   // KPI
   contractedHours: number;
@@ -243,8 +248,10 @@ export function computeWeeklyPlanSummary(
   let totalRestNightMinutes = 0;
   let totalRestWeekendMinutes = 0;
   let totalOvertimeMinutes = 0;
+  let totalPersonalCostOre = 0;
   for (const pt of personalTasks) {
     const minutes = personalTaskMinutes(pt);
+    totalPersonalCostOre += pt.cachedCostOre ?? 0;
     switch (pt.timeCategory) {
       case "break_meal":
         totalBreakMinutes += minutes;
@@ -381,6 +388,7 @@ export function computeWeeklyPlanSummary(
     totalOvertimeMinutes,
     totalValue,
     totalTravelCost,
+    totalPersonalCostOre,
     taskCount: tasks.length,
     contractedHours,
     contractedMinutes: Math.round(contractedMinutes),
@@ -805,6 +813,88 @@ export async function resolveTravelEngineParams(
   };
 }
 
+/**
+ * Task #1235 (Motor 12): väljer bästa "restid"-artikel för en resa. Filtrerar på
+ * tenant + articleType="restid" (soft-delete/arkiv hanteras av getArticles).
+ * Bland kandidater som matchar (eller saknar) fordonstyp/hastighetsintervall väljs
+ * den mest SPECIFIKA matchningen (flest satta urvalsvillkor som stämmer) — en
+ * artikel utan villkor fungerar som tenant-fallback. Ingen "restid"-artikel alls
+ * ⇒ null (motorn faller tillbaka på legacy config.costPerKmOre/haversine-tid).
+ */
+export async function resolveTravelArticle(
+  tenantId: string,
+  opts: { vehicleType?: string | null; avgSpeedKmh?: number | null } = {},
+): Promise<Article | null> {
+  const all = await storage.getArticles(tenantId);
+  const candidates = all.filter((a) => a.articleType === "restid" && a.travelMinutesPerKm != null);
+  if (candidates.length === 0) return null;
+
+  let best: Article | null = null;
+  let bestScore = -1;
+  for (const a of candidates) {
+    let score = 0;
+    if (a.travelVehicleTypes && a.travelVehicleTypes.length > 0) {
+      if (!opts.vehicleType || !a.travelVehicleTypes.includes(opts.vehicleType)) continue;
+      score += 2;
+    }
+    if (a.travelMinSpeedKmh != null || a.travelMaxSpeedKmh != null) {
+      const speed = opts.avgSpeedKmh;
+      if (speed == null) continue;
+      if (a.travelMinSpeedKmh != null && speed < a.travelMinSpeedKmh) continue;
+      if (a.travelMaxSpeedKmh != null && speed > a.travelMaxSpeedKmh) continue;
+      score += 1;
+    }
+    if (score >= bestScore) {
+      bestScore = score;
+      best = a;
+    }
+  }
+  return best;
+}
+
+/**
+ * Task #1235: framkalkylerar en resa via en "restid"-artikel (öre/km + minuter/km).
+ * Görs ENDAST om en matchande tenant-artikel finns — annars null och anroparen
+ * faller tillbaka på legacy hastighetstak/faktor-kedjan (back-compat).
+ */
+export function computeTravelFromArticle(
+  article: Article,
+  distanceKm: number,
+): { minutes: number; costOre: number } | null {
+  if (article.travelMinutesPerKm == null) return null;
+  const minutes = Math.round(distanceKm * article.travelMinutesPerKm);
+  const costOre = Math.round(distanceKm * (article.cost ?? 0));
+  return { minutes, costOre };
+}
+
+/**
+ * Task #1235: väljer artikeln (articleType="internal_time") som gör en icke-
+ * produktionstidskategori (vila/lunch/semester/sjukdom/utbildning/administration/
+ * egen tid) till en artikelbaserad uppgift. Matchas via articles.timeCodeKey ===
+ * personalTasks.timeCategory (samma koppling som produktionsartiklar använder mot
+ * time_code_definitions.key). Ingen matchande artikel ⇒ null (fristående tidspost,
+ * som tidigare — expand-contract, kräver ingen admin-migrering av befintliga tenants).
+ */
+export async function resolveTimeCategoryArticle(
+  tenantId: string,
+  timeCategory: string,
+): Promise<Article | null> {
+  const all = await storage.getArticles(tenantId);
+  const match = all.find((a) => a.articleType === "internal_time" && a.timeCodeKey === timeCategory);
+  return match ?? null;
+}
+
+/**
+ * Task #1235: kostnad (öre) för ett personligt block via dess artikel. cost på en
+ * internal_time-artikel tolkas som öre/minut (arbetskraftskostnad för tidstypen).
+ */
+export function computePersonalTaskCostFromArticle(
+  article: Article,
+  durationMinutes: number,
+): number {
+  return Math.round(durationMinutes * (article.cost ?? 0));
+}
+
 /** mm-dd ur ett datum (sträng "YYYY-MM-DD" eller Date). */
 function toMmDd(d: string | Date): string {
   if (typeof d === "string") return d.slice(5, 10);
@@ -1040,16 +1130,43 @@ export async function recomputeTravelForPlan(
       ? entry.timeCategory
       : autoCategory.get(entry.id) ?? entry.timeCategory ?? null;
 
-    const { minutes, correction } = applyTravelCorrection(
-      raw.durationMin,
-      raw.distanceKm,
-      raw.source,
-      resolvedParams,
-      entry.plannedDate ?? null,
-      effectiveCategory,
-    );
+    // Task #1235 (Motor 12): en tenant-artikel (articleType="restid") driver hellre
+    // tid/kostnad än de generiska hastighetstak/faktor-konstanterna. Ingen matchande
+    // artikel ⇒ oförändrat legacy-beteende (back-compat).
+    const avgSpeedKmh = raw.durationMin > 0 ? raw.distanceKm / (raw.durationMin / 60) : 0;
+    const travelArticle = await resolveTravelArticle(tenantId, { avgSpeedKmh });
+    const articleResult = travelArticle ? computeTravelFromArticle(travelArticle, raw.distanceKm) : null;
 
-    const travelCost = Math.round(raw.distanceKm * config.costPerKmOre);
+    let minutes: number;
+    let correction: TravelCorrection;
+    let travelCost: number;
+    if (articleResult) {
+      minutes = articleResult.minutes;
+      travelCost = articleResult.costOre;
+      correction = {
+        rawMinutes: Math.round(raw.durationMin),
+        rawSource: raw.source,
+        distanceKm: round2(raw.distanceKm),
+        avgSpeedKmh: round2(avgSpeedKmh),
+        appliedSpeedCapKmh: null,
+        travelTimeFactor: 1,
+        winterFactor: 1,
+        winterApplied: false,
+        computedAt: new Date().toISOString(),
+      };
+    } else {
+      const legacy = applyTravelCorrection(
+        raw.durationMin,
+        raw.distanceKm,
+        raw.source,
+        resolvedParams,
+        entry.plannedDate ?? null,
+        effectiveCategory,
+      );
+      minutes = legacy.minutes;
+      correction = legacy.correction;
+      travelCost = Math.round(raw.distanceKm * config.costPerKmOre);
+    }
     totalKm += raw.distanceKm;
     totalCostOre += travelCost;
 
@@ -1064,6 +1181,7 @@ export async function recomputeTravelForPlan(
       source: raw.source,
       correction,
       isCommute: effectiveCategory === "travel_commute",
+      articleId: travelArticle?.id ?? null,
     };
     // Skriv aldrig över en manuellt satt tidskod.
     if (!entry.timeCategoryManual) {
@@ -1166,6 +1284,7 @@ export async function recomputeWeeklyPlan(
         within168h: summary.within168h,
         overContracted: summary.overContracted,
         estimatedKm: summary.estimatedKm,
+        totalPersonalCostOre: summary.totalPersonalCostOre,
         estimatedCo2Kg: summary.estimatedCo2Kg,
         totalRestNightMinutes: summary.totalRestNightMinutes,
         totalRestWeekendMinutes: summary.totalRestWeekendMinutes,
