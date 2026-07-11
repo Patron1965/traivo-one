@@ -1,7 +1,7 @@
 import type { Express } from "express";
 import { z } from "zod";
 import { asyncHandler } from "../asyncHandler";
-import { getTenantIdWithFallback } from "../tenant-middleware";
+import { getTenantIdWithFallback, requirePlanner } from "../tenant-middleware";
 import { AppError, ValidationError } from "../errors";
 import { isAuthenticated } from "../replit_integrations/auth";
 import { storage } from "../storage";
@@ -159,7 +159,7 @@ async function buildOptimizationPayload(
 }
 
 export async function registerOptimizationRoutes(app: Express) {
-  app.post("/api/optimization/jobs", isAuthenticated, asyncHandler(async (req, res) => {
+  app.post("/api/optimization/jobs", requirePlanner, asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
 
     let stops: OptimizationStop[];
@@ -314,7 +314,7 @@ export async function registerOptimizationRoutes(app: Express) {
     res.json(job.result);
   }));
 
-  app.post("/api/optimization/apply/:id", isAuthenticated, asyncHandler(async (req, res) => {
+  app.post("/api/optimization/apply/:id", requirePlanner, asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const job = await getOptimizationJob(req.params.id, tenantId);
 

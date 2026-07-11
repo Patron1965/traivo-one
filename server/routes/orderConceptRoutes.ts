@@ -5,7 +5,7 @@ import { db } from "../db";
 import { eq, sql, desc, and, gte, isNull, inArray } from "drizzle-orm";
 import { z } from "zod";
 import { formatZodError, verifyTenantOwnership, DEFAULT_TENANT_ID } from "./helpers";
-import { getTenantIdWithFallback } from "../tenant-middleware";
+import { getTenantIdWithFallback, requirePlanner } from "../tenant-middleware";
 import { asyncHandler } from "../asyncHandler";
 import { NotFoundError, ValidationError, ForbiddenError } from "../errors";
 import { objects, workOrders, customerCommunications, orderConceptArticles, orderConceptObjects, articleObjectMappings, conceptFilters, priceLists, deliverySchedules, assignments as assignmentsTable, articles, type InsertOrderConceptArticle } from "@shared/schema";
@@ -1553,7 +1553,7 @@ app.delete("/api/assignments/:assignmentId/articles/:articleId", asyncHandler(as
 // CUSTOMER NOTIFICATIONS - E-post notifieringar till kunder
 // ============================================
 
-app.post("/api/notifications/send", asyncHandler(async (req, res) => {
+app.post("/api/notifications/send", requirePlanner, asyncHandler(async (req, res) => {
     const { sendCustomerNotification } = await import("../customer-notifications");
     const tenantId = getTenantIdWithFallback(req);
     const { workOrderId, notificationType, estimatedArrivalMinutes, customMessage } = req.body;
@@ -1586,7 +1586,7 @@ app.post("/api/notifications/send", asyncHandler(async (req, res) => {
     });
 }));
 
-app.post("/api/notifications/technician-on-way/:workOrderId", asyncHandler(async (req, res) => {
+app.post("/api/notifications/technician-on-way/:workOrderId", requirePlanner, asyncHandler(async (req, res) => {
     const { notifyTechnicianOnWay } = await import("../customer-notifications");
     const tenantId = getTenantIdWithFallback(req);
     const { workOrderId } = req.params;
@@ -1610,7 +1610,7 @@ app.post("/api/notifications/technician-on-way/:workOrderId", asyncHandler(async
     });
 }));
 
-app.post("/api/notifications/job-completed/:workOrderId", asyncHandler(async (req, res) => {
+app.post("/api/notifications/job-completed/:workOrderId", requirePlanner, asyncHandler(async (req, res) => {
     const { notifyJobCompleted } = await import("../customer-notifications");
     const tenantId = getTenantIdWithFallback(req);
     const { workOrderId } = req.params;
@@ -1630,7 +1630,7 @@ app.post("/api/notifications/job-completed/:workOrderId", asyncHandler(async (re
     });
 }));
 
-app.post("/api/notifications/send-schedule/:resourceId", asyncHandler(async (req, res) => {
+app.post("/api/notifications/send-schedule/:resourceId", requirePlanner, asyncHandler(async (req, res) => {
     const { sendScheduleToResource } = await import("../customer-notifications");
     const tenantId = getTenantIdWithFallback(req);
     const { resourceId } = req.params;

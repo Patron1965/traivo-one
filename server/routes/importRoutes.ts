@@ -461,7 +461,7 @@ app.post("/api/import/resources", upload.single("file"), asyncHandler(async (req
     res.json({ imported: imported.length, errors });
 }));
 
-app.post("/api/import/objects", upload.single("file"), asyncHandler(async (req, res) => {
+app.post("/api/import/objects", requireAdmin, upload.single("file"), asyncHandler(async (req, res) => {
     if (!req.file) {
       throw new ValidationError("Ingen fil uppladdad");
     }
@@ -6818,7 +6818,7 @@ app.post("/api/import/customer-fastighetslista/diff", asyncHandler(async (req, r
 }));
 
 // POST /commit — skapa nya, uppdatera ändrade, flagga saknade
-app.post("/api/import/customer-fastighetslista/commit", asyncHandler(async (req, res) => {
+app.post("/api/import/customer-fastighetslista/commit", requireAdmin, asyncHandler(async (req, res) => {
   const tenantId = getTenantIdWithFallback(req);
   const userId = (req as any).user?.id || (req as any).user?.claims?.sub || null;
   const {
