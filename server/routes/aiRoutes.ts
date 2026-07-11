@@ -2038,18 +2038,39 @@ app.post("/api/notifications/token", isAuthenticated, asyncHandler(async (req: a
     }
     
     // Verify resource belongs to the same tenant
-    // In production, you might also verify that the authenticated user
-    // is allowed to access this specific resource
     const tenantId = getTenantIdWithFallback(req);
     if (resource.tenantId !== tenantId) {
       console.log(`[notifications] Token request denied: resource ${resourceId} belongs to different tenant`);
       throw new ForbiddenError("Ej behörig att komma åt denna resurs");
     }
+
+    // Enforce resource-level authorization: callers must either have a
+    // planner-grade role (owner/admin/planner) or be the authenticated user
+    // whose account is linked to the requested resource.  A plain tenant
+    // member (technician/user/viewer) may only obtain a token for their own
+    // linked resource — never for another person's resource.
+    const callerRole: string | undefined = req.tenantRole;
+    const plannerRoles = ["owner", "admin", "planner"];
+    const isPlanner = callerRole && plannerRoles.includes(callerRole);
+
+    if (!isPlanner) {
+      const callerId: string | undefined = req.user?.claims?.sub;
+      const resourceLinkedUserId: string | null | undefined = resource.userId;
+      const isOwnResource =
+        callerId && resourceLinkedUserId && callerId === resourceLinkedUserId;
+
+      if (!isOwnResource) {
+        console.log(
+          `[notifications] Token request denied: user ${callerId ?? "unknown"} (role=${callerRole}) attempted to mint token for resource ${resourceId} owned by user ${resourceLinkedUserId ?? "none"}`
+        );
+        throw new ForbiddenError("Ej behörig att hämta token för denna resurs");
+      }
+    }
     
     // Generate token for this resource
     const token = notificationService.generateAuthToken(resourceId, tenantId);
     
-    console.log(`[notifications] Token generated for resource ${resourceId} by user ${req.user?.claims?.sub || "unknown"}`);
+    console.log(`[notifications] Token generated for resource ${resourceId} by user ${req.user?.claims?.sub || "unknown"} (role=${callerRole})`);
     
     res.json({ 
       token,

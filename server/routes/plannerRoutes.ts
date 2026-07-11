@@ -1173,7 +1173,7 @@ app.get("/api/resources/:id/positions", asyncHandler(async (req, res) => {
     res.json(positions);
 }));
 
-app.post("/api/planning/what-if", requireTenantWithFallback, asyncHandler(async (req: any, res) => {
+app.post("/api/planning/what-if", requireTenantWithFallback, requirePlannerAccess, asyncHandler(async (req: any, res) => {
     const tenantId = getTenantIdWithFallback(req);
 
     const schema = z.object({
@@ -1350,7 +1350,7 @@ app.post("/api/planning/what-if", requireTenantWithFallback, asyncHandler(async 
     });
 }));
 
-app.get("/api/planning/constraints", requireTenantWithFallback, asyncHandler(async (req: any, res) => {
+app.get("/api/planning/constraints", requireTenantWithFallback, requirePlannerAccess, asyncHandler(async (req: any, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const weekStart = req.query.weekStart as string;
     if (!weekStart || !/^\d{4}-\d{2}-\d{2}$/.test(weekStart)) {
@@ -1531,7 +1531,7 @@ app.get("/api/planning/constraints", requireTenantWithFallback, asyncHandler(asy
     res.json({ cells, weekStart, dates });
 }));
 
-app.get("/api/planning/heatmap", requireTenantWithFallback, asyncHandler(async (req, res) => {
+app.get("/api/planning/heatmap", requireTenantWithFallback, requirePlannerAccess, asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const weeksParam = parseInt(req.query.weeks as string) || 2;
     const weeks = Math.min(Math.max(weeksParam, 1), 8);
