@@ -1501,6 +1501,10 @@ export const teamMembers = pgTable("team_members", {
   validFrom: timestamp("valid_from"),
   validTo: timestamp("valid_to"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
+  // NULL = inbjudan väntar på svar; icke-NULL = inbjudan accepterad (eller
+  // direkt aktiv, t.ex. teamledaren). Används för att skilja pendande inbjudningar
+  // från bekräftade medlemskap (deviationsdata kräver accepterat medlemskap).
+  acceptedAt: timestamp("accepted_at"),
 });
 
 // Planeringsparametrar per objekt (SLA, tidsfönster, etc.)

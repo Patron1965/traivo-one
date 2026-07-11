@@ -6274,7 +6274,7 @@ export class DatabaseStorage implements IStorage {
       db.select({ resourceId: teamMembers.resourceId, resourceName: resources.name })
         .from(teamMembers)
         .innerJoin(resources, eq(teamMembers.resourceId, resources.id))
-        .where(eq(teamMembers.teamId, teamId)),
+        .where(and(eq(teamMembers.teamId, teamId), isNotNull(teamMembers.acceptedAt))),
       db.select({
         id: workOrders.id,
         resourceId: workOrders.resourceId,

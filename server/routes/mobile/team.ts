@@ -1,4 +1,5 @@
 import type { Express, NextFunction, Response } from "express";
+import { isNotNull } from "drizzle-orm";
 import {
   MobileAuthenticatedRequest,
   storage, db, eq, and, inArray, z,
@@ -69,6 +70,7 @@ const createTeamHandler = asyncHandler(async (req: MobileAuthenticatedRequest, r
     teamId,
     resourceId,
     role: "ledare",
+    acceptedAt: new Date(),
   });
 
   res.json({ success: true, teamId });
@@ -99,9 +101,9 @@ const inviteHandler = asyncHandler(async (req: MobileAuthenticatedRequest, res: 
     teamId,
     resourceId: parsed.data.resourceId,
     role: "medlem",
+    acceptedAt: null,
   });
   notificationService.notifyTeamInvite(teamId, parsed.data.resourceId);
-  notificationService.notifyTeamMemberJoined(teamId, parsed.data.resourceId);
   res.json({ success: true });
 });
 
@@ -111,6 +113,9 @@ const acceptHandler = asyncHandler(async (req: MobileAuthenticatedRequest, res: 
   const existing = await db.select().from(teamMembers)
     .where(and(eq(teamMembers.teamId, teamId), eq(teamMembers.resourceId, resourceId)));
   if (existing.length === 0) throw new NotFoundError("Ingen inbjudan hittad");
+  await db.update(teamMembers)
+    .set({ acceptedAt: new Date() })
+    .where(and(eq(teamMembers.teamId, teamId), eq(teamMembers.resourceId, resourceId)));
   notificationService.notifyTeamMemberJoined(teamId, resourceId);
   res.json({ success: true });
 });
@@ -170,9 +175,11 @@ const myTeamDeviationsHandler = asyncHandler(async (req: MobileAuthenticatedRequ
     throw new ValidationError(formatted.error, formatted.details);
   }
 
-  const membership = await db.select().from(teamMembers).where(eq(teamMembers.resourceId, resourceId));
   const teamId = req.params.teamId;
-  if (!membership.some((m) => m.teamId === teamId)) {
+  const membership = await db.select().from(teamMembers).where(
+    and(eq(teamMembers.resourceId, resourceId), eq(teamMembers.teamId, teamId), isNotNull(teamMembers.acceptedAt))
+  );
+  if (membership.length === 0) {
     throw new ForbiddenError("Du tillhör inte detta team");
   }
 

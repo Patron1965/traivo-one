@@ -464,12 +464,26 @@ app.patch("/api/mobile/orders/:id/status", isMobileAuthenticated, asyncHandler(a
         updateData.completedVehicleRegNo = bodyVehicleRegNo || null;
       }
       if (bodyParticipantIds !== undefined) {
-        const participantIds = Array.isArray(bodyParticipantIds)
+        const rawIds = Array.isArray(bodyParticipantIds)
           ? bodyParticipantIds.filter((id: unknown): id is string => typeof id === "string" && id.length > 0)
           : [];
-        // Fall tillbaka på den utförande resursen om inga deltagare skickades.
-        updateData.completedParticipantIds = participantIds.length > 0
-          ? participantIds
+        // Säkerhetskontroll: tillåt bara deltagare som är bekräftade medlemmar i
+        // orderns team, plus den inloggade resursen själv. Förhindrar att fältpersonal
+        // tillverkar attributioner till kollegor för Fortnox-export.
+        let allowedParticipantIds: Set<string> = new Set(resourceId ? [resourceId] : []);
+        if (rawIds.length > 0 && order.teamId) {
+          const { teamMembers: teamMembersTable } = await import("@shared/schema");
+          const { isNotNull: isNotNullFn } = await import("drizzle-orm");
+          const acceptedMembers = await db
+            .select({ resourceId: teamMembersTable.resourceId })
+            .from(teamMembersTable)
+            .where(and(eq(teamMembersTable.teamId, order.teamId), isNotNullFn(teamMembersTable.acceptedAt)));
+          for (const m of acceptedMembers) allowedParticipantIds.add(m.resourceId);
+        }
+        const validatedIds = rawIds.filter(id => allowedParticipantIds.has(id));
+        // Fall tillbaka på den utförande resursen om inga giltiga deltagare skickades.
+        updateData.completedParticipantIds = validatedIds.length > 0
+          ? validatedIds
           : (resourceId ? [resourceId] : null);
       } else if (resourceId) {
         // Ingen deltagarlista skickad: registrera åtminstone den inloggade utföraren.
