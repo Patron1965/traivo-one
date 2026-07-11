@@ -236,8 +236,8 @@ export function ObjectHeaderPanel({
 
   type Slot = { key: string; label: string; value: string | null; inheritedFrom?: string | null };
   const slots: Slot[] = [];
-  if (qfc && qfc.source.level !== "none") {
-    for (const f of qfc.fields) {
+  if (qfc?.source?.level && qfc.source.level !== "none") {
+    for (const f of qfc.fields ?? []) {
       const entry = entryByKatalog.get(f.katalogId);
       const label = f.visningsnamn || f.namn || entry?.katalog?.visningsnamn || entry?.katalog?.namn || defLabel(f.katalogId) || "Fält";
       const inheritedFrom = entry?.source === "inherited"
@@ -308,7 +308,7 @@ export function ObjectHeaderPanel({
                 ))}
               </div>
               <div className="flex items-center gap-1.5 shrink-0">
-                {qfc?.source.level === "objectType" && (
+                {qfc?.source?.level === "objectType" && (
                   <Badge
                     variant="outline"
                     className="text-[10px] px-1.5 py-0 font-normal"
@@ -318,7 +318,7 @@ export function ObjectHeaderPanel({
                     Objekttyp-standard
                   </Badge>
                 )}
-                {qfc?.source.level === "object" && !qfc.hasOwnOverride && (
+                {qfc?.source?.level === "object" && !qfc.hasOwnOverride && (
                   <Badge
                     variant="outline"
                     className="text-[10px] px-1.5 py-0 font-normal"
@@ -570,8 +570,8 @@ function HeaderQuickFieldEditor({
   );
 
   const inheritLabel =
-    qfc?.source.level === "objectType" ? "Ärver just nu standarden för objekttypen."
-    : qfc?.source.level === "object" && !qfc.hasOwnOverride ? "Ärver just nu snabbfält från ett överordnat objekt."
+    qfc?.source?.level === "objectType" ? "Ärver just nu standarden för objekttypen."
+    : qfc?.source?.level === "object" && !qfc.hasOwnOverride ? "Ärver just nu snabbfält från ett överordnat objekt."
     : qfc?.hasOwnOverride ? "Detta objekt har egna snabbfält."
     : "Inga snabbfält är valda ännu.";
 

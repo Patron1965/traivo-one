@@ -217,8 +217,22 @@ export function ObjectSystemGeneratedPanel({ objectId }: Props) {
     );
   }
 
-  const { address, position, propertyOwner, pointedInConcepts, tasksHistory, tasksFuture, unperformedTasks = [], images, issueReports, ratings } = data;
-  const hasAddress = !!(address.gatuadress || address.postnummer || address.ort);
+  // Defensivt: defaulta alla list-/objektfält så en avvikande API-payload
+  // (t.ex. äldre serverversion) inte kraschar hela panelen med
+  // "Cannot read properties of undefined".
+  const {
+    address = {} as SystemGeneratedMetadata["address"],
+    position = { geocoded: false } as SystemGeneratedMetadata["position"],
+    propertyOwner,
+    pointedInConcepts = [],
+    tasksHistory = [],
+    tasksFuture = [],
+    unperformedTasks = [],
+    images = [],
+    issueReports = [],
+    ratings = [],
+  } = data;
+  const hasAddress = !!(address?.gatuadress || address?.postnummer || address?.ort);
 
   return (
     <div className="space-y-2" data-testid="panel-system-generated">

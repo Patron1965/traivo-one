@@ -49,8 +49,6 @@ export interface ObjectMetadataBodyProps {
   onAnonymize?: (katalogId: string) => void;
   anonymizePending?: boolean;
   renderHistoryButton?: (entry: MetadataFormEntry) => ReactNode;
-  legacyEntries: MetadataFormEntry[];
-  onEditLegacyField: (group: string) => void;
   objectAssignments: AssignmentItem[];
   navigate: (path: string) => void;
 }
@@ -91,8 +89,6 @@ export function ObjectMetadataBody({
   onAnonymize,
   anonymizePending,
   renderHistoryButton,
-  legacyEntries,
-  onEditLegacyField,
   objectAssignments,
   navigate,
 }: ObjectMetadataBodyProps) {
@@ -154,7 +150,6 @@ export function ObjectMetadataBody({
       anonymizePending={anonymizePending}
       onPreviewImage={setPreviewUrl}
       renderHistoryButton={renderHistoryButton}
-      onEditLegacyField={onEditLegacyField}
     />
   );
 
@@ -248,7 +243,7 @@ export function ObjectMetadataBody({
           </div>
         </div>
 
-        {groups.length === 0 && legacyEntries.length === 0 && (
+        {groups.length === 0 && (
           <Card>
             <CardContent className="py-8 text-center text-sm text-muted-foreground" data-testid="empty-object-metadata">
               Inga metadatafält ännu. Lägg till ett fält för att komma igång.
@@ -277,19 +272,6 @@ export function ObjectMetadataBody({
             </div>
           </section>
         ))}
-
-        {!filterActive && legacyEntries.length > 0 && (
-          <section
-            id="meta-area-legacy"
-            className="scroll-mt-24 space-y-3"
-            data-testid="section-meta-area-legacy"
-          >
-            <AreaHeading label="Objektfält (under migrering)" count={legacyEntries.length} />
-            <div className="grid gap-3 sm:grid-cols-2">
-              {legacyEntries.map(renderField)}
-            </div>
-          </section>
-        )}
 
         {!filterActive && (
         <>

@@ -6,6 +6,7 @@ import { memoryLocation } from "wouter/memory-location";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { LanguageProvider } from "@/hooks/use-language";
 import ObjectDetailPage from "@/pages/ObjectDetailPage";
+import { ObjectMetadataBody } from "@/components/objects/ObjectMetadataBody";
 import { getQueryFn } from "@/lib/queryClient";
 
 // Task #1134: e2e/runTest-rökning av den nya en-sidiga Objektöversikten (#1128)
@@ -185,35 +186,37 @@ describe("ObjectDetailPage — översikt: navigering & sektioner", () => {
     cleanup();
   });
 
+  // Objektvyn är omstrukturerad (Etapp 5) till en snabbmeny
+  // ("object-detail-quicknav") och tre ankarsektioner: huvud, metadata och
+  // linked-tasks. De gamla testerna mot sticky-nav/deep-tools/"Objektfält
+  // (under migrering)" är ersatta nedan — de ytorna finns inte längre.
   async function mountAndWaitForNav(path = `/objects/${OBJECT_ID}`) {
     installFetchMock(makeResolvedObject());
     const utils = renderObjectDetail(path);
     await waitFor(() => {
-      expect(utils.queryByTestId("object-detail-section-nav")).toBeTruthy();
+      expect(utils.queryByTestId("object-detail-quicknav")).toBeTruthy();
     });
     return utils;
   }
 
-  it("renderar snabbnavigeringen som en sticky topbar", async () => {
-    const { getByTestId } = await mountAndWaitForNav();
-    const nav = getByTestId("object-detail-section-nav");
-    expect(nav.className).toContain("sticky");
-    expect(nav.className).toContain("top-0");
+  it("renderar snabbmenyn och de tre ankarsektionerna", async () => {
+    await mountAndWaitForNav();
+    for (const id of [
+      "object-section-huvud",
+      "object-section-metadata",
+      "object-section-linked-tasks",
+    ]) {
+      expect(document.getElementById(id), `${id} saknas i DOM`).toBeTruthy();
+    }
   });
 
-  it("varje jump-nav-knapp scrollar till motsvarande sektion", async () => {
+  it("varje snabbmeny-knapp scrollar till motsvarande sektion", async () => {
     const { getByTestId } = await mountAndWaitForNav();
     const scroll = installScrollSpy();
 
     const navToSection: Array<[string, string]> = [
-      ["nav-overview", "object-section-overview"],
-      ["nav-hierarchy", "object-section-hierarchy"],
       ["nav-metadata", "object-section-metadata"],
-      ["nav-location", "object-section-location"],
-      ["nav-contacts", "object-section-contacts"],
-      ["nav-images", "object-section-images"],
-      ["nav-info-packages", "object-section-info-packages"],
-      ["nav-restrictions", "object-section-restrictions"],
+      ["nav-linked-tasks", "object-section-linked-tasks"],
     ];
 
     for (const [navId, sectionId] of navToSection) {
@@ -224,84 +227,91 @@ describe("ObjectDetailPage — översikt: navigering & sektioner", () => {
     }
   });
 
-  it("header-pennan (button-edit-parent) scrollar till hierarki-sektionen", async () => {
+  it("header-pennan (button-edit-parent) scrollar till huvud-sektionen (hierarki)", async () => {
     const { getByTestId } = await mountAndWaitForNav();
     const scroll = installScrollSpy();
+    // scrollToSection("hierarchy") mappas via TAB_TO_SECTION till "huvud".
     fireEvent.click(getByTestId("button-edit-parent"));
-    expect(scroll.lastScrolledId()).toBe("object-section-hierarchy");
+    expect(scroll.lastScrolledId()).toBe("object-section-huvud");
   });
 
-  it("'Avancerat'-navknappen öppnar deep-tools-collapsiblen och scrollar dit", async () => {
-    const { getByTestId } = await mountAndWaitForNav();
-    const scroll = installScrollSpy();
-
-    // Collapsiblen är stängd från början → innehåll dolt.
-    const toggle = getByTestId("button-toggle-deep-tools");
-    expect(toggle.getAttribute("data-state")).toBe("closed");
-
-    fireEvent.click(getByTestId("nav-deep-tools"));
-
-    await waitFor(() => {
-      expect(getByTestId("button-toggle-deep-tools").getAttribute("data-state")).toBe("open");
-    });
-    await waitFor(() => {
-      expect(scroll.lastScrolledId()).toBe("object-section-deep-tools");
-    });
-  });
-
-  it("?tab=ekonomi-djuplänk öppnar deep-tools automatiskt efter att objektet laddats", async () => {
+  it("bakåtkompatibel ?tab=ekonomi-djuplänk scrollar till huvud-sektionen", async () => {
     installFetchMock(makeResolvedObject());
     // ?tab-effekten läser window.location.search direkt (inte wouters
     // memory-location), så jsdom-URL:en måste sättas innan montering.
     window.history.replaceState(null, "", `/objects/${OBJECT_ID}?tab=ekonomi`);
-    const { queryByTestId, getByTestId } = renderObjectDetail(
-      `/objects/${OBJECT_ID}?tab=ekonomi`,
-    );
+    const scroll = installScrollSpy();
+    const { queryByTestId } = renderObjectDetail(`/objects/${OBJECT_ID}?tab=ekonomi`);
     await waitFor(() => {
-      expect(queryByTestId("object-detail-section-nav")).toBeTruthy();
+      expect(queryByTestId("object-detail-quicknav")).toBeTruthy();
     });
     await waitFor(() => {
-      expect(getByTestId("button-toggle-deep-tools").getAttribute("data-state")).toBe("open");
+      expect(scroll.lastScrolledId()).toBe("object-section-huvud");
     });
   });
 
-  it("renderar alltid sektions-wrappern för 'Objektfält (under migrering)' även utan värden", async () => {
-    await mountAndWaitForNav();
-    // Wrappern renderas alltid (även när kortet är tomt) så gamla ?tab=-djuplänkar
-    // hittar ett ankare; själva kortet visas bara när minst ett värde finns.
-    expect(document.getElementById("object-section-object-fields")).toBeTruthy();
-    expect(document.querySelector('[data-testid="card-object-fields"]')).toBeNull();
-  });
-
-  it("visar inte 'Objektfält'-kortet när accessType är default 'open' utan andra värden", async () => {
-    // accessType har DB-default "open" — det får INTE räknas som ett riktigt värde,
-    // annars fabriceras "Tillgångstyp: Öppet" på nästan alla objekt (exakt det PO
-    // ville bort från). Kortet ska förbli dolt när inga andra hårdkodade fält finns.
-    installFetchMock(makeResolvedObject({ accessType: "open" }));
-    const { queryByTestId } = renderObjectDetail(`/objects/${OBJECT_ID}`);
-    await waitFor(() => {
-      expect(queryByTestId("object-detail-section-nav")).toBeTruthy();
-    });
-    expect(document.querySelector('[data-testid="card-object-fields"]')).toBeNull();
-  });
-
-  it("bakåtkompatibel ?tab=access-djuplänk scrollar till 'Objektfält (under migrering)'", async () => {
+  it("bakåtkompatibel ?tab=access-djuplänk scrollar till metadata-sektionen", async () => {
     installFetchMock(makeResolvedObject());
     // ?tab-effekten läser window.location.search direkt; sätt jsdom-URL:en före montering.
     window.history.replaceState(null, "", `/objects/${OBJECT_ID}?tab=access`);
     const scroll = installScrollSpy();
     const { queryByTestId } = renderObjectDetail(`/objects/${OBJECT_ID}?tab=access`);
     await waitFor(() => {
-      expect(queryByTestId("object-detail-section-nav")).toBeTruthy();
+      expect(queryByTestId("object-detail-quicknav")).toBeTruthy();
     });
     await waitFor(() => {
-      expect(scroll.lastScrolledId()).toBe("object-section-object-fields");
+      expect(scroll.lastScrolledId()).toBe("object-section-metadata");
     });
+  });
+
+  it("fabricerar inte 'Tillgångstyp' från DB-defaulten accessType='open'", async () => {
+    // accessType har DB-default "open" — det får INTE räknas som ett riktigt värde,
+    // annars fabriceras "Tillgångstyp: Öppet" på nästan alla objekt.
+    installFetchMock(makeResolvedObject({ accessType: "open" }));
+    const { queryByTestId, container } = renderObjectDetail(`/objects/${OBJECT_ID}`);
+    await waitFor(() => {
+      expect(queryByTestId("object-detail-quicknav")).toBeTruthy();
+    });
+    expect(container.textContent).not.toContain("Tillgångstyp");
   });
 
   it("renderar inga råa tomma objekt ('{}') i översikten", async () => {
     const { container } = await mountAndWaitForNav();
     expect(container.textContent).not.toContain("{}");
     expect(container.textContent).not.toContain("[object Object]");
+  });
+
+  it("regression: ObjectMetadataBody renderar utan legacy-props (kraschen som sköts till prod)", async () => {
+    // Ursprungsbuggen: Etapp 5 tog bort legacyEntries/onEditLegacyField ur
+    // call-siten men inte ur ObjectMetadataBody → `legacyEntries.length` på
+    // undefined kraschade hela objektsidan. Detta test monterar komponenten
+    // direkt med det NYA prop-kontraktet och låser att den inte kastar.
+    installFetchMock(makeResolvedObject());
+    const { hook } = memoryLocation({ path: `/objects/${OBJECT_ID}` });
+    expect(() =>
+      render(
+        <QueryClientProvider client={makeClient()}>
+          <LanguageProvider>
+            <TooltipProvider>
+              <Router hook={hook}>
+                <ObjectMetadataBody
+                  objectId={OBJECT_ID}
+                  entries={[]}
+                  types={[]}
+                  onAdd={() => {}}
+                  isAdding={false}
+                  onSoftDelete={() => {}}
+                  onRestore={() => {}}
+                  softDeletePending={false}
+                  restorePending={false}
+                  objectAssignments={[]}
+                  navigate={() => {}}
+                />
+              </Router>
+            </TooltipProvider>
+          </LanguageProvider>
+        </QueryClientProvider>,
+      ),
+    ).not.toThrow();
   });
 });

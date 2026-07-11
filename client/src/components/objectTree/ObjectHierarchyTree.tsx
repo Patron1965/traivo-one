@@ -95,10 +95,10 @@ export function buildBlob(n: TreeNode): string {
     n.city ?? "",
     n.postalCode ?? "",
     n.customerName ?? "",
-    n.executorNames.join(" "),
-    n.orderStatuses.join(" "),
+    (n.executorNames ?? []).join(" "),
+    (n.orderStatuses ?? []).join(" "),
   ];
-  for (const [k, v] of Object.entries(n.metadata)) {
+  for (const [k, v] of Object.entries(n.metadata ?? {})) {
     parts.push(k, v);
   }
   return parts.join(" ").toLowerCase();
@@ -106,7 +106,7 @@ export function buildBlob(n: TreeNode): string {
 
 export function matchToken(n: TreeNode, blob: string, t: ParsedToken): boolean {
   if (t.key) {
-    const val = n.metadata[t.key];
+    const val = (n.metadata ?? {})[t.key];
     if (val == null) return false;
     return val.toLowerCase().includes(t.value);
   }
@@ -431,7 +431,7 @@ export function ObjectHierarchyTree({
                 · {node.customerName}
               </span>
             )}
-            {node.orderStatuses.length > 0 && (
+            {(node.orderStatuses?.length ?? 0) > 0 && (
               <Badge
                 className={`${getWorkOrderStatusBadge(node.orderStatuses[0])} text-xs shrink-0 hidden lg:inline-flex`}
                 variant="secondary"
