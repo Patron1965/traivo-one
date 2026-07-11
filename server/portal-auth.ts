@@ -1,5 +1,6 @@
 import crypto from "crypto";
 import { storage } from "./storage";
+import { isModuleEnabled } from "./feature-flags";
 
 const TOKEN_EXPIRY_MINUTES = 15;
 const SESSION_EXPIRY_DAYS = 30;
@@ -64,6 +65,15 @@ export async function verifyMagicLink(
 
   if (new Date() > portalToken.expiresAt) {
     return { success: false, error: "Länken har gått ut. Begär en ny inloggningslänk." };
+  }
+
+  // Gate on portal module state before consuming token or creating any session.
+  // This prevents disabled-tenant portals from issuing sessions even via valid tokens.
+  const portalActive = await isModuleEnabled(portalToken.tenantId, "customer_portal");
+  if (!portalActive) {
+    // Consume the token to prevent replay, but do not create a session.
+    await storage.markPortalTokenUsed(portalToken.id);
+    return { success: false, error: "Kundportalen är inte aktiverad för denna organisation" };
   }
 
   await storage.markPortalTokenUsed(portalToken.id);

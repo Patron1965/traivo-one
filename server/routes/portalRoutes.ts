@@ -133,7 +133,11 @@ function isObjectOwnedByPortalCustomer(
 }
 
 app.get("/api/portal/tenants", asyncHandler(async (req, res) => {
-    const tenants = await storage.getPublicTenants();
+    const allTenants = await storage.getPublicTenants();
+    const portalEnabled = await Promise.all(
+      allTenants.map(t => isModuleEnabled(t.id, "customer_portal"))
+    );
+    const tenants = allTenants.filter((_, i) => portalEnabled[i]);
     res.json(tenants.map(t => ({ id: t.id, name: t.name })));
 }));
 
@@ -146,14 +150,25 @@ app.post("/api/portal/auth/request-link", authLimiter, asyncHandler(async (req, 
     }
 
     if (!tenantId) {
-      const tenants = await storage.getPublicTenants();
-      if (tenants.length === 1) {
-        tenantId = tenants[0].id;
-      } else if (tenants.length === 0) {
+      const allTenants = await storage.getPublicTenants();
+      const portalEnabledFlags = await Promise.all(
+        allTenants.map(t => isModuleEnabled(t.id, "customer_portal"))
+      );
+      const portalTenants = allTenants.filter((_, i) => portalEnabledFlags[i]);
+      if (portalTenants.length === 1) {
+        tenantId = portalTenants[0].id;
+      } else if (portalTenants.length === 0) {
         throw new ValidationError("Ingen aktiv tenant hittades");
       } else {
         throw new ValidationError("Välj ett företag");
       }
+    }
+
+    // Verify portal module is enabled for this tenant before issuing any token.
+    const portalActive = await isModuleEnabled(tenantId, "customer_portal");
+    if (!portalActive) {
+      // Return generic success to avoid leaking module state to unauthenticated callers.
+      return res.json({ success: true, message: "Inloggningslänk skickad till din e-post", emailSent: false });
     }
 
     const ip = req.ip || req.socket.remoteAddress || "unknown";
@@ -169,33 +184,32 @@ app.post("/api/portal/auth/request-link", authLimiter, asyncHandler(async (req, 
       req.headers["user-agent"]
     );
 
-    if (!result.success) {
-      throw new ValidationError(result.error);
-    }
+    // Always return a generic success response to prevent email enumeration.
+    // If the account exists, send the link; otherwise silently succeed.
+    if (result.success) {
+      const tenant = await storage.getTenant(tenantId);
+      const companyName = tenant?.name || "Traivo";
+      
+      const baseUrl = process.env.REPLIT_DEV_DOMAIN 
+        ? `https://${process.env.REPLIT_DEV_DOMAIN}`
+        : `https://${req.headers.host}`;
+      const magicLinkUrl = `${baseUrl}/portal/verify?token=${result.token}`;
 
-    const tenant = await storage.getTenant(tenantId);
-    const companyName = tenant?.name || "Traivo";
-    
-    const baseUrl = process.env.REPLIT_DEV_DOMAIN 
-      ? `https://${process.env.REPLIT_DEV_DOMAIN}`
-      : `https://${req.headers.host}`;
-    const magicLinkUrl = `${baseUrl}/portal/verify?token=${result.token}`;
+      const emailSent = await sendPortalMagicLinkEmail(
+        email,
+        magicLinkUrl,
+        result.customer?.name || result.customer?.contactPerson || "Kund",
+        companyName
+      );
 
-    const emailSent = await sendPortalMagicLinkEmail(
-      email,
-      magicLinkUrl,
-      result.customer?.name || result.customer?.contactPerson || "Kund",
-      companyName
-    );
-
-    if (!emailSent) {
-      console.warn("Magic link email not sent - RESEND_API_KEY may be missing");
+      if (!emailSent) {
+        console.warn("Magic link email not sent - RESEND_API_KEY may be missing");
+      }
     }
 
     res.json({ 
       success: true, 
       message: "Inloggningslänk skickad till din e-post",
-      emailSent,
     });
 }));
 
@@ -219,6 +233,22 @@ app.post("/api/portal/auth/verify", authLimiter, asyncHandler(async (req, res) =
         reason: result.error || "invalid_token",
       });
       throw new ValidationError(result.error);
+    }
+
+    // Verify portal module is still enabled for this tenant before creating a session.
+    const tenantId = result.session?.tenant?.id;
+    if (tenantId) {
+      const portalActive = await isModuleEnabled(tenantId, "customer_portal");
+      if (!portalActive) {
+        await logLoginEvent({
+          req,
+          method: "portal",
+          outcome: "failed",
+          reason: "portal_disabled",
+          tenantId,
+        });
+        throw new ForbiddenError("Kundportalen är inte aktiverad för denna organisation");
+      }
     }
 
     await logLoginEvent({
@@ -249,20 +279,14 @@ app.post("/api/portal/auth/verify", authLimiter, asyncHandler(async (req, res) =
 }));
 
 app.get("/api/portal/me", asyncHandler(async (req, res) => {
-    const authHeader = req.headers.authorization;
-    if (!authHeader?.startsWith("Bearer ")) {
-      throw new UnauthorizedError("Autentisering krävs");
-    }
+    // Use requirePortalAuth which enforces both session validity and portal module state.
+    const session = await requirePortalAuth(req, res);
+    if (!session) return;
 
-    const sessionToken = authHeader.substring(7);
-    const { validateSession } = await import("../portal-auth");
-    const session = await validateSession(sessionToken);
-
-    if (!session.valid) {
-      throw new UnauthorizedError("Ogiltig session");
-    }
-
-    const tenant = await storage.getTenant(session.tenantId!);
+    const [customer, tenant] = await Promise.all([
+      storage.getCustomer(session.customerId!),
+      storage.getTenant(session.tenantId!),
+    ]);
 
     // Lös upp objekt-scope för portal-användaren (om någon).
     let scope: { isFullAccess: boolean; objectCount: number; rootObjectIds: string[]; rootObjectNames: string[] } = {
@@ -290,11 +314,11 @@ app.get("/api/portal/me", asyncHandler(async (req, res) => {
 
     res.json({
       customer: {
-        id: session.customer?.id,
-        name: session.customer?.name,
-        email: session.customer?.email,
-        phone: session.customer?.phone,
-        city: session.customer?.city,
+        id: customer?.id,
+        name: customer?.name,
+        email: customer?.email,
+        phone: customer?.phone,
+        city: customer?.city,
       },
       tenant: {
         id: tenant?.id,
@@ -2664,13 +2688,61 @@ app.post("/api/portal/field/report", asyncHandler(async (req, res) => {
       throw new NotFoundError("Objekt hittades inte eller tillhör inte din kund");
     }
 
+    // Verify ACL ownership of each photo path to prevent cross-customer or
+    // arbitrary path injection (mirrors the public report flow in extendedRoutes).
+    let validatedPhotos: string[] = [];
+    if (photos && photos.length > 0) {
+      const { ObjectStorageService } = await import("../replit_integrations/object_storage/objectStorage");
+      const { getObjectAclPolicy } = await import("../replit_integrations/object_storage/objectAcl");
+      const { customerChangeRequests: changeRequestsTable } = await import("@shared/schema");
+      const oss = new ObjectStorageService();
+      const expectedOwner = `portal:${session.tenantId}:${session.customerId}`;
+      for (const photoPath of photos) {
+        // 1. Verify ACL ownership (prevents cross-customer path injection).
+        let aclOwner: string | null = null;
+        try {
+          const file = await oss.getObjectEntityFile(photoPath);
+          const acl = await getObjectAclPolicy(file);
+          aclOwner = acl?.owner ?? null;
+        } catch {
+          throw new ValidationError("Ett bifogat foto kunde inte hittas. Ladda upp på nytt.");
+        }
+        if (aclOwner !== expectedOwner) {
+          throw new ValidationError("Ett bifogat foto är inte giltigt för denna rapport.");
+        }
+
+        // 2. For scoped sessions: if the photo path already exists in a report
+        //    belonging to an out-of-scope object, reject it. This prevents a
+        //    scoped user from "laundering" a foreign photo path into a scoped report.
+        if (session.scopedObjectIds !== null) {
+          const [existingReport] = await db
+            .select({ objectId: changeRequestsTable.objectId })
+            .from(changeRequestsTable)
+            .where(
+              and(
+                eq(changeRequestsTable.tenantId, session.tenantId!),
+                eq(changeRequestsTable.customerId, session.customerId!),
+                sql`${changeRequestsTable.photos} @> ${JSON.stringify([photoPath])}::jsonb`
+              )
+            )
+            .limit(1);
+
+          if (existingReport && !isObjectInScope(session, existingReport.objectId)) {
+            throw new ForbiddenError("Ett bifogat foto tillhör inte ett tillgängligt objekt.");
+          }
+        }
+
+        validatedPhotos.push(photoPath);
+      }
+    }
+
     const report = await storage.createCustomerChangeRequest({
       tenantId: session.tenantId!,
       objectId,
       customerId: session.customerId!,
       category,
       description,
-      photos: photos || [],
+      photos: validatedPhotos,
       latitude: latitude ?? null,
       longitude: longitude ?? null,
       status: "new",
@@ -2736,6 +2808,30 @@ app.post("/api/portal/media/signed-url", asyncHandler(async (req, res) => {
     const expectedOwner = `portal:${session.tenantId}:${session.customerId}`;
     if (!policy || policy.owner !== expectedOwner) {
       throw new ForbiddenError("Åtkomst nekad");
+    }
+
+    // For scoped portal sessions enforce object-level scope: the media must be
+    // found in customer_change_requests tied to an in-scope object. Fail-closed
+    // — if the path is not found in any report or belongs to an out-of-scope
+    // object, deny. (Full-access sessions pass through on customer ACL alone.)
+    if (session.scopedObjectIds !== null) {
+      const { customerChangeRequests } = await import("@shared/schema");
+      const [matchingReport] = await db
+        .select({ objectId: customerChangeRequests.objectId })
+        .from(customerChangeRequests)
+        .where(
+          and(
+            eq(customerChangeRequests.tenantId, session.tenantId!),
+            eq(customerChangeRequests.customerId, session.customerId!),
+            sql`${customerChangeRequests.photos} @> ${JSON.stringify([objectPath])}::jsonb`
+          )
+        )
+        .limit(1);
+
+      // Deny if path not in any report, or if the report's object is out of scope.
+      if (!matchingReport || !isObjectInScope(session, matchingReport.objectId)) {
+        throw new ForbiddenError("Åtkomst nekad");
+      }
     }
 
     const signedUrl = await objectStorageService.getSignedObjectReadURL(objectPath, 300);
