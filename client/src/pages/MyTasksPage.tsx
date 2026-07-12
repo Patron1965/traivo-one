@@ -10,7 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Progress } from "@/components/ui/progress";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import {
   Calendar,
   MapPin,
@@ -301,6 +301,7 @@ function getRecentPageMap(tl: (key: string) => string): Record<string, { title: 
     "/resources": { title: tl("nav.resources"), icon: Users, color: "text-chart-5" },
     "/vehicles": { title: tl("nav.vehicles"), icon: Truck, color: "text-chart-4" },
     "/planner": { title: tl("nav.week-planner"), icon: Calendar, color: "text-chart-2" },
+    "/veckoplan": { title: "Veckoplan", icon: Calendar, color: "text-chart-2" },
     "/order-stock": { title: tl("nav.order-stock"), icon: FileText, color: "text-chart-1" },
     "/routes": { title: tl("nav.route-planning"), icon: Route, color: "text-chart-4" },
     "/dashboard": { title: tl("nav.dashboard"), icon: BarChart3, color: "text-destructive" },
@@ -495,6 +496,7 @@ function TodaysOrdersList({
   onViewObject?: (object: ServiceObject) => void;
 }) {
   const { t: tl } = useLanguage();
+  const [, navigate] = useLocation();
   const todaysOrders = orders.filter(order => {
     if (!order.scheduledDate) return false;
     return isToday(new Date(order.scheduledDate));
@@ -505,9 +507,9 @@ function TodaysOrdersList({
       <EmptyState
         icon={CheckCircle2}
         title={tl("page.today.no-jobs-today")}
-        description="Inga arbetsordrar schemalagda för idag. Planera in jobb via veckoplaneraren."
-        actionLabel="Öppna Veckoplaneraren"
-        onAction={() => window.location.href = "/planner"}
+        description="Inga arbetsordrar schemalagda för idag. Planera in jobb via veckoplanen."
+        actionLabel="Öppna Veckoplanen"
+        onAction={() => navigate("/veckoplan")}
         actionIcon={Calendar}
       />
     );
@@ -670,7 +672,7 @@ export default function MyTasksPage() {
               value={todaysOrders.length}
               description={`${todaysOrders.filter(o => o.orderStatus === "utford").length} ${tl("page.today.completed")}`}
               icon={Calendar}
-              href="/planner"
+              href="/veckoplan"
             />
           )}
           {ordersLoading ? (
@@ -705,7 +707,7 @@ export default function MyTasksPage() {
               value={`${completedThisWeek}/${thisWeekOrders.length}`}
               description={tl("page.today.orders-done")}
               icon={CheckCircle2}
-              href="/planner"
+              href="/veckoplan"
               variant={completedThisWeek === thisWeekOrders.length && thisWeekOrders.length > 0 ? "success" : "default"}
             />
           )}
@@ -752,9 +754,9 @@ export default function MyTasksPage() {
                   Starta fältarbete
                 </Button>
               </Link>
-              <Link href="/planner">
+              <Link href="/veckoplan">
                 <Button variant="outline" size="sm" data-testid="button-view-planner">
-                  {tl("page.planner.title")}
+                  Veckoplan
                   <ArrowRight className="h-4 w-4 ml-2" />
                 </Button>
               </Link>
