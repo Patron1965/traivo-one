@@ -35,10 +35,10 @@ const severityConfig = {
 };
 
 const actionRoutes: Record<string, string> = {
-  "Se veckoplanering": "/planner",
-  "Granska planeringen": "/planner",
+  "Se veckoplanering": "/veckoplan",
+  "Granska planeringen": "/veckoplan",
   "Se omöjliga ordrar": "/orders",
-  "Tilldela resurser": "/planner",
+  "Tilldela resurser": "/veckoplan",
 };
 
 export function ProactiveTips() {
