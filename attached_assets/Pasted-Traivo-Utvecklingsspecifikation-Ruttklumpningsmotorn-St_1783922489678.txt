@@ -1,0 +1,324 @@
+Traivo – Utvecklingsspecifikation
+
+Ruttklumpningsmotorn
+
+Strategisk motor för optimering av utförandedatum och ruttklumpning
+
+Dokumenttyp: Utvecklingsspecifikation
+System: Traivo
+Komponent: Motorarkitektur
+Status: Förslag till implementering
+Prioritet: Hög
+
+
+1. Bakgrund
+
+Traivos arkitektur bygger idag på flera separata motorer som var och en löser ett tydligt definierat problem.
+
+Nuvarande huvudmotorer är:
+
+Tidsmotorn – analyserar uppgifternas leveransvillkor och beräknar vilka datum och tider som är möjliga.
+Geografimotorn – analyserar objektens geografiska position.
+Klumpningsmotorn – identifierar vilka uppgifter som kan utföras vid samma stopp, normalt inom en konfigurerbar radie (exempelvis cirka 30 meter).
+Varje motor fungerar korrekt inom sitt ansvarsområde.
+
+Det finns dock ett återstående optimeringsproblem som ingen av motorerna idag löser.
+
+
+2. Problembeskrivning
+
+Tidsmotorn väljer idag i praktiken det första möjliga utförandedatumet enligt uppgiftens leveransvillkor.
+
+Detta är lokalt korrekt men inte alltid optimalt ur ett produktions- och ruttperspektiv.
+
+Exempel:
+
+Tre klumpar finns i Nynäshamn.
+
+Klump A
+
+Kan utföras vilken dag som helst under hela augusti.
+Klump B
+
+Kan endast utföras på torsdagar under augusti.
+Klump C
+
+Kan endast utföras onsdag eller torsdag sista veckan i augusti.
+Tidsmotorn kommer normalt att föreslå första möjliga torsdag för Klump B.
+
+Resultatet blir att arbetena sprids över flera resor.
+
+Den optimala lösningen är istället att identifiera att samtliga tre klumpar kan utföras sista torsdagen i augusti och därför välja detta datum.
+
+Detta reducerar resor, restid och kostnader samtidigt som produktionen koncentreras.
+
+
+3. Syfte
+
+Ruttklumpningsmotorn skall analysera samtliga möjliga utförandedatum och välja det datum som ger högst total samordningsnytta.
+
+Motorn skall alltså inte endast avgöra om ett datum är giltigt.
+
+Den skall avgöra vilket giltigt datum som är bäst.
+
+
+4. Motorernas ansvar
+
+Tidsmotorn
+
+Ansvar:
+
+tolka leveransvillkor
+skapa möjliga tidsfönster
+beräkna tillåtna datum
+inte välja slutligt datum
+Output:
+
+En lista över samtliga möjliga utförandedatum.
+
+
+Geografimotorn
+
+Ansvar:
+
+analysera geografisk position
+avstånd
+ort
+vägstruktur
+geografiska relationer
+
+Klumpningsmotorn
+
+Ansvar:
+
+Identifiera vilka uppgifter som kan utföras vid samma stopp.
+
+Exempel:
+
+samma fastighet
+samma återvinningsplats
+samma gård
+samma parkeringsyta
+Normalt används en konfigurerbar radie, exempelvis cirka 30 meter.
+
+Resultatet blir ett stopp.
+
+
+Ruttklumpningsmotorn (Ny)
+
+Ansvar:
+
+Identifiera vilka stopp eller klumpar som bör utföras under samma produktionsdag.
+
+Motorn arbetar alltså på en högre nivå än klumpningsmotorn.
+
+Den optimerar inte stopp.
+
+Den optimerar hela produktionsområden och rutter.
+
+
+5. Arbetsprincip
+
+Motorn skall:
+
+läsa samtliga möjliga datum från tidsmotorn
+läsa geografisk information från geografimotorn
+läsa stoppklumpar från klumpningsmotorn
+analysera alla möjliga kombinationer
+poängsätta varje alternativ
+välja den kombination som ger högst total effektivitet
+
+6. Skillnaden mot dagens klumpning
+
+Nuvarande klumpningsmotor arbetar ungefär enligt:
+
+“Vad kan utföras när bilen ändå stannar här?”
+
+Den nya motorn arbetar enligt:
+
+“Vilken dag bör bilen åka hit överhuvudtaget?”
+
+Detta är två helt olika optimeringsproblem.
+
+
+7. Poängmodell
+
+Varje möjlig dag skall kunna poängsättas.
+
+Exempel på parametrar:
+
+antal möjliga stopp
+antal möjliga klumpar
+produktionstid
+restid
+fordonskostnad
+leveransprioritet
+ekonomiskt värde
+geografisk samordning
+framtida planeringsmöjligheter
+belastning i veckoplanen
+Poängmodellen skall vara helt konfigurerbar.
+
+
+8. Ruttklumpar
+
+Motorn skall skapa en ny informationsnivå.
+
+Idag finns exempelvis:
+
+Uppgifter
+Klumpar (stopp)
+Ny nivå:
+
+Ruttklumpar
+
+Exempel:
+
+Ruttklump Nynäshamn
+
+Innehåller:
+
+8 produktionstimmar
+12 stopp
+53 uppgifter
+Eller:
+
+Ruttklump Farsta
+
+Innehåller:
+
+3 produktionstimmar
+5 stopp
+19 uppgifter
+
+9. Visning i planeringsnavet
+
+Planeringsnavet skall kunna visa information på flera nivåer.
+
+Nivå 1
+
+Enskilda uppgifter.
+
+Nivå 2
+
+Stopp (klumpar).
+
+Nivå 3
+
+Ruttklumpar.
+
+Planeraren skall kunna växla mellan nivåerna.
+
+
+10. Namngivning
+
+Motorn skall automatiskt skapa namn.
+
+Normalt används huvudort.
+
+Exempel:
+
+Nynäshamn
+Södertälje
+Farsta
+Västerås
+Om rutten saknar naturlig huvudort skall systemet kunna skapa ett logiskt namn utifrån geografisk tyngdpunkt eller annan konfigurerbar regel.
+
+
+11. Hantering av långa rutter
+
+Vissa uppdrag följer inte en ort.
+
+Exempel:
+
+Sundsvall–Gävle.
+
+Motorn skall därför kunna skapa ruttklumpar även utifrån:
+
+vägstråk
+korridorer
+transportleder
+geografiska kedjor
+Detta skall styras av parametrar.
+
+
+12. Parametrisering
+
+Precis som klumpningsmotorn skall ruttklumpningsmotorn vara helt parameterstyrd.
+
+Exempel:
+
+maximal geografisk spridning
+maximal restid
+önskad produktionstid
+minsta antal stopp
+viktning mellan restid och produktion
+ekonomisk prioritering
+leveransprioritet
+fordonsgrupper
+team
+kundprioritet
+artikelgrupper
+Samtliga parametrar skall kunna ändras utan programmering.
+
+
+13. Relation till övriga motorer
+
+Motorn ersätter inte någon befintlig motor.
+
+Den kompletterar dem.
+
+Informationsflödet blir:
+
+Tidsmotor
+
+↓
+
+Geografimotor
+
+↓
+
+Klumpningsmotor
+
+↓
+
+Ruttklumpningsmotor
+
+↓
+
+Veckoplanering
+
+↓
+
+Ruttoptimering Light
+
+↓
+
+Produktion
+
+
+14. Förväntade effekter
+
+Införandet av ruttklumpningsmotorn förväntas ge:
+
+färre resor
+bättre samordning
+lägre transportkostnader
+högre beläggningsgrad
+bättre veckoplanering
+färre omplaneringar
+bättre resursutnyttjande
+högre produktivitet
+bättre ekonomiskt resultat
+
+15. Sammanfattning
+
+Ruttklumpningsmotorn utgör nästa logiska steg i Traivos motorarkitektur.
+
+Där klumpningsmotorn optimerar stopp optimerar ruttklumpningsmotorn hela produktionsdagar och geografiska rutter.
+
+Motorn analyserar samtliga möjliga utförandedatum och väljer den kombination som ger högst total nytta för verksamheten. Resultatet blir en mer intelligent planering där beslut fattas utifrån helheten istället för enskilda uppgifter.
+
+Detta innebär att Traivo får ett ytterligare strategiskt optimeringslager ovanför dagens tids-, geografi- och stoppklumpning, vilket stärker systemets förmåga att automatiskt skapa ekonomiskt och operativt optimala produktionsplaner.
+
+I nästa version kan dokumentet kompletteras med flödesscheman, beslutsdiagram och algoritmförslag så att det fungerar som ett fullständigt tekniskt designunderlag för utvecklarna.
