@@ -156,6 +156,7 @@ import {
   // Task #785 — Veckoplanering: datafundament
   weeklyPlans, weeklyPlanTasks, personalTasks, personalTaskSchedules,
   travelTimeEntries, weeklyPlanWarnings, geographicDistricts, districtZones,
+  stopClusters, routeClusters,
   planningReservations, type PlanningReservation, type InsertPlanningReservation,
   preTasks, execTypePreTaskRules, disruptions,
   slotTimes, type SlotTime, type InsertSlotTime,
@@ -3262,10 +3263,16 @@ export class DatabaseStorage implements IStorage {
       objectLatitude: objects.latitude,
       objectLongitude: objects.longitude,
       customerName: customers.name,
+      stopClusterId: workOrders.stopClusterId,
+      routeClusterId: workOrders.routeClusterId,
+      stopClusterName: stopClusters.displayName,
+      routeClusterName: routeClusters.displayName,
     })
     .from(workOrders)
     .leftJoin(objects, eq(workOrders.objectId, objects.id))
     .leftJoin(customers, eq(workOrders.customerId, customers.id))
+    .leftJoin(stopClusters, eq(workOrders.stopClusterId, stopClusters.id))
+    .leftJoin(routeClusters, eq(workOrders.routeClusterId, routeClusters.id))
     .where(and(...conditions))
     .orderBy(desc(workOrders.scheduledDate));
     
@@ -3963,10 +3970,16 @@ export class DatabaseStorage implements IStorage {
       objectLatitude: objects.latitude,
       objectLongitude: objects.longitude,
       customerName: customers.name,
+      stopClusterId: workOrders.stopClusterId,
+      routeClusterId: workOrders.routeClusterId,
+      stopClusterName: stopClusters.displayName,
+      routeClusterName: routeClusters.displayName,
     })
     .from(workOrders)
     .leftJoin(objects, eq(workOrders.objectId, objects.id))
     .leftJoin(customers, eq(workOrders.customerId, customers.id))
+    .leftJoin(stopClusters, eq(workOrders.stopClusterId, stopClusters.id))
+    .leftJoin(routeClusters, eq(workOrders.routeClusterId, routeClusters.id))
     .where(whereClause)
     .orderBy(workOrders.priority, workOrders.plannedWindowEnd)
     .limit(limit)

@@ -2108,6 +2108,9 @@ export type WorkOrderWithObject = WorkOrder & {
   // Objektets koordinater - säkerhetsnät om task_latitude/longitude saknas
   objectLatitude?: number | null;
   objectLongitude?: number | null;
+  // Klumpnamn för snabb visning i veckoplaneringen (Task #1271)
+  stopClusterName?: string | null;
+  routeClusterName?: string | null;
 };
 // Grovplanering — serveraggregat per vecka (Task #795). Färdiga summor så att
 // klienten slipper hämta + summera hela orderlistan.

@@ -1,4 +1,4 @@
-import { memo } from "react";
+import { memo, useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -19,6 +19,9 @@ import { WorkOrderMetadataPanel } from "../WorkOrderMetadataPanel";
 import { useLocalizedObjectName } from "@/lib/object-name";
 import { LocationRequirementBadge } from "@/components/LocationRequirementBadge";
 import { TaskRoleBadge } from "@/components/TaskRoleBadge";
+import { RouteClusterBadge } from "@/components/clustering/RouteClusterBadge";
+import { StopClusterBadge } from "@/components/clustering/StopClusterBadge";
+import { ClusterSidePanel, type ClusterRef } from "@/components/clustering/ClusterSidePanel";
 
 interface JobCardProps {
   job: WorkOrderWithObject;
@@ -62,7 +65,16 @@ export const JobCard = memo(function JobCard({
   const hasConflict = job.scheduledDate && jobConflicts[job.id];
   const isMultiSelected = selectedJobIds && selectedJobIds.has(job.id);
 
+  const [clusterPanel, setClusterPanel] = useState<ClusterRef | null>(null);
+
+  const routeClusterName = (job as WorkOrderWithObject).routeClusterName;
+  const stopClusterName = (job as WorkOrderWithObject).stopClusterName;
+  const routeClusterId = job.routeClusterId;
+  const stopClusterId = job.stopClusterId;
+
   return (
+    <>
+      <ClusterSidePanel cluster={clusterPanel} onClose={() => setClusterPanel(null)} />
       <Card
         className={`p-1 cursor-grab active:cursor-grabbing hover-elevate active-elevate-2 border-l-2 overflow-hidden ${timeBlockBorders[category]} ${selectedJob === job.id ? "ring-2 ring-primary" : ""} ${hasConflict ? "ring-2 ring-destructive/50 bg-destructive/10 dark:bg-destructive/15" : ""} ${isMultiSelected ? "ring-2 ring-chart-1/50 bg-chart-1/10 dark:bg-chart-1/15" : ""} group touch-none`}
         onClick={() => onJobClick(job.id)}
@@ -146,6 +158,24 @@ export const JobCard = memo(function JobCard({
             )}
             <TaskRoleBadge task={job} className="h-4" testIdSuffix={job.id} />
             <LocationRequirementBadge order={job} compact testIdSuffix={job.id} />
+            {(routeClusterName || stopClusterName) && (
+              <div className="flex flex-wrap gap-1 mt-0.5" onClick={(e) => e.stopPropagation()}>
+                {routeClusterName && routeClusterId && (
+                  <RouteClusterBadge
+                    name={routeClusterName}
+                    onClick={() => setClusterPanel({ type: "route", id: routeClusterId })}
+                    className="text-[9px] h-4"
+                  />
+                )}
+                {stopClusterName && stopClusterId && (
+                  <StopClusterBadge
+                    name={stopClusterName}
+                    onClick={() => setClusterPanel({ type: "stop", id: stopClusterId })}
+                    className="text-[9px] h-4"
+                  />
+                )}
+              </div>
+            )}
             {(job.objectAccessCode || job.objectKeyNumber) && (
               <div className="flex items-center gap-2 mt-0.5">
                 {job.objectAccessCode && (
@@ -369,6 +399,7 @@ export const JobCard = memo(function JobCard({
           </div>
         </div>
       </Card>
+    </>
   );
 });
 
