@@ -1,0 +1,107 @@
+Här är en tydligare formulering som kan ersätta invändningen om compatible_executor_type i specifikationen:
+2. Utförandekod – skilj uppgiftens krav från utförarens sammansättning
+Förslaget att compatible_executor_type skulle behöva beskriva team, enskilda resurser, fordon, utrustning, kompetenser och olika kombinationer av dessa bygger på en sammanblandning av två skilda delar i Traivo:
+    1    Vad uppgiften kräver för typ av utförande.
+    2    Vilka resurser som tillsammans bildar en utförare med förmåga att genomföra uppgiften.
+Grundprincip: artikel blir uppgift
+En artikel i Traivo innehåller ett omfattande informationspaket med minst cirka 94 informationsfält. När artikeln används i ett orderkoncept, en snabborder, en uppgiftsmotor eller någon annan uppgiftsskapande funktion skapas en unik uppgift.
+Uppgiften övertar artikelns relevanta grundinformation och kompletteras därefter successivt med bland annat:
+    •    unikt uppgiftsnummer och uppgiftskälla,
+    •    objekt, kund och geografisk position,
+    •    antal och produktionstid,
+    •    leveranstider och tidsfönster,
+    •    metadata och dokumentation,
+    •    pris-, kostnads- och faktureringsinformation,
+    •    status genom hela flödet,
+    •    planerad och verklig utförare,
+    •    verkligt antal, verklig produktionstid och utförd leveranstid.
+Detta innebär att uppgiften är ett stort och dynamiskt informationspaket. Alla dessa fält ska dock inte användas för att avgöra vilken utförare som kan tilldelas uppgiften.
+Utförandekoden är uppgiftens relevanta sorteringsfält
+För sortering och planering behöver uppgiften endast ange vilken typ av utförande som krävs. Detta anges genom fältet:
+Utförandekod
+Utförandekoden beskriver inte exakt vilket team, vilken medarbetare, vilket fordon eller vilken utrustning som ska utföra uppgiften. Den beskriver enbart vilken utförandeförmåga uppgiften kräver.
+Exempel:
+    •    RBK-TVÄTT – arbete med rullbara avfallskärl.
+    •    BÖK-SERVICE – service av bottenöppnande behållare.
+    •    SVETS-SERVICE – servicearbete som kräver svetsförmåga.
+    •    EL-SERVICE – arbete som kräver relevant elkompetens.
+    •    INSPEKTION – kontroll- och dokumentationsuppgift.
+    •    TRANSPORT – transportuppgift.
+    •    RESUPPGIFT – systemskapad resa mellan två uppgifter.
+Utförandekoden ska vara ett strukturerat värde från ett register, inte fri text.
+Utförarens kapacitet hanteras separat
+En utförare kan i Traivo bestå av en eller flera komponenter, exempelvis:
+    •    en enskild medarbetare,
+    •    ett arbetslag eller team,
+    •    ett eller flera fordon,
+    •    särskild utrustning,
+    •    viss kompetens eller behörighet,
+    •    en kombination av personal, fordon och utrustning.
+Det är på utförarsidan, inte på uppgiften, som denna komplexitet ska hanteras.
+En utförare eller ett team ska kunna kopplas till en eller flera utförandekoder som den har förmåga att utföra.
+Exempel:
+Utförare/team
+Resurser och förmåga
+Godkända utförandekoder
+Team RBK 1
+Två medarbetare och tvättfordon för rullbara kärl
+RBK-TVÄTT, RBK-SERVICE
+Serviceteam 2
+Servicetekniker, servicebil och verktyg
+BÖK-SERVICE, INSPEKTION
+Svetsteam
+Svetstekniker, svetsutrustning och servicefordon
+SVETS-SERVICE, BÖK-SERVICE
+Transportteam
+Förare och lastbil
+TRANSPORT, HÄMTNING
+En utförare kan alltså ha förmåga att utföra flera utförandetyper. På motsvarande sätt kan flera olika utförare ha förmåga att utföra samma utförandetyp.
+Planering i den första versionen
+I det aktuella utvecklingsläget räcker det att varje uppgift har ett tydligt fält för utförandekod.
+Planeraren använder därefter koden för att:
+    •    filtrera och sortera uppgifter i Uppgiftsnavet,
+    •    klumpa uppgifter som kan utföras av samma typ av utförare,
+    •    bedöma vilket team som har rätt personal, fordon och utrustning,
+    •    tilldela uppgiften till ett lämpligt team eller en lämplig utförare,
+    •    placera uppgiften i utförarens veckoplan.
+Planeraren ansvarar inledningsvis för den slutliga bedömningen.
+Exempelvis ska en uppgift av typen rullbara kärl tilldelas ett team som har rätt fordon och utrustning för att hantera rullbara kärl. En serviceuppgift med utförandekod som kräver svetsförmåga ska tilldelas en utförare eller ett team som har svetskompetens och relevant utrustning.
+Datamodell
+Det finns därför inget omedelbart behov av att lagra hela utförarens sammansättning i uppgiften genom en omfattande JSONB-struktur.
+På uppgiften behövs i grunden:
+execution_code
+eller på svenska:
+utforandekod
+Fältet bör vara kopplat till ett register över tillåtna utförandekoder.
+På utförarsidan behövs en separat koppling där varje utförare eller team kan ha en eller flera utförandekoder:
+executor_id
+execution_code
+Det ger en enkel många-till-många-relation:
+    •    en utförandekod kan behärskas av flera utförare,
+    •    en utförare kan behärska flera utförandekoder.
+Tilldelning är ett separat uppgiftsfält
+När planeraren har valt vem som ska utföra uppgiften sparas detta separat under uppgiftens tilldelning:
+    •    tilldelad utförare,
+    •    tilldelat team,
+    •    eventuell medarbetare,
+    •    eventuell veckoplan,
+    •    kostnadsställe,
+    •    projekt.
+Utförandekoden förändras normalt inte vid tilldelningen. Den beskriver fortfarande vilken typ av utförande uppgiften kräver, medan tilldelningen beskriver vem som faktiskt ska utföra den.
+Framtida automatisk matchning
+Strukturen ska senare kunna användas av planeringsmotorerna för att föreslå eller automatiskt välja lämpliga utförare.
+En sådan matchning kan väga samman:
+    •    uppgiftens utförandekod,
+    •    utförarens registrerade förmågor,
+    •    tillgänglig tid,
+    •    geografisk position,
+    •    leveranstid och tidsfönster,
+    •    fordon och utrustning,
+    •    kompetenser och behörigheter,
+    •    kapacitet och produktionstid,
+    •    befintliga uppgifter i veckoplanen.
+Detta innebär dock inte att all denna information ska lagras i fältet för utförandekod. Utförandekoden är den gemensamma nyckeln mellan uppgiftens krav och utförarens förmåga.
+Slutsats
+compatible_executor_type bör inte utformas som ett fritextfält som försöker beskriva hela utförarens komplexa sammansättning. Fältet bör i stället benämnas utförandekod och innehålla en strukturerad kod som anger vilken typ av utförande uppgiften kräver.
+Uppgiftens omfattande informationspaket med minst cirka 94 fält finns kvar och används för styrning, planering, genomförande, dokumentation och fakturering. För den grundläggande sorteringen av vilka uppgifter som kan utföras av samma typ av utförare är det däremot utförandekoden som är relevant.
+Komplexiteten med team, medarbetare, fordon, utrustning och kompetenser ska ligga i utförarregistret och i den faktiska tilldelningen – inte dupliceras i varje uppgift.
