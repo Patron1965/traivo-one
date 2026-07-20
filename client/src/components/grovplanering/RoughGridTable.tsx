@@ -43,6 +43,12 @@ import {
 } from "@/lib/rough-planning";
 import { RouteClusterBadge } from "@/components/clustering/RouteClusterBadge";
 import { StopClusterBadge } from "@/components/clustering/StopClusterBadge";
+import type { ClusterRef } from "@/components/clustering/ClusterSidePanel";
+
+export interface TaskClusters {
+  stop: { id: string; displayName: string; status?: string; memberCount?: number }[];
+  route: { id: string; displayName: string; status?: string; period?: string | null; workMinutes?: number | null }[];
+}
 
 const GROUP_ICON: Record<GroupBy, typeof Building2 | null> = {
   objekt: Building2,
@@ -67,6 +73,8 @@ interface RoughGridTableProps {
   onRevokeRow: (row: GridTaskRow) => void;
   // Mikro-grovplanering (objektsidan): läsvy utan urval/tilldelning.
   readOnly?: boolean;
+  onOpenCluster?: (ref: ClusterRef) => void;
+  getTaskClusters?: (taskId: string) => TaskClusters | undefined;
 }
 
 function StatusCell({ status }: { status: GridTaskRow["status"] }) {
@@ -87,6 +95,8 @@ function TaskRow({
   onAssignRow,
   onRevokeRow,
   readOnly = false,
+  onOpenCluster,
+  taskClusters,
 }: {
   row: GridTaskRow;
   selected: boolean;
@@ -95,6 +105,8 @@ function TaskRow({
   onAssignRow: (row: GridTaskRow) => void;
   onRevokeRow: (row: GridTaskRow) => void;
   readOnly?: boolean;
+  onOpenCluster?: (ref: ClusterRef) => void;
+  taskClusters?: TaskClusters;
 }) {
   const chip = weekChip(row.roughPlannedWeek);
   const sourceLabel = creationSourceLabel(row.source);
@@ -129,16 +141,51 @@ function TaskRow({
             Källa: {sourceLabel}
           </div>
         )}
-        {(row.routeClusterName || row.stopClusterName) && (
-          <div className="mt-0.5 flex flex-wrap gap-1">
-            {row.routeClusterName && (
-              <RouteClusterBadge name={row.routeClusterName} />
-            )}
-            {row.stopClusterName && (
-              <StopClusterBadge name={row.stopClusterName} />
-            )}
-          </div>
-        )}
+        {/* Klump-badges: möjliga klumpar från batch-fetch eller fallback till assigned */}
+        {(() => {
+          const routeEntries = taskClusters?.route.length
+            ? taskClusters.route
+            : row.routeClusterId
+            ? [{ id: row.routeClusterId, displayName: row.routeClusterName ?? row.routeClusterId.slice(0, 8), status: undefined, period: null }]
+            : [];
+          const stopEntries = taskClusters?.stop.length
+            ? taskClusters.stop
+            : row.stopClusterId
+            ? [{ id: row.stopClusterId, displayName: row.stopClusterName ?? row.stopClusterId.slice(0, 8), status: undefined, memberCount: undefined }]
+            : [];
+          if (routeEntries.length === 0 && stopEntries.length === 0) return null;
+          return (
+            <>
+              <div className="mt-0.5 flex flex-wrap gap-1" data-testid={`badges-clusters-${row.id}`}>
+                {routeEntries.map((c) => (
+                  <RouteClusterBadge
+                    key={c.id}
+                    name={c.displayName}
+                    period={c.period}
+                    status={c.status}
+                    onClick={onOpenCluster ? () => onOpenCluster({ type: "route", id: c.id }) : undefined}
+                  />
+                ))}
+                {stopEntries.map((c) => (
+                  <StopClusterBadge
+                    key={c.id}
+                    name={c.displayName}
+                    memberCount={"memberCount" in c ? c.memberCount : undefined}
+                    status={c.status}
+                    onClick={onOpenCluster ? () => onOpenCluster({ type: "stop", id: c.id }) : undefined}
+                  />
+                ))}
+              </div>
+              {(routeEntries.length + stopEntries.length) > 0 && (
+                <div className="mt-0.5 text-[10px] text-muted-foreground/70" data-testid={`text-cluster-info-${row.id}`}>
+                  {routeEntries.length > 0 && `${routeEntries.length} ruttklump${routeEntries.length > 1 ? "ar" : ""}`}
+                  {routeEntries.length > 0 && stopEntries.length > 0 && " · "}
+                  {stopEntries.length > 0 && `${stopEntries.length} stoppklump${stopEntries.length > 1 ? "ar" : ""}`}
+                </div>
+              )}
+            </>
+          );
+        })()}
       </TableCell>
       <TableCell>
         <Badge variant="outline" className="font-normal">
@@ -236,6 +283,8 @@ export function RoughGridTable({
   onAssignRow,
   onRevokeRow,
   readOnly = false,
+  onOpenCluster,
+  getTaskClusters,
 }: RoughGridTableProps) {
   const flat = grouping === "ingen";
   const GroupIcon = GROUP_ICON[grouping];
@@ -352,6 +401,8 @@ export function RoughGridTable({
                       onAssignRow={onAssignRow}
                       onRevokeRow={onRevokeRow}
                       readOnly={readOnly}
+                      onOpenCluster={onOpenCluster}
+                      taskClusters={getTaskClusters?.(row.id)}
                     />
                   ))}
               </Fragment>

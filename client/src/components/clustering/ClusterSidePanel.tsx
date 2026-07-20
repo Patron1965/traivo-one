@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
+import { useLocation } from "wouter";
 import {
   Lock,
   LockOpen,
@@ -11,6 +12,8 @@ import {
   Clock,
   MapPin,
   Pencil,
+  CalendarDays,
+  AlertTriangle,
 } from "lucide-react";
 import {
   Sheet,
@@ -21,6 +24,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -61,6 +65,7 @@ interface RouteClusterDetail {
   centerLongitude: number | null;
   radiusKilometers: number | null;
   executionCode: string | null;
+  routeDescription: string | null;
   calculatedWorkMinutes: number | null;
   calculatedTravelMinutes: number | null;
   precisionLevel: string | null;
@@ -95,6 +100,15 @@ const PRECISION_LABEL: Record<string, string> = {
   low: "Låg",
 };
 
+function ConstraintWarning() {
+  return (
+    <div className="flex items-start gap-2 rounded-md border border-warning/50 bg-warning/10 px-3 py-2 text-xs text-warning">
+      <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+      <span>Klumpen är låst. Manuella ändringar kan avvika från klumpkriterierna (geografi, tid, utförandekod).</span>
+    </div>
+  );
+}
+
 // ============================================================================
 // StopClusterPanel
 // ============================================================================
@@ -107,9 +121,12 @@ function StopClusterPanel({
   onClose: () => void;
 }) {
   const { toast } = useToast();
+  const [, navigate] = useLocation();
   const [tasksOpen, setTasksOpen] = useState(true);
   const [editingName, setEditingName] = useState(false);
   const [nameValue, setNameValue] = useState("");
+  const [lockComment, setLockComment] = useState("");
+  const [showLockComment, setShowLockComment] = useState(false);
 
   const { data: cluster, isLoading } = useQuery<StopClusterDetail>({
     queryKey: ["/api/clustering/stop-clusters", clusterId],
@@ -122,7 +139,10 @@ function StopClusterPanel({
       (await apiRequest("PATCH", `/api/clustering/stop-clusters/${clusterId}`, body)).json(),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["/api/clustering/stop-clusters"] });
+      void queryClient.invalidateQueries({ queryKey: ["/api/rough-planning/grid"] });
       setEditingName(false);
+      setShowLockComment(false);
+      setLockComment("");
       toast({ title: "Stoppklump uppdaterad" });
     },
     onError: () => toast({ title: "Fel vid uppdatering", variant: "destructive" }),
@@ -138,6 +158,7 @@ function StopClusterPanel({
   }
 
   const meta = STATUS_META[cluster.status] ?? STATUS_META.active;
+  const isLocked = cluster.status === "locked";
 
   return (
     <div className="flex flex-col gap-4 p-1">
@@ -191,6 +212,7 @@ function StopClusterPanel({
         </Button>
       </div>
 
+      {isLocked && <ConstraintWarning />}
       <Separator />
 
       {/* Metadata */}
@@ -229,16 +251,48 @@ function StopClusterPanel({
           </Button>
         )}
         {cluster.status !== "locked" && (
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => patchMutation.mutate({ status: "locked" })}
-            disabled={patchMutation.isPending}
-            data-testid="button-cluster-lock"
-          >
-            <Lock className="h-4 w-4" />
-            Lås
-          </Button>
+          showLockComment ? (
+            <div className="flex w-full flex-col gap-2">
+              <Textarea
+                placeholder="Kommentar (valfritt)"
+                value={lockComment}
+                onChange={(e) => setLockComment(e.target.value)}
+                className="h-20 text-xs resize-none"
+                data-testid="textarea-lock-comment"
+              />
+              <div className="flex gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => patchMutation.mutate({ status: "locked" })}
+                  disabled={patchMutation.isPending}
+                  data-testid="button-cluster-lock-confirm"
+                >
+                  <Lock className="h-4 w-4" />
+                  Lås
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => setShowLockComment(false)}
+                  data-testid="button-cluster-lock-cancel"
+                >
+                  Avbryt
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setShowLockComment(true)}
+              disabled={patchMutation.isPending}
+              data-testid="button-cluster-lock"
+            >
+              <Lock className="h-4 w-4" />
+              Lås
+            </Button>
+          )
         )}
         {cluster.status === "locked" && (
           <Button
@@ -252,6 +306,15 @@ function StopClusterPanel({
             Lås upp
           </Button>
         )}
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => navigate("/veckoplan")}
+          data-testid="button-cluster-send-to-veckoplan"
+        >
+          <CalendarDays className="h-4 w-4" />
+          Skicka till veckoplan
+        </Button>
       </div>
 
       <Separator />
@@ -311,9 +374,12 @@ function RouteClusterPanel({
   onClose: () => void;
 }) {
   const { toast } = useToast();
+  const [, navigate] = useLocation();
   const [tasksOpen, setTasksOpen] = useState(true);
   const [editingName, setEditingName] = useState(false);
   const [nameValue, setNameValue] = useState("");
+  const [lockComment, setLockComment] = useState("");
+  const [showLockComment, setShowLockComment] = useState(false);
 
   const { data: cluster, isLoading } = useQuery<RouteClusterDetail>({
     queryKey: ["/api/clustering/route-clusters", clusterId],
@@ -322,11 +388,14 @@ function RouteClusterPanel({
   });
 
   const patchMutation = useMutation({
-    mutationFn: async (body: { status?: string; displayName?: string }) =>
+    mutationFn: async (body: { status?: string; displayName?: string; routeDescription?: string }) =>
       (await apiRequest("PATCH", `/api/clustering/route-clusters/${clusterId}`, body)).json(),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["/api/clustering/route-clusters"] });
+      void queryClient.invalidateQueries({ queryKey: ["/api/rough-planning/grid"] });
       setEditingName(false);
+      setShowLockComment(false);
+      setLockComment("");
       toast({ title: "Ruttklump uppdaterad" });
     },
     onError: () => toast({ title: "Fel vid uppdatering", variant: "destructive" }),
@@ -343,6 +412,7 @@ function RouteClusterPanel({
 
   const meta = STATUS_META[cluster.status] ?? STATUS_META.active;
   const precLabel = PRECISION_LABEL[cluster.precisionLevel ?? ""] ?? cluster.precisionLevel ?? "–";
+  const isLocked = cluster.status === "locked";
 
   return (
     <div className="flex flex-col gap-4 p-1">
@@ -401,6 +471,7 @@ function RouteClusterPanel({
         </Button>
       </div>
 
+      {isLocked && <ConstraintWarning />}
       <Separator />
 
       {/* Metadata */}
@@ -428,6 +499,12 @@ function RouteClusterPanel({
         <div className="tabular-nums font-medium">{cluster.taskCount}</div>
       </div>
 
+      {cluster.routeDescription && (
+        <p className="text-xs text-muted-foreground rounded border border-border bg-muted/30 px-2 py-1.5">
+          {cluster.routeDescription}
+        </p>
+      )}
+
       <Separator />
 
       {/* Åtgärder */}
@@ -445,16 +522,53 @@ function RouteClusterPanel({
           </Button>
         )}
         {cluster.status !== "locked" && (
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => patchMutation.mutate({ status: "locked" })}
-            disabled={patchMutation.isPending}
-            data-testid="button-route-cluster-lock"
-          >
-            <Lock className="h-4 w-4" />
-            Lås
-          </Button>
+          showLockComment ? (
+            <div className="flex w-full flex-col gap-2">
+              <Textarea
+                placeholder="Låskommentar (valfritt, sparas i ruttnotes)"
+                value={lockComment}
+                onChange={(e) => setLockComment(e.target.value)}
+                className="h-20 text-xs resize-none"
+                data-testid="textarea-route-lock-comment"
+              />
+              <div className="flex gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() =>
+                    patchMutation.mutate({
+                      status: "locked",
+                      ...(lockComment.trim() ? { routeDescription: lockComment.trim() } : {}),
+                    })
+                  }
+                  disabled={patchMutation.isPending}
+                  data-testid="button-route-cluster-lock-confirm"
+                >
+                  <Lock className="h-4 w-4" />
+                  Lås
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => setShowLockComment(false)}
+                  data-testid="button-route-cluster-lock-cancel"
+                >
+                  Avbryt
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setShowLockComment(true)}
+              disabled={patchMutation.isPending}
+              data-testid="button-route-cluster-lock"
+            >
+              <Lock className="h-4 w-4" />
+              Lås
+            </Button>
+          )
         )}
         {cluster.status === "locked" && (
           <Button
@@ -468,6 +582,15 @@ function RouteClusterPanel({
             Lås upp
           </Button>
         )}
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => navigate("/veckoplan")}
+          data-testid="button-route-cluster-send-to-veckoplan"
+        >
+          <CalendarDays className="h-4 w-4" />
+          Skicka till veckoplan
+        </Button>
       </div>
 
       <Separator />
@@ -533,7 +656,7 @@ export function ClusterSidePanel({ cluster, onClose }: ClusterSidePanelProps) {
     <Sheet open={cluster !== null} onOpenChange={(open) => { if (!open) onClose(); }}>
       <SheetContent
         side="right"
-        className="w-[380px] sm:w-[420px] overflow-y-auto"
+        className="w-[380px] sm:w-[440px] overflow-y-auto"
         data-testid="sheet-cluster-panel"
       >
         <SheetHeader className="sr-only">

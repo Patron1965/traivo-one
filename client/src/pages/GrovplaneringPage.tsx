@@ -64,7 +64,9 @@ import {
   type FilterState,
 } from "@/components/grovplanering/RoughFilterPanel";
 import { RoughGridTable } from "@/components/grovplanering/RoughGridTable";
+import type { TaskClusters } from "@/components/grovplanering/RoughGridTable";
 import { RoughAssignModal } from "@/components/grovplanering/RoughAssignModal";
+import { ClusterSidePanel, type ClusterRef } from "@/components/clustering/ClusterSidePanel";
 import { EngineRunControl } from "@/components/grovplanering/EngineRunControl";
 import { EngineResultsView } from "@/components/grovplanering/EngineResultsView";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -293,6 +295,7 @@ export default function GrovplaneringPage() {
 
   const [selected, setSelected] = useState<Map<string, GridTaskRow>>(new Map());
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  const [openCluster, setOpenCluster] = useState<ClusterRef | null>(null);
 
   const [assignTarget, setAssignTarget] = useState<GridTaskRow[] | null>(null);
   const [revokeTarget, setRevokeTarget] = useState<
@@ -383,6 +386,27 @@ export default function GrovplaneringPage() {
   }, [filteredGroups, hasAdvancedFilter, offset, pageSize]);
 
   const summary = data?.summary ?? EMPTY_KPIS;
+
+  // Batch-hämta klump-memberships för synliga uppgifter (manuell vy).
+  const visibleTaskIds = useMemo(
+    () => groups.flatMap((g) => g.tasks.map((t) => t.id)),
+    [groups],
+  );
+  const membershipIdsKey = visibleTaskIds.slice(0, 200).sort().join(",");
+  const { data: membershipData } = useQuery<Record<string, TaskClusters>>({
+    queryKey: ["/api/clustering/task-memberships", membershipIdsKey],
+    queryFn: async () => {
+      if (visibleTaskIds.length === 0) return {};
+      const params = new URLSearchParams({
+        workOrderIds: visibleTaskIds.slice(0, 200).join(","),
+      });
+      return (await apiRequest("GET", `/api/clustering/task-memberships?${params}`)).json();
+    },
+    enabled: visibleTaskIds.length > 0,
+  });
+
+  const getTaskClusters = (taskId: string): TaskClusters | undefined =>
+    membershipData?.[taskId];
 
   // Motorns förslag (Task #1039) — läses on-demand, separat från work_order-rutnätet.
   const {
@@ -951,6 +975,8 @@ export default function GrovplaneringPage() {
                 label: row.objectName ?? row.title ?? "uppgift",
               })
             }
+            onOpenCluster={setOpenCluster}
+            getTaskClusters={getTaskClusters}
           />
 
           {/* Paginering + legend */}
@@ -1039,6 +1065,9 @@ export default function GrovplaneringPage() {
       </div>
         </>
       )}
+
+      {/* Klump-panel (öppnas vid klick på badge i manuell vy) */}
+      <ClusterSidePanel cluster={openCluster} onClose={() => setOpenCluster(null)} />
 
       {/* Tilldela-modal */}
       <RoughAssignModal

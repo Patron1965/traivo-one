@@ -3,6 +3,7 @@
  * Används som "Klumpvy"-fliken i GrovplaneringPage.
  */
 import { useState } from "react";
+import { useLocation } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import {
   CheckCircle2,
@@ -15,6 +16,9 @@ import {
   ChevronDown,
   ChevronRight,
   RefreshCw,
+  Merge,
+  Users,
+  CalendarDays,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -269,6 +273,8 @@ function MassActionBar({
   onUnlock,
   loading,
   onClear,
+  onMerge,
+  onSendToVeckoplan,
 }: {
   count: number;
   type: "route" | "stop";
@@ -277,6 +283,8 @@ function MassActionBar({
   onUnlock: () => void;
   loading: boolean;
   onClear: () => void;
+  onMerge?: () => void;
+  onSendToVeckoplan?: () => void;
 }) {
   if (count === 0) return null;
   return (
@@ -317,6 +325,32 @@ function MassActionBar({
         <LockOpen className="h-4 w-4" />
         Lås upp alla
       </Button>
+      {/* Slå ihop: bara för stoppklumpar, exakt 2 valda */}
+      {type === "stop" && count === 2 && onMerge && (
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={onMerge}
+          disabled={loading}
+          data-testid="button-mass-merge"
+        >
+          <Merge className="h-4 w-4" />
+          Slå ihop
+        </Button>
+      )}
+      {/* Skicka till veckoplan */}
+      {onSendToVeckoplan && (
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={onSendToVeckoplan}
+          disabled={loading}
+          data-testid="button-mass-send-veckoplan"
+        >
+          <CalendarDays className="h-4 w-4" />
+          Skicka till veckoplan
+        </Button>
+      )}
       <Button
         size="sm"
         variant="ghost"
@@ -338,6 +372,7 @@ type StatusFilter = "all" | "active" | "confirmed" | "locked" | "dissolved";
 
 export function ClusterListView() {
   const { toast } = useToast();
+  const [, navigate] = useLocation();
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [activeSection, setActiveSection] = useState<"route" | "stop">("route");
   const [routeCollapsed, setRouteCollapsed] = useState(false);
@@ -384,6 +419,19 @@ export function ClusterListView() {
       toast({ title: "Stoppklumpning klar" });
     },
     onError: () => toast({ title: "Fel vid stoppklumpning", variant: "destructive" }),
+  });
+
+  // ---- Merge stop clusters mutation (exakt 2 valda) ----
+  const mergeStopMutation = useMutation({
+    mutationFn: async ([sourceId, targetId]: [string, string]) =>
+      (await apiRequest("POST", "/api/clustering/stop-clusters/merge", { sourceId, targetId })).json(),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["/api/clustering/stop-clusters"] });
+      void queryClient.invalidateQueries({ queryKey: ["/api/rough-planning/grid"] });
+      setSelectedStopIds(new Set());
+      toast({ title: "Stoppklumpar sammanslagna" });
+    },
+    onError: () => toast({ title: "Fel vid sammanslagning", variant: "destructive" }),
   });
 
   // ---- Mass-action mutations ----
@@ -503,17 +551,23 @@ export function ClusterListView() {
           onLock={() => massRouteMutation.mutate("locked")}
           onUnlock={() => massRouteMutation.mutate("active")}
           onClear={() => setSelectedRouteIds(new Set())}
+          onSendToVeckoplan={() => navigate("/veckoplan")}
         />
       )}
       {selectedStopIds.size > 0 && (
         <MassActionBar
           count={selectedStopIds.size}
           type="stop"
-          loading={massStopMutation.isPending}
+          loading={massStopMutation.isPending || mergeStopMutation.isPending}
           onConfirm={() => massStopMutation.mutate("confirmed")}
           onLock={() => massStopMutation.mutate("locked")}
           onUnlock={() => massStopMutation.mutate("auto")}
           onClear={() => setSelectedStopIds(new Set())}
+          onMerge={() => {
+            const [src, tgt] = Array.from(selectedStopIds);
+            if (src && tgt) mergeStopMutation.mutate([src, tgt]);
+          }}
+          onSendToVeckoplan={() => navigate("/veckoplan")}
         />
       )}
 

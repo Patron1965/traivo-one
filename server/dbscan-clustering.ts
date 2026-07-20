@@ -338,7 +338,7 @@ export function dbscanCluster(
   let totalIntraDist = 0;
   let intraPairs = 0;
 
-  for (const [, members] of clusterMap) {
+  for (const [, members] of Array.from(clusterMap)) {
     const lat = members.reduce((s, st) => s + st.lat, 0) / members.length;
     const lng = members.reduce((s, st) => s + st.lng, 0) / members.length;
     clusters.push({ centroid: { lat, lng }, stops: members });

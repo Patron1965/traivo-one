@@ -891,6 +891,115 @@ export function registerClusteringRoutes(app: Express): void {
       res.status(201).json({ split: true, newCluster });
     }),
   );
+
+  // -----------------------------------------------------------------------
+  // GET /api/clustering/task-memberships?workOrderIds=id1,id2,...
+  // Hämtar aktiva klump-memberships för en lista work order IDs (max 200).
+  // Returnerar: { [workOrderId]: { stop: [...], route: [...] } }
+  // -----------------------------------------------------------------------
+  app.get(
+    "/api/clustering/task-memberships",
+    asyncHandler(async (req, res) => {
+      const tenantId = getTenantIdWithFallback(req);
+      const raw = ((req.query.workOrderIds as string) ?? "").trim();
+      const woIds = raw.split(",").map((s) => s.trim()).filter(Boolean).slice(0, 200);
+      if (woIds.length === 0) { res.json({}); return; }
+
+      const [stopMems, routeMems] = await Promise.all([
+        db
+          .select({
+            taskId: stopClusterMemberships.taskId,
+            clusterId: stopClusters.id,
+            displayName: stopClusters.displayName,
+            status: stopClusters.status,
+          })
+          .from(stopClusterMemberships)
+          .innerJoin(stopClusters, eq(stopClusters.id, stopClusterMemberships.stopClusterId))
+          .where(
+            and(
+              eq(stopClusterMemberships.tenantId, tenantId),
+              inArray(stopClusterMemberships.taskId, woIds),
+              isNull(stopClusterMemberships.removedAt),
+              eq(stopClusterMemberships.taskTable, "work_orders"),
+            ),
+          ),
+        db
+          .select({
+            taskId: routeClusterMemberships.taskId,
+            clusterId: routeClusters.id,
+            displayName: routeClusters.displayName,
+            status: routeClusters.status,
+            calculatedWorkMinutes: routeClusters.calculatedWorkMinutes,
+            earliestDeliveryAt: routeClusters.earliestDeliveryAt,
+            latestDeliveryAt: routeClusters.latestDeliveryAt,
+          })
+          .from(routeClusterMemberships)
+          .innerJoin(routeClusters, eq(routeClusters.id, routeClusterMemberships.routeClusterId))
+          .where(
+            and(
+              eq(routeClusterMemberships.tenantId, tenantId),
+              inArray(routeClusterMemberships.taskId, woIds),
+              isNull(routeClusterMemberships.removedAt),
+              eq(routeClusterMemberships.taskTable, "work_orders"),
+            ),
+          ),
+      ]);
+
+      // member counts for the stop clusters found
+      const scIds = Array.from(new Set(stopMems.map((m) => m.clusterId)));
+      const stopCountMap = new Map<string, number>();
+      if (scIds.length > 0) {
+        const cRows = await db
+          .select({
+            stopClusterId: stopClusterMemberships.stopClusterId,
+            cnt: sql<number>`count(*)`,
+          })
+          .from(stopClusterMemberships)
+          .where(
+            and(
+              eq(stopClusterMemberships.tenantId, tenantId),
+              inArray(stopClusterMemberships.stopClusterId, scIds),
+              isNull(stopClusterMemberships.removedAt),
+            ),
+          )
+          .groupBy(stopClusterMemberships.stopClusterId);
+        for (const row of cRows) stopCountMap.set(row.stopClusterId, Number(row.cnt));
+      }
+
+      const result: Record<string, { stop: object[]; route: object[] }> = {};
+      for (const id of woIds) result[id] = { stop: [], route: [] };
+
+      for (const m of stopMems) {
+        result[m.taskId]?.stop.push({
+          id: m.clusterId,
+          displayName: m.displayName,
+          status: m.status,
+          memberCount: stopCountMap.get(m.clusterId) ?? 0,
+        });
+      }
+      for (const m of routeMems) {
+        const period = m.earliestDeliveryAt
+          ? formatWeekLabel(new Date(m.earliestDeliveryAt as unknown as string))
+          : null;
+        const periodEnd = m.latestDeliveryAt
+          ? formatWeekLabel(new Date(m.latestDeliveryAt as unknown as string))
+          : null;
+        const periodLabel =
+          period && periodEnd && period !== periodEnd
+            ? `${period}–${periodEnd}`
+            : period;
+        result[m.taskId]?.route.push({
+          id: m.clusterId,
+          displayName: m.displayName,
+          status: m.status,
+          period: periodLabel,
+          workMinutes: m.calculatedWorkMinutes,
+        });
+      }
+
+      res.json(result);
+    }),
+  );
 }
 
 // ---------------------------------------------------------------------------
