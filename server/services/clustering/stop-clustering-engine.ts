@@ -1,17 +1,24 @@
 /**
  * Stoppklumpningsmotorn (ADR Klumpning v1).
  *
- * Identifierar uppgifter (work_orders + assignments) som kan utföras vid samma
- * fysiska stopp baserat på fyra villkor:
- *   1. Geografisk — koordinater inom konfigurerbar radie (default 30 m)
- *   2. Tidsmässig — leveranstidsfönster överlappar (STRIKT överlapp)
- *   3. Utförarmässig — exakt samma execution_code (null === null är OK;
- *                      null !== "kod" → hoppas över)
+ * Identifierar uppgifter (work_orders) som kan utföras vid samma fysiska
+ * stopp baserat på fyra villkor:
+ *   1. Geografisk   — koordinater inom konfigurerbar radie (default 30 m)
+ *                     ELLER exakt adressmatchning
+ *   2. Tidsmässig   — parvisa tidsfönster överlappar (STRIKT, UTAN kedjeklustring)
+ *   3. Utförarmässig — exakt samma execution_code
+ *                     (null === null är OK; null !== "kod")
  *   4. Statusmässig — uppgiften är aktiv för planering
+ *
+ * Tidsfönster-invariant (klumpens garanti):
+ *   Klumpen håller ett INTERSEKTIONSFÖNSTER (intersection av alla members windows).
+ *   En ny uppgift får bara gå in om dess fönster överlappar med intersektionen.
+ *   Detta förhindrar kedjeklustring (A∩B, B∩C men A⊄C → A och C hamnar aldrig
+ *   i samma klump).
  *
  * Låsningslogik (per klump):
  *   auto      – motorns beslut; skrivs över fritt vid omräkning
- *   confirmed – planeraren bekräftat; ÄNDRAS ALDRIG automatiskt (samma skydd som locked)
+ *   confirmed – planeraren bekräftat; ÄNDRAS ALDRIG automatiskt
  *   locked    – hoppas ALLTID över vid automatisk omräkning
  */
 import { db } from "../../db";
@@ -68,12 +75,51 @@ interface ActiveTask {
   geo: TaskGeo;
   window: TaskWindow;
   estimatedDurationMinutes: number | null;
-  stopClusterId: string | null;
-  stopClusterStatus: string | null;
 }
 
 // ---------------------------------------------------------------------------
-// Interna hjälpfunktioner
+// Interna hjälpfunktioner – tid
+// ---------------------------------------------------------------------------
+
+/**
+ * Sant om fönstren överlappar. Null-start = -∞, null-end = +∞.
+ * Krav: STRIKT överlapp — uppgifter med icke-överlappande fönster
+ * hamnar ALDRIG i samma klump.
+ */
+function windowsOverlap(a: TaskWindow, b: TaskWindow): boolean {
+  const aStart = a.start?.getTime() ?? -Infinity;
+  const aEnd = a.end?.getTime() ?? Infinity;
+  const bStart = b.start?.getTime() ?? -Infinity;
+  const bEnd = b.end?.getTime() ?? Infinity;
+  return aStart <= bEnd && bStart <= aEnd;
+}
+
+/**
+ * Beräknar intersektionsfönstret för två fönster.
+ * Returnerar null om intersektionen är tom (aEnd < bStart eller tvärtom).
+ */
+function intersectWindows(
+  a: TaskWindow,
+  b: TaskWindow,
+): TaskWindow | null {
+  const aStart = a.start?.getTime() ?? -Infinity;
+  const aEnd = a.end?.getTime() ?? Infinity;
+  const bStart = b.start?.getTime() ?? -Infinity;
+  const bEnd = b.end?.getTime() ?? Infinity;
+
+  const iStart = Math.max(aStart, bStart);
+  const iEnd = Math.min(aEnd, bEnd);
+
+  if (iStart > iEnd) return null; // Tomma intersektionen
+
+  return {
+    start: iStart === -Infinity ? null : new Date(iStart),
+    end: iEnd === Infinity ? null : new Date(iEnd),
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Interna hjälpfunktioner – geo
 // ---------------------------------------------------------------------------
 
 function haversineMeters(
@@ -97,19 +143,9 @@ function normalizeAddressKey(address: string | null | undefined): string {
   return address.toLowerCase().replace(/\s+/g, " ").trim();
 }
 
-/**
- * STRIKT tidsfönsteröverlapp — uppgifter med icke-överlappande fönster
- * hamnar ALDRIG i samma klump (jämför Acceptanskriterium 2).
- * Öppna fönster (start=null eller end=null) behandlas konservativt:
- *   null start → -∞, null end → +∞.
- */
-function windowsOverlap(a: TaskWindow, b: TaskWindow): boolean {
-  const aStart = a.start?.getTime() ?? -Infinity;
-  const aEnd = a.end?.getTime() ?? Infinity;
-  const bStart = b.start?.getTime() ?? -Infinity;
-  const bEnd = b.end?.getTime() ?? Infinity;
-  return aStart <= bEnd && bStart <= aEnd;
-}
+// ---------------------------------------------------------------------------
+// Interna hjälpfunktioner – övrigt
+// ---------------------------------------------------------------------------
 
 function isActiveForPlanning(wo: WorkOrder): boolean {
   if (wo.deletedAt != null) return false;
@@ -160,12 +196,7 @@ async function resolveTaskGeo(wo: WorkOrder): Promise<TaskGeo> {
       city: obj?.city ?? null,
     };
   }
-  return {
-    latitude: null,
-    longitude: null,
-    normalizedAddress: null,
-    city: null,
-  };
+  return { latitude: null, longitude: null, normalizedAddress: null, city: null };
 }
 
 interface TenantClusterConfig {
@@ -182,7 +213,6 @@ async function getTenantConfig(tenantId: string): Promise<TenantClusterConfig> {
   };
 }
 
-/** Myntar nästa SC-NNN referensnummer (tenant-scoped, best-effort sekvens). */
 async function mintStopClusterReference(tenantId: string): Promise<string> {
   const result = await db
     .select({ cnt: sql<number>`count(*)` })
@@ -192,7 +222,6 @@ async function mintStopClusterReference(tenantId: string): Promise<string> {
   return `SC-${String(n).padStart(3, "0")}`;
 }
 
-/** Beräknar viktad centroid (aritmetiskt medelvärde). */
 function computeCentroid(
   coords: Array<{ lat: number; lng: number }>,
 ): { latitude: number; longitude: number } | null {
@@ -204,20 +233,60 @@ function computeCentroid(
   };
 }
 
-/** Sant om klumpstatus är skyddad (blocked from auto-change). */
+/** Klumpar med confirmed eller locked status ändras ALDRIG av automatiska flöden. */
 function isProtectedStatus(status: string | null | undefined): boolean {
   return status === "locked" || status === "confirmed";
+}
+
+/**
+ * Hämtar intersektionsfönstret för alla aktiva members i en klump.
+ * Om klumpen saknar members returneras null (öppet fönster – matchar allt).
+ * Om intersektionen är tom returneras en sentinel med start > end.
+ */
+async function getClusterIntersectionWindow(
+  clusterId: string,
+  tenantId: string,
+): Promise<TaskWindow | null> {
+  const memberships = await db
+    .select({ taskId: stopClusterMemberships.taskId })
+    .from(stopClusterMemberships)
+    .where(
+      and(
+        eq(stopClusterMemberships.stopClusterId, clusterId),
+        eq(stopClusterMemberships.tenantId, tenantId),
+        isNull(stopClusterMemberships.removedAt),
+      ),
+    );
+
+  if (memberships.length === 0) return null;
+
+  const memberIds = memberships.map((m) => m.taskId);
+  const memberWos = await db
+    .select()
+    .from(workOrders)
+    .where(inArray(workOrders.id, memberIds));
+
+  let intersection: TaskWindow | null = null;
+  for (const mwo of memberWos) {
+    const mw = getEffectiveWindow(mwo as WorkOrder);
+    if (intersection === null) {
+      intersection = mw;
+    } else {
+      const next = intersectWindows(intersection, mw);
+      if (next === null) {
+        // Intersektionen är redan tom — klumpen är inkonsistent (bör inte hända).
+        return { start: new Date(0), end: new Date(-1) };
+      }
+      intersection = next;
+    }
+  }
+  return intersection;
 }
 
 // ---------------------------------------------------------------------------
 // Publika API
 // ---------------------------------------------------------------------------
 
-/**
- * Bygger visningsnamn för en stoppklump.
- *   "Mekanivägen 2C, Tullinge"        (adress + stad)
- *   "Mekanivägen 2C – Miljörum västra" (adress + extra)
- */
 export function buildStopClusterName(
   address: string,
   city?: string | null,
@@ -228,13 +297,13 @@ export function buildStopClusterName(
 }
 
 /**
- * Analyserar EN uppgift mot befintliga stoppklumpar (skrivskyddad, inkrementell).
- * Returnerar alla matchande klumpar sorterade efter avstånd.
+ * Analyserar EN uppgift mot befintliga stoppklumpar (skrivskyddad).
  *
- * Klumpvillkor (alla tre måste uppfyllas):
- *   1. Strikt geo-matchning: koordinater inom radiusMeters ELLER exakt adress
- *   2. Strikt tidsfönsteröverlapp (ej gap-baserat)
- *   3. Exakt execution_code-matchning (null === null är OK)
+ * Villkor (alla tre måste uppfyllas):
+ *   1. Exakt execution_code-matchning (null===null OK)
+ *   2. Ny uppgift överlappar med klumpens INTERSEKTIONSFÖNSTER
+ *      (förhindrar kedjeklustring)
+ *   3. Geo-matchning inom radiusMeters ELLER exakt adress
  */
 export async function analyzeTask(
   taskId: string,
@@ -246,7 +315,7 @@ export async function analyzeTask(
 
   const config = await getTenantConfig(tenantId);
   const geo = await resolveTaskGeo(wo);
-  const window = getEffectiveWindow(wo);
+  const taskWindow = getEffectiveWindow(wo);
 
   const clusters = await db
     .select()
@@ -282,23 +351,24 @@ export async function analyzeTask(
   for (const cluster of clusters) {
     const reasons: StopClusterMatch["matchReasons"] = [];
 
-    // Villkor 3: Exakt execution_code-matchning (null === null OK, null !== "kod")
+    // Villkor 3: Exakt execution_code-matchning
     if (cluster.executionCode !== wo.executionCode) continue;
     if (wo.executionCode !== null) reasons.push("execution_code");
 
-    // Villkor 2: STRIKT tidsfönsteröverlapp
-    const clusterWindow: TaskWindow = {
-      start: cluster.earliestDeliveryAt
-        ? new Date(cluster.earliestDeliveryAt)
-        : null,
-      end: cluster.latestDeliveryAt
-        ? new Date(cluster.latestDeliveryAt)
-        : null,
-    };
-    if (!windowsOverlap(window, clusterWindow)) continue;
+    // Villkor 2: Ny uppgift måste överlappa med klumpens INTERSEKTIONSFÖNSTER
+    //   (förhindrar kedjeklustring; null-intersection = inga members → öppet)
+    const intersection = await getClusterIntersectionWindow(cluster.id, tenantId);
+    if (intersection !== null) {
+      // Kolla om intersection är tom (sentinel)
+      const iStart = intersection.start?.getTime() ?? -Infinity;
+      const iEnd = intersection.end?.getTime() ?? Infinity;
+      if (iStart > iEnd) continue; // Tom intersection → klumpen tar inga fler
+
+      if (!windowsOverlap(taskWindow, intersection)) continue;
+    }
     reasons.push("time");
 
-    // Villkor 1: Geo-matchning (koordinater inom radie ELLER exakt adress)
+    // Villkor 1: Geo-matchning
     let distanceMeters: number | null = null;
     let geoMatched = false;
 
@@ -314,9 +384,10 @@ export async function analyzeTask(
         cluster.latitude,
         cluster.longitude,
       );
-      if (distanceMeters > config.radiusMeters) continue;
-      reasons.push("geo");
-      geoMatched = true;
+      if (distanceMeters <= config.radiusMeters) {
+        reasons.push("geo");
+        geoMatched = true;
+      }
     }
 
     if (
@@ -350,11 +421,8 @@ export async function analyzeTask(
 }
 
 /**
- * Inkrementell tilldelning: analyserar uppgiften, väljer bästa ej-skyddade klump,
- * skriver assignment + membership. Kallas från klustringsköns processor.
- *
- * Skyddade klumpar (confirmed + locked): uppgift i en sådan klump ändras ALDRIG
- * automatiskt. Ny uppgift tilldelas ALDRIG automatiskt till en skyddad klump.
+ * Inkrementell tilldelning: analyserar uppgiften, väljer bästa ej-skyddade
+ * klump och skriver assignment + membership.
  */
 export async function processTask(
   taskId: string,
@@ -372,7 +440,7 @@ export async function processTask(
       })
     : null;
 
-  // Skyddade klumpar (confirmed + locked): rör dem ALDRIG automatiskt.
+  // Skyddade klumpar (confirmed + locked): rör dem ALDRIG automatiskt
   if (isProtectedStatus(currentCluster?.status)) {
     return { action: "skipped", clusterId: wo.stopClusterId ?? undefined };
   }
@@ -382,38 +450,33 @@ export async function processTask(
   if (!isActiveForPlanning(wo)) {
     if (wo.stopClusterId) {
       await removeFromCluster(taskId, "work_orders", tenantId, "status_change");
-      return { action: "removed" };
     }
-    return { action: "skipped" };
+    return { action: "removed" };
   }
 
   const config = await getTenantConfig(tenantId);
   const geo = await resolveTaskGeo(wo);
-
   const hasGeo = geo.latitude != null && geo.longitude != null;
   const hasAddress = !!geo.normalizedAddress;
+
   if (!hasGeo && !hasAddress) {
     if (wo.stopClusterId) {
       await removeFromCluster(taskId, "work_orders", tenantId, "recluster");
-      return { action: "removed" };
     }
     return { action: "skipped" };
   }
 
-  // Hämta bara matchande klumpar (analyzeTask exkluderar dissolved + kontrollerar villkor)
+  // analyzeTask använder intersektionsfönstret internt — förhindrar kedjeklustring
   const allMatches = await analyzeTask(taskId, tenantId);
-
-  // Välj bästa icke-skyddade match (confirmed/locked hoppas alltid över)
   const bestMatch =
     allMatches.find((m) => !isProtectedStatus(m.cluster.status)) ?? null;
 
   if (!bestMatch) {
-    // Ingen befintlig klump matchar — skapa ny solo-klump
     if (wo.stopClusterId) {
       await removeFromCluster(taskId, "work_orders", tenantId, "recluster");
     }
 
-    const window = getEffectiveWindow(wo);
+    const taskWindow = getEffectiveWindow(wo);
     const displayName = buildStopClusterName(
       geo.normalizedAddress || "Okänd adress",
       geo.city,
@@ -432,8 +495,8 @@ export async function processTask(
         longitude: geo.longitude,
         radiusMeters: config.radiusMeters,
         executionCode: wo.executionCode,
-        earliestDeliveryAt: window.start,
-        latestDeliveryAt: window.end,
+        earliestDeliveryAt: taskWindow.start,
+        latestDeliveryAt: taskWindow.end,
         calculatedDurationMinutes: wo.estimatedDuration ?? null,
         status: "auto",
         clusteringRuleVersion: "v1",
@@ -446,18 +509,14 @@ export async function processTask(
   }
 
   if (bestMatch.cluster.id === wo.stopClusterId) {
-    // Uppgiften är redan i rätt klump — uppdatera bara tidsfönstret
-    const window = getEffectiveWindow(wo);
-    await updateClusterWindow(
-      bestMatch.cluster.id,
-      window,
-      wo.estimatedDuration ?? null,
-      now,
-    );
+    // Redan i rätt klump — uppdatera bara statistik (ej ackumulera duration)
+    await db
+      .update(stopClusters)
+      .set({ lastCalculatedAt: now })
+      .where(eq(stopClusters.id, bestMatch.cluster.id));
     return { action: "kept", clusterId: bestMatch.cluster.id };
   }
 
-  // Flytta till bättre klump
   if (wo.stopClusterId) {
     await removeFromCluster(taskId, "work_orders", tenantId, "recluster");
   }
@@ -506,9 +565,7 @@ async function assignToCluster(
     await db
       .update(workOrders)
       .set({ stopClusterId: clusterId, stopClusterCalculatedAt: now })
-      .where(
-        and(eq(workOrders.id, taskId), eq(workOrders.tenantId, tenantId)),
-      );
+      .where(and(eq(workOrders.id, taskId), eq(workOrders.tenantId, tenantId)));
   }
 }
 
@@ -535,58 +592,17 @@ async function removeFromCluster(
     await db
       .update(workOrders)
       .set({ stopClusterId: null, stopClusterCalculatedAt: now })
-      .where(
-        and(eq(workOrders.id, taskId), eq(workOrders.tenantId, tenantId)),
-      );
+      .where(and(eq(workOrders.id, taskId), eq(workOrders.tenantId, tenantId)));
   }
-}
-
-async function updateClusterWindow(
-  clusterId: string,
-  newWindow: TaskWindow,
-  durationMinutes: number | null,
-  now: Date,
-): Promise<void> {
-  const cluster = await db.query.stopClusters.findFirst({
-    where: eq(stopClusters.id, clusterId),
-  });
-  if (!cluster || isProtectedStatus(cluster.status)) return;
-
-  const existingStart = cluster.earliestDeliveryAt
-    ? new Date(cluster.earliestDeliveryAt)
-    : null;
-  const existingEnd = cluster.latestDeliveryAt
-    ? new Date(cluster.latestDeliveryAt)
-    : null;
-
-  const effectiveStart =
-    existingStart && newWindow.start
-      ? new Date(Math.min(existingStart.getTime(), newWindow.start.getTime()))
-      : newWindow.start ?? existingStart;
-  const effectiveEnd =
-    existingEnd && newWindow.end
-      ? new Date(Math.max(existingEnd.getTime(), newWindow.end.getTime()))
-      : newWindow.end ?? existingEnd;
-
-  const newDuration =
-    durationMinutes != null
-      ? (cluster.calculatedDurationMinutes ?? 0) + durationMinutes
-      : cluster.calculatedDurationMinutes;
-
-  await db
-    .update(stopClusters)
-    .set({
-      earliestDeliveryAt: effectiveStart,
-      latestDeliveryAt: effectiveEnd,
-      calculatedDurationMinutes: newDuration,
-      lastCalculatedAt: now,
-    })
-    .where(eq(stopClusters.id, clusterId));
 }
 
 /**
  * Fullständig omräkning för en tenant. Berör ENBART auto-klumpar.
- * Confirmed och locked klumpar (och uppgifter i dem) hoppas alltid över.
+ *
+ * Tidsfönster-invariant: varje bucket håller ett intersektionsfönster som
+ * krymper med varje ny member. En ny uppgift kan bara gå in om dess fönster
+ * överlappar med intersektionen — detta förhindrar kedjeklustring
+ * (A∩B, B∩C men A⊄C → A och C hamnar i SEPARATA klumpar).
  */
 export async function runFullAnalysis(
   tenantId: string,
@@ -609,15 +625,12 @@ export async function runFullAnalysis(
     durationMs: 0,
   };
 
-  // Identifiera auto-klumpar (enda kandidaterna för upplösning)
+  // 1. Lös upp ENBART auto-klumpar
   const autoClusters = await db
     .select({ id: stopClusters.id })
     .from(stopClusters)
     .where(
-      and(
-        eq(stopClusters.tenantId, tenantId),
-        eq(stopClusters.status, "auto"),
-      ),
+      and(eq(stopClusters.tenantId, tenantId), eq(stopClusters.status, "auto")),
     );
   const autoClusterIds = autoClusters.map((c) => c.id);
 
@@ -632,7 +645,6 @@ export async function runFullAnalysis(
           isNull(stopClusterMemberships.removedAt),
         ),
       );
-
     await db
       .update(workOrders)
       .set({ stopClusterId: null, stopClusterCalculatedAt: now })
@@ -642,16 +654,14 @@ export async function runFullAnalysis(
           inArray(workOrders.stopClusterId, autoClusterIds),
         ),
       );
-
     await db
       .update(stopClusters)
       .set({ status: "dissolved", dissolvedAt: now })
       .where(inArray(stopClusters.id, autoClusterIds));
-
     result.dissolved = autoClusterIds.length;
   }
 
-  // Hämta alla aktiva WO inom horizon
+  // 2. Hämta aktiva WO inom horizon
   const eligibleWos = await db
     .select()
     .from(workOrders)
@@ -675,7 +685,7 @@ export async function runFullAnalysis(
   const tasks: ActiveTask[] = [];
   for (const wo of eligibleWos) {
     try {
-      // Uppgifter i protected (confirmed/locked) klumpar hoppas ALLTID över
+      // WO i protected (confirmed/locked) klumpar hoppas över
       if (wo.stopClusterId) {
         const sc = await db.query.stopClusters.findFirst({
           where: eq(stopClusters.id, wo.stopClusterId),
@@ -694,7 +704,6 @@ export async function runFullAnalysis(
       const geo = await resolveTaskGeo(wo as WorkOrder);
       const window = getEffectiveWindow(wo as WorkOrder);
 
-      // Filtrera bort WO utanför horizon
       const taskEnd = window.end ?? window.start ?? null;
       if (taskEnd && taskEnd > horizon) continue;
 
@@ -702,9 +711,7 @@ export async function runFullAnalysis(
         geo.latitude == null &&
         geo.longitude == null &&
         !geo.normalizedAddress
-      ) {
-        continue;
-      }
+      ) continue;
 
       tasks.push({
         id: wo.id,
@@ -714,8 +721,6 @@ export async function runFullAnalysis(
         geo,
         window,
         estimatedDurationMinutes: wo.estimatedDuration ?? null,
-        stopClusterId: null,
-        stopClusterStatus: null,
       });
     } catch (err) {
       result.errors.push(
@@ -724,12 +729,26 @@ export async function runFullAnalysis(
     }
   }
 
-  // Greedy-klustring: strikt geo + strikt execution_code + strikt tidsfönsteröverlapp
+  // 3. Greedy-klustring med INTERSEKTIONSFÖNSTER per bucket
+  //
+  //   Bucket-invariant:
+  //     intersectionWindow = ∩ av alla members windows (krymper med varje ny member)
+  //     unionWindow        = ∪ av alla members windows (för display/storage)
+  //
+  //   En ny uppgift kan gå in i bucket OM:
+  //     (a) executionCode matchar exakt
+  //     (b) geo matchar (inom radie ELLER exakt adress)
+  //     (c) task.window ∩ bucket.intersectionWindow ≠ ∅
+  //
+  //   Varje task kan bara hamna i FÖRSTA matchande bucket (greedy).
+
   interface ClusterBucket {
     tasks: ActiveTask[];
     geo: TaskGeo;
-    window: TaskWindow;
+    intersectionWindow: TaskWindow; // krymper
+    unionWindow: TaskWindow;        // växer (för display)
     executionCode: string | null;
+    totalDuration: number;
   }
 
   const buckets: ClusterBucket[] = [];
@@ -737,10 +756,10 @@ export async function runFullAnalysis(
   for (const task of tasks) {
     let placed = false;
     for (const bucket of buckets) {
-      // Villkor 3: Exakt execution_code-matchning
+      // Villkor (a): Exakt execution_code
       if (bucket.executionCode !== task.executionCode) continue;
 
-      // Villkor 1: Geo-matchning
+      // Villkor (b): Geo-matchning
       const geoOk = (() => {
         if (
           bucket.geo.latitude != null &&
@@ -764,24 +783,27 @@ export async function runFullAnalysis(
       })();
       if (!geoOk) continue;
 
-      // Villkor 2: STRIKT tidsfönsteröverlapp
-      if (!windowsOverlap(bucket.window, task.window)) continue;
+      // Villkor (c): STRIKT tidsfönsteröverlapp mot INTERSEKTIONSFÖNSTRET
+      // (förhindrar kedjeklustring)
+      if (!windowsOverlap(task.window, bucket.intersectionWindow)) continue;
 
+      // Beräkna ny intersection (krymper)
+      const newIntersection = intersectWindows(bucket.intersectionWindow, task.window);
+      if (newIntersection === null) continue; // Tom intersection efter merge — ej kompatibel
+
+      // Lägg till i bucket
       bucket.tasks.push(task);
-      // Expandera bucketens fönster till union
-      if (
-        task.window.start &&
-        (bucket.window.start == null ||
-          task.window.start < bucket.window.start)
-      ) {
-        bucket.window.start = task.window.start;
-      }
-      if (
-        task.window.end &&
-        (bucket.window.end == null || task.window.end > bucket.window.end)
-      ) {
-        bucket.window.end = task.window.end;
-      }
+      bucket.intersectionWindow = newIntersection;
+
+      // Expandera union (för display)
+      const uStart = bucket.unionWindow.start;
+      const uEnd = bucket.unionWindow.end;
+      if (task.window.start && (!uStart || task.window.start < uStart))
+        bucket.unionWindow.start = task.window.start;
+      if (task.window.end && (!uEnd || task.window.end > uEnd))
+        bucket.unionWindow.end = task.window.end;
+
+      bucket.totalDuration += task.estimatedDurationMinutes ?? 0;
       placed = true;
       break;
     }
@@ -790,13 +812,15 @@ export async function runFullAnalysis(
       buckets.push({
         tasks: [task],
         geo: { ...task.geo },
-        window: { ...task.window },
+        intersectionWindow: { ...task.window },
+        unionWindow: { ...task.window },
         executionCode: task.executionCode,
+        totalDuration: task.estimatedDurationMinutes ?? 0,
       });
     }
   }
 
-  // Skapa klumpar för varje bucket
+  // 4. Skapa klumpar för varje bucket
   for (const bucket of buckets) {
     try {
       const centroid = computeCentroid(
@@ -806,8 +830,8 @@ export async function runFullAnalysis(
       );
 
       const firstAddr =
-        bucket.tasks.find((t) => t.geo.normalizedAddress)?.geo
-          .normalizedAddress ?? null;
+        bucket.tasks.find((t) => t.geo.normalizedAddress)?.geo.normalizedAddress ??
+        null;
       const firstCity =
         bucket.tasks.find((t) => t.geo.city)?.geo.city ?? null;
 
@@ -816,10 +840,6 @@ export async function runFullAnalysis(
         firstCity,
       );
       const referenceNumber = await mintStopClusterReference(tenantId);
-      const totalDuration = bucket.tasks.reduce(
-        (s, t) => s + (t.estimatedDurationMinutes ?? 0),
-        0,
-      );
 
       const [newCluster] = await db
         .insert(stopClusters)
@@ -833,9 +853,10 @@ export async function runFullAnalysis(
           longitude: centroid?.longitude ?? null,
           radiusMeters: config.radiusMeters,
           executionCode: bucket.executionCode,
-          earliestDeliveryAt: bucket.window.start,
-          latestDeliveryAt: bucket.window.end,
-          calculatedDurationMinutes: totalDuration || null,
+          // Lagra UNIONEN för display/informationsändamål
+          earliestDeliveryAt: bucket.unionWindow.start,
+          latestDeliveryAt: bucket.unionWindow.end,
+          calculatedDurationMinutes: bucket.totalDuration || null,
           status: "auto",
           clusteringRuleVersion: "v1",
           lastCalculatedAt: now,
@@ -857,13 +878,11 @@ export async function runFullAnalysis(
       const woIds = bucket.tasks
         .filter((t) => t.taskTable === "work_orders")
         .map((t) => t.id);
+
       if (woIds.length > 0) {
         await db
           .update(workOrders)
-          .set({
-            stopClusterId: newCluster.id,
-            stopClusterCalculatedAt: now,
-          })
+          .set({ stopClusterId: newCluster.id, stopClusterCalculatedAt: now })
           .where(
             and(
               eq(workOrders.tenantId, tenantId),
