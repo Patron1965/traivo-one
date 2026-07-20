@@ -582,6 +582,19 @@ export const workOrders = pgTable("work_orders", {
   // createWorkOrderWithLines) under transaktionsbundet advisory-lås; övriga WO lämnas
   // NULL (expand-contract, back-compat). Klientsatt värde ignoreras alltid.
   orderNumber: text("order_number"),
+  // === Klumpningsmotorer (ADR klumpning v1): dynamisk stopp- och rutt-gruppering ===
+  // Alla fält nullable (expand-contract). Uppdateras av klumpningsservicen vid trigger
+  // (fältändring i CLUSTERING_TRIGGERS) eller manuell körning av planerare.
+  // clusterLockStatus styr om motorns beslut får skrivas över vid omräkning:
+  //   auto      = motorns senaste beslut, kan skrivas om
+  //   confirmed = planeraren har bekräftat, motorn varnar vid avvikelse
+  //   locked    = ändras ALDRIG automatiskt, kräver explicit upplåsning
+  stopClusterId: varchar("stop_cluster_id").references((): any => stopClusters.id, { onDelete: "set null" }),
+  routeClusterId: varchar("route_cluster_id").references((): any => routeClusters.id, { onDelete: "set null" }),
+  stopClusterCalculatedAt: timestamp("stop_cluster_calculated_at"),
+  routeClusterCalculatedAt: timestamp("route_cluster_calculated_at"),
+  clusterLockStatus: text("cluster_lock_status"),
+  clusterExclusionReason: text("cluster_exclusion_reason"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   deletedAt: timestamp("deleted_at"),
 }, (table) => [
@@ -3483,6 +3496,15 @@ export const assignments = pgTable("assignments", {
   // Se work_orders.uppgiftspaket. 1 logisk uppgift spänner över assignments +
   // work_orders (uppgiftskontrakt v1) — paketet finns därför på BÅDA lagren.
   uppgiftspaket: jsonb("uppgiftspaket").$type<Uppgiftspaket>(),
+  // === Klumpningsmotorer (ADR klumpning v1): Alt B — fält på BÅDA tabellerna ===
+  // Täcker koncept-genererade uppgifter (assignments) som ännu ej materialiserats
+  // till work_orders. Se work_orders.stopClusterId för kommentarer om lock-semantik.
+  stopClusterId: varchar("stop_cluster_id").references((): any => stopClusters.id, { onDelete: "set null" }),
+  routeClusterId: varchar("route_cluster_id").references((): any => routeClusters.id, { onDelete: "set null" }),
+  stopClusterCalculatedAt: timestamp("stop_cluster_calculated_at"),
+  routeClusterCalculatedAt: timestamp("route_cluster_calculated_at"),
+  clusterLockStatus: text("cluster_lock_status"),
+  clusterExclusionReason: text("cluster_exclusion_reason"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   deletedAt: timestamp("deleted_at"),
 }, (table) => [
@@ -8129,6 +8151,171 @@ export const insertSavedFilterSchema = createInsertSchema(savedFilters)
     roles: z.array(z.string()).optional().default([]),
   });
 export type InsertSavedFilter = z.infer<typeof insertSavedFilterSchema>;
+
+// ============================================================================
+// ADR Klumpning v1: Dynamiska stopp- och ruttklumpar
+//
+// STOPPKLUMP = dynamisk grupp av uppgifter som kan utföras vid samma fysiska stopp
+// (t.ex. "Mekanivägen 2C, Tullinge"). Operativ horisont 1–2 veckor.
+//
+// RUTTKLUMP = dynamisk grupp av stopp som bör utföras under samma produktionsdag
+// (t.ex. "Nynäshamn", "Södertälje–Nynäshamn"). Strategisk horisont upp till 1 år.
+//
+// Skiljer sig från `clusters` (permanent organisationsstruktur, ingen FK längre
+// i UI men kolumner bevarade för VRP/plumbing expand-contract).
+//
+// Klump-ID:n finns på BÅDA work_orders OCH assignments (Alt B — se ADR §3):
+//   work_orders  → manuella/snabborder-uppgifter + materialiserade call_off
+//   assignments  → koncept-genererade uppgifter som ej ännu materialiserats
+//
+// Status-flöde: active → confirmed → locked → dissolved
+//   active    = motorns aktuella beslut
+//   confirmed = planeraren har bekräftat
+//   locked    = låst för manuell planering (motorn rör ej)
+//   dissolved = klumpen är upplöst (historik bevaras)
+// ============================================================================
+
+export const stopClusters = pgTable("stop_clusters", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
+  // Löpande referensnummer per tenant, format "SC-NNN" (myntas server-side).
+  referenceNumber: text("reference_number"),
+  // Visningsnamn: "{Gatuadress}, {Stad}" eller "{Gatuadress} – {Extra info}".
+  displayName: text("display_name").notNull(),
+  normalizedAddress: text("normalized_address"),
+  city: text("city"),
+  // Geografisk tyngdpunkt för klumpen (WGS-84, haversine v1 — PostGIS framtida beslut).
+  latitude: real("latitude"),
+  longitude: real("longitude"),
+  // Klumpens effektiva geografi-radie (default 30m per konfiguration).
+  radiusMeters: real("radius_meters").default(30),
+  // Utförandekod — alla uppgifter i klumpen måste ha samma kod (eller null = ospecificerad).
+  executionCode: text("execution_code"),
+  // Tidsfönster för klumpen (union av alla ingående uppgifters tidsfönster).
+  earliestDeliveryAt: timestamp("earliest_delivery_at"),
+  latestDeliveryAt: timestamp("latest_delivery_at"),
+  // Beräknad total produktionstid (summa av estimatedDuration på ingående uppgifter).
+  calculatedDurationMinutes: integer("calculated_duration_minutes"),
+  // Status-flöde (se kommentar ovan).
+  status: text("status").default("active").notNull(),
+  // Versionsmärkning av den regelkonfiguration som skapade klumpen (för omräkningskoll).
+  clusteringRuleVersion: text("clustering_rule_version"),
+  lastCalculatedAt: timestamp("last_calculated_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  dissolvedAt: timestamp("dissolved_at"),
+}, (table) => [
+  index("idx_stop_clusters_tenant").on(table.tenantId),
+  index("idx_stop_clusters_tenant_status").on(table.tenantId, table.status),
+  index("idx_stop_clusters_tenant_execution_code").on(table.tenantId, table.executionCode),
+  uniqueIndex("uq_stop_clusters_reference_number").on(table.tenantId, table.referenceNumber),
+]);
+
+export type StopCluster = typeof stopClusters.$inferSelect;
+export const insertStopClusterSchema = createInsertSchema(stopClusters).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+  dissolvedAt: true,
+});
+export type InsertStopCluster = z.infer<typeof insertStopClusterSchema>;
+
+// ============================================================================
+
+export const routeClusters = pgTable("route_clusters", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
+  // Löpande referensnummer per tenant, format "RC-NNN" (myntas server-side).
+  referenceNumber: text("reference_number"),
+  // Visningsnamn sätts via reverse geocoding av tyngdpunkten (getMapProvider()).
+  // Flerortiga klumpar: "Stad1–Stad2". Fallback: "Ruttklump YYYY-MM-DD".
+  displayName: text("display_name").notNull(),
+  routeDescription: text("route_description"),
+  // Geografisk tyngdpunkt (viktat medelvärde av ingående stopp).
+  centerLatitude: real("center_latitude"),
+  centerLongitude: real("center_longitude"),
+  // Klumpens effektiva geografi-radie (default 40 km per konfiguration).
+  radiusKilometers: real("radius_kilometers").default(40),
+  // Utförandekod — homogenitetskrav (null = blandad klump, konfigurationsval).
+  executionCode: text("execution_code"),
+  // Tidsfönster för hela ruttklumpen (union av ingående stoppklumpars tidsfönster).
+  earliestDeliveryAt: timestamp("earliest_delivery_at"),
+  latestDeliveryAt: timestamp("latest_delivery_at"),
+  // Beräknad produktionstid (summa) och restid (uppskattad via haversine-kedja).
+  calculatedWorkMinutes: integer("calculated_work_minutes"),
+  calculatedTravelMinutes: integer("calculated_travel_minutes"),
+  // Precisionsindikator: high (≤30d), medium (30–90d), low (90–365d).
+  precisionLevel: text("precision_level").default("high"),
+  // Status-flöde (se kommentar ovan vid stopClusters).
+  status: text("status").default("active").notNull(),
+  // Versionsmärkning av regelkonfigurationen.
+  clusteringRuleVersion: text("clustering_rule_version"),
+  lastCalculatedAt: timestamp("last_calculated_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  dissolvedAt: timestamp("dissolved_at"),
+}, (table) => [
+  index("idx_route_clusters_tenant").on(table.tenantId),
+  index("idx_route_clusters_tenant_status").on(table.tenantId, table.status),
+  index("idx_route_clusters_tenant_execution_code").on(table.tenantId, table.executionCode),
+  uniqueIndex("uq_route_clusters_reference_number").on(table.tenantId, table.referenceNumber),
+]);
+
+export type RouteCluster = typeof routeClusters.$inferSelect;
+export const insertRouteClusterSchema = createInsertSchema(routeClusters).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+  dissolvedAt: true,
+});
+export type InsertRouteCluster = z.infer<typeof insertRouteClusterSchema>;
+
+// ============================================================================
+// Klump-membership-historik (append-only)
+//
+// Spårar varje tilldelning och borttagning av uppgifter från klumpar.
+// taskId refererar till work_order.id (för manuella) eller assignment.id (för
+// koncept-genererade). taskTable = 'work_orders' | 'assignments' skiljer källa.
+// assigned_at / removed_at + removal_reason ger full audit trail.
+// ============================================================================
+
+export const stopClusterMemberships = pgTable("stop_cluster_memberships", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
+  stopClusterId: varchar("stop_cluster_id").references(() => stopClusters.id).notNull(),
+  // Uppgiftens id (work_order eller assignment — se taskTable).
+  taskId: varchar("task_id").notNull(),
+  // Vilken tabell uppgiften bor i: 'work_orders' | 'assignments'.
+  taskTable: text("task_table").notNull(),
+  assignedAt: timestamp("assigned_at").defaultNow().notNull(),
+  // NULL = fortfarande aktiv i klumpen.
+  removedAt: timestamp("removed_at"),
+  // Anledning till borttagning: recluster | manual | dissolved | status_change.
+  removalReason: text("removal_reason"),
+}, (table) => [
+  index("idx_stop_cluster_memberships_cluster").on(table.stopClusterId),
+  index("idx_stop_cluster_memberships_task").on(table.taskId, table.taskTable),
+  index("idx_stop_cluster_memberships_tenant_active").on(table.tenantId, table.removedAt),
+]);
+
+export type StopClusterMembership = typeof stopClusterMemberships.$inferSelect;
+
+export const routeClusterMemberships = pgTable("route_cluster_memberships", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
+  routeClusterId: varchar("route_cluster_id").references(() => routeClusters.id).notNull(),
+  taskId: varchar("task_id").notNull(),
+  taskTable: text("task_table").notNull(),
+  assignedAt: timestamp("assigned_at").defaultNow().notNull(),
+  removedAt: timestamp("removed_at"),
+  removalReason: text("removal_reason"),
+}, (table) => [
+  index("idx_route_cluster_memberships_cluster").on(table.routeClusterId),
+  index("idx_route_cluster_memberships_task").on(table.taskId, table.taskTable),
+  index("idx_route_cluster_memberships_tenant_active").on(table.tenantId, table.removedAt),
+]);
+
+export type RouteClusterMembership = typeof routeClusterMemberships.$inferSelect;
 
 // ============================================================================
 // Task #991: Enhetligt utförarregister (läsmodell)
