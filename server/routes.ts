@@ -9,6 +9,7 @@ import { registerMagicLinkRoutes } from "./replit_integrations/auth/magicLinkAut
 import { registerInvitationsRoutes } from "./routes/invitationsRoutes";
 import { registerRouteGeometryRoutes } from "./routes/routeGeometryRoutes";
 import { registerClusteringRoutes } from "./routes/clusteringRoutes";
+import { clusteringScheduler } from "./services/clustering/clustering-scheduler";
 import { requireTenantWithFallback, getTenantIdWithFallback, getUserTenants, requireAdmin } from "./tenant-middleware";
 import { moduleGuardMiddleware } from "./feature-flags";
 import { notificationService } from "./notifications";
@@ -644,8 +645,9 @@ export async function registerRoutes(
 
   registerRouteGeometryRoutes(app);
 
-  // Stoppklumpningsmotor (ADR Klumpning v1)
+  // Stoppklumpningsmotor + Ruttklumpningsmotor (ADR Klumpning v1)
   registerClusteringRoutes(app);
+  clusteringScheduler.start();
 
   // Global error-middleware registreras i server/index.ts (errorHandler) efter
   // att alla routes är monterade — den hanterar AppError, ZodError och okända fel
