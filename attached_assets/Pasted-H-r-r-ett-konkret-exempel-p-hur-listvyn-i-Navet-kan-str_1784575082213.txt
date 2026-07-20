@@ -1,0 +1,1054 @@
+Här är ett konkret exempel på hur listvyn i Navet kan struktureras med tre kollapsbara nivåer: ruttklump, stoppklump och enskild uppgift.
+
+Exempel – kollapsbar uppgiftslista i Navet
+
+1. Grundprincip
+
+Navets huvudlista ska kunna visa uppgifter i en hierarkisk och kollapsbar struktur med tre nivåer:
+
+1. Ruttklump
+2. Stoppklump
+3. Enskild uppgift
+
+Användaren ska kunna öppna och stänga varje nivå utan att lämna Navet.
+
+Strukturen ska exempelvis visas enligt:
+
+Göteborg 1
+↳ Hamngatan 22, Göteborg
+ ↳ Uppgift 10452 – Tvätt RBK
+ ↳ Uppgift 10453 – Märkning RBK
+↳ Storgatan 14, Göteborg
+ ↳ Uppgift 10461 – Reparation RBK
+
+Ruttklumpen är den övergripande administrativa grupperingen. Under ruttklumpen visas stoppklumparna. Under respektive stoppklump visas de enskilda uppgifterna.
+
+Uppgifter som inte ingår i någon ruttklump eller stoppklump ska kunna visas direkt på uppgiftsnivå i Navet.
+
+⸻
+
+2. Exempel på kollapsbar tabell
+
+Nivå	Utförandetyp	Arbetsnamn	Önskad eller möjlig leverans	Produktionstid	Produktionsvärde	Marginal	Status
+▼ Ruttklump	RBK	Göteborg 1	Vecka 38–39	27,5 h	68 750 kr	32 %	Otilldelad – klar för planering
+↳ ▼ Stoppklump	RBK	Hamngatan 22, Göteborg	Augusti, onsdagar 08.00–16.00	9,0 h	23 400 kr	34 %	Otilldelad
+↳ ↳ Uppgift	RBK	Tvätt av 24 RBK	Nästa möjliga: onsdag 19 augusti 08.00	6,0 h	15 600 kr	35 %	Uppgift för planering
+↳ ↳ Uppgift	RBK	Märkning av fraktioner	Onsdagar i augusti 08.00–16.00	2,0 h	5 200 kr	33 %	Uppgift för planering
+↳ ↳ Uppgift	Tillsyn	Funktionskontroll	Senast vecka 39	1,0 h	2 600 kr	30 %	Uppgift för planering
+↳ ▼ Stoppklump	RBK	Storgatan 14, Göteborg	Vecka 38–39, vardagar 07.00–17.00	10,5 h	26 250 kr	31 %	Otilldelad
+↳ ↳ Uppgift	RBK	Tvätt av 32 RBK	Vecka 38–39	8,0 h	20 000 kr	32 %	Uppgift för planering
+↳ ↳ Uppgift	Reparation	Byte av lock och hjul	Vardagar 07.00–17.00	2,5 h	6 250 kr	28 %	Materialkontroll krävs
+↳ ▼ Stoppklump	RBK	Industrivägen 8, Mölndal	Vecka 39, helst fredag	8,0 h	19 100 kr	30 %	Otilldelad
+↳ ↳ Uppgift	RBK	Tvätt och sanering	Vecka 39, helst fredag	5,5 h	13 750 kr	31 %	Uppgift för planering
+↳ ↳ Uppgift	Reparation	Justering av hjul och broms	Vecka 39	2,5 h	5 350 kr	27 %	Uppgift för planering
+
+⸻
+
+3. Nivå 1 – ruttklump
+
+Ruttklumpen ska visas som tabellens översta sammanfattningsnivå.
+
+Raden ska kunna kollapsas och expanderas med exempelvis en pil:
+
+* ▶ stängd ruttklump
+* ▼ öppen ruttklump
+
+När ruttklumpen är stängd visas endast den sammanfattande raden.
+
+Kolumner på ruttklumpsnivå
+
+Utförandetyp
+
+Visar vilken utförandetyp som dominerar eller gäller för ruttklumpen, exempelvis:
+
+* RBK
+* BÖK
+* Tillsyn
+* Reparation
+* Installation
+* Blandad
+
+Utförandetypen ska härledas från artiklarna i de ingående uppgifterna.
+
+Om flera kompatibla utförandetyper finns i samma klump ska detta visas som exempelvis:
+
+RBK + Tillsyn
+
+Om klumpen innehåller flera tydligt skilda utförandetyper ska värdet visas som:
+
+Blandad
+
+Användaren ska då kunna öppna informationsrutan och se vilka utförandetyper som ingår.
+
+Systemgenererat arbetsnamn
+
+Ruttklumpen ska få ett systemgenererat arbetsnamn baserat på geografiskt område eller ort.
+
+Exempel:
+
+* Göteborg 1
+* Göteborg 2
+* Nynäshamn 1
+* Södertälje 1
+* Västerås väst 1
+
+Numreringen ska användas när flera ruttklumpar skapas inom samma område.
+
+Namnet ska kunna justeras manuellt av behörig planerare utan att ruttklumpens ID ändras.
+
+Önskad eller möjlig generell leveranstid
+
+Kolumnen visar Tidsmotorns sammanfattning av de gemensamma eller kompatibla leveransvillkoren för klumpen.
+
+Exempel:
+
+* Vecka 38–39
+* Augusti
+* Vecka 39, helst fredag
+* September, vardagar 09.00–16.00
+* Flera kompatibla tidsfönster
+
+Om tidsvillkoren är komplexa ska en informationsikon visas.
+
+Exempel:
+
+Vecka 38–39 ⓘ
+
+När användaren öppnar informationsrutan kan följande visas:
+
+Uppgifterna kan genomföras under vecka 38–39. Tre stopp har hårda tidsfönster på vardagar 09.00–16.00. Två stopp bör helst genomföras på onsdag eller fredag.
+
+Om uppgifternas tidsfönster inte är kompatibla ska klumpen markeras med en varning.
+
+Exempel:
+
+Tidskonflikt – klumpen behöver delas
+
+Produktionstid
+
+Visar summan av beräknad produktionstid för samtliga ingående uppgifter.
+
+Exempel:
+
+27,5 h
+
+Produktionstiden ska inte inkludera dynamiska reseuppgifter som ännu inte har skapats i veckoplanen.
+
+Produktionsvärde
+
+Visar det sammanlagda beräknade försäljnings- eller produktionsvärdet för samtliga uppgifter i ruttklumpen.
+
+Exempel:
+
+68 750 kr
+
+Värdet ska härledas från uppgifternas artikel, antal, pris och orderkoncept.
+
+Marginal
+
+Visar beräknad marginal för hela ruttklumpen.
+
+Exempel:
+
+32 %
+
+Marginalen ska räknas utifrån sammanlagt produktionsvärde och beräknad kostnad.
+
+Om kostnadsunderlag saknas ska detta visas tydligt:
+
+Ej beräknad
+
+Status
+
+Visar ruttklumpens aktuella administrativa status.
+
+Exempel:
+
+* Otilldelad – klar för planering
+* Delvis tilldelad
+* Tilldelad till vecka 38
+* Tidskonflikt
+* Överskrider maximal produktionstid
+* Kräver manuell kontroll
+* Upplöst
+* Simulerad
+
+Ruttklumpens status är en sammanfattning av klumpens administrativa läge och de ingående uppgifternas status.
+
+⸻
+
+4. Nivå 2 – stoppklump
+
+När ruttklumpen öppnas visas de stoppklumpar som ingår.
+
+Stoppklumpen ska på motsvarande sätt kunna öppnas och stängas.
+
+Kolumner på stoppklumpsnivå
+
+Utförandetyp
+
+Visar vilken utförandetyp eller vilka kompatibla utförandetyper som ingår vid stoppet.
+
+Exempel:
+
+* RBK
+* BÖK
+* RBK + Tillsyn
+* Reparation
+* Blandad
+
+Systemgenererat arbetsnamn
+
+Stoppklumpen ska få ett systemgenererat arbetsnamn baserat på adressen.
+
+Exempel:
+
+* Hamngatan 22, Göteborg
+* Storgatan 14, Göteborg
+* Industrivägen 8, Mölndal
+
+Om flera separata stopp finns på samma adress ska namnet kunna kompletteras med exempelvis:
+
+* Hamngatan 22 – Miljörum A
+* Hamngatan 22 – Gård 2
+* Hamngatan 22 – BÖK norra sidan
+
+Önskad eller möjlig leveranstid
+
+Kolumnen visar Tidsmotorns sammanfattning för det aktuella stoppet.
+
+Exempel:
+
+* Augusti, onsdagar 08.00–16.00
+* Vecka 38–39
+* Vardagar 07.00–17.00
+* Senast 30 september
+* Helst fredag
+
+För komplexa leveransvillkor ska en informationsruta kunna öppnas.
+
+Exempel:
+
+Augusti, onsdagar 08.00–16.00 ⓘ
+
+Informationsrutan kan visa:
+
+Hårt tidsvillkor: arbetet ska genomföras under augusti.
+Hårt tidsfönster: onsdagar mellan 08.00 och 16.00.
+Nästa möjliga tid: onsdag 19 augusti klockan 08.00.
+
+Produktionstid
+
+Visar summan av planerad produktionstid för samtliga uppgifter i stoppklumpen.
+
+Exempel:
+
+9,0 h
+
+Produktionsvärde
+
+Visar sammanlagt värde för stoppets uppgifter.
+
+Exempel:
+
+23 400 kr
+
+Marginal
+
+Visar beräknad marginal för stoppklumpen.
+
+Exempel:
+
+34 %
+
+Status
+
+Visar stoppets aktuella status.
+
+Exempel:
+
+* Otilldelad
+* Tilldelad till vecka 38
+* Planerad tisdag
+* Delvis tilldelad
+* Tidskonflikt
+* Material saknas
+* Omöjlig att utföra
+* Utförd
+* Fakturakontroll
+* Fakturerad
+
+⸻
+
+5. Nivå 3 – enskild uppgift
+
+När stoppklumpen öppnas visas samtliga enskilda uppgifter vid stoppet.
+
+Uppgiften är den beständiga grundenheten i systemet.
+
+Varje uppgiftsrad ska kunna öppnas för att visa uppgiftspaketet och dess metadata.
+
+Grundkolumner på uppgiftsnivå
+
+Uppgiftsnummer	Utförandetyp	Uppgift eller artikel	Antal	Enhet	Planerad tid	Pris	Produktionsvärde	Marginal	Leveranstid	Status
+10452	RBK	Tvätt av RBK 660 liter	24	st	6,0 h	650 kr	15 600 kr	35 %	Onsdagar i augusti 08.00–16.00	För planering
+10453	RBK	Märkning av fraktioner	24	st	2,0 h	217 kr	5 208 kr	33 %	Onsdagar i augusti 08.00–16.00	För planering
+10454	Tillsyn	Funktionskontroll RBK	1	stopp	1,0 h	2 600 kr	2 600 kr	30 %	Senast vecka 39	För planering
+
+Utökad uppgiftsinformation
+
+När användaren öppnar en uppgift ska följande information kunna visas:
+
+Identitet och relationer
+
+* uppgifts-ID,
+* kund,
+* kundnummer,
+* objekt,
+* objektnummer,
+* adress,
+* order,
+* orderkoncept,
+* artikel,
+* artikelnummer,
+* eventuell huvuduppgift,
+* eventuella underuppgifter.
+
+Kvantitet och produktion
+
+* beställt antal,
+* planerat antal,
+* verkligt utfört antal,
+* enhet,
+* planerad produktionstid,
+* verklig produktionstid,
+* beräknad tid per enhet,
+* verklig tid per enhet.
+
+Ekonomi
+
+* artikelpris,
+* avtalat kundpris,
+* totalt produktionsvärde,
+* beräknad kostnad,
+* beräknad marginal,
+* verklig kostnad,
+* verklig marginal,
+* fakturerbart antal,
+* fakturerat värde.
+
+Leveranstid
+
+* önskad leveranstid,
+* nästa möjliga leveranstid,
+* hårda tidsfönster,
+* mjuka tidsfönster,
+* positiva tidsönskemål,
+* negativa tidsbegränsningar,
+* sammanfattad leveranstext från Tidsmotorn.
+
+Planering
+
+* tilldelad eller otilldelad,
+* tilldelad kalendervecka,
+* tilldelad utförare,
+* tilldelat team,
+* planerad dag,
+* planerad starttid,
+* planerad sluttid,
+* stoppklump,
+* tidigare ruttklump,
+* aktuell kapacitetsbelastning.
+
+Status och historik
+
+* huvudstatus,
+* sekundär status,
+* eventuell avvikelsestatus,
+* statusorsak,
+* skapad datum och tid,
+* skapad av,
+* senaste ändring,
+* tidigare tilldelningar,
+* tidigare veckoplaner,
+* återgångar till Navet,
+* utföranderapport,
+* fakturastatus.
+
+Metadata och dokumentation
+
+* relevanta metadata från uppgiftspaketets fält,
+* bilder,
+* filer,
+* instruktioner,
+* kontaktuppgifter,
+* riskinformation,
+* åtkomstinformation,
+* kundens anvisningar,
+* utförarens kommentarer.
+
+⸻
+
+6. Manuella åtgärder från tabellen
+
+Användaren ska kunna markera en eller flera rader på samtliga nivåer.
+
+Åtgärder för ruttklump
+
+* tilldela hela ruttklumpen,
+* välja vecka,
+* välja utförare eller team,
+* ändra leveransvecka,
+* lösa upp klumpen,
+* dela klumpen,
+* gruppera om klumpen,
+* ta bort en uppgift från klumpen,
+* visa klumpen på karta,
+* simulera tilldelning,
+* återföra samtliga uppgifter till otilldelat läge.
+
+Åtgärder för stoppklump
+
+* tilldela hela stoppet,
+* välja vecka,
+* välja utförare eller team,
+* flytta stoppet mellan veckor,
+* lösa upp stoppklumpen,
+* lägga till eller ta bort uppgifter,
+* visa stoppet på karta,
+* återföra stoppets uppgifter till otilldelat läge.
+
+Åtgärder för enskild uppgift
+
+* öppna uppgiftspaketet,
+* tilldela uppgiften,
+* byta vecka,
+* byta utförare eller team,
+* flytta uppgiften mellan stoppklumpar,
+* ta bort uppgiften från en klump,
+* återföra uppgiften till otilldelat läge,
+* ändra antal eller planerad tid,
+* registrera avvikelse,
+* ändra status,
+* visa historik.
+
+⸻
+
+7. Exempel på stängd och öppnad vy
+
+Stängd ruttklump
+
+	Utförandetyp	Arbetsnamn	Leverans	Produktionstid	Produktionsvärde	Marginal	Status
+▶	RBK	Göteborg 1	Vecka 38–39	27,5 h	68 750 kr	32 %	Otilldelad
+
+Öppnad ruttklump med stängda stopp
+
+	Utförandetyp	Arbetsnamn	Leverans	Produktionstid	Produktionsvärde	Marginal	Status
+▼	RBK	Göteborg 1	Vecka 38–39	27,5 h	68 750 kr	32 %	Otilldelad
+↳ ▶	RBK	Hamngatan 22, Göteborg	Augusti, onsdagar 08.00–16.00	9,0 h	23 400 kr	34 %	Otilldelad
+↳ ▶	RBK	Storgatan 14, Göteborg	Vecka 38–39	10,5 h	26 250 kr	31 %	Otilldelad
+↳ ▶	RBK	Industrivägen 8, Mölndal	Vecka 39, helst fredag	8,0 h	19 100 kr	30 %	Otilldelad
+
+Öppnad ruttklump och öppnad stoppklump
+
+	Utförandetyp	Arbetsnamn eller uppgift	Leverans	Produktionstid	Produktionsvärde	Marginal	Status
+▼	RBK	Göteborg 1	Vecka 38–39	27,5 h	68 750 kr	32 %	Otilldelad
+↳ ▼	RBK	Hamngatan 22, Göteborg	Augusti, onsdagar 08.00–16.00	9,0 h	23 400 kr	34 %	Otilldelad
+↳ ↳	RBK	Tvätt av 24 RBK	Nästa möjliga onsdag 08.00	6,0 h	15 600 kr	35 %	För planering
+↳ ↳	RBK	Märkning av 24 RBK	Onsdagar i augusti	2,0 h	5 200 kr	33 %	För planering
+↳ ↳	Tillsyn	Funktionskontroll	Senast vecka 39	1,0 h	2 600 kr	30 %	För planering
+↳ ▶	RBK	Storgatan 14, Göteborg	Vecka 38–39	10,5 h	26 250 kr	31 %	Otilldelad
+
+⸻
+
+8. Filtrering och sortering
+
+Navets lista ska kunna filtreras och sorteras på samtliga nivåer.
+
+Exempel på filter:
+
+* utförandetyp,
+* ort,
+* geografiskt område,
+* ruttklump,
+* stoppklump,
+* kund,
+* objekt,
+* leveransvecka,
+* tidsfönster,
+* tilldelad eller otilldelad,
+* utförare,
+* team,
+* huvudstatus,
+* sekundär status,
+* produktionstid,
+* produktionsvärde,
+* marginal,
+* över- eller dubbelbokning.
+
+Vid filtrering ska systemet fortfarande visa hierarkin.
+
+Om en enskild uppgift matchar ett filter ska dess överordnade stoppklump och ruttklump kunna visas för att användaren ska förstå sammanhanget.
+
+⸻
+
+9. Summeringsprincip
+
+Värden på klumpnivå ska alltid summeras från de ingående uppgifterna.
+
+Det innebär att:
+
+* ruttklumpens produktionstid är summan av uppgifternas produktionstid,
+* stoppklumpens produktionstid är summan av stoppets uppgifter,
+* produktionsvärdet summeras från uppgifternas ekonomiska värden,
+* marginalen beräknas utifrån totalt värde och total kostnad,
+* status sammanfattas från uppgifternas status och klumpens administrativa läge,
+* leveranstiden sammanfattas av Tidsmotorn utifrån de ingående tidsvillkoren.
+
+Värdena ska uppdateras dynamiskt när:
+
+* en uppgift läggs till,
+* en uppgift tas bort,
+* antal ändras,
+* produktionstid ändras,
+* pris ändras,
+* en uppgift utförs,
+* verkliga värden registreras,
+* uppgiften byter klump eller tilldelning.
+
+⸻
+
+10. Grundläggande utvecklingskrav
+
+Listan i Navet ska inte vara tre separata listor.
+
+Det ska vara en sammanhängande hierarkisk tabell där användaren kan röra sig från:
+
+ruttklump → stoppklump → enskild uppgift
+
+utan att lämna huvudvyn.
+
+Tabellen ska stödja:
+
+* kollapsning och expandering,
+* markering av en eller flera rader,
+* gruppåtgärder,
+* filtrering,
+* sortering,
+* kartvisning,
+* informationsrutor,
+* statusindikering,
+* summering,
+* direkt öppning av uppgiftspaketet.
+
+Grundprincipen är att planeraren snabbt ska kunna växla mellan:
+
+* övergripande grovplanering,
+* hantering av geografiska stopp,
+* kontroll av den enskilda uppgiftens order-, produktions-, tids- och ekonomiinformation.
+
+
+
+Detta bör betraktas som ett särskilt avsnitt efter beskrivningen av nivå 3 – enskild uppgift och dess data och källor.
+
+Tillägg – fullständig uppgiftsvy, källspårning och styrning från orderkoncept, snabborder, schema och abonnemang
+
+1. Enskild uppgift ska kunna öppnas fullständigt från Navet
+
+En enskild uppgift i Navets hierarkiska lista ska kunna öppnas i en fullständig uppgiftsvy.
+
+Denna vy ska i princip kunna redovisa samtliga uppgifter i uppgiftspaketet, det vill säga de cirka 94 datafält som följer uppgiften genom hela flödet.
+
+Det innebär inte att alla fält alltid måste visas samtidigt i en lång och svåröverskådlig lista. Fälten bör i stället organiseras i tydliga, kollapsbara informationsområden, exempelvis:
+
+* identitet och grunduppgifter,
+* kund och betalningsinformation,
+* objekt och geografisk plats,
+* order och orderkoncept,
+* artikel och utförandetyp,
+* antal och enhet,
+* leveranstid och tidsfönster,
+* planerad produktionstid,
+* faktisk produktionstid,
+* pris och prislista,
+* kostnad och marginal,
+* tilldelning och veckoplan,
+* utförare och team,
+* status och avvikelser,
+* instruktioner och arbetsmiljöinformation,
+* bilder, dokument och övriga metadata,
+* fakturaunderlag,
+* historik och källspårning.
+
+Uppgiftsvyn ska göra det möjligt att förstå hela uppgiften utan att planeraren först behöver lämna Navet och söka i flera olika register.
+
+⸻
+
+2. Uppgiftsvyn ska visa både aktuellt och ursprungligt värde
+
+För centrala fält ska systemet, där det är relevant, kunna visa:
+
+* aktuellt värde,
+* ursprungligt värde,
+* varifrån värdet kommer,
+* om värdet har ärvts,
+* om värdet har ändrats lokalt på uppgiften,
+* vem som ändrade värdet,
+* när ändringen genomfördes.
+
+Exempel:
+
+Fält	Aktuellt värde	Källa	Senast ändrat
+Leveransvillkor	Vecka 38–39	Orderkoncept	20 juli 2026
+Prislista	KINAB Fastighet 2026	Kundavtal/Fortnox	1 januari 2026
+Antal	24 st	Snabborder, lokalt ändrat	18 juli 2026
+Planerad tid	6,0 h	Artikelberäkning	Systemgenererat
+Tilldelat team	Team Väst	Veckoplan	20 juli 2026
+Utförandetyp	RBK	Artikel	Vid uppgiftens skapande
+
+Det ska vara tydligt om ett fält är:
+
+* källstyrt,
+* ärvt,
+* systemberäknat,
+* lokalt ändrat,
+* låst,
+* eller möjligt att redigera.
+
+⸻
+
+3. Möjlighet att gå tillbaka till uppgiftens källa
+
+Från den öppnade uppgiften ska användaren kunna gå tillbaka till den källa som skapade eller styr uppgiften.
+
+Källan kan exempelvis vara:
+
+* ett orderkoncept,
+* en snabborder,
+* en vanlig order,
+* ett schema,
+* ett abonnemang,
+* en manuellt skapad uppgift,
+* en motor eller metadataanalysator,
+* en annan huvuduppgift eller återkommande uppgiftsdefinition.
+
+Uppgiftsvyn ska därför innehålla tydliga länkar eller åtgärdsknappar, exempelvis:
+
+* Öppna orderkoncept
+* Öppna snabborder
+* Öppna ursprungsorder
+* Öppna schema
+* Öppna abonnemang
+* Visa skapandekälla
+* Visa arv och ändringshistorik
+
+Användaren ska inte behöva leta manuellt efter rätt orderkoncept, schema eller abonnemang.
+
+⸻
+
+4. Ändringar ska göras på rätt nivå
+
+Systemet måste tydligt skilja mellan:
+
+1. ändring av endast den aktuella uppgiften, och
+2. ändring av den källa som kan skapa eller påverka flera uppgifter.
+
+Detta är särskilt viktigt vid ändring av exempelvis:
+
+* leveranstid,
+* tidsfönster,
+* antal,
+* artikel,
+* pris,
+* prislista,
+* planerad produktionstid,
+* instruktion,
+* utförartyp,
+* kundreferens,
+* faktureringsinformation.
+
+Om användaren exempelvis vill ändra leveranstiden från uppgiftsvyn ska systemet visa om leveranstiden kommer från:
+
+* uppgiften själv,
+* snabbordern,
+* orderkonceptet,
+* schemat,
+* abonnemanget,
+* eller ett överordnat objekt.
+
+Användaren ska därefter kunna välja rätt ändringsnivå.
+
+Exempel:
+
+Leveranstiden kommer från abonnemanget RBK-tvätt Göteborg 2026.
+Välj hur ändringen ska tillämpas:
+
+* endast denna uppgift,
+* denna och framtida uppgifter,
+* hela abonnemanget,
+* öppna abonnemanget utan att ändra.
+
+⸻
+
+5. Ändring av orderkoncept eller snabborder
+
+Om uppgiften har skapats från ett orderkoncept eller en snabborder ska användaren kunna öppna denna källa från uppgiften.
+
+Där ska det exempelvis vara möjligt att justera:
+
+* leveranstid,
+* tidsfönster,
+* antal,
+* artikel eller artikelkombination,
+* kund,
+* objekt,
+* prislista,
+* enhetspris,
+* referenser,
+* instruktioner,
+* utförartyp,
+* metadata som ligger till grund för uppgiften.
+
+Systemet måste dock skilja mellan att:
+
+* ändra den redan skapade uppgiften,
+* ändra ursprungsordern,
+* ändra orderkonceptets mall,
+* ändra framtida uppgifter som skapas från samma källa.
+
+En ändring av ett orderkoncept får inte automatiskt skriva över redan skapade eller utförda uppgifter utan en tydlig, medveten åtgärd.
+
+⸻
+
+6. Särskild komplexitet för schemalagda uppgifter
+
+Om uppgiften är skapad genom ett schema måste systemet visa detta tydligt.
+
+Exempel:
+
+Källa: Schema – Tillsyn varje måndag
+
+Ett schema kan skapa återkommande uppgifter utifrån exempelvis:
+
+* veckodag,
+* kalenderintervall,
+* månad,
+* säsong,
+* bestämt antal tillfällen,
+* start- och slutdatum,
+* cykliska tidsvillkor.
+
+När en användare ändrar en schemaskapad uppgift ska systemet fråga vilken omfattning ändringen ska ha.
+
+Minst följande alternativ bör finnas:
+
+* endast denna uppgiftsinstans,
+* denna och efterföljande instanser,
+* samtliga ännu inte skapade instanser,
+* hela schemat,
+* öppna schemat utan att genomföra ändring.
+
+Systemet måste undvika att en lokal ändring på en enskild uppgift oavsiktligt förändrar hela schemat.
+
+Det ska också vara tydligt om framtida schemauppgifter:
+
+* redan har skapats som självständiga uppgifter,
+* skapas löpande vid en viss tidpunkt,
+* eller ännu endast finns som en schemadefinition.
+
+⸻
+
+7. Särskild komplexitet för abonnemangsuppgifter
+
+Om uppgiften har skapats från ett abonnemang ska abonnemanget betraktas som en överordnad affärs- och produktionsdefinition.
+
+Abonnemanget kan styra exempelvis:
+
+* vilka artiklar som ska utföras,
+* antal,
+* intervall,
+* leveranstider,
+* kund,
+* objekt,
+* prislista,
+* pris,
+* fakturaintervall,
+* startdatum,
+* slutdatum,
+* uppsägningstid,
+* indexering,
+* säsongsvariationer,
+* vilka uppgifter som ska skapas.
+
+Uppgiftsvyn ska tydligt visa:
+
+* vilket abonnemang uppgiften tillhör,
+* vilken abonnemangsperiod uppgiften avser,
+* vilken abonnemangsrad eller artikel som skapade uppgiften,
+* vilka värden som ärvts från abonnemanget,
+* vilka värden som har ändrats på den enskilda uppgiften.
+
+Vid förändring ska användaren exempelvis kunna välja:
+
+* ändra endast denna uppgift,
+* ändra återstående uppgifter i aktuell period,
+* ändra framtida ännu inte skapade uppgifter,
+* ändra abonnemanget från ett valt datum,
+* öppna abonnemanget för fullständig redigering.
+
+⸻
+
+8. Redan skapade respektive framtida uppgifter
+
+Systemet måste skilja mellan:
+
+* redan skapade uppgifter,
+* tilldelade uppgifter,
+* utförda uppgifter,
+* fakturerade uppgifter,
+* framtida ännu inte skapade uppgifter.
+
+En förändring av ett schema, abonnemang eller orderkoncept får olika konsekvenser beroende på uppgiftens status.
+
+Inte skapade framtida uppgifter
+
+Kan normalt följa den nya källinformationen när de senare skapas.
+
+Skapade men otilldelade uppgifter
+
+Kan eventuellt uppdateras i grupp efter användarens uttryckliga val.
+
+Tilldelade uppgifter
+
+Kan påverka veckoplan, utförare, kapacitet, stoppklump, ruttklump och reseuppgifter. Systemet ska därför visa konsekvensanalys innan ändringen genomförs.
+
+Utförda uppgifter
+
+Ska normalt inte skrivas om från en ändrad källa. Verkligt utfall och historik måste bevaras.
+
+Fakturerade uppgifter
+
+Ska vara särskilt skyddade. Ändring kan kräva korrigering, kreditering eller separat ekonomisk hantering och får inte ske som en vanlig planeringsändring.
+
+⸻
+
+9. Konsekvensanalys före ändring
+
+När en ändring i en källa riskerar att påverka flera uppgifter ska Traivo visa en sammanfattning innan ändringen genomförs.
+
+Exempel:
+
+Ändringen av leveranstiden påverkar:
+
+* 1 aktuell uppgift,
+* 7 skapade men otilldelade uppgifter,
+* 3 uppgifter som redan ligger i veckoplan,
+* 14 framtida uppgifter som ännu inte har skapats.
+
+Två av de tilldelade uppgifterna riskerar att hamna utanför sitt nya hårda tidsfönster.
+
+Användaren ska därefter kunna välja vilka kategorier som ska uppdateras.
+
+Systemet ska inte genomföra omfattande bakåtriktade förändringar utan att konsekvenserna visas.
+
+⸻
+
+10. Pris, prislista och ekonomisk källa
+
+På uppgiftsnivån ska det framgå var uppgiftens pris kommer från.
+
+Priskällan kan exempelvis vara:
+
+* angivet pris på ordern,
+* angivet pris på snabbordern,
+* kundens prislista,
+* artikelns grundpris,
+* abonnemangspris,
+* manuellt angivet pris,
+* senare prisjustering.
+
+Föreslagen prioriteringsordning är:
+
+1. uttryckligt pris på order eller uppgift,
+2. kundspecifikt avtal eller kundprislista,
+3. abonnemangspris,
+4. artikelpris,
+5. krav på manuell prissättning.
+
+När användaren väljer att justera prislista från uppgiftsvyn ska systemet tydligt fråga om ändringen avser:
+
+* endast den aktuella uppgiften,
+* aktuell order,
+* aktuellt abonnemang,
+* framtida uppgifter,
+* kundens generella prislista.
+
+En ändring av kundens generella prislista ska inte automatiskt ändra historiska, utförda eller fakturerade uppgifter.
+
+⸻
+
+11. Ändringsarv och lokala avvikelser
+
+En uppgift ska kunna avvika från sin källa utan att källan behöver ändras.
+
+Exempel:
+
+Ett abonnemang anger att arbetet normalt ska utföras på onsdagar, men kunden begär att ett enskilt tillfälle genomförs på fredag.
+
+Då ska systemet kunna registrera:
+
+* abonnemangets ordinarie tidsregel,
+* den enskilda uppgiftens lokala avvikelse,
+* anledningen till avvikelsen,
+* vem som godkände den,
+* om efterföljande uppgifter ska återgå till abonnemangets grundregel.
+
+Lokala ändringar ska markeras tydligt, exempelvis med:
+
+* Lokalt ändrad
+* Avviker från schema
+* Avviker från abonnemang
+* Manuellt pris
+* Manuellt leveransvillkor
+
+⸻
+
+12. Uppgiftsvyns struktur
+
+Den fullständiga uppgiftsvyn kan exempelvis delas in i följande kollapsbara sektioner:
+
+A. Sammanfattning
+
+* uppgiftsnummer,
+* arbetsnamn,
+* utförandetyp,
+* kund,
+* objekt,
+* adress,
+* leveranstid,
+* planerad tid,
+* värde,
+* marginal,
+* status,
+* tilldelning.
+
+B. Källa och ursprung
+
+* skapad från orderkoncept, snabborder, schema eller abonnemang,
+* källans namn och ID,
+* länk till källan,
+* skapandedatum,
+* arv och lokala avvikelser.
+
+C. Order och artikel
+
+* ordernummer,
+* orderkoncept,
+* artikelnummer,
+* artikeltext,
+* antal,
+* enhet,
+* pris,
+* prislista,
+* referenser.
+
+D. Tid och leverans
+
+* fullständiga tidsvillkor,
+* nästa möjliga tid,
+* hårda tidsfönster,
+* mjuka tidsfönster,
+* positiva och negativa regler,
+* planerad dag och tid.
+
+E. Produktion och ekonomi
+
+* beräknad produktionstid,
+* verklig produktionstid,
+* produktionsvärde,
+* beräknad kostnad,
+* verklig kostnad,
+* marginal,
+* fakturaunderlag.
+
+F. Planering och klumpar
+
+* otilldelad eller tilldelad,
+* vecka,
+* utförare,
+* team,
+* ruttklump,
+* stoppklump,
+* över- eller dubbelbokning,
+* kopplade reseuppgifter.
+
+G. Metadata
+
+* samtliga relevanta fält ur uppgiftspaketets cirka 94 fält,
+* bilder,
+* filer,
+* instruktioner,
+* kontaktinformation,
+* risker och åtkomst.
+
+H. Status och historik
+
+* huvudstatus,
+* sekundära statusar,
+* avvikelser,
+* samtliga ändringar,
+* tidigare tilldelningar,
+* utföranderapport,
+* fakturastatus.
+
+⸻
+
+13. Administrativa åtgärder från den fullständiga uppgiftsvyn
+
+Behörig användare ska från uppgiftsvyn kunna:
+
+* ändra uppgiften lokalt,
+* öppna och ändra uppgiftens källa,
+* ändra leveranstid,
+* ändra antal,
+* ändra planerad produktionstid,
+* ändra pris eller prislista,
+* ändra artikel där detta är tillåtet,
+* ändra utförartyp,
+* tilldela eller otilldela uppgiften,
+* flytta uppgiften mellan veckor,
+* flytta uppgiften mellan stoppklumpar,
+* ta bort uppgiften från en ruttklump,
+* registrera avvikelse,
+* visa konsekvenser för schema eller abonnemang,
+* visa fullständig historik.
+
+Alla ändringar ska styras av behörighet och loggas.
+
+⸻
+
+14. Grundläggande utvecklingsprincip
+
+Navet ska inte endast visa en sammanfattad planeringsrad.
+
+Från den enskilda uppgiften ska planeraren kunna gå hela vägen från den sammanfattade raden till:
+
+* uppgiftens kompletta data,
+* uppgiftens cirka 94 metadatafält,
+* ursprunglig order eller snabborder,
+* orderkoncept,
+* schema,
+* abonnemang,
+* pris- och leveranskälla,
+* ändringshistorik.
+
+Grundprincipen ska vara:
+
+* uppgiften är en självständig och beständig enhet,
+* uppgiften ska alltid kunna spåras till sin källa,
+* en lokal ändring ska inte oavsiktligt ändra källan,
+* en ändring av källan ska inte oavsiktligt skriva över historiska uppgifter,
+* scheman och abonnemang kräver särskild hantering av enskild instans, framtida instanser och redan skapade uppgifter,
+* användaren ska alltid förstå vilken nivå som ändras och vilka konsekvenser ändringen får.
+
+Detta tillägg gör Navet till både planeringsvy och ingång till uppgiftens fullständiga affärs-, produktions- och källinformation.
