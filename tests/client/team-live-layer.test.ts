@@ -325,3 +325,75 @@ describe("groupTrailStops", () => {
     ).toEqual([]);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Task #1308: computeTrailStatusDurations & formatDurationMs
+// ---------------------------------------------------------------------------
+
+import {
+  computeTrailStatusDurations,
+  formatDurationMs,
+} from "../../client/src/components/clustering/TeamLiveLayer";
+
+describe("computeTrailStatusDurations", () => {
+  it("summerar tid per statuskategori (intervall tillskrivs första punktens status)", () => {
+    const d = computeTrailStatusDurations([
+      pt("2026-07-20T08:00:00Z", "traveling"),
+      pt("2026-07-20T08:10:00Z", "on_site"),
+      pt("2026-07-20T08:20:00Z", "on_site"),
+      pt("2026-07-20T08:30:00Z", "idle"),
+      pt("2026-07-20T08:35:00Z", "traveling"),
+      pt("2026-07-20T08:45:00Z", "on_site"),
+    ]);
+    expect(d.travelingMs).toBe(20 * 60 * 1000);
+    expect(d.onSiteMs).toBe(20 * 60 * 1000);
+    expect(d.pausedMs).toBe(5 * 60 * 1000);
+  });
+
+  it("on_job räknas som på plats och break som paus", () => {
+    const d = computeTrailStatusDurations([
+      pt("2026-07-20T08:00:00Z", "on_job"),
+      pt("2026-07-20T08:05:00Z", "break"),
+      pt("2026-07-20T08:10:00Z", "break"),
+    ]);
+    expect(d.onSiteMs).toBe(5 * 60 * 1000);
+    expect(d.pausedMs).toBe(5 * 60 * 1000);
+    expect(d.travelingMs).toBe(0);
+  });
+
+  it("ignorerar dataluckor > 15 min och okänd/null-status", () => {
+    const d = computeTrailStatusDurations([
+      pt("2026-07-20T08:00:00Z", "on_site"),
+      pt("2026-07-20T08:20:00Z", "on_site"), // 20 min gap → ignoreras
+      pt("2026-07-20T08:25:00Z", null),
+      pt("2026-07-20T08:30:00Z", "offline"),
+      pt("2026-07-20T08:35:00Z", "on_site"),
+    ]);
+    // Endast 08:20→08:25 (on_site, 5 min) räknas; gapet samt null/offline ignoreras.
+    expect(d.onSiteMs).toBe(5 * 60 * 1000);
+    expect(d.travelingMs).toBe(0);
+    expect(d.pausedMs).toBe(0);
+  });
+
+  it("tom lista och en enda punkt ger nollor", () => {
+    expect(computeTrailStatusDurations([])).toEqual({
+      onSiteMs: 0,
+      travelingMs: 0,
+      pausedMs: 0,
+    });
+    expect(computeTrailStatusDurations([pt("2026-07-20T08:00:00Z", "on_site")])).toEqual({
+      onSiteMs: 0,
+      travelingMs: 0,
+      pausedMs: 0,
+    });
+  });
+});
+
+describe("formatDurationMs", () => {
+  it("formaterar timmar och minuter", () => {
+    expect(formatDurationMs(0)).toBe("<1m");
+    expect(formatDurationMs(25 * 60 * 1000)).toBe("25m");
+    expect(formatDurationMs(60 * 60 * 1000)).toBe("1h");
+    expect(formatDurationMs((3 * 60 + 20) * 60 * 1000)).toBe("3h 20m");
+  });
+});

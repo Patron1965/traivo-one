@@ -14,7 +14,7 @@ import { Marker, Popup, Polyline, CircleMarker, Tooltip } from "react-leaflet";
 import L from "leaflet";
 import { format } from "date-fns";
 import { sv as svLocale } from "date-fns/locale";
-import { Clock, MapPin, Users } from "lucide-react";
+import { Car, Clock, MapPin, PauseCircle, Users } from "lucide-react";
 import {
   Sheet,
   SheetContent,
@@ -480,6 +480,61 @@ export function groupTrailStops(points: TrailPointDto[]): TrailStop[] {
   return stops;
 }
 
+// ---------------------------------------------------------------------------
+// Task #1308: Aggregerad tid per status (på plats / körning / paus) ur trailen
+// ---------------------------------------------------------------------------
+
+export interface TrailStatusDurations {
+  onSiteMs: number;
+  travelingMs: number;
+  pausedMs: number;
+}
+
+/** Intervall längre än så räknas som datalucka och ignoreras (t.ex. app avstängd). */
+const MAX_INTERVAL_MS = 15 * 60 * 1000;
+
+/**
+ * Summerar tiden per statuskategori ur trail-punkterna. Varje intervall
+ * mellan två konsekutiva punkter tillskrivs den FÖRSTA punktens status.
+ * on_site/on_job ⇒ på plats, traveling ⇒ körning, idle/break ⇒ paus.
+ * Luckor > MAX_INTERVAL_MS och okänd/null-status räknas inte.
+ */
+export function computeTrailStatusDurations(
+  points: TrailPointDto[],
+): TrailStatusDurations {
+  const result: TrailStatusDurations = { onSiteMs: 0, travelingMs: 0, pausedMs: 0 };
+  for (let i = 0; i < points.length - 1; i++) {
+    const ms =
+      new Date(points[i + 1].recordedAt).getTime() -
+      new Date(points[i].recordedAt).getTime();
+    if (ms <= 0 || ms > MAX_INTERVAL_MS) continue;
+    switch (points[i].status) {
+      case "on_site":
+      case "on_job":
+        result.onSiteMs += ms;
+        break;
+      case "traveling":
+        result.travelingMs += ms;
+        break;
+      case "idle":
+      case "break":
+        result.pausedMs += ms;
+        break;
+    }
+  }
+  return result;
+}
+
+/** Formaterar millisekunder som "3h 20m" / "25m"; under 1 min ⇒ "<1m". */
+export function formatDurationMs(ms: number): string {
+  const totalMin = Math.round(ms / 60000);
+  if (totalMin < 1) return "<1m";
+  const h = Math.floor(totalMin / 60);
+  const m = totalMin % 60;
+  if (h === 0) return `${m}m`;
+  return m === 0 ? `${h}h` : `${h}h ${m}m`;
+}
+
 /** Hämtar dagens färdväg per team; nytt datum ⇒ ny query (linjen rensas). */
 export function useTeamTrails(enabled: boolean, dayStr: string) {
   return useQuery<TeamPositionTrailDto[]>({
@@ -592,6 +647,18 @@ export function TeamDayPanel({
   onClose: () => void;
 }) {
   const dayStr = format(day, "yyyy-MM-dd");
+
+  // Task #1308: aggregerad tid per status ur dagens trail-punkter.
+  const trailsQuery = useTeamTrails(team !== null, dayStr);
+  const statusSummary = useMemo(() => {
+    if (!team) return null;
+    const trail = (trailsQuery.data ?? []).find((t) => t.teamId === team.teamId);
+    if (!trail || trail.points.length < 2) return null;
+    const d = computeTrailStatusDurations(trail.points);
+    if (d.onSiteMs + d.travelingMs + d.pausedMs === 0) return null;
+    return d;
+  }, [team, trailsQuery.data]);
+
   const { data, isLoading } = useQuery<GridResponse>({
     queryKey: ["/api/rough-planning/grid", "team-day-panel", dayStr, team?.teamId],
     queryFn: async () => {
@@ -659,6 +726,31 @@ export function TeamDayPanel({
                   {format(new Date(team.position.lastUpdate), "HH:mm", { locale: svLocale })}
                   {isStalePosition(team.position.lastUpdate) ? " (inaktuell)" : ""}
                 </div>
+              </div>
+            </div>
+          )}
+
+          {statusSummary && (
+            <div
+              className="rounded-md border border-border bg-muted/40 px-3 py-2 text-xs space-y-1.5"
+              data-testid="text-team-status-summary"
+            >
+              <div className="font-medium text-muted-foreground">
+                Dagens aktivitet
+              </div>
+              <div className="flex flex-wrap gap-x-4 gap-y-1">
+                <span className="flex items-center gap-1.5" data-testid="text-status-on-site">
+                  <MapPin className="h-3.5 w-3.5 text-muted-foreground" />
+                  På plats {formatDurationMs(statusSummary.onSiteMs)}
+                </span>
+                <span className="flex items-center gap-1.5" data-testid="text-status-traveling">
+                  <Car className="h-3.5 w-3.5 text-muted-foreground" />
+                  Körning {formatDurationMs(statusSummary.travelingMs)}
+                </span>
+                <span className="flex items-center gap-1.5" data-testid="text-status-paused">
+                  <PauseCircle className="h-3.5 w-3.5 text-muted-foreground" />
+                  Paus {formatDurationMs(statusSummary.pausedMs)}
+                </span>
               </div>
             </div>
           )}
