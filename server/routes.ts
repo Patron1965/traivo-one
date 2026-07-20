@@ -8,6 +8,7 @@ import { setupAuth, registerAuthRoutes, isAuthenticated } from "./replit_integra
 import { registerMagicLinkRoutes } from "./replit_integrations/auth/magicLinkAuth";
 import { registerInvitationsRoutes } from "./routes/invitationsRoutes";
 import { registerRouteGeometryRoutes } from "./routes/routeGeometryRoutes";
+import { registerClusteringRoutes } from "./routes/clusteringRoutes";
 import { requireTenantWithFallback, getTenantIdWithFallback, getUserTenants, requireAdmin } from "./tenant-middleware";
 import { moduleGuardMiddleware } from "./feature-flags";
 import { notificationService } from "./notifications";
@@ -642,6 +643,9 @@ export async function registerRoutes(
   fortnoxSyncScheduler.start();
 
   registerRouteGeometryRoutes(app);
+
+  // Stoppklumpningsmotor (ADR Klumpning v1)
+  registerClusteringRoutes(app);
 
   // Global error-middleware registreras i server/index.ts (errorHandler) efter
   // att alla routes är monterade — den hanterar AppError, ZodError och okända fel

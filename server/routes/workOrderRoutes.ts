@@ -25,6 +25,8 @@ import { AppError, NotFoundError, ValidationError, ConflictError, ForbiddenError
 import { deriveFortnoxCodesWithSourceForWorkOrder } from "../services/fortnox-code-derivation";
 import { getObjectMetadataImages } from "../services/object-system-metadata";
 import { logWorkOrderTransition, getTaskEvents } from "../services/task-event-log";
+import { shouldRecluster } from "../services/clustering/triggers";
+import { clusteringQueue } from "../services/clustering/clustering-queue";
 import { distributeActualTime, adjustActualTimeDistribution, ActualTimeDistributionError } from "../services/actual-time-distribution";
 import { resolveStopPositions } from "../services/stop-positions";
 
@@ -1776,6 +1778,21 @@ app.patch("/api/work-orders/:id", asyncHandler(async (req, res) => {
     handleWorkOrderStatusChange(workOrder.id, oldSt, newSt, tenantId).catch(err =>
       console.error("[ai-communication] Event hook error:", err)
     );
+  }
+
+  // Stoppklumpning: kö inkrementell omräkning om triggerfält ändrades.
+  // Best-effort — blockerar aldrig API-svaret.
+  try {
+    const changedFields = Object.keys(updateData);
+    if (shouldRecluster(changedFields)) {
+      clusteringQueue.enqueue({
+        taskId: workOrder.id,
+        taskTable: "work_orders",
+        tenantId,
+      });
+    }
+  } catch (clusterErr) {
+    console.error("[clustering] failed to enqueue for WO", workOrder.id, clusterErr);
   }
 
   res.json(workOrder);
