@@ -68,6 +68,8 @@ import { RoughAssignModal } from "@/components/grovplanering/RoughAssignModal";
 import { EngineRunControl } from "@/components/grovplanering/EngineRunControl";
 import { EngineResultsView } from "@/components/grovplanering/EngineResultsView";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { ClusterListView } from "@/components/clustering/ClusterListView";
+import { ClusterMapView } from "@/components/clustering/ClusterMapView";
 import type { EngineResultsResponse } from "@/lib/engine-results";
 import {
   ROUGH_STATUS_ORDER,
@@ -272,7 +274,7 @@ function pageWindow(current: number, total: number): (number | "ellipsis")[] {
 export default function GrovplaneringPage() {
   const { toast } = useToast();
 
-  const [view, setView] = useState<"manuell" | "motor">("manuell");
+  const [view, setView] = useState<"manuell" | "motor" | "klump" | "karta">("manuell");
   const [groupBy, setGroupBy] = useState<GroupBy>("objekt");
   const [pageSize, setPageSize] = useState(20);
   const [offset, setOffset] = useState(0);
@@ -704,11 +706,11 @@ export default function GrovplaneringPage() {
         onRan={openMotorView}
       />
 
-      {/* Vy-växel: manuell lista vs motorns förslag */}
+      {/* Vy-växel: manuell lista / motorns förslag / klumpvy / kartvy */}
       <Tabs
         value={view}
         onValueChange={(v) => {
-          const next = v as "manuell" | "motor";
+          const next = v as "manuell" | "motor" | "klump" | "karta";
           if (next === "motor") openMotorView();
           else setView(next);
         }}
@@ -722,6 +724,12 @@ export default function GrovplaneringPage() {
             {engineData?.hasResults
               ? ` (${formatCount(engineData.summary.taskCount)})`
               : ""}
+          </TabsTrigger>
+          <TabsTrigger value="klump" data-testid="tab-klump">
+            Klumpvy
+          </TabsTrigger>
+          <TabsTrigger value="karta" data-testid="tab-karta">
+            Karta
           </TabsTrigger>
         </TabsList>
       </Tabs>
@@ -761,6 +769,10 @@ export default function GrovplaneringPage() {
             }
           />
         )
+      ) : view === "klump" ? (
+        <ClusterListView />
+      ) : view === "karta" ? (
+        <ClusterMapView />
       ) : (
         <>
       {/* Gruppering & Åtgärder */}

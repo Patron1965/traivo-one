@@ -41,6 +41,8 @@ import {
   type GridTaskRow,
   type GroupBy,
 } from "@/lib/rough-planning";
+import { RouteClusterBadge } from "@/components/clustering/RouteClusterBadge";
+import { StopClusterBadge } from "@/components/clustering/StopClusterBadge";
 
 const GROUP_ICON: Record<GroupBy, typeof Building2 | null> = {
   objekt: Building2,
@@ -125,6 +127,16 @@ function TaskRow({
             data-testid={`text-task-source-${row.id}`}
           >
             Källa: {sourceLabel}
+          </div>
+        )}
+        {(row.routeClusterName || row.stopClusterName) && (
+          <div className="mt-0.5 flex flex-wrap gap-1">
+            {row.routeClusterName && (
+              <RouteClusterBadge name={row.routeClusterName} />
+            )}
+            {row.stopClusterName && (
+              <StopClusterBadge name={row.stopClusterName} />
+            )}
           </div>
         )}
       </TableCell>

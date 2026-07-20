@@ -53,6 +53,10 @@ export interface GridTaskRow {
   value: number; // öre
   cost: number; // öre
   source: string | null; // creation_method-nyckel (manual/import/external_report/performer/automatic)
+  stopClusterId: string | null;
+  stopClusterName: string | null;
+  routeClusterId: string | null;
+  routeClusterName: string | null;
 }
 
 export interface GridGroup {

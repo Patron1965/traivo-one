@@ -26,6 +26,8 @@ import {
   teams,
   assignments,
   orderConcepts,
+  stopClusters,
+  routeClusters,
 } from "@shared/schema";
 import { haversineDistanceKm } from "./distance-matrix-service";
 
@@ -84,6 +86,10 @@ export interface GridTaskRow {
   value: number; // öre
   cost: number; // öre
   source: string | null; // creation_method-nyckel (manual/import/external_report/performer/automatic)
+  stopClusterId: string | null;
+  stopClusterName: string | null;
+  routeClusterId: string | null;
+  routeClusterName: string | null;
 }
 
 export interface GridGroup {
@@ -272,6 +278,10 @@ interface RawRow {
   creationMethod: string | null;
   lat: number | null;
   lng: number | null;
+  stopClusterId: string | null;
+  stopClusterName: string | null;
+  routeClusterId: string | null;
+  routeClusterName: string | null;
 }
 
 function emptyKpis(): GridKpis {
@@ -380,11 +390,17 @@ async function buildOrderedGroups(
       creationMethod: workOrders.creationMethod,
       lat: sql<number | null>`COALESCE(${workOrders.taskLatitude}, ${objects.latitude})`,
       lng: sql<number | null>`COALESCE(${workOrders.taskLongitude}, ${objects.longitude})`,
+      stopClusterId: workOrders.stopClusterId,
+      stopClusterName: stopClusters.displayName,
+      routeClusterId: workOrders.routeClusterId,
+      routeClusterName: routeClusters.displayName,
     })
     .from(workOrders)
     .leftJoin(objects, eq(workOrders.objectId, objects.id))
     .leftJoin(customers, eq(workOrders.customerId, customers.id))
     .leftJoin(teams, eq(workOrders.teamId, teams.id))
+    .leftJoin(stopClusters, eq(workOrders.stopClusterId, stopClusters.id))
+    .leftJoin(routeClusters, eq(workOrders.routeClusterId, routeClusters.id))
     .where(and(...conditions))
     .limit(ROW_CAP + 1)) as RawRow[];
 
@@ -425,6 +441,10 @@ async function buildOrderedGroups(
       source: r.creationMethod ?? null,
       lat: r.lat != null ? Number(r.lat) : null,
       lng: r.lng != null ? Number(r.lng) : null,
+      stopClusterId: r.stopClusterId ?? null,
+      stopClusterName: r.stopClusterName ?? null,
+      routeClusterId: r.routeClusterId ?? null,
+      routeClusterName: r.routeClusterName ?? null,
     });
   }
 
