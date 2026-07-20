@@ -1,0 +1,203 @@
+Traivo bygger på principen att allt som upptar tid eller resurser representeras som en uppgift.
+
+Det innebär att vissa uppgifter skapas direkt från order eller orderkoncept medan andra uppstår dynamiskt genom Traivos planeringsmotorer.
+
+Alla uppgifter lagras i samma uppgiftstabell och hanteras enligt samma grundmodell.
+
+Skillnaden ligger endast i hur uppgiften skapas, vilken artikel den bygger på och vilka affärsregler som gäller.
+
+⸻
+
+Typer av uppgifter
+
+Traivo arbetar med två huvudkategorier av uppgifter.
+
+1. Grunduppgifter
+
+Grunduppgifter skapas exempelvis av:
+
+Orderkoncept
+Snabborder
+Abonnemang
+Metadataanalysator
+Manuella registreringar
+Integrationer
+AI-funktioner
+
+Exempel:
+
+Tvätt
+Besiktning
+Reparation
+Service
+Installation
+Kontroll
+
+Dessa uppgifter hamnar omedelbart i Navet där de väntar på planering.
+
+⸻
+
+2. Dynamiskt skapade uppgifter
+
+Vissa uppgifter skapas först när planeringen genomförs.
+
+De är fortfarande vanliga uppgifter men genereras automatiskt av Traivos motorer.
+
+Restidsuppgifter
+
+Restid är en särskild dynamisk uppgiftstyp.
+
+Den skapas inte när ordern registreras utan först under finplaneringen i Veckoplanen, när Ruttoptimering Light har bestämt i vilken ordning uppgifterna ska utföras.
+
+Restidsuppgiften beskriver resan mellan två planerade uppgifter.
+
+Exempel:
+
+Tvätt → Restid → Besiktning → Restid → Reparation
+
+Varje restidsuppgift får samma grundstruktur som övriga uppgifter och kan innehålla exempelvis:
+
+startpunkt
+slutpunkt
+beräknad restid
+beräknad körsträcka
+transportmedel
+tilldelad utförare
+status
+planerad start- och sluttid
+
+När restidsuppgiften skapats blir den en del av uppgiftstabellen och visas både i Veckoplanen och i Navet.
+
+Den kan därmed följas upp, analyseras och användas i statistik och kapacitetsberäkningar på samma sätt som övriga uppgifter.
+
+⸻
+
+Egentidsuppgifter
+
+Egentid är en annan typ av uppgift.
+
+Den planeras av utföraren eller planeraren i samband med finplaneringen.
+
+Exempel:
+
+Lunch
+Rast
+Tankning
+Verkstadstid
+Administrativ tid
+Interna möten
+Utbildning
+Lastning
+Lossning
+Annan intern tid
+
+När egentiden planeras skapas motsvarande uppgifter som lagras i uppgiftstabellen.
+
+Även dessa blir synliga i både Veckoplanen och Navet.
+
+⸻
+
+Navet och Veckoplanen
+
+Navet
+
+Navet är Traivos centrala planerings- och produktionsöversikt.
+
+Navet innehåller samtliga uppgifter, oavsett hur de skapats.
+
+Det innebär att Navet visar:
+
+grunduppgifter
+restidsuppgifter
+egentidsuppgifter
+framtida uppgifter
+planerade uppgifter
+pågående uppgifter
+avslutade uppgifter
+
+Navet är därmed den samlade bilden av företagets produktion.
+
+⸻
+
+Veckoplanen
+
+Veckoplanen är verktyget för finplanering.
+
+Här bestäms bland annat:
+
+utförare
+ordningsföljd
+starttider
+sluttider
+rutt
+transporter
+raster
+övrig egentid
+
+Det är i denna process som dynamiska uppgiftstyper, såsom restid och vissa egentidsuppgifter, skapas.
+
+När de skapats blir de en del av den gemensamma uppgiftstabellen och är därefter fullt synliga och sökbara även i Navet.
+
+⸻
+
+Filtrering och prioritering i Navet
+
+Navet arbetar inte främst med uppgiftstyp utan med uppgifternas egenskaper.
+
+De viktigaste filtrerings- och sorteringskriterierna är bland annat:
+
+uppgiftsstatus
+utförartyp
+leveranstid
+hårda tidsfönster
+mjuka tidsfönster
+tilldelad eller ej tilldelad utförare
+planerad eller ej planerad
+stoppklump
+ruttklump
+geografiskt område
+kund
+objekt
+artikel
+prioritet
+kompetenskrav
+
+Särskilt viktig är informationen om en uppgift redan är tilldelad en utförare och därmed ingår i en veckoplan, eller om den fortfarande väntar på planering.
+
+⸻
+
+Status är Navets viktigaste styrinformation
+
+Uppgiftens status är den centrala informationsbäraren i Navet.
+
+Status används för att:
+
+filtrera uppgifter
+prioritera planering
+identifiera avvikelser
+styra arbetsflöden
+följa produktionen
+skapa nyckeltal
+analysera kapacitet
+
+Status samverkar med övriga egenskaper såsom leveranstid, utförartyp, tilldelning, stoppklump och ruttklump för att ge planeraren en aktuell och korrekt lägesbild.
+
+⸻
+
+Arkitekturprincip
+
+Traivo arbetar med en gemensam uppgiftstabell och en gemensam uppgiftsmodell.
+
+Nya uppgifter kan skapas under hela uppgiftens livscykel av olika motorer och planeringsfunktioner.
+
+Alla uppgifter – oavsett om de avser kundarbete, transporter eller egentid – behandlas på samma sätt och blir en del av den samlade produktionsbilden i Navet.
+
+Detta ger en enhetlig informationsmodell där planering, uppföljning, statistik, resursutnyttjande och analys alltid utgår från samma datamodell och samma uppgiftsbegrepp.
+
+Jag skulle dessutom införa en begreppsmodell som utvecklarna kan använda konsekvent:
+
+Navet = Traivos centrala produktionsdatabas och grovplanering (alla uppgifter).
+Veckoplanen = finplanering där uppgifter tilldelas utförare, sekvenseras och kompletteras med dynamiskt skapade uppgifter som restid och egentid.
+Motorerna = beräknar och berikar uppgiftspaketet, men skapar inte alternativa datamodeller.
+
+Det ger en mycket tydlig ansvarsfördelning mellan Navet, Veckoplanen och Traivos olika motorer.
