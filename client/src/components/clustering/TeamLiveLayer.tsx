@@ -7,9 +7,9 @@
  *   inuti BaseMap). Klick öppnar teamets dagschema i sidopanelen.
  * - TeamDayPanel: Sheet med teamets schemalagda uppgifter för vald dag.
  */
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Marker, Popup } from "react-leaflet";
+import { Marker, Popup, Polyline, CircleMarker, Tooltip } from "react-leaflet";
 import L from "leaflet";
 import { format } from "date-fns";
 import { sv as svLocale } from "date-fns/locale";
@@ -273,6 +273,73 @@ export function TeamLiveMarkers({
           </Marker>
         );
       })}
+    </>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Task #1298: Dagens färdväg (breadcrumb-spår) per team
+// ---------------------------------------------------------------------------
+
+export interface TeamPositionTrailDto {
+  teamId: string;
+  teamName: string;
+  teamColor: string | null;
+  points: Array<{
+    latitude: number;
+    longitude: number;
+    recordedAt: string;
+  }>;
+}
+
+/** Hämtar dagens färdväg per team; nytt datum ⇒ ny query (linjen rensas). */
+export function useTeamTrails(enabled: boolean, dayStr: string) {
+  return useQuery<TeamPositionTrailDto[]>({
+    queryKey: ["/api/teams/position-trails", dayStr],
+    queryFn: async () =>
+      (await apiRequest("GET", `/api/teams/position-trails?date=${dayStr}`)).json(),
+    enabled,
+    staleTime: 60 * 1000,
+    refetchInterval: enabled ? 2 * 60 * 1000 : false,
+  });
+}
+
+export function TeamTrailPolylines({ trails }: { trails: TeamPositionTrailDto[] }) {
+  return (
+    <>
+      {trails
+        .filter((t) => t.points.length >= 2)
+        .map((t) => {
+          const color = t.teamColor ?? "#4A9B9B";
+          const positions = t.points.map(
+            (p) => [p.latitude, p.longitude] as [number, number],
+          );
+          const first = t.points[0];
+          return (
+            <Fragment key={t.teamId}>
+              <Polyline
+                positions={positions}
+                pathOptions={{
+                  color,
+                  weight: 3,
+                  opacity: 0.75,
+                  dashArray: "6 6",
+                  lineCap: "round",
+                }}
+              />
+              <CircleMarker
+                center={[first.latitude, first.longitude]}
+                radius={5}
+                pathOptions={{ color, fillColor: color, fillOpacity: 0.9, weight: 2 }}
+              >
+                <Tooltip direction="top" offset={[0, -6]}>
+                  {t.teamName} · start{" "}
+                  {format(new Date(first.recordedAt), "HH:mm", { locale: svLocale })}
+                </Tooltip>
+              </CircleMarker>
+            </Fragment>
+          );
+        })}
     </>
   );
 }

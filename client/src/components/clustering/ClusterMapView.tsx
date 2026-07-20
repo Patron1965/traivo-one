@@ -13,6 +13,7 @@ import {
   CalendarDays,
   Loader2,
   Info,
+  Route as RouteIcon,
   Square,
   Users,
   X,
@@ -32,7 +33,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ClusterWeekSlider } from "./ClusterWeekSlider";
 import { ClusterSidePanel, type ClusterRef } from "./ClusterSidePanel";
-import { TeamLiveMarkers, TeamDayPanel, useTeamLivePositions } from "./TeamLiveLayer";
+import { TeamLiveMarkers, TeamDayPanel, useTeamLivePositions, useTeamTrails, TeamTrailPolylines } from "./TeamLiveLayer";
 import { MapTimeline } from "./MapTimeline";
 import { RapidAssignDialog } from "./RapidAssignDialog";
 import { cn } from "@/lib/utils";
@@ -577,6 +578,8 @@ export function ClusterMapView({
   const [selectedMapIds, setSelectedMapIds] = useState<Set<string>>(new Set());
   const [rapidAssignOpen, setRapidAssignOpen] = useState(false);
   const [openTeamId, setOpenTeamId] = useState<string | null>(null);
+  // Task #1298: toggle för dagens färdväg (breadcrumb-spår) per team
+  const [showTrails, setShowTrails] = useState(false);
 
   const handleModeChange = (m: "planera" | "utfor") => {
     setMapMode(m);
@@ -638,6 +641,14 @@ export function ClusterMapView({
 
   // Task #1292: live-positioner per team (WebSocket, ingen polling)
   const liveTeams = useTeamLivePositions(mapMode === "utfor");
+
+  // Task #1298: dagens färdväg per team (hämtas bara när toggeln är på;
+  // nytt datum ⇒ ny query-nyckel ⇒ linjen rensas automatiskt vid dagbyte)
+  const trailsQuery = useTeamTrails(mapMode === "utfor" && showTrails, dayStr);
+  const teamTrails = useMemo(() => {
+    const all = trailsQuery.data ?? [];
+    return fieldTeamId === "all" ? all : all.filter((t) => t.teamId === fieldTeamId);
+  }, [trailsQuery.data, fieldTeamId]);
   const openTeam = openTeamId
     ? liveTeams.find((t) => t.teamId === openTeamId) ?? null
     : null;
@@ -756,6 +767,22 @@ export function ClusterMapView({
                   ))}
               </SelectContent>
             </Select>
+          )}
+
+          {/* Utförarläge: toggle för dagens färdväg (Task #1298) */}
+          {mapMode === "utfor" && (
+            <Button
+              size="sm"
+              variant={showTrails ? "default" : "outline"}
+              onClick={() => setShowTrails((v) => !v)}
+              data-testid="button-toggle-team-trails"
+            >
+              <RouteIcon className="h-4 w-4" />
+              Färdväg
+              {showTrails && trailsQuery.isFetching && (
+                <Loader2 className="h-3 w-3 animate-spin" />
+              )}
+            </Button>
           )}
 
           {/* Planerarläge: statusfilter */}
@@ -881,6 +908,9 @@ export function ClusterMapView({
             fieldStopClusterIds={fieldStopClusterIds}
             isFieldMode={mapMode === "utfor"}
           />
+          {mapMode === "utfor" && showTrails && (
+            <TeamTrailPolylines trails={teamTrails} />
+          )}
           {mapMode === "utfor" && (
             <TeamLiveMarkers
               teams={

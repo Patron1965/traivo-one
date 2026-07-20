@@ -1823,6 +1823,19 @@ app.get("/api/teams/live-positions", asyncHandler(async (req, res) => {
     res.json(positions);
 }));
 
+// Task #1298: Dagens färdväg (breadcrumb-spår) per team i utförarläget.
+// Statisk route FÖRE /api/teams/:id (annars matchar :id "position-trails").
+app.get("/api/teams/position-trails", asyncHandler(async (req, res) => {
+    const tenantId = getTenantIdWithFallback(req);
+    const dateParam = typeof req.query.date === "string" ? req.query.date : "";
+    const day = /^\d{4}-\d{2}-\d{2}$/.test(dateParam) ? new Date(dateParam) : new Date();
+    if (isNaN(day.getTime())) throw new ValidationError("Ogiltigt datum");
+    const start = new Date(day); start.setHours(0, 0, 0, 0);
+    const end = new Date(day); end.setHours(23, 59, 59, 999);
+    const trails = await storage.getTeamPositionTrails(tenantId, start, end);
+    res.json(trails);
+}));
+
 app.get("/api/teams/:id", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const team = await storage.getTeam(req.params.id);

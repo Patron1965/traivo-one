@@ -393,6 +393,18 @@ export interface TeamLivePosition {
   } | null;
 }
 
+// Task #1298: Dagens färdväg (breadcrumb-spår) per team i utförarläget.
+export interface TeamPositionTrail {
+  teamId: string;
+  teamName: string;
+  teamColor: string | null;
+  points: Array<{
+    latitude: number;
+    longitude: number;
+    recordedAt: string;
+  }>;
+}
+
 export interface IStorage {
   getUser(id: string): Promise<User | undefined>;
   getUserByUsername(username: string): Promise<User | undefined>;
@@ -785,6 +797,8 @@ export interface IStorage {
   getActiveResourcePositions(tenantId: string): Promise<Resource[]>;
   getAllActiveResourcePositions(): Promise<Resource[]>;
   getTeamLivePositions(tenantId: string): Promise<TeamLivePosition[]>;
+  // (TeamPositionTrail — Task #1298, dagens färdväg per team)
+  getTeamPositionTrails(tenantId: string, startDate: Date, endDate: Date): Promise<TeamPositionTrail[]>;
   
   // Fortnox Config
   getFortnoxConfig(tenantId: string): Promise<FortnoxConfig | undefined>;
@@ -6911,6 +6925,51 @@ export class DatabaseStorage implements IStorage {
           };
         }
       }
+    }
+    return Array.from(byTeam.values());
+  }
+
+  // Task #1298: Dagens färdväg (breadcrumb-spår) per team. Aggregerar
+  // resource_positions för teamets accepterade medlemmar inom vald dag,
+  // kronologiskt sorterat, tenant-scopat.
+  async getTeamPositionTrails(tenantId: string, startDate: Date, endDate: Date): Promise<TeamPositionTrail[]> {
+    const rows = await db
+      .select({
+        teamId: teams.id,
+        teamName: teams.name,
+        teamColor: teams.color,
+        latitude: resourcePositions.latitude,
+        longitude: resourcePositions.longitude,
+        recordedAt: resourcePositions.recordedAt,
+      })
+      .from(teams)
+      .innerJoin(teamMembers, eq(teamMembers.teamId, teams.id))
+      .innerJoin(resources, eq(teamMembers.resourceId, resources.id))
+      .innerJoin(resourcePositions, eq(resourcePositions.resourceId, resources.id))
+      .where(and(
+        eq(teams.tenantId, tenantId),
+        isNull(teams.deletedAt),
+        eq(teams.status, "active"),
+        isNotNull(teamMembers.acceptedAt),
+        eq(resources.tenantId, tenantId),
+        isNull(resources.deletedAt),
+        gte(resourcePositions.recordedAt, startDate),
+        lte(resourcePositions.recordedAt, endDate),
+      ))
+      .orderBy(resourcePositions.recordedAt);
+
+    const byTeam = new Map<string, TeamPositionTrail>();
+    for (const r of rows) {
+      let entry = byTeam.get(r.teamId);
+      if (!entry) {
+        entry = { teamId: r.teamId, teamName: r.teamName, teamColor: r.teamColor ?? null, points: [] };
+        byTeam.set(r.teamId, entry);
+      }
+      entry.points.push({
+        latitude: r.latitude,
+        longitude: r.longitude,
+        recordedAt: new Date(r.recordedAt).toISOString(),
+      });
     }
     return Array.from(byTeam.values());
   }
