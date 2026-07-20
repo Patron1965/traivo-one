@@ -406,6 +406,7 @@ export function ClusterListView() {
       (await apiRequest("POST", "/api/clustering/route/full-run", {})).json(),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["/api/clustering/route-clusters"] });
+      void queryClient.invalidateQueries({ queryKey: ["/api/rough-planning/grid"] });
       toast({ title: "Ruttklumpning klar" });
     },
     onError: () => toast({ title: "Fel vid ruttklumpning", variant: "destructive" }),
@@ -416,6 +417,7 @@ export function ClusterListView() {
       (await apiRequest("POST", "/api/clustering/stop/full-run", {})).json(),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["/api/clustering/stop-clusters"] });
+      void queryClient.invalidateQueries({ queryKey: ["/api/rough-planning/grid"] });
       toast({ title: "Stoppklumpning klar" });
     },
     onError: () => toast({ title: "Fel vid stoppklumpning", variant: "destructive" }),
