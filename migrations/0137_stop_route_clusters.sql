@@ -17,17 +17,20 @@
 -- 1. stop_clusters
 -- ============================================================================
 CREATE TABLE IF NOT EXISTS stop_clusters (
-  id                          varchar PRIMARY KEY DEFAULT gen_random_uuid(),
-  tenant_id                   varchar NOT NULL REFERENCES tenants(id),
-  reference_number            text,
-  display_name                text NOT NULL,
-  normalized_address          text,
-  city                        text,
-  latitude                    real,
-  longitude                   real,
-  radius_meters               real DEFAULT 30,
-  execution_code              text,
-  earliest_delivery_at        timestamp,
+  id                              varchar PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id                       varchar NOT NULL REFERENCES tenants(id),
+  reference_number                text,
+  display_name                    text NOT NULL,
+  normalized_address              text,
+  city                            text,
+  latitude                        real,
+  longitude                       real,
+  radius_meters                   real DEFAULT 30,
+  execution_code                  text,
+  -- FK till execution_code_definitions (UUID-baserad referensintegritet).
+  -- Lagrar även execution_code som text (soft-ref, codebase-konvention) för query-bekvämlighet.
+  execution_code_definition_id    varchar REFERENCES execution_code_definitions(id) ON DELETE SET NULL,
+  earliest_delivery_at            timestamp,
   latest_delivery_at          timestamp,
   calculated_duration_minutes integer,
   status                      text NOT NULL DEFAULT 'active',
@@ -55,15 +58,17 @@ CREATE UNIQUE INDEX IF NOT EXISTS uq_stop_clusters_reference_number
 -- 2. route_clusters
 -- ============================================================================
 CREATE TABLE IF NOT EXISTS route_clusters (
-  id                          varchar PRIMARY KEY DEFAULT gen_random_uuid(),
-  tenant_id                   varchar NOT NULL REFERENCES tenants(id),
-  reference_number            text,
-  display_name                text NOT NULL,
-  route_description           text,
-  center_latitude             real,
-  center_longitude            real,
-  radius_kilometers           real DEFAULT 40,
-  execution_code              text,
+  id                              varchar PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id                       varchar NOT NULL REFERENCES tenants(id),
+  reference_number                text,
+  display_name                    text NOT NULL,
+  route_description               text,
+  center_latitude                 real,
+  center_longitude                real,
+  radius_kilometers               real DEFAULT 40,
+  execution_code                  text,
+  -- FK till execution_code_definitions (UUID-baserad referensintegritet).
+  execution_code_definition_id    varchar REFERENCES execution_code_definitions(id) ON DELETE SET NULL,
   earliest_delivery_at        timestamp,
   latest_delivery_at          timestamp,
   calculated_work_minutes     integer,

@@ -628,6 +628,8 @@ export const workOrders = pgTable("work_orders", {
   uniqueIndex("uq_work_orders_tenant_order_number")
     .on(table.tenantId, table.orderNumber)
     .where(sql`order_number IS NOT NULL`),
+  index("idx_work_orders_stop_cluster").on(table.stopClusterId),
+  index("idx_work_orders_route_cluster").on(table.routeClusterId),
 ]);
 
 // Orderrader - artiklar kopplade till en order med beräknade priser
@@ -3519,6 +3521,8 @@ export const assignments = pgTable("assignments", {
   index("idx_assignments_tenant_resource_date").on(table.tenantId, table.resourceId, table.scheduledDate),
   index("idx_assignments_tenant_deleted").on(table.tenantId, table.deletedAt),
   index("idx_assignments_parent_assignment").on(table.parentAssignmentId),
+  index("idx_assignments_stop_cluster").on(table.stopClusterId),
+  index("idx_assignments_route_cluster").on(table.routeClusterId),
 ]);
 
 export const insertAssignmentSchema = createInsertSchema(assignments).omit({
@@ -8189,8 +8193,12 @@ export const stopClusters = pgTable("stop_clusters", {
   longitude: real("longitude"),
   // Klumpens effektiva geografi-radie (default 30m per konfiguration).
   radiusMeters: real("radius_meters").default(30),
-  // Utförandekod — alla uppgifter i klumpen måste ha samma kod (eller null = ospecificerad).
+  // Utförandekod — lagras som text (soft-ref till execution_code_definitions.key, codebase-konvention)
+  // OCH som UUID FK för referensintegritet. NULL = ingen utförandekod specificerad för klumpen.
   executionCode: text("execution_code"),
+  executionCodeDefinitionId: varchar("execution_code_definition_id").references(
+    () => executionCodeDefinitions.id, { onDelete: "set null" }
+  ),
   // Tidsfönster för klumpen (union av alla ingående uppgifters tidsfönster).
   earliestDeliveryAt: timestamp("earliest_delivery_at"),
   latestDeliveryAt: timestamp("latest_delivery_at"),
@@ -8208,7 +8216,9 @@ export const stopClusters = pgTable("stop_clusters", {
   index("idx_stop_clusters_tenant").on(table.tenantId),
   index("idx_stop_clusters_tenant_status").on(table.tenantId, table.status),
   index("idx_stop_clusters_tenant_execution_code").on(table.tenantId, table.executionCode),
-  uniqueIndex("uq_stop_clusters_reference_number").on(table.tenantId, table.referenceNumber),
+  uniqueIndex("uq_stop_clusters_reference_number")
+    .on(table.tenantId, table.referenceNumber)
+    .where(sql`reference_number IS NOT NULL`),
 ]);
 
 export type StopCluster = typeof stopClusters.$inferSelect;
@@ -8236,8 +8246,12 @@ export const routeClusters = pgTable("route_clusters", {
   centerLongitude: real("center_longitude"),
   // Klumpens effektiva geografi-radie (default 40 km per konfiguration).
   radiusKilometers: real("radius_kilometers").default(40),
-  // Utförandekod — homogenitetskrav (null = blandad klump, konfigurationsval).
+  // Utförandekod — lagras som text (soft-ref, codebase-konvention) OCH som UUID FK.
+  // NULL = blandad klump (ingen homogen utförandekod), konfigurationsval.
   executionCode: text("execution_code"),
+  executionCodeDefinitionId: varchar("execution_code_definition_id").references(
+    () => executionCodeDefinitions.id, { onDelete: "set null" }
+  ),
   // Tidsfönster för hela ruttklumpen (union av ingående stoppklumpars tidsfönster).
   earliestDeliveryAt: timestamp("earliest_delivery_at"),
   latestDeliveryAt: timestamp("latest_delivery_at"),
@@ -8258,7 +8272,9 @@ export const routeClusters = pgTable("route_clusters", {
   index("idx_route_clusters_tenant").on(table.tenantId),
   index("idx_route_clusters_tenant_status").on(table.tenantId, table.status),
   index("idx_route_clusters_tenant_execution_code").on(table.tenantId, table.executionCode),
-  uniqueIndex("uq_route_clusters_reference_number").on(table.tenantId, table.referenceNumber),
+  uniqueIndex("uq_route_clusters_reference_number")
+    .on(table.tenantId, table.referenceNumber)
+    .where(sql`reference_number IS NOT NULL`),
 ]);
 
 export type RouteCluster = typeof routeClusters.$inferSelect;
