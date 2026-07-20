@@ -903,24 +903,80 @@ export async function processRouteTask(
     await removeWoFromRouteCluster(taskId, tenantId, wo.routeClusterId, "recluster");
   }
 
+  // Hämta WO igen (kan ha ändrats sedan röjningen ovan)
+  const wo2 = await storage.getWorkOrder(taskId);
+  if (!wo2) return { action: "skipped" };
+
   // Kör analys — mutableOnly=true säkerställer att vi ALDRIG lägger till uppgiften
   // i en confirmed/locked klump (automatisk tilldelning respekterar planerarens lås).
   const matches = await analyzeTask(taskId, tenantId, { mutableOnly: true });
   const best = matches[0];
-  if (!best) return { action: "unchanged" };
 
   const now = new Date();
+
+  // Tilldela till befintlig matchande klump
+  if (best) {
+    await db.insert(routeClusterMemberships).values({
+      tenantId,
+      routeClusterId: best.cluster.id,
+      taskId,
+      taskTable: "work_orders",
+      assignedAt: now,
+    });
+    await db
+      .update(workOrders)
+      .set({ routeClusterId: best.cluster.id, routeClusterCalculatedAt: now })
+      .where(and(eq(workOrders.id, taskId), eq(workOrders.tenantId, tenantId)));
+    return { action: "assigned", clusterId: best.cluster.id };
+  }
+
+  // Ingen befintlig klump matchar → skapa en ny near-term ruttklump för uppgiften.
+  // (Near-term = ≤30d; längre horisonter skapas enbart av scheduler.)
+  const config = await getRouteConfig(tenantId);
+  const geo2 = { lat: wo2.taskLatitude ?? null, lng: wo2.taskLongitude ?? null };
+  const win2 = getEffectiveWindow(wo2);
+  const precision2 = derivePrecision(win2.start);
+
+  let displayName2 = `Ruttklump ${now.toISOString().slice(0, 10)}`;
+  if (geo2.lat != null && geo2.lng != null) {
+    displayName2 = await buildRouteClusterName(geo2.lat, geo2.lng, tenantId);
+  }
+
+  const referenceNumber2 = await mintRouteClusterReference(tenantId);
+
+  const [newCluster] = await db
+    .insert(routeClusters)
+    .values({
+      tenantId,
+      referenceNumber: referenceNumber2,
+      displayName: displayName2,
+      centerLatitude: geo2.lat,
+      centerLongitude: geo2.lng,
+      radiusKilometers: config.radiusKm,
+      executionCode: wo2.executionCode ?? null,
+      earliestDeliveryAt: win2.start,
+      latestDeliveryAt: win2.end,
+      calculatedWorkMinutes: wo2.estimatedDuration ?? null,
+      calculatedTravelMinutes: null,
+      precisionLevel: precision2,
+      status: "active",
+      clusteringRuleVersion: "v1",
+      lastCalculatedAt: now,
+      updatedAt: now,
+    })
+    .returning();
+
   await db.insert(routeClusterMemberships).values({
     tenantId,
-    routeClusterId: best.cluster.id,
+    routeClusterId: newCluster.id,
     taskId,
     taskTable: "work_orders",
     assignedAt: now,
   });
   await db
     .update(workOrders)
-    .set({ routeClusterId: best.cluster.id, routeClusterCalculatedAt: now })
+    .set({ routeClusterId: newCluster.id, routeClusterCalculatedAt: now })
     .where(and(eq(workOrders.id, taskId), eq(workOrders.tenantId, tenantId)));
 
-  return { action: "assigned", clusterId: best.cluster.id };
+  return { action: "assigned", clusterId: newCluster.id };
 }
