@@ -4,7 +4,7 @@
  */
 import { useState, useCallback, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Circle, CircleMarker, Popup, Rectangle, useMapEvents } from "react-leaflet";
+import { Circle, CircleMarker, Popup, Rectangle, useMapEvents, useMap } from "react-leaflet";
 import type * as L from "leaflet";
 import { Loader2, Info, Square, X } from "lucide-react";
 import { getISOWeek, getYear } from "date-fns";
@@ -65,6 +65,20 @@ const EXECUTION_PALETTE = [
   "#1B6B4B",
   "#9BAA5B",
 ];
+
+// ---------------------------------------------------------------------------
+// MapFlyTo — centrerar kartan på angivet mål (monteras inuti MapContainer)
+// ---------------------------------------------------------------------------
+function MapFlyTo({ target }: { target: [number, number] | null }) {
+  const map = useMap();
+  useEffect(() => {
+    if (target) {
+      map.flyTo(target, Math.max(map.getZoom(), 12), { animate: true, duration: 1 });
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [target]);
+  return null;
+}
 
 function codeColor(code: string | null): { fill: string; stroke: string } {
   if (!code) return { fill: "#6B7C8C33", stroke: "#6B7C8C" };
@@ -541,6 +555,22 @@ export function ClusterMapView({ focusCluster }: { focusCluster?: ClusterRef | n
             onBoundsSelected={handleBoundsSelected}
             selectedMapIds={selectedMapIds}
           />
+          {(() => {
+            if (!focusCluster) return null;
+            let target: LatLngTuple | null = null;
+            if (focusCluster.type === "route") {
+              const rc = routeClusters.find((c) => c.id === focusCluster.id);
+              if (rc?.centerLatitude != null && rc.centerLongitude != null) {
+                target = [rc.centerLatitude, rc.centerLongitude];
+              }
+            } else {
+              const sc = stopClusters.find((c) => c.id === focusCluster.id);
+              if (sc?.latitude != null && sc.longitude != null) {
+                target = [sc.latitude, sc.longitude];
+              }
+            }
+            return <MapFlyTo target={target} />;
+          })()}
         </BaseMap>
         <MapLegend codes={allCodes} />
       </div>

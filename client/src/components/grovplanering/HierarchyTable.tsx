@@ -6,10 +6,12 @@
  * Chevron-knapp → expanderar/kollapserar nivån.
  * Uppgifter utan ruttklump → platta L3-rader nedanför trädstrukturen.
  */
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback } from "react";
 import {
   ChevronRight,
   ChevronDown,
+  ChevronUp,
+  ChevronsUpDown,
   Route,
   MapPin,
   MoreVertical,
@@ -66,6 +68,46 @@ interface HierarchyTableProps {
   onAssignCluster?: (tasks: GridTaskRow[]) => void;
   onRevokeCluster?: (tasks: GridTaskRow[]) => void;
   onGoToMap?: (clusterRef?: ClusterRef) => void;
+}
+
+// ---------------------------------------------------------------------------
+// Sortering
+// ---------------------------------------------------------------------------
+type SortKey = "leveranstid" | "tid" | "varde" | "marginal";
+type SortDir = "asc" | "desc";
+
+function SortIcon({ col, sortKey, sortDir }: { col: SortKey; sortKey: SortKey | null; sortDir: SortDir }) {
+  if (col !== sortKey) return <ChevronsUpDown className="h-3 w-3 ml-1 opacity-40" />;
+  return sortDir === "asc"
+    ? <ChevronUp className="h-3 w-3 ml-1" />
+    : <ChevronDown className="h-3 w-3 ml-1" />;
+}
+
+function sortedTaskList(tasks: GridTaskRow[], sortKey: SortKey | null, sortDir: SortDir): GridTaskRow[] {
+  if (!sortKey) return tasks;
+  return [...tasks].sort((a, b) => {
+    let av: number | string | null, bv: number | string | null;
+    switch (sortKey) {
+      case "leveranstid": av = a.desiredDeliveryStart; bv = b.desiredDeliveryStart; break;
+      case "tid": av = a.productionMinutes; bv = b.productionMinutes; break;
+      case "varde": av = a.value; bv = b.value; break;
+      case "marginal": av = a.value - a.cost; bv = b.value - b.cost; break;
+    }
+    if (av == null) return 1;
+    if (bv == null) return -1;
+    const cmp = av < bv ? -1 : av > bv ? 1 : 0;
+    return sortDir === "asc" ? cmp : -cmp;
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Utförandetyp-aggregering per klumpad nivå (L1/L2)
+// ---------------------------------------------------------------------------
+function aggregateExecutionCode(tasks: GridTaskRow[]): string {
+  const codes = [...new Set(tasks.map((t) => t.executionCode).filter(Boolean) as string[])];
+  if (codes.length === 0) return "–";
+  if (codes.length === 1) return codes[0];
+  return `${codes[0]} +${codes.length - 1}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -178,8 +220,9 @@ function RouteRow({
           )}
         </Button>
       </TableCell>
-      {/* Utförandetyp — L1 sammanfattar inte utförandetyp */}
-      <TableCell />
+      <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
+        {aggregateExecutionCode(allTasks)}
+      </TableCell>
       <TableCell className="min-w-[200px]">
         <div className="flex items-center gap-2">
           <Route className="h-3.5 w-3.5 shrink-0 text-chart-4" />
@@ -304,8 +347,9 @@ function StopRow({
           </Button>
         </div>
       </TableCell>
-      {/* Utförandetyp — L2 sammanfattar inte utförandetyp */}
-      <TableCell />
+      <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
+        {aggregateExecutionCode(stop.tasks)}
+      </TableCell>
       <TableCell className="min-w-[200px]">
         <div className="flex items-center gap-2 pl-5">
           <MapPin className="h-3.5 w-3.5 shrink-0 text-chart-4" />
@@ -506,7 +550,29 @@ export function HierarchyTable({
   onRevokeCluster,
   onGoToMap,
 }: HierarchyTableProps) {
-  const { routes, unclusteredTasks } = useMemo(() => buildHierarchy(tasks), [tasks]);
+  const [sortKey, setSortKey] = useState<SortKey | null>(null);
+  const [sortDir, setSortDir] = useState<SortDir>("asc");
+
+  const handleSort = useCallback((col: SortKey) => {
+    setSortKey((prev) => {
+      if (prev === col) {
+        setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+        return col;
+      }
+      setSortDir("asc");
+      return col;
+    });
+  }, []);
+
+  const sortedTasks = useMemo(
+    () => sortedTaskList(tasks, sortKey, sortDir),
+    [tasks, sortKey, sortDir],
+  );
+
+  const { routes, unclusteredTasks } = useMemo(
+    () => buildHierarchy(sortedTasks),
+    [sortedTasks],
+  );
 
   const [collapsedRoutes, setCollapsedRoutes] = useState<Set<string>>(new Set());
   const [collapsedStops, setCollapsedStops] = useState<Set<string>>(new Set());
@@ -556,11 +622,43 @@ export function HierarchyTable({
             <TableHead className="w-9" />
             <TableHead className="whitespace-nowrap">Utförandetyp</TableHead>
             <TableHead>Namn</TableHead>
-            <TableHead className="whitespace-nowrap">Leveranstid</TableHead>
+            <TableHead
+              className="whitespace-nowrap cursor-pointer select-none hover:text-foreground"
+              onClick={() => handleSort("leveranstid")}
+            >
+              <span className="flex items-center">
+                Leveranstid
+                <SortIcon col="leveranstid" sortKey={sortKey} sortDir={sortDir} />
+              </span>
+            </TableHead>
             <TableHead className="whitespace-nowrap text-right">Uppgifter</TableHead>
-            <TableHead className="whitespace-nowrap text-right">Prod.tid</TableHead>
-            <TableHead className="whitespace-nowrap text-right">Värde</TableHead>
-            <TableHead className="whitespace-nowrap text-right">Marginal</TableHead>
+            <TableHead
+              className="whitespace-nowrap text-right cursor-pointer select-none hover:text-foreground"
+              onClick={() => handleSort("tid")}
+            >
+              <span className="flex items-center justify-end">
+                Prod.tid
+                <SortIcon col="tid" sortKey={sortKey} sortDir={sortDir} />
+              </span>
+            </TableHead>
+            <TableHead
+              className="whitespace-nowrap text-right cursor-pointer select-none hover:text-foreground"
+              onClick={() => handleSort("varde")}
+            >
+              <span className="flex items-center justify-end">
+                Värde
+                <SortIcon col="varde" sortKey={sortKey} sortDir={sortDir} />
+              </span>
+            </TableHead>
+            <TableHead
+              className="whitespace-nowrap text-right cursor-pointer select-none hover:text-foreground"
+              onClick={() => handleSort("marginal")}
+            >
+              <span className="flex items-center justify-end">
+                Marginal
+                <SortIcon col="marginal" sortKey={sortKey} sortDir={sortDir} />
+              </span>
+            </TableHead>
             <TableHead>Status</TableHead>
             <TableHead className="w-9" />
           </TableRow>
