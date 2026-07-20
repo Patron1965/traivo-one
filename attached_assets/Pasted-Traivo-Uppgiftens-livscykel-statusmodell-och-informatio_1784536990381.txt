@@ -1,0 +1,270 @@
+Traivo – Uppgiftens livscykel, statusmodell och informationsflöde
+Grundprincip
+En uppgift i Traivo är inte ett statiskt registerobjekt utan ett levande informationspaket.
+Varje uppgift består av en artikel kompletterad med cirka 94 informationsfält. Under uppgiftens livscykel uppdateras dessa fält kontinuerligt av Traivos motorer, planerare, utförare och integrationer.
+Status beskriver var uppgiften befinner sig i processen, medan informationsfälten beskriver uppgiftens aktuella kunskapsläge.
+Det innebär att samma uppgift successivt blir mer komplett och mer korrekt ju längre den rör sig genom produktionskedjan.
+
+
+⸻
+
+
+Uppgiftens livscykel
+1. Uppgift skapad
+Uppgiften har skapats av exempelvis:
+Orderkoncept
+Snabborder
+Abonnemang
+AI-funktion
+Integration
+Metadataanalysator
+Manuell registrering
+Informationen består huvudsakligen av grunddata såsom:
+artikel
+kund
+objekt
+adress
+leveransvillkor
+prioritet
+grundläggande metadata
+
+
+⸻
+
+
+2. För planering i Navet
+Traivos motorer börjar nu analysera uppgiften.
+Exempel på information som tillkommer eller uppdateras:
+tidsfönster
+önskat leveransdatum
+hårda och mjuka villkor
+möjlig utförartyp
+preliminär produktionstid
+preliminär restid
+stoppklump
+ruttklump
+rekommenderat utförandedatum
+rekommenderad vecka
+Här sker huvuddelen av grovplaneringen.
+
+
+⸻
+
+
+3. Planerad i Veckoplan
+När planeraren accepterar planeringen tilldelas uppgiften en utförare.
+Nu kompletteras uppgiften med exempelvis:
+utförare
+team
+fordon
+planerad starttid
+planerad sluttid
+planerad ordningsföljd
+planerat stopp
+planerad rutt
+Samtidigt kan finplaneringen skapa nya dynamiska uppgifter såsom:
+restid
+lunch
+raster
+övrig egentid
+Dessa uppgifter blir omedelbart en del av samma uppgiftstabell och synliga även i Navet.
+
+
+⸻
+
+
+4. På väg
+Utföraren har påbörjat arbetsflödet.
+Exempel på uppdateringar:
+faktisk starttid
+GPS-position
+faktisk restid
+avvikelser
+uppskattad ankomsttid
+
+
+⸻
+
+
+5. På plats
+Utföraren har anlänt.
+Nu registreras bland annat:
+faktisk ankomst
+eventuell väntetid
+platsverifiering
+kontrollpunkter
+
+
+⸻
+
+
+6. Utförd
+Arbetet är färdigt.
+Nu uppdateras ett stort antal informationsfält med verkliga produktionsdata.
+Exempel:
+faktisk produktionstid
+faktisk restid
+faktiskt material
+faktiskt antal
+verklig resursförbrukning
+bilder
+dokument
+kontrollresultat
+avvikelser
+signaturer
+kommentarer
+De planerade värdena finns fortfarande kvar för analys och jämförelse.
+
+
+⸻
+
+
+7. Fakturakontroll
+Uppgiften kontrolleras innan fakturering.
+Systemet verifierar exempelvis:
+artikel
+pris
+mängd
+fakturerbart antal
+avtalsvillkor
+kundspecifika regler
+referenser
+ekonomiska kontroller
+Här kan ytterligare justeringar göras.
+
+
+⸻
+
+
+8. Fakturerad
+När fakturering genomförts kompletteras uppgiften med ekonomisk information såsom:
+fakturanummer
+fakturadatum
+fakturerat antal
+fakturerat pris
+bokföringsinformation
+exportstatus
+integrationsstatus
+Uppgiften avslutas men finns kvar för historik, analys och statistik.
+
+
+⸻
+
+
+Specialstatusar
+Utöver huvudflödet finns statusar som beskriver särskilda situationer.
+Exempel:
+Simulerad
+Används för:
+testplanering
+kapacitetsanalys
+simulering av framtida produktion
+Simulerade uppgifter påverkar inte verklig produktion men kan användas av planeringsmotorerna.
+
+
+⸻
+
+
+Omöjlig att utföra
+Används när uppgiften inte kan genomföras.
+Exempel:
+kunden ej tillgänglig
+objekt saknas
+säkerhetsrisk
+fel resurser
+väderförhållanden
+tekniskt hinder
+Statusen innebär inte att uppgiften försvinner utan att den kräver ny planering eller särskild åtgärd.
+
+
+⸻
+
+
+Dubbelbokad
+Visar att planeringen innehåller en konflikt som måste lösas.
+
+
+⸻
+
+
+Överbokad
+Visar att utföraren eller resurserna saknar tillräcklig kapacitet.
+
+
+⸻
+
+
+Pausad
+Arbetet har påbörjats men avbrutits och kan återupptas senare.
+
+
+⸻
+
+
+Makulerad
+Uppgiften ska inte längre utföras men behålls för historik och spårbarhet.
+
+
+⸻
+
+
+Informationspaketet utvecklas genom hela livscykeln
+De cirka 94 informationsfälten är inte statiska.
+De kompletteras och uppdateras successivt.
+Exempel på information som förändras:
+rekommenderat utförandedatum
+planerat utförandedatum
+faktiskt utförandedatum
+preliminär produktionstid
+faktisk produktionstid
+preliminär restid
+faktisk restid
+preliminärt antal
+faktiskt antal
+preliminärt pris
+faktiskt pris
+preliminär utförare
+tilldelad utförare
+preliminär status
+aktuell status
+Traivo sparar både planerade och verkliga värden.
+Det gör det möjligt att analysera:
+planeringsprecision
+tidsavvikelser
+produktionsutfall
+resursutnyttjande
+ekonomiskt utfall
+förbättringspotential
+
+
+⸻
+
+
+Viktig designprincip
+Traivo ersätter normalt inte planerade värden med verkliga värden.
+I stället lagras båda.
+Exempel:
+Planerat värde
+Verkligt värde
+Planerad produktionstid
+Faktisk produktionstid
+Planerad restid
+Faktisk restid
+Planerat antal
+Utfört antal
+Planerat pris
+Fakturerat pris
+Planerad starttid
+Faktisk starttid
+Planerad sluttid
+Faktisk sluttid
+Detta ger full spårbarhet och möjliggör avancerad analys av planeringskvalitet, effektivitet och ekonomi.
+
+
+⸻
+
+
+Sammanfattning
+Status visar var uppgiften befinner sig i arbetsflödet.
+Informationspaketet beskriver allt som är känt om uppgiften vid varje tidpunkt.
+Traivos motorer, planerare, utförare och integrationer arbetar tillsammans med att successivt förädla uppgiften genom hela livscykeln – från skapad till fakturerad – samtidigt som både planerade och verkliga värden bevaras för uppföljning, analys och kontinuerlig förbättring.
