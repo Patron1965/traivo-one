@@ -21,6 +21,8 @@ import { runRollingAnalysis, getAllTenantIds } from "./route-clustering-engine";
 
 const TICK_MS = 60 * 60 * 1000; // En gång per timme
 const TIMEZONE = process.env.CLUSTERING_TIMEZONE || "Europe/Stockholm";
+const DAILY_HOUR = parseInt(process.env.ROUTE_CLUSTER_DAILY_HOUR ?? "2", 10);
+const WEEKLY_HOUR = parseInt(process.env.ROUTE_CLUSTER_WEEKLY_HOUR ?? "3", 10);
 
 function getLocalParts(now: Date): {
   hour: number;
@@ -156,7 +158,7 @@ class ClusteringScheduler {
     if (this.intervalId != null) return;
 
     console.log(
-      `[clustering-scheduler] Started (daily@02:00, weekly@03:00 Sundays, tz=${TIMEZONE})`,
+      `[clustering-scheduler] Started (daily@${String(DAILY_HOUR).padStart(2, "0")}:00, weekly@${String(WEEKLY_HOUR).padStart(2, "0")}:00 Sundays, tz=${TIMEZONE})`,
     );
 
     this.intervalId = setInterval(() => {
@@ -184,14 +186,14 @@ class ClusteringScheduler {
     const dateKey = now.toISOString().slice(0, 10);
     const weekKey = `${now.getFullYear()}-W${formatIsoWeekNum(now)}`;
 
-    // Daglig körning kl. 02:00 (en gång per dag)
-    if (hour === 2 && this.lastDailyRun !== dateKey) {
+    // Daglig körning (en gång per dag, konfigurerbar via ROUTE_CLUSTER_DAILY_HOUR, default 02:00)
+    if (hour === DAILY_HOUR && this.lastDailyRun !== dateKey) {
       this.lastDailyRun = dateKey;
       await runDailyAnalysis();
     }
 
-    // Veckovis körning kl. 03:00 söndagar (en gång per vecka)
-    if (weekday === 0 && hour === 3 && this.lastWeeklyRun !== weekKey) {
+    // Veckovis körning söndagar (en gång per vecka, konfigurerbar via ROUTE_CLUSTER_WEEKLY_HOUR, default 03:00)
+    if (weekday === 0 && hour === WEEKLY_HOUR && this.lastWeeklyRun !== weekKey) {
       this.lastWeeklyRun = weekKey;
       await runWeeklyAnalysis();
     }

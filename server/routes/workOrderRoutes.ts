@@ -2,7 +2,7 @@ import type { Express } from "express";
 import { storage } from "../storage";
 import { getTimeRestrictionsForObjects } from "../services/object-time-restrictions";
 import { db } from "../db";
-import { eq, and, desc, inArray, isNull, or, ilike, gte, lte } from "drizzle-orm";
+import { eq, and, desc, inArray, isNull, or, ilike, gte, lte, sql } from "drizzle-orm";
 import { z } from "zod";
 import {
   formatZodError,
@@ -15,7 +15,7 @@ import {
   ensureResourceIdsInTenant,
 } from "./helpers";
 import { getTenantIdWithFallback, requireAdmin, requirePlanner } from "../tenant-middleware";
-import { insertWorkOrderSchema, insertWorkOrderLineSchema, ORDER_STATUSES, type OrderStatus, articles, insertProcurementSchema, insertSetupTimeLogSchema, insertSimulationScenarioSchema, resources, orderConcepts, workOrderLines, fortnoxInvoiceExports, protocols, workOrders, customers, objects, slaRiskSnapshots, geographicDistricts, IMPOSSIBLE_REASON_LABELS, type ImpossibleReason, type OrderConcept, isOutsidePreferredWindow } from "@shared/schema";
+import { insertWorkOrderSchema, insertWorkOrderLineSchema, ORDER_STATUSES, type OrderStatus, articles, insertProcurementSchema, insertSetupTimeLogSchema, insertSimulationScenarioSchema, resources, orderConcepts, workOrderLines, fortnoxInvoiceExports, protocols, workOrders, customers, objects, slaRiskSnapshots, geographicDistricts, IMPOSSIBLE_REASON_LABELS, type ImpossibleReason, type OrderConcept, isOutsidePreferredWindow, routeClusterMemberships } from "@shared/schema";
 import type { WorkOrder, InsertWorkOrderLine } from "@shared/schema";
 import { handleWorkOrderStatusChange } from "../ai-communication";
 import { generatePreTasksForWorkOrder } from "../planning/weeklyPlanEngine";
@@ -306,7 +306,17 @@ app.get("/api/work-orders/:id", asyncHandler(async (req, res) => {
   // Ruttklumpsdata: hämta klump-metadata och analysera mot befintliga klumpar.
   let routeClusterName: string | null = null;
   let routeClusterPrecision: string | null = null;
-  let routeClusterOptions: unknown[] = [];
+
+  interface RouteClusterOptionDto {
+    id: string;
+    displayName: string;
+    period: string | null;
+    productionMinutes: number;
+    stopCount: number;
+    taskCount: number;
+    precision: "high" | "medium" | "low";
+  }
+  let routeClusterOptions: RouteClusterOptionDto[] = [];
 
   if (verified.routeClusterId) {
     const rc = await db.query.routeClusters.findFirst({
@@ -321,7 +331,62 @@ app.get("/api/work-orders/:id", asyncHandler(async (req, res) => {
 
   // analyzeRouteTask är skrivskyddad — kör alltid för att ge planeraren alternativ
   try {
-    routeClusterOptions = await analyzeRouteTask(verified.id, tenantId);
+    const rawMatches = await analyzeRouteTask(verified.id, tenantId);
+    if (rawMatches.length > 0) {
+      // Batch-hämta membership-räknare för matchade klump
+      const clusterIds = rawMatches.map((m) => m.cluster.id);
+      const countRows = await db
+        .select({
+          routeClusterId: routeClusterMemberships.routeClusterId,
+          cnt: sql<number>`count(*)::int`,
+        })
+        .from(routeClusterMemberships)
+        .where(
+          and(
+            inArray(routeClusterMemberships.routeClusterId, clusterIds),
+            isNull(routeClusterMemberships.removedAt),
+          ),
+        )
+        .groupBy(routeClusterMemberships.routeClusterId);
+      const countMap = new Map(countRows.map((r) => [r.routeClusterId, r.cnt]));
+
+      routeClusterOptions = rawMatches.map((m) => {
+        const c = m.cluster;
+        // period = "v.NN" eller "v.NN–v.MM" baserat på klumpens fönster
+        let period: string | null = null;
+        const fmtWeek = (d: Date) => {
+          const tmp = new Date(d);
+          tmp.setHours(0, 0, 0, 0);
+          tmp.setDate(tmp.getDate() + 3 - ((tmp.getDay() + 6) % 7));
+          const w1 = new Date(tmp.getFullYear(), 0, 4);
+          const wn =
+            1 +
+            Math.round(
+              ((tmp.getTime() - w1.getTime()) / 86400000 -
+                3 +
+                ((w1.getDay() + 6) % 7)) /
+                7,
+            );
+          return `v.${wn}`;
+        };
+        if (c.earliestDeliveryAt) {
+          const ws = fmtWeek(new Date(c.earliestDeliveryAt));
+          const we = c.latestDeliveryAt
+            ? fmtWeek(new Date(c.latestDeliveryAt))
+            : null;
+          period = we && we !== ws ? `${ws}–${we}` : ws;
+        }
+        return {
+          id: c.id,
+          displayName: c.displayName,
+          period,
+          productionMinutes: c.calculatedWorkMinutes ?? 0,
+          taskCount: countMap.get(c.id) ?? 0,
+          stopCount: countMap.get(c.id) ?? 0, // v1: stopp ≈ uppgifter
+          precision: m.precision,
+        };
+      });
+    }
   } catch {
     // best-effort — bryt inte WO-GET om klustringsanalysen misslyckas
   }

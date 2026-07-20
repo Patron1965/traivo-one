@@ -801,3 +801,116 @@ export async function getAllTenantIds(): Promise<string[]> {
   const rows = await db.select({ id: tenants.id }).from(tenants);
   return rows.map((r) => r.id);
 }
+
+// ---------------------------------------------------------------------------
+// Inkrementell near-term-klustring (trigger-driven via kö)
+// ---------------------------------------------------------------------------
+
+/**
+ * Tar bort en uppgift från ett ruttklump (intern helper).
+ * Stämplar removedAt på membership-raden och nullar routeClusterId på WO.
+ */
+async function removeWoFromRouteCluster(
+  taskId: string,
+  tenantId: string,
+  clusterId: string,
+  reason: string,
+): Promise<void> {
+  const now = new Date();
+  await db
+    .update(routeClusterMemberships)
+    .set({ removedAt: now, removalReason: reason })
+    .where(
+      and(
+        eq(routeClusterMemberships.taskId, taskId),
+        eq(routeClusterMemberships.routeClusterId, clusterId),
+        eq(routeClusterMemberships.tenantId, tenantId),
+        isNull(routeClusterMemberships.removedAt),
+      ),
+    );
+  await db
+    .update(workOrders)
+    .set({ routeClusterId: null, routeClusterCalculatedAt: now })
+    .where(and(eq(workOrders.id, taskId), eq(workOrders.tenantId, tenantId)));
+}
+
+/**
+ * Inkrementell ruttklumpningstilldelning för en enskild uppgift.
+ *
+ * Anropas av klusteringskön när en uppgift skapas/ändras (near-term trigger).
+ * Hanterar bara uppgifter vars leveransfönster faller inom de närmaste 30 dagarna
+ * (high precision) — längre horisonter hanteras av daglig/veckovis scheduler.
+ *
+ * Flöde:
+ *   1. Hämta WO; skippa om ej aktiv.
+ *   2. Protected cluster (confirmed/locked) → hoppa.
+ *   3. Ta bort från nuvarande active cluster (om det finns).
+ *   4. Kör analyzeTask → tilldela till bäst matchande klump.
+ *   5. Ingen match → lämna utan klump (scheduler skapar ny vid nästa körning).
+ */
+export async function processRouteTask(
+  taskId: string,
+  tenantId: string,
+): Promise<{
+  action: "assigned" | "removed" | "unchanged" | "skipped";
+  clusterId?: string;
+}> {
+  const wo = await storage.getWorkOrder(taskId);
+  if (!wo || wo.tenantId !== tenantId) return { action: "skipped" };
+  if (!isActiveForPlanning(wo)) {
+    // Inaktiv uppgift → ta bort från active cluster om tilldelad
+    if (wo.routeClusterId) {
+      const existing = await db.query.routeClusters.findFirst({
+        where: eq(routeClusters.id, wo.routeClusterId),
+        columns: { status: true },
+      });
+      if (existing?.status === "active") {
+        await removeWoFromRouteCluster(taskId, tenantId, wo.routeClusterId, "task_inactive");
+        return { action: "removed" };
+      }
+    }
+    return { action: "skipped" };
+  }
+
+  // Kontrollera om uppgiftens leveransfönster är near-term (≤30 dagar).
+  // Längre horisonter hanteras exklusivt av den schemalagda körningen.
+  const window = getEffectiveWindow(wo);
+  const nearTermCutoff = new Date();
+  nearTermCutoff.setDate(nearTermCutoff.getDate() + 30);
+  const woStart = window.start ?? window.end ?? null;
+  if (woStart && woStart > nearTermCutoff) {
+    // Utanför near-term-band — triggerbaserad omräkning hoppar; scheduler tar hand om det.
+    return { action: "unchanged" };
+  }
+
+  // Protected cluster → lämna orörd
+  if (wo.routeClusterId) {
+    const existing = await db.query.routeClusters.findFirst({
+      where: eq(routeClusters.id, wo.routeClusterId),
+      columns: { status: true },
+    });
+    if (isProtectedStatus(existing?.status)) return { action: "skipped" };
+    // Active cluster → ta bort för att möjliggöra omplacering
+    await removeWoFromRouteCluster(taskId, tenantId, wo.routeClusterId, "recluster");
+  }
+
+  // Kör analys — tilldela till bäst matchande klump
+  const matches = await analyzeTask(taskId, tenantId);
+  const best = matches[0];
+  if (!best) return { action: "unchanged" };
+
+  const now = new Date();
+  await db.insert(routeClusterMemberships).values({
+    tenantId,
+    routeClusterId: best.cluster.id,
+    taskId,
+    taskTable: "work_orders",
+    assignedAt: now,
+  });
+  await db
+    .update(workOrders)
+    .set({ routeClusterId: best.cluster.id, routeClusterCalculatedAt: now })
+    .where(and(eq(workOrders.id, taskId), eq(workOrders.tenantId, tenantId)));
+
+  return { action: "assigned", clusterId: best.cluster.id };
+}

@@ -9,6 +9,7 @@
 import { db } from "../../db";
 import { taskEvents } from "@shared/schema";
 import { processTask } from "./stop-clustering-engine";
+import { processRouteTask } from "./route-clustering-engine";
 
 interface ClusteringJob {
   taskId: string;
@@ -99,7 +100,33 @@ class ClusteringQueue {
             );
           }
         }
-        // assignments: P3 (ruttklumpning)
+        // Ruttklumpning: inkrementell near-term-tilldelning för work_orders
+        if (job.taskTable === "work_orders") {
+          const routeResult = await processRouteTask(job.taskId, job.tenantId);
+          if (routeResult.action === "assigned") {
+            await logClusterEvent(
+              job.tenantId,
+              job.taskId,
+              "route_cluster_assigned",
+              {
+                clusterId: routeResult.clusterId,
+                action: routeResult.action,
+                source: "clustering_queue",
+              },
+            );
+          } else if (routeResult.action === "removed") {
+            await logClusterEvent(
+              job.tenantId,
+              job.taskId,
+              "route_cluster_removed",
+              {
+                action: routeResult.action,
+                source: "clustering_queue",
+              },
+            );
+          }
+        }
+        // assignments: P3
       } catch (err) {
         console.error(
           `[clustering-queue] Error processing task ${job.taskId}:`,
