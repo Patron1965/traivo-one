@@ -14,6 +14,8 @@ import {
   Pencil,
   CalendarDays,
   AlertTriangle,
+  Merge,
+  Scissors,
 } from "lucide-react";
 import {
   Sheet,
@@ -26,6 +28,15 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -74,6 +85,20 @@ interface RouteClusterDetail {
   tasks: ClusterTask[];
 }
 
+interface StopClusterSummary {
+  id: string;
+  displayName: string;
+  status: string;
+  memberCount: number;
+}
+
+interface RouteClusterSummary {
+  id: string;
+  displayName: string;
+  status: string;
+  taskCount: number;
+}
+
 // ============================================================================
 // Hjälpfunktioner
 // ============================================================================
@@ -110,6 +135,170 @@ function ConstraintWarning() {
 }
 
 // ============================================================================
+// MergePanel — gemensam komponent för slå ihop
+// ============================================================================
+
+function MergePanel({
+  currentId,
+  clusterType,
+  otherClusters,
+  isMergePending,
+  onConfirm,
+  onCancel,
+}: {
+  currentId: string;
+  clusterType: "stop" | "route";
+  otherClusters: Array<{ id: string; displayName: string; status: string; count: number }>;
+  isMergePending: boolean;
+  onConfirm: (targetId: string) => void;
+  onCancel: () => void;
+}) {
+  const [targetId, setTargetId] = useState("");
+  const eligible = otherClusters.filter(
+    (c) => c.id !== currentId && c.status !== "dissolved"
+  );
+
+  return (
+    <div className="flex flex-col gap-2 rounded-md border border-border bg-muted/30 px-3 py-3">
+      <p className="text-xs font-medium">
+        Välj klump att slå ihop med <span className="text-muted-foreground">(den här klumpen upplöses)</span>
+      </p>
+      {eligible.length === 0 ? (
+        <p className="text-xs text-muted-foreground">Inga andra klumpar tillgängliga.</p>
+      ) : (
+        <Select value={targetId} onValueChange={setTargetId}>
+          <SelectTrigger className="h-8 text-xs" data-testid="select-merge-target">
+            <SelectValue placeholder="Välj målklump…" />
+          </SelectTrigger>
+          <SelectContent>
+            {eligible.map((c) => (
+              <SelectItem key={c.id} value={c.id} data-testid={`option-merge-target-${c.id}`}>
+                {c.displayName}
+                <span className="ml-1 text-muted-foreground">
+                  ({c.count} uppg.)
+                </span>
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      )}
+      <div className="flex gap-2">
+        <Button
+          size="sm"
+          variant="destructive"
+          disabled={!targetId || isMergePending}
+          onClick={() => onConfirm(targetId)}
+          data-testid="button-merge-confirm"
+        >
+          {isMergePending && <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />}
+          Slå ihop
+        </Button>
+        <Button size="sm" variant="ghost" onClick={onCancel} data-testid="button-merge-cancel">
+          Avbryt
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================================
+// SplitPanel — gemensam komponent för dela
+// ============================================================================
+
+function SplitPanel({
+  tasks,
+  isSplitPending,
+  onConfirm,
+  onCancel,
+}: {
+  tasks: ClusterTask[];
+  isSplitPending: boolean;
+  onConfirm: (taskIds: string[], displayName?: string) => void;
+  onCancel: () => void;
+}) {
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [splitName, setSplitName] = useState("");
+
+  function toggleTask(id: string) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  const canSplit = selectedIds.size >= 1 && selectedIds.size < tasks.length;
+
+  return (
+    <div className="flex flex-col gap-2 rounded-md border border-border bg-muted/30 px-3 py-3">
+      <p className="text-xs font-medium">
+        Välj uppgifter att flytta till en ny klump
+      </p>
+      {tasks.length <= 1 ? (
+        <p className="text-xs text-muted-foreground">Klumpen måste ha minst 2 uppgifter för att kunna delas.</p>
+      ) : (
+        <>
+          <ul className="flex flex-col gap-1 max-h-48 overflow-y-auto">
+            {tasks.map((t) => (
+              <li key={t.id} className="flex items-center gap-2 rounded px-1 py-1 hover:bg-muted/60">
+                <Checkbox
+                  id={`split-task-${t.id}`}
+                  checked={selectedIds.has(t.id)}
+                  onCheckedChange={() => toggleTask(t.id)}
+                  data-testid={`checkbox-split-task-${t.id}`}
+                />
+                <Label
+                  htmlFor={`split-task-${t.id}`}
+                  className="flex-1 cursor-pointer text-xs leading-tight"
+                >
+                  <span className="font-medium">{t.title ?? t.orderNumber ?? t.id.slice(0, 8)}</span>
+                  {t.estimatedDuration != null && (
+                    <span className="ml-1 text-muted-foreground tabular-nums">
+                      {formatMinutes(t.estimatedDuration)}
+                    </span>
+                  )}
+                </Label>
+              </li>
+            ))}
+          </ul>
+          <Input
+            placeholder="Namn på ny klump (valfritt)"
+            value={splitName}
+            onChange={(e) => setSplitName(e.target.value)}
+            className="h-8 text-xs"
+            data-testid="input-split-name"
+          />
+          {!canSplit && selectedIds.size > 0 && selectedIds.size >= tasks.length && (
+            <p className="text-xs text-warning">Minst en uppgift måste stanna kvar i den ursprungliga klumpen.</p>
+          )}
+          <div className="flex gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={!canSplit || isSplitPending}
+              onClick={() =>
+                onConfirm(
+                  Array.from(selectedIds),
+                  splitName.trim() || undefined
+                )
+              }
+              data-testid="button-split-confirm"
+            >
+              {isSplitPending && <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />}
+              Dela ({selectedIds.size} valda)
+            </Button>
+            <Button size="sm" variant="ghost" onClick={onCancel} data-testid="button-split-cancel">
+              Avbryt
+            </Button>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+// ============================================================================
 // StopClusterPanel
 // ============================================================================
 
@@ -127,11 +316,20 @@ function StopClusterPanel({
   const [nameValue, setNameValue] = useState("");
   const [lockComment, setLockComment] = useState("");
   const [showLockComment, setShowLockComment] = useState(false);
+  const [showMerge, setShowMerge] = useState(false);
+  const [showSplit, setShowSplit] = useState(false);
 
   const { data: cluster, isLoading } = useQuery<StopClusterDetail>({
     queryKey: ["/api/clustering/stop-clusters", clusterId],
     queryFn: async () =>
       (await apiRequest("GET", `/api/clustering/stop-clusters/${clusterId}`)).json(),
+  });
+
+  const { data: allClusters } = useQuery<StopClusterSummary[]>({
+    queryKey: ["/api/clustering/stop-clusters"],
+    queryFn: async () =>
+      (await apiRequest("GET", "/api/clustering/stop-clusters")).json(),
+    enabled: showMerge,
   });
 
   const patchMutation = useMutation({
@@ -148,6 +346,46 @@ function StopClusterPanel({
     onError: () => toast({ title: "Fel vid uppdatering", variant: "destructive" }),
   });
 
+  const mergeMutation = useMutation({
+    mutationFn: async (targetId: string) =>
+      (
+        await apiRequest("POST", "/api/clustering/stop-clusters/merge", {
+          sourceId: clusterId,
+          targetId,
+        })
+      ).json(),
+    onSuccess: (_data, targetId) => {
+      void queryClient.invalidateQueries({ queryKey: ["/api/clustering/stop-clusters"] });
+      void queryClient.invalidateQueries({ queryKey: ["/api/rough-planning/grid"] });
+      toast({ title: "Klumpar sammanslagna" });
+      onClose();
+    },
+    onError: () => toast({ title: "Fel vid sammanslagning", variant: "destructive" }),
+  });
+
+  const splitMutation = useMutation({
+    mutationFn: async ({
+      taskIds,
+      displayName,
+    }: {
+      taskIds: string[];
+      displayName?: string;
+    }) =>
+      (
+        await apiRequest("POST", `/api/clustering/stop-clusters/${clusterId}/split`, {
+          taskIds,
+          ...(displayName ? { displayName } : {}),
+        })
+      ).json(),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["/api/clustering/stop-clusters"] });
+      void queryClient.invalidateQueries({ queryKey: ["/api/rough-planning/grid"] });
+      setShowSplit(false);
+      toast({ title: "Klump delad" });
+    },
+    onError: () => toast({ title: "Fel vid delning", variant: "destructive" }),
+  });
+
   if (isLoading || !cluster) {
     return (
       <div className="flex items-center justify-center py-16 text-muted-foreground">
@@ -159,6 +397,10 @@ function StopClusterPanel({
 
   const meta = STATUS_META[cluster.status] ?? STATUS_META.active;
   const isLocked = cluster.status === "locked";
+
+  const mergeTargetList = (allClusters ?? [])
+    .filter((c) => c.id !== clusterId && c.status !== "dissolved")
+    .map((c) => ({ id: c.id, displayName: c.displayName, status: c.status, count: c.memberCount }));
 
   return (
     <div className="flex flex-col gap-4 p-1">
@@ -315,7 +557,57 @@ function StopClusterPanel({
           <CalendarDays className="h-4 w-4" />
           Skicka till veckoplan
         </Button>
+
+        {/* Slå ihop */}
+        {!showMerge && !showSplit && (
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => setShowMerge(true)}
+            data-testid="button-cluster-merge"
+          >
+            <Merge className="h-4 w-4" />
+            Slå ihop
+          </Button>
+        )}
+
+        {/* Dela klump */}
+        {!showMerge && !showSplit && cluster.tasks.length >= 2 && (
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => setShowSplit(true)}
+            data-testid="button-cluster-split"
+          >
+            <Scissors className="h-4 w-4" />
+            Dela klump
+          </Button>
+        )}
       </div>
+
+      {/* Merge-panel */}
+      {showMerge && (
+        <MergePanel
+          currentId={clusterId}
+          clusterType="stop"
+          otherClusters={mergeTargetList}
+          isMergePending={mergeMutation.isPending}
+          onConfirm={(targetId) => mergeMutation.mutate(targetId)}
+          onCancel={() => setShowMerge(false)}
+        />
+      )}
+
+      {/* Split-panel */}
+      {showSplit && (
+        <SplitPanel
+          tasks={cluster.tasks}
+          isSplitPending={splitMutation.isPending}
+          onConfirm={(taskIds, displayName) =>
+            splitMutation.mutate({ taskIds, displayName })
+          }
+          onCancel={() => setShowSplit(false)}
+        />
+      )}
 
       <Separator />
 
@@ -380,11 +672,20 @@ function RouteClusterPanel({
   const [nameValue, setNameValue] = useState("");
   const [lockComment, setLockComment] = useState("");
   const [showLockComment, setShowLockComment] = useState(false);
+  const [showMerge, setShowMerge] = useState(false);
+  const [showSplit, setShowSplit] = useState(false);
 
   const { data: cluster, isLoading } = useQuery<RouteClusterDetail>({
     queryKey: ["/api/clustering/route-clusters", clusterId],
     queryFn: async () =>
       (await apiRequest("GET", `/api/clustering/route-clusters/${clusterId}`)).json(),
+  });
+
+  const { data: allClusters } = useQuery<RouteClusterSummary[]>({
+    queryKey: ["/api/clustering/route-clusters"],
+    queryFn: async () =>
+      (await apiRequest("GET", "/api/clustering/route-clusters")).json(),
+    enabled: showMerge,
   });
 
   const patchMutation = useMutation({
@@ -401,6 +702,46 @@ function RouteClusterPanel({
     onError: () => toast({ title: "Fel vid uppdatering", variant: "destructive" }),
   });
 
+  const mergeMutation = useMutation({
+    mutationFn: async (targetId: string) =>
+      (
+        await apiRequest("POST", "/api/clustering/route-clusters/merge", {
+          sourceId: clusterId,
+          targetId,
+        })
+      ).json(),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["/api/clustering/route-clusters"] });
+      void queryClient.invalidateQueries({ queryKey: ["/api/rough-planning/grid"] });
+      toast({ title: "Ruttklumpar sammanslagna" });
+      onClose();
+    },
+    onError: () => toast({ title: "Fel vid sammanslagning", variant: "destructive" }),
+  });
+
+  const splitMutation = useMutation({
+    mutationFn: async ({
+      taskIds,
+      displayName,
+    }: {
+      taskIds: string[];
+      displayName?: string;
+    }) =>
+      (
+        await apiRequest("POST", `/api/clustering/route-clusters/${clusterId}/split`, {
+          taskIds,
+          ...(displayName ? { displayName } : {}),
+        })
+      ).json(),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["/api/clustering/route-clusters"] });
+      void queryClient.invalidateQueries({ queryKey: ["/api/rough-planning/grid"] });
+      setShowSplit(false);
+      toast({ title: "Ruttklump delad" });
+    },
+    onError: () => toast({ title: "Fel vid delning", variant: "destructive" }),
+  });
+
   if (isLoading || !cluster) {
     return (
       <div className="flex items-center justify-center py-16 text-muted-foreground">
@@ -413,6 +754,10 @@ function RouteClusterPanel({
   const meta = STATUS_META[cluster.status] ?? STATUS_META.active;
   const precLabel = PRECISION_LABEL[cluster.precisionLevel ?? ""] ?? cluster.precisionLevel ?? "–";
   const isLocked = cluster.status === "locked";
+
+  const mergeTargetList = (allClusters ?? [])
+    .filter((c) => c.id !== clusterId && c.status !== "dissolved")
+    .map((c) => ({ id: c.id, displayName: c.displayName, status: c.status, count: c.taskCount }));
 
   return (
     <div className="flex flex-col gap-4 p-1">
@@ -591,7 +936,57 @@ function RouteClusterPanel({
           <CalendarDays className="h-4 w-4" />
           Skicka till veckoplan
         </Button>
+
+        {/* Slå ihop */}
+        {!showMerge && !showSplit && (
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => setShowMerge(true)}
+            data-testid="button-route-cluster-merge"
+          >
+            <Merge className="h-4 w-4" />
+            Slå ihop
+          </Button>
+        )}
+
+        {/* Dela klump */}
+        {!showMerge && !showSplit && cluster.tasks.length >= 2 && (
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => setShowSplit(true)}
+            data-testid="button-route-cluster-split"
+          >
+            <Scissors className="h-4 w-4" />
+            Dela klump
+          </Button>
+        )}
       </div>
+
+      {/* Merge-panel */}
+      {showMerge && (
+        <MergePanel
+          currentId={clusterId}
+          clusterType="route"
+          otherClusters={mergeTargetList}
+          isMergePending={mergeMutation.isPending}
+          onConfirm={(targetId) => mergeMutation.mutate(targetId)}
+          onCancel={() => setShowMerge(false)}
+        />
+      )}
+
+      {/* Split-panel */}
+      {showSplit && (
+        <SplitPanel
+          tasks={cluster.tasks}
+          isSplitPending={splitMutation.isPending}
+          onConfirm={(taskIds, displayName) =>
+            splitMutation.mutate({ taskIds, displayName })
+          }
+          onCancel={() => setShowSplit(false)}
+        />
+      )}
 
       <Separator />
 
