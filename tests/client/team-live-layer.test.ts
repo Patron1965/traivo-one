@@ -131,6 +131,17 @@ describe("mergeApiTeams", () => {
     expect(out[0].position?.resourceId).toBe("r1");
   });
 
+  it("uppdaterar team-metadata från API även när WS-positionen behålls", () => {
+    const prev = [team("A", ["r1"], pos("r1", "2026-07-20T12:00:00Z"))];
+    const incoming = [
+      { ...team("A", ["r1", "r2"], pos("r1", "2026-07-20T11:00:00Z")), teamName: "Nytt namn" },
+    ];
+    const out = mergeApiTeams(prev, incoming);
+    expect(out[0].teamName).toBe("Nytt namn");
+    expect(out[0].resourceIds).toEqual(["r1", "r2"]);
+    expect(out[0].position?.lastUpdate).toBe("2026-07-20T12:00:00Z");
+  });
+
   it("nya team från API läggs till, borttagna försvinner", () => {
     const prev = [team("A", ["r1"])];
     const incoming = [team("B", ["r3"])];

@@ -233,6 +233,7 @@ import { getObjectWithAllMetadata, getObjectAtkomstFields } from "./metadata-que
 import { buildUppgiftspaket } from "./services/uppgiftspaket";
 import type { InsertAssignment as InsertAssignmentType } from "@shared/schema";
 import { haversineDistanceKm } from "./distance-matrix-service";
+import { groupTeamLiveRows } from "./services/team-live-positions";
 import type { AssociationCondition } from "@shared/schema";
 
 export interface ResolvedArticlePrice {
@@ -6880,9 +6881,10 @@ export class DatabaseStorage implements IStorage {
       ));
   }
 
-  // Task #1292: Live-position per aktivt fältteam (utförarläge på kartan).
-  // Returnerar alla aktiva team med accepterade medlemmar + den senast
-  // rapporterade GPS-positionen bland teamets medlemmar (om någon finns).
+  // Task #1292/#1300: Live-position per aktivt fältteam (utförarläge på kartan).
+  // Returnerar ALLA aktiva team — team utan accepterade medlemmar exkluderas
+  // inte utan får resourceIds=[] och position=null (left join). Senast
+  // rapporterade GPS-positionen bland teamets accepterade medlemmar vinner.
   async getTeamLivePositions(tenantId: string): Promise<TeamLivePosition[]> {
     const rows = await db
       .select({
@@ -6897,43 +6899,22 @@ export class DatabaseStorage implements IStorage {
         lastPositionUpdate: resources.lastPositionUpdate,
       })
       .from(teams)
-      .innerJoin(teamMembers, eq(teamMembers.teamId, teams.id))
-      .innerJoin(resources, eq(teamMembers.resourceId, resources.id))
+      .leftJoin(teamMembers, and(
+        eq(teamMembers.teamId, teams.id),
+        isNotNull(teamMembers.acceptedAt),
+      ))
+      .leftJoin(resources, and(
+        eq(teamMembers.resourceId, resources.id),
+        eq(resources.tenantId, tenantId),
+        isNull(resources.deletedAt),
+      ))
       .where(and(
         eq(teams.tenantId, tenantId),
         isNull(teams.deletedAt),
         eq(teams.status, "active"),
-        isNotNull(teamMembers.acceptedAt),
-        eq(resources.tenantId, tenantId),
-        isNull(resources.deletedAt),
       ));
 
-    const byTeam = new Map<string, TeamLivePosition>();
-    for (const r of rows) {
-      let entry = byTeam.get(r.teamId);
-      if (!entry) {
-        entry = { teamId: r.teamId, teamName: r.teamName, teamColor: r.teamColor ?? null, resourceIds: [], position: null, memberPositions: [] };
-        byTeam.set(r.teamId, entry);
-      }
-      entry.resourceIds.push(r.resourceId);
-      if (r.latitude != null && r.longitude != null && r.lastPositionUpdate != null) {
-        const memberPos = {
-          resourceId: r.resourceId,
-          resourceName: r.resourceName,
-          latitude: r.latitude,
-          longitude: r.longitude,
-          status: r.trackingStatus ?? null,
-          lastUpdate: new Date(r.lastPositionUpdate).toISOString(),
-        };
-        entry.memberPositions.push(memberPos);
-        const ts = new Date(r.lastPositionUpdate).getTime();
-        const prev = entry.position;
-        if (!prev || ts > new Date(prev.lastUpdate).getTime()) {
-          entry.position = memberPos;
-        }
-      }
-    }
-    return Array.from(byTeam.values());
+    return groupTeamLiveRows(rows);
   }
 
   // Task #1298: Dagens färdväg (breadcrumb-spår) per team. Aggregerar
