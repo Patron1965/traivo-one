@@ -65,6 +65,7 @@ import {
 } from "@/components/grovplanering/RoughFilterPanel";
 import { RoughGridTable } from "@/components/grovplanering/RoughGridTable";
 import type { TaskClusters } from "@/components/grovplanering/RoughGridTable";
+import { HierarchyTable } from "@/components/grovplanering/HierarchyTable";
 import { RoughAssignModal } from "@/components/grovplanering/RoughAssignModal";
 import { ClusterSidePanel, type ClusterRef } from "@/components/clustering/ClusterSidePanel";
 import { EngineRunControl } from "@/components/grovplanering/EngineRunControl";
@@ -276,7 +277,7 @@ function pageWindow(current: number, total: number): (number | "ellipsis")[] {
 export default function GrovplaneringPage() {
   const { toast } = useToast();
 
-  const [view, setView] = useState<"manuell" | "motor" | "klump" | "karta">("manuell");
+  const [view, setView] = useState<"manuell" | "motor" | "klump" | "karta" | "hierarki">("manuell");
   const [groupBy, setGroupBy] = useState<GroupBy>("objekt");
   const [pageSize, setPageSize] = useState(20);
   const [offset, setOffset] = useState(0);
@@ -407,6 +408,32 @@ export default function GrovplaneringPage() {
 
   const getTaskClusters = (taskId: string): TaskClusters | undefined =>
     membershipData?.[taskId];
+
+  // Hierarki-vy: hämta platt lista (ingen gruppering, hög limit) när hierarki-fliken är aktiv.
+  // buildHierarchy() grupperar klient-sidan efter routeClusterId/stopClusterId.
+  const hierarchyFilterParams = useMemo(() => {
+    const p = buildFilterParams(applied, "ingen");
+    p.set("limit", "2000");
+    p.set("offset", "0");
+    return p.toString();
+  }, [applied]);
+
+  const {
+    data: hierarchyData,
+    isLoading: hierarchyLoading,
+    isError: hierarchyError,
+  } = useQuery<GridResponse>({
+    queryKey: ["/api/rough-planning/grid", "hierarki", applied],
+    queryFn: async () =>
+      (await apiRequest("GET", `/api/rough-planning/grid?${hierarchyFilterParams}`)).json(),
+    enabled: view === "hierarki",
+    placeholderData: keepPreviousData,
+  });
+
+  const hierarchyTasks = useMemo(
+    () => (hierarchyData?.groups ?? []).flatMap((g) => g.tasks),
+    [hierarchyData],
+  );
 
   // Motorns förslag (Task #1039) — läses on-demand, separat från work_order-rutnätet.
   const {
@@ -734,7 +761,7 @@ export default function GrovplaneringPage() {
       <Tabs
         value={view}
         onValueChange={(v) => {
-          const next = v as "manuell" | "motor" | "klump" | "karta";
+          const next = v as "manuell" | "motor" | "klump" | "karta" | "hierarki";
           if (next === "motor") openMotorView();
           else setView(next);
         }}
@@ -742,6 +769,9 @@ export default function GrovplaneringPage() {
         <TabsList data-testid="tabs-grov-view">
           <TabsTrigger value="manuell" data-testid="tab-manuell">
             Manuell lista
+          </TabsTrigger>
+          <TabsTrigger value="hierarki" data-testid="tab-hierarki">
+            Hierarki
           </TabsTrigger>
           <TabsTrigger value="motor" data-testid="tab-motor">
             Motorns förslag
@@ -758,7 +788,36 @@ export default function GrovplaneringPage() {
         </TabsList>
       </Tabs>
 
-      {view === "motor" ? (
+      {view === "hierarki" ? (
+        hierarchyLoading ? (
+          <div className="flex items-center justify-center rounded-lg border py-16 text-muted-foreground">
+            <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+            Laddar hierarki…
+          </div>
+        ) : hierarchyError ? (
+          <div
+            className="rounded-lg border py-16 text-center text-destructive"
+            data-testid="text-hierarchy-error"
+          >
+            Kunde inte ladda hierarkin. Försök igen.
+          </div>
+        ) : (
+          <HierarchyTable
+            tasks={hierarchyTasks}
+            selected={selected}
+            onToggleRow={toggleRow}
+            onAssignRow={(row) => setAssignTarget([row])}
+            onRevokeRow={(row) =>
+              setRevokeTarget({
+                ids: [row.id],
+                label: row.objectName ?? row.title ?? "uppgift",
+              })
+            }
+            onOpenCluster={setOpenCluster}
+            onAssignCluster={(rows) => setAssignTarget(rows)}
+          />
+        )
+      ) : view === "motor" ? (
         engineLoading ? (
           <div className="flex items-center justify-center rounded-lg border py-16 text-muted-foreground">
             <Loader2 className="mr-2 h-5 w-5 animate-spin" />

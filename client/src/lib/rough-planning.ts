@@ -196,3 +196,134 @@ export function resolvePeriodRange(
   const to = rangeTo ? endOfDay(new Date(rangeTo)).toISOString() : undefined;
   return { from, to };
 }
+
+// ---------------------------------------------------------------------------
+// Hierarchy (Task #1283) — 3-nivå kollapsbar hierarki
+// Ruttklump (L1) → Stoppklump (L2) → Uppgift (L3)
+// ---------------------------------------------------------------------------
+
+export interface HierarchyKpis {
+  taskCount: number;
+  productionMinutes: number;
+  value: number;
+  cost: number;
+}
+
+export interface HierarchyL2Stop {
+  id: string | null;
+  displayName: string;
+  tasks: GridTaskRow[];
+  kpis: HierarchyKpis;
+}
+
+export interface HierarchyL1Route {
+  id: string | null;
+  displayName: string;
+  stopClusters: HierarchyL2Stop[];
+  kpis: HierarchyKpis;
+}
+
+function computeHierarchyKpis(tasks: GridTaskRow[]): HierarchyKpis {
+  let productionMinutes = 0;
+  let value = 0;
+  let cost = 0;
+  for (const t of tasks) {
+    productionMinutes += t.productionMinutes;
+    value += t.value;
+    cost += t.cost;
+  }
+  return { taskCount: tasks.length, productionMinutes, value, cost };
+}
+
+export function buildHierarchy(tasks: GridTaskRow[]): HierarchyL1Route[] {
+  const routeMap = new Map<
+    string | null,
+    {
+      id: string | null;
+      displayName: string;
+      stopMap: Map<
+        string | null,
+        { id: string | null; displayName: string; tasks: GridTaskRow[] }
+      >;
+    }
+  >();
+
+  for (const task of tasks) {
+    const rKey = task.routeClusterId ?? null;
+    if (!routeMap.has(rKey)) {
+      routeMap.set(rKey, {
+        id: rKey,
+        displayName:
+          task.routeClusterName ?? (rKey ? rKey.slice(0, 8) : "Utan ruttklump"),
+        stopMap: new Map(),
+      });
+    }
+    const route = routeMap.get(rKey)!;
+    const sKey = task.stopClusterId ?? null;
+    if (!route.stopMap.has(sKey)) {
+      route.stopMap.set(sKey, {
+        id: sKey,
+        displayName:
+          task.stopClusterName ??
+          (sKey ? sKey.slice(0, 8) : "Utan stoppklump"),
+        tasks: [],
+      });
+    }
+    route.stopMap.get(sKey)!.tasks.push(task);
+  }
+
+  const sortedRouteKeys = [...routeMap.keys()].sort((a, b) => {
+    if (a === null && b !== null) return 1;
+    if (a !== null && b === null) return -1;
+    return (routeMap.get(a)?.displayName ?? "").localeCompare(
+      routeMap.get(b)?.displayName ?? "",
+      "sv-SE",
+    );
+  });
+
+  return sortedRouteKeys.map((rKey) => {
+    const route = routeMap.get(rKey)!;
+    const sortedStopKeys = [...route.stopMap.keys()].sort((a, b) => {
+      if (a === null && b !== null) return 1;
+      if (a !== null && b === null) return -1;
+      return (route.stopMap.get(a)?.displayName ?? "").localeCompare(
+        route.stopMap.get(b)?.displayName ?? "",
+        "sv-SE",
+      );
+    });
+
+    const stopClusters: HierarchyL2Stop[] = sortedStopKeys.map((sKey) => {
+      const stop = route.stopMap.get(sKey)!;
+      return {
+        id: stop.id,
+        displayName: stop.displayName,
+        tasks: stop.tasks,
+        kpis: computeHierarchyKpis(stop.tasks),
+      };
+    });
+
+    const allTasks = stopClusters.flatMap((s) => s.tasks);
+    return {
+      id: route.id,
+      displayName: route.displayName,
+      stopClusters,
+      kpis: computeHierarchyKpis(allTasks),
+    };
+  });
+}
+
+/** Kompakt leveranstidsintervall för en samling uppgifter (L1/L2-rader). */
+export function clusterDeliveryRange(tasks: GridTaskRow[]): string {
+  const dates = tasks
+    .map((t) => t.desiredDeliveryStart)
+    .filter((d): d is string => !!d)
+    .map((d) => new Date(d))
+    .filter((d) => Number.isFinite(d.getTime()))
+    .sort((a, b) => a.getTime() - b.getTime());
+  if (dates.length === 0) return "–";
+  const fmt = (d: Date) =>
+    d.toLocaleDateString("sv-SE", { day: "numeric", month: "short" });
+  const first = fmt(dates[0]);
+  const last = fmt(dates[dates.length - 1]);
+  return first === last ? first : `${first} – ${last}`;
+}
