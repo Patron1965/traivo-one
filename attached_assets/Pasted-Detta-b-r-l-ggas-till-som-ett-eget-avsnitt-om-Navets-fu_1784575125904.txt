@@ -1,0 +1,601 @@
+Detta bör läggas till som ett eget avsnitt om Navets fullständiga status-, utfalls- och analysfunktion.
+
+Tillägg – Navets hantering av samtliga uppgiftsstatusar, utfall, följduppgifter och export för efteranalys
+
+1. Navet omfattar hela uppgiftens livscykel
+
+Navet ska inte endast vara en planeringsvy för otilldelade och tilldelade uppgifter.
+
+Det som hittills beskrivits om:
+
+* otilldelade uppgifter,
+* ruttklumpar,
+* stoppklumpar,
+* tilldelning till utförare eller team,
+* placering i veckoplan,
+* återgång från veckoplan till Navet,
+
+är en central del av Navet, men Navet ska samtidigt hantera och redovisa uppgifter genom hela deras livscykel.
+
+Navet ska därför kunna visa, filtrera, sortera, summera och analysera uppgifter med samtliga huvudstatusar och relevanta tilläggsstatusar, från att uppgiften skapas till att den är utförd, kontrollerad och fakturerad.
+
+Exempel på huvudstatusar är:
+
+1. uppgift skapad,
+2. uppgift för planering i Navet,
+3. otilldelad,
+4. tilldelad till veckoplan,
+5. dubbelbokad,
+6. överbokad,
+7. på väg,
+8. på plats,
+9. utförd,
+10. omöjlig att utföra,
+11. fakturakontroll,
+12. fakturerad.
+
+Därutöver kan uppgifter ha tilläggsstatusar eller avvikelsestatusar, exempelvis:
+
+* simulerad,
+* tidskonflikt,
+* delvis utförd,
+* väntar på material,
+* väntar på kund,
+* åtkomst saknas,
+* felaktiga grunddata,
+* leveranstid bör omförhandlas,
+* uppdaterad för optimal rutt,
+* avvikelse rapporterad,
+* återförd till Navet,
+* kräver manuell kontroll.
+
+Navets statusmodell ska vara central för all filtrering, sortering, gruppering, summering och analys.
+
+⸻
+
+2. Navet ska visa både planerade värden och verkligt utfall
+
+För varje uppgift, stoppklump, ruttklump, vecka, utförare och team ska Navet kunna redovisa både:
+
+* planerade eller beräknade värden, och
+* verkligt registrerat utfall.
+
+Det ska gå att jämföra plan och utfall direkt i listan eller genom en expanderad analysvy.
+
+Planerade värden kan exempelvis omfatta:
+
+* planerat antal,
+* planerad produktionstid,
+* planerad restid,
+* planerat produktionsvärde,
+* beräknad kostnad,
+* beräknad marginal,
+* planerad starttid,
+* planerad sluttid,
+* planerad leveransdag,
+* planerad utförare eller team.
+
+Verkligt utfall kan exempelvis omfatta:
+
+* verkligt utfört antal,
+* verklig produktionstid,
+* verklig restid,
+* verklig total arbetstid,
+* verkligt produktionsvärde,
+* verkligt fakturerbart värde,
+* verklig kostnad,
+* verklig marginal,
+* faktisk starttid,
+* faktisk sluttid,
+* faktiskt utförandedatum,
+* verklig utförare eller verkligt team,
+* utförd, delvis utförd eller inte utförd.
+
+Systemet ska även kunna visa differensen mellan plan och utfall.
+
+Exempel:
+
+Värde	Planerat	Utfall	Avvikelse
+Produktionstid	6,0 h	7,5 h	+1,5 h
+Antal	24 st	22 st	–2 st
+Produktionsvärde	15 600 kr	14 300 kr	–1 300 kr
+Restid	1,0 h	1,4 h	+0,4 h
+Marginal	35 %	27 %	–8 procentenheter
+
+⸻
+
+3. Kolumner för plan och utfall i Navets tabell
+
+Navets listvy bör kunna växla mellan olika kolumnuppsättningar.
+
+Planeringsvy
+
+Visar främst:
+
+* planerad produktionstid,
+* planerat produktionsvärde,
+* beräknad marginal,
+* önskad eller möjlig leveranstid,
+* tilldelning,
+* status.
+
+Utförandevy
+
+Visar främst:
+
+* faktisk starttid,
+* faktisk sluttid,
+* verklig produktionstid,
+* verkligt antal,
+* utföranderesultat,
+* avvikelse,
+* status.
+
+Ekonomi- och analysvy
+
+Visar främst:
+
+* planerat värde,
+* verkligt värde,
+* fakturerbart värde,
+* planerad kostnad,
+* verklig kostnad,
+* planerad marginal,
+* verklig marginal,
+* avvikelse i kronor och procent.
+
+Fullständig vy
+
+Visar både planerade och verkliga värden sida vid sida.
+
+Användaren ska kunna välja kolumner och spara egna vyer beroende på arbetsuppgift, exempelvis:
+
+* planering,
+* operativ uppföljning,
+* produktionsledning,
+* fakturakontroll,
+* ekonomisk efteranalys.
+
+⸻
+
+4. Följduppgifter och dynamiskt skapade uppgifter
+
+Navet ska kunna visa uppgifter som har skapats som en följd av andra uppgifter.
+
+Det gäller i första hand reseuppgifter som skapas av Ruttoptimering Light, men modellen ska även kunna hantera andra framtida följduppgifter.
+
+Exempel på följduppgifter kan vara:
+
+* resa till nästa uppgift,
+* extra resa efter omplanering,
+* väntetid,
+* återbesök,
+* akut kompletteringsarbete,
+* materialhämtning,
+* avvikelsehantering,
+* efterkontroll.
+
+Följduppgiften ska vara en egen uppgift med:
+
+* eget uppgifts-ID,
+* egen artikel,
+* egen planerad tid,
+* egen verklig tid,
+* eget kostnads- och värdeunderlag,
+* egen status,
+* koppling till den eller de uppgifter som orsakade att den skapades.
+
+Det ska alltid framgå varför följduppgiften finns och vilken uppgift eller planeringssekvens den är kopplad till.
+
+⸻
+
+5. Reseuppgifter kopplade till uppgifter och stopp
+
+Reseuppgifter som skapas av Ruttoptimering Light ska kunna redovisas i Navet både som självständiga uppgifter och som kopplade följduppgifter.
+
+För varje resa ska systemet kunna visa:
+
+* reseuppgiftens ID,
+* researtikel,
+* utförare eller team,
+* uppgiften eller platsen resan startar från,
+* uppgiften eller platsen resan går till,
+* planerad restid,
+* verklig restid,
+* planerad start- och sluttid,
+* faktisk start- och sluttid,
+* planerad kostnad,
+* verklig kostnad,
+* eventuell debitering,
+* status,
+* om resan genomfördes eller inte.
+
+Resan ska kunna kopplas till:
+
+* föregående uppgift,
+* efterföljande uppgift,
+* stoppklump,
+* veckoplan,
+* utförare eller team.
+
+Systemet ska kunna visa resor som:
+
+* planerade,
+* påbörjade,
+* genomförda,
+* avbrutna,
+* borttagna genom omplanering,
+* skapade men aldrig utförda.
+
+⸻
+
+6. Utförda och inte utförda uppgifter
+
+Navet ska kunna redovisa både uppgifter som utfördes och uppgifter som inte kunde utföras.
+
+För utförda uppgifter ska exempelvis visas:
+
+* faktisk utförandetid,
+* verklig produktionstid,
+* verkligt antal,
+* faktiskt produktionsvärde,
+* verklig kostnad,
+* avvikelser,
+* utföranderapport,
+* bilder och dokumentation,
+* utförare eller team.
+
+För uppgifter som inte kunde utföras ska exempelvis visas:
+
+* status: omöjlig att utföra,
+* datum och tid för försöket,
+* utförare eller team,
+* tid som ändå förbrukades,
+* resa som genomfördes,
+* väntetid,
+* orsak,
+* dokumentation,
+* om återbesök krävs,
+* om uppgiften ska återgå till Navet,
+* om uppgiften ska faktureras helt, delvis eller inte alls.
+
+Det är viktigt att systemet skiljer mellan:
+
+* uppgiften utfördes inte,
+* ingen tid förbrukades,
+* resa genomfördes,
+* arbetstid förbrukades på plats,
+* viss del av uppgiften utfördes,
+* ett nytt försök måste planeras.
+
+En uppgift som inte kunde utföras kan alltså ändå ha ett verkligt tids- och kostnadsutfall.
+
+⸻
+
+7. Plan och utfall på klumpnivå
+
+Planerade och verkliga värden ska kunna summeras på:
+
+* uppgiftsnivå,
+* stoppklumpsnivå,
+* ruttklumpsnivå,
+* veckoplansnivå,
+* utförarnivå,
+* teamnivå,
+* kundnivå,
+* objektnivå,
+* artikel- eller utförandetyp.
+
+Exempel på stoppklump
+
+Värde	Planerat	Utfall	Avvikelse
+Produktionstid	9,0 h	10,2 h	+1,2 h
+Resor	1,1 h	1,5 h	+0,4 h
+Totaltid	10,1 h	11,7 h	+1,6 h
+Produktionsvärde	23 400 kr	22 800 kr	–600 kr
+Marginal	34 %	28 %	–6 procentenheter
+
+Om en klump innehåller uppgifter med olika status ska detta sammanfattas tydligt, exempelvis:
+
+* 8 uppgifter utförda,
+* 1 delvis utförd,
+* 2 omöjliga att utföra,
+* 1 återförd till Navet.
+
+⸻
+
+8. Historiskt perspektiv och låsning av utfall
+
+Navet ska kunna visa aktuella och historiska uppgifter.
+
+När verkliga värden registrerats ska dessa inte skrivas över av senare förändringar i:
+
+* orderkoncept,
+* artikel,
+* prislista,
+* schema,
+* abonnemang,
+* planerad tid,
+* motorinställningar.
+
+Planerade värden kan förändras under planeringen, men verkligt utfall ska bevaras som historisk dokumentation.
+
+För relevanta fält ska systemet därför kunna lagra:
+
+* ursprungligt planerat värde,
+* senast planerat värde före utförande,
+* verkligt utfall,
+* avvikelse.
+
+Detta är särskilt viktigt för efteranalys av exempelvis:
+
+* kalkylerad mot verklig produktionstid,
+* kalkylerad mot verklig restid,
+* planerad mot verklig marginal,
+* skillnad mellan artikelkalkyl och verkligt arbete.
+
+⸻
+
+9. Fakturakontroll och fakturerade uppgifter
+
+Navet ska kunna visa uppgifter med status:
+
+* fakturakontroll,
+* godkänd för fakturering,
+* fakturerad,
+* fakturerad med avvikelse,
+* ej fakturerbar,
+* krediterad eller korrigerad.
+
+Vid fakturakontroll ska planeraren eller ekonomifunktionen kunna jämföra:
+
+* beställt antal,
+* planerat antal,
+* verkligt antal,
+* fakturerbart antal,
+* planerat pris,
+* aktuellt pris,
+* fakturerbart värde,
+* eventuell resa eller följduppgift,
+* avvikelseorsak.
+
+Navet ska därmed även kunna fungera som ett analys- och kontrollunderlag inför fakturering, även om själva fakturan skapas i Fortnox.
+
+⸻
+
+10. Filtrering och analys av samtliga statusar
+
+Navet ska kunna filtrera uppgifter utifrån hela statusmodellen.
+
+Exempel på filter:
+
+* endast otilldelade,
+* endast tilldelade,
+* endast överbokade,
+* endast dubbelbokade,
+* på väg,
+* på plats,
+* utförda,
+* delvis utförda,
+* omöjliga att utföra,
+* väntar på åtgärd,
+* fakturakontroll,
+* fakturerade,
+* återförda till Navet,
+* uppgifter med tidsavvikelse,
+* uppgifter med ekonomisk avvikelse,
+* uppgifter där verklig tid överstiger planerad tid,
+* uppgifter där resan överstiger beräknad tid,
+* uppgifter med låg eller negativ marginal.
+
+Filter ska kunna kombineras med:
+
+* datumintervall,
+* utförare,
+* team,
+* kund,
+* objekt,
+* ort,
+* utförandetyp,
+* artikel,
+* ruttklump,
+* stoppklump,
+* vecka,
+* schema,
+* abonnemang,
+* orderkoncept.
+
+⸻
+
+11. Export till CSV
+
+Navets listor och analysresultat ska kunna exporteras i CSV-format.
+
+Exporten ska kunna omfatta:
+
+* aktuell filtrerad lista,
+* markerade rader,
+* en ruttklump,
+* en stoppklump,
+* en veckoplan,
+* en utförare eller ett team,
+* ett datumintervall,
+* samtliga uppgifter inom valt urval.
+
+Det ska finnas minst två exportlägen.
+
+A. Synliga kolumner
+
+Exporterar de kolumner som användaren för tillfället visar i Navet.
+
+Detta lämpar sig för enklare rapporter och delning.
+
+B. Fullständig dataexport
+
+Exporterar samtliga tillgängliga datafält för de valda uppgifterna, i princip hela uppgiftspaketet med cirka 94 datafält samt relevanta systemfält.
+
+Fullständig export ska bland annat kunna innehålla:
+
+* uppgifts-ID,
+* status och tilläggsstatus,
+* kund och objekt,
+* orderkoncept och snabborder,
+* schema och abonnemang,
+* artikel,
+* antal,
+* planerad och verklig tid,
+* planerat och verkligt värde,
+* planerad och verklig kostnad,
+* planerad och verklig marginal,
+* leveranstider och tidsfönster,
+* utförare och team,
+* stoppklump och ruttklump,
+* reseuppgifter,
+* faktisk utförandetid,
+* avvikelser,
+* fakturastatus,
+* skapandedatum,
+* ändringsdatum,
+* källinformation,
+* metadatafält.
+
+⸻
+
+12. Export av hierarkiska data
+
+Eftersom Navets vy är hierarkisk måste exporten hantera relationen mellan:
+
+* ruttklump,
+* stoppklump,
+* uppgift,
+* följduppgift,
+* reseuppgift.
+
+I CSV-format ska varje rad i första hand motsvara en självständig uppgift.
+
+Relationerna ska anges genom separata kolumner, exempelvis:
+
+* ruttklump-ID,
+* ruttklumpens arbetsnamn,
+* stoppklump-ID,
+* stoppklumpens arbetsnamn,
+* huvuduppgift-ID,
+* följduppgift till uppgifts-ID,
+* föregående uppgift-ID,
+* efterföljande uppgift-ID,
+* reseuppgift ja/nej.
+
+På detta sätt kan informationen analyseras vidare i exempelvis:
+
+* Excel,
+* Power BI,
+* Python,
+* statistikverktyg,
+* ekonomisystem,
+* andra analysmiljöer.
+
+⸻
+
+13. Exportkvalitet och format
+
+CSV-exporten ska:
+
+* använda tydliga och stabila kolumnnamn,
+* kunna exporteras med UTF-8,
+* hantera svenska tecken,
+* ha konsekvent datumformat,
+* ha konsekvent tidsformat,
+* separera numeriska värden från enheter,
+* ange valuta separat eller konsekvent,
+* inte blanda text och numeriska värden i samma analyskolumn.
+
+Exempel:
+
+* planned_production_hours
+* actual_production_hours
+* planned_travel_hours
+* actual_travel_hours
+* planned_value_sek
+* actual_value_sek
+* planned_margin_percent
+* actual_margin_percent
+
+Exporten bör även innehålla:
+
+* exportdatum,
+* vald tidsperiod,
+* använda filter,
+* systemversion,
+* eventuell motorversion eller parameteruppsättning.
+
+Detta gör det möjligt att i efterhand förstå vilket underlag analysen bygger på.
+
+⸻
+
+14. Efteranalys och lärande
+
+Syftet med exporten är inte endast rapportering.
+
+Data ska kunna användas för att analysera och förbättra:
+
+* artikelkalkyler,
+* planerade produktionstider,
+* utförartyper,
+* stoppklumpning,
+* ruttklumpning,
+* veckoplanering,
+* restidsberäkningar,
+* prissättning,
+* marginaler,
+* abonnemang,
+* schema,
+* bemanning,
+* geografiska områden.
+
+Exempel på analyser:
+
+* vilka artiklar tar längre tid än kalkylerat,
+* vilka geografiska områden ger högst restid,
+* vilka uppgiftstyper har störst avvikelse mellan plan och utfall,
+* vilka stopp ger återkommande problem,
+* vilka kunder eller objekt har hög andel omöjliga utföranden,
+* hur stor del av arbetstiden är produktion, resa, väntetid respektive egentid,
+* vilka klumpar ger bäst eller sämst marginal,
+* hur väl 28-timmarsgränsen för ruttklumpar fungerar i verkligheten.
+
+Resultaten ska senare kunna användas för att justera motorernas parametrar och förbättra framtida planering.
+
+⸻
+
+15. Sammanfattande utvecklingsprincip
+
+Navet ska vara Traivos centrala vy för hela uppgiftens livscykel.
+
+Navet ska därför hantera:
+
+* skapade uppgifter,
+* otilldelade uppgifter,
+* tilldelade uppgifter,
+* planerade uppgifter,
+* uppgifter under utförande,
+* utförda uppgifter,
+* uppgifter som inte kunde utföras,
+* uppgifter i fakturakontroll,
+* fakturerade uppgifter,
+* dynamiskt skapade följduppgifter,
+* resor och andra tillkommande uppgifter.
+
+För varje nivå ska Navet kunna redovisa:
+
+* plan,
+* utfall,
+* ekonomiskt resultat,
+* tidsmässigt resultat,
+* status,
+* avvikelse,
+* källa,
+* historik.
+
+All information ska kunna filtreras, summeras och exporteras för vidare efteranalys.
+
+Grundprincipen är att samma uppgift ska kunna följas från skapande och planering till utförande, ekonomiskt utfall, fakturering och analys utan att dess identitet eller historik går förlorad.
