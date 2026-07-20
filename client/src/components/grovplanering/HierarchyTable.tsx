@@ -2,8 +2,9 @@
  * Navet – 3-nivå kollapsbar hierarki (Task #1283)
  * Ruttklump (L1) → Stoppklump (L2) → Uppgift (L3)
  *
- * Data byggs klient-sidan via buildHierarchy() från en platt lista med
- * GridTaskRow som har routeClusterId/stopClusterId-fält ifyllda av API:t.
+ * Klick på L1/L2-rad → öppnar ClusterSidePanel.
+ * Chevron-knapp → expanderar/kollapserar nivån.
+ * Uppgifter utan ruttklump → platta L3-rader nedanför trädstrukturen.
  */
 import { useState, useMemo } from "react";
 import {
@@ -14,7 +15,7 @@ import {
   MoreVertical,
   UserPlus,
   RotateCcw,
-  ExternalLink,
+  Map,
 } from "lucide-react";
 
 import {
@@ -31,6 +32,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
@@ -42,6 +44,8 @@ import {
   formatDateShort,
   clusterDeliveryRange,
   buildHierarchy,
+  computeMargin,
+  formatMargin,
   type GridTaskRow,
   type HierarchyL1Route,
   type HierarchyL2Stop,
@@ -49,7 +53,8 @@ import {
 } from "@/lib/rough-planning";
 import type { ClusterRef } from "@/components/clustering/ClusterSidePanel";
 
-const COL_COUNT = 8;
+/** 9 kolumner: chevron/check | Namn | Leveranstid | Uppgifter | Prod.tid | Värde | Marginal | Status | Åtgärder */
+const COL_COUNT = 9;
 
 interface HierarchyTableProps {
   tasks: GridTaskRow[];
@@ -59,8 +64,12 @@ interface HierarchyTableProps {
   onRevokeRow: (row: GridTaskRow) => void;
   onOpenCluster?: (ref: ClusterRef) => void;
   onAssignCluster?: (tasks: GridTaskRow[]) => void;
+  onGoToMap?: () => void;
 }
 
+// ---------------------------------------------------------------------------
+// StatusDots — bubble-up statusvisning
+// ---------------------------------------------------------------------------
 function StatusDots({ tasks }: { tasks: GridTaskRow[] }) {
   const counts = new Map<string, number>();
   for (const t of tasks) {
@@ -73,7 +82,11 @@ function StatusDots({ tasks }: { tasks: GridTaskRow[] }) {
       {present.map((s) => {
         const meta = ROUGH_STATUS_META[s];
         return (
-          <span key={s} className="flex items-center gap-1 text-xs text-muted-foreground" title={meta.label}>
+          <span
+            key={s}
+            className="flex items-center gap-1 text-xs text-muted-foreground"
+            title={meta.label}
+          >
             <span className={cn("inline-block h-2 w-2 rounded-full shrink-0", meta.dot)} />
             {counts.get(s)}
           </span>
@@ -83,7 +96,11 @@ function StatusDots({ tasks }: { tasks: GridTaskRow[] }) {
   );
 }
 
+// ---------------------------------------------------------------------------
+// KpiCells — aggregerade kolumner (Uppgifter | Prod.tid | Värde | Marginal)
+// ---------------------------------------------------------------------------
 function KpiCells({ kpis }: { kpis: HierarchyKpis }) {
+  const margin = computeMargin(kpis.value, kpis.cost);
   return (
     <>
       <TableCell className="whitespace-nowrap text-right tabular-nums text-sm font-medium">
@@ -95,32 +112,63 @@ function KpiCells({ kpis }: { kpis: HierarchyKpis }) {
       <TableCell className="whitespace-nowrap text-right tabular-nums text-sm">
         {formatSekFromOre(kpis.value)}
       </TableCell>
+      <TableCell
+        className={cn(
+          "whitespace-nowrap text-right tabular-nums text-sm",
+          margin !== null && margin < 0 ? "text-destructive" : "text-muted-foreground",
+        )}
+      >
+        {formatMargin(margin)}
+      </TableCell>
     </>
   );
 }
 
+// ---------------------------------------------------------------------------
+// RouteRow — L1 ruttklump
+// ---------------------------------------------------------------------------
 function RouteRow({
   route,
   expanded,
-  onToggle,
+  onToggleExpand,
   onOpenCluster,
   onAssignCluster,
+  onGoToMap,
 }: {
   route: HierarchyL1Route;
   expanded: boolean;
-  onToggle: () => void;
+  onToggleExpand: (e: React.MouseEvent) => void;
   onOpenCluster?: (ref: ClusterRef) => void;
   onAssignCluster?: (tasks: GridTaskRow[]) => void;
+  onGoToMap?: () => void;
 }) {
   const allTasks = route.stopClusters.flatMap((s) => s.tasks);
+  const hasAssigned = allTasks.some((t) => t.status === "tilldelad");
+
+  const handleRowClick = () => {
+    if (onOpenCluster && route.id) {
+      onOpenCluster({ type: "route", id: route.id });
+    }
+  };
+
   return (
     <TableRow
-      className="bg-muted/40 hover:bg-muted/60 cursor-pointer"
-      data-testid={`row-route-${route.id ?? "none"}`}
-      onClick={onToggle}
+      className={cn(
+        "bg-muted/40 hover:bg-muted/60",
+        onOpenCluster && route.id && "cursor-pointer",
+      )}
+      data-testid={`row-route-${route.id}`}
+      onClick={handleRowClick}
     >
-      <TableCell className="w-9">
-        <Button size="icon" variant="ghost" className="h-6 w-6 shrink-0" tabIndex={-1}>
+      <TableCell className="w-9" onClick={(e) => e.stopPropagation()}>
+        <Button
+          size="icon"
+          variant="ghost"
+          className="h-6 w-6 shrink-0"
+          tabIndex={-1}
+          onClick={onToggleExpand}
+          data-testid={`button-route-expand-${route.id}`}
+        >
           {expanded ? (
             <ChevronDown className="h-4 w-4" />
           ) : (
@@ -128,10 +176,13 @@ function RouteRow({
           )}
         </Button>
       </TableCell>
-      <TableCell className="min-w-[180px]">
+      <TableCell className="min-w-[200px]">
         <div className="flex items-center gap-2">
           <Route className="h-3.5 w-3.5 shrink-0 text-chart-4" />
-          <span className="font-semibold text-sm truncate" data-testid={`text-route-name-${route.id ?? "none"}`}>
+          <span
+            className="font-semibold text-sm truncate"
+            data-testid={`text-route-name-${route.id}`}
+          >
             {route.displayName}
           </span>
         </div>
@@ -150,29 +201,41 @@ function RouteRow({
               size="icon"
               variant="ghost"
               className="h-7 w-7"
-              data-testid={`button-route-actions-${route.id ?? "none"}`}
+              data-testid={`button-route-actions-${route.id}`}
             >
               <MoreVertical className="h-4 w-4" />
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
-            {route.id && onOpenCluster && (
-              <DropdownMenuItem
-                onClick={() => onOpenCluster({ type: "route", id: route.id! })}
-                data-testid={`action-route-open-${route.id}`}
-              >
-                <ExternalLink className="h-4 w-4" />
-                Öppna klumpanel
-              </DropdownMenuItem>
-            )}
             {onAssignCluster && allTasks.length > 0 && (
               <DropdownMenuItem
                 onClick={() => onAssignCluster(allTasks)}
-                data-testid={`action-route-assign-${route.id ?? "none"}`}
+                data-testid={`action-route-assign-${route.id}`}
               >
                 <UserPlus className="h-4 w-4" />
                 Tilldela alla ({route.kpis.taskCount})…
               </DropdownMenuItem>
+            )}
+            {hasAssigned && onAssignCluster && (
+              <DropdownMenuItem
+                onClick={() => onAssignCluster(allTasks.filter((t) => t.status === "tilldelad"))}
+                data-testid={`action-route-revoke-${route.id}`}
+              >
+                <RotateCcw className="h-4 w-4" />
+                Återkalla tilldelade…
+              </DropdownMenuItem>
+            )}
+            {onGoToMap && (
+              <>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  onClick={onGoToMap}
+                  data-testid={`action-route-map-${route.id}`}
+                >
+                  <Map className="h-4 w-4" />
+                  Visa på karta
+                </DropdownMenuItem>
+              </>
             )}
           </DropdownMenuContent>
         </DropdownMenu>
@@ -181,43 +244,67 @@ function RouteRow({
   );
 }
 
+// ---------------------------------------------------------------------------
+// StopRow — L2 stoppklump
+// ---------------------------------------------------------------------------
 function StopRow({
   stop,
   expanded,
-  onToggle,
+  onToggleExpand,
   onOpenCluster,
   onAssignCluster,
+  onGoToMap,
 }: {
   stop: HierarchyL2Stop;
   expanded: boolean;
-  onToggle: () => void;
+  onToggleExpand: (e: React.MouseEvent) => void;
   onOpenCluster?: (ref: ClusterRef) => void;
   onAssignCluster?: (tasks: GridTaskRow[]) => void;
+  onGoToMap?: () => void;
 }) {
+  const hasAssigned = stop.tasks.some((t) => t.status === "tilldelad");
+
+  const handleRowClick = () => {
+    if (stop.id && onOpenCluster) {
+      onOpenCluster({ type: "stop", id: stop.id });
+    }
+  };
+
   return (
     <TableRow
-      className="bg-muted/20 hover:bg-muted/40 cursor-pointer"
-      data-testid={`row-stop-${stop.id ?? "none"}`}
-      onClick={onToggle}
+      className={cn(
+        "bg-muted/20 hover:bg-muted/40",
+        stop.id && onOpenCluster && "cursor-pointer",
+      )}
+      data-testid={`row-stop-${stop.id ?? "ungrouped"}`}
+      onClick={handleRowClick}
     >
-      <TableCell className="w-9">
-        <div className="flex items-center">
-          <span className="ml-5 shrink-0">
-            <Button size="icon" variant="ghost" className="h-6 w-6" tabIndex={-1}>
-              {expanded ? (
-                <ChevronDown className="h-3.5 w-3.5" />
-              ) : (
-                <ChevronRight className="h-3.5 w-3.5" />
-              )}
-            </Button>
-          </span>
+      <TableCell className="w-9" onClick={(e) => e.stopPropagation()}>
+        <div className="pl-5">
+          <Button
+            size="icon"
+            variant="ghost"
+            className="h-6 w-6"
+            tabIndex={-1}
+            onClick={onToggleExpand}
+            data-testid={`button-stop-expand-${stop.id ?? "ungrouped"}`}
+          >
+            {expanded ? (
+              <ChevronDown className="h-3.5 w-3.5" />
+            ) : (
+              <ChevronRight className="h-3.5 w-3.5" />
+            )}
+          </Button>
         </div>
       </TableCell>
-      <TableCell className="min-w-[180px]">
+      <TableCell className="min-w-[200px]">
         <div className="flex items-center gap-2 pl-5">
           <MapPin className="h-3.5 w-3.5 shrink-0 text-chart-4" />
-          <span className="text-sm truncate" data-testid={`text-stop-name-${stop.id ?? "none"}`}>
-            {stop.displayName}
+          <span
+            className="text-sm truncate"
+            data-testid={`text-stop-name-${stop.id ?? "ungrouped"}`}
+          >
+            {stop.displayName || <span className="italic text-muted-foreground">Utan stoppklump</span>}
           </span>
         </div>
       </TableCell>
@@ -229,57 +316,81 @@ function StopRow({
         <StatusDots tasks={stop.tasks} />
       </TableCell>
       <TableCell className="w-9" onClick={(e) => e.stopPropagation()}>
-        <DropdownMenu modal={false}>
-          <DropdownMenuTrigger asChild>
-            <Button
-              size="icon"
-              variant="ghost"
-              className="h-7 w-7"
-              data-testid={`button-stop-actions-${stop.id ?? "none"}`}
-            >
-              <MoreVertical className="h-4 w-4" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            {stop.id && onOpenCluster && (
-              <DropdownMenuItem
-                onClick={() => onOpenCluster({ type: "stop", id: stop.id! })}
-                data-testid={`action-stop-open-${stop.id}`}
+        {(stop.id || onAssignCluster || onGoToMap) && (
+          <DropdownMenu modal={false}>
+            <DropdownMenuTrigger asChild>
+              <Button
+                size="icon"
+                variant="ghost"
+                className="h-7 w-7"
+                data-testid={`button-stop-actions-${stop.id ?? "ungrouped"}`}
               >
-                <ExternalLink className="h-4 w-4" />
-                Öppna klumpanel
-              </DropdownMenuItem>
-            )}
-            {onAssignCluster && stop.tasks.length > 0 && (
-              <DropdownMenuItem
-                onClick={() => onAssignCluster(stop.tasks)}
-                data-testid={`action-stop-assign-${stop.id ?? "none"}`}
-              >
-                <UserPlus className="h-4 w-4" />
-                Tilldela alla ({stop.kpis.taskCount})…
-              </DropdownMenuItem>
-            )}
-          </DropdownMenuContent>
-        </DropdownMenu>
+                <MoreVertical className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              {onAssignCluster && stop.tasks.length > 0 && (
+                <DropdownMenuItem
+                  onClick={() => onAssignCluster(stop.tasks)}
+                  data-testid={`action-stop-assign-${stop.id ?? "ungrouped"}`}
+                >
+                  <UserPlus className="h-4 w-4" />
+                  Tilldela alla ({stop.kpis.taskCount})…
+                </DropdownMenuItem>
+              )}
+              {hasAssigned && onAssignCluster && (
+                <DropdownMenuItem
+                  onClick={() =>
+                    onAssignCluster(stop.tasks.filter((t) => t.status === "tilldelad"))
+                  }
+                  data-testid={`action-stop-revoke-${stop.id ?? "ungrouped"}`}
+                >
+                  <RotateCcw className="h-4 w-4" />
+                  Återkalla tilldelade…
+                </DropdownMenuItem>
+              )}
+              {onGoToMap && (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    onClick={onGoToMap}
+                    data-testid={`action-stop-map-${stop.id ?? "ungrouped"}`}
+                  >
+                    <Map className="h-4 w-4" />
+                    Visa på karta
+                  </DropdownMenuItem>
+                </>
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
       </TableCell>
     </TableRow>
   );
 }
 
+// ---------------------------------------------------------------------------
+// TaskRow — L3 enskild uppgift (indenterad under stopp ELLER platt/oklämmad)
+// ---------------------------------------------------------------------------
 function TaskRow({
   row,
   selected,
   onToggleRow,
   onAssignRow,
   onRevokeRow,
+  indentLevel,
 }: {
   row: GridTaskRow;
   selected: boolean;
   onToggleRow: (row: GridTaskRow) => void;
   onAssignRow: (row: GridTaskRow) => void;
   onRevokeRow: (row: GridTaskRow) => void;
+  indentLevel: 0 | 1 | 2;
 }) {
   const meta = ROUGH_STATUS_META[row.status];
+  const margin = computeMargin(row.value, row.cost);
+  const indentPx = indentLevel === 2 ? "pl-[3.5rem]" : indentLevel === 1 ? "pl-[1.75rem]" : "pl-1";
+
   return (
     <TableRow
       data-state={selected ? "selected" : undefined}
@@ -292,8 +403,8 @@ function TaskRow({
           data-testid={`check-hier-task-${row.id}`}
         />
       </TableCell>
-      <TableCell className="min-w-[200px]">
-        <div className="pl-10">
+      <TableCell className="min-w-[220px]">
+        <div className={indentPx}>
           <div className="font-medium text-sm truncate">
             {row.objectName ?? row.title ?? "–"}
           </div>
@@ -320,6 +431,14 @@ function TaskRow({
       </TableCell>
       <TableCell className="whitespace-nowrap text-right tabular-nums text-sm">
         {formatSekFromOre(row.value)}
+      </TableCell>
+      <TableCell
+        className={cn(
+          "whitespace-nowrap text-right tabular-nums text-sm",
+          margin !== null && margin < 0 ? "text-destructive" : "text-muted-foreground",
+        )}
+      >
+        {formatMargin(margin)}
       </TableCell>
       <TableCell>
         <span className="flex items-center gap-1.5">
@@ -362,6 +481,9 @@ function TaskRow({
   );
 }
 
+// ---------------------------------------------------------------------------
+// HierarchyTable — huvudkomponent
+// ---------------------------------------------------------------------------
 export function HierarchyTable({
   tasks,
   selected,
@@ -370,27 +492,32 @@ export function HierarchyTable({
   onRevokeRow,
   onOpenCluster,
   onAssignCluster,
+  onGoToMap,
 }: HierarchyTableProps) {
-  const hierarchy = useMemo(() => buildHierarchy(tasks), [tasks]);
+  const { routes, unclusteredTasks } = useMemo(() => buildHierarchy(tasks), [tasks]);
 
   const [collapsedRoutes, setCollapsedRoutes] = useState<Set<string>>(new Set());
   const [collapsedStops, setCollapsedStops] = useState<Set<string>>(new Set());
 
-  const toggleRoute = (key: string) =>
+  const toggleRoute = (key: string, e: React.MouseEvent) => {
+    e.stopPropagation();
     setCollapsedRoutes((prev) => {
       const next = new Set(prev);
       if (next.has(key)) next.delete(key);
       else next.add(key);
       return next;
     });
+  };
 
-  const toggleStop = (key: string) =>
+  const toggleStop = (key: string, e: React.MouseEvent) => {
+    e.stopPropagation();
     setCollapsedStops((prev) => {
       const next = new Set(prev);
       if (next.has(key)) next.delete(key);
       else next.add(key);
       return next;
     });
+  };
 
   if (tasks.length === 0) {
     return (
@@ -403,6 +530,12 @@ export function HierarchyTable({
     );
   }
 
+  const routeCount = routes.length;
+  const stopCount = routes.reduce(
+    (n, r) => n + r.stopClusters.filter((s) => s.id !== null).length,
+    0,
+  );
+
   return (
     <div className="overflow-x-auto rounded-lg border" data-testid="table-hierarchy">
       <Table>
@@ -414,13 +547,15 @@ export function HierarchyTable({
             <TableHead className="whitespace-nowrap text-right">Uppgifter</TableHead>
             <TableHead className="whitespace-nowrap text-right">Prod.tid</TableHead>
             <TableHead className="whitespace-nowrap text-right">Värde</TableHead>
+            <TableHead className="whitespace-nowrap text-right">Marginal</TableHead>
             <TableHead>Status</TableHead>
             <TableHead className="w-9" />
           </TableRow>
         </TableHeader>
         <TableBody>
-          {hierarchy.map((route) => {
-            const routeKey = route.id ?? "__no_route__";
+          {/* L1/L2/L3 — uppgifter med ruttklump */}
+          {routes.map((route) => {
+            const routeKey = route.id;
             const routeExpanded = !collapsedRoutes.has(routeKey);
 
             return [
@@ -428,13 +563,14 @@ export function HierarchyTable({
                 key={`route-${routeKey}`}
                 route={route}
                 expanded={routeExpanded}
-                onToggle={() => toggleRoute(routeKey)}
+                onToggleExpand={(e) => toggleRoute(routeKey, e)}
                 onOpenCluster={onOpenCluster}
                 onAssignCluster={onAssignCluster}
+                onGoToMap={onGoToMap}
               />,
               ...(routeExpanded
                 ? route.stopClusters.flatMap((stop) => {
-                    const stopKey = `${routeKey}__${stop.id ?? "__no_stop__"}`;
+                    const stopKey = `${routeKey}__${stop.id ?? "__nostop__"}`;
                     const stopExpanded = !collapsedStops.has(stopKey);
 
                     return [
@@ -442,9 +578,10 @@ export function HierarchyTable({
                         key={`stop-${stopKey}`}
                         stop={stop}
                         expanded={stopExpanded}
-                        onToggle={() => toggleStop(stopKey)}
+                        onToggleExpand={(e) => toggleStop(stopKey, e)}
                         onOpenCluster={onOpenCluster}
                         onAssignCluster={onAssignCluster}
+                        onGoToMap={onGoToMap}
                       />,
                       ...(stopExpanded
                         ? stop.tasks.map((row) => (
@@ -455,6 +592,7 @@ export function HierarchyTable({
                               onToggleRow={onToggleRow}
                               onAssignRow={onAssignRow}
                               onRevokeRow={onRevokeRow}
+                              indentLevel={2}
                             />
                           ))
                         : []),
@@ -463,15 +601,38 @@ export function HierarchyTable({
                 : []),
             ];
           })}
+
+          {/* Platta L3-rader — uppgifter utan ruttklump */}
+          {unclusteredTasks.length > 0 && (
+            <>
+              {routes.length > 0 && (
+                <TableRow>
+                  <TableCell
+                    colSpan={COL_COUNT}
+                    className="py-1 px-3 text-xs text-muted-foreground bg-muted/10 border-t"
+                  >
+                    Utan klumptillhörighet ({unclusteredTasks.length})
+                  </TableCell>
+                </TableRow>
+              )}
+              {unclusteredTasks.map((row) => (
+                <TaskRow
+                  key={`task-unc-${row.id}`}
+                  row={row}
+                  selected={selected.has(row.id)}
+                  onToggleRow={onToggleRow}
+                  onAssignRow={onAssignRow}
+                  onRevokeRow={onRevokeRow}
+                  indentLevel={0}
+                />
+              ))}
+            </>
+          )}
         </TableBody>
       </Table>
       <div className="border-t px-4 py-2 text-xs text-muted-foreground">
-        {tasks.length} uppgifter · {hierarchy.filter((r) => r.id !== null).length} ruttklumpar ·{" "}
-        {hierarchy.reduce(
-          (n, r) => n + r.stopClusters.filter((s) => s.id !== null).length,
-          0,
-        )}{" "}
-        stoppklumpar
+        {tasks.length} uppgifter · {routeCount} ruttklumpar · {stopCount} stoppklumpar
+        {unclusteredTasks.length > 0 && ` · ${unclusteredTasks.length} utan klump`}
       </div>
     </div>
   );

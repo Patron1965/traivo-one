@@ -200,6 +200,14 @@ export function resolvePeriodRange(
 // ---------------------------------------------------------------------------
 // Hierarchy (Task #1283) — 3-nivå kollapsbar hierarki
 // Ruttklump (L1) → Stoppklump (L2) → Uppgift (L3)
+//
+// Designregel:
+//  - Uppgifter MED routeClusterId → L1 → L2 → L3-träd.
+//  - Uppgifter UTAN routeClusterId (oavsett stopClusterId) → ogrupperade och
+//    visas direkt som platta L3-rader nedanför trädet.
+//  - Ingen syntetisk "Utan ruttklump"-L1-rad skapas.
+//  - Stopklumpar inom en ruttklump: verkliga stop-IDs → L2-rader; uppgifter
+//    i samma rutt men utan stopClusterId → L3 direkt under L1 (ingen L2-rad).
 // ---------------------------------------------------------------------------
 
 export interface HierarchyKpis {
@@ -210,6 +218,7 @@ export interface HierarchyKpis {
 }
 
 export interface HierarchyL2Stop {
+  /** Null = uppgifter i denna rutt utan stopklump-tillhörighet */
   id: string | null;
   displayName: string;
   tasks: GridTaskRow[];
@@ -217,10 +226,18 @@ export interface HierarchyL2Stop {
 }
 
 export interface HierarchyL1Route {
-  id: string | null;
+  id: string;
   displayName: string;
+  /** Stopklumpar (id != null) + ev. null-bucket för uppgifter utan stopp */
   stopClusters: HierarchyL2Stop[];
   kpis: HierarchyKpis;
+}
+
+export interface HierarchyBuildResult {
+  /** Uppgifter som tillhör minst en ruttklump */
+  routes: HierarchyL1Route[];
+  /** Uppgifter helt utan ruttklump → visas som platta L3-rader */
+  unclusteredTasks: GridTaskRow[];
 }
 
 function computeHierarchyKpis(tasks: GridTaskRow[]): HierarchyKpis {
@@ -235,11 +252,13 @@ function computeHierarchyKpis(tasks: GridTaskRow[]): HierarchyKpis {
   return { taskCount: tasks.length, productionMinutes, value, cost };
 }
 
-export function buildHierarchy(tasks: GridTaskRow[]): HierarchyL1Route[] {
+export function buildHierarchy(tasks: GridTaskRow[]): HierarchyBuildResult {
+  const unclusteredTasks: GridTaskRow[] = [];
+
   const routeMap = new Map<
-    string | null,
+    string,
     {
-      id: string | null;
+      id: string;
       displayName: string;
       stopMap: Map<
         string | null,
@@ -250,11 +269,17 @@ export function buildHierarchy(tasks: GridTaskRow[]): HierarchyL1Route[] {
 
   for (const task of tasks) {
     const rKey = task.routeClusterId ?? null;
+
+    if (rKey === null) {
+      // Ingen ruttklump → platt L3
+      unclusteredTasks.push(task);
+      continue;
+    }
+
     if (!routeMap.has(rKey)) {
       routeMap.set(rKey, {
         id: rKey,
-        displayName:
-          task.routeClusterName ?? (rKey ? rKey.slice(0, 8) : "Utan ruttklump"),
+        displayName: task.routeClusterName ?? rKey.slice(0, 8),
         stopMap: new Map(),
       });
     }
@@ -263,26 +288,24 @@ export function buildHierarchy(tasks: GridTaskRow[]): HierarchyL1Route[] {
     if (!route.stopMap.has(sKey)) {
       route.stopMap.set(sKey, {
         id: sKey,
-        displayName:
-          task.stopClusterName ??
-          (sKey ? sKey.slice(0, 8) : "Utan stoppklump"),
+        displayName: task.stopClusterName ?? (sKey ? sKey.slice(0, 8) : ""),
         tasks: [],
       });
     }
     route.stopMap.get(sKey)!.tasks.push(task);
   }
 
-  const sortedRouteKeys = [...routeMap.keys()].sort((a, b) => {
-    if (a === null && b !== null) return 1;
-    if (a !== null && b === null) return -1;
-    return (routeMap.get(a)?.displayName ?? "").localeCompare(
+  const sortedRouteKeys = [...routeMap.keys()].sort((a, b) =>
+    (routeMap.get(a)?.displayName ?? "").localeCompare(
       routeMap.get(b)?.displayName ?? "",
       "sv-SE",
-    );
-  });
+    ),
+  );
 
-  return sortedRouteKeys.map((rKey) => {
+  const routes = sortedRouteKeys.map((rKey) => {
     const route = routeMap.get(rKey)!;
+
+    // Sortera: namngivna stopp first (alphabetically), null-bucket sist
     const sortedStopKeys = [...route.stopMap.keys()].sort((a, b) => {
       if (a === null && b !== null) return 1;
       if (a !== null && b === null) return -1;
@@ -310,6 +333,8 @@ export function buildHierarchy(tasks: GridTaskRow[]): HierarchyL1Route[] {
       kpis: computeHierarchyKpis(allTasks),
     };
   });
+
+  return { routes, unclusteredTasks };
 }
 
 /** Kompakt leveranstidsintervall för en samling uppgifter (L1/L2-rader). */
@@ -326,4 +351,16 @@ export function clusterDeliveryRange(tasks: GridTaskRow[]): string {
   const first = fmt(dates[0]);
   const last = fmt(dates[dates.length - 1]);
   return first === last ? first : `${first} – ${last}`;
+}
+
+/** Marginal i öre (value - cost). Returnerar null om value=0 (inget underlag). */
+export function computeMargin(value: number, cost: number): number | null {
+  return value === 0 ? null : value - cost;
+}
+
+/** Formatera marginal som "+X kr" / "−X kr" eller "–" */
+export function formatMargin(marginOre: number | null): string {
+  if (marginOre === null) return "–";
+  const sign = marginOre >= 0 ? "+" : "";
+  return `${sign}${Math.round(marginOre / 100).toLocaleString("sv-SE")} kr`;
 }

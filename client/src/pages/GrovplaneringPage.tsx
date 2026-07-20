@@ -277,7 +277,8 @@ function pageWindow(current: number, total: number): (number | "ellipsis")[] {
 export default function GrovplaneringPage() {
   const { toast } = useToast();
 
-  const [view, setView] = useState<"manuell" | "motor" | "klump" | "karta" | "hierarki">("manuell");
+  const [view, setView] = useState<"manuell" | "motor" | "klump" | "karta">("manuell");
+  const [listMode, setListMode] = useState<"lista" | "hierarki">("lista");
   const [groupBy, setGroupBy] = useState<GroupBy>("objekt");
   const [pageSize, setPageSize] = useState(20);
   const [offset, setOffset] = useState(0);
@@ -409,8 +410,9 @@ export default function GrovplaneringPage() {
   const getTaskClusters = (taskId: string): TaskClusters | undefined =>
     membershipData?.[taskId];
 
-  // Hierarki-vy: hämta platt lista (ingen gruppering, hög limit) när hierarki-fliken är aktiv.
+  // Hierarki-vy: hämta platt lista (ingen gruppering, hög limit) när hierarki-läget är aktivt.
   // buildHierarchy() grupperar klient-sidan efter routeClusterId/stopClusterId.
+  // Avancerat filter appliceras klient-sidan (samma logik som filteredGroups) för filterparity.
   const hierarchyFilterParams = useMemo(() => {
     const p = buildFilterParams(applied, "ingen");
     p.set("limit", "2000");
@@ -426,14 +428,21 @@ export default function GrovplaneringPage() {
     queryKey: ["/api/rough-planning/grid", "hierarki", applied],
     queryFn: async () =>
       (await apiRequest("GET", `/api/rough-planning/grid?${hierarchyFilterParams}`)).json(),
-    enabled: view === "hierarki",
+    enabled: view === "manuell" && listMode === "hierarki",
     placeholderData: keepPreviousData,
   });
 
-  const hierarchyTasks = useMemo(
-    () => (hierarchyData?.groups ?? []).flatMap((g) => g.tasks),
-    [hierarchyData],
-  );
+  const hierarchyTasks = useMemo(() => {
+    const rawTasks = (hierarchyData?.groups ?? []).flatMap((g) => g.tasks);
+    if (!hasAdvancedFilter) return rawTasks;
+    const allowedFields = visibleFieldsForRole(GROVPLANERING_FILTER_FIELDS, currentRole);
+    const allowedKeys = new Set(allowedFields.map((f) => f.key));
+    const safeFilter: FilterGroup = {
+      ...advancedFilter,
+      conditions: advancedFilter.conditions.filter((c) => allowedKeys.has(c.field)),
+    };
+    return rawTasks.filter((t) => evaluateFilterGroup(t, safeFilter, allowedFields));
+  }, [hierarchyData, hasAdvancedFilter, advancedFilter, currentRole]);
 
   // Motorns förslag (Task #1039) — läses on-demand, separat från work_order-rutnätet.
   const {
@@ -761,7 +770,7 @@ export default function GrovplaneringPage() {
       <Tabs
         value={view}
         onValueChange={(v) => {
-          const next = v as "manuell" | "motor" | "klump" | "karta" | "hierarki";
+          const next = v as "manuell" | "motor" | "klump" | "karta";
           if (next === "motor") openMotorView();
           else setView(next);
         }}
@@ -769,9 +778,6 @@ export default function GrovplaneringPage() {
         <TabsList data-testid="tabs-grov-view">
           <TabsTrigger value="manuell" data-testid="tab-manuell">
             Manuell lista
-          </TabsTrigger>
-          <TabsTrigger value="hierarki" data-testid="tab-hierarki">
-            Hierarki
           </TabsTrigger>
           <TabsTrigger value="motor" data-testid="tab-motor">
             Motorns förslag
@@ -788,36 +794,7 @@ export default function GrovplaneringPage() {
         </TabsList>
       </Tabs>
 
-      {view === "hierarki" ? (
-        hierarchyLoading ? (
-          <div className="flex items-center justify-center rounded-lg border py-16 text-muted-foreground">
-            <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-            Laddar hierarki…
-          </div>
-        ) : hierarchyError ? (
-          <div
-            className="rounded-lg border py-16 text-center text-destructive"
-            data-testid="text-hierarchy-error"
-          >
-            Kunde inte ladda hierarkin. Försök igen.
-          </div>
-        ) : (
-          <HierarchyTable
-            tasks={hierarchyTasks}
-            selected={selected}
-            onToggleRow={toggleRow}
-            onAssignRow={(row) => setAssignTarget([row])}
-            onRevokeRow={(row) =>
-              setRevokeTarget({
-                ids: [row.id],
-                label: row.objectName ?? row.title ?? "uppgift",
-              })
-            }
-            onOpenCluster={setOpenCluster}
-            onAssignCluster={(rows) => setAssignTarget(rows)}
-          />
-        )
-      ) : view === "motor" ? (
+      {view === "motor" ? (
         engineLoading ? (
           <div className="flex items-center justify-center rounded-lg border py-16 text-muted-foreground">
             <Loader2 className="mr-2 h-5 w-5 animate-spin" />
@@ -862,29 +839,55 @@ export default function GrovplaneringPage() {
       <Card>
         <CardContent className="flex flex-wrap items-center justify-between gap-4 p-3">
           <div className="flex flex-wrap items-center gap-3">
-            <span className="text-sm font-medium">Gruppera per:</span>
-            <RadioGroup
-              value={groupBy}
-              onValueChange={(v) => setGroupBy(v as GroupBy)}
-              className="flex flex-wrap items-center gap-4"
-              data-testid="radiogroup-groupby"
-            >
-              {GROUP_OPTIONS.map((o) => (
-                <div key={o.value} className="flex items-center gap-1.5">
-                  <RadioGroupItem
-                    value={o.value}
-                    id={`group-${o.value}`}
-                    data-testid={`radio-group-${o.value}`}
-                  />
-                  <Label
-                    htmlFor={`group-${o.value}`}
-                    className="cursor-pointer text-sm font-normal"
-                  >
-                    {o.label}
-                  </Label>
-                </div>
-              ))}
-            </RadioGroup>
+            {/* Listläge-växel: Lista | Hierarki */}
+            <div className="flex items-center rounded-md border p-0.5 gap-0.5" data-testid="toggle-listmode">
+              <Button
+                size="sm"
+                variant={listMode === "lista" ? "default" : "ghost"}
+                className="h-7 px-2.5 text-xs"
+                onClick={() => setListMode("lista")}
+                data-testid="button-listmode-lista"
+              >
+                Lista
+              </Button>
+              <Button
+                size="sm"
+                variant={listMode === "hierarki" ? "default" : "ghost"}
+                className="h-7 px-2.5 text-xs"
+                onClick={() => setListMode("hierarki")}
+                data-testid="button-listmode-hierarki"
+              >
+                Hierarki
+              </Button>
+            </div>
+
+            {listMode === "lista" && (
+              <>
+                <span className="text-sm font-medium">Gruppera per:</span>
+                <RadioGroup
+                  value={groupBy}
+                  onValueChange={(v) => setGroupBy(v as GroupBy)}
+                  className="flex flex-wrap items-center gap-4"
+                  data-testid="radiogroup-groupby"
+                >
+                  {GROUP_OPTIONS.map((o) => (
+                    <div key={o.value} className="flex items-center gap-1.5">
+                      <RadioGroupItem
+                        value={o.value}
+                        id={`group-${o.value}`}
+                        data-testid={`radio-group-${o.value}`}
+                      />
+                      <Label
+                        htmlFor={`group-${o.value}`}
+                        className="cursor-pointer text-sm font-normal"
+                      >
+                        {o.label}
+                      </Label>
+                    </div>
+                  ))}
+                </RadioGroup>
+              </>
+            )}
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
@@ -1000,8 +1003,38 @@ export default function GrovplaneringPage() {
         </CardContent>
       </Card>
 
-      {/* Rutnät */}
-      {isLoading ? (
+      {/* Rutnät / Hierarki */}
+      {listMode === "hierarki" ? (
+        hierarchyLoading ? (
+          <div className="flex items-center justify-center rounded-lg border py-16 text-muted-foreground">
+            <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+            Laddar hierarki…
+          </div>
+        ) : hierarchyError ? (
+          <div
+            className="rounded-lg border py-16 text-center text-destructive"
+            data-testid="text-hierarchy-error"
+          >
+            Kunde inte ladda hierarkin. Försök igen.
+          </div>
+        ) : (
+          <HierarchyTable
+            tasks={hierarchyTasks}
+            selected={selected}
+            onToggleRow={toggleRow}
+            onAssignRow={(row) => setAssignTarget([row])}
+            onRevokeRow={(row) =>
+              setRevokeTarget({
+                ids: [row.id],
+                label: row.objectName ?? row.title ?? "uppgift",
+              })
+            }
+            onOpenCluster={setOpenCluster}
+            onAssignCluster={(rows) => setAssignTarget(rows)}
+            onGoToMap={() => setView("karta")}
+          />
+        )
+      ) : isLoading ? (
         <div className="flex items-center justify-center rounded-lg border py-16 text-muted-foreground">
           <Loader2 className="mr-2 h-5 w-5 animate-spin" />
           Laddar uppgifter…
