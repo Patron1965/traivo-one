@@ -1,0 +1,102 @@
+Här är en sammanhållen och mer korrekt formulering för specifikationen:
+5. Omräkning och omklumpning ska endast styras av tid, plats och utförandetyp
+Klumpningsmotorerna i Traivo ska endast använda de uppgifter som avgör om två eller flera uppgifter kan utföras tillsammans.
+De tre grundfrågorna är:
+    •    När? – leveranstid, möjliga tidsfönster och aktuell planeringsperiod.
+    •    Var? – adress, koordinater och geografisk närhet.
+    •    Hur? – uppgiftens utförandekod eller utförandetyp.
+Övrig information i uppgiftens informationspaket, exempelvis beskrivningar, priser, fakturareferenser, dokumentation, metadata som inte påverkar utförandet eller andra administrativa uppgifter, ska inte utlösa någon omklumpning.
+Planeringsrelevanta förändringar
+Omklumpning behöver endast övervägas när något av följande förändras:
+    •    önskad eller möjlig leveranstid,
+    •    hårt eller mjukt tidsfönster,
+    •    planerad period eller vecka,
+    •    adress,
+    •    longitud eller latitud,
+    •    beräknad geografisk position,
+    •    utförandekod eller utförandetyp,
+    •    uppgiftsstatus om statusändringen innebär att uppgiften ska tas med eller tas bort från planeringsunderlaget.
+Förändringar i andra fält ska inte påverka klumpningsresultatet.
+Endast den ändrade uppgiften behöver analyseras
+En förändring ska inte medföra att samtliga uppgifter i Traivo räknas om.
+Om exempelvis leveranstiden för en uppgift ändras ska klumpningsmotorn i första hand endast analysera den ändrade uppgiften mot relevanta befintliga stopp- och ruttklumpar.
+Exempel:
+En uppgift är först önskad för vecka 38 och ingår då inte i någon lämplig Göteborgsrutt. Leveranstiden ändras senare till vecka 44. Systemet ska då analysera om just denna uppgift kan:
+    •    läggas till i en redan identifierad Göteborgsrutt,
+    •    flyttas från en tidigare klump,
+    •    bilda grund för en ny klump,
+    •    eller fortsatt ligga kvar som oklumpad.
+Det finns normalt inget behov av att räkna om alla övriga uppgifter.
+En större omräkning ska endast behöva göras när en förändring faktiskt påverkar ett större sammanhang, exempelvis när:
+    •    en central planeringsregel ändras,
+    •    klumpningsradien ändras,
+    •    en utförandekod omdefinieras,
+    •    en hel period eller ett helt geografiskt område analyseras på nytt,
+    •    planeraren uttryckligen begär en fullständig omanalys.
+Ruttklumpning som rullande grovplanering
+Ruttklumpningsfunktionen ska kunna analysera uppgifter rullande minst ett år framåt i tiden.
+Syftet är inte att skapa en exakt veckoplan ett år i förväg. Syftet är att tidigt visa hur uppgifter successivt börjar bilda möjliga rutter, ortsklumpar och produktionsunderlag.
+I Uppgiftsnavet ska planeraren exempelvis kunna se:
+Göteborg, vecka 43–45: cirka 60 planerade produktionstimmar för en viss utförandetyp.
+Detta innebär att Traivo tidigt kan visa:
+    •    var kommande uppgifter geografiskt samlas,
+    •    under vilka veckor eller perioder de kan utföras,
+    •    vilken utförandetyp de tillhör,
+    •    sammanlagd uppskattad produktionstid,
+    •    antal uppgifter,
+    •    om underlaget börjar bli tillräckligt för att skapa en ekonomiskt och praktiskt rimlig rutt.
+Denna funktion är en del av Traivos grovplanering och ska främst ge planeraren en framåtblickande lägesbild.
+Olika precision beroende på tidshorisont
+Planeringsprecisionen ska öka ju närmare aktuellt datum man kommer.
+Lång horisont – upp till ett år framåt
+På längre sikt är klumpningen preliminär och ska främst visa:
+    •    möjlig ort eller rutt,
+    •    ungefärlig period,
+    •    sammanlagd produktionstid,
+    •    utförandetyp,
+    •    möjlig kapacitetsbelastning.
+Klumpen kan exempelvis anges som:
+Göteborg, vecka 43–45, cirka 60 produktionstimmar.
+Detta är ett planeringsunderlag och inte ett bindande produktionsbeslut.
+Mellanhorisont – kommande månader
+När uppgifterna närmar sig i tid kan systemet successivt precisera:
+    •    aktuell vecka,
+    •    möjlig kombination av uppgifter,
+    •    möjliga utförare,
+    •    rimlig ruttstruktur,
+    •    uppskattad restid,
+    •    kapacitetsbehov.
+Kort horisont – närmaste rullande månad
+Den närmaste rullande månaden ska ha högst precision.
+Här ska grovplaneringen successivt övergå till konkret planering med:
+    •    tydligare vecka och dag,
+    •    mer exakt stopp- och ruttindelning,
+    •    tillgänglig utförare eller team,
+    •    produktionstid,
+    •    restid,
+    •    leveranstider och tidsfönster,
+    •    underlag för överföring till veckoplan och finplanering.
+Ingen kontinuerlig fullständig omräkning
+Ruttklumpningen ska inte räknas om fullständigt varje gång någon uppgift ändras och inte heller köras kontinuerligt över hela årsunderlaget.
+Systemet bör i stället arbeta med:
+    •    inkrementell omräkning av ändrade uppgifter,
+    •    schemalagd översyn av framtida perioder,
+    •    tätare uppdatering för den närmaste månaden,
+    •    mer sällan genomförd omräkning för perioder långt fram i tiden,
+    •    manuell fullständig omräkning när planeraren begär det.
+Exempel på möjlig princip:
+    •    närmaste månaden analyseras relativt ofta,
+    •    följande kvartal analyseras mer sällan,
+    •    resterande del av året analyseras exempelvis vid större förändringar eller schemalagda tillfällen.
+Den exakta tekniska frekvensen ska bestämmas i implementationen, men grundprincipen är att beräkningsintensiteten ska vara högst där planeringsbehovet är närmast och mest konkret.
+Sammanfattande krav
+Klumpningsmotorernas omräkning ska bygga på följande principer:
+    1    Endast tid, plats och utförandetyp är relevanta för klumpningen.
+    2    Ändringar i övrig uppgiftsinformation ska inte utlösa omklumpning.
+    3    En ändring ska i första hand endast leda till analys av den berörda uppgiften.
+    4    Fullständig omräkning ska endast ske vid större regeländringar eller efter ett aktivt beslut.
+    5    Ruttklumpning ska kunna ge en rullande lägesbild minst ett år framåt.
+    6    Klumpar långt fram i tiden är preliminära och används för grovplanering.
+    7    Precisionen ska öka successivt när uppgifterna närmar sig aktuellt datum.
+    8    Den närmaste rullande månaden ska vara mest detaljerad och utgöra underlag för veckoplanering och finplanering.
+Klumpningsfunktionen ska därmed inte betraktas som en statisk indelning av uppgifter, utan som ett dynamiskt och successivt förfinat planeringsunderlag över tid.
