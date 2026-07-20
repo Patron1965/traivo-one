@@ -32,6 +32,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ClusterWeekSlider } from "./ClusterWeekSlider";
 import { ClusterSidePanel, type ClusterRef } from "./ClusterSidePanel";
+import { TeamLiveMarkers, TeamDayPanel, useTeamLivePositions } from "./TeamLiveLayer";
 import { MapTimeline } from "./MapTimeline";
 import { RapidAssignDialog } from "./RapidAssignDialog";
 import { cn } from "@/lib/utils";
@@ -575,6 +576,7 @@ export function ClusterMapView({
   const [selectionBounds, setSelectionBounds] = useState<[LatLngTuple, LatLngTuple] | null>(null);
   const [selectedMapIds, setSelectedMapIds] = useState<Set<string>>(new Set());
   const [rapidAssignOpen, setRapidAssignOpen] = useState(false);
+  const [openTeamId, setOpenTeamId] = useState<string | null>(null);
 
   const handleModeChange = (m: "planera" | "utfor") => {
     setMapMode(m);
@@ -633,6 +635,12 @@ export function ClusterMapView({
     },
     enabled: mapMode === "utfor",
   });
+
+  // Task #1292: live-positioner per team (WebSocket, ingen polling)
+  const liveTeams = useTeamLivePositions(mapMode === "utfor");
+  const openTeam = openTeamId
+    ? liveTeams.find((t) => t.teamId === openTeamId) ?? null
+    : null;
 
   const fieldTasks = useMemo(
     () => (dayGridData?.groups ?? []).flatMap((g) => g.tasks),
@@ -873,6 +881,16 @@ export function ClusterMapView({
             fieldStopClusterIds={fieldStopClusterIds}
             isFieldMode={mapMode === "utfor"}
           />
+          {mapMode === "utfor" && (
+            <TeamLiveMarkers
+              teams={
+                fieldTeamId === "all"
+                  ? liveTeams
+                  : liveTeams.filter((t) => t.teamId === fieldTeamId)
+              }
+              onOpenTeam={setOpenTeamId}
+            />
+          )}
           {(() => {
             if (!focusCluster) return null;
             let target: LatLngTuple | null = null;
@@ -906,6 +924,9 @@ export function ClusterMapView({
       </div>
 
       <ClusterSidePanel cluster={openCluster} onClose={() => setOpenCluster(null)} />
+
+      {/* Task #1292: teamets dagschema vid klick på live-markör */}
+      <TeamDayPanel team={openTeam} day={selectedDay} onClose={() => setOpenTeamId(null)} />
 
       {/* Snabbtilldela klumpar */}
       <RapidAssignDialog

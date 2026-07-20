@@ -377,6 +377,22 @@ function nearestDistrictLabel(
   return best ? { id: best.id, name: best.name } : null;
 }
 
+// Task #1292: Live-position per aktivt fältteam (utförarläge på kartan).
+export interface TeamLivePosition {
+  teamId: string;
+  teamName: string;
+  teamColor: string | null;
+  resourceIds: string[];
+  position: {
+    resourceId: string;
+    resourceName: string;
+    latitude: number;
+    longitude: number;
+    status: string | null;
+    lastUpdate: string;
+  } | null;
+}
+
 export interface IStorage {
   getUser(id: string): Promise<User | undefined>;
   getUserByUsername(username: string): Promise<User | undefined>;
@@ -762,11 +778,13 @@ export interface IStorage {
   createTenantPackageInstallation(installation: InsertTenantPackageInstallation): Promise<TenantPackageInstallation>;
   
   // Resource Position Tracking
+  // (TeamLivePosition — Task #1292, se interface-deklarationen ovanför IStorage)
   updateResourcePosition(resourceId: string, position: { currentLatitude: number; currentLongitude: number; lastPositionUpdate: Date; trackingStatus: string }): Promise<Resource | undefined>;
   createResourcePosition(position: InsertResourcePosition): Promise<ResourcePosition>;
   getResourcePositions(resourceId: string, startDate?: Date, endDate?: Date): Promise<ResourcePosition[]>;
   getActiveResourcePositions(tenantId: string): Promise<Resource[]>;
   getAllActiveResourcePositions(): Promise<Resource[]>;
+  getTeamLivePositions(tenantId: string): Promise<TeamLivePosition[]>;
   
   // Fortnox Config
   getFortnoxConfig(tenantId: string): Promise<FortnoxConfig | undefined>;
@@ -6841,6 +6859,60 @@ export class DatabaseStorage implements IStorage {
         isNull(resources.deletedAt),
         gte(resources.lastPositionUpdate, fiveMinutesAgo)
       ));
+  }
+
+  // Task #1292: Live-position per aktivt fältteam (utförarläge på kartan).
+  // Returnerar alla aktiva team med accepterade medlemmar + den senast
+  // rapporterade GPS-positionen bland teamets medlemmar (om någon finns).
+  async getTeamLivePositions(tenantId: string): Promise<TeamLivePosition[]> {
+    const rows = await db
+      .select({
+        teamId: teams.id,
+        teamName: teams.name,
+        teamColor: teams.color,
+        resourceId: resources.id,
+        resourceName: resources.name,
+        latitude: resources.currentLatitude,
+        longitude: resources.currentLongitude,
+        trackingStatus: resources.trackingStatus,
+        lastPositionUpdate: resources.lastPositionUpdate,
+      })
+      .from(teams)
+      .innerJoin(teamMembers, eq(teamMembers.teamId, teams.id))
+      .innerJoin(resources, eq(teamMembers.resourceId, resources.id))
+      .where(and(
+        eq(teams.tenantId, tenantId),
+        isNull(teams.deletedAt),
+        eq(teams.status, "active"),
+        isNotNull(teamMembers.acceptedAt),
+        eq(resources.tenantId, tenantId),
+        isNull(resources.deletedAt),
+      ));
+
+    const byTeam = new Map<string, TeamLivePosition>();
+    for (const r of rows) {
+      let entry = byTeam.get(r.teamId);
+      if (!entry) {
+        entry = { teamId: r.teamId, teamName: r.teamName, teamColor: r.teamColor ?? null, resourceIds: [], position: null };
+        byTeam.set(r.teamId, entry);
+      }
+      entry.resourceIds.push(r.resourceId);
+      if (r.latitude != null && r.longitude != null && r.lastPositionUpdate != null) {
+        const ts = new Date(r.lastPositionUpdate).getTime();
+        const prev = entry.position;
+        if (!prev || ts > new Date(prev.lastUpdate).getTime()) {
+          entry.position = {
+            resourceId: r.resourceId,
+            resourceName: r.resourceName,
+            latitude: r.latitude,
+            longitude: r.longitude,
+            status: r.trackingStatus ?? null,
+            lastUpdate: new Date(r.lastPositionUpdate).toISOString(),
+          };
+        }
+      }
+    }
+    return Array.from(byTeam.values());
   }
 
   // Fortnox Config

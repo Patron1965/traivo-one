@@ -1815,6 +1815,14 @@ app.get("/api/teams", asyncHandler(async (req, res) => {
     res.json(teams);
 }));
 
+// Task #1292: Live-position per aktivt fältteam (utförarläge på kartan).
+// Statisk route FÖRE /api/teams/:id (annars matchar :id "live-positions").
+app.get("/api/teams/live-positions", asyncHandler(async (req, res) => {
+    const tenantId = getTenantIdWithFallback(req);
+    const positions = await storage.getTeamLivePositions(tenantId);
+    res.json(positions);
+}));
+
 app.get("/api/teams/:id", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const team = await storage.getTeam(req.params.id);
