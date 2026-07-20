@@ -238,3 +238,90 @@ describe("applyPositionUpdate — memberPositions (Task #1299)", () => {
     expect(out[0].memberPositions.map((m) => m.resourceId).sort()).toEqual(["r1", "r2"]);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Task #1302: groupTrailStops — stopp/pauser längs färdvägen
+// ---------------------------------------------------------------------------
+import { groupTrailStops, type TrailPointDto } from "../../client/src/components/clustering/TeamLiveLayer";
+
+function pt(
+  recordedAt: string,
+  status: string | null,
+  workOrderId: string | null = null,
+  lat = 59.0,
+  lng = 18.0,
+): TrailPointDto {
+  return {
+    latitude: lat,
+    longitude: lng,
+    recordedAt,
+    status,
+    workOrderId,
+    workOrderTitle: workOrderId ? `WO ${workOrderId}` : null,
+  };
+}
+
+describe("groupTrailStops", () => {
+  it("grupperar konsekutiva on_site-punkter till ett stopp med tidsintervall", () => {
+    const stops = groupTrailStops([
+      pt("2026-07-20T09:00:00Z", "traveling"),
+      pt("2026-07-20T09:12:00Z", "on_site", "wo1"),
+      pt("2026-07-20T09:30:00Z", "on_site", "wo1"),
+      pt("2026-07-20T09:47:00Z", "on_site", "wo1"),
+      pt("2026-07-20T10:00:00Z", "traveling"),
+    ]);
+    expect(stops).toHaveLength(1);
+    expect(stops[0]).toMatchObject({
+      status: "on_site",
+      startedAt: "2026-07-20T09:12:00Z",
+      endedAt: "2026-07-20T09:47:00Z",
+      workOrderId: "wo1",
+      workOrderTitle: "WO wo1",
+      pointCount: 3,
+    });
+  });
+
+  it("bryter stopp när arbetsordern byts", () => {
+    const stops = groupTrailStops([
+      pt("2026-07-20T09:00:00Z", "on_site", "wo1"),
+      pt("2026-07-20T09:10:00Z", "on_site", "wo1"),
+      pt("2026-07-20T09:20:00Z", "on_site", "wo2"),
+      pt("2026-07-20T09:30:00Z", "on_site", "wo2"),
+    ]);
+    expect(stops).toHaveLength(2);
+    expect(stops[0].workOrderId).toBe("wo1");
+    expect(stops[1].workOrderId).toBe("wo2");
+  });
+
+  it("idle-punkter blir paus-stopp; enstaka kort punkt filtreras bort", () => {
+    const stops = groupTrailStops([
+      pt("2026-07-20T09:00:00Z", "traveling"),
+      pt("2026-07-20T09:05:00Z", "idle"),
+      pt("2026-07-20T09:20:00Z", "traveling"),
+      pt("2026-07-20T10:00:00Z", "idle"),
+      pt("2026-07-20T10:15:00Z", "idle"),
+    ]);
+    expect(stops).toHaveLength(1);
+    expect(stops[0].status).toBe("idle");
+    expect(stops[0].startedAt).toBe("2026-07-20T10:00:00Z");
+  });
+
+  it("beräknar stoppets position som medelvärde av punkterna", () => {
+    const stops = groupTrailStops([
+      pt("2026-07-20T09:00:00Z", "on_site", "wo1", 59.0, 18.0),
+      pt("2026-07-20T09:10:00Z", "on_site", "wo1", 59.2, 18.2),
+    ]);
+    expect(stops[0].latitude).toBeCloseTo(59.1);
+    expect(stops[0].longitude).toBeCloseTo(18.1);
+  });
+
+  it("tom lista och enbart traveling ger inga stopp", () => {
+    expect(groupTrailStops([])).toEqual([]);
+    expect(
+      groupTrailStops([
+        pt("2026-07-20T09:00:00Z", "traveling"),
+        pt("2026-07-20T09:10:00Z", null),
+      ]),
+    ).toEqual([]);
+  });
+});

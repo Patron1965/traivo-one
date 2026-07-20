@@ -393,15 +393,90 @@ export function TeamLiveMarkers({
 // Task #1298: Dagens färdväg (breadcrumb-spår) per team
 // ---------------------------------------------------------------------------
 
+export interface TrailPointDto {
+  latitude: number;
+  longitude: number;
+  recordedAt: string;
+  status: string | null;
+  workOrderId: string | null;
+  workOrderTitle: string | null;
+}
+
 export interface TeamPositionTrailDto {
   teamId: string;
   teamName: string;
   teamColor: string | null;
-  points: Array<{
-    latitude: number;
-    longitude: number;
-    recordedAt: string;
-  }>;
+  points: TrailPointDto[];
+}
+
+// ---------------------------------------------------------------------------
+// Task #1302: Stopp längs färdvägen — gruppera på-plats-/inaktiv-punkter
+// ---------------------------------------------------------------------------
+
+export interface TrailStop {
+  latitude: number;
+  longitude: number;
+  startedAt: string;
+  endedAt: string;
+  status: string; // dominerande status: on_site eller idle
+  workOrderId: string | null;
+  workOrderTitle: string | null;
+  pointCount: number;
+}
+
+const STOP_STATUSES = new Set(["on_site", "idle"]);
+/** Minsta stopplängd i ms för att visas som stoppmarkör (filtrerar GPS-brus). */
+const MIN_STOP_MS = 3 * 60 * 1000;
+
+/**
+ * Grupperar konsekutiva punkter med status on_site/idle till stopp.
+ * Ett stopp bryts när status lämnar on_site/idle eller när arbetsordern
+ * byts (två olika jobb på samma plats = två stopp). Stopp kortare än
+ * MIN_STOP_MS filtreras bort om de bara har en punkt.
+ */
+export function groupTrailStops(points: TrailPointDto[]): TrailStop[] {
+  const stops: TrailStop[] = [];
+  let current: TrailPointDto[] = [];
+
+  const flush = () => {
+    if (current.length === 0) return;
+    const startedAt = current[0].recordedAt;
+    const endedAt = current[current.length - 1].recordedAt;
+    const durationMs = new Date(endedAt).getTime() - new Date(startedAt).getTime();
+    if (current.length >= 2 || durationMs >= MIN_STOP_MS) {
+      const onSiteCount = current.filter((p) => p.status === "on_site").length;
+      const withWo = current.find((p) => p.workOrderId != null);
+      stops.push({
+        latitude: current.reduce((s, p) => s + p.latitude, 0) / current.length,
+        longitude: current.reduce((s, p) => s + p.longitude, 0) / current.length,
+        startedAt,
+        endedAt,
+        status: onSiteCount >= current.length - onSiteCount ? "on_site" : "idle",
+        workOrderId: withWo?.workOrderId ?? null,
+        workOrderTitle: withWo?.workOrderTitle ?? null,
+        pointCount: current.length,
+      });
+    }
+    current = [];
+  };
+
+  for (const p of points) {
+    if (!STOP_STATUSES.has(p.status ?? "")) {
+      flush();
+      continue;
+    }
+    if (
+      current.length > 0 &&
+      p.workOrderId != null &&
+      current[0].workOrderId != null &&
+      p.workOrderId !== current[0].workOrderId
+    ) {
+      flush();
+    }
+    current.push(p);
+  }
+  flush();
+  return stops;
 }
 
 /** Hämtar dagens färdväg per team; nytt datum ⇒ ny query (linjen rensas). */
@@ -449,6 +524,34 @@ export function TeamTrailPolylines({ trails }: { trails: TeamPositionTrailDto[] 
                   {format(new Date(first.recordedAt), "HH:mm", { locale: svLocale })}
                 </Tooltip>
               </CircleMarker>
+              {groupTrailStops(t.points).map((stop, i) => (
+                <CircleMarker
+                  key={`${t.teamId}-stop-${i}`}
+                  center={[stop.latitude, stop.longitude]}
+                  radius={7}
+                  pathOptions={{
+                    color: "#ffffff",
+                    fillColor: color,
+                    fillOpacity: stop.status === "on_site" ? 0.95 : 0.55,
+                    weight: 2,
+                  }}
+                >
+                  <Tooltip direction="top" offset={[0, -8]}>
+                    <div className="text-xs space-y-0.5">
+                      <div className="font-semibold">
+                        {t.teamName} ·{" "}
+                        {stop.status === "on_site" ? "På plats" : "Paus"}
+                      </div>
+                      <div>
+                        {format(new Date(stop.startedAt), "HH:mm", { locale: svLocale })}
+                        –
+                        {format(new Date(stop.endedAt), "HH:mm", { locale: svLocale })}
+                      </div>
+                      {stop.workOrderTitle && <div>{stop.workOrderTitle}</div>}
+                    </div>
+                  </Tooltip>
+                </CircleMarker>
+              ))}
             </Fragment>
           );
         })}

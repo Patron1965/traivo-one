@@ -400,6 +400,7 @@ export interface TeamLivePosition {
 }
 
 // Task #1298: Dagens färdväg (breadcrumb-spår) per team i utförarläget.
+// Task #1302: punkter bär status/workOrderId så klienten kan gruppera stopp.
 export interface TeamPositionTrail {
   teamId: string;
   teamName: string;
@@ -408,6 +409,9 @@ export interface TeamPositionTrail {
     latitude: number;
     longitude: number;
     recordedAt: string;
+    status: string | null;
+    workOrderId: string | null;
+    workOrderTitle: string | null;
   }>;
 }
 
@@ -6929,11 +6933,18 @@ export class DatabaseStorage implements IStorage {
         latitude: resourcePositions.latitude,
         longitude: resourcePositions.longitude,
         recordedAt: resourcePositions.recordedAt,
+        status: resourcePositions.status,
+        workOrderId: resourcePositions.workOrderId,
+        workOrderTitle: workOrders.title,
       })
       .from(teams)
       .innerJoin(teamMembers, eq(teamMembers.teamId, teams.id))
       .innerJoin(resources, eq(teamMembers.resourceId, resources.id))
       .innerJoin(resourcePositions, eq(resourcePositions.resourceId, resources.id))
+      .leftJoin(workOrders, and(
+        eq(workOrders.id, resourcePositions.workOrderId),
+        eq(workOrders.tenantId, tenantId),
+      ))
       .where(and(
         eq(teams.tenantId, tenantId),
         isNull(teams.deletedAt),
@@ -6957,6 +6968,9 @@ export class DatabaseStorage implements IStorage {
         latitude: r.latitude,
         longitude: r.longitude,
         recordedAt: new Date(r.recordedAt).toISOString(),
+        status: r.status ?? null,
+        workOrderId: r.workOrderId ?? null,
+        workOrderTitle: r.workOrderTitle ?? null,
       });
     }
     return Array.from(byTeam.values());
