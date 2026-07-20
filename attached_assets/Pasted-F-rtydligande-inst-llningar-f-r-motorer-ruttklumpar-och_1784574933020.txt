@@ -1,0 +1,778 @@
+Förtydligande – inställningar för motorer, ruttklumpar och dynamisk veckoplanering
+
+1. Gemensamt inställningsformulär för samtliga motorer
+
+Samtliga motorer i Traivo ska ha ett eget inställningsformulär. Formuläret ska både:
+
+1. förklara motorns syfte och hur dess logik fungerar, och
+2. göra det möjligt för behörig administratör att justera de parametrar som styr motorns beräkningar.
+
+Inställningsformuläret ska alltså inte enbart vara en teknisk konfigurationssida. Det ska även fungera som en tydlig beskrivning av:
+
+* motorns funktion,
+* vilka uppgifter och metadata motorn analyserar,
+* vilka villkor och parametrar som påverkar resultatet,
+* vilket resultat motorn förväntas skapa,
+* hur motorn samverkar med övriga motorer i Traivo.
+
+För varje parameter ska följande framgå:
+
+* parameterns namn,
+* vad parametern påverkar,
+* aktuellt inställt värde,
+* tillåtet intervall eller tillåtna alternativ,
+* standardvärde,
+* konsekvensen av att höja, sänka eller ändra värdet.
+
+Systemet bör även spara:
+
+* vem som har ändrat en parameter,
+* när ändringen genomfördes,
+* vilket tidigare värde som användes,
+* vilket nytt värde som infördes.
+
+Motorernas inställningar ska inte vara hårdkodade om parametrarna rimligen kan behöva förändras i takt med att Traivo används och utvecklas.
+
+⸻
+
+2. Inställningar för stoppklumpningsmotorn
+
+Stoppklumpningsmotorn ska ha justerbara parametrar för bland annat:
+
+* maximal geografisk radie för att uppgifter ska betraktas som samma stopp eller arbetsplats,
+* krav på identisk eller kompatibel utförartyp,
+* krav på kompatibla leveranstider och tidsfönster,
+* hänsyn till om objekten ligger på höger eller vänster sida av gatan,
+* tillåtet avstånd längs gångväg eller körväg,
+* hänsyn till fastighetsgräns, entré, infart eller annat geografiskt hinder,
+* maximalt antal uppgifter i en stoppklump,
+* eventuella viktningar mellan geografisk närhet, tidsmässig kompatibilitet och utförartyp.
+
+Exempelvis ska standardradien kunna vara cirka 30 meter, men värdet ska vara justerbart.
+
+Höger och vänster sida av gatan kan vara avgörande eftersom två objekt kan ligga nära varandra fågelvägen men ändå kräva att fordonet kör runt ett kvarter, passerar en olämplig väg eller använder olika infarter.
+
+Motorn ska därför, när relevant information finns tillgänglig, kunna väga in:
+
+* gatans sida,
+* entré eller infart,
+* faktisk åtkomst,
+* geografiska eller fysiska hinder,
+* praktisk framkomlighet.
+
+Stoppklumpningsmotorns syfte är att identifiera uppgifter som praktiskt bör hanteras som samma stopp eller arbetsplats.
+
+Stoppklumpar ska kunna användas både i Navet och i veckoplaneringen.
+
+Planeraren ska kunna:
+
+* tilldela en hel stoppklump till en utförare eller ett team,
+* tilldela stoppklumpen till en veckoplan,
+* ta bort en stoppklump från en veckoplan,
+* återföra stoppklumpens uppgifter till otilldelat läge i Navet,
+* lösa upp stoppklumpen,
+* lägga till eller ta bort uppgifter,
+* låta motorn gruppera om uppgifterna.
+
+Stoppklumpen är en dynamisk administrativ gruppering. De ingående uppgifterna ska alltid behålla sina egna identiteter, metadata och historik.
+
+⸻
+
+3. Inställningar för ruttklumpningsmotorn – version 1
+
+Ruttklumpningsmotorn ska ha ett motsvarande inställningsformulär med en tydlig beskrivning av motorns funktion och justerbara parametrar.
+
+I den första versionen ska ruttklumpningsmotorn skapa logiska klumpar av otilldelade uppgifter baserat på:
+
+* geografisk tyngdpunkt,
+* geografisk radie,
+* ort eller naturligt geografiskt område,
+* kompatibla utförartyper,
+* kompatibla leveransperioder och tidsfönster,
+* sammanlagd beräknad produktionstid,
+* maximalt antal uppgifter eller stopp, om detta används som begränsning.
+
+Ruttklumpningsmotorn ska alltså i första hand skapa administrativa arbetsklumpar som motsvarar exempelvis:
+
+* Göteborg,
+* Nynäshamn,
+* Södertälje,
+* Västerås,
+* eller ett annat logiskt geografiskt område.
+
+Syftet är att planeraren ska kunna hantera ett större antal sammanhörande uppgifter med en gemensam manöver i Navet.
+
+Den sammanlagda produktionstiden ska vara en central och justerbar parameter.
+
+Exempelvis ska en administratör kunna ange att en ruttklump maximalt får innehålla 28 beräknade produktionstimmar.
+
+Avgränsning i version 1
+
+I den första versionen behöver ruttklumpningsmotorn inte ta hänsyn till:
+
+* faktisk körsträcka,
+* beräknad restid,
+* optimal körordning,
+* trafiksituation,
+* vägval,
+* exakt sammanhängande färdriktning,
+* avancerad analys av arbetsuppgifter längs långa vägsträckor.
+
+Det räcker i version 1 att ruttklumpen skapas utifrån:
+
+* ort eller geografiskt område,
+* tyngdpunkt,
+* radie,
+* leveranstid,
+* utförartyp,
+* sammanlagd produktionstid.
+
+Hur modellen ska hantera ett utsträckt arbetsområde, exempelvis flera uppgifter längs en vägsträcka på 100 kilometer eller mer, kan utvecklas i senare versioner.
+
+Replit kan gärna föreslå en lämplig modell även för sådana linjära geografiska områden, men detta ska inte vara ett absolut krav för den första versionen.
+
+Exempel
+
+Om det finns otilldelade uppgifter i Göteborg med en sammanlagd beräknad produktionstid på 84 timmar och den maximala produktionstiden har ställts in till 28 timmar per ruttklump, ska motorn kunna skapa tre ruttklumpar.
+
+Motorn ska eftersträva att varje ruttklump:
+
+* ligger inom ett logiskt geografiskt område,
+* har en rimlig geografisk tyngdpunkt,
+* innehåller kompatibla uppgifter,
+* kan utföras av samma utförartyp eller teamtyp,
+* har förenliga leveransperioder och tidsfönster,
+* inte överstiger den inställda maximala produktionstiden.
+
+Gränsen på exempelvis 28 timmar ska vara justerbar och får inte vara hårdkodad.
+
+⸻
+
+4. Syftet med maximal produktionstid per ruttklump
+
+Syftet med en ruttklump är att planeraren ska kunna tilldela hela klumpen till:
+
+* en utförare eller ett team, och
+* en bestämd veckoplan.
+
+Tilldelningen ska kunna genomföras med en gemensam manöver eller ett klick i Navet.
+
+Ruttklumpen får därför inte vara så omfattande att den tilldelade veckoplanen automatiskt blir kraftigt överbokad.
+
+Den maximala produktionstiden per ruttklump ska ses som en kapacitetsgräns för själva produktionen, inte som veckoplanens totala tillgängliga arbetstid.
+
+Veckoplanen måste även kunna innehålla exempelvis:
+
+* dynamiskt skapade reseuppgifter,
+* egentid,
+* raster,
+* möten,
+* utbildning,
+* andra tidsbundna uppgifter,
+* redan tilldelade uppgifter,
+* eventuella hårda eller mjuka tidsfönster.
+
+Exempelvis kan en ruttklump begränsas till 28 produktionstimmar för att lämna utrymme för resor och andra uppgifter inom en veckoplan med 40 timmars tillgänglig arbetstid.
+
+Den maximala produktionstiden ska därför kunna anpassas efter exempelvis:
+
+* utförartyp,
+* teamtyp,
+* verksamhetsområde,
+* geografiskt område,
+* planeringsmodell,
+* erfarenhet från verkligt utfall.
+
+⸻
+
+5. Delning av stora geografiska kluster
+
+Om en mängd geografiskt sammanhörande uppgifter överstiger den inställda maxgränsen för produktionstid ska ruttklumpningsmotorn automatiskt skapa flera ruttklumpar.
+
+Uppdelningen ska i version 1 huvudsakligen baseras på:
+
+* geografisk tyngdpunkt,
+* inställd radie,
+* ort eller geografiskt område,
+* beräknad produktionstid,
+* leveranstider och tidsfönster,
+* utförartyp,
+* antal uppgifter eller stopp.
+
+Motorn ska undvika att slumpmässigt dela upp uppgifter enbart utifrån den ordning som uppgifterna råkar finnas i databasen.
+
+Den ska i stället söka logiska geografiska och tidsmässiga brytpunkter.
+
+Varje ruttklump ska få ett eget unikt klump-ID och kunna visa:
+
+* antal uppgifter,
+* antal stopp eller preliminära stopp,
+* sammanlagd beräknad produktionstid,
+* geografiskt område eller ort,
+* geografisk tyngdpunkt,
+* använd radie,
+* sammanfattad leveranstid,
+* möjliga leveransveckor,
+* kompatibla utförartyper,
+* kompatibla utförare eller team,
+* återstående kapacitetsmarginal mot inställd maxgräns.
+
+Preliminär restid eller körsträcka behöver inte beräknas eller visas i den första versionen av ruttklumpningsmotorn.
+
+⸻
+
+6. Uppgifter som inte ingår i någon ruttklump
+
+Alla uppgifter behöver inte ingå i en ruttklump.
+
+Uppgifter som inte uppfyller villkoren för att grupperas ska ligga kvar som enskilda uppgifter i Navet.
+
+Sådana uppgifter ska kunna:
+
+* tilldelas individuellt,
+* flyttas till en veckoplan,
+* tilldelas en utförare eller ett team,
+* senare ingå i en ny ruttklump,
+* senare ingå i en stoppklump,
+* hanteras tillsammans med andra uppgifter genom manuellt urval.
+
+Ruttklumpningsmotorn är därmed ett hjälpmedel för att effektivisera planeringen. Den får inte skapa ett krav på att alla uppgifter måste tillhöra en ruttklump.
+
+⸻
+
+7. Ruttklumpar ska kunna lösas upp och grupperas om
+
+En ruttklump är en dynamisk planeringsgruppering och får inte innebära att de ursprungliga uppgifterna slås samman eller förlorar sin identitet.
+
+Planeraren ska kunna:
+
+* lösa upp en hel ruttklump,
+* ta bort en enskild uppgift från klumpen,
+* lägga till en uppgift i en befintlig klump,
+* slå samman två eller flera ruttklumpar,
+* dela en ruttklump manuellt,
+* ändra en klumps geografiska eller tidsmässiga avgränsning,
+* låta motorn gruppera om de aktuella uppgifterna.
+
+När en ruttklump löses upp ska samtliga ingående uppgifter finnas kvar som självständiga uppgifter i Navet.
+
+Motorn ska därefter kunna genomföra en ny gruppering baserat på:
+
+* aktuella otilldelade uppgifter,
+* aktuella motorinställningar,
+* leveranstider,
+* utförartyper,
+* geografiska parametrar,
+* kapacitetsgränser.
+
+En tidigare klumptillhörighet får inte låsa uppgiften eller påverka möjligheten att gruppera om den.
+
+⸻
+
+8. Ruttklumpen finns endast i Navet
+
+Ruttklumpen är ett planeringsobjekt i Navet, det vill säga i grovplaneringen.
+
+Ruttklumpen ska användas för att:
+
+* samla otilldelade uppgifter,
+* visa en logisk geografisk och tidsmässig grupp,
+* bedöma produktionstid och kapacitet,
+* välja utförare eller team,
+* välja lämplig vecka,
+* tilldela hela gruppen till en veckoplan,
+* återföra hela gruppens uppgifter till otilldelat läge,
+* hantera många uppgifter med en gemensam administrativ manöver.
+
+När en ruttklump tilldelas en utförare eller ett team och en veckoplan ska de ingående uppgifterna kopplas till veckoplanen.
+
+Själva ruttklumpen ska däremot inte behöva visas som en sammanhållen klump i utförarens veckoplan.
+
+I veckoplanen ska uppgifterna i stället kunna organiseras utifrån:
+
+* stoppklumpar,
+* enskilda uppgifter,
+* veckans dagar,
+* tidsfönster,
+* tillgänglig arbetstid,
+* utförarens kapacitet,
+* dynamiskt skapade reseuppgifter.
+
+Ruttklumpen är därmed ett verktyg för urval och grupptilldelning i Navet.
+
+Stoppklumpen är den mer konkreta grupperingen av uppgifter som hör till samma arbetsplats eller stopp och kan användas i både Navet och veckoplanen.
+
+⸻
+
+9. Stoppklumpar som administrativ planeringsenhet
+
+Stoppklumpningsmotorn ska vara tillgänglig för planeraren parallellt med ruttklumpningsmotorn.
+
+Ett stopp eller en stoppklump ska kunna hanteras administrativt på motsvarande sätt som en ruttklump.
+
+Planeraren ska exempelvis kunna:
+
+* markera ett stopp eller en stoppklump,
+* tilldela samtliga ingående uppgifter till en utförare eller ett team,
+* tilldela stoppet till en veckoplan,
+* flytta stoppet mellan veckor eller dagar,
+* ta bort stoppet från en veckoplan,
+* återföra de ingående uppgifterna till otilldelat läge,
+* lösa upp stoppklumpen,
+* gruppera stoppets uppgifter på nytt.
+
+Skillnaden är att ruttklumpen är en större gruppering av uppgifter kopplad till en ort eller ett område, medan stoppklumpen samlar uppgifter vid samma eller närliggande arbetsplats.
+
+⸻
+
+10. Ruttoptimering Light i veckoplanen
+
+Ruttoptimering Light ska ha ett tydligt avgränsat ansvar.
+
+Motorns uppgift är att beräkna och skapa reseuppgiften mellan två uppgifter som ligger efter varandra i veckoplanen.
+
+Det spelar ingen roll vilken uppgiftstyp som ligger före eller efter resan.
+
+Reseuppgiften ska kunna skapas mellan exempelvis:
+
+* två produktionsuppgifter,
+* egentid och produktion,
+* produktion och egentid,
+* möte och produktion,
+* utbildning och produktion,
+* två stoppklumpar,
+* eller andra kombinationer av uppgiftstyper.
+
+Ruttoptimering Light ska:
+
+1. identifiera uppgiften som ligger före resan,
+2. identifiera den efterföljande uppgiften,
+3. beräkna resan mellan uppgifternas geografiska platser,
+4. välja rätt researtikel för aktuell utförare eller aktuellt team,
+5. beräkna tiden för reseuppgiften,
+6. skapa reseuppgiften som en dynamisk uppgift,
+7. placera reseuppgiften mellan de båda uppgifterna i veckoplanen.
+
+Reseuppgiften är inte en ursprungligen beställd produktionsuppgift. Den skapas dynamiskt i finplaneringen utifrån ordningsföljden mellan två uppgifter.
+
+Om ordningen mellan uppgifterna ändras ska reseuppgifterna kunna:
+
+* räknas om,
+* tas bort,
+* ersättas,
+* skapas på nytt.
+
+Ruttoptimering Light ska inte i denna grundfunktion ansvara för:
+
+* leveranstider,
+* tidsfönster,
+* val av leveransdag,
+* prioritering mellan hårda och mjuka tider,
+* beslut om när en uppgift får utföras.
+
+Detta ansvar ligger hos Tidsmotorn.
+
+Ruttoptimering Light kan på sikt även ge stöd för ordningsföljd och placering, men kärnuppgiften är att skapa och beräkna reseuppgiften från den föregående uppgiften till den efterföljande uppgiften.
+
+⸻
+
+11. Tidsmotorns ansvar
+
+Tidsmotorn ansvarar för att hålla reda på när en uppgift får, bör eller inte bör utföras.
+
+Tidsmotorn ska hantera:
+
+* önskad leveranstid,
+* möjliga leveranstider,
+* hårda tidsfönster,
+* mjuka tidsfönster,
+* positiva tidsönskemål,
+* negativa tidsbegränsningar,
+* återkommande eller cykliska tidsfönster,
+* datumintervall,
+* veckodagar,
+* klockslag,
+* första möjliga utförandetid,
+* nästa möjliga utförandetid.
+
+Tidsmotorn ska säkerställa att en uppgift placeras inom de regler som gäller för uppgiften.
+
+Exempel på kombinerade tidsvillkor
+
+En uppgift kan exempelvis ha följande villkor:
+
+* hårt villkor: hela september,
+* hårt villkor: vardagar mellan 09.00 och 16.00,
+* mjukt positivt önskemål: onsdagar och fredagar.
+
+Det innebär att uppgiften får utföras på vardagar i september mellan 09.00 och 16.00, men att onsdagar och fredagar är särskilt önskvärda.
+
+Tidsmotorn ska skilja mellan:
+
+* när uppgiften över huvud taget får utföras,
+* när uppgiften helst bör utföras,
+* när uppgiften inte får eller helst inte bör utföras.
+
+⸻
+
+12. Tidsmotorns förslag på nästa leveranstid
+
+Tidsmotorn ska alltid kunna presentera en aktuell föreslagen leveranstid.
+
+Om en leveransregel innehåller flera eller återkommande möjliga tillfällen kan systemet inte visa alla dessa som en enda planeringstidpunkt.
+
+Tidsmotorn ska därför föreslå den första möjliga tiden enligt samtliga aktuella regler.
+
+Om leveransregeln exempelvis är:
+
+alla onsdagar i augusti mellan 07.00 och 18.00
+
+ska tidsmotorn föreslå den första tillgängliga onsdagen i augusti inom det angivna tidsintervallet.
+
+När denna tid har passerat ska tidsmotorn automatiskt gå vidare och föreslå nästa möjliga onsdag.
+
+Det föreslagna datumet och klockslaget ska ses som:
+
+* aktuell planeringsreferens,
+* nästa möjliga utförandetillfälle,
+* inte som en fullständig beskrivning av leveransregeln.
+
+Tidsmotorn måste därför även skapa en sammanfattande informationstext som beskriver hela leveransvillkoret.
+
+⸻
+
+13. Sammanfattat informationsfält för leveranstid
+
+Tidsmotorn ska skapa ett tydligt informationsfält i klartext som sammanfattar uppgiftens fullständiga leveransvillkor.
+
+Exempel:
+
+* Augusti – onsdagar 07.00–18.00
+* September – vardagar 09.00–16.00, helst onsdag eller fredag
+* Vecka 32–35 – valfri fredag
+* Första vardagen varje månad
+* Hela september, dock inte måndagar
+* Senast 30 september, helst under vecka 38
+
+Informationsfältet ska kunna visas för:
+
+* planeraren i Navet,
+* planeraren i veckoplanen,
+* utföraren,
+* kunden,
+* på en enskild uppgift,
+* på en stoppklump,
+* på en ruttklump.
+
+För en klump ska informationen antingen visa:
+
+* en gemensam sammanfattning när uppgifternas tidsvillkor är kompatibla, eller
+* en varning om att uppgifterna har olika eller delvis motstridiga tidsvillkor.
+
+Det sammanfattande informationsfältet ska vara begripligt utan att användaren behöver tolka motorernas bakomliggande matematiska regler.
+
+⸻
+
+14. Första versionen av ruttklumpningsmotorn hanterar endast otilldelade uppgifter
+
+I den första versionen ska ruttklumpningsmotorn endast hantera otilldelade uppgifter.
+
+Med en otilldelad uppgift avses en uppgift som:
+
+* finns i Navet,
+* ännu inte ligger på någon utförares eller något teams veckoplan,
+* saknar aktiv tilldelning till utförare eller team,
+* har en status som innebär att uppgiften är tillgänglig för planering.
+
+Motorn ska i den första versionen inte automatiskt hämta in eller gruppera om uppgifter som redan är tilldelade till en veckoplan.
+
+Detta avgränsar funktionen och minskar risken att motorn förändrar en redan genomförd planering.
+
+I en framtida version kan det övervägas om motorn även ska kunna analysera:
+
+* redan tilldelade uppgifter,
+* en kombination av tilldelade och otilldelade uppgifter,
+* uppgifter från flera veckoplaner,
+* möjliga förbättringar av redan planerade rutter eller veckor.
+
+En sådan funktion ska dock inte vara ett krav i den första versionen.
+
+⸻
+
+15. Dynamisk justering av en veckoplan
+
+En tilldelad veckoplan ska kunna justeras dynamiskt även efter att uppgifterna har tilldelats.
+
+Planeraren ska kunna:
+
+* lägga till en ny tilldelad uppgift,
+* ta bort en tilldelad uppgift,
+* lägga till eller ta bort en stoppklump,
+* flytta en uppgift mellan dagar,
+* flytta en stoppklump mellan dagar,
+* flytta en uppgift till en annan vecka,
+* flytta en stoppklump till en annan vecka,
+* ändra tilldelad utförare,
+* ändra tilldelat team,
+* återföra uppgifter till otilldelat läge i Navet.
+
+Efter varje förändring ska systemet räkna om relevanta värden, exempelvis:
+
+* planerad produktionstid,
+* dynamiskt beräknade reseuppgifter,
+* total beläggning,
+* tillgänglig kapacitet,
+* över- eller dubbelbokning,
+* om hårda tidsfönster uppfylls,
+* om mjuka eller positiva tidsönskemål uppfylls.
+
+En veckoplan får innehålla överbokade uppgifter, men detta ska framgå tydligt genom:
+
+* status,
+* varning,
+* kapacitetsvisning,
+* summering av planerad tid mot tillgänglig tid.
+
+Överbokning ska inte automatiskt radera eller flytta uppgifter. Planeraren ska kunna fatta beslut om hur situationen ska hanteras.
+
+⸻
+
+16. Byte av team för en hel veckoplan
+
+Det ska vara möjligt att i en samlad åtgärd byta tilldelat team för en hel veckoplan.
+
+Funktionen ska exempelvis kunna användas när:
+
+* ett annat team ska genomföra hela veckans arbete,
+* ett team blir frånvarande,
+* kapaciteten förändras,
+* en underentreprenör tar över arbetet,
+* ett geografiskt ansvar flyttas mellan team,
+* planeringen behöver omfördelas.
+
+Vid byte av team ska samtliga tilldelade uppgifter och stoppklumpar i den valda veckoplanen uppdateras.
+
+Systemet ska samtidigt kontrollera:
+
+* om det nya teamet har rätt utförartyp,
+* om teamet har rätt kompetens eller behörighet,
+* om teamet har tillräcklig tillgänglig kapacitet,
+* om uppgifterna fortfarande kan utföras inom sina tidsfönster,
+* om bytet skapar dubbelbokning eller överbokning.
+
+Systemet ska varna vid konflikt men ska, beroende på användarens behörighet, kunna tillåta att planeraren genomför bytet ändå.
+
+Byte av team ska registreras i historiken.
+
+⸻
+
+17. När en uppgift återgår från veckoplanen till Navet
+
+När en uppgift tas bort från en veckoplan och återgår till Navet ska detta inte innebära att uppgiften raderas, kopieras eller skapas på nytt.
+
+Det innebär i grunden endast att uppgiftens tilldelningsstatus ändras:
+
+* från tilldelad,
+* till otilldelad.
+
+Uppgiften ska behålla:
+
+* sitt uppgifts-ID,
+* sitt objekt,
+* sin kundkoppling,
+* sin artikel,
+* sina metadata,
+* sina leveranstider,
+* sina tidsfönster,
+* sin historik,
+* sin planerade eller beräknade produktionstid,
+* eventuella tidigare planeringsvärden.
+
+Den aktiva kopplingen till aktuell utförare, aktuellt team och aktuell veckoplan ska tas bort eller avslutas.
+
+Uppgiften blir därefter åter tillgänglig i Navet och kan:
+
+* tilldelas manuellt,
+* ingå i en ny stoppklump,
+* ingå i en ny ruttklump,
+* tilldelas en annan utförare,
+* tilldelas ett annat team,
+* läggas på en annan vecka.
+
+Det ska kunna registreras varför uppgiften återfördes till Navet, exempelvis:
+
+* kapacitetsbrist,
+* överbokning,
+* ändrad leveranstid,
+* kundändring,
+* fel utförartyp,
+* sjukdom eller resursbortfall,
+* omöjligt att utföra,
+* manuell omplanering.
+
+⸻
+
+18. Statuslogik vid tilldelning och återgång
+
+Tilldelning ska vara en status- och relationsförändring, inte en kopiering av uppgiften.
+
+Vid tilldelning
+
+När en uppgift förs från otilldelat läge i Navet till en veckoplan ska systemet:
+
+1. behålla samma uppgifts-ID,
+2. koppla uppgiften till vald kalendervecka,
+3. koppla uppgiften till vald utförare eller valt team,
+4. ändra uppgiftens tilldelningsstatus från otilldelad till tilldelad eller planerad,
+5. göra uppgiften synlig i aktuell veckoplan,
+6. behålla uppgiften synlig och sökbar i Navet,
+7. registrera tilldelningen i uppgiftens historik.
+
+Vid återgång
+
+När uppgiften tas bort från veckoplanen ska systemet:
+
+1. behålla samma uppgifts-ID,
+2. ta bort eller avsluta den aktiva kopplingen till veckoplanen,
+3. ta bort eller avsluta tilldelningen till utförare eller team,
+4. ändra tilldelningsstatus till otilldelad,
+5. göra uppgiften tillgänglig för ny planering i Navet,
+6. ta bort eller räkna om berörda reseuppgifter,
+7. spara förändringen i uppgiftens historik.
+
+Navet innehåller därmed både tilldelade och otilldelade uppgifter.
+
+Ruttklumpningsmotorns första version ska dock endast välja uppgifter som är otilldelade.
+
+⸻
+
+19. Skillnaden mellan ruttklump, stoppklump och veckoplan
+
+Ruttklump
+
+En större, dynamisk gruppering i Navet av otilldelade uppgifter som:
+
+* geografiskt hör till samma ort eller område,
+* ligger inom en inställd radie eller logisk geografisk avgränsning,
+* tidsmässigt kan genomföras under samma period,
+* kan genomföras av samma utförartyp,
+* ryms inom inställd maximal produktionstid.
+
+Ruttklumpen används för:
+
+* grovplanering,
+* kapacitetsbedömning,
+* gemensam tilldelning,
+* hantering av flera uppgifter med en manöver.
+
+Ruttklumpen är inte en färdig körlista.
+
+Stoppklump
+
+En dynamisk gruppering av uppgifter som ska genomföras vid samma eller närliggande stopp, adress eller arbetsplats.
+
+Stoppklumpen används:
+
+* i Navet,
+* i veckoplaneringen,
+* vid tilldelning,
+* vid finplanering,
+* vid utförande.
+
+Veckoplan
+
+En konkret tilldelning av uppgifter och stoppklumpar till:
+
+* en viss kalendervecka,
+* en utförare eller ett team,
+* tillgängliga dagar och tider.
+
+Veckoplanen kompletteras med:
+
+* dynamiskt skapade reseuppgifter,
+* egentid,
+* raster,
+* andra planerade uppgifter,
+* status för över- eller dubbelbokning.
+
+⸻
+
+20. Motorernas avgränsade ansvar
+
+Varje motor ska ha ett tydligt definierat ansvar.
+
+Ruttklumpningsmotorn
+
+Ansvarar i version 1 för att gruppera otilldelade uppgifter utifrån:
+
+* ort eller område,
+* geografisk tyngdpunkt,
+* radie,
+* utförartyp,
+* tidsmässig kompatibilitet,
+* maximal produktionstid.
+
+Stoppklumpningsmotorn
+
+Ansvarar för att identifiera och gruppera uppgifter som hör till samma eller närliggande arbetsplats eller stopp.
+
+Tidsmotorn
+
+Ansvarar för:
+
+* önskade och möjliga utförandetider,
+* hårda och mjuka tidsfönster,
+* positiva och negativa tidsvillkor,
+* cykliska leveransmönster,
+* nästa möjliga leveranstid,
+* sammanfattad leveransinformation.
+
+Ruttoptimering Light
+
+Ansvarar för att:
+
+* beräkna resan mellan två efterföljande uppgifter,
+* välja rätt researtikel,
+* beräkna restid,
+* skapa den dynamiska reseuppgiften i veckoplanen.
+
+Motorerna ska samverka men inte överta varandras huvudansvar.
+
+⸻
+
+21. Sammanfattande utvecklingsprincip
+
+Motorerna ska ge förslag, genomföra beräkningar och skapa dynamiska grupperingar, men de får inte låsa uppgifterna eller göra dem beroende av en permanent klumpstruktur.
+
+Grundprincipen ska vara:
+
+* uppgiften är den beständiga enheten,
+* klumpen är en dynamisk planeringsgruppering,
+* tilldelningen är en förändringsbar relation,
+* veckoplanen är den konkreta resurs- och tidsplaneringen,
+* status avgör var i flödet uppgiften befinner sig,
+* motorerna har separata men samverkande ansvarsområden.
+
+Planeraren ska alltid kunna:
+
+* lösa upp klumpar,
+* justera klumpar,
+* flytta uppgifter,
+* lägga till eller ta bort uppgifter,
+* tilldela eller otilldela uppgifter,
+* gruppera om uppgifter,
+* byta utförare eller team,
+* återföra uppgifter till Navet,
+
+utan att uppgifternas identitet, metadata eller historik går förlorad.
+
+Detta underlag ska kopplas direkt till den tidigare specifikationen för:
+
+* Navet,
+* veckoplanen,
+* stoppklumpningsmotorn,
+* ruttklumpningsmotorn,
+* Tidsmotorn,
+* Ruttoptimering Light,
+* statusmodellen,
+* uppgiftspaketet och dess metadata.
