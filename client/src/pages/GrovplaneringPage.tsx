@@ -298,6 +298,7 @@ export default function GrovplaneringPage() {
   const [selected, setSelected] = useState<Map<string, GridTaskRow>>(new Map());
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [openCluster, setOpenCluster] = useState<ClusterRef | null>(null);
+  const [mapFocusCluster, setMapFocusCluster] = useState<ClusterRef | null>(null);
 
   const [assignTarget, setAssignTarget] = useState<GridTaskRow[] | null>(null);
   const [revokeTarget, setRevokeTarget] = useState<
@@ -464,10 +465,13 @@ export default function GrovplaneringPage() {
     void refetchEngine();
   };
 
-  // Selektion.
+  // Selektion. I hierarki-läget används hierarchyTasks som underlag.
   const visibleRows = useMemo(
-    () => groups.flatMap((g) => g.tasks),
-    [groups],
+    () =>
+      listMode === "hierarki"
+        ? hierarchyTasks
+        : groups.flatMap((g) => g.tasks),
+    [listMode, hierarchyTasks, groups],
   );
   const allVisibleSelected =
     visibleRows.length > 0 && visibleRows.every((r) => selected.has(r.id));
@@ -832,7 +836,7 @@ export default function GrovplaneringPage() {
       ) : view === "klump" ? (
         <ClusterListView />
       ) : view === "karta" ? (
-        <ClusterMapView />
+        <ClusterMapView focusCluster={mapFocusCluster} />
       ) : (
         <>
       {/* Gruppering & Åtgärder */}
@@ -939,7 +943,7 @@ export default function GrovplaneringPage() {
               )}
               Exportera (Excel)
             </Button>
-            <DropdownMenu>
+            {listMode === "lista" && (<DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button
                   size="sm"
@@ -972,7 +976,7 @@ export default function GrovplaneringPage() {
                   </DropdownMenuItem>
                 ))}
               </DropdownMenuContent>
-            </DropdownMenu>
+            </DropdownMenu>)}
             <Button
               size="sm"
               variant="outline"
@@ -1031,7 +1035,16 @@ export default function GrovplaneringPage() {
             }
             onOpenCluster={setOpenCluster}
             onAssignCluster={(rows) => setAssignTarget(rows)}
-            onGoToMap={() => setView("karta")}
+            onRevokeCluster={(rows) =>
+              setRevokeTarget({
+                ids: rows.map((r) => r.id),
+                label: `${rows.length} uppgifter`,
+              })
+            }
+            onGoToMap={(ref) => {
+              if (ref) setMapFocusCluster(ref);
+              setView("karta");
+            }}
           />
         )
       ) : isLoading ? (

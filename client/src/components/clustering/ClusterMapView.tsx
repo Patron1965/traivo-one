@@ -2,7 +2,7 @@
  * Kartvy — ruttklumpar som cirklar + stoppklumpar som punktmarkörer.
  * Karta-flik i GrovplaneringPage. Execution_code styr cirkelfargen (ej status).
  */
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Circle, CircleMarker, Popup, Rectangle, useMapEvents } from "react-leaflet";
 import type * as L from "leaflet";
@@ -350,14 +350,21 @@ function MapMassBar({
 // Exporterat ClusterMapView
 // ============================================================================
 
-export function ClusterMapView() {
+export function ClusterMapView({ focusCluster }: { focusCluster?: ClusterRef | null }) {
   const [weekRef, setWeekRef] = useState(() => new Date());
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [executionCodeFilter, setExecutionCodeFilter] = useState<string>("all");
-  const [openCluster, setOpenCluster] = useState<ClusterRef | null>(null);
+  const [openCluster, setOpenCluster] = useState<ClusterRef | null>(focusCluster ?? null);
   const [drawMode, setDrawMode] = useState(false);
   const [selectionBounds, setSelectionBounds] = useState<[LatLngTuple, LatLngTuple] | null>(null);
   const [selectedMapIds, setSelectedMapIds] = useState<Set<string>>(new Set());
+
+  // Öppna panel automatiskt om ett kluster skickats in utifrån (från hierarki-vy).
+  useEffect(() => {
+    if (focusCluster != null) {
+      setOpenCluster(focusCluster);
+    }
+  }, [focusCluster]);
 
   const weekNum = getISOWeek(weekRef);
   const year = getYear(weekRef);

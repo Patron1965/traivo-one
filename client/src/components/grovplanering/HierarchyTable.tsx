@@ -53,8 +53,8 @@ import {
 } from "@/lib/rough-planning";
 import type { ClusterRef } from "@/components/clustering/ClusterSidePanel";
 
-/** 9 kolumner: chevron/check | Namn | Leveranstid | Uppgifter | Prod.tid | Värde | Marginal | Status | Åtgärder */
-const COL_COUNT = 9;
+/** 10 kolumner: chevron/check | Utförandetyp | Namn | Leveranstid | Uppgifter | Prod.tid | Värde | Marginal | Status | Åtgärder */
+const COL_COUNT = 10;
 
 interface HierarchyTableProps {
   tasks: GridTaskRow[];
@@ -64,7 +64,8 @@ interface HierarchyTableProps {
   onRevokeRow: (row: GridTaskRow) => void;
   onOpenCluster?: (ref: ClusterRef) => void;
   onAssignCluster?: (tasks: GridTaskRow[]) => void;
-  onGoToMap?: () => void;
+  onRevokeCluster?: (tasks: GridTaskRow[]) => void;
+  onGoToMap?: (clusterRef?: ClusterRef) => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -133,6 +134,7 @@ function RouteRow({
   onToggleExpand,
   onOpenCluster,
   onAssignCluster,
+  onRevokeCluster,
   onGoToMap,
 }: {
   route: HierarchyL1Route;
@@ -140,22 +142,22 @@ function RouteRow({
   onToggleExpand: (e: React.MouseEvent) => void;
   onOpenCluster?: (ref: ClusterRef) => void;
   onAssignCluster?: (tasks: GridTaskRow[]) => void;
-  onGoToMap?: () => void;
+  onRevokeCluster?: (tasks: GridTaskRow[]) => void;
+  onGoToMap?: (ref?: ClusterRef) => void;
 }) {
   const allTasks = route.stopClusters.flatMap((s) => s.tasks);
-  const hasAssigned = allTasks.some((t) => t.status === "tilldelad");
+  const assignedTasks = allTasks.filter((t) => t.status === "tilldelad");
+  const clusterRef: ClusterRef = { type: "route", id: route.id };
 
   const handleRowClick = () => {
-    if (onOpenCluster && route.id) {
-      onOpenCluster({ type: "route", id: route.id });
-    }
+    if (onOpenCluster) onOpenCluster(clusterRef);
   };
 
   return (
     <TableRow
       className={cn(
         "bg-muted/40 hover:bg-muted/60",
-        onOpenCluster && route.id && "cursor-pointer",
+        onOpenCluster && "cursor-pointer",
       )}
       data-testid={`row-route-${route.id}`}
       onClick={handleRowClick}
@@ -176,6 +178,8 @@ function RouteRow({
           )}
         </Button>
       </TableCell>
+      {/* Utförandetyp — L1 sammanfattar inte utförandetyp */}
+      <TableCell />
       <TableCell className="min-w-[200px]">
         <div className="flex items-center gap-2">
           <Route className="h-3.5 w-3.5 shrink-0 text-chart-4" />
@@ -216,20 +220,20 @@ function RouteRow({
                 Tilldela alla ({route.kpis.taskCount})…
               </DropdownMenuItem>
             )}
-            {hasAssigned && onAssignCluster && (
+            {onRevokeCluster && assignedTasks.length > 0 && (
               <DropdownMenuItem
-                onClick={() => onAssignCluster(allTasks.filter((t) => t.status === "tilldelad"))}
+                onClick={() => onRevokeCluster(assignedTasks)}
                 data-testid={`action-route-revoke-${route.id}`}
               >
                 <RotateCcw className="h-4 w-4" />
-                Återkalla tilldelade…
+                Återkalla tilldelade ({assignedTasks.length})…
               </DropdownMenuItem>
             )}
             {onGoToMap && (
               <>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
-                  onClick={onGoToMap}
+                  onClick={() => onGoToMap(clusterRef)}
                   data-testid={`action-route-map-${route.id}`}
                 >
                   <Map className="h-4 w-4" />
@@ -253,6 +257,7 @@ function StopRow({
   onToggleExpand,
   onOpenCluster,
   onAssignCluster,
+  onRevokeCluster,
   onGoToMap,
 }: {
   stop: HierarchyL2Stop;
@@ -260,14 +265,16 @@ function StopRow({
   onToggleExpand: (e: React.MouseEvent) => void;
   onOpenCluster?: (ref: ClusterRef) => void;
   onAssignCluster?: (tasks: GridTaskRow[]) => void;
-  onGoToMap?: () => void;
+  onRevokeCluster?: (tasks: GridTaskRow[]) => void;
+  onGoToMap?: (ref?: ClusterRef) => void;
 }) {
-  const hasAssigned = stop.tasks.some((t) => t.status === "tilldelad");
+  const assignedTasks = stop.tasks.filter((t) => t.status === "tilldelad");
+  const clusterRef: ClusterRef | undefined = stop.id
+    ? { type: "stop", id: stop.id }
+    : undefined;
 
   const handleRowClick = () => {
-    if (stop.id && onOpenCluster) {
-      onOpenCluster({ type: "stop", id: stop.id });
-    }
+    if (stop.id && onOpenCluster) onOpenCluster({ type: "stop", id: stop.id });
   };
 
   return (
@@ -297,6 +304,8 @@ function StopRow({
           </Button>
         </div>
       </TableCell>
+      {/* Utförandetyp — L2 sammanfattar inte utförandetyp */}
+      <TableCell />
       <TableCell className="min-w-[200px]">
         <div className="flex items-center gap-2 pl-5">
           <MapPin className="h-3.5 w-3.5 shrink-0 text-chart-4" />
@@ -338,22 +347,20 @@ function StopRow({
                   Tilldela alla ({stop.kpis.taskCount})…
                 </DropdownMenuItem>
               )}
-              {hasAssigned && onAssignCluster && (
+              {onRevokeCluster && assignedTasks.length > 0 && (
                 <DropdownMenuItem
-                  onClick={() =>
-                    onAssignCluster(stop.tasks.filter((t) => t.status === "tilldelad"))
-                  }
+                  onClick={() => onRevokeCluster(assignedTasks)}
                   data-testid={`action-stop-revoke-${stop.id ?? "ungrouped"}`}
                 >
                   <RotateCcw className="h-4 w-4" />
-                  Återkalla tilldelade…
+                  Återkalla tilldelade ({assignedTasks.length})…
                 </DropdownMenuItem>
               )}
               {onGoToMap && (
                 <>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem
-                    onClick={onGoToMap}
+                    onClick={() => onGoToMap(clusterRef)}
                     data-testid={`action-stop-map-${stop.id ?? "ungrouped"}`}
                   >
                     <Map className="h-4 w-4" />
@@ -402,6 +409,10 @@ function TaskRow({
           onCheckedChange={() => onToggleRow(row)}
           data-testid={`check-hier-task-${row.id}`}
         />
+      </TableCell>
+      {/* Utförandetyp — L3 */}
+      <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
+        {row.executionCode ?? row.taskTypeLabel ?? "–"}
       </TableCell>
       <TableCell className="min-w-[220px]">
         <div className={indentPx}>
@@ -492,6 +503,7 @@ export function HierarchyTable({
   onRevokeRow,
   onOpenCluster,
   onAssignCluster,
+  onRevokeCluster,
   onGoToMap,
 }: HierarchyTableProps) {
   const { routes, unclusteredTasks } = useMemo(() => buildHierarchy(tasks), [tasks]);
@@ -542,6 +554,7 @@ export function HierarchyTable({
         <TableHeader>
           <TableRow>
             <TableHead className="w-9" />
+            <TableHead className="whitespace-nowrap">Utförandetyp</TableHead>
             <TableHead>Namn</TableHead>
             <TableHead className="whitespace-nowrap">Leveranstid</TableHead>
             <TableHead className="whitespace-nowrap text-right">Uppgifter</TableHead>
@@ -566,6 +579,7 @@ export function HierarchyTable({
                 onToggleExpand={(e) => toggleRoute(routeKey, e)}
                 onOpenCluster={onOpenCluster}
                 onAssignCluster={onAssignCluster}
+                onRevokeCluster={onRevokeCluster}
                 onGoToMap={onGoToMap}
               />,
               ...(routeExpanded
@@ -581,6 +595,7 @@ export function HierarchyTable({
                         onToggleExpand={(e) => toggleStop(stopKey, e)}
                         onOpenCluster={onOpenCluster}
                         onAssignCluster={onAssignCluster}
+                        onRevokeCluster={onRevokeCluster}
                         onGoToMap={onGoToMap}
                       />,
                       ...(stopExpanded
