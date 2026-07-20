@@ -893,6 +893,95 @@ export function registerClusteringRoutes(app: Express): void {
   );
 
   // -----------------------------------------------------------------------
+  // POST /api/clustering/bulk-assign
+  // Tilldela alla uppgifter i valda klumpar till ett team och en vecka.
+  // Används från kartvy (planerarläge) vid rektangelurval av klumpar.
+  // -----------------------------------------------------------------------
+  app.post(
+    "/api/clustering/bulk-assign",
+    requirePlanner,
+    asyncHandler(async (req, res) => {
+      const tenantId = getTenantIdWithFallback(req);
+      const schema = z.object({
+        routeClusterIds: z.array(z.string().min(1)).max(200).default([]),
+        stopClusterIds: z.array(z.string().min(1)).max(200).default([]),
+        teamId: z.string().min(1),
+        week: z.string().regex(/^\d{4}-W\d{2}$/, "Ogiltigt veckoformat (YYYY-Www)"),
+        kommentar: z.string().max(250).optional(),
+      });
+      const parsed = schema.parse(req.body);
+
+      const woIds = new Set<string>();
+
+      for (const clusterId of parsed.routeClusterIds) {
+        const cluster = await db.query.routeClusters.findFirst({
+          where: and(
+            eq(routeClusters.id, clusterId),
+            eq(routeClusters.tenantId, tenantId),
+          ),
+        });
+        if (!cluster) continue;
+        const members = await db
+          .select()
+          .from(routeClusterMemberships)
+          .where(
+            and(
+              eq(routeClusterMemberships.routeClusterId, clusterId),
+              isNull(routeClusterMemberships.removedAt),
+            ),
+          );
+        for (const m of members) {
+          if (m.taskTable === "work_orders") woIds.add(m.taskId);
+        }
+      }
+
+      for (const clusterId of parsed.stopClusterIds) {
+        const cluster = await db.query.stopClusters.findFirst({
+          where: and(
+            eq(stopClusters.id, clusterId),
+            eq(stopClusters.tenantId, tenantId),
+          ),
+        });
+        if (!cluster) continue;
+        const members = await db
+          .select()
+          .from(stopClusterMemberships)
+          .where(
+            and(
+              eq(stopClusterMemberships.stopClusterId, clusterId),
+              isNull(stopClusterMemberships.removedAt),
+            ),
+          );
+        for (const m of members) {
+          if (m.taskTable === "work_orders") woIds.add(m.taskId);
+        }
+      }
+
+      const allIds = Array.from(woIds);
+      if (allIds.length === 0) {
+        return res.json({ updated: 0, total: 0 });
+      }
+
+      const returning = await db
+        .update(workOrders)
+        .set({
+          teamId: parsed.teamId,
+          roughPlannedWeek: parsed.week,
+          ...(parsed.kommentar ? { plannedNotes: parsed.kommentar } : {}),
+        })
+        .where(
+          and(
+            inArray(workOrders.id, allIds),
+            eq(workOrders.tenantId, tenantId),
+          ),
+        )
+        .returning({ id: workOrders.id });
+
+      res.json({ updated: returning.length, total: allIds.length });
+    }),
+  );
+
+  // -----------------------------------------------------------------------
   // GET /api/clustering/task-memberships?workOrderIds=id1,id2,...
   // Hämtar aktiva klump-memberships för en lista work order IDs (max 200).
   // Returnerar: { [workOrderId]: { stop: [...], route: [...] } }
