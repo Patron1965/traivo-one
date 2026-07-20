@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { format as formatDate, isSameWeek } from "date-fns";
 import {
   useQuery,
   useMutation,
@@ -291,6 +292,16 @@ export default function GrovplaneringPage() {
     const persisted = loadPersistedFilter();
     return persisted ? deriveApplied(persisted) : EMPTY_APPLIED;
   });
+
+  // Delad vecko-/dagkälla för kartvyn (MapTimeline/ClusterWeekSlider) och
+  // rutnätets periodfilter — lyft hit så veckobyte i en vy speglas i den andra
+  // och överlever flikbyten. Initieras från det persisterade filtrets ankare.
+  const [weekRef, setWeekRef] = useState<Date>(() => {
+    const persisted = loadPersistedFilter();
+    const d = persisted ? new Date(persisted.anchor) : new Date();
+    return isNaN(d.getTime()) ? new Date() : d;
+  });
+  const [selectedDay, setSelectedDay] = useState<Date>(() => new Date());
 
   const [advancedFilter, setAdvancedFilter] = useState<FilterGroup>(() => emptyFilterGroup());
   const { user: currentUser } = useAuth() as { user?: { role?: string | null } };
@@ -694,6 +705,31 @@ export default function GrovplaneringPage() {
     clearPersistedFilter();
   };
 
+  // Kartvyn byter vecka → spegla in i rutnätets periodfilter (ankare) när
+  // filtret står i veckoläge, så båda vyerna visar samma aktiva vecka.
+  const handleWeekChange = (d: Date) => {
+    setWeekRef(d);
+    if (draft.periodMode === "vecka" && !isSameWeek(d, new Date(draft.anchor), { weekStartsOn: 1 })) {
+      // Lokal datumformattering — toISOString() är UTC och kan skifta
+      // måndag 00:00 (CET/CEST) till föregående dag/vecka.
+      const nextDraft = { ...draft, anchor: formatDate(d, "yyyy-MM-dd") };
+      setDraft(nextDraft);
+      setApplied(deriveApplied(nextDraft));
+      setOffset(0);
+      persistFilter(nextDraft);
+    }
+  };
+
+  // Rutnätets periodankare byter vecka → spegla in i kartvyns vecka.
+  useEffect(() => {
+    if (draft.periodMode !== "vecka") return;
+    const anchorDate = new Date(draft.anchor);
+    if (isNaN(anchorDate.getTime())) return;
+    setWeekRef((prev) =>
+      isSameWeek(prev, anchorDate, { weekStartsOn: 1 }) ? prev : anchorDate,
+    );
+  }, [draft.anchor, draft.periodMode]);
+
   // Återställ sida vid grupperings-/sidstorleksbyte.
   useEffect(() => {
     setOffset(0);
@@ -884,7 +920,13 @@ export default function GrovplaneringPage() {
       ) : view === "klump" ? (
         <ClusterListView />
       ) : view === "karta" ? (
-        <ClusterMapView focusCluster={mapFocusCluster} />
+        <ClusterMapView
+          focusCluster={mapFocusCluster}
+          weekRef={weekRef}
+          onWeekChange={handleWeekChange}
+          selectedDay={selectedDay}
+          onDayChange={setSelectedDay}
+        />
       ) : (
         <>
       {/* Gruppering & Åtgärder */}

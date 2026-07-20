@@ -542,12 +542,24 @@ function ModeToggle({
 // Exporterat ClusterMapView
 // ============================================================================
 
-export function ClusterMapView({ focusCluster }: { focusCluster?: ClusterRef | null }) {
+interface ClusterMapViewProps {
+  focusCluster?: ClusterRef | null;
+  /** Delad vecko-/dagkälla (lyft till GrovplaneringPage, Task: synk karta ↔ rutnät). */
+  weekRef: Date;
+  onWeekChange: (d: Date) => void;
+  selectedDay: Date;
+  onDayChange: (d: Date) => void;
+}
+
+export function ClusterMapView({
+  focusCluster,
+  weekRef,
+  onWeekChange: setWeekRef,
+  selectedDay,
+  onDayChange: setSelectedDay,
+}: ClusterMapViewProps) {
   const { user: currentUser } = useAuth() as { user?: { role?: string | null } };
   const isPlanner = ["owner", "admin", "planner"].includes(currentUser?.role ?? "");
-
-  const [weekRef, setWeekRef] = useState(() => new Date());
-  const [selectedDay, setSelectedDay] = useState(() => new Date());
   const [mapMode, setMapMode] = useState<"planera" | "utfor">(() => {
     try {
       return (localStorage.getItem("grovplanering.mapMode") as "planera" | "utfor") ?? (isPlanner ? "planera" : "utfor");
