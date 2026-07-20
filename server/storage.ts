@@ -378,19 +378,24 @@ function nearestDistrictLabel(
 }
 
 // Task #1292: Live-position per aktivt fältteam (utförarläge på kartan).
+export interface TeamMemberLivePosition {
+  resourceId: string;
+  resourceName: string;
+  latitude: number;
+  longitude: number;
+  status: string | null;
+  lastUpdate: string;
+}
+
 export interface TeamLivePosition {
   teamId: string;
   teamName: string;
   teamColor: string | null;
   resourceIds: string[];
-  position: {
-    resourceId: string;
-    resourceName: string;
-    latitude: number;
-    longitude: number;
-    status: string | null;
-    lastUpdate: string;
-  } | null;
+  /** Senast rapporterade positionen bland teamets medlemmar (back-compat). */
+  position: TeamMemberLivePosition | null;
+  /** Alla medlemmar med känd position (Task #1299: expanderad medlemsvy). */
+  memberPositions: TeamMemberLivePosition[];
 }
 
 // Task #1298: Dagens färdväg (breadcrumb-spår) per team i utförarläget.
@@ -6907,22 +6912,24 @@ export class DatabaseStorage implements IStorage {
     for (const r of rows) {
       let entry = byTeam.get(r.teamId);
       if (!entry) {
-        entry = { teamId: r.teamId, teamName: r.teamName, teamColor: r.teamColor ?? null, resourceIds: [], position: null };
+        entry = { teamId: r.teamId, teamName: r.teamName, teamColor: r.teamColor ?? null, resourceIds: [], position: null, memberPositions: [] };
         byTeam.set(r.teamId, entry);
       }
       entry.resourceIds.push(r.resourceId);
       if (r.latitude != null && r.longitude != null && r.lastPositionUpdate != null) {
+        const memberPos = {
+          resourceId: r.resourceId,
+          resourceName: r.resourceName,
+          latitude: r.latitude,
+          longitude: r.longitude,
+          status: r.trackingStatus ?? null,
+          lastUpdate: new Date(r.lastPositionUpdate).toISOString(),
+        };
+        entry.memberPositions.push(memberPos);
         const ts = new Date(r.lastPositionUpdate).getTime();
         const prev = entry.position;
         if (!prev || ts > new Date(prev.lastUpdate).getTime()) {
-          entry.position = {
-            resourceId: r.resourceId,
-            resourceName: r.resourceName,
-            latitude: r.latitude,
-            longitude: r.longitude,
-            status: r.trackingStatus ?? null,
-            lastUpdate: new Date(r.lastPositionUpdate).toISOString(),
-          };
+          entry.position = memberPos;
         }
       }
     }

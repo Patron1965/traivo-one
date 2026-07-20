@@ -28,19 +28,24 @@ import type { GridResponse, GridTaskRow } from "@/lib/rough-planning";
 // Typer (speglar server/storage.ts TeamLivePosition)
 // ---------------------------------------------------------------------------
 
+export interface MemberLivePositionDto {
+  resourceId: string;
+  resourceName: string;
+  latitude: number;
+  longitude: number;
+  status: string | null;
+  lastUpdate: string;
+}
+
 export interface TeamLivePositionDto {
   teamId: string;
   teamName: string;
   teamColor: string | null;
   resourceIds: string[];
-  position: {
-    resourceId: string;
-    resourceName: string;
-    latitude: number;
-    longitude: number;
-    status: string | null;
-    lastUpdate: string;
-  } | null;
+  /** Senast rapporterade positionen bland teamets medlemmar. */
+  position: MemberLivePositionDto | null;
+  /** Task #1299: alla medlemmar med känd position (expanderad vy). */
+  memberPositions: MemberLivePositionDto[];
 }
 
 const STATUS_LABELS: Record<string, string> = {
@@ -71,15 +76,39 @@ export function mergeApiTeams(
   const prevById = new Map(prev.map((t) => [t.teamId, t]));
   return incoming.map((t) => {
     const existing = prevById.get(t.teamId);
+    // Server-svar kan sakna memberPositions (äldre cache) — normalisera.
+    const incomingMembers = t.memberPositions ?? [];
+    // Per medlem: behåll den nyare av befintlig (WS) och inkommande (API).
+    const existingMembers = new Map(
+      (existing?.memberPositions ?? []).map((m) => [m.resourceId, m]),
+    );
+    const mergedMembers = incomingMembers.map((m) => {
+      const prevM = existingMembers.get(m.resourceId);
+      if (
+        prevM &&
+        new Date(prevM.lastUpdate).getTime() > new Date(m.lastUpdate).getTime()
+      ) {
+        return prevM;
+      }
+      return m;
+    });
+    // Medlemmar som bara finns i WS-state (API:t hann inte se dem) behålls
+    // om de fortfarande är medlemmar i teamet.
+    for (const [rid, prevM] of Array.from(existingMembers.entries())) {
+      if (!mergedMembers.some((m) => m.resourceId === rid) && t.resourceIds.includes(rid)) {
+        mergedMembers.push(prevM);
+      }
+    }
+    let position = t.position;
     if (
       existing?.position &&
       (!t.position ||
         new Date(existing.position.lastUpdate).getTime() >
           new Date(t.position.lastUpdate).getTime())
     ) {
-      return { ...t, position: existing.position };
+      position = existing.position;
     }
-    return t;
+    return { ...t, position, memberPositions: mergedMembers };
   });
 }
 
@@ -109,28 +138,39 @@ export function applyPositionUpdate(
   return teams.map((t) => {
     if (t.teamId !== teamId) return t;
     const incomingTs = msg.timestamp ? new Date(msg.timestamp).getTime() : Date.now();
-    if (
-      t.position &&
-      t.position.resourceId !== msg.resourceId &&
-      new Date(t.position.lastUpdate).getTime() > incomingTs
-    ) {
+    const lastUpdate = msg.timestamp ?? new Date().toISOString();
+
+    // Task #1299: uppdatera alltid rätt medlem i memberPositions.
+    const members = t.memberPositions ?? [];
+    const prevMember = members.find((m) => m.resourceId === msg.resourceId);
+    const memberPos: MemberLivePositionDto = {
+      resourceId: msg.resourceId!,
+      resourceName:
+        prevMember?.resourceName || (msg.resourceName ?? ""),
+      latitude: msg.latitude!,
+      longitude: msg.longitude!,
+      status: msg.status ?? prevMember?.status ?? null,
+      lastUpdate,
+    };
+    // Ignorera äldre händelse än medlemmens befintliga position.
+    if (prevMember && new Date(prevMember.lastUpdate).getTime() > incomingTs) {
       return t;
     }
-    const prevPos = t.position;
-    return {
-      ...t,
-      position: {
-        resourceId: msg.resourceId!,
-        resourceName:
-          prevPos && prevPos.resourceId === msg.resourceId
-            ? prevPos.resourceName
-            : (msg.resourceName ?? prevPos?.resourceName ?? ""),
-        latitude: msg.latitude!,
-        longitude: msg.longitude!,
-        status: msg.status ?? prevPos?.status ?? null,
-        lastUpdate: msg.timestamp ?? new Date().toISOString(),
-      },
-    };
+    const memberPositions = prevMember
+      ? members.map((m) => (m.resourceId === msg.resourceId ? memberPos : m))
+      : [...members, memberPos];
+
+    // Team-positionen (senast rapporterande) uppdateras bara om händelsen
+    // är nyare än nuvarande teamposition.
+    let position = t.position;
+    if (
+      !position ||
+      position.resourceId === msg.resourceId ||
+      new Date(position.lastUpdate).getTime() <= incomingTs
+    ) {
+      position = memberPos;
+    }
+    return { ...t, position, memberPositions };
   });
 }
 
@@ -230,6 +270,17 @@ function teamInitials(name: string): string {
   return (parts[0][0] + parts[1][0]).toUpperCase();
 }
 
+// Task #1299: mindre prick-markör för en enskild teammedlem (expanderad vy).
+function memberDotIcon(color: string, stale: boolean): L.DivIcon {
+  const size = 18;
+  return L.divIcon({
+    className: "custom-marker",
+    html: `<div style="width:${size}px;height:${size}px;background:${color};border-radius:50%;border:2px solid white;box-shadow:0 1px 4px rgba(0,0,0,0.4);${stale ? "opacity:0.55;" : ""}"></div>`,
+    iconSize: [size, size],
+    iconAnchor: [size / 2, size / 2],
+  });
+}
+
 export function TeamLiveMarkers({
   teams,
   onOpenTeam,
@@ -242,19 +293,39 @@ export function TeamLiveMarkers({
     [teams],
   );
 
+  // Task #1299: team vars medlemsmarkörer är expanderade.
+  const [expandedTeamIds, setExpandedTeamIds] = useState<Set<string>>(new Set());
+
+  const toggleExpanded = (teamId: string) => {
+    setExpandedTeamIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(teamId)) next.delete(teamId);
+      else next.add(teamId);
+      return next;
+    });
+  };
+
   return (
     <>
       {positioned.map((t) => {
         const p = t.position!;
         const stale = isStalePosition(p.lastUpdate);
         const color = t.teamColor ?? "#4A9B9B";
+        const members = t.memberPositions ?? [];
+        const expandable = members.length > 1;
+        const expanded = expandable && expandedTeamIds.has(t.teamId);
         return (
           <Marker
             key={t.teamId}
             position={[p.latitude, p.longitude]}
             icon={teamPulseIcon(color, teamInitials(t.teamName), stale)}
             zIndexOffset={1000}
-            eventHandlers={{ click: () => onOpenTeam(t.teamId) }}
+            eventHandlers={{
+              click: () => {
+                if (expandable) toggleExpanded(t.teamId);
+                onOpenTeam(t.teamId);
+              },
+            }}
           >
             <Popup>
               <div className="text-sm space-y-1 min-w-[160px]">
@@ -268,11 +339,52 @@ export function TeamLiveMarkers({
                   {format(new Date(p.lastUpdate), "HH:mm", { locale: svLocale })}
                   {stale ? " (inaktuell)" : ""}
                 </div>
+                {expandable && (
+                  <div className="text-xs text-muted-foreground">
+                    {members.length} medlemmar med position — klicka på markören
+                    för att {expanded ? "dölja" : "visa"} alla
+                  </div>
+                )}
               </div>
             </Popup>
           </Marker>
         );
       })}
+      {/* Task #1299: individuella medlemsmarkörer för expanderade team */}
+      {positioned
+        .filter((t) => expandedTeamIds.has(t.teamId) && (t.memberPositions ?? []).length > 1)
+        .flatMap((t) => {
+          const color = t.teamColor ?? "#4A9B9B";
+          return (t.memberPositions ?? [])
+            // Den senast rapporterande visas redan som team-markör.
+            .filter((m) => m.resourceId !== t.position!.resourceId)
+            .map((m) => {
+              const stale = isStalePosition(m.lastUpdate);
+              return (
+                <Marker
+                  key={`${t.teamId}-${m.resourceId}`}
+                  position={[m.latitude, m.longitude]}
+                  icon={memberDotIcon(color, stale)}
+                  zIndexOffset={900}
+                >
+                  <Popup>
+                    <div className="text-sm space-y-1 min-w-[140px]">
+                      <div className="font-semibold">{m.resourceName}</div>
+                      <div className="text-xs text-muted-foreground">
+                        {t.teamName}
+                        {m.status ? ` · ${STATUS_LABELS[m.status] ?? m.status}` : ""}
+                      </div>
+                      <div className="text-xs text-muted-foreground">
+                        Uppdaterad{" "}
+                        {format(new Date(m.lastUpdate), "HH:mm", { locale: svLocale })}
+                        {stale ? " (inaktuell)" : ""}
+                      </div>
+                    </div>
+                  </Popup>
+                </Marker>
+              );
+            });
+        })}
     </>
   );
 }
