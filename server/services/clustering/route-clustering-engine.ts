@@ -32,7 +32,7 @@ import {
   type RouteCluster,
   type WorkOrder,
 } from "@shared/schema";
-import { eq, and, isNull, notInArray, inArray, gte, sql } from "drizzle-orm";
+import { eq, and, isNull, notInArray, inArray, gte, lte, or, sql } from "drizzle-orm";
 import { haversineDistanceKm } from "../../distance-matrix-service";
 import { getMapProvider } from "../mapProvider";
 
@@ -301,7 +301,19 @@ export function scoreDay(
     return cStart <= dayEnd && dayStart <= cEnd;
   });
 
+  if (relevant.length === 0) return 0;
+
   let score = 0;
+
+  // weekloadBalance: straffar för många klumpar på samma dag
+  score += relevant.length * weights.weekloadBalance;
+
+  // executionCodeMatch: bonus om alla klumpar på dagen har SAMMA utförandekod
+  const codes = new Set(relevant.map((c) => c.executionCode));
+  if (codes.size === 1) {
+    score += weights.executionCodeMatch;
+  }
+
   for (const c of relevant) {
     const workMin = c.calculatedWorkMinutes ?? 0;
     const travelMin = c.calculatedTravelMinutes ?? 0;
@@ -309,10 +321,17 @@ export function scoreDay(
     // Membercount approximation from stored work minutes (best-effort utan DB-query)
     const stopCountApprox = Math.max(1, Math.round(workMin / 60));
 
+    // deliveryPriority: high = tidskritisk = bonus; low = låg prio
+    const priorityFactor =
+      c.precisionLevel === "high" ? 1.0 :
+      c.precisionLevel === "medium" ? 0.5 :
+      0.0;
+
     score +=
       stopCountApprox * weights.stopCount +
       workMin * weights.productionMinutes +
-      travelMin * weights.travelMinutes;
+      travelMin * weights.travelMinutes +
+      priorityFactor * weights.deliveryPriority;
   }
 
   return score;
@@ -375,23 +394,26 @@ export async function analyzeTask(
     reasons.push("time");
 
     // Villkor 3: Geo inom radiusKm
+    // Strikt regel: uppgift utan geo kan INTE gå med i en geo-bunden klump.
     let distanceKm: number | null = null;
-    if (
-      taskGeo.latitude != null &&
-      taskGeo.longitude != null &&
-      cluster.centerLatitude != null &&
-      cluster.centerLongitude != null
-    ) {
+    const taskHasGeo = taskGeo.latitude != null && taskGeo.longitude != null;
+    const clusterHasGeo =
+      cluster.centerLatitude != null && cluster.centerLongitude != null;
+
+    if (taskHasGeo && clusterHasGeo) {
       distanceKm = haversineDistanceKm(
-        taskGeo.latitude,
-        taskGeo.longitude,
-        cluster.centerLatitude,
-        cluster.centerLongitude,
+        taskGeo.latitude!,
+        taskGeo.longitude!,
+        cluster.centerLatitude!,
+        cluster.centerLongitude!,
       );
       if (distanceKm > config.radiusKm) continue;
       reasons.push("geo");
+    } else if (!taskHasGeo && clusterHasGeo) {
+      // Uppgift saknar position → kan ej validera geo mot klumpens radie → hoppa
+      continue;
     } else {
-      // Ingen geo på uppgift eller klump → hoppa över geo-villkoret
+      // Klumpen har ingen centroid (alla utan geo) → geo-villkoret ej tillämpbart
       reasons.push("geo");
     }
 
@@ -422,18 +444,28 @@ export async function analyzeTask(
 
 /**
  * Fullständig rullande omräkning för en tenant.
- * Berör ENBART `active`-klumpar.
+ * Berör ENBART `active`-klumpar inom det angivna tidsbandet.
  * `confirmed` och `locked` klumpar hoppas alltid över.
+ *
+ * @param horizonDays  Övre gräns för tidsband (default: config.horizonDays).
+ * @param minHorizonDays  Undre gräns för tidsband (default: 0 = inga near-term klumpar
+ *                        undantas). Skicka 30 för daglig körning för att slippa
+ *                        röra klumpar som klusteringskön hanterar.
  */
 export async function runRollingAnalysis(
   tenantId: string,
   horizonDays?: number,
+  minHorizonDays = 0,
 ): Promise<RouteClustering> {
   const t0 = Date.now();
   const config = await getRouteConfig(tenantId);
   const effectiveHorizon = horizonDays ?? config.horizonDays;
   const now = new Date();
   const horizon = new Date(now.getTime() + effectiveHorizon * 86_400_000);
+  const bandStart =
+    minHorizonDays > 0
+      ? new Date(now.getTime() + minHorizonDays * 86_400_000)
+      : new Date(0);
 
   const result: RouteClustering = {
     created: 0,
@@ -446,7 +478,8 @@ export async function runRollingAnalysis(
     durationMs: 0,
   };
 
-  // 1. Lös upp ENBART active-klumpar
+  // 1. Lös upp ENBART active-klumpar inom tidsbandet.
+  //    Klumpar utanför bandet (t.ex. lång horisont vid daglig körning) rörs ej.
   const activeClusters = await db
     .select({ id: routeClusters.id })
     .from(routeClusters)
@@ -454,6 +487,14 @@ export async function runRollingAnalysis(
       and(
         eq(routeClusters.tenantId, tenantId),
         eq(routeClusters.status, "active"),
+        // Inkludera bara klumpar vars planeringsperiod faller i vårt band
+        or(
+          isNull(routeClusters.earliestDeliveryAt),
+          and(
+            gte(routeClusters.earliestDeliveryAt, bandStart),
+            lte(routeClusters.earliestDeliveryAt, horizon),
+          ),
+        ),
       ),
     );
   const activeClusterIds = activeClusters.map((c) => c.id);
@@ -528,6 +569,9 @@ export async function runRollingAnalysis(
       const window = getEffectiveWindow(wo as WorkOrder);
       const taskEnd = window.end ?? window.start ?? null;
       if (taskEnd && taskEnd > horizon) continue;
+      // Undanta uppgifter som faller UNDER det undre bandet (hanteras av annan körning)
+      const taskStart = window.start ?? null;
+      if (taskStart && minHorizonDays > 0 && taskStart < bandStart) continue;
 
       const geo: TaskGeo = {
         latitude: wo.taskLatitude ?? null,
@@ -574,21 +618,24 @@ export async function runRollingAnalysis(
       if (!windowsOverlap(task.window, bucket.window)) continue;
 
       // Villkor 3: Geo inom radiusKm
-      let geoOk = true;
-      if (
-        bucket.centroid &&
-        task.geo.latitude != null &&
-        task.geo.longitude != null
-      ) {
+      // Strikt: uppgift utan geo kan INTE gå med i en geo-bunden bucket.
+      const taskHasGeo =
+        task.geo.latitude != null && task.geo.longitude != null;
+      const bucketHasGeo = bucket.centroid != null;
+
+      if (taskHasGeo && bucketHasGeo) {
         const dist = haversineDistanceKm(
-          bucket.centroid.lat,
-          bucket.centroid.lng,
-          task.geo.latitude,
-          task.geo.longitude,
+          bucket.centroid!.lat,
+          bucket.centroid!.lng,
+          task.geo.latitude!,
+          task.geo.longitude!,
         );
-        if (dist > config.radiusKm) geoOk = false;
+        if (dist > config.radiusKm) continue;
+      } else if (!taskHasGeo && bucketHasGeo) {
+        // Uppgift saknar position → kan ej validera radie → hoppa
+        continue;
       }
-      if (!geoOk) continue;
+      // Båda saknar geo → geo-villkor ej tillämpbart → OK
 
       // Villkor 4: Kapacitetskontroll
       const newWork = bucket.totalWorkMinutes + (task.estimatedDurationMinutes ?? 0);

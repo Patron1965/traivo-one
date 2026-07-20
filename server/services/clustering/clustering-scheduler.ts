@@ -15,7 +15,8 @@
  * Notering: startar i server/routes.ts via clusteringScheduler.start().
  */
 import { db } from "../../db";
-import { taskEvents, tenants } from "@shared/schema";
+import { eq, and, isNull } from "drizzle-orm";
+import { taskEvents, tenants, workOrders } from "@shared/schema";
 import { runRollingAnalysis, getAllTenantIds } from "./route-clustering-engine";
 
 const TICK_MS = 60 * 60 * 1000; // En gång per timme
@@ -74,15 +75,40 @@ async function logSchedulerEvent(
   }
 }
 
+async function getRepresentativeWoId(tenantId: string): Promise<string | null> {
+  const rows = await db
+    .select({ id: workOrders.id })
+    .from(workOrders)
+    .where(
+      and(
+        eq(workOrders.tenantId, tenantId),
+        isNull(workOrders.deletedAt),
+      ),
+    )
+    .limit(1);
+  return rows[0]?.id ?? null;
+}
+
 async function runDailyAnalysis(): Promise<void> {
   console.log("[clustering-scheduler] Running daily mid-term analysis (30–90d)");
   const tenantIds = await getAllTenantIds();
   for (const tenantId of tenantIds) {
     try {
-      const result = await runRollingAnalysis(tenantId, 90);
+      // Daglig körning: 30–90d tidsbandet (minHorizonDays=30 sparar near-term klumpar)
+      const result = await runRollingAnalysis(tenantId, 90, 30);
       console.log(
         `[clustering-scheduler] daily tenant=${tenantId} created=${result.created} dissolved=${result.dissolved} assigned=${result.assigned} durationMs=${result.durationMs}`,
       );
+      const woId = await getRepresentativeWoId(tenantId);
+      await logSchedulerEvent(tenantId, woId, "route_cluster_scheduler_daily_run", {
+        horizon: 90,
+        minHorizon: 30,
+        created: result.created,
+        dissolved: result.dissolved,
+        assigned: result.assigned,
+        errors: result.errors.length,
+        durationMs: result.durationMs,
+      });
     } catch (err) {
       console.error(
         `[clustering-scheduler] daily error tenant=${tenantId}:`,
@@ -97,10 +123,21 @@ async function runWeeklyAnalysis(): Promise<void> {
   const tenantIds = await getAllTenantIds();
   for (const tenantId of tenantIds) {
     try {
-      const result = await runRollingAnalysis(tenantId, 365);
+      // Veckovis körning: 90–365d tidsbandet (minHorizonDays=90 sparar dagliga klumpar)
+      const result = await runRollingAnalysis(tenantId, 365, 90);
       console.log(
         `[clustering-scheduler] weekly tenant=${tenantId} created=${result.created} dissolved=${result.dissolved} assigned=${result.assigned} durationMs=${result.durationMs}`,
       );
+      const woId = await getRepresentativeWoId(tenantId);
+      await logSchedulerEvent(tenantId, woId, "route_cluster_scheduler_weekly_run", {
+        horizon: 365,
+        minHorizon: 90,
+        created: result.created,
+        dissolved: result.dissolved,
+        assigned: result.assigned,
+        errors: result.errors.length,
+        durationMs: result.durationMs,
+      });
     } catch (err) {
       console.error(
         `[clustering-scheduler] weekly error tenant=${tenantId}:`,

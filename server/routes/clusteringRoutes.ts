@@ -464,7 +464,9 @@ export function registerClusteringRoutes(app: Express): void {
 
   // -----------------------------------------------------------------------
   // GET /api/clustering/route-clusters
-  // Lista ruttklumpar för tenant. Filter: ?status=, ?week=, ?executionCode=, ?city=
+  // Lista ruttklumpar för tenant.
+  // Filter: ?status=, ?week=<num>, ?executionCode=, ?city=
+  //   ?week=43  → vecka 43 (ISO); returnerar klumpar vars period överlappar veckan
   // -----------------------------------------------------------------------
   app.get(
     "/api/clustering/route-clusters",
@@ -473,6 +475,19 @@ export function registerClusteringRoutes(app: Express): void {
       const statusFilter = (req.query.status as string) || null;
       const executionCodeFilter = (req.query.executionCode as string) || null;
       const cityFilter = (req.query.city as string) || null;
+
+      // Veckofiltret: parsera "43" eller "v.43" → ISO vecka som datum-intervall
+      const weekParam = (req.query.week as string) || null;
+      let weekStart: Date | null = null;
+      let weekEnd: Date | null = null;
+      if (weekParam) {
+        const weekNum = parseInt(weekParam.replace(/^v\./, ""), 10);
+        if (!isNaN(weekNum)) {
+          const year = new Date().getFullYear();
+          weekStart = isoWeekStart(year, weekNum);
+          weekEnd = new Date(weekStart.getTime() + 7 * 86_400_000 - 1);
+        }
+      }
 
       const conditions = [eq(routeClusters.tenantId, tenantId)];
       if (statusFilter) conditions.push(eq(routeClusters.status, statusFilter));
@@ -504,24 +519,37 @@ export function registerClusteringRoutes(app: Express): void {
         countMap.set(row.routeClusterId, Number(row.cnt));
       }
 
-      const result = rows
-        .filter((c) => !cityFilter || c.displayName?.includes(cityFilter))
-        .map((c) => ({
-          ...c,
-          taskCount: countMap.get(c.id) ?? 0,
-          period: c.earliestDeliveryAt
-            ? (() => {
-                const start = new Date(c.earliestDeliveryAt);
-                const end = c.latestDeliveryAt
-                  ? new Date(c.latestDeliveryAt)
-                  : null;
-                if (!end) return formatWeekLabel(start);
-                const wS = formatWeekLabel(start);
-                const wE = formatWeekLabel(end);
-                return wS === wE ? wS : `${wS}–${wE}`;
-              })()
-            : null,
-        }));
+      const filtered = rows.filter((c) => {
+        if (cityFilter && !c.displayName?.includes(cityFilter)) return false;
+        if (weekStart && weekEnd) {
+          // Klumpens period måste överlappa [weekStart, weekEnd]
+          const cS = c.earliestDeliveryAt
+            ? new Date(c.earliestDeliveryAt)
+            : new Date(0);
+          const cE = c.latestDeliveryAt
+            ? new Date(c.latestDeliveryAt)
+            : new Date(8640000000000000);
+          if (cS > weekEnd || cE < weekStart) return false;
+        }
+        return true;
+      });
+
+      const result = filtered.map((c) => ({
+        ...c,
+        taskCount: countMap.get(c.id) ?? 0,
+        period: c.earliestDeliveryAt
+          ? (() => {
+              const start = new Date(c.earliestDeliveryAt);
+              const end = c.latestDeliveryAt
+                ? new Date(c.latestDeliveryAt)
+                : null;
+              if (!end) return formatWeekLabel(start);
+              const wS = formatWeekLabel(start);
+              const wE = formatWeekLabel(end);
+              return wS === wE ? wS : `${wS}–${wE}`;
+            })()
+          : null,
+      }));
 
       res.json(result);
     }),
@@ -868,6 +896,18 @@ export function registerClusteringRoutes(app: Express): void {
 // ---------------------------------------------------------------------------
 // Hjälpfunktioner
 // ---------------------------------------------------------------------------
+
+/** Returnerar Monday 00:00:00 för ISO-vecka weekNum i år year. */
+function isoWeekStart(year: number, weekNum: number): Date {
+  // Jan 4 är alltid i vecka 1 (ISO 8601)
+  const jan4 = new Date(year, 0, 4);
+  const mondayWeek1 = new Date(jan4);
+  mondayWeek1.setDate(jan4.getDate() - ((jan4.getDay() + 6) % 7));
+  const start = new Date(mondayWeek1);
+  start.setDate(mondayWeek1.getDate() + (weekNum - 1) * 7);
+  start.setHours(0, 0, 0, 0);
+  return start;
+}
 
 function formatWeekLabel(date: Date): string {
   const d = new Date(date);

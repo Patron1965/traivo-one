@@ -27,6 +27,8 @@ import { getObjectMetadataImages } from "../services/object-system-metadata";
 import { logWorkOrderTransition, getTaskEvents } from "../services/task-event-log";
 import { shouldRecluster } from "../services/clustering/triggers";
 import { clusteringQueue } from "../services/clustering/clustering-queue";
+import { analyzeTask as analyzeRouteTask } from "../services/clustering/route-clustering-engine";
+import { routeClusters } from "@shared/schema";
 import { distributeActualTime, adjustActualTimeDistribution, ActualTimeDistributionError } from "../services/actual-time-distribution";
 import { resolveStopPositions } from "../services/stop-positions";
 
@@ -301,6 +303,29 @@ app.get("/api/work-orders/:id", asyncHandler(async (req, res) => {
 
   const cancellation = (verified.metadata as any)?.cancellation ?? null;
 
+  // Ruttklumpsdata: hämta klump-metadata och analysera mot befintliga klumpar.
+  let routeClusterName: string | null = null;
+  let routeClusterPrecision: string | null = null;
+  let routeClusterOptions: unknown[] = [];
+
+  if (verified.routeClusterId) {
+    const rc = await db.query.routeClusters.findFirst({
+      where: eq(routeClusters.id, verified.routeClusterId),
+      columns: { displayName: true, precisionLevel: true },
+    });
+    if (rc) {
+      routeClusterName = rc.displayName;
+      routeClusterPrecision = rc.precisionLevel;
+    }
+  }
+
+  // analyzeRouteTask är skrivskyddad — kör alltid för att ge planeraren alternativ
+  try {
+    routeClusterOptions = await analyzeRouteTask(verified.id, tenantId);
+  } catch {
+    // best-effort — bryt inte WO-GET om klustringsanalysen misslyckas
+  }
+
   res.json({
     ...verified,
     customerName: customer?.name,
@@ -310,6 +335,9 @@ app.get("/api/work-orders/:id", asyncHandler(async (req, res) => {
     objectAddress: object?.address,
     isCancelled: !!verified.deletedAt,
     cancellation,
+    routeClusterName,
+    routeClusterPrecision,
+    routeClusterOptions,
   });
 }));
 
