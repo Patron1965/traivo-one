@@ -11,6 +11,7 @@ import {
   ChevronRight,
   Columns3,
   Download,
+  FileText,
   Loader2,
   RotateCcw,
   Users,
@@ -597,6 +598,53 @@ export default function GrovplaneringPage() {
     }
   };
 
+  const exportToCsv = async (scope: "all" | "selected" = "all") => {
+    setExporting(true);
+    try {
+      const p = buildFilterParams(applied, groupBy);
+      if (scope === "selected" && selected.size > 0) {
+        p.set("workOrderIds", Array.from(selected.keys()).join(","));
+      }
+      const res = await fetch(`/api/rough-planning/export-csv?${p.toString()}`, {
+        credentials: "include",
+      });
+      if (!res.ok) {
+        const errText = await res.text().catch(() => "Okänt fel");
+        throw new Error(errText);
+      }
+      const truncated = res.headers.get("X-Truncated") === "true";
+      const rowCount = res.headers.get("X-Row-Count");
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      // Bevara filnamn från servern (inkl. filter-suffix) om tillgängligt
+      const cd = res.headers.get("Content-Disposition") ?? "";
+      const cdMatch = cd.match(/filename="([^"]+)"/);
+      const datestamp = new Date().toISOString().slice(0, 10);
+      a.download = cdMatch ? cdMatch[1] : `navet-export-${datestamp}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      if (truncated && rowCount) {
+        toast({
+          title: "Export trunkerad",
+          description: `Filen innehåller ${rowCount} rader (max 15 000). Förfina filtret för fullständig export.`,
+          variant: "default",
+        });
+      }
+    } catch (err) {
+      toast({
+        title: "Kunde inte exportera CSV",
+        description: err instanceof Error ? err.message : undefined,
+        variant: "destructive",
+      });
+    } finally {
+      setExporting(false);
+    }
+  };
+
   const toggleCollapse = (key: string) =>
     setCollapsed((prev) => {
       const next = new Set(prev);
@@ -929,20 +977,58 @@ export default function GrovplaneringPage() {
               <Columns3 className="h-4 w-4" />
               Kolumner ({exportColumns.length})
             </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={exporting || total === 0 || exportColumns.length === 0}
-              onClick={exportToExcel}
-              data-testid="button-export-excel"
-            >
-              {exporting ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <Download className="h-4 w-4" />
-              )}
-              Exportera (Excel)
-            </Button>
+            <DropdownMenu modal={false}>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={exporting || total === 0}
+                  data-testid="button-export-dropdown"
+                >
+                  {exporting ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Download className="h-4 w-4" />
+                  )}
+                  Exportera
+                  <ChevronDown className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-64">
+                <DropdownMenuItem
+                  onClick={exportToExcel}
+                  disabled={exporting || exportColumns.length === 0}
+                  data-testid="menuitem-export-excel"
+                >
+                  <Download className="h-4 w-4 shrink-0" />
+                  <div className="flex flex-col">
+                    <span>Synliga kolumner (Excel)</span>
+                    <span className="text-xs text-muted-foreground">
+                      {exportColumns.length} kolumner · ~{Math.min(total, 10000).toLocaleString("sv")} rader · max 10 000
+                    </span>
+                  </div>
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() => exportToCsv(selected.size > 0 ? "selected" : "all")}
+                  disabled={exporting}
+                  data-testid="menuitem-export-csv"
+                >
+                  <FileText className="h-4 w-4 shrink-0" />
+                  <div className="flex flex-col">
+                    <span>
+                      {selected.size > 0
+                        ? `Fullständig CSV (${selected.size.toLocaleString("sv")} markerade)`
+                        : "Fullständig CSV-export"}
+                    </span>
+                    <span className="text-xs text-muted-foreground">
+                      {selected.size > 0
+                        ? `${selected.size.toLocaleString("sv")} rader · 94+ fält + hierarki + metadata`
+                        : `~${total.toLocaleString("sv")} rader · 94+ fält + hierarki + metadata`}
+                    </span>
+                  </div>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
             {listMode === "lista" && (<DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button

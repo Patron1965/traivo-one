@@ -28,6 +28,11 @@ import {
   orderConcepts,
   stopClusters,
   routeClusters,
+  resources,
+  geographicDistricts,
+  taskDependencies,
+  metadataVarden,
+  metadataKatalog,
 } from "@shared/schema";
 import { haversineDistanceKm } from "./distance-matrix-service";
 
@@ -902,4 +907,576 @@ export async function buildGrovplaneringExport(
 
   const buf = await wb.xlsx.writeBuffer();
   return { buffer: Buffer.from(buf), truncated, rowCount };
+}
+
+// ---------------------------------------------------------------------------
+// Fullständig CSV-export (Task #1285) — ~94 fält per uppgift + hierarki.
+// Återanvänder buildConditions + uppgiftstyp-normalisering från buildOrderedGroups.
+// Stöder extra filter: workOrderIds (selektionsscope, max 1 000).
+// Formula-injection neutraliseras via safeCell på alla textfält (memory: csv-export-hardening).
+// ---------------------------------------------------------------------------
+
+export interface FullCsvFilters extends GridFilters {
+  workOrderIds?: string[];
+}
+
+// RFC 4180-kompatibel fältescaping (kapsla in om fältet innehåller komma/citattecken/newline).
+function escapeCsvField(value: string): string {
+  if (value.includes(",") || value.includes('"') || value.includes("\n") || value.includes("\r")) {
+    return '"' + value.replace(/"/g, '""') + '"';
+  }
+  return value;
+}
+
+export async function buildGrovplaneringFullCsvExport(
+  tenantId: string,
+  filters: FullCsvFilters,
+): Promise<{ csv: string; rowCount: number; truncated: boolean }> {
+  // ---------------------------------------------------------------------------
+  // Fas 1: Huvud-query med alla JOIN:ade kolumner
+  // ---------------------------------------------------------------------------
+  const conditions = buildConditions(tenantId, filters);
+  if (filters.workOrderIds && filters.workOrderIds.length > 0) {
+    conditions.push(inArray(workOrders.id, filters.workOrderIds.slice(0, 1000)));
+  }
+
+  const CSV_CAP = 15000;
+
+  const fetched = await db
+    .select({
+      id: workOrders.id,
+      orderNumber: workOrders.orderNumber,
+      customerId: workOrders.customerId,
+      objectId: workOrders.objectId,
+      teamId: workOrders.teamId,
+      resourceId: workOrders.resourceId,
+      stopClusterId: workOrders.stopClusterId,
+      routeClusterId: workOrders.routeClusterId,
+      parentWorkOrderId: workOrders.parentWorkOrderId,
+      sourceAssignmentId: workOrders.sourceAssignmentId,
+      orderConceptId: workOrders.orderConceptId,
+      districtId: workOrders.districtId,
+      title: workOrders.title,
+      description: workOrders.description,
+      notes: workOrders.notes,
+      plannedNotes: workOrders.plannedNotes,
+      externalReference: workOrders.externalReference,
+      importBatchId: workOrders.importBatchId,
+      matchReason: workOrders.matchReason,
+      impossibleReason: workOrders.impossibleReason,
+      impossibleReasonText: workOrders.impossibleReasonText,
+      orderType: workOrders.orderType,
+      taskCategory: workOrders.taskCategory,
+      locationRequirement: workOrders.locationRequirement,
+      executionCode: workOrders.executionCode,
+      executionType: workOrders.executionType,
+      logisticsRole: workOrders.logisticsRole,
+      priority: workOrders.priority,
+      derivedStatus: STATUS_CASE,
+      status: workOrders.status,
+      orderStatus: workOrders.orderStatus,
+      executionStatus: workOrders.executionStatus,
+      creationMethod: workOrders.creationMethod,
+      isSimulated: workOrders.isSimulated,
+      desiredDeliveryStart: workOrders.desiredDeliveryStart,
+      desiredDeliveryEnd: workOrders.desiredDeliveryEnd,
+      scheduledDate: workOrders.scheduledDate,
+      scheduledStartTime: workOrders.scheduledStartTime,
+      plannedWindowStart: workOrders.plannedWindowStart,
+      plannedWindowEnd: workOrders.plannedWindowEnd,
+      roughPlannedWeek: workOrders.roughPlannedWeek,
+      preferredWeek: workOrders.preferredWeek,
+      outsidePreferredWindow: workOrders.outsidePreferredWindow,
+      deliveryPreferencePriority: workOrders.deliveryPreferencePriority,
+      etaSmsSent: workOrders.etaSmsSent,
+      onWayAt: workOrders.onWayAt,
+      onSiteAt: workOrders.onSiteAt,
+      completedAt: workOrders.completedAt,
+      inspectedAt: workOrders.inspectedAt,
+      invoicedAt: workOrders.invoicedAt,
+      lockedAt: workOrders.lockedAt,
+      impossibleAt: workOrders.impossibleAt,
+      createdAt: workOrders.createdAt,
+      estimatedDuration: workOrders.estimatedDuration,
+      actualDuration: workOrders.actualDuration,
+      cachedProductionMinutes: workOrders.cachedProductionMinutes,
+      setupTime: workOrders.setupTime,
+      setupReason: workOrders.setupReason,
+      cachedValue: workOrders.cachedValue,
+      cachedCost: workOrders.cachedCost,
+      frozenUnit: workOrders.frozenUnit,
+      frozenQuantity: workOrders.frozenQuantity,
+      frozenUnitPrice: workOrders.frozenUnitPrice,
+      frozenUnitCost: workOrders.frozenUnitCost,
+      frozenUnitTime: workOrders.frozenUnitTime,
+      invoiceQueueState: workOrders.invoiceQueueState,
+      billingSegmentKey: workOrders.billingSegmentKey,
+      subscriptionCovered: workOrders.subscriptionCovered,
+      completedVehicleRegNo: workOrders.completedVehicleRegNo,
+      returnToWarehouse: workOrders.returnToWarehouse,
+      dependencyCriticality: workOrders.dependencyCriticality,
+      clusterLockStatus: workOrders.clusterLockStatus,
+      clusterExclusionReason: workOrders.clusterExclusionReason,
+      taskLatitude: workOrders.taskLatitude,
+      taskLongitude: workOrders.taskLongitude,
+      customerName: customers.name,
+      customerNumber: customers.customerNumber,
+      objectName: objects.name,
+      objectNumber: objects.objectNumber,
+      objectType: objects.objectType,
+      objectHierarchyLevel: objects.hierarchyLevel,
+      objectAddress: objects.address,
+      objectCity: objects.city,
+      objectPostalCode: objects.postalCode,
+      objectLat: objects.latitude,
+      objectLng: objects.longitude,
+      objectLastServiceDate: objects.lastServiceDate,
+      objectParentId: objects.parentId,
+      teamName: teams.name,
+      resourceName: resources.name,
+      stopClusterName: stopClusters.displayName,
+      routeClusterName: routeClusters.displayName,
+      districtName: geographicDistricts.name,
+    })
+    .from(workOrders)
+    .leftJoin(objects, eq(workOrders.objectId, objects.id))
+    .leftJoin(customers, eq(workOrders.customerId, customers.id))
+    .leftJoin(teams, eq(workOrders.teamId, teams.id))
+    .leftJoin(resources, eq(workOrders.resourceId, resources.id))
+    .leftJoin(stopClusters, eq(workOrders.stopClusterId, stopClusters.id))
+    .leftJoin(routeClusters, eq(workOrders.routeClusterId, routeClusters.id))
+    .leftJoin(geographicDistricts, eq(workOrders.districtId, geographicDistricts.id))
+    .where(and(...conditions))
+    .orderBy(workOrders.createdAt)
+    .limit(CSV_CAP + 1);
+
+  const truncated = fetched.length > CSV_CAP;
+  const raw = truncated ? fetched.slice(0, CSV_CAP) : fetched;
+
+  // Uppgiftstyp-filter i applagret (fuzzy normalisering, samma som buildOrderedGroups).
+  const typeFilter =
+    filters.taskTypes && filters.taskTypes.length > 0
+      ? new Set(filters.taskTypes)
+      : null;
+
+  const rows = typeFilter
+    ? raw.filter((r) => typeFilter.has(normalizeTaskType(r.orderType)))
+    : raw;
+
+  // ---------------------------------------------------------------------------
+  // Fas 2: Hierarki-batch — predecessorer, efterföljare, reseuppgiftslänk
+  // ---------------------------------------------------------------------------
+  const woIds = rows.map((r) => r.id);
+  const objectIds = [...new Set(rows.map((r) => r.objectId).filter((id): id is string => id != null))];
+
+  // Predecessorer: uppgifter den här WO:n beror på
+  const predecessorMap = new Map<string, string[]>();
+  // Efterföljare: WO:n som beror på den här uppgiften
+  const successorMap = new Map<string, string[]>();
+  // Reseuppgiftslänk: barn-WO med logisticsRole='travel' för varje förälder
+  const travelChildMap = new Map<string, string>();
+
+  if (woIds.length > 0) {
+    const [depsForward, depsBackward, travelChildren] = await Promise.all([
+      db
+        .select({ workOrderId: taskDependencies.workOrderId, dependsOnId: taskDependencies.dependsOnWorkOrderId })
+        .from(taskDependencies)
+        .where(and(eq(taskDependencies.tenantId, tenantId), inArray(taskDependencies.workOrderId, woIds))),
+      db
+        .select({ workOrderId: taskDependencies.workOrderId, dependsOnId: taskDependencies.dependsOnWorkOrderId })
+        .from(taskDependencies)
+        .where(and(eq(taskDependencies.tenantId, tenantId), inArray(taskDependencies.dependsOnWorkOrderId, woIds))),
+      db
+        .select({ id: workOrders.id, parentId: workOrders.parentWorkOrderId })
+        .from(workOrders)
+        .where(and(
+          eq(workOrders.tenantId, tenantId),
+          inArray(workOrders.parentWorkOrderId, woIds),
+          eq(workOrders.logisticsRole, "travel"),
+          isNull(workOrders.deletedAt),
+        )),
+    ]);
+
+    for (const d of depsForward) {
+      if (!d.dependsOnId) continue;
+      const arr = predecessorMap.get(d.workOrderId) ?? [];
+      arr.push(d.dependsOnId);
+      predecessorMap.set(d.workOrderId, arr);
+    }
+    for (const d of depsBackward) {
+      if (!d.dependsOnId) continue;
+      const arr = successorMap.get(d.dependsOnId) ?? [];
+      arr.push(d.workOrderId);
+      successorMap.set(d.dependsOnId, arr);
+    }
+    for (const t of travelChildren) {
+      if (t.parentId) travelChildMap.set(t.parentId, t.id);
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Fas 3: Metadata-batch — hämta aktiva metadatavärden per objekt
+  // ---------------------------------------------------------------------------
+  // Platt nyckel=värde; kolumnerna bestäms av de faktiska data (union av alla keys).
+  const metaByObject = new Map<string, Map<string, string>>(); // objectId → {namn: visningsvärde}
+  const metaKeySet = new Set<string>();
+
+  if (objectIds.length > 0) {
+    // Chunked batching — Postgres IN-listan klarar tusentals ID:n men vi håller
+    // batcharna till 500 för att undvika plan-overhead på stora arrayer.
+    const BATCH_SIZE = 500;
+
+    function metaValStr(mr: {
+      vardeString: string | null;
+      vardeInteger: number | null;
+      vardeDecimal: number | null;
+      vardeBoolean: boolean | null;
+      vardeDatetime: Date | string | null;
+    }): string {
+      if (mr.vardeString != null) return mr.vardeString;
+      if (mr.vardeInteger != null) return String(mr.vardeInteger);
+      if (mr.vardeDecimal != null) return String(mr.vardeDecimal);
+      if (mr.vardeBoolean != null) return mr.vardeBoolean ? "Ja" : "Nej";
+      if (mr.vardeDatetime != null) {
+        const d = mr.vardeDatetime instanceof Date ? mr.vardeDatetime : new Date(mr.vardeDatetime as string);
+        return Number.isFinite(d.getTime()) ? d.toISOString().slice(0, 10) : "";
+      }
+      return "";
+    }
+
+    // Parallella chunked-queries för alla objectIds
+    const chunks: string[][] = [];
+    for (let i = 0; i < objectIds.length; i += BATCH_SIZE) {
+      chunks.push(objectIds.slice(i, i + BATCH_SIZE));
+    }
+
+    const chunkResults = await Promise.all(
+      chunks.map((chunk) =>
+        db
+          .select({
+            objektId: metadataVarden.objektId,
+            namn: metadataKatalog.namn,
+            vardeString: metadataVarden.vardeString,
+            vardeInteger: metadataVarden.vardeInteger,
+            vardeDecimal: metadataVarden.vardeDecimal,
+            vardeBoolean: metadataVarden.vardeBoolean,
+            vardeDatetime: metadataVarden.vardeDatetime,
+          })
+          .from(metadataVarden)
+          .innerJoin(metadataKatalog, eq(metadataVarden.metadataKatalogId, metadataKatalog.id))
+          .where(and(
+            eq(metadataVarden.tenantId, tenantId),
+            inArray(metadataVarden.objektId, chunk),
+            eq(metadataVarden.status, "aktiv"),
+            eq(metadataVarden.raderad, false),
+            isNull(metadataKatalog.deletedAt),
+          ))
+          .orderBy(metadataKatalog.namn),
+      ),
+    );
+
+    for (const metaRows of chunkResults) {
+      for (const mr of metaRows) {
+        if (!mr.objektId || !mr.namn) continue;
+        let objMap = metaByObject.get(mr.objektId);
+        if (!objMap) { objMap = new Map(); metaByObject.set(mr.objektId, objMap); }
+        objMap.set(mr.namn, metaValStr(mr));
+        metaKeySet.add(mr.namn);
+      }
+    }
+  }
+
+  const metaKeys = [...metaKeySet].sort(); // Deterministisk kolumnordning
+
+  // ---------------------------------------------------------------------------
+  // Fas 4: CSV-generering
+  // ---------------------------------------------------------------------------
+  function isoOrEmpty(d: Date | string | null | undefined): string {
+    if (!d) return "";
+    const date = d instanceof Date ? d : new Date(d as string);
+    return Number.isFinite(date.getTime())
+      ? date.toISOString().replace("T", " ").slice(0, 19)
+      : "";
+  }
+
+  function boolStr(v: boolean | null | undefined): string {
+    if (v == null) return "";
+    return v ? "Ja" : "Nej";
+  }
+
+  function numStr(v: number | null | undefined): string {
+    if (v == null) return "";
+    return String(v);
+  }
+
+  function oreToKr(v: number | null | undefined): string {
+    if (v == null) return "";
+    return (Math.round(v) / 100).toFixed(2);
+  }
+
+  const STATIC_HEADERS = [
+    "Uppgifts-ID",
+    "Ordernummer",
+    "Kund-ID",
+    "Objekt-ID",
+    "Team-ID",
+    "Resurs-ID",
+    "Stoppklump-ID",
+    "Ruttklump-ID",
+    "Förälder-uppgift-ID",
+    "Källuppdragsrad-ID",
+    "Orderkoncept-ID",
+    "Distrikt-ID",
+    // Hierarki-relationer
+    "Reseuppgift (ja/nej)",
+    "Reseuppgift-ID (child travel task)",
+    "Föregående uppgifter (IDs)",
+    "Efterföljande uppgifter (IDs)",
+    // Text
+    "Titel",
+    "Beskrivning",
+    "Anteckningar",
+    "Planerade anteckningar",
+    "Extern referens",
+    "Importbatch",
+    "Matchningsorsak",
+    "Avvikelseorsak (nyckel)",
+    "Avvikelseorsak (text)",
+    // Kund
+    "Kundnamn",
+    "Kundnummer",
+    // Objekt
+    "Objektnamn",
+    "Objektnummer",
+    "Objekttyp",
+    "Hierarkinivå",
+    "Adress",
+    "Stad",
+    "Postnummer",
+    "Objekt-lat",
+    "Objekt-lng",
+    "Senast utförd (objekt)",
+    "Objekt förälder-ID",
+    // Utförare
+    "Teamnamn",
+    "Resursnamn",
+    "Distriktnamn",
+    // Klump
+    "Stoppklump",
+    "Ruttklump",
+    "Klumplåsstatus",
+    "Klumpexklusionsorsak",
+    // Typ/kategori
+    "Ordertyp (rådata)",
+    "Uppgiftstyp (nyckel)",
+    "Uppgiftstyp",
+    "Uppgiftskategori",
+    "Platskrav",
+    "Utförandekod",
+    "Utförandetyp",
+    "Logistikroll",
+    "Prioritet",
+    // Status
+    "Härledd status",
+    "Livscykelstatus",
+    "Orderstatus",
+    "Utförandestatus",
+    "Skapandemetod",
+    "Är simulerad",
+    // Planeringsdatum
+    "Önskad leverans (start)",
+    "Önskad leverans (slut)",
+    "Schemalagd datum",
+    "Schemalagd starttid",
+    "Planerat fönster (start)",
+    "Planerat fönster (slut)",
+    "Grovplanerad vecka",
+    "Föredragen vecka",
+    "Utanför önskat fönster",
+    "Leveranspreferens prioritet",
+    "ETA SMS skickat",
+    // Tidsstämplar
+    "På väg",
+    "På plats",
+    "Slutförd",
+    "Inspekterad",
+    "Fakturerad",
+    "Låst",
+    "Omöjlig",
+    "Skapad",
+    // Tid & ekonomi
+    "Uppskattad tid (min)",
+    "Verklig tid (min)",
+    "Produktionstid (min)",
+    "Produktionstid (tim)",
+    "Ställtid (min)",
+    "Ställtidsorsak",
+    "Ordervärde (öre)",
+    "Ordervärde (kr)",
+    "Kostnad (öre)",
+    "Kostnad (kr)",
+    // Frysta priser
+    "Fryst enhet",
+    "Fryst antal",
+    "Fruset styckpris (kr)",
+    "Frusen styck-kostnad (kr)",
+    "Fruset styck-tid (min)",
+    // Faktura
+    "Fakturaköstatus",
+    "Faktureringssegmentnyckel",
+    "Abonnemangstäckt",
+    // Slutförande
+    "Slutfört fordon regnr",
+    "Retur till lager",
+    "Beroendekritikalitet",
+    // GPS
+    "Uppgifts-lat",
+    "Uppgifts-lng",
+  ];
+
+  // Metadata-kolumnrubriker suffix:ade med "Meta:" för tydlighet
+  const metaHeaders = metaKeys.map((k) => `Meta: ${k}`);
+  const ALL_HEADERS = [...STATIC_HEADERS, ...metaHeaders];
+
+  const lines: string[] = [];
+  lines.push(ALL_HEADERS.map((h) => escapeCsvField(safeCell(h))).join(","));
+
+  for (const r of rows) {
+    const taskType = normalizeTaskType(r.orderType);
+    const taskTypeLabel = TASK_TYPE_LABELS[taskType] ?? "Övrigt";
+    const prodMin = r.cachedProductionMinutes ?? 0;
+    const isTravel = r.logisticsRole === "travel";
+    const travelChildId = travelChildMap.get(r.id) ?? "";
+    const predecessors = predecessorMap.get(r.id)?.join("; ") ?? "";
+    const successors = successorMap.get(r.id)?.join("; ") ?? "";
+
+    const staticFields: string[] = [
+      r.id,
+      r.orderNumber ?? "",
+      r.customerId ?? "",
+      r.objectId ?? "",
+      r.teamId ?? "",
+      r.resourceId ?? "",
+      r.stopClusterId ?? "",
+      r.routeClusterId ?? "",
+      r.parentWorkOrderId ?? "",
+      r.sourceAssignmentId ?? "",
+      r.orderConceptId ?? "",
+      r.districtId ?? "",
+      // Hierarki-relationer
+      boolStr(isTravel),
+      travelChildId,
+      predecessors,
+      successors,
+      // Text
+      r.title ?? "",
+      r.description ?? "",
+      r.notes ?? "",
+      r.plannedNotes ?? "",
+      r.externalReference ?? "",
+      r.importBatchId ?? "",
+      r.matchReason ?? "",
+      r.impossibleReason ?? "",
+      r.impossibleReasonText ?? "",
+      // Kund
+      r.customerName ?? "",
+      r.customerNumber ?? "",
+      // Objekt
+      r.objectName ?? "",
+      r.objectNumber ?? "",
+      r.objectType ?? "",
+      r.objectHierarchyLevel ?? "",
+      r.objectAddress ?? "",
+      r.objectCity ?? "",
+      r.objectPostalCode ?? "",
+      numStr(r.objectLat),
+      numStr(r.objectLng),
+      isoOrEmpty(r.objectLastServiceDate),
+      r.objectParentId ?? "",
+      // Utförare
+      r.teamName ?? "",
+      r.resourceName ?? "",
+      r.districtName ?? "",
+      // Klump
+      r.stopClusterName ?? "",
+      r.routeClusterName ?? "",
+      r.clusterLockStatus ?? "",
+      r.clusterExclusionReason ?? "",
+      // Typ/kategori
+      r.orderType ?? "",
+      taskType,
+      taskTypeLabel,
+      r.taskCategory ?? "",
+      r.locationRequirement ?? "",
+      r.executionCode ?? "",
+      r.executionType ?? "",
+      r.logisticsRole ?? "",
+      r.priority ?? "",
+      // Status
+      ROUGH_STATUS_LABELS[r.derivedStatus as RoughStatus] ?? String(r.derivedStatus ?? ""),
+      r.status ?? "",
+      r.orderStatus ?? "",
+      r.executionStatus ?? "",
+      r.creationMethod ?? "",
+      boolStr(r.isSimulated),
+      // Planeringsdatum
+      isoOrEmpty(r.desiredDeliveryStart),
+      isoOrEmpty(r.desiredDeliveryEnd),
+      isoOrEmpty(r.scheduledDate),
+      r.scheduledStartTime ?? "",
+      isoOrEmpty(r.plannedWindowStart),
+      isoOrEmpty(r.plannedWindowEnd),
+      r.roughPlannedWeek ?? "",
+      r.preferredWeek ?? "",
+      boolStr(r.outsidePreferredWindow),
+      r.deliveryPreferencePriority ?? "",
+      boolStr(r.etaSmsSent),
+      // Tidsstämplar
+      isoOrEmpty(r.onWayAt),
+      isoOrEmpty(r.onSiteAt),
+      isoOrEmpty(r.completedAt),
+      isoOrEmpty(r.inspectedAt),
+      isoOrEmpty(r.invoicedAt),
+      isoOrEmpty(r.lockedAt),
+      isoOrEmpty(r.impossibleAt),
+      isoOrEmpty(r.createdAt),
+      // Tid & ekonomi
+      numStr(r.estimatedDuration),
+      numStr(r.actualDuration),
+      numStr(prodMin),
+      prodMin > 0 ? (prodMin / 60).toFixed(2) : "0.00",
+      numStr(r.setupTime),
+      r.setupReason ?? "",
+      numStr(r.cachedValue),
+      oreToKr(r.cachedValue),
+      numStr(r.cachedCost),
+      oreToKr(r.cachedCost),
+      // Frysta priser
+      r.frozenUnit ?? "",
+      r.frozenQuantity != null ? String(r.frozenQuantity) : "",
+      r.frozenUnitPrice != null ? (r.frozenUnitPrice / 100).toFixed(2) : "",
+      r.frozenUnitCost != null ? (r.frozenUnitCost / 100).toFixed(2) : "",
+      r.frozenUnitTime != null ? String(r.frozenUnitTime) : "",
+      // Faktura
+      r.invoiceQueueState ?? "",
+      r.billingSegmentKey ?? "",
+      boolStr(r.subscriptionCovered),
+      // Slutförande
+      r.completedVehicleRegNo ?? "",
+      boolStr(r.returnToWarehouse),
+      r.dependencyCriticality ?? "",
+      // GPS
+      numStr(r.taskLatitude),
+      numStr(r.taskLongitude),
+    ];
+
+    // Metadata-kolumner (en per metaKey, tom om objektet saknar det fältet)
+    const objMeta = r.objectId ? metaByObject.get(r.objectId) : undefined;
+    const metaFields = metaKeys.map((k) => objMeta?.get(k) ?? "");
+
+    const allFields = [...staticFields, ...metaFields];
+    lines.push(allFields.map((f) => escapeCsvField(safeCell(f))).join(","));
+  }
+
+  return { csv: lines.join("\r\n"), rowCount: rows.length, truncated };
 }

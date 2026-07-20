@@ -49,11 +49,13 @@ import {
   getRoughPlanningCities,
   revokeRoughAssignments,
   buildGrovplaneringExport,
+  buildGrovplaneringFullCsvExport,
   sanitizeGrovExportColumns,
   TASK_TYPE_KEYS,
   type GroupBy,
   type GridFilters,
   type RoughStatus,
+  type FullCsvFilters,
 } from "../grovplanering-grid";
 import { getEngineResults, applyEngineDecision } from "../services/engine-results";
 
@@ -316,6 +318,43 @@ export function registerWeeklyPlanRoutes(app: Express) {
     res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
     res.setHeader("Cache-Control", "no-cache, must-revalidate");
     res.send(buffer);
+  }));
+
+  // Fullständig CSV-export (Task #1285) — ~94 fält + hierarkirelationer per uppgift.
+  // Returnerar text/csv. Stöder samma filter som rutnätet + workOrderIds (selektionsscope).
+  const csvWorkOrderIdsSchema = z.object({
+    workOrderIds: z.string().optional(),
+  });
+
+  app.get("/api/rough-planning/export-csv", ...guard, asyncHandler(async (req, res) => {
+    const tenantId = getTenantIdWithFallback(req);
+    const { filters } = parseGridQuery(req.query);
+
+    const woParsed = csvWorkOrderIdsSchema.safeParse({ workOrderIds: req.query.workOrderIds });
+    const workOrderIds = (woParsed.success && woParsed.data.workOrderIds)
+      ? woParsed.data.workOrderIds.split(",").map((s) => s.trim()).filter(Boolean).slice(0, 1000)
+      : undefined;
+
+    const csvFilters: FullCsvFilters = { ...filters, workOrderIds };
+    const { csv, rowCount, truncated } = await buildGrovplaneringFullCsvExport(tenantId, csvFilters);
+
+    const datestamp = new Date().toISOString().slice(0, 10);
+    const suffix = filters.city
+      ? `-${filters.city.toLowerCase().replace(/[^a-z0-9]/g, "")}`
+      : filters.districtIds?.length === 1
+        ? `-distrikt`
+        : "";
+    const fileName = `navet-export-${datestamp}${suffix}.csv`;
+
+    res.setHeader("Content-Type", "text/csv; charset=utf-8");
+    res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
+    res.setHeader("Cache-Control", "no-cache, must-revalidate");
+    if (truncated) {
+      res.setHeader("X-Truncated", "true");
+      res.setHeader("X-Row-Count", String(rowCount));
+    }
+    // BOM för korrekt UTF-8 i Excel på Windows
+    res.send("\uFEFF" + csv);
   }));
 
   // Alla rader i EN grupp över alla sidor (Task #922) — driver "Markera grupp"
