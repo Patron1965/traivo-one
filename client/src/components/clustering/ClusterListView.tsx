@@ -447,6 +447,7 @@ export function ClusterListView() {
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["/api/clustering/route-clusters"] });
+      void queryClient.invalidateQueries({ queryKey: ["/api/rough-planning/grid"] });
       setSelectedRouteIds(new Set());
       toast({ title: "Ruttklumpar uppdaterade" });
     },
@@ -463,6 +464,7 @@ export function ClusterListView() {
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["/api/clustering/stop-clusters"] });
+      void queryClient.invalidateQueries({ queryKey: ["/api/rough-planning/grid"] });
       setSelectedStopIds(new Set());
       toast({ title: "Stoppklumpar uppdaterade" });
     },
