@@ -1,16 +1,43 @@
 /**
  * Asynkron klustringsköa (in-memory, v1).
  *
- * Poolar inkommande analysbegäranden och batchar dem var 30:e sekund.
+ * Pooler inkommande analysbegäranden och batchar dem var 30:e sekund.
  * Deduplicerar: flera ändringar på samma uppgift → EN analys per batch.
- * Loggar till konsolen (task_events-integration kan byggas P3).
+ * Loggar klustringsresultat till `task_events` (append-only, same pattern as
+ * logWorkOrderTransition). Best-effort — en loggmiss blockerar aldrig affärsoperationen.
  */
+import { db } from "../../db";
+import { taskEvents } from "@shared/schema";
 import { processTask } from "./stop-clustering-engine";
 
 interface ClusteringJob {
   taskId: string;
   taskTable: "work_orders" | "assignments";
   tenantId: string;
+}
+
+async function logClusterEvent(
+  tenantId: string,
+  workOrderId: string,
+  eventType: string,
+  detail: Record<string, unknown>,
+): Promise<void> {
+  try {
+    await db.insert(taskEvents).values({
+      tenantId,
+      workOrderId,
+      eventType,
+      actorType: "system",
+      actorId: null,
+      detail,
+      occurredAt: new Date(),
+    });
+  } catch (err) {
+    console.error(
+      `[clustering-queue] task_events write failed for ${workOrderId}:`,
+      err,
+    );
+  }
 }
 
 class ClusteringQueue {
@@ -46,9 +73,33 @@ class ClusteringQueue {
     for (const job of jobs) {
       try {
         if (job.taskTable === "work_orders") {
-          await processTask(job.taskId, job.tenantId);
+          const result = await processTask(job.taskId, job.tenantId);
+
+          // Logga till task_events vid faktisk klumptilldelning/borttagning
+          if (result.action === "assigned" || result.action === "created") {
+            await logClusterEvent(
+              job.tenantId,
+              job.taskId,
+              "stop_cluster_assigned",
+              {
+                clusterId: result.clusterId,
+                action: result.action,
+                source: "clustering_queue",
+              },
+            );
+          } else if (result.action === "removed") {
+            await logClusterEvent(
+              job.tenantId,
+              job.taskId,
+              "stop_cluster_removed",
+              {
+                action: result.action,
+                source: "clustering_queue",
+              },
+            );
+          }
         }
-        // assignments: P3 (stöds via routeclustering)
+        // assignments: P3 (ruttklumpning)
       } catch (err) {
         console.error(
           `[clustering-queue] Error processing task ${job.taskId}:`,

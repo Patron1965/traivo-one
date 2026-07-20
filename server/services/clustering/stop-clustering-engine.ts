@@ -4,13 +4,14 @@
  * Identifierar uppgifter (work_orders + assignments) som kan utföras vid samma
  * fysiska stopp baserat på fyra villkor:
  *   1. Geografisk — koordinater inom konfigurerbar radie (default 30 m)
- *   2. Tidsmässig — leveranstidsfönster överlappar (inom max_time_gap_days)
- *   3. Utförarmässig — samma execution_code
+ *   2. Tidsmässig — leveranstidsfönster överlappar (STRIKT överlapp)
+ *   3. Utförarmässig — exakt samma execution_code (null === null är OK;
+ *                      null !== "kod" → hoppas över)
  *   4. Statusmässig — uppgiften är aktiv för planering
  *
  * Låsningslogik (per klump):
  *   auto      – motorns beslut; skrivs över fritt vid omräkning
- *   confirmed – planeraren bekräftat; varnas vid motorändring men ändras ej
+ *   confirmed – planeraren bekräftat; ÄNDRAS ALDRIG automatiskt (samma skydd som locked)
  *   locked    – hoppas ALLTID över vid automatisk omräkning
  */
 import { db } from "../../db";
@@ -96,31 +97,18 @@ function normalizeAddressKey(address: string | null | undefined): string {
   return address.toLowerCase().replace(/\s+/g, " ").trim();
 }
 
+/**
+ * STRIKT tidsfönsteröverlapp — uppgifter med icke-överlappande fönster
+ * hamnar ALDRIG i samma klump (jämför Acceptanskriterium 2).
+ * Öppna fönster (start=null eller end=null) behandlas konservativt:
+ *   null start → -∞, null end → +∞.
+ */
 function windowsOverlap(a: TaskWindow, b: TaskWindow): boolean {
-  if (!a.start && !a.end && !b.start && !b.end) return true;
   const aStart = a.start?.getTime() ?? -Infinity;
   const aEnd = a.end?.getTime() ?? Infinity;
   const bStart = b.start?.getTime() ?? -Infinity;
   const bEnd = b.end?.getTime() ?? Infinity;
   return aStart <= bEnd && bStart <= aEnd;
-}
-
-function windowsWithinGap(
-  a: TaskWindow,
-  b: TaskWindow,
-  maxGapMs: number,
-): boolean {
-  if (windowsOverlap(a, b)) return true;
-  const aStart = a.start?.getTime() ?? null;
-  const aEnd = a.end?.getTime() ?? null;
-  const bStart = b.start?.getTime() ?? null;
-  const bEnd = b.end?.getTime() ?? null;
-  if (!aStart && !aEnd && !bStart && !bEnd) return true;
-  const gap = Math.min(
-    aStart !== null && bEnd !== null ? Math.abs(aStart - bEnd) : Infinity,
-    aEnd !== null && bStart !== null ? Math.abs(aEnd - bStart) : Infinity,
-  );
-  return gap <= maxGapMs;
 }
 
 function isActiveForPlanning(wo: WorkOrder): boolean {
@@ -139,17 +127,12 @@ function getEffectiveWindow(wo: WorkOrder): TaskWindow {
     };
   }
   return {
-    start: wo.desiredDeliveryStart
-      ? new Date(wo.desiredDeliveryStart)
-      : null,
+    start: wo.desiredDeliveryStart ? new Date(wo.desiredDeliveryStart) : null,
     end: wo.desiredDeliveryEnd ? new Date(wo.desiredDeliveryEnd) : null,
   };
 }
 
-/**
- * Hämtar geo + adress för en work_order. Prioritet:
- *   taskLatitude/taskLongitude på WO → objektets latitude/longitude.
- */
+/** Geo-löser en work_order. Prioritet: taskLatitude/Lng → objektets lat/lng. */
 async function resolveTaskGeo(wo: WorkOrder): Promise<TaskGeo> {
   if (wo.taskLatitude != null && wo.taskLongitude != null) {
     const obj = wo.objectId
@@ -177,12 +160,16 @@ async function resolveTaskGeo(wo: WorkOrder): Promise<TaskGeo> {
       city: obj?.city ?? null,
     };
   }
-  return { latitude: null, longitude: null, normalizedAddress: null, city: null };
+  return {
+    latitude: null,
+    longitude: null,
+    normalizedAddress: null,
+    city: null,
+  };
 }
 
 interface TenantClusterConfig {
   radiusMeters: number;
-  maxTimeGapMs: number;
   horizonDays: number;
 }
 
@@ -191,12 +178,11 @@ async function getTenantConfig(tenantId: string): Promise<TenantClusterConfig> {
   const settings = (tenant?.settings as Record<string, unknown>) ?? {};
   return {
     radiusMeters: Number(settings.stop_cluster_radius_meters ?? 30),
-    maxTimeGapMs: Number(settings.stop_cluster_max_time_gap_days ?? 14) * 86_400_000,
     horizonDays: Number(settings.stop_cluster_horizon_days ?? 14),
   };
 }
 
-/** Myntar nästa SC-NNN referensnummer (tenant-scoped). */
+/** Myntar nästa SC-NNN referensnummer (tenant-scoped, best-effort sekvens). */
 async function mintStopClusterReference(tenantId: string): Promise<string> {
   const result = await db
     .select({ cnt: sql<number>`count(*)` })
@@ -218,14 +204,19 @@ function computeCentroid(
   };
 }
 
+/** Sant om klumpstatus är skyddad (blocked from auto-change). */
+function isProtectedStatus(status: string | null | undefined): boolean {
+  return status === "locked" || status === "confirmed";
+}
+
 // ---------------------------------------------------------------------------
 // Publika API
 // ---------------------------------------------------------------------------
 
 /**
  * Bygger visningsnamn för en stoppklump.
- *   "Mekanivägen 2C, Tullinge"  (adress + stad)
- *   "Mekanivägen 2C – Miljörum västra"  (adress + extra)
+ *   "Mekanivägen 2C, Tullinge"        (adress + stad)
+ *   "Mekanivägen 2C – Miljörum västra" (adress + extra)
  */
 export function buildStopClusterName(
   address: string,
@@ -237,8 +228,13 @@ export function buildStopClusterName(
 }
 
 /**
- * Analyserar EN uppgift mot befintliga stoppklumpar (inkrementell, skrivskyddad).
- * Returnerar alla matchande klumpar sorterade efter geografisk avstånd.
+ * Analyserar EN uppgift mot befintliga stoppklumpar (skrivskyddad, inkrementell).
+ * Returnerar alla matchande klumpar sorterade efter avstånd.
+ *
+ * Klumpvillkor (alla tre måste uppfyllas):
+ *   1. Strikt geo-matchning: koordinater inom radiusMeters ELLER exakt adress
+ *   2. Strikt tidsfönsteröverlapp (ej gap-baserat)
+ *   3. Exakt execution_code-matchning (null === null är OK)
  */
 export async function analyzeTask(
   taskId: string,
@@ -262,7 +258,7 @@ export async function analyzeTask(
       ),
     );
 
-  const memberCounts = await db
+  const countRows = await db
     .select({
       stopClusterId: stopClusterMemberships.stopClusterId,
       cnt: sql<number>`count(*)`,
@@ -277,7 +273,7 @@ export async function analyzeTask(
     .groupBy(stopClusterMemberships.stopClusterId);
 
   const memberCountMap = new Map<string, number>();
-  for (const row of memberCounts) {
+  for (const row of countRows) {
     memberCountMap.set(row.stopClusterId, Number(row.cnt));
   }
 
@@ -286,15 +282,11 @@ export async function analyzeTask(
   for (const cluster of clusters) {
     const reasons: StopClusterMatch["matchReasons"] = [];
 
-    const codeOk =
-      cluster.executionCode === null ||
-      wo.executionCode === null ||
-      cluster.executionCode === wo.executionCode;
-    if (!codeOk) continue;
-    if (cluster.executionCode !== null && wo.executionCode !== null) {
-      reasons.push("execution_code");
-    }
+    // Villkor 3: Exakt execution_code-matchning (null === null OK, null !== "kod")
+    if (cluster.executionCode !== wo.executionCode) continue;
+    if (wo.executionCode !== null) reasons.push("execution_code");
 
+    // Villkor 2: STRIKT tidsfönsteröverlapp
     const clusterWindow: TaskWindow = {
       start: cluster.earliestDeliveryAt
         ? new Date(cluster.earliestDeliveryAt)
@@ -303,11 +295,12 @@ export async function analyzeTask(
         ? new Date(cluster.latestDeliveryAt)
         : null,
     };
-    const timeOk = windowsWithinGap(window, clusterWindow, config.maxTimeGapMs);
-    if (!timeOk) continue;
-    if (windowsOverlap(window, clusterWindow)) reasons.push("time");
+    if (!windowsOverlap(window, clusterWindow)) continue;
+    reasons.push("time");
 
+    // Villkor 1: Geo-matchning (koordinater inom radie ELLER exakt adress)
     let distanceMeters: number | null = null;
+    let geoMatched = false;
 
     if (
       geo.latitude != null &&
@@ -323,15 +316,20 @@ export async function analyzeTask(
       );
       if (distanceMeters > config.radiusMeters) continue;
       reasons.push("geo");
-    } else if (
+      geoMatched = true;
+    }
+
+    if (
+      !geoMatched &&
       geo.normalizedAddress &&
       cluster.normalizedAddress &&
       normalizeAddressKey(cluster.normalizedAddress) === geo.normalizedAddress
     ) {
       reasons.push("address");
-    } else {
-      continue;
+      geoMatched = true;
     }
+
+    if (!geoMatched) continue;
 
     matches.push({
       cluster,
@@ -352,25 +350,21 @@ export async function analyzeTask(
 }
 
 /**
- * Inkrementell tilldelning: analyserar uppgiften, väljer bästa klump,
- * skriver assignment + membership. Kallas från kön.
+ * Inkrementell tilldelning: analyserar uppgiften, väljer bästa ej-skyddade klump,
+ * skriver assignment + membership. Kallas från klustringsköns processor.
+ *
+ * Skyddade klumpar (confirmed + locked): uppgift i en sådan klump ändras ALDRIG
+ * automatiskt. Ny uppgift tilldelas ALDRIG automatiskt till en skyddad klump.
  */
 export async function processTask(
   taskId: string,
   tenantId: string,
-): Promise<void> {
+): Promise<{
+  action: "skipped" | "removed" | "kept" | "assigned" | "created";
+  clusterId?: string;
+}> {
   const wo = await storage.getWorkOrder(taskId);
-  if (!wo || wo.tenantId !== tenantId) return;
-
-  if (!isActiveForPlanning(wo)) {
-    await removeFromCluster(taskId, "work_orders", tenantId, "status_change");
-    return;
-  }
-
-  const config = await getTenantConfig(tenantId);
-  const geo = await resolveTaskGeo(wo);
-  const window = getEffectiveWindow(wo);
-  const now = new Date();
+  if (!wo || wo.tenantId !== tenantId) return { action: "skipped" };
 
   const currentCluster = wo.stopClusterId
     ? await db.query.stopClusters.findFirst({
@@ -378,24 +372,48 @@ export async function processTask(
       })
     : null;
 
-  if (currentCluster?.status === "locked") return;
+  // Skyddade klumpar (confirmed + locked): rör dem ALDRIG automatiskt.
+  if (isProtectedStatus(currentCluster?.status)) {
+    return { action: "skipped", clusterId: wo.stopClusterId ?? undefined };
+  }
 
-  const matches = await analyzeTask(taskId, tenantId);
+  const now = new Date();
 
-  const bestMatch = matches.find(
-    (m) =>
-      m.cluster.status !== "locked" &&
-      m.cluster.id !== wo.stopClusterId,
-  ) ?? matches[0] ?? null;
+  if (!isActiveForPlanning(wo)) {
+    if (wo.stopClusterId) {
+      await removeFromCluster(taskId, "work_orders", tenantId, "status_change");
+      return { action: "removed" };
+    }
+    return { action: "skipped" };
+  }
+
+  const config = await getTenantConfig(tenantId);
+  const geo = await resolveTaskGeo(wo);
+
+  const hasGeo = geo.latitude != null && geo.longitude != null;
+  const hasAddress = !!geo.normalizedAddress;
+  if (!hasGeo && !hasAddress) {
+    if (wo.stopClusterId) {
+      await removeFromCluster(taskId, "work_orders", tenantId, "recluster");
+      return { action: "removed" };
+    }
+    return { action: "skipped" };
+  }
+
+  // Hämta bara matchande klumpar (analyzeTask exkluderar dissolved + kontrollerar villkor)
+  const allMatches = await analyzeTask(taskId, tenantId);
+
+  // Välj bästa icke-skyddade match (confirmed/locked hoppas alltid över)
+  const bestMatch =
+    allMatches.find((m) => !isProtectedStatus(m.cluster.status)) ?? null;
 
   if (!bestMatch) {
-    const hasGeo = geo.latitude != null && geo.longitude != null;
-    const hasAddress = !!geo.normalizedAddress;
-    if (!hasGeo && !hasAddress) {
+    // Ingen befintlig klump matchar — skapa ny solo-klump
+    if (wo.stopClusterId) {
       await removeFromCluster(taskId, "work_orders", tenantId, "recluster");
-      return;
     }
 
+    const window = getEffectiveWindow(wo);
     const displayName = buildStopClusterName(
       geo.normalizedAddress || "Okänd adress",
       geo.city,
@@ -423,25 +441,26 @@ export async function processTask(
       })
       .returning();
 
-    await assignToCluster(
-      taskId,
-      "work_orders",
-      newCluster.id,
-      tenantId,
-      wo.stopClusterId,
-    );
-    return;
+    await assignToCluster(taskId, "work_orders", newCluster.id, tenantId, wo.stopClusterId);
+    return { action: "created", clusterId: newCluster.id };
   }
 
   if (bestMatch.cluster.id === wo.stopClusterId) {
-    await updateClusterWindow(bestMatch.cluster.id, window, wo.estimatedDuration ?? null, now);
-    return;
+    // Uppgiften är redan i rätt klump — uppdatera bara tidsfönstret
+    const window = getEffectiveWindow(wo);
+    await updateClusterWindow(
+      bestMatch.cluster.id,
+      window,
+      wo.estimatedDuration ?? null,
+      now,
+    );
+    return { action: "kept", clusterId: bestMatch.cluster.id };
   }
 
-  if (currentCluster && currentCluster.status !== "locked") {
+  // Flytta till bättre klump
+  if (wo.stopClusterId) {
     await removeFromCluster(taskId, "work_orders", tenantId, "recluster");
   }
-
   await assignToCluster(
     taskId,
     "work_orders",
@@ -449,6 +468,7 @@ export async function processTask(
     tenantId,
     wo.stopClusterId,
   );
+  return { action: "assigned", clusterId: bestMatch.cluster.id };
 }
 
 async function assignToCluster(
@@ -485,10 +505,7 @@ async function assignToCluster(
   if (taskTable === "work_orders") {
     await db
       .update(workOrders)
-      .set({
-        stopClusterId: clusterId,
-        stopClusterCalculatedAt: now,
-      })
+      .set({ stopClusterId: clusterId, stopClusterCalculatedAt: now })
       .where(
         and(eq(workOrders.id, taskId), eq(workOrders.tenantId, tenantId)),
       );
@@ -533,7 +550,7 @@ async function updateClusterWindow(
   const cluster = await db.query.stopClusters.findFirst({
     where: eq(stopClusters.id, clusterId),
   });
-  if (!cluster || cluster.status === "locked") return;
+  if (!cluster || isProtectedStatus(cluster.status)) return;
 
   const existingStart = cluster.earliestDeliveryAt
     ? new Date(cluster.earliestDeliveryAt)
@@ -542,17 +559,14 @@ async function updateClusterWindow(
     ? new Date(cluster.latestDeliveryAt)
     : null;
 
-  const newStart = newWindow.start;
-  const newEnd = newWindow.end;
-
   const effectiveStart =
-    existingStart && newStart
-      ? new Date(Math.min(existingStart.getTime(), newStart.getTime()))
-      : newStart ?? existingStart;
+    existingStart && newWindow.start
+      ? new Date(Math.min(existingStart.getTime(), newWindow.start.getTime()))
+      : newWindow.start ?? existingStart;
   const effectiveEnd =
-    existingEnd && newEnd
-      ? new Date(Math.max(existingEnd.getTime(), newEnd.getTime()))
-      : newEnd ?? existingEnd;
+    existingEnd && newWindow.end
+      ? new Date(Math.max(existingEnd.getTime(), newWindow.end.getTime()))
+      : newWindow.end ?? existingEnd;
 
   const newDuration =
     durationMinutes != null
@@ -572,7 +586,7 @@ async function updateClusterWindow(
 
 /**
  * Fullständig omräkning för en tenant. Berör ENBART auto-klumpar.
- * Confirmed/locked klumpar hoppas över.
+ * Confirmed och locked klumpar (och uppgifter i dem) hoppas alltid över.
  */
 export async function runFullAnalysis(
   tenantId: string,
@@ -595,6 +609,7 @@ export async function runFullAnalysis(
     durationMs: 0,
   };
 
+  // Identifiera auto-klumpar (enda kandidaterna för upplösning)
   const autoClusters = await db
     .select({ id: stopClusters.id })
     .from(stopClusters)
@@ -636,6 +651,7 @@ export async function runFullAnalysis(
     result.dissolved = autoClusterIds.length;
   }
 
+  // Hämta alla aktiva WO inom horizon
   const eligibleWos = await db
     .select()
     .from(workOrders)
@@ -659,32 +675,34 @@ export async function runFullAnalysis(
   const tasks: ActiveTask[] = [];
   for (const wo of eligibleWos) {
     try {
+      // Uppgifter i protected (confirmed/locked) klumpar hoppas ALLTID över
+      if (wo.stopClusterId) {
+        const sc = await db.query.stopClusters.findFirst({
+          where: eq(stopClusters.id, wo.stopClusterId),
+          columns: { status: true },
+        });
+        if (sc?.status === "locked") {
+          result.lockedSkipped++;
+          continue;
+        }
+        if (sc?.status === "confirmed") {
+          result.confirmedSkipped++;
+          continue;
+        }
+      }
+
       const geo = await resolveTaskGeo(wo as WorkOrder);
       const window = getEffectiveWindow(wo as WorkOrder);
 
-      const taskEnd = window.end ?? now;
-      if (taskEnd < now || taskEnd > horizon) continue;
+      // Filtrera bort WO utanför horizon
+      const taskEnd = window.end ?? window.start ?? null;
+      if (taskEnd && taskEnd > horizon) continue;
 
       if (
         geo.latitude == null &&
         geo.longitude == null &&
         !geo.normalizedAddress
       ) {
-        continue;
-      }
-
-      const stopCluster = wo.stopClusterId
-        ? await db.query.stopClusters.findFirst({
-            where: eq(stopClusters.id, wo.stopClusterId),
-          })
-        : null;
-
-      if (stopCluster?.status === "locked") {
-        result.lockedSkipped++;
-        continue;
-      }
-      if (stopCluster?.status === "confirmed") {
-        result.confirmedSkipped++;
         continue;
       }
 
@@ -696,8 +714,8 @@ export async function runFullAnalysis(
         geo,
         window,
         estimatedDurationMinutes: wo.estimatedDuration ?? null,
-        stopClusterId: wo.stopClusterId,
-        stopClusterStatus: stopCluster?.status ?? null,
+        stopClusterId: null,
+        stopClusterStatus: null,
       });
     } catch (err) {
       result.errors.push(
@@ -706,8 +724,8 @@ export async function runFullAnalysis(
     }
   }
 
+  // Greedy-klustring: strikt geo + strikt execution_code + strikt tidsfönsteröverlapp
   interface ClusterBucket {
-    clusterId?: string;
     tasks: ActiveTask[];
     geo: TaskGeo;
     window: TaskWindow;
@@ -719,15 +737,10 @@ export async function runFullAnalysis(
   for (const task of tasks) {
     let placed = false;
     for (const bucket of buckets) {
-      if (bucket.executionCode !== task.executionCode) {
-        if (
-          bucket.executionCode !== null &&
-          task.executionCode !== null
-        ) {
-          continue;
-        }
-      }
+      // Villkor 3: Exakt execution_code-matchning
+      if (bucket.executionCode !== task.executionCode) continue;
 
+      // Villkor 1: Geo-matchning
       const geoOk = (() => {
         if (
           bucket.geo.latitude != null &&
@@ -744,24 +757,18 @@ export async function runFullAnalysis(
             ) <= config.radiusMeters
           );
         }
-        if (
-          bucket.geo.normalizedAddress &&
-          task.geo.normalizedAddress
-        ) {
+        if (bucket.geo.normalizedAddress && task.geo.normalizedAddress) {
           return bucket.geo.normalizedAddress === task.geo.normalizedAddress;
         }
         return false;
       })();
       if (!geoOk) continue;
 
-      const timeOk = windowsWithinGap(
-        bucket.window,
-        task.window,
-        config.maxTimeGapMs,
-      );
-      if (!timeOk) continue;
+      // Villkor 2: STRIKT tidsfönsteröverlapp
+      if (!windowsOverlap(bucket.window, task.window)) continue;
 
       bucket.tasks.push(task);
+      // Expandera bucketens fönster till union
       if (
         task.window.start &&
         (bucket.window.start == null ||
@@ -789,17 +796,13 @@ export async function runFullAnalysis(
     }
   }
 
+  // Skapa klumpar för varje bucket
   for (const bucket of buckets) {
     try {
       const centroid = computeCentroid(
         bucket.tasks
-          .filter(
-            (t) => t.geo.latitude != null && t.geo.longitude != null,
-          )
-          .map((t) => ({
-            lat: t.geo.latitude!,
-            lng: t.geo.longitude!,
-          })),
+          .filter((t) => t.geo.latitude != null && t.geo.longitude != null)
+          .map((t) => ({ lat: t.geo.latitude!, lng: t.geo.longitude! })),
       );
 
       const firstAddr =
@@ -813,7 +816,6 @@ export async function runFullAnalysis(
         firstCity,
       );
       const referenceNumber = await mintStopClusterReference(tenantId);
-
       const totalDuration = bucket.tasks.reduce(
         (s, t) => s + (t.estimatedDurationMinutes ?? 0),
         0,
