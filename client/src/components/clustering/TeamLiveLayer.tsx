@@ -8,6 +8,7 @@
  * - TeamDayPanel: Sheet med teamets schemalagda uppgifter för vald dag.
  */
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import { useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { Marker, Popup, Polyline, CircleMarker, Tooltip } from "react-leaflet";
 import L from "leaflet";
@@ -492,6 +493,7 @@ export function useTeamTrails(enabled: boolean, dayStr: string) {
 }
 
 export function TeamTrailPolylines({ trails }: { trails: TeamPositionTrailDto[] }) {
+  const [, setLocation] = useLocation();
   return (
     <>
       {trails
@@ -535,6 +537,18 @@ export function TeamTrailPolylines({ trails }: { trails: TeamPositionTrailDto[] 
                     fillOpacity: stop.status === "on_site" ? 0.95 : 0.55,
                     weight: 2,
                   }}
+                  eventHandlers={
+                    stop.workOrderId
+                      ? {
+                          click: () =>
+                            setLocation(`/work-orders/${stop.workOrderId}`),
+                          add: (e) => {
+                            const el = (e.target as L.CircleMarker).getElement();
+                            if (el) (el as HTMLElement).style.cursor = "pointer";
+                          },
+                        }
+                      : undefined
+                  }
                 >
                   <Tooltip direction="top" offset={[0, -8]}>
                     <div className="text-xs space-y-0.5">
@@ -548,6 +562,11 @@ export function TeamTrailPolylines({ trails }: { trails: TeamPositionTrailDto[] 
                         {format(new Date(stop.endedAt), "HH:mm", { locale: svLocale })}
                       </div>
                       {stop.workOrderTitle && <div>{stop.workOrderTitle}</div>}
+                      {stop.workOrderId && (
+                        <div className="text-muted-foreground">
+                          Klicka för att öppna arbetsordern
+                        </div>
+                      )}
                     </div>
                   </Tooltip>
                 </CircleMarker>
