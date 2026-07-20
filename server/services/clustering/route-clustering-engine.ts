@@ -350,6 +350,15 @@ export function scoreDay(
 export async function analyzeTask(
   taskId: string,
   tenantId: string,
+  options?: {
+    /**
+     * När true inkluderas BARA klumpar med status "active" som kandidater.
+     * Används av automatisk tilldelning (kö/trigger) för att aldrig röra
+     * skyddade klumpar (confirmed/locked).
+     * Default: false — alla icke-upplösta klumpar visas (för planeraren).
+     */
+    mutableOnly?: boolean;
+  },
 ): Promise<RouteClusterMatch[]> {
   const wo = await storage.getWorkOrder(taskId);
   if (!wo || wo.tenantId !== tenantId) return [];
@@ -362,15 +371,15 @@ export async function analyzeTask(
   };
   const taskWindow = getEffectiveWindow(wo);
 
+  const statusFilter =
+    options?.mutableOnly
+      ? eq(routeClusters.status, "active")
+      : notInArray(routeClusters.status, ["dissolved"]);
+
   const clusters = await db
     .select()
     .from(routeClusters)
-    .where(
-      and(
-        eq(routeClusters.tenantId, tenantId),
-        notInArray(routeClusters.status, ["dissolved"]),
-      ),
-    );
+    .where(and(eq(routeClusters.tenantId, tenantId), statusFilter));
 
   const matches: RouteClusterMatch[] = [];
 
@@ -894,8 +903,9 @@ export async function processRouteTask(
     await removeWoFromRouteCluster(taskId, tenantId, wo.routeClusterId, "recluster");
   }
 
-  // Kör analys — tilldela till bäst matchande klump
-  const matches = await analyzeTask(taskId, tenantId);
+  // Kör analys — mutableOnly=true säkerställer att vi ALDRIG lägger till uppgiften
+  // i en confirmed/locked klump (automatisk tilldelning respekterar planerarens lås).
+  const matches = await analyzeTask(taskId, tenantId, { mutableOnly: true });
   const best = matches[0];
   if (!best) return { action: "unchanged" };
 
