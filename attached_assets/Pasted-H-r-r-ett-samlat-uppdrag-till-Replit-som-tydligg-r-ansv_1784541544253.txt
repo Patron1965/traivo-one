@@ -1,0 +1,203 @@
+Här är ett samlat uppdrag till Replit som tydliggör ansvarsfördelningen mellan motorerna och hur resultatet ska kommuniceras i Uppgiftsnavet.
+Uppdrag till Replit: Samordnad analys av tid, geografi och klumpning
+Bakgrund
+Traivo ska inte behandla tid, geografi, stoppklumpning och ruttklumpning som fyra separata funktioner som ger fristående resultat.
+Grundprincipen är i stället att:
+    •    Tidsmotorn avgör när en uppgift får, bör eller helst ska utföras.
+    •    Geografimotorn avgör var uppgiften finns och vilka andra uppgifter, stopp eller rutter som ligger geografiskt relevant.
+    •    Stoppklumpningsmotorn identifierar uppgifter som kan genomföras vid samma stopp eller arbetsplats.
+    •    Ruttklumpningsmotorn identifierar uppgifter och stopp som tillsammans kan bilda en lämplig rutt inom en viss period.
+Motorerna ska arbeta tillsammans och leverera ett gemensamt planeringsunderlag till Uppgiftsnavet.
+1. Grundmodell
+En uppgift ska kunna ha flera tidsvillkor samtidigt.
+Exempel:
+    •    hård leveransperiod: hela september,
+    •    hårt krav: vardagar,
+    •    hårt klockslag: 09.00–16.00,
+    •    mjukt önskemål: onsdagar och fredagar.
+Tidsmotorn ska utifrån detta ta fram:
+    •    samtliga giltiga dagar och tider,
+    •    vilka tider som är särskilt lämpliga,
+    •    vilka veckor uppgiften kan ingå i,
+    •    hur planeringsfriheten förändras när tiden går.
+Geografimotorn ska samtidigt ta fram:
+    •    uppgiftens geografiska punkt,
+    •    närliggande uppgifter,
+    •    möjliga gemensamma stopp,
+    •    möjliga geografiska ruttområden.
+Klumpningsmotorerna ska därefter kombinera tids- och geografiinformationen med uppgiftens utförandekod.
+Grundfrågorna är:
+    •    När?
+    •    Var?
+    •    Hur?
+Därtill ska uppgiftens status avgöra om uppgiften över huvud taget ska ingå i planeringsunderlaget.
+2. Gemensam analys
+Systemet ska analysera om en uppgift kan ingå i en eller flera möjliga klumpar.
+En uppgift kan exempelvis samtidigt vara möjlig att utföra:
+    •    i Göteborg Nord vecka 36,
+    •    i Göteborg Nord vecka 37,
+    •    i Göteborg Centrum vecka 38,
+    •    eller som enskild uppgift vecka 39.
+Detta innebär inte att uppgiften kopieras.
+Det är en och samma uppgift med flera möjliga planeringsalternativ.
+Varje alternativ ska bygga på en kombination av:
+    •    giltigt tidsfönster,
+    •    geografisk relevans,
+    •    kompatibel utförandekod,
+    •    aktuell uppgiftsstatus,
+    •    tillgänglig produktionskapacitet,
+    •    befintliga stopp- och ruttklumpar.
+3. Tidsmotorns ansvar
+Tidsmotorn ska:
+    1    tolka hårda och mjuka tidsregler,
+    2    beräkna samtliga möjliga utförandetider,
+    3    rangordna de möjliga tiderna,
+    4    visa vilka veckor, dagar och klockslag som är giltiga,
+    5    markera prioriterade tider,
+    6    visa hur många möjliga tider som återstår,
+    7    uppdatera bedömningen när planeringshorisonten förändras.
+Tidsmotorn ska skilja mellan:
+    •    tillåten tid,
+    •    föredragen tid,
+    •    föreslagen tid,
+    •    planerad tid,
+    •    verklig utförd tid.
+4. Geografimotorns ansvar
+Geografimotorn ska i den första versionen arbeta med Long/Lat och en exakt punktposition.
+Motorn ska:
+    1    bestämma uppgiftens geografiska position,
+    2    beräkna avstånd till andra uppgifter,
+    3    identifiera uppgifter inom relevant stoppradie,
+    4    identifiera uppgifter inom relevant ruttradie,
+    5    ta fram geografiska kandidater till stopp- och ruttklumpar,
+    6    leverera underlag till kartvyn i Uppgiftsnavet och Veckoplanen.
+Geografimotorn ska inte ensam besluta om klumpning. Geografisk närhet är endast ett av flera villkor.
+5. Stoppklumpningsmotorns ansvar
+Stoppklumpningsmotorn ska arbeta operativt och främst användas för uppgifter som snart ska tilldelas en utförare och placeras i en veckoplan.
+Normal tidshorisont är:
+    •    1–2 veckor framåt,
+    •    eller ett manuellt valt tidsintervall.
+Motorn ska identifiera uppgifter som:
+    •    ligger på samma adress eller arbetsplats,
+    •    ligger inom inställd stoppradie,
+    •    har kompatibel utförandekod,
+    •    kan utföras inom överlappande tidsfönster,
+    •    kan tilldelas samma utförare eller team.
+Resultatet ska vara möjliga stoppklumpar som planeraren kan:
+    •    välja,
+    •    dela,
+    •    slå samman,
+    •    tilldela en utförare,
+    •    placera i en veckoplan.
+6. Ruttklumpningsmotorns ansvar
+Ruttklumpningsmotorn ska arbeta med en rullande planeringshorisont om minst ett år.
+Syftet är grovplanering, inte exakt daglig planering.
+Motorn ska visa hur uppgifter successivt börjar bilda möjliga rutter över tid.
+Exempel:
+Göteborg, vecka 43–45
+85 uppgifter
+60 produktionstimmar
+Utförandekod RBK-TVÄTT
+Ruttklumpar långt fram i tiden ska vara preliminära.
+Precisionen ska öka ju närmare aktuellt datum man kommer.
+Motorn ska kunna föreslå:
+    •    hela ruttklumpar,
+    •    delklumpar,
+    •    flera möjliga veckor,
+    •    flera möjliga utförare,
+    •    uppskattad produktionstid,
+    •    uppskattad resursbelastning.
+7. Uppgiftsnavets visning
+Uppgiftsnavet ska visa resultatet från motorerna som ett gemensamt planeringsunderlag.
+För varje uppgift ska Navet kunna visa:
+    •    leveransperiod,
+    •    giltiga tidsregler,
+    •    prioriterade dagar och tider,
+    •    antal möjliga veckor,
+    •    möjliga stoppklumpar,
+    •    möjliga ruttklumpar,
+    •    bästa aktuella planeringsförslag,
+    •    återstående planeringsfrihet.
+Kompakt exempel:
+September · vardagar 09–16 · helst ons/fre
+4 möjliga ruttklumpar · 3 möjliga stoppklumpar
+Vid öppning ska planeraren kunna se vilka konkreta veckor och klumpar som är möjliga.
+8. Kartbaserat arbetssätt
+Resultatet ska även kunna visas på karta.
+Planeraren ska i Uppgiftsnavet kunna:
+    •    bläddra vecka för vecka,
+    •    se hur uppgifter uppstår geografiskt över tid,
+    •    filtrera på utförandekod och status,
+    •    markera ett geografiskt område,
+    •    välja enskilda uppgifter,
+    •    välja stoppklumpar,
+    •    välja hela ruttklumpar,
+    •    skicka urvalet till utförare och veckoplan.
+Kartan ska fungera på motsvarande sätt som en väderradarkarta där tid och geografi visas samtidigt.
+9. Triggers för ny analys
+Ny analys ska endast initieras när någon av följande förändras:
+    •    När: leveransperiod, tidsfönster, möjlig vecka eller planerad tid.
+    •    Var: adress, Long/Lat eller annan geografiskt relevant position.
+    •    Hur: utförandekod.
+    •    Status: skapad, återförd från veckoplan eller annan statusförändring som påverkar om uppgiften ska ingå i planeringen.
+Ändringar av exempelvis:
+    •    beskrivning,
+    •    pris,
+    •    dokument,
+    •    fakturauppgifter,
+    •    intern information,
+ska inte initiera omklumpning.
+10. Inkrementell omräkning
+När en uppgift förändras ska systemet i första hand endast analysera den förändrade uppgiften mot befintliga relevanta klumpar.
+Exempel:
+Om uppgiftens leveransperiod ändras från vecka 38 till vecka 44 ska systemet kontrollera om just denna uppgift:
+    •    kan läggas till i en befintlig ruttklump,
+    •    ska flyttas från en tidigare klump,
+    •    ska ingå i ett nytt stopp,
+    •    eller fortsatt ska vara oklumpad.
+Systemet ska inte göra en fullständig omräkning av alla uppgifter vid varje ändring.
+Fullständig omräkning ska endast ske vid exempelvis:
+    •    ändrad klumpningsradie,
+    •    ändrad central planeringsregel,
+    •    ändrad definition av utförandekod,
+    •    manuell begäran från planeraren,
+    •    schemalagd större omanalys.
+11. Planerarens arbetsflöde
+Planeraren ska kunna arbeta på tre nivåer:
+A. Hela ruttklumpar
+Planeraren väljer en hel ruttklump och:
+    •    tilldelar den till en utförare,
+    •    placerar den i en vecka,
+    •    eller delar upp den i flera delklumpar.
+B. Stoppklumpar
+Planeraren filtrerar på:
+    •    tid,
+    •    geografi,
+    •    utförandetyp,
+    •    status,
+och väljer flera stoppklumpar för tilldelning.
+C. Enskilda uppgifter
+Planeraren ska alltid kunna välja och tilldela enskilda uppgifter vid behov.
+Det normala arbetssättet vid stora volymer ska dock vara att arbeta med klumpar, inte att manuellt tilldela hundratals uppgifter en och en.
+12. Tekniskt mål
+Replit ska ta fram en modell där motorerna kan arbeta separat men leverera ett gemensamt resultat.
+Det ska finnas en tydlig skillnad mellan:
+    •    rådata på uppgiften,
+    •    beräknade tidsalternativ,
+    •    geografiska kandidater,
+    •    möjliga klumptillhörigheter,
+    •    vald planering,
+    •    faktisk tilldelning.
+Beräknade alternativ får inte förväxlas med en beslutad planering.
+En uppgift kan därför ha flera möjliga klumptillhörigheter samtidigt, men endast en aktiv planerad placering när planeraren har fattat beslut.
+Förväntad leverans från Replit
+Replit ska återkomma med:
+    1    förslag till datamodell för tidsregler och möjliga utförandetider,
+    2    modell för möjliga stopp- och ruttklumptillhörigheter,
+    3    logik för samverkan mellan tidsmotor, geografimotor och klumpningsmotorer,
+    4    triggerlogik för inkrementell omräkning,
+    5    förslag på API-flöde,
+    6    förslag på hur resultatet ska visas i Uppgiftsnavets list- och kartvy,
+    7    princip för hur en preliminär klump övergår till planerad och tilldelad produktion,
+    8    bedömning av prestanda för en rullande planeringshorisont på ett år.
+Den centrala principen är att Traivo ska kombinera när, var och hur för att visa alla praktiskt möjliga planeringsalternativ, samtidigt som planeraren behåller kontrollen över den slutliga tilldelningen.
