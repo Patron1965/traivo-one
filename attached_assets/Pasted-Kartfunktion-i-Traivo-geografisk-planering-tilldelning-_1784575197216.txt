@@ -1,0 +1,1609 @@
+Kartfunktion i Traivo – geografisk planering, tilldelning, utförande och uppföljning
+
+
+
+1. Syfte
+
+
+
+Kartfunktionen ska vara en av Traivos centrala arbetsytor och komplettera Navets tabellvy.
+
+
+
+Navet visar uppgifterna strukturerat i listor och hierarkier. Kartan visar samma uppgifter geografiskt och över tid. Tidslinjen visar när uppgifterna kan, bör eller ska utföras.
+
+
+
+Kartfunktionen ska därför inte vara en passiv kartvisning. Den ska vara ett aktivt arbetsverktyg där planeraren och utföraren kan:
+
+
+
+* se var uppgifter, stoppklumpar och ruttklumpar finns,
+
+* förstå hur de är grupperade,
+
+* se när de kan eller ska utföras,
+
+* bedöma produktionstid, värde och kapacitet,
+
+* plocka och tilldela arbete direkt från kartan,
+
+* bygga en veckoplan geografiskt och tidsmässigt,
+
+* följa utförandet,
+
+* omplanera arbetet,
+
+* registrera status och utfall.
+
+
+
+Kartfunktionen ska använda samma uppgifter, statusar, klumpar, tidsvillkor och behörigheter som Navet. En ändring i kartan ska omedelbart visas i Navet och vice versa.
+
+
+
+⸻
+
+
+
+2. Kartan ska både visa och användas för att plocka arbete
+
+
+
+Kartans funktion är tvådelad:
+
+
+
+1. visualisera uppgifter, stoppklumpar och ruttklumpar geografiskt och över tid,
+
+2. fungera som en aktiv plock- och planeringsyta.
+
+
+
+Planeraren ska kunna plocka direkt från kartan:
+
+
+
+* en hel ruttklump,
+
+* en eller flera stoppklumpar,
+
+* en enskild uppgift,
+
+* flera markerade objekt inom ett geografiskt område.
+
+
+
+Det valda arbetet ska kunna tilldelas:
+
+
+
+* en utförare eller ett team,
+
+* en kalendervecka.
+
+
+
+När tilldelningen genomförs ska uppgifterna byta från otilldelat till tilldelat läge och kopplas till vald utförares eller valt teams veckoplan.
+
+
+
+Kartan ska därmed kunna användas för hela flödet från geografiskt urval till färdig veckoplan.
+
+
+
+⸻
+
+
+
+3. Två arbetslägen
+
+
+
+Kartfunktionen ska ha två tydliga arbetslägen:
+
+
+
+1. planerarläge,
+
+2. utförarläge.
+
+
+
+3.1 Planerarläge
+
+
+
+Planerarläget används för grovplanering, tilldelning och kapacitetsfördelning.
+
+
+
+Planeraren arbetar huvudsakligen med:
+
+
+
+* ruttklumpar,
+
+* stoppklumpar,
+
+* enskilda uppgifter,
+
+* otilldelade uppgifter,
+
+* tilldelade uppgifter,
+
+* geografisk arbetsfördelning,
+
+* kapacitetsplanering,
+
+* val av utförare eller team,
+
+* val av kalendervecka,
+
+* omplanering och återgång till Navet.
+
+
+
+Tidsupplösningen ska i första hand vara kalenderveckor.
+
+
+
+Planeraren ska kunna flytta tidslinjen vecka för vecka och se vilka uppgifter och klumpar som är möjliga, tilldelade, utförda eller försenade under respektive vecka.
+
+
+
+3.2 Utförarläge
+
+
+
+Utförarläget används av den person eller det team som ska genomföra arbetet.
+
+
+
+Här visas i första hand:
+
+
+
+* den aktuella utförarens tilldelade uppgifter,
+
+* teamets tilldelade uppgifter, om behörigheten medger det,
+
+* stoppklumpar,
+
+* enskilda uppgifter,
+
+* reseuppgifter,
+
+* andra tidsuppgifter i veckoplanen.
+
+
+
+Tidsupplösningen ska vara dagar.
+
+
+
+Utföraren ska kunna växla mellan exempelvis:
+
+
+
+* måndag,
+
+* tisdag,
+
+* onsdag,
+
+* torsdag,
+
+* fredag,
+
+* lördag och söndag när det är relevant.
+
+
+
+Utföraren ska kunna använda kartan för att:
+
+
+
+* se dagens stopp,
+
+* se dagens uppgifter,
+
+* se reseuppgifter,
+
+* följa dagens geografiska plan,
+
+* öppna uppgifter,
+
+* ändra status,
+
+* registrera verklig tid,
+
+* rapportera avvikelse,
+
+* rapportera att arbetet är omöjligt att utföra,
+
+* lägga till bilder och dokumentation,
+
+* se nästa planerade stopp,
+
+* se kommande dagars arbete.
+
+
+
+⸻
+
+
+
+4. Kartans tre geografiska nivåer
+
+
+
+Kartan ska kunna visa tre hierarkiska nivåer:
+
+
+
+1. ruttklump,
+
+2. stoppklump,
+
+3. enskild uppgift.
+
+
+
+Vilken nivå som visas ska kunna bero på zoomnivå, filter och användarens val.
+
+
+
+4.1 Nivå 1 – ruttklump
+
+
+
+Ruttklumpar visas normalt när kartan är utzoomad.
+
+
+
+En ruttklump representerar en större geografisk gruppering kopplad till en ort eller ett område.
+
+
+
+Exempel:
+
+
+
+* Göteborg 1,
+
+* Göteborg 2,
+
+* Nynäshamn 1,
+
+* Södertälje 1.
+
+
+
+Ruttklumpen används främst av planeraren för att hantera många otilldelade uppgifter med en gemensam manöver.
+
+
+
+4.2 Nivå 2 – stoppklump
+
+
+
+När användaren öppnar eller zoomar in på en ruttklump visas dess stoppklumpar.
+
+
+
+Exempel:
+
+
+
+* Hamngatan 22, Göteborg,
+
+* Industrivägen 8, Mölndal,
+
+* Centrumvägen 4, Nynäshamn.
+
+
+
+Stoppklumpen representerar en adress, arbetsplats eller annan logisk stoppunkt.
+
+
+
+4.3 Nivå 3 – enskild uppgift
+
+
+
+När ett stopp öppnas visas de enskilda uppgifterna.
+
+
+
+Exempel:
+
+
+
+* tvätt RBK,
+
+* tillsyn,
+
+* reparation,
+
+* märkning,
+
+* besiktning.
+
+
+
+Varje enskild uppgift ska kunna öppnas från kartan och visa uppgiftens fullständiga uppgiftspaket med i princip samtliga cirka 94 datafält.
+
+
+
+Det ska även vara möjligt att gå vidare till uppgiftens källa, exempelvis:
+
+
+
+* orderkoncept,
+
+* snabborder,
+
+* schema,
+
+* abonnemang,
+
+* ursprungsorder.
+
+
+
+⸻
+
+
+
+5. Tidslinjen
+
+
+
+Längst ned i kartan ska det finnas en tidslinje.
+
+
+
+Principen ska påminna om en väderradarkarta där användaren kan flytta sig framåt och bakåt i tiden och följa hur informationen förändras.
+
+
+
+I Traivo är det inte nederbörd som visas, utan:
+
+
+
+* ruttklumpar,
+
+* stoppklumpar,
+
+* uppgifter,
+
+* tilldelningar,
+
+* statusar,
+
+* möjlig eller planerad leveranstid.
+
+
+
+5.1 Planerarens tidslinje
+
+
+
+Planeraren arbetar i första hand vecka för vecka.
+
+
+
+Exempel:
+
+
+
+v. 36 → v. 37 → v. 38 → v. 39 → v. 40
+
+
+
+Planeraren ska kunna:
+
+
+
+* dra tidslinjen,
+
+* gå till föregående eller nästa vecka,
+
+* spela upp flera veckor,
+
+* pausa uppspelningen,
+
+* hoppa till aktuell vecka,
+
+* välja ett längre intervall.
+
+
+
+5.2 Utförarens tidslinje
+
+
+
+Utföraren arbetar i första hand dag för dag.
+
+
+
+Exempel:
+
+
+
+Måndag → Tisdag → Onsdag → Torsdag → Fredag
+
+
+
+Utföraren ska kunna:
+
+
+
+* gå till föregående eller nästa dag,
+
+* dra tidslinjen,
+
+* växla mellan dag och hela veckan,
+
+* hoppa till dagens datum,
+
+* se hur veckans arbete är fördelat.
+
+
+
+⸻
+
+
+
+6. Klumparnas liv över tiden
+
+
+
+En ruttklump eller uppgift ska inte försvinna enbart därför att användaren flyttar tidslinjen.
+
+
+
+Den ska visas under hela den period då den är relevant eller möjlig att utföra.
+
+
+
+Exempel:
+
+
+
+Möjlig leverans: vecka 38–40
+
+
+
+Klumpen ska då visas under:
+
+
+
+* vecka 38,
+
+* vecka 39,
+
+* vecka 40.
+
+
+
+Presentation och status kan däremot förändras beroende på vald vecka.
+
+
+
+Exempel på lägen:
+
+
+
+* ännu inte planeringsbar,
+
+* möjlig att planera,
+
+* nästa möjliga vecka,
+
+* tilldelad,
+
+* pågående,
+
+* utförd,
+
+* inte utförd,
+
+* passerad hård leveranstid.
+
+
+
+På detta sätt kan planeraren följa arbetsmängd och leveransmöjligheter över tiden på samma sätt som ett väderområde följs genom flera radarbilder.
+
+
+
+⸻
+
+
+
+7. Tidsmotorns information på kartan
+
+
+
+Kartan ska inte endast visa ett föreslaget datum.
+
+
+
+Tidsmotorn ska också visa en sammanfattning av uppgiftens eller klumpens fullständiga leveransvillkor.
+
+
+
+Exempel:
+
+
+
+* Augusti – onsdagar 08.00–16.00
+
+* September – vardagar 09.00–16.00, helst onsdag eller fredag
+
+* Vecka 38–40
+
+* Senast 30 september
+
+* Hela veckan, dock inte måndag
+
+
+
+När användaren öppnar informationsrutan ska även nästa möjliga utförandetid visas.
+
+
+
+Exempel:
+
+
+
+Nästa möjliga utförandetid: onsdag 19 augusti kl. 08.00.
+
+
+
+Om en klump innehåller flera uppgifter med olika tidsvillkor ska kartan visa:
+
+
+
+* en gemensam sammanfattning när villkoren är kompatibla,
+
+* en varning när tidsvillkoren skiljer sig eller står i konflikt.
+
+
+
+⸻
+
+
+
+8. Visning av arbetsmängd och ekonomiskt värde
+
+
+
+Varje ruttklump ska direkt på kartan kunna visa:
+
+
+
+* arbetsnamn,
+
+* produktionstid,
+
+* försäljningsvärde,
+
+* antal stopp,
+
+* antal uppgifter,
+
+* status,
+
+* leveransperiod,
+
+* eventuell tilldelning.
+
+
+
+Exempel:
+
+
+
+Göteborg 1
+
+27,5 h
+
+68 750 kr
+
+6 stopp
+
+v. 38–39
+
+Otilldelad
+
+
+
+Exakta värden ska alltid kunna läsas som siffror. Den grafiska presentationen är ett komplement och får inte ersätta de numeriska värdena.
+
+
+
+⸻
+
+
+
+9. Grafisk presentation
+
+
+
+Kartobjekten ska kunna bära flera informationslager genom storlek, färg, form och text.
+
+
+
+9.1 Storlek
+
+
+
+Storleken kan representera produktionstid.
+
+
+
+Exempel:
+
+
+
+* liten symbol: 8 timmar,
+
+* medelstor symbol: 18 timmar,
+
+* stor symbol: 28 timmar,
+
+* extra stor eller särskilt markerad symbol: 34 timmar och därmed över inställd maxgräns.
+
+
+
+Det exakta antalet produktionstimmar ska samtidigt visas som siffra.
+
+
+
+9.2 Färg
+
+
+
+Färgen ska kunna representera olika analysvärden.
+
+
+
+Användaren ska kunna välja färgläge, exempelvis:
+
+
+
+* försäljningsvärde,
+
+* marginal,
+
+* status,
+
+* kapacitetsutnyttjande,
+
+* leveransbrådska,
+
+* plan mot utfall.
+
+
+
+Kartans legend ska ändras automatiskt beroende på valt färgläge.
+
+
+
+9.3 Form
+
+
+
+Formen kan exempelvis visa status eller objekttyp.
+
+
+
+Exempel:
+
+
+
+* cirkel: otilldelad,
+
+* fyrkant: tilldelad,
+
+* triangel: tidskonflikt eller varning,
+
+* sexkant: delvis tilldelad,
+
+* streckad symbol: simulerad eller preliminär.
+
+
+
+Alternativt kan olika former användas för att skilja mellan:
+
+
+
+* ruttklump,
+
+* stoppklump,
+
+* uppgift.
+
+
+
+Den slutliga grafiska standarden ska definieras i Traivos designsystem.
+
+
+
+⸻
+
+
+
+10. Informationspanel
+
+
+
+När en klump, ett stopp eller en uppgift väljs ska en informationspanel öppnas.
+
+
+
+För en ruttklump ska panelen exempelvis visa:
+
+
+
+* arbetsnamn,
+
+* klump-ID,
+
+* ort eller område,
+
+* utförandetyp,
+
+* antal uppgifter,
+
+* antal stopp,
+
+* produktionstid,
+
+* maximal tillåten produktionstid,
+
+* återstående kapacitetsmarginal,
+
+* försäljningsvärde,
+
+* beräknad marginal,
+
+* leveransperiod,
+
+* Tidsmotorns sammanfattning,
+
+* nästa möjliga leveranstid,
+
+* status,
+
+* tilldelad eller otilldelad,
+
+* utförare eller team,
+
+* vald kalendervecka.
+
+
+
+Från panelen ska användaren kunna:
+
+
+
+* öppna objektet i Navets tabell,
+
+* visa ingående stopp eller uppgifter,
+
+* tilldela objektet,
+
+* återföra objektet till otilldelat läge,
+
+* dela eller lösa upp en klump,
+
+* gruppera om uppgifter,
+
+* öppna fullständig uppgiftsinformation.
+
+
+
+⸻
+
+
+
+11. Direkt tilldelning från kartan
+
+
+
+Planeraren ska kunna utföra tilldelningen direkt från kartan.
+
+
+
+Följande objekt ska kunna tilldelas:
+
+
+
+* en ruttklump,
+
+* en stoppklump,
+
+* en enskild uppgift,
+
+* flera markerade klumpar eller stopp.
+
+
+
+Tilldelningsflödet ska exempelvis vara:
+
+
+
+1. Välj ett eller flera objekt.
+
+2. Välj Tilldela.
+
+3. Välj utförare eller team.
+
+4. Välj kalendervecka.
+
+5. Visa kapacitet och tidsvillkor.
+
+6. Bekräfta tilldelningen.
+
+
+
+Systemet ska före bekräftelsen visa:
+
+
+
+* vald produktionstid,
+
+* utförarens tillgängliga tid,
+
+* befintlig beläggning,
+
+* total beläggning efter tilldelningen,
+
+* risk för överbokning,
+
+* tidskonflikter,
+
+* vilka uppgifter som inte ryms inom hårda tidsfönster.
+
+
+
+Överbokning ska kunna tillåtas efter varning.
+
+
+
+⸻
+
+
+
+12. Gruppmarkering
+
+
+
+Planeraren ska kunna markera:
+
+
+
+* en klump,
+
+* flera klumpar,
+
+* ett eller flera stopp,
+
+* enskilda uppgifter,
+
+* samtliga objekt inom ett ritat geografiskt område,
+
+* samtliga objekt som är synliga efter ett filter.
+
+
+
+Systemet ska då summera:
+
+
+
+* antal ruttklumpar,
+
+* antal stopp,
+
+* antal uppgifter,
+
+* sammanlagd produktionstid,
+
+* sammanlagt försäljningsvärde,
+
+* beräknad marginal,
+
+* gemensamma möjliga leveransveckor,
+
+* kapacitetsutnyttjande,
+
+* eventuella tidskonflikter.
+
+
+
+Hela urvalet ska kunna tilldelas genom en gemensam administrativ åtgärd.
+
+
+
+⸻
+
+
+
+13. Utförarens miniatyr-Nav
+
+
+
+När uppgifter tilldelas en utförare och en kalendervecka ska de visas i en särskild veckovy för utföraren.
+
+
+
+Denna vy kan beskrivas som ett miniatyr-Nav.
+
+
+
+Den ska endast innehålla:
+
+
+
+* vald utförares eller valt teams uppgifter,
+
+* den aktuella veckan,
+
+* de stoppklumpar som uppgifterna ingår i,
+
+* enskilda uppgifter,
+
+* reseuppgifter,
+
+* andra tidsuppgifter.
+
+
+
+Utförarens miniatyr-Nav ska kunna visas både som:
+
+
+
+* lista,
+
+* karta.
+
+
+
+Ruttklumpen behöver normalt inte följa med som arbetsgruppering i utförarens veckoplan. Där ska uppgifterna i stället grupperas som stoppklumpar och enskilda uppgifter.
+
+
+
+Det ska dock gå att se vilken ruttklump uppgifterna ursprungligen kom från.
+
+
+
+⸻
+
+
+
+14. Veckoplanen byggs genom att plocka stopp och uppgifter
+
+
+
+När arbetet har tilldelats till en utförare och vecka ska det kunna fördelas över veckans dagar.
+
+
+
+Detta ska kunna göras av:
+
+
+
+* planeraren,
+
+* utföraren själv, om behörigheten tillåter det.
+
+
+
+Det normala arbetssättet ska vara att plocka ett stopp i taget från kartan.
+
+
+
+Användaren ska kunna:
+
+
+
+1. välja aktuell vecka,
+
+2. välja en dag,
+
+3. se vilka stopp och uppgifter som kan utföras den dagen,
+
+4. plocka ett stopp eller en uppgift,
+
+5. placera den i dagens plan,
+
+6. fortsätta med nästa geografiskt eller tidsmässigt lämpliga stopp.
+
+
+
+Tidsmotorn ska samtidigt visa:
+
+
+
+* uppgifter som kan utföras hela veckan,
+
+* uppgifter som endast kan utföras vissa dagar,
+
+* hårda tidsfönster,
+
+* mjuka eller positiva önskemål,
+
+* uppgifter som inte kan placeras vald dag.
+
+
+
+Syftet är att användaren successivt ska kunna skapa en geografiskt och tidsmässigt logisk körplan över veckan.
+
+
+
+⸻
+
+
+
+15. Ruttoptimering Light
+
+
+
+Ruttoptimering Light ska löpande beräkna och skapa reseuppgifterna när veckoplanen byggs.
+
+
+
+Varje gång ett stopp eller en uppgift placeras i veckoplanen ska motorn:
+
+
+
+1. identifiera platsen före uppgiften,
+
+2. identifiera den nya uppgiftens plats,
+
+3. identifiera eventuell efterföljande plats,
+
+4. beräkna berörda resor,
+
+5. välja rätt researtikel för utföraren,
+
+6. skapa eller uppdatera reseuppgifterna,
+
+7. räkna om dagens och veckans tid.
+
+
+
+Om en uppgift flyttas, tas bort eller får en ny ordningsföljd ska berörda reseuppgifter automatiskt:
+
+
+
+* tas bort,
+
+* räknas om,
+
+* ersättas,
+
+* skapas på nytt.
+
+
+
+Ruttoptimering Light ska inte avgöra leveranstider. Detta ansvar ligger hos Tidsmotorn.
+
+
+
+⸻
+
+
+
+16. Veckoplanen som en obruten kedja av platser och uppgifter
+
+
+
+Veckoplanen ska ses som en obruten tidsmässig och geografisk kedja från en helgvila till nästa helgvila.
+
+
+
+Kedjan kan innehålla:
+
+
+
+* helgvila,
+
+* resa,
+
+* produktion,
+
+* egentid,
+
+* möte,
+
+* utbildning,
+
+* väntetid,
+
+* nattvila,
+
+* nästa resa,
+
+* nästa produktion,
+
+* nästa helgvila.
+
+
+
+Exempel:
+
+
+
+Helgvila
+
+→ resa
+
+→ stopp 1
+
+→ resa
+
+→ stopp 2
+
+→ egentid
+
+→ resa
+
+→ nattvila
+
+→ resa
+
+→ stopp 3
+
+→ resa
+
+→ helgvila
+
+
+
+Alla delar ska hanteras som tidsblock eller uppgifter i veckoplanen.
+
+
+
+⸻
+
+
+
+17. Automatisk resa från och till helgvila
+
+
+
+Om en veckoplan är tom och endast innehåller start och slut vid helgvilans plats ska det inte finnas några reseuppgifter.
+
+
+
+Så snart den första uppgiften eller stoppklumpen läggs ut ska systemet automatiskt skapa:
+
+
+
+* en resa från helgvilans plats till första arbetsplatsen,
+
+* en resa från sista arbetsplatsen tillbaka till nästa helgvila.
+
+
+
+När fler stopp läggs in ska systemet skapa resor mellan dessa platser och räkna om kedjan.
+
+
+
+Om nattvila sker på annan plats ska den platsen fungera som nästa geografiska utgångspunkt.
+
+
+
+Veckoplanen ska därmed alltid kunna beskrivas som en sammanhängande kedja av platser och aktiviteter.
+
+
+
+⸻
+
+
+
+18. Summering av olika tidstyper
+
+
+
+Systemet ska kontinuerligt summera olika tidstyper.
+
+
+
+Exempel:
+
+
+
+* produktionstid,
+
+* restid,
+
+* egentid,
+
+* mötestid,
+
+* utbildningstid,
+
+* väntetid,
+
+* nattvila,
+
+* helgvila,
+
+* spilltid,
+
+* oplanerad tid,
+
+* övriga uppgiftstyper.
+
+
+
+Summeringen ska kunna visas per:
+
+
+
+* dag,
+
+* vecka,
+
+* utförare,
+
+* team,
+
+* uppgiftstyp.
+
+
+
+Systemet ska bland annat visa:
+
+
+
+* planerad produktionstid,
+
+* planerad restid,
+
+* total planerad arbetstid,
+
+* ledig tid,
+
+* beläggningsgrad,
+
+* eventuell överbokning.
+
+
+
+Spilltid eller oplanerad tid ska kunna visas som den del av tillgänglig tid som ännu inte innehåller någon planerad uppgift.
+
+
+
+⸻
+
+
+
+19. Överlappning och överbokning
+
+
+
+Traivo ska tillåta överbokning och tidsmässig överlappning.
+
+
+
+Exempelvis kan:
+
+
+
+* två produktionsuppgifter överlappa,
+
+* en produktionsuppgift överlappa egentid,
+
+* flera uppgifter konkurrera om samma tidsintervall.
+
+
+
+Systemet ska inte automatiskt radera, flytta eller blockera uppgifterna.
+
+
+
+I stället ska det:
+
+
+
+* tydligt markera överlappningen,
+
+* visa vilka uppgifter som berörs,
+
+* visa hur många timmar som är överbokade,
+
+* visa konsekvensen för leveranstider och resor,
+
+* ge planeraren möjlighet att justera ordningen.
+
+
+
+Överbokning är därmed en tillåten status och inte ett tekniskt fel.
+
+
+
+⸻
+
+
+
+20. Utförande och status från kartan
+
+
+
+Utföraren ska kunna ändra uppgiftens operativa status direkt från kartan.
+
+
+
+Exempel på statusar:
+
+
+
+* på väg,
+
+* på plats,
+
+* utförd,
+
+* delvis utförd,
+
+* omöjlig att utföra,
+
+* avvikelse rapporterad.
+
+
+
+Utföraren ska även kunna:
+
+
+
+* registrera verklig starttid,
+
+* registrera verklig sluttid,
+
+* registrera verklig produktionstid,
+
+* registrera verkligt antal,
+
+* registrera verklig restid,
+
+* lägga till bilder,
+
+* skriva kommentarer,
+
+* ange orsak till att uppgiften inte kunde utföras.
+
+
+
+Ändringarna ska omedelbart visas i:
+
+
+
+* utförarens veckoplan,
+
+* Navet,
+
+* kartan,
+
+* uppgiftens historik,
+
+* underlaget för uppföljning och fakturakontroll.
+
+
+
+⸻
+
+
+
+21. Planerade och verkliga värden på kartan
+
+
+
+Kartan ska kunna visa både plan och utfall.
+
+
+
+Exempel på valbara lägen:
+
+
+
+* planerad produktionstid,
+
+* verklig produktionstid,
+
+* planerat värde,
+
+* verkligt värde,
+
+* planerad restid,
+
+* verklig restid,
+
+* planerad marginal,
+
+* verklig marginal,
+
+* avvikelse mellan plan och utfall.
+
+
+
+Det ska därmed vara möjligt att använda kartan både före, under och efter utförandet.
+
+
+
+⸻
+
+
+
+22. Filter och visningslägen
+
+
+
+Kartan ska kunna filtreras på samma sätt som Navet.
+
+
+
+Exempel på filter:
+
+
+
+* status,
+
+* tilldelad eller otilldelad,
+
+* utförare,
+
+* team,
+
+* kalendervecka,
+
+* dag,
+
+* utförandetyp,
+
+* artikel,
+
+* kund,
+
+* objekt,
+
+* ort,
+
+* ruttklump,
+
+* stoppklump,
+
+* leveranstid,
+
+* tidskonflikt,
+
+* produktionstid,
+
+* försäljningsvärde,
+
+* marginal,
+
+* plan eller utfall.
+
+
+
+Det ska även gå att välja om kartan ska visa:
+
+
+
+* endast ruttklumpar,
+
+* endast stoppklumpar,
+
+* endast uppgifter,
+
+* uppgifter utanför klump,
+
+* reseuppgifter,
+
+* utförda uppgifter,
+
+* omöjliga att utföra,
+
+* samtliga statusar.
+
+
+
+⸻
+
+
+
+23. Koppling mellan karta, Nav och veckoplan
+
+
+
+Kartan, Navet och veckoplanen ska vara tre vyer över samma underliggande information.
+
+
+
+* Navet visar struktur, status och data.
+
+* Kartan visar geografi.
+
+* Tidslinjen visar utveckling över tid.
+
+* Veckoplanen visar resursens konkreta ordningsföljd och tidsbelastning.
+
+
+
+Om användaren exempelvis:
+
+
+
+* tilldelar en klump,
+
+* flyttar en uppgift,
+
+* ändrar vecka,
+
+* ändrar dag,
+
+* återför en uppgift till Navet,
+
+* ändrar status,
+
+* registrerar verklig tid,
+
+
+
+ska samtliga berörda vyer uppdateras direkt.
+
+
+
+⸻
+
+
+
+24. Sammanfattande utvecklingsprincip
+
+
+
+Kartfunktionen ska inte utvecklas som en fristående presentation.
+
+
+
+Den ska vara ett aktivt planerings-, tilldelnings- och utförandeverktyg som arbetar med samma uppgifter som Navet och veckoplanen.
+
+
+
+Grundflödet är:
+
+
+
+Navet med samtliga uppgifter
+
+→ geografisk visning på kartan
+
+→ ruttklump, stoppklump eller enskild uppgift plockas
+
+→ uppgiften tilldelas utförare och vecka
+
+→ uppgiften visas i utförarens miniatyr-Nav
+
+→ stopp och uppgifter placeras ut dag för dag
+
+→ Ruttoptimering Light skapar reseuppgifter
+
+→ veckoplanen byggs som en obruten kedja från helgvila till helgvila
+
+→ utföraren registrerar status och verkligt utfall
+
+→ resultatet återförs till Navet för uppföljning, fakturakontroll och efteranalys.
+
+
+
+Kartan ska på detta sätt ge både planeraren och utföraren en fullständig geografisk och tidsmässig lägesbild och samtidigt fungera som en praktisk arbetsyta för att planera, tilldela, utföra och följa upp arbetet i Traivo.
+
+
+
+Se bifogade exempel på förslag på kartvisning för planerare och utförare image0.pngimage1.pngimage2.pngimage4.png
