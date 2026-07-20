@@ -1,0 +1,130 @@
+Förtydligande av begreppet kluster i Traivo
+
+Grunddefinition
+
+Ett kluster i Traivo är en logisk gruppering av objekt som tillsammans bildar en struktur, ett träd eller en gren. Klustret beskriver hur objekt hör ihop organisatoriskt eller funktionellt och har ingen direkt koppling till planering, ruttoptimering eller geografisk klumpning.
+
+Kluster används för att skapa en flexibel objektstruktur där varje nivå kan innehålla ett eller flera underliggande kluster eller enskilda objekt. Ett objekt kan samtidigt vara en del av ett större kluster och själv fungera som rot för ett nytt underkluster.
+
+Klustret är därmed Traivos sätt att beskriva verklighetens hierarkier.
+
+⸻
+
+Exempel 1 – Axfood
+
+Axfood kan representeras som ett överordnat kluster.
+
+Under detta finns exempelvis:
+
+Hemköp
+Willys
+Snabbgross
+
+Varje butik utgör i sin tur ett eget kluster.
+
+Exempel:
+
+Axfood
+→ Hemköp Tullinge
+→ Pantmaskiner
+→ Återvinningsplats
+→ Kundvagnar
+→ Lastkaj
+→ Övriga serviceobjekt
+
+Varje nivå kan innehålla egna objekt och ytterligare underkluster.
+
+⸻
+
+Exempel 2 – Bostadsrättsförening
+
+En bostadsrättsförening kan utgöra ett huvudkluster.
+
+Under detta finns exempelvis:
+
+BRF Solgläntan
+
+→ Återvinningsplats Norra
+
+→ Återvinningsplats Södra
+
+Under respektive återvinningsplats finns objekt såsom:
+
+Bottenöppnande behållare
+Rullbara kärl
+Textilbehållare
+Matavfallskärl
+Glasbehållare
+Elavfallskärl
+
+Varje återvinningsplats är alltså ett eget underkluster med sina objekt.
+
+⸻
+
+Egenskaper
+
+Kluster används för att:
+
+skapa logiska objektträd
+organisera anläggningar
+gruppera objekt
+dela metadata mellan objekt
+förenkla administration
+möjliggöra arv av metadata
+skapa överblick i stora organisationer
+
+Klustret beskriver alltid en beständig struktur och påverkas normalt inte av planering eller tid.
+
+⸻
+
+Skillnad mot stoppklumpar och ruttklumpar
+
+Det är viktigt att skilja mellan dessa tre begrepp.
+
+Kluster
+
+Beskriver hur objekt är organiserade.
+
+Frågan som besvaras är:
+
+“Vilka objekt hör organisatoriskt eller funktionellt ihop?”
+
+Exempel:
+
+Axfood → Hemköp → Återvinning → Behållare.
+
+⸻
+
+Stoppklump
+
+Skapas dynamiskt av stoppklumpningsmotorn.
+
+Frågan som besvaras är:
+
+“Vilka uppgifter kan utföras vid samma fysiska stopp?”
+
+En stoppklump kan innehålla uppgifter från flera olika objekt inom samma kluster.
+
+⸻
+
+Ruttklump
+
+Skapas dynamiskt av ruttklumpningsmotorn.
+
+Frågan som besvaras är:
+
+“Vilka uppgifter eller stopp kan utföras inom samma rutt eller planeringsområde?”
+
+En ruttklump kan innehålla uppgifter från flera olika kluster om de ligger geografiskt och tidsmässigt lämpligt.
+
+⸻
+
+Sammanfattning
+
+Traivo använder tre olika typer av gruppering:
+
+Kluster – beskriver den permanenta objektstrukturen (träd och grenar).
+Stoppklumpar – beskriver tillfälliga planeringsgrupper på samma arbetsplats eller stopp.
+Ruttklumpar – beskriver tillfälliga planeringsgrupper inom samma geografiska rutt.
+
+Kluster är en del av informationsmodellen och förändras normalt endast när anläggningens struktur ändras. Stoppklumpar och ruttklumpar skapas däremot dynamiskt av planeringsmotorerna och förändras kontinuerligt när uppgifter, leveranstider, status eller resurser ändras.
