@@ -1,0 +1,362 @@
+Här är en tydlig definition och rekommenderad entitetsmodell för Replit-utvecklingen.
+Definition av stoppklumpar och ruttklumpar i Traivo
+1. Grundprincip
+I Traivo är varje uppgift en självständig post med cirka 94 informationsfält. Fälten kan exempelvis innehålla:
+kund och objekt
+artikel och utförartyp
+gatuadress, ort och koordinater
+önskad leveranstid
+möjliga hårda och mjuka tidsfönster
+beräknad utförandetid
+pris och ekonomiskt värde
+möjlig utförare eller utförargrupp
+uppgiftsstatus
+planeringsstatus
+övrig metadata som styr om, när och av vem uppgiften kan utföras
+Varje uppgift ska dessutom kompletteras med två separata referensfält:
+Stoppklumps-ID
+Ruttklumps-ID
+Fälten innehåller resultatet från Traivos två klumpningsmotorer.
+En uppgift kan alltså:
+sakna klumptillhörighet
+tillhöra en stoppklump
+tillhöra en ruttklump
+tillhöra både en stoppklump och en ruttklump
+Stoppklumpen och ruttklumpen är två olika logiska nivåer och får inte blandas ihop.
+
+
+⸻
+
+
+2. Definition av stoppklump
+2.1 Vad är en stoppklump?
+En stoppklump är en logisk gruppering av en eller flera uppgifter som Traivo bedömer kan utföras vid samma fysiska stopp eller arbetsplats.
+Stoppklumpen representerar alltså platsen där utföraren stannar och genomför ett eller flera arbeten.
+Exempel:
+Tre olika uppgifter finns på Mekanivägen 2C i Tullinge. Uppgifterna avser olika artiklar men kan utföras av samma typ av utförare under samma tillåtna tidsperiod. Uppgifterna kan då ingå i samma stoppklump.
+2.2 Villkor för att uppgifter ska få ingå i samma stoppklump
+Att två uppgifter har samma adress är inte tillräckligt. Stoppklumpningsmotorn ska kontrollera att uppgifterna är praktiskt och tidsmässigt möjliga att utföra tillsammans.
+Följande grundvillkor ska därför vara uppfyllda:
+Geografisk överensstämmelse
+Uppgifterna ska avse samma unika stopp eller arbetsplats. Detta kan fastställas genom:
+samma objektsadress
+samma normaliserade gatuadress
+samma objekt eller närliggande objekt
+koordinater inom en konfigurerbar radie, exempelvis cirka 30 meter
+Radien ska vara justerbar och får inte ensam avgöra klumpningen.
+Tidsmässig kompatibilitet
+Uppgifternas leveranstider och tidsfönster ska vara förenliga.
+Motorn ska kontrollera bland annat:
+önskat leveransdatum
+tidigaste möjliga leveransdatum
+senaste tillåtna leveransdatum
+hårda tidsfönster
+mjuka tidsfönster
+tidsmotorns föreslagna utförandevecka
+redan planerad tid
+beräknad utförandetid
+eventuell prioritet eller akutstatus
+Uppgifter får inte klumpas ihop enbart för att de finns på samma adress om deras tillåtna leveranstider inte överlappar.
+Exempel:
+Uppgift A måste utföras senast den 10 augusti.
+Uppgift B får tidigast utföras den 25 augusti.
+Dessa uppgifter ska normalt inte ingå i samma aktiva stoppklump, trots att de finns på samma adress.
+Utförarmässig kompatibilitet
+Uppgifterna ska kunna utföras av:
+samma utförare
+samma utförargrupp
+samma kompetenstyp
+eller en kombination av utförartyper som enligt Traivos regler kan skickas till samma stopp och veckoplan
+Statusmässig kompatibilitet
+Uppgifter med status som gör dem olämpliga för gemensam planering ska normalt inte tas med i en aktiv stoppklump.
+Exempel på sådana statusar kan vara:
+fakturerad
+makulerad eller arkiverad
+omöjlig att utföra utan ny åtgärd
+redan slutförd, om inte historisk klumptillhörighet ska visas
+Reglerna ska vara konfigurerbara.
+
+
+⸻
+
+
+3. Stoppklumpens identifiering
+När Traivos stoppklumpningsmotor identifierar att en eller flera uppgifter hör till samma stopp ska systemet skapa eller återanvända en stoppklump.
+Stoppklumpen ska minst få:
+ett unikt stoppklumps-ID
+ett maskinläsbart referensnummer
+ett visningsnamn
+normaliserad gatuadress
+ort
+koordinat eller geografisk mittpunkt
+status
+skapad tidpunkt
+senast omräknad tidpunkt
+regelversion eller motorversion
+Rekommenderat visningsnamn
+Stoppklumpens namn ska i normalfallet vara gatuadressen.
+Exempel:
+Mekanivägen 2C, Tullinge
+Om flera tydligt åtskilda stopp finns på samma adress bör namnet kompletteras med exempelvis:
+objektnamn
+anläggningsdel
+gård
+miljörum
+byggnad
+port
+kundens platsbeteckning
+Exempel:
+Mekanivägen 2C – Miljörum västra gården
+Referens på uppgiften
+Alla uppgifter som ingår i stoppklumpen ska få stoppklumpens unika ID i fältet:
+stop_cluster_id
+Det ska vara en referens till stoppklumpsposten och inte endast en kopierad text.
+
+
+⸻
+
+
+4. Definition av ruttklump
+4.1 Vad är en ruttklump?
+En ruttklump är en logisk gruppering av en eller flera uppgifter eller stoppklumpar som Traivo bedömer kan utföras inom samma geografiska rutt, ort eller sträckning.
+Ruttklumpen representerar alltså ett större geografiskt och planeringsmässigt sammanhang än stoppklumpen.
+En ruttklump kan innehålla:
+flera fristående uppgifter
+flera stoppklumpar
+eller en kombination av stoppklumpar och uppgifter som ännu inte bildat en stoppklump
+Exempel:
+Uppgifter i Nynäshamn, Ösmo och längs samma naturliga körstråk kan samlas i en ruttklump, förutsatt att de kan utföras under samma tidsperiod och av en lämplig utförare.
+4.2 Villkor för att uppgifter ska få ingå i samma ruttklump
+Geografisk förenlighet
+Ruttklumpningsmotorn ska bedöma om uppgifterna ligger inom:
+samma ort
+samma geografiska område
+samma naturliga körstråk
+samma start- och målrelation
+eller en konfigurerbar geografisk radie, exempelvis cirka 40 kilometer
+Motorn får inte enbart använda postnummer eller fasta administrativa områden.
+Den ska väga in faktisk geografi, körbar väg och logisk sträckning.
+Tidsmässig kompatibilitet
+Uppgifterna ska kunna utföras under samma planeringsperiod.
+Motorn ska kontrollera:
+önskade leveransdatum
+hårda och mjuka tidsfönster
+tidsmotorns föreslagna vecka eller utförandetid
+total beräknad produktionstid
+beräknad restid
+arbetspassets eller veckoplanens tillgängliga tid
+eventuella prioriteringar
+Uppgifter ska inte ingå i samma aktiva ruttklump om leveranstiderna ligger så långt ifrån varandra att de inte rimligen kan planeras i samma rutt eller planeringsperiod.
+Utförarmässig kompatibilitet
+Uppgifterna ska kunna tilldelas:
+samma utförare
+samma team
+samma fordon eller resursslag
+eller kompatibla utförartyper enligt Traivos regler
+Kapacitetsmässig kompatibilitet
+Motorn ska kontrollera att ruttklumpen är möjlig att genomföra med hänsyn till:
+produktionstid
+restid
+raster
+arbetstid
+fordonets kapacitet
+utförarens tillgänglighet
+eventuella geografiska begränsningar
+
+
+⸻
+
+
+5. Ruttklumpens identifiering
+När ruttklumpningsmotorn identifierar att uppgifter eller stopp hör till samma rutt ska Traivo skapa eller återanvända en ruttklump.
+Ruttklumpen ska minst innehålla:
+unikt ruttklumps-ID
+referensnummer
+visningsnamn
+ort, område eller ruttbeskrivning
+geografisk omfattning
+beräknad rutt eller geografisk tyngdpunkt
+tillåten planeringsperiod
+beräknad produktionstid
+beräknad restid
+möjlig utförare eller utförargrupp
+status
+skapad tidpunkt
+senast omräknad tidpunkt
+motorversion
+Rekommenderat visningsnamn
+Ruttklumpens namn ska normalt utgå från ort eller sträckning.
+Exempel:
+Nynäshamn
+Södertälje–Nynäshamn
+Södra Stockholm
+Farsta–Haninge
+E4 södergående – Södertäljeområdet
+Namnet är en visningstext. Det unika ruttklumps-ID:t är den tekniska identifieraren.
+Referens på uppgiften
+Alla uppgifter som ingår i ruttklumpen ska få ruttklumpens ID i fältet:
+route_cluster_id
+Detta ska vara en referens till ruttklumpsposten.
+
+
+⸻
+
+
+6. Förhållandet mellan uppgift, stoppklump och ruttklump
+Den rekommenderade hierarkin är:
+Ruttklump
+→ Stoppklump
+→ Uppgift
+Exempel:
+Ruttklump: Södertälje–Nynäshamn
+Stoppklump 1: Storgatan 12, Södertälje
+Stoppklump 2: Industrivägen 4, Ösmo
+Stoppklump 3: Hamngatan 8, Nynäshamn
+Varje stoppklump kan innehålla en eller flera uppgifter.
+En uppgift ska normalt endast tillhöra:
+en aktiv stoppklump
+en aktiv ruttklump
+Historiska tillhörigheter bör sparas separat för spårbarhet.
+
+
+⸻
+
+
+7. Rekommenderad entitetsmodell
+Beslut
+Stoppklumpar och ruttklumpar bör skapas som egna entiteter och egna tabeller.
+De bör inte återanvända den befintliga generella clusters-tabellen, om den tabellen används för andra typer av statiska objektstrukturer, kundgrupperingar eller informella träd.
+Skälet är att stoppklumpar och ruttklumpar är:
+dynamiskt beräknade
+tidsberoende
+geografiskt beroende
+versionsberoende
+planeringsberoende
+föränderliga när uppgifter, status eller leveranstider ändras
+De är därför inte samma sak som en generell eller administrativ klusterstruktur.
+Föreslagna tabeller
+stop_clusters
+Föreslagna fält:
+id
+reference_number
+display_name
+normalized_address
+postal_code
+city
+latitude
+longitude
+radius_meters
+status
+earliest_delivery_at
+latest_delivery_at
+calculated_duration_minutes
+compatible_executor_type
+created_at
+updated_at
+last_calculated_at
+clustering_rule_version
+route_clusters
+Föreslagna fält:
+id
+reference_number
+display_name
+route_description
+center_latitude
+center_longitude
+radius_kilometers
+geographic_geometry
+earliest_delivery_at
+latest_delivery_at
+calculated_work_minutes
+calculated_travel_minutes
+compatible_executor_type
+status
+created_at
+updated_at
+last_calculated_at
+clustering_rule_version
+Komplettering av 
+tasks
+Uppgiftstabellen kompletteras minst med:
+stop_cluster_id
+route_cluster_id
+Fälten ska vara nullable, eftersom en uppgift kan sakna aktuell klumptillhörighet.
+Det bör även övervägas att lägga till:
+stop_cluster_calculated_at
+route_cluster_calculated_at
+cluster_lock_status
+cluster_exclusion_reason
+
+
+⸻
+
+
+8. Dynamisk omräkning
+Klumpningen får inte betraktas som permanent.
+Stopp- och ruttklumpar ska omvärderas när relevanta uppgiftsfält ändras, exempelvis:
+leveransdatum
+tidsfönster
+adress
+koordinat
+utförartyp
+beräknad arbetstid
+status
+prioritet
+planerad vecka
+tilldelad utförare
+kundens villkor
+När en förändring innebär att uppgiften inte längre är kompatibel med klumpen ska Traivo:
+ta bort uppgiften från den aktiva klumpen
+omvärdera resterande uppgifter
+uppdatera klumpens tidsintervall, omfattning och beräkningar
+vid behov skapa en ny klump
+spara förändringen i historiken
+
+
+⸻
+
+
+9. Låsning och manuell hantering
+Systemet bör skilja mellan:
+automatiskt skapad klump
+manuellt bekräftad klump
+manuellt låst klump
+manuellt upplöst klump
+En låst klump ska inte ändras automatiskt utan tydlig varning eller särskilt systembeslut.
+Användaren ska kunna:
+lägga till en uppgift manuellt
+ta bort en uppgift
+slå samman klumpar
+dela en klump
+låsa en klump
+låsa upp en klump
+ange orsak till avvikelse
+Motorn ska samtidigt kunna visa om den manuella ändringen strider mot:
+tidsvillkor
+utförarkrav
+geografiska villkor
+kapacitetskrav
+
+
+⸻
+
+
+10. Sammanfattad systemdefinition
+Stoppklump
+En stoppklump är en dynamiskt beräknad grupp av uppgifter som avser samma fysiska stopp eller arbetsplats och som är geografiskt, tidsmässigt, statusmässigt och utförarmässigt kompatibla.
+Stoppklumpen får ett unikt referensnummer och ett namn som normalt motsvarar gatuadressen. Stoppklumpens ID sparas på varje uppgift som ingår i klumpen.
+Ruttklump
+En ruttklump är en dynamiskt beräknad grupp av uppgifter eller stoppklumpar som ligger inom samma ort, område eller naturliga körsträckning och som kan planeras och utföras inom samma tidsperiod av en kompatibel utförare eller utförargrupp.
+Ruttklumpen får ett unikt referensnummer och ett namn baserat på ort, område eller sträckning. Ruttklumpens ID sparas på varje uppgift som ingår i klumpen.
+Viktig avgränsning
+Geografisk närhet är ett nödvändigt men inte tillräckligt villkor.
+Ingen uppgift får läggas i samma stoppklump eller ruttklump om leveranstider, tidsfönster, utförarkrav, status eller kapacitet gör att uppgifterna inte kan planeras eller utföras tillsammans.
+Rekommenderat beslut för utvecklingen
+Skapa två nya entiteter:
+stop_clusters
+route_clusters
+Komplettera varje uppgift med:
+stop_cluster_id
+route_cluster_id
+Återanvänd inte den befintliga generella clusters-entiteten, annat än möjligen som gemensam teknisk basklass om detta kan göras utan att blanda ihop affärslogiken.
+Det centrala beslutet är alltså att stoppklumpar och ruttklumpar ska vara egna dynamiska planeringsentiteter, inte bara två textfält och inte samma typ av struktur som Traivos vanliga objekt- eller kundkluster.
