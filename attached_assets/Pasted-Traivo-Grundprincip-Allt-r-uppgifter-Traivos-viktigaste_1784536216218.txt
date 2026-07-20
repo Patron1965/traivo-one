@@ -1,0 +1,130 @@
+Traivo – Grundprincip: Allt är uppgifter
+Traivos viktigaste arkitekturprincip
+Den grundläggande principen i Traivo är att allt representeras som uppgifter.
+Det innebär att systemet inte skiljer på produktiva arbeten, restider eller olika typer av intern tid genom separata datamodeller. Istället hanteras allt som uppgifter med olika artiklar, metadata och egenskaper.
+Det finns därför endast en gemensam uppgiftstabell (Tasks) där alla typer av aktiviteter lagras och behandlas enligt samma grundmodell.
+
+
+⸻
+
+
+Exempel på uppgifter
+Följande är alla uppgifter i Traivo:
+Produktionsuppgifter
+Tvätt
+Besiktning
+Service
+Reparation
+Installation
+Funktionskontroll
+Sanering
+Leverans
+Hämtning
+Kundbesök
+Transportuppgifter
+Restid mellan uppdrag
+Körning till kund
+Körning mellan arbetsplatser
+Returresa
+Färjeresor eller andra transporter
+Egentidsuppgifter
+Även tid som inte är direkt debiterbar hanteras som uppgifter, exempelvis:
+Lunch
+Raster
+Tankning
+Lastning och lossning
+Städning av fordon
+Verkstadsarbete
+Administrativ tid
+Utbildning
+Interna möten
+Sjukfrånvaro
+Semester
+Beredskap
+Annan planerad frånvaro
+
+
+⸻
+
+
+Varför allt är uppgifter
+Genom att allt representeras som uppgifter får Traivo en enhetlig informationsmodell.
+Alla aktiviteter kan då:
+planeras
+flyttas
+prioriteras
+tilldelas en utförare eller ett team
+visas i veckoplanen
+visas i kalendern
+tidsoptimeras
+ruttoptimeras
+följas upp
+analyseras
+rapporteras
+kopplas till statistik och nyckeltal
+Samma planeringsmotorer och logik används oavsett om uppgiften avser en debiterbar tjänst eller intern tid.
+
+
+⸻
+
+
+Artikel styr uppgiftens egenskaper
+Det som skiljer olika uppgifter åt är inte datamodellen utan den artikel och de regler som uppgiften bygger på.
+Artikeln avgör bland annat:
+om uppgiften är debiterbar
+om den ska faktureras
+om den är produktionstid
+om den är restid
+om den är egentid
+om den ska påverka kapacitet
+om den ska påverka tillgänglighet
+vilka resurser som krävs
+vilka kompetenser som krävs
+hur uppgiften ska följas upp
+Det innebär att en tvätt, en reparation, en restid och en lunch är olika typer av uppgifter, men de bygger på samma grundstruktur.
+
+
+⸻
+
+
+En gemensam planeringsmodell
+Eftersom allt är uppgifter kan Traivos planeringsmotor behandla hela arbetsdagen på ett enhetligt sätt.
+En arbetsdag består därför av en sekvens av uppgifter, exempelvis:
+Restid till kund
+Tvätt av behållare
+Besiktning
+Reparation
+Restid till nästa kund
+Lunch
+Restid
+Servicearbete
+Administrativ tid
+Återresa
+Samtliga aktiviteter planeras, tidsätts och följs upp enligt samma principer.
+
+
+⸻
+
+
+Koppling till 168-timmarsmodellen
+Traivos planering omfattar hela veckans 168 timmar.
+Alla aktiviteter som upptar tid under veckan representeras därför som uppgifter. Detta ger en komplett bild av resursutnyttjande, tillgänglighet och kapacitet.
+Det blir möjligt att analysera hur stor del av tiden som utgör:
+produktion
+restid
+väntetid
+intern tid
+utbildning
+frånvaro
+övrig tid
+utan att använda separata planeringsmodeller.
+
+
+⸻
+
+
+Arkitekturregel
+Det ska aldrig skapas särskilda tabeller eller alternativa modeller för olika typer av aktiviteter.
+Grundregeln är:
+Om något upptar tid, resurser eller kapacitet i Traivo ska det representeras som en uppgift.
+Skillnaden mellan olika aktiviteter ligger i artikel, metadata och affärsregler – inte i datamodellen.
