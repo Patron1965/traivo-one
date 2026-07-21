@@ -33,6 +33,7 @@ import {
   taskDependencies,
   metadataVarden,
   metadataKatalog,
+  taskTypes,
 } from "@shared/schema";
 import { haversineDistanceKm } from "./distance-matrix-service";
 
@@ -162,6 +163,46 @@ export function normalizeTaskType(orderType: string | null | undefined): string 
   if (raw.includes("konsult")) return "konsultation";
   if (raw.includes("service")) return "service";
   return "ovrigt";
+}
+
+// ---------------------------------------------------------------------------
+// Register-medveten uppgiftstyps-matchning (dynamiskt task_types-register).
+// Exakt match (case-insensitive) på registrets key eller label vinner ALLTID;
+// därefter faller vi tillbaka på den heuristiska normalizeTaskType (back-compat
+// för fritext-orderType som "Tvätt av behållare"). Etiketter hämtas i första
+// hand från registret så att omdöpta typer visas rätt i rutnätet.
+// ---------------------------------------------------------------------------
+export interface TaskTypeMatcher {
+  normalize(orderType: string | null | undefined): string;
+  labelFor(key: string): string;
+}
+
+export async function loadTaskTypeMatcher(tenantId: string): Promise<TaskTypeMatcher> {
+  // Inkluderar även inaktiverade typer: befintliga uppgifter behåller sin klassning
+  // och läsbara etikett i grid/export; endast filterpanelen begränsas till aktiva.
+  const registry = await db
+    .select({ key: taskTypes.key, label: taskTypes.label })
+    .from(taskTypes)
+    .where(eq(taskTypes.tenantId, tenantId));
+
+  const byExact = new Map<string, string>(); // lower(key|label) -> key
+  const labels = new Map<string, string>(); // key -> label
+  for (const t of registry) {
+    byExact.set(t.key.toLowerCase(), t.key);
+    byExact.set(t.label.trim().toLowerCase(), t.key);
+    labels.set(t.key, t.label);
+  }
+
+  return {
+    normalize(orderType) {
+      const raw = (orderType ?? "").trim().toLowerCase();
+      if (raw && byExact.has(raw)) return byExact.get(raw)!;
+      return normalizeTaskType(orderType);
+    },
+    labelFor(key) {
+      return labels.get(key) ?? TASK_TYPE_LABELS[key] ?? "Övrigt";
+    },
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -370,6 +411,7 @@ async function buildOrderedGroups(
   grouping: GroupBy,
 ): Promise<OrderedGroupsResult> {
   const conditions = buildConditions(tenantId, filters);
+  const typeMatcher = await loadTaskTypeMatcher(tenantId);
 
   const fetched = (await db
     .select({
@@ -420,7 +462,7 @@ async function buildOrderedGroups(
 
   const rows: (GridTaskRow & { lat: number | null; lng: number | null })[] = [];
   for (const r of raw) {
-    const taskType = normalizeTaskType(r.orderType);
+    const taskType = typeMatcher.normalize(r.orderType);
     if (typeFilter && !typeFilter.has(taskType)) continue;
     rows.push({
       id: r.id,
@@ -431,7 +473,7 @@ async function buildOrderedGroups(
       objectName: r.objectName,
       title: r.title,
       taskType,
-      taskTypeLabel: TASK_TYPE_LABELS[taskType] ?? "Övrigt",
+      taskTypeLabel: typeMatcher.labelFor(taskType),
       executionCode: r.executionCode ?? null,
       desiredDeliveryStart: toIso(r.desiredDeliveryStart),
       desiredDeliveryEnd: toIso(r.desiredDeliveryEnd),
@@ -1059,8 +1101,9 @@ export async function buildGrovplaneringFullCsvExport(
       ? new Set(filters.taskTypes)
       : null;
 
+  const typeMatcher = await loadTaskTypeMatcher(tenantId);
   const rows = typeFilter
-    ? raw.filter((r) => typeFilter.has(normalizeTaskType(r.orderType)))
+    ? raw.filter((r) => typeFilter.has(typeMatcher.normalize(r.orderType)))
     : raw;
 
   // ---------------------------------------------------------------------------
@@ -1342,8 +1385,8 @@ export async function buildGrovplaneringFullCsvExport(
   lines.push(ALL_HEADERS.map((h) => escapeCsvField(safeCell(h))).join(","));
 
   for (const r of rows) {
-    const taskType = normalizeTaskType(r.orderType);
-    const taskTypeLabel = TASK_TYPE_LABELS[taskType] ?? "Övrigt";
+    const taskType = typeMatcher.normalize(r.orderType);
+    const taskTypeLabel = typeMatcher.labelFor(taskType);
     const prodMin = r.cachedProductionMinutes ?? 0;
     const isTravel = r.logisticsRole === "travel";
     const travelChildId = travelChildMap.get(r.id) ?? "";

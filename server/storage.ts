@@ -29,7 +29,7 @@ import {
   type ResourceAvailability, type InsertResourceAvailability,
   type VehicleSchedule, type InsertVehicleSchedule,
   type Subscription, type InsertSubscription,
-  type Team, type InsertTeam, type TaskType,
+  type Team, type InsertTeam, type TaskType, type InsertTaskType,
   type TeamMember, type InsertTeamMember,
   type PlanningParameter, type InsertPlanningParameter,
   type ResourcePosition, type InsertResourcePosition,
@@ -6282,6 +6282,53 @@ export class DatabaseStorage implements IStorage {
       .from(taskTypes)
       .where(and(eq(taskTypes.tenantId, tenantId), eq(taskTypes.isActive, true)))
       .orderBy(taskTypes.sortOrder, taskTypes.label);
+  }
+
+  // Admin-register: alla typer inkl. inaktiverade (för hanteringssidan).
+  async getAllTaskTypes(tenantId: string): Promise<TaskType[]> {
+    return db
+      .select()
+      .from(taskTypes)
+      .where(eq(taskTypes.tenantId, tenantId))
+      .orderBy(taskTypes.sortOrder, taskTypes.label);
+  }
+
+  async getTaskType(id: string, tenantId: string): Promise<TaskType | undefined> {
+    const [row] = await db
+      .select()
+      .from(taskTypes)
+      .where(and(eq(taskTypes.id, id), eq(taskTypes.tenantId, tenantId)));
+    return row || undefined;
+  }
+
+  async createTaskType(data: InsertTaskType): Promise<TaskType> {
+    const [row] = await db.insert(taskTypes).values(data).returning();
+    return row;
+  }
+
+  async updateTaskType(
+    id: string,
+    tenantId: string,
+    data: Partial<Pick<TaskType, "label" | "sortOrder" | "isActive">>,
+  ): Promise<TaskType | undefined> {
+    const [row] = await db
+      .update(taskTypes)
+      .set(data)
+      .where(and(eq(taskTypes.id, id), eq(taskTypes.tenantId, tenantId)))
+      .returning();
+    return row || undefined;
+  }
+
+  // Seed-on-read (insert-only, idempotent): tenants utan register-rader får standardtyperna.
+  async seedTaskTypes(
+    tenantId: string,
+    defaults: { key: string; label: string; sortOrder: number }[],
+  ): Promise<void> {
+    if (defaults.length === 0) return;
+    await db
+      .insert(taskTypes)
+      .values(defaults.map((d) => ({ tenantId, ...d, isActive: true })))
+      .onConflictDoNothing();
   }
 
   async getTeam(id: string): Promise<Team | undefined> {
