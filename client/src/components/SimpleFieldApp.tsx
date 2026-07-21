@@ -39,6 +39,7 @@ import { MaterialLog, type MaterialItem } from "@/components/MaterialLog";
 import { OrderChecklist } from "@/components/OrderChecklist";
 import { ObjectDisplayNames } from "@/components/ObjectDisplayNames";
 import { SigningValidationModal } from "@/components/SigningValidationModal";
+import { VehicleStockView } from "@/components/VehicleStockView";
 import type { WorkOrderWithObject, Customer } from "@shared/schema";
 import { IMPOSSIBLE_REASONS, IMPOSSIBLE_REASON_LABELS, REQUIRED_FIELDS_BY_ORDER_TYPE } from "@shared/schema";
 import { CATEGORY_LABELS, SEVERITY_LABELS, GO_CATEGORIES } from "@shared/changeRequestCategories";
@@ -83,7 +84,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 
-type View = "jobs" | "job" | "report" | "todo" | "outbox" | "timeline";
+type View = "jobs" | "job" | "report" | "todo" | "outbox" | "timeline" | "stock";
 
 interface MyReportItem {
   id: string;
@@ -2024,6 +2025,12 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
   if (view === "timeline") {
     return (
       <TimelineView onBack={() => setView("jobs")} mobileApiCall={mobileApiCall} />
+    );
+  }
+
+  if (view === "stock") {
+    return (
+      <VehicleStockView onBack={() => setView("jobs")} mobileApiCall={mobileApiCall} />
     );
   }
 
@@ -4420,6 +4427,15 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
               {pendingChanges}
             </span>
           )}
+        </Button>
+        <Button
+          variant="outline"
+          className="h-12 gap-2 px-4"
+          onClick={() => setView("stock")}
+          data-testid="button-open-vehicle-stock"
+        >
+          <Truck className="h-5 w-5 text-chart-2" />
+          Bil
         </Button>
         <Button
           variant="outline"

@@ -14,6 +14,7 @@ import type { Express } from "express";
     usesQuantityMetadata, isActiveArticleStatus,
     invalidateWorkflowCaches,
   } from "./shared";
+  import { resolveVehicleLocationForResource, listStockBalancesForLocation } from "../../services/stock-balance";
   import type { Request, Response } from "express";
   
   export function registerMiscRoutes(app: Express) {
@@ -110,6 +111,35 @@ app.get("/api/mobile/orders/:id/checklist", isMobileAuthenticated, asyncHandler(
         articleType: t.articleType,
         questions: t.questions,
       })),
+    });
+}));
+
+// ============================================
+// BIL-LAGER (Lagermodul 2.0) — teknikerns saldo
+// ============================================
+
+// Saldon för teknikerns bil-lagerplats (resurs-koppling vinner över team).
+// Tenant härleds ALLTID från mobilt token/resursen (bypassad yta — aldrig req.tenantId).
+app.get("/api/mobile/stock/my-vehicle", isMobileAuthenticated, asyncHandler(async (req: MobileAuthenticatedRequest, res: Response) => {
+    const resourceId = req.mobileResourceId;
+    let tenantId = req.mobileTenantId;
+    if (!tenantId) {
+      const resource = await storage.getResource(resourceId);
+      if (!resource) throw new NotFoundError("Resurs hittades inte");
+      tenantId = resource.tenantId;
+    }
+
+    const location = await resolveVehicleLocationForResource(tenantId, resourceId);
+    if (!location) {
+      res.json({ hasVehicleLocation: false, location: null, balances: [], lowCount: 0 });
+      return;
+    }
+    const balances = await listStockBalancesForLocation(tenantId, location);
+    res.json({
+      hasVehicleLocation: true,
+      location,
+      balances,
+      lowCount: balances.filter((b) => b.isLow).length,
     });
 }));
 

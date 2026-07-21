@@ -18,6 +18,7 @@ import {
   workOrderLines,
   workOrders,
   articles,
+  teamMembers,
   type Article,
   type StockMovementType,
 } from "@shared/schema";
@@ -186,6 +187,35 @@ export async function resolveVehicleLocationForWorkOrder(
   return null;
 }
 
+/** Bil-lager: hitta den aktiva lagerplats (kind='vehicle') som hör till en
+ * RESURS direkt, eller via ett team resursen är aktiv medlem i. Resurs-koppling
+ * vinner över team-koppling (samma prioritering som WO-varianten ovan). */
+export async function resolveVehicleLocationForResource(
+  tenantId: string,
+  resourceId: string,
+): Promise<string | null> {
+  const rows = await db
+    .select({ name: stockLocations.name, resourceId: stockLocations.resourceId, teamId: stockLocations.teamId })
+    .from(stockLocations)
+    .where(and(
+      eq(stockLocations.tenantId, tenantId),
+      eq(stockLocations.kind, "vehicle"),
+      eq(stockLocations.isActive, true),
+    ));
+  if (rows.length === 0) return null;
+  const byResource = rows.find((r) => r.resourceId === resourceId);
+  if (byResource) return byResource.name;
+  const teamLinked = rows.filter((r) => r.teamId);
+  if (teamLinked.length === 0) return null;
+  const memberships = await db
+    .select({ teamId: teamMembers.teamId })
+    .from(teamMembers)
+    .where(eq(teamMembers.resourceId, resourceId));
+  const memberTeamIds = new Set(memberships.map((m) => m.teamId));
+  const byTeam = teamLinked.find((r) => r.teamId && memberTeamIds.has(r.teamId));
+  return byTeam?.name ?? null;
+}
+
 /** Idempotent avstämning av lagerpåverkan för EN orderrad. Drar netto-förbrukningen
  * (taget - retur) från radens lagerplats; återläggning sker automatiskt när retur
  * ökar (delta blir negativt → saldot ökar).
@@ -352,6 +382,34 @@ export async function listStockBalances(tenantId: string): Promise<StockBalanceR
     .innerJoin(articles, eq(articles.id, stockBalances.articleId))
     .where(eq(stockBalances.tenantId, tenantId))
     .orderBy(articles.name, stockBalances.location);
+  return rows.map(mapRow);
+}
+
+/** Lagersaldon för EN lagerplats, berikade med artikelinfo och lågt-flagga. */
+export async function listStockBalancesForLocation(
+  tenantId: string,
+  location: string,
+): Promise<StockBalanceRow[]> {
+  const loc = location.trim();
+  if (!loc) return [];
+  const rows = await db
+    .select({
+      id: stockBalances.id,
+      articleId: stockBalances.articleId,
+      articleNumber: articles.articleNumber,
+      articleName: articles.name,
+      location: stockBalances.location,
+      balance: stockBalances.balance,
+      rowReorderPoint: stockBalances.reorderPoint,
+      articleReorderPoint: articles.reorderPoint,
+      safetyStock: stockBalances.safetyStock,
+      articleSafetyStock: articles.safetyStock,
+      updatedAt: stockBalances.updatedAt,
+    })
+    .from(stockBalances)
+    .innerJoin(articles, eq(articles.id, stockBalances.articleId))
+    .where(and(eq(stockBalances.tenantId, tenantId), eq(stockBalances.location, loc)))
+    .orderBy(articles.name);
   return rows.map(mapRow);
 }
 
