@@ -1877,13 +1877,21 @@ app.patch("/api/task-types/:id", requireAdmin, asyncHandler(async (req, res) => 
     res.json(updated);
 }));
 
-// Inaktivering (aldrig hard-delete): typen försvinner ur filter/val men historik behålls.
+// Radering med användnings-vakt (samma mönster som utförandekoder):
+// oanvänd typ → hard-delete; typ som används av befintliga uppgifter → inaktivering
+// (arkiv) så att historikens klassning/etikett aldrig tappas.
 app.delete("/api/task-types/:id", requireAdmin, asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const existing = await storage.getTaskType(req.params.id, tenantId);
     if (!existing) throw new NotFoundError("Uppgiftstypen hittades inte");
-    await storage.updateTaskType(req.params.id, tenantId, { isActive: false });
-    res.json({ deactivated: true });
+    const usage = await storage.countTaskTypeUsage(tenantId, existing.key, existing.label);
+    if (usage > 0) {
+      await storage.updateTaskType(req.params.id, tenantId, { isActive: false });
+      res.json({ deleted: false, deactivated: true, usage });
+      return;
+    }
+    await storage.deleteTaskType(req.params.id, tenantId);
+    res.json({ deleted: true, deactivated: false, usage: 0 });
 }));
 
 // ============== TEAMS ==============

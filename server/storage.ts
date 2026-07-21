@@ -6319,6 +6319,27 @@ export class DatabaseStorage implements IStorage {
     return row || undefined;
   }
 
+  // Användning = uppgifter vars orderType (fritext) normaliseras till typen
+  // (case-insensitive match på nyckel eller etikett — samma regel som loadTaskTypeMatcher).
+  async countTaskTypeUsage(tenantId: string, key: string, label: string): Promise<number> {
+    const [row] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(workOrders)
+      .where(
+        and(
+          eq(workOrders.tenantId, tenantId),
+          sql`lower(trim(${workOrders.orderType})) IN (${key.toLowerCase()}, ${label.trim().toLowerCase()})`,
+        ),
+      );
+    return row?.count ?? 0;
+  }
+
+  async deleteTaskType(id: string, tenantId: string): Promise<void> {
+    await db
+      .delete(taskTypes)
+      .where(and(eq(taskTypes.id, id), eq(taskTypes.tenantId, tenantId)));
+  }
+
   // Seed-on-read (insert-only, idempotent): tenants utan register-rader får standardtyperna.
   async seedTaskTypes(
     tenantId: string,

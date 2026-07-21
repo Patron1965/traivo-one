@@ -23,11 +23,21 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { QueryState } from "@/components/QueryState";
-import { ListChecks, Plus, Pencil, Loader2, Lock } from "lucide-react";
+import { ListChecks, Plus, Pencil, Trash2, Loader2, Lock } from "lucide-react";
 import type { TaskType } from "@shared/schema";
 
 interface TaskTypeFormData {
@@ -59,6 +69,7 @@ export default function TaskTypesPage() {
   const [editing, setEditing] = useState<TaskType | null>(null);
   const [formData, setFormData] = useState<TaskTypeFormData>(emptyForm);
   const [keyTouched, setKeyTouched] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<TaskType | null>(null);
 
   const { data: types = [], isLoading, isError, refetch } = useQuery<TaskType[]>({
     queryKey: ["/api/task-types"],
@@ -118,6 +129,28 @@ export default function TaskTypesPage() {
     },
     onError: (err: Error) => {
       toast({ title: "Kunde inte ändra status", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const res = await apiRequest("DELETE", `/api/task-types/${id}`);
+      return res.json();
+    },
+    onSuccess: (result: { deleted?: boolean; deactivated?: boolean; usage?: number }) => {
+      invalidate();
+      setDeleteTarget(null);
+      if (result?.deleted) {
+        toast({ title: "Uppgiftstyp raderad" });
+      } else {
+        toast({
+          title: "Uppgiftstyp inaktiverad",
+          description: `Typen används av ${result?.usage ?? 0} uppgift(er) och kan därför inte raderas helt — den har inaktiverats i stället.`,
+        });
+      }
+    },
+    onError: (err: Error) => {
+      toast({ title: "Kunde inte radera", description: err.message, variant: "destructive" });
     },
   });
 
@@ -242,6 +275,15 @@ export default function TaskTypesPage() {
                             aria-label={t.isActive ? "Inaktivera" : "Aktivera"}
                             data-testid={`switch-active-${t.key}`}
                           />
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            title="Radera"
+                            onClick={() => setDeleteTarget(t)}
+                            data-testid={`button-delete-${t.key}`}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
                         </div>
                       </TableCell>
                     </TableRow>
@@ -325,6 +367,30 @@ export default function TaskTypesPage() {
           </form>
         </DialogContent>
       </Dialog>
+
+      <AlertDialog open={!!deleteTarget} onOpenChange={(o) => { if (!o) setDeleteTarget(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Radera uppgiftstyp?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Uppgiftstypen "{deleteTarget?.label}" raderas om den inte används. Används den av
+              befintliga uppgifter inaktiveras den i stället, så att uppgifterna behåller sin
+              klassning och etikett.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid="button-cancel-delete">Avbryt</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => deleteTarget && deleteMutation.mutate(deleteTarget.id)}
+              disabled={deleteMutation.isPending}
+              data-testid="button-confirm-delete"
+            >
+              {deleteMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              Radera
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
