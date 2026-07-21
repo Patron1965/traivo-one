@@ -121,3 +121,4 @@
 - [Verklig tid-fördelning (klump)](actual-time-distribution.md) — distributeActualTime = largest-remainder-split på estimatedDuration; klump=explicit workOrderIds[] (ingen tabell ännu); actualDurationManual låser rad vid omkörning.
 - [Artikelbaserad restid/intern tid](article-based-time-tasks.md) — icke-produktionstid artikeldrivs via nullable articleId på lätta länktabeller, ej work_orders-migrering; effektiv varaktighet måste räknas likadant överallt (duration ELLER start/slut).
 - [Uppgiftseditor personal_tasks vs produktion](uppgiftseditor-personal-time.md) — fri artikelval-editor: internal_time/restid→personal_tasks, tjanst→work_orders; server re-härleder articleId aldrig från klient.
+- [Lagersaldo concurrency-lås](stock-balance-concurrency.md) — delta-beräknande saldo-writes (reconcile/inventering) måste läsa utgångsvärdet under FOR UPDATE i samma tx, annars dubbelbokning.

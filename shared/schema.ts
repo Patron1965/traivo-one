@@ -677,6 +677,10 @@ export const workOrderLines = pgTable("work_order_lines", {
   // bara applicerar DELTAT mot saldot, aldrig hela beloppet på nytt. NULL/0 = inget
   // draget ännu (expand-contract; artiklar utan lagerplats rör aldrig saldo).
   stockAppliedQuantity: integer("stock_applied_quantity").default(0),
+  // Lagermodul 2.0: vilken lagerplats radens lagerdrag applicerats mot (bil-lager
+  // eller artikelns huvudlagerplats). Sätts vid första draget och används sedan för
+  // alla delta (retur läggs tillbaka på samma plats som uttaget). NULL = ej draget.
+  stockAppliedLocation: text("stock_applied_location"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (table) => [
   index("idx_work_order_lines_work_order_id").on(table.workOrderId),
@@ -744,6 +748,80 @@ export const insertStockBalanceSchema = createInsertSchema(stockBalances).omit({
 });
 export type StockBalance = typeof stockBalances.$inferSelect;
 export type InsertStockBalance = z.infer<typeof insertStockBalanceSchema>;
+
+// === Lagermodul 2.0: lagerplatsregister ===
+// Formaliserar lagerplatser (huvudlager + servicebilar) i stället för fri text.
+// `name` är nyckeln som matchar stock_balances.location / articles.stockLocation
+// (befintliga fritextplatser adopteras bakåtkompatibelt genom att registrera en
+// rad med samma namn). kind='vehicle' kan kopplas till resurs och/eller team —
+// det styr bil-lager-uttag i fältflödet. Additivt (expand-contract): saldon och
+// rörelser fungerar även för platser som inte finns i registret.
+export const stockLocations = pgTable("stock_locations", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
+  name: text("name").notNull(),
+  // 'main' (huvudlager) | 'vehicle' (servicebil/team-lager)
+  kind: text("kind").default("main").notNull(),
+  resourceId: varchar("resource_id").references(() => resources.id),
+  teamId: varchar("team_id").references(() => teams.id),
+  isActive: boolean("is_active").default(true).notNull(),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex("uq_stock_locations_tenant_name").on(table.tenantId, table.name),
+  index("idx_stock_locations_tenant").on(table.tenantId),
+]);
+
+export const insertStockLocationSchema = createInsertSchema(stockLocations).omit({
+  id: true,
+  createdAt: true,
+});
+export type StockLocation = typeof stockLocations.$inferSelect;
+export type InsertStockLocation = z.infer<typeof insertStockLocationSchema>;
+
+// === Lagermodul 2.0: rörelselogg ===
+// Append-only logg över ALLA saldoförändringar i stock_balances — saldot ska
+// alltid gå att förklara som summan av sina rörelser. Stämplas uteslutande av
+// saldoservicen (server/services/stock-balance.ts); inga direkta saldo-UPDATEs
+// utanför den. `delta` = förändringen (+/-), `balanceAfter` = saldot efter.
+export const STOCK_MOVEMENT_TYPES = [
+  "uttag",        // fältuttag (taget antal, netto)
+  "retur",        // återläggning från fält
+  "inleverans",   // mottagen leverans
+  "overforing_ut",  // överföring: från-sidan
+  "overforing_in",  // överföring: till-sidan
+  "justering",    // manuell justering (absolut saldo satt)
+  "inventering",  // inventeringsdiff
+] as const;
+export type StockMovementType = (typeof STOCK_MOVEMENT_TYPES)[number];
+
+export const stockMovements = pgTable("stock_movements", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
+  articleId: varchar("article_id").references(() => articles.id).notNull(),
+  location: text("location").notNull(),
+  movementType: text("movement_type").notNull(),
+  delta: integer("delta").notNull(),
+  balanceAfter: integer("balance_after").notNull(),
+  // Motpartsplats vid överföring (från/till beroende på riktning).
+  counterpartLocation: text("counterpart_location"),
+  workOrderId: varchar("work_order_id"),
+  note: text("note"),
+  // Vem: user-id (webb) eller resurs-id (fält) — fritext-label, ingen FK.
+  createdBy: varchar("created_by"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_stock_movements_tenant_article").on(table.tenantId, table.articleId),
+  index("idx_stock_movements_tenant_location").on(table.tenantId, table.location),
+  index("idx_stock_movements_tenant_created").on(table.tenantId, table.createdAt),
+]);
+
+export const insertStockMovementSchema = createInsertSchema(stockMovements).omit({
+  id: true,
+  createdAt: true,
+});
+export type StockMovement = typeof stockMovements.$inferSelect;
+export type InsertStockMovement = z.infer<typeof insertStockMovementSchema>;
 
 // Länkning av flera objekt till en arbetsorder
 export const workOrderObjects = pgTable("work_order_objects", {

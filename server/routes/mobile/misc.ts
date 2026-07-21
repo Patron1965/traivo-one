@@ -1175,7 +1175,15 @@ app.post("/api/mobile/tasks/:id/taken-quantity-update", isMobileAuthenticated, a
       try {
         const { reconcileWorkOrderLineStock, getStockSignalForArticleLocation } = await import("../../services/stock-balance");
         await reconcileWorkOrderLineStock(tenantId, line.id);
-        stockSignal = await getStockSignalForArticleLocation(tenantId, article.id, article.stockLocation);
+        // Lagermodul 2.0: signalera saldot för platsen som draget faktiskt
+        // applicerades mot (bil-lager eller huvudlager) — inte alltid artikelns.
+        const { workOrderLines } = await import("@shared/schema");
+        const [updatedLine] = await db
+          .select({ stockAppliedLocation: workOrderLines.stockAppliedLocation })
+          .from(workOrderLines)
+          .where(and(eq(workOrderLines.id, line.id), eq(workOrderLines.tenantId, tenantId)));
+        const signalLocation = updatedLine?.stockAppliedLocation ?? article.stockLocation;
+        stockSignal = await getStockSignalForArticleLocation(tenantId, article.id, signalLocation);
       } catch (stockErr) {
         console.error("[stock-balance] reconcile (taken-quantity-update) misslyckades:", stockErr);
       }
