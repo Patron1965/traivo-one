@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Link } from "wouter";
 import { addWeeks, addMonths } from "date-fns";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -7,6 +8,7 @@ import {
   ChevronRight,
   Filter,
   Loader2,
+  Settings2,
   SlidersHorizontal,
   X,
 } from "lucide-react";
@@ -301,7 +303,17 @@ export function RoughFilterPanel({
         {/* Uppgiftstyp + status */}
         <div className="grid gap-5 md:grid-cols-2">
           <div className="space-y-2">
-            <Label className="text-xs">Uppgiftstyp</Label>
+            <div className="flex items-center justify-between">
+              <Label className="text-xs">Uppgiftstyp</Label>
+              <Link
+                href="/task-types"
+                className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+                data-testid="link-manage-task-types"
+              >
+                <Settings2 className="h-3 w-3" />
+                Hantera
+              </Link>
+            </div>
             {taskTypesLoading ? (
               <p
                 className="text-sm text-muted-foreground"
