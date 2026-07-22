@@ -39,6 +39,7 @@ import {
   Building2,
   Target,
   Route,
+  BookOpen,
 } from "lucide-react";
 import { format, isToday, isTomorrow, startOfWeek, endOfWeek } from "date-fns";
 import { sv } from "date-fns/locale";
@@ -307,6 +308,63 @@ function getRecentPageMap(tl: (key: string) => string): Record<string, { title: 
     "/dashboard": { title: tl("nav.dashboard"), icon: BarChart3, color: "text-destructive" },
     "/mobile": { title: tl("nav.mobile-field"), icon: Smartphone, color: "text-chart-2" },
   };
+}
+
+function WelcomeGuideCard({ userId }: { userId?: string }) {
+  const storageKey = `traivo-system-guide-dismissed-${userId || "anon"}`;
+  const [dismissed, setDismissed] = useState(true);
+
+  useEffect(() => {
+    if (!userId) return;
+    setDismissed(localStorage.getItem(storageKey) === "1");
+  }, [userId, storageKey]);
+
+  if (dismissed) return null;
+
+  const handleDismiss = () => {
+    localStorage.setItem(storageKey, "1");
+    setDismissed(true);
+  };
+
+  return (
+    <Card
+      className="relative bg-gradient-to-r from-[#1B4B6B]/8 via-[#4A9B9B]/6 to-[#7DBFB0]/8 dark:from-[#1B4B6B]/20 dark:via-[#4A9B9B]/15 dark:to-[#7DBFB0]/20 border-[#4A9B9B]/25 dark:border-[#4A9B9B]/30"
+      data-testid="card-welcome-guide"
+    >
+      <Button
+        variant="ghost"
+        size="icon"
+        className="absolute top-2 right-2 h-7 w-7 text-muted-foreground"
+        onClick={handleDismiss}
+        aria-label="Stäng välkomstkortet"
+        data-testid="button-dismiss-welcome-guide"
+      >
+        <X className="h-4 w-4" />
+      </Button>
+      <CardContent className="py-5 pr-10">
+        <div className="flex items-start gap-4 flex-wrap sm:flex-nowrap">
+          <div className="p-2.5 rounded-lg bg-[#4A9B9B]/15 dark:bg-[#4A9B9B]/25 shrink-0">
+            <BookOpen className="h-5 w-5 text-[#1B4B6B] dark:text-[#7DBFB0]" />
+          </div>
+          <div className="flex-1 min-w-[220px]">
+            <p className="font-semibold">Ny i Traivo? Börja med systemguiden</p>
+            <p className="text-sm text-muted-foreground mt-1">
+              Få en överblick över systemets nio områden — vad funktionerna gör och vilken nytta de ger. Perfekt start för att lära känna plattformen.
+            </p>
+          </div>
+          <Link href="/systemoversikt" className="shrink-0">
+            <Button
+              className="bg-[#1B4B6B] hover:bg-[#1B4B6B]/90 dark:bg-[#4A9B9B] dark:hover:bg-[#4A9B9B]/90 text-white"
+              data-testid="button-open-system-guide"
+            >
+              Öppna systemguiden
+              <ArrowRight className="h-4 w-4 ml-2" />
+            </Button>
+          </Link>
+        </div>
+      </CardContent>
+    </Card>
+  );
 }
 
 function RecentPages() {
@@ -656,6 +714,8 @@ export default function MyTasksPage() {
             </Button>
           </div>
         </div>
+
+        <WelcomeGuideCard userId={user?.id} />
 
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4 mb-8">
           {ordersLoading ? (
