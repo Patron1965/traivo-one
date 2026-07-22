@@ -38,6 +38,7 @@ import {
   Shapes,
   Zap,
   Cog,
+  BookOpen,
   type LucideIcon,
 } from "lucide-react";
 import { translate } from "./i18n";
@@ -156,6 +157,7 @@ export function getEkonomiItems(tl?: (key: string) => string): NavItem[] {
 export function getAIItems(tl?: (key: string) => string): NavItem[] {
   const l = tl || svFallback;
   return [
+    { title: "Systemöversikt & guide", url: "/systemoversikt", icon: BookOpen, description: "Överblick över systemets nio områden med AI-chatt: vad gör funktionerna och vilken nytta ger de?" },
     { title: l("nav.ai-assistant"), url: "/ai-assistant", icon: Brain, description: l("nav.ai-assistant.desc") },
     { title: l("nav.predictive-planning"), url: "/predictive-planning", icon: TrendingUp, description: l("nav.predictive-planning.desc") },
     { title: l("nav.predictive-maintenance"), url: "/predictive-maintenance", icon: Activity, description: l("nav.predictive-maintenance.desc") },

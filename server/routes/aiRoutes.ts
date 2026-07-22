@@ -1715,6 +1715,69 @@ app.post("/api/ai/planner-chat/execute", requirePlanner, asyncHandler(async (req
     throw new ValidationError("Ogiltig åtgärd eller saknade parametrar.", { success: false });
 }));
 
+// ============================================
+// SYSTEMÖVERSIKT-CHATT (onboarding)
+// Öppen för ALLA inloggade tenant-roller (ej requirePlanner).
+// Svaren bygger enbart på systemöversiktens spec-text — ingen tenant-data.
+// ============================================
+app.post("/api/ai/system-overview-chat", isAuthenticated, asyncHandler(async (req, res) => {
+    const { question, conversationHistory } = req.body;
+
+    if (!question || typeof question !== "string" || question.trim().length === 0) {
+      throw new ValidationError("Fråga krävs");
+    }
+    if (question.length > 2000) {
+      throw new ValidationError("Frågan är för lång (max 2000 tecken)");
+    }
+
+    const guard = await aiBudgetGuard(req, res, "chat");
+    if (guard.blocked) return;
+
+    const { buildSystemOverviewContext } = await import("@shared/system-overview-content");
+
+    const OpenAI = (await import("openai")).default;
+    const openai = new OpenAI({
+      apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
+      baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
+    });
+
+    const systemPrompt = `Du är en hjälpsam onboarding-guide för Traivo One, en plattform för fältserviceplanering. Din uppgift är att förklara vad systemets olika delar gör och vilken nytta de ger för användarens verksamhet.
+
+Regler:
+- Svara ALLTID på svenska, i klartext utan teknisk jargong.
+- Basera dina svar ENBART på systemöversikten nedan. Du har INTE tillgång till användarens verksamhetsdata (ordrar, kunder, siffror) — hänvisa vänligt till AI-assistenten i systemet om användaren frågar om sådant.
+- Koppla svaren till verksamhetsnytta: vad sparar tid, minskar fel eller förbättrar kundupplevelsen.
+- Håll svaren korta och konkreta (några stycken max), gärna med punktlistor.
+- Om frågan ligger utanför systemöversikten, säg det ärligt och föreslå vad du kan hjälpa till med.
+
+SYSTEMÖVERSIKT:
+${buildSystemOverviewContext()}`;
+
+    const history: Array<{ role: "user" | "assistant"; content: string }> = Array.isArray(conversationHistory)
+      ? conversationHistory
+          .filter((m: { role?: string; content?: string }) => (m?.role === "user" || m?.role === "assistant") && typeof m?.content === "string")
+          .slice(-10)
+          .map((m: { role: "user" | "assistant"; content: string }) => ({ role: m.role, content: m.content.slice(0, 4000) }))
+      : [];
+
+    const completion = await openai.chat.completions.create({
+      model: guard.model,
+      messages: [
+        { role: "system", content: systemPrompt },
+        ...history,
+        { role: "user", content: question },
+      ],
+      max_completion_tokens: 4000,
+    });
+
+    const answer = completion.choices[0]?.message?.content?.trim();
+    if (!answer) {
+      throw new AppError("AI-svaret var tomt — försök igen", 502);
+    }
+
+    res.json({ answer });
+}));
+
 // AI Setup Time Insights
 app.get("/api/ai/setup-insights", requirePlanner, asyncHandler(async (req, res) => {
     const { analyzeSetupTimeLogs } = await import("../ai-planner");
