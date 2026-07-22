@@ -240,3 +240,9 @@ id = "TY0oSsMHCs6V0CgrFEsw0"
 uri = "file://docs/informationspaket-94-falt-avstamning.md"
 type = "text"
 title = "Informationspaket – 94-fälts-avstämning"
+
+[[outputs]]
+id = "NxYWLOTXY7N0IJN4ewVEq"
+uri = "file://exports/traivo-systemoversikt.pdf"
+type = "pdf"
+title = "Traivo One — Systemöversikt (presentation, 11 sidor)"
