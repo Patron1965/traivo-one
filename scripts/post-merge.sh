@@ -105,7 +105,8 @@ if command -v psql >/dev/null 2>&1 && [ -n "$DATABASE_URL" ]; then
            migrations/0135_saved_filters.sql \
            migrations/0136_team_members_accepted_at.sql \
            migrations/0137_stop_route_clusters.sql \
-           migrations/0138_lagermodul_2_0.sql; do
+           migrations/0138_lagermodul_2_0.sql \
+           migrations/0139_stock_source_override.sql; do
     if [ -f "$f" ]; then
       echo "[post-merge] Applying $f"
       psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f "$f"

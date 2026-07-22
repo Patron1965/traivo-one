@@ -1091,6 +1091,11 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
     returnedQuantity?: number;
     quantityReconciliationNote?: string | null;
     takenQuantityEditable?: boolean;
+    // Task #1316: lagerkälla för uttaget. takeFromMainStock = teknikerns sparade
+    // val; stockSourceLocked = uttag redan draget från annan plats än huvudlagret.
+    takeFromMainStock?: boolean;
+    hasMainStockLocation?: boolean;
+    stockSourceLocked?: boolean;
   }
 
   interface ShowMetadataFieldContext {
@@ -1130,6 +1135,9 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
   const [takenEdits, setTakenEdits] = useState<Record<string, string>>({});
   const [takenNoteEdits, setTakenNoteEdits] = useState<Record<string, string>>({});
   const [savingTakenLineId, setSavingTakenLineId] = useState<string | null>(null);
+  // Task #1316: "ta från huvudlager"-val per orderrad (keyas på lineId).
+  // undefined = visa serverns sparade val.
+  const [mainStockEdits, setMainStockEdits] = useState<Record<string, boolean>>({});
 
   const { data: metadataContext } = useQuery<{ articles: MetadataArticleContext[]; dependencyArticles?: DependencyArticleContext[]; orderArticles?: OrderArticleContext[]; showMetadataFields?: ShowMetadataFieldContext[]; leaveMetadataFields?: LeaveMetadataFieldContext[] }>({
     queryKey: ["/api/mobile/tasks", selectedJobId, "metadata-context"],
@@ -1189,7 +1197,7 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
 
   // Uppgiftslogik v1 (kolumn T): registrera taget/förbrukat antal per orderrad.
   // Servern härleder svinn/retur och rör aldrig det fakturerade antalet.
-  const handleTakenQuantityUpdate = useCallback(async (lineId: string, raw: string, note: string) => {
+  const handleTakenQuantityUpdate = useCallback(async (lineId: string, raw: string, note: string, takeFromMainStock?: boolean) => {
     if (!selectedJobId) return;
     const trimmed = (raw ?? "").trim().replace(",", ".");
     const qty = Number(trimmed);
@@ -1199,11 +1207,12 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
     }
     setSavingTakenLineId(lineId);
     try {
-      await mobileApiCall("POST", `/api/mobile/tasks/${selectedJobId}/taken-quantity-update`, { lineId, takenQuantity: qty, note: note?.trim() || undefined });
+      await mobileApiCall("POST", `/api/mobile/tasks/${selectedJobId}/taken-quantity-update`, { lineId, takenQuantity: qty, note: note?.trim() || undefined, takeFromMainStock });
       queryClient.invalidateQueries({ queryKey: ["/api/mobile/tasks", selectedJobId, "metadata-context"] });
       queryClient.invalidateQueries({ queryKey: ["/api/mobile/tasks", selectedJobId, "quantity-events", lineId] });
       setTakenEdits((prev) => { const next = { ...prev }; delete next[lineId]; return next; });
       setTakenNoteEdits((prev) => { const next = { ...prev }; delete next[lineId]; return next; });
+      setMainStockEdits((prev) => { const next = { ...prev }; delete next[lineId]; return next; });
       toast({ title: "Taget antal registrerat", description: `Taget: ${Math.round(qty)}` });
     } catch (error) {
       toast({ title: "Kunde inte registrera taget antal", description: error instanceof Error ? error.message : "Försök igen", variant: "destructive" });
@@ -2633,6 +2642,28 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
                                 onChange={(e) => setTakenNoteEdits((prev) => ({ ...prev, [oa.lineId]: e.target.value }))}
                                 data-testid={`input-taken-note-${oa.articleId}`}
                               />
+                              {/* Task #1316: lagerkälla — teknikern kan tvinga uttag från
+                                  huvudlagret (t.ex. när bilen är tom). Låst när uttag redan
+                                  dragits från en annan plats (retur måste hamna rätt). */}
+                              {oa.hasMainStockLocation && (
+                                <label
+                                  className={`flex items-center gap-2 text-[11px] ${oa.stockSourceLocked ? "text-muted-foreground/60" : "text-muted-foreground"}`}
+                                  data-testid={`label-main-stock-${oa.articleId}`}
+                                >
+                                  <input
+                                    type="checkbox"
+                                    className="h-3.5 w-3.5 accent-primary"
+                                    disabled={!!oa.stockSourceLocked}
+                                    checked={mainStockEdits[oa.lineId] ?? oa.takeFromMainStock ?? false}
+                                    onChange={(e) => setMainStockEdits((prev) => ({ ...prev, [oa.lineId]: e.target.checked }))}
+                                    data-testid={`checkbox-main-stock-${oa.articleId}`}
+                                  />
+                                  <span>
+                                    Ta från huvudlager
+                                    {oa.stockSourceLocked ? " (låst — uttag redan draget från bilen)" : ""}
+                                  </span>
+                                </label>
+                              )}
                               <Button
                                 size="sm"
                                 className="w-full h-8 text-xs"
@@ -2641,6 +2672,7 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
                                   oa.lineId,
                                   takenEdits[oa.lineId] ?? (oa.takenQuantity != null ? String(oa.takenQuantity) : String(oa.quantity)),
                                   takenNoteEdits[oa.lineId] ?? oa.quantityReconciliationNote ?? "",
+                                  mainStockEdits[oa.lineId] ?? oa.takeFromMainStock ?? false,
                                 )}
                                 data-testid={`button-save-taken-${oa.articleId}`}
                               >

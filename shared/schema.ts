@@ -681,6 +681,11 @@ export const workOrderLines = pgTable("work_order_lines", {
   // eller artikelns huvudlagerplats). Sätts vid första draget och används sedan för
   // alla delta (retur läggs tillbaka på samma plats som uttaget). NULL = ej draget.
   stockAppliedLocation: text("stock_applied_location"),
+  // Task #1316: teknikerns val av lagerkälla för radens uttag. NULL = automatiskt
+  // platsval (bil-lager om saldo finns), 'main' = tvinga artikelns huvudlagerplats.
+  // Påverkar bara FÖRSTA draget — redan applicerad plats (stockAppliedLocation)
+  // vinner alltid så retur hamnar på samma plats som uttaget.
+  stockSourceOverride: text("stock_source_override"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (table) => [
   index("idx_work_order_lines_work_order_id").on(table.workOrderId),

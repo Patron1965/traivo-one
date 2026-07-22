@@ -258,6 +258,12 @@ export async function reconcileWorkOrderLineStock(tenantId: string, lineId: stri
       const articleLocation = (article.stockLocation ?? "").trim();
       if (!articleLocation) return; // Artikel utan lagerplats rör aldrig något saldo.
       location = articleLocation;
+      // Task #1316: teknikern har flaggat "ta från huvudlager" på raden ⇒ hoppa
+      // över bil-lager-uppslaget och dra direkt från artikelns huvudlagerplats.
+      if (line.stockSourceOverride === "main") {
+        await applyStockDelta(tx, tenantId, line, article, location);
+        return;
+      }
       // Bil-lager: dra från utförarens servicebil om den har ett saldo för artikeln.
       try {
         const vehicleLocation = await resolveVehicleLocationForWorkOrder(tenantId, line.workOrderId);
@@ -277,33 +283,46 @@ export async function reconcileWorkOrderLineStock(tenantId: string, lineId: stri
       }
     }
 
-    const netConsumed = Math.max((line.takenQuantity ?? 0) - (line.returnedQuantity ?? 0), 0);
-    const alreadyApplied = line.stockAppliedQuantity ?? 0;
-    const delta = netConsumed - alreadyApplied;
-    if (delta === 0) {
-      // Stämpla platsen även utan delta så framtida retur hamnar rätt.
-      if (!line.stockAppliedLocation && (line.stockAppliedQuantity ?? 0) !== 0) {
-        await tx
-          .update(workOrderLines)
-          .set({ stockAppliedLocation: location })
-          .where(and(eq(workOrderLines.id, line.id), eq(workOrderLines.tenantId, tenantId)));
-      }
-      return;
-    }
-
-    await adjustStockBalance(tenantId, article.id, location, -delta, {
-      article,
-      tx,
-      movement: {
-        type: delta > 0 ? "uttag" : "retur",
-        workOrderId: line.workOrderId,
-      },
-    });
-    await tx
-      .update(workOrderLines)
-      .set({ stockAppliedQuantity: netConsumed, stockAppliedLocation: location })
-      .where(and(eq(workOrderLines.id, line.id), eq(workOrderLines.tenantId, tenantId)));
+    await applyStockDelta(tx, tenantId, line, article, location);
   });
+}
+
+/** Applicerar radens netto-delta (taget - retur - redan draget) mot en bestämd
+ * lagerplats och stämplar plats + applicerat netto på raden. Delad avslutning
+ * för både automatiskt platsval och tvingat huvudlager (stockSourceOverride). */
+async function applyStockDelta(
+  tx: DbLike,
+  tenantId: string,
+  line: typeof workOrderLines.$inferSelect,
+  article: Article,
+  location: string,
+): Promise<void> {
+  const netConsumed = Math.max((line.takenQuantity ?? 0) - (line.returnedQuantity ?? 0), 0);
+  const alreadyApplied = line.stockAppliedQuantity ?? 0;
+  const delta = netConsumed - alreadyApplied;
+  if (delta === 0) {
+    // Stämpla platsen även utan delta så framtida retur hamnar rätt.
+    if (!line.stockAppliedLocation && (line.stockAppliedQuantity ?? 0) !== 0) {
+      await tx
+        .update(workOrderLines)
+        .set({ stockAppliedLocation: location })
+        .where(and(eq(workOrderLines.id, line.id), eq(workOrderLines.tenantId, tenantId)));
+    }
+    return;
+  }
+
+  await adjustStockBalance(tenantId, article.id, location, -delta, {
+    article,
+    tx,
+    movement: {
+      type: delta > 0 ? "uttag" : "retur",
+      workOrderId: line.workOrderId,
+    },
+  });
+  await tx
+    .update(workOrderLines)
+    .set({ stockAppliedQuantity: netConsumed, stockAppliedLocation: location })
+    .where(and(eq(workOrderLines.id, line.id), eq(workOrderLines.tenantId, tenantId)));
 }
 
 /** Avstämmer alla artikelrader på en arbetsorder (anropas vid slutförande). */

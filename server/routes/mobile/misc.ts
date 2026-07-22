@@ -881,6 +881,15 @@ app.get("/api/mobile/tasks/:id/metadata-context", isMobileAuthenticated, asyncHa
           returnedQuantity: line.returnedQuantity ?? 0,
           quantityReconciliationNote: line.quantityReconciliationNote ?? null,
           takenQuantityEditable: !orderInvoiceLocked && !!a && isActiveArticleStatus(a.status),
+          // Task #1316: teknikerns lagerkälle-val + om valet fortfarande går att
+          // ändra (låst när uttag redan dragits från en annan plats än huvudlagret).
+          takeFromMainStock: line.stockSourceOverride === "main",
+          // hasStockLocation kräver koordinater (retur-ruttning); källvalet kräver
+          // bara att artikeln HAR en huvudlagerplats.
+          hasMainStockLocation: !!(a?.stockLocation && a.stockLocation.trim()),
+          stockSourceLocked: !!line.stockAppliedLocation &&
+            !!(a?.stockLocation && a.stockLocation.trim()) &&
+            line.stockAppliedLocation !== a!.stockLocation!.trim(),
         };
       });
 
@@ -1126,7 +1135,7 @@ app.post("/api/mobile/tasks/:id/quantity-update", isMobileAuthenticated, asyncHa
 app.post("/api/mobile/tasks/:id/taken-quantity-update", isMobileAuthenticated, asyncHandler(async (req: MobileAuthenticatedRequest, res: Response) => {
     const orderId = req.params.id;
     const resourceId = req.mobileResourceId;
-    const { lineId, takenQuantity, note } = req.body ?? {};
+    const { lineId, takenQuantity, note, takeFromMainStock } = req.body ?? {};
 
     if (!lineId || takenQuantity === undefined || takenQuantity === null) {
       throw new ValidationError("lineId och takenQuantity krävs");
@@ -1175,12 +1184,31 @@ app.post("/api/mobile/tasks/:id/taken-quantity-update", isMobileAuthenticated, a
     const wasteQty = article.shouldBeReturned ? 0 : surplus;
     const trimmedNote = typeof note === "string" && note.trim() ? note.trim() : null;
 
+    // Task #1316: teknikerns val av lagerkälla ("ta från huvudlager"). Sparas FÖRE
+    // reconcile så platsvalet respekteras vid första lagerdraget. Valet kan bara
+    // påverka rader vars plats inte redan stämplats (stockAppliedLocation vinner —
+    // retur måste hamna på samma plats som uttaget). Utelämnat ⇒ oförändrat.
+    if (takeFromMainStock !== undefined && takeFromMainStock !== null) {
+      if (typeof takeFromMainStock !== "boolean") {
+        throw new ValidationError("takeFromMainStock måste vara true/false");
+      }
+      if (takeFromMainStock && line.stockAppliedLocation) {
+        const mainLocation = (article.stockLocation ?? "").trim();
+        if (mainLocation && line.stockAppliedLocation !== mainLocation) {
+          throw new ValidationError("Uttag har redan dragits från en annan lagerplats — lagerkällan kan inte ändras för denna rad");
+        }
+      }
+    }
+
     // Skriv taget/svinn/retur på orderraden. `quantity` (fakturabas) utelämnas medvetet.
     await storage.updateWorkOrderLine(line.id, {
       takenQuantity: takenInt,
       wasteQuantity: wasteQty,
       returnedQuantity: returnedQty,
       quantityReconciliationNote: trimmedNote,
+      ...(typeof takeFromMainStock === "boolean"
+        ? { stockSourceOverride: takeFromMainStock ? "main" : null }
+        : {}),
     });
 
     // Append-only audit (INTE en lagerledger — bär bara signalen). Ett 'taken'-event
