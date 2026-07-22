@@ -87,6 +87,7 @@ const PLANNER_ROUTES = new Set([
   "/annual-planning",
   "/enhetsansvarig",
   "/metadata-granskning",
+  "/systemoversikt",
 ]);
 
 const TECHNICIAN_ROUTES = new Set([
@@ -94,6 +95,7 @@ const TECHNICIAN_ROUTES = new Set([
   "/home",
   "/mobile",
   "/settings",
+  "/systemoversikt",
 ]);
 
 const CUSTOMER_ROUTES = new Set([
@@ -101,6 +103,7 @@ const CUSTOMER_ROUTES = new Set([
   "/home",
   "/customer-portal",
   "/settings",
+  "/systemoversikt",
 ]);
 
 const REPORTER_ROUTES = new Set([
@@ -108,6 +111,7 @@ const REPORTER_ROUTES = new Set([
   "/home",
   "/settings",
   "/my-reports",
+  "/systemoversikt",
 ]);
 
 export function getRoleLabel(role: string): string {

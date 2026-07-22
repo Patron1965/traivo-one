@@ -41,6 +41,7 @@ import {
   Home,
   ArrowLeft,
   Star,
+  BookOpen,
 } from "lucide-react";
 
 interface BadgeCounts {
@@ -392,6 +393,12 @@ function UserMenu() {
           <p className="text-sm font-medium">{displayName}</p>
           <p className="text-xs text-muted-foreground">{user?.email}</p>
         </div>
+        <DropdownMenuItem asChild>
+          <Link href="/systemoversikt" className="cursor-pointer" data-testid="nav-system-guide-menu">
+            <BookOpen className="h-4 w-4 mr-2" />
+            Systemöversikt & guide
+          </Link>
+        </DropdownMenuItem>
         <DropdownMenuItem asChild>
           <Link href="/settings" className="cursor-pointer" data-testid="nav-settings-menu">
             <Settings className="h-4 w-4 mr-2" />
