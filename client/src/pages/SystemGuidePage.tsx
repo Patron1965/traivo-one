@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { BookOpen, Send, Loader2, Sparkles, MessageSquare } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
+import { VoiceInput } from "@/components/VoiceInput";
 import { PageHeader } from "@/components/layout/PageHeader";
 import {
   SYSTEM_OVERVIEW_AREAS,
@@ -194,13 +195,21 @@ export default function SystemGuidePage() {
                   rows={2}
                   data-testid="input-system-guide-chat"
                 />
-                <Button
-                  onClick={() => sendQuestion(chatMessage)}
-                  disabled={!chatMessage.trim() || chatMutation.isPending}
-                  data-testid="button-send-system-guide-chat"
-                >
-                  <Send className="h-4 w-4" />
-                </Button>
+                <div className="flex flex-col gap-2">
+                  <VoiceInput
+                    onTranscript={(text) =>
+                      setChatMessage((prev) => (prev.trim() ? `${prev.trim()} ${text}` : text))
+                    }
+                  />
+                  <Button
+                    size="icon"
+                    onClick={() => sendQuestion(chatMessage)}
+                    disabled={!chatMessage.trim() || chatMutation.isPending}
+                    data-testid="button-send-system-guide-chat"
+                  >
+                    <Send className="h-4 w-4" />
+                  </Button>
+                </div>
               </div>
             </CardContent>
           </Card>
