@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -7,7 +7,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useTenantBranding } from "@/components/TenantBrandingProvider";
 import { 
   Mail, 
@@ -24,7 +23,7 @@ import {
 
 const loginSchema = z.object({
   email: z.string().email("Ange en giltig e-postadress"),
-  tenantId: z.string().optional(),
+  tenantName: z.string().optional(),
 });
 
 type LoginForm = z.infer<typeof loginSchema>;
@@ -57,43 +56,35 @@ export default function PortalLoginPage() {
   const [emailSent, setEmailSent] = useState(false);
   const [sentEmail, setSentEmail] = useState("");
 
-  const tenantsQuery = useQuery<{ id: string; name: string }[]>({
+  const tenantsQuery = useQuery<{ count: number }>({
     queryKey: ["/api/portal/tenants"],
     queryFn: async () => {
       const res = await fetch("/api/portal/tenants");
-      if (!res.ok) return [];
+      if (!res.ok) return { count: 0 };
       return res.json();
     },
   });
 
-  const tenants = tenantsQuery.data || [];
+  const tenantCount = tenantsQuery.data?.count ?? 0;
   const isLoadingTenants = tenantsQuery.isLoading;
-  const hasMultipleTenants = tenants.length > 1;
+  const hasMultipleTenants = tenantCount > 1;
 
   const form = useForm<LoginForm>({
     resolver: zodResolver(loginSchema),
     defaultValues: {
       email: "",
-      tenantId: "",
+      tenantName: "",
     },
   });
 
-  useEffect(() => {
-    if (tenants.length === 1) {
-      form.setValue("tenantId", tenants[0].id);
-    }
-  }, [tenants, form]);
-
   const requestLinkMutation = useMutation({
     mutationFn: async (data: LoginForm) => {
-      const effectiveTenantId = data.tenantId || (tenants.length === 1 ? tenants[0].id : undefined);
-
       const res = await fetch("/api/portal/auth/request-link", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           email: data.email,
-          tenantId: effectiveTenantId,
+          tenantName: data.tenantName || undefined,
         }),
       });
       if (!res.ok) {
@@ -245,24 +236,19 @@ export default function PortalLoginPage() {
                     {hasMultipleTenants && (
                       <FormField
                         control={form.control}
-                        name="tenantId"
+                        name="tenantName"
                         render={({ field }) => (
                           <FormItem>
-                            <FormLabel>Företag</FormLabel>
-                            <Select onValueChange={field.onChange} defaultValue={field.value}>
-                              <FormControl>
-                                <SelectTrigger data-testid="select-tenant">
-                                  <SelectValue placeholder="Välj företag" />
-                                </SelectTrigger>
-                              </FormControl>
-                              <SelectContent>
-                                {tenants.map((tenant) => (
-                                  <SelectItem key={tenant.id} value={tenant.id}>
-                                    {tenant.name}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
+                            <FormLabel>Organisationsnamn</FormLabel>
+                            <FormControl>
+                              <Input
+                                placeholder="Ditt företagsnamn"
+                                autoComplete="organization"
+                                className="h-11"
+                                data-testid="input-tenant-name"
+                                {...field}
+                              />
+                            </FormControl>
                             <FormMessage />
                           </FormItem>
                         )}

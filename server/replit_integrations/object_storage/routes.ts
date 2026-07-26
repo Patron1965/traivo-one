@@ -3,6 +3,9 @@ import { ObjectStorageService, ObjectNotFoundError, ALLOWED_UPLOAD_MIME_TYPES } 
 import { isAuthenticated } from "../auth";
 import { getTenantIdWithFallback, requireTenantWithFallback } from "../../tenant-middleware";
 import { MAX_FIELD_PHOTO_SIZE_BYTES, MAX_FIELD_PHOTO_SIZE_MB } from "@shared/upload-limits";
+import { db } from "../../db";
+import { eq, lt, sql, notInArray } from "drizzle-orm";
+import { portalConfirmedUploads, customerChangeRequests } from "@shared/schema";
 
 /**
  * Register object storage routes for file uploads.
@@ -176,6 +179,76 @@ export function registerObjectStorageRoutes(app: Express): void {
   // never followed up with a confirm call.
   const CLEANUP_INTERVAL_MS = 60 * 60 * 1000; // every hour
   const UNCONFIRMED_TTL_MS   = 60 * 60 * 1000; // orphans older than 1 h
+
+  // Confirmed-orphan GC: portal customers confirm files via the portal upload
+  // flow which permanently excludes them from UNCONFIRMED cleanup above.  We
+  // separately reclaim confirmed-but-never-referenced files older than the TTL
+  // to prevent indefinite storage growth from abusive or abandoned uploads.
+  const CONFIRMED_ORPHAN_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
+
+  const runConfirmedOrphanGC = async () => {
+    try {
+      const cutoff = new Date(Date.now() - CONFIRMED_ORPHAN_TTL_MS);
+
+      // Find confirmed upload rows that are old enough to be eligible for GC.
+      const candidates = await db
+        .select({
+          id: portalConfirmedUploads.id,
+          objectPath: portalConfirmedUploads.objectPath,
+        })
+        .from(portalConfirmedUploads)
+        .where(lt(portalConfirmedUploads.confirmedAt, cutoff));
+
+      if (candidates.length === 0) return;
+
+      // For each candidate, check if the path is still referenced in any
+      // customer_change_request.photos array.  We do this in-process rather
+      // than a single SQL ANY to stay compatible with any PG driver versions.
+      let gcDeleted = 0;
+      let gcErrors = 0;
+
+      for (const row of candidates) {
+        try {
+          const [ref] = await db
+            .select({ id: customerChangeRequests.id })
+            .from(customerChangeRequests)
+            .where(
+              sql`${customerChangeRequests.photos} @> ${JSON.stringify([row.objectPath])}::jsonb`
+            )
+            .limit(1);
+
+          if (ref) continue; // Still referenced — leave it alone.
+
+          // Not referenced by any change request: reclaim storage and tracking row.
+          try {
+            const oss = new ObjectStorageService();
+            const objectFile = await oss.getObjectEntityFile(row.objectPath);
+            await objectFile.delete();
+          } catch (storageErr: any) {
+            if (storageErr?.code !== 404) {
+              console.error(`[upload-cleanup] GC storage delete failed for ${row.objectPath}:`, storageErr);
+              gcErrors++;
+              continue;
+            }
+            // 404 = already gone from storage; still clean up the tracking row.
+          }
+
+          await db.delete(portalConfirmedUploads).where(eq(portalConfirmedUploads.id, row.id));
+          gcDeleted++;
+        } catch (rowErr) {
+          console.error(`[upload-cleanup] GC error for row ${row.id}:`, rowErr);
+          gcErrors++;
+        }
+      }
+
+      if (gcDeleted > 0 || gcErrors > 0) {
+        console.log(`[upload-cleanup] confirmed-orphan GC gcDeleted=${gcDeleted} gcErrors=${gcErrors}`);
+      }
+    } catch (err) {
+      console.error("[upload-cleanup] Confirmed-orphan GC run failed:", err);
+    }
+  };
+
   const runCleanup = async () => {
     try {
       const result = await objectStorageService.cleanupUnconfirmedUploads(UNCONFIRMED_TTL_MS);
@@ -187,6 +260,8 @@ export function registerObjectStorageRoutes(app: Express): void {
     } catch (err) {
       console.error("[upload-cleanup] Cleanup run failed:", err);
     }
+    // Run confirmed-orphan GC in the same tick.
+    await runConfirmedOrphanGC();
   };
   // Initial delay of 5 minutes so startup is not blocked, then run every hour.
   setTimeout(() => {

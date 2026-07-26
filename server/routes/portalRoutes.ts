@@ -132,34 +132,73 @@ function isObjectOwnedByPortalCustomer(
   return obj.customerId === session.customerId;
 }
 
-app.get("/api/portal/tenants", asyncHandler(async (req, res) => {
+app.get("/api/portal/tenants", authLimiter, asyncHandler(async (req, res) => {
     const allTenants = await storage.getPublicTenants();
     const portalEnabled = await Promise.all(
       allTenants.map(t => isModuleEnabled(t.id, "customer_portal"))
     );
-    const tenants = allTenants.filter((_, i) => portalEnabled[i]);
-    res.json(tenants.map(t => ({ id: t.id, name: t.name })));
+    const count = allTenants.filter((_, i) => portalEnabled[i]).length;
+    // Return only a count — no names or IDs are exposed to unauthenticated
+    // callers. The count lets the client decide whether to auto-detect
+    // (count=1) or show a text field for the user to type their org name
+    // (count>1). Tenant identities are resolved server-side from the typed
+    // name in the request-link handler.
+    res.json({ count });
 }));
 
+// Minimum wall-clock milliseconds before the request-link endpoint sends any
+// response.  All code paths — valid/invalid tenant name, valid/invalid email,
+// portal module on/off — must wait at least this long before responding so
+// that repeated-sampling timing attacks cannot distinguish between them.
+const REQUEST_LINK_MIN_RESPONSE_MS = 1000;
+
 app.post("/api/portal/auth/request-link", authLimiter, asyncHandler(async (req, res) => {
+    // Start minimum-response-time budget immediately.  Every return path below
+    // must await this before sending the response.
+    const minDelayPromise = new Promise<void>(resolve =>
+      setTimeout(resolve, REQUEST_LINK_MIN_RESPONSE_MS)
+    );
+    const genericOk = { success: true, message: "Inloggningslänk skickad till din e-post" };
+
     const { email } = req.body;
-    let { tenantId } = req.body;
+    // Accept either a pre-resolved tenantId (internal/trusted callers) or a
+    // tenantName from the public login form. Never trust raw UUIDs from the
+    // client as authoritative without re-validating module enablement below.
+    let { tenantId, tenantName } = req.body;
     
     if (!email) {
+      await minDelayPromise;
       throw new ValidationError("E-postadress krävs");
     }
 
     if (!tenantId) {
+      // Resolve tenantName → tenantId server-side so that the public login
+      // form never needs to handle or store internal UUIDs.
       const allTenants = await storage.getPublicTenants();
       const portalEnabledFlags = await Promise.all(
         allTenants.map(t => isModuleEnabled(t.id, "customer_portal"))
       );
       const portalTenants = allTenants.filter((_, i) => portalEnabledFlags[i]);
-      if (portalTenants.length === 1) {
+
+      if (tenantName) {
+        // Match by name (case-insensitive, trimmed). Require exactly ONE match
+        // to prevent ambiguity if two portal tenants share the same display name.
+        // Both 0-match and 2+-match cases fail-closed: callers cannot distinguish
+        // "wrong org name" from "no customer account" by timing.
+        const normalised = String(tenantName).trim().toLowerCase();
+        const matches = portalTenants.filter(t => t.name.trim().toLowerCase() === normalised);
+        if (matches.length !== 1) {
+          await minDelayPromise;
+          return res.json(genericOk);
+        }
+        tenantId = matches[0].id;
+      } else if (portalTenants.length === 1) {
         tenantId = portalTenants[0].id;
       } else if (portalTenants.length === 0) {
+        await minDelayPromise;
         throw new ValidationError("Ingen aktiv tenant hittades");
       } else {
+        await minDelayPromise;
         throw new ValidationError("Välj ett företag");
       }
     }
@@ -167,12 +206,14 @@ app.post("/api/portal/auth/request-link", authLimiter, asyncHandler(async (req, 
     // Verify portal module is enabled for this tenant before issuing any token.
     const portalActive = await isModuleEnabled(tenantId, "customer_portal");
     if (!portalActive) {
-      // Return generic success to avoid leaking module state to unauthenticated callers.
-      return res.json({ success: true, message: "Inloggningslänk skickad till din e-post", emailSent: false });
+      await minDelayPromise;
+      return res.json(genericOk);
     }
 
     const ip = req.ip || req.socket.remoteAddress || "unknown";
     if (!checkPortalRateLimit(`${ip}:${email}`)) {
+      // 429 is intentionally fast — the rate-limit state itself is not a
+      // per-email secret and is protected by the preceding authLimiter.
       return res.status(429).json({ error: "För många inloggningsförsök. Försök igen om 15 minuter." });
     }
 
@@ -184,8 +225,8 @@ app.post("/api/portal/auth/request-link", authLimiter, asyncHandler(async (req, 
       req.headers["user-agent"]
     );
 
-    // Always return a generic success response to prevent email enumeration.
-    // If the account exists, send the link; otherwise silently succeed.
+    // Fire-and-forget the email send so that the in-process work does not
+    // extend the response time observable by the caller.
     if (result.success) {
       const tenant = await storage.getTenant(tenantId);
       const companyName = tenant?.name || "Traivo";
@@ -195,22 +236,17 @@ app.post("/api/portal/auth/request-link", authLimiter, asyncHandler(async (req, 
         : `https://${req.headers.host}`;
       const magicLinkUrl = `${baseUrl}/portal/verify?token=${result.token}`;
 
-      const emailSent = await sendPortalMagicLinkEmail(
+      sendPortalMagicLinkEmail(
         email,
         magicLinkUrl,
         result.customer?.name || result.customer?.contactPerson || "Kund",
         companyName
-      );
-
-      if (!emailSent) {
-        console.warn("Magic link email not sent - RESEND_API_KEY may be missing");
-      }
+      ).catch(err => console.warn("Magic link email not sent:", err));
     }
 
-    res.json({ 
-      success: true, 
-      message: "Inloggningslänk skickad till din e-post",
-    });
+    // All paths wait the minimum budget before responding.
+    await minDelayPromise;
+    res.json(genericOk);
 }));
 
 app.post("/api/portal/auth/verify", authLimiter, asyncHandler(async (req, res) => {
@@ -2838,6 +2874,11 @@ app.post("/api/portal/media/signed-url", asyncHandler(async (req, res) => {
     res.json({ signedUrl });
 }));
 
+// Maximum confirmed uploads a portal customer may accumulate per rolling hour.
+// DB-backed so the limit survives server restarts and applies across instances.
+const PORTAL_UPLOAD_CONFIRM_LIMIT = 20;
+const PORTAL_UPLOAD_CONFIRM_WINDOW_MS = 60 * 60 * 1000; // 1 hour
+
 app.post("/api/portal/field/confirm-photo", asyncHandler(async (req, res) => {
     const session = await requirePortalAuth(req, res);
     if (!session) return;
@@ -2852,6 +2893,28 @@ app.post("/api/portal/field/confirm-photo", asyncHandler(async (req, res) => {
       throw new ValidationError("Ogiltig fotosökväg");
     }
 
+    // DB-backed upload quota: count rows confirmed by this customer in the
+    // last hour.  Using the DB makes the limit durable across restarts and
+    // effective on multi-instance deployments.  Confirmed files gain an ACL
+    // and are permanently excluded from the unconfirmed-upload cleanup job, so
+    // without this gate a portal user could accumulate unbounded storage.
+    const { portalConfirmedUploads } = await import("@shared/schema");
+    const windowStart = new Date(Date.now() - PORTAL_UPLOAD_CONFIRM_WINDOW_MS);
+    const [{ recentCount }] = await db
+      .select({ recentCount: sql<number>`cast(count(*) as int)` })
+      .from(portalConfirmedUploads)
+      .where(
+        and(
+          eq(portalConfirmedUploads.tenantId, session.tenantId!),
+          eq(portalConfirmedUploads.customerId, session.customerId!),
+          gte(portalConfirmedUploads.confirmedAt, windowStart)
+        )
+      );
+
+    if (recentCount >= PORTAL_UPLOAD_CONFIRM_LIMIT) {
+      return res.status(429).json({ error: "För många filer uppladdade. Försök igen om en stund." });
+    }
+
     const { ObjectStorageService } = await import("../replit_integrations/object_storage/objectStorage");
     const { MAX_FIELD_PHOTO_SIZE_BYTES } = await import("@shared/upload-limits");
     const oss = new ObjectStorageService();
@@ -2864,6 +2927,13 @@ app.post("/api/portal/field/confirm-photo", asyncHandler(async (req, res) => {
     } catch (err: any) {
       throw new ValidationError(err.message || "Fotot kunde inte verifieras i lagringen");
     }
+
+    // Record the confirmed upload for quota tracking and future orphan GC.
+    await db.insert(portalConfirmedUploads).values({
+      tenantId: session.tenantId!,
+      customerId: session.customerId!,
+      objectPath,
+    });
 
     res.json({ success: true, photoPath: objectPath });
 }));

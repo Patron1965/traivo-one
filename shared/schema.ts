@@ -4394,6 +4394,21 @@ export const customerPortalSessions = pgTable("customer_portal_sessions", {
   userAgent: text("user_agent"),
 });
 
+// Tracks every file that a portal customer has confirmed (ACL-bound) in object
+// storage.  Used for durable, cross-restart upload-quota enforcement and for
+// periodic cleanup of confirmed-but-orphaned objects (files never attached to
+// a change request or report).
+export const portalConfirmedUploads = pgTable("portal_confirmed_uploads", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
+  customerId: varchar("customer_id").references(() => customers.id).notNull(),
+  objectPath: text("object_path").notNull(),
+  confirmedAt: timestamp("confirmed_at").defaultNow().notNull(),
+}, (t) => ({
+  byCustomer: index("pcu_customer_idx").on(t.tenantId, t.customerId),
+  byConfirmedAt: index("pcu_confirmed_at_idx").on(t.confirmedAt),
+}));
+
 export const BOOKING_REQUEST_STATUSES = [
   "pending",      // Väntar på handläggning
   "confirmed",    // Bekräftad
