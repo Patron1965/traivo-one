@@ -834,14 +834,16 @@ app.patch("/api/mobile/objects/:id/location", isMobileAuthenticated, asyncHandle
       throw new ValidationError("Position utanför giltigt intervall");
     }
 
-    // Behörighet: teknikern måste ha minst en tilldelad order för objektet.
-    // Den ordern bär tenant-kontexten (mobil-ytan saknar tenant-middleware).
+    // Behörighet: teknikern måste ha en aktiv (ej utförd/fakturerad) order för objektet.
+    // Avslutade uppdrag ger inte kvar-stående skrivrättighet till objektets koordinater.
+    // Den aktiva ordern bär tenant-kontexten (mobil-ytan saknar tenant-middleware).
     const assigned = await db
       .select({ tenantId: workOrders.tenantId })
       .from(workOrders)
       .where(and(
         eq(workOrders.objectId, objectId),
         eq(workOrders.resourceId, resourceId),
+        sql`${workOrders.orderStatus} NOT IN ('utford', 'fakturerad')`,
       ))
       .limit(1);
     if (assigned.length === 0) {

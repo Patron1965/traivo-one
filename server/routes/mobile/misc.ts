@@ -484,6 +484,21 @@ app.post("/api/mobile/customer-change-requests", isMobileAuthenticated, asyncHan
       throw new ValidationError("Objektet saknar kund-koppling");
     }
 
+    // Behörighet: teknikern måste ha en aktiv (ej utförd/fakturerad) order för objektet.
+    const activeAssignment = await db
+      .select({ id: workOrders.id })
+      .from(workOrders)
+      .where(and(
+        eq(workOrders.objectId, data.objectId),
+        eq(workOrders.resourceId, resourceId),
+        eq(workOrders.tenantId, tenantId),
+        sql`${workOrders.orderStatus} NOT IN ('utford', 'fakturerad')`,
+      ))
+      .limit(1);
+    if (activeAssignment.length === 0) {
+      throw new ForbiddenError("Ej behörig att rapportera för detta objekt");
+    }
+
     const isOneCategory = (ONE_CATEGORIES as readonly string[]).includes(data.category);
     const isGoCategory = Object.keys(GO_CATEGORY_MAP).includes(data.category);
     if (!isOneCategory && !isGoCategory) {
