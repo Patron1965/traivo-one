@@ -1752,7 +1752,7 @@ app.post("/api/notifications/send-schedule/:resourceId", requirePlanner, asyncHa
     res.json(result);
 }));
 
-app.post("/api/work-orders/:workOrderId/send-sms", asyncHandler(async (req, res) => {
+app.post("/api/work-orders/:workOrderId/send-sms", requirePlanner, asyncHandler(async (req, res) => {
     const { sendSms, isTwilioConfigured } = await import("../replit_integrations/twilio");
     const tenantId = getTenantIdWithFallback(req);
     const { workOrderId } = req.params;
@@ -1817,7 +1817,7 @@ app.post("/api/work-orders/:workOrderId/send-sms", asyncHandler(async (req, res)
     });
 }));
 
-app.get("/api/work-orders/:workOrderId/communications", asyncHandler(async (req, res) => {
+app.get("/api/work-orders/:workOrderId/communications", requirePlanner, asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const { workOrderId } = req.params;
 
@@ -1837,7 +1837,7 @@ app.get("/api/work-orders/:workOrderId/communications", asyncHandler(async (req,
     res.json(logs);
 }));
 
-app.post("/api/work-orders/:workOrderId/auto-eta-sms", asyncHandler(async (req, res) => {
+app.post("/api/work-orders/:workOrderId/auto-eta-sms", requirePlanner, asyncHandler(async (req, res) => {
     const { sendSms, isTwilioConfigured } = await import("../replit_integrations/twilio");
     const { getMapProvider } = await import("../services/mapProvider");
     const tenantId = getTenantIdWithFallback(req);

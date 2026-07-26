@@ -5,7 +5,7 @@ import { db } from "../db";
 import { eq, sql, desc, and, gte, isNull, inArray } from "drizzle-orm";
 import { z } from "zod";
 import { formatZodError, verifyTenantOwnership, DEFAULT_TENANT_ID, ensureResourceInTenant, ensureResourceIdsInTenant } from "./helpers";
-import { getTenantIdWithFallback } from "../tenant-middleware";
+import { getTenantIdWithFallback, requirePlanner } from "../tenant-middleware";
 import { asyncHandler } from "../asyncHandler";
 import { NotFoundError, ValidationError, ForbiddenError, describeFortnoxMappingConflict } from "../errors";
 import { objects, workOrders, articles, customers, fortnoxMappings, importBatches, assignments, type InsertWorkOrder, type ServiceObject, type Assignment } from "@shared/schema";
@@ -2041,7 +2041,7 @@ app.post("/api/route/google-maps-url", asyncHandler(async (req, res) => {
 }));
 
 // Send route to mobile app via WebSocket
-app.post("/api/route/send-to-mobile", asyncHandler(async (req, res) => {
+app.post("/api/route/send-to-mobile", requirePlanner, asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const { resourceId, stops, date, googleMapsUrl } = req.body;
     

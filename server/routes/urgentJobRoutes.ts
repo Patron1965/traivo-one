@@ -7,6 +7,7 @@ import { db } from "../db";
 import { eq, and, not, inArray } from "drizzle-orm";
 import { z } from "zod";
 import { getErrorMessage, isMobileAuthenticated } from "./helpers";
+import { requirePlanner } from "../tenant-middleware";
 import { AppError, ValidationError } from "../errors";
 
 const router = Router();
@@ -19,7 +20,7 @@ function haversineDistance(lat1: number, lon1: number, lat2: number, lon2: numbe
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
-router.post("/urgent-jobs/assign", async (req: Request, res: Response, next: NextFunction) => {
+router.post("/urgent-jobs/assign", requirePlanner, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const tenantId = req.tenantId!;
     const schema = z.object({
@@ -139,7 +140,7 @@ router.post("/urgent-jobs/assign", async (req: Request, res: Response, next: Nex
   }
 });
 
-router.get("/urgent-jobs", async (req: Request, res: Response, next: NextFunction) => {
+router.get("/urgent-jobs", requirePlanner, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const tenantId = req.tenantId!;
     const assignments = await db.query.urgentJobAssignments.findMany({
@@ -156,7 +157,7 @@ router.get("/urgent-jobs", async (req: Request, res: Response, next: NextFunctio
   }
 });
 
-router.get("/urgent-jobs/:id", async (req: Request, res: Response, next: NextFunction) => {
+router.get("/urgent-jobs/:id", requirePlanner, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const assignment = await db.query.urgentJobAssignments.findFirst({
       where: and(
@@ -171,7 +172,7 @@ router.get("/urgent-jobs/:id", async (req: Request, res: Response, next: NextFun
   }
 });
 
-router.post("/urgent-jobs/:id/reassign", async (req: Request, res: Response, next: NextFunction) => {
+router.post("/urgent-jobs/:id/reassign", requirePlanner, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { newResourceId } = req.body;
     if (!newResourceId) return next(new ValidationError("newResourceId krävs"));
@@ -248,7 +249,7 @@ router.post("/urgent-jobs/:id/reassign", async (req: Request, res: Response, nex
   }
 });
 
-router.post("/urgent-jobs/find-nearest", async (req: Request, res: Response, next: NextFunction) => {
+router.post("/urgent-jobs/find-nearest", requirePlanner, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const tenantId = req.tenantId!;
     const { latitude, longitude, excludeResourceIds } = req.body;

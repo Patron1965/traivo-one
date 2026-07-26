@@ -2142,7 +2142,7 @@ app.post("/api/notifications/token", isAuthenticated, asyncHandler(async (req: a
     });
 }));
 
-app.post("/api/ai/suggest-placement", isAuthenticated, asyncHandler(async (req: Request, res: Response) => {
+app.post("/api/ai/suggest-placement", requirePlanner, asyncHandler(async (req: Request, res: Response) => {
     const guard = await aiBudgetGuard(req, res, "planning");
     if (guard.blocked) return;
 
