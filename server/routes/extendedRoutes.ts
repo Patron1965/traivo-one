@@ -1754,10 +1754,38 @@ app.get("/api/system/budget-status/all-tenants", requireSystemAdmin, asyncHandle
 // FIELD WORKER TASK ENDPOINTS
 // ============================================
 
+/**
+ * Resolve the resourceId linked to the authenticated web-session user.
+ * Returns null when the user has no linked resource.
+ */
+async function getCallerResourceId(req: Request): Promise<string | null> {
+  const userId: string | null = (req.user as any)?.claims?.sub ?? (req.session as any)?.userId ?? null;
+  if (!userId) return null;
+  const user = await storage.getUser(userId);
+  return user?.resourceId ?? null;
+}
+
+/** Planners, admins, and owners may view and mutate any field-worker task. */
+function isPrivilegedRole(req: Request): boolean {
+  const role = req.tenantRole;
+  return role === "owner" || role === "admin" || role === "planner";
+}
+
 app.get("/api/field-worker/tasks", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
-    const { date, resourceId } = req.query;
-    
+    const { date } = req.query;
+    let { resourceId } = req.query as { resourceId?: string };
+
+    if (!isPrivilegedRole(req)) {
+      // Non-privileged callers may only retrieve their own tasks.
+      const callerResourceId = await getCallerResourceId(req);
+      if (!callerResourceId) {
+        return res.json([]);
+      }
+      // Ignore any caller-supplied resourceId and enforce their own.
+      resourceId = callerResourceId;
+    }
+
     const allOrders = await storage.getWorkOrders(tenantId);
     const targetDate = date ? new Date(date as string) : new Date();
     const dateStr = targetDate.toISOString().split('T')[0];
@@ -1849,7 +1877,14 @@ app.post("/api/field-worker/tasks/:id/start", asyncHandler(async (req, res) => {
     if (!workOrder || workOrder.tenantId !== tenantId) {
       throw new NotFoundError("Uppgift hittades inte");
     }
-    
+
+    if (!isPrivilegedRole(req)) {
+      const callerResourceId = await getCallerResourceId(req);
+      if (!callerResourceId || callerResourceId !== workOrder.resourceId) {
+        throw new ForbiddenError("Du kan bara starta uppgifter tilldelade till dig");
+      }
+    }
+
     const updated = await storage.updateWorkOrder(req.params.id, {
       executionStatus: "travel",
       status: "in_progress",
@@ -1872,7 +1907,14 @@ app.post("/api/field-worker/tasks/:id/complete", asyncHandler(async (req, res) =
     if (!workOrder || workOrder.tenantId !== tenantId) {
       throw new NotFoundError("Uppgift hittades inte");
     }
-    
+
+    if (!isPrivilegedRole(req)) {
+      const callerResourceId = await getCallerResourceId(req);
+      if (!callerResourceId || callerResourceId !== workOrder.resourceId) {
+        throw new ForbiddenError("Du kan bara slutföra uppgifter tilldelade till dig");
+      }
+    }
+
     const updated = await storage.updateWorkOrder(req.params.id, {
       executionStatus: "completed",
       status: "completed",
@@ -1897,7 +1939,14 @@ app.post("/api/field-worker/tasks/:id/update-metadata", asyncHandler(async (req,
     if (!workOrder || workOrder.tenantId !== tenantId) {
       throw new NotFoundError("Uppgift hittades inte");
     }
-    
+
+    if (!isPrivilegedRole(req)) {
+      const callerResourceId = await getCallerResourceId(req);
+      if (!callerResourceId || callerResourceId !== workOrder.resourceId) {
+        throw new ForbiddenError("Du kan bara uppdatera metadata på uppgifter tilldelade till dig");
+      }
+    }
+
     const { metadata } = req.body;
     if (workOrder.objectId && metadata) {
       for (const [key, value] of Object.entries(metadata)) {
@@ -1928,6 +1977,13 @@ app.post("/api/field-worker/tasks/:id/upload-photo", asyncHandler(async (req, re
       throw new NotFoundError("Uppgift hittades inte");
     }
 
+    if (!isPrivilegedRole(req)) {
+      const callerResourceId = await getCallerResourceId(req);
+      if (!callerResourceId || callerResourceId !== workOrder.resourceId) {
+        throw new ForbiddenError("Du kan bara ladda upp foton på uppgifter tilldelade till dig");
+      }
+    }
+
     const { contentType, size } = req.body;
     const { ObjectStorageService, ALLOWED_UPLOAD_MIME_TYPES } = await import("../replit_integrations/object_storage/objectStorage");
     const { MAX_FIELD_PHOTO_SIZE_BYTES, MAX_FIELD_PHOTO_SIZE_MB } = await import("@shared/upload-limits");
@@ -1955,7 +2011,14 @@ app.post("/api/field-worker/tasks/:id/confirm-photo", asyncHandler(async (req, r
     if (!workOrder || workOrder.tenantId !== tenantId) {
       throw new NotFoundError("Uppgift hittades inte");
     }
-    
+
+    if (!isPrivilegedRole(req)) {
+      const callerResourceId = await getCallerResourceId(req);
+      if (!callerResourceId || callerResourceId !== workOrder.resourceId) {
+        throw new ForbiddenError("Du kan bara bekräfta foton på uppgifter tilldelade till dig");
+      }
+    }
+
     const { objectPath, category } = req.body;
     if (!objectPath) {
       throw new ValidationError("objectPath krävs");
