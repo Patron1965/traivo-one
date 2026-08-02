@@ -457,6 +457,15 @@ export default function GrovplaneringPage() {
     return rawTasks.filter((t) => evaluateFilterGroup(t, safeFilter, allowedFields));
   }, [hierarchyData, hasAdvancedFilter, advancedFilter, currentRole]);
 
+  // Trunkeringsindikation: servern skickade färre rader än totalen (limit- eller radtak).
+  const hierarchyLoadedCount = useMemo(
+    () => (hierarchyData?.groups ?? []).reduce((sum, g) => sum + g.tasks.length, 0),
+    [hierarchyData],
+  );
+  const hierarchyTruncated =
+    !!hierarchyData &&
+    (hierarchyData.truncated || hierarchyData.pagination.total > hierarchyLoadedCount);
+
   // Motorns förslag (Task #1039) — läses on-demand, separat från work_order-rutnätet.
   const {
     data: engineData,
@@ -1150,7 +1159,17 @@ export default function GrovplaneringPage() {
             Kunde inte ladda hierarkin. Försök igen.
           </div>
         ) : (
-          <HierarchyTable
+          <>
+            {hierarchyTruncated && (
+              <div
+                className="mb-2 rounded-md border border-yellow-500/40 bg-yellow-500/10 px-3 py-2 text-sm text-muted-foreground"
+                data-testid="text-hierarchy-truncated"
+              >
+                Visar de första {hierarchyLoadedCount} av {hierarchyData?.pagination.total}{" "}
+                uppgifterna. Använd filter för att avgränsa urvalet.
+              </div>
+            )}
+            <HierarchyTable
             tasks={hierarchyTasks}
             selected={selected}
             onToggleRow={toggleRow}
@@ -1173,7 +1192,8 @@ export default function GrovplaneringPage() {
               if (ref) setMapFocusCluster(ref);
               setView("karta");
             }}
-          />
+            />
+          </>
         )
       ) : isLoading ? (
         <div className="flex items-center justify-center rounded-lg border py-16 text-muted-foreground">
