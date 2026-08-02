@@ -571,7 +571,7 @@ export function registerClusteringRoutes(app: Express): void {
           eq(routeClusters.tenantId, tenantId),
         ),
       });
-      if (!cluster) throw new NotFoundError("Ruttklump");
+      if (!cluster) throw new NotFoundError("Ruttförslag");
 
       const memberships = await db
         .select()
@@ -651,7 +651,7 @@ export function registerClusteringRoutes(app: Express): void {
           eq(routeClusters.tenantId, tenantId),
         ),
       });
-      if (!cluster) throw new NotFoundError("Ruttklump");
+      if (!cluster) throw new NotFoundError("Ruttförslag");
 
       const schema = z.object({
         status: z.enum(["active", "confirmed", "locked"]).optional(),
@@ -707,7 +707,7 @@ export function registerClusteringRoutes(app: Express): void {
       });
       const { sourceId, targetId } = schema.parse(req.body);
       if (sourceId === targetId) {
-        throw new ValidationError("Källa och mål kan inte vara samma ruttklump");
+        throw new ValidationError("Källa och mål kan inte vara samma ruttförslag");
       }
 
       const [source, target] = await Promise.all([
@@ -824,7 +824,7 @@ export function registerClusteringRoutes(app: Express): void {
           eq(routeClusters.tenantId, tenantId),
         ),
       });
-      if (!cluster) throw new NotFoundError("Ruttklump");
+      if (!cluster) throw new NotFoundError("Ruttförslag");
 
       const schema = z.object({
         taskIds: z.array(z.string().min(1)).min(1),

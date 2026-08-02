@@ -822,7 +822,7 @@ export function ClusterMapView({
             <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
           )}
           <span className="text-xs text-muted-foreground">
-            {routeClusters.length} ruttklumpar · {stopClusters.length} stoppklumpar
+            {routeClusters.length} ruttförslag · {stopClusters.length} stoppklumpar
           </span>
           {mapMode === "planera" && (
             <Button

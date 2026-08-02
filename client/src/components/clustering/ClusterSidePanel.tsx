@@ -697,7 +697,7 @@ function RouteClusterPanel({
       setEditingName(false);
       setShowLockComment(false);
       setLockComment("");
-      toast({ title: "Ruttklump uppdaterad" });
+      toast({ title: "Ruttförslag uppdaterat" });
     },
     onError: () => toast({ title: "Fel vid uppdatering", variant: "destructive" }),
   });
@@ -713,7 +713,7 @@ function RouteClusterPanel({
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["/api/clustering/route-clusters"] });
       void queryClient.invalidateQueries({ queryKey: ["/api/rough-planning/grid"] });
-      toast({ title: "Ruttklumpar sammanslagna" });
+      toast({ title: "Ruttförslag sammanslagna" });
       onClose();
     },
     onError: () => toast({ title: "Fel vid sammanslagning", variant: "destructive" }),
@@ -737,7 +737,7 @@ function RouteClusterPanel({
       void queryClient.invalidateQueries({ queryKey: ["/api/clustering/route-clusters"] });
       void queryClient.invalidateQueries({ queryKey: ["/api/rough-planning/grid"] });
       setShowSplit(false);
-      toast({ title: "Ruttklump delad" });
+      toast({ title: "Ruttförslag delat" });
     },
     onError: () => toast({ title: "Fel vid delning", variant: "destructive" }),
   });
@@ -1056,7 +1056,7 @@ export function ClusterSidePanel({ cluster, onClose }: ClusterSidePanelProps) {
       >
         <SheetHeader className="sr-only">
           <SheetTitle>
-            {cluster?.type === "route" ? "Ruttklump" : "Stoppklump"}
+            {cluster?.type === "route" ? "Ruttförslag" : "Stoppklump"}
           </SheetTitle>
         </SheetHeader>
         {cluster?.type === "stop" && (

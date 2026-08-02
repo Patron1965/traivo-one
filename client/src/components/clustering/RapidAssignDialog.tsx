@@ -124,7 +124,7 @@ export function RapidAssignDialog({
           {routeClusterIds.length > 0 && (
             <div className="flex-1">
               <p className="text-xs text-muted-foreground flex items-center gap-1">
-                <MapPin className="h-3 w-3" /> Ruttklumpar
+                <MapPin className="h-3 w-3" /> Ruttförslag
               </p>
               <p className="font-semibold tabular-nums">{routeClusterIds.length}</p>
             </div>

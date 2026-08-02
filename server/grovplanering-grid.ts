@@ -1265,7 +1265,7 @@ export async function buildGrovplaneringFullCsvExport(
     "Team-ID",
     "Resurs-ID",
     "Stoppklump-ID",
-    "Ruttklump-ID",
+    "Ruttförslag-ID",
     "Förälder-uppgift-ID",
     "Källuppdragsrad-ID",
     "Orderkoncept-ID",
@@ -1306,7 +1306,7 @@ export async function buildGrovplaneringFullCsvExport(
     "Distriktnamn",
     // Klump
     "Stoppklump",
-    "Ruttklump",
+    "Ruttförslag",
     "Klumplåsstatus",
     "Klumpexklusionsorsak",
     // Typ/kategori

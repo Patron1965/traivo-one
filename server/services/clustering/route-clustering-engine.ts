@@ -271,7 +271,7 @@ export async function buildRouteClusterName(
   } catch {
     // Geocoding-fel ska inte stoppa klustringsprocessen
   }
-  return `Ruttklump ${new Date().toISOString().slice(0, 10)}`;
+  return `Ruttförslag ${new Date().toISOString().slice(0, 10)}`;
 }
 
 /**
@@ -715,7 +715,7 @@ export async function runRollingAnalysis(
       const centroid = bucket.centroid;
       const precision = derivePrecision(bucket.window.start);
 
-      let displayName = `Ruttklump ${now.toISOString().slice(0, 10)}`;
+      let displayName = `Ruttförslag ${now.toISOString().slice(0, 10)}`;
       if (centroid) {
         displayName = await buildRouteClusterName(
           centroid.lat,
@@ -937,7 +937,7 @@ export async function processRouteTask(
   const win2 = getEffectiveWindow(wo2);
   const precision2 = derivePrecision(win2.start);
 
-  let displayName2 = `Ruttklump ${now.toISOString().slice(0, 10)}`;
+  let displayName2 = `Ruttförslag ${now.toISOString().slice(0, 10)}`;
   if (geo2.lat != null && geo2.lng != null) {
     displayName2 = await buildRouteClusterName(geo2.lat, geo2.lng, tenantId);
   }

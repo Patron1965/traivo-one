@@ -744,7 +744,7 @@ export function HierarchyTable({
         </TableBody>
       </Table>
       <div className="border-t px-4 py-2 text-xs text-muted-foreground">
-        {tasks.length} uppgifter · {routeCount} ruttklumpar · {stopCount} stoppklumpar
+        {tasks.length} uppgifter · {routeCount} ruttförslag · {stopCount} stoppklumpar
         {unclusteredTasks.length > 0 && ` · ${unclusteredTasks.length} utan klump`}
       </div>
     </div>

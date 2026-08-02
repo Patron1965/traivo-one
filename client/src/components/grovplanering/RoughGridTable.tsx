@@ -178,7 +178,7 @@ function TaskRow({
               </div>
               {(routeEntries.length + stopEntries.length) > 0 && (
                 <div className="mt-0.5 text-[10px] text-muted-foreground/70" data-testid={`text-cluster-info-${row.id}`}>
-                  {routeEntries.length > 0 && `${routeEntries.length} ruttklump${routeEntries.length > 1 ? "ar" : ""}`}
+                  {routeEntries.length > 0 && `${routeEntries.length} ruttförslag`}
                   {routeEntries.length > 0 && stopEntries.length > 0 && " · "}
                   {stopEntries.length > 0 && `${stopEntries.length} stoppklump${stopEntries.length > 1 ? "ar" : ""}`}
                 </div>

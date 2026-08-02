@@ -293,7 +293,7 @@ function MassActionBar({
       data-testid="bar-cluster-mass-actions"
     >
       <span className="text-sm font-medium">
-        {count} {type === "route" ? "ruttklumpar" : "stoppklumpar"} markerade
+        {count} {type === "route" ? "ruttförslag" : "stoppklumpar"} markerade
       </span>
       <Button
         size="sm"
@@ -407,9 +407,9 @@ export function ClusterListView() {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["/api/clustering/route-clusters"] });
       void queryClient.invalidateQueries({ queryKey: ["/api/rough-planning/grid"] });
-      toast({ title: "Ruttklumpning klar" });
+      toast({ title: "Ruttförslag skapade" });
     },
-    onError: () => toast({ title: "Fel vid ruttklumpning", variant: "destructive" }),
+    onError: () => toast({ title: "Fel vid skapande av ruttförslag", variant: "destructive" }),
   });
 
   const stopFullRun = useMutation({
@@ -449,7 +449,7 @@ export function ClusterListView() {
       void queryClient.invalidateQueries({ queryKey: ["/api/clustering/route-clusters"] });
       void queryClient.invalidateQueries({ queryKey: ["/api/rough-planning/grid"] });
       setSelectedRouteIds(new Set());
-      toast({ title: "Ruttklumpar uppdaterade" });
+      toast({ title: "Ruttförslag uppdaterade" });
     },
     onError: () => toast({ title: "Fel vid massåtgärd", variant: "destructive" }),
   });
@@ -526,7 +526,7 @@ export function ClusterListView() {
             ) : (
               <RefreshCw className="h-4 w-4" />
             )}
-            Räkna om ruttklumpar
+            Räkna om ruttförslag
           </Button>
           <Button
             size="sm"
@@ -575,7 +575,7 @@ export function ClusterListView() {
         />
       )}
 
-      {/* Ruttklumpar */}
+      {/* Ruttförslag */}
       <div>
         <button
           className="flex items-center gap-2 text-sm font-semibold mb-2 hover:text-foreground text-foreground"
@@ -583,7 +583,7 @@ export function ClusterListView() {
           data-testid="button-route-clusters-toggle"
         >
           <Route className="h-4 w-4 text-muted-foreground" />
-          Ruttklumpar
+          Ruttförslag
           <Badge variant="secondary" className="text-xs">
             {routeClusters.length}
           </Badge>
@@ -598,14 +598,14 @@ export function ClusterListView() {
             {routeQuery.isLoading ? (
               <div className="flex items-center justify-center py-8 text-muted-foreground">
                 <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-                Laddar ruttklumpar…
+                Laddar ruttförslag…
               </div>
             ) : routeClusters.length === 0 ? (
               <div
                 className="rounded-lg border border-dashed py-8 text-center text-sm text-muted-foreground"
                 data-testid="text-no-route-clusters"
               >
-                Inga ruttklumpar hittades. Kör "Räkna om ruttklumpar" för att bygga klumpar.
+                Inga ruttförslag hittades. Kör "Räkna om ruttförslag" för att bygga förslag.
               </div>
             ) : (
               <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
