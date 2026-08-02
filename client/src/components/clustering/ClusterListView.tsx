@@ -1,6 +1,6 @@
 /**
- * Klumpvy — lista route clusters och stop clusters med bulk-åtgärder.
- * Används som "Klumpvy"-fliken i GrovplaneringPage.
+ * Förslagsvy — lista route clusters och stop clusters med bulk-åtgärder.
+ * Används som "Förslagsvy"-fliken i GrovplaneringPage.
  */
 import { useState } from "react";
 import { useLocation } from "wouter";

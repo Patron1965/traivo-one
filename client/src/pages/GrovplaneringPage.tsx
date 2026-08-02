@@ -863,7 +863,7 @@ export default function GrovplaneringPage() {
         onRan={openMotorView}
       />
 
-      {/* Vy-växel: manuell lista / motorns förslag / klumpvy / kartvy */}
+      {/* Vy-växel: manuell lista / motorns förslag / förslagsvy / kartvy */}
       <Tabs
         value={view}
         onValueChange={(v) => {
@@ -883,7 +883,7 @@ export default function GrovplaneringPage() {
               : ""}
           </TabsTrigger>
           <TabsTrigger value="klump" data-testid="tab-klump">
-            Klumpvy
+            Förslagsvy
           </TabsTrigger>
           <TabsTrigger value="karta" data-testid="tab-karta">
             Karta
