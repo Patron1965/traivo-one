@@ -8339,7 +8339,7 @@ export const routeClusters = pgTable("route_clusters", {
   // Löpande referensnummer per tenant, format "RC-NNN" (myntas server-side).
   referenceNumber: text("reference_number"),
   // Visningsnamn sätts via reverse geocoding av tyngdpunkten (getMapProvider()).
-  // Flerortiga klumpar: "Stad1–Stad2". Fallback: "Ruttklump YYYY-MM-DD".
+  // Flerortiga klumpar: "Stad1–Stad2". Fallback: "Ruttförslag YYYY-MM-DD".
   displayName: text("display_name").notNull(),
   routeDescription: text("route_description"),
   // Geografisk tyngdpunkt (viktat medelvärde av ingående stopp).
