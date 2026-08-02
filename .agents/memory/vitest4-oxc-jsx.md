@@ -18,10 +18,13 @@ TS and chokes on JSX unless JSX is explicitly enabled.
 **Fix:** in `vitest.config.ts` set the top-level `oxc` option:
 ```ts
 export default defineConfig({
-  oxc: { jsx: "automatic" },
+  oxc: { jsx: { runtime: "automatic" } },
   ...
 })
 ```
+Note (2026-08): newer vitest 4.x rejects the string form with
+`[BUNDLER_INITIALIZE_ERROR] Invalid jsx option: 'automatic'` — the option must
+be the object form `{ runtime: "automatic" }`.
 This restores JSX transform for all `.tsx` files in the test pipeline.
 
 **Why:** `@vitejs/plugin-react` (babel-based) does NOT engage under rolldown-vite

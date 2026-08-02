@@ -911,51 +911,59 @@ export function registerClusteringRoutes(app: Express): void {
       });
       const parsed = schema.parse(req.body);
 
+      // Set-baserad hämtning: tenant-validering av klumparna sker via
+      // inner join mot kluster-tabellen (tenant-filtrerad) — en fråga per
+      // klumptyp istället för 2 frågor per klump.
+      const [routeMembers, stopMembers] = await Promise.all([
+        parsed.routeClusterIds.length > 0
+          ? db
+              .select({ taskId: routeClusterMemberships.taskId })
+              .from(routeClusterMemberships)
+              .innerJoin(
+                routeClusters,
+                and(
+                  eq(routeClusters.id, routeClusterMemberships.routeClusterId),
+                  eq(routeClusters.tenantId, tenantId),
+                ),
+              )
+              .where(
+                and(
+                  inArray(
+                    routeClusterMemberships.routeClusterId,
+                    parsed.routeClusterIds,
+                  ),
+                  isNull(routeClusterMemberships.removedAt),
+                  eq(routeClusterMemberships.taskTable, "work_orders"),
+                ),
+              )
+          : Promise.resolve([]),
+        parsed.stopClusterIds.length > 0
+          ? db
+              .select({ taskId: stopClusterMemberships.taskId })
+              .from(stopClusterMemberships)
+              .innerJoin(
+                stopClusters,
+                and(
+                  eq(stopClusters.id, stopClusterMemberships.stopClusterId),
+                  eq(stopClusters.tenantId, tenantId),
+                ),
+              )
+              .where(
+                and(
+                  inArray(
+                    stopClusterMemberships.stopClusterId,
+                    parsed.stopClusterIds,
+                  ),
+                  isNull(stopClusterMemberships.removedAt),
+                  eq(stopClusterMemberships.taskTable, "work_orders"),
+                ),
+              )
+          : Promise.resolve([]),
+      ]);
+
       const woIds = new Set<string>();
-
-      for (const clusterId of parsed.routeClusterIds) {
-        const cluster = await db.query.routeClusters.findFirst({
-          where: and(
-            eq(routeClusters.id, clusterId),
-            eq(routeClusters.tenantId, tenantId),
-          ),
-        });
-        if (!cluster) continue;
-        const members = await db
-          .select()
-          .from(routeClusterMemberships)
-          .where(
-            and(
-              eq(routeClusterMemberships.routeClusterId, clusterId),
-              isNull(routeClusterMemberships.removedAt),
-            ),
-          );
-        for (const m of members) {
-          if (m.taskTable === "work_orders") woIds.add(m.taskId);
-        }
-      }
-
-      for (const clusterId of parsed.stopClusterIds) {
-        const cluster = await db.query.stopClusters.findFirst({
-          where: and(
-            eq(stopClusters.id, clusterId),
-            eq(stopClusters.tenantId, tenantId),
-          ),
-        });
-        if (!cluster) continue;
-        const members = await db
-          .select()
-          .from(stopClusterMemberships)
-          .where(
-            and(
-              eq(stopClusterMemberships.stopClusterId, clusterId),
-              isNull(stopClusterMemberships.removedAt),
-            ),
-          );
-        for (const m of members) {
-          if (m.taskTable === "work_orders") woIds.add(m.taskId);
-        }
-      }
+      for (const m of routeMembers) woIds.add(m.taskId);
+      for (const m of stopMembers) woIds.add(m.taskId);
 
       const allIds = Array.from(woIds);
       if (allIds.length === 0) {

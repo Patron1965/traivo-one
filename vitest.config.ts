@@ -6,7 +6,7 @@ export default defineConfig({
   // favour of `oxc`. JSX in client `.tsx` files only transforms when JSX is
   // configured here; otherwise oxc parses `.tsx` as plain TS and fails.
   oxc: {
-    jsx: "automatic",
+    jsx: { runtime: "automatic" },
   },
   resolve: {
     alias: {
