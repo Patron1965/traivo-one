@@ -17,7 +17,7 @@ import {
   MoreVertical,
   UserPlus,
   RotateCcw,
-  Map,
+  Map as MapIcon,
 } from "lucide-react";
 
 import {
@@ -279,7 +279,7 @@ function RouteRow({
                   onClick={() => onGoToMap(clusterRef)}
                   data-testid={`action-route-map-${route.id}`}
                 >
-                  <Map className="h-4 w-4" />
+                  <MapIcon className="h-4 w-4" />
                   Visa på karta
                 </DropdownMenuItem>
               </>
@@ -407,7 +407,7 @@ function StopRow({
                     onClick={() => onGoToMap(clusterRef)}
                     data-testid={`action-stop-map-${stop.id ?? "ungrouped"}`}
                   >
-                    <Map className="h-4 w-4" />
+                    <MapIcon className="h-4 w-4" />
                     Visa på karta
                   </DropdownMenuItem>
                 </>
