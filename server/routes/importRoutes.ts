@@ -805,7 +805,7 @@ app.get("/api/import/progress/:jobId", (req, res) => {
   });
 });
 
-app.post("/api/import/modus/validate", upload.single("file"), asyncHandler(async (req, res) => {
+app.post("/api/import/modus/validate", requireAdmin, upload.single("file"), asyncHandler(async (req, res) => {
     if (!req.file) {
       throw new ValidationError("Ingen fil uppladdad");
     }
@@ -1140,7 +1140,7 @@ app.post("/api/import/modus/validate", upload.single("file"), asyncHandler(async
 // Kinabs 29 010 kärl) inte triggar proxy-/lastbalanserare-timeouts. UI pollar
 // GET /api/import/batches/:batchId för progress – samma mönster som
 // /api/import/modus/objects/enrich/apply (runEnrichApplyJob).
-app.post("/api/import/modus/objects", upload.single("file"), asyncHandler(async (req, res) => {
+app.post("/api/import/modus/objects", requireAdmin, upload.single("file"), asyncHandler(async (req, res) => {
     if (!req.file) {
       throw new ValidationError("Ingen fil uppladdad");
     }
@@ -1648,7 +1648,7 @@ async function runModusObjectsImportJob(params: {
 
 // Modus 2.0 Import - Tasks (uppgifter)
 // Preview/validate tasks CSV before import - returns missing objects/customers and duplicates
-app.post("/api/import/modus/tasks/validate", upload.single("file"), asyncHandler(async (req, res) => {
+app.post("/api/import/modus/tasks/validate", requireAdmin, upload.single("file"), asyncHandler(async (req, res) => {
     if (!req.file) {
       throw new ValidationError("Ingen fil uppladdad");
     }
@@ -1776,7 +1776,7 @@ app.post("/api/import/modus/tasks/validate", upload.single("file"), asyncHandler
     });
   }));
 
-app.post("/api/import/modus/tasks", upload.single("file"), asyncHandler(async (req, res) => {
+app.post("/api/import/modus/tasks", requireAdmin, upload.single("file"), asyncHandler(async (req, res) => {
     if (!req.file) {
       throw new ValidationError("Ingen fil uppladdad");
     }
@@ -2353,7 +2353,7 @@ async function runModusTasksImportJob(params: {
 }
 
 // Modus 2.0 Import - Task Events (for setup time analysis)
-app.post("/api/import/modus/events", upload.single("file"), asyncHandler(async (req, res) => {
+app.post("/api/import/modus/events", requireAdmin, upload.single("file"), asyncHandler(async (req, res) => {
     if (!req.file) {
       throw new ValidationError("Ingen fil uppladdad");
     }
@@ -2494,7 +2494,7 @@ async function runModusEventsAnalysisJob(params: {
 }
 
 // Modus 2.0 Import - Invoice Lines (fakturarader)
-app.post("/api/import/modus/invoice-lines", upload.single("file"), asyncHandler(async (req, res) => {
+app.post("/api/import/modus/invoice-lines", requireAdmin, upload.single("file"), asyncHandler(async (req, res) => {
     if (!req.file) {
       throw new ValidationError("Ingen fil uppladdad");
     }
@@ -4431,7 +4431,7 @@ app.post("/api/import/rollback/:batchId", requireAdmin, asyncHandler(async (req,
 }));
 
 // P20: Import with custom column mapping
-app.post("/api/import/modus/objects-mapped", upload.single("file"), asyncHandler(async (req, res) => {
+app.post("/api/import/modus/objects-mapped", requireAdmin, upload.single("file"), asyncHandler(async (req, res) => {
     if (!req.file) throw new ValidationError("Ingen fil uppladdad");
     
     const csvText = req.file.buffer.toString("utf-8");

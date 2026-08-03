@@ -336,6 +336,11 @@ app.get("/api/mobile/orders/:id/time-entries", isMobileAuthenticated, asyncHandl
     const order = await storage.getWorkOrder(orderId);
     if (!order) throw new NotFoundError("Order hittades inte");
     if (order.resourceId !== resourceId) throw new ForbiddenError("Ej behörig");
+    // Tenant-skydd (defense-in-depth): ordern måste tillhöra samma tenant som
+    // det mobila tokenet, inte bara ha matchande resourceId.
+    if (req.mobileTenantId && order.tenantId !== req.mobileTenantId) {
+      throw new NotFoundError("Order hittades inte");
+    }
 
     const entries = await db.select().from(workEntries)
       .where(eq(workEntries.workOrderId, orderId))
@@ -422,6 +427,11 @@ app.patch("/api/mobile/time-entries/:id", isMobileAuthenticated, asyncHandler(as
       .where(and(eq(workEntries.id, entryId), eq(workEntries.resourceId, resourceId)));
 
     if (!entry) throw new NotFoundError("Tidspost hittades inte");
+    // Tenant-skydd (defense-in-depth): posten måste tillhöra samma tenant som
+    // det mobila tokenet, inte bara ha matchande resourceId.
+    if (req.mobileTenantId && entry.tenantId !== req.mobileTenantId) {
+      throw new NotFoundError("Tidspost hittades inte");
+    }
 
     const schema = z.object({
       startTime: z.string().optional(),

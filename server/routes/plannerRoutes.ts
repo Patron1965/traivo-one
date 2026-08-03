@@ -1155,8 +1155,12 @@ setInterval(loadRoutes, 60000);
 });
 
 // Get resource position history (breadcrumb trail) for a specific date
-app.get("/api/resources/:id/positions", asyncHandler(async (req, res) => {
+app.get("/api/resources/:id/positions", requireTenantWithFallback, asyncHandler(async (req, res) => {
+    const tenantId = getTenantIdWithFallback(req);
     const resourceId = req.params.id;
+    // Tenant-skydd: verifiera att resursen tillhör anroparens tenant innan
+    // GPS-historik (PII/platsdata) lämnas ut. 404 om den tillhör annan tenant.
+    await ensureResourceInTenant(resourceId, tenantId);
     const dateParam = req.query.date as string;
     
     let startDate: Date | undefined;

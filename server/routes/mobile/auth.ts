@@ -50,26 +50,24 @@ app.post("/api/mobile/login", mobileLoginLimiter, asyncHandler(async (req, res) 
     let resource: Resource | undefined;
 
     if (pin && !email && !username) {
-      resource = resources.find(r => r.pin === pin && r.status === 'active');
+      resource = resources.find(r => !!r.pin && r.pin === pin && r.status === 'active');
     } else if (username && password) {
       resource = resources.find(r =>
         (r.email?.toLowerCase() === username.toLowerCase() || r.name?.toLowerCase() === username.toLowerCase()) && r.status === 'active'
       );
-      if (resource && resource.pin && resource.pin !== password) {
+      // En resurs utan konfigurerad PIN kan inte logga in — annars skulle
+      // vilket lösenord som helst accepteras (auth-bypass).
+      if (resource && (!resource.pin || resource.pin !== password)) {
         resource = undefined;
       }
     } else if (email && pin) {
       resource = resources.find(r =>
         r.email?.toLowerCase() === email.toLowerCase() && r.status === 'active'
       );
-      if (resource) {
-        if (resource.pin) {
-          if (resource.pin !== pin) resource = undefined;
-        } else {
-          if (pin.length < 4 || pin.length > 6) {
-            return res.status(401).json({ error: "PIN must be 4-6 digits" });
-          }
-        }
+      // Kräv att resursen har en PIN OCH att den matchar. Tidigare accepterades
+      // vilken 4–6-siffrig PIN som helst för resurser utan PIN (auth-bypass).
+      if (resource && (!resource.pin || resource.pin !== pin)) {
+        resource = undefined;
       }
     } else {
       await logLoginEvent({

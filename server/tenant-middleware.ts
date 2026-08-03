@@ -13,17 +13,21 @@ function getInternalAdminToken(): string | null {
     cachedInternalAdminToken = envToken.trim();
     return cachedInternalAdminToken;
   }
-  try {
-    const filePath = resolve(process.cwd(), ".local/.import_token");
-    if (existsSync(filePath)) {
-      const fromFile = readFileSync(filePath, "utf8").trim();
-      if (fromFile) {
-        cachedInternalAdminToken = fromFile;
-        return cachedInternalAdminToken;
+  // Fil-fallback är endast tillåten i utveckling — i produktion får token
+  // BARA komma från miljövariabeln INTERNAL_ADMIN_TOKEN (Task #293).
+  if (process.env.NODE_ENV !== "production") {
+    try {
+      const filePath = resolve(process.cwd(), ".local/.import_token");
+      if (existsSync(filePath)) {
+        const fromFile = readFileSync(filePath, "utf8").trim();
+        if (fromFile) {
+          cachedInternalAdminToken = fromFile;
+          return cachedInternalAdminToken;
+        }
       }
+    } catch {
+      // ignore
     }
-  } catch {
-    // ignore
   }
   cachedInternalAdminToken = null;
   return null;
