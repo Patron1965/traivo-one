@@ -52,7 +52,7 @@ import {
   FileText,
   MessageSquare,
   Image as ImageIcon,
-  History,
+  History as HistoryIcon,
   AlertTriangle,
   Loader2,
   MapPin,
@@ -274,7 +274,7 @@ const TIMELINE_EVENT_META: Record<string, { label: string; icon: typeof Activity
   planned_window_set: { label: "Planerad tid satt", icon: Clock, tone: "muted" },
   en_route: { label: "På väg", icon: Truck, tone: "primary" },
   arrived: { label: "På plats", icon: MapPin, tone: "primary" },
-  completed: { label: "Utförd", icon: History, tone: "primary" },
+  completed: { label: "Utförd", icon: HistoryIcon, tone: "primary" },
   impossible: { label: "Omöjlig att utföra", icon: AlertTriangle, tone: "warning" },
 };
 
@@ -1141,7 +1141,7 @@ export default function WorkOrderDetailPage() {
         <Card>
           <CardHeader className="pb-3">
             <CardTitle className="text-base flex items-center gap-2">
-              <History className="h-4 w-4" /> Tidigare ordrar på objektet
+              <HistoryIcon className="h-4 w-4" /> Tidigare ordrar på objektet
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -1237,7 +1237,7 @@ export default function WorkOrderDetailPage() {
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-base flex items-center gap-2">
-            <History className="h-4 w-4" /> Tidslinje
+            <HistoryIcon className="h-4 w-4" /> Tidslinje
             {timeline.length > 0 && <Badge variant="secondary" className="ml-1 text-xs">{timeline.length}</Badge>}
           </CardTitle>
         </CardHeader>

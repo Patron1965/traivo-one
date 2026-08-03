@@ -3,7 +3,7 @@ import { Marker, Polyline, Popup, CircleMarker } from "react-leaflet";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { useQuery } from "@tanstack/react-query";
-import { Loader2, MapPin, Navigation } from "lucide-react";
+import { Loader2, MapPin, Navigation as NavigationIcon } from "lucide-react";
 import { format } from "date-fns";
 import { sv } from "date-fns/locale";
 import { BaseMap, MapFitBounds, statusDivIcon, getResourceStatusColor } from "@/components/ui/map";
@@ -98,7 +98,7 @@ export function ResourceTrackingMap({
     <Card className={`${className} overflow-hidden relative`}>
       <div className="absolute top-2 left-2 z-[1000] flex gap-1 flex-wrap">
         <Badge variant="secondary" className="text-xs">
-          <Navigation className="h-3 w-3 mr-1" />
+          <NavigationIcon className="h-3 w-3 mr-1" />
           {resourceName}
         </Badge>
         <Badge variant="outline" className="text-xs bg-background/90">

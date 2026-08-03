@@ -11,7 +11,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Calendar, MapPin, Clock, User, LogOut, Plus, Loader2, CalendarDays, History, FileText, MessageCircle, Send, Grid3X3, Truck, AlertCircle, RefreshCw, CheckCircle2, ArrowRight, Sparkles, Package, Phone, Trash2, Recycle, TreeDeciduous, Star, Camera, Menu, X, Home, Settings, Bell, ChevronRight, Map as MapIcon, Image as ImageIcon, Shield, ClipboardCheck, CalendarRange } from "lucide-react";
+import { Calendar, MapPin, Clock, User, LogOut, Plus, Loader2, CalendarDays, History as HistoryIcon, FileText, MessageCircle, Send, Grid3X3, Truck, AlertCircle, RefreshCw, CheckCircle2, ArrowRight, Sparkles, Package, Phone, Trash2, Recycle, TreeDeciduous, Star, Camera, Menu, X, Home, Settings, Bell, ChevronRight, Map as MapIcon, Image as ImageIcon, Shield, ClipboardCheck, CalendarRange } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -1045,7 +1045,7 @@ export default function PortalDashboardPage() {
                 Kommande
               </TabsTrigger>
               <TabsTrigger value="history" data-testid="tab-history">
-                <History className="h-4 w-4 mr-2" />
+                <HistoryIcon className="h-4 w-4 mr-2" />
                 Historik
               </TabsTrigger>
               <TabsTrigger value="requests" data-testid="tab-requests">
@@ -1145,7 +1145,7 @@ export default function PortalDashboardPage() {
               <Card className="bg-gradient-to-br from-muted/30 to-transparent">
                 <CardContent className="flex flex-col items-center justify-center py-16 text-center">
                   <div className="p-4 bg-chart-2/15 rounded-full mb-4">
-                    <History className="h-10 w-10 text-chart-2" />
+                    <HistoryIcon className="h-10 w-10 text-chart-2" />
                   </div>
                   <h3 className="text-lg font-semibold mb-2">Ingen historik ännu</h3>
                   <p className="text-muted-foreground max-w-sm">

@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { AlertCircle, CheckCircle2, MapPin, Loader2, Navigation, Building2, Sparkles } from 'lucide-react';
+import { AlertCircle, CheckCircle2, MapPin, Loader2, Navigation as NavigationIcon, Building2, Sparkles } from 'lucide-react';
 import { apiRequest } from '@/lib/queryClient';
 
 interface DynamicInfo {
@@ -191,7 +191,7 @@ export default function DynamicReportPage() {
                       : 'Platstjänster är inte tillgängliga i den här webbläsaren.'}
                   </p>
                   <Button variant="outline" size="sm" onClick={requestLocation} data-testid="button-retry-location">
-                    <Navigation className="mr-2 h-4 w-4" /> Försök igen
+                    <NavigationIcon className="mr-2 h-4 w-4" /> Försök igen
                   </Button>
                 </div>
               )}
@@ -206,7 +206,7 @@ export default function DynamicReportPage() {
                     Inga objekt hittades inom {Math.round(nearby.radiusMeters)} m från din position.
                   </p>
                   <Button variant="outline" size="sm" onClick={requestLocation} data-testid="button-refresh-location">
-                    <Navigation className="mr-2 h-4 w-4" /> Uppdatera position
+                    <NavigationIcon className="mr-2 h-4 w-4" /> Uppdatera position
                   </Button>
                 </div>
               )}

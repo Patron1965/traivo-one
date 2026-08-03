@@ -55,7 +55,7 @@ import {
   Play,
   Eye,
   Phone,
-  Image,
+  Image as ImageIcon,
   Package,
 } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";

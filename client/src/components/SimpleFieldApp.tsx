@@ -8,13 +8,13 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { 
   MapPin, Play, CheckCircle, ArrowLeft,
-  Loader2, AlertTriangle, Navigation, Phone,
+  Loader2, AlertTriangle, Navigation as NavigationIcon, Phone,
   HelpCircle, Clock, Trash2, Ban, MapPinOff, Timer, Bell, WifiOff, FileSignature, Camera, X,
   Key, DoorOpen, ListChecks, CircleDot, Circle, Mail, Coffee, MessageSquare, ChevronRight,
   User, CloudSun, Pause, SkipForward, Send, Flag, Thermometer, Wind, Download, Share,
   Lock, Unlock, ClipboardCheck, Wrench, UserX, AlarmClock, Car, Database, FileText, ListTodo, Eye, EyeOff, Settings, Network, Plus,
   Search, Route, Users, Warehouse, ChevronDown, Package, Hash, Moon, Sun,
-  ArrowRightLeft, RotateCcw, Calendar, Truck, History, Activity
+  ArrowRightLeft, RotateCcw, Calendar, Truck, History as HistoryIcon, Activity
 } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
@@ -372,7 +372,7 @@ const FIELD_TIMELINE_EVENT_META: Record<string, { label: string; icon: typeof Ac
   planned_window_set: { label: "Planerad tid satt", icon: Clock, tone: "muted" },
   en_route: { label: "På väg", icon: Truck, tone: "primary" },
   arrived: { label: "På plats", icon: MapPin, tone: "primary" },
-  completed: { label: "Utförd", icon: History, tone: "primary" },
+  completed: { label: "Utförd", icon: HistoryIcon, tone: "primary" },
   impossible: { label: "Omöjlig att utföra", icon: AlertTriangle, tone: "warning" },
 };
 
@@ -449,7 +449,7 @@ function TaskTimelinePanel({
     <Card data-testid="card-task-timeline">
       <CardHeader className="pb-3">
         <CardTitle className="text-sm flex items-center gap-2">
-          <History className="h-4 w-4" /> Tidslinje
+          <HistoryIcon className="h-4 w-4" /> Tidslinje
           {timeline.length > 0 && <Badge variant="secondary" className="ml-1 text-xs">{timeline.length}</Badge>}
         </CardTitle>
       </CardHeader>
@@ -1982,7 +1982,7 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
                 )}
                 {travelDistances[job.id] && travelDistances[job.id].distanceKm != null && (
                   <span className="text-xs text-muted-foreground flex items-center gap-0.5" data-testid={`travel-info-${job.id}`}>
-                    <Navigation className="h-2.5 w-2.5" />
+                    <NavigationIcon className="h-2.5 w-2.5" />
                     {travelDistances[job.id].distanceKm} km · {travelDistances[job.id].travelMinutes} min
                   </span>
                 )}
@@ -2250,7 +2250,7 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
                       }}
                       data-testid="button-navigate-stop-primary"
                     >
-                      <Navigation className="h-4 w-4" />
+                      <NavigationIcon className="h-4 w-4" />
                       <span className="ml-1">Navigera</span>
                     </Button>
                   )}
@@ -2459,7 +2459,7 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
                           onClick={() => openNavigation(dep.stockLatitude!, dep.stockLongitude!)}
                           data-testid={`button-navigate-stock-${dep.articleId}`}
                         >
-                          <Navigation className="h-4 w-4" />
+                          <NavigationIcon className="h-4 w-4" />
                           Navigera
                         </Button>
                       )}
@@ -3059,7 +3059,7 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
                 }}
                 data-testid="button-navigate"
               >
-                <Navigation className="h-5 w-5 text-chart-1" />
+                <NavigationIcon className="h-5 w-5 text-chart-1" />
                 <span className="text-xs">Navigera</span>
               </Button>
             )}
@@ -3981,7 +3981,7 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
             />
             {resourceId && (
               <div className={`flex items-center gap-1 px-2 py-1 rounded text-xs ${gpsActive ? "text-chart-2 bg-chart-2/10 dark:bg-chart-2/15" : "text-muted-foreground bg-muted"}`} data-testid="indicator-gps-status">
-                <Navigation className="h-3 w-3" />
+                <NavigationIcon className="h-3 w-3" />
                 <span>{gpsActive ? "GPS" : "Ingen GPS"}</span>
               </div>
             )}
@@ -4205,7 +4205,7 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
                     }}
                     data-testid="button-next-stop-navigate"
                   >
-                    <Navigation className="h-4 w-4" />
+                    <NavigationIcon className="h-4 w-4" />
                     Navigera
                   </Button>
                 </div>

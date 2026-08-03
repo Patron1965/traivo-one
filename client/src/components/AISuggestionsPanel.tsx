@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { Loader2, Sparkles, ArrowRight, Clock, Check, X, RefreshCw, Zap, Calendar, Route, MapPin, TrendingUp, ChevronDown, ChevronUp, Map, AlertTriangle, MessageSquare, Send, User, Bot } from "lucide-react";
+import { Loader2, Sparkles, ArrowRight, Clock, Check, X, RefreshCw, Zap, Calendar, Route, MapPin, TrendingUp, ChevronDown, ChevronUp, Map as MapIcon, AlertTriangle, MessageSquare, Send, User, Bot } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Progress } from "@/components/ui/progress";
@@ -783,7 +783,7 @@ export function AISuggestionsPanel({ weekStart, weekEnd, selectedDate, onApplySu
                                   onClick={() => setShowMapForRoute(route.resourceId)}
                                   data-testid={`button-show-map-${route.resourceId}`}
                                 >
-                                  <Map className="h-3 w-3 mr-1" />
+                                  <MapIcon className="h-3 w-3 mr-1" />
                                   Visa karta
                                 </Button>
                               </div>

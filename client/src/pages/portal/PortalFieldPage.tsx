@@ -10,7 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import {
   Camera, QrCode, Search, MapPin, ArrowLeft, Send, Loader2,
   CheckCircle, AlertTriangle, Package, Wrench, Trash2, HelpCircle,
-  Clock, Image, X, Building2, FileText, Navigation, ChevronRight
+  Clock, Image as ImageIcon, X, Building2, FileText, Navigation as NavigationIcon, ChevronRight
 } from "lucide-react";
 import { useTenantBranding } from "@/components/TenantBrandingProvider";
 import { customerReportStatusBadge, getCustomerReportStatusBadge } from "@/lib/status-colors";
@@ -537,7 +537,7 @@ export default function PortalFieldPage() {
                     )}
                     {selectedObject.accessCode && (
                       <div className="flex items-center gap-2 text-sm">
-                        <Navigation className="h-4 w-4 text-muted-foreground" />
+                        <NavigationIcon className="h-4 w-4 text-muted-foreground" />
                         <span>Portkod: {selectedObject.accessCode}</span>
                       </div>
                     )}
@@ -717,7 +717,7 @@ export default function PortalFieldPage() {
                   <div key={i} className="relative w-20 h-20 rounded-lg border bg-muted overflow-hidden" data-testid={`photo-${i}`}>
                     <img src={photo.displayUrl} alt={`Foto ${i + 1}`} className="w-full h-full object-cover" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
                     <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                      <Image className="h-6 w-6 text-muted-foreground opacity-30" />
+                      <ImageIcon className="h-6 w-6 text-muted-foreground opacity-30" />
                     </div>
                     <button
                       className="absolute -top-1 -right-1 h-5 w-5 rounded-full bg-destructive text-white flex items-center justify-center z-10"

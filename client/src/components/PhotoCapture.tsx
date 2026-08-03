@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { 
-  Camera, X, Upload, Loader2, Image, ImagePlus,
+  Camera, X, Upload, Loader2, Image as ImageIcon, ImagePlus,
   AlertTriangle, CheckCircle, Eye
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
@@ -183,7 +183,7 @@ export function PhotoCapture({
       case "before": return <Eye className="h-2.5 w-2.5" />;
       case "after": return <CheckCircle className="h-2.5 w-2.5" />;
       case "problem": return <AlertTriangle className="h-2.5 w-2.5 text-chart-4" />;
-      default: return <Image className="h-2.5 w-2.5" />;
+      default: return <ImageIcon className="h-2.5 w-2.5" />;
     }
   };
 
@@ -304,7 +304,7 @@ export function PhotoCapture({
                     data-testid={`photo-thumbnail-${index}`}
                   >
                     <div className="absolute inset-0 flex items-center justify-center bg-muted">
-                      <Image className="h-6 w-6 text-muted-foreground" />
+                      <ImageIcon className="h-6 w-6 text-muted-foreground" />
                     </div>
                     <img
                       src={photo.path}

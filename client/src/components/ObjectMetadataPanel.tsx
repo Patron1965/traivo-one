@@ -13,8 +13,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, Dialog
 import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
 import { 
-  Loader2, Database, Lock, Plus, Save, X, History, Edit2, 
-  ArrowDown, ExternalLink, Trash2, Image, FileText, MapPin, Clock, Hash, Type, ToggleLeft,
+  Loader2, Database, Lock, Plus, Save, X, History as HistoryIcon, Edit2, 
+  ArrowDown, ExternalLink, Trash2, Image as ImageIcon, FileText, MapPin, Clock, Hash, Type, ToggleLeft,
   Share2, ChevronRight, ChevronDown, TreeDeciduous, RotateCcw, Pencil, Calculator, AlertTriangle,
   Server, Wrench, Upload
 } from "lucide-react";
@@ -88,7 +88,7 @@ const DATA_TYPE_ICONS: Record<string, typeof Type> = {
   datetime: Clock,
   json: FileText,
   referens: ExternalLink,
-  image: Image,
+  image: ImageIcon,
   file: FileText,
   code: Hash,
   location: MapPin,
@@ -304,7 +304,7 @@ function MetadataHistoryModal({ metadataId, metadataName, tenantId }: { metadata
         <TooltipTrigger asChild>
           <DialogTrigger asChild>
             <Button variant="ghost" size="icon" className="h-7 w-7" data-testid={`button-history-${metadataId}`}>
-              <History className="h-3.5 w-3.5" />
+              <HistoryIcon className="h-3.5 w-3.5" />
             </Button>
           </DialogTrigger>
         </TooltipTrigger>
@@ -313,7 +313,7 @@ function MetadataHistoryModal({ metadataId, metadataName, tenantId }: { metadata
       <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <History className="h-5 w-5" />
+            <HistoryIcon className="h-5 w-5" />
             Historik: {metadataName}
           </DialogTitle>
           <DialogDescription>Andringshistorik for detta metadata-varde</DialogDescription>
@@ -412,7 +412,7 @@ function ObjectMetadataHistoryDialog({ objectId, objectName }: { objectId: strin
         <TooltipTrigger asChild>
           <DialogTrigger asChild>
             <Button variant="outline" size="sm" className="h-7 text-xs gap-1" data-testid={`button-object-history-${objectId}`}>
-              <History className="h-3.5 w-3.5" />
+              <HistoryIcon className="h-3.5 w-3.5" />
               Historik
             </Button>
           </DialogTrigger>
@@ -422,7 +422,7 @@ function ObjectMetadataHistoryDialog({ objectId, objectName }: { objectId: strin
       <DialogContent className="max-w-lg max-h-[80vh] flex flex-col">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <History className="h-5 w-5" />
+            <HistoryIcon className="h-5 w-5" />
             Ändringshistorik: {objectName}
           </DialogTitle>
           <DialogDescription>Alla metadataändringar på detta objekt</DialogDescription>
@@ -434,7 +434,7 @@ function ObjectMetadataHistoryDialog({ objectId, objectName }: { objectId: strin
             </div>
           ) : historik.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground text-sm">
-              <History className="h-8 w-8 mx-auto mb-2 opacity-30" />
+              <HistoryIcon className="h-8 w-8 mx-auto mb-2 opacity-30" />
               Ingen ändringshistorik tillgänglig
             </div>
           ) : (

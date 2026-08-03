@@ -29,7 +29,7 @@ import { useQuery } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import {
   CalendarRange,
-  History,
+  History as HistoryIcon,
   MessageSquare,
   Image as ImageIcon,
   StickyNote,
@@ -1395,7 +1395,7 @@ export function JobCardExpandPanel({ jobId, enabled, onHistoryClick, bulkJobIds 
             <CalendarRange className="h-3.5 w-3.5 stroke-[2.25] shrink-0" /><span className="truncate">Period</span><CountBadge value={data.counts.period} />
           </TabsTrigger>
           <TabsTrigger value="history" className="h-7 px-1 text-[10px] gap-1 font-semibold text-foreground/70 rounded-sm border border-transparent data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:border-border data-[state=active]:shadow-sm" data-testid={`tab-job-history-${jobId}`} title="Historik">
-            <History className="h-3.5 w-3.5 stroke-[2.25] shrink-0" /><span className="truncate">Historik</span><CountBadge value={data.counts.history} />
+            <HistoryIcon className="h-3.5 w-3.5 stroke-[2.25] shrink-0" /><span className="truncate">Historik</span><CountBadge value={data.counts.history} />
           </TabsTrigger>
           <TabsTrigger value="communications" className="h-7 px-1 text-[10px] gap-1 font-semibold text-foreground/70 rounded-sm border border-transparent data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:border-border data-[state=active]:shadow-sm" data-testid={`tab-job-communications-${jobId}`} title="Kommunikation">
             <MessageSquare className="h-3.5 w-3.5 stroke-[2.25] shrink-0" /><span className="truncate">Komm.</span><CountBadge value={data.counts.communications} />

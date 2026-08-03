@@ -13,7 +13,7 @@ import {
   Loader2,
   Star,
   X,
-  Navigation,
+  Navigation as NavigationIcon,
   Building2,
 } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
@@ -419,7 +419,7 @@ export default function MetadataEditorPublicPage() {
                             )}
                           </div>
                           <span className="flex items-center gap-1 text-xs text-muted-foreground shrink-0">
-                            <Navigation className="h-3 w-3" />
+                            <NavigationIcon className="h-3 w-3" />
                             {o.distanceMeters} m
                           </span>
                         </div>

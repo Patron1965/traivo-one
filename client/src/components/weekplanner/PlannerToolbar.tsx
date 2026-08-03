@@ -9,7 +9,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Separator } from "@/components/ui/separator";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { ChevronLeft, ChevronRight, Plus, AlertTriangle, Sparkles, Undo2, Redo2, CalendarDays, Calendar, CalendarRange, Clock, MapPin, Navigation, Wand2, TrendingUp, Activity, UsersRound, ZoomIn, ZoomOut, Trash2, ArrowRight, ChevronDown, ChevronUp, Crosshair, ExternalLink, ShieldCheck, Send, Inbox, Target, X, Search, Home } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, AlertTriangle, Sparkles, Undo2, Redo2, CalendarDays, Calendar, CalendarRange, Clock, MapPin, Navigation as NavigationIcon, Wand2, TrendingUp, Activity, UsersRound, ZoomIn, ZoomOut, Trash2, ArrowRight, ChevronDown, ChevronUp, Crosshair, ExternalLink, ShieldCheck, Send, Inbox, Target, X, Search, Home } from "lucide-react";
 import type { Resource, ResourceProfile, ResourceProfileAssignment } from "@shared/schema";
 import type { ViewMode, PlannerDisplayMode } from "./types";
 import type { PopoutView, SyncRole, AssignSlot } from "./usePlannerSync";
@@ -755,7 +755,7 @@ export const PlannerToolbar = memo(function PlannerToolbar(props: PlannerToolbar
               <Tooltip>
                 <TooltipTrigger asChild>
                   <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-chart-3/15 dark:bg-chart-3/15 text-chart-3 border border-chart-3/20 dark:border-chart-3/80" data-testid="goal-bar-travel">
-                    <Navigation className="h-3 w-3" />
+                    <NavigationIcon className="h-3 w-3" />
                     <span className="font-medium">{weekTravelTotal.hours}h</span>
                     <span className="text-chart-3">({weekTravelTotal.km} km)</span>
                   </div>

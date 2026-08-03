@@ -28,7 +28,7 @@ import {
   Anchor,
   Route,
   AlertTriangle,
-  Navigation,
+  Navigation as NavigationIcon,
 } from "lucide-react";
 import { OBJECT_HIERARCHY_LEVELS, type WorkOrderWithObject } from "@shared/schema";
 import { haversineDistanceKm, estimateTravelMinutes, formatDistanceKm } from "@/lib/geo";
@@ -743,7 +743,7 @@ export const PlannerAreaSearchPanel = memo(function PlannerAreaSearchPanel({
                       disabled={selectedJobIds.size === 0 || (selectedJobIds.size === 1 && selectedJobIds.has(anchorJobId || ""))}
                       data-testid="button-add-to-route"
                     >
-                      <Navigation className="h-4 w-4 mr-1.5" />
+                      <NavigationIcon className="h-4 w-4 mr-1.5" />
                       Lägg till i rutten
                       {(() => {
                         const n = Array.from(selectedJobIds).filter(id => id !== anchorJobId).length;
@@ -852,7 +852,7 @@ export const PlannerAreaSearchPanel = memo(function PlannerAreaSearchPanel({
                               className="inline-flex items-center gap-0.5 px-1.5 py-0 rounded border border-primary/30 bg-primary/5 text-primary text-[10px]"
                               data-testid={`chip-distance-${job.id}`}
                             >
-                              <Navigation className="h-2.5 w-2.5" />
+                              <NavigationIcon className="h-2.5 w-2.5" />
                               {dist?.km != null
                                 ? `${formatDistanceKm(dist.km)} · ≈${dist.minutes} min`
                                 : "—"}

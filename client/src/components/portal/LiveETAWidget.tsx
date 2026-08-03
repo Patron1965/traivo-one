@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Truck, Clock, MapPin, Navigation } from "lucide-react";
+import { Truck, Clock, MapPin, Navigation as NavigationIcon } from "lucide-react";
 
 interface LiveETAData {
   available: boolean;
@@ -74,7 +74,7 @@ export function LiveETAWidget({ workOrderId, objectAddress }: LiveETAWidgetProps
 
             {eta.resourceName && (
               <p className="text-sm text-muted-foreground mb-2">
-                <Navigation className="h-3 w-3 inline mr-1" />
+                <NavigationIcon className="h-3 w-3 inline mr-1" />
                 {eta.resourceName}
               </p>
             )}

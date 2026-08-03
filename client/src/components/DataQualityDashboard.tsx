@@ -8,7 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { useToast } from "@/hooks/use-toast";
 import {
   MapPin, AlertTriangle, CheckCircle, Loader2, RefreshCw,
-  Building2, Truck, GitBranch, Navigation, FileUp, Save, Pencil, X,
+  Building2, Truck, GitBranch, Navigation as NavigationIcon, FileUp, Save, Pencil, X,
   Phone, User, MessageSquare, Hash, FileSearch, Trash2, Download
 } from "lucide-react";
 import { useQuery, useMutation } from "@tanstack/react-query";
@@ -316,7 +316,7 @@ export function DataQualityDashboard() {
       label: "Kärl utan adress",
       count: containers.missingAddress,
       total: containers.total,
-      icon: Navigation,
+      icon: NavigationIcon,
       color: "text-destructive",
       bgColor: "bg-destructive/10 dark:bg-destructive/15",
       borderColor: "border-destructive/20 dark:border-destructive/80",

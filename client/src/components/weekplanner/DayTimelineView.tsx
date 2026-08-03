@@ -1,7 +1,7 @@
 import { memo } from "react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { AlertTriangle, Navigation, ShieldAlert, ShieldCheck, ShieldX } from "lucide-react";
+import { AlertTriangle, Navigation as NavigationIcon, ShieldAlert, ShieldCheck, ShieldX } from "lucide-react";
 import { format } from "date-fns";
 import type { Resource, WorkOrderWithObject, ObjectTimeRestriction } from "@shared/schema";
 import { DAY_START_HOUR, DAY_END_HOUR, HOURS_IN_DAY, getJobCategory } from "./types";
@@ -170,7 +170,7 @@ export const DayTimelineView = memo(function DayTimelineView(props: DayTimelineV
                             <Tooltip>
                               <TooltipTrigger asChild>
                                 <div className="flex items-center gap-1.5 px-2 py-1 mt-1 rounded text-xs bg-chart-3/15 dark:bg-chart-3/15 border border-chart-3/30 dark:border-chart-3/70 text-chart-3" data-testid={`travel-block-${job.id}`}>
-                                  <Navigation className="h-3 w-3" />
+                                  <NavigationIcon className="h-3 w-3" />
                                   <span>Restid {travelAfter.minutes} min</span>
                                   <span className="text-chart-3">({travelAfter.distanceKm} km)</span>
                                 </div>
@@ -188,7 +188,7 @@ export const DayTimelineView = memo(function DayTimelineView(props: DayTimelineV
                       <Tooltip key={`travel-orphan-${i}`}>
                         <TooltipTrigger asChild>
                           <div className="flex items-center gap-1.5 px-2 py-1 rounded text-xs bg-chart-3/15 dark:bg-chart-3/15 border border-chart-3/30 dark:border-chart-3/70 text-chart-3">
-                            <Navigation className="h-3 w-3" />
+                            <NavigationIcon className="h-3 w-3" />
                             <span>Restid {t.minutes} min ({t.distanceKm} km)</span>
                           </div>
                         </TooltipTrigger>

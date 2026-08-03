@@ -9,7 +9,7 @@ import {
   Cog,
   Building,
   MapPin,
-  Navigation,
+  Navigation as NavigationIcon,
   Target,
   CalendarClock,
   CircleSlash,
@@ -261,7 +261,7 @@ export function ObjectSystemGeneratedPanel({ objectId }: Props) {
 
       <Section
         title="Geokodad position"
-        icon={<Navigation className="h-4 w-4" />}
+        icon={<NavigationIcon className="h-4 w-4" />}
         testId="system-position"
         locked
         isEmpty={!position.geocoded}

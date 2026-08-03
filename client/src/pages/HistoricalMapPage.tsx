@@ -14,8 +14,8 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { format } from "date-fns";
 import { sv } from "date-fns/locale";
 import {
-  Play, Pause, SkipBack, SkipForward, Clock, MapPin, Navigation,
-  CheckCircle2, Timer, TrendingUp, Users, Loader2, CalendarIcon, History
+  Play, Pause, SkipBack, SkipForward, Clock, MapPin, Navigation as NavigationIcon,
+  CheckCircle2, Timer, TrendingUp, Users, Loader2, CalendarIcon, History as HistoryIcon
 } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
@@ -225,7 +225,7 @@ export default function HistoricalMapPage() {
     <div className="flex flex-col h-[calc(100vh-4rem)]" data-testid="page-historical-map">
       <div className="flex items-center justify-between p-4 border-b flex-wrap gap-2">
         <div className="flex items-center gap-2">
-          <History className="h-5 w-5 text-primary" />
+          <HistoryIcon className="h-5 w-5 text-primary" />
           <div>
             <h1 className="text-xl font-bold" data-testid="text-historical-map-title">Historisk Kartvy</h1>
             <p className="text-xs text-muted-foreground">Spela upp rörelsemönster för att utvärdera effektivitet</p>
@@ -376,7 +376,7 @@ export default function HistoricalMapPage() {
           </div>
         ) : sortedPositions.length === 0 ? (
           <div className="h-full flex flex-col items-center justify-center gap-3 text-muted-foreground">
-            <Navigation className="h-12 w-12" />
+            <NavigationIcon className="h-12 w-12" />
             <p className="text-lg font-medium">Inga positioner registrerade</p>
             <p className="text-sm">
               {selectedResource?.name} har inga GPS-positioner för{" "}

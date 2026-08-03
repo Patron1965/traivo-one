@@ -3,7 +3,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
-  Play, Navigation, AlertTriangle, ChevronDown, ChevronUp,
+  Play, Navigation as NavigationIcon, AlertTriangle, ChevronDown, ChevronUp,
   Car, MapPin, Wrench, CheckCircle, Circle,
 } from "lucide-react";
 
@@ -124,7 +124,7 @@ export function FocusCTA({ jobStarted, hasAddress, onStart, onNavigate, onReport
         disabled={!hasAddress}
         data-testid="focus-button-navigate"
       >
-        <Navigation className={`h-6 w-6 ${hasAddress ? "text-chart-1" : "text-muted-foreground"}`} />
+        <NavigationIcon className={`h-6 w-6 ${hasAddress ? "text-chart-1" : "text-muted-foreground"}`} />
         <span className="text-xs font-medium">Navigera</span>
       </Button>
       <Button

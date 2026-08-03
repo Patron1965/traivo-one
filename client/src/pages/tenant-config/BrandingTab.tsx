@@ -9,7 +9,7 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import type { TenantBranding } from "@shared/schema";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Building2, Save, Loader2, Palette, Image, Type, Globe, Search, Check, Upload, X, Eye, AlertTriangle } from "lucide-react";
+import { Building2, Save, Loader2, Palette, Image as ImageIcon, Type, Globe, Search, Check, Upload, X, Eye, AlertTriangle } from "lucide-react";
 import {
   ACCEPTED_IMAGE_FORMATS_LABEL,
   IMAGE_REJECT_TOAST,
@@ -488,7 +488,7 @@ export function BrandingTab() {
 
               <div className="space-y-2">
                 <Label className="flex items-center gap-2">
-                  <Image className="h-4 w-4" />
+                  <ImageIcon className="h-4 w-4" />
                   Logotyp
                 </Label>
                 {isExternallyHostedLogo(form.logoUrl) && (

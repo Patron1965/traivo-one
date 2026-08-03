@@ -15,7 +15,7 @@ import {
 } from "@/components/ui/command";
 import {
   Calendar,
-  Map,
+  Map as MapIcon,
   Building2,
   Users,
   Settings,
@@ -46,7 +46,7 @@ import {
   Search,
   Moon,
   Sun,
-  History,
+  History as HistoryIcon,
   MapPin,
   User,
   Loader2,
@@ -77,7 +77,7 @@ const allNavItems: NavItemConfig[] = [
   { title: "Veckoplanering", url: "/planner", icon: Calendar, category: "Planering", keywords: ["schema", "vecka", "planera"] },
   { title: "Orderstock", url: "/order-stock", icon: ClipboardList, category: "Planering", keywords: ["order", "beställning", "jobb"] },
   { title: "Mobilapp", url: "/mobile", icon: Smartphone, category: "Planering", keywords: ["fält", "tekniker", "app"] },
-  { title: "Rutter", url: "/routes", icon: Map, category: "Planering", keywords: ["köra", "väg", "navigering"] },
+  { title: "Rutter", url: "/routes", icon: MapIcon, category: "Planering", keywords: ["köra", "väg", "navigering"] },
   { title: "Ekonomi", url: "/economics", icon: DollarSign, category: "Analys", keywords: ["intäkter", "kostnader", "resultat"] },
   { title: "Prislistor", url: "/price-lists", icon: Receipt, category: "System", keywords: ["pris", "kostnad", "taxa"] },
   { title: "Abonnemang", url: "/subscriptions", icon: RefreshCw, category: "System", keywords: ["prenumeration", "återkommande"] },
@@ -339,7 +339,7 @@ export function CommandPalette({ onThemeToggle, currentTheme }: CommandPalettePr
                 className="gap-3"
                 data-testid={`command-recent-${item.url.replace("/", "") || "home"}`}
               >
-                <History className="h-4 w-4 text-muted-foreground" />
+                <HistoryIcon className="h-4 w-4 text-muted-foreground" />
                 <item.icon className="h-4 w-4" />
                 <span>{item.title}</span>
               </CommandItem>

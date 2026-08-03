@@ -8,7 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { AlertTriangle, MapPin, Navigation, Phone, User, Clock, Loader2, Check, X, ChevronRight } from "lucide-react";
+import { AlertTriangle, MapPin, Navigation as NavigationIcon, Phone, User, Clock, Loader2, Check, X, ChevronRight } from "lucide-react";
 import type { WorkOrderWithObject, Resource } from "@shared/schema";
 
 interface NearestResource {
@@ -202,7 +202,7 @@ export function UrgentJobDialog({ open, onClose, preselectedOrder, targetLatitud
                 </div>
               </div>
               <Button className="w-full bg-destructive hover:bg-destructive text-white" onClick={handleFindNearest} disabled={!latitude || !longitude} data-testid="button-find-nearest">
-                <Navigation className="h-4 w-4 mr-2" />
+                <NavigationIcon className="h-4 w-4 mr-2" />
                 Hitta närmaste tekniker
               </Button>
             </>
@@ -237,7 +237,7 @@ export function UrgentJobDialog({ open, onClose, preselectedOrder, targetLatitud
                           </div>
                           <div className="flex items-center gap-3 text-sm text-muted-foreground mt-0.5">
                             <span className="flex items-center gap-1">
-                              <Navigation className="h-3 w-3" /> {r.distance}
+                              <NavigationIcon className="h-3 w-3" /> {r.distance}
                             </span>
                             <span className="flex items-center gap-1">
                               <Clock className="h-3 w-3" /> ~{r.estimatedMinutes} min

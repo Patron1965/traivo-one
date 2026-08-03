@@ -6,7 +6,7 @@ import { CSS } from "@dnd-kit/utilities";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { GripVertical, Clock, ChevronDown, ChevronUp, MapPin, Navigation, AlertTriangle, Ban } from "lucide-react";
+import { GripVertical, Clock, ChevronDown, ChevronUp, MapPin, Navigation as NavigationIcon, AlertTriangle, Ban } from "lucide-react";
 import type { WorkOrderWithObject, Customer } from "@shared/schema";
 import { priorityDotColors, priorityLabels } from "./types";
 
@@ -170,7 +170,7 @@ export const SortableRouteItem = memo(function SortableRouteItem({
       </Card>
       {travelToNext && index < totalCount - 1 && (
         <div className="flex items-center gap-1 py-1 px-2 text-[10px] text-muted-foreground">
-          <Navigation className="h-2.5 w-2.5" />
+          <NavigationIcon className="h-2.5 w-2.5" />
           <span>~{travelToNext} min körtid</span>
         </div>
       )}

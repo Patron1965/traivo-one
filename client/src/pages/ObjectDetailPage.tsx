@@ -28,10 +28,10 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest, versionedUrl } from "@/lib/queryClient";
 import {
   ArrowLeft, Building2, MapPin, Key, Keyboard, Users, DoorOpen,
-  Clock, Package, FileText, Image, Contact, GitFork, AlertTriangle,
+  Clock, Package, FileText, Image as ImageIcon, Contact, GitFork, AlertTriangle,
   Calendar, Loader2, ChevronRight, Wrench,
   Box, Layers, Plus,
-  Trash2, Pencil, Save, X, Phone, Mail, LinkIcon, Search, History,
+  Trash2, Pencil, Save, X, Phone, Mail, LinkIcon, Search, History as HistoryIcon,
   ArrowUp, ArrowDown, RotateCcw, Cog, Copy, Gauge, Zap
 } from "lucide-react";
 import { ObjectMetadataBody } from "@/components/objects/ObjectMetadataBody";
@@ -1168,7 +1168,7 @@ export default function ObjectDetailPage() {
                     className="h-6 gap-1 px-2 text-xs text-muted-foreground"
                     data-testid="button-status-history"
                   >
-                    <History className="h-3 w-3" />
+                    <HistoryIcon className="h-3 w-3" />
                     Historik ({statusHistory.entries.length})
                   </Button>
                 </PopoverTrigger>
@@ -1818,7 +1818,7 @@ function MetadataHistorikButton({
             onClick={() => setOpen(true)}
             data-testid={`button-metadata-history-${katalogId}`}
           >
-            <History className="h-3.5 w-3.5" />
+            <HistoryIcon className="h-3.5 w-3.5" />
           </Button>
         </TooltipTrigger>
         <TooltipContent>Visa historik</TooltipContent>
@@ -1827,7 +1827,7 @@ function MetadataHistorikButton({
         <DialogContent className="max-w-2xl">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <History className="h-4 w-4" /> Historik – {katalogNamn}
+              <HistoryIcon className="h-4 w-4" /> Historik – {katalogNamn}
             </DialogTitle>
             <DialogDescription>
               Kronologisk tidslinje över alla ändringar på detta fält. Nyaste händelsen visas först.

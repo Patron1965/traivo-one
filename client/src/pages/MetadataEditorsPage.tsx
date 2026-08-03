@@ -34,7 +34,7 @@ import {
   Check,
   MapPin,
   Building2,
-  Navigation,
+  Navigation as NavigationIcon,
   GripVertical,
   Star,
   Type,
@@ -1110,7 +1110,7 @@ function LinkDialog({ editor, onClose }: { editor: MetadataEditor; onClose: () =
 
           {editor.type === "gps" && (
             <p className="text-sm text-muted-foreground flex items-center gap-2">
-              <Navigation className="h-4 w-4" />
+              <NavigationIcon className="h-4 w-4" />
               En enda länk gäller för hela organisationen — avsändaren väljer objekt via sin position.
             </p>
           )}

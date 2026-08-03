@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
-  ArrowLeft, MapPin, Navigation, Loader2, CheckCircle, ClipboardCheck,
+  ArrowLeft, MapPin, Navigation as NavigationIcon, Loader2, CheckCircle, ClipboardCheck,
   Building2, AlertTriangle, Inbox,
 } from "lucide-react";
 import { useTenantBranding } from "@/components/TenantBrandingProvider";
@@ -141,7 +141,7 @@ function TaskCard({ task }: { task: ExecutionTask }) {
             data-testid={`link-task-map-${task.id}`}
           >
             <a href={url} target="_blank" rel="noopener noreferrer">
-              <Navigation className="h-4 w-4 mr-2" />
+              <NavigationIcon className="h-4 w-4 mr-2" />
               Öppna i karta
             </a>
           </Button>

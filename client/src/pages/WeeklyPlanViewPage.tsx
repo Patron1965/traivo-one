@@ -43,7 +43,7 @@ import {
   Route,
   Leaf,
   Map as MapIcon,
-  Navigation,
+  Navigation as NavigationIcon,
   ExternalLink,
   Pencil,
   Save,
@@ -2605,7 +2605,7 @@ function DayDetailPanel({
                   }}
                   data-testid={`button-move-job-${b.id}`}
                 >
-                  <Navigation className="h-3 w-3" />
+                  <NavigationIcon className="h-3 w-3" />
                   Flytta jobb
                 </Button>
               </div>

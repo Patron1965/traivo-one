@@ -19,7 +19,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { 
   Upload, Users, Building2, Truck, Trash2, CheckCircle, AlertCircle, 
   Loader2, Download, Eye, X, FileUp, Check, Clock, FileSpreadsheet, Database,
-  ArrowRight, Info, Settings, ChevronDown, ChevronUp, ListChecks, History, Undo2,
+  ArrowRight, Info, Settings, ChevronDown, ChevronUp, ListChecks, History as HistoryIcon, Undo2,
   SkipForward, Ban, BarChart3, ClipboardList, Tag, AlertTriangle, Merge, Copy, Link2,
   FilePlus, Receipt, RefreshCw, Layers
 } from "lucide-react";
@@ -366,7 +366,7 @@ function ImportHistorySection() {
       <Card>
         <CardHeader>
           <CardTitle className="text-lg flex items-center gap-2">
-            <History className="h-5 w-5" />
+            <HistoryIcon className="h-5 w-5" />
             Importhistorik
           </CardTitle>
           <CardDescription>Visa och hantera tidigare importer. Klicka på en rad för att se detaljerad status och progress för pågående eller klara körningar.</CardDescription>
@@ -378,7 +378,7 @@ function ImportHistorySection() {
             </div>
           ) : batches.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground">
-              <History className="h-12 w-12 mx-auto mb-4 opacity-50" />
+              <HistoryIcon className="h-12 w-12 mx-auto mb-4 opacity-50" />
               <p>Ingen importhistorik hittades.</p>
             </div>
           ) : (
@@ -3116,7 +3116,7 @@ export default function ImportPage() {
             </TabsTrigger>
           )}
           <TabsTrigger value="history" className="flex items-center gap-2" data-testid="tab-import-history">
-            <History className="h-4 w-4" />
+            <HistoryIcon className="h-4 w-4" />
             Historik
           </TabsTrigger>
           <TabsTrigger value="quality" className="flex items-center gap-2" data-testid="tab-data-quality">
@@ -4745,7 +4745,7 @@ export default function ImportPage() {
             <Card data-testid="card-import-history">
               <CardHeader className="pb-3">
                 <CardTitle className="text-base flex items-center gap-2">
-                  <History className="h-4 w-4" />
+                  <HistoryIcon className="h-4 w-4" />
                   Importhistorik
                 </CardTitle>
                 <CardDescription>Tidigare importer med möjlighet att ångra</CardDescription>

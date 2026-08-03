@@ -33,9 +33,9 @@ import {
   Sparkles,
   Eye,
   Phone,
-  Image,
+  Image as ImageIcon,
   Package,
-  History,
+  History as HistoryIcon,
   Building2,
   Target,
   Route,
@@ -391,7 +391,7 @@ function RecentPages() {
       <CardHeader className="pb-3">
         <CardTitle className="flex items-center gap-2 text-base">
           <div className="p-1 rounded-md bg-chart-1/15 dark:bg-chart-1/15">
-            <History className="h-3.5 w-3.5 text-chart-1" />
+            <HistoryIcon className="h-3.5 w-3.5 text-chart-1" />
           </div>
           Senast besökta
         </CardTitle>

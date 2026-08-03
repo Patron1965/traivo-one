@@ -7,7 +7,7 @@ import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, Command
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
-import { AlertTriangle, Plus, Navigation, Cloud, Sun, CloudRain, Snowflake, ShieldAlert, ShieldCheck, ShieldX, EyeOff, ChevronDown, ChevronRight, ChevronLeft, Trash2, UserPlus, Loader2, Repeat, Users, Home, ArrowRight, ArrowLeft, Volume2, VolumeX } from "lucide-react";
+import { AlertTriangle, Plus, Navigation as NavigationIcon, Cloud, Sun, CloudRain, Snowflake, ShieldAlert, ShieldCheck, ShieldX, EyeOff, ChevronDown, ChevronRight, ChevronLeft, Trash2, UserPlus, Loader2, Repeat, Users, Home, ArrowRight, ArrowLeft, Volume2, VolumeX } from "lucide-react";
 import { useDroppable } from "@dnd-kit/core";
 import { format, isSameDay } from "date-fns";
 import { sv } from "date-fns/locale";
@@ -362,7 +362,7 @@ function CommuteSummaryBody({
   return (
     <div className="px-2 py-1.5 text-xs" data-testid={`commute-summary-${rowId}-${format(day, "yyyy-MM-dd")}`}>
       <div className="flex items-center gap-1.5 font-medium text-foreground mb-1">
-        <Navigation className="h-3.5 w-3.5 text-chart-3" />
+        <NavigationIcon className="h-3.5 w-3.5 text-chart-3" />
         <span>Inställelseresa</span>
       </div>
       <p className="text-muted-foreground mb-2 capitalize">{rowLabel} · {dayLabel}</p>
@@ -939,7 +939,7 @@ export const WeekGridView = memo(function WeekGridView(props: WeekGridViewProps)
                         <Tooltip>
                           <TooltipTrigger asChild>
                             <div className="flex items-center gap-1 mt-2 px-1.5 py-0.5 rounded text-[10px] bg-chart-3/15 dark:bg-chart-3/15 text-chart-3 border border-chart-3/20 dark:border-chart-3/80" data-testid={`travel-summary-${resource.id}-${dayStr}`}>
-                              <Navigation className="h-2.5 w-2.5" />
+                              <NavigationIcon className="h-2.5 w-2.5" />
                               <span>{totalTravelMin} min</span>
                               <span className="text-chart-3">({Math.round(totalTravelKm)} km)</span>
                             </div>

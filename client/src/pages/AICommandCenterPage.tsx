@@ -12,7 +12,7 @@ import { Progress } from "@/components/ui/progress";
 import {
   Brain, Sparkles, TrendingUp, TrendingDown, AlertTriangle, CheckCircle2,
   Clock, RefreshCw, Loader2, Send, MessageCircle, Zap, Target,
-  BarChart3, Users, ArrowUpRight, ArrowDownRight, Minus, Navigation,
+  BarChart3, Users, ArrowUpRight, ArrowDownRight, Minus, Navigation as NavigationIcon,
   Bell, Mail, Smartphone, Eye, ChevronRight, Lightbulb, Shield
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
@@ -292,7 +292,7 @@ function ETAPanel() {
         <div className="flex items-center justify-between">
           <div>
             <CardTitle className="text-base flex items-center gap-2">
-              <Navigation className="h-5 w-5 text-chart-1" />
+              <NavigationIcon className="h-5 w-5 text-chart-1" />
               ETA & Förseningar
             </CardTitle>
             <CardDescription>Realtids-ETA för dagens ordrar</CardDescription>

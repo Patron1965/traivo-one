@@ -62,7 +62,7 @@ import {
   BarChart3,
   Link2,
   FileText,
-  History,
+  History as HistoryIcon,
   ArrowRight,
   ArrowLeft,
   Lightbulb,
@@ -661,7 +661,7 @@ export default function OrderConceptsPage() {
                               onClick={() => { setSelectedConceptForPhase2(concept.id); setRunLogsDialogOpen(true); }}
                               data-testid={`button-run-logs-${concept.id}`}
                             >
-                              <History className="h-4 w-4" />
+                              <HistoryIcon className="h-4 w-4" />
                             </Button>
                           </TooltipTrigger>
                           <TooltipContent>Körhistorik</TooltipContent>
@@ -1278,7 +1278,7 @@ export default function OrderConceptsPage() {
         <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <History className="h-5 w-5" />
+              <HistoryIcon className="h-5 w-5" />
               Körhistorik
             </DialogTitle>
             <DialogDescription>

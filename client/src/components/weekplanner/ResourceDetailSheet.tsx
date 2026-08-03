@@ -9,7 +9,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Phone, Mail, Wrench, Calendar, Send, MessageSquare, CheckCircle2, AlertCircle, History, XCircle, PlusCircle, MailCheck } from "lucide-react";
+import { Phone, Mail, Wrench, Calendar, Send, MessageSquare, CheckCircle2, AlertCircle, History as HistoryIcon, XCircle, PlusCircle, MailCheck } from "lucide-react";
 import { format } from "date-fns";
 import { sv } from "date-fns/locale";
 import type { Resource, DriverNotification } from "@shared/schema";
@@ -154,7 +154,7 @@ export const ResourceDetailSheet = memo(function ResourceDetailSheet(props: Reso
           <TabsList className="grid w-full grid-cols-2">
             <TabsTrigger value="overview" data-testid="tab-resource-overview">Översikt</TabsTrigger>
             <TabsTrigger value="history" data-testid="tab-resource-history">
-              <History className="h-3.5 w-3.5 mr-1" />
+              <HistoryIcon className="h-3.5 w-3.5 mr-1" />
               Schemautskick & SMS
             </TabsTrigger>
           </TabsList>

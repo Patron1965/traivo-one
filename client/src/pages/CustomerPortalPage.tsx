@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
-import { Calendar, Truck, Package, Clock, CalendarPlus, CheckCircle, AlertCircle, Loader2, Search, MapPin, Phone, Building, List, Map, Maximize2, X } from "lucide-react";
+import { Calendar, Truck, Package, Clock, CalendarPlus, CheckCircle, AlertCircle, Loader2, Search, MapPin, Phone, Building, List, Map as MapIcon, Maximize2, X } from "lucide-react";
 import { MapContainer, TileLayer, Marker, Popup, useMap } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
@@ -544,7 +544,7 @@ export default function CustomerPortalPage() {
                         title={geoObjects.length === 0 ? "Inga hämtningsställen med koordinater" : undefined}
                         data-testid="button-pickup-map-view"
                       >
-                        <Map className="h-4 w-4 mr-1" />
+                        <MapIcon className="h-4 w-4 mr-1" />
                         Karta
                       </Button>
                     </div>

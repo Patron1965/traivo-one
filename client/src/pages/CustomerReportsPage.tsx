@@ -12,7 +12,7 @@ import {
   Camera, Search, MapPin, Loader2, CheckCircle, AlertTriangle,
   Package, Wrench, HelpCircle, Clock, Building2, Eye, Trash2,
   Filter, MessageSquare, ClipboardList, ExternalLink, X, Calendar,
-  History, User
+  History as HistoryIcon, User
 } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -558,7 +558,7 @@ export default function CustomerReportsPage() {
 
               <div className="border-t pt-4 space-y-3" data-testid="section-status-history">
                 <p className="text-sm font-medium flex items-center gap-2">
-                  <History className="h-4 w-4" />
+                  <HistoryIcon className="h-4 w-4" />
                   Statushistorik
                 </p>
                 <div className="space-y-2">

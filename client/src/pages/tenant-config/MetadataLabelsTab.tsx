@@ -13,7 +13,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import {
   Plus, Lock, Trash2, Edit2, Tag, Hash, Calendar, CalendarX, Clock, Building, Building2,
-  FileText, MapPin, Package, Users, Link, Camera, Image, Store, GitFork, Search, Loader2, Shield
+  FileText, MapPin, Package, Users, Link, Camera, Image as ImageIcon, Store, GitFork, Search, Loader2, Shield
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import type { MetadataKatalog, InsertMetadataKatalog } from "@shared/schema";
@@ -41,7 +41,7 @@ const datatypLabels: Record<string, string> = {
 
 const iconMap: Record<string, LucideIcon> = {
   Users, GitFork, Package, MapPin, Hash, Calendar, CalendarX, Clock,
-  Building, Building2, FileText, Store, Link, Camera, Image, Tag, Shield,
+  Building, Building2, FileText, Store, Link, Camera, Image: ImageIcon, Tag, Shield,
 };
 
 function getIcon(iconName: string | null): LucideIcon {

@@ -28,7 +28,7 @@ import {
   Search, Plus, Filter, Loader2, ChevronRight, ChevronLeft, Building2, MapPin, Trash2, 
   Map as MapIcon, List, Copy, Upload, Clock, Users, DoorOpen,
   Check, X, FileSpreadsheet, Download, BarChart3, MoreHorizontal, AlertTriangle, AlertCircle, ChevronDown, ChevronUp, XCircle,
-  Image, GitFork, Globe, ShieldAlert, ShieldCheck, ShieldX, Package, Info, Camera,
+  Image as ImageIcon, GitFork, Globe, ShieldAlert, ShieldCheck, ShieldX, Package, Info, Camera,
   ArrowUp, ArrowDown, ArrowUpDown, Network, Pencil, FolderPlus, Archive, Columns3,
   Phone, Mail
 } from "lucide-react";

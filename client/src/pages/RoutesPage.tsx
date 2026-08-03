@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
-import { Loader2, Sparkles, TrendingUp, Clock, MapPin, Route as RouteIcon, Truck, AlertCircle, AlertTriangle, Check, Map, CloudRain, Wind, Thermometer, Monitor } from "lucide-react";
+import { Loader2, Sparkles, TrendingUp, Clock, MapPin, Route as RouteIcon, Truck, AlertCircle, AlertTriangle, Check, Map as MapIcon, CloudRain, Wind, Thermometer, Monitor } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useToast } from "@/hooks/use-toast";
@@ -532,7 +532,7 @@ export default function RoutesPage() {
                                   onClick={() => setSelectedRouteForMap(selectedRouteForMap?.resourceId === route.resourceId ? null : route)}
                                   data-testid={`button-show-map-${route.resourceId || idx}`}
                                 >
-                                  <Map className="h-3 w-3 mr-1" />
+                                  <MapIcon className="h-3 w-3 mr-1" />
                                   {selectedRouteForMap?.resourceId === route.resourceId ? "Dölj karta" : "Visa karta"}
                                 </Button>
                               </TooltipTrigger>
