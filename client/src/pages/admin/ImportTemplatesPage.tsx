@@ -245,7 +245,7 @@ export default function ImportTemplatesPage() {
       <PageHeader
         icon={FileSpreadsheet}
         title="Importmallar"
-        description="Bygg namngivna Excel-mallar genom att bocka i vilka metadatafält som ska ingå. Systemkolumnerna (A–E) ingår alltid; varje valt fält blir en egen kolumn."
+        description="En del av mallspåret: bygg namngivna Excel-mallar genom att bocka i vilka metadatafält som ska ingå. Systemkolumnerna (A–E) ingår alltid; varje valt fält blir en egen kolumn. Mallarna laddas ner här eller i Objektmall-importen och läses tillbaka via mallspåret."
         testId="text-import-templates-title"
       />
 

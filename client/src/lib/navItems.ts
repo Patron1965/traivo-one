@@ -102,7 +102,7 @@ export function getGrunddataItems(t: (key: string, fallback: string) => string, 
     { title: "Lagersaldo", url: "/inventory", icon: Package, description: "Lagersaldo per artikel och lagerplats med beställningspunkt och varning vid lågt saldo", subSection: "Inköp & pris" },
     { title: l("nav.price-lists"), url: "/price-lists", icon: Receipt, description: l("nav.price-lists.desc"), subSection: "Inköp & pris" },
     // Import
-    { title: "Import", url: "/import", icon: Upload, description: "Importera data, objektmallar och spara importmallar", adminOnly: true, subSection: "Import" },
+    { title: "Import", url: "/import", icon: Upload, description: "Importera & uppdatera objekt, systemspecifika importer och mallar", adminOnly: true, subSection: "Import" },
   ];
 }
 

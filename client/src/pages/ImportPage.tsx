@@ -30,8 +30,7 @@ import { ImportSummaryView } from "@/components/ImportSummaryView";
 import { ImportHealthOverview } from "@/components/ImportHealthOverview";
 import ImportColumnMapper from "@/components/ImportColumnMapper";
 import CustomerFastighetslistaImport from "@/components/CustomerFastighetslistaImport";
-import { ImportEntryChooser, type ImportMode } from "@/components/import/ImportEntryChooser";
-import { ImportDestinationChooser } from "@/components/import/ImportDestinationChooser";
+import { ImportHub, type ImportSection } from "@/components/import/ImportHub";
 import { ChildObjectImportFlow } from "@/components/import/ChildObjectImportFlow";
 import { ImportWizardFlow } from "@/components/import/ImportWizardFlow";
 import { ObjectImportV2Flow } from "@/components/import/ObjectImportV2Flow";
@@ -2119,79 +2118,72 @@ export default function ImportPage() {
   // Task #564: läs ?mode=&tab=&parent= från URL (genvägar från objekt-detalj)
   const searchString = useSearch();
   const urlParams = useMemo(() => new URLSearchParams(searchString || ""), [searchString]);
-  const urlMode = urlParams.get("mode") as ImportMode | null;
+  const urlMode = urlParams.get("mode"); // legacy-länkar (?mode=migration/ongoing/wizard)
   const urlTab = urlParams.get("tab");
   const urlParent = urlParams.get("parent") || undefined;
-
-  const MODE_STORAGE_KEY = "traivo-import-mode";
-  const [importMode, setImportMode] = useState<ImportMode | null>(() => {
-    if (urlMode === "migration" || urlMode === "ongoing" || urlMode === "wizard") return urlMode;
-    const saved = typeof window !== "undefined" ? localStorage.getItem(MODE_STORAGE_KEY) : null;
-    return saved === "migration" || saved === "ongoing" || saved === "wizard" ? (saved as ImportMode) : null;
-  });
-  useEffect(() => {
-    if (importMode) localStorage.setItem(MODE_STORAGE_KEY, importMode);
-  }, [importMode]);
-
-  // Enad ingångsväljare: "Importera ny data" är den enda ingången som stannar kvar
-  // på /import (de andra två korten navigerar till /objektmall-import respektive
-  // /import-templates). När section === "new-data" visas läges-väljaren + verktygen.
-  const SECTION_STORAGE_KEY = "traivo-import-section";
-  const [section, setSection] = useState<"new-data" | null>(() => {
-    if (urlMode === "migration" || urlMode === "ongoing" || urlMode === "wizard") return "new-data";
-    if (urlTab) return "new-data";
-    const savedMode = typeof window !== "undefined" ? localStorage.getItem(MODE_STORAGE_KEY) : null;
-    if (savedMode === "migration" || savedMode === "ongoing" || savedMode === "wizard") return "new-data";
-    const savedSection = typeof window !== "undefined" ? localStorage.getItem(SECTION_STORAGE_KEY) : null;
-    return savedSection === "new-data" ? "new-data" : null;
-  });
-  useEffect(() => {
-    if (section) localStorage.setItem(SECTION_STORAGE_KEY, section);
-    else localStorage.removeItem(SECTION_STORAGE_KEY);
-  }, [section]);
 
   type ActiveTab =
     | "modus" | "enrich" | "manual" | "fortnox" | "mapped"
     | "customerlist" | "children" | "recipients" | "diff"
     | "wizard" | "objectsv2"
     | "history" | "quality";
-  const initialTab: ActiveTab = ((): ActiveTab => {
-    const validTabs: ActiveTab[] = [
-      "modus", "enrich", "manual", "fortnox", "mapped",
-      "customerlist", "children", "recipients", "diff",
-      "wizard", "objectsv2",
-      "history", "quality",
-    ];
-    if (urlTab && validTabs.includes(urlTab as ActiveTab)) return urlTab as ActiveTab;
-    return "customerlist";
-  })();
+
+  // Task #1344: startvyn har fyra sektioner. Varje flik hör hemma i exakt en
+  // sektion; djuplänkar (?tab=) fortsätter fungera genom att sektionen härleds
+  // från fliken.
+  const TAB_SECTION: Record<ActiveTab, ImportSection> = {
+    objectsv2: "objects",
+    modus: "system", enrich: "system", fortnox: "system",
+    customerlist: "system", children: "system", recipients: "system", diff: "system",
+    manual: "advanced", mapped: "advanced", wizard: "advanced",
+    history: "history", quality: "history",
+  };
+  const SECTION_DEFAULT_TAB: Record<ImportSection, ActiveTab> = {
+    objects: "objectsv2",
+    system: "customerlist",
+    advanced: "manual",
+    history: "history",
+  };
+  const SECTION_STORAGE_KEY = "traivo-import-section-v2";
+  const isValidTab = (t: string | null): t is ActiveTab => !!t && t in TAB_SECTION;
+  const [section, setSection] = useState<ImportSection | null>(() => {
+    if (isValidTab(urlTab)) return TAB_SECTION[urlTab];
+    // Legacy-lägen mappas till närmast motsvarande sektion.
+    if (urlMode === "migration" || urlMode === "ongoing") return "system";
+    if (urlMode === "wizard") return "advanced";
+    const saved = typeof window !== "undefined" ? localStorage.getItem(SECTION_STORAGE_KEY) : null;
+    return saved === "objects" || saved === "system" || saved === "history" || saved === "advanced"
+      ? (saved as ImportSection)
+      : null;
+  });
+  useEffect(() => {
+    if (section) localStorage.setItem(SECTION_STORAGE_KEY, section);
+    else localStorage.removeItem(SECTION_STORAGE_KEY);
+  }, [section]);
+
+  const initialTab: ActiveTab = isValidTab(urlTab)
+    ? urlTab
+    : urlMode === "wizard"
+      ? "wizard" // legacy ?mode=wizard öppnade tre-stegs-wizarden
+      : SECTION_DEFAULT_TAB[section ?? "objects"];
   const [activeTab, setActiveTab] = useState<ActiveTab>(initialTab);
 
-  // Task #564 + #578: normalisera activeTab när importMode ändras
-  const visibleTabsForMode = useCallback((mode: ImportMode | null): ActiveTab[] => {
-    const migration: ActiveTab[] = ["modus", "enrich", "manual", "fortnox", "mapped"];
-    const ongoing: ActiveTab[] = ["customerlist", "children", "recipients", "diff"];
-    const wizard: ActiveTab[] = ["wizard", "objectsv2"];
-    const always: ActiveTab[] = ["history", "quality"];
-    if (mode === "migration") return [...migration, ...always];
-    if (mode === "ongoing") return [...ongoing, ...always];
-    if (mode === "wizard") return [...wizard, ...always];
-    return [...migration, ...ongoing, ...wizard, ...always];
-  }, []);
+  // Engångsstädning: gamla läges-/sektionsnycklar från före Task #1344.
   useEffect(() => {
-    const allowed = visibleTabsForMode(importMode);
-    if (!allowed.includes(activeTab)) {
-      const fallback: ActiveTab =
-        importMode === "migration"
-          ? "modus"
-          : importMode === "wizard"
-          ? "wizard"
-          : importMode === "ongoing"
-          ? "customerlist"
-          : "customerlist";
-      setActiveTab(fallback);
+    try {
+      localStorage.removeItem("traivo-import-mode");
+      localStorage.removeItem("traivo-import-section");
+    } catch {
+      // localStorage kan vara otillgängligt — ignorera.
     }
-  }, [importMode, activeTab, visibleTabsForMode]);
+  }, []);
+
+  // Håll aktiv flik inom vald sektion (t.ex. efter byte i startvyn).
+  useEffect(() => {
+    if (!section) return;
+    if (TAB_SECTION[activeTab] !== section) setActiveTab(SECTION_DEFAULT_TAB[section]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [section, activeTab]);
   const [showObjectColumns, setShowObjectColumns] = useState(false);
   const [showTaskColumns, setShowTaskColumns] = useState(false);
   const [showEventColumns, setShowEventColumns] = useState(false);
@@ -3047,43 +3039,14 @@ export default function ImportPage() {
       <PageTabs tabs={IMPORT_TABS} />
       <PageHeader icon={Upload} title={tl("page.import.title")} description={tl("page.import.description")} testId="text-import-title" />
 
-      <ImportDestinationChooser
-        active={section === "new-data"}
-        onSelectNewData={() => setSection("new-data")}
-      />
+      <ImportHub section={section} onSelect={setSection} />
 
-      {section === "new-data" && (
-        <ImportEntryChooser value={importMode} onChange={setImportMode} />
-      )}
-
-      {section === "new-data" && (
+      {section !== null && (
       <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as ActiveTab)}>
+        {/* Objekt-sektionen har bara en flik — göm flikraden helt. */}
+        {section !== "objects" && (
         <TabsList className="flex w-full flex-wrap h-auto justify-start gap-1">
-          {(importMode === null || importMode === "migration") && (
-            <>
-              <TabsTrigger value="modus" className="flex items-center gap-2" data-testid="tab-modus-import">
-                <FileSpreadsheet className="h-4 w-4" />
-                Modus 2.0
-              </TabsTrigger>
-              <TabsTrigger value="enrich" className="flex items-center gap-2" data-testid="tab-enrich-karl">
-                <Tag className="h-4 w-4" />
-                Berika kärl
-              </TabsTrigger>
-              <TabsTrigger value="manual" className="flex items-center gap-2" data-testid="tab-manual-import">
-                <Upload className="h-4 w-4" />
-                Manuell CSV
-              </TabsTrigger>
-              <TabsTrigger value="fortnox" className="flex items-center gap-2" data-testid="tab-fortnox-import">
-                <Link2 className="h-4 w-4" />
-                Fortnox-export
-              </TabsTrigger>
-              <TabsTrigger value="mapped" className="flex items-center gap-2" data-testid="tab-mapped-import">
-                <Database className="h-4 w-4" />
-                Mappad import
-              </TabsTrigger>
-            </>
-          )}
-          {(importMode === null || importMode === "ongoing") && (
+          {section === "system" && (
             <>
               <TabsTrigger value="customerlist" className="flex items-center gap-2" data-testid="tab-customerlist-import">
                 <Building2 className="h-4 w-4" />
@@ -3101,29 +3064,50 @@ export default function ImportPage() {
                 <RefreshCw className="h-4 w-4" />
                 Diff &amp; uppdatera
               </TabsTrigger>
+              <TabsTrigger value="modus" className="flex items-center gap-2" data-testid="tab-modus-import">
+                <FileSpreadsheet className="h-4 w-4" />
+                Modus 2.0
+              </TabsTrigger>
+              <TabsTrigger value="enrich" className="flex items-center gap-2" data-testid="tab-enrich-karl">
+                <Tag className="h-4 w-4" />
+                Berika kärl
+              </TabsTrigger>
+              <TabsTrigger value="fortnox" className="flex items-center gap-2" data-testid="tab-fortnox-import">
+                <Link2 className="h-4 w-4" />
+                Fortnox-export
+              </TabsTrigger>
             </>
           )}
-          {(importMode === null || importMode === "wizard") && (
-            <TabsTrigger value="wizard" className="flex items-center gap-2" data-testid="tab-wizard-import">
-              <FilePlus className="h-4 w-4" />
-              Tre-stegs wizard
-            </TabsTrigger>
+          {section === "advanced" && (
+            <>
+              <TabsTrigger value="manual" className="flex items-center gap-2" data-testid="tab-manual-import">
+                <Upload className="h-4 w-4" />
+                Manuell CSV
+              </TabsTrigger>
+              <TabsTrigger value="mapped" className="flex items-center gap-2" data-testid="tab-mapped-import">
+                <Database className="h-4 w-4" />
+                Mappad import
+              </TabsTrigger>
+              <TabsTrigger value="wizard" className="flex items-center gap-2" data-testid="tab-wizard-import">
+                <FilePlus className="h-4 w-4" />
+                Tre-stegs wizard
+              </TabsTrigger>
+            </>
           )}
-          {(importMode === null || importMode === "wizard") && (
-            <TabsTrigger value="objectsv2" className="flex items-center gap-2" data-testid="tab-objectsv2-import">
-              <Layers className="h-4 w-4" />
-              Import 2.0
-            </TabsTrigger>
+          {section === "history" && (
+            <>
+              <TabsTrigger value="history" className="flex items-center gap-2" data-testid="tab-import-history">
+                <HistoryIcon className="h-4 w-4" />
+                Historik
+              </TabsTrigger>
+              <TabsTrigger value="quality" className="flex items-center gap-2" data-testid="tab-data-quality">
+                <BarChart3 className="h-4 w-4" />
+                Datakvalitet
+              </TabsTrigger>
+            </>
           )}
-          <TabsTrigger value="history" className="flex items-center gap-2" data-testid="tab-import-history">
-            <HistoryIcon className="h-4 w-4" />
-            Historik
-          </TabsTrigger>
-          <TabsTrigger value="quality" className="flex items-center gap-2" data-testid="tab-data-quality">
-            <BarChart3 className="h-4 w-4" />
-            Datakvalitet
-          </TabsTrigger>
         </TabsList>
+        )}
 
         <TabsContent value="customerlist" className="space-y-6">
           <CustomerFastighetslistaImport />
@@ -5056,6 +5040,25 @@ export default function ImportPage() {
         </TabsContent>
 
         <TabsContent value="objectsv2" className="space-y-6">
+          {/* Task #1344: förklara round-trip-flödet export → Excel → matchningsimport */}
+          <Card className="border-chart-1/20 dark:border-chart-1/80 bg-chart-1/10 dark:bg-chart-1/15">
+            <CardContent className="pt-6">
+              <div className="flex items-start gap-3">
+                <Info className="h-5 w-5 mt-0.5 shrink-0 text-chart-1" />
+                <div className="text-sm space-y-1">
+                  <p className="font-medium">Ett sammanhängande flöde: exportera → redigera → läs tillbaka</p>
+                  <p className="text-muted-foreground">
+                    Vill du uppdatera befintliga objekt? Börja med en export från{" "}
+                    <a href="/objects" className="underline" data-testid="link-to-objects-export">Objekt-sidan</a>{" "}
+                    (Tvåfils-export), komplettera i Excel och ladda upp filen här — kolumnerna matchas mot rätt
+                    fält och metadatafält i steg 3. Nya rader skapas som nya objekt och hierarkin byggs automatiskt.
+                    För helt nya listor med fast mall och interimnummer finns även{" "}
+                    <a href="/objektmall-import" className="underline" data-testid="link-to-objektmall">mallspåret</a>.
+                  </p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
           <ObjectImportV2Flow />
         </TabsContent>
 

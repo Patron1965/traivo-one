@@ -1635,8 +1635,16 @@ export default function ObjectsPage() {
             <DropdownMenuItem onClick={() => navigate("/objektmall-import")} data-testid="menu-export-excel-roundtrip">
               <Download className="h-4 w-4 mr-2 mt-0.5 shrink-0" />
               <div className="flex flex-col">
-                <span>För återimport (Excel)</span>
+                <span>För återimport (Excel, mallspåret)</span>
                 <span className="text-xs text-muted-foreground">Redigera och läs tillbaka – uppdaterar befintliga objekt via objektmallen</span>
+              </div>
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={() => navigate("/import?tab=objectsv2")} data-testid="menu-goto-import">
+              <Upload className="h-4 w-4 mr-2 mt-0.5 shrink-0" />
+              <div className="flex flex-col">
+                <span>Läs tillbaka en fil (import)…</span>
+                <span className="text-xs text-muted-foreground">Öppna matchningsimporten – exporterade filer kan läsas tillbaka med kolumnmatchning</span>
               </div>
             </DropdownMenuItem>
           </DropdownMenuContent>

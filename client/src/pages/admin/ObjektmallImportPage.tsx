@@ -330,6 +330,14 @@ export default function ObjektmallImportPage() {
           dynamiska metadata-kolumner som läses in och visas nedan. Re-import av samma fil uppdaterar befintliga
           objekt — inga dubbletter skapas.
         </p>
+        <p className="text-muted-foreground text-sm mt-1">
+          Detta är <span className="font-medium">mallspåret</span>: kolumnerna följer den fasta mallen och behöver inte
+          matchas. Har du en egen fil med annan kolumnstruktur? Använd i stället{" "}
+          <Link href="/import?tab=objectsv2" className="underline" data-testid="link-to-matching-import">
+            matchningsimporten
+          </Link>{" "}
+          under Importera data.
+        </p>
       </div>
 
       {/* Mall + upload */}

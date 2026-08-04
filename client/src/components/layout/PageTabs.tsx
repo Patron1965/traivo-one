@@ -16,8 +16,8 @@ export const METADATA_TABS: PageTab[] = [
 
 export const IMPORT_TABS: PageTab[] = [
   { label: "Importera data", href: "/import" },
-  { label: "Objektmall", href: "/objektmall-import" },
-  { label: "Importmallar", href: "/import-templates" },
+  { label: "Mallspår: Objektmall", href: "/objektmall-import" },
+  { label: "Mallspår: Importmallar", href: "/import-templates" },
 ];
 
 export function PageTabs({ tabs }: { tabs: PageTab[] }) {

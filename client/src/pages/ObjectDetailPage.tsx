@@ -1084,9 +1084,9 @@ export default function ObjectDetailPage() {
         {ancestors.length > 0 && ancestors.slice().reverse().map((anc) => (
           <span key={anc.id} className="flex items-center gap-1">
             <Button
-              variant="link"
+              variant="ghost"
               size="sm"
-              className="h-auto p-0 text-muted-foreground"
+              className="h-auto p-0 text-muted-foreground underline-offset-4 hover:underline"
               onClick={() => navigate(`/objects/${anc.id}`)}
               data-testid={`breadcrumb-ancestor-${anc.id}`}
             >

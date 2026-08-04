@@ -43,6 +43,15 @@ function normalizeMessage(message: string): string {
   return message.replace(/'[^']*'/g, (quoted) => {
     if (!quoted.includes("{")) return quoted;
     const inner = quoted.slice(1, -1);
+    // Truncated literals ("... 122 more ...") show a nondeterministic SUBSET
+    // of members between tsc runs — sorting can't stabilize them. Collapse the
+    // member list entirely so the key only depends on the truncation marker.
+    if (/\.\.\.\s*\d+\s*more\s*\.\.\./.test(inner)) {
+      const collapsed = inner.replace(/\{[^{}]*\.\.\.\s*\d+\s*more\s*\.\.\.[^{}]*\}/g, "{~truncated~}");
+      // Om markören låg i ett nästlat literal som regexen inte fångade,
+      // kollapsa hela strängen som sista utväg.
+      return collapsed.includes("{~truncated~}") ? `'${collapsed}'` : `'{~truncated~}'`;
+    }
     const canonical = inner
       .split(/;\s*/)
       .map((part) => part.trim())
