@@ -33,6 +33,7 @@ import { createMetadata, updateMetadata, deleteMetadata, getPrimaryChainObjectId
 import { getObjectInfoPackageTree } from "../services/object-info-package-tree";
 import { metadataKatalog, metadataVarden, objectHeaderConfigs, objectQuickFieldConfigs } from "@shared/schema";
 import { getMapProvider } from "../services/mapProvider";
+import { syncObjectGeoFields } from "../services/geo-field-sync";
 import { isValidWhat3words, normalizeWhat3words, WHAT3WORDS_FORMAT_ERROR } from "@shared/what3words";
 
 type ServiceObject = Awaited<ReturnType<typeof storage.getObjects>>[number];
@@ -620,6 +621,49 @@ app.put("/api/object-header-config/:objectType", requireAdmin, asyncHandler(asyn
 // låsta beslutet "åsidosättbar på lägre nivå". Tenant-ägarskap av objektet och
 // varje inpekat katalog-id valideras dock alltid server-side.
 // ============================================================================
+// ============================================================================
+// Task #1367: dedikerad, behörighetsgate:ad positionsskrivning för vinjettens
+// kartdialog. requireAdmin (owner/admin) speglar UI:ts canEdit. Skrivningen går
+// via metadata-vägen (Koordinater, metod='manuell' — historik + attribution),
+// och geo-synken körs SYNKRONT innan svaret så att objektkolumn-cachen
+// (latitude/longitude) redan är uppdaterad när klienten refetch:ar.
+// ============================================================================
+const objectPositionBodySchema = z.object({
+  lat: z.number().finite().min(-90).max(90),
+  lng: z.number().finite().min(-180).max(180),
+});
+
+app.put("/api/objects/:id/position", requireAdmin, asyncHandler(async (req, res) => {
+  const tenantId = getTenantIdWithFallback(req);
+  const objektId = req.params.id;
+  const existing = await storage.getObject(objektId);
+  if (!verifyTenantOwnership(existing, tenantId)) {
+    throw new NotFoundError("Objekt");
+  }
+  const body = objectPositionBodySchema.parse(req.body);
+
+  const actor = (req as any).user?.claims?.sub;
+  const row = await createMetadata({
+    tenantId,
+    objektId,
+    metadataTypNamn: "Koordinater",
+    varde: { type: "point", lat: body.lat, lng: body.lng },
+    metod: "manuell",
+    skapadAv: actor,
+  });
+
+  // Synka kolumn-cachen direkt (den debouncade bakgrundssynken konvergerar
+  // sedan till samma värde — andra varvet är en no-op).
+  await syncObjectGeoFields(tenantId, objektId);
+  const updated = await storage.getObject(objektId);
+
+  res.json({
+    metadataId: row.id,
+    latitude: updated?.latitude ?? null,
+    longitude: updated?.longitude ?? null,
+  });
+}));
+
 app.get("/api/objects/:id/quick-field-config", asyncHandler(async (req, res) => {
   const tenantId = getTenantIdWithFallback(req);
   const existing = await storage.getObject(req.params.id);

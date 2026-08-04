@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { MapContainer, TileLayer, Marker } from "react-leaflet";
+import { MapContainer, TileLayer, Marker, useMapEvents } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { useMapConfig } from "@/hooks/use-map-config";
@@ -43,6 +43,11 @@ interface PanelMetadataEntry {
   inheritedValue?: string | null;
   // Task #1366: källradens id när lokalt värde skuggar ett ärvt (för historik).
   inheritedMetadataId?: string | null;
+  // Task #1367: ursprung/attribution för positionsraden (vem/när/källa).
+  metod?: string | null;
+  skapadAv?: string | null;
+  uppdateradAv?: string | null;
+  lastChangedAt?: string | null;
 }
 
 interface HeaderConfig {
@@ -273,6 +278,13 @@ export function ObjectHeaderPanel({
   // Task #1366: dialoger för vinjettbild resp. logotyp (byt/ladda upp + historik).
   const [imageDialogOpen, setImageDialogOpen] = useState(false);
   const [logoDialogOpen, setLogoDialogOpen] = useState(false);
+  // Task #1367: kartdialog med redigerbar (draggbar) pinpoint.
+  const [mapDialogOpen, setMapDialogOpen] = useState(false);
+  // Objektets egna/ärvda Koordinater-rad (metadata = källan; objektkolumnerna
+  // är bara en ruttbar cache via geo-fält-synken).
+  const koordEntry = metadata.find(
+    (m) => !m.softDeleted && !m.raderad && m.katalog?.namn === "Koordinater",
+  );
 
   type Slot = { key: string; label: string; value: string | null; inheritedFrom?: string | null };
   const slots: Slot[] = [];
@@ -456,10 +468,21 @@ export function ObjectHeaderPanel({
             )}
             {effective.showMap && (
               <div className="flex flex-col gap-1" data-testid="header-map-column">
+                {/* Interaktiv Leaflet-karta får inte nästlas i en <button>
+                    (ogiltig HTML) — därför en div-tile med en positionerad
+                    overlay-knapp ovanpå som öppnar dialogen. */}
                 <div
-                  className="w-28 h-28 md:w-32 md:h-32 rounded-md overflow-hidden border bg-muted"
+                  className="w-28 h-28 md:w-32 md:h-32 rounded-md overflow-hidden border bg-muted relative"
                   data-testid="header-map-tile"
                 >
+                  <button
+                    type="button"
+                    onClick={() => setMapDialogOpen(true)}
+                    className="absolute inset-0 z-[500] cursor-pointer hover:ring-2 hover:ring-inset hover:ring-ring/40 rounded-md focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+                    title="Öppna karta"
+                    aria-label="Öppna karta"
+                    data-testid="button-header-map-open"
+                  />
                   {(p1 || p2Point) ? (
                     <MapContainer
                       // Remount när punktuppsättningen ändras (P2 laddas asynkront) så
@@ -546,6 +569,17 @@ export function ObjectHeaderPanel({
           contain
         />
       )}
+      {/* Task #1367: kartdialog — visa position, redigera via draggbar pinpoint. */}
+      <HeaderMapDialog
+        open={mapDialogOpen}
+        onOpenChange={setMapDialogOpen}
+        objectId={objectId}
+        entry={koordEntry}
+        p1={p1}
+        p2Point={p2Point}
+        p2Title={p2Title}
+        canEdit={canEdit}
+      />
     </Card>
   );
 }
@@ -1133,3 +1167,231 @@ function HeaderQuickFieldEditor({
     </>
   );
 }
+
+// ============================================================================
+// Task #1367: Kartdialog — visar objektets position (P1 ruttbar + ev. P2
+// fördjupad), och låter behörig användare redigera positionen genom att dra
+// pinpointen (eller klicka för att placera en ny). Skrivningen går ALLTID via
+// metadata-vägen (POST /api/metadata, fältet "Koordinater", metod='manuell'):
+// metadata är källan och geo-fält-synken uppdaterar objektkolumn-cachen i
+// bakgrunden; ersatt värde arkiveras automatiskt till metadata_historik.
+// ============================================================================
+
+// Fallback-center när objektet helt saknar position (Sverige, låg zoom).
+const SWEDEN_FALLBACK: [number, number] = [62.0, 15.0];
+
+function DraggableEditMarker({
+  position,
+  onMove,
+}: {
+  position: [number, number] | null;
+  onMove: (pos: [number, number]) => void;
+}) {
+  // Klick på kartan placerar/flyttar pinpointen (viktigt när position saknas).
+  useMapEvents({
+    click: (e) => onMove([e.latlng.lat, e.latlng.lng]),
+  });
+  if (!position) return null;
+  return (
+    <Marker
+      position={position}
+      icon={greenPin}
+      draggable
+      eventHandlers={{
+        dragend: (e) => {
+          const ll = (e.target as L.Marker).getLatLng();
+          onMove([ll.lat, ll.lng]);
+        },
+      }}
+    />
+  );
+}
+
+function HeaderMapDialog({
+  open,
+  onOpenChange,
+  objectId,
+  entry,
+  p1,
+  p2Point,
+  p2Title,
+  canEdit,
+}: {
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+  objectId: string;
+  entry?: PanelMetadataEntry;
+  p1: [number, number] | null;
+  p2Point: [number, number] | null;
+  p2Title: string;
+  canEdit: boolean;
+}) {
+  const mapConfig = useMapConfig();
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState<[number, number] | null>(null);
+
+  // Nollställ redigeringsläget varje gång dialogen öppnas.
+  useEffect(() => {
+    if (open) {
+      setEditing(false);
+      setDraft(null);
+    }
+  }, [open]);
+
+  const isInherited = entry?.source === "inherited";
+  const changedAt = entry?.lastChangedAt ? new Date(entry.lastChangedAt) : null;
+  const changedBy = entry?.uppdateradAv || entry?.skapadAv || null;
+  const metodLabel = entry?.metod
+    ? HISTORIK_METOD_LABELS[entry.metod] ?? entry.metod
+    : null;
+
+  const saveMutation = useMutation({
+    mutationFn: async (pos: [number, number]) => {
+      // Dedikerad behörighetsgate:ad endpoint (owner/admin). Servern skriver
+      // via metadata-vägen (Koordinater, metod='manuell' → historik/attribution;
+      // ärvd position skuggas av en egen rad) och kör geo-synken SYNKRONT, så
+      // kolumn-cachen är uppdaterad när queries nedan refetch:ar.
+      return apiRequest("PUT", `/api/objects/${objectId}/position`, {
+        lat: pos[0],
+        lng: pos[1],
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/metadata/objects", objectId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/objects", objectId, "resolved"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/objects", objectId, "system-generated-metadata"] });
+      toast({ title: "Position sparad", description: "Koordinaterna uppdaterades." });
+      setEditing(false);
+      setDraft(null);
+    },
+    onError: (err: any) => {
+      toast({
+        title: "Kunde inte spara positionen",
+        description: err?.message ?? "Okänt fel",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const displayPos = editing ? draft : p1;
+  const center = displayPos ?? p1 ?? p2Point ?? SWEDEN_FALLBACK;
+  const zoom = displayPos || p1 || p2Point ? 15 : 4;
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-2xl" data-testid="dialog-header-map">
+        <DialogHeader>
+          <DialogTitle>Position</DialogTitle>
+          <DialogDescription>
+            {editing
+              ? "Dra markören (eller klicka på kartan) och spara för att uppdatera positionen."
+              : "Objektets ruttbara position. Adress och position är separata uppgifter."}
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-3">
+          <div className="h-80 rounded-md overflow-hidden border" data-testid="map-header-dialog">
+            <MapContainer
+              key={editing ? "edit" : `view|${center.join(",")}`}
+              center={center}
+              zoom={zoom}
+              style={{ height: "100%", width: "100%" }}
+            >
+              <TileLayer url={mapConfig.tileUrl} attribution={mapConfig.attribution} />
+              {editing ? (
+                <DraggableEditMarker position={draft} onMove={setDraft} />
+              ) : (
+                <>
+                  {p1 && <Marker position={p1} icon={greenPin} title="Standardadress (ruttbar)" />}
+                  {p2Point && <Marker position={p2Point} icon={advancedPositionIcon} title={p2Title} />}
+                </>
+              )}
+            </MapContainer>
+          </div>
+
+          {editing && (
+            <div className="text-xs text-muted-foreground" data-testid="text-map-draft-coords">
+              {draft
+                ? `Ny position: ${draft[0].toFixed(6)}, ${draft[1].toFixed(6)}`
+                : "Klicka på kartan för att placera pinpointen."}
+            </div>
+          )}
+
+          {!editing && (
+            <div className="text-xs text-muted-foreground space-y-0.5" data-testid="text-map-position-meta">
+              {p1 ? (
+                <div>Position: {p1[0].toFixed(6)}, {p1[1].toFixed(6)}</div>
+              ) : (
+                <div>Ingen ruttbar position registrerad.</div>
+              )}
+              {entry && (
+                <div className="flex items-center gap-1 flex-wrap">
+                  <span>
+                    Senast ändrad: {changedAt && !Number.isNaN(changedAt.getTime()) ? changedAt.toLocaleString("sv-SE") : "—"}
+                    {changedBy ? ` · Av: ${changedBy}` : ""}
+                    {metodLabel ? ` · Källa: ${metodLabel}` : ""}
+                  </span>
+                  {isInherited && (
+                    <Badge variant="outline" className="text-[10px] px-1 py-0 font-normal" data-testid="badge-map-inherited">
+                      Ärvd{entry.fromObject?.namn || entry.inheritedFromName ? ` från ${entry.fromObject?.namn || entry.inheritedFromName}` : ""}
+                    </Badge>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        <DialogFooter className="gap-2">
+          {canEdit && !editing && (
+            <Button
+              variant="secondary"
+              onClick={() => {
+                setEditing(true);
+                setDraft(p1);
+              }}
+              data-testid="button-map-edit-position"
+            >
+              <MapPin className="h-4 w-4 mr-2" />
+              Redigera position
+            </Button>
+          )}
+          {editing && (
+            <>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setEditing(false);
+                  setDraft(null);
+                }}
+                disabled={saveMutation.isPending}
+                data-testid="button-map-cancel-edit"
+              >
+                Avbryt
+              </Button>
+              <Button
+                onClick={() => draft && saveMutation.mutate(draft)}
+                disabled={!draft || saveMutation.isPending}
+                data-testid="button-map-save-position"
+              >
+                {saveMutation.isPending ? (
+                  <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Sparar...</>
+                ) : (
+                  "Spara position"
+                )}
+              </Button>
+            </>
+          )}
+          {!editing && (
+            <Button variant="outline" onClick={() => onOpenChange(false)} data-testid="button-map-close">
+              Stäng
+            </Button>
+          )}
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
