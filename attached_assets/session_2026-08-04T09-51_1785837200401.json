@@ -1,0 +1,302 @@
+{
+  "sessionId": "10f262c399",
+  "exportedAt": "2026-08-04T09:51:19.573Z",
+  "summary": "### Key Topics Discussed\n- Import av data, inklusive skapande av objekt och import av metadata.\n- Specifika detaljer kring objektimport och användning av interimnummer.\n- Diskussion kring en specifik mall för objektimport som inkluderade interimnummer för förälder och namn.\n- Möjligheten att lägga till metadata i den gamla importformen.\n- Två huvudsakliga importtyper: import av nya objekt (med eller utan metadatafält) och uppdatering av metadatafält för befintliga objekt.\n- Behov av en funktion för att exportera objektlistan och metadata.\n- Mappning mellan objektmall och importmall.\n- Exportfunktion för grunddata/objekt och dess sammankoppling med importprocessen.\n- Utfall av exportfunktionen: objektnamn, systemskapat objektnummer, frisläppt namn och status.\n- Diskussion om en metadatafil som är tom på grund av begränsad metadata.\n- Exportfunktionens resultatfil har nu en extra kolumn för \"föräldertill\" kopplingen.\n- Hantering av en fullständig metadatalista för import och export.\n- Import av metadatafält genom att ange objektnamn/nummer.\n- Navigering mellan olika menyer/vyn i systemet.\n- Behov av att inkludera \"butiksnummer\" eller \"fastighetsnummer\" som ett metadatafält i exportlistan för att matcha kundspecifika nummer med Trivos interna objektnummer.\n- Komplexiteten med metadatafält som tillåter flera poster och hur detta påverkar visningen (endast ett fält kan visas, t.ex. det senaste).\n- Vikten av metadatafält för att matcha data.\n- Vikten av en flexibel matchningsfunktion.\n- Behovet av att först implementera importfunktionen med interimnummer för att etablera objektstrukturen och deras relationer.\n- Att det importerade objektet får ett unikt objektnummer i Trivo.\n- Behovet av att kunna exportera Trivos objektnummer tillsammans med ett valt metadatafält för kundöversättning.\n- Diskussion om en importfunktion för ytterligare metadatafält.\n- Import av metadata på radnivå eller kolumnnivå.\n- Exempel på uppdatering av metadata på ett objekt som kontaktperson eller antal kärl, där en lista med objektnummer och korresponderande metadatafält och dess värde skapas (t.ex. objektnummer 06, metadatafält Fasadnummer, värde 23).\n- Utökad diskussion om matchningsfunktionens förmåga att känna igen objektnr, objektnamn och särknamn.\n- Möjligheten att välja kolumner för matchning mot metadatafält som \"antal\" eller \"kontaktnamn\" under import.\n\n### Decisions Made\n- Inga nya beslut har fattats.\n\n### Action Items\n- Inga nya action items.\n\n### Important Points & Insights\n- Processen för dataimport, särskilt gällande interim-nummer och modellinläsning, upplevs som otydlig.\n- Det betonas att objektimport är en återkommande process och att en effektiv metod för att hantera interimnummer vid import är nödvändig.\n- Det råder fortfarande stor otydlighet och förvirring kring import- och skapandeprocessen för objekt.\n- Det finns en specifik mall för objektimport som styr kolumner som interimnummer för förälder och namn.\n- Identifierat att det finns två primära importscenarier: nya objekt och uppdateringar av befintliga objekt.\n- Det finns ett behov av att kunna exportera objektlistor och metadata.\n- Det finns en exportfunktion för objekt under grunddata som måste kopplas ihop med importprocessen.\n- Exportfunktionen producerar objektnamn, systemets skapade objektnummer, frisläppt namn och status som utdata.\n- En tom metadatafil konstaterades på grund av begränsad metadata, men den kommer att lista tillgänglig metadata för objektet.\n- Det finns en extra kolumn i exportfilen som anger föräldrakopplingen (\"föräldertill\").\n- Möjligt att importera en komplett metadatalista där man kopplar metadatafält till objektnamn/nummer.\n- Systemets menystruktur och navigering, specifikt hur man kopplas från en meny till en annan, är korrekt.\n- Att kunna inkludera \"butiksnummer\" eller \"fastighetsnummer\" i exportlistan tillsammans med Trivos objektnummer är viktigt för datamatchning och hantering av kundspecifika identifierare (t.ex. från Axfood eller Svenska Bostäder).\n- Det är en utmaning att visa metadatafält som tillåter flera poster; en regel behövs för att bestämma vilket fält som ska visas (t.ex. det senaste).\n- En flexibel matchningsfunktion är avgörande.\n- Det är nödvändigt att ha en importfunktion med interimnummer för att skapa objektstrukturen och dess relationer.\n- Det unika objektnumret i Trivo blir det primära identifieraren efter import.\n- Export av Trivos objektnummer med ett metadatafält är viktigt för kundens översättning och matchning.\n- Det är troligt att metadatat kan hanteras på radnivå vid import i de flesta fall.\n- Matchningsfunktionen kommer att kunna känna igen och hantera objektnr, objektnamn och särknamn automatiskt.\n\n### Open Questions/Pending Items\n- Det finns osäkerhet kring vilken metod som är lämplig för första gångens migrering för att skapa och exportera objekt.\n- Det finns ett behov av att förtydliga importprocessen.\n- Det behöver identifieras hur man väljer och hanterar filen med interimnummer vid objektimport.\n- Behov av en genomgång av vad som ska göras innan fortsatt arbete.\n- Utforska möjligheten att lägga till metadatafält i importmallen och anpassa kolumnvalet.\n- Fastställa var exportfunktionen för objektlistor och metadata finns/hur den fungerar.\n- Förstå hur mappningen mellan objektmall och importmall fungerar.\n- Behov av att vara försiktig med metadata som importeras.\n- Hur de olika filerna (metadata och import) hänger ihop under importprocessen.\n- Ytterligare viktig information som behöver adresseras.\n- Hur man hanterar metadatafält som tillåter flera poster i en export eller visning, specifikt att bestämma vilken post som ska visas (t.ex. den senaste) när endast ett fält kan visas.\n- Hur man kan exportera en fil som innehåller både Trivos objektnummer och kundens specifika nummer (t.ex. butiksnummer/fastighetsnummer) för att underlätta kopplingar.\n- Detaljer om importfunktionen för ytterligare metadata, t.ex. antal.\n-  Hur systemet kommer att beskriva och uppfatta diskussionen för att underlätta uppstädning och lokalisering av information.",
+  "conversation": [],
+  "transcripts": [
+    {
+      "text": "Ja, för om vi tittar nu på det här med import av data då och m-- import av data är ju då dels att skapa objekt och sen så att koppla då eller importera metadata till dem.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och jag upplever att den här är nog lite granna så att säga rörig här då. För att om, om vi bortser från den här skärmen, vad är det vi behöver göra? Jo, vi behöver importera objekt och det gör vi då med det här systemet som vi kallar då interim-nummer och vi kan alltså s-- lägga en modell och, och, och liksom få in då och skapa då de här. Och jag är lite osäker nu vilken, vilken jag liksom... Första gångsmigrering, skapa, export. Ja, det är första gången man gör någonting.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Jo. Ja. Men det är import. Ja, just det. Ja. Alltså, det, det jag vill, det jag vill ha här är ju nu den här...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Äh, alltså...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Företagsinställning, import. Det här är ju alla typer av im-importer, va? Så att det är ju inte bara...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Ja, men om vi vänder på vad, vad är det för typ av import som vi... Om, om vi nu ska ha, jag vet inte vad det är, men, men det här är ju frågan om att vi ska importera objekt. Ja. Och jag tror att vi inte, vi får inte krångla till det. För det är ju någonting som vi kommer att göra hela tiden. Och då, när du importerar objekt så behöver vi hitta och nu hittar inte ens jag själv den då, eh, där jag väljer, alltså den här filen med interimnummer. Ja, just det. Mm. Och då ska vi ha en form, en sån som heter då importfil.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Objekt helt enkelt. Eller import eller skapande utav, utav, utav objekt då. Men, men jag, jag, jag vet inte. Alltså den...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Jag reder inte ut det här. Det är, det är alltså för snurrigt det här.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Ja, vi, vänta, vi, vi, vi ger oss där och så skickar vi in det här bara och så, och så vill vi ha lite- Ja, men innan vi gör det så, så vi går igenom vad det är vi vill göra för någonting då. Och det är ju då, eh, som jag ser...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Eh, det ena läget då är att vi importerar objekt och då gör vi det med den här filen där vi har då de här kolumnerna och vi har, eh, kan anmäla intrivnummer för förälder och, och vi kan lägga in namn och, och det enligt den här mallen. Det, det, det är den här mallen som... Eller ja, m-mall och mall, men den har ju tagit fram en sån mall. Mm, mm. Eh, vi kan också lägga till...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Eh, metadata där. Fast det var i den gamla formen. Mm.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Eh, för, för då hade vi en tanke då att man skulle kunna lägga till flera metadatafält där och så välja på, på kolumn. Men det kom ju li-- Sen kom vi ju på då att vi skulle ha samma system som i, i-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Ja, i? I, vad heter det, eh, eh, routing då. Ja, att man, eh, matchar. Ja, och då, då matchar vi ju bara f-f-fält utifrån rubriken då. Ja, ja, exakt. Och som jag ser det då så har vi alltså två stycken. Vi, vi har den här importen utav de nya objekterna- Mm. -eh, med eller utan metadatafält. Och så har vi då importen utav metadatafält mot, alltså uppdateringen",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "utav, ut-ut-utav, utav det då.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mot befintliga objekt. Ja.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Ja, just det. Äh, o-och i princip så täcker vi ju liksom in. Det är ju de två olika formerna som, som finns då. Mm. Sen har vi då, för att få ordning på det här, så behöver vi då kunna... Det, det vi inte har i det läget är då att vi har ett behov utav att kunna exportera objektlistan och även metadata då. Mm. Och det gör den ju då, äh, den funktionen finns, fast den finns inte här tror jag då. Men då, då exporterar den ju då... Den, den, den finns- Om du går högst upp.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Äh, här, här. D-d-då har du objektmall där och importmall. Jo, men det, det, det- Undrar om inte det här är mappningen då? Jo, det kan, det kan det ju mycket väl vara. Men om vi går på grunddatan här för att knyta upp säcken då och så går vi på objekt, så finns det ju här då en exportfunktion. Ja. Och här, grejen är ju då att det här, det måste liksom hänga ihop då. Mm. Så att fil nummer ett som den kan exportera, och vi kan ju köra den nu så ser vi då hur den ser ut.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Det är då...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Nej, jag förstår det. Jag vet inte om se-se-- Om du öppnar den där i Numbers, så har du det. Ja, ja, jag fick den på fötter från... Nu så, ja, den kom här.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Ja, och den syns inte där då.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Så. Eh, så det här är då vad, vad vi får ut och då får vi reda på då att det är objektnamnet och vi får reda på, alltså det systemets skapade objektnummer och som en service så, så, så ger den släppt- Namnet. Namnet också. Och sen så ger den statusen på den. Sen så har vi då...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Fil nummer två.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Vart var det då då? Det, det var där, exportera, där ja.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Då får vi då egentligen samma sak en gång till. Eh, eh, jag, jag vet ändå inte syftet varför den har, har gjort så här, för det här, det här är ju liksom samma, fast här får den även då- Kopplingen. Eh, ja, om det är nån som är en, en förälder då. I det här fallet är det 07:an där då som är det. Men det, det är väl, det är väl naturligtvis okej. Det ska, det skadar ju inte att ha två filer liksom. Men, men, men det går att diskutera vad, vad, vad den... Det här är bara en kolumn till som den lägger till där. Men det, det, det är ju bra. Sen",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "så har vi då trean här nu då som är då metadatafilen. Och nu är väl den då tom, för vi har väl begränsat med metadata i de här. Ja.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och, eh, precis som jag sa, så är det en under för vi inte har någon metadata då. Men det är ju här vi då får in...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Med att, eh, då, eh, här kommer vi ju att få en lista- Ja, ja ...på metadata som finns på, på, på- Objektet. Ja. Ja. Men här behöver vi då vara lite granna...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Eh, för att kunna hantera det här så behöver vi alltså... Det här blir den fullständiga metadatalistan då, där man kan då...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "få in. Och, och det går ju då också att importera exakt en sån här metadatalista där man sätter objektnam-- numret och så säger, säger man då att metadatafält si och så ska vara där. Och då, då lägger den ju förhoppningsvis in där. Men de här filerna behöver ju då...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "finnas...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Det, det måste hänga ihop det här. Ja, jag- Sen ska vi se. För återom-- Importering, då är det ytterligare en fil här och där man...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Ja, ja just det. Och nu, nu kommer vi hit och, och här är det då ytterligare en... Ja, det är den där. Ja, just... Då har den hamnat här.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Eh, ja, det är väl i och för sig... Då kop-- Nu kopplar den ju alltså till- Mm ...till...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Till, till den. Den går alltså från den menyn till den där. Det är ju, det är ju rätt. Men en viktig grej här kan man väl säga då är att...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Vi behöver...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Du ska förklara det här nu. Men, äh, du, från en sån här lista så skulle vi alltså behöva ha till exempel butiksnummer här? Ja, just det. Och, och, och så har vi då på importen. Ja. För vi, vi, vi kan alltså lägga vad...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Ett metadatafält i rubriknivå där. Det som styrar till det där och som gör det här, det är ju att vissa metadatafält kan ju tillåtas att ha flera poster. Och då funkar ju inte det för att då kan den ju, den kan ju bara visa ett fält. Om det är till exempel butiksnummer eller, eller... Och där måste vi ha en regel då. Så att den visar det senaste. Det senaste då, ja.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Men den är ju så livsviktig för att kunna matcha data då. Så att, för...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Grejen är ju att det där s-- gråa numret där nu då som är alltså objektnumret, det är ju vårt heliga nummer som håller reda på kopplingen och så. Men när vi pratar med till exempel Axfood då eller Svenska Bostäder, så kommer ju de att kalla-- säga det då fastighetsnumret eller butiksnumret. Så de kommer ju då att leverera en lista som har... Nu har vi en ny metadata för fastighetsnummer. Så, så därför så behöver vi kunna exportera...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Nu tänker jag ju då Excel. Jag säger att det behöver inte vara rätt och det är klart att systemet kan hantera det, men på något vis känns det enklast att exportera en fil med vårt, alltså Trivos nummer och valt kundens nummer, företrädesvis butiksnummer eller fastighetsnummer eller ja, vad nu kunden vill. Så att vi på det viset då kan, kan då peka... Det kommer ju liksom olika listor från olika kunder.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Ja, ja, så... Ja, ja, och... Och, och, och, och, och därför är ju den här matchnings... Funktionen. Funktionen liksom avgör eller viktig. Ja. Att, att man, att det är flexibelt helt enkelt. Ja, och att man, eh, och för att, och, och samma, för du har ju inspelningen på. Ja, ja, ja. För, för att sammanfatta det här nu då så, så behöver vi, vi behöver först ha importfunktionen med intrivnummer nu som jag säger för att kunna skapa strukturen utav objekten och deras relation.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. Mm. Till varandra. Och när den importeras där utifrån kundens data då, då kommer den ju då att få ett unikt objektnummer som blir det heliga i Trivo då. Sen behöver vi kunna exportera den ihop med ett valt metadatafält för att få en rikslikare till kunden. Så vi kan alltså få en översättning till kunden. Ja, ja, ja, fatta. Jajamän. Och sen så behöver vi då ha en importfunktion för metadata, till exempel antal...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Eh,",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "antingen på radnivå eller på kolumnnivå importera metadata. Och eftersom att i de flesta fall så kommer vi ju då kunna hantera det på rad.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Nivå? Mm.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. Äh, om vi till exempel ska importera en ny, en, en, en ny, en, en, en kontakt. Vi, vi har uppdatering av, utav, utav metadata på ett objekt. Till exempel kontaktperson eller antalet kärl. Då vill vi ju då kunna skapa en sån här lista där det då står objektnummer 06, äh, och så står det då här metadatafält, fasadnummer och så säger vi att det är tjugo-- Fasadnummer 23. Och sen så sätter vi",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "då metadatafält antal och så säger vi då tidigare. Då kommer vi liksom då kunna, och med det, kunna importera det och få det på rätt ställe. Ja. Och med den här matchningsfunktionen då- Ja. -så kommer vi ju att kunna- Ja, välja varandra. -plugga då. Och, och, och förhoppningsvis så kommer det att kunna se objektnummer, objektnamn och särknamn. Ja, det känner du ju igen som sina egna. Ja, egna, ja. Så den behöver du inte importera. Nej, nej, nej. Utan det bara finns ju. Och sen då för kolumnerna efterkommande så ska vi kunna välja att kolumn A är till exempel",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "data som ska matchas mot antal. Kolumn B innehåller ett namn och det ska matchas mot, äh, metadatafältet, äh, kontaktnamn och, och så vidare. Så nu har vi... Jag vet inte om den där klarar av att- Nej, men jag tänker såhär, när jag skickar in det här och så ber jag, äh, sys-- Ja, systemet, äh, förkl-- Ja, beskriva hur han uppfattar vår diskussion här. Ja, precis. Och sen får vi text och så får vi läsa den. Och så får vi städa upp här så vi kan, vi kan liksom hitta, hitta, hitta-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    }
+  ]
+}
