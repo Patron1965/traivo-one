@@ -67,6 +67,7 @@ import {
   type ImportDuplicateWarning,
 } from "../services/object-duplicates";
 import { OBJEKTMALL_INTERIM_PREFIX } from "@shared/objektmall-template";
+import { classifyExecuteRowNotes } from "../services/import-result-notes";
 
 function getUserId(req: Request): string | null {
   return (req as any).user?.claims?.sub ?? (req as any).user?.id ?? null;
@@ -654,7 +655,61 @@ export function registerObjectImportV2Routes(app: Express): void {
     asyncHandler(async (req, res) => {
       const tenantId = getTenantIdWithFallback(req);
       const session = await loadSession(req.params.id, tenantId);
-      res.json(session.result ?? null);
+      const result = (session.result as Record<string, unknown> | null) ?? null;
+      if (!result) {
+        res.json(null);
+        return;
+      }
+
+      // Task #1364: lista VILKA rader som blev nya toppnivåer (became_roots)
+      // resp. kaskad-hoppade utrustningsrader. Datat kommer från de redan
+      // persisterade radnoteringarna (validationMsgs, field="execute") som
+      // execute stämplade — ingen ny beräkning.
+      const summary = (result.summary ?? {}) as { became_roots?: number; skipped_missing_parent?: number };
+      if ((summary.became_roots ?? 0) > 0 || (summary.skipped_missing_parent ?? 0) > 0) {
+        type ExecMsg = { field?: string; message?: string; severity?: string; code?: string };
+        const rows = await db
+          .select({
+            rowNumber: objectImportRows.rowNumber,
+            status: objectImportRows.status,
+            validationMsgs: objectImportRows.validationMsgs,
+            objectId: objectImportRows.objectId,
+            rawData: objectImportRows.rawData,
+            objectName: objects.name,
+          })
+          .from(objectImportRows)
+          .leftJoin(
+            objects,
+            and(eq(objects.id, objectImportRows.objectId), eq(objects.tenantId, tenantId)),
+          )
+          .where(
+            and(
+              eq(objectImportRows.sessionId, req.params.id),
+              eq(objectImportRows.tenantId, tenantId),
+            ),
+          )
+          .orderBy(objectImportRows.rowNumber);
+
+        // Namn för hoppade rader (inget objekt skapades): läs rå-cellen i den
+        // kolumn som mappats till "name".
+        const mappings = (session.mappings as ColumnMappings) ?? {};
+        const nameColIndex = Object.entries(mappings).find(([, m]) => m.target === "name")?.[0] ?? null;
+
+        const { becameRootRows, skippedEquipmentRows } = classifyExecuteRowNotes(
+          rows.map((r) => ({
+            rowNumber: r.rowNumber,
+            status: r.status,
+            validationMsgs: (r.validationMsgs as ExecMsg[] | null) ?? null,
+            objectId: r.objectId ?? null,
+            objectName: r.objectName ?? null,
+            rawData: r.rawData,
+          })),
+          nameColIndex,
+        );
+        res.json({ ...result, became_root_rows: becameRootRows, skipped_equipment_rows: skippedEquipmentRows });
+        return;
+      }
+      res.json(result);
     }),
   );
 
@@ -904,6 +959,9 @@ export function registerObjectImportV2Routes(app: Express): void {
           objectId: string | null,
           msg?: string,
           msgSeverity: "error" | "warning" = "error",
+          // Task #1364: strukturerad orsakskod så att resultat-endpointen kan
+          // klassa noteringen durabelt (utan att tolka meddelandetext).
+          msgCode?: "became_root" | "equipment_skipped_missing_primary" | "kept_existing_placement",
         ) => {
           try {
             await db
@@ -912,7 +970,11 @@ export function registerObjectImportV2Routes(app: Express): void {
                 status,
                 objectId: objectId ?? null,
                 ...(msg
-                  ? { validationMsgs: [{ field: "execute", message: msg, severity: msgSeverity }] as any }
+                  ? {
+                      validationMsgs: [
+                        { field: "execute", message: msg, severity: msgSeverity, ...(msgCode ? { code: msgCode } : {}) },
+                      ] as any,
+                    }
                   : {}),
                 updatedAt: new Date(),
               })
@@ -1189,6 +1251,7 @@ export function registerObjectImportV2Routes(app: Express): void {
                   null,
                   `Primärraden för interim "${item.interimId ?? ""}" importerades inte — utrustningsraden hoppas över.`,
                   "warning",
+                  "equipment_skipped_missing_primary",
                 );
                 skippedMissingParent++;
                 continue;
@@ -1393,6 +1456,7 @@ export function registerObjectImportV2Routes(app: Express): void {
                   ? `Föräldern kunde inte hittas ${unresolvedParentRef} — objektets befintliga placering behålls.`
                   : undefined,
                 "warning",
+                unresolvedParent ? "kept_existing_placement" : undefined,
               );
             } else {
               // Interim-primärer utan systemnummer får objectNumber MALL-<interim>
@@ -1475,6 +1539,7 @@ export function registerObjectImportV2Routes(app: Express): void {
                   ? `Föräldern kunde inte hittas ${unresolvedParentRef} — objektet importerades som topphierarki (rot).`
                   : undefined,
                 "warning",
+                unresolvedParent ? "became_root" : undefined,
               );
             }
           } catch (err: any) {

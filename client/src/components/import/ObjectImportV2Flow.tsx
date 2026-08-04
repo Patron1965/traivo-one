@@ -118,6 +118,10 @@ interface ExecuteResponse {
   cluster_id: string;
   // Task #1357: batch-id som skapade objekt stämplats med (importBatchId).
   import_batch_id?: string;
+  // Task #1364: vilka rader som blev nya toppnivåer resp. kaskad-hoppades
+  // (hämtas från persisterade radnoteringar, field="execute").
+  became_root_rows?: Array<{ rowNumber: number; objectId: string | null; name: string | null; message: string }>;
+  skipped_equipment_rows?: Array<{ rowNumber: number; name: string | null; message: string }>;
 }
 
 const STEPS: { num: StepNum; label: string; icon: typeof Upload }[] = [
@@ -1073,18 +1077,53 @@ export function ObjectImportV2Flow() {
                     <AlertTriangle className="h-5 w-5 shrink-0 mt-0.5 text-warning" />
                     <div className="space-y-1 text-muted-foreground">
                       {(result.summary.became_roots ?? 0) > 0 && (
-                        <p>
-                          <span className="font-medium text-foreground">
-                            {result.summary.became_roots} objekt importerades som nya toppnivåer
-                          </span>{" "}
-                          eftersom föräldern inte kunde hittas.
-                        </p>
+                        <div className="space-y-1">
+                          <p>
+                            <span className="font-medium text-foreground">
+                              {result.summary.became_roots} objekt importerades som nya toppnivåer
+                            </span>{" "}
+                            eftersom föräldern inte kunde hittas.
+                          </p>
+                          {(result.became_root_rows?.length ?? 0) > 0 && (
+                            <ul className="list-disc pl-5 space-y-0.5" data-testid="list-became-root-rows">
+                              {result.became_root_rows!.map((r) => (
+                                <li key={r.rowNumber} data-testid={`became-root-row-${r.rowNumber}`}>
+                                  Rad {r.rowNumber}:{" "}
+                                  {r.objectId ? (
+                                    <button
+                                      type="button"
+                                      className="text-primary underline underline-offset-2 hover:no-underline"
+                                      onClick={() => navigate(`/objects/${r.objectId}`)}
+                                      data-testid={`link-became-root-object-${r.rowNumber}`}
+                                    >
+                                      {r.name ?? "Öppna objektet"}
+                                    </button>
+                                  ) : (
+                                    <span className="text-foreground">{r.name ?? "(namn saknas)"}</span>
+                                  )}
+                                </li>
+                              ))}
+                            </ul>
+                          )}
+                        </div>
                       )}
                       {(result.summary.skipped_missing_parent ?? 0) > 0 && (
-                        <p>
-                          {result.summary.skipped_missing_parent} utrustningsrad(er) hoppades över
-                          eftersom deras primärrad inte importerades.
-                        </p>
+                        <div className="space-y-1">
+                          <p>
+                            {result.summary.skipped_missing_parent} utrustningsrad(er) hoppades över
+                            eftersom deras primärrad inte importerades.
+                          </p>
+                          {(result.skipped_equipment_rows?.length ?? 0) > 0 && (
+                            <ul className="list-disc pl-5 space-y-0.5" data-testid="list-skipped-equipment-rows">
+                              {result.skipped_equipment_rows!.map((r) => (
+                                <li key={r.rowNumber} data-testid={`skipped-equipment-row-${r.rowNumber}`}>
+                                  Rad {r.rowNumber}
+                                  {r.name ? `: ${r.name}` : ""}
+                                </li>
+                              ))}
+                            </ul>
+                          )}
+                        </div>
                       )}
                     </div>
                   </div>
