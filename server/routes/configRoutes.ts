@@ -1730,6 +1730,8 @@ app.post("/api/subscriptions/generate-orders", asyncHandler(async (req, res) => 
           description: `Genererad från abonnemang: ${sub.name}`,
           orderStatus: "skapad",
           priority: "normal",
+          // Task #1369: ursprung stämplat vid skapandet (abonnemangsgenerering).
+          sourceType: "automatisk",
           estimatedDuration: 60,
           scheduledDate: nextGenDate,
           isSimulated: false,

@@ -1120,7 +1120,8 @@ app.post("/api/annual-planning/apply-distribution", asyncHandler(async (req, res
           return undefined;
         });
 
-        const [created] = await db.insert(workOrders).values({ ...orderData, uppgiftspaket }).returning();
+        // Task #1369: ursprung stämplat vid skapandet (AI-distribution av årsmål).
+        const [created] = await db.insert(workOrders).values({ ...orderData, uppgiftspaket, sourceType: "automatisk" }).returning();
         totalCreated++;
         didMutateWorkOrders = true;
 

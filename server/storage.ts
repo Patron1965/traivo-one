@@ -4574,6 +4574,15 @@ export class DatabaseStorage implements IStorage {
 
   async updateWorkOrder(id: string, data: Partial<InsertWorkOrder>): Promise<WorkOrder | undefined> {
     const updates: Partial<InsertWorkOrder> = { ...data };
+    // Task #1369: ursprunget (källtyp + konceptreferens) stämplas vid skapandet och
+    // är oföränderligt — strippa på storage-nivå så INGEN update-väg (routes, mobil,
+    // sync) kan ändra/fabricera det. Server-interna flöden som behöver sätta dessa
+    // gör det vid create (createWorkOrder/createWorkOrderWithLines) eller via
+    // direkta db.update (t.ex. materialiseraren).
+    delete updates.sourceType;
+    delete updates.orderConceptId;
+    // Om payloaden ENBART bestod av strippade fält: no-op, returnera nuvarande rad.
+    if (Object.keys(updates).length === 0) return this.getWorkOrder(id);
     // Auto-fill task_latitude/longitude from object ENDAST när objectId byts till nytt värde
     // och anroparen inte själv anger koordinater. Detta respekterar avsiktliga
     // null-värden ("ingen specifik punkt") och task-specifika overrides.
@@ -8090,8 +8099,18 @@ export class DatabaseStorage implements IStorage {
   }
 
   async updateAssignment(id: string, tenantId: string, data: Partial<InsertAssignment>): Promise<Assignment | undefined> {
+    // Task #1369: ursprunget (källtyp + konceptreferens) är oföränderligt efter
+    // skapandet — strippa på storage-nivå så ingen update-väg kan ändra det.
+    const updates: Partial<InsertAssignment> = { ...data };
+    delete updates.sourceType;
+    delete updates.orderConceptId;
+    // Om payloaden ENBART bestod av strippade fält: no-op, returnera nuvarande rad.
+    if (Object.keys(updates).length === 0) {
+      const existing = await this.getAssignment(id);
+      return existing && existing.tenantId === tenantId && !existing.deletedAt ? existing : undefined;
+    }
     const [result] = await db.update(assignments)
-      .set(data)
+      .set(updates)
       .where(and(
         eq(assignments.id, id),
         eq(assignments.tenantId, tenantId),

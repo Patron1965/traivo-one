@@ -541,6 +541,8 @@ export function EnkelUppgiftWizard({
       if (draft.description.trim()) payload.description = draft.description.trim();
       if (draft.plannedNotes.trim()) payload.plannedNotes = draft.plannedNotes.trim();
 
+      // Task #1369: ursprung stämplas vid skapandet — uppgiftseditor/Enkel uppgift.
+      payload.sourceType = "uppgiftseditor";
       const woRes = await apiRequest("POST", "/api/work-orders/with-lines", {
         workOrder: payload,
         lines: linePayloads,

@@ -2124,7 +2124,10 @@ export async function expandStructuralArticle(
       taskType: child.taskType || parentWorkOrder.taskType,
       estimatedDuration: 30,
       parentWorkOrderId: parentWorkOrder.id,
-      creationMethod: "structural_expansion"
+      creationMethod: "structural_expansion",
+      // Task #1369: deluppgift ärver förälderns ursprung + konceptreferens.
+      sourceType: parentWorkOrder.sourceType || undefined,
+      orderConceptId: parentWorkOrder.orderConceptId || undefined,
     });
     createdWorkOrders.push(newWorkOrder);
 

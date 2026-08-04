@@ -106,6 +106,8 @@ app.post("/api/iot/signals", asyncHandler(async (req, res) => {
           orderStatus: "skapad",
           description,
           priority,
+          // Task #1369: ursprung stämplat vid skapandet (IoT-signal → auto-order).
+          sourceType: "automatisk",
           source: "iot",
         });
         createdWorkOrder = wo;

@@ -534,6 +534,13 @@ export const workOrders = pgTable("work_orders", {
   sourceAssignmentId: varchar("source_assignment_id").references((): any => assignments.id),
   orderConceptId: varchar("order_concept_id").references((): any => orderConcepts.id),
   invoiceSourceType: text("invoice_source_type"),
+  // === Task #1369: Uppgiftens ursprung (källtyp) ===
+  // Stämplas vid skapandet (orderkoncept/snabborder/uppgiftseditor/import — se
+  // shared/task-source.ts) och ändras aldrig. Skild från creationMethod (teknisk
+  // skapandemetod) och invoiceSourceType (fakturaflödets projektion). NULL =
+  // historisk rad ⇒ visas som "Okänd" (ingen påhittad backfill). Relationen
+  // Objekt → Order → Uppgift → Orderkoncept bärs av objectId + orderConceptId.
+  sourceType: text("source_type"),
   frozenIsFixedPrice: boolean("frozen_is_fixed_price").default(false),
   // === Task #1187: Abonnemang 0-faktura & kvittning ===
   // Sätts när en abonnemangstäckt uppgift materialiseras: WO:n har fått en negativ
@@ -3495,6 +3502,10 @@ export const assignments = pgTable("assignments", {
   tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
   // Orderkoncept som genererade uppgiften
   orderConceptId: varchar("order_concept_id").references(() => orderConcepts.id),
+  // Task #1369: Uppgiftens ursprung (källtyp) — se shared/task-source.ts och
+  // kommentaren på work_orders.sourceType. Koncept-expansionen stämplar
+  // "orderkoncept"; NULL = historisk rad ⇒ "Okänd".
+  sourceType: text("source_type"),
   // Objekt som uppgiften gäller
   objectId: varchar("object_id").references(() => objects.id).notNull(),
   // Task #937: Resolverad order-/faktureringskund för uppgiften, snapshotad vid

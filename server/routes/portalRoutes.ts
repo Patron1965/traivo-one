@@ -3093,6 +3093,8 @@ app.post("/api/customer-change-requests/:id/create-work-order", requireAdmin, as
       description: `Rapport från kund:\n${report.description}\n\nRapport-ID: ${report.id}`,
       orderType: "service",
       priority: "normal",
+      // Task #1369: ursprung stämplat vid skapandet (kundrapport → åtgärdsorder).
+      sourceType: "felanmalan",
       status: "draft",
       orderStatus: "planerad",
     });

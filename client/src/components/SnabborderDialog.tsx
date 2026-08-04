@@ -271,6 +271,8 @@ export function SnabborderDialog({
       if (varReferens.trim()) workOrder.frozenOurReference = varReferens.trim();
       if (ertOrdernr.trim()) workOrder.frozenCustomerInvoiceReference = ertOrdernr.trim();
 
+      // Task #1369: ursprung stämplas vid skapandet — snabborder.
+      workOrder.sourceType = "snabborder";
       const res = await apiRequest("POST", "/api/work-orders/with-lines", {
         workOrder,
         assignOrderNumber: true,

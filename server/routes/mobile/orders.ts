@@ -772,6 +772,9 @@ app.post("/api/mobile/orders/:id/return-to-warehouse", isMobileAuthenticated, as
       customerId: order.customerId,
       objectId: order.objectId,
       resourceId: order.resourceId,
+      // Task #1369: retur-uppgift ärver huvudorderns ursprung + konceptreferens.
+      sourceType: order.sourceType || undefined,
+      orderConceptId: order.orderConceptId || undefined,
       title: `Återta: ${article.name}`,
       description: `Återtag till lager${stock.address ? `: ${stock.address}` : ""}.${reason ? ` Orsak: ${reason}` : ""}`,
       orderType: "service",

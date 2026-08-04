@@ -1908,7 +1908,7 @@ app.post("/api/import/modus/tasks", requireAdmin, upload.single("file"), asyncHa
           await storage.updateWorkOrder(existingWo.id, workOrderFields);
           updated.push(uppgiftsnamn);
         } else {
-          const newWo = await storage.createWorkOrder({ tenantId, ...workOrderFields, importBatchId: taskBatchId });
+          const newWo = await storage.createWorkOrder({ tenantId, ...workOrderFields, importBatchId: taskBatchId, sourceType: "import" });
           workOrderByModusId.set(uppgiftsId, newWo);
           created.push(uppgiftsnamn);
         }
@@ -2128,7 +2128,7 @@ async function runModusTasksImportJob(params: {
           await storage.updateWorkOrder(existingWo.id, workOrderFields);
           updated.push(uppgiftsnamn);
         } else {
-          const newWo = await storage.createWorkOrder({ tenantId, ...workOrderFields, importBatchId: taskBatchId });
+          const newWo = await storage.createWorkOrder({ tenantId, ...workOrderFields, importBatchId: taskBatchId, sourceType: "import" });
           workOrderByModusId.set(uppgiftsId, newWo);
           created.push(uppgiftsnamn);
         }

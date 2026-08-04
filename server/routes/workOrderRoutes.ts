@@ -17,6 +17,7 @@ import {
 import { getTenantIdWithFallback, requireAdmin, requirePlanner } from "../tenant-middleware";
 import { insertWorkOrderSchema, insertWorkOrderLineSchema, ORDER_STATUSES, type OrderStatus, articles, insertProcurementSchema, insertSetupTimeLogSchema, insertSimulationScenarioSchema, resources, orderConcepts, workOrderLines, fortnoxInvoiceExports, protocols, workOrders, customers, objects, slaRiskSnapshots, geographicDistricts, IMPOSSIBLE_REASON_LABELS, type ImpossibleReason, type OrderConcept, isOutsidePreferredWindow, routeClusterMemberships } from "@shared/schema";
 import type { WorkOrder, InsertWorkOrderLine } from "@shared/schema";
+import { CLIENT_ALLOWED_TASK_SOURCES } from "@shared/task-source";
 import { handleWorkOrderStatusChange } from "../ai-communication";
 import { generatePreTasksForWorkOrder } from "../planning/weeklyPlanEngine";
 import { notificationService } from "../notifications";
@@ -391,8 +392,24 @@ app.get("/api/work-orders/:id", asyncHandler(async (req, res) => {
     // best-effort — bryt inte WO-GET om klustringsanalysen misslyckas
   }
 
+  // Task #1369: exponera uppgiftens ursprung — konceptnamn när ordern härstammar
+  // från ett orderkoncept (sourceType/orderConceptId följer med via ...verified).
+  let orderConceptName: string | null = null;
+  if (verified.orderConceptId) {
+    try {
+      const [oc] = await db
+        .select({ name: orderConcepts.name })
+        .from(orderConcepts)
+        .where(and(eq(orderConcepts.id, verified.orderConceptId), eq(orderConcepts.tenantId, tenantId)));
+      orderConceptName = oc?.name ?? null;
+    } catch {
+      // best-effort — bryt inte WO-GET om konceptuppslag misslyckas
+    }
+  }
+
   res.json({
     ...verified,
+    orderConceptName,
     customerName: customer?.name,
     customerPhone: customer?.phone,
     customerEmail: customer?.email,
@@ -1161,6 +1178,8 @@ app.post("/api/work-orders/quick-bulk", requirePlanner, asyncHandler(async (req,
         priority: parsed.priority || "normal",
         orderStatus: "skapad",
         isSimulated: false,
+        // Task #1369: ursprung stämplat vid skapandet (snabborder/bulk-skapande).
+        sourceType: "snabborder",
       });
       const workOrder = await storage.createWorkOrder(data);
       createdIds.push(workOrder.id);
@@ -1182,6 +1201,11 @@ app.post("/api/work-orders", asyncHandler(async (req, res) => {
   // (assignOrderNumber) — aldrig via denna route. Strippa ev. klientvärde så att
   // en tenant-användare inte kan reservera/kollidera på framtida nummer.
   delete bodyData.orderNumber;
+  // Task #1369: källtyp — klienten får bara ange snabborder/uppgiftseditor;
+  // "orderkoncept"/"import" myntas server-side. Konceptreferens aldrig från klient.
+  // Utelämnad/otillåten källa ⇒ server-default "manuell" (NULL = enbart historiska rader).
+  if (!CLIENT_ALLOWED_TASK_SOURCES.includes(bodyData.sourceType)) bodyData.sourceType = "manuell";
+  delete bodyData.orderConceptId;
   for (const field of ['scheduledDate', 'desiredDeliveryStart', 'desiredDeliveryEnd'] as const) {
     if (bodyData[field] && typeof bodyData[field] === 'string') {
       const dateStr = bodyData[field] as string;
@@ -1371,6 +1395,11 @@ app.post("/api/work-orders/with-lines", requirePlanner, asyncHandler(async (req,
   const bodyData: Record<string, unknown> = { ...parsedBody.data.workOrder };
   // Ordernummer myntas alltid server-side (opts-flagga) — aldrig från klienten.
   delete bodyData.orderNumber;
+  // Task #1369: källtyp — klienten får bara ange snabborder/uppgiftseditor;
+  // "orderkoncept"/"import" myntas server-side. Konceptreferens aldrig från klient.
+  // Utelämnad/otillåten källa ⇒ server-default "manuell" (NULL = enbart historiska rader).
+  if (!CLIENT_ALLOWED_TASK_SOURCES.includes(bodyData.sourceType as any)) bodyData.sourceType = "manuell";
+  delete bodyData.orderConceptId;
   for (const field of ['scheduledDate', 'desiredDeliveryStart', 'desiredDeliveryEnd'] as const) {
     if (bodyData[field] && typeof bodyData[field] === 'string') {
       const dateStr = bodyData[field] as string;
@@ -1506,6 +1535,11 @@ app.patch("/api/work-orders/:id", asyncHandler(async (req, res) => {
 
   // Ordernummer myntas server-side och får aldrig ändras/sättas via PATCH.
   delete updateData.orderNumber;
+
+  // Task #1369: ursprunget (källtyp + konceptreferens) stämplas vid skapandet och
+  // är oföränderligt — får aldrig ändras/fabriceras via PATCH.
+  delete updateData.sourceType;
+  delete updateData.orderConceptId;
 
   // §5 A — platskrav: acceptera bara giltiga enum-värden eller null; släng ogiltigt.
   if ("locationRequirement" in updateData) {
@@ -2666,6 +2700,9 @@ app.post("/api/simulation-scenarios/:id/clone-orders", asyncHandler(async (req, 
       estimatedDuration: original.estimatedDuration,
       isSimulated: true,
       simulationScenarioId: scenarioId,
+      // Task #1369: klonad order ärver originalets ursprung + konceptreferens.
+      sourceType: original.sourceType || undefined,
+      orderConceptId: original.orderConceptId || undefined,
       notes: original.notes,
       metadata: original.metadata as Record<string, unknown> | undefined
     });

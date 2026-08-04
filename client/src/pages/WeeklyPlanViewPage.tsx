@@ -578,6 +578,8 @@ export default function WeeklyPlanViewPage() {
           taskCategory: "admin",
           teamId: effectiveTeamId || undefined,
           scheduledDate: vars.date,
+          // Task #1369: ursprung stämplas vid skapandet — uppgiftseditorn.
+          sourceType: "uppgiftseditor",
         },
         lines: [{ articleId: vars.articleId, quantity: 1 }],
       });

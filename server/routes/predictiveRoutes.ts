@@ -367,6 +367,8 @@ export async function registerPredictiveRoutes(app: Express) {
       tenantId,
       objectId,
       customerId: obj.customerId,
+      // Task #1369: ursprung stämplat vid skapandet (predictive-motorn).
+      sourceType: "automatisk",
       title,
       scheduledDate: new Date(scheduledDate),
       description: description || title,

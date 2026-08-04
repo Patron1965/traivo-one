@@ -112,6 +112,8 @@ async function createStockPickupAssignment(opts: {
     cachedValue: 0,
     cachedCost: 0,
     logisticsRole: "pickup",
+    // Task #1369: ursprung stämplat vid skapandet (koncept-expansion).
+    sourceType: "orderkoncept",
     // Task #1205 (fält 54): matchningsorsak ärvs till hämt-uppgiften.
     matchReason: matchReason ?? undefined,
     // Task #1110: stämpla artikelns utförandekod på hämt-uppgiften (informationspaket).
@@ -314,6 +316,8 @@ export async function generateScheduleAssignments(opts: {
         frozenTimeCode: linkedArticle?.timeCodeKey ?? undefined,
         // Task #997: fryst viktat tidsregel-paket (null om objektet saknar regler).
         frozenTimeRules: frozenTimeRulesByObject.get(obj.id) ?? null,
+        // Task #1369: ursprung stämplat vid skapandet (koncept-expansion, schema).
+        sourceType: "orderkoncept",
         // Task #1124/#1187: faktureringstyp-snapshot (schedule/subscription). Läses av
         // materialiseraren; abonnemangsuppgifter kvittas till 0 vid slutförande så att
         // identifieringen inte hänger på att konceptet finns kvar/oförändrat senare.
@@ -1568,6 +1572,9 @@ app.post("/api/work-orders/:workOrderId/generate-pickup-tasks", asyncHandler(asy
         taskLatitude: article.stockLatitude || undefined,
         taskLongitude: article.stockLongitude || undefined,
         logisticsRole: "pickup",
+        // Task #1369: derivat ärver huvudorderns ursprung + konceptreferens.
+        sourceType: mainWorkOrder.sourceType || undefined,
+        orderConceptId: mainWorkOrder.orderConceptId || undefined,
       });
 
       await storage.createTaskDependency({
@@ -1783,6 +1790,9 @@ app.post("/api/work-orders/:id/expand-structural", asyncHandler(async (req, res)
         executionCode: workOrder.executionCode,
         // Tidskod ärvs från förälder-WO (strukturellt delsteg).
         frozenTimeCode: workOrder.frozenTimeCode,
+        // Task #1369: delsteg ärver förälder-WO:ns ursprung + konceptreferens.
+        sourceType: workOrder.sourceType || undefined,
+        orderConceptId: workOrder.orderConceptId || undefined,
       });
 
       await storage.createTaskDependency({
@@ -2661,6 +2671,8 @@ app.post("/api/order-concepts/:id/execute", asyncHandler(async (req, res) => {
         frozenTimeCode: linkedArticle?.timeCodeKey ?? undefined,
         // Task #997: fryst viktat tidsregel-paket (null om objektet saknar regler).
         frozenTimeRules: frozenTimeRulesByObject.get(obj.id) ?? null,
+        // Task #1369: ursprung stämplat vid skapandet (koncept-expansion, avrop).
+        sourceType: "orderkoncept",
         // Task #1124: informationspaket-natur (fast pris + faktureringstyp) snapshotat
         // vid expansion — bärs vidare till materialiserad faktura-WO. conceptMethod är
         // "call_off" här (schema/abonnemang har redan returnerat ovan).
@@ -2731,6 +2743,10 @@ app.post("/api/order-concepts/:id/execute", asyncHandler(async (req, res) => {
           executionCode: article.executionCode ?? null,
           // Tidskod fryst från artikelns timeCodeKey (finplanering/lön).
           frozenTimeCode: article.timeCodeKey ?? null,
+          // Task #1369: ursprung + konceptreferens stämplas vid skapandet så att
+          // relationen Objekt → Order → Orderkoncept aldrig försvinner.
+          sourceType: "orderkoncept",
+          orderConceptId: concept.id,
         } as InsertWorkOrder);
         createdAdminWorkOrders.push({ id: wo.id, taskCategory: wo.taskCategory, articleId: ca.articleId });
       }
@@ -2809,6 +2825,8 @@ app.post("/api/order-concepts/:id/execute", asyncHandler(async (req, res) => {
             // vid expansion (call_off-väg; schema/abonnemang har returnerat ovan).
             isFixedPrice: isFixedPriceConcept(concept),
             billingMethod: conceptMethod,
+            // Task #1369: ursprung stämplat vid skapandet (koncept-expansion, föruppgift).
+            sourceType: "orderkoncept",
           });
           await storage.createAssignmentArticle({
             assignmentId: preAssignment.id,

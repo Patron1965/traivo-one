@@ -241,6 +241,9 @@ export async function ensureWorkOrderForAssignmentExecution(
     sourceAssignmentId: assignmentId,
     orderConceptId: assignment.orderConceptId,
     invoiceSourceType: "assignment",
+    // Task #1369: ursprunget följer med från uppgiften till den projicerade WO:n.
+    // Legacy-assignments utan stämpel: koncept-koppling ⇒ "orderkoncept", annars NULL.
+    sourceType: assignment.sourceType ?? (assignment.orderConceptId ? "orderkoncept" : undefined),
     frozenIsFixedPrice: assignment.isFixedPrice ?? false,
     // Uppgiftslogik v1 (Fakturalås BY+CE): frys konceptets segment-lås på WO:n vid
     // projektion. Saknat/raderat koncept ⇒ false (dagens beteende).

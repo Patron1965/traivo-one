@@ -655,6 +655,8 @@ app.post("/api/deviation-reports/:id/create-order", asyncHandler(async (req, res
       status: 'planned',
       description: `Åtgärd: ${categoryLabel} - ${report.title}\n\nBeskrivning: ${report.description || ''}\n\nAllvarlighetsgrad: ${severityLabel}\n\nFöreslagen åtgärd: ${report.suggestedAction || 'Ej angiven'}`,
       creationMethod: 'deviation_report',
+      // Task #1369: ursprung stämplat vid skapandet (avvikelserapport → åtgärdsorder).
+      sourceType: "felanmalan",
       latitude: report.latitude ? String(report.latitude) : undefined,
       longitude: report.longitude ? String(report.longitude) : undefined,
     });
@@ -1087,6 +1089,8 @@ app.post("/api/cases/:source/:id/create-order", requirePlanner, asyncHandler(asy
       longitude: existing.longitude ?? object.longitude ?? undefined,
       creationMethod: "case_create_order",
       createdBy: userId,
+      // Task #1369: ursprung stämplat vid skapandet (ärende → ad-hoc orderkoncept).
+      sourceType: "orderkoncept",
     } as any);
 
     // Länka tillbaka + flytta ärendet framåt

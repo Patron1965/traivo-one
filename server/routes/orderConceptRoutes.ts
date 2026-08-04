@@ -1,5 +1,6 @@
 import type { Express } from "express";
 import { storage } from "../storage";
+import { CLIENT_ALLOWED_TASK_SOURCES } from "@shared/task-source";
 import { invalidateWorkflowCaches } from "../services/dashboardCache";
 import { db } from "../db";
 import { eq, sql, desc, and, gte, isNull, inArray } from "drizzle-orm";
@@ -658,6 +659,9 @@ app.post("/api/work-orders/:id/generate-dependent-tasks", asyncHandler(async (re
         priority: workOrder.priority,
         description: `Beroende uppgift (${template.dependencyType === "before" ? "före" : "efter"})`,
         creationMethod: "auto_dependency",
+        // Task #1369: beroendeuppgift ärver förälderns ursprung + konceptreferens.
+        sourceType: workOrder.sourceType || undefined,
+        orderConceptId: workOrder.orderConceptId || undefined,
       });
 
       const instance = await storage.createTaskDependencyInstance({
@@ -1329,12 +1333,20 @@ app.get("/api/order-concepts/:id/assignments", asyncHandler(async (req, res) => 
 app.post("/api/assignments", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const userId = req.session?.user?.id;
-    
+
+    // Task #1369: källtyp — klienten får bara ange snabborder/uppgiftseditor;
+    // "orderkoncept" myntas enbart server-side vid koncept-expansion, och
+    // konceptreferensen sätts aldrig från klient-payload.
+    const bodyData = { ...req.body };
+    // Utelämnad/otillåten källa ⇒ server-default "manuell" (NULL = enbart historiska rader).
+    if (!CLIENT_ALLOWED_TASK_SOURCES.includes(bodyData.sourceType)) bodyData.sourceType = "manuell";
+    delete bodyData.orderConceptId;
+
     const assignment = await storage.createAssignment({
-      ...req.body,
+      ...bodyData,
       tenantId,
       createdBy: userId,
-      creationMethod: req.body.creationMethod || "manual"
+      creationMethod: bodyData.creationMethod || "manual"
     });
     res.status(201).json(assignment);
 }));
@@ -1346,7 +1358,13 @@ app.patch("/api/assignments/:id", asyncHandler(async (req, res) => {
       throw new NotFoundError("Uppgift hittades inte");
     }
     
-    const assignment = await storage.updateAssignment(req.params.id, tenantId, req.body);
+    // Task #1369: ursprunget (källtyp + konceptreferens) stämplas vid skapandet och
+    // är oföränderligt — får aldrig ändras/fabriceras via PATCH.
+    const patchBody = { ...req.body };
+    delete patchBody.sourceType;
+    delete patchBody.orderConceptId;
+
+    const assignment = await storage.updateAssignment(req.params.id, tenantId, patchBody);
     res.json(assignment);
 }));
 
