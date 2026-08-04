@@ -400,11 +400,14 @@ export function validateCrossRow(rows: ResolvedRow[]): CrossRowIssue[] {
   for (const r of rows) {
     const p = r.fields.interim_parent_id;
     if (p && !interimIds.has(p)) {
+      // Task #1356: saknad interimförälder stoppar inte importen — raden blir
+      // en topphierarki (rot på en gren). Varning så användaren informeras och
+      // kan hoppa över raden manuellt om det inte är avsikten.
       issues.push({
         rowNumber: r.rowNumber,
         field: "interim_parent_id",
-        message: `Interimförälder "${p}" finns inte i filen`,
-        severity: "error",
+        message: `Interimförälder "${p}" finns inte i filen — raden importeras som topphierarki (rot)`,
+        severity: "warning",
       });
     }
   }
