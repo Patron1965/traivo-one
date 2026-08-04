@@ -1,0 +1,341 @@
+Här är en version formulerad som konkreta utvecklingskrav till Replit:
+Utvecklingskrav – Objektinformation i Traivo
+Bygg om sidan Objektinformation enligt nedanstående krav. Syftet är att skapa en sammanhållen objektsida där objektets identitet, metadata, bilder, geografiska placering, uppgifter och systeminformation visas på ett tydligt och spårbart sätt.
+1. Översta objektvinjetten ska behållas
+Nuvarande översta vinjett för objektet ska behållas som grund och inte ersättas av den nya metadata-layouten.
+Vinjetten ska minst visa:
+Objektnummer
+Objektnamn
+Status
+Objektförälder
+Antal underordnade objekt
+Utöver detta ska vinjetten kunna visa tre valbara metadatafält.
+Exempel på sådana fält kan vara:
+Fastighetsnummer
+Driftområde
+Kundens interna objektnummer
+Vilka tre metadatafält som visas ska inte hårdkodas. Ett metadatafält ska kunna markeras med egenskapen exempelvis:
+Visa i objektvinjett = Ja/Nej
+Systemet ska därefter automatiskt använda de utvalda fälten i vinjetten.
+
+
+⸻
+
+
+2. Vinjetten ska innehålla tre visuella informationsytor
+Vinjetten ska stödja:
+Vinjettbild
+Objektet ska ha en primär vinjettbild.
+Det ska gå att:
+visa aktuell vinjettbild
+byta/ladda upp ny vinjettbild
+se tidigare vinjettbilder
+se datum då bilden skapades/laddades upp
+se vem som skapade/laddade upp bilden
+se bildens källa
+Tidigare historik får inte försvinna när en ny bild väljs.
+Kundlogotyp
+Vinjetten ska kunna visa kundens eller objektförälderns logotyp.
+Logotypen ska kunna:
+ärvas från överordnat objekt
+registreras direkt på aktuellt objekt
+ersätta ett ärvt värde
+Systemet ska visa om logotypen är:
+Direkt
+Ärvd
+Överskriven
+Kartbild
+Vinjetten ska innehålla en kartvy som visar objektets geografiska position.
+Kartvyn ska ha en pinpoint/markör.
+Användaren ska kunna välja:
+Redigera position
+och därefter flytta markören direkt på kartan.
+När positionen sparas ska objektets koordinater uppdateras.
+Systemet ska lagra minst:
+latitud
+longitud
+senast ändrad datum/tid
+ändrad av
+källa
+Adress och geografisk position ska behandlas som två separata informationsmängder. Kartpositionen ska alltså kunna ange objektets exakta fysiska placering även om den avviker från adressens mittpunkt.
+
+
+
+⸻
+
+
+4. Metadata ska grupperas per metadataområde
+Metadata ska fortsatt vara strukturerad i definierade metadataområden.
+Exempel:
+Kontaktinformation
+Adress
+Drift
+Ekonomi
+Anläggningsinformation
+Behållare
+Bilder
+Dokument
+Relationer
+Klassificering
+Anteckningar
+Nyckelvärden
+Övrigt
+Systemet ska använda den faktiska metadataområdesstrukturen i databasen och inte bygga dessa som statiska UI-sektioner.
+
+
+⸻
+
+
+5. Poster inom ett metadataområde ska visas som karusell
+Varje metadataområde ska presenteras som en egen sektion.
+Poster inom området ska visas som kort i en horisontell karusell, enligt principen i den tidigare framtagna bildlayouten.
+Exempel:
+Kontaktinformation 1 / 3
+< [Anna Andersson] [Johan Svensson] [Maria Nilsson] >
+Det ska finnas:
+vänster/höger-navigation
+positionsindikering
+antal poster
+stöd för swipe på touch-enheter
+knapp för Visa alla när området innehåller många poster
+Kortens primära innehåll ska vara lättläst. Systeminformation ska visas mer diskret längst ned på respektive kort.
+
+
+⸻
+
+
+6. Varje metadata-post ska ha proveniens
+Varje metadata-post ska kunna visa var informationen kommer ifrån.
+Minst följande källstatus ska stödjas:
+Direkt
+Ärvd
+Överskriven
+Systemgenererad
+För varje post ska systemet, där informationen finns, kunna visa:
+skapad datum/tid
+skapad av
+senast ändrad datum/tid
+ändrad av
+källa
+ärvd från objekt
+överskriver värde från objekt
+Exempel:
+Driftentreprenör
+Renhållning Syd AB
+Källa: Ärvd
+Ärvt från: Hemköp Kristianstad
+Senast ändrad: 2026-06-10
+Ändrad av: Johan Svensson
+Detta ska bygga på faktisk dataproveniens och inte endast visas grafiskt.
+
+
+⸻
+
+
+7. Metadata ska kunna läggas till och redigeras
+Den nya vyn får inte bli en ren läsvy.
+Användaren ska fortsatt kunna:
+skapa metadatafält
+lägga till metadata-post
+ändra värde
+redigera post
+ta bort post
+ange metadataområde
+ange datatyp
+ändra metadataområde där detta är tillåtet
+ange om fältet ska visas i objektvinjetten
+Exempel på metadatafält:
+Namn: Fastighetsnummer
+Metadataområde: Anläggningsinformation
+Datatyp: Text
+Värde: Kristianstad 4:27
+Visa i objektvinjett: Ja
+Systemet ska kunna hantera nya metadatafält utan att ny programspecifik kod behöver skrivas för varje fält.
+
+
+⸻
+
+
+8. Bilder ska integreras i samma objektsida
+Tidigare funktionalitet för bilder ska bevaras.
+Bildinformationen ska kunna innehålla exempelvis:
+vinjettbild
+verifieringsbilder
+kontrollbilder
+avvikelsebilder
+övriga objektsbilder
+Bilder ska fortsatt kunna kopplas till exempelvis:
+objekt
+order
+uppgift
+kontrollpunkt
+avvikelse
+För varje bild ska relevanta systemfält och metadata bevaras, exempelvis:
+datum
+tid
+fotograf/användare
+källa
+ursprung
+order
+orderkoncept
+uppgift
+beskrivning
+Bildkarusellen kan följa samma visuella princip som tidigare framtagen layout.
+
+
+⸻
+
+
+9. Uppgifter ska inte behandlas som vanlig metadata
+Uppgifter är system-/produktionsinformation och ska inte byggas som fria metadatafält.
+Varje uppgift ska ha egna systemfält.
+Minst följande information ska kunna lagras och visas:
+Uppgifts-ID
+Uppgiftsnamn
+Objekt
+Order
+Artikel/tjänst
+Status
+Resultat
+antal
+planerat datum
+utfört datum/tid
+utförd av
+skapad datum/tid
+skapad av
+källa
+
+
+⸻
+
+
+10. Systemet måste ange uppgiftens ursprung
+För varje uppgift ska det tydligt framgå hur uppgiften skapades.
+Minst följande källor ska stödjas:
+Orderkoncept
+Om uppgiften genererats genom ett Orderkoncept ska följande relation bevaras:
+Objekt → Order → Uppgift → Orderkoncept
+Systemet ska kunna visa exempelvis:
+Uppgift: Kontroll lyftkrok
+Order: WO-81234
+Källa: Orderkoncept
+Orderkoncept: OK-2003 Lyftkontroll
+Artikel/tjänst: Lyftkrok-kontroll
+Status: Utförd
+Resultat: OK
+Relationen till ursprungligt Orderkoncept får inte försvinna efter att order eller uppgift skapats.
+Snabborder
+Om uppgiften skapats via Snabborder ska systemet visa:
+Uppgift: Reparation lyftkrok
+Order: WO-80877
+Källa: Snabborder
+Status: Pågående
+Det ska alltså inte krävas ett Orderkoncept för en Snabborder.
+Datamodellen ska vara förberedd för att fler källtyper kan tillkomma senare.
+
+
+⸻
+
+
+11. Kopplade order och uppgifter
+På objektsidan ska det finnas en sammanställning över objektets kopplade order och uppgifter.
+Minst följande kolumner ska kunna visas:
+Fält
+Exempel
+Order
+WO-81234
+Uppgift
+Kontroll lyftkrok
+Källa
+Orderkoncept
+Orderkoncept
+OK-2003 Lyftkontroll
+Status/resultat
+Utförd / OK
+Datum
+2026-06-16
+För Snabborder:
+Order
+Uppgift
+Källa
+WO-80877
+Reparation lyftkrok
+Snabborder
+Ordernummer, uppgift och Orderkoncept ska vara klickbara där respektive detaljvy finns.
+
+
+⸻
+
+
+12. Separat sektion för Systeminformation
+Längst ned på objektsidan ska finnas ett särskilt område:
+Systeminformation
+Detta ska hållas åtskilt från användarredigerbar metadata.
+Här ska exempelvis visas:
+Internt objekt-ID
+Objektnummer
+Skapad datum/tid
+Skapad av
+Senast ändrad datum/tid
+Ändrad av
+Versionsnummer
+Källsystem
+status
+relation till överordnat objekt
+antal underordnade objekt
+Här kan även sammanställningen över systemets relationer till:
+order
+uppgifter
+orderkoncept
+snabborder
+placeras.
+
+
+⸻
+
+
+13. Viktig datamodellprincip
+UI:t får inte styra datamodellen.
+Följande ska hållas isär:
+Objekt
+Objektets identitet och hierarki.
+Metadata
+Flexibla informationsfält kopplade till objektet.
+Metadataområde
+Gruppering av metadata.
+Order
+Beställd/planerad produktion.
+Uppgift
+Det arbete som ska utföras eller har utförts.
+Orderkoncept
+Definition/mall som kan generera order och uppgifter.
+Snabborder
+Order som skapas utan ordinarie Orderkonceptflöde.
+Systeminformation
+Teknisk information, relationer, versionshistorik och proveniens.
+Dessa ska inte blandas ihop endast för att de visas på samma objektsida.
+
+
+⸻
+
+
+Acceptanskriterier
+Ändringen är klar först när:
+Nuvarande översta objektvinjett finns kvar.
+Vinjetten kan visa tre valbara metadatafält.
+Vinjettbild kan visas och uppdateras.
+Kundlogotyp kan visas och hantera arv.
+Kartan visar objektets pinpoint.
+Pinpoint kan flyttas och den nya positionen sparas.
+Vänster metadata-meny är borttagen.
+Metadata visas grupperad per område.
+Poster inom respektive område visas i karusell.
+Metadata kan skapas, redigeras och tas bort.
+Proveniens för metadata bevaras och visas.
+Bilder och tidigare bildfunktionalitet finns kvar.
+Uppgifter har systemfält för källa/ursprung.
+Det framgår om en uppgift kommer från Orderkoncept eller Snabborder.
+Relation till ursprungligt Orderkoncept finns kvar.
+Kopplade order och uppgifter visas på objektet.
+Systeminformation visas separat från vanlig metadata.
+Befintliga data och relationer får inte förloras eller migreras destruktivt i samband med UI-ändringen.
