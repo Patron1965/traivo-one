@@ -31,7 +31,6 @@ const allowlist = [
   "express",
   "express-rate-limit",
   "jsonwebtoken",
-  "memorystore",
   "multer",
   "nanoid",
   "nodemailer",
@@ -41,7 +40,6 @@ const allowlist = [
   "ws",
   "xlsx",
   "zod",
-  "zod-validation-error",
 ];
 
 async function buildAll() {

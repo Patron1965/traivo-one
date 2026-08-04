@@ -7,7 +7,7 @@ kod, inga migrationer i denna fas.
 **Föregångare:** `adr-orderkoncept-v3.md` (objekt-neutralitet, kund-hierarki,
 fakturanivåer, metadata-livscykel), `docs/uppgiftsmodellen-utredning.md`,
 `docs/uppgiftslogik-utvecklingslogg.md`.
-**Källmaterial:** `exports/grundmodell.html` (Steg 0), `exports/tasklista.html`
+**Källmaterial:** genererade underlag "grundmodell" (Steg 0) och "tasklista" (engångsexporter, borttagna vid repo-städning 2026-08-04; innehållet är införlivat i detta dokument)
 (P1–P5), `.agents/memory/uppgiftslogik-v1-decisions.md`.
 **Maskinläsbar motsvarighet:** `shared/uppgift-contract.ts` (enda importbara
 källan för P3/P4/P5).

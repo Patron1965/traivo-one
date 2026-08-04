@@ -1,0 +1,26 @@
+Beroendelistan är bred och bör styras aktivt
+package.json har ett stort antal beroenden och delvis överlappande teknikval, exempelvis både Express och Hono samt flera paket kring styling/animation. Det behöver inte vara fel, men ökar attackyta, underhållskostnad, bundle-risk och risken för dubbla implementationsspår. Rekommendation:
+Gör en kvartalsvis dependency review.
+Dokumentera vilket ramverk som är primärt för API:t.
+Ta bort paket som inte används.
+Låt Dependabot/Renovate eller motsvarande bevaka säkerhetsuppdateringar.
+Separera tydligt produktionsberoenden från utvecklings- och testberoenden.
+Typecheck-baseline bör vara en tillfällig brygga
+typecheck-baseline.json på cirka 29 kB indikerar sannolikt att det finns ett antal kända TypeScript-problem som tolereras just nu. Det är förståeligt under snabb utveckling, men bör ha en plan. Rekommendation:
+Sätt ett mål att baseline ska minska i varje sprint.
+Blockera nya fel i CI.
+Dela upp förbättringsarbetet per domän: planering, arbetsorder, objekt, kund, användare/behörighet osv.
+Multi-tenant måste vara tydligt i datamodell och åtkomstkontroll
+Eftersom Traivo ska vara en gemensam SaaS-plattform med separata kundmiljöer är detta den största arkitekturfrågan. Mappstrukturen säger inte i sig hur tenant-isolering hanteras. Jag skulle vilja se tydliga principer för:
+konsekvent tenantId/organisationsgräns i alla kundägda tabeller,
+centraliserad tenant-resolution från session/token,
+att varje databasfråga automatiskt begränsas till rätt tenant,
+roll- och behörighetsmodell per kund,
+audit log för känsliga ändringar,
+testfall som försöker läsa eller ändra data från annan tenant.
+Detta bör behandlas som en produkt- och säkerhetsprincip, inte som något varje route själv behöver komma ihåg.
+Separera domänkärnan från integrations- och UI-lagret
+Traivo riskerar annars att växa till en stor samling routes och komponenter där planeringslogik, importlogik och integrationsdetaljer blandas. För just er produkt är kärndomänen värdefull: arbetsorder, objekt, kompetens, tekniker, geografi, tidsfönster, SLA, kapacitet, resor och optimeringsresultat. Rekommendation:
+Låt shared eller en separat domänmodul äga centrala begrepp och regler.
+Låt importformat, API-routes och UI vara adaptrar runt denna kärna.
+Definiera stabila kontrakt mellan plattformen och optimization-service.

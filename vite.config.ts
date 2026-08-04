@@ -41,7 +41,7 @@ export default defineConfig({
           if (id.includes("/react/") || id.includes("/react-dom/") || id.includes("/scheduler/")) return "vendor-react";
           if (id.includes("@tanstack")) return "vendor-tanstack";
           if (id.includes("date-fns")) return "vendor-date";
-          if (id.includes("lucide-react") || id.includes("react-icons")) return "vendor-icons";
+          if (id.includes("lucide-react")) return "vendor-icons";
           if (id.includes("framer-motion")) return "vendor-motion";
           return undefined;
         },

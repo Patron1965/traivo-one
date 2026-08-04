@@ -2,11 +2,15 @@ import { defineConfig } from "vitest/config";
 import path from "path";
 
 export default defineConfig({
-  // vitest 4 bundles rolldown-vite (oxc), which ignores the `esbuild` option in
-  // favour of `oxc`. JSX in client `.tsx` files only transforms when JSX is
-  // configured here; otherwise oxc parses `.tsx` as plain TS and fails.
+  // vitest <=4.1.5 bundled rolldown-vite (oxc) som ignorerar `esbuild`;
+  // vitest >=4.1.10 använder vanlig vite (esbuild) igen. Behåll BÅDA
+  // JSX-konfigurationerna så att `.tsx` transformeras oavsett variant —
+  // annars "React is not defined" i alla client-tester.
   oxc: {
     jsx: { runtime: "automatic" },
+  },
+  esbuild: {
+    jsx: "automatic",
   },
   resolve: {
     alias: {

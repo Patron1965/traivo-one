@@ -2,7 +2,7 @@
 
 ## Stack
 **Frontend:** React, TypeScript, Vite, shadcn/ui, react-leaflet
-**Backend:** Express.js, Node.js
+**Backend:** Express.js (primärt och enda API-ramverk — inför inte parallella ramverk), Node.js
 **Database:** PostgreSQL, Drizzle ORM
 **AI/Optimization:** OpenAI, Geoapify (Routing/VRP), OSRM, OR-Tools (Python FastAPI)
 **Geocoding:** Geoapify, OpenStreetMap Nominatim
@@ -41,6 +41,8 @@ Aktiva "var-uppmärksam-på"-regler. Djupare detalj i `.agents/memory/`, `CHANGE
 - **Auto-tilldelning AV i prod:** `resolveFallbackTenantId()`=null i prod; nya användare måste bjudas in explicit (override `AUTO_ASSIGN_TENANT=true`, avrådes). `/api/me/tenant`=null för oinloggade.
 - **Demo-seed AV i prod:** `seedDatabase()` skippar demo utan `ENABLE_DEMO_SEED`; rensa rester via `scripts/kinab-reset-operational-data.ts --confirm RENSA-KINAB`.
 - **Auto-checkpoint kan committa raderingar:** kör `scripts/check-mass-deletion.ts --commits 50 --threshold 50` före `git push github main`. Recovery: `docs/disaster-recovery.md` §Scenario D.
+- **Beroende-policy:** inga paket utan verifierad användning; `@types/*` och test-/byggverktyg hör hemma i `devDependencies`; verifiera med importsökning innan nya beroenden läggs till.
+- **Ingen force-push till main som rutin:** vanlig `git push` är normalflödet; `--force`/`--force-with-lease` endast som medveten engångsåtgärd vid verifierad fast-forward/recovery.
 - **Roll-kolumner (2 platser):** all access-kontroll använder tenant-rollen (`user_tenant_roles.role`) — ändra via `assignUserToTenant`, lämna `users.role` orörd.
 - **Bypassad mobile-yta:** `/api/mobile/*` går utanför tenant-mw — använd `req.mobileTenantId` (läs aldrig `req.tenantId` där).
 - **Portal user scope:** tom scope = full access (back-compat); sätt explicit scope för begränsning.

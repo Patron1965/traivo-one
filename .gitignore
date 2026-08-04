@@ -6,3 +6,12 @@ vite.config.ts.*
 *.tar.gz
 test-results/
 playwright-report/
+
+# Genererade artefakter & arbetsfiler — ska aldrig committas
+exports/*
+!exports/.gitkeep
+verify-prod-report-*.md
+*.log
+*.tmp
+*.bak
+*.dump
