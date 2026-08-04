@@ -35,6 +35,11 @@ import {
 import { eq, and, isNull, notInArray, inArray, gte, lte, or, sql } from "drizzle-orm";
 import { haversineDistanceKm } from "../../distance-matrix-service";
 import { getMapProvider } from "../mapProvider";
+import { objects } from "@shared/schema";
+import {
+  resolveObjectLocation,
+  type LocatableObject,
+} from "../object-location";
 
 // ---------------------------------------------------------------------------
 // Typer
@@ -146,6 +151,42 @@ function getEffectiveWindow(wo: WorkOrder): TaskWindow {
     start: wo.desiredDeliveryStart ? new Date(wo.desiredDeliveryStart) : null,
     end: wo.desiredDeliveryEnd ? new Date(wo.desiredDeliveryEnd) : null,
   };
+}
+
+/**
+ * Uppgiftens position: i första hand WO:s egna task-koordinater,
+ * annars fallback till objektets ruttbara position (kanonisk modell i
+ * object-location.ts — entré-koordinat räknas som ruttbar fallback).
+ * Utan detta blir klumpar centroid-lösa (osynliga på kartan) så fort
+ * ordrarna saknar egna koordinater, trots att objekten har position.
+ */
+function resolveWoGeoFromObject(
+  wo: WorkOrder,
+  obj: LocatableObject | null | undefined,
+): TaskGeo {
+  if (wo.taskLatitude != null && wo.taskLongitude != null) {
+    return { latitude: wo.taskLatitude, longitude: wo.taskLongitude };
+  }
+  if (obj) {
+    const loc = resolveObjectLocation(obj);
+    if (loc.routable && loc.latitude != null && loc.longitude != null) {
+      return { latitude: loc.latitude, longitude: loc.longitude };
+    }
+  }
+  return { latitude: null, longitude: null };
+}
+
+async function resolveWoGeo(wo: WorkOrder): Promise<TaskGeo> {
+  if (wo.taskLatitude != null && wo.taskLongitude != null) {
+    return { latitude: wo.taskLatitude, longitude: wo.taskLongitude };
+  }
+  if (!wo.objectId) return { latitude: null, longitude: null };
+  const [obj] = await db
+    .select()
+    .from(objects)
+    .where(and(eq(objects.id, wo.objectId), eq(objects.tenantId, wo.tenantId)))
+    .limit(1);
+  return resolveWoGeoFromObject(wo, obj as LocatableObject | undefined);
 }
 
 function computeCentroid(
@@ -365,10 +406,7 @@ export async function analyzeTask(
   if (!isActiveForPlanning(wo)) return [];
 
   const config = await getRouteConfig(tenantId);
-  const taskGeo: TaskGeo = {
-    latitude: wo.taskLatitude ?? null,
-    longitude: wo.taskLongitude ?? null,
-  };
+  const taskGeo: TaskGeo = await resolveWoGeo(wo);
   const taskWindow = getEffectiveWindow(wo);
 
   const statusFilter =
@@ -496,8 +534,12 @@ export async function runRollingAnalysis(
       and(
         eq(routeClusters.tenantId, tenantId),
         eq(routeClusters.status, "active"),
-        // Inkludera bara klumpar vars planeringsperiod faller i vårt band
+        // Inkludera bara klumpar vars planeringsperiod faller i vårt band —
+        // MEN centroid-lösa klumpar (centerLatitude IS NULL) är trasiga
+        // (osynliga på kartan, geo-villkor ej validerbart) och löses alltid
+        // upp för ombyggnad, även utanför bandet.
         or(
+          isNull(routeClusters.centerLatitude),
           isNull(routeClusters.earliestDeliveryAt),
           and(
             gte(routeClusters.earliestDeliveryAt, bandStart),
@@ -556,6 +598,23 @@ export async function runRollingAnalysis(
       ),
     );
 
+  // Batch-ladda objekt för geo-fallback (WO utan egna task-koordinater)
+  const fallbackObjectIds = Array.from(
+    new Set(
+      eligibleWos
+        .filter((w) => (w.taskLatitude == null || w.taskLongitude == null) && w.objectId)
+        .map((w) => w.objectId as string),
+    ),
+  );
+  const objectById = new Map<string, LocatableObject>();
+  if (fallbackObjectIds.length > 0) {
+    const objRows = await db
+      .select()
+      .from(objects)
+      .where(and(eq(objects.tenantId, tenantId), inArray(objects.id, fallbackObjectIds)));
+    for (const o of objRows) objectById.set(o.id, o as LocatableObject);
+  }
+
   const tasks: ActiveTask[] = [];
   for (const wo of eligibleWos) {
     try {
@@ -582,10 +641,10 @@ export async function runRollingAnalysis(
       const taskStart = window.start ?? null;
       if (taskStart && minHorizonDays > 0 && taskStart < bandStart) continue;
 
-      const geo: TaskGeo = {
-        latitude: wo.taskLatitude ?? null,
-        longitude: wo.taskLongitude ?? null,
-      };
+      const geo = resolveWoGeoFromObject(
+        wo as WorkOrder,
+        wo.objectId ? objectById.get(wo.objectId) : null,
+      );
 
       tasks.push({
         id: wo.id,
@@ -927,13 +986,36 @@ export async function processRouteTask(
       .update(workOrders)
       .set({ routeClusterId: best.cluster.id, routeClusterCalculatedAt: now })
       .where(and(eq(workOrders.id, taskId), eq(workOrders.tenantId, tenantId)));
+
+    // Reparera centroid-lös klump: om klumpen saknar center men uppgiften
+    // har (fallback-)geo, sätt centret så klumpen blir synlig på kartan.
+    if (best.cluster.centerLatitude == null || best.cluster.centerLongitude == null) {
+      const geoFix = await resolveWoGeo(wo2);
+      if (geoFix.latitude != null && geoFix.longitude != null) {
+        await db
+          .update(routeClusters)
+          .set({
+            centerLatitude: geoFix.latitude,
+            centerLongitude: geoFix.longitude,
+            updatedAt: now,
+          })
+          .where(
+            and(
+              eq(routeClusters.id, best.cluster.id),
+              eq(routeClusters.tenantId, tenantId),
+              isNull(routeClusters.centerLatitude),
+            ),
+          );
+      }
+    }
     return { action: "assigned", clusterId: best.cluster.id };
   }
 
   // Ingen befintlig klump matchar → skapa en ny near-term ruttklump för uppgiften.
   // (Near-term = ≤30d; längre horisonter skapas enbart av scheduler.)
   const config = await getRouteConfig(tenantId);
-  const geo2 = { lat: wo2.taskLatitude ?? null, lng: wo2.taskLongitude ?? null };
+  const geoResolved = await resolveWoGeo(wo2);
+  const geo2 = { lat: geoResolved.latitude, lng: geoResolved.longitude };
   const win2 = getEffectiveWindow(wo2);
   const precision2 = derivePrecision(win2.start);
 
