@@ -207,6 +207,98 @@ describe("Import 2.0 execute — API-nivå E2E", () => {
 // system_parent_id måste peka på ett FAKTISKT DB-objekt. Ett påhittat värde får
 // inte passera validering (skulle annars tyst importeras som rot), och ett äkta
 // DB-nummer måste både passera validering OCH parentas korrekt vid execute.
+describe("Import 2.0 — uppdaterings-rad med påhittad förälder behåller placering (Task #1356)", () => {
+  it("kopplar ALDRIG loss ett befintligt objekt när föräldern inte kan hittas", async () => {
+    // Befintlig hierarki: förälder → barn.
+    const [keepParent] = await db
+      .insert(objects)
+      .values({ tenantId: TENANT, customerId: CUSTOMER_ID, name: "Behåll-förälder", objectNumber: "KEEP-PARENT-1" })
+      .returning();
+    const [child] = await db
+      .insert(objects)
+      .values({
+        tenantId: TENANT,
+        customerId: CUSTOMER_ID,
+        name: "Behåll-barn",
+        objectNumber: "KEEP-CHILD-1",
+        parentId: keepParent.id,
+      })
+      .returning();
+
+    const matrix = [
+      ["Systemnummer", "Objektnamn", "Systemförälder"],
+      ["KEEP-CHILD-1", "Behåll-barn uppdaterad", "OBJ-NOPE-77"],
+    ];
+    const mappings = {
+      "0": { target: "system_id", type: "standard" as const },
+      "1": { target: "name", type: "standard" as const, required: true },
+      "2": { target: "system_parent_id", type: "standard" as const },
+    };
+    const up = await req("POST", "/api/import/objects-v2/upload", { userId: ADMIN, body: { matrix } });
+    const sessionId = up.body.session_id as string;
+    await req("PUT", `/api/import/objects-v2/${sessionId}/mappings`, { userId: ADMIN, body: { mappings } });
+    const exec = await req("POST", `/api/import/objects-v2/${sessionId}/execute`, {
+      userId: ADMIN,
+      body: { customerId: CUSTOMER_ID },
+    });
+    expect(exec.status).toBe(202);
+    for (let i = 0; i < 50; i++) {
+      const st = await req("GET", `/api/import/objects-v2/${sessionId}/status`, { userId: ADMIN });
+      if (st.body.status === "completed" || st.body.status === "failed") break;
+      await sleep(150);
+    }
+    const result = await req("GET", `/api/import/objects-v2/${sessionId}/result`, { userId: ADMIN });
+    expect(result.body?.status).toBe("completed");
+    expect(result.body?.summary?.updated).toBe(1);
+    // Uppdaterings-rader rot-ifieras aldrig — became_roots gäller bara skapade.
+    expect(result.body?.summary?.became_roots ?? 0).toBe(0);
+
+    const after = (await db.select().from(objects).where(eq(objects.id, child.id)))[0];
+    expect(after.name).toBe("Behåll-barn uppdaterad");
+    expect(after.parentId).toBe(keepParent.id); // placeringen behålls
+  });
+});
+
+describe("Import 2.0 — hoppa över-kaskad för utrustning (Task #1356)", () => {
+  it("utrustning hoppas över när primärraden hoppas över av användaren", async () => {
+    const matrix = [
+      ["Systemnummer", "Objektnamn", "Interimsnummer", "Interims-förälder"],
+      ["", "Kaskad Org", "2000", ""],
+      ["", "Kaskad Butik", "20", "2000"],
+      ["", "Kaskad Kärl", "20", ""],
+    ];
+    const up = await req("POST", "/api/import/objects-v2/upload", {
+      userId: ADMIN,
+      body: { matrix, fileName: "kaskad.xlsx" },
+    });
+    const sessionId = up.body.session_id as string;
+    await req("PUT", `/api/import/objects-v2/${sessionId}/mappings`, { userId: ADMIN, body: { mappings: MAPPINGS } });
+    await req("POST", `/api/import/objects-v2/${sessionId}/validate`, { userId: ADMIN });
+
+    // Hoppa över butiksraden (rad 2 = primär för interim 20).
+    const exec = await req("POST", `/api/import/objects-v2/${sessionId}/execute`, {
+      userId: ADMIN,
+      body: { customerId: CUSTOMER_ID, skipRowNumbers: [2] },
+    });
+    expect(exec.status).toBe(202);
+    for (let i = 0; i < 50; i++) {
+      const st = await req("GET", `/api/import/objects-v2/${sessionId}/status`, { userId: ADMIN });
+      if (st.body.status === "completed" || st.body.status === "failed") break;
+      await sleep(150);
+    }
+    const result = await req("GET", `/api/import/objects-v2/${sessionId}/result`, { userId: ADMIN });
+    expect(result.body?.status).toBe("completed");
+    // Org skapas; butik hoppad av användaren; kärlet kaskad-hoppas (primär saknas).
+    expect(result.body?.summary?.skipped_missing_parent).toBe(1);
+    expect(result.body?.summary?.errors).toBe(0);
+
+    const all = await db.select().from(objects).where(eq(objects.tenantId, TENANT));
+    expect(all.find((o) => o.name === "Kaskad Org")).toBeTruthy();
+    expect(all.find((o) => o.name === "Kaskad Butik")).toBeUndefined();
+    expect(all.find((o) => o.name === "Kaskad Kärl")).toBeUndefined();
+  });
+});
+
 describe("Import 2.0 — system_parent_id DB-referens", () => {
   const SP_MAPPINGS = {
     "0": { target: "name", type: "standard" as const, required: true },
@@ -221,17 +313,21 @@ describe("Import 2.0 — system_parent_id DB-referens", () => {
     return { sessionId, validation: val.body };
   }
 
-  it("avvisar ett påhittat system_parent_id som inte finns i DB", async () => {
+  it("varnar (topphierarki) för påhittat system_parent_id som inte finns i DB", async () => {
+    // Task #1356: saknad systemförälder blockerar inte — raden blir rot med varning.
     // OBS: andra cellen hålls < 15 tecken så att header-detektorn inte tar
     // dataraden för en beskrivningsrad (looksLikeDescriptionRow).
     const { validation } = await uploadValidate([
       ["Objektnamn", "Systemförälder"],
       ["Barn utan riktig förälder", "OBJ-NOPE-9"],
     ]);
-    expect(validation.summary.invalid).toBe(1);
+    expect(validation.summary.invalid).toBe(0);
+    expect(validation.summary.new_roots).toBe(1);
     const row = validation.rows.find((r: any) => r.rowNumber === 1)!;
-    expect(row.status).toBe("invalid");
-    expect(row.issues.some((i: any) => i.field === "system_parent_id")).toBe(true);
+    expect(row.status).toBe("warning");
+    const issue = row.issues.find((i: any) => i.field === "system_parent_id");
+    expect(issue?.severity).toBe("warning");
+    expect(issue?.message).toContain("topphierarki");
   });
 
   it("godkänner ett äkta DB-system_parent_id och parentar barnet under det vid execute", async () => {
@@ -267,9 +363,9 @@ describe("Import 2.0 — system_parent_id DB-referens", () => {
     expect(child.parentId).toBe(parent.id); // parentad under DB-föräldern, ej rot
   });
 
-  it("vägrar importera ett barn som rot när validate hoppas över och föräldern är påhittad", async () => {
-    // Defense-in-depth: execute kan köras med ENBART mappningar (utan validate).
-    // Ett påhittat system_parent_id får då ALDRIG tyst falla tillbaka till rot.
+  it("importerar barn med påhittad förälder som topphierarki (rot) med redovisad varning", async () => {
+    // Task #1356: execute utan validate — påhittat system_parent_id ⇒ raden
+    // importeras som rot, men ALDRIG tyst: became_roots redovisas i resultatet.
     const up = await req("POST", "/api/import/objects-v2/upload", {
       userId: ADMIN,
       body: {
@@ -294,12 +390,15 @@ describe("Import 2.0 — system_parent_id DB-referens", () => {
       await sleep(150);
     }
     const result = await req("GET", `/api/import/objects-v2/${sessionId}/result`, { userId: ADMIN });
-    expect(result.body?.summary?.created).toBe(0);
-    expect(result.body?.summary?.errors).toBeGreaterThanOrEqual(1);
+    expect(result.body?.status).toBe("completed");
+    expect(result.body?.summary?.created).toBe(1);
+    expect(result.body?.summary?.errors).toBe(0);
+    expect(result.body?.summary?.became_roots).toBe(1);
 
     const orphan = (await db.select().from(objects).where(eq(objects.tenantId, TENANT))).find(
       (o) => o.name === "Föräldralöst barn",
-    );
-    expect(orphan).toBeUndefined(); // får ALDRIG skapas som rot
+    )!;
+    expect(orphan).toBeTruthy();
+    expect(orphan.parentId).toBeNull(); // skapad som topphierarki (rot)
   });
 });

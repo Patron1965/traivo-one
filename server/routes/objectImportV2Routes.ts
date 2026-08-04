@@ -323,12 +323,15 @@ export function registerObjectImportV2Routes(app: Express): void {
           if (!sp || existingParents.has(sp)) continue;
           const row = byRow.get(r.rowNumber);
           if (!row) continue;
+          // Task #1356: saknad systemförälder stoppar inte importen — raden
+          // blir en topphierarki (rot). Varning informerar användaren, som kan
+          // bocka i "hoppa över" om raden inte ska importeras alls.
           row.issues.push({
             field: "system_parent_id",
-            message: `Systemföräldranummer "${sp}" finns inte i Traivo`,
-            severity: "error",
+            message: `Systemföräldranummer "${sp}" finns inte i Traivo — raden importeras som topphierarki (rot)`,
+            severity: "warning",
           });
-          row.status = "invalid";
+          if (row.status === "valid") row.status = "warning";
         }
       }
 
@@ -577,6 +580,17 @@ export function registerObjectImportV2Routes(app: Express): void {
         valid: rows.filter((r) => r.status === "valid").length,
         warning: rows.filter((r) => r.status === "warning").length,
         invalid: rows.filter((r) => r.status === "invalid").length,
+        // Task #1356: rader vars förälder inte kunde hittas — de importeras
+        // som nya toppnivåer (rot) om de inte hoppas över.
+        new_roots: rows.filter(
+          (r) =>
+            r.status !== "invalid" &&
+            r.issues.some(
+              (i: any) =>
+                i.severity === "warning" &&
+                (i.field === "interim_parent_id" || i.field === "system_parent_id"),
+            ),
+        ).length,
       };
       const validation = { summary, rows, duplicateWarnings };
 
@@ -798,9 +812,12 @@ export function registerObjectImportV2Routes(app: Express): void {
         if (validation?.rows) {
           for (const r of validation.rows) if (r.status === "invalid") skip.add(r.rowNumber);
         }
-        const resolved: ResolvedRow[] = rawRows
-          .map((raw, i) => resolveRow(i + 1, raw, mappings))
-          .filter((r) => !skip.has(r.rowNumber));
+        // Task #1356: hierarkiplanen (primär/utrustning-klassning per interim-
+        // grupp) måste byggas på ALLA rader — annars omklassas en utrustningsrad
+        // till primär när användaren hoppar över butiksraden, och skapas tyst
+        // som rot. Skippade rader filtreras bort EFTER planeringen istället.
+        const resolvedAll: ResolvedRow[] = rawRows.map((raw, i) => resolveRow(i + 1, raw, mappings));
+        const resolved: ResolvedRow[] = resolvedAll.filter((r) => !skip.has(r.rowNumber));
 
         // Befintliga objekt via systemnummer (uppdatera) + externt_id.
         // Slå även upp objekt som refereras som system_parent_id så att en
@@ -867,15 +884,17 @@ export function registerObjectImportV2Routes(app: Express): void {
         }
 
         const plan = buildHierarchyPlan(
-          resolved,
+          resolvedAll,
           new Set(existingByObjectNumber.keys()),
           new Set(existingByExternalId.keys()),
           new Set(existingByInterim.keys()),
         );
 
         // Cykel-rader hoppas över (ska redan vara fångade i validering).
+        // Skippade rader (användarval + ogiltiga) filtreras här — EFTER att
+        // hierarkiplanen klassat primär/utrustning på hela filen (Task #1356).
         const cycleSet = new Set(plan.cycleRowNumbers);
-        const ordered = plan.ordered.filter((p) => !cycleSet.has(p.rowNumber));
+        const ordered = plan.ordered.filter((p) => !cycleSet.has(p.rowNumber) && !skip.has(p.row.rowNumber));
 
         // §6.1: markera överhoppade rader (uttryckligt skippade, ogiltiga,
         // cykler) som "skipped" i den persistenta radmängden.
@@ -884,6 +903,7 @@ export function registerObjectImportV2Routes(app: Express): void {
           status: "imported" | "skipped" | "invalid",
           objectId: string | null,
           msg?: string,
+          msgSeverity: "error" | "warning" = "error",
         ) => {
           try {
             await db
@@ -892,7 +912,7 @@ export function registerObjectImportV2Routes(app: Express): void {
                 status,
                 objectId: objectId ?? null,
                 ...(msg
-                  ? { validationMsgs: [{ field: "execute", message: msg, severity: "error" }] as any }
+                  ? { validationMsgs: [{ field: "execute", message: msg, severity: msgSeverity }] as any }
                   : {}),
                 updatedAt: new Date(),
               })
@@ -931,6 +951,9 @@ export function registerObjectImportV2Routes(app: Express): void {
         const customerByObjectId = new Map<string, string>();
         let created = 0;
         let updated = 0;
+        // Task #1356: rader vars förälder inte kunde resolvas.
+        let becameRoots = 0; // primärrader → topphierarki (rot)
+        let skippedMissingParent = 0; // utrustningsrader utan primär → hoppas över
         let errors = 0;
         const rootObjectIds = new Set<string>();
         const total = ordered.length || 1;
@@ -1147,20 +1170,32 @@ export function registerObjectImportV2Routes(app: Express): void {
               (parentId ? customerByObjectId.get(parentId) : undefined) ??
               fallbackCustomerId;
 
-            // Fail-closed (defense-in-depth): execute kan köras utan föregående
-            // validate (endast mappningar krävs). Om en rad UTTRYCKLIGEN pekar ut
-            // en förälder men den inte kan resolvas får raden ALDRIG tyst
-            // importeras som rot — då skulle ett påhittat system_parent_id
-            // korrumpera hierarkin trots att validate-fixen stänger validate-vägen.
+            // Task #1356: en rad som UTTRYCKLIGEN pekar ut en förälder som inte
+            // kan resolvas importeras som topphierarki (rot) — men aldrig TYST:
+            // varningen stämplas på raden (validationMsgs) och antalet
+            // redovisas i resultatet (became_roots). Utrustningsrader (delar
+            // interim med en primärrad) kan inte bli rötter — utan sin primär
+            // hoppas de över, annars skulle utrustning sväva fritt i trädet.
             const declaresParent =
               item.kind === "equipment"
                 ? !!item.interimId
                 : !!(row.fields.system_parent_id || row.fields.interim_parent_id);
+            let unresolvedParent = false;
             if (declaresParent && !parentId) {
-              throw new Error(
-                `Föräldern kunde inte hittas (system_parent_id="${row.fields.system_parent_id ?? ""}", interim_parent_id="${row.fields.interim_parent_id ?? ""}") — raden importeras inte som rotobjekt.`,
-              );
+              if (item.kind === "equipment") {
+                await markRow(
+                  row.rowNumber,
+                  "skipped",
+                  null,
+                  `Primärraden för interim "${item.interimId ?? ""}" importerades inte — utrustningsraden hoppas över.`,
+                  "warning",
+                );
+                skippedMissingParent++;
+                continue;
+              }
+              unresolvedParent = true;
             }
+            const unresolvedParentRef = `(system_parent_id="${row.fields.system_parent_id ?? ""}", interim_parent_id="${row.fields.interim_parent_id ?? ""}")`;
 
             // Bestäm mål-objekt-id för uppdatering (Systemnummer > externt_id >
             // Interimsnummer).
@@ -1347,7 +1382,18 @@ export function registerObjectImportV2Routes(app: Express): void {
               depthByObjectId.set(targetId, parentId ? (depthByObjectId.get(parentId) ?? 0) + 1 : 0);
               if (!parentId) rootObjectIds.add(targetId);
               updated++;
-              await markRow(item.row.rowNumber, "imported", targetId);
+              // Uppdaterings-rader ROT-IFIERAS ALDRIG: en ej-resolverbar förälder
+              // får inte koppla loss ett befintligt objekt från sin nuvarande
+              // placering (destruktivt). Behåll placeringen och redovisa ärligt.
+              await markRow(
+                item.row.rowNumber,
+                "imported",
+                targetId,
+                unresolvedParent
+                  ? `Föräldern kunde inte hittas ${unresolvedParentRef} — objektets befintliga placering behålls.`
+                  : undefined,
+                "warning",
+              );
             } else {
               // Interim-primärer utan systemnummer får objectNumber MALL-<interim>
               // så re-import matchar dem (uppdaterar istället för dubblerar).
@@ -1420,7 +1466,16 @@ export function registerObjectImportV2Routes(app: Express): void {
               depthByObjectId.set(createdObj.id, parentId ? (depthByObjectId.get(parentId) ?? 0) + 1 : 0);
               if (!parentId) rootObjectIds.add(createdObj.id);
               created++;
-              await markRow(item.row.rowNumber, "imported", createdObj.id);
+              if (unresolvedParent) becameRoots++;
+              await markRow(
+                item.row.rowNumber,
+                "imported",
+                createdObj.id,
+                unresolvedParent
+                  ? `Föräldern kunde inte hittas ${unresolvedParentRef} — objektet importerades som topphierarki (rot).`
+                  : undefined,
+                "warning",
+              );
             }
           } catch (err: any) {
             errors++;
@@ -1454,8 +1509,11 @@ export function registerObjectImportV2Routes(app: Express): void {
             total_rows: resolved.length,
             created,
             updated,
-            skipped: rawRows.length - resolved.length,
+            skipped: rawRows.length - resolved.length + skippedMissingParent,
             errors,
+            // Task #1356: rader med ej-resolverbar förälder.
+            became_roots: becameRoots,
+            skipped_missing_parent: skippedMissingParent,
           },
           hierarchy: {
             root_objects: rootObjectIds.size,

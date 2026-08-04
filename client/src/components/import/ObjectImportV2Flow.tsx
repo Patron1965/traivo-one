@@ -97,14 +97,22 @@ interface DuplicateWarning {
   existing: Array<{ id: string; objectNumber: string | null; name: string; address: string | null }>;
 }
 interface ValidationResponse {
-  summary: { total_rows: number; valid: number; warning: number; invalid: number } | null;
+  summary: { total_rows: number; valid: number; warning: number; invalid: number; new_roots?: number } | null;
   rows: ValidatedRow[];
   duplicateWarnings?: DuplicateWarning[];
 }
 
 interface ExecuteResponse {
   status: string;
-  summary: { total_rows: number; created: number; updated: number; skipped: number; errors: number };
+  summary: {
+    total_rows: number;
+    created: number;
+    updated: number;
+    skipped: number;
+    errors: number;
+    became_roots?: number;
+    skipped_missing_parent?: number;
+  };
   hierarchy: { root_objects: number; total_levels: number; total_objects: number };
   customer_id: string;
   cluster_id: string;
@@ -839,6 +847,24 @@ export function ObjectImportV2Flow() {
                     </a>
                   </div>
                 )}
+                {(validation.summary.new_roots ?? 0) > 0 && (
+                  <div
+                    className="flex items-start gap-2 rounded-md border border-warning/40 bg-warning/10 p-3 text-sm"
+                    data-testid="banner-new-roots"
+                  >
+                    <AlertTriangle className="h-5 w-5 shrink-0 mt-0.5 text-warning" />
+                    <div className="space-y-1">
+                      <p className="font-medium text-foreground">
+                        {validation.summary.new_roots} rad(er) blir nya toppnivåer
+                      </p>
+                      <p className="text-muted-foreground">
+                        Föräldern kunde inte hittas i filen eller i Traivo — raderna importeras som
+                        topphierarkier (rot). Bocka i "Hoppa över" på en rad om den inte ska
+                        importeras alls.
+                      </p>
+                    </div>
+                  </div>
+                )}
                 <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
                   <div className="rounded-md border border-border p-3" data-testid="summary-total">
                     <p className="text-2xl font-semibold">{validation.summary.total_rows}</p>
@@ -892,6 +918,11 @@ export function ObjectImportV2Flow() {
                                   onCheckedChange={() => toggleSkipRow(r.rowNumber)}
                                   data-testid={`checkbox-skip-${r.rowNumber}`}
                                   aria-label={`Hoppa över rad ${r.rowNumber}`}
+                                  title={
+                                    r.status === "invalid"
+                                      ? "Ogiltiga rader hoppas alltid över automatiskt och kan inte avmarkeras."
+                                      : undefined
+                                  }
                                 />
                               </TableCell>
                             </TableRow>
@@ -901,7 +932,9 @@ export function ObjectImportV2Flow() {
                   </div>
                 )}
                 <p className="text-xs text-muted-foreground">
-                  Ogiltiga rader hoppas alltid över. Bocka i ytterligare rader för att utesluta dem från importen.
+                  Ogiltiga rader hoppas alltid över automatiskt (krysset är låst). Giltiga rader och
+                  varningsrader kan bockas i för att uteslutas från importen — t.ex. rader som annars
+                  skulle bli nya toppnivåer.
                 </p>
               </>
             )}
@@ -1032,6 +1065,30 @@ export function ObjectImportV2Flow() {
                   Hierarki: {result.hierarchy.root_objects} rotobjekt, {result.hierarchy.total_levels} nivåer,{" "}
                   {result.hierarchy.total_objects} objekt totalt.
                 </div>
+                {((result.summary.became_roots ?? 0) > 0 || (result.summary.skipped_missing_parent ?? 0) > 0) && (
+                  <div
+                    className="flex items-start gap-2 rounded-md border border-warning/40 bg-warning/10 p-3 text-sm"
+                    data-testid="result-became-roots"
+                  >
+                    <AlertTriangle className="h-5 w-5 shrink-0 mt-0.5 text-warning" />
+                    <div className="space-y-1 text-muted-foreground">
+                      {(result.summary.became_roots ?? 0) > 0 && (
+                        <p>
+                          <span className="font-medium text-foreground">
+                            {result.summary.became_roots} objekt importerades som nya toppnivåer
+                          </span>{" "}
+                          eftersom föräldern inte kunde hittas.
+                        </p>
+                      )}
+                      {(result.summary.skipped_missing_parent ?? 0) > 0 && (
+                        <p>
+                          {result.summary.skipped_missing_parent} utrustningsrad(er) hoppades över
+                          eftersom deras primärrad inte importerades.
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                )}
                 <ImportUndoButton />
                 <div className="flex flex-wrap items-center gap-2">
                   {/* Task #1357: primär åtgärd — visa de importerade objekten i

@@ -192,10 +192,13 @@ describe("resolveRow", () => {
 });
 
 describe("validateCrossRow", () => {
-  it("errors on unknown interim parent", () => {
+  it("varnar (topphierarki) för okänd interimförälder — inte blockerande fel", () => {
+    // Task #1356: saknad interimförälder ⇒ raden blir rot, med varning.
     const rows = [resolved(1, { interim_id: "I1", interim_parent_id: "MISSING" })];
     const issues = validateCrossRow(rows);
-    expect(issues.some((i) => i.field === "interim_parent_id" && i.severity === "error")).toBe(true);
+    const issue = issues.find((i) => i.field === "interim_parent_id");
+    expect(issue?.severity).toBe("warning");
+    expect(issue?.message).toContain("topphierarki");
   });
   it("detects self-parent and circular references", () => {
     const self = validateCrossRow([resolved(1, { interim_id: "I1", interim_parent_id: "I1" })]);
