@@ -1,0 +1,75 @@
+Instruktion till Replit – artikelkalkyl i Traivo
+Bygg om sektionen Pris & Ekonomi till en generell artikelkalkyl som fungerar lika för inköpta varor, egentillverkade/sammansatta produkter och tjänsteartiklar.
+Grundprincipen ska vara:
+1. Kostnader byggs först upp till en självkostnad.
+2. Försäljningspriset beräknas därefter separat.
+Det är viktigt att listpris/försäljningspris aldrig ingår i beräkningen av självkostnaden.
+Första versionen ska vara enkel och huvudsakligen manuell. Senare ska respektive kostnad kunna automatiseras via exempelvis inköpshistorik, fraktdata, lagerdata eller API.
+Fält
+Funktion
+Inköpspris / grundkostnad
+Artikelns direkta inköpskostnad per enhet. För tjänster kan detta vara 0.
+Materialkostnad
+Ytterligare material som förbrukas för artikeln.
+Fraktkostnad
+Beräknad/allokerad fraktkostnad per artikel/enhet.
+Emballagekostnad
+Pall, kartong, emballage, packmaterial etc. per enhet.
+Miljö-/återvinningsavgift
+Avgifter eller beräknad kostnad för omhändertagande/förpackningsansvar etc.
+Produktionstid
+Tid i minuter som krävs för att producera, montera, förbereda eller utföra artikeln.
+Timkostnad
+Kostnadssats för vald produktionstid/tidstyp.
+Beräknad tidskostnad
+Produktionstid / 60 × timkostnad. Ska räknas automatiskt.
+Lagerkostnad
+Beräknad kostnad per artikel för lagerhållning.
+Internkostnad / hantering
+Övrig intern kostnad, exempelvis administration, plock, pack eller hantering.
+Övrig kostnad
+Generellt fält för kostnader som inte passar ovan.
+Systemet summerar dessa till:
+Självkostnad = inköpspris + material + frakt + emballage + miljöavgift + tidskostnad + lagerkostnad + internkostnad + övrig kostnad
+Detta ska vara artikelns centrala kostvärde.
+Därefter ska prissättningen ligga i ett separat block:
+Försäljningspris / listpris
+Traivo ska stödja två alternativa beräkningssätt:
+Påslag på kostnad
+Försäljningspris = självkostnad × (1 + påslag %)
+Exempel:
+Självkostnad 100 kr + 25 % påslag = 125 kr
+Bruttomarginal
+Försäljningspris = självkostnad / (1 − marginal %)
+Exempel:
+Självkostnad 100 kr och önskad marginal 25 % = 133,33 kr
+Det är viktigt att Traivo skiljer på påslag och marginal, eftersom de företagsekonomiskt inte är samma sak.
+Om användaren själv skriver ett listpris ska systemet i stället räkna baklänges och visa:
+Täckningsbidrag per enhet = listpris − självkostnad
+och
+Marginal % = (listpris − självkostnad) / listpris × 100
+Förändring mot bilden som den ser ut nu
+I nuvarande Traivo skulle jag alltså ändra logiken så att Standardkostnad inte ligger som ännu en kostnad ovanpå inköpspris, material osv. Standardkostnaden bör snarare vara det beräknade resultatet av kostnadskalkylen, alternativt ett separat manuellt alternativ om man uttryckligen vill använda en fast standardkostnad.
+Det bör därför visuellt bli ungefär:
+KOSTNADSKALKYL
+Inköpspris
+Material
+Frakt
+Emballage
+Miljöavgift
+Produktion/tid
+Lager
+Intern hantering
+Övrigt
+= SJÄLVKOSTNAD
+sedan:
+PRISKALKYL
+Prissättningsmetod: Manuell / Påslag / Marginal
+Påslag % eller önskad marginal %
+= Beräknat listpris
+och längst ned tydligt:
+Självkostnad: 128 kr
+Listpris: 175 kr
+Täckningsbidrag: 47 kr
+Bruttomarginal: 26,9 %
+Det här är en betydligt renare modell och framför allt gör den att samma artikelmotor kan användas för en skruv, en sopsäck, en egenmonterad produkt, en servicetimme eller en komplett KINAB-tjänst. Sen kan vi bygga nästa nivå där exempelvis frakt, lager och faktisk produktionstid börjar räknas fram automatiskt.
