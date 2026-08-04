@@ -13,8 +13,9 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { useToast } from "@/hooks/use-toast";
 import { useUpload } from "@/hooks/use-upload";
 import { apiRequest } from "@/lib/queryClient";
-import { metadataTypeOptionLabel, metadataDisplayName, METADATA_DATATYPE_LABELS } from "@/lib/metadata-display";
+import { metadataTypeRowLabel, metadataDisplayName, METADATA_DATATYPE_LABELS } from "@/lib/metadata-display";
 import { useMetadataAreas } from "@/hooks/use-metadata-areas";
+import { useMetadataFavorites } from "@/hooks/use-metadata-favorites";
 import type { MetadataInstance } from "@shared/schema";
 import {
   FileText, Image as ImageIcon, Upload, Download, Trash2, RotateCcw, Cog,
@@ -1579,6 +1580,10 @@ export function MetadataAddButton({
     return a.namn.localeCompare(b.namn, "sv");
   };
 
+  // Favoritmarkerade typer (per användare + tenant, server-persisterade) visas
+  // överst i en egen "Favoriter"-grupp.
+  const { favoriteSet, toggleFavorite } = useMetadataFavorites();
+
   // Väljar-alternativ grupperade per metadataområde (SelectGroup + SelectLabel),
   // med familjer samlade: rot först, barn direkt efter (indenterade).
   const dropdownGroups = useMemo(() => {
@@ -1621,8 +1626,22 @@ export function MetadataAddButton({
       if (a.sortOrder !== b.sortOrder) return a.sortOrder - b.sortOrder;
       return a.label.localeCompare(b.label, "sv");
     });
+
+    // Favoriter överst i egen grupp (raderna finns kvar i sina områdesgrupper).
+    const favRows = addableTypes
+      .filter((t) => favoriteSet.has(t.namn))
+      .sort(baseSort)
+      .map((t) => ({ type: t, isChild: false }));
+    if (favRows.length > 0) {
+      groups.unshift({
+        area: "__favoriter__",
+        label: "Favoriter",
+        sortOrder: -1,
+        rows: favRows,
+      });
+    }
     return groups;
-  }, [addableTypes, childrenByParentId, areaOrder, areaLabel]);
+  }, [addableTypes, childrenByParentId, areaOrder, areaLabel, favoriteSet]);
 
   // Familjemedlemmar för vald typ: hela familjen (rot + syskon) som valbara
   // värdefält. Tom/1 medlem → inte en familj (enskilt fält).
@@ -1744,25 +1763,63 @@ export function MetadataAddButton({
                   <SelectContent>
                     {dropdownGroups.map((g) => (
                       <SelectGroup key={g.area}>
-                        <SelectLabel>{g.label}</SelectLabel>
+                        <SelectLabel className="bg-muted/70 -mx-1 mb-0.5 rounded-sm pl-2 pr-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground flex items-center gap-1.5">
+                          {g.area === "__favoriter__" && (
+                            <Star className="h-3 w-3 fill-amber-400 text-amber-400" />
+                          )}
+                          {g.label}
+                        </SelectLabel>
                         {g.rows.map(({ type: t, isChild }) => {
-                          const dn = isChild ? metadataDisplayName(t) : metadataTypeOptionLabel(t);
+                          const dn = isChild ? metadataDisplayName(t) : metadataTypeRowLabel(t);
                           const typLabel =
                             (METADATA_DATATYPE_LABELS as Record<string, string>)[t.datatyp ?? "string"] ??
                             (t.datatyp ?? "");
+                          const isFav = favoriteSet.has(t.namn);
                           return (
                             <SelectItem
-                              key={t.id || t.namn}
+                              key={`${g.area}-${t.id || t.namn}`}
                               value={t.namn}
-                              className={isChild ? "pl-8" : undefined}
+                              className={isChild ? "pl-8 pr-14" : "pr-14"}
                               data-testid={`option-metadata-type-${t.namn}`}
                             >
                               <span className="flex items-center gap-2 w-full">
                                 <span className="flex-1 truncate">{dn}</span>
-                                <span className="ml-2 text-[10px] text-muted-foreground shrink-0">
+                                <Badge
+                                  variant="outline"
+                                  className="ml-2 shrink-0 px-1.5 py-0 text-[10px] font-normal text-muted-foreground"
+                                >
                                   {typLabel}
-                                </span>
+                                </Badge>
                               </span>
+                              <button
+                                type="button"
+                                tabIndex={-1}
+                                aria-label={isFav ? "Ta bort favorit" : "Markera som favorit"}
+                                title={isFav ? "Ta bort favorit" : "Markera som favorit"}
+                                className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 hover:bg-accent"
+                                onPointerDown={(e) => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                }}
+                                onPointerUp={(e) => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                }}
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  toggleFavorite(t.namn);
+                                }}
+                                data-testid={`button-favorite-metadata-type-${t.namn}`}
+                              >
+                                <Star
+                                  className={
+                                    isFav
+                                      ? "h-3.5 w-3.5 fill-amber-400 text-amber-400"
+                                      : "h-3.5 w-3.5 text-muted-foreground/40"
+                                  }
+                                />
+                              </button>
                             </SelectItem>
                           );
                         })}

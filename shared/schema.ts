@@ -7235,6 +7235,22 @@ export const mobileUserPreferences = pgTable("mobile_user_preferences", {
   index("idx_mobile_prefs_tenant").on(table.tenantId),
 ]);
 
+// Favoritmarkerade metadatatyper i webb-appens typ-väljare ("Lägg till
+// metadata"). Per användare + tenant; `favorites` är en jsonb-array av
+// metadata_katalog.namn (den immutabla matchningsnyckeln, ej id — namn är
+// unikt per tenant och överlever export/import).
+export const userMetadataFavorites = pgTable("user_metadata_favorites", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id).notNull(),
+  tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
+  favorites: jsonb("favorites").default([]).notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex("idx_user_metadata_favorites_user_tenant").on(table.userId, table.tenantId),
+]);
+
+export type UserMetadataFavorites = typeof userMetadataFavorites.$inferSelect;
+
 export const insertMobileUserPreferencesSchema = createInsertSchema(mobileUserPreferences).omit({ id: true, updatedAt: true });
 export type MobileUserPreference = typeof mobileUserPreferences.$inferSelect;
 export type InsertMobileUserPreference = z.infer<typeof insertMobileUserPreferencesSchema>;

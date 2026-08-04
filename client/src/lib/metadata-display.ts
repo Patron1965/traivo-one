@@ -34,6 +34,23 @@ export const METADATA_DATATYPE_LABELS: Record<string, string> = {
   file: "Fil",
 };
 
+// Radetikett i typ-väljaren när raden redan står under sin områdes-
+// grupprubrik och datatypen visas som separat badge: "{nummer}. {Visningsnamn}"
+// — utan "(område)" och utan "· datatyp" (Task #1360: ingen dubbeltext).
+export function metadataTypeRowLabel(
+  t?: {
+    visningsnamn?: string | null;
+    namn?: string | null;
+    displayNumber?: number | null;
+  } | null,
+): string {
+  if (!t) return "";
+  const prefix = t.displayNumber != null ? `${t.displayNumber}. ` : "";
+  const name = metadataDisplayName(t);
+  const displayName = name ? name.charAt(0).toUpperCase() + name.slice(1) : name;
+  return `${prefix}${displayName}`;
+}
+
 // Enhetlig etikett för en metadatatyp i "Lägg till metadata"-väljare.
 // Bygger: "{nummer}. {Visningsnamn} (kategori) · datatyp".
 // Använder metadataDisplayName för namn (visningsnamn → namn med

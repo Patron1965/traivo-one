@@ -2,7 +2,7 @@ import { Router, Request, Response } from "express";
 import { z, ZodError } from "zod";
 import { db } from "./db";
 import { eq, and, isNull } from "drizzle-orm";
-import { metadataKatalog, metadataKatalogKunder, metadataAreas, metadataVarden, articles, customers, objects } from "@shared/schema";
+import { metadataKatalog, metadataKatalogKunder, metadataAreas, metadataVarden, articles, customers, objects, userMetadataFavorites } from "@shared/schema";
 import { inArray } from "drizzle-orm";
 import { getErrorMessage } from "./routes/helpers";
 import { parseFormula } from "./metadata-formula";
@@ -63,6 +63,69 @@ export const metadataRouter = Router();
 // ============================================================================
 // METADATATYPER (KATALOG) ENDPOINTS
 // ============================================================================
+
+// ============================================================================
+// FAVORITER — favoritmarkerade metadatatyper i typ-väljaren.
+// Per användare + tenant; lagras som array av metadata_katalog.namn.
+// ============================================================================
+
+function getAuthenticatedUserId(req: Request): string | null {
+  const sub = (req as any).user?.claims?.sub;
+  return typeof sub === "string" && sub.length > 0 ? sub : null;
+}
+
+metadataRouter.get("/favorites", async (req: Request, res: Response) => {
+  try {
+    const tenantId = getTenantIdWithFallback(req);
+    const userId = getAuthenticatedUserId(req);
+    if (!tenantId || !userId) {
+      return res.status(401).json({ error: "Ej autentiserad" });
+    }
+    const [row] = await db
+      .select()
+      .from(userMetadataFavorites)
+      .where(and(eq(userMetadataFavorites.userId, userId), eq(userMetadataFavorites.tenantId, tenantId)))
+      .limit(1);
+    const favorites = Array.isArray(row?.favorites)
+      ? (row!.favorites as unknown[]).filter((v): v is string => typeof v === "string")
+      : [];
+    res.json({ favorites });
+  } catch (error) {
+    console.error("Error fetching metadata favorites:", error);
+    res.status(500).json({ error: "Kunde inte hämta favoriter" });
+  }
+});
+
+const favoritesPutSchema = z.object({
+  favorites: z.array(z.string().min(1).max(200)).max(500),
+});
+
+metadataRouter.put("/favorites", async (req: Request, res: Response) => {
+  try {
+    const tenantId = getTenantIdWithFallback(req);
+    const userId = getAuthenticatedUserId(req);
+    if (!tenantId || !userId) {
+      return res.status(401).json({ error: "Ej autentiserad" });
+    }
+    const parsed = favoritesPutSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ error: "Ogiltig favoritlista", message: parsed.error.message });
+    }
+    // Dedupe med bevarad ordning.
+    const favorites = Array.from(new Set(parsed.data.favorites));
+    await db
+      .insert(userMetadataFavorites)
+      .values({ userId, tenantId, favorites })
+      .onConflictDoUpdate({
+        target: [userMetadataFavorites.userId, userMetadataFavorites.tenantId],
+        set: { favorites, updatedAt: new Date() },
+      });
+    res.json({ favorites });
+  } catch (error) {
+    console.error("Error saving metadata favorites:", error);
+    res.status(500).json({ error: "Kunde inte spara favoriter" });
+  }
+});
 
 metadataRouter.get("/types", async (req: Request, res: Response) => {
   try {
