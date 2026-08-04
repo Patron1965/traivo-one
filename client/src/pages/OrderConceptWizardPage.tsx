@@ -22,6 +22,7 @@ import type {
 } from "@shared/schema";
 import { normalizeInvoiceFrequency, buildInvoicePatch } from "@shared/order-concept-method";
 import { computeConceptOrderValue } from "@shared/order-concept-value";
+import { resolveArticleCostBasisOre } from "@shared/article-pricing";
 import Step1NameCustomer from "@/components/orderkoncept/Step1NameCustomer";
 import Step2PriceReference from "@/components/orderkoncept/Step2PriceReference";
 import Step3Invoicing from "@/components/orderkoncept/Step3Invoicing";
@@ -376,7 +377,7 @@ export default function OrderConceptWizardPage() {
       return {
         unitPriceOre: ca.unitPrice ?? art?.listPrice ?? 0,
         quantity: ca.quantity || 1,
-        costOre: art?.cost ?? 0,
+        costOre: art ? resolveArticleCostBasisOre(art) : 0,
         productionTimeMinutes: art?.productionTime ?? 0,
       };
     }),

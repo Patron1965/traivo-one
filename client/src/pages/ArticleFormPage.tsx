@@ -201,6 +201,15 @@ interface ArticleFormData {
   freightCost: number;
   warehouseCost: number;
   markupPercent: number | null;
+  // Task #1350: artikelkalkyl — kostnadskalkyl → självkostnad → separat priskalkyl.
+  packagingCost: number;
+  environmentalFee: number;
+  hourlyCost: number;
+  otherCost: number;
+  /** "" = legacy (typ-styrd kostnadsbas, äldre artiklar), "calc" | "standard". */
+  costingMethod: "" | "calc" | "standard";
+  pricingMethod: "manual" | "markup" | "margin";
+  desiredMarginPercent: number | null;
   chargeModel: string;
   informationRequirements: InformationRequirement[];
   showMetadataFields: ShowMetadataRow[];
@@ -288,6 +297,13 @@ const emptyFormData: ArticleFormData = {
   freightCost: 0,
   warehouseCost: 0,
   markupPercent: null,
+  packagingCost: 0,
+  environmentalFee: 0,
+  hourlyCost: 0,
+  otherCost: 0,
+  costingMethod: "calc",
+  pricingMethod: "manual",
+  desiredMarginPercent: null,
   chargeModel: "",
   informationRequirements: [],
   showMetadataFields: [],
@@ -311,7 +327,6 @@ const ARTICLE_SECTIONS: { id: string; title: string; icon: LucideIcon }[] = [
   { id: "fasthakning", title: "Fasthakningslogik", icon: LinkIcon },
   { id: "antalslogik", title: "Antalslogik", icon: ListChecks },
   { id: "metadata", title: "Visa och uppdatera metadata", icon: Database },
-  { id: "utforarkategori", title: "Utförarkategori", icon: Users },
 ];
 
 function sectionStatus(stat?: SectionStat): SectionStatus {
@@ -354,17 +369,31 @@ function getSectionStats(
     ]),
     "pris-ekonomi": countFilled([
       fd.listPrice > 0,
-      fd.cost > 0,
-      fd.purchasePrice > 0,
-      fd.standardCost > 0,
-      fd.materialCost > 0,
-      fd.freightCost > 0,
-      fd.warehouseCost > 0,
-      fd.markupPercent != null,
+      fd.costingMethod === "standard"
+        ? fd.standardCost > 0
+        : fd.purchasePrice > 0 ||
+          fd.materialCost > 0 ||
+          fd.freightCost > 0 ||
+          fd.packagingCost > 0 ||
+          fd.environmentalFee > 0 ||
+          fd.hourlyCost > 0 ||
+          fd.warehouseCost > 0 ||
+          fd.cost > 0 ||
+          fd.otherCost > 0,
+      fd.pricingMethod === "markup"
+        ? fd.markupPercent != null
+        : fd.pricingMethod === "margin"
+          ? fd.desiredMarginPercent != null
+          : fd.listPrice > 0,
       fd.chargeModel.trim() !== "",
-      fd.productionTime > 0,
     ]),
-    planeringslogik: countFilled([fd.offsetMinutes !== 0, fd.groupSize > 1]),
+    planeringslogik: countFilled([
+      fd.offsetMinutes !== 0,
+      fd.groupSize > 1,
+      fd.productionTime > 0,
+      fd.timeCodeKey.trim() !== "",
+      fd.performerCategory.trim() !== "",
+    ]),
     struktur: { filled: componentDraft.length > 0 ? 1 : 0, total: 1 },
     fasthakning: { filled: assocCount > 0 ? 1 : 0, total: 1 },
     antalslogik: countFilled([
@@ -378,9 +407,6 @@ function getSectionStats(
     metadata: countFilled([
       fd.showMetadataFields.length > 0,
       fd.leaveMetadataFields.length > 0,
-    ]),
-    utforarkategori: countFilled([
-      fd.performerCategory.trim() !== "",
     ]),
   };
 }
@@ -1196,6 +1222,23 @@ export default function ArticleFormPage() {
       freightCost: (article as any).freightCost ?? 0,
       warehouseCost: (article as any).warehouseCost ?? 0,
       markupPercent: (article as any).markupPercent ?? null,
+      packagingCost: (article as any).packagingCost ?? 0,
+      environmentalFee: (article as any).environmentalFee ?? 0,
+      hourlyCost: (article as any).hourlyCost ?? 0,
+      otherCost: (article as any).otherCost ?? 0,
+      // "" = legacy: äldre artiklar utan valt kostnadsläge behåller den
+      // typ-styrda kostnadsbasen tills användaren aktivt väljer kalkylen.
+      costingMethod:
+        (article as any).costingMethod === "calc" || (article as any).costingMethod === "standard"
+          ? (article as any).costingMethod
+          : "",
+      pricingMethod:
+        (article as any).pricingMethod === "markup" || (article as any).pricingMethod === "margin" || (article as any).pricingMethod === "manual"
+          ? (article as any).pricingMethod
+          : (article as any).markupPercent != null
+            ? "markup"
+            : "manual",
+      desiredMarginPercent: (article as any).desiredMarginPercent ?? null,
       chargeModel: (article as any).chargeModel || "",
       informationRequirements: Array.isArray((article as any).informationRequirements)
         ? ((article as any).informationRequirements as InformationRequirement[])
@@ -1376,6 +1419,13 @@ export default function ArticleFormPage() {
     }
 
     const payload: Partial<ArticleFormData> & { fortnoxArticleNumber?: string | null } = { ...formData };
+    // Artikelkalkyl (Task #1350): "" = legacy → spara null så kostnadsläget förblir oval t.
+    (payload as any).costingMethod = formData.costingMethod || null;
+    // Vid påslag/marginal är listpriset ett beräknat resultat — persistera det så att
+    // alla konsumenter (prisupplösning, KPI, Fortnox) ser samma listpris som formuläret.
+    if (formData.pricingMethod !== "manual") {
+      payload.listPrice = pricing.computedListPriceOre;
+    }
     payload.stockLocations = formData.stockLocations.filter((r) => (r.location || "").trim() !== "");
     payload.informationRequirements = formData.informationRequirements.filter((r) => (r.type || "").trim() !== "");
     payload.showMetadataFields = formData.showMetadataFields
@@ -1411,12 +1461,20 @@ export default function ArticleFormPage() {
 
   const pricing = computeArticlePricing({
     articleType: formData.articleType,
+    costingMethod: formData.costingMethod || null,
     purchasePrice: formData.purchasePrice || 0,
     standardCost: formData.standardCost || 0,
     materialCost: formData.materialCost || 0,
     freightCost: formData.freightCost || 0,
+    packagingCost: formData.packagingCost || 0,
+    environmentalFee: formData.environmentalFee || 0,
+    productionTime: formData.productionTime || 0,
+    hourlyCost: formData.hourlyCost || 0,
     warehouseCost: formData.warehouseCost || 0,
+    otherCost: formData.otherCost || 0,
+    pricingMethod: formData.pricingMethod,
     markupPercent: formData.markupPercent,
+    desiredMarginPercent: formData.desiredMarginPercent,
     listPrice: formData.listPrice || 0,
     // Internkostnad är admin-only; uteslut den ur den visade självkostnaden för
     // icke-admins så att summan matchar förklaringstexten och inte avslöjar det
@@ -1425,15 +1483,6 @@ export default function ArticleFormPage() {
   });
   const marginOre = pricing.marginPerUnitOre;
   const marginPositive = marginOre >= 0;
-  // Självkostnadens poster, beskrivet exakt så användaren ser vad som ingår.
-  // Kostnadsbasen styrs av artikeltypen: vara → inköpspris, annars standardkostnad.
-  const selfCostBasisLabel =
-    formData.articleType === "vara" ? "inköpspris" : "standardkostnad";
-  const selfCostParts = [selfCostBasisLabel, "materialkostnad", "fraktkostnad", "lagerkostnad"];
-  if (isAdmin) selfCostParts.push("internkostnad");
-  const selfCostFormula = selfCostParts.join(" + ");
-  const marginReferenceLabel =
-    (formData.listPrice || 0) > 0 ? "satt listpris" : "beräknat listpris";
 
   // Redigeringsläge: visa laddnings-/feltillstånd tills artikeln hämtats.
   if (isEditMode && articleLoading && !initialized) {
@@ -2067,136 +2116,195 @@ export default function ArticleFormPage() {
 
           {/* 4. Pris & Ekonomi */}
           <FormSection title="Pris & Ekonomi" icon={<DollarSign className="h-4 w-4" />} testId="section-pris-ekonomi" {...sectionProps("pris-ekonomi")}>
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+            {/* ── KOSTNADSKALKYL ──────────────────────────────────────────── */}
+            <div className="space-y-3 rounded-md border p-3" data-testid="block-kostnadskalkyl">
+              <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Kostnadskalkyl</Label>
               <div className="space-y-2">
-                <Label htmlFor="listPrice">Listpris (kr)</Label>
-                <Input
-                  id="listPrice"
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={formData.listPrice ? (formData.listPrice / 100).toString() : ""}
-                  placeholder="0.00"
-                  onChange={(e) => {
-                    const v = e.target.value;
-                    setFormData({ ...formData, listPrice: v === "" ? 0 : Math.round(parseFloat(v) * 100) || 0 });
-                  }}
-                  data-testid="input-list-price"
-                />
+                <Label htmlFor="costingMethod">Kostnadsläge</Label>
+                <Select
+                  value={formData.costingMethod || "legacy"}
+                  onValueChange={(v) => setFormData({ ...formData, costingMethod: v === "legacy" ? "" : (v as "calc" | "standard") })}
+                >
+                  <SelectTrigger id="costingMethod" data-testid="select-costing-method">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="calc">Beräknad självkostnad (kalkyl)</SelectItem>
+                    <SelectItem value="standard">Fast standardkostnad (manuell)</SelectItem>
+                    {formData.costingMethod === "" && (
+                      <SelectItem value="legacy">Äldre modell (kostnadsbas efter artikeltyp)</SelectItem>
+                    )}
+                  </SelectContent>
+                </Select>
+                {formData.costingMethod === "" && (
+                  <p className="text-xs text-muted-foreground" data-testid="text-legacy-costing-note">
+                    Artikeln använder den äldre modellen: kostnadsbas = {formData.articleType === "vara" ? "inköpspris" : "standardkostnad"} + tillägg.
+                    Välj "Beräknad självkostnad" eller "Fast standardkostnad" för den nya kalkylen — inget ändras förrän du sparar.
+                  </p>
+                )}
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="purchasePrice">Inköpspris (kr)</Label>
-                <Input
-                  id="purchasePrice"
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={formData.purchasePrice ? (formData.purchasePrice / 100).toString() : ""}
-                  placeholder="0.00"
-                  onChange={(e) => {
-                    const v = e.target.value;
-                    setFormData({ ...formData, purchasePrice: v === "" ? 0 : Math.round(parseFloat(v) * 100) || 0 });
-                  }}
-                  data-testid="input-purchase-price"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="standardCost">Standardkostnad (kr)</Label>
-                <Input
-                  id="standardCost"
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={formData.standardCost ? (formData.standardCost / 100).toString() : ""}
-                  placeholder="0.00"
-                  onChange={(e) => {
-                    const v = e.target.value;
-                    setFormData({ ...formData, standardCost: v === "" ? 0 : Math.round(parseFloat(v) * 100) || 0 });
-                  }}
-                  data-testid="input-standard-cost"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="materialCost">Materialkostnad (kr)</Label>
-                <Input
-                  id="materialCost"
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={formData.materialCost ? (formData.materialCost / 100).toString() : ""}
-                  placeholder="0.00"
-                  onChange={(e) => {
-                    const v = e.target.value;
-                    setFormData({ ...formData, materialCost: v === "" ? 0 : Math.round(parseFloat(v) * 100) || 0 });
-                  }}
-                  data-testid="input-material-cost"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="freightCost">Fraktkostnad (kr)</Label>
-                <Input
-                  id="freightCost"
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={formData.freightCost ? (formData.freightCost / 100).toString() : ""}
-                  placeholder="0.00"
-                  onChange={(e) => {
-                    const v = e.target.value;
-                    setFormData({ ...formData, freightCost: v === "" ? 0 : Math.round(parseFloat(v) * 100) || 0 });
-                  }}
-                  data-testid="input-freight-cost"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="warehouseCost">Lagerkostnad (kr)</Label>
-                <Input
-                  id="warehouseCost"
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={formData.warehouseCost ? (formData.warehouseCost / 100).toString() : ""}
-                  placeholder="0.00"
-                  onChange={(e) => {
-                    const v = e.target.value;
-                    setFormData({ ...formData, warehouseCost: v === "" ? 0 : Math.round(parseFloat(v) * 100) || 0 });
-                  }}
-                  data-testid="input-warehouse-cost"
-                />
-              </div>
-              {isAdmin && (
+
+              {formData.costingMethod === "standard" ? (
                 <div className="space-y-2">
-                  <Label htmlFor="cost">Internkostnad (kr)</Label>
+                  <Label htmlFor="standardCost">Fast standardkostnad (kr)</Label>
                   <Input
-                    id="cost"
+                    id="standardCost"
                     type="number"
                     min="0"
                     step="0.01"
-                    value={formData.cost ? (formData.cost / 100).toString() : ""}
+                    value={formData.standardCost ? (formData.standardCost / 100).toString() : ""}
                     placeholder="0.00"
                     onChange={(e) => {
                       const v = e.target.value;
-                      setFormData({ ...formData, cost: v === "" ? 0 : Math.round(parseFloat(v) * 100) || 0 });
+                      setFormData({ ...formData, standardCost: v === "" ? 0 : Math.round(parseFloat(v) * 100) || 0 });
                     }}
-                    data-testid="input-cost"
+                    data-testid="input-standard-cost"
                   />
+                  <p className="text-xs text-muted-foreground">
+                    Den fasta standardkostnaden används i stället för kalkylen — övriga kostnadsposter ignoreras.
+                  </p>
                 </div>
+              ) : (
+                <>
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                    {(
+                      [
+                        { key: "purchasePrice", label: "Inköpspris / grundkostnad (kr)", testId: "input-purchase-price" },
+                        { key: "materialCost", label: "Materialkostnad (kr)", testId: "input-material-cost" },
+                        { key: "freightCost", label: "Fraktkostnad (kr)", testId: "input-freight-cost" },
+                        { key: "packagingCost", label: "Emballagekostnad (kr)", testId: "input-packaging-cost" },
+                        { key: "environmentalFee", label: "Miljö-/återvinningsavgift (kr)", testId: "input-environmental-fee" },
+                        { key: "hourlyCost", label: "Timkostnad (kr/h)", testId: "input-hourly-cost" },
+                        { key: "warehouseCost", label: "Lagerkostnad (kr)", testId: "input-warehouse-cost" },
+                        ...(isAdmin ? [{ key: "cost", label: "Internkostnad / hantering (kr)", testId: "input-cost" }] : []),
+                        { key: "otherCost", label: "Övrig kostnad (kr)", testId: "input-other-cost" },
+                        ...(formData.costingMethod === "" && formData.articleType !== "vara"
+                          ? [{ key: "standardCost", label: "Standardkostnad (kr) — kostnadsbas (äldre modell)", testId: "input-standard-cost" }]
+                          : []),
+                      ] as { key: "purchasePrice" | "materialCost" | "freightCost" | "packagingCost" | "environmentalFee" | "hourlyCost" | "warehouseCost" | "cost" | "otherCost" | "standardCost"; label: string; testId: string }[]
+                    ).map((f) => (
+                      <div key={f.key} className="space-y-2">
+                        <Label htmlFor={f.key}>{f.label}</Label>
+                        <Input
+                          id={f.key}
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={formData[f.key] ? (formData[f.key] / 100).toString() : ""}
+                          placeholder="0.00"
+                          onChange={(e) => {
+                            const v = e.target.value;
+                            setFormData({ ...formData, [f.key]: v === "" ? 0 : Math.round(parseFloat(v) * 100) || 0 });
+                          }}
+                          data-testid={f.testId}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                  <div className="flex items-center justify-between rounded-md bg-muted/40 px-3 py-2 text-sm" data-testid="row-time-cost">
+                    <span className="text-muted-foreground">
+                      Beräknad tidskostnad — produktionstid {formData.productionTime || 0} min ÷ 60 × timkostnad (produktionstiden redigeras under Planeringslogik)
+                    </span>
+                    <span className="font-mono" data-testid="text-time-cost">{formatSekFromOre(pricing.timeCostOre, { decimals: true })}</span>
+                  </div>
+                </>
               )}
-              <div className="space-y-2">
-                <Label htmlFor="markupPercent">Påslag (%)</Label>
-                <Input
-                  id="markupPercent"
-                  type="number"
-                  step="0.1"
-                  value={formData.markupPercent ?? ""}
-                  placeholder="—"
-                  onChange={(e) => {
-                    const raw = e.target.value.trim();
-                    setFormData({ ...formData, markupPercent: raw === "" ? null : parseFloat(raw) || 0 });
-                  }}
-                  data-testid="input-markup-percent"
-                />
+
+              <div className="flex items-center justify-between border-t pt-2 text-sm font-semibold" data-testid="row-self-cost">
+                <span>= SJÄLVKOSTNAD</span>
+                <span className="font-mono" data-testid="text-article-self-cost">{formatSekFromOre(pricing.selfCostOre, { decimals: true })}</span>
               </div>
+            </div>
+
+            {/* ── PRISKALKYL ──────────────────────────────────────────────── */}
+            <div className="space-y-3 rounded-md border p-3" data-testid="block-priskalkyl">
+              <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Priskalkyl</Label>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                <div className="space-y-2">
+                  <Label htmlFor="pricingMethod">Prissättningsmetod</Label>
+                  <Select
+                    value={formData.pricingMethod}
+                    onValueChange={(v) => setFormData({ ...formData, pricingMethod: v as "manual" | "markup" | "margin" })}
+                  >
+                    <SelectTrigger id="pricingMethod" data-testid="select-pricing-method">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="manual">Manuell (skriv listpris)</SelectItem>
+                      <SelectItem value="markup">Påslag på självkostnad</SelectItem>
+                      <SelectItem value="margin">Önskad bruttomarginal</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                {formData.pricingMethod === "markup" && (
+                  <div className="space-y-2">
+                    <Label htmlFor="markupPercent">Påslag (%)</Label>
+                    <Input
+                      id="markupPercent"
+                      type="number"
+                      step="0.1"
+                      value={formData.markupPercent ?? ""}
+                      placeholder="—"
+                      onChange={(e) => {
+                        const raw = e.target.value.trim();
+                        setFormData({ ...formData, markupPercent: raw === "" ? null : parseFloat(raw) || 0 });
+                      }}
+                      data-testid="input-markup-percent"
+                    />
+                  </div>
+                )}
+                {formData.pricingMethod === "margin" && (
+                  <div className="space-y-2">
+                    <Label htmlFor="desiredMarginPercent">Önskad marginal (%)</Label>
+                    <Input
+                      id="desiredMarginPercent"
+                      type="number"
+                      step="0.1"
+                      min="0"
+                      max="99.9"
+                      value={formData.desiredMarginPercent ?? ""}
+                      placeholder="—"
+                      onChange={(e) => {
+                        const raw = e.target.value.trim();
+                        setFormData({ ...formData, desiredMarginPercent: raw === "" ? null : parseFloat(raw) || 0 });
+                      }}
+                      data-testid="input-desired-margin-percent"
+                    />
+                  </div>
+                )}
+                {formData.pricingMethod === "manual" ? (
+                  <div className="space-y-2">
+                    <Label htmlFor="listPrice">Listpris (kr)</Label>
+                    <Input
+                      id="listPrice"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={formData.listPrice ? (formData.listPrice / 100).toString() : ""}
+                      placeholder="0.00"
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        setFormData({ ...formData, listPrice: v === "" ? 0 : Math.round(parseFloat(v) * 100) || 0 });
+                      }}
+                      data-testid="input-list-price"
+                    />
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <Label>Beräknat listpris</Label>
+                    <div className="flex h-9 items-center rounded-md border bg-muted/40 px-3 font-mono text-sm" data-testid="text-article-computed-list-price">
+                      {formatSekFromOre(pricing.computedListPriceOre, { decimals: true })}
+                    </div>
+                  </div>
+                )}
+              </div>
+              <p className="text-xs text-muted-foreground" data-testid="text-pricing-method-explainer">
+                {formData.pricingMethod === "markup"
+                  ? "Listpris = självkostnad × (1 + påslag %). Exempel: 100 kr självkostnad + 25 % påslag = 125 kr."
+                  : formData.pricingMethod === "margin"
+                    ? "Listpris = självkostnad ÷ (1 − marginal %). Exempel: 100 kr självkostnad och 25 % önskad marginal = 133,33 kr. Observera: marginal är inte samma sak som påslag."
+                    : "Du sätter listpriset själv — systemet räknar baklänges och visar täckningsbidrag per enhet (listpris − självkostnad) och marginal %."}
+              </p>
             </div>
 
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
@@ -2219,6 +2327,51 @@ export default function ArticleFormPage() {
                   </SelectContent>
                 </Select>
               </div>
+            </div>
+
+            {/* ── Summering ───────────────────────────────────────────────── */}
+            <div className="space-y-2 rounded-md border bg-muted/40 px-3 py-3 text-sm" data-testid="panel-price-buildup">
+              <div className="flex items-center justify-between">
+                <span className="text-muted-foreground">Självkostnad</span>
+                <span className="font-mono" data-testid="text-summary-self-cost">{formatSekFromOre(pricing.selfCostOre, { decimals: true })}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-muted-foreground">Listpris</span>
+                <span className="font-mono" data-testid="text-summary-list-price">{formatSekFromOre(pricing.referenceListPriceOre, { decimals: true })}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-muted-foreground">Täckningsbidrag / enhet</span>
+                <span className="font-mono" data-testid="text-summary-margin-per-unit">{formatSekFromOre(pricing.marginPerUnitOre, { decimals: true })}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-muted-foreground">Bruttomarginal</span>
+                <span className="font-mono" data-testid="text-article-margin-percent">
+                  {pricing.marginPercent != null ? `${pricing.marginPercent.toFixed(1).replace(".", ",")} %` : "–"}
+                </span>
+              </div>
+            </div>
+            <div
+              className={`flex items-center justify-between rounded-md border px-3 py-2 text-sm ${
+                marginPositive
+                  ? "border-chart-2/20 bg-chart-2/10 text-chart-2"
+                  : "border-destructive/20 bg-destructive/10 text-destructive"
+              }`}
+              data-testid="text-article-margin"
+            >
+              <span className="font-medium">Täckningsbidrag per enhet</span>
+              <span className="font-mono">
+                {marginPositive ? "+" : ""}
+                {formatSekFromOre(marginOre, { decimals: true })}
+              </span>
+            </div>
+          </FormSection>
+
+          {/* 5. Planeringslogik */}
+          <FormSection title="Planeringslogik" icon={<CalendarClock className="h-4 w-4" />} testId="section-planeringslogik" {...sectionProps("planeringslogik")}>
+            {/* Task #1350 + användarönskemål: allt planeringsrelaterat samlat här —
+                hur lång tid det tar (produktionstid), vilken typ av tid (tidstyp),
+                vem som utför (utförarkategori) och när relativt huvudjobbet (offset). */}
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
               {formData.articleType !== "vara" && (
                 <div className="space-y-2">
                   <Label htmlFor="productionTime">Produktionstid (min)</Label>
@@ -2230,6 +2383,9 @@ export default function ArticleFormPage() {
                     onChange={(e) => setFormData({ ...formData, productionTime: parseInt(e.target.value) || 0 })}
                     data-testid="input-production-time"
                   />
+                  <p className="text-xs text-muted-foreground">
+                    Hur lång tid utförandet tar. Används i planeringen och som underlag för tidskostnaden i kostnadskalkylen.
+                  </p>
                 </div>
               )}
               <div className="space-y-2">
@@ -2262,50 +2418,30 @@ export default function ArticleFormPage() {
                   Vilken tidstyp (produktion/ställtid/internt/egentid) artikelns utförda tid räknas som — enligt tidskod-registret med prioritet. Fryses per uppgift vid expansion.
                 </p>
               </div>
+              <div className="space-y-2">
+                <Label htmlFor="performerCategory">Utförarkategori</Label>
+                <Select
+                  value={formData.performerCategory || "__none__"}
+                  onValueChange={(v) => setFormData({ ...formData, performerCategory: v === "__none__" ? "" : v })}
+                >
+                  <SelectTrigger id="performerCategory" data-testid="select-performer-category">
+                    <SelectValue placeholder="Välj utförandekod" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">Ingen</SelectItem>
+                    {executionCodeOptions.map((opt) => (
+                      <SelectItem key={opt.value} value={opt.value} data-testid={`option-performer-category-${opt.value}`}>
+                        {opt.isLegacy ? `${opt.label} (fritext)` : opt.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  Vilken utförandekod (utförartyp) som normalt utför artikeln. Hanteras i utförandekod-registret.
+                </p>
+              </div>
             </div>
 
-            <div className="space-y-2 rounded-md border bg-muted/40 px-3 py-3 text-sm" data-testid="panel-price-buildup">
-              <div className="flex items-center justify-between">
-                <span className="text-muted-foreground">Självkostnad</span>
-                <span className="font-mono" data-testid="text-article-self-cost">
-                  {formatSekFromOre(pricing.selfCostOre, { decimals: true })}
-                </span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-muted-foreground">Beräknat listpris (självkostnad × påslag)</span>
-                <span className="font-mono" data-testid="text-article-computed-list-price">
-                  {formatSekFromOre(pricing.computedListPriceOre, { decimals: true })}
-                </span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-muted-foreground">Marginal (mot {marginReferenceLabel})</span>
-                <span className="font-mono" data-testid="text-article-margin-percent">
-                  {pricing.marginPercent != null ? `${pricing.marginPercent.toFixed(1)} %` : "–"}
-                </span>
-              </div>
-            </div>
-            <div
-              className={`flex items-center justify-between rounded-md border px-3 py-2 text-sm ${
-                marginPositive
-                  ? "border-chart-2/20 bg-chart-2/10 text-chart-2"
-                  : "border-destructive/20 bg-destructive/10 text-destructive"
-              }`}
-              data-testid="text-article-margin"
-            >
-              <span className="font-medium">Marginal per enhet</span>
-              <span className="font-mono">
-                {marginPositive ? "+" : ""}
-                {formatSekFromOre(marginOre, { decimals: true })}
-              </span>
-            </div>
-            <p className="text-xs text-muted-foreground" data-testid="text-self-cost-explainer">
-              Självkostnad = {selfCostFormula} (kostnadsbas: {formData.articleType === "vara" ? "inköpspris för vara" : "standardkostnad för tjänst"}).
-              Beräknat listpris = självkostnad × (1 + påslag%). Marginal beräknas mot {marginReferenceLabel} (satt listpris om det finns, annars beräknat listpris).
-            </p>
-          </FormSection>
-
-          {/* 5. Planeringslogik */}
-          <FormSection title="Planeringslogik" icon={<CalendarClock className="h-4 w-4" />} testId="section-planeringslogik" {...sectionProps("planeringslogik")}>
             <div className="space-y-3">
               <Label>Offsettid</Label>
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -3228,31 +3364,6 @@ export default function ArticleFormPage() {
             </div>
           </FormSection>
 
-          {/* 10. Utförarkategori */}
-          <FormSection title="Utförarkategori" icon={<Users className="h-4 w-4" />} testId="section-utforarkategori" {...sectionProps("utforarkategori")}>
-            <div className="space-y-2">
-              <Label htmlFor="performerCategory">Utförarkategori</Label>
-              <Select
-                value={formData.performerCategory || "__none__"}
-                onValueChange={(v) => setFormData({ ...formData, performerCategory: v === "__none__" ? "" : v })}
-              >
-                <SelectTrigger id="performerCategory" data-testid="select-performer-category">
-                  <SelectValue placeholder="Välj utförandekod" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__none__">Ingen</SelectItem>
-                  {executionCodeOptions.map((opt) => (
-                    <SelectItem key={opt.value} value={opt.value} data-testid={`option-performer-category-${opt.value}`}>
-                      {opt.isLegacy ? `${opt.label} (fritext)` : opt.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <p className="text-xs text-muted-foreground">
-                Vilken utförandekod (utförartyp) som normalt utför artikeln. Hanteras i utförandekod-registret.
-              </p>
-            </div>
-          </FormSection>
             </div>
           </div>
         </div>

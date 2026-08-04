@@ -17,6 +17,7 @@
 // (restören delas ut deterministiskt, ingen avrundning över/under den kanoniska avgiften).
 
 import { storage } from "../storage";
+import { resolveArticleCostBasisOre } from "@shared/article-pricing";
 import { computeConceptOrderValue } from "@shared/order-concept-value";
 import { resolveConceptMatchingObjects } from "./order-concept-targeting";
 import {
@@ -96,7 +97,7 @@ export async function computeConceptSubscriptionFee(
     return {
       unitPriceOre: ca.unitPrice ?? art?.listPrice ?? 0,
       quantity: ca.quantity || 1,
-      costOre: art?.cost ?? 0,
+      costOre: art ? resolveArticleCostBasisOre(art) : 0,
       productionTimeMinutes: art?.productionTime ?? 0,
     };
   });

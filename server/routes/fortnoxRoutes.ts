@@ -9,6 +9,7 @@ import { getTenantIdWithFallback, requirePlanner } from "../tenant-middleware";
 import { asyncHandler } from "../asyncHandler";
 import { NotFoundError, ValidationError, ForbiddenError, describeFortnoxMappingConflict } from "../errors";
 import { objects, workOrders, articles, customers, fortnoxMappings, importBatches, assignments, type InsertWorkOrder, type ServiceObject, type Assignment } from "@shared/schema";
+import { resolveArticleCostBasisOre } from "@shared/article-pricing";
 import {
   shouldSplitForStockPickup,
   resolveStockLocation,
@@ -379,7 +380,7 @@ export async function prepareConceptCustomerPricing(opts: {
   const priceMemo = new Map<string, ConceptPriceMemo>();
   const listPriceFor = (a: Awaited<ReturnType<typeof storage.getArticle>> | undefined): ConceptPriceMemo => ({
     price: a?.listPrice || 0,
-    cost: a?.cost || 0,
+    cost: a ? resolveArticleCostBasisOre(a) : 0,
     productionMinutes: a?.productionTime || 0,
     priceListId: null,
   });
@@ -2364,7 +2365,7 @@ app.post("/api/order-concepts/:id/execute", asyncHandler(async (req, res) => {
       } else if (linkedArticle) {
         linkedPrice = {
           price: linkedArticle.listPrice || 0,
-          cost: linkedArticle.cost || 0,
+          cost: resolveArticleCostBasisOre(linkedArticle),
           productionMinutes: linkedArticle.productionTime || 0,
           priceListId: null,
         };
@@ -2767,7 +2768,7 @@ app.post("/api/order-concepts/:id/execute", asyncHandler(async (req, res) => {
           const preCustomerId = customerIdForObject(obj.id);
           let unitTime = article.productionTime || 30;
           let unitPrice = article.listPrice || 0;
-          let unitCost = article.cost || 0;
+          let unitCost = resolveArticleCostBasisOre(article);
           if (preCustomerId) {
             const info = await resolvePriceMemo(article, ca.articleId, preCustomerId);
             unitTime = info.productionMinutes || unitTime;
@@ -2892,7 +2893,7 @@ app.post("/api/order-concepts/:id/preview", asyncHandler(async (req, res) => {
       } else if (linkedArticle) {
         linkedPrice = {
           price: linkedArticle.listPrice || 0,
-          cost: linkedArticle.cost || 0,
+          cost: resolveArticleCostBasisOre(linkedArticle),
           productionMinutes: linkedArticle.productionTime || 0,
         };
       }
@@ -3034,7 +3035,7 @@ app.post("/api/order-concepts/:id/run-rolling", asyncHandler(async (req, res) =>
       } else if (linkedArticle) {
         linkedPrice = {
           price: linkedArticle.listPrice || 0,
-          cost: linkedArticle.cost || 0,
+          cost: resolveArticleCostBasisOre(linkedArticle),
           productionMinutes: linkedArticle.productionTime || 0,
         };
       }

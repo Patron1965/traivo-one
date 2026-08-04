@@ -17,6 +17,7 @@ import { sendEmail } from "../replit_integrations/resend";
 import { issueMagicLink } from "../replit_integrations/auth/magicLinkAuth";
 import { dashboardCache, DASHBOARD_CACHE_TTL } from "../services/dashboardCache";
 import { mapTileLimiter, TILE_HOURLY_ALERT_THRESHOLD } from "../middleware/rate-limit";
+import { resolveArticleCostBasisOre } from "@shared/article-pricing";
 
 export async function registerKPIRoutes(app: Express) {
 // ============================================
@@ -233,8 +234,21 @@ app.get("/api/kpis/article-margins", requireAdmin, asyncHandler(async (req, res)
         articleId: workOrderLines.articleId,
         articleNumber: articles.articleNumber,
         name: articles.name,
-        // Självkostnad (inköp + frakt + lager) när någon komponent satts, annars legacy internkostnad. GAP-104 / Task #938.
-        unitCost: sql<number>`CASE WHEN ${articles.purchasePrice} IS NOT NULL OR ${articles.freightCost} IS NOT NULL OR ${articles.warehouseCost} IS NOT NULL THEN COALESCE(${articles.purchasePrice}, 0) + COALESCE(${articles.freightCost}, 0) + COALESCE(${articles.warehouseCost}, 0) ELSE ${articles.cost} END`,
+        // Task #1350: självkostnaden beräknas i JS via den delade kalkylmotorn
+        // (shared/article-pricing.ts) så att KPI:n och artikelformuläret aldrig driftar.
+        articleType: articles.articleType,
+        costingMethod: articles.costingMethod,
+        purchasePrice: articles.purchasePrice,
+        standardCost: articles.standardCost,
+        materialCost: articles.materialCost,
+        freightCost: articles.freightCost,
+        packagingCost: articles.packagingCost,
+        environmentalFee: articles.environmentalFee,
+        productionTime: articles.productionTime,
+        hourlyCost: articles.hourlyCost,
+        warehouseCost: articles.warehouseCost,
+        articleCost: articles.cost,
+        otherCost: articles.otherCost,
         listPrice: articles.listPrice,
         totalRevenue: sql<string>`COALESCE(SUM(${workOrderLines.quantity} * COALESCE(${workOrderLines.resolvedPrice}, 0)), 0)::bigint`,
         totalCost: sql<string>`COALESCE(SUM(${workOrderLines.quantity} * COALESCE(${workOrderLines.resolvedCost}, 0)), 0)::bigint`,
@@ -249,7 +263,25 @@ app.get("/api/kpis/article-margins", requireAdmin, asyncHandler(async (req, res)
         sql`${workOrders.deletedAt} IS NULL`,
         sql`${workOrderLines.isOptional} IS NOT TRUE`,
       ))
-      .groupBy(workOrderLines.articleId, articles.articleNumber, articles.name, articles.cost, articles.purchasePrice, articles.freightCost, articles.warehouseCost, articles.listPrice)
+      .groupBy(
+        workOrderLines.articleId,
+        articles.articleNumber,
+        articles.name,
+        articles.articleType,
+        articles.costingMethod,
+        articles.cost,
+        articles.purchasePrice,
+        articles.standardCost,
+        articles.materialCost,
+        articles.freightCost,
+        articles.packagingCost,
+        articles.environmentalFee,
+        articles.productionTime,
+        articles.hourlyCost,
+        articles.warehouseCost,
+        articles.otherCost,
+        articles.listPrice,
+      )
       .orderBy(desc(sql`SUM(${workOrderLines.quantity} * COALESCE(${workOrderLines.resolvedPrice}, 0))`))
       .limit(limit);
 
@@ -257,11 +289,30 @@ app.get("/api/kpis/article-margins", requireAdmin, asyncHandler(async (req, res)
       const revenue = Number(r.totalRevenue) || 0;
       const cost = Number(r.totalCost) || 0;
       const margin = revenue - cost;
+      // Samma självkostnadsdefinition som artikelformuläret (delad motor),
+      // med inbyggd legacy-fallback (typ-styrd kostnadsbas / internkostnad).
+      const unitCost = r.articleId
+        ? resolveArticleCostBasisOre({
+            articleType: r.articleType,
+            costingMethod: r.costingMethod,
+            purchasePrice: r.purchasePrice,
+            standardCost: r.standardCost,
+            materialCost: r.materialCost,
+            freightCost: r.freightCost,
+            packagingCost: r.packagingCost,
+            environmentalFee: r.environmentalFee,
+            productionTime: r.productionTime,
+            hourlyCost: r.hourlyCost,
+            warehouseCost: r.warehouseCost,
+            cost: r.articleCost,
+            otherCost: r.otherCost,
+          })
+        : 0;
       return {
         articleId: r.articleId,
         articleNumber: r.articleNumber,
         name: r.name,
-        unitCost: r.unitCost,
+        unitCost,
         listPrice: r.listPrice,
         totalRevenue: revenue,
         totalCost: cost,

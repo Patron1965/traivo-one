@@ -174,6 +174,7 @@ import {
   type Disruption, type InsertDisruption,
   type ExecutorRegister, type ExecutorRegisterAsset, type ExecutorRegisterPerson, type ExecutorRegisterTeam,
 } from "@shared/schema";
+import { resolveArticleCostBasisOre } from "@shared/article-pricing";
 import { db } from "./db";
 import { eq, ne, and, or, isNull, isNotNull, asc, desc, gte, lte, lt, sql, inArray, notInArray, getTableColumns, type SQL, type SQLWrapper } from "drizzle-orm";
 
@@ -5751,7 +5752,7 @@ export class DatabaseStorage implements IStorage {
         if (pla) {
           return {
             price: pla.price,
-            cost: article.cost || 0,
+            cost: resolveArticleCostBasisOre(article),
             productionMinutes: pla.productionTime || article.productionTime || 0,
             priceListId: pl.id,
             source: 'rabattbrev'
@@ -5762,7 +5763,7 @@ export class DatabaseStorage implements IStorage {
           const discountedPrice = Math.round((article.listPrice || 0) * (100 - pl.discountPercent) / 100);
           return {
             price: discountedPrice,
-            cost: article.cost || 0,
+            cost: resolveArticleCostBasisOre(article),
             productionMinutes: article.productionTime || 0,
             priceListId: pl.id,
             source: 'rabattbrev'
@@ -5779,7 +5780,7 @@ export class DatabaseStorage implements IStorage {
         if (pla) {
           return {
             price: pla.price,
-            cost: article.cost || 0,
+            cost: resolveArticleCostBasisOre(article),
             productionMinutes: pla.productionTime || article.productionTime || 0,
             priceListId: pl.id,
             source: 'kundunik'
@@ -5796,7 +5797,7 @@ export class DatabaseStorage implements IStorage {
         if (pla) {
           return {
             price: pla.price,
-            cost: article.cost || 0,
+            cost: resolveArticleCostBasisOre(article),
             productionMinutes: pla.productionTime || article.productionTime || 0,
             priceListId: pl.id,
             source: 'generell'
@@ -5808,7 +5809,7 @@ export class DatabaseStorage implements IStorage {
     // 4. Fallback to article list price
     return {
       price: article.listPrice || 0,
-      cost: article.cost || 0,
+      cost: resolveArticleCostBasisOre(article),
       productionMinutes: article.productionTime || 0,
       priceListId: null,
       source: 'listprice'
@@ -5831,7 +5832,7 @@ export class DatabaseStorage implements IStorage {
     if (!pl || pl.tenantId !== tenantId || pl.status !== 'active' || pl.deletedAt) {
       return {
         price: article.listPrice || 0,
-        cost: article.cost || 0,
+        cost: resolveArticleCostBasisOre(article),
         productionMinutes: article.productionTime || 0,
         priceListId: null,
         source: 'listprice'
@@ -5844,7 +5845,7 @@ export class DatabaseStorage implements IStorage {
     if (pla) {
       return {
         price: pla.price,
-        cost: article.cost || 0,
+        cost: resolveArticleCostBasisOre(article),
         productionMinutes: pla.productionTime || article.productionTime || 0,
         priceListId: priceListIdParam,
         source: 'prislista'
@@ -5855,7 +5856,7 @@ export class DatabaseStorage implements IStorage {
       const discountedPrice = Math.round((article.listPrice || 0) * (100 - pl.discountPercent) / 100);
       return {
         price: discountedPrice,
-        cost: article.cost || 0,
+        cost: resolveArticleCostBasisOre(article),
         productionMinutes: article.productionTime || 0,
         priceListId: priceListIdParam,
         source: 'rabattbrev'
@@ -5864,7 +5865,7 @@ export class DatabaseStorage implements IStorage {
 
     return {
       price: article.listPrice || 0,
-      cost: article.cost || 0,
+      cost: resolveArticleCostBasisOre(article),
       productionMinutes: article.productionTime || 0,
       priceListId: null,
       source: 'listprice'

@@ -1,65 +1,111 @@
 /**
- * Centraliserad prisuppbyggnad för artiklar (GAP-104 / Task #938).
+ * Centraliserad artikelkalkyl (GAP-104 / Task #938, ombyggd i Task #1350).
  *
- * Återanvänds av både servern (KPI/marginaluppföljning) och artikelformuläret
- * (live-sammanfattning) så att självkostnad, listpris och marginal beräknas
- * identiskt överallt.
+ * Återanvänds av både servern (KPI/marginaluppföljning, prisupplösning) och
+ * artikelformuläret (live-sammanfattning) så att självkostnad, listpris och
+ * marginal beräknas identiskt överallt.
  *
  * VALUTA: alla prisfält är i ÖRE (samma konvention som articles.listPrice m.fl.).
  *
- *   kostnadsbas       = vara → inköpspris, annars (tjänst m.fl.) → standardkostnad
- *   självkostnad      = kostnadsbas + materialkostnad + fraktkostnad + lagerkostnad + internkostnad
- *   beräknat listpris = självkostnad × (1 + påslag%/100)
- *   marginal/enhet    = referenslistpris − självkostnad
- *   marginal%         = marginal/enhet ÷ referenslistpris × 100
+ * Grundprincip (Tomas instruktionsfil, Task #1350):
+ *   1. KOSTNADSKALKYL — kostnadskomponenter summeras till en SJÄLVKOSTNAD.
+ *      Listpris/försäljningspris ingår ALDRIG i självkostnaden.
+ *   2. PRISKALKYL — försäljningspriset beräknas därefter separat enligt vald
+ *      prissättningsmetod (manuell / påslag / marginal).
  *
- * Kostnadsbasen väljs efter artikeltyp så att samma post aldrig dubbelräknas:
- * en vara använder inköpspris, en tjänst (eller annan icke-vara) standardkostnad.
- * Övriga poster (material, frakt, lager, intern) är alltid additiva tillägg.
+ * Kostnadsläge (costingMethod):
+ *   "calc"     — självkostnad = inköpspris + material + frakt + emballage +
+ *                miljöavgift + tidskostnad + lager + intern + övrig, där
+ *                tidskostnad = produktionstid/60 × timkostnad (auto).
+ *                Standardkostnaden ingår INTE (den är inte längre additiv).
+ *   "standard" — explicit fast standardkostnad ersätter kalkylsumman.
+ *   null       — LEGACY (bakåtkompatibelt): kostnadsbas efter artikeltyp
+ *                (vara → inköpspris, annars standardkostnad) + samma additiva
+ *                tillägg som tidigare. Befintliga artiklar behåller därmed sin
+ *                effektiva kostnad tills användaren väljer kalkylen.
  *
- * "referenslistpris" = det faktiskt satta listpriset (om > 0), annars det
- * beräknade listpriset. Så att marginalen speglar det pris som faktiskt
- * debiteras, men ändå visar något vettigt innan ett listpris satts.
+ * Prissättningsmetod (pricingMethod):
+ *   "markup" — listpris = självkostnad × (1 + påslag %/100)
+ *   "margin" — listpris = självkostnad ÷ (1 − marginal %/100)   (marginal < 100)
+ *   "manual" — användaren sätter listpris; TB/enhet = listpris − självkostnad
+ *              och marginal % = TB ÷ listpris × 100 räknas baklänges.
+ *   null     — LEGACY: påslag om markupPercent är satt, annars manuell.
+ *
+ * OBS: påslag och marginal är företagsekonomiskt OLIKA begrepp — 25 % påslag på
+ * 100 kr ger 125 kr, medan 25 % önskad marginal ger 133,33 kr.
  */
 
+export type ArticleCostingMethod = "calc" | "standard";
+export type ArticlePricingMethod = "manual" | "markup" | "margin";
+
 export interface ArticleCostInput {
-  /** Artikeltyp — styr kostnadsbasen ("vara" → inköpspris, annars standardkostnad). */
+  /** Artikeltyp — styr legacy-kostnadsbasen ("vara" → inköpspris, annars standardkostnad). */
   articleType?: string | null;
-  /** Inköpspris (öre) — kostnadsbas för varor. */
+  /** Kostnadsläge: "calc" | "standard" | null (legacy typ-styrd bas). */
+  costingMethod?: string | null;
+  /** Inköpspris/grundkostnad (öre). */
   purchasePrice?: number | null;
-  /** Standardkostnad (öre) — kostnadsbas för tjänster/icke-varor. */
+  /** Standardkostnad (öre) — legacy-bas för icke-varor / explicit fast kostnad ("standard"). */
   standardCost?: number | null;
-  /** Materialkostnad (öre) — additivt tillägg. */
+  /** Materialkostnad (öre). */
   materialCost?: number | null;
-  /** Fraktkostnad (öre) — additivt tillägg. */
+  /** Fraktkostnad (öre). */
   freightCost?: number | null;
-  /** Lagerkostnad (öre) — additivt tillägg. */
+  /** Emballagekostnad (öre). */
+  packagingCost?: number | null;
+  /** Miljö-/återvinningsavgift (öre). */
+  environmentalFee?: number | null;
+  /** Produktionstid (minuter) — driver auto-tidskostnaden. */
+  productionTime?: number | null;
+  /** Timkostnad (öre/timme) för produktionstiden. */
+  hourlyCost?: number | null;
+  /** Lagerkostnad (öre). */
   warehouseCost?: number | null;
+  /** Internkostnad/hantering (öre) — legacy-kolumnen `cost`. */
+  cost?: number | null;
+  /** Övrig kostnad (öre). */
+  otherCost?: number | null;
+  /** Prissättningsmetod: "manual" | "markup" | "margin" | null (legacy). */
+  pricingMethod?: string | null;
   /** Påslag i procent (t.ex. 25 = 25 %). */
   markupPercent?: number | null;
+  /** Önskad bruttomarginal i procent (t.ex. 25 = 25 %). Måste vara < 100. */
+  desiredMarginPercent?: number | null;
   /** Faktiskt satt listpris (öre). */
   listPrice?: number | null;
-  /** Internkostnad (öre) — additivt tillägg (tidigare legacy fallback-kostnad). */
-  cost?: number | null;
 }
 
 export interface ArticlePricing {
-  /** Självkostnad = kostnadsbas + material + frakt + lager + intern (öre). */
+  /** Kostnadsläge som faktiskt tillämpats ("calc" | "standard" | "legacy"). */
+  costingMode: "calc" | "standard" | "legacy";
+  /** Prissättningsmetod som faktiskt tillämpats. */
+  pricingMode: ArticlePricingMethod;
+  /** Auto-beräknad tidskostnad = produktionstid/60 × timkostnad (öre). */
+  timeCostOre: number;
+  /** Självkostnad (öre) enligt kostnadsläget ovan. */
   selfCostOre: number;
   /** True om minst en kostnadspost (bas eller tillägg) är explicit satt. */
   hasCostComponents: boolean;
-  /** Beräknat listpris = självkostnad × (1 + påslag) (öre). */
+  /** Beräknat listpris enligt prissättningsmetoden (öre). Vid "manual" = satt listpris. */
   computedListPriceOre: number;
   /** Det listpris marginalen beräknas mot (satt listpris om > 0, annars beräknat). */
   referenceListPriceOre: number;
-  /** Marginal per enhet = referenslistpris − självkostnad (öre). */
+  /** Täckningsbidrag per enhet = referenslistpris − självkostnad (öre). */
   marginPerUnitOre: number;
-  /** Marginal i procent av referenslistpriset (null om referenslistpris = 0). */
+  /** Bruttomarginal i procent av referenslistpriset (null om referenslistpris = 0). */
   marginPercent: number | null;
 }
 
+/** Tidskostnad (öre) = produktionstid/60 × timkostnad. Auto-beräknad, avrundad till hela öre. */
+export function computeTimeCostOre(input: Pick<ArticleCostInput, "productionTime" | "hourlyCost">): number {
+  const minutes = input.productionTime ?? 0;
+  const hourly = input.hourlyCost ?? 0;
+  if (minutes <= 0 || hourly <= 0) return 0;
+  return Math.round((minutes / 60) * hourly);
+}
+
 /**
- * Kostnadsbas (öre) efter artikeltyp: varor använder inköpspris, övriga
+ * LEGACY-kostnadsbas (öre) efter artikeltyp: varor använder inköpspris, övriga
  * (tjänst/kontroll/felanmälan/beroende) standardkostnad. Säkerställer att
  * inköpspris och standardkostnad aldrig dubbelräknas för samma artikel.
  */
@@ -70,25 +116,47 @@ export function resolveCostBasisOre(input: ArticleCostInput): number {
   return input.standardCost ?? 0;
 }
 
-/**
- * Självkostnad = kostnadsbas (inköp för vara / standardkostnad för tjänst) +
- * material + frakt + lager + internkostnad (öre). Returnerar 0 om inget är satt.
- */
-export function computeArticleSelfCostOre(input: ArticleCostInput): number {
+function normalizeCostingMethod(input: ArticleCostInput): "calc" | "standard" | "legacy" {
+  if (input.costingMethod === "calc") return "calc";
+  if (input.costingMethod === "standard") return "standard";
+  return "legacy";
+}
+
+/** Summan av de additiva kostnadsposterna (allt utom kostnadsbasen), inkl. auto-tidskostnad. */
+function additiveCostsOre(input: ArticleCostInput): number {
   return (
-    resolveCostBasisOre(input) +
     (input.materialCost ?? 0) +
     (input.freightCost ?? 0) +
+    (input.packagingCost ?? 0) +
+    (input.environmentalFee ?? 0) +
+    computeTimeCostOre(input) +
     (input.warehouseCost ?? 0) +
-    (input.cost ?? 0)
+    (input.cost ?? 0) +
+    (input.otherCost ?? 0)
   );
 }
 
 /**
- * Kostnadsbas för marginal-/kostnadsuppföljning. Internkostnaden är numera en
- * additiv del av självkostnaden, så detta är ett alias för
- * computeArticleSelfCostOre (gamla artiklar som bara har internkostnad satt får
- * självkostnad = internkostnad och fortsätter därmed fungera oförändrat).
+ * Självkostnad (öre) enligt kostnadsläget:
+ *   "standard" → fast standardkostnad (ersätter kalkylen helt)
+ *   "calc"     → inköpspris + samtliga additiva poster (standardkostnad ingår EJ)
+ *   legacy     → typ-styrd kostnadsbas + additiva poster (bakåtkompatibelt)
+ */
+export function computeArticleSelfCostOre(input: ArticleCostInput): number {
+  const mode = normalizeCostingMethod(input);
+  if (mode === "standard") {
+    return input.standardCost ?? 0;
+  }
+  if (mode === "calc") {
+    return (input.purchasePrice ?? 0) + additiveCostsOre(input);
+  }
+  return resolveCostBasisOre(input) + additiveCostsOre(input);
+}
+
+/**
+ * Kostnadsbas för marginal-/kostnadsuppföljning och prisupplösning — alias för
+ * computeArticleSelfCostOre. Gamla artiklar som bara har internkostnad satt får
+ * självkostnad = internkostnad och fortsätter därmed fungera oförändrat.
  */
 export function resolveArticleCostBasisOre(input: ArticleCostInput): number {
   return computeArticleSelfCostOre(input);
@@ -101,28 +169,68 @@ function hasAnyCostComponent(input: ArticleCostInput): boolean {
     input.purchasePrice != null ||
     input.materialCost != null ||
     input.freightCost != null ||
+    input.packagingCost != null ||
+    input.environmentalFee != null ||
+    input.hourlyCost != null ||
     input.warehouseCost != null ||
-    input.cost != null
+    input.cost != null ||
+    input.otherCost != null
   );
 }
 
+function normalizePricingMethod(input: ArticleCostInput): ArticlePricingMethod {
+  if (input.pricingMethod === "markup" || input.pricingMethod === "margin" || input.pricingMethod === "manual") {
+    return input.pricingMethod;
+  }
+  // Legacy: påslag om markupPercent är satt, annars manuellt listpris.
+  return input.markupPercent != null ? "markup" : "manual";
+}
+
 /**
- * Hela prisuppbyggnaden i ett anrop. Används av artikelformulärets
- * live-sammanfattning och av servern.
+ * Hela artikelkalkylen i ett anrop: kostnadskomponenter → självkostnad →
+ * listpris enligt vald metod → TB/marginal baklänges vid manuellt pris.
+ * Används av artikelformulärets live-sammanfattning och av servern.
  */
 export function computeArticlePricing(input: ArticleCostInput): ArticlePricing {
+  const costingMode = normalizeCostingMethod(input);
+  const pricingMode = normalizePricingMethod(input);
+  const timeCostOre = costingMode === "standard" ? 0 : computeTimeCostOre(input);
   const selfCostOre = computeArticleSelfCostOre(input);
   const hasCostComponents = hasAnyCostComponent(input);
-  const markup = input.markupPercent ?? 0;
-  const computedListPriceOre = Math.round(selfCostOre * (1 + markup / 100));
   const setListPrice = input.listPrice ?? 0;
-  const referenceListPriceOre = setListPrice > 0 ? setListPrice : computedListPriceOre;
+
+  let computedListPriceOre: number;
+  if (pricingMode === "markup") {
+    const markup = input.markupPercent ?? 0;
+    computedListPriceOre = Math.round(selfCostOre * (1 + markup / 100));
+  } else if (pricingMode === "margin") {
+    const margin = input.desiredMarginPercent ?? 0;
+    computedListPriceOre =
+      margin > 0 && margin < 100
+        ? Math.round(selfCostOre / (1 - margin / 100))
+        : selfCostOre; // ogiltig/ej satt marginal → ingen uppräkning
+  } else {
+    computedListPriceOre = setListPrice;
+  }
+
+  // Referenspris för TB/marginal: vid automatisk prissättning (påslag/marginal)
+  // ÄR det beräknade priset det som kommer att sparas — ett ev. gammalt sparat
+  // listpris får inte styra marginalvisningen. Endast vid manuell prissättning
+  // är det satta listpriset referensen.
+  const referenceListPriceOre =
+    pricingMode === "manual"
+      ? (setListPrice > 0 ? setListPrice : computedListPriceOre)
+      : computedListPriceOre;
   const marginPerUnitOre = referenceListPriceOre - selfCostOre;
   const marginPercent =
     referenceListPriceOre > 0
       ? (marginPerUnitOre / referenceListPriceOre) * 100
       : null;
+
   return {
+    costingMode,
+    pricingMode,
+    timeCostOre,
     selfCostOre,
     hasCostComponents,
     computedListPriceOre,

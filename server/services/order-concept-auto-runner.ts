@@ -31,6 +31,7 @@
 // invoice-inserten stämplar tenantId).
 
 import { db } from "../db";
+import { resolveArticleCostBasisOre } from "@shared/article-pricing";
 import { and, eq, isNull, lte, isNotNull } from "drizzle-orm";
 import { tenants, orderConcepts, customerInvoices, type OrderConcept } from "@shared/schema";
 import { getOrderConceptMethod } from "@shared/order-concept-method";
@@ -345,7 +346,7 @@ async function runScheduleConcept(
     } else if (linkedArticle) {
       linkedPrice = {
         price: linkedArticle.listPrice || 0,
-        cost: linkedArticle.cost || 0,
+        cost: resolveArticleCostBasisOre(linkedArticle),
         productionMinutes: linkedArticle.productionTime || 0,
         priceListId: null,
       };

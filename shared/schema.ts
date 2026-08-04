@@ -1085,6 +1085,20 @@ export const articles = pgTable("articles", {
   freightCost: integer("freight_cost"),            // Fraktkostnad (öre)
   warehouseCost: integer("warehouse_cost"),        // Lagerkostnad (öre)
   markupPercent: real("markup_percent"),           // Påslag (%)
+  // Task #1350: Artikelkalkyl — kostnadskalkyl → självkostnad → separat priskalkyl.
+  // Expand-contract: alla nullable → befintliga artiklar behåller sin legacy-innebörd
+  // (kostnadsbas efter artikeltyp) tills costingMethod sätts. Belopp i öre, procent real.
+  packagingCost: integer("packaging_cost"),         // Emballagekostnad (öre)
+  environmentalFee: integer("environmental_fee"),   // Miljö-/återvinningsavgift (öre)
+  hourlyCost: integer("hourly_cost"),               // Timkostnad (öre/timme) för produktionstid
+  otherCost: integer("other_cost"),                 // Övrig kostnad (öre)
+  // Kostnadsläge: null=legacy (typ-styrd kostnadsbas), "calc"=kalkylsumma,
+  // "standard"=explicit fast standardkostnad ersätter kalkylen.
+  costingMethod: text("costing_method"),
+  // Prissättningsmetod: null=legacy (påslag om markupPercent satt, annars manuell),
+  // "manual" | "markup" | "margin".
+  pricingMethod: text("pricing_method"),
+  desiredMarginPercent: real("desired_margin_percent"), // Önskad bruttomarginal (%)
   chargeModel: text("charge_model"),               // Debiteringsmodell: per_styck/per_timme/fast/per_meter/per_kvm
   travelTime: integer("travel_time"),              // Restid (min)
   // Lager & Inköp:

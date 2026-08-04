@@ -11,6 +11,7 @@ import { NotFoundError, ValidationError, ForbiddenError } from "../errors";
 import { objects, workOrders, customerCommunications, orderConceptArticles, orderConceptObjects, articleObjectMappings, conceptFilters, priceLists, deliverySchedules, assignments as assignmentsTable, articles, type InsertOrderConceptArticle } from "@shared/schema";
 import { getISOWeek, getStartOfISOWeek, getDateFromWeekdayInMonth } from "./helpers";
 import { getOrderConceptMethod } from "@shared/order-concept-method";
+import { resolveArticleCostBasisOre } from "@shared/article-pricing";
 import { computeConceptOrderValue } from "@shared/order-concept-value";
 import { buildScheduleDateTargets } from "../services/order-concept-schedule";
 import {
@@ -39,6 +40,11 @@ import {
   fixedPriceWoDivisor,
 } from "../services/order-concept-article-hits";
 import { computeConceptSubscriptionFee } from "../services/order-concept-subscription";
+
+// Task-delad regel: kostnads-snapshot för koncept-artikelrader (review-summary m.fl.)
+// måste gå via den delade självkostnadsmotorn — aldrig läsa articles.cost direkt.
+export const conceptArticleCostOre = (art: { costingMethod?: string | null } | null | undefined): number =>
+  art ? resolveArticleCostBasisOre(art as any) : 0;
 import {
   resolveObjectInvoiceRefs,
   formatEnrichedDescription,
@@ -2217,7 +2223,7 @@ app.get("/api/order-concepts/:id/review-summary", asyncHandler(async (req, res) 
       quantity: qty,
       unitPriceKr: unitPriceOre / 100,
       lineTotalKr: (unitPriceOre * qty) / 100,
-      costKr: ((art?.cost ?? 0) * qty) / 100,
+      costKr: (conceptArticleCostOre(art) * qty) / 100,
       productionMinutes: (art?.productionTime ?? 0) * qty,
     };
   });
@@ -2329,7 +2335,7 @@ app.get("/api/order-concepts/:id/review-summary", asyncHandler(async (req, res) 
     return {
       unitPriceOre: ca.unitPrice ?? art?.listPrice ?? 0,
       quantity: ca.quantity || 1,
-      costOre: art?.cost ?? 0,
+      costOre: conceptArticleCostOre(art),
       productionTimeMinutes: art?.productionTime ?? 0,
     };
   });
