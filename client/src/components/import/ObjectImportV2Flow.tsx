@@ -163,14 +163,20 @@ function persistMapping(cols: DetectedColumn[], mappings: Mappings) {
 }
 
 // Parsa uppladdad fil till en matris (alla rader inkl. headers).
-async function fileToMatrix(file: File): Promise<string[][]> {
+// För Excel-filer kan man välja vilket blad som ska läsas (sheetIndex) —
+// bladnamnen returneras så att UI:t kan visa en bladväljare vid flera blad.
+async function fileToMatrix(
+  file: File,
+  opts: { sheetIndex?: number } = {},
+): Promise<{ matrix: string[][]; sheetNames: string[] }> {
   const name = file.name.toLowerCase();
   if (name.endsWith(".xlsx") || name.endsWith(".xls")) {
     const ExcelJS = (await import("exceljs")).default;
     const buf = await file.arrayBuffer();
     const wb = new ExcelJS.Workbook();
     await wb.xlsx.load(buf);
-    const sheet = wb.worksheets[0];
+    const sheetNames = wb.worksheets.map((s) => s.name);
+    const sheet = wb.worksheets[opts.sheetIndex ?? 0] ?? wb.worksheets[0];
     if (!sheet) throw new Error("Hittade inget kalkylblad i Excel-filen");
     const cellToString = (val: unknown): string => {
       if (val === null || val === undefined) return "";
@@ -191,12 +197,23 @@ async function fileToMatrix(file: File): Promise<string[][]> {
       for (let c = 1; c <= colCount; c++) rowData.push(cellToString(row.getCell(c).value));
       rows.push(rowData);
     });
-    return rows;
+    return { matrix: rows, sheetNames };
   }
   // CSV — auto-detektera avgränsare via Papa.
   const text = await file.text();
   const parsed = Papa.parse<string[]>(text, { skipEmptyLines: true });
-  return (parsed.data as string[][]).map((r) => r.map((c) => String(c ?? "")));
+  return {
+    matrix: (parsed.data as string[][]).map((r) => r.map((c) => String(c ?? ""))),
+    sheetNames: [],
+  };
+}
+
+// Fil utan rubrikrad: syntetisera "Kolumn 1..N" så att mappningssteget ändå
+// kan användas (kolumnerna matchas manuellt mot rätt fält).
+function prependSyntheticHeaders(matrix: string[][]): string[][] {
+  const width = matrix.reduce((m, r) => Math.max(m, r.length), 0);
+  const header = Array.from({ length: width }, (_, i) => `Kolumn ${i + 1}`);
+  return [header, ...matrix];
 }
 
 // Tre-fils-export (Task #1176), Fil 3 – Metadata: långformat med en rad per
@@ -274,6 +291,12 @@ export function ObjectImportV2Flow() {
   const [skippedRows, setSkippedRows] = useState<Set<number>>(new Set());
   const [overwriteMetadata, setOverwriteMetadata] = useState(false);
   const [importing, setImporting] = useState(false);
+  // Inläsningsval: Excel-blad + rubrikrad. Råfilen behålls så att byte av
+  // blad/rubrikval kan läsa om filen utan ny uppladdning från användaren.
+  const rawFileRef = useRef<File | null>(null);
+  const [sheetNames, setSheetNames] = useState<string[]>([]);
+  const [sheetIndex, setSheetIndex] = useState(0);
+  const [hasHeaders, setHasHeaders] = useState(true);
 
   const { data: customers = [] } = useQuery<Customer[]>({ queryKey: ["/api/customers"] });
   const { data: fieldsData } = useQuery<{ fields: FieldDef[] }>({
@@ -288,18 +311,22 @@ export function ObjectImportV2Flow() {
   }, [fields]);
 
   const uploadMutation = useMutation({
-    mutationFn: async (file: File) => {
-      const rawMatrix = await fileToMatrix(file);
-      if (rawMatrix.length === 0) throw new Error("Filen är tom.");
-      // Fil 3 (metadata-långformat) pivoteras till brett format innan uppladdning.
+    mutationFn: async (input: { file: File; sheetIndex?: number; hasHeaders?: boolean }) => {
+      const { file } = input;
+      const parsed = await fileToMatrix(file, { sheetIndex: input.sheetIndex ?? 0 });
+      let rawMatrix = parsed.matrix;
+      if (rawMatrix.length === 0) throw new Error("Filen är tom (valt blad saknar rader).");
+      if (input.hasHeaders === false) rawMatrix = prependSyntheticHeaders(rawMatrix);
+      // Metadata-långformat pivoteras till brett format innan uppladdning.
       const matrix = pivotLongMetadataMatrix(rawMatrix) ?? rawMatrix;
       const res = await apiRequest("POST", "/api/import/objects-v2/upload", {
         fileName: file.name,
         matrix,
       });
-      return (await res.json()) as UploadResponse;
+      return { ...((await res.json()) as UploadResponse), _sheetNames: parsed.sheetNames };
     },
     onSuccess: (data) => {
+      setSheetNames(data._sheetNames);
       setSessionId(data.session_id);
       setFileName(data.file_name);
       setColumns(data.columns);
@@ -307,6 +334,13 @@ export function ObjectImportV2Flow() {
       setTotalRows(data.total_rows);
       setAutoMappings(data.mappings);
       setMappings(data.mappings);
+      // Ny session ⇒ rensa all sessionsbunden state (validering, hoppade rader,
+      // resultat) — annars kan stale val från förra bladet/rubrikläget slå igenom.
+      setValidation(null);
+      setSkippedRows(new Set());
+      setResult(null);
+      setCustomerId("");
+      setImporting(false);
       // Låt restore-effekten köra för denna (ev. nya) filstruktur.
       restoredSigRef.current = null;
       setStep(2);
@@ -456,6 +490,10 @@ export function ObjectImportV2Flow() {
     setCustomerId("");
     setSkippedRows(new Set());
     setImporting(false);
+    rawFileRef.current = null;
+    setSheetNames([]);
+    setSheetIndex(0);
+    setHasHeaders(true);
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
@@ -514,7 +552,12 @@ export function ObjectImportV2Flow() {
               data-testid="input-object-import-file"
               onChange={(e) => {
                 const file = e.target.files?.[0];
-                if (file) uploadMutation.mutate(file);
+                if (file) {
+                  rawFileRef.current = file;
+                  setSheetIndex(0);
+                  setHasHeaders(true);
+                  uploadMutation.mutate({ file, sheetIndex: 0, hasHeaders: true });
+                }
               }}
             />
             <div className="flex flex-col items-center justify-center gap-3 rounded-lg border border-dashed border-border p-10 text-center">
@@ -550,6 +593,52 @@ export function ObjectImportV2Flow() {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
+            {/* Inläsningsval: bladväljare (Excel med flera blad) + rubrikrad. */}
+            <div className="flex flex-wrap items-center gap-4 rounded-md border border-border bg-muted/40 p-3">
+              {sheetNames.length > 1 && (
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-muted-foreground">Blad:</span>
+                  <Select
+                    value={String(sheetIndex)}
+                    onValueChange={(v) => {
+                      const idx = Number(v);
+                      setSheetIndex(idx);
+                      if (rawFileRef.current) {
+                        uploadMutation.mutate({ file: rawFileRef.current, sheetIndex: idx, hasHeaders });
+                      }
+                    }}
+                    disabled={uploadMutation.isPending}
+                  >
+                    <SelectTrigger className="w-56" data-testid="select-import-sheet">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {sheetNames.map((n, i) => (
+                        <SelectItem key={i} value={String(i)} data-testid={`sheet-option-${i}`}>
+                          {n || `Blad ${i + 1}`}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+              <label className="flex items-center gap-2 text-sm cursor-pointer">
+                <Checkbox
+                  checked={hasHeaders}
+                  disabled={uploadMutation.isPending}
+                  onCheckedChange={(checked) => {
+                    const v = checked === true;
+                    setHasHeaders(v);
+                    if (rawFileRef.current) {
+                      uploadMutation.mutate({ file: rawFileRef.current, sheetIndex, hasHeaders: v });
+                    }
+                  }}
+                  data-testid="checkbox-has-headers"
+                />
+                Första raden innehåller rubriker
+              </label>
+              {uploadMutation.isPending && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
+            </div>
             <div className="overflow-x-auto rounded-md border border-border">
               <Table>
                 <TableHeader>

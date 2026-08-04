@@ -970,8 +970,25 @@ export function registerObjectImportV2Routes(app: Express): void {
           }
         };
 
+        // Multi-förälder: objektexporten skriver EN rad per förälderkoppling
+        // (samma objektnummer på flera rader). Första raden i körningen synkar
+        // primärföräldern; efterföljande rader för samma objekt läggs till som
+        // sekundära kopplingar istället för att ersätta primären — annars
+        // "vinner" sista raden och övriga kopplingar tappas vid round-trip.
+        const parentSyncedThisRun = new Set<string>();
         const syncPrimaryParent = async (objectId: string, parentId: string | null, isNew = false) => {
           if (!parentId) return;
+          if (parentSyncedThisRun.has(objectId)) {
+            const dup = await db
+              .select({ id: objectParents.id })
+              .from(objectParents)
+              .where(and(eq(objectParents.objectId, objectId), eq(objectParents.parentId, parentId), eq(objectParents.tenantId, tenantId)));
+            if (!dup[0]) {
+              await db.insert(objectParents).values({ tenantId, objectId, parentId, isPrimary: false, relationContext: "alternate" });
+            }
+            return;
+          }
+          parentSyncedThisRun.add(objectId);
           if (isNew) {
             // Nyskapat objekt: ingen befintlig primär-rad kan finnas → direkt insert.
             await db.insert(objectParents).values({ tenantId, objectId, parentId, isPrimary: true, relationContext: "primary" });

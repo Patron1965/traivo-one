@@ -833,30 +833,21 @@ export default function ObjectsPage() {
   // /api/objects levererar det som displayName; faller tillbaka på namnet.
   const slaktnamnOf = (obj: ServiceObject): string => (obj as any).displayName ?? obj.name;
 
-  // ── Fil 1 – Objekt: de fyra intrinsiska kolumnerna (nummer, namn, släktnamn,
-  // status). Objektet äger bara dessa; allt annat (adress, stad m.m.) ligger i
-  // metadatafilen (Fil 3). Kan läsas tillbaka via matchningsimporten
-  // (Objektnummer → system_id, Objektnamn → name, Status → active_status).
-  const buildObjektFileRows = (allObjects: ServiceObject[]): (string | number)[][] => {
-    const headers = ["Objektnummer", "Objektnamn", "Släktnamn", "Status"];
-    const rows: (string | number)[][] = allObjects.map(obj => [
-      obj.objectNumber || "",
-      obj.name,
-      slaktnamnOf(obj),
-      obj.status || "",
-    ]);
-    return [headers, ...rows];
-  };
-
-  // ── Fil 2 – Kopplade objekt: en rad per förälderkoppling (multi-förälder-stöd).
-  // Huvudobjekt = objektets eget nummer, Koppling uppåt = förälderns nummer.
-  // Rotobjekt (utan förälder inom exporturvalet) får ÄNDÅ en rad med tom
-  // "Koppling uppåt" — annars saknas de helt i filen trots att de är giltiga
-  // objekt (Mats-rapporterat: BRF Hönshuset syntes inte i "2-kopplade objekt").
-  const buildKoppladeObjektFileRows = async (
+  // ── Fil 1 – Objekt (sammanslagen): fd Fil 1 (intrinsiska kolumner) + fd Fil 2
+  // (förälderkoppling) i EN fil — en rad per förälderkoppling (multi-förälder),
+  // rotobjekt får en rad med tom "Koppling uppåt". Den separata kopplingsfilen
+  // togs bort på produktägarens begäran (dubblerad information var förvirrande).
+  // Valfria kundreferens-kolumner (refFields) läggs till som metadata.<namn> så
+  // att filen round-trippar via matchningsimporten och kan användas som
+  // översättningsnyckel mot kundens egna listor (butiksnummer m.m.).
+  const buildObjektFileRows = async (
     allObjects: ServiceObject[],
+    refFields: MetadataCatalogType[] = [],
   ): Promise<(string | number)[][]> => {
-    const headers = ["Huvudobjekt", "Namn", "Koppling uppåt", "Släktnamn"];
+    const headers = [
+      "Objektnummer", "Objektnamn", "Släktnamn", "Status", "Koppling uppåt",
+      ...refFields.map(f => `metadata.${f.namn}`),
+    ];
     const numberById = new Map(allObjects.map(o => [o.id, o.objectNumber || ""]));
 
     const res = await fetch(`/api/objects/parents-export`, { credentials: "include" });
@@ -870,27 +861,48 @@ export default function ObjectsPage() {
       linksByChild.set(link.objectId, arr);
     }
 
+    // Kundreferens-värden: senaste/ärvda värdet per (objekt, fält), chunkat
+    // enligt values-batch-endpointens tak (objectIds ≤ 500, katalogIds ≤ 60).
+    const refValuesByObj: Record<string, Record<string, string>> = {};
+    if (refFields.length > 0 && allObjects.length > 0) {
+      const katalogIds = refFields.map(f => f.id);
+      const OBJ_CHUNK = 200;
+      const KAT_CHUNK = 60;
+      const ids = allObjects.map(o => o.id);
+      for (let i = 0; i < ids.length; i += OBJ_CHUNK) {
+        const objChunk = ids.slice(i, i + OBJ_CHUNK);
+        for (let j = 0; j < katalogIds.length; j += KAT_CHUNK) {
+          const katChunk = katalogIds.slice(j, j + KAT_CHUNK);
+          const mRes = await apiRequest("POST", "/api/metadata/objects/values-batch", {
+            objectIds: objChunk,
+            katalogIds: katChunk,
+          });
+          const mData: { values: Record<string, Record<string, string>> } = await mRes.json();
+          for (const [objId, m] of Object.entries(mData.values ?? {})) {
+            refValuesByObj[objId] = { ...(refValuesByObj[objId] ?? {}), ...m };
+          }
+        }
+      }
+    }
+
     const rows: (string | number)[][] = [];
     for (const child of allObjects) {
+      const refCells = refFields.map(f => refValuesByObj[child.id]?.[f.id] ?? "");
+      const base = [
+        child.objectNumber || "",
+        child.name,
+        slaktnamnOf(child),
+        child.status || "",
+      ];
       const childLinks = (linksByChild.get(child.id) ?? [])
         .filter(link => numberById.has(link.parentId)); // förälder ej i exporturvalet → hoppa
       if (childLinks.length === 0) {
         // Rotobjekt (eller förälder utanför urvalet) — en rad med tom uppåt-koppling.
-        rows.push([
-          child.objectNumber || "",
-          child.name,
-          "",
-          slaktnamnOf(child),
-        ]);
+        rows.push([...base, "", ...refCells]);
         continue;
       }
       for (const link of childLinks) {
-        rows.push([
-          child.objectNumber || "",
-          child.name,
-          numberById.get(link.parentId) || "",
-          slaktnamnOf(child),
-        ]);
+        rows.push([...base, numberById.get(link.parentId) || "", ...refCells]);
       }
     }
     return [headers, ...rows];
@@ -946,23 +958,21 @@ export default function ObjectsPage() {
     return [headers, ...rows];
   };
 
-  // Tre-fils-export: producerar Objekt-, Kopplade objekt- och Metadatafilerna
-  // enligt "allt är metadata"-modellen. Samma tre filer kan läsas tillbaka via
-  // matchningsimporten för att uppdatera befintliga objekt + metadata.
-  const exportThreeFiles = async () => {
+  // Tvåfils-export: Objektfilen (inkl. förälderkoppling) + Metadatafilen.
+  // Samma filer kan läsas tillbaka via matchningsimporten för att uppdatera
+  // befintliga objekt + metadata.
+  const exportTwoFiles = async () => {
     if (isExporting) return;
     setIsExporting(true);
     try {
       const allObjects = await fetchAllObjectsForExport();
-      const objektRows = buildObjektFileRows(allObjects);
-      const koppladeRows = await buildKoppladeObjektFileRows(allObjects);
+      const objektRows = await buildObjektFileRows(allObjects);
       const metaRows = await buildMetadataFileRows(allObjects);
       downloadCSV("1-objekt.csv", objektRows);
-      downloadCSV("2-kopplade-objekt.csv", koppladeRows);
-      downloadCSV("3-metadata.csv", metaRows);
+      downloadCSV("2-metadata.csv", metaRows);
       toast({
         title: "Export klar",
-        description: `${allObjects.length} objekt i tre filer (objekt, kopplade objekt, metadata)`,
+        description: `${allObjects.length} objekt i två filer (objekt inkl. koppling, metadata)`,
       });
     } catch (err) {
       toast({ title: "Export misslyckades", description: err instanceof Error ? err.message : "Okänt fel", variant: "destructive" });
@@ -971,28 +981,18 @@ export default function ObjectsPage() {
     }
   };
 
-  const exportObjektFil = async () => {
+  const exportObjektFil = async (refFields: MetadataCatalogType[] = []) => {
     if (isExporting) return;
     setIsExporting(true);
     try {
       const allObjects = await fetchAllObjectsForExport();
-      downloadCSV("1-objekt.csv", buildObjektFileRows(allObjects));
-      toast({ title: "Export klar", description: `${allObjects.length} objekt exporterade` });
-    } catch (err) {
-      toast({ title: "Export misslyckades", description: err instanceof Error ? err.message : "Okänt fel", variant: "destructive" });
-    } finally {
-      setIsExporting(false);
-    }
-  };
-
-  const exportKoppladeObjektFil = async () => {
-    if (isExporting) return;
-    setIsExporting(true);
-    try {
-      const allObjects = await fetchAllObjectsForExport();
-      const rows = await buildKoppladeObjektFileRows(allObjects);
-      downloadCSV("2-kopplade-objekt.csv", rows);
-      toast({ title: "Export klar", description: `${rows.length - 1} kopplingar exporterade` });
+      downloadCSV("1-objekt.csv", await buildObjektFileRows(allObjects, refFields));
+      toast({
+        title: "Export klar",
+        description: refFields.length > 0
+          ? `${allObjects.length} objekt exporterade med ${refFields.length} kundreferens-kolumn${refFields.length > 1 ? "er" : ""}`
+          : `${allObjects.length} objekt exporterade`,
+      });
     } catch (err) {
       toast({ title: "Export misslyckades", description: err instanceof Error ? err.message : "Okänt fel", variant: "destructive" });
     } finally {
@@ -1006,13 +1006,32 @@ export default function ObjectsPage() {
     try {
       const allObjects = await fetchAllObjectsForExport();
       const rows = await buildMetadataFileRows(allObjects);
-      downloadCSV("3-metadata.csv", rows);
+      downloadCSV("2-metadata.csv", rows);
       toast({ title: "Export klar", description: `Metadatavärden exporterade (${rows.length - 1} rader)` });
     } catch (err) {
       toast({ title: "Export misslyckades", description: err instanceof Error ? err.message : "Okänt fel", variant: "destructive" });
     } finally {
       setIsExporting(false);
     }
+  };
+
+  // Kundreferens-export: dialog där man väljer ett eller flera metadatafält
+  // (t.ex. butiksnummer/fastighetsnummer) som extra kolumner i objektfilen —
+  // används som översättningsnyckel mot kundens egna listor.
+  const [refExportDialogOpen, setRefExportDialogOpen] = useState(false);
+  const [refExportFieldIds, setRefExportFieldIds] = useState<Set<string>>(new Set());
+  const [refExportSearch, setRefExportSearch] = useState("");
+  const refExportCandidates = useMemo(() => {
+    const q = refExportSearch.trim().toLowerCase();
+    if (!q) return metadataCatalog;
+    return metadataCatalog.filter(t =>
+      t.namn.toLowerCase().includes(q) || (t.beteckning ?? "").toLowerCase().includes(q),
+    );
+  }, [metadataCatalog, refExportSearch]);
+  const runRefExport = async () => {
+    const fields = metadataCatalog.filter(t => refExportFieldIds.has(t.id));
+    setRefExportDialogOpen(false);
+    await exportObjektFil(fields);
   };
 
   // Kolumnexport av markerade objekt i round-trip-format för matchningsimporten
@@ -1580,32 +1599,35 @@ export default function ObjectsPage() {
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-80">
-            <DropdownMenuItem onClick={exportThreeFiles} data-testid="menu-export-three-files">
+            <DropdownMenuItem onClick={exportTwoFiles} data-testid="menu-export-two-files">
               <FileSpreadsheet className="h-4 w-4 mr-2 mt-0.5 shrink-0" />
               <div className="flex flex-col">
-                <span>Tre-fils-export (CSV)</span>
-                <span className="text-xs text-muted-foreground">Objekt + kopplade objekt + metadata – kan läsas tillbaka via matchningsimporten</span>
+                <span>Tvåfils-export (CSV)</span>
+                <span className="text-xs text-muted-foreground">Objekt (inkl. koppling uppåt) + metadata – kan läsas tillbaka via matchningsimporten</span>
               </div>
             </DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={exportObjektFil} data-testid="menu-export-objekt-file">
+            <DropdownMenuItem onClick={() => exportObjektFil()} data-testid="menu-export-objekt-file">
               <FileSpreadsheet className="h-4 w-4 mr-2 mt-0.5 shrink-0" />
               <div className="flex flex-col">
                 <span>Fil 1 – Objekt (CSV)</span>
-                <span className="text-xs text-muted-foreground">Objektnummer, objektnamn, släktnamn, status</span>
+                <span className="text-xs text-muted-foreground">Objektnummer, namn, släktnamn, status, koppling uppåt (en rad per koppling)</span>
               </div>
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={exportKoppladeObjektFil} data-testid="menu-export-kopplade-file">
+            <DropdownMenuItem
+              onClick={() => { setRefExportFieldIds(new Set()); setRefExportSearch(""); setRefExportDialogOpen(true); }}
+              data-testid="menu-export-objekt-kundreferens"
+            >
               <FileSpreadsheet className="h-4 w-4 mr-2 mt-0.5 shrink-0" />
               <div className="flex flex-col">
-                <span>Fil 2 – Kopplade objekt (CSV)</span>
-                <span className="text-xs text-muted-foreground">En rad per förälderkoppling (multi-förälder)</span>
+                <span>Fil 1 med kundreferens…</span>
+                <span className="text-xs text-muted-foreground">Välj metadatafält (t.ex. butiksnummer) som extra kolumner – översättningsnyckel mot kundens listor</span>
               </div>
             </DropdownMenuItem>
             <DropdownMenuItem onClick={exportMetadataFil} data-testid="menu-export-metadata-file">
               <FileSpreadsheet className="h-4 w-4 mr-2 mt-0.5 shrink-0" />
               <div className="flex flex-col">
-                <span>Fil 3 – Metadata (CSV)</span>
+                <span>Fil 2 – Metadata (CSV)</span>
                 <span className="text-xs text-muted-foreground">En rad per objekt + metadatafält (namn, data)</span>
               </div>
             </DropdownMenuItem>
@@ -1619,6 +1641,64 @@ export default function ObjectsPage() {
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
+        <Dialog open={refExportDialogOpen} onOpenChange={setRefExportDialogOpen}>
+          <DialogContent className="max-w-md" data-testid="dialog-ref-export">
+            <DialogHeader>
+              <DialogTitle>Exportera med kundreferens</DialogTitle>
+              <DialogDescription>
+                Välj ett eller flera metadatafält som läggs till som extra kolumner i objektfilen —
+                t.ex. butiksnummer eller fastighetsnummer, för att kunna matcha mot kundens egna listor.
+                För fält med flera poster exporteras det senaste värdet.
+              </DialogDescription>
+            </DialogHeader>
+            <Input
+              placeholder="Sök metadatafält…"
+              value={refExportSearch}
+              onChange={(e) => setRefExportSearch(e.target.value)}
+              data-testid="input-ref-export-search"
+            />
+            <div className="max-h-64 overflow-y-auto space-y-1 border rounded-md p-2">
+              {refExportCandidates.length === 0 && (
+                <p className="text-sm text-muted-foreground p-2">Inga metadatafält matchar sökningen.</p>
+              )}
+              {refExportCandidates.map((t) => (
+                <label
+                  key={t.id}
+                  className="flex items-center gap-2 rounded px-2 py-1.5 text-sm hover-elevate cursor-pointer"
+                  data-testid={`ref-export-field-${t.id}`}
+                >
+                  <Checkbox
+                    checked={refExportFieldIds.has(t.id)}
+                    onCheckedChange={(checked) => {
+                      setRefExportFieldIds(prev => {
+                        const next = new Set(prev);
+                        if (checked) next.add(t.id); else next.delete(t.id);
+                        return next;
+                      });
+                    }}
+                  />
+                  <span className="flex-1">{t.beteckning || t.namn}</span>
+                  {t.beteckning && t.beteckning !== t.namn && (
+                    <span className="text-xs text-muted-foreground font-mono">{t.namn}</span>
+                  )}
+                </label>
+              ))}
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setRefExportDialogOpen(false)} data-testid="button-ref-export-cancel">
+                Avbryt
+              </Button>
+              <Button
+                onClick={runRefExport}
+                disabled={refExportFieldIds.size === 0 || isExporting}
+                data-testid="button-ref-export-run"
+              >
+                <Download className="h-4 w-4 mr-2" />
+                Exportera ({refExportFieldIds.size} fält)
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
         <Button size="lg" onClick={() => navigate("/objects/new")} data-testid="button-add-object">
           <Plus className="h-4 w-4 mr-2" />
           Skapa {t("object_singular").toLowerCase()}
