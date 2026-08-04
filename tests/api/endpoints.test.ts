@@ -63,7 +63,9 @@ describe("API Endpoints", () => {
       const res = await apiGet("/api/me/tenant");
       expect(res.status).toBe(200);
       expect(res.body).toHaveProperty("tenantId");
-      expect(res.body.tenantId).toBe("default-tenant");
+      // Säkerhet: oinloggade besökare får ingen tenant (tidigare fanns en
+      // back-compat-fallback till en default-tenant, den är medvetet borttagen).
+      expect(res.body.tenantId).toBeNull();
       expect(res.body).toHaveProperty("tenants");
       expect(Array.isArray(res.body.tenants)).toBe(true);
     });
@@ -165,10 +167,13 @@ describe("API Endpoints", () => {
       expect(res.body).toHaveProperty("error");
     });
 
-    it("GET /api/portal/tenants returnerar lista med tenants", async () => {
+    it("GET /api/portal/tenants returnerar endast en räknare (inga identiteter)", async () => {
       const res = await apiGet("/api/portal/tenants");
       expect(res.status).toBe(200);
-      expect(Array.isArray(res.body)).toBe(true);
+      // Säkerhet: endpointen exponerar inte längre tenant-namn/-id:n för
+      // oautentiserade anrop — bara { count } för klientens auto-detect-logik.
+      expect(typeof res.body?.count).toBe("number");
+      expect(Array.isArray(res.body)).toBe(false);
     });
 
     it("POST /api/portal/logout returnerar success", async () => {
@@ -226,19 +231,21 @@ describe("API Endpoints", () => {
   });
 
   describe("Publika endpoints – /api/public", () => {
-    it("GET /api/public/report/:code kräver autentisering (tenant-middleware)", async () => {
+    it("GET /api/public/report/:code ger 404 för ogiltig kod (ingen enumeration)", async () => {
+      // Publika QR-endpoints är kodgated (ej sessionsauth): en ogiltig kod ska
+      // ge 404, inte 401 — tenant resolvas server-side via QR-koden.
       const res = await apiGet(`/api/public/report/invalid-code-${randomId()}`);
-      expect(res.status).toBe(401);
+      expect(res.status).toBe(404);
       expect(res.body).toHaveProperty("error");
     });
 
-    it("POST /api/public/report/:code kräver autentisering (tenant-middleware)", async () => {
+    it("POST /api/public/report/:code ger 404 för ogiltig kod (ingen enumeration)", async () => {
       const res = await apiPost(`/api/public/report/invalid-code-${randomId()}`, {
         category: "damage",
         title: "Test-anmälan",
         description: "Testbeskrivning",
       });
-      expect(res.status).toBe(401);
+      expect(res.status).toBe(404);
       expect(res.body).toHaveProperty("error");
     });
   });
@@ -260,9 +267,9 @@ describe("API Endpoints", () => {
       expect(typeof res.body.error).toBe("string");
     });
 
-    it("401-svar från publik endpoint (tenant-skyddad) innehåller error-fält", async () => {
+    it("404-svar från publik endpoint (kodgated) innehåller error-fält", async () => {
       const res = await apiGet(`/api/public/report/nonexistent-${randomId()}`);
-      expect(res.status).toBe(401);
+      expect(res.status).toBe(404);
       expect(res.body).toHaveProperty("error");
       expect(typeof res.body.error).toBe("string");
     });

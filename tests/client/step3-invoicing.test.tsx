@@ -27,9 +27,19 @@ const BASE_PROPS = {
   departmentMetadataField: null as string | null,
   monthlyFee: null as number | null,
   subscriptionStartDate: "",
+  settlementArticleId: null as string | null,
   customerReference: "",
   customerLabel: "",
+  ourReference: "",
+  customerReferenceMode: "HARDCODED",
+  customerReferenceMetadataField: null as string | null,
+  customerLabelMode: "HARDCODED",
+  customerLabelMetadataField: null as string | null,
+  invoiceRowReferenceFields: [] as string[],
+  includeExecutorFreetext: false,
+  requireCompleteSegmentBeforeInvoice: false,
   conceptId: null as string | null,
+  articles: [] as never[],
 };
 
 function renderStep3(overrides: Partial<typeof BASE_PROPS> = {}) {
@@ -67,7 +77,10 @@ describe("Step3Invoicing — tvåvalsmetoden mappar korrekt", () => {
 describe("Step3Invoicing — metadatabaserad referens blir ett fakturastopp", () => {
   afterEach(() => cleanup());
 
-  it("växling till metadatareferens sätter invoiceConsolidation = vald frekvens och rensar fast referens", () => {
+  it("växling till metadatauppdelning sätter invoiceConsolidation = vald frekvens (referenser orörda)", () => {
+    // Task #1124: fakturauppdelning är frikopplad från referenserna — den rör
+    // BARA invoiceConsolidation (+ departmentMetadataField), aldrig
+    // customerReference/customerLabel.
     const { getByTestId, onUpdate } = renderStep3({
       invoiceFrequency: "quarterly",
       invoiceConsolidation: "customer",
@@ -77,8 +90,6 @@ describe("Step3Invoicing — metadatabaserad referens blir ett fakturastopp", ()
     fireEvent.click(getByTestId("radio-reference-metadata"));
     expect(onUpdate).toHaveBeenCalledWith({
       invoiceConsolidation: "quarterly",
-      customerReference: "",
-      customerLabel: "",
     });
   });
 

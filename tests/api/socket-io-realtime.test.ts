@@ -4,7 +4,7 @@ import {
   TENANT_ID, TOMAS_ID, ANNA_ID,
   type Captured,
   captureSocket, waitFor, loginMobile, mintSocketToken, emitTest,
-  createTeam, deleteTeam, inviteToTeam, leaveTeam, connectSocket,
+  createTeam, deleteTeam, inviteToTeam, acceptTeamInvite, leaveTeam, connectSocket,
   ALL_NAMED_EVENTS,
 } from "./socket-io-helpers";
 
@@ -278,9 +278,10 @@ describe("Socket.io realtime channel (Traivo Go)", () => {
       tomasEvents.some((e) => e.event === "team:invitation"),
     );
 
-    // After invite, the bridge live-joins Anna into team:teamId and emits a
-    // synthetic team:order_updated to confirm membership. Both members of the
-    // team room should now see it.
+    // Inbjudan är numera väntande (acceptedAt=null) — Anna live-joinas i
+    // team-rummet först när hon accepterar. Efter accept emittas en syntetisk
+    // team:order_updated (memberJoined) som båda teammedlemmarna ser.
+    await acceptTeamInvite(annaMobile, teamId);
     await waitFor(() =>
       tomasEvents.some(
         (e) =>

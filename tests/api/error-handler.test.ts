@@ -146,14 +146,20 @@ describe("errorHandler — okänt Error och plain-objekt med status", () => {
     errorHandler(new Error("boom"), h.req, h.res, h.next);
     expect(h.getStatus()).toBe(500);
     expect(h.getBody().code).toBe("ERR_INTERNAL");
-    expect(h.getBody().message).toBe("boom");
+    // Säkerhet: okända Error-meddelanden läcker inte till klienten — servern
+    // svarar med ett generiskt svenskt meddelande (detaljer loggas server-side).
+    expect(h.getBody().message).toBe(
+      "Ett internt serverfel uppstod. Försök igen senare.",
+    );
   });
 
   it("ger generiskt meddelande för icke-Error som kastas", () => {
     const h = makeHarness();
     errorHandler("bara en sträng", h.req, h.res, h.next);
     expect(h.getStatus()).toBe(500);
-    expect(h.getBody().message).toBe("Ett oväntat serverfel uppstod");
+    expect(h.getBody().message).toBe(
+      "Ett internt serverfel uppstod. Försök igen senare.",
+    );
   });
 
   it("läser status från objekt med .status och mappar code", () => {

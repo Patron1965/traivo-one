@@ -104,10 +104,15 @@ describe("ApiError — details-array utan message (bakåtkompatibel fält-format
 });
 
 describe("ApiError — icke-JSON och tom body", () => {
-  it("använder rå text som message när body inte är JSON", async () => {
+  it("visar begripligt svenskt meddelande för 5xx med icke-JSON-body", async () => {
+    // Icke-JSON 5xx (t.ex. Replit-edgens råa "Internal Server Error" under
+    // omstart) ska INTE visas rått för användaren — klienten översätter till
+    // ett svenskt generiskt meddelande.
     mockFetchOnce("Internal Server Error", { status: 500 });
     const err = await captureApiError(() => apiRequest("GET", "/api/x"));
-    expect(err.message).toBe("Internal Server Error");
+    expect(err.message).toBe(
+      "Servern är tillfälligt otillgänglig. Försök igen om en liten stund.",
+    );
     expect(err.code).toBe("ERR_INTERNAL");
   });
 

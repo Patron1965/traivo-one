@@ -40,14 +40,15 @@ const COL = {
   object: 4,
   title: 5,
   taskType: 6,
-  desired: 7,
-  minutes: 8,
-  hours: 9,
-  team: 10,
-  week: 11,
-  lastService: 12,
-  valueKr: 13,
-  costKr: 14,
+  executionCode: 7,
+  desired: 8,
+  minutes: 9,
+  hours: 10,
+  team: 11,
+  week: 12,
+  lastService: 13,
+  valueKr: 14,
+  costKr: 15,
 } as const;
 
 let tenantA: string;

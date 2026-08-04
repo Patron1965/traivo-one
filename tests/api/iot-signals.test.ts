@@ -28,6 +28,12 @@ describe("IoT API", () => {
       customerId: customer.id,
     } as InsertObject);
     objectId = obj.id;
+
+    // Kundkoppling sker numera via Ekonomi-metadatafältet "Kund" (object_payers
+    // är borttagen) — storage.createObject ignorerar customerId-fältet. Koppla
+    // kunden explicit så att IoT-auto-ordern kan härleda customer_id (NOT NULL).
+    const { ensurePrimaryPayer } = await import("../../server/services/object-customer");
+    await ensurePrimaryPayer(TEST_TENANT, objectId, customer.id);
   });
 
   describe("Storage: API Key CRUD", () => {

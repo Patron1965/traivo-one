@@ -124,10 +124,15 @@ describe("TopNav nav groups", () => {
     expect(screen.queryByTestId("nav-dropdown-ai")).toBeTruthy();
 
     // Fully-filtered groups must not render any trigger/group.
+    // (Planering renderas som direktlänk när den har items — kolla båda testid:n.)
     for (const slug of OTHER_GROUP_SLUGS) {
       expect(
         screen.queryByTestId(`nav-dropdown-${slug}`),
         `expected nav-dropdown-${slug} to be absent`,
+      ).toBeNull();
+      expect(
+        screen.queryByTestId(`nav-link-${slug}`),
+        `expected nav-link-${slug} to be absent`,
       ).toBeNull();
     }
   });
@@ -138,9 +143,13 @@ describe("TopNav nav groups", () => {
     renderUI(h(TopNav));
 
     for (const slug of ["ai", ...OTHER_GROUP_SLUGS]) {
+      // "Planering" renderas numera som direktlänk (NavDirectLink) i stället
+      // för dropdown — den har testid nav-link-planering.
+      const testId =
+        slug === "planering" ? `nav-link-${slug}` : `nav-dropdown-${slug}`;
       expect(
-        screen.queryByTestId(`nav-dropdown-${slug}`),
-        `expected nav-dropdown-${slug} to be present`,
+        screen.queryByTestId(testId),
+        `expected ${testId} to be present`,
       ).toBeTruthy();
     }
   });

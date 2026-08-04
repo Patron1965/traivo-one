@@ -38,12 +38,18 @@ describe("parseDeliveryDate (Task #901 B8)", () => {
     expect(result?.getSeconds()).toBe(45);
   });
 
-  it("tolkar ett rent datum (YYYY-MM-DD)", () => {
+  it("tolkar ett rent datum (YYYY-MM-DD) som midnatt i Europe/Stockholm", () => {
+    // Task #911: datum-only förankras till lokal midnatt i Europe/Stockholm,
+    // inte UTC-midnatt. I augusti (CEST, UTC+2) blir det 22:00 UTC dagen innan.
     const result = parseDeliveryDate("2026-08-15");
     expect(result).toBeInstanceOf(Date);
-    expect(result?.getUTCFullYear()).toBe(2026);
-    expect(result?.getUTCMonth()).toBe(7);
-    expect(result?.getUTCDate()).toBe(15);
+    expect(result?.toISOString()).toBe("2026-08-14T22:00:00.000Z");
+    const stockholm = new Intl.DateTimeFormat("sv-SE", {
+      timeZone: "Europe/Stockholm",
+      dateStyle: "short",
+      timeStyle: "short",
+    }).format(result!);
+    expect(stockholm).toBe("2026-08-15 00:00");
   });
 
   it("trimmar omgivande blanksteg", () => {

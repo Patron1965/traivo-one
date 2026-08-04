@@ -69,6 +69,11 @@ beforeAll(async () => {
     next();
   });
   registerPlatformAdminRoutes(app);
+  // Routes kastar AppError (ValidationError/ConflictError) — den globala
+  // errorHandler-middlewaren måste monteras sist precis som i riktiga servern
+  // för att ge den strukturerade JSON-payloaden ({error, code, message, details}).
+  const { errorHandler } = await import("../../server/middleware/errorHandler");
+  app.use(errorHandler);
   await new Promise<void>((resolve) => {
     server = app.listen(0, "127.0.0.1", () => resolve());
   });
@@ -196,8 +201,9 @@ describe("/api/platform/users/:id DELETE — confirm + last-owner-skydd", () => 
       body: { confirm: "RADERA" },
     });
     expect(blocked.status).toBe(409);
-    expect(Array.isArray(blocked.body?.blockingTenants)).toBe(true);
-    expect(blocked.body.blockingTenants).toEqual(
+    // blockingTenants ligger i den strukturerade felkroppens details-fält.
+    expect(Array.isArray(blocked.body?.details?.blockingTenants)).toBe(true);
+    expect(blocked.body.details.blockingTenants).toEqual(
       expect.arrayContaining([LONE_TENANT_A, LONE_TENANT_B]),
     );
     // Target ska fortfarande existera

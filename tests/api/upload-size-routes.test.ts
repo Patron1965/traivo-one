@@ -133,6 +133,13 @@ async function buildAppWith(register: (app: Express) => Promise<void> | void): P
     ?? (expressMod as unknown as typeof import("express").default);
   const app = expressFn();
   app.use(expressFn.json());
+  // Field-worker-routerna kräver numera privilegierad roll (owner/admin/planner)
+  // eller en caller-kopplad resurs; storleksgräns-testerna gäller själva
+  // size-guarden, så vi kör som planner.
+  app.use((reqIn: Request, _res: Response, next: NextFunction) => {
+    (reqIn as Request & { tenantRole?: string }).tenantRole = "planner";
+    next();
+  });
   await register(app);
   // Mirror the global error middleware in server/index.ts so AppError-throwing
   // routes return their proper status code instead of bubbling to a 500.

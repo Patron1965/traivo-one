@@ -34,7 +34,28 @@ export async function waitFor<T>(
   throw new Error(`waitFor timed out after ${timeoutMs}ms`);
 }
 
+// Robust test-fixtur: mobil-login kräver numera att resursen har en konfigurerad
+// PIN som matchar (resurser utan PIN avvisas — auth-bypass-fix). Seed-datat
+// lämnar vissa demo-resurser (t.ex. anna@kinab.se) utan PIN, vilket gav 401 i
+// testerna. Sätt test-PIN:en på den aktiva resursen innan inloggning.
+async function ensureMobilePinFixture(email: string, pin: string): Promise<void> {
+  const { db } = await import("../../server/db");
+  const { resources } = await import("../../shared/schema");
+  const { eq, and, isNull, sql } = await import("drizzle-orm");
+  await db
+    .update(resources)
+    .set({ pin })
+    .where(
+      and(
+        sql`lower(${resources.email}) = ${email.toLowerCase()}`,
+        eq(resources.status, "active"),
+        isNull(resources.pin),
+      ),
+    );
+}
+
 export async function loginMobile(email: string, pin = "1234"): Promise<string> {
+  await ensureMobilePinFixture(email, pin);
   const res = await fetch(`${BASE}/api/mobile/login`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -142,6 +163,14 @@ export async function inviteToTeam(
     body: JSON.stringify({ resourceId }),
   });
   if (!res.ok) throw new Error(`Invite failed: ${res.status}`);
+}
+
+export async function acceptTeamInvite(mobileToken: string, teamId: string) {
+  const res = await fetch(`${BASE}/api/mobile/teams/${teamId}/accept`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${mobileToken}` },
+  });
+  if (!res.ok) throw new Error(`Accept failed: ${res.status}`);
 }
 
 export async function leaveTeam(mobileToken: string, teamId: string) {

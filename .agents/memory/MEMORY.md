@@ -125,4 +125,5 @@
 - [import_batches.session_id utan FK](import-batches-session-id.md) — kolumnen pekar numera på object_import_sessions (Import 2.0) UTAN FK; gamla import_sessions droppad — återinför aldrig FK:n.
 - [Artikelkalkyl kostnads-/prisläge](article-calc-costing-method.md) — costingMethod null=legacy typ-bas (rör ej gamla artiklar), "standard" ersätter kalkylen; all självkostnad via shared/article-pricing, aldrig SQL-dubblett; articles.cost är öre/km för restid-artiklar.
 - [Vinjett snabbfälts-fallback](vinjett-quickfield-fallback.md) — 3 nivåer (objektkedja→objekttyp→visaIVinjett-flagga); metadata-audit-actor är server-auktoritativ (req.user vinner); ärvd bildhistorik läses från källobjektets rad.
+- [API-tester körs mot dev-servern](api-tests-dev-server.md) — vitest-API-tester kräver körande dev-server + ENABLE_REALTIME_TEST_ROUTES (rate-limit-skip); mobil-login kräver PIN-fixtur; team-join sker vid accept ej invite.
 - [Lagersaldo concurrency-lås](stock-balance-concurrency.md) — delta-beräknande saldo-writes (reconcile/inventering) måste läsa utgångsvärdet under FOR UPDATE i samma tx, annars dubbelbokning.
