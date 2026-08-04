@@ -978,6 +978,13 @@ export function EnkelUppgiftWizard({
                       {!objectsFetching && debouncedObject.trim() && (objectResults || []).length === 0 && (
                         <div className="p-3 text-center text-xs text-muted-foreground">Inga objekt matchar</div>
                       )}
+                      {/* Task #1088: servern cappar sökningen på 200 träffar — visa
+                          tydligt att listan är avkortad så användaren förfinar. */}
+                      {!objectsFetching && (objectResults || []).length >= 200 && (
+                        <div className="p-3 text-center text-xs text-muted-foreground" data-testid="text-object-search-truncated">
+                          Fler träffar kan finnas — förfina sökningen för att hitta rätt objekt.
+                        </div>
+                      )}
                       {!debouncedObject.trim() && (
                         <div className="p-3 text-center text-xs text-muted-foreground">Skriv för att söka</div>
                       )}

@@ -461,7 +461,11 @@ app.get("/api/objects/parent-search", asyncHandler(async (req, res) => {
     res.json([]);
     return;
   }
-  const hits = await storage.searchObjectsForParent(tenantId, q, { excludeObjectId: exclude, limit: 30 });
+  // Task #1088: klienten kan begära fler träffar ("Visa fler") — cappad till
+  // storage-lagrets max (100) så stora kunder inte fastnar vid de första 30.
+  const limitRaw = parseInt(String(req.query.limit ?? "30"), 10);
+  const limit = Number.isFinite(limitRaw) ? Math.max(1, Math.min(100, limitRaw)) : 30;
+  const hits = await storage.searchObjectsForParent(tenantId, q, { excludeObjectId: exclude, limit });
   res.json(hits);
 }));
 

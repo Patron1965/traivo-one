@@ -54,6 +54,10 @@ interface ObjectParentComboboxProps {
 const formatPath = (path: Array<{ id: string; name: string }>) =>
   path.map((p) => p.name).join(" › ");
 
+// Task #1088: sidstorlek för "Visa fler"-paginering; servern cappar på 100.
+const SEARCH_PAGE_SIZE = 30;
+const SEARCH_MAX_LIMIT = 100;
+
 /**
  * Sökbar förälder-väljare. Delar sök-beteende och släktnamns-visning med
  * "Lägg till förälder"-dialogen (ObjectParentsManager) så att objekt-ytorna ser
@@ -75,13 +79,20 @@ export function ObjectParentCombobox({
 }: ObjectParentComboboxProps) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
+  // Task #1088: "Visa fler"-paginering via växande limit (server cappar 100).
+  const [searchLimit, setSearchLimit] = useState(SEARCH_PAGE_SIZE);
   const debounced = useDebounced(search);
   const trimmed = debounced.trim();
 
+  // Nytt sökord → börja om från första sidan.
+  useEffect(() => {
+    setSearchLimit(SEARCH_PAGE_SIZE);
+  }, [trimmed]);
+
   const { data: results = [], isFetching } = useQuery<ObjectParentSearchHit[]>({
-    queryKey: ["/api/objects/parent-search", { q: trimmed, exclude: excludeId ?? "" }],
+    queryKey: ["/api/objects/parent-search", { q: trimmed, exclude: excludeId ?? "", limit: searchLimit }],
     queryFn: async () => {
-      const params = new URLSearchParams({ q: trimmed });
+      const params = new URLSearchParams({ q: trimmed, limit: String(searchLimit) });
       if (excludeId) params.set("exclude", excludeId);
       const res = await fetch(versionedUrl(`/api/objects/parent-search?${params.toString()}`), {
         credentials: "include",
@@ -194,6 +205,21 @@ export function ObjectParentCombobox({
                     )}
                   </CommandItem>
                 ))}
+                {results.length >= searchLimit && searchLimit < SEARCH_MAX_LIMIT && (
+                  <CommandItem
+                    value="__load_more__"
+                    onSelect={() => setSearchLimit((l) => Math.min(l + SEARCH_PAGE_SIZE, SEARCH_MAX_LIMIT))}
+                    className="justify-center text-sm text-primary"
+                    data-testid={testId ? `${testId}-load-more` : undefined}
+                  >
+                    Visa fler träffar…
+                  </CommandItem>
+                )}
+                {results.length >= SEARCH_MAX_LIMIT && (
+                  <div className="px-2 py-2 text-center text-xs text-muted-foreground">
+                    Fler träffar kan finnas — förfina sökningen för att hitta rätt objekt.
+                  </div>
+                )}
               </CommandGroup>
             )}
           </CommandList>

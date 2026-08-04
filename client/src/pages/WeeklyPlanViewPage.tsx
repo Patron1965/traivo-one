@@ -6,6 +6,7 @@ import {
   startOfISOWeek,
   getISOWeek,
   getISOWeekYear,
+  getISOWeeksInYear,
   addDays,
   format,
 } from "date-fns";
@@ -341,13 +342,28 @@ function reservationToBlock(r: PlanningReservationWithConsumption): ScheduleBloc
 export default function WeeklyPlanViewPage() {
   const { toast } = useToast();
   const now = useMemo(() => new Date(), []);
-  const initialTeamId = useMemo(() => {
-    if (typeof window === "undefined") return "";
-    return new URLSearchParams(window.location.search).get("teamId") ?? "";
+  // Task #813: team + vecka/år initieras från adressraden så att en delad/
+  // bokmärkt länk eller en sidladdning återställer samma vy.
+  const initialParams = useMemo(() => {
+    if (typeof window === "undefined") return null;
+    return new URLSearchParams(window.location.search);
   }, []);
+  const initialTeamId = initialParams?.get("teamId") ?? "";
   const [teamId, setTeamId] = useState<string>(initialTeamId);
-  const [year, setYear] = useState<number>(getISOWeekYear(now));
-  const [week, setWeek] = useState<number>(getISOWeek(now));
+  const [year, setYear] = useState<number>(() => {
+    const y = parseInt(initialParams?.get("year") ?? "", 10);
+    return Number.isFinite(y) && y >= 2000 && y <= 2100 ? y : getISOWeekYear(now);
+  });
+  const [week, setWeek] = useState<number>(() => {
+    const w = parseInt(initialParams?.get("week") ?? "", 10);
+    const y = parseInt(initialParams?.get("year") ?? "", 10);
+    const isoYear = Number.isFinite(y) && y >= 2000 && y <= 2100 ? y : getISOWeekYear(now);
+    // Validera mot årets faktiska antal ISO-veckor (52 eller 53) — annars
+    // normaliserar date-fns t.ex. 2021-v53 tyst till 2022-v01 medan API-nycklar
+    // och adressraden fortsätter säga v53/2021 (fel data mot fel rubrik).
+    const maxWeek = getISOWeeksInYear(setISOWeekYear(now, isoYear));
+    return Number.isFinite(w) && w >= 1 && w <= maxWeek ? w : getISOWeek(now);
+  });
   const [editing, setEditing] = useState<ScheduleBlock | null>(null);
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
   const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null);
@@ -364,6 +380,23 @@ export default function WeeklyPlanViewPage() {
   });
 
   const effectiveTeamId = teamId || teams[0]?.id || "";
+
+  // Task #813: spegla valt team + vecka/år till adressraden (replaceState —
+  // ingen ny historikpost per veckobläddring) så att omladdning och delade
+  // länkar behåller vyn. Övriga query-params bevaras.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const p = new URLSearchParams(window.location.search);
+    if (effectiveTeamId) p.set("teamId", effectiveTeamId);
+    else p.delete("teamId");
+    p.set("year", String(year));
+    p.set("week", String(week));
+    const qs = p.toString();
+    const next = `${window.location.pathname}${qs ? `?${qs}` : ""}`;
+    if (next !== `${window.location.pathname}${window.location.search}`) {
+      window.history.replaceState(window.history.state, "", next);
+    }
+  }, [effectiveTeamId, year, week]);
 
   const listKey = `/api/weekly-plans?teamId=${effectiveTeamId}&year=${year}&week=${week}`;
   const { data: planList, isLoading: listLoading } = useQuery<WeeklyPlan[]>({
