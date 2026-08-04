@@ -211,6 +211,62 @@ describe("Objektvy 360 P1 — snabbfälts-konfig (arv nedåt / åsidosättning)"
     expect(child.body?.fields.map((f: any) => f.katalogId)).toEqual([katB]);
   });
 
+  // Task #1366: sista fallback — katalogfält flaggade "Visa i objektvinjett".
+  it("fallback: visaIVinjett-flaggade katalogfält när varken per-objekt- eller objekttyp-konfig finns", async () => {
+    // Rensa objekttyp-defaulten så kedjan är helt utan explicit konfig.
+    await db.delete(objectHeaderConfigs).where(inArray(objectHeaderConfigs.tenantId, [TENANT]));
+    // Flagga B och C (ordning styrs av displayNumber NULLS LAST, sortOrder, namn).
+    await db
+      .update(metadataKatalog)
+      .set({ visaIVinjett: true, sortOrder: 2 })
+      .where(inArray(metadataKatalog.id, [katC]));
+    await db
+      .update(metadataKatalog)
+      .set({ visaIVinjett: true, sortOrder: 1 })
+      .where(inArray(metadataKatalog.id, [katB]));
+
+    const child = await req("GET", `/api/objects/${childId}/quick-field-config`, { userId: ADMIN });
+    expect(child.status).toBe(200);
+    expect(child.body?.source).toEqual({ level: "katalog" });
+    expect(child.body?.hasOwnOverride).toBe(false);
+    expect(child.body?.fields.map((f: any) => f.katalogId)).toEqual([katB, katC]);
+  });
+
+  it("explicit konfig vinner alltid över visaIVinjett-flaggan", async () => {
+    const hdr = await req("PUT", `/api/object-header-config/karl`, {
+      userId: ADMIN,
+      body: { field1KatalogId: katA },
+    });
+    expect(hdr.status).toBe(200);
+    const child = await req("GET", `/api/objects/${childId}/quick-field-config`, { userId: ADMIN });
+    expect(child.body?.source).toEqual({ level: "objectType", objectType: "karl" });
+    expect(child.body?.fields.map((f: any) => f.katalogId)).toEqual([katA]);
+  });
+
+  // Task #1366: kundlogotyp-konfig sparas och returneras på header-configen.
+  it("PUT object-header-config persisterar showLogo + logoMetadataKatalogId", async () => {
+    const put = await req("PUT", `/api/object-header-config/karl`, {
+      userId: ADMIN,
+      body: { showLogo: true, logoMetadataKatalogId: katA },
+    });
+    expect(put.status).toBe(200);
+    expect(put.body?.showLogo).toBe(true);
+    expect(put.body?.logoMetadataKatalogId).toBe(katA);
+
+    const get = await req("GET", `/api/object-header-config/karl`, { userId: ADMIN });
+    expect(get.status).toBe(200);
+    expect(get.body?.showLogo).toBe(true);
+    expect(get.body?.logoMetadataKatalogId).toBe(katA);
+  });
+
+  it("PUT object-header-config med logotyp-fält från annan organisation avvisas → 400", async () => {
+    const res = await req("PUT", `/api/object-header-config/karl`, {
+      userId: ADMIN,
+      body: { showLogo: true, logoMetadataKatalogId: "00000000-0000-0000-0000-000000000000" },
+    });
+    expect(res.status).toBe(400);
+  });
+
   it("PUT med katalog-id från annan/okänd organisation avvisas → 400 (IDOR-skydd)", async () => {
     const res = await req("PUT", `/api/objects/${childId}/quick-field-config`, {
       userId: ADMIN,

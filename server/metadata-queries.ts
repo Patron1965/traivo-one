@@ -1169,6 +1169,9 @@ export async function getObjectWithAllMetadata(
       overridden,
       inheritedValue,
       inheritedFromName,
+      // Task #1366: källradens id när ett lokalt värde skuggar ett ärvt — låter
+      // klienten hämta källobjektets historik-kedja separat (tenant-scopad route).
+      inheritedMetadataId: hasLocalShadow || softDeleted ? (inheritedRow?.id ?? null) : null,
       softDeleted,
       raderad: nearest.raderad === true,
       instances,
@@ -2100,6 +2103,8 @@ export interface ResolvedQuickFieldConfig {
   source:
     | { level: "object"; objectId: string }
     | { level: "objectType"; objectType: string }
+    // Task #1366: fallback-nivå — fält flaggade "Visa i objektvinjett" i katalogen.
+    | { level: "katalog" }
     | { level: "none" };
   // Om DETTA objekt har en egen rad (styr om UI:t visar "åsidosatt" vs "ärvd").
   hasOwnOverride: boolean;
@@ -2169,6 +2174,28 @@ export async function resolveQuickFieldConfig(
       if (cfg) {
         source = { level: "objectType", objectType: self.objectType };
         rawKatalogIds = [cfg.f1, cfg.f2, cfg.f3];
+      }
+    }
+    // Task #1366: sista fallback — katalogfält flaggade "Visa i objektvinjett".
+    // Upp till tre, ordnade efter displayNumber (nulls sist), sortOrder, namn.
+    if (source.level === "none") {
+      const flagged = await db
+        .select({ id: metadataKatalog.id })
+        .from(metadataKatalog)
+        .where(and(
+          eq(metadataKatalog.tenantId, tenantId),
+          eq(metadataKatalog.visaIVinjett, true),
+          isNull(metadataKatalog.deletedAt),
+        ))
+        .orderBy(
+          sql`${metadataKatalog.displayNumber} ASC NULLS LAST`,
+          asc(metadataKatalog.sortOrder),
+          asc(metadataKatalog.namn),
+        )
+        .limit(3);
+      if (flagged.length > 0) {
+        source = { level: "katalog" };
+        rawKatalogIds = flagged.map((f) => f.id);
       }
     }
   }

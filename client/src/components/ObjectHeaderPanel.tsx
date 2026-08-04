@@ -4,6 +4,7 @@ import { MapContainer, TileLayer, Marker } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { useMapConfig } from "@/hooks/use-map-config";
+import { useUpload } from "@/hooks/use-upload";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent } from "@/components/ui/card";
@@ -24,7 +25,9 @@ import {
 // Fältvärdena kommer från objektets metadata-array som ObjectDetailPage redan
 // laddar (["/api/metadata/objects", objectId]). Vi tar bara det vi behöver.
 interface PanelMetadataEntry {
+  id?: string;
   metadataKatalogId?: string;
+  overridden?: boolean;
   katalog?: { namn?: string; visningsnamn?: string };
   vardeString?: string | null;
   vardeInteger?: number | null;
@@ -37,12 +40,18 @@ interface PanelMetadataEntry {
   source?: string;
   fromObject?: { namn?: string } | null;
   inheritedFromName?: string | null;
+  inheritedValue?: string | null;
+  // Task #1366: källradens id när lokalt värde skuggar ett ärvt (för historik).
+  inheritedMetadataId?: string | null;
 }
 
 interface HeaderConfig {
   showImage: boolean;
   imageSource: "metadata";
   imageMetadataKatalogId: string | null;
+  // Task #1366: kundlogotyp-bricka (bild-typat katalogfält, ärvs via metadata-arvet).
+  showLogo: boolean;
+  logoMetadataKatalogId: string | null;
   showMap: boolean;
   field1KatalogId: string | null;
   field2KatalogId: string | null;
@@ -66,6 +75,8 @@ interface QuickFieldConfig {
   source:
     | { level: "object"; objectId: string }
     | { level: "objectType"; objectType: string }
+    // Task #1366: fallback — fält flaggade "Visa i objektvinjett" i katalogen.
+    | { level: "katalog" }
     | { level: "none" };
   hasOwnOverride: boolean;
   rawKatalogIds: (string | null)[];
@@ -108,6 +119,8 @@ const DEFAULT_CONFIG: HeaderConfig = {
   showImage: true,
   imageSource: "metadata",
   imageMetadataKatalogId: null,
+  showLogo: false,
+  logoMetadataKatalogId: null,
   showMap: true,
   field1KatalogId: null,
   field2KatalogId: null,
@@ -228,11 +241,38 @@ export function ObjectHeaderPanel({
   const defLabel = (id: string): string | undefined =>
     definitions.find((d) => d.id === id)?.fieldLabel;
 
-  const imageUrl: string | null = (() => {
-    if (!effective.showImage) return null;
-    if (!effective.imageMetadataKatalogId) return null;
-    return entryByKatalog.get(effective.imageMetadataKatalogId)?.vardeString ?? null;
-  })();
+  const imageEntry = effective.imageMetadataKatalogId
+    ? entryByKatalog.get(effective.imageMetadataKatalogId)
+    : undefined;
+  const imageUrl: string | null =
+    effective.showImage && effective.imageMetadataKatalogId
+      ? imageEntry?.vardeString ?? null
+      : null;
+
+  // Task #1366: kundlogotyp — värdet (ev. ärvt) för det inpekade logotypfältet.
+  const logoEntry = effective.logoMetadataKatalogId
+    ? entryByKatalog.get(effective.logoMetadataKatalogId)
+    : undefined;
+  const logoUrl: string | null =
+    effective.showLogo && effective.logoMetadataKatalogId
+      ? logoEntry?.vardeString ?? null
+      : null;
+  // Badge: Ärvd (värdet kommer från förälder) / Överskriven (eget värde skuggar
+  // ett ärvt) / Direkt (eget värde utan ärvt bakom).
+  const logoBadge: { label: string; title: string } | null = logoEntry
+    ? logoEntry.source === "inherited"
+      ? {
+          label: "Ärvd",
+          title: `Logotypen ärvs${logoEntry.fromObject?.namn || logoEntry.inheritedFromName ? ` från ${logoEntry.fromObject?.namn || logoEntry.inheritedFromName}` : " från överordnat objekt"}`,
+        }
+      : logoEntry.overridden
+        ? { label: "Överskriven", title: "Logotypen är registrerad direkt och skriver över ett ärvt värde" }
+        : { label: "Direkt", title: "Logotypen är registrerad direkt på objektet" }
+    : null;
+
+  // Task #1366: dialoger för vinjettbild resp. logotyp (byt/ladda upp + historik).
+  const [imageDialogOpen, setImageDialogOpen] = useState(false);
+  const [logoDialogOpen, setLogoDialogOpen] = useState(false);
 
   type Slot = { key: string; label: string; value: string | null; inheritedFrom?: string | null };
   const slots: Slot[] = [];
@@ -308,6 +348,16 @@ export function ObjectHeaderPanel({
                 ))}
               </div>
               <div className="flex items-center gap-1.5 shrink-0">
+                {qfc?.source?.level === "katalog" && (
+                  <Badge
+                    variant="outline"
+                    className="text-[10px] px-1.5 py-0 font-normal"
+                    title={'Snabbfälten kommer från fält flaggade "Visa i objektvinjett" i metadatainställningarna'}
+                    data-testid="badge-quick-field-source"
+                  >
+                    Fältflagga
+                  </Badge>
+                )}
                 {qfc?.source?.level === "objectType" && (
                   <Badge
                     variant="outline"
@@ -360,17 +410,47 @@ export function ObjectHeaderPanel({
             </div>
           </div>
 
-          {/* Brickor: bild + karta */}
+          {/* Brickor: bild + logotyp + karta */}
           <div className="flex gap-3 shrink-0">
             {effective.showImage && (
-              <div
-                className="w-28 h-28 md:w-32 md:h-32 rounded-md overflow-hidden border bg-muted flex items-center justify-center"
+              <button
+                type="button"
+                className="w-28 h-28 md:w-32 md:h-32 rounded-md overflow-hidden border bg-muted flex items-center justify-center relative group"
+                onClick={() => effective.imageMetadataKatalogId && setImageDialogOpen(true)}
+                title={effective.imageMetadataKatalogId ? "Visa vinjettbild, byt bild eller se historik" : "Inget bildfält konfigurerat"}
                 data-testid="header-image-tile"
               >
                 {imageUrl ? (
                   <img src={imageUrl} alt={name || objectNumber || "Objektbild"} className="w-full h-full object-cover" data-testid="img-header-object" />
                 ) : (
                   <ImageIcon className="h-7 w-7 text-muted-foreground/60" />
+                )}
+              </button>
+            )}
+            {effective.showLogo && effective.logoMetadataKatalogId && (
+              <div className="flex flex-col gap-1" data-testid="header-logo-column">
+                <button
+                  type="button"
+                  className="w-28 h-28 md:w-32 md:h-32 rounded-md overflow-hidden border bg-background flex items-center justify-center p-2"
+                  onClick={() => setLogoDialogOpen(true)}
+                  title="Visa kundlogotyp, byt eller se historik"
+                  data-testid="header-logo-tile"
+                >
+                  {logoUrl ? (
+                    <img src={logoUrl} alt="Kundlogotyp" className="max-w-full max-h-full object-contain" data-testid="img-header-logo" />
+                  ) : (
+                    <ImageIcon className="h-7 w-7 text-muted-foreground/60" />
+                  )}
+                </button>
+                {logoBadge && (
+                  <Badge
+                    variant="outline"
+                    className="text-[10px] px-1 py-0 font-normal self-start"
+                    title={logoBadge.title}
+                    data-testid="badge-header-logo-source"
+                  >
+                    {logoBadge.label}
+                  </Badge>
                 )}
               </div>
             )}
@@ -441,7 +521,312 @@ export function ObjectHeaderPanel({
           </div>
         </div>
       </CardContent>
+      {/* Task #1366: vinjettbild-/logotypdialoger (visa, byt/ladda upp, historik). */}
+      {effective.imageMetadataKatalogId && (
+        <HeaderImageDialog
+          open={imageDialogOpen}
+          onOpenChange={setImageDialogOpen}
+          objectId={objectId}
+          katalogId={effective.imageMetadataKatalogId}
+          entry={imageEntry}
+          title="Vinjettbild"
+          canEdit={canEdit}
+        />
+      )}
+      {effective.logoMetadataKatalogId && (
+        <HeaderImageDialog
+          open={logoDialogOpen}
+          onOpenChange={setLogoDialogOpen}
+          objectId={objectId}
+          katalogId={effective.logoMetadataKatalogId}
+          entry={logoEntry}
+          title="Kundlogotyp"
+          canEdit={canEdit}
+          badge={logoBadge}
+          contain
+        />
+      )}
     </Card>
+  );
+}
+
+// ============================================================================
+// Task #1366: Vinjettbild-/logotypdialog — visar aktuell bild, låter behörig
+// användare byta/ladda upp ny (via metadata-vägen: ersatt värde arkiveras
+// automatiskt till metadata_historik = append-only kedja) samt visar historiken
+// (tidigare bilder med datum, vem och källa/metod).
+// ============================================================================
+
+interface HistorikRow {
+  id: string;
+  gammaltVarde: string | null;
+  nyttVarde: string | null;
+  andradAv: string | null;
+  andradVid: string | null;
+  andringsMetod: string | null;
+}
+
+const HISTORIK_METOD_LABELS: Record<string, string> = {
+  manuell: "Manuell",
+  automatisk: "Automatisk",
+  extern: "Extern källa",
+  utforande: "Utförande",
+  arvd: "Ärvd",
+  import: "Import",
+  system: "System",
+};
+
+function isImagePath(v: string | null | undefined): boolean {
+  return !!v && (v.startsWith("/") || v.startsWith("http"));
+}
+
+function HeaderImageDialog({
+  open, onOpenChange, objectId, katalogId, entry, title, canEdit, badge, contain,
+}: {
+  open: boolean;
+  onOpenChange: (o: boolean) => void;
+  objectId: string;
+  katalogId: string;
+  entry: PanelMetadataEntry | undefined;
+  title: string;
+  canEdit: boolean;
+  badge?: { label: string; title: string } | null;
+  contain?: boolean;
+}) {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const inputRef = useRef<HTMLInputElement>(null);
+  const { uploadFile, isUploading } = useUpload();
+  const [saving, setSaving] = useState(false);
+
+  const currentUrl = entry?.vardeString ?? null;
+  const hasLocalValue = !!entry && entry.source !== "inherited" && !!entry.vardeString && !!entry.id;
+
+  // Katalognamn behövs för POST /api/metadata (skapa nytt lokalt värde). Slås upp
+  // ur katalogen (delad cache-nyckel med snabbfälts-editorn).
+  const { data: katalogFields = [] } = useQuery<ImageMetadataOption[]>({
+    queryKey: ["/api/metadata-labels"],
+    enabled: open,
+  });
+  const katalogNamn = entry?.katalog?.namn
+    ?? katalogFields.find((f) => f.id === katalogId)?.namn
+    ?? null;
+
+  // Historik (append-only kedja i metadata_historik). För ärvda värden pekar
+  // entry.id på KÄLLOBJEKTETS rad — historiken hämtas därifrån (tenant-scopad
+  // server-side) och märks upp med källobjektet i rubriken.
+  const { data: historik = [] } = useQuery<HistorikRow[]>({
+    queryKey: ["/api/metadata/historik", entry?.id],
+    queryFn: async () => {
+      const res = await fetch(`/api/metadata/historik/${entry!.id}`, { credentials: "include" });
+      if (!res.ok) return [];
+      return res.json();
+    },
+    enabled: open && !!entry?.id,
+  });
+
+  // Överskrivet värde: källobjektets kedja visas som EGEN sektion (den lokala
+  // raden ovan börjar sin egen kedja vid åsidosättningen — källhistoriken får
+  // inte försvinna bara för att objektet fått ett eget värde).
+  const sourceHistorikId = entry?.overridden ? entry?.inheritedMetadataId : null;
+  const { data: sourceHistorik = [] } = useQuery<HistorikRow[]>({
+    queryKey: ["/api/metadata/historik", sourceHistorikId],
+    queryFn: async () => {
+      const res = await fetch(`/api/metadata/historik/${sourceHistorikId}`, { credentials: "include" });
+      if (!res.ok) return [];
+      return res.json();
+    },
+    enabled: open && !!sourceHistorikId,
+  });
+
+  const handleFile = async (file: File) => {
+    const res = await uploadFile(file);
+    if (!res) {
+      toast({ title: "Uppladdning misslyckades", variant: "destructive" });
+      return;
+    }
+    setSaving(true);
+    try {
+      if (hasLocalValue) {
+        await apiRequest("PUT", `/api/metadata/${entry!.id}`, { varde: res.objectPath });
+      } else {
+        if (!katalogNamn) throw new Error("Kunde inte hitta metadatafältet");
+        await apiRequest("POST", "/api/metadata", {
+          objektId: objectId,
+          metadataTypNamn: katalogNamn,
+          varde: res.objectPath,
+        });
+      }
+      toast({ title: `${title} uppdaterad`, description: "Tidigare bild bevaras i historiken." });
+      queryClient.invalidateQueries({ queryKey: ["/api/metadata/objects", objectId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/metadata/historik", entry?.id] });
+    } catch (err) {
+      toast({
+        title: "Kunde inte spara",
+        description: err instanceof Error ? err.message : undefined,
+        variant: "destructive",
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // Historiklistan: varje rad = ett byte. Vi visar det ERSATTA värdet
+  // (gammaltVarde) som "tidigare bild" med tidpunkt, vem och källa/metod.
+  const previous = historik.filter((h) => isImagePath(h.gammaltVarde));
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-lg" data-testid={`dialog-header-image-${contain ? "logo" : "vignette"}`}>
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            {title}
+            {badge && (
+              <Badge variant="outline" className="text-[10px] px-1.5 py-0 font-normal" title={badge.title}>
+                {badge.label}
+              </Badge>
+            )}
+          </DialogTitle>
+          <DialogDescription>
+            {canEdit
+              ? "Byt eller ladda upp en ny bild. Tidigare bilder bevaras alltid i historiken."
+              : "Tidigare bilder bevaras i historiken."}
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-4">
+          <div className="rounded-md border bg-muted flex items-center justify-center min-h-40 max-h-72 overflow-hidden">
+            {currentUrl ? (
+              <img
+                src={currentUrl}
+                alt={title}
+                className={contain ? "max-h-72 max-w-full object-contain p-3" : "max-h-72 w-full object-contain"}
+                data-testid="img-header-dialog-current"
+              />
+            ) : (
+              <div className="flex flex-col items-center gap-1 py-8 text-muted-foreground">
+                <ImageIcon className="h-8 w-8" />
+                <span className="text-sm">Ingen bild ännu</span>
+              </div>
+            )}
+          </div>
+          {entry?.source === "inherited" && (
+            <p className="text-xs text-muted-foreground" data-testid="text-header-image-inherited">
+              Bilden ärvs från {entry.fromObject?.namn || entry.inheritedFromName || "överordnat objekt"}.
+              {canEdit ? " Laddar du upp en ny bild registreras den direkt på detta objekt och skriver över det ärvda värdet." : ""}
+            </p>
+          )}
+
+          {canEdit && (
+            <>
+              <input
+                ref={inputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                data-testid="input-header-image-upload"
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) handleFile(f);
+                  e.target.value = "";
+                }}
+              />
+              <Button
+                size="sm"
+                disabled={isUploading || saving}
+                onClick={() => inputRef.current?.click()}
+                data-testid="button-header-image-upload"
+              >
+                {isUploading || saving ? (
+                  <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Laddar upp...</>
+                ) : currentUrl ? "Byt bild" : "Ladda upp bild"}
+              </Button>
+            </>
+          )}
+
+          {!!entry?.id && (
+            <div className="space-y-2">
+              <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                Tidigare bilder
+                {entry?.source === "inherited"
+                  ? ` (från ${entry.fromObject?.namn || entry.inheritedFromName || "källobjektet"})`
+                  : ""}
+              </div>
+              {previous.length === 0 ? (
+                <p className="text-xs text-muted-foreground" data-testid="text-header-image-no-history">
+                  Ingen tidigare bild — historiken byggs på vid varje byte.
+                </p>
+              ) : (
+                <div className="space-y-2 max-h-56 overflow-y-auto" data-testid="list-header-image-history">
+                  {previous.map((h) => (
+                    <div key={h.id} className="flex items-center gap-3 rounded-md border p-2" data-testid={`row-header-image-history-${h.id}`}>
+                      <div className="w-14 h-14 rounded overflow-hidden border bg-muted shrink-0 flex items-center justify-center">
+                        {h.gammaltVarde ? (
+                          <img src={h.gammaltVarde} alt="Tidigare bild" className="w-full h-full object-cover" />
+                        ) : (
+                          <ImageIcon className="h-5 w-5 text-muted-foreground/60" />
+                        )}
+                      </div>
+                      <div className="min-w-0 text-xs space-y-0.5">
+                        <div className="font-medium">
+                          Ersatt {h.andradVid ? new Date(h.andradVid).toLocaleString("sv-SE") : "—"}
+                        </div>
+                        <div className="text-muted-foreground truncate">
+                          Av: {h.andradAv || "okänd"}
+                          {h.andringsMetod ? ` · Källa: ${HISTORIK_METOD_LABELS[h.andringsMetod] ?? h.andringsMetod}` : ""}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Överskrivet ärvt värde: källobjektets kedja som egen, tydligt märkt
+              sektion — den försvinner inte när objektet får ett eget värde. */}
+          {entry?.overridden && !!entry?.inheritedMetadataId && (
+            <div className="space-y-2" data-testid="section-header-image-source-history">
+              <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                Bilder på källobjektet{entry.inheritedFromName ? ` (${entry.inheritedFromName})` : ""}
+              </div>
+              {isImagePath(entry.inheritedValue) && (
+                <div className="flex items-center gap-3 rounded-md border p-2" data-testid="row-header-image-source-current">
+                  <div className="w-14 h-14 rounded overflow-hidden border bg-muted shrink-0 flex items-center justify-center">
+                    <img src={entry.inheritedValue!} alt="Källobjektets bild" className="w-full h-full object-cover" />
+                  </div>
+                  <div className="min-w-0 text-xs text-muted-foreground">
+                    Källobjektets nuvarande bild (skuggas av det egna värdet ovan)
+                  </div>
+                </div>
+              )}
+              {sourceHistorik.filter((h) => isImagePath(h.gammaltVarde)).map((h) => (
+                <div key={h.id} className="flex items-center gap-3 rounded-md border p-2" data-testid={`row-header-image-source-history-${h.id}`}>
+                  <div className="w-14 h-14 rounded overflow-hidden border bg-muted shrink-0 flex items-center justify-center">
+                    <img src={h.gammaltVarde!} alt="Tidigare bild (källobjekt)" className="w-full h-full object-cover" />
+                  </div>
+                  <div className="min-w-0 text-xs space-y-0.5">
+                    <div className="font-medium">
+                      Ersatt {h.andradVid ? new Date(h.andradVid).toLocaleString("sv-SE") : "—"}
+                    </div>
+                    <div className="text-muted-foreground truncate">
+                      Av: {h.andradAv || "okänd"}
+                      {h.andringsMetod ? ` · Källa: ${HISTORIK_METOD_LABELS[h.andringsMetod] ?? h.andringsMetod}` : ""}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)} data-testid="button-header-image-close">
+            Stäng
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -671,6 +1056,43 @@ function HeaderQuickFieldEditor({
                         </SelectContent>
                       </Select>
                     )}
+                  </div>
+                )}
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="toggle-header-logo">Visa kundlogotyp</Label>
+                  <Switch
+                    id="toggle-header-logo"
+                    checked={display.showLogo}
+                    onCheckedChange={(v) => setDisplay((d) => ({ ...d, showLogo: v }))}
+                    data-testid="switch-header-logo"
+                  />
+                </div>
+                {display.showLogo && (
+                  <div className="space-y-1.5">
+                    <Label>Logotypfält (metadata)</Label>
+                    <Select
+                      value={display.logoMetadataKatalogId ?? undefined}
+                      onValueChange={(v) => setDisplay((d) => ({ ...d, logoMetadataKatalogId: v }))}
+                    >
+                      <SelectTrigger data-testid="select-header-logo-metadata-field">
+                        <SelectValue placeholder="Välj bildfält..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {imageFieldOptions.length === 0 && (
+                          <div className="px-2 py-1.5 text-sm text-muted-foreground">
+                            Inga bildfält hittades
+                          </div>
+                        )}
+                        {imageFieldOptions.map((f) => (
+                          <SelectItem key={f.id} value={f.id}>
+                            {f.visningsnamn || f.namn}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <p className="text-[11px] text-muted-foreground">
+                      Logotypen ärvs nedåt via metadata-arvet och kan registreras direkt eller skriva över ärvt värde.
+                    </p>
                   </div>
                 )}
                 <div className="flex items-center justify-between">

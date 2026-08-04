@@ -4824,6 +4824,12 @@ export const metadataKatalog = pgTable("metadata_katalog", {
   // finns alltid kvar i admin/katalog oavsett flaggan.
   visasIKarusell: boolean("visas_i_karusell").default(true).notNull(),
 
+  // Task #1366: "Visa i objektvinjett" — flagga som gör fältet till kandidat för
+  // objektvinjettens snabbfält när ingen explicit snabbfälts-konfig finns (varken
+  // per-objekt eller per objekttyp). Upp till tre flaggade fält visas (ordnade
+  // efter displayNumber/sortOrder/namn). Additivt (expand-contract), default false.
+  visaIVinjett: boolean("visa_i_vinjett").default(false).notNull(),
+
   createdAt: timestamp("created_at").defaultNow().notNull(),
 
   // Task #716: arkivering (soft-delete) istället för permanent radering.
@@ -4884,6 +4890,11 @@ export const objectHeaderConfigs = pgTable("object_header_configs", {
   // Endast satt när imageSource='metadata' — pekar in ett metadata_katalog-fält
   // med datatyp='image' vars värde (vardeString) visas som objekthuvudets bild.
   imageMetadataKatalogId: varchar("image_metadata_katalog_id").references(() => metadataKatalog.id, { onDelete: "set null" }),
+  // Task #1366: kundlogotyp-bricka i objektvinjetten. Pekar in ett bild-typat
+  // katalogfält vars (ev. ärvda) värde visas som logotyp med Direkt/Ärvd/
+  // Överskriven-badge. Additivt (expand-contract): default av/NULL.
+  showLogo: boolean("show_logo").default(false).notNull(),
+  logoMetadataKatalogId: varchar("logo_metadata_katalog_id").references(() => metadataKatalog.id, { onDelete: "set null" }),
   showMap: boolean("show_map").default(true).notNull(),
   field1KatalogId: varchar("field1_katalog_id").references(() => metadataKatalog.id, { onDelete: "set null" }),
   field2KatalogId: varchar("field2_katalog_id").references(() => metadataKatalog.id, { onDelete: "set null" }),
@@ -5191,6 +5202,9 @@ export interface MetadataVardenWithKatalog extends MetadataVarden {
   inheritedValue?: string | null;
   // Namnet på objektet det ärvda värdet kommer ifrån (närmaste förälder med värde).
   inheritedFromName?: string | null;
+  // Task #1366: källradens id när ett lokalt värde skuggar ett ärvt — låter
+  // klienten hämta källobjektets historik-kedja separat.
+  inheritedMetadataId?: string | null;
   // softDeleted: värdet är mjuk-raderat (eget värde dolt, eller ärvt fält struket
   // via en tombstone-rad på barnnivå). Visas överstruket med Återställ-möjlighet.
   softDeleted?: boolean;

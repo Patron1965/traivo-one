@@ -537,6 +537,9 @@ const objectHeaderConfigBodySchema = z.object({
   showImage: z.boolean().optional(),
   imageSource: z.enum(["latest_image", "metadata"]).optional(),
   imageMetadataKatalogId: z.string().nullable().optional(),
+  // Task #1366: kundlogotyp-bricka (bild-typat katalogfält, ärvs via metadata-arvet).
+  showLogo: z.boolean().optional(),
+  logoMetadataKatalogId: z.string().nullable().optional(),
   showMap: z.boolean().optional(),
   field1KatalogId: z.string().nullable().optional(),
   field2KatalogId: z.string().nullable().optional(),
@@ -552,7 +555,7 @@ app.put("/api/object-header-config/:objectType", requireAdmin, asyncHandler(asyn
   const body = objectHeaderConfigBodySchema.parse(req.body);
 
   // Säkerhet: varje inpekat katalog-id måste tillhöra denna tenant.
-  const katalogIds = [body.field1KatalogId, body.field2KatalogId, body.field3KatalogId, body.imageMetadataKatalogId]
+  const katalogIds = [body.field1KatalogId, body.field2KatalogId, body.field3KatalogId, body.imageMetadataKatalogId, body.logoMetadataKatalogId]
     .filter((v): v is string => typeof v === "string" && v.length > 0);
   if (katalogIds.length > 0) {
     const owned = await db
@@ -576,6 +579,8 @@ app.put("/api/object-header-config/:objectType", requireAdmin, asyncHandler(asyn
     showImage: body.showImage ?? true,
     imageSource: body.imageSource ?? "metadata",
     imageMetadataKatalogId: body.imageMetadataKatalogId ?? null,
+    showLogo: body.showLogo ?? false,
+    logoMetadataKatalogId: body.logoMetadataKatalogId ?? null,
     showMap: body.showMap ?? true,
     field1KatalogId: body.field1KatalogId ?? null,
     field2KatalogId: body.field2KatalogId ?? null,
@@ -592,6 +597,8 @@ app.put("/api/object-header-config/:objectType", requireAdmin, asyncHandler(asyn
         showImage: values.showImage,
         imageSource: values.imageSource,
         imageMetadataKatalogId: values.imageMetadataKatalogId,
+        showLogo: values.showLogo,
+        logoMetadataKatalogId: values.logoMetadataKatalogId,
         showMap: values.showMap,
         field1KatalogId: values.field1KatalogId,
         field2KatalogId: values.field2KatalogId,

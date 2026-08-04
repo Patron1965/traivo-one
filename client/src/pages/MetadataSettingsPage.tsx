@@ -105,6 +105,7 @@ interface MetadataKatalog {
   allowDuplicates: boolean;
   kronologiskVisning: boolean;
   visasIKarusell: boolean;
+  visaIVinjett?: boolean;
   parentMetadataId: string | null;
   // Task #666: beräknat fält — när true räknas värdet ut från en formel som
   // refererar syskonfält i samma familj. Lagrar inget eget värde.
@@ -800,6 +801,8 @@ function MetadataTypeForm({ initialData, onSubmit, isPending, allTypes, customer
   const [allowDuplicates, setAllowDuplicates] = useState(initialData?.allowDuplicates ?? false);
   const [kronologiskVisning, setKronologiskVisning] = useState(initialData?.kronologiskVisning ?? false);
   const [visasIKarusell, setVisasIKarusell] = useState(initialData?.visasIKarusell ?? true);
+  // Task #1366: kandidat för objektvinjettens snabbfält (fallback, max tre visas).
+  const [visaIVinjett, setVisaIVinjett] = useState(initialData?.visaIVinjett ?? false);
   const [parentMetadataId, setParentMetadataId] = useState(initialData?.parentMetadataId || '');
   // Task #666: beräknat fält. Ett beräknat fält tillhör en familj och har en formel
   // som refererar syskonfält (t.ex. "langd * bredd"). Värdet räknas ut readonly.
@@ -878,6 +881,7 @@ function MetadataTypeForm({ initialData, onSubmit, isPending, allTypes, customer
       allowDuplicates,
       kronologiskVisning,
       visasIKarusell,
+      visaIVinjett,
       parentMetadataId: parentMetadataId || null,
       arBeraknad: parentMetadataId ? arBeraknad : false,
       formel: parentMetadataId && arBeraknad ? (formel.trim() || null) : null,
@@ -1269,6 +1273,20 @@ function MetadataTypeForm({ initialData, onSubmit, isPending, allTypes, customer
             checked={visasIKarusell}
             onCheckedChange={setVisasIKarusell}
             data-testid="switch-type-karusell"
+          />
+        </div>
+
+        <div className="flex items-center justify-between">
+          <div>
+            <Label>Visa i objektvinjett</Label>
+            <p className="text-xs text-muted-foreground">
+              Föreslå fältet som snabbfält i objektvinjetten (max tre visas, gäller när ingen egen snabbfälts-konfig finns)
+            </p>
+          </div>
+          <Switch
+            checked={visaIVinjett}
+            onCheckedChange={setVisaIVinjett}
+            data-testid="switch-type-vinjett"
           />
         </div>
       </div>

@@ -2284,6 +2284,10 @@ app.patch("/api/metadata-labels/:id", requireAdmin, asyncHandler(async (req, res
       kronologiskVisning: z.boolean().optional(),
       // Task #1218: styr om fältet visas i metadata-karusellen på objekt-ytor.
       visasIKarusell: z.boolean().optional(),
+      // Task #1366: kandidat för objektvinjettens snabbfält (fallback-nivå).
+      // Samma flagga som /api/metadata/types PUT — båda skriv-ytorna måste
+      // acceptera den så katalogen inte får en yta där flaggan är osättbar.
+      visaIVinjett: z.boolean().optional(),
     });
     const parsed = updateSchema.parse(req.body);
     

@@ -70,6 +70,8 @@ export function MetadataLabelsTab() {
     displayNumber: "",
     allowDuplicates: false,
     kronologiskVisning: false,
+    // Task #1366: kandidat för objektvinjettens snabbfält (fallback, max tre visas).
+    visaIVinjett: false,
   });
 
   const { data: labels = [], isLoading } = useQuery<MetadataKatalog[]>({
@@ -105,7 +107,7 @@ export function MetadataLabelsTab() {
     onError: (error: Error) => toast({ title: "Kunde inte arkivera etikett", description: error.message, variant: "destructive" }),
   });
 
-  const emptyForm = { namn: "", beteckning: "", beskrivning: "", datatyp: "string", icon: "Tag", standardArvs: false, isRequired: false, allowedValues: "", area: "", displayNumber: "", allowDuplicates: false, kronologiskVisning: false };
+  const emptyForm = { namn: "", beteckning: "", beskrivning: "", datatyp: "string", icon: "Tag", standardArvs: false, isRequired: false, allowedValues: "", area: "", displayNumber: "", allowDuplicates: false, kronologiskVisning: false, visaIVinjett: false };
 
   const closeDialog = () => {
     setDialogOpen(false);
@@ -134,6 +136,7 @@ export function MetadataLabelsTab() {
       displayNumber: label.displayNumber != null ? String(label.displayNumber) : "",
       allowDuplicates: label.allowDuplicates,
       kronologiskVisning: label.kronologiskVisning,
+      visaIVinjett: label.visaIVinjett ?? false,
     });
     setDialogOpen(true);
   };
@@ -153,6 +156,7 @@ export function MetadataLabelsTab() {
       displayNumber: parsedDisplayNumber != null && Number.isFinite(parsedDisplayNumber) ? parsedDisplayNumber : null,
       allowDuplicates: formData.allowDuplicates,
       kronologiskVisning: formData.kronologiskVisning,
+      visaIVinjett: formData.visaIVinjett,
     };
 
     if (editingLabel) {
@@ -462,6 +466,14 @@ export function MetadataLabelsTab() {
                   data-testid="switch-label-kronologisk"
                 />
                 <Label className="text-sm">Kronologisk visning</Label>
+              </div>
+              <div className="flex items-center gap-2">
+                <Switch
+                  checked={formData.visaIVinjett}
+                  onCheckedChange={(v) => setFormData({ ...formData, visaIVinjett: v })}
+                  data-testid="switch-label-vinjett"
+                />
+                <Label className="text-sm">Visa i objektvinjett</Label>
               </div>
             </div>
           </div>

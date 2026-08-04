@@ -493,6 +493,9 @@ const createMetadataTypeSchema = z.object({
   kronologiskVisning: z.boolean().optional().default(false),
   // Task #1218: styr om fältet visas i metadata-karusellen på objekt-ytor.
   visasIKarusell: z.boolean().optional(),
+  // Task #1366: kandidat för objektvinjettens snabbfält (fallback-nivå när
+  // ingen explicit snabbfälts-konfig finns; max tre visas).
+  visaIVinjett: z.boolean().optional(),
   // Task #666: beräknat fält. När arBeraknad=true måste fältet ha en formel som
   // refererar syskonfält inom samma familj (kräver parentMetadataId). Formeln
   // tillåter endast de fyra räknesätten + parenteser. Tom/blank formel → null.
@@ -1250,7 +1253,10 @@ metadataRouter.post("/", async (req: Request, res: Response) => {
       arvsNedat: validated.arvsNedat,
       nivaLas: validated.nivaLas,
       koppladTillMetadataId: validated.koppladTillMetadataId,
-      skapadAv: validated.skapadAv,
+      // Audit: attribution är server-auktoritativ — inloggad användare vinner
+      // alltid över ev. klient-skickat värde (klientfältet behålls som fallback
+      // för interna/skriptade anrop utan användarsession).
+      skapadAv: (req as any).user?.claims?.sub ?? validated.skapadAv,
       metod: validated.metod,
     });
 
@@ -1294,7 +1300,9 @@ metadataRouter.put("/:id", async (req: Request, res: Response) => {
     const { id } = req.params;
     const validated = updateMetadataSchema.parse(req.body);
 
-    const updated = await updateMetadata(id, validated.varde, tenantId, validated.uppdateradAv, validated.metod);
+    // Audit: server-auktoritativ attribution (se POST "/" ovan).
+    const actor = (req as any).user?.claims?.sub ?? validated.uppdateradAv;
+    const updated = await updateMetadata(id, validated.varde, tenantId, actor, validated.metod);
 
     res.json(updated);
   } catch (error) {
