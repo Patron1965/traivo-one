@@ -3598,6 +3598,7 @@ export async function getObjectMetadataHistorik(
     .select({
       id: metadataHistorik.id,
       tenantId: metadataHistorik.tenantId,
+      importBatchId: metadataHistorik.importBatchId,
       metadataVardenId: metadataHistorik.metadataVardenId,
       objektId: metadataHistorik.objektId,
       metadataKatalogId: metadataHistorik.metadataKatalogId,

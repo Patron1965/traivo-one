@@ -117,7 +117,6 @@ export function buildResetPhases(tenant: string): ResetPhase[] {
         ["invoice_consolidation_policies", `tenant_id = '${tenant}'`],
         ["invoice_recipients", `tenant_id = '${tenant}'`],
         ["customer_import_mappings", `tenant_id = '${tenant}'`],
-        ["import_sessions", `tenant_id = '${tenant}'`],
         ["customer_invoices", `tenant_id = '${tenant}'`],
         ["customer_notification_settings", `tenant_id = '${tenant}'`],
         ["customer_portal_messages", `tenant_id = '${tenant}'`],

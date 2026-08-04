@@ -6606,6 +6606,11 @@ export const importBatches = pgTable("import_batches", {
   errors: integer("errors").default(0),
   scorecardSummary: jsonb("scorecard_summary"),
   metadata: jsonb("metadata").default({}),
+  // Import-sessions-id som batchen hör till. Historiskt FK → import_sessions
+  // (tre-stegs-wizarden, migration 0049); FK:n är borttagen i migration 0142
+  // tillsammans med tabellen. Kolumnen BEHÅLLS medvetet utan FK: Import 2.0
+  // (objectImportV2Routes, sourceFlow="objects-v2") stämplar den med
+  // object_import_sessions-id för Ångra-spårbarhet.
   sessionId: varchar("session_id"),
   // Ångra-funktion (Task #930+): vilket importflöde batchen kom från och om den
   // fortfarande går att rulla tillbaka. Additivt/expand-contract — nullable/default.
@@ -6663,37 +6668,9 @@ export type InsertImportAction = z.infer<typeof insertImportActionSchema>;
 export type ImportAction = typeof importActions.$inferSelect;
 
 // ============================================
-// Import Sessions — wizard-bunden interim → objectId-mapping (task #578)
-// ============================================
-// Håller mapping `interim → objectId` som spänner över alla tre stegen i
-// tre-stegs import-wizarden (Organisation → Butiker → Fysiska objekt).
-// step_completed = senast committad steg (0/1/2/3). interim_map ackumuleras
-// stegvis så steg 2/3 kan referera steg 1:s interimnummer.
-export const importSessions = pgTable("import_sessions", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
-  // Task #925: kund-agnostisk wizard (ADR v3). Kolumnen behålls (expand-contract)
-  // men är nullable — objekt skapas neutrala och kopplas till kund via orderkoncept.
-  customerId: varchar("customer_id").references(() => customers.id),
-  status: text("status").default("in_progress").notNull(),
-  stepCompleted: integer("step_completed").default(0).notNull(),
-  interimMap: jsonb("interim_map").default({}).notNull(),
-  createdCounts: jsonb("created_counts").default({}).notNull(),
-  createdBy: varchar("created_by"),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().notNull(),
-}, (table) => [
-  index("idx_import_sessions_tenant").on(table.tenantId),
-  index("idx_import_sessions_tenant_status").on(table.tenantId, table.status),
-]);
-
-export type ImportSession = typeof importSessions.$inferSelect;
-export type InsertImportSession = typeof importSessions.$inferInsert;
-
-// ============================================
 // Import 2.0 — objektimport-sessioner (session-baserat 5-stegsflöde)
-// Additivt bord. Disjunkt från `import_sessions` (3-stegs wizard, kräver
-// customerId NOT NULL). Här hålls hela sessionens tillstånd som JSONB:
+// (Tre-stegs-wizardens `import_sessions` är borttagen — contract-fas, task #1348,
+// migration 0142.) Här hålls hela sessionens tillstånd som JSONB:
 // detekterade kolumner, rårader, mappningar, valideringsresultat och slutresultat.
 // ============================================
 export const objectImportSessions = pgTable("object_import_sessions", {

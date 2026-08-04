@@ -7,7 +7,7 @@ import { formatZodError, verifyTenantOwnership, DEFAULT_TENANT_ID } from "./help
 import { getTenantIdWithFallback, assignUserToTenant, getUserTenants } from "../tenant-middleware";
 import { asyncHandler } from "../asyncHandler";
 import { NotFoundError, ValidationError, UnauthorizedError, ForbiddenError, ConflictError } from "../errors";
-import { objects, workOrders, articles , insertDeviationReportSchema, insertProtocolSchema, apiUsageLogs, taskDependencyInstances, invitations, weeklyPlanTasks } from "@shared/schema";
+import { objects, workOrders, articles , insertDeviationReportSchema, insertProtocolSchema, apiUsageLogs, apiBudgets, taskDependencyInstances, invitations, weeklyPlanTasks } from "@shared/schema";
 import { getISOWeek, getStartOfISOWeek, getDateFromWeekdayInMonth } from "./helpers";
 import { notificationService } from "../notifications";
 import { sendEmail } from "../replit_integrations/resend";

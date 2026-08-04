@@ -48,7 +48,6 @@ if command -v psql >/dev/null 2>&1 && [ -n "$DATABASE_URL" ]; then
            migrations/0085_task_types.sql \
            migrations/0086_article_layout_spec_fields.sql \
            migrations/0087_article_quantity_formula.sql \
-           migrations/0088_import_sessions_customer_nullable.sql \
            migrations/0089_objects_customer_nullable.sql \
            migrations/0090_reversible_import_actions.sql \
            migrations/0091_order_concept_target_object_ids.sql \
@@ -108,7 +107,8 @@ if command -v psql >/dev/null 2>&1 && [ -n "$DATABASE_URL" ]; then
            migrations/0138_lagermodul_2_0.sql \
            migrations/0139_stock_source_override.sql \
            migrations/0140_portal_confirmed_uploads.sql \
-           migrations/0141_ruttforslag_rename_backfill.sql; do
+           migrations/0141_ruttforslag_rename_backfill.sql \
+           migrations/0142_drop_import_sessions.sql; do
     if [ -f "$f" ]; then
       echo "[post-merge] Applying $f"
       psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f "$f"

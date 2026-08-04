@@ -1268,8 +1268,8 @@ async function backfillSystemTierModules() {
       if (!SYSTEM_TIERS.has(row.packageTier)) continue;
       const expected = getModulesForPackage(row.packageTier as any);
       const current = (row.enabledModules || []) as string[];
-      const currentSet = new Set(current);
-      const expectedSet = new Set(expected);
+      const currentSet = new Set<string>(current);
+      const expectedSet = new Set<string>(expected);
       const same =
         current.length === expected.length &&
         expected.every((m) => currentSet.has(m));

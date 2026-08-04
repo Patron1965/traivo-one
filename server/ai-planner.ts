@@ -36,10 +36,15 @@ const openai = new OpenAI({
 
 const DEFAULT_AI_MODEL = "gpt-5-mini";
 
+// day_of_week ("monday".."sunday") → ISO-veckodag 1-7 (måndag=1).
+const WEEKDAY_NAME_TO_ISO: Record<string, number> = {
+  monday: 1, tuesday: 2, wednesday: 3, thursday: 4, friday: 5, saturday: 6, sunday: 7,
+};
+
 async function callOpenAI(
-  params: Parameters<typeof openai.chat.completions.create>[0],
+  params: OpenAI.Chat.Completions.ChatCompletionCreateParamsNonStreaming,
   label = "ai-call"
-): ReturnType<typeof openai.chat.completions.create> {
+): Promise<OpenAI.Chat.Completions.ChatCompletion> {
   if (!aiContext.getStore()) {
     console.warn(`[${label}] WARNING: callOpenAI invoked without AI context (no tenantId/model). Using defaults.`);
   }
@@ -684,11 +689,11 @@ function findBestSlot(
           // Matcha veckonummer om specificerat
           if (tw.weekNumber && tw.weekNumber !== weekNum) continue;
           
-          // Matcha veckodag om specificerat (1=måndag, 7=söndag i vår modell)
-          if (tw.weekday) {
-            const twWeekday = tw.weekday; // 1-7 (måndag-söndag)
+          // Matcha veckodag om specificerat (day_of_week = "monday".."sunday")
+          if (tw.dayOfWeek) {
+            const twWeekday = WEEKDAY_NAME_TO_ISO[tw.dayOfWeek.toLowerCase()];
             const jsWeekday = dayOfWeek === 0 ? 7 : dayOfWeek; // Konvertera JS 0-6 till 1-7
-            if (twWeekday !== jsWeekday) continue;
+            if (twWeekday !== undefined && twWeekday !== jsWeekday) continue;
           }
           
           // Matchat tidsfönster! Ge bonus baserat på prioritet
@@ -1552,10 +1557,10 @@ function findBestSlotWithWeather(
         
         for (const tw of timeWindows) {
           if (tw.weekNumber && tw.weekNumber !== weekNum) continue;
-          if (tw.weekday) {
-            const twWeekday = tw.weekday;
+          if (tw.dayOfWeek) {
+            const twWeekday = WEEKDAY_NAME_TO_ISO[tw.dayOfWeek.toLowerCase()];
             const jsWeekday = dayOfWeek === 0 ? 7 : dayOfWeek;
-            if (twWeekday !== jsWeekday) continue;
+            if (twWeekday !== undefined && twWeekday !== jsWeekday) continue;
           }
           const priorityBonus = tw.priority ? Math.max(0, 30 - (tw.priority - 1) * 5) : 25;
           score += priorityBonus;
@@ -2634,6 +2639,7 @@ Om användaren vill göra en ändring (flytta, omplanera), använd suggest_resch
     while (msg?.tool_calls && msg.tool_calls.length > 0 && toolCallRounds < 3) {
       messages.push(msg);
       for (const tc of msg.tool_calls) {
+        if (tc.type !== "function") continue;
         const args = JSON.parse(tc.function.arguments || "{}");
         const result = executeTool(tc.function.name, args);
         messages.push({ role: "tool", tool_call_id: tc.id, content: result });
