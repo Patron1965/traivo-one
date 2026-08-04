@@ -2052,41 +2052,6 @@ app.delete("/api/import/batch/:batchId", asyncHandler(async (req, res) => {
     });
 }));
 
-app.delete("/api/import/clear/:type", asyncHandler(async (req, res) => {
-    const { type } = req.params;
-    const tenantId = getTenantIdWithFallback(req);
-    
-    if (type === "customers") {
-      const customers = await storage.getCustomers(tenantId);
-      for (const c of customers) {
-        await storage.deleteCustomer(c.id);
-      }
-      res.json({ deleted: customers.length });
-    } else if (type === "resources") {
-      const resources = await storage.getResources(tenantId);
-      for (const r of resources) {
-        await storage.deleteResource(r.id);
-      }
-      res.json({ deleted: resources.length });
-    } else if (type === "objects") {
-      const objects = await storage.getObjects(tenantId);
-      for (const o of objects) {
-        await storage.deleteObject(o.id);
-      }
-      res.json({ deleted: objects.length });
-    } else if (type === "work-orders") {
-      const workOrders = await storage.getWorkOrders(tenantId);
-      for (const wo of workOrders) {
-        await storage.deleteWorkOrder(wo.id);
-      }
-      res.json({ deleted: workOrders.length });
-    } else {
-      throw new ValidationError("Okänd typ");
-    }
-}));
-
-// Notification token endpoint - generates auth token for WebSocket connection
-// Requires authentication and validates resource ownership
 app.post("/api/notifications/token", isAuthenticated, asyncHandler(async (req: any, res) => {
     const { resourceId } = req.body;
     

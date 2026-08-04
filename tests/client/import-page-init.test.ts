@@ -1,4 +1,4 @@
-// Task #1345: djuplänkar (?tab=), legacy-länkar (?mode=) och sparad sektion
+// Task #1345/#1346: djuplänkar (?tab=), legacy-länkar (?mode=) och sparad sektion
 // (traivo-import-section-v2) får aldrig öppna fel importflöde. Testerna låser
 // mappningen TAB_SECTION/SECTION_DEFAULT_TAB och init-logiken i
 // client/src/lib/import-page-init.ts (används av ImportPage).
@@ -17,7 +17,7 @@ import {
 import type { ImportSection } from "@/components/import/ImportHub";
 
 const ALL_TABS = Object.keys(TAB_SECTION) as ActiveTab[];
-const ALL_SECTIONS: ImportSection[] = ["objects", "system", "history", "advanced"];
+const ALL_SECTIONS: ImportSection[] = ["objects", "system", "history"];
 
 describe("TAB_SECTION / SECTION_DEFAULT_TAB", () => {
   it("mappar varje flik till exakt en giltig sektion", () => {
@@ -29,9 +29,9 @@ describe("TAB_SECTION / SECTION_DEFAULT_TAB", () => {
   it("täcker alla kända flikar (regression-lås)", () => {
     expect(ALL_TABS.sort()).toEqual(
       [
-        "modus", "enrich", "manual", "fortnox", "mapped",
-        "customerlist", "children", "recipients", "diff",
-        "wizard", "objectsv2", "history", "quality",
+        "modus", "enrich", "fortnox",
+        "customerlist", "children", "recipients", "diff", "resources",
+        "objectsv2", "history", "quality",
       ].sort(),
     );
   });
@@ -53,16 +53,13 @@ describe("TAB_SECTION / SECTION_DEFAULT_TAB", () => {
       children: "system",
       recipients: "system",
       diff: "system",
-      manual: "advanced",
-      mapped: "advanced",
-      wizard: "advanced",
+      resources: "system",
       history: "history",
       quality: "history",
     });
     expect(SECTION_DEFAULT_TAB).toEqual({
       objects: "objectsv2",
       system: "customerlist",
-      advanced: "manual",
       history: "history",
     });
   });
@@ -93,13 +90,20 @@ describe("resolveInitialSection — djuplänkar ?tab=", () => {
 
   it("?tab= vinner över både ?mode= och sparad sektion", () => {
     expect(resolveInitialSection("history", "wizard", "objects")).toBe("history");
-    expect(resolveInitialSection("objectsv2", "migration", "advanced")).toBe("objects");
+    expect(resolveInitialSection("objectsv2", "migration", "system")).toBe("objects");
   });
 
   it("ogiltigt ?tab= ignoreras och faller vidare till mode/sparat", () => {
-    expect(resolveInitialSection("nonsense", "wizard", null)).toBe("advanced");
+    expect(resolveInitialSection("nonsense", "wizard", null)).toBe("objects");
     expect(resolveInitialSection("nonsense", null, "history")).toBe("history");
     expect(resolveInitialSection("nonsense", null, null)).toBeNull();
+  });
+
+  // Task #1346: borttagna flikar (manual/mapped/wizard) faller till huvudflödet.
+  it("?tab=manual/mapped/wizard öppnar huvudflödet (objekt)", () => {
+    expect(resolveInitialSection("manual", null, null)).toBe("objects");
+    expect(resolveInitialSection("mapped", null, null)).toBe("objects");
+    expect(resolveInitialSection("wizard", null, "history")).toBe("objects");
   });
 });
 
@@ -109,8 +113,12 @@ describe("resolveInitialSection — legacy ?mode=", () => {
     expect(resolveInitialSection(null, "ongoing", null)).toBe("system");
   });
 
-  it("mode=wizard öppnar avancerat-sektionen", () => {
-    expect(resolveInitialSection(null, "wizard", null)).toBe("advanced");
+  it("mode=wizard (borttagen wizard) öppnar huvudflödet", () => {
+    expect(resolveInitialSection(null, "wizard", null)).toBe("objects");
+  });
+
+  it("sparad 'advanced'-sektion (borttagen) ger startvyn", () => {
+    expect(resolveInitialSection(null, null, "advanced")).toBeNull();
   });
 
   it("legacy-mode vinner över sparad sektion", () => {
@@ -152,10 +160,10 @@ describe("resolveInitialTab", () => {
     expect(resolveInitialTab("modus", "wizard", "system")).toBe("modus");
   });
 
-  it("legacy ?mode=wizard öppnar tre-stegs-wizarden", () => {
-    expect(resolveInitialTab(null, "wizard", "advanced")).toBe("wizard");
+  it("legacy ?mode=wizard ger huvudflödets default-flik", () => {
+    expect(resolveInitialTab(null, "wizard", "objects")).toBe("objectsv2");
     // Även om ingen sektion härletts än.
-    expect(resolveInitialTab(null, "wizard", null)).toBe("wizard");
+    expect(resolveInitialTab(null, "wizard", null)).toBe("objectsv2");
   });
 
   it("mode=migration/ongoing ger sektionens default-flik", () => {

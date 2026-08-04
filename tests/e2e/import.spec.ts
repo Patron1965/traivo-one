@@ -18,30 +18,8 @@ test.describe("Import page", () => {
   test("all import tabs visible", async ({ page }) => {
     await navigateTo(page, "/import");
     await expect(page.locator('[data-testid="tab-modus-import"]')).toBeVisible({ timeout: 10000 });
-    await expect(page.locator('[data-testid="tab-manual-import"]')).toBeVisible({ timeout: 10000 });
-    await expect(page.locator('[data-testid="tab-mapped-import"]')).toBeVisible({ timeout: 10000 });
     await expect(page.locator('[data-testid="tab-import-history"]')).toBeVisible({ timeout: 10000 });
     await expect(page.locator('[data-testid="tab-data-quality"]')).toBeVisible({ timeout: 10000 });
-  });
-
-  test("manual import tab switches without crash", async ({ page }) => {
-    await navigateTo(page, "/import");
-    const manualTab = page.locator('[data-testid="tab-manual-import"]');
-    await expect(manualTab).toBeVisible({ timeout: 10000 });
-    await manualTab.click({ force: true });
-    await expect(page.locator("body")).toBeVisible();
-    const hasError = await page.locator("text=Application Error").isVisible().catch(() => false);
-    expect(hasError).toBe(false);
-  });
-
-  test("mapped import tab switches without crash", async ({ page }) => {
-    await navigateTo(page, "/import");
-    const mappedTab = page.locator('[data-testid="tab-mapped-import"]');
-    await expect(mappedTab).toBeVisible({ timeout: 10000 });
-    await mappedTab.click({ force: true });
-    await expect(page.locator("body")).toBeVisible();
-    const hasError = await page.locator("text=Application Error").isVisible().catch(() => false);
-    expect(hasError).toBe(false);
   });
 
   test("data quality tab shows 'objects not in Modus export' card", async ({ page }) => {

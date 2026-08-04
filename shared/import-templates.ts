@@ -33,10 +33,7 @@ export type ImportTemplateKey =
   | "fortnox-kunder"
   | "fortnox-fakturahistorik"
   | "fastighetslista"
-  | "barnobjekt"
-  | "wizard-organisation"
-  | "wizard-stores"
-  | "wizard-equipment";
+  | "barnobjekt";
 
 const MODUS_OBJEKT: ImportTemplateDefinition = {
   key: "modus-objekt",
@@ -215,68 +212,6 @@ const BARNOBJEKT: ImportTemplateDefinition = {
   ],
 };
 
-// Task #578 — Tre-stegs import-wizard. Interim-IDn refereras mellan stegen.
-const WIZARD_ORGANISATION: ImportTemplateDefinition = {
-  key: "wizard-organisation",
-  fileName: "traivo-mall-wizard-organisation.xlsx",
-  sheetName: "Organisation",
-  title: "Wizard steg 1 — Organisation",
-  intro:
-    "Första steget i tre-stegs import-wizarden: organisationsnoder (koncern, " +
-    "region, BRF). Sätt ett interim-ID per rad (t.ex. ORG-1) som du sedan kan " +
-    "referera i kolumnen 'Förälder (interim-ID)' i steg 2 (butiker) och steg 3 (fysiska objekt).",
-  columns: [
-    { name: "interim", label: "Interim-ID", required: true, description: "Tillfälligt ID som steg 2/3 refererar till", example: "ORG-1" },
-    { name: "name", label: "Namn", required: true, description: "Namn på organisationsnoden", example: "Axfood AB" },
-    { name: "hierarchyLevel", label: "Hierarkinivå", required: false, description: "koncern, brf, fastighet, rum, karl", example: "koncern" },
-    { name: "parentInterim", label: "Förälder (interim-ID)", required: false, description: "Interim-ID för överordnad rad (tom = rot)", example: "" },
-    { name: "address", label: "Adress", required: false, description: "Adress (valfritt)", example: "Solnavägen 4" },
-    { name: "city", label: "Ort", required: false, description: "Ort (valfritt)", example: "Solna" },
-    { name: "postalCode", label: "Postnummer", required: false, description: "Postnummer (valfritt)", example: "171 54" },
-  ],
-};
-
-const WIZARD_STORES: ImportTemplateDefinition = {
-  key: "wizard-stores",
-  fileName: "traivo-mall-wizard-butiker.xlsx",
-  sheetName: "Butiker",
-  title: "Wizard steg 2 — Butiker",
-  intro:
-    "Andra steget: fysiska platser (butiker, fastigheter). 'Förälder (interim-ID)' " +
-    "måste peka på en organisationsrad från steg 1. Adress, ort och postnummer " +
-    "ärvs från överordnad organisation om de utelämnas.",
-  columns: [
-    { name: "interim", label: "Interim-ID", required: true, description: "Tillfälligt ID som steg 3 refererar till", example: "BUT-101" },
-    { name: "name", label: "Namn", required: true, description: "Butikens/fastighetens namn", example: "Willys Solna" },
-    { name: "parentInterim", label: "Förälder (interim-ID)", required: true, description: "Interim-ID från steg 1 (organisation)", example: "ORG-1" },
-    { name: "objectNumber", label: "Objektnummer", required: false, description: "Externt objektnummer (valfritt)", example: "1001" },
-    { name: "address", label: "Adress", required: false, description: "Adress (ärvs från organisation om tom)", example: "Solnavägen 4" },
-    { name: "city", label: "Ort", required: false, description: "Ort (ärvs från organisation om tom)", example: "Solna" },
-    { name: "postalCode", label: "Postnummer", required: false, description: "Postnummer (ärvs från organisation om tom)", example: "171 54" },
-  ],
-};
-
-const WIZARD_EQUIPMENT: ImportTemplateDefinition = {
-  key: "wizard-equipment",
-  fileName: "traivo-mall-wizard-objekt.xlsx",
-  sheetName: "Fysiska objekt",
-  title: "Wizard steg 3 — Fysiska objekt",
-  intro:
-    "Tredje steget: utrustning/objekt inom butikerna (kärl, fettavskiljare, " +
-    "soprum). 'Förälder (interim-ID)' måste peka på en butiksrad från steg 2. Adress " +
-    "ärvs från överordnad butik om den utelämnas.",
-  columns: [
-    { name: "interim", label: "Interim-ID", required: false, description: "Tillfälligt ID (valfritt — endast om framtida steg behöver referera)", example: "OBJ-1" },
-    { name: "name", label: "Namn", required: true, description: "Objektets namn", example: "Sopkärl 660L bak" },
-    { name: "parentInterim", label: "Förälder (interim-ID)", required: true, description: "Interim-ID från steg 2 (butik)", example: "BUT-101" },
-    { name: "objectNumber", label: "Objektnummer", required: false, description: "Externt objektnummer (valfritt)", example: "K-0001" },
-    { name: "hierarchyLevel", label: "Hierarkinivå", required: false, description: "rum, karl, etc.", example: "karl" },
-    { name: "address", label: "Adress", required: false, description: "Adress (ärvs från butik om tom)", example: "" },
-    { name: "city", label: "Ort", required: false, description: "Ort (ärvs från butik om tom)", example: "" },
-    { name: "postalCode", label: "Postnummer", required: false, description: "Postnummer (ärvs från butik om tom)", example: "" },
-  ],
-};
-
 export const IMPORT_TEMPLATES: Record<ImportTemplateKey, ImportTemplateDefinition> = {
   "modus-objekt": MODUS_OBJEKT,
   "modus-tasks": MODUS_TASKS,
@@ -286,9 +221,6 @@ export const IMPORT_TEMPLATES: Record<ImportTemplateKey, ImportTemplateDefinitio
   "fortnox-fakturahistorik": FORTNOX_INVOICES,
   "fastighetslista": FASTIGHETSLISTA,
   "barnobjekt": BARNOBJEKT,
-  "wizard-organisation": WIZARD_ORGANISATION,
-  "wizard-stores": WIZARD_STORES,
-  "wizard-equipment": WIZARD_EQUIPMENT,
 };
 
 export function getImportTemplate(key: string): ImportTemplateDefinition | null {

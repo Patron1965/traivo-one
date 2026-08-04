@@ -2,6 +2,8 @@
 // plus grupperade sekundära ingångar. Ersätter de tidigare två väljarna
 // (ImportDestinationChooser + ImportEntryChooser) som skapade tre konkurrerande
 // ingångar utan förklaring.
+// Task #1346: Avancerat-sektionen (Manuell CSV, Mappad import, Tre-stegs wizard)
+// är borttagen — de vägarna täcks av matchningsimporten, Kundlistan och mallspåret.
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Link } from "wouter";
@@ -12,11 +14,10 @@ import {
   FileSpreadsheet,
   ListChecks,
   ArrowRight,
-  Wrench,
   Info,
 } from "lucide-react";
 
-export type ImportSection = "objects" | "system" | "history" | "advanced";
+export type ImportSection = "objects" | "system" | "history";
 
 interface Props {
   section: ImportSection | null;
@@ -45,7 +46,7 @@ const MAIN_CHOICES: Array<{
     icon: Database,
     title: "Systemspecifika importer",
     description:
-      "Modus 2.0, Fortnox, kundlistor, underobjekt, fakturamottagare, berika kärl samt diff & uppdatera.",
+      "Modus 2.0, Fortnox, kundlistor, resurser, underobjekt, fakturamottagare, berika kärl samt diff & uppdatera.",
     testId: "button-section-system",
   },
   {
@@ -133,20 +134,6 @@ export function ImportHub({ section, onSelect }: Props) {
             </Link>
           </div>
         </div>
-
-        {/* Avancerat: äldre generiska vägar som täcks av huvudflödet */}
-        <button
-          type="button"
-          onClick={() => onSelect("advanced")}
-          className={`flex items-center gap-2 text-xs transition-colors ${
-            section === "advanced" ? "text-foreground font-medium" : "text-muted-foreground hover:text-foreground"
-          }`}
-          data-testid="button-section-advanced"
-        >
-          <Wrench className="h-3.5 w-3.5" />
-          Avancerat: äldre importvägar (Manuell CSV, Mappad import, Tre-stegs wizard)
-          {section === "advanced" && <Badge variant="outline" className="text-xs">Visas nedan</Badge>}
-        </button>
       </CardContent>
     </Card>
   );
