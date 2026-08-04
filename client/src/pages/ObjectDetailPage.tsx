@@ -1512,6 +1512,7 @@ export default function ObjectDetailPage() {
                     renderHistoryButton={renderHistory}
                     objectAssignments={objectAssignments}
                     navigate={navigate}
+                    canEditFields={isAdmin}
                   />
                 )}
               </div>

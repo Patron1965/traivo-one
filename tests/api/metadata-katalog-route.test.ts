@@ -116,6 +116,48 @@ afterAll(async () => {
   process.env.NODE_ENV = originalNodeEnv;
 }, 30000);
 
+describe("Katalog-skrivningar kräver owner/admin (Task #1368)", () => {
+  const MEMBER = `${NS}-member`;
+
+  it("icke-admin tenant-medlem nekas på POST och PUT /types (403)", async () => {
+    await db.insert(users).values([{ id: MEMBER, email: `${MEMBER}@test.local` }]).onConflictDoNothing();
+    await db
+      .insert(userTenantRoles)
+      .values([{ userId: MEMBER, tenantId: TENANT_A, role: "user", isActive: true, assignedBy: ADMIN_A }])
+      .onConflictDoNothing();
+
+    const created = await req("POST", "/api/metadata/types", {
+      userId: ADMIN_A,
+      body: { namn: `${NS}-rollgate`, datatyp: "string" },
+    });
+    expect(created.status).toBe(201);
+
+    const postRes = await req("POST", "/api/metadata/types", {
+      userId: MEMBER,
+      body: { namn: `${NS}-member-created`, datatyp: "string" },
+    });
+    expect(postRes.status).toBe(403);
+
+    const putRes = await req("PUT", `/api/metadata/types/${created.body.id}`, {
+      userId: MEMBER,
+      body: { area: "ekonomi" },
+    });
+    expect(putRes.status).toBe(403);
+
+    // Admin får däremot uppdatera (område + vinjettflagga från objektsidan).
+    const adminPut = await req("PUT", `/api/metadata/types/${created.body.id}`, {
+      userId: ADMIN_A,
+      body: { area: "ekonomi", visaIVinjett: true },
+    });
+    expect(adminPut.status).toBe(200);
+    expect(adminPut.body.area).toBe("ekonomi");
+    expect(adminPut.body.visaIVinjett).toBe(true);
+
+    await db.delete(userTenantRoles).where(inArray(userTenantRoles.userId, [MEMBER]));
+    await db.delete(users).where(inArray(users.id, [MEMBER]));
+  });
+});
+
 describe("POST /api/metadata/types — unikhet & normalisering (Task #646)", () => {
   it("oinloggad → 401", async () => {
     const res = await req("POST", "/api/metadata/types", {

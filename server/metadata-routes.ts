@@ -627,7 +627,9 @@ async function countMetadataChildren(tenantId: string, id: string): Promise<numb
   return children.length;
 }
 
-metadataRouter.post("/types", async (req: Request, res: Response) => {
+// Task #1368: katalogändringar är tenant-globala — kräver owner/admin server-
+// side (UI-gating är inte auktorisation). DELETE/restore var redan requireAdmin.
+metadataRouter.post("/types", requireAdmin, async (req: Request, res: Response) => {
   try {
     const tenantId = getTenantIdWithFallback(req);
     if (!tenantId) {
@@ -749,7 +751,7 @@ metadataRouter.post("/types", async (req: Request, res: Response) => {
   }
 });
 
-metadataRouter.put("/types/:id", async (req: Request, res: Response) => {
+metadataRouter.put("/types/:id", requireAdmin, async (req: Request, res: Response) => {
   try {
     const tenantId = getTenantIdWithFallback(req);
     if (!tenantId) {

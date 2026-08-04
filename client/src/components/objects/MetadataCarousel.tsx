@@ -17,7 +17,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import {
   Pencil, Trash2, RotateCcw, AlertTriangle, ChevronLeft, ChevronRight, Link as LinkIcon,
-  ShieldOff, Lock,
+  ShieldOff, Lock, Settings2,
 } from "lucide-react";
 import type { MetadataInstance } from "@shared/schema";
 import { KallaBadge, deriveEntryKalla } from "@/lib/metadata-kalla";
@@ -31,8 +31,23 @@ import {
   type MetadataFormEntry,
   type MetadataFormType,
 } from "@/components/ObjectMetadataForm";
-import { selectRenderKind, isCompositeValue } from "./metadata-carousel-utils";
+import { selectRenderKind, isCompositeValue, type MetadataAreaMeta } from "./metadata-carousel-utils";
 import { InheritedEditDialog } from "./InheritedEditDialog";
+import { MetadataFieldSettingsDialog } from "./MetadataFieldSettingsDialog";
+
+/** Läsbar etikett för värdets ursprung (metod) i kortets systeminfo-rad. */
+const METOD_LABELS: Record<string, string> = {
+  manuell: "Manuell",
+  system: "System",
+  tjanst: "Tjänst",
+  utforande: "Utförande",
+  import: "Import",
+  auto: "Automatisk",
+};
+function metodLabel(metod?: string | null): string | null {
+  if (!metod) return null;
+  return METOD_LABELS[metod] ?? metod;
+}
 
 /** Nyckel/värde-vy för ett sammansatt JSON-värde (t.ex. kontakt: namn/tel/epost). */
 function CompositeValue({ value }: { value: unknown }) {
@@ -129,6 +144,9 @@ export interface MetadataCarouselProps {
   anonymizePending?: boolean;
   onPreviewImage: (url: string) => void;
   renderHistoryButton?: (entry: MetadataFormEntry) => ReactNode;
+  /** Task #1368: admin får ändra fältets katalog-inställningar (område/datatyp/vinjett). */
+  canEditField?: boolean;
+  areas?: MetadataAreaMeta[];
 }
 
 /**
@@ -150,11 +168,14 @@ export function MetadataCarousel({
   anonymizePending,
   onPreviewImage,
   renderHistoryButton,
+  canEditField,
+  areas = [],
 }: MetadataCarouselProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [editOpen, setEditOpen] = useState(false);
   const [anonymizeOpen, setAnonymizeOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   const datatyp = entry.katalog?.datatyp ?? type?.datatyp ?? "string";
   const dtMeta = DATATYPE_META[datatyp] ?? DATATYPE_META.string;
@@ -197,11 +218,6 @@ export function MetadataCarousel({
           </div>
           <div className="text-xs text-muted-foreground flex items-center gap-2 flex-wrap pl-[1.375rem]">
             <span>{dtMeta.label}</span>
-            {lastChanged && !Number.isNaN(lastChanged.getTime()) && (
-              <span data-testid={`text-metadata-last-changed-${entry.id}`}>
-                Senast ändrad {lastChanged.toLocaleDateString("sv-SE")}
-              </span>
-            )}
           </div>
         </div>
 
@@ -236,6 +252,19 @@ export function MetadataCarousel({
               )}
 
               {renderHistoryButton?.(entry)}
+
+              {canEditField && type?.id && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 w-7 p-0"
+                  onClick={() => setSettingsOpen(true)}
+                  data-testid={`button-field-settings-${entry.id}`}
+                  aria-label="Fältinställningar"
+                >
+                  <Settings2 className="h-3.5 w-3.5" />
+                </Button>
+              )}
 
               {canEdit && (
                 <Button
@@ -312,7 +341,55 @@ export function MetadataCarousel({
         ) : (
           <MetadataValue entry={entry} datatyp={datatyp} onPreviewImage={onPreviewImage} />
         )}
+
+        {/* Task #1368: diskret systeminfo längst ned — endast verklig proveniens
+            (senast ändrad/av/källa/ärvd-från), aldrig fabricerade fält. */}
+        {(() => {
+          const parts: { key: string; node: ReactNode }[] = [];
+          if (lastChanged && !Number.isNaN(lastChanged.getTime())) {
+            parts.push({
+              key: "changed",
+              node: <span data-testid={`text-metadata-last-changed-${entry.id}`}>Senast ändrad {lastChanged.toLocaleDateString("sv-SE")}</span>,
+            });
+          }
+          const actor = entry.uppdateradAv ?? entry.skapadAv;
+          if (actor) {
+            parts.push({ key: "actor", node: <span data-testid={`text-metadata-actor-${entry.id}`}>Av {actor}</span> });
+          }
+          const kallaLabel = metodLabel(entry.metod);
+          if (kallaLabel) {
+            parts.push({ key: "kalla", node: <span data-testid={`text-metadata-kalla-${entry.id}`}>Källa: {kallaLabel}</span> });
+          }
+          const inheritedFrom = entry.fromObject?.namn || entry.inheritedFromName;
+          if (entry.source === "inherited" && inheritedFrom) {
+            parts.push({ key: "inherited", node: <span data-testid={`text-metadata-inherited-from-${entry.id}`}>Ärvd från {inheritedFrom}</span> });
+          }
+          if (parts.length === 0) return null;
+          return (
+            <div
+              className="mt-3 border-t pt-2 text-[11px] text-muted-foreground flex items-center gap-x-2 gap-y-0.5 flex-wrap"
+              data-testid={`metadata-systeminfo-${entry.id}`}
+            >
+              {parts.map((p, i) => (
+                <span key={p.key} className="flex items-center gap-2">
+                  {i > 0 && <span aria-hidden>·</span>}
+                  {p.node}
+                </span>
+              ))}
+            </div>
+          );
+        })()}
       </CardContent>
+
+      {canEditField && type?.id && settingsOpen && (
+        <MetadataFieldSettingsDialog
+          type={type}
+          areas={areas}
+          objectId={objectId}
+          open={settingsOpen}
+          onOpenChange={setSettingsOpen}
+        />
+      )}
 
       {canEdit && (
         <InheritedEditDialog

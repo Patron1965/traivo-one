@@ -18,6 +18,8 @@ import {
 } from "@/components/ObjectMetadataForm";
 import { ObjectSystemGeneratedPanel } from "@/components/ObjectSystemGeneratedPanel";
 import { MetadataCarousel } from "./MetadataCarousel";
+import { MetadataAreaSection } from "./MetadataAreaSection";
+import { MetadataCreateFieldDialog } from "./MetadataCreateFieldDialog";
 import { ObjectSystemOrdersList } from "./ObjectSystemOrdersList";
 import {
   groupEntriesByArea,
@@ -51,22 +53,12 @@ export interface ObjectMetadataBodyProps {
   renderHistoryButton?: (entry: MetadataFormEntry) => ReactNode;
   objectAssignments: AssignmentItem[];
   navigate: (path: string) => void;
+  /** Task #1368: admin får skapa fält och ändra katalog-inställningar härifrån. */
+  canEditFields?: boolean;
 }
 
 function anchorSlug(area: string): string {
   return area === "__ovrigt__" ? "ovrigt" : area;
-}
-
-/** Sektionsrubrik med ankarnamn + antal (delas av alla metadata-areas). */
-function AreaHeading({ label, count }: { label: string; count: number }) {
-  return (
-    <div className="flex items-center gap-2">
-      <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-        {label}
-      </h3>
-      <Badge variant="secondary" className="text-[10px]">{count}</Badge>
-    </div>
-  );
 }
 
 /**
@@ -91,6 +83,7 @@ export function ObjectMetadataBody({
   renderHistoryButton,
   objectAssignments,
   navigate,
+  canEditFields,
 }: ObjectMetadataBodyProps) {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   // BILD 2/3: filtrera listan på metadataområden (tom = visa alla).
@@ -150,6 +143,8 @@ export function ObjectMetadataBody({
       anonymizePending={anonymizePending}
       onPreviewImage={setPreviewUrl}
       renderHistoryButton={renderHistoryButton}
+      canEditField={canEditFields}
+      areas={areas}
     />
   );
 
@@ -233,6 +228,9 @@ export function ObjectMetadataBody({
                 </div>
               </PopoverContent>
             </Popover>
+            {canEditFields && (
+              <MetadataCreateFieldDialog areas={areas} objectId={objectId} />
+            )}
             <MetadataAddButton
               objectId={objectId}
               metadataTypes={types}
@@ -259,18 +257,15 @@ export function ObjectMetadataBody({
           </Card>
         )}
 
+        {/* Task #1368: per område — swipebar karusell på mobil (positions-
+            indikering + antal), kompakt grid + "Visa alla" på desktop. */}
         {visibleGroups.map((g) => (
-          <section
+          <MetadataAreaSection
             key={g.area}
-            id={`meta-area-${anchorSlug(g.area)}`}
-            className="scroll-mt-24 space-y-3"
-            data-testid={`section-meta-area-${anchorSlug(g.area)}`}
-          >
-            <AreaHeading label={g.label} count={g.items.length} />
-            <div className="grid gap-3 sm:grid-cols-2">
-              {g.items.map(renderField)}
-            </div>
-          </section>
+            areaKey={anchorSlug(g.area)}
+            label={g.label}
+            cards={g.items.map((entry) => ({ key: entry.id, node: renderField(entry) }))}
+          />
         ))}
 
         {!filterActive && (
