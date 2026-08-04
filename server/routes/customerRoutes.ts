@@ -915,10 +915,20 @@ app.get("/api/objects/:id/work-orders", asyncHandler(async (req, res) => {
   if (!verifyTenantOwnership(object, tenantId)) {
     throw new NotFoundError("Objekt");
   }
-  const allOrders = await storage.getWorkOrders(tenantId, undefined, undefined, true, 500);
-  const objectOrders = allOrders
-    .filter(wo => wo.objectId === req.params.id)
-    .slice(0, 50);
+  // Task #1370: direkt tenant+objekt-scopad DB-query (tidigare filtrerades en
+  // tenant-vid 500-lista i minnet — objektets ordrar kunde falla utanför capen).
+  // Fulla work_orders-rader behålls (inkl. sourceType/orderConceptId/orderNumber/
+  // invoiceQueueState som "Kopplade order och uppgifter"-tabellen konsumerar).
+  const objectOrders = await db
+    .select()
+    .from(workOrders)
+    .where(and(
+      eq(workOrders.tenantId, tenantId),
+      eq(workOrders.objectId, req.params.id),
+      isNull(workOrders.deletedAt),
+    ))
+    .orderBy(sql`${workOrders.createdAt} DESC`)
+    .limit(50);
 
   // Task #714: berika varje order med antal orderrader ("antal") för korten.
   const orderIds = objectOrders.map(wo => wo.id);
@@ -931,7 +941,22 @@ app.get("/api/objects/:id/work-orders", asyncHandler(async (req, res) => {
       .groupBy(workOrderLines.workOrderId);
     for (const r of rows) lineCounts.set(r.workOrderId, Number(r.count) || 0);
   }
-  const enriched = objectOrders.map(wo => ({ ...wo, lineCount: lineCounts.get(wo.id) ?? 0 }));
+  // Task #1370: berika med orderkonceptets namn för "Kopplade order och
+  // uppgifter"-tabellen (källa + klickbar konceptlänk). Tenant-scopad lookup.
+  const conceptIds = Array.from(new Set(objectOrders.map(wo => wo.orderConceptId).filter((v): v is string => !!v)));
+  const conceptNames = new Map<string, string>();
+  if (conceptIds.length > 0) {
+    const rows = await db
+      .select({ id: orderConcepts.id, name: orderConcepts.name })
+      .from(orderConcepts)
+      .where(and(eq(orderConcepts.tenantId, tenantId), inArray(orderConcepts.id, conceptIds)));
+    for (const r of rows) if (r.name) conceptNames.set(r.id, r.name);
+  }
+  const enriched = objectOrders.map(wo => ({
+    ...wo,
+    lineCount: lineCounts.get(wo.id) ?? 0,
+    orderConceptName: wo.orderConceptId ? conceptNames.get(wo.orderConceptId) ?? null : null,
+  }));
   res.json(enriched);
 }));
 
@@ -953,14 +978,22 @@ app.get("/api/objects/:id/assignments", asyncHandler(async (req, res) => {
       scheduledDate: assignments.scheduledDate,
       quantity: assignments.quantity,
       createdAt: assignments.createdAt,
+      // Task #1370: uppgiftens ursprung (stämplas vid skapandet, Task #1369).
+      sourceType: assignments.sourceType,
       orderConceptId: assignments.orderConceptId,
       orderConceptName: orderConcepts.name,
       customerId: orderConcepts.customerId,
       customerName: customers.name,
     })
     .from(assignments)
-    .leftJoin(orderConcepts, eq(assignments.orderConceptId, orderConcepts.id))
-    .leftJoin(customers, eq(orderConcepts.customerId, customers.id))
+    .leftJoin(orderConcepts, and(
+      eq(assignments.orderConceptId, orderConcepts.id),
+      eq(orderConcepts.tenantId, tenantId),
+    ))
+    .leftJoin(customers, and(
+      eq(orderConcepts.customerId, customers.id),
+      eq(customers.tenantId, tenantId),
+    ))
     .where(and(
       eq(assignments.tenantId, tenantId),
       eq(assignments.objectId, req.params.id),

@@ -25,6 +25,7 @@ import {
   customers,
   metadataKatalog,
   metadataVarden,
+  objects,
   orderConcepts,
   resources,
   technicianRatings,
@@ -171,6 +172,30 @@ export type SystemUnperformedTask = {
   executionCode: string | null;
 };
 
+// Task #1370: Systeminformation — read-only teknisk sektion längst ned på
+// objektsidan, åtskild från redigerbar metadata. ENBART riktiga objekt-kolumner
+// (objekt-360-memory: inget fabriceras):
+//   - internalId/objectNumber/status/createdAt/deletedAt → objects-kolumner
+//   - parentId/parentName → objects.parent_id (+ namn-lookup)
+//   - childCount → count(objects.parent_id = id), tenant-scopat
+//   - sourceSystem → härlett ur importBatchId/isInterimObject (riktiga kolumner)
+// MEDVETNA UTELÄMNANDEN (dokumenterat beslut): "Versionsnummer" och
+// "ändrad datum/av" saknar backing-kolumner på objects (ingen updated_at/
+// updated_by) — de utelämnas i stället för att fabriceras.
+export type SystemInfoGroup = {
+  internalId: string;
+  objectNumber: string | null;
+  status: string | null;
+  createdAt: string | null;
+  archivedAt: string | null;
+  sourceSystem: string | null;
+  importBatchId: string | null;
+  parentId: string | null;
+  parentName: string | null;
+  childCount: number;
+  hierarchyDepth: number | null;
+};
+
 export type ObjectSystemGeneratedMetadata = {
   address: SystemAddressGroup;
   position: SystemPositionGroup;
@@ -190,6 +215,7 @@ export type ObjectSystemGeneratedMetadata = {
   ratings: SystemRating[];
   inspections: SystemInspection[];
   communications: SystemCommunication[];
+  systemInfo: SystemInfoGroup | null;
 };
 
 const toIso = (v: unknown): string | null =>
@@ -610,6 +636,48 @@ export async function getObjectSystemGeneratedMetadata(
 
   const images: SystemImage[] = imagesRaw;
 
+  // Task #1370: Systeminformation — riktiga objekt-kolumner + förälder/barn.
+  let systemInfo: SystemInfoGroup | null = null;
+  if (object && object.tenantId === tenantId) {
+    const [parentRow, childRow] = await Promise.all([
+      object.parentId
+        ? db
+            .select({ id: objects.id, name: objects.name })
+            .from(objects)
+            .where(and(eq(objects.tenantId, tenantId), eq(objects.id, object.parentId)))
+            .limit(1)
+        : Promise.resolve([] as { id: string; name: string | null }[]),
+      db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(objects)
+        .where(and(
+          eq(objects.tenantId, tenantId),
+          eq(objects.parentId, objectId),
+          isNull(objects.deletedAt),
+        )),
+    ]);
+    // Källsystem härleds ur riktiga kolumner: importBatchId (importerad) och
+    // isInterimObject (interim från import). Saknas båda ⇒ skapad i Traivo.
+    const sourceSystem = object.importBatchId
+      ? "Import"
+      : object.isInterimObject
+        ? "Import (interim)"
+        : "Traivo";
+    systemInfo = {
+      internalId: object.id,
+      objectNumber: object.objectNumber ?? null,
+      status: object.deletedAt ? "archived" : (object.status ?? null),
+      createdAt: toIso(object.createdAt),
+      archivedAt: toIso(object.deletedAt),
+      sourceSystem,
+      importBatchId: object.importBatchId ?? null,
+      parentId: object.parentId ?? null,
+      parentName: parentRow[0]?.name ?? null,
+      childCount: Number(childRow[0]?.count ?? 0),
+      hierarchyDepth: object.hierarchyDepth ?? null,
+    };
+  }
+
   const issueReports: SystemIssueReport[] = issuesRaw.map((it) => ({
     id: it.id,
     title: it.title ?? null,
@@ -635,5 +703,6 @@ export async function getObjectSystemGeneratedMetadata(
     ratings,
     inspections,
     communications,
+    systemInfo,
   };
 }

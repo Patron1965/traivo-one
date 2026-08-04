@@ -37,6 +37,8 @@ import {
 import { ObjectMetadataBody } from "@/components/objects/ObjectMetadataBody";
 import { ObjectDomainGrid } from "@/components/objects/ObjectDomainGrid";
 import { ObjectLinkedTasksGrid } from "@/components/objects/ObjectLinkedTasksGrid";
+import { ObjectLinkedOrdersTable } from "@/components/objects/ObjectLinkedOrdersTable";
+import { ObjectSystemInfoSection } from "@/components/objects/ObjectSystemInfoSection";
 import { DomainCarouselCard } from "@/components/objects/DomainCarouselCard";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import "leaflet/dist/leaflet.css";
@@ -214,6 +216,8 @@ interface ObjectAssignmentItem {
   scheduledDate?: string | null;
   quantity?: number | null;
   createdAt?: string | null;
+  // Task #1370: ursprung (Task #1369) för "Kopplade order och uppgifter".
+  sourceType?: string | null;
   orderConceptId?: string | null;
   orderConceptName?: string | null;
   customerId?: string | null;
@@ -1546,6 +1550,13 @@ export default function ObjectDetailPage() {
             </Button>
           </div>
 
+          {/* Task #1370 (krav 11): sammanställning av kopplade order + uppgifter
+              med källa, orderkoncept, status (deriveUppgiftStatus) och datum. */}
+          <ObjectLinkedOrdersTable
+            workOrders={workOrders as any}
+            assignments={objectAssignments as any}
+          />
+
           {/* Mikro-grovplanering: subträd + källa, exakt grovplaneringslayout (readOnly) */}
           <ObjectLinkedTasksGrid objectId={objectId} />
 
@@ -1561,6 +1572,12 @@ export default function ObjectDetailPage() {
           />
         </section>
 
+        {/* ==================== (4) SYSTEMINFORMATION ====================
+            Task #1370 (krav 12): separat read-only sektion längst ned,
+            åtskild från redigerbar metadata. */}
+        <section id="object-section-system-info" className="scroll-mt-4">
+          <ObjectSystemInfoSection objectId={objectId} />
+        </section>
 
       </div>
 
