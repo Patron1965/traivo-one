@@ -256,6 +256,16 @@ export const requireTenantWithFallback: RequestHandler = async (req, res, next) 
 
 export function getTenantIdWithFallback(req: Request): string {
   if (!req.tenantId) {
+    // Mobil-yta (Task #1387): /api/mobile/* går utanför den globala
+    // tenant-middlewaren, men isMobileAuthenticated har redan resolvat tenant
+    // server-side från Bearer-token. Använd den — annars föll dev tillbaka på
+    // "kinab" (fel tenant) och prod kastade 500 för mobil-handlers som anropar
+    // den här hjälparen.
+    const mobileTenantId = (req as Request & { mobileTenantId?: string }).mobileTenantId;
+    if (mobileTenantId) {
+      return mobileTenantId;
+    }
+
     const isDevelopment = process.env.NODE_ENV !== "production";
     
     if (isDevelopment) {
