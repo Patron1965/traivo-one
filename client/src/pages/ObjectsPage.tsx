@@ -127,6 +127,19 @@ export default function ObjectsPage() {
     const params = new URLSearchParams(window.location.search);
     return params.get("issue");
   });
+  // Task #1357: filtrera på importbatch (länk från Import 2.0-resultatsteget).
+  const [importBatchFilter, setImportBatchFilterRaw] = useState<string | null>(() => {
+    const params = new URLSearchParams(window.location.search);
+    return params.get("importBatch");
+  });
+  const clearImportBatchFilter = () => {
+    setImportBatchFilterRaw(null);
+    setCurrentPage(0);
+    const params = new URLSearchParams(window.location.search);
+    params.delete("importBatch");
+    const qs = params.toString();
+    window.history.replaceState({}, "", window.location.pathname + (qs ? `?${qs}` : ""));
+  };
   const [customerFilter, setCustomerFilterRaw] = useState<string[]>(() => {
     const params = new URLSearchParams(window.location.search);
     const c = params.get("customerId") || params.get("customer");
@@ -229,7 +242,7 @@ export default function ObjectsPage() {
   });
 
   const { data: objectsData, isLoading, isError: objectsIsError, error: objectsError, refetch: objectsRefetch } = useQuery<{ objects: ServiceObject[]; total: number }>({
-    queryKey: ["/api/objects", "paginated", currentPage, debouncedSearch, customerFilter, JSON.stringify(activeConditions), reportedFilter, interimFilter, issueFilter, locationTypeFilter, taskTypeFilter, taskCustomerFilter, taskCompletedFrom, taskCompletedTo],
+    queryKey: ["/api/objects", "paginated", currentPage, debouncedSearch, customerFilter, JSON.stringify(activeConditions), reportedFilter, interimFilter, issueFilter, locationTypeFilter, taskTypeFilter, taskCustomerFilter, taskCompletedFrom, taskCompletedTo, importBatchFilter],
     queryFn: async () => {
       const params = new URLSearchParams({
         limit: PAGE_SIZE.toString(),
@@ -255,6 +268,9 @@ export default function ObjectsPage() {
       }
       if (issueFilter) {
         params.append("issue", issueFilter);
+      }
+      if (importBatchFilter) {
+        params.append("importBatchId", importBatchFilter);
       }
       if (taskTypeFilter !== "all") {
         params.append("taskType", taskTypeFilter);
@@ -748,7 +764,8 @@ export default function ObjectsPage() {
     issueFilter ? 1 : 0,
     locationTypeFilter !== "all" ? 1 : 0,
     hasLinkedTaskFilter ? 1 : 0,
-  ].reduce((a, b) => a + b, 0), [activeConditions, customerFilter, reportedFilter, interimFilter, issueFilter, locationTypeFilter, hasLinkedTaskFilter]);
+    importBatchFilter ? 1 : 0,
+  ].reduce((a, b) => a + b, 0), [activeConditions, customerFilter, reportedFilter, interimFilter, issueFilter, locationTypeFilter, hasLinkedTaskFilter, importBatchFilter]);
 
   const clearAllFilters = () => {
     setConditionFilters([]);
@@ -761,6 +778,7 @@ export default function ObjectsPage() {
     setTaskCustomerFilter(null);
     setTaskCompletedFrom("");
     setTaskCompletedTo("");
+    setImportBatchFilterRaw(null);
     window.history.replaceState({}, "", window.location.pathname);
   };
 
@@ -805,8 +823,9 @@ export default function ObjectsPage() {
     if (interimFilter) params.append("interim", "true");
     if (issueFilter) params.append("issue", issueFilter);
     if (locationTypeFilter !== "all") params.append("locationType", locationTypeFilter);
+    if (importBatchFilter) params.append("importBatchId", importBatchFilter);
     return params;
-  }, [debouncedSearch, customerFilter, activeConditions, reportedFilter, interimFilter, issueFilter, locationTypeFilter]);
+  }, [debouncedSearch, customerFilter, activeConditions, reportedFilter, interimFilter, issueFilter, locationTypeFilter, importBatchFilter]);
 
   const downloadCSV = (filename: string, rows: (string | number)[][]) => {
     const csv = rows.map(row => row.map(sanitizeCSVCell).join(",")).join("\n");
@@ -1830,6 +1849,12 @@ export default function ObjectsPage() {
               {interimFilter && (
                 <Badge variant="secondary" className="gap-1 cursor-pointer" onClick={() => setInterimFilter(false)} data-testid="badge-filter-interim">
                   Overifierade (QR)
+                  <X className="h-3 w-3" />
+                </Badge>
+              )}
+              {importBatchFilter && (
+                <Badge variant="secondary" className="gap-1 cursor-pointer" onClick={clearImportBatchFilter} data-testid="badge-filter-import-batch">
+                  Import: {importBatchFilter}
                   <X className="h-3 w-3" />
                 </Badge>
               )}

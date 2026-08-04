@@ -1180,6 +1180,10 @@ export function registerObjectImportV2Routes(app: Express): void {
               const updateData: Record<string, unknown> = { ...(known as any) };
               if (row.fields.name) updateData.name = row.fields.name;
               if (parentId) updateData.parentId = parentId;
+              // Task #1357: stämpla även uppdaterade objekt med batch-id:t så att
+              // "Visa objekten" (importBatch-filtret) visar HELA importens resultat,
+              // inte bara nyskapade rader. Vid re-import vinner senaste batchen.
+              updateData.importBatchId = batchId;
               // Ångra-funktion: snapshot:a objektets tillstånd FÖRE uppdateringen
               // (before) — undo återställer endast om nuvarande state == after.
               const [preSnapshot] = await db
@@ -1459,6 +1463,8 @@ export function registerObjectImportV2Routes(app: Express): void {
             total_objects: created + updated,
           },
           customer_id: fallbackCustomerId,
+          // Task #1357: låt klienten länka till objektlistan filtrerad på batchen.
+          import_batch_id: batchId,
           customers_linked: new Set(Array.from(customerByObjectId.values())).size,
           per_row_customer: perRowCustomer,
         };

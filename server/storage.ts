@@ -509,7 +509,7 @@ export interface IStorage {
   
   /** Föredragen API: hämtar samtliga objekt för en tenant. */
   getObjects(tenantId: string): Promise<ServiceObject[]>;
-  getObjectsPaginated(tenantId: string, limit: number, offset: number, search?: string, customerIds?: string[], filters?: { objectType?: string; hierarchyLevel?: string; isInterimObject?: boolean; issue?: string; reported?: boolean; locationType?: string; linkedTask?: LinkedTaskFilter }): Promise<{ objects: ServiceObject[]; total: number }>;
+  getObjectsPaginated(tenantId: string, limit: number, offset: number, search?: string, customerIds?: string[], filters?: { objectType?: string; hierarchyLevel?: string; isInterimObject?: boolean; issue?: string; reported?: boolean; locationType?: string; linkedTask?: LinkedTaskFilter; importBatchId?: string }): Promise<{ objects: ServiceObject[]; total: number }>;
   getObjectsByIds(tenantId: string, ids: string[]): Promise<ServiceObject[]>;
   getObjectsWithIssues(tenantId: string, options?: { issueType?: string; status?: string; customerId?: string; limit?: number }): Promise<{
     totalObjectsWithIssues: number;
@@ -2408,7 +2408,7 @@ export class DatabaseStorage implements IStorage {
     return db.select(objectColumnsWithPrimaryCustomer()).from(objects).where(and(eq(objects.tenantId, tenantId), isNull(objects.deletedAt)));
   }
 
-  async getObjectsPaginated(tenantId: string, limit: number, offset: number, search?: string, customerIds?: string[], filters?: { objectType?: string; hierarchyLevel?: string; isInterimObject?: boolean; issue?: string; reported?: boolean; locationType?: string; linkedTask?: LinkedTaskFilter }): Promise<{ objects: ServiceObject[]; total: number }> {
+  async getObjectsPaginated(tenantId: string, limit: number, offset: number, search?: string, customerIds?: string[], filters?: { objectType?: string; hierarchyLevel?: string; isInterimObject?: boolean; issue?: string; reported?: boolean; locationType?: string; linkedTask?: LinkedTaskFilter; importBatchId?: string }): Promise<{ objects: ServiceObject[]; total: number }> {
     const { sql, count } = await import("drizzle-orm");
     
     let whereConditions = and(eq(objects.tenantId, tenantId), isNull(objects.deletedAt));
@@ -2431,6 +2431,12 @@ export class DatabaseStorage implements IStorage {
     
     if (filters?.isInterimObject !== undefined) {
       whereConditions = and(whereConditions, eq(objects.isInterimObject, filters.isInterimObject));
+    }
+
+    // Task #1357: filtrera på importbatch — objekt stämplas med importBatchId
+    // vid Import 2.0 så att "Visa objekten" efter import kan visa exakt batchen.
+    if (filters?.importBatchId) {
+      whereConditions = and(whereConditions, eq(objects.importBatchId, filters.importBatchId));
     }
 
 

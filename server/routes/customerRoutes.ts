@@ -521,6 +521,8 @@ app.get("/api/objects", asyncHandler(async (req, res) => {
   }
 
   const interim = req.query.interim as string || undefined;
+  // Task #1357: filtrera på importbatch (objekt stämplas med importBatchId vid Import 2.0).
+  const importBatchId = (req.query.importBatchId as string)?.trim() || undefined;
   const issue = req.query.issue as string || undefined;
   const reported = req.query.reported === "true";
   // Task #990: platstyp-filter (pinpoint/area/none). Ogiltig param ignoreras.
@@ -575,7 +577,7 @@ app.get("/api/objects", asyncHandler(async (req, res) => {
       }
     : undefined;
 
-  const hasFilters = objectType || hierarchyLevel || interim || issue || reported || locationType || linkedTask;
+  const hasFilters = objectType || hierarchyLevel || interim || issue || reported || locationType || linkedTask || importBatchId;
   const paginated = req.query.paginated === "true";
 
   // Task #552 (A): Berika listsvar med composed displayName så att alla konsumenter
@@ -593,7 +595,7 @@ app.get("/api/objects", asyncHandler(async (req, res) => {
   };
 
   if (paginated || req.query.limit || req.query.offset || req.query.search || req.query.customerId || hasFilters || hasConditions) {
-    const filters = hasFilters ? { objectType, hierarchyLevel, isInterimObject: interim === "true" ? true : interim === "false" ? false : undefined, issue, reported: reported || undefined, locationType, linkedTask } : undefined;
+    const filters = hasFilters ? { objectType, hierarchyLevel, isInterimObject: interim === "true" ? true : interim === "false" ? false : undefined, issue, reported: reported || undefined, locationType, linkedTask, importBatchId } : undefined;
 
     if (hasConditions) {
       // Villkorsfilter: hämta alla bas-filtrerade objekt, kör den DELADE

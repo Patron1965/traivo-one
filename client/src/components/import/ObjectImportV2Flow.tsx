@@ -2,6 +2,7 @@
 // Steg: Ladda upp → Förhandsgranska → Matcha → Validera → Importera & bygg hierarki.
 // Additivt; pratar med /api/import/objects-v2/*. Klientsidig xlsx/csv-parsning.
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useLocation } from "wouter";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -107,6 +108,8 @@ interface ExecuteResponse {
   hierarchy: { root_objects: number; total_levels: number; total_objects: number };
   customer_id: string;
   cluster_id: string;
+  // Task #1357: batch-id som skapade objekt stämplats med (importBatchId).
+  import_batch_id?: string;
 }
 
 const STEPS: { num: StepNum; label: string; icon: typeof Upload }[] = [
@@ -273,6 +276,7 @@ export function pivotLongMetadataMatrix(matrix: string[][]): string[][] | null {
 
 export function ObjectImportV2Flow() {
   const { toast } = useToast();
+  const [, navigate] = useLocation();
   const fileInputRef = useRef<HTMLInputElement>(null);
   // Vilken rubriksignatur restore-effekten redan hanterat (en gång per uppladdning).
   const restoredSigRef = useRef<string | null>(null);
@@ -1029,9 +1033,25 @@ export function ObjectImportV2Flow() {
                   {result.hierarchy.total_objects} objekt totalt.
                 </div>
                 <ImportUndoButton />
-                <Button onClick={resetFlow} data-testid="button-new-import">
-                  Ny import
-                </Button>
+                <div className="flex flex-wrap items-center gap-2">
+                  {/* Task #1357: primär åtgärd — visa de importerade objekten i
+                      objektlistan, filtrerad på importens batch. */}
+                  <Button
+                    onClick={() =>
+                      navigate(
+                        result.import_batch_id
+                          ? `/objects?importBatch=${encodeURIComponent(result.import_batch_id)}`
+                          : "/objects",
+                      )
+                    }
+                    data-testid="button-view-imported-objects"
+                  >
+                    <ListChecks className="mr-2 h-4 w-4" /> Visa objekten
+                  </Button>
+                  <Button variant="outline" onClick={resetFlow} data-testid="button-new-import">
+                    Importera fler
+                  </Button>
+                </div>
               </div>
             )}
           </CardContent>
