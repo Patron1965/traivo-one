@@ -48,6 +48,10 @@ import { ImportPreviewPanel, ResourcePreviewPanel, type NameOverrides } from "@/
 import { DataQualityDashboard } from "@/components/DataQualityDashboard";
 import { IMPORT_TEMPLATES } from "@shared/import-templates";
 import { DownloadTemplateButton } from "@/components/DownloadTemplateButton";
+import {
+  TAB_SECTION, SECTION_DEFAULT_TAB, SECTION_STORAGE_KEY, LEGACY_STORAGE_KEYS,
+  resolveInitialSection, resolveInitialTab, type ActiveTab,
+} from "@/lib/import-page-init";
 
 type ImportType = "customers" | "resources" | "objects";
 type ModusImportType = "objects" | "tasks" | "events" | "invoice-lines";
@@ -2122,57 +2126,25 @@ export default function ImportPage() {
   const urlTab = urlParams.get("tab");
   const urlParent = urlParams.get("parent") || undefined;
 
-  type ActiveTab =
-    | "modus" | "enrich" | "manual" | "fortnox" | "mapped"
-    | "customerlist" | "children" | "recipients" | "diff"
-    | "wizard" | "objectsv2"
-    | "history" | "quality";
-
-  // Task #1344: startvyn har fyra sektioner. Varje flik hör hemma i exakt en
-  // sektion; djuplänkar (?tab=) fortsätter fungera genom att sektionen härleds
-  // från fliken.
-  const TAB_SECTION: Record<ActiveTab, ImportSection> = {
-    objectsv2: "objects",
-    modus: "system", enrich: "system", fortnox: "system",
-    customerlist: "system", children: "system", recipients: "system", diff: "system",
-    manual: "advanced", mapped: "advanced", wizard: "advanced",
-    history: "history", quality: "history",
-  };
-  const SECTION_DEFAULT_TAB: Record<ImportSection, ActiveTab> = {
-    objects: "objectsv2",
-    system: "customerlist",
-    advanced: "manual",
-    history: "history",
-  };
-  const SECTION_STORAGE_KEY = "traivo-import-section-v2";
-  const isValidTab = (t: string | null): t is ActiveTab => !!t && t in TAB_SECTION;
+  // Task #1344/#1345: sektions-/flik-initlogiken bor i en testbar modul
+  // (client/src/lib/import-page-init.ts) så att djuplänkar aldrig regredierar.
   const [section, setSection] = useState<ImportSection | null>(() => {
-    if (isValidTab(urlTab)) return TAB_SECTION[urlTab];
-    // Legacy-lägen mappas till närmast motsvarande sektion.
-    if (urlMode === "migration" || urlMode === "ongoing") return "system";
-    if (urlMode === "wizard") return "advanced";
     const saved = typeof window !== "undefined" ? localStorage.getItem(SECTION_STORAGE_KEY) : null;
-    return saved === "objects" || saved === "system" || saved === "history" || saved === "advanced"
-      ? (saved as ImportSection)
-      : null;
+    return resolveInitialSection(urlTab, urlMode, saved);
   });
   useEffect(() => {
     if (section) localStorage.setItem(SECTION_STORAGE_KEY, section);
     else localStorage.removeItem(SECTION_STORAGE_KEY);
   }, [section]);
 
-  const initialTab: ActiveTab = isValidTab(urlTab)
-    ? urlTab
-    : urlMode === "wizard"
-      ? "wizard" // legacy ?mode=wizard öppnade tre-stegs-wizarden
-      : SECTION_DEFAULT_TAB[section ?? "objects"];
-  const [activeTab, setActiveTab] = useState<ActiveTab>(initialTab);
+  const [activeTab, setActiveTab] = useState<ActiveTab>(() =>
+    resolveInitialTab(urlTab, urlMode, section),
+  );
 
   // Engångsstädning: gamla läges-/sektionsnycklar från före Task #1344.
   useEffect(() => {
     try {
-      localStorage.removeItem("traivo-import-mode");
-      localStorage.removeItem("traivo-import-section");
+      for (const key of LEGACY_STORAGE_KEYS) localStorage.removeItem(key);
     } catch {
       // localStorage kan vara otillgängligt — ignorera.
     }
