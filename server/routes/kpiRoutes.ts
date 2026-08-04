@@ -15,6 +15,7 @@ import { objects, workOrders, metadataVarden, apiUsageLogs, apiBudgets, invitati
 import { getISOWeek, getStartOfISOWeek } from "./helpers";
 import { sendEmail } from "../replit_integrations/resend";
 import { issueMagicLink } from "../replit_integrations/auth/magicLinkAuth";
+import { hashPassword } from "../password";
 import { dashboardCache, DASHBOARD_CACHE_TTL } from "../services/dashboardCache";
 import { mapTileLimiter, TILE_HOURLY_ALERT_THRESHOLD } from "../middleware/rate-limit";
 import { resolveArticleCostBasisOre } from "@shared/article-pricing";

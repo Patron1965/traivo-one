@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll } from "vitest";
+import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import crypto from "crypto";
 import { storage } from "../../server/storage";
 import { db } from "../../server/db";
@@ -229,6 +229,22 @@ describe("Portal light-utförandevy — kvittering är fail-closed (Task #715)",
       customerId: customerAId,
       portalUserId: limitedUser.id,
     });
+  });
+
+  // Task #1351: städa upp katalogpost + artikel så att testkörningar inte
+  // fyller metadatafälts-väljare och artikellistor med "PE-…test…"-skräp.
+  afterAll(async () => {
+    // Soft-delete (arkiv-konventionen) — hard delete stoppas av FK från
+    // metadata_varden-raderna som kvitteringstesterna skapade.
+    await db
+      .update(metadataKatalog)
+      .set({ deletedAt: new Date(), archivedReason: "testresidue-cleanup" })
+      .where(and(eq(metadataKatalog.tenantId, TENANT_ID), eq(metadataKatalog.namn, ALLOWED_LABEL)));
+    if (articleId) {
+      await storage.deleteArticle(articleId).catch(() => {
+        // Best-effort — misslyckad städning får inte fälla testsviten.
+      });
+    }
   });
 
   describe("Sanity: scope-resolver", () => {

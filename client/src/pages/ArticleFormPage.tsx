@@ -1495,7 +1495,10 @@ export default function ArticleFormPage() {
   if (isEditMode && articleError) {
     return (
       <div className="flex h-full flex-col items-center justify-center gap-4 p-6" data-testid="state-error-article">
-        <p className="text-sm text-destructive">Kunde inte läsa artikeln.</p>
+        <p className="text-sm text-destructive">
+          Kunde inte läsa artikeln. Den kan vara arkiverad eller så visar listan en äldre version — ladda om
+          sidan och försök igen.
+        </p>
         <Button variant="outline" onClick={() => navigate("/articles")} data-testid="button-back-articles">
           Tillbaka till artiklar
         </Button>
@@ -1508,8 +1511,11 @@ export default function ArticleFormPage() {
       <header className="sticky top-0 z-50 border-b bg-background">
         <div className="flex flex-wrap items-center justify-between gap-3 px-6 py-3">
           <div className="min-w-0">
-            <h1 className="text-lg font-semibold" data-testid="text-form-title">
-              {isEditMode ? "Redigera artikel" : "Ny artikel"}
+            <h1 className="text-lg font-semibold truncate" data-testid="text-form-title">
+              {/* Task #1351: visa artikelnummer + namn så användaren direkt ser att rätt artikel öppnats. */}
+              {isEditMode
+                ? `Redigera ${[formData.articleNumber, formData.name].filter(Boolean).join(" · ") || "artikel"}`
+                : "Ny artikel"}
             </h1>
             <p className="text-sm text-muted-foreground">
               {isEditMode ? "Uppdatera artikelinformation" : "Lägg till en ny artikel i systemet"}

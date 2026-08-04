@@ -507,9 +507,10 @@ export default function ArticlesPage() {
     return { activeCount, inactiveCount, withHook, topTypes };
   }, [articles]);
 
+  // Priser lagras i öre — dividera med 100 för visning i kronor.
   const formatPrice = (price: number | null | undefined) => {
     if (price === null || price === undefined) return "-";
-    return `${price.toFixed(2)} kr`;
+    return `${(price / 100).toFixed(2)} kr`;
   };
 
   const formatTime = (minutes: number | null | undefined) => {
