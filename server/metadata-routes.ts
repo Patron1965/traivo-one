@@ -90,7 +90,7 @@ metadataRouter.get("/favorites", async (req: Request, res: Response) => {
       ? (row!.favorites as unknown[]).filter((v): v is string => typeof v === "string")
       : [];
     res.json({ favorites });
-  } catch (error) {
+  } catch (error: any) {
     console.error("Error fetching metadata favorites:", error);
     res.status(500).json({ error: "Kunde inte hämta favoriter" });
   }
@@ -121,7 +121,7 @@ metadataRouter.put("/favorites", async (req: Request, res: Response) => {
         set: { favorites, updatedAt: new Date() },
       });
     res.json({ favorites });
-  } catch (error) {
+  } catch (error: any) {
     console.error("Error saving metadata favorites:", error);
     res.status(500).json({ error: "Kunde inte spara favoriter" });
   }
@@ -167,7 +167,7 @@ metadataRouter.get("/types", async (req: Request, res: Response) => {
       : undefined;
     const types = await getAllMetadataTypesWithCustomers(tenantId, customerIdParam);
     res.json(types);
-  } catch (error) {
+  } catch (error: any) {
     console.error("Error fetching metadata types:", error);
     res.status(500).json({ error: "Kunde inte hämta metadatatyper" });
   }
@@ -184,7 +184,7 @@ metadataRouter.post("/types/seed", async (req: Request, res: Response) => {
     await ensureSystemlastaFalt(tenantId);
     await ensureSystemomradenFalt(tenantId);
     res.json({ message: "Standardmetadatatyper skapade" });
-  } catch (error) {
+  } catch (error: any) {
     console.error("Error seeding metadata types:", error);
     res.status(500).json({ error: "Kunde inte skapa metadatatyper" });
   }
@@ -212,7 +212,7 @@ metadataRouter.get("/areas", async (req: Request, res: Response) => {
     }
     const areas = await getMetadataAreas(tenantId);
     res.json(areas);
-  } catch (error) {
+  } catch (error: any) {
     console.error("Error fetching metadata areas:", error);
     res.status(500).json({ error: "Kunde inte hämta områden" });
   }
@@ -270,7 +270,7 @@ metadataRouter.post("/areas", requireAdmin, async (req: Request, res: Response) 
       .returning();
 
     res.status(201).json(created);
-  } catch (error) {
+  } catch (error: any) {
     if (error instanceof ZodError) {
       return res.status(400).json({ error: "Valideringsfel", details: error.errors });
     }
@@ -317,7 +317,7 @@ metadataRouter.delete("/areas/:id", requireAdmin, async (req: Request, res: Resp
       .where(and(eq(metadataAreas.id, req.params.id), eq(metadataAreas.tenantId, tenantId)));
 
     res.status(204).send();
-  } catch (error) {
+  } catch (error: any) {
     console.error("Error deleting metadata area:", error);
     res.status(500).json({ error: "Kunde inte ta bort kategorin" });
   }
@@ -385,7 +385,7 @@ metadataRouter.patch("/areas/reorder", requireAdmin, async (req: Request, res: R
 
     const updated = await getMetadataAreas(tenantId);
     res.json(updated);
-  } catch (error) {
+  } catch (error: any) {
     if (error instanceof ZodError) {
       return res.status(400).json({ error: "Valideringsfel", details: error.errors });
     }
@@ -443,7 +443,7 @@ metadataRouter.patch("/areas/:id", requireAdmin, async (req: Request, res: Respo
       .returning();
 
     res.json(updated);
-  } catch (error) {
+  } catch (error: any) {
     if (error instanceof ZodError) {
       return res.status(400).json({ error: "Valideringsfel", details: error.errors });
     }
@@ -739,7 +739,7 @@ metadataRouter.post("/types", requireAdmin, async (req: Request, res: Response) 
     }
 
     res.status(201).json({ ...newType, customerIds: customerIds ?? [] });
-  } catch (error) {
+  } catch (error: any) {
     console.error("Error creating metadata type:", error);
     if (error instanceof ZodError) {
       return res.status(400).json({ 
@@ -960,7 +960,7 @@ metadataRouter.put("/types/:id", requireAdmin, async (req: Request, res: Respons
 
     const links = await getMetadataCustomerLinks(tenantId);
     res.json({ ...updated, customerIds: links.get(id) ?? [] });
-  } catch (error) {
+  } catch (error: any) {
     console.error("Error updating metadata type:", error);
     // Handle Zod validation errors
     if (error instanceof ZodError) {
@@ -1003,7 +1003,7 @@ metadataRouter.delete("/types/:id", requireAdmin, async (req: Request, res: Resp
     }
 
     res.status(204).send();
-  } catch (error) {
+  } catch (error: any) {
     console.error("Error archiving metadata type:", error);
     res.status(500).json({ error: "Kunde inte arkivera metadatatyp" });
   }
@@ -1021,7 +1021,7 @@ metadataRouter.get("/types/archived", requireAdmin, async (req: Request, res: Re
     }
     const archived = await listArchivedMetadataTypes(tenantId);
     res.json(archived);
-  } catch (error) {
+  } catch (error: any) {
     console.error("Error listing archived metadata types:", error);
     res.status(500).json({ error: "Kunde inte hämta arkiverade metadatatyper" });
   }
@@ -1047,7 +1047,7 @@ metadataRouter.post("/types/:id/restore", requireAdmin, async (req: Request, res
       });
     }
     res.json(result.type);
-  } catch (error) {
+  } catch (error: any) {
     console.error("Error restoring metadata type:", error);
     res.status(500).json({ error: "Kunde inte återställa metadatatyp" });
   }
@@ -1072,7 +1072,7 @@ metadataRouter.post("/objects/values-batch", async (req: Request, res: Response)
     const { objectIds, katalogIds } = schema.parse(req.body);
     const values = await getObjectsMetadataValuesForCatalog(tenantId, objectIds, katalogIds);
     res.json({ values });
-  } catch (error) {
+  } catch (error: any) {
     if (error instanceof ZodError) {
       return res.status(400).json({ error: "Ogiltig förfrågan", details: error.errors });
     }
@@ -1109,7 +1109,7 @@ metadataRouter.get("/objects/:objectId", async (req: Request, res: Response) => 
     };
 
     res.json(enriched);
-  } catch (error) {
+  } catch (error: any) {
     console.error("Error fetching object metadata:", error);
     res.status(500).json({ error: "Kunde inte hämta metadata" });
   }
@@ -1127,7 +1127,7 @@ metadataRouter.get("/objects/:objectId/available-types", async (req: Request, re
     const { objectId } = req.params;
     const types = await getAvailableMetadataTypesForObject(tenantId, objectId);
     res.json(types);
-  } catch (error) {
+  } catch (error: any) {
     console.error("Error fetching available metadata types for object:", error);
     res.status(500).json({ error: "Kunde inte hämta tillgängliga metadatatyper" });
   }
@@ -1145,7 +1145,7 @@ metadataRouter.get("/objects/:objectId/value/:typNamn", async (req: Request, res
     const value = await getMetadataValue(objectId, typNamn, tenantId);
 
     res.json({ value });
-  } catch (error) {
+  } catch (error: any) {
     console.error("Error fetching metadata value:", error);
     res.status(500).json({ error: "Kunde inte hämta metadata-värde" });
   }
@@ -1163,7 +1163,7 @@ metadataRouter.get("/objects/:objectId/position", async (req: Request, res: Resp
     const position = await getGeographicPosition(objectId, tenantId);
 
     res.json(position);
-  } catch (error) {
+  } catch (error: any) {
     console.error("Error fetching geographic position:", error);
     res.status(500).json({ error: "Kunde inte hämta position" });
   }
@@ -1181,7 +1181,7 @@ metadataRouter.get("/objects/:objectId/archived-posts", async (req: Request, res
     const { objectId } = req.params;
     const posts = await getArchivedMetadataPosts(objectId, tenantId);
     res.json(posts);
-  } catch (error) {
+  } catch (error: any) {
     console.error("Error fetching archived metadata posts:", error);
     res.status(500).json({ error: "Kunde inte hämta arkiverade poster" });
   }
@@ -1203,7 +1203,7 @@ metadataRouter.get("/objects/:objectId/tree", async (req: Request, res: Response
     }
 
     res.json(tree);
-  } catch (error) {
+  } catch (error: any) {
     console.error("Error fetching cluster tree:", error);
     res.status(500).json({ error: "Kunde inte hämta träd" });
   }
@@ -1221,7 +1221,7 @@ metadataRouter.get("/objects/:objectId/crossfertilized/:typNamn", async (req: Re
     const crossFertilized = await getCrossFertilizedMetadata(objectId, typNamn, tenantId);
 
     res.json(crossFertilized);
-  } catch (error) {
+  } catch (error: any) {
     console.error("Error fetching cross-fertilized metadata:", error);
     res.status(500).json({ error: "Kunde inte hämta korsbefruktad metadata" });
   }
@@ -1263,7 +1263,7 @@ metadataRouter.post("/", async (req: Request, res: Response) => {
     });
 
     res.status(201).json(newMetadata);
-  } catch (error) {
+  } catch (error: any) {
     console.error("Error creating metadata:", error);
     // Handle Zod validation errors
     if (error instanceof ZodError) {
@@ -1307,7 +1307,7 @@ metadataRouter.put("/:id", async (req: Request, res: Response) => {
     const updated = await updateMetadata(id, validated.varde, tenantId, actor, validated.metod);
 
     res.json(updated);
-  } catch (error) {
+  } catch (error: any) {
     console.error("Error updating metadata:", error);
     // Handle Zod validation errors
     if (error instanceof ZodError) {
@@ -1345,7 +1345,7 @@ metadataRouter.delete("/:id", async (req: Request, res: Response) => {
     await deleteMetadata(id, tenantId);
 
     res.status(204).send();
-  } catch (error) {
+  } catch (error: any) {
     console.error("Error deleting metadata:", error);
     res.status(500).json({ error: "Kunde inte radera metadata" });
   }
@@ -1367,7 +1367,7 @@ metadataRouter.get("/search", async (req: Request, res: Response) => {
     const results = await findObjectsWithMetadata(typNamn, tenantId, varde);
 
     res.json(results);
-  } catch (error) {
+  } catch (error: any) {
     console.error("Error searching metadata:", error);
     res.status(500).json({ error: "Kunde inte söka metadata" });
   }
@@ -1391,7 +1391,7 @@ metadataRouter.patch("/:id/inheritance", async (req: Request, res: Response) => 
     }
 
     res.json(updated);
-  } catch (error) {
+  } catch (error: any) {
     console.error("Error updating metadata inheritance:", error);
     res.status(500).json({ error: "Kunde inte uppdatera ärvning" });
   }
@@ -1411,7 +1411,7 @@ metadataRouter.get("/historik/:metadataId", async (req: Request, res: Response) 
     const { metadataId } = req.params;
     const historik = await getMetadataHistorik(metadataId, tenantId);
     res.json(historik);
-  } catch (error) {
+  } catch (error: any) {
     console.error("Error fetching metadata history:", error);
     res.status(500).json({ error: "Kunde inte hämta metadata-historik" });
   }
@@ -1451,7 +1451,7 @@ metadataRouter.get(
 
       const history = await getMetadataDefinitionHistory(objectId, katalogId, tenantId, limit);
       res.json({ katalog, history });
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error fetching metadata definition history:", error);
       res.status(500).json({ error: "Kunde inte hämta historik för fältet" });
     }
@@ -1665,7 +1665,7 @@ metadataRouter.get("/objects/:objectId/historik", async (req: Request, res: Resp
     const { objectId } = req.params;
     const historik = await getObjectMetadataHistorik(objectId, tenantId);
     res.json(historik);
-  } catch (error) {
+  } catch (error: any) {
     console.error("Error fetching object metadata history:", error);
     res.status(500).json({ error: "Kunde inte hämta objektmetadata-historik" });
   }
@@ -1685,7 +1685,7 @@ metadataRouter.get("/work-orders/:workOrderId", async (req: Request, res: Respon
     const { workOrderId } = req.params;
     const metadata = await getWorkOrderMetadata(workOrderId, tenantId);
     res.json(metadata);
-  } catch (error) {
+  } catch (error: any) {
     console.error("Error fetching work order metadata:", error);
     res.status(500).json({ error: "Kunde inte hämta arbetsordermetadata" });
   }
@@ -1716,7 +1716,7 @@ metadataRouter.post("/work-orders/:workOrderId", async (req: Request, res: Respo
     });
 
     res.status(201).json(newMetadata);
-  } catch (error) {
+  } catch (error: any) {
     console.error("Error creating work order metadata:", error);
     if (error instanceof ZodError) {
       return res.status(400).json({ 
@@ -1743,7 +1743,7 @@ metadataRouter.delete("/work-orders/metadata/:id", async (req: Request, res: Res
     const { id } = req.params;
     await deleteWorkOrderMetadata(id, tenantId);
     res.status(204).send();
-  } catch (error) {
+  } catch (error: any) {
     console.error("Error deleting work order metadata:", error);
     if (error.message?.includes('not found')) {
       return res.status(404).json({ error: error.message });
@@ -1800,7 +1800,7 @@ metadataRouter.post("/work-orders/bulk-apply", async (req: Request, res: Respons
         } else if (meta.vardeBoolean !== null && meta.vardeBoolean !== undefined) {
           value = String(meta.vardeBoolean);
         } else if (meta.vardeDatetime !== null && meta.vardeDatetime !== undefined) {
-          value = meta.vardeDatetime;
+          value = meta.vardeDatetime instanceof Date ? meta.vardeDatetime.toISOString() : String(meta.vardeDatetime);
         } else if (meta.vardeJson !== null && meta.vardeJson !== undefined) {
           value = JSON.stringify(meta.vardeJson);
         } else if (meta.vardeReferens !== null && meta.vardeReferens !== undefined) {
@@ -1820,7 +1820,7 @@ metadataRouter.post("/work-orders/bulk-apply", async (req: Request, res: Respons
     }
 
     res.json({ applied, targets: targetWorkOrderIds.length, metadataPerOrder: sourceMetadata.length });
-  } catch (error) {
+  } catch (error: any) {
     console.error("Error bulk applying work order metadata:", error);
     res.status(500).json({ error: "Kunde inte tillämpa metadata" });
   }
@@ -1843,7 +1843,7 @@ metadataRouter.get("/propagate-preview/:objectId", async (req: Request, res: Res
     }
     const preview = await getPropagationPreview(objectId, metadataKatalogId, tenantId);
     res.json(preview);
-  } catch (error) {
+  } catch (error: any) {
     console.error("Error getting propagation preview:", error);
     res.status(500).json({ error: "Kunde inte hämta förhandsvisning" });
   }
@@ -1871,7 +1871,7 @@ metadataRouter.post("/propagate/:objectId", async (req: Request, res: Response) 
     );
 
     res.json(result);
-  } catch (error) {
+  } catch (error: any) {
     console.error("Error propagating metadata:", error);
     res.status(500).json({ error: "Kunde inte propagera metadata" });
   }
@@ -1897,7 +1897,7 @@ metadataRouter.get("/inheritance-tree/:objectId", async (req: Request, res: Resp
 
     const tree = await getInheritanceTree(objectId, metadataKatalogId, tenantId);
     res.json(tree);
-  } catch (error) {
+  } catch (error: any) {
     console.error("Error fetching inheritance tree:", error);
     res.status(500).json({ error: "Kunde inte hämta arvsträd" });
   }
@@ -1956,7 +1956,7 @@ metadataRouter.get("/article-preview/:objectId/:articleId", async (req: Request,
       leave: leaveData,
       leaveFormat: article.leaveMetadataFormat || "value",
     });
-  } catch (error) {
+  } catch (error: any) {
     console.error("Error fetching article metadata preview:", error);
     res.status(500).json({ error: "Kunde inte hämta artikelmetadata-förhandsvisning" });
   }
@@ -1999,7 +1999,7 @@ metadataRouter.post("/article-writeback/:objectId/:articleId", async (req: Reque
     );
 
     res.json(result);
-  } catch (error) {
+  } catch (error: any) {
     console.error("Error writing article metadata:", error);
     res.status(500).json({ error: "Kunde inte skriva artikelmetadata" });
   }
@@ -2020,7 +2020,7 @@ metadataRouter.get("/article-fetch/:objectId/:fetchCode", async (req: Request, r
     }
 
     res.json(result);
-  } catch (error) {
+  } catch (error: any) {
     console.error("Error fetching article metadata:", error);
     res.status(500).json({ error: "Kunde inte hämta artikelmetadata" });
   }
@@ -2051,7 +2051,7 @@ metadataRouter.post("/article-write/:objectId", async (req: Request, res: Respon
     );
 
     res.json(result);
-  } catch (error) {
+  } catch (error: any) {
     console.error("Error writing article metadata:", error);
     if (error.message?.includes('not found')) {
       return res.status(404).json({ error: error.message });

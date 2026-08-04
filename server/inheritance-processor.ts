@@ -45,7 +45,7 @@ export class InheritanceProcessor {
 
       if (!obj) break;
 
-      ancestors.push(obj);
+      ancestors.push(obj as unknown as import("@shared/schema").ServiceObject);
 
       if (isFirst && contextParentId) {
         currentId = contextParentId;
@@ -97,7 +97,7 @@ export class InheritanceProcessor {
         );
 
       for (const child of children) {
-        result.push(child);
+        result.push(child as unknown as import("@shared/schema").ServiceObject);
         queue.push(child.id);
       }
     }

@@ -109,13 +109,13 @@ app.get("/api/proactive-sales/inactive", asyncHandler(async (req, res) => {
   interface CountRow { count: string }
   interface TotalRow { total: string }
 
-  const totalCustomers = parseInt((totalCustomersResult.rows as CountRow[])[0]?.count ?? "0");
-  const totalRevenueAll = parseInt((totalRevenueResult.rows as TotalRow[])[0]?.total ?? "0");
-  const summaryRow = (summaryResult.rows as SummaryRow[])[0];
+  const totalCustomers = parseInt((totalCustomersResult.rows as unknown as CountRow[])[0]?.count ?? "0");
+  const totalRevenueAll = parseInt((totalRevenueResult.rows as unknown as TotalRow[])[0]?.total ?? "0");
+  const summaryRow = (summaryResult.rows as unknown as SummaryRow[])[0];
   const inactiveCount = parseInt(summaryRow?.inactive_count ?? "0");
   const totalLostRevenue = parseInt(summaryRow?.lost_revenue ?? "0");
 
-  const rows = inactiveRows.rows as InactiveRow[];
+  const rows = inactiveRows.rows as unknown as InactiveRow[];
   const inactiveList = rows.map((r) => ({
     id: r.id,
     name: r.name,

@@ -528,7 +528,7 @@ app.post("/api/annual-planning/ai-distribute", asyncHandler(async (req, res) => 
         frequency = convertLegacyPeriodicity(subscriptionPeriodicity);
       }
       if (frequency && seasonRestriction && !frequency.season) {
-        frequency = { ...frequency, season: seasonRestriction };
+        frequency = { ...frequency, season: seasonRestriction as NonNullable<typeof frequency>["season"] };
       }
 
       if (frequency) {

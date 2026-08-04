@@ -363,6 +363,9 @@ export async function registerPredictiveRoutes(app: Express) {
       return undefined;
     });
 
+    if (!obj.customerId) {
+      throw new ValidationError("Objektet saknar kund — arbetsorder kan inte skapas");
+    }
     const [order] = await db.insert(workOrders).values({
       tenantId,
       objectId,

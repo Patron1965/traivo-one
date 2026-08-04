@@ -649,7 +649,7 @@ app.get("/api/work-orders/:id/expand", asyncHandler(async (req, res) => {
     id: `obj:${i.id}`,
     url: i.imageUrl,
     label: i.description ?? "Objektbild",
-    date: (i.imageDate instanceof Date ? i.imageDate : new Date(i.imageDate)).toISOString(),
+    date: ((i.imageDate as unknown) instanceof Date ? (i.imageDate as unknown as Date) : new Date(i.imageDate as unknown as string)).toISOString(),
   }));
   const protocolImageItems: FieldImage[] = protocolList.flatMap(p => {
     const arr: FieldImage[] = [];
@@ -1234,8 +1234,8 @@ app.post("/api/work-orders", asyncHandler(async (req, res) => {
   if (data.customerId) await ensureCustomerInTenant(data.customerId, tenantId);
   if (data.objectId) ensureObjectNotArchived(await ensureObjectInTenant(data.objectId, tenantId));
 
-  if (data.articleId && data.objectId) {
-    const article = await storage.getArticle(data.articleId);
+  if ((data as { articleId?: string | null }).articleId && data.objectId) {
+    const article = await storage.getArticle((data as { articleId?: string | null }).articleId as string);
     const hasLimitationType =
       !!article && !!article.limitationType && article.limitationType !== "unlimited";
     // Informationspaket fält 19: numeriskt tak (maxPerAddress) räknat per
@@ -1248,7 +1248,7 @@ app.post("/api/work-orders", asyncHandler(async (req, res) => {
     if (article && (hasLimitationType || hasMaxCap)) {
       const allOrders = await storage.getWorkOrders(tenantId);
       const existingForArticle = allOrders.filter(
-        wo => wo.articleId === data.articleId && wo.orderStatus !== "avbruten" && wo.deletedAt === null
+        wo => (wo as { articleId?: string | null }).articleId === (data as { articleId?: string | null }).articleId && wo.orderStatus !== "avbruten" && wo.deletedAt === null
       );
 
       if (hasLimitationType) {

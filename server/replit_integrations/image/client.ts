@@ -22,7 +22,7 @@ export async function generateImageBuffer(
     size,
   });
   trackApiUsage({ service: "openai", method: "images.generate", endpoint: "/v1/images/generations", model: "dall-e-3", units: 1 });
-  const base64 = response.data[0]?.b64_json ?? "";
+  const base64 = response.data?.[0]?.b64_json ?? "";
   return Buffer.from(base64, "base64");
 }
 
@@ -50,7 +50,7 @@ export async function editImages(
   });
   trackApiUsage({ service: "openai", method: "images.generate", endpoint: "/v1/images/generations", model: "dall-e-3", units: 1 });
 
-  const imageBase64 = response.data[0]?.b64_json ?? "";
+  const imageBase64 = response.data?.[0]?.b64_json ?? "";
   const imageBytes = Buffer.from(imageBase64, "base64");
 
   if (outputPath) {

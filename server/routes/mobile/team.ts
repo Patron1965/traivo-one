@@ -1,4 +1,4 @@
-import type { Express, NextFunction, Response } from "express";
+import type { Express, NextFunction, Response, RequestHandler } from "express";
 import { isNotNull } from "drizzle-orm";
 import {
   MobileAuthenticatedRequest,
@@ -217,15 +217,15 @@ export function registerTeamRoutes(app: Express) {
 // take precedence for Bearer-token requests. Non-Bearer requests fall through
 // to the web/admin handler registered later via next("route").
 export function registerTeamAliasRoutes(app: Express) {
-  const ifBearer = (handler: (req: MobileAuthenticatedRequest, res: Response, next: NextFunction) => void) => {
+  const ifBearer = (handler: (req: MobileAuthenticatedRequest, res: Response, next: NextFunction) => void): RequestHandler[] => {
     return [
-      (req: MobileAuthenticatedRequest, _res: Response, next: NextFunction) => {
+      (req, _res, next) => {
         const auth = req.headers.authorization || "";
         if (!auth.toLowerCase().startsWith("bearer ")) return next("route");
         return next();
       },
-      isMobileAuthenticated,
-      handler,
+      isMobileAuthenticated as RequestHandler,
+      handler as RequestHandler,
     ];
   };
   app.get("/api/teams", ...ifBearer(myTeamHandler));

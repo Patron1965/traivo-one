@@ -13,7 +13,7 @@ import { mapGoCategory, ONE_CATEGORIES, SEVERITY_LEVELS, GO_CATEGORY_MAP, AUTO_L
 import { notificationService } from "../../notifications";
 import { triggerETANotification } from "../../eta-notification-service";
 import OpenAI from "openai";
-import { getArticleMetadataForObject, writeArticleMetadataOnObject, findMissingRequiredLeaveMetadata, writeProvidedLeaveMetadataFields, getAllMetadataTypes, buildMetadataGroupIndex, expandArticleMetadataRows } from "../../metadata-queries";
+import { getArticleMetadataForObject, getObjectWithAllMetadata, writeArticleMetadataOnObject, findMissingRequiredLeaveMetadata, writeProvidedLeaveMetadataFields, getAllMetadataTypes, buildMetadataGroupIndex, expandArticleMetadataRows } from "../../metadata-queries";
 import { usesQuantityMetadata, isActiveArticleStatus } from "../../article-quantity";
 import { handleWorkOrderStatusChange } from "../../ai-communication";
 import { invalidateWorkflowCaches } from "../../services/dashboardCache";
@@ -58,7 +58,7 @@ export async function enrichOrderForMobile(order: WorkOrder, storageRef: typeof 
 
   const depDetails = await Promise.all(
     dependencies.map(async (dep: Record<string, unknown>) => {
-      const depOrder = await storageRef.getWorkOrder(dep.dependsOnWorkOrderId).catch(() => null);
+      const depOrder = await storageRef.getWorkOrder(dep.dependsOnWorkOrderId as string).catch(() => null);
       return {
         orderId: dep.dependsOnWorkOrderId,
         orderNumber: depOrder?.title || dep.dependsOnWorkOrderId,
@@ -70,7 +70,7 @@ export async function enrichOrderForMobile(order: WorkOrder, storageRef: typeof 
 
   const enrichedLines = await Promise.all(
     lines.map(async (line: Record<string, unknown>) => {
-      const article = await storageRef.getArticle(line.articleId).catch(() => null);
+      const article = await storageRef.getArticle(line.articleId as string).catch(() => null);
       return {
         id: line.id,
         articleId: line.articleId,
@@ -93,7 +93,7 @@ export async function enrichOrderForMobile(order: WorkOrder, storageRef: typeof 
   const subSteps = structuralArticles.map((sa: Record<string, unknown>, idx: number) => ({
     id: sa.id,
     label: sa.stepLabel || `Steg ${idx + 1}`,
-    completed: completedSubSteps.includes(sa.id),
+    completed: completedSubSteps.includes(sa.id as string),
   }));
 
   const noteParts = order.notes
@@ -170,7 +170,7 @@ export async function enrichOrderForMobile(order: WorkOrder, storageRef: typeof 
     subSteps: subSteps.length > 0 ? subSteps : enrichedLines.map((l: Record<string, unknown>) => ({
       id: l.id,
       label: l.articleName || `Artikel ${l.articleNumber}`,
-      completed: completedSubSteps.includes(l.id),
+      completed: completedSubSteps.includes(l.id as string),
     })),
     articles: enrichedLines,
     cachedValue: order.cachedValue || 0,
@@ -246,7 +246,7 @@ export async function handleQuickAction(orderId: string, actionType: string) {
 
     if (actionType === "needs_part") {
       const existingMaterialNeeds = (existingMetadata.materialNeeds as string[]) || [];
-      updateData.metadata.materialNeeds = [
+      (updateData.metadata as Record<string, unknown>).materialNeeds = [
         ...existingMaterialNeeds,
         `Reservdel behövs (rapporterad ${timestamp})`,
       ];
@@ -292,7 +292,7 @@ export {
   mapGoCategory, ONE_CATEGORIES, SEVERITY_LEVELS, GO_CATEGORY_MAP, AUTO_LINK_DEVIATION_TYPES,
   notificationService, triggerETANotification,
   OpenAI,
-  getArticleMetadataForObject, writeArticleMetadataOnObject, findMissingRequiredLeaveMetadata, writeProvidedLeaveMetadataFields, getAllMetadataTypes, buildMetadataGroupIndex, expandArticleMetadataRows,
+  getArticleMetadataForObject, getObjectWithAllMetadata, writeArticleMetadataOnObject, findMissingRequiredLeaveMetadata, writeProvidedLeaveMetadataFields, getAllMetadataTypes, buildMetadataGroupIndex, expandArticleMetadataRows,
   usesQuantityMetadata, isActiveArticleStatus,
   handleWorkOrderStatusChange,
   invalidateWorkflowCaches,

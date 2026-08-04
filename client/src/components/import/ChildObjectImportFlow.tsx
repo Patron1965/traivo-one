@@ -168,7 +168,7 @@ export function ChildObjectImportFlow({
               return String((val as { result?: unknown }).result ?? "");
             }
             if ("hyperlink" in val) {
-              return (val as { text: string }).text;
+              return (val as unknown as { text: string }).text;
             }
           }
           return String(val);

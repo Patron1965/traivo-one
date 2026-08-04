@@ -217,7 +217,7 @@ export default function ArticleComponentsPage() {
                 ) : (
                   structureArticles.map((a) => (
                     <SelectItem key={a.id} value={a.id}>
-                      {a.code} — {a.name}
+                      {a.articleNumber} — {a.name}
                     </SelectItem>
                   ))
                 )}
@@ -233,7 +233,7 @@ export default function ArticleComponentsPage() {
             <div>
               <CardTitle className="flex items-center gap-2">
                 <Layers className="h-5 w-5" />
-                {parentArticle.code} — {parentArticle.name}
+                {parentArticle.articleNumber} — {parentArticle.name}
               </CardTitle>
               <CardDescription>
                 Komponenter som ingår i strukturen.
@@ -280,7 +280,7 @@ export default function ArticleComponentsPage() {
                       <TableRow key={c.id} data-testid={`row-component-${c.id}`}>
                         <TableCell className="text-muted-foreground">{c.sortOrder ?? 0}</TableCell>
                         <TableCell className="font-medium">
-                          {child ? `${child.code} — ${child.name}` : c.childArticleId}
+                          {child ? `${child.articleNumber} — ${child.name}` : c.childArticleId}
                         </TableCell>
                         <TableCell className="text-right tabular-nums">
                           {Number(c.quantity ?? 1)}
@@ -355,7 +355,7 @@ export default function ArticleComponentsPage() {
                       <SelectContent>
                         {componentCandidates.map((a) => (
                           <SelectItem key={a.id} value={a.id}>
-                            {a.code} — {a.name}
+                            {a.articleNumber} — {a.name}
                           </SelectItem>
                         ))}
                       </SelectContent>

@@ -1,5 +1,5 @@
 import OpenAI from "openai";
-import type { WorkOrder, Resource, SetupTimeLog, ServiceObject, TaskDesiredTimewindow, StructuralArticle, Article, InsertWorkOrder, InsertTaskDependency } from "@shared/schema";
+import type { WorkOrder, WorkOrderWithObject, Resource, SetupTimeLog, ServiceObject, TaskDesiredTimewindow, StructuralArticle, Article, InsertWorkOrder, InsertTaskDependency } from "@shared/schema";
 import { fetchWeatherForecast, type WeatherImpact } from "./weather-service";
 import { storage } from "./storage";
 import { buildSystemPrompt, PLANNING_PERSONA_ADDITIONS } from "./ai/persona";
@@ -2117,11 +2117,11 @@ export async function expandStructuralArticle(
       description: `Deluppgift av ${parentArticle.name} för ${parentWorkOrder.title}`,
       customerId: parentWorkOrder.customerId,
       objectId: parentWorkOrder.objectId,
-      articleIds: [child.childArticleId],
+      structuralArticleId: child.childArticleId,
       status: "draft",
       orderStatus: "skapad",
       priority: parentWorkOrder.priority,
-      taskType: child.taskType || parentWorkOrder.taskType,
+      taskCategory: child.taskType || parentWorkOrder.taskCategory,
       estimatedDuration: 30,
       parentWorkOrderId: parentWorkOrder.id,
       creationMethod: "structural_expansion",
@@ -2407,7 +2407,7 @@ export function generateGoogleMapsUrl(stops: RouteStop[]): string {
 // ============================================
 
 export interface ConversationalPlannerContext {
-  workOrders: WorkOrder[];
+  workOrders: WorkOrderWithObject[];
   resources: Resource[];
   weekStart: string;
   weekEnd: string;
@@ -2697,7 +2697,8 @@ export async function processConversationalPlannerQuery(
   // Get orders for the week
   const weekOrders = workOrders.filter(o => {
     if (!o.scheduledDate) return false;
-    return o.scheduledDate >= weekStart && o.scheduledDate <= weekEnd;
+    const d = o.scheduledDate instanceof Date ? o.scheduledDate.toISOString().split("T")[0] : String(o.scheduledDate).split("T")[0];
+    return d >= weekStart && d <= weekEnd;
   });
   
   // Calculate statistics
@@ -3052,11 +3053,12 @@ export async function aiAssistedSchedule(
 async function getWeatherForPlanning(weekStart: string): Promise<WeatherImpact[]> {
   try {
     const forecast = await fetchWeatherForecast(59.3293, 18.0686, 7);
-    if (!forecast?.daily) return [];
-    return forecast.daily.time?.map((date: string, i: number) => {
-      const precip = forecast.daily.precipitation_sum?.[i] || 0;
-      const wind = forecast.daily.wind_speed_10m_max?.[i] || 0;
-      const temp = forecast.daily.temperature_2m_max?.[i] || 15;
+    if (!forecast?.forecasts) return [];
+    return forecast.forecasts.map((f) => {
+      const date = f.date;
+      const precip = f.precipitation || 0;
+      const wind = f.windSpeed || 0;
+      const temp = f.temperature ?? 15;
       let impactLevel: "none" | "low" | "medium" | "high" | "severe" = "none";
       let capacityMultiplier = 1.0;
       const reasons: string[] = [];

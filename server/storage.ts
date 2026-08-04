@@ -549,7 +549,7 @@ export interface IStorage {
    */
   getWorkOrders(tenantId: string, startDate?: Date, endDate?: Date, includeUnscheduled?: boolean, limit?: number): Promise<WorkOrderWithObject[]>;
   /** Fritextsökning av aktiva ordrar för planerarens "Hitta order" — utan datumgränser, max `limit` träffar. */
-  searchActiveWorkOrders(tenantId: string, query: string, limit?: number): Promise<Array<{ id: string; title: string | null; objectName: string | null; objectAddress: string | null; customerName: string | null; externalReference: string | null; executionCode: string | null; scheduledDate: string | null; resourceId: string | null; teamId: string | null; orderStatus: string }>>;
+  searchActiveWorkOrders(tenantId: string, query: string, limit?: number): Promise<Array<{ id: string; title: string | null; objectName: string | null; objectAddress: string | null; customerName: string | null; externalReference: string | null; executionCode: string | null; scheduledDate: Date | null; resourceId: string | null; teamId: string | null; orderStatus: string }>>;
   getWorkOrdersByExternalRefs(tenantId: string, refs: string[]): Promise<Array<{ id: string; externalReference: string | null; modusId: string | null; metadata: unknown }>>;
   /**
    * Grovplanering-aggregat per vecka (Task #795). Returnerar färdiga summor per
@@ -1989,7 +1989,7 @@ export class DatabaseStorage implements IStorage {
       WHERE c.tenant_id = ${tenantId} AND c.deleted_at IS NULL${idFilter}
     `);
     interface AggRow { customer_id: string; object_count: number; active_orders: number }
-    return (result.rows as AggRow[]).map(r => ({
+    return (result.rows as unknown as AggRow[]).map(r => ({
       customerId: r.customer_id,
       objectCount: Number(r.object_count) || 0,
       activeOrders: Number(r.active_orders) || 0,
@@ -2004,7 +2004,7 @@ export class DatabaseStorage implements IStorage {
         (SELECT COUNT(*)::int FROM work_orders WHERE tenant_id = ${tenantId} AND deleted_at IS NULL AND order_status NOT IN ('utford', 'fakturerad')) as active_orders
     `);
     interface TotalsRow { customer_count: number; object_count: number; active_orders: number }
-    const row = (result.rows as TotalsRow[])[0];
+    const row = (result.rows as unknown as TotalsRow[])[0];
     return {
       customerCount: Number(row?.customer_count) || 0,
       objectCount: Number(row?.object_count) || 0,
@@ -2061,12 +2061,12 @@ export class DatabaseStorage implements IStorage {
     interface InvRow { invoiced_total: string | number }
 
     const objectsByLevel: Record<string, number> = {};
-    for (const r of levelsRes.rows as LevelRow[]) {
+    for (const r of levelsRes.rows as unknown as LevelRow[]) {
       objectsByLevel[r.level] = Number(r.count) || 0;
     }
-    const orders = (ordersRes.rows as OrdersRow[])[0] || { active_orders: 0, completed_orders: 0, invoiced_orders: 0, total_orders: 0 };
-    const subs = (subsRes.rows as SubsRow[])[0] || { active_subscriptions: 0 };
-    const inv = (invoicedRes.rows as InvRow[])[0] || { invoiced_total: 0 };
+    const orders = (ordersRes.rows as unknown as OrdersRow[])[0] || { active_orders: 0, completed_orders: 0, invoiced_orders: 0, total_orders: 0 };
+    const subs = (subsRes.rows as unknown as SubsRow[])[0] || { active_subscriptions: 0 };
+    const inv = (invoicedRes.rows as unknown as InvRow[])[0] || { invoiced_total: 0 };
     const totalObjects = Object.values(objectsByLevel).reduce((a, b) => a + b, 0);
 
     return {
@@ -2276,7 +2276,7 @@ export class DatabaseStorage implements IStorage {
       object_count: number | string; active_orders: number | string;
       orders_30d: number | string; revenue_30d: number | string;
     }
-    const rows = result.rows as Row[];
+    const rows = result.rows as unknown as Row[];
 
     const self = { objectCount: 0, activeOrders: 0, ordersLast30Days: 0, revenueLast30Days: 0 };
     const rollup = { objectCount: 0, activeOrders: 0, ordersLast30Days: 0, revenueLast30Days: 0 };
@@ -2316,7 +2316,7 @@ export class DatabaseStorage implements IStorage {
         id: c.id,
         name: c.name,
         hierarchyType: c.hierarchyType,
-        isReseller: c.isReseller,
+        isReseller: c.isReseller ?? false,
         ...b,
       };
     });
@@ -2591,7 +2591,7 @@ export class DatabaseStorage implements IStorage {
     }>();
 
     const objectIdSet = new Set<string>();
-    for (const row of aggResult.rows as IssueAggRow[]) {
+    for (const row of aggResult.rows as unknown as IssueAggRow[]) {
       const key = `${row.object_id}::${row.category}`;
       let g = groups.get(key);
       if (!g) {
@@ -3329,7 +3329,7 @@ export class DatabaseStorage implements IStorage {
       query = query.limit(limit) as typeof query;
     }
     
-    return query;
+    return query as unknown as Promise<WorkOrderWithObject[]>;
   }
 
   async searchActiveWorkOrders(tenantId: string, query: string, limit = 20) {
@@ -3473,7 +3473,7 @@ export class DatabaseStorage implements IStorage {
       gte(workOrders.scheduledDate, startDate),
       lte(workOrders.scheduledDate, endDate),
     ))
-    .orderBy(desc(workOrders.scheduledDate));
+    .orderBy(desc(workOrders.scheduledDate)) as unknown as Promise<WorkOrderWithObject[]>;
   }
 
   async getRoughPlanningSummary(tenantId: string, week: string, districtId?: string): Promise<RoughPlanningSummary> {
@@ -3883,7 +3883,7 @@ export class DatabaseStorage implements IStorage {
       or(isNull(workOrders.scheduledDate), isNull(workOrders.resourceId))
     ))
     .orderBy(workOrders.priority, workOrders.plannedWindowEnd)
-    .limit(limit);
+    .limit(limit) as unknown as Promise<WorkOrderWithObject[]>;
   }
 
   async getUnscheduledWorkOrdersPaginated(tenantId: string, limit: number, offset: number, search?: string, dateFilter?: { field: 'desired' | 'created' | 'sla'; from?: string; to?: string }): Promise<{ workOrders: WorkOrderWithObject[]; total: number; missingDateFieldCount?: number }> {
@@ -4034,7 +4034,7 @@ export class DatabaseStorage implements IStorage {
     .limit(limit)
     .offset(offset);
 
-    return { workOrders: rows, total: countResult?.count || 0, missingDateFieldCount };
+    return { workOrders: rows as unknown as WorkOrderWithObject[], total: countResult?.count || 0, missingDateFieldCount };
   }
 
   async getUnscheduledMissingDateField(tenantId: string, field: 'desired' | 'sla', search?: string, limit: number = 100): Promise<WorkOrderWithObject[]> {
@@ -4135,7 +4135,7 @@ export class DatabaseStorage implements IStorage {
     .orderBy(workOrders.priority, workOrders.createdAt)
     .limit(limit);
 
-    return rows;
+    return rows as unknown as WorkOrderWithObject[];
   }
 
   async bulkUnscheduleWorkOrders(tenantId: string, startDate: Date, endDate: Date, resourceIds?: string[]): Promise<number> {
@@ -4274,7 +4274,7 @@ export class DatabaseStorage implements IStorage {
     .offset(offset);
 
     return {
-      workOrders: data,
+      workOrders: data as unknown as WorkOrderWithObject[],
       total: countResult?.count || 0
     };
   }
@@ -6604,8 +6604,8 @@ export class DatabaseStorage implements IStorage {
 
     const linkedVehicleIds = new Set(allResVehicles.map(rv => rv.vehicleId));
     const linkedEquipmentIds = new Set(allResEquipment.map(re => re.equipmentId));
-    const unassignedVehicles = allVehicles.filter(v => !linkedVehicleIds.has(v.id)).map(toVehicleAsset);
-    const unassignedEquipment = allEquipment.filter(e => !linkedEquipmentIds.has(e.id)).map(toEquipmentAsset);
+    const unassignedVehicles = allVehicles.filter(v => !linkedVehicleIds.has(v.id)).map(v => toVehicleAsset(v));
+    const unassignedEquipment = allEquipment.filter(e => !linkedEquipmentIds.has(e.id)).map(e => toEquipmentAsset(e));
 
     return { teams: teamsOut, standalonePersons, unassignedVehicles, unassignedEquipment };
   }

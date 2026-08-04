@@ -512,7 +512,7 @@ app.get("/api/export/:type", asyncHandler(async (req, res) => {
         objektnummer: o.objectNumber || "",
         typ: o.objectType,
         nivå: o.objectLevel,
-        kund: customerMap.get(o.customerId) || "",
+        kund: customerMap.get(o.customerId ?? "") || "",
         adress: o.address || "",
         stad: o.city || "",
       }));
@@ -1872,7 +1872,7 @@ app.post("/api/import/modus/tasks", requireAdmin, upload.single("file"), asyncHa
         }
 
         const workOrderFields: Omit<InsertWorkOrder, "tenantId" | "importBatchId"> = {
-          customerId: resolvedCustomerId || object.customerId,
+          customerId: resolvedCustomerId || object.customerId || "",
           objectId: object.id,
           resourceId,
           title: uppgiftsnamn,
@@ -2093,7 +2093,7 @@ async function runModusTasksImportJob(params: {
         }
 
         const workOrderFields: Omit<InsertWorkOrder, "tenantId" | "importBatchId"> = {
-          customerId: resolvedCustomerId || object.customerId,
+          customerId: resolvedCustomerId || object.customerId || "",
           objectId: object.id,
           resourceId,
           title: uppgiftsnamn,
@@ -3097,7 +3097,6 @@ app.post("/api/import/fortnox-customers/bulk", xlsxUpload.single("file"), asyncH
               || (r.city ? `${primary.name} – ${r.city}` : `${primary.name} – ${r.address}`);
             const [createdObject] = await tx.insert(objects).values({
               tenantId,
-              customerId,
               name: objectName,
               objectNumber: `${customerNumber}-${addrKey.slice(0, 16)}`,
               objectType: "fastighet",
@@ -3107,9 +3106,10 @@ app.post("/api/import/fortnox-customers/bulk", xlsxUpload.single("file"), asyncH
               city: r.city || null,
               postalCode: r.postalCode || null,
               status: "active",
-              notes: "Skapad automatiskt vid Fortnox-xlsx-import (leveransadress)",
               importBatchId,
             }).returning();
+            // ADR v3: kund-koppling via primär payer (ej längre objects.customer_id).
+            await ensurePrimaryPayer(tenantId, createdObject.id, customerId);
             await tx.insert(fortnoxMappings).values({
               tenantId, entityType: "object", unicornId: createdObject.id, fortnoxId: objectFortnoxId,
             });
@@ -3126,7 +3126,6 @@ app.post("/api/import/fortnox-customers/bulk", xlsxUpload.single("file"), asyncH
             const objectName = primary.deliveryName || primary.name;
             const [createdObject] = await tx.insert(objects).values({
               tenantId,
-              customerId,
               name: objectName,
               objectNumber: customerNumber,
               objectType: "fastighet",
@@ -3136,9 +3135,10 @@ app.post("/api/import/fortnox-customers/bulk", xlsxUpload.single("file"), asyncH
               city: primary.city || null,
               postalCode: primary.postalCode || null,
               status: "active",
-              notes: "Skapad automatiskt vid Fortnox-xlsx-import",
               importBatchId,
             }).returning();
+            // ADR v3: kund-koppling via primär payer (ej längre objects.customer_id).
+            await ensurePrimaryPayer(tenantId, createdObject.id, customerId);
             await tx.insert(fortnoxMappings).values({
               tenantId, entityType: "object", unicornId: createdObject.id, fortnoxId: objectFortnoxId,
             });
@@ -3243,12 +3243,9 @@ function parseInvoiceDate(s: string): Date | null {
   return isNaN(d.getTime()) ? null : d;
 }
 
-function parseFortnoxInvoiceXlsx(buffer: Buffer): FortnoxInvoiceLine[] {
-  const wb = XLSX.read(buffer, { type: "buffer" });
-  const sheetName = wb.SheetNames[0];
+async function parseFortnoxInvoiceXlsx(buffer: Buffer): Promise<FortnoxInvoiceLine[]> {
+  const { sheetName, aoa } = await readSheetAOA(buffer);
   if (!sheetName) return [];
-  const sheet = wb.Sheets[sheetName];
-  const aoa = XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1, defval: "", raw: false });
   if (aoa.length === 0) return [];
 
   // Locate header row (within first 15 rows) – look for common Fortnox columns
@@ -3445,7 +3442,7 @@ app.post("/api/import/fortnox-invoices/analyze", xlsxUpload.single("file"), asyn
   const minSpanDays = Math.max(0, parseInt(String(req.body?.minSpanDays || "60"), 10));
   const persist = String(req.body?.persist || "false").toLowerCase() === "true";
 
-  const lines = parseFortnoxInvoiceXlsx(req.file.buffer);
+  const lines = await parseFortnoxInvoiceXlsx(req.file.buffer);
   if (lines.length === 0) throw new ValidationError("Filen innehåller inga fakturarader vi kunde tolka. Kontrollera att kolumner som InvoiceDate, CustomerNumber och ArticleNumber finns.");
 
   const { suggestions, totalGroups, totalLines, uniqueCustomers } = analyzeRecurrence(lines, { minOccurrences, minSpanDays });
@@ -6393,7 +6390,6 @@ app.post("/api/import/customer-fastighetslista/commit", requireAdmin, asyncHandl
       if (!selectedNew.has(nr.rowIndex)) continue;
       const [created] = await tx.insert(objects).values({
         tenantId,
-        customerId,
         name: nr.name || nr.address,
         address: nr.address,
         postalCode: nr.postalCode || null,
@@ -6403,6 +6399,8 @@ app.post("/api/import/customer-fastighetslista/commit", requireAdmin, asyncHandl
         hierarchyLevel: "fastighet",
         importBatchId: batchId,
       }).returning();
+      // ADR v3: kund-koppling via primär payer (ej längre objects.customer_id).
+      await ensurePrimaryPayer(tenantId, created.id, customerId);
       createdIds.push(created.id);
       createdCount++;
     }
@@ -6533,7 +6531,7 @@ app.post("/api/import/customer-fastighetslista/commit", requireAdmin, asyncHandl
     createdObjectsResp = createdRows.map(o => ({
       id: o.id,
       name: o.name,
-      address: o.address,
+      address: o.address ?? "",
       hasCoords: o.latitude != null && o.longitude != null,
     }));
   }

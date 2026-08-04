@@ -125,6 +125,7 @@ export async function handleWorkOrderStatusChange(
     const workOrder = await storage.getWorkOrder(workOrderId);
     if (!workOrder || workOrder.tenantId !== tenantId) return;
 
+    if (!workOrder.objectId) return;
     const object = await storage.getObject(workOrder.objectId);
     if (!object) return;
 
@@ -322,6 +323,7 @@ export async function sendETAUpdate(
     const workOrder = await storage.getWorkOrder(workOrderId);
     if (!workOrder || workOrder.tenantId !== tenantId) return;
 
+    if (!workOrder.objectId) return;
     const object = await storage.getObject(workOrder.objectId);
     if (!object) return;
 

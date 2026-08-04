@@ -66,8 +66,17 @@ export class NotFoundError extends AppError {
 }
 
 export class ValidationError extends AppError {
-  constructor(message: string = "Ogiltig data", details?: unknown) {
-    super(message, 400, { code: "ERR_VALIDATION", details });
+  // Accepterar även formatZodError-resultatet ({ error, details }) direkt —
+  // tidigare koercerades objektet till "[object Object]" som message.
+  constructor(
+    message: string | { error: string; details?: unknown } = "Ogiltig data",
+    details?: unknown,
+  ) {
+    if (typeof message === "object" && message !== null) {
+      super(message.error, 400, { code: "ERR_VALIDATION", details: message.details ?? details });
+    } else {
+      super(message, 400, { code: "ERR_VALIDATION", details });
+    }
   }
 }
 

@@ -94,7 +94,7 @@ app.post("/api/iot/signals", asyncHandler(async (req, res) => {
 
     if (rulesEnabled && autoOrderTypes.includes(signalType)) {
       const obj = await storage.getObject(device.objectId);
-      if (obj) {
+      if (obj && obj.customerId) {
         const description = SIGNAL_TYPE_TO_ORDER_DESCRIPTION[signalType] || `IoT-signal: ${signalType}`;
         const priority = priorityOverrides[signalType] || DEFAULT_PRIORITY_MAP[signalType] || "normal";
         const wo = await storage.createWorkOrder({
@@ -108,7 +108,6 @@ app.post("/api/iot/signals", asyncHandler(async (req, res) => {
           priority,
           // Task #1369: ursprung stämplat vid skapandet (IoT-signal → auto-order).
           sourceType: "automatisk",
-          source: "iot",
         });
         createdWorkOrder = wo;
         await storage.updateIotSignal(signal.id, { processed: true, workOrderId: wo.id });

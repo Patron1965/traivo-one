@@ -511,7 +511,7 @@ export async function sendScheduleToResource(
             html,
           });
           if (emailResult.error) {
-            result.email = { success: false, error: emailResult.error.message, recipient: resourceEmail };
+            result.email = { success: false, error: emailResult.error instanceof Error ? emailResult.error.message : String((emailResult.error as { message?: string })?.message ?? emailResult.error), recipient: resourceEmail };
           } else {
             result.email = { success: true, recipient: resourceEmail, messageId: emailResult.data?.id };
           }

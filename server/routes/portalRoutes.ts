@@ -1,4 +1,4 @@
-import type { Express } from "express";
+import type { Express, Request as ExpressRequest, Response as ExpressResponse } from "express";
 import { ensurePrimaryPayer } from "../services/object-customer";
 import { storage } from "../storage";
 import { db } from "../db";
@@ -1648,6 +1648,9 @@ app.post("/api/portal/visit-confirmations", asyncHandler(async (req, res) => {
     }
     
     const { workOrderId, confirmationStatus, disputeReason, customerComment, confirmedByName } = parseResult.data;
+    if (!workOrderId) {
+      throw new ValidationError("Arbetsorder saknas");
+    }
     
     // Check if already confirmed
     const existing = await storage.getVisitConfirmationByWorkOrder(workOrderId);
@@ -1895,6 +1898,9 @@ app.post("/api/portal/self-bookings", asyncHandler(async (req, res) => {
     }
     
     const { slotId, objectId, serviceType, customerNotes } = parseResult.data;
+    if (!slotId) {
+      throw new ValidationError("Tidslucka saknas");
+    }
 
     const enabledServiceTypes = bookingConfig.serviceTypes
       .filter((t: any) => t.enabled)
@@ -2786,12 +2792,12 @@ app.post("/api/portal/field/report", asyncHandler(async (req, res) => {
 
     try {
       const { notificationService: ns } = await import("../notifications");
-      ns.broadcastToTenant(session.tenantId!, {
-        type: "customer_change_request",
+      ns.broadcastToAll({
+        type: "customer_change_request" as any,
         title: "Ny kundrapport",
         message: `Kund ${session.customerName} rapporterade "${category}" på ${obj.name}`,
         data: { reportId: report.id, objectId },
-      });
+      }, session.tenantId!);
     } catch {}
 
     res.status(201).json(report);
@@ -3108,12 +3114,12 @@ app.post("/api/customer-change-requests/:id/create-work-order", requireAdmin, as
 
     try {
       const { notificationService: ns } = await import("../notifications");
-      ns.broadcastToTenant(tenantId, {
-        type: "work_order_created",
+      ns.broadcastToAll({
+        type: "work_order_created" as any,
         title: "Arbetsorder skapad från kundrapport",
         message: `Ny order "${workOrder.title}" skapad för ${obj.name}`,
         data: { workOrderId: workOrder.id, objectId: obj.id },
-      });
+      }, tenantId);
     } catch {}
 
     res.status(201).json({ workOrder, report: { id: report.id, status: "resolved" } });
@@ -3280,7 +3286,7 @@ app.get("/api/portal/notifications/summary", asyncHandler(async (req, res) => {
         .where(and(
           eq(portalMessages.tenantId, session.tenantId!),
           eq(portalMessages.customerId, session.customerId!),
-          eq(portalMessages.sender, "staff"),
+          eq(portalMessages.senderType, "staff"),
           isNull(portalMessages.readAt)
         ));
       const woIds = Array.from(new Set(rows.map(r => r.workOrderId).filter((x): x is string => !!x)));
@@ -3302,7 +3308,7 @@ app.get("/api/portal/notifications/summary", asyncHandler(async (req, res) => {
         .where(and(
           eq(portalMessages.tenantId, session.tenantId!),
           eq(portalMessages.customerId, session.customerId!),
-          eq(portalMessages.sender, "staff"),
+          eq(portalMessages.senderType, "staff"),
           isNull(portalMessages.readAt)
         ));
       unreadCount = Number(unreadMessages[0]?.count || 0);
@@ -3355,7 +3361,7 @@ app.get("/api/staff/portal-messages/:customerId", requirePlanner, asyncHandler(a
       .where(and(
         eq(portalMessages.tenantId, tenantId),
         eq(portalMessages.customerId, req.params.customerId),
-        eq(portalMessages.sender, "customer"),
+        eq(portalMessages.senderType, "customer"),
         isNull(portalMessages.readAt)
       ));
     
@@ -3376,7 +3382,7 @@ app.post("/api/staff/portal-messages/:customerId", requirePlanner, asyncHandler(
       tenantId,
       customerId: req.params.customerId,
       message: message.trim(),
-      sender: "staff",
+      senderType: "staff",
     }).returning();
     
     res.json(newMsg);

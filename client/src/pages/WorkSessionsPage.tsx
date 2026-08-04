@@ -332,7 +332,7 @@ export default function WorkSessionsPage() {
             </Button>
           </div>
 
-          {timeSummary?.nightRestViolations?.length > 0 && (
+          {timeSummary && (timeSummary.nightRestViolations?.length ?? 0) > 0 && (
             <Card className="border-destructive/30 bg-destructive/10 dark:bg-destructive/15">
               <CardHeader className="pb-2">
                 <CardTitle className="text-destructive flex items-center gap-2 text-base">
@@ -351,7 +351,7 @@ export default function WorkSessionsPage() {
             </Card>
           )}
 
-          {timeSummary?.weeklyRestViolations?.length > 0 && (
+          {timeSummary && (timeSummary.weeklyRestViolations?.length ?? 0) > 0 && (
             <Card className="border-chart-4/30 bg-chart-4/10 dark:bg-chart-4/15">
               <CardHeader className="pb-2">
                 <CardTitle className="text-chart-4 flex items-center gap-2 text-base">

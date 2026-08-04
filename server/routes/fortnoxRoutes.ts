@@ -1,5 +1,6 @@
 import type { Express } from "express";
 import { storage } from "../storage";
+import { ensurePrimaryPayer } from "../services/object-customer";
 import { getTimeRestrictionsForObjects, getTimeRestrictionsForTenant } from "../services/object-time-restrictions";
 import { db } from "../db";
 import { eq, sql, desc, and, gte, isNull, inArray } from "drizzle-orm";
@@ -8,7 +9,8 @@ import { formatZodError, verifyTenantOwnership, DEFAULT_TENANT_ID, ensureResourc
 import { getTenantIdWithFallback, requirePlanner } from "../tenant-middleware";
 import { asyncHandler } from "../asyncHandler";
 import { NotFoundError, ValidationError, ForbiddenError, describeFortnoxMappingConflict } from "../errors";
-import { objects, workOrders, articles, customers, fortnoxMappings, importBatches, assignments, type InsertWorkOrder, type ServiceObject, type Assignment } from "@shared/schema";
+import { objects, workOrders, articles, customers, fortnoxMappings, importBatches, assignments, insertWorkOrderSchema, insertTaskDesiredTimewindowSchema, insertTaskDependencySchema, insertTaskInformationSchema, insertStructuralArticleSchema, type InsertWorkOrder, type ServiceObject, type Assignment } from "@shared/schema";
+import { notificationService } from "../notifications";
 import { resolveArticleCostBasisOre } from "@shared/article-pricing";
 import {
   shouldSplitForStockPickup,
@@ -46,7 +48,7 @@ import {
 async function verifyObjectTenant(objectId: string, tenantId: string): Promise<boolean> {
   try {
     const obj = await storage.getObject(objectId);
-    return verifyTenantOwnership(obj, tenantId);
+    return verifyTenantOwnership(obj, tenantId) !== null;
   } catch {
     return false;
   }
@@ -1246,7 +1248,7 @@ app.post("/api/auto-plan-week", asyncHandler(async (req, res) => {
 
           if (order.executionCode) {
             const hasDirectCodes = resource.executionCodes && resource.executionCodes.length > 0;
-            const directMatch = hasDirectCodes && resource.executionCodes.includes(order.executionCode);
+            const directMatch = hasDirectCodes && resource.executionCodes!.includes(order.executionCode);
             const profileCodes = resourceProfileCodes.get(resource.id);
             const hasProfileCodes = profileCodes && profileCodes.size > 0;
             const profileMatch = hasProfileCodes && profileCodes.has(order.executionCode);
@@ -1763,7 +1765,7 @@ app.post("/api/work-orders/:id/expand-structural", asyncHandler(async (req, res)
     const workOrder = await storage.getWorkOrder(req.params.id);
     if (!workOrder) throw new NotFoundError("Arbetsorder hittades inte");
 
-    const articleId = workOrder.articleId;
+    const articleId = workOrder.structuralArticleId;
     if (!articleId) throw new ValidationError("Arbetsordern saknar artikel");
 
     const subArticles = await storage.getStructuralArticlesByParent(articleId);
@@ -1778,7 +1780,6 @@ app.post("/api/work-orders/:id/expand-structural", asyncHandler(async (req, res)
         description: `Delsteg ${sub.sequenceOrder}: ${sub.stepName || childArticle?.name || ""}`,
         status: "pending",
         executionStatus: "not_planned",
-        articleId: sub.childArticleId,
         objectId: workOrder.objectId,
         customerId: workOrder.customerId,
         resourceId: workOrder.resourceId,
@@ -1838,7 +1839,7 @@ app.get("/api/work-orders/:id/sub-steps", asyncHandler(async (req, res) => {
       }
     }
 
-    const articleId = workOrder.articleId;
+    const articleId = workOrder.structuralArticleId;
     let structuralInfo = null;
     if (articleId) {
       const subArticles = await storage.getStructuralArticlesByParent(articleId);
@@ -3925,7 +3926,6 @@ app.post("/api/fortnox/full-import", asyncHandler(async (req, res) => {
           const createdObjectId = await db.transaction(async (tx) => {
             const [created] = await tx.insert(objects).values({
               tenantId,
-              customerId: unicornCustomerId!,
               name: so.name,
               objectNumber: so.objectNumber,
               objectType: "fastighet",
@@ -3935,7 +3935,6 @@ app.post("/api/fortnox/full-import", asyncHandler(async (req, res) => {
               city: so.city,
               postalCode: so.postalCode,
               status: "active",
-              notes: so.notes,
               importBatchId,
             }).returning();
             await tx.insert(fortnoxMappings).values({
@@ -3946,6 +3945,7 @@ app.post("/api/fortnox/full-import", asyncHandler(async (req, res) => {
             });
             return created.id;
           });
+          await ensurePrimaryPayer(tenantId, createdObjectId, unicornCustomerId);
           objectFortnoxIds.add(so.fortnoxId);
           objectSummary.created++;
           if (so.address && so.address.trim() !== "") {

@@ -421,7 +421,7 @@ export default function OrderStockPage() {
   // Lazy load objects by ID - only fetch objects referenced by orders
   const objectIdsNeeded = useMemo(() => {
     if (!orderStockData?.orders) return [];
-    const ids = orderStockData.orders.map(o => o.objectId).filter(Boolean);
+    const ids = orderStockData.orders.map(o => o.objectId).filter((id): id is string => Boolean(id));
     return Array.from(new Set(ids));
   }, [orderStockData?.orders]);
 
@@ -580,7 +580,7 @@ export default function OrderStockPage() {
       const headers = [tl("csv.title"), tl("csv.customer"), tl("csv.object"), tl("csv.status"), tl("csv.value"), tl("csv.cost"), tl("csv.production-time"), tl("csv.planned-date")];
       const rows = data.orders.map(order => {
         const customer = customerMap.get(order.customerId);
-        const object = objectMap.get(order.objectId);
+        const object = objectMap.get(order.objectId || "");
         return [
           order.title || "",
           customer?.name || "",
@@ -1525,7 +1525,7 @@ export default function OrderStockPage() {
                   ) : (
                     <div className="divide-y rounded-md border">
                       {orderLines.map(line => {
-                        const article = articleMap.get(line.articleId);
+                        const article = articleMap.get(line.articleId || "");
                         return (
                           <div 
                             key={line.id} 
@@ -1709,7 +1709,7 @@ export default function OrderStockPage() {
         onOpenChange={(o) => { if (!o && !bulkDeletingLine) setLineToDelete(null); }}
       >
         {lineToDelete && (() => {
-          const article = articleMap.get(lineToDelete.articleId);
+          const article = articleMap.get(lineToDelete.articleId || "");
           const otherSelected = Array.from(selectedIds).filter(
             (id) => id !== selectedOrderForLines?.id,
           );

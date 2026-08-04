@@ -266,7 +266,7 @@ export default function WeeklyReportPage() {
             </h2>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
               <KpiTile label="Slutförda kärl" value={data.current.containers.toLocaleString("sv-SE")} delta={deltaBadge(data.current.containers, data.previous?.containers ?? 0)} testId="kpi-containers" />
-              <KpiTile label="Intäkt" value={formatSekFromOre(data.current.revenue)} delta={deltaBadge(data.current.revenue - data.previous?.revenue ?? 0, 0)} testId="kpi-revenue" />
+              <KpiTile label="Intäkt" value={formatSekFromOre(data.current.revenue)} delta={deltaBadge(data.current.revenue - (data.previous?.revenue ?? 0), 0)} testId="kpi-revenue" />
               <KpiTile label="Snitt-ledtid" value={`${data.current.avgLeadMinutes} min`} delta={deltaBadge(data.current.avgLeadMinutes, data.previous?.avgLeadMinutes ?? 0, " min")} testId="kpi-lead" />
               <KpiTile label="SLA-uppfyllnad" value={`${data.current.slaRate}%`} delta={deltaBadge(data.current.slaRate, data.previous?.slaRate ?? 0, "%")} testId="kpi-sla" />
             </div>

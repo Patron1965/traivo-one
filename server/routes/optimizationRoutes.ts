@@ -93,14 +93,14 @@ async function buildOptimizationPayload(
   };
 
   const baseJobs = filteredOrders.map(o => {
-    const obj = objectMap.get(o.objectId)!;
+    const obj = objectMap.get(o.objectId!)!;
     const durationSec = (o.estimatedDuration || 30) * 60;
     return {
       location: [obj.longitude!, obj.latitude!] as [number, number],
       duration: durationSec,
       priority: o.priority === "hög" ? 80 : o.priority === "medel" ? 50 : 30,
       id: o.id,
-      description: o.orderTitle || o.id,
+      description: o.title || o.id,
     };
   });
 

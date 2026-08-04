@@ -75,7 +75,7 @@ export default function OptimizationPrepPage() {
 
   // Hämta endast objekt som refereras i veckans arbetsordrar
   const weekOrderObjectIds = useMemo(() => {
-    return weekOrders.map(o => o.objectId).filter(Boolean);
+    return weekOrders.map(o => o.objectId).filter((id): id is string => Boolean(id));
   }, [weekOrders]);
 
   const { data: objects = [], isLoading: loadingObjects } = useObjectsByIds(weekOrderObjectIds);
@@ -149,8 +149,8 @@ export default function OptimizationPrepPage() {
   const customerDistribution = useMemo(() => {
     const dist: Record<string, { name: string; count: number; hours: number }> = {};
     weekOrders.forEach(order => {
-      const obj = objectMap.get(order.objectId);
-      const customer = obj ? customerMap.get(obj.customerId) : null;
+      const obj = objectMap.get(order.objectId || "");
+      const customer = obj ? customerMap.get(obj.customerId || "") : null;
       const custId = customer?.id || "unknown";
       const custName = customer?.name || (obj ? "Okänd kund" : "Saknar objekt");
       if (!dist[custId]) {

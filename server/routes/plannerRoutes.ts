@@ -276,7 +276,7 @@ app.get("/api/planner/routes", requireTenantWithFallback, requirePlannerAccess, 
         longitude: obj?.longitude || order.taskLongitude,
         scheduledTimeStart: order.scheduledStartTime,
         status: order.orderStatus,
-        sequence: order.sequenceNumber || 0,
+        sequence: (order as { sequenceNumber?: number }).sequenceNumber || 0,
       });
     }
 
@@ -291,7 +291,7 @@ app.get("/api/planner/routes", requireTenantWithFallback, requirePlannerAccess, 
       return {
         resourceId,
         resourceName: resource?.name || 'Okänd',
-        color: resource?.color || null,
+        color: (resource as { color?: string | null } | undefined)?.color || null,
         waypoints: sorted.map(o => ({
           id: o.id,
           orderNumber: o.orderNumber,
@@ -1380,7 +1380,8 @@ app.get("/api/planning/constraints", requireTenantWithFallback, requirePlannerAc
     const resourceArticles = await storage.getResourceArticlesByResourceIds(resourceIds);
     const teamMembers = await storage.getAllTeamMembers(tenantId);
     const allTimeRestrictions = await getTimeRestrictionsForTenant(tenantId);
-    const allWorkOrderLines = await storage.getWorkOrderLinesByTenant?.(tenantId) || [];
+    const allWorkOrderLines: Array<{ workOrderId: string; articleId: string | null }> =
+      (await (storage as { getWorkOrderLinesByTenant?: (tenantId: string) => Promise<Array<{ workOrderId: string; articleId: string | null }>> }).getWorkOrderLinesByTenant?.(tenantId)) || [];
     const dependencyInstances = await storage.getTaskDependencyInstances(tenantId);
 
     const MAX_HOURS = 8;
@@ -1471,7 +1472,7 @@ app.get("/api/planning/constraints", requireTenantWithFallback, requirePlannerAc
             if (!hasCompetencies) {
               constraints.push({ category: "competency", severity: "critical", description: `Saknar registrerad kompetens, men "${order.title || order.id.slice(0, 8)}" kräver ${orderLines.length} artikel(ar)` });
             } else {
-              const unmatchedCount = orderLines.filter(line => !resourceCompetencyArticleIds.has(line.articleId)).length;
+              const unmatchedCount = orderLines.filter(line => !line.articleId || !resourceCompetencyArticleIds.has(line.articleId)).length;
               if (unmatchedCount > 0) {
                 constraints.push({ category: "competency", severity: "critical", description: `Saknar kompetens för ${unmatchedCount} artikel(ar) på "${order.title || order.id.slice(0, 8)}"` });
               }

@@ -1152,7 +1152,7 @@ export default function ResourcesPage() {
                               <span className="text-sm font-medium">{job.scheduledStartTime || "—"}</span>
                               <span className="text-sm flex-1">{job.title}</span>
                               <span className="text-xs text-muted-foreground">
-                                {objectMap.get(job.objectId) || "—"}
+                                {objectMap.get(job.objectId || "") || "—"}
                               </span>
                               <Badge
                                 variant={

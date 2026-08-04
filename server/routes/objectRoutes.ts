@@ -1271,7 +1271,7 @@ app.get("/api/objects/missing-coordinates", asyncHandler(async (req, res) => {
     city: o.city,
     postalCode: o.postalCode,
     customerId: o.customerId,
-    customerName: customerById.get(o.customerId)?.name || null,
+    customerName: (o.customerId ? customerById.get(o.customerId)?.name : null) || null,
   }));
 
   const byCustomer = new Map<string, { customerId: string; customerName: string; count: number }>();

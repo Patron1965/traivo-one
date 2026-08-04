@@ -760,7 +760,6 @@ async function refreshDemoWorkOrderDates() {
       status: "active",
       homeLatitude: 59.2369,
       homeLongitude: 17.9812,
-      color: "#E74C3C",
     });
     console.log("Created resource res-anna");
   }

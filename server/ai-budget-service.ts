@@ -253,13 +253,13 @@ export async function checkAndSendBudgetAlerts(tenantId: string): Promise<void> 
 
       if (adminResourceIds.length > 0) {
         for (const resourceId of adminResourceIds) {
-          await notificationService.sendToResource(resourceId, notification);
+          await notificationService.sendToResource(resourceId, notification as unknown as Parameters<typeof notificationService.sendToResource>[1]);
         }
       } else if (adminUserIds.length > 0) {
         for (const userId of adminUserIds) {
-          await notificationService.sendToUser?.(userId, notification);
+          await (notificationService as unknown as { sendToUser?: (userId: string, n: unknown) => Promise<void> }).sendToUser?.(userId, notification);
         }
-        if (!notificationService.sendToUser) {
+        if (!(notificationService as unknown as { sendToUser?: (userId: string, n: unknown) => Promise<void> }).sendToUser) {
           console.warn(`[ai-budget] Admin users for tenant ${tenantId} are not linked to resources; alert logged but WebSocket delivery skipped`);
         }
       } else {

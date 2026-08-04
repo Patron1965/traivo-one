@@ -637,7 +637,7 @@ app.post("/api/work-orders/:id/generate-dependent-tasks", asyncHandler(async (re
       throw new NotFoundError("Arbetsorder hittades inte");
     }
 
-    const templates = await storage.getTaskDependencyTemplates(tenantId, workOrder.articleId || undefined);
+    const templates = await storage.getTaskDependencyTemplates(tenantId, workOrder.structuralArticleId || undefined);
     if (templates.length === 0) {
       return res.json({ created: 0, message: "Inga beroendemallar konfigurerade för denna artikel" });
     }
@@ -650,13 +650,14 @@ app.post("/api/work-orders/:id/generate-dependent-tasks", asyncHandler(async (re
 
       const childWo = await storage.createWorkOrder({
         tenantId,
-        articleId: template.dependentArticleId,
+        structuralArticleId: template.dependentArticleId,
         objectId: workOrder.objectId,
         customerId: workOrder.customerId,
         scheduledDate: childScheduled,
         status: template.dependencyType === "before" ? "pending" : "locked",
         executionStatus: "not_started",
         priority: workOrder.priority,
+        title: `Beroende uppgift (${template.dependencyType === "before" ? "före" : "efter"})`,
         description: `Beroende uppgift (${template.dependencyType === "before" ? "före" : "efter"})`,
         creationMethod: "auto_dependency",
         // Task #1369: beroendeuppgift ärver förälderns ursprung + konceptreferens.
@@ -800,8 +801,8 @@ app.get("/api/invoice-preview", asyncHandler(async (req, res) => {
             objectName: order.objectName,
             objectAddress: order.objectAddress,
             quantity: 1,
-            unitPrice: order.estimatedCost || 0,
-            total: order.estimatedCost || 0,
+            unitPrice: order.cachedCost || 0,
+            total: order.cachedCost || 0,
             completedAt: order.completedAt,
             metadata: lineMetadata,
           });
@@ -817,7 +818,7 @@ app.get("/api/invoice-preview", asyncHandler(async (req, res) => {
         
         for (const [oid, objOrders] of Object.entries(byObject)) {
           const firstOrder = objOrders[0];
-          const totalCost = objOrders.reduce((sum, o) => sum + (o.estimatedCost || 0), 0);
+          const totalCost = objOrders.reduce((sum, o) => sum + (o.cachedCost || 0), 0);
           
           lines.push({
             workOrderId: objOrders.map(o => o.id).join(','),
@@ -1796,7 +1797,7 @@ app.post("/api/work-orders/:workOrderId/send-sms", requirePlanner, asyncHandler(
     }
 
     const workOrder = await storage.getWorkOrder(workOrderId);
-    if (!verifyTenantOwnership(workOrder, tenantId)) {
+    if (!verifyTenantOwnership(workOrder, tenantId) || !workOrder) {
       throw new NotFoundError("Arbetsorder hittades inte");
     }
 
@@ -1869,7 +1870,7 @@ app.post("/api/work-orders/:workOrderId/auto-eta-sms", requirePlanner, asyncHand
     const { technicianLat, technicianLng } = req.body;
 
     const workOrder = await storage.getWorkOrder(workOrderId);
-    if (!verifyTenantOwnership(workOrder, tenantId)) {
+    if (!verifyTenantOwnership(workOrder, tenantId) || !workOrder) {
       throw new NotFoundError("Arbetsorder hittades inte");
     }
 
@@ -1890,6 +1891,9 @@ app.post("/api/work-orders/:workOrderId/auto-eta-sms", requirePlanner, asyncHand
       return;
     }
 
+    if (!workOrder.objectId) {
+      throw new NotFoundError("Objekt hittades inte");
+    }
     const obj = await storage.getObject(workOrder.objectId);
     if (!obj) {
       throw new NotFoundError("Objekt hittades inte");

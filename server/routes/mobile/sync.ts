@@ -29,8 +29,8 @@ app.post("/api/mobile/sync", isMobileAuthenticated, asyncHandler(async (req: Mob
 
     const results: Array<{ clientId: string; status: string; error?: string }> = [];
 
-    for (const action of actions) {
-      const { clientId, actionType, payload } = action;
+    for (const action of actions as Array<Record<string, any>>) {
+      const { clientId, actionType, payload } = action as { clientId?: string; actionType?: string; payload: Record<string, any> };
       if (!clientId || !actionType) {
         results.push({ clientId: clientId || "unknown", status: "error", error: "clientId and actionType required" });
         continue;
@@ -132,14 +132,14 @@ app.post("/api/mobile/sync", isMobileAuthenticated, asyncHandler(async (req: Mob
             notificationService.sendToResource(resourceId, {
               type: "order:updated",
               title: "Order uppdaterad (sync)",
-              message: `${syncUpdated.title || orderId} — status: ${newStatus}`,
+              message: `${syncUpdated?.title || orderId} — status: ${newStatus}`,
               orderId,
               data: { status: newStatus, executionStatus: updateData.executionStatus, source: "sync" }
             });
 
             broadcastPlannerEvent({
               type: 'status_changed',
-              data: { orderId, orderNumber: syncUpdated.title || `WO-${orderId.substring(0,8)}`, oldStatus: order.orderStatus || 'unknown', newStatus, driverName: resource?.name || '', timestamp: new Date().toISOString() }
+              data: { orderId, orderNumber: syncUpdated?.title || `WO-${orderId.substring(0,8)}`, oldStatus: order.orderStatus || 'unknown', newStatus, driverName: resource?.name || '', timestamp: new Date().toISOString() }
             });
             break;
           }
@@ -178,7 +178,8 @@ app.post("/api/mobile/sync", isMobileAuthenticated, asyncHandler(async (req: Mob
               results.push({ clientId, status: "error", error });
               break;
             }
-            const existingDeviations = Array.isArray(order.deviations) ? order.deviations : [];
+            const orderDeviations = (order as Record<string, unknown>).deviations;
+            const existingDeviations = Array.isArray(orderDeviations) ? orderDeviations : [];
             await storage.updateWorkOrder(orderId, {
               deviations: [...existingDeviations, {
                 description: description || "",
@@ -187,7 +188,7 @@ app.post("/api/mobile/sync", isMobileAuthenticated, asyncHandler(async (req: Mob
                 reportedBy: resourceId,
                 reportedAt: new Date().toISOString(),
               }],
-            } as Partial<WorkOrder>);
+            } as unknown as Parameters<typeof storage.updateWorkOrder>[1]);
             await storage.updateOfflineSyncLogStatus(logEntry.id, "completed");
             results.push({ clientId, status: "completed" });
             break;
@@ -205,7 +206,8 @@ app.post("/api/mobile/sync", isMobileAuthenticated, asyncHandler(async (req: Mob
               results.push({ clientId, status: "error", error });
               break;
             }
-            const materials = Array.isArray(order.materialsUsed) ? order.materialsUsed : [];
+            const orderMaterials = (order as Record<string, unknown>).materialsUsed;
+            const materials = Array.isArray(orderMaterials) ? orderMaterials : [];
             await storage.updateWorkOrder(orderId, {
               materialsUsed: [...materials, {
                 articleId,
@@ -214,7 +216,7 @@ app.post("/api/mobile/sync", isMobileAuthenticated, asyncHandler(async (req: Mob
                 loggedBy: resourceId,
                 loggedAt: new Date().toISOString(),
               }],
-            } as Partial<WorkOrder>);
+            } as unknown as Parameters<typeof storage.updateWorkOrder>[1]);
             // Notify the team room (if any) that material was logged on a
             // shared order — drives the `team:material_logged` Go event.
             if (order.teamId) {
@@ -263,10 +265,10 @@ app.post("/api/mobile/sync", isMobileAuthenticated, asyncHandler(async (req: Mob
                   tenantId,
                   workOrderId: orderId,
                   objectId: order.objectId!,
-                  inspectionType: insp.category || "Övrigt",
-                  status: insp.status || "ok",
-                  issues: insp.issues || [],
-                  comment: insp.comment || null,
+                  inspectionType: (insp.category as string) || "Övrigt",
+                  status: (insp.status as string) || "ok",
+                  issues: (insp.issues as unknown[]) || [],
+                  comment: (insp.comment as string | null) || null,
                   inspectedBy: resourceId,
                 })
               ));
@@ -340,7 +342,7 @@ app.post("/api/mobile/sync", isMobileAuthenticated, asyncHandler(async (req: Mob
             }));
             await storage.updateWorkOrder(orderId, {
               metadata: { ...meta, photos: [...existingPhotos, ...newPhotos] },
-            } as Partial<WorkOrder>);
+            } as unknown as Parameters<typeof storage.updateWorkOrder>[1]);
             await storage.updateOfflineSyncLogStatus(logEntry.id, "completed");
             results.push({ clientId, status: "completed" });
             break;

@@ -18,6 +18,8 @@ import { issueMagicLink } from "../replit_integrations/auth/magicLinkAuth";
 import { hashPassword } from "../password";
 import { dashboardCache, DASHBOARD_CACHE_TTL } from "../services/dashboardCache";
 import { mapTileLimiter, TILE_HOURLY_ALERT_THRESHOLD } from "../middleware/rate-limit";
+import { generateAndSendWeeklyReports } from "../weekly-report";
+import { anomalyMonitor } from "../anomaly-monitor";
 import { resolveArticleCostBasisOre } from "@shared/article-pricing";
 
 export async function registerKPIRoutes(app: Express) {
@@ -509,7 +511,7 @@ app.get("/api/reports/weekly", requirePlanner, asyncHandler(async (req, res) => 
   for (const d of weekDeviations) {
     const cat = d.category || "ovrigt";
     categoryMap.set(cat, (categoryMap.get(cat) || 0) + 1);
-    const root = d.rootCause || d.cause || d.reason || null;
+    const root = (d as any).rootCause || (d as any).cause || (d as any).reason || null;
     if (root) rootCauseMap.set(String(root), (rootCauseMap.get(String(root)) || 0) + 1);
   }
   const deviationSummary = {
@@ -1245,7 +1247,7 @@ app.put("/api/system/sms-config", requireAdmin, asyncHandler(async (req, res) =>
       action: "update_sms_config",
       resourceType: "tenant",
       resourceId: tenantId,
-      data: parseResult.data,
+      metadata: parseResult.data,
     });
     
     res.json({
@@ -1518,7 +1520,7 @@ app.post("/api/system/industry-packages/:id/install", requireAdmin, asyncHandler
             unitPrice: article.unitPrice?.toString(),
             unit: article.unit,
             objectTypes: article.objectTypes,
-          });
+          } as any);
           articlesInstalled++;
         } catch (err) {
           console.warn(`Skipping duplicate article ${article.articleNumber}:`, err);
@@ -1559,7 +1561,7 @@ app.post("/api/system/industry-packages/:id/install", requireAdmin, asyncHandler
               isConditional: sa.isConditional || false,
               conditionType: sa.conditionType,
               conditionValue: sa.conditionValue,
-            });
+            } as any);
             structuralArticlesInstalled++;
           } else {
             console.warn(`Skipping structural article: parent=${sa.parentArticleNumber} child=${sa.childArticleNumber} - articles not found`);
@@ -1630,7 +1632,7 @@ app.post("/api/system/onboard-tenant", requireAdmin, asyncHandler(async (req, re
       contactEmail: company.contactEmail || null,
       contactPhone: company.contactPhone || null,
       industry: company.industry || null,
-    });
+    } as any);
 
     let packageSummary = null;
     if (industryPackageId) {
@@ -1654,7 +1656,7 @@ app.post("/api/system/onboard-tenant", requireAdmin, asyncHandler(async (req, re
                 unitPrice: article.unitPrice?.toString(),
                 unit: article.unit,
                 objectTypes: article.objectTypes,
-              });
+              } as any);
               articlesInstalled++;
             } catch (err) {
               console.warn(`Skipping duplicate article ${article.articleNumber}:`, err);
@@ -1693,7 +1695,7 @@ app.post("/api/system/onboard-tenant", requireAdmin, asyncHandler(async (req, re
                   isConditional: sa.isConditional || false,
                   conditionType: sa.conditionType,
                   conditionValue: sa.conditionValue,
-                });
+                } as any);
                 structuralArticlesInstalled++;
               }
             } catch (err) {
@@ -3009,7 +3011,7 @@ app.post("/api/reports/sales-intelligence", requireAdmin, asyncHandler(async (re
     const objectIdsWithMetadata = new Set(objectsWithMetadata.map(r => r.objectId));
     const orderObjectIds = new Set(allOrders.map(o => o.objectId));
 
-    const metadataNoOrderIds = [...objectIdsWithMetadata].filter(id => !orderObjectIds.has(id));
+    const metadataNoOrderIds = [...objectIdsWithMetadata].filter((id): id is string => !!id && !orderObjectIds.has(id));
     const objectMetadataGaps: ObjectMetadataGap[] = [];
     if (metadataNoOrderIds.length > 0) {
       const gapObjectRows = await db.select({
@@ -3252,7 +3254,7 @@ Svara ENBART med valid JSON, ingen annan text.`;
     });
 
     if (emailResult.error) {
-      throw new ValidationError(`Kunde inte skicka e-post: ${emailResult.error.message}`);
+      throw new ValidationError(`Kunde inte skicka e-post: ${(emailResult.error as any)?.message ?? String(emailResult.error)}`);
     }
 
     res.json({

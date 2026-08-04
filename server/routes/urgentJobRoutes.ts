@@ -273,7 +273,7 @@ router.post("/urgent-jobs/find-nearest", requirePlanner, async (req: Request, re
       phone: c.phone,
       currentLatitude: c.currentLatitude,
       currentLongitude: c.currentLongitude,
-      currentStatus: c.currentStatus,
+      currentStatus: (c as { currentStatus?: string | null }).currentStatus ?? null,
       distance: c.distance < 1 ? `${Math.round(c.distance * 1000)} m` : `${c.distance.toFixed(1)} km`,
       distanceKm: c.distance,
       estimatedMinutes: c.estimatedMinutes,

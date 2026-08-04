@@ -19,3 +19,5 @@ When you fix type errors in a file, re-run the check; if it reports many baselin
 
 ## Background-log rollback trap
 Run tsc **synchronously in one bash call**. The `Start application` workflow restarts on file edits, and that restart **rolls back files written by backgrounded (`nohup`/`setsid`) processes** — logs in `/tmp/*.log` or `.local/*.log` disappear between bash tool calls.
+
+**2026-08-04:** Baseline nedbantad till `{}` (0 fel repo-wide). Nya tsc-fel ska nu fixas direkt — baseline ska aldrig växa igen. Vid TS2345 mot breda interface-typer (t.ex. MetadataVardenWithKatalog-pushar med extra fält): cast `as unknown as (typeof arr)[number]` hellre än att luckra upp interfacet.

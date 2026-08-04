@@ -9,6 +9,8 @@ import { asyncHandler } from "../asyncHandler";
 import { NotFoundError, ValidationError, UnauthorizedError, ForbiddenError, ConflictError } from "../errors";
 import { objects, workOrders, articles , insertDeviationReportSchema, insertProtocolSchema, apiUsageLogs, apiBudgets, taskDependencyInstances, invitations, weeklyPlanTasks } from "@shared/schema";
 import { getISOWeek, getStartOfISOWeek, getDateFromWeekdayInMonth } from "./helpers";
+import { handleWorkOrderStatusChange, getCommunicationLog, getAutoNotificationSettings, sendETAUpdate } from "../ai-communication";
+import type { UserRole } from "@shared/schema";
 import { notificationService } from "../notifications";
 import { sendEmail } from "../replit_integrations/resend";
 import { requireAdmin, requirePlanner } from "../tenant-middleware";
@@ -651,14 +653,15 @@ app.post("/api/deviation-reports/:id/create-order", asyncHandler(async (req, res
       tenantId,
       objectId: report.objectId,
       customerId: object.customerId || '',
+      title: `Åtgärd: ${categoryLabel} - ${report.title}`,
       orderType: 'manual',
       status: 'planned',
       description: `Åtgärd: ${categoryLabel} - ${report.title}\n\nBeskrivning: ${report.description || ''}\n\nAllvarlighetsgrad: ${severityLabel}\n\nFöreslagen åtgärd: ${report.suggestedAction || 'Ej angiven'}`,
       creationMethod: 'deviation_report',
       // Task #1369: ursprung stämplat vid skapandet (avvikelserapport → åtgärdsorder).
       sourceType: "felanmalan",
-      latitude: report.latitude ? String(report.latitude) : undefined,
-      longitude: report.longitude ? String(report.longitude) : undefined,
+      taskLatitude: report.latitude ?? undefined,
+      taskLongitude: report.longitude ?? undefined,
     });
     
     // Update deviation report with linked order
@@ -716,7 +719,7 @@ app.get("/api/objects/:id/issue-history", asyncHandler(async (req, res) => {
         category: dev.category,
         title: dev.title,
         status: dev.status,
-        severity: dev.severity,
+        severity: dev.severityLevel,
         id: dev.id,
       });
     }
@@ -1630,7 +1633,7 @@ app.get("/api/system/api-costs/recent", requireAdmin, asyncHandler(async (req, r
 
 const requireSystemAdmin = async (req: Request, res: Response, next: NextFunction) => {
   const replitUser = req.user;
-  const sessionUserId = (req.session as Record<string, string>)?.userId;
+  const sessionUserId = (req.session as unknown as Record<string, string>)?.userId;
   const userId = replitUser?.claims?.sub || sessionUserId;
   if (!userId) {
     return next(new UnauthorizedError("Ej autentiserad"));
@@ -1648,7 +1651,7 @@ const requireSystemAdmin = async (req: Request, res: Response, next: NextFunctio
     if (isGlobalAdmin.length === 0) {
       return next(new ForbiddenError("Systemadministratörsbehörighet krävs."));
     }
-    req.userId = userId;
+    (req as any).userId = userId;
     return next();
   } catch {
     return res.status(500).json({ error: "Kunde inte verifiera behörighet" });
@@ -1894,7 +1897,7 @@ app.post("/api/field-worker/tasks/:id/start", asyncHandler(async (req, res) => {
       status: "in_progress",
     });
     if (workOrder.tenantId) {
-      handleWorkOrderStatusChange(req.params.id, workOrder.executionStatus || "pending", "travel", workOrder.tenantId).catch(err =>
+      handleWorkOrderStatusChange(req.params.id, workOrder.executionStatus || "pending", "travel", workOrder.tenantId).catch((err: unknown) =>
         console.error("[ai-communication] Field start hook error:", err)
       );
     }
@@ -1925,7 +1928,7 @@ app.post("/api/field-worker/tasks/:id/complete", asyncHandler(async (req, res) =
       completedAt: new Date(),
     });
     if (workOrder.tenantId) {
-      handleWorkOrderStatusChange(req.params.id, workOrder.executionStatus || "in_progress", "completed", workOrder.tenantId).catch(err =>
+      handleWorkOrderStatusChange(req.params.id, workOrder.executionStatus || "in_progress", "completed", workOrder.tenantId).catch((err: unknown) =>
         console.error("[ai-communication] Field complete hook error:", err)
       );
     }
@@ -2048,7 +2051,7 @@ app.post("/api/field-worker/tasks/:id/confirm-photo", asyncHandler(async (req, r
       uploadedAt: new Date().toISOString(),
     });
     
-    await storage.updateWorkOrder(req.params.id, tenantId, {
+    await storage.updateWorkOrder(req.params.id, {
       metadata: { ...metadata, photos },
     });
     
@@ -2406,8 +2409,8 @@ app.get("/api/ai/communications", requirePlanner, asyncHandler(async (req, res) 
     const log = await getCommunicationLog(tenantId, {
       workOrderId: workOrderId as string,
       status: status as string,
-      from: from as string,
-      to: to as string,
+      startDate: from ? new Date(from as string) : undefined,
+      endDate: to ? new Date(to as string) : undefined,
     });
     res.json(log);
 }));

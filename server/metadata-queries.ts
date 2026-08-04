@@ -1107,7 +1107,7 @@ export async function getObjectWithAllMetadata(
             }))
         : undefined;
 
-    metadataWithKatalog.push({
+    metadataWithKatalog.push(({
       id: nearest.id,
       tenantId: tenantId,
       objektId: nearest.objekt_id,
@@ -1178,7 +1178,7 @@ export async function getObjectWithAllMetadata(
       // Task #1213: konflikt vid multi-förälder-arv
       inheritanceConflict: inheritanceConflict || undefined,
       conflictSources,
-    });
+    }) as unknown as (typeof metadataWithKatalog)[number]);
   }
 
   // Task #663: filtrera bort kundlåsta fält som inte hör till objektets kund.
@@ -1290,7 +1290,7 @@ export async function getObjectWithAllMetadata(
           if (isInteger) vardeInteger = Math.round(res.value);
           else vardeDecimal = res.value;
         }
-        filteredMetadata.push({
+        filteredMetadata.push(({
           id: `computed-${f.id}`,
           tenantId,
           objektId,
@@ -1323,7 +1323,7 @@ export async function getObjectWithAllMetadata(
           source: "computed",
           computed: true,
           computedError: res ? res.error : "Kunde inte beräkna",
-        });
+        }) as unknown as (typeof filteredMetadata)[number]);
       }
     }
   }
@@ -1592,7 +1592,7 @@ export async function createMetadata(data: {
       }
       break;
     case 'datetime':
-      vardeFields.vardeDatetime = new Date(data.varde);
+      vardeFields.vardeDatetime = new Date(data.varde as string | number | Date);
       if (isNaN(vardeFields.vardeDatetime.getTime())) {
         throw new Error(`Invalid datetime value: ${data.varde}`);
       }
@@ -2414,7 +2414,7 @@ export async function updateMetadata(
       }
       break;
     case 'datetime':
-      vardeFields.vardeDatetime = new Date(varde);
+      vardeFields.vardeDatetime = new Date(varde as string | number | Date);
       if (isNaN(vardeFields.vardeDatetime.getTime())) {
         throw new Error(`Invalid datetime value: ${varde}`);
       }
@@ -2477,7 +2477,7 @@ export async function updateMetadata(
   // Task #552 (D): notifiera bakgrundsjob om metadata-ändring.
   try {
     const { enqueueMetadataChange } = await import("./services/metadata-change-jobs");
-    enqueueMetadataChange(tenantId, existing.objektId);
+    if (existing.objektId) enqueueMetadataChange(tenantId, existing.objektId);
   } catch (err) {
     console.error("[metadata-queries] enqueueMetadataChange failed (update):", err);
   }
@@ -5497,7 +5497,7 @@ export async function createWorkOrderMetadata(data: {
       }
       break;
     case 'datetime':
-      vardeFields.vardeDatetime = new Date(data.varde);
+      vardeFields.vardeDatetime = new Date(data.varde as string | number | Date);
       if (isNaN(vardeFields.vardeDatetime.getTime())) {
         throw new Error(`Invalid datetime value: ${data.varde}`);
       }

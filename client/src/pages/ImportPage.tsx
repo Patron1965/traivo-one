@@ -204,7 +204,7 @@ async function maybeConvertXlsxToCsv(file: File): Promise<File> {
         return String((val as { result?: unknown }).result ?? "");
       }
       if ("hyperlink" in val) {
-        return (val as { text: string }).text;
+        return (val as unknown as { text: string }).text;
       }
     }
     return String(val);
@@ -2659,7 +2659,7 @@ export default function ImportPage() {
     setModusValidation(null);
   };
 
-  const handleModusUpload = async (type: ModusImportType, file: File, scorecardSummary?: Record<string, number> | null) => {
+  const handleModusUpload = async (type: ModusImportType, file: File, scorecardSummary?: Record<string, unknown> | null) => {
     setModusUploading(type);
     const formData = new FormData();
     formData.append("file", file);

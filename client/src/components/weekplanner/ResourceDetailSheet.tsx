@@ -172,13 +172,13 @@ export const ResourceDetailSheet = memo(function ResourceDetailSheet(props: Reso
                 <span data-testid={`text-resource-phone-${resource.id}`}>{resource.phone}</span>
               </div>
             )}
-            {resource.skills && resource.skills.length > 0 && (
+            {resource.competencies && resource.competencies.length > 0 && (
               <div className="space-y-1">
                 <div className="flex items-center gap-1 text-sm text-muted-foreground">
                   <Wrench className="h-4 w-4" /> Kompetenser
                 </div>
                 <div className="flex flex-wrap gap-1">
-                  {resource.skills.map((skill, i) => (
+                  {resource.competencies.map((skill, i) => (
                     <Badge key={i} variant="outline" className="text-xs">{skill}</Badge>
                   ))}
                 </div>

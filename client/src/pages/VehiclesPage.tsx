@@ -590,13 +590,13 @@ export default function VehiclesPage() {
                             </span>
                           </span>
                         </div>
-                        {vehicle.odometerReading && (
+                        {vehicle.currentMileage && (
                           <div className="flex items-center justify-between">
                             <span className="flex items-center gap-2 text-muted-foreground">
                               <Gauge className="h-3 w-3" />
                               Mätarställning
                             </span>
-                            <span>{vehicle.odometerReading.toLocaleString("sv")} km</span>
+                            <span>{vehicle.currentMileage.toLocaleString("sv")} km</span>
                           </div>
                         )}
                         {vehicle.inspectionDate && (

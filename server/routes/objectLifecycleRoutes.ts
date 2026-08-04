@@ -37,7 +37,7 @@ export function registerObjectLifecycleRoutes(app: Express): void {
   app.put("/api/tenants/me/display-name-rules", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const parsed = displayNameRulesSchema.safeParse(req.body);
-    if (!parsed.success) throw new ValidationError(formatZodError(parsed.error).message ?? "Ogiltiga regler");
+    if (!parsed.success) throw new ValidationError(formatZodError(parsed.error));
     const saved = await saveDisplayNameRules(tenantId, parsed.data);
     res.json(saved);
   }));
@@ -55,7 +55,7 @@ export function registerObjectLifecycleRoutes(app: Express): void {
     const tenantId = getTenantIdWithFallback(req);
     const schema = z.object({ ids: z.array(z.string()).min(1).max(500), language: z.string().optional() });
     const parsed = schema.safeParse(req.body);
-    if (!parsed.success) throw new ValidationError(formatZodError(parsed.error).message ?? "Ogiltig input");
+    if (!parsed.success) throw new ValidationError(formatZodError(parsed.error));
     const map = await computeDisplayNamesBatch(parsed.data.ids, tenantId, undefined, parsed.data.language);
     res.json(Object.fromEntries(map));
   }));
@@ -85,7 +85,7 @@ export function registerObjectLifecycleRoutes(app: Express): void {
       force: z.boolean().optional(),
     });
     const parsed = schema.safeParse(req.body ?? {});
-    if (!parsed.success) throw new ValidationError(formatZodError(parsed.error).message ?? "Ogiltig input");
+    if (!parsed.success) throw new ValidationError(formatZodError(parsed.error));
     const userId = (req as any).user?.claims?.sub ?? (req as any).user?.id ?? null;
     const result = await archiveObject(req.params.id, tenantId, {
       archivedBy: userId,
@@ -165,7 +165,7 @@ export function registerObjectLifecycleRoutes(app: Express): void {
       .where(and(eq(objects.id, req.params.parentId), eq(objects.tenantId, tenantId)));
     if (!parent) throw new NotFoundError("Parent-objekt");
     const parsed = importChildrenSchema.safeParse(req.body);
-    if (!parsed.success) throw new ValidationError(formatZodError(parsed.error).message ?? "Ogiltig payload");
+    if (!parsed.success) throw new ValidationError(formatZodError(parsed.error));
 
     const dryRun = parsed.data.dryRun === true;
     const errors: Array<{ index: number; message: string }> = [];

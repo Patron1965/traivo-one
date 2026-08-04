@@ -293,7 +293,7 @@ export const RouteMapView = memo(function RouteMapView(props: RouteMapViewProps)
                   <div className="min-w-[200px]">
                     <div className="font-medium">{job.title}</div>
                     <div className="text-sm text-gray-500">{job.objectName}</div>
-                    {job.taskAddress && <div className="text-sm text-gray-500">{job.taskAddress}</div>}
+                    {job.objectAddress && <div className="text-sm text-gray-500">{job.objectAddress}</div>}
                     <div className="flex gap-2 mt-1">
                       <span className="text-xs bg-gray-100 px-1.5 py-0.5 rounded">
                         {((job.estimatedDuration || 0) / 60).toFixed(1)}h

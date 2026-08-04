@@ -718,7 +718,7 @@ app.patch("/api/price-list-articles/:id", asyncHandler(async (req, res) => {
       throw new NotFoundError("Prislisteartikel hittades inte");
     }
     
-    const updateSchema = insertPriceListArticleSchema.partial().omit({ tenantId: true });
+    const updateSchema = insertPriceListArticleSchema.partial();
     const parseResult = updateSchema.safeParse(req.body);
     if (!parseResult.success) {
       return res.status(400).json(formatZodError(parseResult.error));
@@ -777,7 +777,7 @@ app.patch("/api/resource-articles/:id", asyncHandler(async (req, res) => {
       throw new NotFoundError("Resursartikel hittades inte");
     }
     
-    const updateSchema = insertResourceArticleSchema.partial().omit({ tenantId: true });
+    const updateSchema = insertResourceArticleSchema.partial();
     const parseResult = updateSchema.safeParse(req.body);
     if (!parseResult.success) {
       return res.status(400).json(formatZodError(parseResult.error));

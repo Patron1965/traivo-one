@@ -33,7 +33,7 @@ export function registerFilterRoutes(app: Express) {
 
   app.get("/api/saved-filters", ...guard, asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
-    const userId = req.user!.claims.sub as string;
+    const userId = req.user!.claims!.sub as string;
     const parsed = scopeQuerySchema.safeParse({ scope: req.query.scope });
     if (!parsed.success) {
       const formatted = formatZodError(parsed.error);
@@ -54,7 +54,7 @@ export function registerFilterRoutes(app: Express) {
 
   app.post("/api/saved-filters", ...guard, asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
-    const userId = req.user!.claims.sub as string;
+    const userId = req.user!.claims!.sub as string;
     const data = parseBody(insertSavedFilterSchema, req.body);
     const row = await storage.createSavedFilter(tenantId, userId, data);
     res.status(201).json(row);
@@ -62,7 +62,7 @@ export function registerFilterRoutes(app: Express) {
 
   app.patch("/api/saved-filters/:id", ...guard, asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
-    const userId = req.user!.claims.sub as string;
+    const userId = req.user!.claims!.sub as string;
     const data = parseBody(insertSavedFilterSchema.partial(), req.body);
     const row = await storage.updateSavedFilter(tenantId, userId, req.params.id, data);
     if (!row) {
@@ -74,7 +74,7 @@ export function registerFilterRoutes(app: Express) {
 
   app.delete("/api/saved-filters/:id", ...guard, asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
-    const userId = req.user!.claims.sub as string;
+    const userId = req.user!.claims!.sub as string;
     await storage.deleteSavedFilter(tenantId, userId, req.params.id);
     res.status(204).end();
   }));

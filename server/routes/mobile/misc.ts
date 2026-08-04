@@ -9,12 +9,13 @@ import type { Express } from "express";
     mapGoCategory, ONE_CATEGORIES, GO_CATEGORY_MAP,
     notificationService, triggerETANotification,
     OpenAI,
-    getArticleMetadataForObject, writeArticleMetadataOnObject,
+    getArticleMetadataForObject, getObjectWithAllMetadata, writeArticleMetadataOnObject,
     getAllMetadataTypes, buildMetadataGroupIndex, expandArticleMetadataRows,
     usesQuantityMetadata, isActiveArticleStatus,
     invalidateWorkflowCaches,
   } from "./shared";
   import { resolveVehicleLocationForResource, listStockBalancesForLocation } from "../../services/stock-balance";
+  import type { BatchPair } from "../../distance-matrix-service";
   import type { Request, Response } from "express";
   
   export function registerMiscRoutes(app: Express) {
@@ -753,7 +754,8 @@ app.get("/api/mobile/tasks/:id/metadata-context", isMobileAuthenticated, asyncHa
     const allArticles = await storage.getArticles(tenantId);
 
     const orderArticleIds: string[] = [];
-    if (order.articleId) orderArticleIds.push(order.articleId);
+    const orderArticleId = (order as Record<string, unknown>).articleId as string | undefined;
+    if (orderArticleId) orderArticleIds.push(orderArticleId);
 
     // Task #835: härled hook-/objekttyp-restriktion från BÅDE legacy-fält OCH nya
     // associationRules (back-compat under expand-fasen; nya artiklar sätter bara regler).
@@ -770,7 +772,8 @@ app.get("/api/mobile/tasks/:id/metadata-context", isMobileAuthenticated, asyncHa
       return orderArticleIds.includes(a.id) || !hasHook || !hasObjectTypes;
     });
 
-    const objectMetadata = await getArticleMetadataForObject(order.objectId, tenantId);
+    const objectWithMetadata = await getObjectWithAllMetadata(order.objectId, tenantId);
+    const objectMetadata = objectWithMetadata?.metadata ?? [];
 
     const result = relevantArticles.map(article => {
       const fetchLabel = article.fetchMetadataLabel;
@@ -778,8 +781,8 @@ app.get("/api/mobile/tasks/:id/metadata-context", isMobileAuthenticated, asyncHa
       let fetchedValue: string | null = null;
       let previousValue: string | null = null;
 
-      if (fetchLabel && objectMetadata) {
-        const match = objectMetadata.find((m: Record<string, unknown>) =>
+      if (fetchLabel && objectMetadata.length > 0) {
+        const match = objectMetadata.find((m) =>
           m.katalog?.beteckning === fetchLabel || m.katalog?.namn === fetchLabel
         );
         if (match) {
@@ -787,8 +790,8 @@ app.get("/api/mobile/tasks/:id/metadata-context", isMobileAuthenticated, asyncHa
         }
       }
 
-      if (updateLabel && article.showPreviousValue && objectMetadata) {
-        const match = objectMetadata.find((m: Record<string, unknown>) =>
+      if (updateLabel && article.showPreviousValue && objectMetadata.length > 0) {
+        const match = objectMetadata.find((m) =>
           m.katalog?.beteckning === updateLabel || m.katalog?.namn === updateLabel
         );
         if (match) {
@@ -1341,13 +1344,21 @@ app.post("/api/distance/batch", asyncHandler(async (req: Request, res: Response)
       throw new ValidationError("pairs-array krävs");
     }
 
-    const batchPairs = pairs.map((p: Record<string, unknown>, i: number) => ({
-      id: p.id || String(i),
-      fromLat: p.fromLat ?? p.origin?.lat,
-      fromLng: p.fromLng ?? p.origin?.lng,
-      toLat: p.toLat ?? p.destination?.lat,
-      toLng: p.toLng ?? p.destination?.lng,
-    }));
+    const batchPairs = pairs.map((rawPair: unknown, i: number) => {
+      const p = rawPair as {
+        id?: string;
+        fromLat?: number; fromLng?: number; toLat?: number; toLng?: number;
+        origin?: { lat?: number; lng?: number };
+        destination?: { lat?: number; lng?: number };
+      };
+      return {
+        id: (p.id as string) || String(i),
+        fromLat: p.fromLat ?? p.origin?.lat,
+        fromLng: p.fromLng ?? p.origin?.lng,
+        toLat: p.toLat ?? p.destination?.lat,
+        toLng: p.toLng ?? p.destination?.lng,
+      };
+    }) as BatchPair[];
 
     const resultMap = await getBatchDistances(batchPairs);
     const resultsArray: Record<string, unknown>[] = [];
@@ -1427,7 +1438,7 @@ app.get("/api/mobile/team-orders", isMobileAuthenticated, asyncHandler(async (re
 
       const tenantId = getTenantIdWithFallback(req);
       const allOrders = await storage.getWorkOrders(tenantId);
-      let orders = allOrders.filter(o => memberResourceIds.includes(o.resourceId));
+      let orders = allOrders.filter(o => !!o.resourceId && memberResourceIds.includes(o.resourceId));
 
       if (dateParam) {
         const target = new Date(dateParam);
@@ -1502,13 +1513,14 @@ app.post("/api/mobile/orders/:id/customer-signoff", isMobileAuthenticated, async
     if (!signature) throw new ValidationError("Signatur krävs");
 
     const metadata = (order.metadata as Record<string, unknown>) || {};
+    const signoffSignedAt = new Date().toISOString();
     metadata.customerSignoff = {
       customerName: customerName || "",
       signature,
       summary: summary || "",
       materials: materials || [],
       deviations: deviations || [],
-      signedAt: new Date().toISOString(),
+      signedAt: signoffSignedAt,
       signedBy: resourceId,
     };
 
@@ -1516,7 +1528,7 @@ app.post("/api/mobile/orders/:id/customer-signoff", isMobileAuthenticated, async
       metadata: { ...metadata },
       executionStatus: "signed_off",
     });
-    res.json({ success: true, signedAt: metadata.customerSignoff.signedAt });
+    res.json({ success: true, signedAt: signoffSignedAt });
 }));
 
 app.post("/api/mobile/notifications/:id/read", isMobileAuthenticated, asyncHandler(async (req: MobileAuthenticatedRequest, res: Response) => {
@@ -1815,7 +1827,7 @@ app.get("/api/mobile/break-config", isMobileAuthenticated, asyncHandler(async (r
 
     const tenant = await storage.getTenant(resource.tenantId);
     const settings = (tenant?.settings as Record<string, unknown>) || {};
-    const breakConfig = settings.breakConfig || {};
+    const breakConfig = (settings.breakConfig as Record<string, unknown>) || {};
 
     res.json({
       breakDuration: breakConfig.durationMinutes || 30,
@@ -1853,7 +1865,7 @@ app.get("/api/mobile/eta-notification/config", isMobileAuthenticated, asyncHandl
 
     const tenant = await storage.getTenant(resource.tenantId);
     const settings = (tenant?.settings as Record<string, unknown>) || {};
-    const etaConfig = settings.etaNotification || {};
+    const etaConfig = (settings.etaNotification as Record<string, unknown>) || {};
 
     res.json({
       enabled: etaConfig.enabled ?? true,
@@ -1925,7 +1937,7 @@ app.post("/api/mobile/work-orders/:id/auto-eta-sms", isMobileAuthenticated, asyn
         success: false,
         etaMinutes: null,
         customerNotified: false,
-        error: err.message || "Kunde inte skicka ETA-notis",
+        error: (err instanceof Error ? err.message : null) || "Kunde inte skicka ETA-notis",
       });
     }
 }));

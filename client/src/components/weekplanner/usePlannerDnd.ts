@@ -44,10 +44,10 @@ interface UsePlannerDndOptions {
   resourceDayJobMap: { jobs: Record<string, Record<string, WorkOrderWithObject[]>> };
   setActiveDragJob: (job: WorkOrderWithObject | null) => void;
   setRouteJobOrder: (order: string[]) => void;
-  updateWorkOrderMutation: { mutate: (data: Record<string, unknown>) => void };
+  updateWorkOrderMutation: { mutate: (data: { id: string; resourceId: string; scheduledDate: string; scheduledStartTime?: string }) => void };
   detectConflictsForJob: (job: WorkOrderWithObject, resourceId: string, dateStr: string, startTime: string | null) => string[];
   detectTeamConflictsForJob?: (job: WorkOrderWithObject, teamId: string, dateStr: string) => string[];
-  setPendingSchedule: (schedule: { jobId: string; resourceId: string; scheduledDate: string; scheduledStartTime?: string; conflicts: string[] } | null) => void;
+  setPendingSchedule: (schedule: { jobId: string; resourceId: string; scheduledDate: string; scheduledStartTime?: string; conflicts: string[]; bulkJobs?: Array<{ jobId: string; startTime: string }> } | null) => void;
   setConflictDialogOpen: (open: boolean) => void;
   executeSchedule: (jobId: string, resourceId: string, dateStr: string, startTime?: string) => void;
   executeTeamSchedule?: (jobId: string, teamId: string, dateStr: string) => void;
@@ -407,7 +407,7 @@ export function usePlannerDnd({
       const fromResourceId = job.resourceId || null;
       const fromDate = job.scheduledDate
         ? (typeof job.scheduledDate === "string"
-          ? job.scheduledDate.split("T")[0]
+          ? (job.scheduledDate as string).split("T")[0]
           : (job.scheduledDate as Date).toISOString().split("T")[0])
         : null;
 

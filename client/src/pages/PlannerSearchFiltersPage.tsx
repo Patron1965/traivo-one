@@ -181,13 +181,12 @@ export default function PlannerSearchFiltersPage() {
         icon={Sliders}
         title="Sparade sökmönster"
         description="Återanvändbara filter för planeraren — personliga eller delade i teamet."
-        actions={
-          <Button onClick={openCreate} data-testid="button-create-filter">
-            <Plus className="mr-2 h-4 w-4" />
-            Nytt sökmönster
-          </Button>
-        }
-      />
+      >
+        <Button onClick={openCreate} data-testid="button-create-filter">
+          <Plus className="mr-2 h-4 w-4" />
+          Nytt sökmönster
+        </Button>
+      </PageHeader>
 
       <Card>
         <CardHeader>
@@ -207,12 +206,9 @@ export default function PlannerSearchFiltersPage() {
               icon={Sliders}
               title="Inga sparade sökmönster ännu"
               description="Skapa ditt första filter för att snabbt hitta återkommande urval i planeraren."
-              action={
-                <Button onClick={openCreate} data-testid="button-create-filter-empty">
-                  <Plus className="mr-2 h-4 w-4" />
-                  Skapa sökmönster
-                </Button>
-              }
+              actionLabel="Skapa sökmönster"
+              onAction={openCreate}
+              actionIcon={Plus}
             />
           ) : (
             <Table>

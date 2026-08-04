@@ -124,7 +124,7 @@ export async function enrichVRPRequestWithConstraints(
     }
   }
   const resourceIds = [...resourceIdSet];
-  const objectIds = [...new Set(workOrders.map(o => o.objectId).filter(Boolean))];
+  const objectIds = [...new Set(workOrders.map(o => o.objectId).filter((id): id is string => Boolean(id)))];
   const dependencySequences: Array<{ beforeOrderId: string; afterOrderId: string }> = [];
 
   const [
@@ -654,7 +654,7 @@ function applyEfficiencyFactors(
 
   const orderArticleMap = new Map<string, string | null>();
   for (const order of workOrders) {
-    orderArticleMap.set(order.id, order.articleId || null);
+    orderArticleMap.set(order.id, (order as { articleId?: string | null }).articleId || null);
   }
 
   // Returnerar effektiv faktor för en specifik agent (resurs ELLER team) givet artikel.

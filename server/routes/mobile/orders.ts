@@ -185,7 +185,7 @@ app.get("/api/mobile/my-orders", isMobileAuthenticated, asyncHandler(async (req:
         objectLongitude: object?.longitude || null,
         latitude: object?.latitude || null,
         longitude: object?.longitude || null,
-        address: object?.address || order.address || "",
+        address: object?.address || (order as Record<string, unknown>).address as string || "",
         city: object?.city || "",
         postalCode: object?.postalCode || "",
         plannedNotes: order.plannedNotes || null,
@@ -297,7 +297,7 @@ app.get("/api/mobile/orders/:id", isMobileAuthenticated, asyncHandler(async (req
     const subSteps = structuralArticles.map((sa: Record<string, unknown>, idx: number) => ({
       id: sa.id,
       label: sa.stepLabel || `Steg ${idx + 1}`,
-      completed: completedSubSteps.includes(sa.id),
+      completed: completedSubSteps.includes(sa.id as string),
     }));
 
     const orderLines = await storage.getWorkOrderLines(orderId).catch(() => []);
@@ -327,7 +327,7 @@ app.get("/api/mobile/orders/:id", isMobileAuthenticated, asyncHandler(async (req
       objectLongitude: object?.longitude,
       latitude: object?.latitude || null,
       longitude: object?.longitude || null,
-      address: object?.address || order.address || "",
+      address: object?.address || (order as Record<string, unknown>).address as string || "",
       city: object?.city || "",
       postalCode: object?.postalCode || "",
       accessCode: detailAtkomst?.portkod ?? null,
@@ -512,7 +512,10 @@ app.patch("/api/mobile/orders/:id/status", isMobileAuthenticated, asyncHandler(a
     }
     
     const updatedOrder = await storage.updateWorkOrder(orderId, updateData);
-    
+    if (!updatedOrder) {
+      return res.status(404).json({ message: "Ordern kunde inte uppdateras" });
+    }
+
     console.log(`[mobile] Order ${orderId} status updated to ${status} by resource ${resourceId}`);
 
     // Task #1188: uppgiftens tidslogg (append-only). Tenant härleds ur WO:n
@@ -975,7 +978,7 @@ app.post("/api/mobile/orders/:id/photos", isMobileAuthenticated, asyncHandler(as
         ...existingMetadata,
         photos: [...existingPhotos, ...newPhotos],
       },
-    } as Partial<WorkOrder>);
+    } as unknown as Parameters<typeof storage.updateWorkOrder>[1]);
 
     console.log(`[mobile] ${photos.length} photos uploaded for order ${orderId} by resource ${resourceId}`);
     res.json({ success: true, count: photos.length });
@@ -1080,6 +1083,7 @@ app.post("/api/mobile/orders/:id/deviations", isMobileAuthenticated, asyncHandle
     const order = await storage.getWorkOrder(orderId);
     if (!order) throw new NotFoundError("Order hittades inte");
     if (order.resourceId !== resourceId) throw new ForbiddenError("Ej behörig");
+    if (!order.objectId) throw new ValidationError("Ordern saknar objekt-koppling");
 
     const resource = await storage.getResource(resourceId);
 
@@ -1355,17 +1359,19 @@ app.post("/api/mobile/orders/:id/inspections", isMobileAuthenticated, asyncHandl
     const order = await storage.getWorkOrder(orderId);
     if (!order) throw new NotFoundError("Order hittades inte");
     if (order.resourceId !== resourceId) throw new ForbiddenError("Ej behörig");
+    if (!order.objectId) throw new ValidationError("Ordern saknar objekt-koppling");
+    const inspectionObjectId = order.objectId;
 
     const results = await Promise.all(
       inspections.map((insp: Record<string, unknown>) =>
         storage.createInspectionMetadata({
           tenantId: order.tenantId,
           workOrderId: orderId,
-          objectId: order.objectId,
-          inspectionType: insp.category || "Övrigt",
-          status: insp.status || "ok",
-          issues: insp.issues || [],
-          comment: insp.comment || null,
+          objectId: inspectionObjectId,
+          inspectionType: (insp.category as string) || "Övrigt",
+          status: (insp.status as string) || "ok",
+          issues: (insp.issues as unknown[]) || [],
+          comment: (insp.comment as string | null) || null,
           inspectedBy: resourceId,
         })
       )

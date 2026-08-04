@@ -257,7 +257,7 @@ function checkCompetency(order: WorkOrder, move: ScheduleMove, ctx: ConstraintCo
   if (orderLines.length === 0) return [];
 
   const resourceArticleIds = new Set(resourceCompetencies.map(ra => ra.articleId));
-  const unmatchedArticles = orderLines.filter(line => !resourceArticleIds.has(line.articleId));
+  const unmatchedArticles = orderLines.filter(line => !line.articleId || !resourceArticleIds.has(line.articleId));
 
   if (unmatchedArticles.length > 0) {
     return [{

@@ -33,7 +33,7 @@ export async function createOptimizationJob(
     tenantId,
     type,
     status: "queued",
-    input: input as Record<string, unknown>,
+    input: input as unknown as Record<string, unknown>,
     progress: 0,
     attempts: 0,
   }).returning();
@@ -181,7 +181,7 @@ async function executeORToolsJob(jobId: string, input: VRPJobInput): Promise<VRP
 
   const validOrders = filteredOrders.filter(o => {
     // Task #990: bara ruttbara objekt (pinpoint + giltig koordinat) ska in i VRP.
-    const obj = objectMap.get(o.objectId);
+    const obj = o.objectId ? objectMap.get(o.objectId) : undefined;
     return obj ? objectIsRoutable(obj) : false;
   });
 
@@ -217,7 +217,7 @@ async function executeORToolsJob(jobId: string, input: VRPJobInput): Promise<VRP
   };
 
   const baseJobs = validOrders.map(o => {
-    const obj = objectMap.get(o.objectId)!;
+    const obj = objectMap.get(o.objectId!)!;
     const durationSec = (o.estimatedDuration || 30) * 60;
     let priority = o.priority === "hög" ? 80 : o.priority === "medel" ? 50 : 30;
     let timeWindows: [number, number][] | undefined;
@@ -253,7 +253,7 @@ async function executeORToolsJob(jobId: string, input: VRPJobInput): Promise<VRP
       duration: durationSec,
       priority,
       id: o.id,
-      description: o.orderTitle || o.id,
+      description: o.title || o.id,
       ...(timeWindows ? { time_windows: timeWindows } : {}),
     };
   });
@@ -350,7 +350,7 @@ async function executeORToolsJob(jobId: string, input: VRPJobInput): Promise<VRP
   const stopMap = new Map(stops.map(s => {
     const order = validOrders.find(o => o.id === s.id);
     return [s.id, {
-      title: order?.orderTitle || s.id,
+      title: order?.title || s.id,
       lat: s.lat,
       lng: s.lng,
       durationMin: Math.round(s.duration / 60),

@@ -333,7 +333,7 @@ export const JobCard = memo(function JobCard({
                 {selectedJob === job.id && (
                   <WorkOrderMetadataPanel
                     workOrderId={job.id}
-                    objectId={job.objectId}
+                    objectId={job.objectId || ""}
                     executionStatus={execStatus}
                     compact
                   />

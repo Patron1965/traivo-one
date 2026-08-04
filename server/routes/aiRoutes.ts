@@ -805,7 +805,7 @@ app.post("/api/ai/planning-suggestions", requirePlanner, asyncHandler(async (req
     const resolvedWeekEnd = weekEnd || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
 
     const orderStateHash = workOrders.map(o => `${o.id}:${o.orderStatus}:${o.scheduledDate || ''}:${o.resourceId || ''}`).join('|');
-    const resourceStateHash = resources.map(r => `${r.id}:${r.isActive}`).join('|');
+    const resourceStateHash = resources.map(r => `${r.id}:${r.status}`).join('|');
     const cacheKey = createAICacheKey({ tenantId, weekStart: resolvedWeekStart, weekEnd: resolvedWeekEnd, orderState: orderStateHash, resourceState: resourceStateHash });
     const cachedResult = getCachedAIResponse(cacheKey);
     if (cachedResult) {
@@ -1364,7 +1364,7 @@ app.get("/api/ai/route-recommendations", asyncHandler(async (req, res) => {
         resourceName: res2?.name || resId,
         orders: orders.map((o: typeof todaysOrders[0]) => ({
           title: o.title || o.orderNumber || "Order",
-          address: o.address || "",
+          address: (o as { address?: string | null }).address || "",
           orderId: o.id,
         })),
       });
@@ -1397,7 +1397,7 @@ app.get("/api/ai/route-recommendations", asyncHandler(async (req, res) => {
 
           const ordersWithCoords = sortedOrders
             .map((o: OrderType) => {
-              const obj = objectMap.get(o.objectId);
+              const obj = o.objectId ? objectMap.get(o.objectId) : undefined;
               return { order: o, lat: obj?.latitude ?? null, lng: obj?.longitude ?? null };
             })
             .filter((x: { order: OrderType; lat: number | null; lng: number | null }): x is { order: OrderType; lat: number; lng: number } => x.lat != null && x.lng != null);
@@ -1680,7 +1680,7 @@ app.post("/api/ai/planner-chat/execute", requirePlanner, asyncHandler(async (req
       let successCount = 0;
       for (const orderId of workOrderIds) {
         try {
-          await storage.updateWorkOrder(orderId, { resourceId: toResourceId }, tenantId);
+          await storage.updateWorkOrder(orderId, { resourceId: toResourceId });
           successCount++;
         } catch (e) {
           console.error(`Failed to update order ${orderId}:`, e);
@@ -1698,7 +1698,7 @@ app.post("/api/ai/planner-chat/execute", requirePlanner, asyncHandler(async (req
       let successCount = 0;
       for (const orderId of workOrderIds) {
         try {
-          await storage.updateWorkOrder(orderId, { scheduledDate: toDate }, tenantId);
+          await storage.updateWorkOrder(orderId, { scheduledDate: toDate });
           successCount++;
         } catch (e) {
           console.error(`Failed to update order ${orderId}:`, e);
@@ -2123,7 +2123,7 @@ app.post("/api/ai/suggest-placement", requirePlanner, asyncHandler(async (req: R
 
     const workOrder = await storage.getWorkOrder(workOrderId);
     if (!workOrder) throw new NotFoundError("Arbetsorder hittades inte");
-    await verifyTenantOwnership(workOrder.tenantId, tenantId, "work_order");
+    if (workOrder.tenantId !== tenantId) throw new NotFoundError("Arbetsorder hittades inte");
 
     // Etapp 5: objekt-egna leveranspreferenser borttagna — alltid tomma.
     const { EMPTY_DELIVERY_PREFERENCES } = await import("@shared/schema");
@@ -2145,7 +2145,7 @@ app.post("/api/ai/suggest-placement", requirePlanner, asyncHandler(async (req: R
     const allOrders = await storage.getWorkOrders(tenantId);
     const scheduledOrders = allOrders.filter(o => o.scheduledDate && o.resourceId).map(o => ({
       ...o,
-      scheduledDate: typeof o.scheduledDate === "string" ? o.scheduledDate.split("T")[0] : o.scheduledDate,
+      scheduledDate: typeof (o.scheduledDate as unknown) === "string" ? (o.scheduledDate as unknown as string).split("T")[0] : o.scheduledDate,
     }));
 
     const objectLat = workOrder.taskLatitude || (workOrder as any).objectLatitude;
@@ -2391,7 +2391,7 @@ app.post("/api/ai/suggest-placement", requirePlanner, asyncHandler(async (req: R
     const resourceIds = activeResources.map(r => r.id);
     const allResourceArticles = await storage.getResourceArticlesByResourceIds(resourceIds);
     const orderLines = await storage.getWorkOrderLines(workOrderId);
-    const orderArticleIds = new Set(orderLines.filter(l => l.articleId).map(l => l.articleId));
+    const orderArticleIds = new Set(orderLines.map(l => l.articleId).filter((id): id is string => Boolean(id)));
 
     for (const suggestion of suggestions) {
       if (orderArticleIds.size > 0) {
@@ -2777,7 +2777,10 @@ app.post("/api/ai/auto-distribute-today", requirePlanner, asyncHandler(async (re
       let bestResource: { id: string; name: string; score: number; reasons: string[]; constraintWarnings: string[] } | null = null;
 
       const orderArticleIds = new Set(
-        allWorkOrderLines.filter(l => l.workOrderId === order.id && l.articleId).map(l => l.articleId)
+        allWorkOrderLines
+          .filter(l => l.workOrderId === order.id)
+          .map(l => l.articleId)
+          .filter((id): id is string => Boolean(id))
       );
       const obj = order.objectId ? objectMap.get(order.objectId) : null;
 

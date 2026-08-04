@@ -130,7 +130,7 @@ app.post("/api/mobile/work-sessions/start", isMobileAuthenticated, asyncHandler(
     const resource = await storage.getResource(resourceId);
     if (!resource) throw new NotFoundError("Resurs hittades inte");
 
-    const existingMeta: Record<string, unknown> = (resource.metadata as Record<string, unknown>) || {};
+    const existingMeta: Record<string, unknown> = ((resource as Record<string, unknown>).metadata as Record<string, unknown>) || {};
     const activeSession = existingMeta.activeWorkSession as Record<string, unknown> | undefined;
 
     if (activeSession && (activeSession as { status?: string }).status === 'active') {
@@ -148,7 +148,7 @@ app.post("/api/mobile/work-sessions/start", isMobileAuthenticated, asyncHandler(
 
     await storage.updateResource(resourceId, {
       metadata: { ...existingMeta, activeWorkSession: session },
-    } as Partial<Resource>);
+    } as unknown as Parameters<typeof storage.updateResource>[1]);
 
     console.log(`[mobile] Work session started for resource ${resourceId}`);
     res.json(await decorateSession(session, session.id));
@@ -166,7 +166,7 @@ app.get("/api/mobile/work-sessions/active", isMobileAuthenticated, asyncHandler(
     const resource = await storage.getResource(resourceId);
     if (!resource) throw new NotFoundError("Resurs hittades inte");
 
-    const existingMeta: Record<string, unknown> = (resource.metadata as Record<string, unknown>) || {};
+    const existingMeta: Record<string, unknown> = ((resource as Record<string, unknown>).metadata as Record<string, unknown>) || {};
     const activeSession = existingMeta.activeWorkSession as Record<string, unknown> | null;
 
     if (activeSession && (activeSession as { status?: string }).status !== 'completed') {
@@ -181,7 +181,7 @@ const workSessionStopHandler = asyncHandler(async (req: MobileAuthenticatedReque
     const resource = await storage.getResource(resourceId);
     if (!resource) throw new NotFoundError("Resurs hittades inte");
 
-    const existingMeta: Record<string, unknown> = (resource.metadata as Record<string, unknown>) || {};
+    const existingMeta: Record<string, unknown> = ((resource as Record<string, unknown>).metadata as Record<string, unknown>) || {};
     const activeSession = existingMeta.activeWorkSession as Record<string, unknown> | null;
 
     if (!activeSession) {
@@ -196,7 +196,7 @@ const workSessionStopHandler = asyncHandler(async (req: MobileAuthenticatedReque
 
     await storage.updateResource(resourceId, {
       metadata: { ...existingMeta, activeWorkSession: updatedSession },
-    } as Partial<Resource>);
+    } as unknown as Parameters<typeof storage.updateResource>[1]);
 
     console.log(`[mobile] Work session stopped for resource ${resourceId}`);
     res.json(await decorateSession(updatedSession, (updatedSession as { id?: string }).id || null));
@@ -216,7 +216,7 @@ const workSessionPauseHandler = asyncHandler(async (req: MobileAuthenticatedRequ
     const resource = await storage.getResource(resourceId);
     if (!resource) throw new NotFoundError("Resurs hittades inte");
 
-    const existingMeta: Record<string, unknown> = (resource.metadata as Record<string, unknown>) || {};
+    const existingMeta: Record<string, unknown> = ((resource as Record<string, unknown>).metadata as Record<string, unknown>) || {};
     const activeSession = existingMeta.activeWorkSession as Record<string, unknown> | null;
 
     if (!activeSession) {
@@ -231,7 +231,7 @@ const workSessionPauseHandler = asyncHandler(async (req: MobileAuthenticatedRequ
 
     await storage.updateResource(resourceId, {
       metadata: { ...existingMeta, activeWorkSession: updatedSession },
-    } as Partial<Resource>);
+    } as unknown as Parameters<typeof storage.updateResource>[1]);
 
     res.json(await decorateSession(updatedSession, (updatedSession as { id?: string }).id || null));
 });
@@ -243,7 +243,7 @@ const workSessionResumeHandler = asyncHandler(async (req: MobileAuthenticatedReq
     const resource = await storage.getResource(resourceId);
     if (!resource) throw new NotFoundError("Resurs hittades inte");
 
-    const existingMeta: Record<string, unknown> = (resource.metadata as Record<string, unknown>) || {};
+    const existingMeta: Record<string, unknown> = ((resource as Record<string, unknown>).metadata as Record<string, unknown>) || {};
     const activeSession = existingMeta.activeWorkSession as Record<string, unknown> | null;
 
     if (!activeSession) {
@@ -263,7 +263,7 @@ const workSessionResumeHandler = asyncHandler(async (req: MobileAuthenticatedReq
 
     await storage.updateResource(resourceId, {
       metadata: { ...existingMeta, activeWorkSession: updatedSession },
-    } as Partial<Resource>);
+    } as unknown as Parameters<typeof storage.updateResource>[1]);
 
     res.json(await decorateSession(updatedSession, (updatedSession as { id?: string }).id || null));
 });

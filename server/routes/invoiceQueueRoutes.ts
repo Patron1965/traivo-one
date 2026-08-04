@@ -391,7 +391,7 @@ export function registerInvoiceQueueRoutes(app: Express): void {
       // Endast fakturerbara: måste kunna landa på en faktura (mottagare eller kund).
       if (!w.frozenInvoiceRecipientId && !w.customerId) continue;
       billable++;
-      const seg: BillingSegment = segments.get(w.objectId) ?? EMPTY_SEGMENT;
+      const seg: BillingSegment = (w.objectId ? segments.get(w.objectId) : undefined) ?? EMPTY_SEGMENT;
       const baseKey = w.frozenInvoiceRecipientId
         ? `r:${w.frozenInvoiceRecipientId}`
         : `c:${w.customerId ?? "_"}`;

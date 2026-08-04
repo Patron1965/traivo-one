@@ -589,7 +589,7 @@ export function registerMetadataEditorRoutes(app: Express) {
         fieldId: field.id,
         tenantId,
         metadataKatalogId: field.metadataKatalogId ?? null,
-        valueJson,
+        valueJson: valueJson as string | number | null,
         photoPaths,
       });
     }

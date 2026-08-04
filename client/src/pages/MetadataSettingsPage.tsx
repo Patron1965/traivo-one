@@ -89,6 +89,7 @@ interface MetadataKatalog {
   id: string;
   tenantId: string;
   namn: string;
+  visningsnamn: string | null;
   beteckning: string | null;
   beskrivning: string | null;
   datatyp: string;

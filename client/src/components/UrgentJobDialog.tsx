@@ -37,7 +37,7 @@ export function UrgentJobDialog({ open, onClose, preselectedOrder, targetLatitud
   const [step, setStep] = useState<"details" | "select-resource" | "confirm" | "sent">("details");
   const [selectedResourceId, setSelectedResourceId] = useState<string>("");
   const [jobType, setJobType] = useState(preselectedOrder?.title || "Akut uppdrag");
-  const [address, setAddress] = useState(targetAddress || preselectedOrder?.taskAddress || "");
+  const [address, setAddress] = useState(targetAddress || preselectedOrder?.objectAddress || "");
   const [latitude, setLatitude] = useState(targetLatitude || preselectedOrder?.taskLatitude || 0);
   const [longitude, setLongitude] = useState(targetLongitude || preselectedOrder?.taskLongitude || 0);
   const [customerName, setCustomerName] = useState(preselectedOrder?.customerName || "");
@@ -67,7 +67,7 @@ export function UrgentJobDialog({ open, onClose, preselectedOrder, targetLatitud
       setNotes("");
       if (preselectedOrder) {
         setJobType(preselectedOrder.title || "Akut uppdrag");
-        setAddress(preselectedOrder.taskAddress || "");
+        setAddress(preselectedOrder.objectAddress || "");
         setLatitude(preselectedOrder.taskLatitude || 0);
         setLongitude(preselectedOrder.taskLongitude || 0);
         setCustomerName(preselectedOrder.customerName || "");

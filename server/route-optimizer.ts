@@ -210,7 +210,7 @@ export async function optimizeResourceDayRoute(
   
   for (const order of dayOrders) {
     if (!order.objectId) continue;
-    const obj = objectMap.get(order.objectId);
+    const obj = order.objectId ? objectMap.get(order.objectId) : undefined;
     // Task #990: hoppa över ej ruttbara objekt (område/ingen-geo/utan koordinat).
     if (!obj || !objectIsRoutable(obj)) continue;
     
@@ -429,7 +429,7 @@ export async function optimizeRoutesVRP(
 
     let coords: [number, number] | null = null;
 
-    const obj = objectMap.get(order.objectId);
+    const obj = order.objectId ? objectMap.get(order.objectId) : undefined;
     if (obj) {
       // Task #990: ruttbara objekt (pinpoint + giltig koordinat) routas via nav-koordinat.
       // Område/ingen-geo objekt hoppas över — falla ALDRIG tillbaka på kluster för ett
@@ -551,7 +551,7 @@ export async function optimizeRoutesVRP(
   }
 
   let enrichedJobs = validJobs.map(j => j.job);
-  let enrichedAgents: Record<string, unknown>[] = agents;
+  let enrichedAgents: Record<string, unknown>[] = agents as unknown as Record<string, unknown>[];
   let constraintsSummary: string[] = [];
 
   if (constraintOptions) {
@@ -571,7 +571,7 @@ export async function optimizeRoutesVRP(
         constraintOptions,
       );
       enrichedJobs = enrichResult.jobs;
-      enrichedAgents = enrichResult.agents;
+      enrichedAgents = enrichResult.agents as unknown as Record<string, unknown>[];
       constraintsSummary = enrichResult.constraintsApplied;
       console.log(`[VRP] Constraints applied: ${constraintsSummary.join(", ")} | Pre-filtered pairs: ${enrichResult.preFilteredPairs} | Dependency sequences: ${enrichResult.dependencySequences.length}`);
     } catch (enrichErr) {
