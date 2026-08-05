@@ -39,7 +39,6 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription,
   AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { ObjectHierarchyTree } from "@/components/objectTree/ObjectHierarchyTree";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { QueryState } from "@/components/QueryState";
 import { AICard } from "@/components/AICard";
@@ -62,6 +61,7 @@ import {
   CONDITION_OPERATORS,
   type ConditionFilter,
 } from "@/components/orderkoncept/shared/ConditionFilter";
+import { ObjectHierarchyTree, computeBranchSeedRoots, type TreeNode } from "@/components/objectTree/ObjectHierarchyTree";
 
 const PAGE_SIZE = 100;
 
@@ -1131,10 +1131,23 @@ export default function ObjectsPage() {
   // nycklar skulle felaktigt grupperas som json-fält i groupMetadataForWrite).
   const exportSelectedColumns = async () => {
     if (isExporting) return;
-    const selected = objects.filter(o => selectedIds.has(o.id));
-    if (selected.length === 0) return;
+    if (selectedIds.size === 0) return;
     setIsExporting(true);
     try {
+      // Task #1398: hämta de markerade objekten via ids-parametern i stället för
+      // att filtrera aktuell sida — trädvyns gren-urval (och markeringar på andra
+      // sidor i listan) ska också exporteras. OBS: med `ids` svarar endpointen
+      // med en BAR array (inte {objects,total}).
+      const selected: ServiceObject[] = [];
+      const allIds = Array.from(selectedIds);
+      const ID_CHUNK = 200;
+      for (let i = 0; i < allIds.length; i += ID_CHUNK) {
+        const chunk = allIds.slice(i, i + ID_CHUNK);
+        const res = await fetch(`/api/objects?ids=${encodeURIComponent(chunk.join(","))}`, { credentials: "include" });
+        if (!res.ok) throw new Error("Kunde inte hämta markerade objekt");
+        const data = await res.json();
+        for (const o of Array.isArray(data) ? data : data.objects ?? []) selected.push(o);
+      }
       const fields = selectedMetadataFields;
       const katalogIds = fields.map(f => f.id);
 
@@ -1188,6 +1201,23 @@ export default function ObjectsPage() {
       setIsExporting(false);
     }
   };
+
+  // Task #1398: skicka urvalet (gren minus avmarkerade) som underlag till
+  // orderkoncept-wizarden. Wizardens server-resolver expanderar varje id till
+  // hela dess subträd — därför skickas MINIMALA helt täckta gren-rötter
+  // (computeBranchSeedRoots), aldrig delvis täckta föräldrar, så att avmarkerade
+  // underobjekt inte åter-inkluderas.
+  const createConceptFromSelection = useCallback(() => {
+    if (selectedIds.size === 0) return;
+    const treeData = queryClient.getQueryData<{ nodes: TreeNode[] }>(["/api/objects/hierarchy-tree"]);
+    const seedIds = treeData?.nodes?.length
+      ? computeBranchSeedRoots(treeData.nodes, selectedIds)
+      : Array.from(selectedIds);
+    try {
+      sessionStorage.setItem("traivo:orderconcept:seedObjectIds", JSON.stringify(seedIds));
+    } catch { /* sessionStorage otillgänglig — wizarden öppnas utan urval */ }
+    navigate("/order-concepts/new");
+  }, [selectedIds, navigate]);
 
   const runBulkUpdate = async (payload: Record<string, unknown>, successMsg: (n: number) => string) => {
     if (bulkBusy) return;
@@ -2241,11 +2271,54 @@ export default function ObjectsPage() {
               <p className="text-sm text-muted-foreground mb-3">
                 Sök på namn och metadata för att hitta {t("object_plural").toLowerCase()} i hela
                 trädet. Klicka på ett {t("object_singular").toLowerCase()} för att öppna helheten.
+                Kryssa i en förälder för att markera hela grenen — enskilda underobjekt kan
+                därefter avmarkeras.
               </p>
+              {selectedIds.size > 0 && (
+                <div
+                  className="flex flex-wrap items-center gap-3 bg-primary/10 border border-primary/20 rounded-lg px-4 py-2.5 mb-3"
+                  data-testid="tree-selection-bar"
+                >
+                  <Check className="h-4 w-4 text-primary" />
+                  <span className="text-sm font-medium" data-testid="text-tree-selected-count">
+                    {selectedIds.size} markerade
+                  </span>
+                  <div className="flex-1" />
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={isExporting}
+                    onClick={exportSelectedColumns}
+                    data-testid="button-tree-export-selection"
+                  >
+                    {isExporting ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Download className="h-4 w-4 mr-1" />}
+                    Exportera markerade
+                  </Button>
+                  <Button
+                    size="sm"
+                    onClick={createConceptFromSelection}
+                    data-testid="button-tree-create-concept"
+                  >
+                    <Package className="h-4 w-4 mr-1" />
+                    Skapa orderkoncept från urval
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setSelectedIds(new Set())}
+                    data-testid="button-tree-clear-selection"
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                </div>
+              )}
               <ObjectHierarchyTree
                 enableScopeModes
                 height={600}
                 onNodeClick={(node) => navigate(`/objects/${node.id}`)}
+                branchSelection
+                selectedObjectIds={selectedIds}
+                onSelectionChange={setSelectedIds}
               />
             </CardContent>
           </Card>

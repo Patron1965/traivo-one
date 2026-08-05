@@ -194,6 +194,24 @@ export default function OrderConceptWizardPage() {
   // Step 6
   const [conceptArticles, setConceptArticles] = useState<ConceptArticleRow[]>([]);
 
+  // Task #1398: ta emot urval från objektsidans trädvy ("Skapa orderkoncept
+  // från urval"). ObjectsPage lägger helt täckta gren-rötter i sessionStorage —
+  // seedas som inpekning (target_object_ids) för nya koncept. Engångsläsning.
+  useEffect(() => {
+    if (isEditing) return;
+    try {
+      const raw = sessionStorage.getItem("traivo:orderconcept:seedObjectIds");
+      if (!raw) return;
+      sessionStorage.removeItem("traivo:orderconcept:seedObjectIds");
+      const ids = JSON.parse(raw);
+      if (Array.isArray(ids)) {
+        const clean = ids.filter((x): x is string => typeof x === "string" && x.length > 0);
+        if (clean.length > 0) setTargetObjectIds(new Set(clean));
+      }
+    } catch { /* trasig seed ignoreras — wizarden startar tom */ }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isEditing]);
+
   const { data: customers = [] } = useQuery<Customer[]>({ queryKey: ["/api/customers"] });
   const { data: articles = [] } = useQuery<Article[]>({ queryKey: ["/api/articles"] });
 

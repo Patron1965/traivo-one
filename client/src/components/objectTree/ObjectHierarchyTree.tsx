@@ -49,6 +49,54 @@ export interface TreeNode {
   metadata: Record<string, string>;
 }
 
+/**
+ * Task #1398: härled minimala gren-rötter vars SUBTRÄD är helt täckta av
+ * urvalet. Wizardens server-resolver expanderar varje target-id till hela dess
+ * subträd — därför får bara noder vars hela gren är vald skickas som rötter,
+ * annars skulle avmarkerade barn åter-inkluderas. Delvis täckta föräldrar
+ * ersätts av sina helt täckta ättlingar.
+ */
+export function computeBranchSeedRoots(
+  nodes: Array<{ id: string; parentId: string | null }>,
+  selected: Set<string>,
+): string[] {
+  const byId = new Map(nodes.map((n) => [n.id, n]));
+  const childrenByParent = new Map<string | null, string[]>();
+  for (const n of nodes) {
+    const pid = n.parentId && byId.has(n.parentId) ? n.parentId : null;
+    const arr = childrenByParent.get(pid) ?? [];
+    arr.push(n.id);
+    childrenByParent.set(pid, arr);
+  }
+  // fullyCovered(id) = noden själv + hela subträdet valt.
+  const fully = new Map<string, boolean>();
+  const isFully = (id: string): boolean => {
+    if (fully.has(id)) return fully.get(id)!;
+    let ok = selected.has(id);
+    for (const kid of childrenByParent.get(id) ?? []) {
+      // Beräkna alltid barnen (memoiseras) men kortslut inte — vi behöver dem
+      // ändå för roots-jakten nedan.
+      const kidOk = isFully(kid);
+      ok = ok && kidOk;
+    }
+    fully.set(id, ok);
+    return ok;
+  };
+  const roots: string[] = [];
+  const collect = (id: string) => {
+    if (isFully(id)) {
+      roots.push(id);
+      return;
+    }
+    for (const kid of childrenByParent.get(id) ?? []) collect(kid);
+  };
+  for (const rootId of childrenByParent.get(null) ?? []) collect(rootId);
+  // Valda objekt som saknas i trädet (t.ex. valda i listvyn på annan sida) tas
+  // med som egna rötter så inget tappas.
+  for (const id of Array.from(selected)) if (!byId.has(id)) roots.push(id);
+  return roots;
+}
+
 interface ParsedToken {
   raw: string;
   negate: boolean;
@@ -142,6 +190,16 @@ interface ObjectHierarchyTreeProps {
    * "faller bort" visuellt. null = inget villkorsfilter aktivt (allt ingår).
    */
   conditionMatchedIds?: Set<string> | null;
+  /**
+   * Task #1398: explicit gren-selektion (ObjectsPage). Kryss på en förälder
+   * markerar hela grenen EXPLICIT (alla ättlingar hamnar i mängden) och
+   * enskilda underobjekt kan därefter avmarkeras. Föräldern visar delmarkerat
+   * (indeterminate) läge när bara en del av grenen är vald. Kräver
+   * selectedObjectIds + onSelectionChange. Ömsesidigt uteslutande med det
+   * implicita läget (onToggleObject).
+   */
+  branchSelection?: boolean;
+  onSelectionChange?: (next: Set<string>) => void;
 }
 
 type TreeScope = "all" | "top";
@@ -153,8 +211,11 @@ export function ObjectHierarchyTree({
   onNodeClick,
   enableScopeModes = false,
   conditionMatchedIds = null,
+  branchSelection = false,
+  onSelectionChange,
 }: ObjectHierarchyTreeProps) {
-  const objectSelectionMode = !!selectedObjectIds && !!onToggleObject;
+  const branchSelectionMode = branchSelection && !!selectedObjectIds && !!onSelectionChange;
+  const objectSelectionMode = (!!selectedObjectIds && !!onToggleObject) || branchSelectionMode;
 
   const [searchInput, setSearchInput] = useState("");
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
@@ -214,7 +275,7 @@ export function ObjectHierarchyTree({
   // de räknas som explicit valda. Härleds via primär parent_id-kedjan i trädet.
   const implicitIncludedIds = useMemo(() => {
     const result = new Set<string>();
-    if (!objectSelectionMode || !selectedObjectIds || selectedObjectIds.size === 0) {
+    if (!objectSelectionMode || branchSelectionMode || !selectedObjectIds || selectedObjectIds.size === 0) {
       return result;
     }
     const stack = Array.from(selectedObjectIds);
@@ -229,6 +290,52 @@ export function ObjectHierarchyTree({
     }
     return result;
   }, [objectSelectionMode, selectedObjectIds, childrenByParent]);
+
+  // Task #1398 (branch-läget): tri-state per nod — "all" (hela grenen inkl.
+  // noden vald), "some" (delvis vald → indeterminate på föräldern), "none".
+  const branchState = useMemo(() => {
+    const state = new Map<string, "all" | "some" | "none">();
+    if (!branchSelectionMode) return state;
+    const sel = selectedObjectIds!;
+    const compute = (id: string): { selected: number; total: number } => {
+      let selectedCount = sel.has(id) ? 1 : 0;
+      let total = 1;
+      for (const kid of childrenByParent.get(id) ?? []) {
+        const sub = compute(kid.id);
+        selectedCount += sub.selected;
+        total += sub.total;
+      }
+      state.set(id, selectedCount === 0 ? "none" : selectedCount === total ? "all" : "some");
+      return { selected: selectedCount, total };
+    };
+    for (const r of roots) compute(r.id);
+    return state;
+  }, [branchSelectionMode, selectedObjectIds, childrenByParent, roots]);
+
+  // Task #1398: kryss i branch-läget — markerar/avmarkerar noden + hela dess
+  // gren EXPLICIT. "all" → avmarkera grenen; annars (none/some) → markera allt.
+  const toggleBranch = useCallback(
+    (id: string) => {
+      if (!branchSelectionMode) return;
+      const branchIds: string[] = [id];
+      const stack = [id];
+      while (stack.length > 0) {
+        const cur = stack.pop()!;
+        for (const kid of childrenByParent.get(cur) ?? []) {
+          branchIds.push(kid.id);
+          stack.push(kid.id);
+        }
+      }
+      const next = new Set(selectedObjectIds!);
+      if (branchState.get(id) === "all") {
+        for (const bid of branchIds) next.delete(bid);
+      } else {
+        for (const bid of branchIds) next.add(bid);
+      }
+      onSelectionChange!(next);
+    },
+    [branchSelectionMode, childrenByParent, selectedObjectIds, branchState, onSelectionChange],
+  );
 
   const tokens = useMemo(() => parseSearch(searchInput), [searchInput]);
 
@@ -341,19 +448,27 @@ export function ObjectHierarchyTree({
       const isMatch = matchedIds.has(node.id);
       // Objekt/gren-läge: explicit vald gren-rot vs. implicit medföljande ättling.
       const objectSelected = objectSelectionMode ? selectedObjectIds!.has(node.id) : false;
-      const objectImplicit = objectSelectionMode
+      const objectImplicit = objectSelectionMode && !branchSelectionMode
         ? implicitIncludedIds.has(node.id) && !objectSelected
         : false;
+      // Task #1398 branch-läget: tri-state (delmarkerad förälder = indeterminate).
+      const nodeBranchState = branchSelectionMode ? branchState.get(node.id) ?? "none" : null;
       // Task #1052: villkorsfilter — objekt i vald gren som inte matchar villkoren
       // "faller bort" (dimmas + implicit kryss släcks). Endast inom selektionen.
       const conditionMiss = conditionMatchedIds != null
         && (objectSelected || objectImplicit)
         && !conditionMatchedIds.has(node.id);
-      const rowHighlight = objectSelected
-        ? "bg-accent/40"
-        : objectImplicit
-          ? "bg-accent/15"
-          : "";
+      const rowHighlight = branchSelectionMode
+        ? objectSelected
+          ? "bg-accent/40"
+          : nodeBranchState === "some"
+            ? "bg-accent/15"
+            : ""
+        : objectSelected
+          ? "bg-accent/40"
+          : objectImplicit
+            ? "bg-accent/15"
+            : "";
 
       return (
         <div
@@ -384,9 +499,19 @@ export function ObjectHierarchyTree({
               visas ikryssade men låsta (de styrs av sin valda förälder). */}
           {objectSelectionMode && (
             <Checkbox
-              checked={objectSelected || (objectImplicit && !conditionMiss)}
+              checked={
+                branchSelectionMode
+                  ? nodeBranchState === "all"
+                    ? true
+                    : nodeBranchState === "some"
+                      ? "indeterminate"
+                      : false
+                  : objectSelected || (objectImplicit && !conditionMiss)
+              }
               disabled={objectImplicit}
-              onCheckedChange={() => onToggleObject!(node.id)}
+              onCheckedChange={() =>
+                branchSelectionMode ? toggleBranch(node.id) : onToggleObject!(node.id)
+              }
               className="shrink-0"
               data-testid={`checkbox-object-node-${node.id}`}
               aria-label={`Välj objekt/gren ${node.name}`}
@@ -397,6 +522,13 @@ export function ObjectHierarchyTree({
           <button
             type="button"
             onClick={() => {
+              if (branchSelectionMode) {
+                // Branch-läget: namnet öppnar objektet om onNodeClick finns
+                // (ObjectsPage) — kryssrutan sköter markeringen.
+                if (onNodeClick) onNodeClick(node);
+                else toggleBranch(node.id);
+                return;
+              }
               if (objectSelectionMode) {
                 // Implicit-medföljande ättlingar går ej att av-/välja enskilt.
                 if (!objectImplicit) onToggleObject!(node.id);
@@ -455,6 +587,9 @@ export function ObjectHierarchyTree({
       onToggleObject,
       implicitIncludedIds,
       conditionMatchedIds,
+      branchSelectionMode,
+      branchState,
+      toggleBranch,
     ],
   );
 
