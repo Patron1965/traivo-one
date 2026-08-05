@@ -1,0 +1,195 @@
+1. Grunddata och objekt
+Genomgången gäller Grunddata och objekt under menyn Objekt. Vid genomgången fanns totalt 905 objekt inlagda.
+
+Objekten visas i ett listläge med 100 objekt per sida. Det konstaterades att en lista med 100 rader blir lång att bläddra igenom, men detta betraktades som en mindre detalj jämfört med övriga problem.
+
+2. Listvyn
+Fast sidhuvud och filter
+Sidhuvudet på sidan behöver ligga kvar när användaren bläddrar i objektlistan. Även sökresultat och filter på vänster sida behöver vara synliga under hela arbetet med listan.
+
+Grönt plus och snabbåtgärder
+Längst ned på sidan finns ett grönt plus för snabbåtgärder. Knappen täcker delvis andra funktioner och ligger ibland olämpligt.
+
+Den nuvarande funktionen innehåller bland annat möjligheten att lägga till fordon och arbeta med planering. Innehållet i snabbåtgärden är dock inte tillräckligt tydligt definierat. Plusknappen bör därför tas bort i sin nuvarande form och återkomma först när innehåll och placering är fastställda.
+
+Snabbåtgärderna som funktion ska finnas kvar, men den visuella utformningen och innehållet behöver kunna anpassas efter behov.
+
+Sidnumrering
+Listan visar exempelvis 1–100 av 905 objekt. När användaren trycker på nästa sida händer inte det som förväntas:
+
+Nästa-knappen är delvis skymd av snabbmenyn.
+Listan går inte vidare till nästa uppsättning objekt.
+Intervallet fortsätter att visa 1–100.
+Samma objekt, exempelvis Ljungbyhö-hed C, återkommer även efter tryck på nästa.
+3. Sökning
+Det finns ett problem med sökfunktionen. Sökningen startar redan efter att användaren har skrivit en enda bokstav.
+
+Vid sökning efter exempelvis Börjes hinner systemet börja bearbeta sökningen efter bokstaven B, vilket gör det svårt att skriva in hela sökordet. Sökningen upplevs därför som långsam och störande.
+
+I samtalet nämndes två möjliga sökbeteenden:
+
+att sökning startar först efter minst två tecken,
+eller att användaren skriver klart och bekräftar sökningen med en särskild knapp.
+4. Export
+Exportfunktionen används för att exportera ett urval av objekt. Vid genomgången fungerade exporten i ett test, men det har förekommit att systemet exporterar samtliga objekt trots att bara vissa objekt har markerats.
+
+Grundprincipen är att exporten endast ska omfatta de objekt som användaren har valt.
+
+5. Information på objektnivå
+Kundkoppling
+Ett objekt ska inte ha en direkt kundkoppling. Kundkopplingen hör hemma på uppgiftsnivå.
+
+En order eller uppgift kan exempelvis vara kopplad till:
+
+Axfood Sverige,
+Börje,
+en annan beställare,
+ett specifikt objekt eller flera objekt.
+Det är därför felaktigt att visa en kundrelation direkt på det enskilda objektet.
+
+Felaktig standardkund
+Systemet visar i vissa fall Tingsryds bostäder AB eller Tälje bostäder på objekten. Förklaringen som framkom var att systemet automatiskt väljer den första kunden eftersom det saknas möjlighet att välja kund i det aktuella sammanhanget.
+
+Denna information blir därmed missvisande på objektnivå.
+
+Förälder och överordnat objekt
+Information om objektets förälder eller överordnade objekt visas redan i trädstrukturen. Exempelvis visas att Axfood Sverige är överordnat Börje i Tingsryd.
+
+Eftersom relationen redan framgår av trädvyn upplevs informationen som dubblerad i objektets detaljvisning.
+
+Objekttyp
+Fältet Objekttyp beskrevs som ett äldre metadatafält som inte används i den nuvarande modellen.
+
+6. Objekt och användare
+Det finns ett behov av att kunna gruppera eller begränsa objekt utifrån användare, snarare än att koppla varje objekt till en kund.
+
+Exemplet som diskuterades var att Börje i Tingsryd ska kunna logga in och se sina relevanta objekt, till exempel:
+
+matavfallskärl,
+pannkärl,
+kundgarage.
+Objekten behöver alltså kunna presenteras utifrån användarens behörighet och tillhörighet.
+
+7. Uppgiftskoppling
+En central framtida funktion är att kunna se vilka uppgifter som är kopplade till ett objekt.
+
+När en användare söker efter exempelvis Börje ska det finnas en snabb väg till:
+
+utförda uppgifter,
+kommande uppgifter,
+andra uppgifter som är kopplade till objektet.
+Objektvyn ska på så sätt fungera som en ingång till navet, där användaren kan se Börjes samlade uppgifter.
+
+Det som är relevant att kunna se är bland annat:
+
+om det finns uppgifter kopplade till objektet,
+vilken faktureringskund som är kopplad till uppgiften,
+om uppgiften är tilldelad en resurs eller utförare,
+vilken status uppgiften har.
+Uppgiftens status kan exempelvis vara:
+
+planerad,
+utförd,
+fakturerad.
+Statusen bestäms automatiskt av systemet.
+
+8. Telink-koppling
+Telink-kopplingen diskuterades utifrån situationen att Börje ringer in.
+
+Om Börje finns registrerad som kontaktperson i Telink ska systemet kunna:
+
+identifiera honom via telefonnumret,
+hitta hans objekt,
+filtrera fram hans relevanta information,
+visa hans tidigare och kommande uppgifter,
+visa hans underordnade objekt.
+9. Lista och trädstruktur
+Det finns två huvudsakliga visningslägen:
+
+listvy,
+trädvy.
+I trädvyn kan användaren expandera exempelvis Axfood Sverige och se underliggande objekt.
+
+Det diskuterades om listvyn och trädvyn i framtiden skulle kunna samordnas eller slås ihop. Tanken är att användaren exempelvis skulle kunna välja en topphierarki i listan och därefter expandera de underordnade objekten direkt där.
+
+Samtidigt konstaterades att det i nuläget kan vara acceptabelt att ha vyerna separerade.
+
+10. Val av objekt i trädvyn
+Det har tidigare gått att markera objekt genom hela trädstrukturen. Den funktionen verkar ha förändrats.
+
+Vid genomgången gällde följande:
+
+När Axfood Sverige markeras väljs endast huvudobjektet.
+Underobjekten markeras inte automatiskt.
+Det går därför inte att exportera hela grenen genom att markera föräldraobjektet.
+Tidigare var avsikten att en markering på föräldranivå skulle omfatta hela grenen.
+Därefter skulle användaren kunna avmarkera enskilda underobjekt som inte ska ingå.
+11. Exempel: order för flera underobjekt
+Ett användningsscenario gäller när Axfood ringer och vill beställa en tjänst för flera underobjekt.
+
+Exemplet som användes var:
+
+Hemköpskedjan,
+egenägda butiker i Göteborg,
+44 underobjekt,
+en tvätt som ska utföras på samtliga utom ett specifikt objekt, exempelvis Kortedala.
+I detta scenario behöver användaren kunna:
+
+välja den aktuella grenen,
+markera hela grenen,
+avmarkera objekt som inte ska omfattas,
+använda urvalet för att skapa ett orderkoncept.
+12. Fördjupat filter
+Det fördjupade filtret innehåller äldre logik som inte motsvarar den nuvarande objektmodellen.
+
+Uppgiftstyper
+Filtret innehåller uppgiftstyper som inte är riktiga uppgiftstyper i den nuvarande modellen. Dessa beskrevs som ett arv från det tidigare systemet.
+
+Kundfilter
+Även kundinformationen i filtret verkar vara baserad på äldre logik och är inte korrekt anpassad till hur kunder ska kopplas till uppgifter.
+
+Metadatafilter
+Den avsedda funktionen är att användaren ska kunna välja metadatafält och filtrera på dess värden, exempelvis:
+
+metadatafält är lika med ett visst värde,
+metadatafält skiljer sig från ett visst värde,
+flera metadatafält kombineras i samma filter.
+Ett exempel är att kunna hitta objekt med metadata som anger att de har blå tunnor.
+
+Filtret innehåller i dag en blandning av:
+
+äldre arv från det tidigare systemet,
+uppgiftstyper,
+kundlogik,
+nyare metadatafält,
+geografiska filter.
+Geografiska filter
+Filter som exempelvis Södertälje kommun eller filter efter exakt position och område nämndes. Det konstaterades att samma grundläggande filterlogik ska återkomma i navet.
+
+De centrala filtreringsområdena är:
+
+metadata,
+uppgiftsstatus.
+13. Kartvyn
+Kartfunktionen visade inte de objekt som förväntades synas, exempelvis Axfoods objekt.
+
+Det var oklart om problemet beror på:
+
+att objekten saknar GPS-koordinater,
+eller att kartan inte visar objekt som faktiskt har koordinater.
+Det upplevdes även som att användaren kunde fastna i kartvyn och behöva gå tillbaka via listvyn. Vid navigering mellan lista, träd och karta var det inte alltid tydligt hur man skulle komma vidare.
+
+14. Information i de olika vyerna
+Det diskuterades vilken information som ska visas i listvyn respektive trädvyn.
+
+I trädvyn visas bland annat information om:
+
+objektens hierarki,
+planerade resurser.
+I listvyn är det viktigare att kunna se:
+
+om det finns uppgifter kopplade till objektet,
+vilken kund som är kopplad till uppgiften,
+vilken resurs som är tilldelad,
+vilken status uppgiften har.
+Det finns därför en skillnad mellan den information som behövs för att förstå objektstrukturen och den information som behövs för att arbeta med uppgifter och order.
