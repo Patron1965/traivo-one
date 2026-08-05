@@ -47,6 +47,7 @@ import {
 } from "lucide-react";
 import QRCode from "qrcode";
 import { useToast } from "@/hooks/use-toast";
+import { MetadataFieldSelect } from "@/components/metadata/MetadataFieldPicker";
 
 type EditorType = "object_specific" | "gps" | "object_creating";
 type FieldKind = "rating" | "text" | "photo";
@@ -840,22 +841,17 @@ function FieldEditor({
         </Select>
 
         {field.mappingMode === "existing" ? (
-          <Select
+          // Task #1423: enhetlig metadata-väljare (områdesrubriker, datatyp-
+          // bricka, favoriter) även här. Värdeform oförändrad: katalog-id.
+          <MetadataFieldSelect
             value={field.metadataKatalogId}
             onValueChange={(v) => onChange({ metadataKatalogId: v })}
-          >
-            <SelectTrigger data-testid={`select-katalog-${index}`}>
-              <SelectValue placeholder="Välj metadatafält" />
-            </SelectTrigger>
-            <SelectContent>
-              {mappableKatalog.map((k) => (
-                <SelectItem key={k.id} value={k.id}>
-                  {k.namn}
-                  {k.beteckning ? ` (${k.beteckning})` : ""}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+            types={mappableKatalog}
+            getValue={(t) => t.id ?? null}
+            placeholder="Välj metadatafält"
+            triggerTestId={`select-katalog-${index}`}
+            optionTestIdPrefix={`option-katalog-${index}`}
+          />
         ) : (
           <p className="text-xs text-muted-foreground">
             Ett nytt flervärdesfält ("{field.label || "fältnamn"}") skapas i katalogen vid spara.
