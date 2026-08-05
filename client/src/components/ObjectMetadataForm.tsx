@@ -25,6 +25,7 @@ import {
   Star, GitFork, Network, Package, ChevronsUpDown, Check,
 } from "lucide-react";
 import { KallaBadge, KallaLegend, deriveEntryKalla } from "@/lib/metadata-kalla";
+import { MetadataFieldSelect } from "@/components/metadata/MetadataFieldPicker";
 
 // Strukturellt kompatibla shapes (matchar ObjectDetailPage). Hålls medvetet
 // fristående så detta formulär kan återanvändas utan att koppla mot sidan.
@@ -696,7 +697,6 @@ export function MetadataAddButton({
 }) {
   const { toast } = useToast();
   const { uploadFile, isUploading } = useUpload();
-  const { order: areaOrder, areaLabel } = useMetadataAreas();
   const [open, setOpen] = useState(false);
   const [selectedType, setSelectedType] = useState("");
   const [value, setValue] = useState("");
@@ -748,68 +748,8 @@ export function MetadataAddButton({
     return a.namn.localeCompare(b.namn, "sv");
   };
 
-  // Favoritmarkerade typer (per användare + tenant, server-persisterade) visas
-  // överst i en egen "Favoriter"-grupp.
-  const { favoriteSet, toggleFavorite } = useMetadataFavorites();
-
-  // Väljar-alternativ grupperade per metadataområde (SelectGroup + SelectLabel),
-  // med familjer samlade: rot först, barn direkt efter (indenterade).
-  const dropdownGroups = useMemo(() => {
-    const OVRIGT = "__ovrigt__";
-    const orderIndex = new Map<string, number>();
-    areaOrder.forEach((v, i) => orderIndex.set(v, i));
-
-    const byArea = new Map<string, MetadataFormType[]>();
-    for (const t of addableTypes) {
-      const a = (t.area ?? "").trim() || OVRIGT;
-      if (!byArea.has(a)) byArea.set(a, []);
-      byArea.get(a)!.push(t);
-    }
-
-    const groups = Array.from(byArea.entries()).map(([area, types]) => {
-      const idsInGroup = new Set(
-        types.map((t) => t.id).filter((id): id is string => !!id),
-      );
-      // Rot = fält vars förälder inte finns i samma grupp (top-level här).
-      const roots = types.filter(
-        (t) => !(t.parentMetadataId && idsInGroup.has(t.parentMetadataId)),
-      );
-      roots.sort(baseSort);
-      const rows: { type: MetadataFormType; isChild: boolean }[] = [];
-      for (const r of roots) {
-        rows.push({ type: r, isChild: !!r.parentMetadataId });
-        const kids = (r.id ? childrenByParentId.get(r.id) : undefined) ?? [];
-        kids.sort(baseSort);
-        for (const k of kids) rows.push({ type: k, isChild: true });
-      }
-      return {
-        area,
-        label: area === OVRIGT ? "Övrigt" : areaLabel(area),
-        sortOrder: area === OVRIGT ? 99999 : orderIndex.get(area) ?? 5000,
-        rows,
-      };
-    });
-
-    groups.sort((a, b) => {
-      if (a.sortOrder !== b.sortOrder) return a.sortOrder - b.sortOrder;
-      return a.label.localeCompare(b.label, "sv");
-    });
-
-    // Favoriter överst i egen grupp (raderna finns kvar i sina områdesgrupper).
-    const favRows = addableTypes
-      .filter((t) => favoriteSet.has(t.namn))
-      .sort(baseSort)
-      .map((t) => ({ type: t, isChild: false }));
-    if (favRows.length > 0) {
-      groups.unshift({
-        area: "__favoriter__",
-        label: "Favoriter",
-        sortOrder: -1,
-        rows: favRows,
-      });
-    }
-    return groups;
-  }, [addableTypes, childrenByParentId, areaOrder, areaLabel, favoriteSet]);
+  // Task #1421: gruppering/favoriter/brickor sköts nu av den delade
+  // MetadataFieldSelect — här behövs bara familje-härledningen kvar.
 
   // Familjemedlemmar för vald typ: hela familjen (rot + syskon) som valbara
   // värdefält. Tom/1 medlem → inte en familj (enskilt fält).
@@ -915,86 +855,20 @@ export function MetadataAddButton({
             <div className="space-y-2">
               <Label>Metadatatyp *</Label>
               {addableTypes.length > 0 ? (
-                <Select
+                // Task #1421: den designade menyn är utbruten till den delade
+                // MetadataFieldSelect (samma utseende i alla metadata-väljare).
+                // Värdeform: namn (oförändrat).
+                <MetadataFieldSelect
                   value={selectedType}
                   onValueChange={(v) => {
                     setSelectedType(v);
                     setValue("");
                     setUploadedName("");
                   }}
-                >
-                  <SelectTrigger data-testid="select-metadata-type">
-                    <SelectValue placeholder="Välj typ...">
-                      {selectedMetaType ? metadataDisplayName(selectedMetaType) : undefined}
-                    </SelectValue>
-                  </SelectTrigger>
-                  <SelectContent>
-                    {dropdownGroups.map((g) => (
-                      <SelectGroup key={g.area}>
-                        <SelectLabel className="bg-muted/70 -mx-1 mb-0.5 rounded-sm pl-2 pr-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground flex items-center gap-1.5">
-                          {g.area === "__favoriter__" && (
-                            <Star className="h-3 w-3 fill-amber-400 text-amber-400" />
-                          )}
-                          {g.label}
-                        </SelectLabel>
-                        {g.rows.map(({ type: t, isChild }) => {
-                          const dn = isChild ? metadataDisplayName(t) : metadataTypeRowLabel(t);
-                          const typLabel =
-                            (METADATA_DATATYPE_LABELS as Record<string, string>)[t.datatyp ?? "string"] ??
-                            (t.datatyp ?? "");
-                          const isFav = favoriteSet.has(t.namn);
-                          return (
-                            <SelectItem
-                              key={`${g.area}-${t.id || t.namn}`}
-                              value={t.namn}
-                              className={isChild ? "pl-8 pr-14" : "pr-14"}
-                              data-testid={`option-metadata-type-${t.namn}`}
-                            >
-                              <span className="flex items-center gap-2 w-full">
-                                <span className="flex-1 truncate">{dn}</span>
-                                <Badge
-                                  variant="outline"
-                                  className="ml-2 shrink-0 px-1.5 py-0 text-[10px] font-normal text-muted-foreground"
-                                >
-                                  {typLabel}
-                                </Badge>
-                              </span>
-                              <button
-                                type="button"
-                                tabIndex={-1}
-                                aria-label={isFav ? "Ta bort favorit" : "Markera som favorit"}
-                                title={isFav ? "Ta bort favorit" : "Markera som favorit"}
-                                className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 hover:bg-accent"
-                                onPointerDown={(e) => {
-                                  e.preventDefault();
-                                  e.stopPropagation();
-                                }}
-                                onPointerUp={(e) => {
-                                  e.preventDefault();
-                                  e.stopPropagation();
-                                }}
-                                onClick={(e) => {
-                                  e.preventDefault();
-                                  e.stopPropagation();
-                                  toggleFavorite(t.namn);
-                                }}
-                                data-testid={`button-favorite-metadata-type-${t.namn}`}
-                              >
-                                <Star
-                                  className={
-                                    isFav
-                                      ? "h-3.5 w-3.5 fill-amber-400 text-amber-400"
-                                      : "h-3.5 w-3.5 text-muted-foreground/40"
-                                  }
-                                />
-                              </button>
-                            </SelectItem>
-                          );
-                        })}
-                      </SelectGroup>
-                    ))}
-                  </SelectContent>
-                </Select>
+                  types={metadataTypes}
+                  triggerTestId="select-metadata-type"
+                  optionTestIdPrefix="option-metadata-type"
+                />
               ) : (
                 <Input
                   value={selectedType}

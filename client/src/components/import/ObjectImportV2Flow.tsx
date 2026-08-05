@@ -42,7 +42,12 @@ import {
   Upload,
 } from "lucide-react";
 import Papa from "papaparse";
+import { Star } from "lucide-react";
 import type { Customer } from "@shared/schema";
+// Task #1421: visuell paritet med den delade metadata-väljaren (datatyp-bricka,
+// favorit-stjärna, grupprubrik-stil, Favoriter-grupp). Värdena förblir f.key.
+import { datatypeBadgeLabel } from "@/components/metadata/MetadataFieldPicker";
+import { useMetadataFavorites } from "@/hooks/use-metadata-favorites";
 
 type StepNum = 1 | 2 | 3 | 4 | 5;
 
@@ -325,6 +330,73 @@ export function ObjectImportV2Flow() {
     for (const f of fields) (groups[f.category] ??= []).push(f);
     return groups;
   }, [fields]);
+
+  // Task #1421: katalog-typer (delad react-query-cache) för att slå upp datatyp
+  // per metadatafält. Importens metadata-FieldDef bär bara type:"text", så vi
+  // matchar på namn ur nyckeln "metadata.<namn>" för att visa rätt datatyp-bricka.
+  const { data: metadataTypes = [] } = useQuery<{ namn: string; datatyp?: string }[]>({
+    queryKey: ["/api/metadata/types"],
+  });
+  const datatypByNamn = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const t of metadataTypes) if (t.namn) m.set(t.namn, t.datatyp ?? "string");
+    return m;
+  }, [metadataTypes]);
+  // metadata.<namn> → katalog-namn (favorit-nyckel + datatyp-uppslag).
+  const metaNamnFromKey = (key: string) =>
+    key.startsWith("metadata.") ? key.slice("metadata.".length) : null;
+  const { favoriteSet, toggleFavorite } = useMetadataFavorites();
+  // Favoritmarkerade metadatafält som finns i importens fältkatalog (värdet
+  // som sparas förblir f.key = "metadata.<namn>").
+  const favoriteMetadataFields = useMemo(
+    () =>
+      (groupedFields.metadata ?? []).filter((f) => {
+        const namn = metaNamnFromKey(f.key);
+        return namn != null && favoriteSet.has(namn);
+      }),
+    [groupedFields.metadata, favoriteSet],
+  );
+
+  // Task #1421: en metadata-option renderad i den delade väljarens stil
+  // (datatyp-bricka + favorit-stjärna). Värdet förblir f.key ("metadata.<namn>").
+  const renderMetadataOption = (f: FieldDef) => {
+    const namn = metaNamnFromKey(f.key);
+    const isFav = namn != null && favoriteSet.has(namn);
+    return (
+      <SelectItem key={f.key} value={f.key} className="pr-14">
+        <span className="flex items-center gap-2 w-full">
+          <span className="flex-1 truncate">{f.label}</span>
+          <Badge
+            variant="outline"
+            className="ml-2 shrink-0 px-1.5 py-0 text-[10px] font-normal text-muted-foreground"
+          >
+            {datatypeBadgeLabel(namn ? datatypByNamn.get(namn) : undefined)}
+          </Badge>
+        </span>
+        {namn != null && (
+          <button
+            type="button"
+            tabIndex={-1}
+            aria-label={isFav ? "Ta bort favorit" : "Markera som favorit"}
+            title={isFav ? "Ta bort favorit" : "Markera som favorit"}
+            className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 hover:bg-accent"
+            onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); }}
+            onPointerUp={(e) => { e.preventDefault(); e.stopPropagation(); }}
+            onClick={(e) => { e.preventDefault(); e.stopPropagation(); toggleFavorite(namn); }}
+            data-testid={`button-favorite-metadata-type-${namn}`}
+          >
+            <Star
+              className={
+                isFav
+                  ? "h-3.5 w-3.5 fill-amber-400 text-amber-400"
+                  : "h-3.5 w-3.5 text-muted-foreground/40"
+              }
+            />
+          </button>
+        )}
+      </SelectItem>
+    );
+  };
 
   const uploadMutation = useMutation({
     mutationFn: async (input: { file: File; sheetIndex?: number; hasHeaders?: boolean }) => {
@@ -735,10 +807,22 @@ export function ObjectImportV2Flow() {
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value={TARGET_NONE}>— Ignorera kolumn —</SelectItem>
+                        {/* Task #1421: Favoriter-grupp överst (endast metadatafält;
+                            värdet förblir f.key). Samma stjärn-/brick-design som den
+                            delade metadata-väljaren. */}
+                        {favoriteMetadataFields.length > 0 && (
+                          <SelectGroup>
+                            <SelectLabel className="bg-muted/70 -mx-1 mb-0.5 rounded-sm pl-2 pr-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground flex items-center gap-1.5">
+                              <Star className="h-3 w-3 fill-amber-400 text-amber-400" />
+                              Favoriter
+                            </SelectLabel>
+                            {favoriteMetadataFields.map((f) => renderMetadataOption(f))}
+                          </SelectGroup>
+                        )}
                         {(["standard", "address", "contact", "metadata"] as const).map((cat) =>
                           (groupedFields[cat]?.length ?? 0) > 0 ? (
                             <SelectGroup key={cat}>
-                              <SelectLabel>
+                              <SelectLabel className="bg-muted/70 -mx-1 mb-0.5 rounded-sm pl-2 pr-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
                                 {cat === "standard"
                                   ? "Standardfält"
                                   : cat === "address"
@@ -747,11 +831,13 @@ export function ObjectImportV2Flow() {
                                   ? "Kontakt"
                                   : "Metadata"}
                               </SelectLabel>
-                              {groupedFields[cat].map((f) => (
-                                <SelectItem key={f.key} value={f.key}>
-                                  {f.label}
-                                </SelectItem>
-                              ))}
+                              {cat === "metadata"
+                                ? groupedFields[cat].map((f) => renderMetadataOption(f))
+                                : groupedFields[cat].map((f) => (
+                                    <SelectItem key={f.key} value={f.key}>
+                                      {f.label}
+                                    </SelectItem>
+                                  ))}
                             </SelectGroup>
                           ) : null,
                         )}

@@ -8,7 +8,11 @@ import { useExecutionCodes } from "@/hooks/use-execution-codes";
 import { useTimeCodes } from "@/hooks/use-time-codes";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { formatSekFromOre } from "@/lib/format";
-import { metadataDisplayName } from "@/lib/metadata-display";
+// Task #1421: enhetlig metadata-väljare (samma design som "Lägg till metadata").
+import {
+  MetadataFieldSelect,
+  type MetadataPickerType,
+} from "@/components/metadata/MetadataFieldPicker";
 import { computeArticlePricing } from "@shared/article-pricing";
 import type {
   Article,
@@ -1029,14 +1033,6 @@ export default function ArticleFormPage() {
     () => new Set(metadataChildrenByParentName.keys()),
     [metadataChildrenByParentName],
   );
-  const groupParentTypes = useMemo(
-    () => metadataTypes.filter((t) => groupParentNames.has(t.namn)),
-    [metadataTypes, groupParentNames],
-  );
-  const individualMetadataTypes = useMemo(
-    () => metadataTypes.filter((t) => !groupParentNames.has(t.namn)),
-    [metadataTypes, groupParentNames],
-  );
 
   const { data: articleTypeDefs = [] } = useQuery<ArticleTypeDefinition[]>({
     queryKey: ["/api/article-types"],
@@ -1057,6 +1053,36 @@ export default function ArticleFormPage() {
     queryKey: ["/api/metadata-labels"],
     select: (data: any[]) => data.map((d: any) => ({ id: d.id, namn: d.namn, visningsnamn: d.visningsnamn ?? null, beteckning: d.beteckning, datatyp: d.datatyp })),
   });
+
+  // Task #1421: värdeformer för de olika artikel-ytorna (bevaras exakt).
+  //  • Antalskälla + visa/lämna-metadata sparar katalog-NAMN (t.namn) — default.
+  //  • Fasthakningsvillkoren sparar "beteckning || namn". För att garantera
+  //    IDENTISKT urval och värdeform matar vi väljaren med samma källa som förr
+  //    (/api/metadata-labels) via `types` och läser beteckning i getValue.
+  const assocTypes = useMemo<MetadataPickerType[]>(
+    () =>
+      metadataLabels.map((ml) => ({
+        id: ml.id,
+        namn: ml.namn,
+        visningsnamn: ml.visningsnamn ?? null,
+        datatyp: ml.datatyp,
+        beteckning: ml.beteckning,
+      })) as MetadataPickerType[],
+    [metadataLabels],
+  );
+  const assocGetValue = useCallback((t: MetadataPickerType) => {
+    const beteckning = (t as { beteckning?: string | null }).beteckning?.trim();
+    return beteckning || t.namn || null;
+  }, []);
+  const namnGetValue = useCallback((t: MetadataPickerType) => t.namn || null, []);
+  // Visa/lämna-metadata: grupp-föräldrar (fält med barn) väljs som GRUPP och
+  // sparar förälderns namn (alla underfält inkluderas dynamiskt vid utförande).
+  // Underfält får därför inte visas som egna val — de göms medan föräldern hålls
+  // valbar. Enskilda fält (utan barn) är valbara som vanligt. Värde = t.namn.
+  const showLeaveInclude = useCallback(
+    (t: MetadataPickerType) => !(t.parentMetadataId),
+    [],
+  );
 
   // Standardleverantör (sektion 3) — GET /api/suppliers.
   const { data: suppliers = [] } = useQuery<Supplier[]>({
@@ -2719,22 +2745,17 @@ export default function ArticleFormPage() {
                   >
                     <div className="space-y-1">
                       <Label className="text-xs">Metadatafält</Label>
-                      <Select
+                      {/* Task #1421: fasthakningsvillkor sparar "beteckning || namn"
+                          (oförändrad värdeform via assocGetValue). */}
+                      <MetadataFieldSelect
                         value={cond.label || "_none"}
                         onValueChange={(v) => updateMetadataCondition(idx, { label: v === "_none" ? "" : v })}
-                      >
-                        <SelectTrigger data-testid={`select-association-label-${idx}`}>
-                          <SelectValue placeholder="Välj fält" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="_none">Välj fält</SelectItem>
-                          {metadataLabels.map((ml) => (
-                            <SelectItem key={ml.id} value={ml.beteckning || ml.namn}>
-                              {metadataDisplayName(ml)}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                        types={assocTypes}
+                        getValue={assocGetValue}
+                        placeholder="Välj fält"
+                        triggerTestId={`select-association-label-${idx}`}
+                        extraOptionsTop={[{ value: "_none", label: "Välj fält" }]}
+                      />
                     </div>
                     <div className="space-y-1">
                       <Label className="text-xs">Operator</Label>
@@ -2786,22 +2807,17 @@ export default function ArticleFormPage() {
             <div className="space-y-3 rounded-md border p-3">
               <Label className="text-sm font-medium">Testa association</Label>
               <div className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_1fr_1fr]">
-                <Select
+                {/* Task #1421: testytan speglar villkoren — samma värdeform
+                    "beteckning || namn". */}
+                <MetadataFieldSelect
                   value={formData.associationLabel || "_none"}
                   onValueChange={(v) => setFormData({ ...formData, associationLabel: v === "_none" ? "" : v })}
-                >
-                  <SelectTrigger data-testid="select-test-association-label">
-                    <SelectValue placeholder="Metadatafält" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="_none">Välj fält</SelectItem>
-                    {metadataLabels.map((ml) => (
-                      <SelectItem key={ml.id} value={ml.beteckning || ml.namn}>
-                        {metadataDisplayName(ml)}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                  types={assocTypes}
+                  getValue={assocGetValue}
+                  placeholder="Metadatafält"
+                  triggerTestId="select-test-association-label"
+                  extraOptionsTop={[{ value: "_none", label: "Välj fält" }]}
+                />
                 <Select
                   value={formData.associationOperator || "equals"}
                   onValueChange={(v) => setFormData({ ...formData, associationOperator: v })}
@@ -2940,22 +2956,16 @@ export default function ArticleFormPage() {
                     <Label htmlFor="quantityMetadataField" className="text-sm">
                       Välj metadatafält
                     </Label>
-                    <Select
+                    {/* Task #1421: antalskälla sparar katalog-namn (t.namn) — default
+                        värdeform. Sentinelalternativet "_none" bevaras överst. */}
+                    <MetadataFieldSelect
                       value={formData.quantityMetadataField || "_none"}
                       onValueChange={(v) => setFormData({ ...formData, quantityMetadataField: v === "_none" ? "" : v })}
-                    >
-                      <SelectTrigger id="quantityMetadataField" data-testid="select-quantity-metadata-field">
-                        <SelectValue placeholder="Välj metadatafält" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="_none">Välj metadatafält</SelectItem>
-                        {metadataTypes.map((t) => (
-                          <SelectItem key={t.id} value={t.namn}>
-                            {metadataDisplayName(t)}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                      getValue={namnGetValue}
+                      placeholder="Välj metadatafält"
+                      triggerTestId="select-quantity-metadata-field"
+                      extraOptionsTop={[{ value: "_none", label: "Välj metadatafält" }]}
+                    />
                     {!formData.quantityMetadataField && (
                       <p className="flex items-start gap-1 text-xs text-muted-foreground" data-testid="hint-quantity-metadata-optional">
                         <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />
@@ -3207,28 +3217,21 @@ export default function ArticleFormPage() {
                 return (
                   <div key={idx} className="space-y-2 rounded-md border p-3" data-testid={`row-show-metadata-${idx}`}>
                     <div className="flex items-center gap-2">
-                      <Select value={row.metadataField || "_none"} onValueChange={(v) => patch({ metadataField: v === "_none" ? "" : v })}>
-                        <SelectTrigger className="flex-1" data-testid={`select-show-metadata-field-${idx}`}>
-                          <SelectValue placeholder="Välj metadatafält" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="_none">Välj metadatafält</SelectItem>
-                          {groupParentTypes.length > 0 && (
-                            <SelectGroup>
-                              <SelectLabel>Grupper (alla underfält)</SelectLabel>
-                              {groupParentTypes.map((t) => (
-                                <SelectItem key={`group-${t.id}`} value={t.namn}>{metadataDisplayName(t)} – alla fält</SelectItem>
-                              ))}
-                            </SelectGroup>
-                          )}
-                          <SelectGroup>
-                            <SelectLabel>Enskilda fält</SelectLabel>
-                            {individualMetadataTypes.map((t) => (
-                              <SelectItem key={t.id} value={t.namn}>{metadataDisplayName(t)}</SelectItem>
-                            ))}
-                          </SelectGroup>
-                        </SelectContent>
-                      </Select>
+                      {/* Task #1421: visa-metadata sparar katalog-namn (t.namn).
+                          Grupp-föräldrar förblir valbara (sparar förälderns namn =
+                          "alla underfält"); underfält göms via include. Värdeform
+                          oförändrad. */}
+                      <MetadataFieldSelect
+                        value={row.metadataField || "_none"}
+                        onValueChange={(v) => patch({ metadataField: v === "_none" ? "" : v })}
+                        getValue={namnGetValue}
+                        include={showLeaveInclude}
+                        includeRubrik
+                        placeholder="Välj metadatafält"
+                        triggerClassName="flex-1"
+                        triggerTestId={`select-show-metadata-field-${idx}`}
+                        extraOptionsTop={[{ value: "_none", label: "Välj metadatafält" }]}
+                      />
                       <Button
                         type="button"
                         size="icon"
@@ -3305,28 +3308,19 @@ export default function ArticleFormPage() {
                 return (
                   <div key={idx} className="space-y-2 rounded-md border p-3" data-testid={`row-leave-metadata-${idx}`}>
                     <div className="flex items-center gap-2">
-                      <Select value={row.metadataField || "_none"} onValueChange={(v) => patch({ metadataField: v === "_none" ? "" : v })}>
-                        <SelectTrigger className="flex-1" data-testid={`select-leave-metadata-field-${idx}`}>
-                          <SelectValue placeholder="Välj metadatafält" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="_none">Välj metadatafält</SelectItem>
-                          {groupParentTypes.length > 0 && (
-                            <SelectGroup>
-                              <SelectLabel>Grupper (alla underfält)</SelectLabel>
-                              {groupParentTypes.map((t) => (
-                                <SelectItem key={`group-${t.id}`} value={t.namn}>{metadataDisplayName(t)} – alla fält</SelectItem>
-                              ))}
-                            </SelectGroup>
-                          )}
-                          <SelectGroup>
-                            <SelectLabel>Enskilda fält</SelectLabel>
-                            {individualMetadataTypes.map((t) => (
-                              <SelectItem key={t.id} value={t.namn}>{metadataDisplayName(t)}</SelectItem>
-                            ))}
-                          </SelectGroup>
-                        </SelectContent>
-                      </Select>
+                      {/* Task #1421: lämna-metadata — samma väljare/värdeform som
+                          visa-metadata (sparar t.namn; grupp-förälder = alla fält). */}
+                      <MetadataFieldSelect
+                        value={row.metadataField || "_none"}
+                        onValueChange={(v) => patch({ metadataField: v === "_none" ? "" : v })}
+                        getValue={namnGetValue}
+                        include={showLeaveInclude}
+                        includeRubrik
+                        placeholder="Välj metadatafält"
+                        triggerClassName="flex-1"
+                        triggerTestId={`select-leave-metadata-field-${idx}`}
+                        extraOptionsTop={[{ value: "_none", label: "Välj metadatafält" }]}
+                      />
                       <Button
                         type="button"
                         size="icon"

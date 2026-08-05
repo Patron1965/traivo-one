@@ -1,8 +1,18 @@
+import { useCallback, useMemo } from "react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Plus, Trash2 } from "lucide-react";
 import type { MetadataDefinition } from "@shared/schema";
+// Task #1421: enhetlig metadata-väljare (samma design som objektets "Lägg till
+// metadata"-meny). Används här ENDAST för definitions-fallet (fieldKey-värden ur
+// /api/metadata-definitions) — det generiska fields-fallet (godtyckliga
+// value/label, t.ex. artiklarnas matchningsregel-etiketter) behåller den enkla
+// listan eftersom dess värden inte nödvändigtvis motsvarar katalograder.
+import {
+  MetadataFieldSelect as MetadataCatalogFieldSelect,
+  type MetadataPickerType,
+} from "@/components/metadata/MetadataFieldPicker";
 // Task #940: operator-semantik + typer lever i @shared/condition-matching (delas
 // med servern). Re-exporteras här så befintliga importörer är oförändrade.
 import {
@@ -76,6 +86,40 @@ export function MetadataFieldSelect({
   allowNone = false,
   testId,
 }: MetadataFieldSelectProps) {
+  // Task #1421: definitions-fallet (sparar def.fieldKey) migreras till den delade
+  // MetadataFieldSelect. /api/metadata-definitions är en compat-vy där def.id ===
+  // metadata_katalog.id, så vi hämtar katalogen i väljaren och mappar katalograd →
+  // fieldKey via defsById. getValue=null utesluter fält som inte fanns i den
+  // ursprungliga listan → exakt samma valbara fält som förut, oförändrad värdeform.
+  const useCatalogPicker = !fields && !!definitions;
+  const defsById = useMemo(
+    () => new Map((definitions ?? []).map((d) => [d.id, d])),
+    [definitions],
+  );
+  const getFieldKeyValue = useCallback(
+    (t: MetadataPickerType) => (t.id ? defsById.get(t.id)?.fieldKey ?? null : null),
+    [defsById],
+  );
+  const extraOptionsTop = useMemo(
+    () => (allowNone ? [{ value: METADATA_NONE, label: "—" }] : undefined),
+    [allowNone],
+  );
+
+  if (useCatalogPicker) {
+    return (
+      <MetadataCatalogFieldSelect
+        value={value}
+        onValueChange={onValueChange}
+        getValue={getFieldKeyValue}
+        extraOptionsTop={extraOptionsTop}
+        placeholder={placeholder}
+        triggerClassName={className}
+        triggerTestId={testId ?? `select-filter-key-${index}`}
+      />
+    );
+  }
+
+  // Generiskt fields-fall: godtyckliga value/label (behåller enkel lista).
   const resolved = resolveFields(fields, definitions);
   return (
     <Select value={value} onValueChange={onValueChange}>

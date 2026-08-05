@@ -29,6 +29,7 @@ import {
   PhotoGalleryView,
   ContactCardsView,
 } from "@/components/MetadataCatalog";
+import { MetadataFieldSelect, type MetadataPickerType } from "@/components/metadata/MetadataFieldPicker";
 
 interface MetadataEntry {
   id: string;
@@ -1707,25 +1708,17 @@ export function ObjectMetadataPanel({ object, trigger }: ObjectMetadataPanelProp
               <div className="space-y-4 py-2">
                 <div className="space-y-2">
                   <Label>Metadatatyp</Label>
-                  <Select value={newMetadata.metadataTypNamn} onValueChange={(v) => setNewMetadata(p => ({ ...p, metadataTypNamn: v }))}>
-                    <SelectTrigger data-testid="select-metadata-type">
-                      <SelectValue placeholder="Valj typ..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {availableTypesForAdd.map(t => {
-                        const area = (t as any).area as string | undefined;
-                        const dn = (t as any).displayNumber as number | undefined;
-                        const prefix = dn != null ? `${dn}. ` : "";
-                        const suffix = (t as any).allowDuplicates ? " · flera tillåts" : "";
-                        const areaLabel = area ? `[${categoryLabels[area] || area}] ` : "";
-                        return (
-                          <SelectItem key={t.id} value={t.namn}>
-                            {areaLabel}{prefix}{t.namn} ({DATA_TYPE_LABELS[t.datatyp] || t.datatyp}){suffix}
-                          </SelectItem>
-                        );
-                      })}
-                    </SelectContent>
-                  </Select>
+                  {/* Task #1421: enhetlig, designad metadata-väljare. Värdeform:
+                      namn (oförändrat) — filtreringen (beräknade/system/redan valda,
+                      allowDuplicates) sker fortfarande i availableTypesForAdd. */}
+                  <MetadataFieldSelect
+                    value={newMetadata.metadataTypNamn}
+                    onValueChange={(v) => setNewMetadata(p => ({ ...p, metadataTypNamn: v }))}
+                    types={availableTypesForAdd as unknown as MetadataPickerType[]}
+                    placeholder="Valj typ..."
+                    triggerTestId="select-metadata-type"
+                    optionTestIdPrefix="option-metadata-type"
+                  />
                 </div>
 
                 {selectedTypeForAdd && (

@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Plus, X, Search, ChevronDown, Upload, Loader2, FileCheck2 } from "lucide-react";
+import { Plus, X, ChevronDown, Upload, Loader2, FileCheck2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -8,10 +8,14 @@ import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { versionedUrl } from "@/lib/queryClient";
 import { useUpload } from "@/hooks/use-upload";
-import { metadataAreaLabel, METADATA_AREA_ORDER } from "@shared/metadata-areas";
+// Task #1421: enhetlig metadata-väljare — Command-varianten (sökbar combobox)
+// med samma gruppering/brickor/favorit-stjärna som "Lägg till metadata".
+import {
+  MetadataFieldCommandList,
+  type MetadataPickerType,
+} from "@/components/metadata/MetadataFieldPicker";
 
 export interface BuilderFieldValue {
   namn: string;
@@ -262,30 +266,19 @@ export function MetadataFieldBuilder({ customerId, inheritedFields, onChange }: 
     [rows],
   );
 
-  const availableTypes = useMemo(
-    () =>
-      types.filter((t) => {
-        if (t.arBeraknad) return false;
-        // underfält adderas endast via sin familj-förälder
-        if (t.parentMetadataId) return false;
-        if (t.id && familyParentIds.has(t.id)) return !addedFamilies.has(t.namn);
-        return !addedNames.has(t.namn);
-      }),
-    [types, addedNames, addedFamilies, familyParentIds],
+  // Task #1421: samma valbarhetsfilter som tidigare (availableTypes) uttryckt som
+  // `include` till den delade väljaren — arBeraknad exkluderas, underfält adderas
+  // bara via sin familj-förälder, och redan tillagda fält/familjer döljs. Väljaren
+  // matas med byggarens EGNA (ev. kund-scopade) types så urvalet är oförändrat.
+  const includeType = useCallback(
+    (t: MetadataPickerType) => {
+      if ((t as MetadataType).arBeraknad) return false;
+      if (t.parentMetadataId) return false;
+      if (t.id && familyParentIds.has(t.id)) return !addedFamilies.has(t.namn);
+      return !addedNames.has(t.namn);
+    },
+    [addedNames, addedFamilies, familyParentIds],
   );
-
-  const grouped = useMemo(() => {
-    const map = new Map<string, MetadataType[]>();
-    for (const t of availableTypes) {
-      const key = t.area || "annat";
-      const arr = map.get(key);
-      if (arr) arr.push(t); else map.set(key, [t]);
-    }
-    const order = [...METADATA_AREA_ORDER, "annat"];
-    return Array.from(map.entries()).sort(
-      (a, b) => (order.indexOf(a[0]) === -1 ? 999 : order.indexOf(a[0])) - (order.indexOf(b[0]) === -1 ? 999 : order.indexOf(b[0])),
-    );
-  }, [availableTypes]);
 
   const addField = (t: MetadataType) => {
     const children = t.id ? childrenByParent.get(t.id) : undefined;
@@ -320,6 +313,14 @@ export function MetadataFieldBuilder({ customerId, inheritedFields, onChange }: 
     ]);
     setPickerOpen(false);
   };
+
+  // Väljaren returnerar den ursprungliga type-raden — vidarebefordra till addField
+  // (som behöver id/namn/datatyp/area/allowedValues för familje-expansion).
+  const handleSelectType = useCallback(
+    (_value: string, t: MetadataPickerType) => addField(t as unknown as MetadataType),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [childrenByParent],
+  );
 
   const updateValue = (namn: string, value: string) => {
     setRows((prev) => prev.map((r) => (r.namn === namn ? { ...r, value } : r)));
@@ -450,33 +451,17 @@ export function MetadataFieldBuilder({ customerId, inheritedFields, onChange }: 
           </Button>
         </PopoverTrigger>
         <PopoverContent className="p-0 w-[320px]" align="start">
-          <Command>
-            <div className="flex items-center border-b px-3">
-              <Search className="h-4 w-4 opacity-50 shrink-0" />
-              <CommandInput placeholder="Sök metadatafält..." className="h-9" data-testid="input-search-metadata-types" />
-            </div>
-            <CommandList>
-              <CommandEmpty>Inga fält hittades.</CommandEmpty>
-              {grouped.map(([area, typesInArea]) => (
-                <CommandGroup key={area} heading={metadataAreaLabel(area)}>
-                  {typesInArea.map((t) => {
-                    const isFamily = !!(t.id && familyParentIds.has(t.id));
-                    return (
-                      <CommandItem
-                        key={t.id || t.namn}
-                        value={`${t.namn} ${t.beteckning || ""} ${metadataAreaLabel(area)}`}
-                        onSelect={() => addField(t)}
-                        data-testid={`option-metadata-type-${t.namn}`}
-                      >
-                        <span className="truncate">{t.namn}</span>
-                        <span className="ml-auto text-xs text-muted-foreground">{isFamily ? "familj" : t.datatyp}</span>
-                      </CommandItem>
-                    );
-                  })}
-                </CommandGroup>
-              ))}
-            </CommandList>
-          </Command>
+          {/* Task #1421: delad Command-lista med enhetlig gruppering/brickor.
+              Bevarar exakt urval via include + byggarens egna types; addField får
+              den valda raden och expanderar familjer som förut. */}
+          <MetadataFieldCommandList
+            types={types as unknown as MetadataPickerType[]}
+            include={includeType}
+            onSelect={handleSelectType}
+            searchPlaceholder="Sök metadatafält..."
+            emptyText="Inga fält hittades."
+            optionTestIdPrefix="option-metadata-type"
+          />
         </PopoverContent>
       </Popover>
     </div>

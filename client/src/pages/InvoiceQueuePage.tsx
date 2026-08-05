@@ -8,7 +8,11 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+// Task #1421: enhetlig metadata-väljare (samma design i alla metadata-menyer).
+import {
+  MetadataFieldSelect,
+  type MetadataPickerType,
+} from "@/components/metadata/MetadataFieldPicker";
 import { QueryState } from "@/components/QueryState";
 import { apiRequest, queryClient, versionedUrl } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -226,12 +230,25 @@ export default function InvoiceQueuePage() {
       toast({ title: "Kunde inte spara", description: err?.message ?? "Okänt fel", variant: "destructive" }),
   });
 
-  const fieldNames = (configQuery.data?.availableFields ?? []).map((f) => f.namn);
+  const availableFields = configQuery.data?.availableFields ?? [];
+  const fieldNames = availableFields.map((f) => f.namn);
   const breakOptions = cfgBreak && !fieldNames.includes(cfgBreak) ? [cfgBreak, ...fieldNames] : fieldNames;
   const groupingOptions =
     cfgGrouping !== NO_GROUPING && cfgGrouping && !fieldNames.includes(cfgGrouping)
       ? [cfgGrouping, ...fieldNames]
       : fieldNames;
+
+  // Task #1421: fältkällan är /api/invoice-flow/config (availableFields), INTE
+  // /api/metadata/types. Vi bygger därför syntetiska katalograder ur namnlistorna
+  // (datatyp bevaras för brickan där den finns) och matar in dem som `types` i den
+  // delade väljaren så exakt samma fält erbjuds. Värdeform: namn — oförändrat.
+  const datatypByName = new Map(availableFields.map((f) => [f.namn, f.datatyp]));
+  const toPickerTypes = (names: string[]): MetadataPickerType[] =>
+    names.map((namn) => ({ namn, datatyp: datatypByName.get(namn) ?? undefined }));
+  const breakPickerTypes = toPickerTypes(
+    breakOptions.length === 0 ? ["Fakturastopp"] : breakOptions,
+  );
+  const groupingPickerTypes = toPickerTypes(groupingOptions);
 
   return (
     <div className="container mx-auto py-6 space-y-6" data-testid="page-invoice-queue">
@@ -463,21 +480,17 @@ export default function InvoiceQueuePage() {
                       <Scissors className="h-3.5 w-3.5" />
                       Fakturastopp-fält
                     </Label>
-                    <Select value={cfgBreak || undefined} onValueChange={setCfgBreak}>
-                      <SelectTrigger data-testid="select-break-field">
-                        <SelectValue placeholder="Välj metadatafält..." />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {breakOptions.length === 0 && (
-                          <SelectItem value="Fakturastopp">Fakturastopp</SelectItem>
-                        )}
-                        {breakOptions.map((name) => (
-                          <SelectItem key={name} value={name} data-testid={`option-break-${name}`}>
-                            {name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    {/* Task #1421: delad MetadataFieldSelect. Fälten kommer från
+                        availableFields (syntetiska katalograder). Värdeform: namn —
+                        oförändrat. */}
+                    <MetadataFieldSelect
+                      value={cfgBreak || ""}
+                      onValueChange={setCfgBreak}
+                      types={breakPickerTypes}
+                      placeholder="Välj metadatafält..."
+                      triggerTestId="select-break-field"
+                      optionTestIdPrefix="option-break"
+                    />
                     <p className="text-xs text-muted-foreground">
                       Objekt där detta fält är sant (Ja/true) bryter samlingen. Läses lokalt per nod.
                     </p>
@@ -488,21 +501,20 @@ export default function InvoiceQueuePage() {
                       <Layers className="h-3.5 w-3.5" />
                       Grupperingsfält
                     </Label>
-                    <Select value={cfgGrouping} onValueChange={setCfgGrouping}>
-                      <SelectTrigger data-testid="select-grouping-field">
-                        <SelectValue placeholder="Ingen gruppering" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value={NO_GROUPING} data-testid="option-grouping-none">
-                          Ingen gruppering
-                        </SelectItem>
-                        {groupingOptions.map((name) => (
-                          <SelectItem key={name} value={name} data-testid={`option-grouping-${name}`}>
-                            {name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    {/* Task #1421: delad MetadataFieldSelect. Sentinel-alternativet
+                        "Ingen gruppering" (NO_GROUPING) bevaras via extraOptionsTop.
+                        Värdeform: namn / NO_GROUPING — oförändrat. */}
+                    <MetadataFieldSelect
+                      value={cfgGrouping}
+                      onValueChange={setCfgGrouping}
+                      types={groupingPickerTypes}
+                      extraOptionsTop={[
+                        { value: NO_GROUPING, label: "Ingen gruppering", testId: "option-grouping-none" },
+                      ]}
+                      placeholder="Ingen gruppering"
+                      triggerTestId="select-grouping-field"
+                      optionTestIdPrefix="option-grouping"
+                    />
                     <p className="text-xs text-muted-foreground">
                       En separat faktura per distinkt värde. Värdet ärvs nedåt (närmaste vinner).
                     </p>

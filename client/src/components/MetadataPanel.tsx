@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
-import { metadataDisplayName, metadataTypeOptionLabel } from "@/lib/metadata-display";
+import { metadataDisplayName } from "@/lib/metadata-display";
+import { MetadataFieldSelect, type MetadataPickerType } from "@/components/metadata/MetadataFieldPicker";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -564,6 +565,9 @@ function AddMetadataForm({ availableTypes, onSubmit, isPending }: AddMetadataFor
   const [varde, setVarde] = useState<string>('');
   const [arvsNedat, setArvsNedat] = useState(false);
 
+  // Task #1421: värdeform = katalog id (samma som gamla SelectItem-värdet).
+  const getPickerValue = useCallback((t: MetadataPickerType) => t.id ?? null, []);
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedType) return;
@@ -594,7 +598,9 @@ function AddMetadataForm({ availableTypes, onSubmit, isPending }: AddMetadataFor
     <form onSubmit={handleSubmit} className="space-y-4">
       <div>
         <Label>Metadatatyp</Label>
-        <Select
+        {/* Task #1421: enhetlig, designad metadata-väljare. Värdeform: katalog id
+            (oförändrat) — vi väljer bland surface-ens egna availableTypes. */}
+        <MetadataFieldSelect
           value={selectedType?.id || ''}
           onValueChange={(value) => {
             const type = availableTypes.find(t => t.id === value);
@@ -603,18 +609,11 @@ function AddMetadataForm({ availableTypes, onSubmit, isPending }: AddMetadataFor
               setArvsNedat(type.standardArvs);
             }
           }}
-        >
-          <SelectTrigger data-testid="select-metadata-type">
-            <SelectValue placeholder="Välj typ..." />
-          </SelectTrigger>
-          <SelectContent>
-            {availableTypes.map((type) => (
-              <SelectItem key={type.id} value={type.id}>
-                {metadataTypeOptionLabel(type)}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+          types={availableTypes as unknown as MetadataPickerType[]}
+          getValue={getPickerValue}
+          triggerTestId="select-metadata-type"
+          optionTestIdPrefix="option-metadata-type"
+        />
         {selectedType?.beskrivning && (
           <p className="text-xs text-muted-foreground mt-1">{selectedType.beskrivning}</p>
         )}

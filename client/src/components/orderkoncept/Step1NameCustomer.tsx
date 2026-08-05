@@ -5,8 +5,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
+// Task #1421: enhetlig metadata-väljare (samma design i alla metadata-menyer).
+import { MetadataFieldSelect } from "@/components/metadata/MetadataFieldPicker";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Search, User, Database, Info, Eye, Loader2, AlertTriangle } from "lucide-react";
@@ -194,34 +195,21 @@ export default function Step1NameCustomer({
                 <Label htmlFor="customer-metadata-field" className="text-xs text-muted-foreground mb-1.5 block">
                   Vilket metadatafält innehåller kundens identifikation?
                 </Label>
-                <Select
+                {/* Task #1421: delad MetadataFieldSelect. Alternativkällan är
+                    OFÖRÄNDRAT /api/metadata-labels (skickas via types) så att
+                    exakt samma fält är valbara som tidigare. Värdeform: namn
+                    (default getValue) — oförändrat. */}
+                <MetadataFieldSelect
+                  types={metadataLabels}
                   value={customerMetadataField ?? ""}
                   onValueChange={(v) => onCustomerMetadataFieldChange(v || null)}
-                >
-                  <SelectTrigger
-                    id="customer-metadata-field"
-                    className={cn("max-w-sm", !customerMetadataField && "border-chart-4/40 ring-1 ring-chart-4/40")}
-                    data-testid="select-customer-metadata-field"
-                  >
-                    <SelectValue placeholder="Välj metadatafält..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {metadataLabels.length === 0 ? (
-                      <SelectItem value="__none__" disabled>Inga metadatafält konfigurerade</SelectItem>
-                    ) : (
-                      metadataLabels.map((label) => (
-                        <SelectItem key={label.id} value={label.namn} data-testid={`option-metadata-field-${label.id}`}>
-                          {label.namn}
-                          {(label.beteckning || label.area) && (
-                            <span className="ml-1.5 text-xs text-muted-foreground">
-                              ({label.beteckning || label.area})
-                            </span>
-                          )}
-                        </SelectItem>
-                      ))
-                    )}
-                  </SelectContent>
-                </Select>
+                  placeholder="Välj metadatafält..."
+                  triggerClassName={cn("max-w-sm", !customerMetadataField && "border-chart-4/40 ring-1 ring-chart-4/40")}
+                  triggerTestId="select-customer-metadata-field"
+                />
+                {metadataLabels.length === 0 && (
+                  <p className="text-xs text-muted-foreground mt-1">Inga metadatafält konfigurerade.</p>
+                )}
               </div>
               <div className="flex items-start gap-2 rounded-md bg-muted/50 p-2.5">
                 <Info className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />

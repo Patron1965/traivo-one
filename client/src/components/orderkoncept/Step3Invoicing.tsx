@@ -4,6 +4,12 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
+// Task #1421: enhetlig metadata-väljare (samma design i alla metadata-menyer).
+import {
+  MetadataFieldSelect,
+  type MetadataPickerType,
+} from "@/components/metadata/MetadataFieldPicker";
+import { useCallback, useMemo } from "react";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { type InvoiceModel, type MetadataDefinition, type Article } from "@shared/schema";
@@ -149,6 +155,16 @@ export default function Step3Invoicing({
     queryKey: ["/api/metadata-labels"],
   });
 
+  // Task #1421: fakturastopp-fältet sparar def.fieldKey. /api/metadata-definitions
+  // är en compat-vy där def.id === metadata_katalog.id → mappa katalograd → fieldKey
+  // via defsById i den delade väljaren (getValue=null utesluter fält som inte fanns
+  // i den ursprungliga listan → exakt samma valbara fält, oförändrad värdeform).
+  const defsById = useMemo(() => new Map(definitions.map((d) => [d.id, d])), [definitions]);
+  const getFakturastoppValue = useCallback(
+    (t: MetadataPickerType) => (t.id ? defsById.get(t.id)?.fieldKey ?? null : null),
+    [defsById],
+  );
+
   const uiMethod = invoiceModelToUiMethod(invoiceModel);
   const isSubscription = uiMethod === "abonnemang";
 
@@ -252,28 +268,17 @@ export default function Step3Invoicing({
               </div>
               {customerReferenceMode === FROM_METADATA ? (
                 <>
-                  <Select
+                  {/* Task #1421: delad MetadataFieldSelect. Värdeform: namn (default) —
+                      resolverns matchningsnyckel, oförändrat. */}
+                  <MetadataFieldSelect
                     value={customerReferenceMetadataField || ""}
                     onValueChange={(v) => onUpdate({ customerReferenceMetadataField: v })}
-                  >
-                    <SelectTrigger data-testid="select-customer-reference-metadata-field">
-                      <SelectValue placeholder="Välj metadatafält..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {metadataLabels.length === 0 ? (
-                        <SelectItem value="__none__" disabled>Inga metadatafält konfigurerade</SelectItem>
-                      ) : (
-                        metadataLabels.map((l) => (
-                          <SelectItem key={l.id} value={l.namn} data-testid={`option-customer-reference-field-${l.id}`}>
-                            {l.namn}
-                            {(l.beteckning || l.area) && (
-                              <span className="ml-1.5 text-xs text-muted-foreground">({l.beteckning || l.area})</span>
-                            )}
-                          </SelectItem>
-                        ))
-                      )}
-                    </SelectContent>
-                  </Select>
+                    placeholder="Välj metadatafält..."
+                    triggerTestId="select-customer-reference-metadata-field"
+                  />
+                  {metadataLabels.length === 0 && (
+                    <p className="text-xs text-muted-foreground mt-1">Inga metadatafält konfigurerade.</p>
+                  )}
                   {!customerReferenceMetadataField && (
                     <p className="text-xs text-warning mt-1" data-testid="warn-customer-reference-field">
                       Välj ett metadatafält — annars blir Er referens tom på fakturan.
@@ -317,28 +322,17 @@ export default function Step3Invoicing({
               </div>
               {customerLabelMode === FROM_METADATA ? (
                 <>
-                  <Select
+                  {/* Task #1421: delad MetadataFieldSelect. Värdeform: namn (default) —
+                      resolverns matchningsnyckel, oförändrat. */}
+                  <MetadataFieldSelect
                     value={customerLabelMetadataField || ""}
                     onValueChange={(v) => onUpdate({ customerLabelMetadataField: v })}
-                  >
-                    <SelectTrigger data-testid="select-customer-label-metadata-field">
-                      <SelectValue placeholder="Välj metadatafält..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {metadataLabels.length === 0 ? (
-                        <SelectItem value="__none__" disabled>Inga metadatafält konfigurerade</SelectItem>
-                      ) : (
-                        metadataLabels.map((l) => (
-                          <SelectItem key={l.id} value={l.namn} data-testid={`option-customer-label-field-${l.id}`}>
-                            {l.namn}
-                            {(l.beteckning || l.area) && (
-                              <span className="ml-1.5 text-xs text-muted-foreground">({l.beteckning || l.area})</span>
-                            )}
-                          </SelectItem>
-                        ))
-                      )}
-                    </SelectContent>
-                  </Select>
+                    placeholder="Välj metadatafält..."
+                    triggerTestId="select-customer-label-metadata-field"
+                  />
+                  {metadataLabels.length === 0 && (
+                    <p className="text-xs text-muted-foreground mt-1">Inga metadatafält konfigurerade.</p>
+                  )}
                   {!customerLabelMetadataField && (
                     <p className="text-xs text-warning mt-1" data-testid="warn-customer-label-field">
                       Välj ett metadatafält — annars blir Ert ordernr tomt på fakturan.
@@ -467,19 +461,15 @@ export default function Step3Invoicing({
             <div className="space-y-3 rounded-md border border-border p-3 mt-3" data-testid="block-metadata-reference">
               <div>
                 <Label className="text-sm mb-1 block">Metadatafält (var fakturan stoppas)</Label>
-                <Select
+                {/* Task #1421: delad MetadataFieldSelect. Värdeform: def.fieldKey
+                    (via defsById-mappningen ovan) — oförändrat. */}
+                <MetadataFieldSelect
                   value={departmentMetadataField || ""}
                   onValueChange={(v) => onUpdate({ departmentMetadataField: v })}
-                >
-                  <SelectTrigger data-testid="select-fakturastopp-field">
-                    <SelectValue placeholder="Välj metadatafält" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {definitions.map((d) => (
-                      <SelectItem key={d.id} value={d.fieldKey}>{d.fieldLabel} ({d.fieldKey})</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                  getValue={getFakturastoppValue}
+                  placeholder="Välj metadatafält"
+                  triggerTestId="select-fakturastopp-field"
+                />
                 <p className="text-xs text-muted-foreground mt-1">
                   En separat faktura skapas per unikt värde i detta fält.
                 </p>

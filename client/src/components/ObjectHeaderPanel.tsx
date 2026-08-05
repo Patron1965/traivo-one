@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { MapContainer, TileLayer, Marker, useMapEvents } from "react-leaflet";
 import L from "leaflet";
@@ -13,14 +13,16 @@ import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import {
-  Select, SelectTrigger, SelectValue, SelectContent, SelectItem,
-} from "@/components/ui/select";
-import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription,
 } from "@/components/ui/dialog";
 import {
   Image as ImageIcon, MapPin, MoreVertical, Loader2, ArrowDownToLine, RotateCcw,
 } from "lucide-react";
+// Task #1421: enhetlig metadata-väljare (samma design som "Lägg till metadata").
+import {
+  MetadataFieldSelect,
+  type MetadataPickerType,
+} from "@/components/metadata/MetadataFieldPicker";
 
 // Fältvärdena kommer från objektets metadata-array som ObjectDetailPage redan
 // laddar (["/api/metadata/objects", objectId]). Vi tar bara det vi behöver.
@@ -887,13 +889,17 @@ function HeaderQuickFieldEditor({
   const [fieldDraft, setFieldDraft] = useState<(string | null)[]>([null, null, null]);
   const [display, setDisplay] = useState<HeaderConfig>(displayConfig);
 
-  // Bild-typade katalogfält (datatyp='image') — valbara som Bildkälla.
-  // Öppnas bara admin/canEdit-sidan så lastas den lite lat (enabled=open).
-  const { data: imageFields = [] } = useQuery<ImageMetadataOption[]>({
-    queryKey: ["/api/metadata-labels"],
-    enabled: open,
-  });
-  const imageFieldOptions = imageFields.filter((f) => f.datatyp === "image" && !f.deletedAt);
+  // Task #1421: bild/logotyp-väljarna använder den delade metadata-väljaren och
+  // filtrerar till bild-typade fält (datatyp='image') via include. Katalogen
+  // hämtas av väljaren själv (delad cache) — ingen egen råfråga behövs längre.
+  const includeImageField = useCallback(
+    (t: MetadataPickerType) => t.datatyp === "image",
+    [],
+  );
+  const katalogIdValue = useCallback(
+    (t: MetadataPickerType) => t.id ?? null,
+    [],
+  );
   // Seedas ENDAST vid öppning (false→true). Att seeda på varje qfc/displayConfig-
   // ändring skulle klippa osparade ändringar i det andra scope:t när ett scope
   // sparas (invalidering → qfc uppdateras medan dialogen är öppen).
@@ -961,29 +967,31 @@ function HeaderQuickFieldEditor({
     },
   });
 
+  // Task #1421: snabbfältsväljaren sparar katalog-id (def.id === katalog.id via
+  // /api/metadata-definitions compat-vy). Väljaren hämtar katalogen själv och
+  // begränsas till exakt de fält denna yta erbjöd tidigare (definitions-listan)
+  // via getValue → katalog-id, eller null för att utesluta. Värdeform oförändrad.
+  const defIds = useMemo(() => new Set(definitions.map((d) => d.id)), [definitions]);
+  const quickFieldGetValue = useCallback(
+    (t: MetadataPickerType) => (t.id && defIds.has(t.id) ? t.id : null),
+    [defIds],
+  );
+
   const fieldSelect = (slot: 0 | 1 | 2) => (
     <div className="space-y-1.5">
       <Label>Snabbfält {slot + 1}</Label>
-      <Select
+      <MetadataFieldSelect
         value={fieldDraft[slot] ?? NONE_VALUE}
         onValueChange={(v) => setFieldDraft((d) => {
           const n = [...d];
           n[slot] = v === NONE_VALUE ? null : v;
           return n;
         })}
-      >
-        <SelectTrigger data-testid={`select-quick-field-${slot + 1}`}>
-          <SelectValue placeholder="Välj metadatafält" />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value={NONE_VALUE}>— Inget —</SelectItem>
-          {definitions.map((d) => (
-            <SelectItem key={d.id} value={d.id}>
-              {d.fieldLabel || d.namn || d.fieldKey || d.id}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
+        getValue={quickFieldGetValue}
+        placeholder="Välj metadatafält"
+        triggerTestId={`select-quick-field-${slot + 1}`}
+        extraOptionsTop={[{ value: NONE_VALUE, label: "— Inget —" }]}
+      />
     </div>
   );
 
@@ -1067,28 +1075,17 @@ function HeaderQuickFieldEditor({
                 {display.showImage && (
                   <div className="space-y-1.5">
                     <Label>Bildfält (metadata)</Label>
-                    {(
-                      <Select
-                        value={display.imageMetadataKatalogId ?? undefined}
-                        onValueChange={(v) => setDisplay((d) => ({ ...d, imageMetadataKatalogId: v }))}
-                      >
-                        <SelectTrigger data-testid="select-header-image-metadata-field">
-                          <SelectValue placeholder="Välj bildfält..." />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {imageFieldOptions.length === 0 && (
-                            <div className="px-2 py-1.5 text-sm text-muted-foreground">
-                              Inga bildfält hittades
-                            </div>
-                          )}
-                          {imageFieldOptions.map((f) => (
-                            <SelectItem key={f.id} value={f.id}>
-                              {f.visningsnamn || f.namn}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    )}
+                    {/* Task #1421: sparar katalog-id, filtrerar till bild-typade
+                        fält (datatyp='image') via include — samma urval som
+                        tidigare råa katalogfråga. Värdeform (katalog-id) oförändrad. */}
+                    <MetadataFieldSelect
+                      value={display.imageMetadataKatalogId ?? ""}
+                      onValueChange={(v) => setDisplay((d) => ({ ...d, imageMetadataKatalogId: v }))}
+                      include={includeImageField}
+                      getValue={katalogIdValue}
+                      placeholder="Välj bildfält..."
+                      triggerTestId="select-header-image-metadata-field"
+                    />
                   </div>
                 )}
                 <div className="flex items-center justify-between">
@@ -1103,26 +1100,15 @@ function HeaderQuickFieldEditor({
                 {display.showLogo && (
                   <div className="space-y-1.5">
                     <Label>Logotypfält (metadata)</Label>
-                    <Select
-                      value={display.logoMetadataKatalogId ?? undefined}
+                    {/* Task #1421: bild-typade katalogfält, sparar katalog-id. */}
+                    <MetadataFieldSelect
+                      value={display.logoMetadataKatalogId ?? ""}
                       onValueChange={(v) => setDisplay((d) => ({ ...d, logoMetadataKatalogId: v }))}
-                    >
-                      <SelectTrigger data-testid="select-header-logo-metadata-field">
-                        <SelectValue placeholder="Välj bildfält..." />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {imageFieldOptions.length === 0 && (
-                          <div className="px-2 py-1.5 text-sm text-muted-foreground">
-                            Inga bildfält hittades
-                          </div>
-                        )}
-                        {imageFieldOptions.map((f) => (
-                          <SelectItem key={f.id} value={f.id}>
-                            {f.visningsnamn || f.namn}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                      include={includeImageField}
+                      getValue={katalogIdValue}
+                      placeholder="Välj bildfält..."
+                      triggerTestId="select-header-logo-metadata-field"
+                    />
                     <p className="text-[11px] text-muted-foreground">
                       Logotypen ärvs nedåt via metadata-arvet och kan registreras direkt eller skriva över ärvt värde.
                     </p>

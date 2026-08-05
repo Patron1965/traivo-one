@@ -26,6 +26,7 @@ import type { WorkOrder, ServiceObject, Customer, Resource, WorkOrderObject, Met
 import { getOrderTypeLabel } from "@shared/schema";
 import { CoupledFieldInput, type OrderTypeMetadataField } from "./CoupledFieldInput";
 import { KonteringCard } from "@/components/KonteringCard";
+import { MetadataFieldSelect, type MetadataPickerType } from "@/components/metadata/MetadataFieldPicker";
 
 interface JobDetailModalProps {
   open: boolean;
@@ -1034,21 +1035,15 @@ export function JobDetailModal({ open, onClose, workOrderId, bulkWorkOrderIds = 
                 <div className="border rounded-md p-3 space-y-3 bg-muted/30">
                   <div className="space-y-2">
                     <label className="text-sm font-medium">Metadatatyp</label>
-                    <Select value={selectedMetadataType} onValueChange={(val) => { setSelectedMetadataType(val); setMetadataValue(""); }}>
-                      <SelectTrigger data-testid="select-metadata-type">
-                        <SelectValue placeholder="Välj typ..." />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {metadataTypes.map((type) => (
-                          <SelectItem key={type.id} value={type.namn}>
-                            {type.namn}
-                            {type.beskrivning && (
-                              <span className="text-muted-foreground ml-2">- {type.beskrivning}</span>
-                            )}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    {/* Task #1421: enhetlig, designad metadata-väljare. Värdeform:
+                        namn (oförändrat) — samma metadataTypes-lista som tidigare. */}
+                    <MetadataFieldSelect
+                      value={selectedMetadataType}
+                      onValueChange={(val) => { setSelectedMetadataType(val); setMetadataValue(""); }}
+                      types={metadataTypes as unknown as MetadataPickerType[]}
+                      triggerTestId="select-metadata-type"
+                      optionTestIdPrefix="option-metadata-type"
+                    />
                   </div>
                   <div className="space-y-2">
                     <label className="text-sm font-medium">Värde</label>

@@ -12,6 +12,8 @@ import { Label } from "@/components/ui/label";
 import { LocationRequirementBadge } from "@/components/LocationRequirementBadge";
 import { TaskRoleBadge } from "@/components/TaskRoleBadge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+// Task #1421: enhetlig metadata-väljare (samma design i alla metadata-menyer).
+import { MetadataFieldSelect } from "@/components/metadata/MetadataFieldPicker";
 import { Separator } from "@/components/ui/separator";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -42,7 +44,7 @@ import { AssignmentDialog } from "@/components/weekplanner/BulkScheduleDialog";
 import { OrderFilterBar } from "@/components/orders/OrderFilterBar";
 import { CancelOrderDialog } from "@/components/orders/CancelOrderDialog";
 import { Checkbox } from "@/components/ui/checkbox";
-import type { WorkOrder, SimulationScenario, Customer, Article, WorkOrderLine, Team, Resource, MetadataKatalog } from "@shared/schema";
+import type { WorkOrder, SimulationScenario, Customer, Article, WorkOrderLine, Team, Resource } from "@shared/schema";
 import { formatSekFromOre } from "@/lib/format";
 import { useLanguage } from "@/hooks/use-language";
 import { useObjectsByIds } from "@/hooks/useObjectSearch";
@@ -258,9 +260,8 @@ export default function OrderStockPage() {
     }
   });
   
-  const { data: metadataTypes = [] } = useQuery<MetadataKatalog[]>({
-    queryKey: ["/api/metadata/types"],
-  });
+  // Task #1421: metadata-typerna hämtas nu direkt i den delade MetadataFieldSelect
+  // (samma /api/metadata/types-query, delad cache) — ingen egen query behövs här.
 
   const { data: scenarios = [] } = useQuery<SimulationScenario[]>({
     queryKey: ["/api/simulation-scenarios"]
@@ -822,16 +823,15 @@ export default function OrderStockPage() {
             <div className="flex items-end gap-3 flex-wrap">
               <div className="space-y-1">
                 <Label className="text-xs">{tl("page.orderstock.metadata-type")}</Label>
-                <Select value={newFilterName} onValueChange={setNewFilterName}>
-                  <SelectTrigger className="w-44" data-testid="select-metadata-type">
-                    <SelectValue placeholder={tl("page.orderstock.select-type")} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {metadataTypes.map(t => (
-                      <SelectItem key={t.id} value={t.namn}>{t.namn}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                {/* Task #1421: delad MetadataFieldSelect. Värdeform: namn (default) —
+                    metadatafiltret matchar på namn, oförändrat. */}
+                <MetadataFieldSelect
+                  value={newFilterName}
+                  onValueChange={setNewFilterName}
+                  placeholder={tl("page.orderstock.select-type")}
+                  triggerClassName="w-44"
+                  triggerTestId="select-metadata-type"
+                />
               </div>
               <div className="space-y-1">
                 <Label className="text-xs">Operator</Label>
