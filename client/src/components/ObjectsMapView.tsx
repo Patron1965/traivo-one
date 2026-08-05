@@ -241,6 +241,7 @@ export const ObjectsMapTab = memo(function ObjectsMapTab({
   onBackToList,
   onGeocodeMissing,
   geocodeRunning = false,
+  geocodeFailures = {},
 }: { 
   objectsWithCoords: MapObjectEntry[];
   mapPositions: [number, number][];
@@ -252,6 +253,9 @@ export const ObjectsMapTab = memo(function ObjectsMapTab({
   // Task #1403: batch-geokoda exakt de listade objekten från panelen.
   onGeocodeMissing?: (ids: string[]) => void;
   geocodeRunning?: boolean;
+  // Task #1414: per-objekt-resultat från senaste geokodningskörningen
+  // (id → orsak) så att kvarvarande objekt visas med förklaring.
+  geocodeFailures?: Record<string, "no_address" | "no_match">;
 }) {
   const [missingOpen, setMissingOpen] = useState(false);
   const totalInSelection = objectsWithCoords.length + missingCoordObjects.length;
@@ -307,19 +311,40 @@ export const ObjectsMapTab = memo(function ObjectsMapTab({
             )}
           </div>
           <ul className="space-y-0.5">
-            {missingCoordObjects.map(o => (
-              <li key={o.id} className="text-sm">
-                <button
-                  type="button"
-                  className="text-left hover:underline"
-                  onClick={() => onOpenObject?.(o.id)}
-                  data-testid={`link-missing-coords-${o.id}`}
-                >
-                  {o.name}
-                </button>
-                {o.address && <span className="ml-2 text-xs text-muted-foreground">{o.address}{o.city ? `, ${o.city}` : ""}</span>}
-              </li>
-            ))}
+            {missingCoordObjects.map(o => {
+              // Task #1414: flagga objekt utan adress redan före körning; efter
+              // körning visas serverns per-objekt-orsak (adress saknas/ingen träff).
+              const failure = geocodeFailures[o.id];
+              const reasonLabel = !o.address
+                ? "Adress saknas"
+                : failure === "no_match"
+                  ? "Ingen träff vid geokodning"
+                  : failure === "no_address"
+                    ? "Adress saknas"
+                    : null;
+              return (
+                <li key={o.id} className="flex flex-wrap items-center gap-x-2 text-sm">
+                  <button
+                    type="button"
+                    className="text-left hover:underline"
+                    onClick={() => onOpenObject?.(o.id)}
+                    data-testid={`link-missing-coords-${o.id}`}
+                  >
+                    {o.name}
+                  </button>
+                  {o.address && <span className="text-xs text-muted-foreground">{o.address}{o.city ? `, ${o.city}` : ""}</span>}
+                  {reasonLabel && (
+                    <span
+                      className="inline-flex items-center gap-1 rounded-sm bg-amber-100 px-1.5 py-0.5 text-[11px] font-medium text-amber-800 dark:bg-amber-900 dark:text-amber-300"
+                      data-testid={`badge-geocode-reason-${o.id}`}
+                    >
+                      <MapPinOff className="h-3 w-3" />
+                      {reasonLabel}
+                    </span>
+                  )}
+                </li>
+              );
+            })}
           </ul>
         </div>
       )}

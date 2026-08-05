@@ -1226,14 +1226,24 @@ export default function ObjectsPage() {
   // Task #1403: geokoda exakt de objekt som listas i kartans saknar-koordinater-
   // panel (befintlig batch-geocode-endpoint med explicita objekt-id:n).
   const [mapGeocodeRunning, setMapGeocodeRunning] = useState(false);
+  // Task #1414: per-objekt-resultat från senaste körningen (id → orsak) så
+  // panelen kan visa varför kvarvarande objekt inte kunde geokodas.
+  const [mapGeocodeFailures, setMapGeocodeFailures] = useState<Record<string, "no_address" | "no_match">>({});
   const runMissingCoordsGeocode = async (ids: string[]) => {
     if (mapGeocodeRunning || ids.length === 0) return;
     setMapGeocodeRunning(true);
     try {
       const res = await apiRequest("POST", "/api/objects/batch-geocode", { objectIds: ids });
-      const data: { geocoded: number; updated: number } = await res.json();
+      const data: { geocoded: number; updated: number; failures?: Array<{ id: string; reason: "no_address" | "no_match" }> } = await res.json();
+      const failureMap: Record<string, "no_address" | "no_match"> = {};
+      for (const f of data.failures ?? []) failureMap[f.id] = f.reason;
+      setMapGeocodeFailures(failureMap);
       queryClient.invalidateQueries({ queryKey: ["/api/objects"], exact: false });
-      toast({ title: "Geokodning klar", description: `${data.updated} objekt uppdaterade (${data.geocoded} geokodade)` });
+      const failedCount = data.failures?.length ?? 0;
+      toast({
+        title: "Geokodning klar",
+        description: `${data.updated} objekt uppdaterade (${data.geocoded} geokodade)${failedCount > 0 ? `, ${failedCount} kunde inte geokodas — se panelen` : ""}`,
+      });
     } catch (err) {
       toast({ title: "Geokodning misslyckades", description: err instanceof Error ? err.message : "Okänt fel", variant: "destructive" });
     } finally {
@@ -2205,6 +2215,7 @@ export default function ObjectsPage() {
             onBackToList={() => setViewMode("list")}
             onGeocodeMissing={runMissingCoordsGeocode}
             geocodeRunning={mapGeocodeRunning}
+            geocodeFailures={mapGeocodeFailures}
           />
         </TabsContent>
       </Tabs>

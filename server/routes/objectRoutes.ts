@@ -278,6 +278,23 @@ app.post("/api/objects/batch-geocode", asyncHandler(async (req, res) => {
   const allObjects = await storage.getObjects(tenantId);
   const targets = applyBatchGeoFilters(allObjects, req.body);
 
+  // Task #1414: per-id-resultat — explicit begärda id:n som filtreras bort
+  // (saknar adress) eller inte ger träff rapporteras med orsak så klienten
+  // kan visa vad som behöver rättas manuellt.
+  const requestedIds: string[] = Array.isArray(req.body?.objectIds) ? req.body.objectIds : [];
+  const failures: Array<{ id: string; reason: "no_address" | "no_match" }> = [];
+  if (requestedIds.length > 0) {
+    const targetIds = new Set(targets.map(t => t.id));
+    const byId = new Map(allObjects.map(o => [o.id, o]));
+    for (const id of requestedIds) {
+      const obj = byId.get(id);
+      if (!obj) continue;
+      if (!targetIds.has(id) && !obj.address) {
+        failures.push({ id, reason: "no_address" });
+      }
+    }
+  }
+
   const addresses = targets.map(o => ({
     id: o.id,
     address: [o.address, o.postalCode, o.city].filter(Boolean).join(", "),
@@ -307,11 +324,19 @@ app.post("/api/objects/batch-geocode", asyncHandler(async (req, res) => {
     }
   }
 
+  // Task #1414: targets som geokodningen inte hittade träff för.
+  for (const t of targets) {
+    if (!results.has(t.id)) {
+      failures.push({ id: t.id, reason: "no_match" });
+    }
+  }
+
   res.json({
     total: addresses.length,
     geocoded: results.size,
     updated,
     updatedIds,
+    failures,
     googleAvailable: isGoogleGeocodingAvailable(),
   });
 }));
