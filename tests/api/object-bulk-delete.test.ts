@@ -2,6 +2,7 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import express from "express";
 import type { AddressInfo } from "net";
 import { registerCustomerRoutes } from "../../server/routes/customerRoutes";
+import { registerObjectLifecycleRoutes } from "../../server/routes/objectLifecycleRoutes";
 import { requireTenantWithFallback } from "../../server/tenant-middleware";
 import { errorHandler } from "../../server/middleware/errorHandler";
 import { storage } from "../../server/storage";
@@ -13,6 +14,7 @@ import {
   customers,
   objects,
   workOrders,
+  auditLogs,
 } from "@shared/schema";
 import { inArray, eq } from "drizzle-orm";
 
@@ -68,6 +70,7 @@ beforeAll(async () => {
   });
   app.use("/api", requireTenantWithFallback);
   await registerCustomerRoutes(app);
+  registerObjectLifecycleRoutes(app);
   app.use(errorHandler);
 
   await new Promise<void>((r) => {
@@ -108,6 +111,8 @@ beforeAll(async () => {
 afterAll(async () => {
   await new Promise<void>((r) => server?.close(() => r()));
   const T = [TENANT_A, TENANT_B];
+  // Arkiveringstestet skriver audit-loggar → städa dem före tenants (FK).
+  await db.delete(auditLogs).where(inArray(auditLogs.tenantId, T));
   await db.delete(workOrders).where(inArray(workOrders.tenantId, T));
   await db.delete(objects).where(inArray(objects.tenantId, T));
   await db.delete(customers).where(inArray(customers.tenantId, T));
@@ -184,6 +189,31 @@ describe("POST /api/objects/bulk-delete (Task #1428)", () => {
     // Barnet blockeras av WO → föräldern blockeras av kvarvarande underobjekt.
     expect(resultFor(body, cId)?.reason).toContain("uppgift");
     expect(resultFor(body, pId)?.reason).toContain("underobjekt");
+  });
+
+  it("arkivering av förälder blockerad av OMARKERAT aktivt barn avvisas med läsbar orsak (klienten visar den kvar i dialogen)", async () => {
+    // keptParentObj blockerades i bulk-delete (omarkerat barn keptChildObj lever).
+    // "Arkivera blockerade"-flödet POSTar /archive per objekt — här ska servern
+    // vägra (409) och preflight ge den läsbara orsaken som klienten visar.
+    const arch = await post(`/api/objects/${keptParentObj}/archive`, USER_A, { reason: "test" });
+    expect(arch.status).toBe(409);
+
+    const pfRes = await fetch(`${baseUrl}/api/objects/${keptParentObj}/archive-preflight`, {
+      headers: { "x-test-user-id": USER_A },
+    });
+    expect(pfRes.status).toBe(200);
+    const pf = await pfRes.json();
+    expect(pf.blockers.join(" ")).toContain("underobjekt");
+
+    // Föräldern är fortfarande aktiv (inte tyst halv-arkiverad).
+    const [row] = await db.select({ deletedAt: objects.deletedAt }).from(objects).where(eq(objects.id, keptParentObj));
+    expect(row.deletedAt).toBeNull();
+
+    // Efter att barnet arkiverats går föräldern att arkivera — vägen vidare finns.
+    const archChild = await post(`/api/objects/${keptChildObj}/archive`, USER_A, { reason: "test" });
+    expect(archChild.status).toBe(200);
+    const archParent = await post(`/api/objects/${keptParentObj}/archive`, USER_A, { reason: "test" });
+    expect(archParent.status).toBe(200);
   });
 
   it("validerar payload", async () => {

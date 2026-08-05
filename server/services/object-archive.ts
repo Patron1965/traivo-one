@@ -42,7 +42,7 @@ export async function archivePreflight(objectId: string, tenantId: string): Prom
 
   const [woStats] = await db.execute(sql`
     SELECT
-      COUNT(*) FILTER (WHERE status = ANY(${ACTIVE_WO_STATUSES}))::int AS active_cnt,
+      COUNT(*) FILTER (WHERE status IN (${sql.join(ACTIVE_WO_STATUSES.map((s) => sql`${s}`), sql`, `)}))::int AS active_cnt,
       COUNT(*)::int AS total_cnt
     FROM work_orders
     WHERE tenant_id = ${tenantId} AND object_id = ${objectId} AND deleted_at IS NULL

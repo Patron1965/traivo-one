@@ -2517,7 +2517,7 @@ export default function ObjectsPage() {
       </AlertDialog>
 
       {/* Task #1428: resultat av massradering — grupperade orsaker + arkivera blockerade. */}
-      <Dialog open={bulkDeleteResult !== null} onOpenChange={(open) => { if (!open && !bulkArchiveBusy) setBulkDeleteResult(null); }}>
+      <Dialog open={bulkDeleteResult !== null} onOpenChange={(open) => { if (!open && !bulkArchiveBusy) { setBulkDeleteResult(null); setBulkArchiveOutcome(null); } }}>
         <DialogContent data-testid="dialog-bulk-delete-result">
           <DialogHeader>
             <DialogTitle>Borttagning klar</DialogTitle>
@@ -2545,11 +2545,38 @@ export default function ObjectsPage() {
                 ))}
             </div>
           )}
+          {/* Misslyckade arkiveringar stannar kvar i dialogen med sina orsaker —
+              t.ex. förälder vars omarkerade underobjekt fortfarande är aktivt. */}
+          {bulkArchiveOutcome && bulkArchiveOutcome.failures.length > 0 && (
+            <div className="space-y-2 text-sm border-t pt-3" data-testid="list-bulk-archive-failures">
+              <p className="font-medium">
+                {bulkArchiveOutcome.archived} arkiverade, {bulkArchiveOutcome.failures.length} kunde inte arkiveras:
+              </p>
+              <div className="space-y-2 max-h-40 overflow-y-auto">
+                {Object.entries(
+                  bulkArchiveOutcome.failures.reduce<Record<string, number>>((acc, f) => {
+                    acc[f.reason] = (acc[f.reason] ?? 0) + 1;
+                    return acc;
+                  }, {}),
+                )
+                  .sort((a, b) => b[1] - a[1])
+                  .map(([reason, count]) => (
+                    <div key={reason} className="flex items-start gap-2">
+                      <Badge variant="secondary" className="shrink-0">{count}</Badge>
+                      <span className="text-muted-foreground">{reason}</span>
+                    </div>
+                  ))}
+              </div>
+              <p className="text-muted-foreground">
+                Åtgärda orsaken (t.ex. arkivera eller flytta aktiva underobjekt) och försök igen.
+              </p>
+            </div>
+          )}
           <DialogFooter>
-            <Button variant="outline" disabled={bulkArchiveBusy} onClick={() => setBulkDeleteResult(null)} data-testid="button-close-bulk-delete-result">
+            <Button variant="outline" disabled={bulkArchiveBusy} onClick={() => { setBulkDeleteResult(null); setBulkArchiveOutcome(null); }} data-testid="button-close-bulk-delete-result">
               Stäng
             </Button>
-            {bulkDeleteResult && bulkDeleteResult.results.some((r) => r.status === "blocked" && r.reason !== "Objektet hittades inte") && (
+            {bulkDeleteResult && bulkArchiveOutcome === null && bulkDeleteResult.results.some((r) => r.status === "blocked" && r.reason !== "Objektet hittades inte") && (
               <Button onClick={runArchiveBlocked} disabled={bulkArchiveBusy} data-testid="button-archive-blocked">
                 {bulkArchiveBusy ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Archive className="h-4 w-4 mr-2" />}
                 Arkivera blockerade
