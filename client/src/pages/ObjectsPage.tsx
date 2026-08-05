@@ -847,8 +847,14 @@ export default function ObjectsPage() {
     if (issueFilter) params.append("issue", issueFilter);
     if (locationTypeFilter !== "all") params.append("locationType", locationTypeFilter);
     if (importBatchFilter) params.append("importBatchId", importBatchFilter);
+    // Task #1397: uppgiftsfiltren måste med — annars exporterar vi ett större
+    // urval än listan (och antalet i exportmenyn) visar.
+    if (taskTypeFilter !== "all") params.append("taskType", taskTypeFilter);
+    if (taskCustomerFilter) params.append("taskCustomerId", taskCustomerFilter);
+    if (taskCompletedFrom) params.append("taskCompletedFrom", taskCompletedFrom);
+    if (taskCompletedTo) params.append("taskCompletedTo", taskCompletedTo);
     return params;
-  }, [debouncedSearch, customerFilter, activeConditions, reportedFilter, interimFilter, issueFilter, locationTypeFilter, importBatchFilter]);
+  }, [debouncedSearch, customerFilter, activeConditions, reportedFilter, interimFilter, issueFilter, locationTypeFilter, importBatchFilter, taskTypeFilter, taskCustomerFilter, taskCompletedFrom, taskCompletedTo]);
 
   const downloadCSV = (filename: string, rows: (string | number)[][]) => {
     const csv = rows.map(row => row.map(sanitizeCSVCell).join(",")).join("\n");
@@ -861,14 +867,26 @@ export default function ObjectsPage() {
     URL.revokeObjectURL(url);
   };
 
-  // Hämtar samtliga objekt (enligt aktiva filter) för exporterna. Återanvänds av
-  // alla tre exportfilerna nedan.
+  // Hämtar objekten som ska exporteras. Återanvänds av alla exportfilerna nedan.
+  // Task #1397: grundprincip — finns markerade objekt exporteras ENDAST de
+  // markerade; annars hela det aktiva filterurvalet. Vi hämtar via samma
+  // filtrerade endpoint (behåller displayName/släktnamns-berikningen) och
+  // begränsar därefter till markeringen.
   const fetchAllObjectsForExport = async (): Promise<ServiceObject[]> => {
-    const params = buildObjectFilterParams(100000, 0);
+    // Med markering: hämta OFILTRERAT och begränsa till markeringen, så att
+    // exporten omfattar exakt de markerade objekten även om filtren ändrats
+    // efter att markeringen gjordes.
+    const params = selectedIds.size > 0
+      ? new URLSearchParams({ limit: "100000", offset: "0" })
+      : buildObjectFilterParams(100000, 0);
     const res = await fetch(`/api/objects?${params.toString()}`, { credentials: "include" });
     if (!res.ok) throw new Error("Kunde inte hämta objekt");
     const data: { objects: ServiceObject[] } = await res.json();
-    return data.objects ?? [];
+    const all = data.objects ?? [];
+    if (selectedIds.size > 0) {
+      return all.filter(o => selectedIds.has(o.id));
+    }
+    return all;
   };
 
   // Släktnamn = det hierarkiska visningsnamnet (t.ex. "Stockholm › BRF › Hus A").
@@ -1641,6 +1659,12 @@ export default function ObjectsPage() {
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-80">
+            {/* Task #1397: tydliggör exportens omfattning innan man väljer format. */}
+            <div className="px-2 py-1.5 text-xs text-muted-foreground border-b mb-1" data-testid="text-export-scope">
+              {selectedIds.size > 0
+                ? `Exporterar ${selectedIds.size} markerade objekt`
+                : `Exporterar hela urvalet (${totalObjects.toLocaleString("sv-SE")} objekt)`}
+            </div>
             <DropdownMenuItem onClick={exportTwoFiles} data-testid="menu-export-two-files">
               <FileSpreadsheet className="h-4 w-4 mr-2 mt-0.5 shrink-0" />
               <div className="flex flex-col">
