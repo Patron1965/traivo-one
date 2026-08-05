@@ -2498,7 +2498,10 @@ export class DatabaseStorage implements IStorage {
     const objectsList = await db.select(objectColumnsWithPrimaryCustomer())
       .from(objects)
       .where(whereConditions)
-      .orderBy(objects.name)
+      // Task #1412: sekundär id-sortering gör ordningen deterministisk även vid
+      // namn-dubbletter — krävs för stabil sid-vis genomströmning (villkorsfiltret
+      // batchar sig igenom bas-resultatet sida för sida).
+      .orderBy(objects.name, objects.id)
       .limit(limit)
       .offset(offset);
     

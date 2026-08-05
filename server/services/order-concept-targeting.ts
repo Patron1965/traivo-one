@@ -82,7 +82,21 @@ export async function buildObjectMetadataMap(
   tenantId: string,
   objectIds: string[],
 ): Promise<Map<string, Record<string, unknown>>> {
-  return getObjectsConditionMetadata(tenantId, objectIds);
+  // Task #1412: chunk:a stora id-listor så att den rekursiva arv-CTE:n i
+  // getObjectsConditionMetadata aldrig körs över tiotusentals objekt i EN
+  // fråga (minnes-/plannerexplosion). Semantiken är per-objekt och påverkas
+  // inte av chunkningen — kartorna slås bara ihop.
+  const CHUNK_SIZE = 500;
+  if (objectIds.length <= CHUNK_SIZE) {
+    return getObjectsConditionMetadata(tenantId, objectIds);
+  }
+  const merged = new Map<string, Record<string, unknown>>();
+  for (let i = 0; i < objectIds.length; i += CHUNK_SIZE) {
+    const chunk = objectIds.slice(i, i + CHUNK_SIZE);
+    const part = await getObjectsConditionMetadata(tenantId, chunk);
+    for (const [id, rec] of Array.from(part.entries())) merged.set(id, rec);
+  }
+  return merged;
 }
 
 /**

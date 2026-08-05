@@ -572,14 +572,27 @@ app.get("/api/objects", asyncHandler(async (req, res) => {
     const filters = hasFilters ? { objectType, hierarchyLevel, isInterimObject: interim === "true" ? true : interim === "false" ? false : undefined, issue, reported: reported || undefined, locationType, importBatchId } : undefined;
 
     if (hasConditions) {
-      // Villkorsfilter: hämta alla bas-filtrerade objekt, kör den DELADE
-      // matchningen (samma som orderkoncept-preview) och paginera i minnet.
-      const base = await storage.getObjectsPaginated(tenantId, 1_000_000, 0, search, customerIds, filters);
+      // Villkorsfilter (Task #1412): strömma bas-filtrerade objekt sida för sida
+      // (stabil ordning: name, id) och kör den DELADE matchningen
+      // (filterObjectsByConditions — samma som orderkoncept-preview) per batch.
+      // Semantiken är per-objekt så batchningen kan inte divergera från den
+      // delade matchningen; totalen räknas över hela genomströmningen medan
+      // bara den efterfrågade sidan behålls i minnet.
       const { filterObjectsByConditions } = await import("../services/order-concept-targeting");
-      const matched = await filterObjectsByConditions(tenantId, base.objects as any, conditions);
-      const total = matched.length;
-      const page = matched.slice(offset, offset + limit);
-      const enriched = await enrichWithDisplayName(page as unknown as Array<Record<string, unknown>>);
+      const BATCH_SIZE = 1000;
+      const page: unknown[] = [];
+      let total = 0;
+      for (let batchOffset = 0; ; batchOffset += BATCH_SIZE) {
+        const batch = await storage.getObjectsPaginated(tenantId, BATCH_SIZE, batchOffset, search, customerIds, filters);
+        if (batch.objects.length === 0) break;
+        const matched = await filterObjectsByConditions(tenantId, batch.objects as any, conditions);
+        for (const obj of matched) {
+          if (total >= offset && page.length < limit) page.push(obj);
+          total++;
+        }
+        if (batch.objects.length < BATCH_SIZE) break;
+      }
+      const enriched = await enrichWithDisplayName(page as Array<Record<string, unknown>>);
       res.json({ objects: enriched, total });
       return;
     }
