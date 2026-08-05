@@ -1,7 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { Cpu, Loader2 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Link } from "wouter";
 
 // Task #1370 (krav 12): Systeminformation — separat read-only sektion längst
 // ned på objektsidan, åtskild från redigerbar metadata. Visar ENBART fält som
@@ -86,17 +85,8 @@ export function ObjectSystemInfoSection({ objectId }: { objectId: string }) {
             <Row label="Arkiverad" value={formatDate(info.archivedAt)} testId="text-sysinfo-archived" />
             <Row label="Källsystem" value={info.sourceSystem} testId="text-sysinfo-source" />
             <Row label="Importbatch" value={info.importBatchId} testId="text-sysinfo-importbatch" />
-            <Row
-              label="Förälder"
-              value={
-                info.parentId ? (
-                  <Link href={`/objects/${info.parentId}`} className="text-primary hover:underline">
-                    {info.parentName || "Överordnat objekt"}
-                  </Link>
-                ) : null
-              }
-              testId="text-sysinfo-parent"
-            />
+            {/* Task #1418: "Förälder"-raden borttagen — överordnat objekt framgår
+                redan av släktnamnet (klickbart per led) högre upp på sidan. */}
             <Row label="Antal underordnade objekt" value={String(info.childCount)} testId="text-sysinfo-children" />
             <Row
               label="Hierarkidjup"

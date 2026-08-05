@@ -1438,24 +1438,9 @@ export default function ObjectsPage() {
               )}
               {/* Task #1399: kund visas inte längre per objekt — kund hör hemma
                   på uppgiftsnivå (payer-relationen finns kvar i backend). */}
-              {/* Task #859: förälder/barn-relation. Barn på samma sida ligger redan
-                  indenterat under föräldern; toppnivå-rader som ändå har en förälder
-                  får en explicit "under {förälder}"-indikator. */}
-              {level === 0 && obj.parentId && (
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <span
-                      className="flex items-center gap-1 cursor-pointer text-foreground/70 hover:text-foreground hover:underline"
-                      onClick={(e) => { e.stopPropagation(); navigate(`/objects/${obj.parentId}`); }}
-                      data-testid={`link-parent-${obj.id}`}
-                    >
-                      <GitFork className="h-3 w-3" />
-                      Under {objectNameById.get(obj.parentId) ?? "överordnat objekt"}
-                    </span>
-                  </TooltipTrigger>
-                  <TooltipContent>Överordnat objekt — klicka för att öppna</TooltipContent>
-                </Tooltip>
-              )}
+              {/* Task #1418: separat "Under {förälder}"-snabblänk borttagen —
+                  informationen framgår redan av släktnamnet i radrubriken
+                  (klickbart per led via nätverks-ikonen). */}
               {hasChildren && (
                 <span className="flex items-center gap-1 text-muted-foreground" data-testid={`text-childcount-${obj.id}`}>
                   <Network className="h-3 w-3" />

@@ -32,7 +32,7 @@ import {
   Calendar, Loader2, ChevronRight, Wrench,
   Box, Layers, Plus,
   Trash2, Pencil, Save, X, Phone, Mail, LinkIcon, Search, History as HistoryIcon,
-  ArrowUp, ArrowDown, RotateCcw, Cog, Copy, Gauge, Zap
+  ArrowUp, ArrowDown, RotateCcw, Cog, Copy, Gauge, Zap, Network
 } from "lucide-react";
 import { ObjectMetadataBody } from "@/components/objects/ObjectMetadataBody";
 import { ObjectDomainGrid } from "@/components/objects/ObjectDomainGrid";
@@ -1078,6 +1078,23 @@ export default function ObjectDetailPage() {
             )}
           </h1>
           <div className="flex items-center gap-2 mt-2 flex-wrap">
+            {/* Task #1418: kompakt barn-indikation i sidhuvudet — nedåt-relationen
+                framgår inte av släktnamnet; klick scrollar till hierarkisektionen. */}
+            {(() => {
+              const directChildren = descendants.filter((d) => d.parentId === objectId).length;
+              return directChildren > 0 ? (
+                <button
+                  type="button"
+                  className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground hover:underline"
+                  onClick={() => scrollToSection("hierarchy")}
+                  title="Visa underordnade objekt i hierarkin"
+                  data-testid="button-header-child-count"
+                >
+                  <Network className="h-3 w-3" />
+                  {directChildren} underordnade
+                </button>
+              ) : null;
+            })()}
             {/* Task #1158: arkivering (soft-delete via deletedAt) är read-only i
                 huvudet — objektets driftstatus (active/inactive/pending) redigeras
                 separat via väljaren nedan (befintlig PATCH /api/objects/:id). */}
@@ -1504,11 +1521,29 @@ export default function ObjectDetailPage() {
                 </div>
                 <div className="space-y-2">
                   <Label>Släktnamn</Label>
+                  {/* Task #1418: släktnamnet klickbart per led även här. */}
                   <div
-                    className="rounded-md border bg-muted px-3 py-2 text-sm text-muted-foreground break-words"
+                    className="rounded-md border bg-muted px-3 py-2 text-sm text-muted-foreground break-words flex flex-wrap items-center gap-1"
                     data-testid="text-slaktnamn"
                   >
-                    {slaktnamn || "—"}
+                    {slaktnamnChain.length === 0 && "—"}
+                    {slaktnamnChain.map((c, i) => (
+                      <span key={c.id} className="flex items-center gap-1">
+                        {i > 0 && <ChevronRight className="h-3 w-3 shrink-0" />}
+                        {c.id === objectId ? (
+                          <span className="font-medium text-foreground">{c.name}</span>
+                        ) : (
+                          <button
+                            type="button"
+                            className="text-primary hover:underline"
+                            onClick={() => { setEditDialogOpen(false); navigate(`/objects/${c.id}`); }}
+                            data-testid={`link-edit-slaktnamn-${c.id}`}
+                          >
+                            {c.name}
+                          </button>
+                        )}
+                      </span>
+                    ))}
                   </div>
                   <p className="text-xs text-muted-foreground">
                     Hela hierarkin (rot → detta objekt). Uppdateras automatiskt vid flytt.

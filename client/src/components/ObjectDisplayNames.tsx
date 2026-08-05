@@ -63,16 +63,24 @@ function languageLabel(code: string): string {
   return LANGUAGE_LABELS[code] ?? code.toUpperCase();
 }
 
+// Task #1418: varje förälder-led i släktnamnet är en egen länk; sista ledet
+// (objektet självt) visas fetstilt utan länk.
 function PathBreadcrumb({ path }: { path: { id: string; name: string; level: string }[] }) {
   return (
     <div className="flex flex-wrap items-center gap-1" data-testid="display-name-path">
       {path.map((node, idx) => (
         <span key={node.id} className="flex items-center gap-1">
-          <span
-            className={`text-xs ${idx === path.length - 1 ? "font-medium text-foreground" : "text-muted-foreground"}`}
-          >
-            {node.name || "—"}
-          </span>
+          {idx === path.length - 1 ? (
+            <span className="text-xs font-medium text-foreground">{node.name || "—"}</span>
+          ) : (
+            <Link
+              href={`/objects/${node.id}`}
+              className="text-xs text-muted-foreground hover:text-foreground hover:underline"
+              data-testid={`link-path-segment-${node.id}`}
+            >
+              {node.name || "—"}
+            </Link>
+          )}
           {idx < path.length - 1 && <ChevronRight className="h-3 w-3 text-muted-foreground/60" />}
         </span>
       ))}
