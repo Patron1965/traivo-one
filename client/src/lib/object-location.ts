@@ -33,6 +33,21 @@ function usable(lat: unknown, lng: unknown): boolean {
   );
 }
 
+/**
+ * Task #1401: effektiv kartposition för visning — egna koordinater vinner,
+ * annars entrékoordinater (speglar serverns platsmodell där entré = pinpoint
+ * OCH ruttbar fallback). Returnerar null när ingen användbar punkt finns.
+ */
+export function effectiveObjectPosition(obj: LocatableLike): [number, number] | null {
+  if (usable(obj.latitude, obj.longitude)) {
+    return [obj.latitude as number, obj.longitude as number];
+  }
+  if (usable(obj.entranceLatitude, obj.entranceLongitude)) {
+    return [obj.entranceLatitude as number, obj.entranceLongitude as number];
+  }
+  return null;
+}
+
 /** Effektiv platstyp: explicit kolumnvärde vinner, annars härleds från geografi. */
 export function effectiveObjectLocationType(obj: LocatableLike): ObjectLocationType {
   if (obj.locationType && (OBJECT_LOCATION_TYPES as readonly string[]).includes(obj.locationType)) {

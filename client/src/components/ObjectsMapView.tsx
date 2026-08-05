@@ -1,8 +1,8 @@
-import { Fragment, memo, useMemo, type ReactNode } from "react";
+import { Fragment, memo, useMemo, useState, type ReactNode } from "react";
 import { Marker, Popup, Polygon, Polyline, useMap } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
-import { DoorOpen } from "lucide-react";
+import { DoorOpen, MapPinOff, ChevronDown, ChevronUp, List } from "lucide-react";
 import type { ServiceObject } from "@shared/schema";
 import { BaseMap } from "@/components/ui/map";
 
@@ -235,19 +235,87 @@ function PolylineLabels({ objects }: { objects: ServiceObject[] }) {
   );
 }
 
+// Task #1401: kartfliken tar emot effektiva positioner (egna ELLER entré-
+// koordinater, beräknade i ObjectsPage via effectiveObjectPosition) samt en
+// synlig lista över objekt som saknar koordinater — de försvinner inte tyst.
+export interface MapObjectEntry {
+  obj: ServiceObject;
+  position: [number, number];
+}
+
 export const ObjectsMapTab = memo(function ObjectsMapTab({ 
   objectsWithCoords, 
   mapPositions, 
   defaultCenter,
   selectedObjectIds,
+  missingCoordObjects = [],
+  onOpenObject,
+  onBackToList,
 }: { 
-  objectsWithCoords: ServiceObject[];
+  objectsWithCoords: MapObjectEntry[];
   mapPositions: [number, number][];
   defaultCenter: [number, number];
   selectedObjectIds?: Set<string>;
+  missingCoordObjects?: ServiceObject[];
+  onOpenObject?: (id: string) => void;
+  onBackToList?: () => void;
 }) {
+  const [missingOpen, setMissingOpen] = useState(false);
+  const totalInSelection = objectsWithCoords.length + missingCoordObjects.length;
   return (
     <div className="overflow-hidden rounded-md border bg-card">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b px-3 py-2">
+        <div className="flex items-center gap-3 text-sm">
+          <span data-testid="text-map-shown-count">
+            <span className="font-medium">{objectsWithCoords.length}</span> av {totalInSelection} objekt på kartan
+          </span>
+          {missingCoordObjects.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setMissingOpen(v => !v)}
+              className="inline-flex items-center gap-1 rounded-md border border-amber-300 bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-800 hover:bg-amber-100 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-300"
+              data-testid="button-toggle-missing-coords"
+            >
+              <MapPinOff className="h-3.5 w-3.5" />
+              {missingCoordObjects.length} saknar koordinater
+              {missingOpen ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+            </button>
+          )}
+        </div>
+        {onBackToList && (
+          <button
+            type="button"
+            onClick={onBackToList}
+            className="inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs font-medium hover:bg-muted"
+            data-testid="button-map-back-to-list"
+          >
+            <List className="h-3.5 w-3.5" />
+            Tillbaka till listan
+          </button>
+        )}
+      </div>
+      {missingOpen && missingCoordObjects.length > 0 && (
+        <div className="max-h-40 overflow-y-auto border-b bg-muted/40 px-3 py-2" data-testid="panel-missing-coords">
+          <div className="mb-1 text-xs text-muted-foreground">
+            Dessa objekt har varken egna koordinater eller entrékoordinater och kan därför inte visas på kartan:
+          </div>
+          <ul className="space-y-0.5">
+            {missingCoordObjects.map(o => (
+              <li key={o.id} className="text-sm">
+                <button
+                  type="button"
+                  className="text-left hover:underline"
+                  onClick={() => onOpenObject?.(o.id)}
+                  data-testid={`link-missing-coords-${o.id}`}
+                >
+                  {o.name}
+                </button>
+                {o.address && <span className="ml-2 text-xs text-muted-foreground">{o.address}{o.city ? `, ${o.city}` : ""}</span>}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
       <div className="h-[500px]">
         <div className="p-0 h-full relative">
           <BaseMap
@@ -256,10 +324,10 @@ export const ObjectsMapTab = memo(function ObjectsMapTab({
           >
             {mapPositions.length > 0 && <MapFitBounds positions={mapPositions} />}
 
-            {objectsWithCoords.map(obj => (
+            {objectsWithCoords.map(({ obj, position }) => (
               <Fragment key={obj.id}>
                 <Marker
-                  position={[obj.latitude!, obj.longitude!]}
+                  position={position}
                   icon={selectedObjectIds?.has(obj.id) ? createHighlightedIcon() : createObjectIcon()}
                 >
                   <Popup>
@@ -267,8 +335,13 @@ export const ObjectsMapTab = memo(function ObjectsMapTab({
                       <div className="font-medium">{obj.name}</div>
                       <div className="text-sm text-gray-600">{obj.address}, {obj.city}</div>
                       <div className="text-sm mt-1">
-                        <span className="font-medium">Typ:</span> {objectTypeLabels[obj.objectType]}
+                        <span className="font-medium">Typ:</span> {objectTypeLabels[obj.objectType] ?? obj.objectType}
                       </div>
+                      {!(obj.latitude && obj.longitude) && (
+                        <div className="text-chart-2 text-xs mt-1 flex items-center gap-1">
+                          <DoorOpen className="h-3 w-3" /> Visar entrékoordinater
+                        </div>
+                      )}
                     </div>
                   </Popup>
                 </Marker>
@@ -291,10 +364,10 @@ export const ObjectsMapTab = memo(function ObjectsMapTab({
               </Fragment>
             ))}
 
-            <PolylineLabels objects={objectsWithCoords} />
+            <PolylineLabels objects={objectsWithCoords.map(e => e.obj)} />
 
           </BaseMap>
-          {objectsWithCoords.some(o => o.polylineData) && (
+          {objectsWithCoords.some(e => e.obj.polylineData) && (
             <div className="absolute bottom-4 right-4 bg-background/90 backdrop-blur-sm rounded-md shadow-md p-3 space-y-1.5 z-[1000]">
               <div className="flex items-center gap-2 text-xs">
                 <span className="w-3 h-1.5 rounded-sm" style={{ backgroundColor: "#4A9B9B" }}></span>

@@ -49,7 +49,7 @@ import { ObjectDisplayNames } from "@/components/ObjectDisplayNames";
 import { ObjectInheritedMetadataPanel } from "@/components/ObjectInheritedMetadataPanel";
 import { ObjectSystemGeneratedPanel } from "@/components/ObjectSystemGeneratedPanel";
 import { useLocalizedObjectName } from "@/lib/object-name";
-import { OBJECT_LOCATION_TYPE_LABELS } from "@/lib/object-location";
+import { OBJECT_LOCATION_TYPE_LABELS, effectiveObjectPosition } from "@/lib/object-location";
 import { AddressSearch } from "@/components/AddressSearch";
 import { CustomerCombobox, CustomerMultiCombobox, useCustomerLookup } from "@/components/CustomerCombobox";
 import { GeocodedObjectsMap, ObjectsMapTab } from "@/components/ObjectsMapView";
@@ -149,7 +149,19 @@ export default function ObjectsPage() {
     return c ? [c] : [];
   });
   const [expandedAreas, setExpandedAreas] = useState<Set<string>>(new Set());
-  const [viewMode, setViewMode] = useState<"list" | "map" | "tree">("list");
+  // Task #1401: vyläget (lista/träd/karta) speglas i URL:en (?view=) så att
+  // man kan djuplänka, ladda om och backa utan att fastna i kartvyn.
+  const [viewMode, setViewModeRaw] = useState<"list" | "map" | "tree">(() => {
+    const v = new URLSearchParams(window.location.search).get("view");
+    return v === "map" || v === "tree" ? v : "list";
+  });
+  const setViewMode = useCallback((v: "list" | "map" | "tree") => {
+    setViewModeRaw(v);
+    const params = new URLSearchParams(window.location.search);
+    if (v === "list") params.delete("view"); else params.set("view", v);
+    const qs = params.toString();
+    window.history.replaceState({}, "", window.location.pathname + (qs ? `?${qs}` : ""));
+  }, []);
   const [copyDialogOpen, setCopyDialogOpen] = useState(false);
   const [objectToCopy, setObjectToCopy] = useState<ServiceObject | null>(null);
   const [copyName, setCopyName] = useState("");
@@ -802,16 +814,31 @@ export default function ObjectsPage() {
     setTaskCompletedFrom("");
     setTaskCompletedTo("");
     setImportBatchFilterRaw(null);
-    window.history.replaceState({}, "", window.location.pathname);
+    // Task #1401: bevara vyläget (?view=) när filtren rensas.
+    const viewParam = new URLSearchParams(window.location.search).get("view");
+    window.history.replaceState({}, "", window.location.pathname + (viewParam ? `?view=${viewParam}` : ""));
   };
 
-  const objectsWithCoords = useMemo(() => {
-    const base = selectedIds.size > 0
+  // Task #1401: kartan läser effektiv position (egna koordinater ELLER
+  // entrékoordinater — speglar serverns platsmodell) istället för att tyst
+  // tappa objekt som bara har entré-punkt. Objekt utan någon punkt samlas i
+  // en synlig "saknar koordinater"-lista i kartfliken.
+  const mapBaseObjects = useMemo(() => (
+    selectedIds.size > 0
       ? filteredObjects.filter(o => selectedIds.has(o.id))
-      : filteredObjects;
-    return base.filter(o => o.latitude && o.longitude);
-  }, [filteredObjects, selectedIds]);
-  const mapPositions = useMemo<[number, number][]>(() => objectsWithCoords.map(o => [o.latitude!, o.longitude!]), [objectsWithCoords]);
+      : filteredObjects
+  ), [filteredObjects, selectedIds]);
+  const objectsWithCoords = useMemo(
+    () => mapBaseObjects
+      .map(o => ({ obj: o, position: effectiveObjectPosition(o) }))
+      .filter((e): e is { obj: ServiceObject; position: [number, number] } => e.position !== null),
+    [mapBaseObjects],
+  );
+  const objectsMissingCoords = useMemo(
+    () => mapBaseObjects.filter(o => effectiveObjectPosition(o) === null),
+    [mapBaseObjects],
+  );
+  const mapPositions = useMemo<[number, number][]>(() => objectsWithCoords.map(e => e.position), [objectsWithCoords]);
 
   const handleCopyObject = useCallback((obj: ServiceObject) => {
     setObjectToCopy(obj);
@@ -2230,6 +2257,9 @@ export default function ObjectsPage() {
             mapPositions={mapPositions}
             defaultCenter={defaultCenter}
             selectedObjectIds={selectedIds}
+            missingCoordObjects={objectsMissingCoords}
+            onOpenObject={(id) => navigate(`/objects/${id}`)}
+            onBackToList={() => setViewMode("list")}
           />
         </TabsContent>
       </Tabs>
