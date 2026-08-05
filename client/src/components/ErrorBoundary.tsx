@@ -25,7 +25,12 @@ function isStaleAssetError(message: string | undefined | null): boolean {
     /error loading dynamically imported module/i.test(message) ||
     /Importing a module script failed/i.test(message) ||
     /ChunkLoadError/i.test(message) ||
-    /Loading chunk \d+ failed/i.test(message)
+    /Loading chunk \d+ failed/i.test(message) ||
+    // Servern (eller en gammal SW-cache) svarade med HTML för en JS-modul —
+    // klassiskt stale-chunk-symptom efter ny deploy (Task #1394).
+    /is not a valid JavaScript MIME type/i.test(message) ||
+    /Expected a JavaScript.* module script/i.test(message) ||
+    /disallowed MIME type/i.test(message)
   );
 }
 

@@ -34,6 +34,12 @@ export async function setupVite(server: Server, app: Express) {
   app.use("*", async (req, res, next) => {
     const url = req.originalUrl;
 
+    // Task #1394: begäran om byggda assets som inte finns får inte falla
+    // tillbaka till index.html (HTML som svar på JS-modul → MIME-fel).
+    if (url.split("?")[0].startsWith("/assets/")) {
+      return res.status(404).type("text/plain").end("Not found");
+    }
+
     try {
       const clientTemplate = path.resolve(
         import.meta.dirname,

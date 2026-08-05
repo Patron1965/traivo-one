@@ -2,8 +2,8 @@
 // Vid bump tömmer `activate`-handlern alla gamla cachar och nya SW tar över via
 // skipWaiting + clients.claim — annars sitter användarna kvar med gammal HTML,
 // gammalt JS-bundle och gamla cachade API-svar tills de manuellt rensar storage.
-const CACHE_NAME = 'unicorn-field-v12';
-const API_CACHE_NAME = 'unicorn-api-v4';
+const CACHE_NAME = 'unicorn-field-v13';
+const API_CACHE_NAME = 'unicorn-api-v5';
 
 // Routes som ALDRIG ska gå genom SW-cache eller offline-fallback — tenant-
 // branding, terminologi och övriga konfigurationsendpoints måste alltid hämtas
@@ -155,8 +155,16 @@ self.addEventListener('fetch', (event) => {
       return fetch(event.request)
         .then((response) => {
           if (response.ok && url.pathname !== '/') {
-            const clone = response.clone();
-            caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
+            // Task #1394: cacha aldrig HTML under en asset-nyckel — om servern
+            // (fel-)svarar med index.html för /assets/*.js skulle vi annars
+            // servera HTML för JS-moduler för evigt → MIME-fel.
+            const contentType = (response.headers.get('content-type') || '').toLowerCase();
+            const isAssetPath = url.pathname.startsWith('/assets/');
+            const isHtml = contentType.includes('text/html');
+            if (!(isAssetPath && isHtml)) {
+              const clone = response.clone();
+              caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
+            }
           }
           return response;
         })

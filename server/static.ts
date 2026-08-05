@@ -33,6 +33,19 @@ export function serveStatic(app: Express) {
     }),
   );
 
+  // Task #1394: saknade byggda assets (t.ex. en gammal hash-chunk efter ny
+  // deploy) får ALDRIG SPA-fallbacka till index.html — då får webbläsaren HTML
+  // för en JS-modulbegäran → "'text/html' is not a valid JavaScript MIME type".
+  // 404 låter klientens stale-chunk-detektor ladda om sidan istället.
+  app.use("*", (req, res, next) => {
+    const pathname = (req.originalUrl || "").split("?")[0];
+    if (pathname.startsWith("/assets/")) {
+      res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+      return res.status(404).type("text/plain").send("Not found");
+    }
+    next();
+  });
+
   // SPA fallback: serve index.html for unknown routes, never cached so a fresh
   // deploy is reflected on the next navigation.
   app.use("*", (_req, res) => {
