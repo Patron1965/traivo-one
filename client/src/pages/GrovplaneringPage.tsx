@@ -65,6 +65,7 @@ import {
   createDefaultFilter,
   type FilterState,
 } from "@/components/grovplanering/RoughFilterPanel";
+import type { ConditionFilter } from "@/components/orderkoncept/shared/ConditionFilter";
 import { RoughGridTable } from "@/components/grovplanering/RoughGridTable";
 import type { TaskClusters } from "@/components/grovplanering/RoughGridTable";
 import { HierarchyTable } from "@/components/grovplanering/HierarchyTable";
@@ -104,6 +105,8 @@ interface AppliedFilter {
   taskTypes: string[];
   statuses: RoughStatus[];
   executionCodes: string[];
+  // Task #1410: objekturval via metadatavillkor (delade motorn med objektlistan).
+  conditions: ConditionFilter[];
 }
 
 const EMPTY_APPLIED: AppliedFilter = {
@@ -114,6 +117,7 @@ const EMPTY_APPLIED: AppliedFilter = {
   taskTypes: [],
   statuses: [],
   executionCodes: [],
+  conditions: [],
 };
 
 const EMPTY_KPIS: GridKpis = {
@@ -183,6 +187,10 @@ function buildFilterParams(applied: AppliedFilter, groupBy: GroupBy): URLSearchP
   if (applied.statuses.length) p.set("statuses", applied.statuses.join(","));
   if (applied.executionCodes.length)
     p.set("executionCodes", applied.executionCodes.join(","));
+  // Task #1410: metadatavillkoren skickas server-side (samma ?conditions=-format
+  // som objektlistan) och matchas där via den delade villkorsmotorn.
+  if (applied.conditions.length)
+    p.set("conditions", JSON.stringify(applied.conditions));
   return p;
 }
 
@@ -234,6 +242,8 @@ function deriveApplied(draft: FilterState): AppliedFilter {
     taskTypes: draft.taskTypes,
     statuses: draft.statuses,
     executionCodes: draft.executionCodes,
+    // Endast kompletta villkor (valt fält) skickas till servern.
+    conditions: draft.conditions.filter((c) => c.metadataKey),
   };
 }
 

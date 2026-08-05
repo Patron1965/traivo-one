@@ -60,6 +60,10 @@ export interface GridFilters {
   teamIds?: string[]; // "Fler filter" — filtrera på tilldelat team
   executionCodes?: string[]; // Task #1110 — filtrera på utförandekod (work_orders.execution_code)
   rootObjectId?: string; // Mikro-grovplanering: begränsa till ett objekt + dess ättlingar (subträd)
+  // Task #1410: objekturval via metadatavillkor (delade motorn filterObjectsByConditions
+  // i weeklyPlanRoutes resolvar villkoren → matchande objekt-id:n). undefined = inget
+  // villkorsfilter; tom lista = inga objekt matchade (⇒ inga rader).
+  objectIds?: string[];
 }
 
 export interface GridKpis {
@@ -271,6 +275,15 @@ function buildConditions(tenantId: string, filters: GridFilters): SQL[] {
           AND (o2.id = ${root} OR ${root} = ANY(o2.hierarchy_path))
       )`,
     );
+  }
+  // Task #1410: metadatavillkorens objekturval (upplöst i routen via den delade
+  // villkorsmotorn). Tom lista = inga matchande objekt ⇒ inga rader.
+  if (filters.objectIds) {
+    if (filters.objectIds.length === 0) {
+      conditions.push(sql`FALSE`);
+    } else {
+      conditions.push(inArray(workOrders.objectId, filters.objectIds));
+    }
   }
   if (filters.postalCode) {
     const norm = filters.postalCode.replace(/\s/g, "");

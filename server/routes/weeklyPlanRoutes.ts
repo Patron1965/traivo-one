@@ -282,6 +282,43 @@ export function registerWeeklyPlanRoutes(app: Express) {
     return { groupBy: parsed.data.groupBy as GroupBy, filters };
   }
 
+  // Task #1410: metadatavillkor för objekturvalet (samma format som objektlistans
+  // ?conditions=, se customerRoutes) — resolvas till matchande objekt-id:n via den
+  // DELADE villkorsmotorn (filterObjectsByConditions/matchesFilter) så att Navet
+  // och objektlistan aldrig driver isär. Ogiltig param ignoreras (samma policy).
+  async function resolveConditionObjectIds(
+    tenantId: string,
+    query: Record<string, unknown>,
+  ): Promise<string[] | undefined> {
+    const raw = typeof query.conditions === "string" ? query.conditions : undefined;
+    if (!raw) return undefined;
+    let conditions: { metadataKey: string; operator: string; filterValue: unknown }[] = [];
+    try {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        conditions = parsed
+          .filter((c: any) => c && typeof c.metadataKey === "string" && c.metadataKey.trim() && typeof c.operator === "string")
+          .map((c: any) => ({ metadataKey: c.metadataKey, operator: c.operator, filterValue: c.filterValue }));
+      }
+    } catch { /* ogiltig conditions-param ignoreras */ }
+    if (conditions.length === 0) return undefined;
+    const { filterObjectsByConditions } = await import("../services/order-concept-targeting");
+    const allObjects = await storage.getObjects(tenantId);
+    const matched = await filterObjectsByConditions(tenantId, allObjects, conditions);
+    return matched.map((o) => o.id);
+  }
+
+  // Delad async-variant: grid-filter + ev. villkorsbaserat objekturval.
+  async function parseGridQueryWithConditions(
+    tenantId: string,
+    query: Record<string, unknown>,
+  ): Promise<{ groupBy: GroupBy; filters: GridFilters }> {
+    const { groupBy, filters } = parseGridQuery(query);
+    const objectIds = await resolveConditionObjectIds(tenantId, query);
+    if (objectIds) filters.objectIds = objectIds;
+    return { groupBy, filters };
+  }
+
   app.get("/api/rough-planning/grid", ...guard, asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const pageParsed = gridPageSchema.safeParse({
@@ -292,7 +329,7 @@ export function registerWeeklyPlanRoutes(app: Express) {
       const formatted = formatZodError(pageParsed.error);
       throw new ValidationError(formatted.error, formatted.details);
     }
-    const { groupBy, filters } = parseGridQuery(req.query);
+    const { groupBy, filters } = await parseGridQueryWithConditions(tenantId, req.query);
     const result = await getGrovplaneringGrid(
       tenantId,
       filters,
@@ -308,7 +345,7 @@ export function registerWeeklyPlanRoutes(app: Express) {
   // scoping som rutnätet, så att det exporterade speglar det som visas.
   app.get("/api/rough-planning/export", ...guard, asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
-    const { groupBy, filters } = parseGridQuery(req.query);
+    const { groupBy, filters } = await parseGridQueryWithConditions(tenantId, req.query);
     const columns = sanitizeGrovExportColumns(csv(req.query.columns));
     const { buffer } = await buildGrovplaneringExport(tenantId, filters, groupBy, columns);
     const datestamp = new Date().toISOString().slice(0, 10);
@@ -330,7 +367,7 @@ export function registerWeeklyPlanRoutes(app: Express) {
 
   app.get("/api/rough-planning/export-csv", ...guard, asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
-    const { filters } = parseGridQuery(req.query);
+    const { filters } = await parseGridQueryWithConditions(tenantId, req.query);
 
     const woParsed = csvWorkOrderIdsSchema.safeParse({ workOrderIds: req.query.workOrderIds });
     const workOrderIds = (woParsed.success && woParsed.data.workOrderIds)
@@ -371,7 +408,7 @@ export function registerWeeklyPlanRoutes(app: Express) {
       const formatted = formatZodError(keyParsed.error);
       throw new ValidationError(formatted.error, formatted.details);
     }
-    const { groupBy, filters } = parseGridQuery(req.query);
+    const { groupBy, filters } = await parseGridQueryWithConditions(tenantId, req.query);
     const result = await getGrovplaneringGroupRows(
       tenantId,
       filters,

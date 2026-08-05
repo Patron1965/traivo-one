@@ -29,6 +29,14 @@ export interface ConditionField {
 
 export const METADATA_NONE = "__none__";
 
+// Task #1400/#1410: objekturvalets begränsade operatoruppsättning ("är lika
+// med"/"skiljer sig från") — delas av objektlistans fördjupade filter och
+// Navets objekturval så etiketter/semantik aldrig driver isär.
+export const OBJECT_CONDITION_OPERATORS: { value: string; label: string; noValue?: boolean }[] = [
+  { value: "equals", label: "är lika med" },
+  { value: "not_equals", label: "skiljer sig från" },
+];
+
 /** Normaliserar metadatadefinitioner → generiska fältalternativ. */
 function definitionsToFields(definitions: MetadataDefinition[]): ConditionField[] {
   return definitions.map((d) => ({ value: d.fieldKey, label: d.fieldLabel }));

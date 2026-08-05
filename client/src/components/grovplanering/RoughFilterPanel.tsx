@@ -29,6 +29,12 @@ import {
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useExecutionCodes } from "@/hooks/use-execution-codes";
 import {
+  ConditionFilterList,
+  OBJECT_CONDITION_OPERATORS,
+  type ConditionFilter,
+  type ConditionField,
+} from "@/components/orderkoncept/shared/ConditionFilter";
+import {
   ROUGH_STATUS_ORDER,
   ROUGH_STATUS_META,
   weekLabel,
@@ -49,6 +55,9 @@ export interface FilterState {
   taskTypes: string[];
   statuses: RoughStatus[];
   executionCodes: string[];
+  // Task #1410: objekturval via metadatavillkor — samma villkorsrader och
+  // delade motor (shared/condition-matching) som objektlistans fördjupade filter.
+  conditions: ConditionFilter[];
 }
 
 export function createDefaultFilter(): FilterState {
@@ -65,6 +74,7 @@ export function createDefaultFilter(): FilterState {
     taskTypes: [],
     statuses: [],
     executionCodes: [],
+    conditions: [],
   };
 }
 
@@ -120,6 +130,19 @@ export function RoughFilterPanel({
     queryKey: ["/api/reference/task-types"],
   });
   const taskTypeOptions: TaskTypeOption[] = taskTypeData ?? [];
+
+  // Task #1410: objekturvalets fältkälla = den svenska metadata-katalogen
+  // (samma som objektlistans fördjupade filter). Nyckeln är katalogens `namn` —
+  // serverns buildObjectMetadataMap nycklar värden på namn/beteckning/punkt-
+  // notation, så namn resolvar alltid.
+  const { data: metadataCatalog = [] } = useQuery<{ namn: string }[]>({
+    queryKey: ["/api/metadata/types"],
+    staleTime: 5 * 60 * 1000,
+  });
+  const conditionFields: ConditionField[] = metadataCatalog.map((t) => ({
+    value: t.namn,
+    label: t.namn,
+  }));
 
   const toggleArray = <T extends string>(arr: T[], item: T): T[] =>
     arr.includes(item) ? arr.filter((x) => x !== item) : [...arr, item];
@@ -481,6 +504,23 @@ export function RoughFilterPanel({
               </div>
             )}
           </div>
+          </div>
+        )}
+
+        {/* Objekturval via metadatavillkor (Task #1410) — samma villkorsrader och
+            delade matchningsmotor som objektlistans fördjupade filter. */}
+        {showMore && (
+          <div className="space-y-2" data-testid="section-object-conditions">
+            <Label className="text-xs">Objekturval (metadata)</Label>
+            <ConditionFilterList
+              filters={value.conditions}
+              fields={conditionFields}
+              onChange={(conditions) => patch({ conditions })}
+              operators={OBJECT_CONDITION_OPERATORS}
+              emptyText="Inga metadatavillkor — alla objekt inkluderas."
+              fieldPlaceholder="Metadatafält"
+              addTestId="button-add-object-condition"
+            />
           </div>
         )}
 

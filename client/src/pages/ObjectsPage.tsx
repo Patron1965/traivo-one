@@ -57,6 +57,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   ConditionFilterList,
   CONDITION_OPERATORS,
+  OBJECT_CONDITION_OPERATORS,
   type ConditionFilter,
   type ConditionField,
 } from "@/components/orderkoncept/shared/ConditionFilter";
@@ -65,11 +66,6 @@ import { CustomerMultiCombobox, useCustomerLookup } from "@/components/CustomerC
 import type { ServiceObject } from "@shared/schema";
 
 const PAGE_SIZE = 100;
-
-const OBJECT_CONDITION_OPERATORS: { value: string; label: string; noValue?: boolean }[] = [
-  { value: "equals", label: "är lika med" },
-  { value: "not_equals", label: "skiljer sig från" },
-];
 const METADATA_COLUMNS_STORAGE_KEY = "traivo:objects:metadataColumns";
 const METADATA_COLUMNS_COLLAPSED_STORAGE_KEY = "traivo:objects:metadataColumnsCollapsed";
 
