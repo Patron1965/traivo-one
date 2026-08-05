@@ -30,7 +30,7 @@ import {
   Check, X, FileSpreadsheet, Download, BarChart3, MoreHorizontal, AlertTriangle, AlertCircle, ChevronDown, ChevronUp, XCircle,
   Image as ImageIcon, GitFork, Globe, ShieldAlert, ShieldCheck, ShieldX, Package, Info, Camera,
   ArrowUp, ArrowDown, ArrowUpDown, Network, Pencil, FolderPlus, Archive, Columns3,
-  Phone, Mail
+  Phone, Mail, Layers
 } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -343,6 +343,25 @@ export default function ObjectsPage() {
     staleTime: 30000,
   });
   const reportCounts = reportCountsData || {};
+
+  // Task #1426: batchade uppgiftsräknare (work_orders + assignments) för de
+  // laddade raderna — ETT anrop per sida, ingen N+1. Objekt utan uppgifter
+  // saknas i svaret (ingen "0"-brus).
+  const loadedObjectIds = useMemo(
+    () => (objectsData?.objects || []).map((o) => o.id).sort(),
+    [objectsData],
+  );
+  const { data: taskCountsData } = useQuery<Record<string, number>>({
+    queryKey: ["/api/objects/task-counts", loadedObjectIds.join(",")],
+    queryFn: async () => {
+      const res = await fetch(`/api/objects/task-counts?ids=${encodeURIComponent(loadedObjectIds.join(","))}`, { credentials: "include" });
+      if (!res.ok) return {};
+      return res.json();
+    },
+    enabled: loadedObjectIds.length > 0,
+    staleTime: 30000,
+  });
+  const taskCounts = taskCountsData || {};
 
   const objects = objectsData?.objects || [];
   const totalObjects = objectsData?.total || 0;
@@ -1380,6 +1399,26 @@ export default function ObjectsPage() {
                   </TooltipContent>
                 </Tooltip>
               )}
+              {/* Task #1426: symbol för kopplade uppgifter — klick öppnar navet
+                  och scrollar till sektionen Kopplade uppgifter (?tab=linked-tasks). */}
+              {taskCounts[obj.id] > 0 && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span
+                      onClick={(e) => { e.stopPropagation(); navigate(`/objects/${obj.id}?tab=linked-tasks`); }}
+                      data-testid={`badge-tasks-${obj.id}`}
+                    >
+                      <Badge variant="secondary" className="text-xs gap-1 cursor-pointer">
+                        <Layers className="h-3 w-3" />
+                        {taskCounts[obj.id]}
+                      </Badge>
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p className="text-sm">{taskCounts[obj.id]} kopplad{taskCounts[obj.id] !== 1 ? "e" : ""} uppgift{taskCounts[obj.id] !== 1 ? "er" : ""}. Klicka för att öppna objektets uppgifter.</p>
+                  </TooltipContent>
+                </Tooltip>
+              )}
               {reportCounts[obj.id] > 0 && (
                 <Tooltip>
                   <TooltipTrigger asChild>
@@ -1441,11 +1480,26 @@ export default function ObjectsPage() {
               {/* Task #1418: separat "Under {förälder}"-snabblänk borttagen —
                   informationen framgår redan av släktnamnet i radrubriken
                   (klickbart per led via nätverks-ikonen). */}
+              {/* Task #1426: barn-räknaren är nu en tydlig, klickbar markering i
+                  samma stil som uppgiftssymbolen — klick öppnar navets
+                  hierarkidel (?tab=hierarchy → huvudsektionen). */}
               {hasChildren && (
-                <span className="flex items-center gap-1 text-muted-foreground" data-testid={`text-childcount-${obj.id}`}>
-                  <Network className="h-3 w-3" />
-                  {children.length} underordnade
-                </span>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span
+                      onClick={(e) => { e.stopPropagation(); navigate(`/objects/${obj.id}?tab=hierarchy`); }}
+                      data-testid={`text-childcount-${obj.id}`}
+                    >
+                      <Badge variant="outline" className="text-xs gap-1 cursor-pointer">
+                        <Network className="h-3 w-3" />
+                        {children.length} underobjekt
+                      </Badge>
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p className="text-sm">{children.length} kopplade underobjekt. Klicka för att öppna objektet och se hierarkin.</p>
+                  </TooltipContent>
+                </Tooltip>
               )}
             </div>
 

@@ -1056,6 +1056,47 @@ app.get("/api/objects/next-number", asyncHandler(async (req, res) => {
   res.json({ objectNumber });
 }));
 
+// Task #1426: batchade uppgiftsräknare för objektlistan — antal kopplade
+// uppgifter (work_orders + assignments via object_id, ej soft-deletade) per
+// objekt. Klienten skickar synliga objekt-id:n i ETT anrop (ingen N+1).
+// Måste ligga FÖRE "/api/objects/:id" annars matchar :id "task-counts".
+app.get("/api/objects/task-counts", asyncHandler(async (req, res) => {
+  const tenantId = getTenantIdWithFallback(req);
+  const idsParam = (req.query.ids as string) || "";
+  // Cap: en listsida är max några hundra rader — skydda mot orimliga anrop.
+  const ids = idsParam.split(",").map((s) => s.trim()).filter(Boolean).slice(0, 500);
+  if (ids.length === 0) return res.json({});
+
+  const counts: Record<string, number> = {};
+  const [woRows, asgRows] = await Promise.all([
+    db
+      .select({ objectId: workOrders.objectId, count: sql<number>`count(*)::int` })
+      .from(workOrders)
+      .where(and(
+        eq(workOrders.tenantId, tenantId),
+        inArray(workOrders.objectId, ids),
+        isNull(workOrders.deletedAt),
+      ))
+      .groupBy(workOrders.objectId),
+    db
+      .select({ objectId: assignments.objectId, count: sql<number>`count(*)::int` })
+      .from(assignments)
+      .where(and(
+        eq(assignments.tenantId, tenantId),
+        inArray(assignments.objectId, ids),
+        isNull(assignments.deletedAt),
+      ))
+      .groupBy(assignments.objectId),
+  ]);
+  for (const r of woRows) {
+    if (r.objectId) counts[r.objectId] = (counts[r.objectId] ?? 0) + (Number(r.count) || 0);
+  }
+  for (const r of asgRows) {
+    if (r.objectId) counts[r.objectId] = (counts[r.objectId] ?? 0) + (Number(r.count) || 0);
+  }
+  res.json(counts);
+}));
+
 app.get("/api/objects/:id", asyncHandler(async (req, res) => {
   const tenantId = getTenantIdWithFallback(req);
   const object = await storage.getObject(req.params.id);
