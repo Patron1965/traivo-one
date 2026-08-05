@@ -2,7 +2,7 @@ import { Fragment, memo, useMemo, useState, type ReactNode } from "react";
 import { Marker, Popup, Polygon, Polyline, useMap } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
-import { DoorOpen, MapPinOff, ChevronDown, ChevronUp, List } from "lucide-react";
+import { DoorOpen, MapPinOff, ChevronDown, ChevronUp, List, MapPin, Loader2 } from "lucide-react";
 import type { ServiceObject } from "@shared/schema";
 import { BaseMap } from "@/components/ui/map";
 
@@ -239,6 +239,8 @@ export const ObjectsMapTab = memo(function ObjectsMapTab({
   missingCoordObjects = [],
   onOpenObject,
   onBackToList,
+  onGeocodeMissing,
+  geocodeRunning = false,
 }: { 
   objectsWithCoords: MapObjectEntry[];
   mapPositions: [number, number][];
@@ -247,6 +249,9 @@ export const ObjectsMapTab = memo(function ObjectsMapTab({
   missingCoordObjects?: ServiceObject[];
   onOpenObject?: (id: string) => void;
   onBackToList?: () => void;
+  // Task #1403: batch-geokoda exakt de listade objekten från panelen.
+  onGeocodeMissing?: (ids: string[]) => void;
+  geocodeRunning?: boolean;
 }) {
   const [missingOpen, setMissingOpen] = useState(false);
   const totalInSelection = objectsWithCoords.length + missingCoordObjects.length;
@@ -284,8 +289,22 @@ export const ObjectsMapTab = memo(function ObjectsMapTab({
       </div>
       {missingOpen && missingCoordObjects.length > 0 && (
         <div className="max-h-40 overflow-y-auto border-b bg-muted/40 px-3 py-2" data-testid="panel-missing-coords">
-          <div className="mb-1 text-xs text-muted-foreground">
-            Dessa objekt har varken egna koordinater eller entrékoordinater och kan därför inte visas på kartan:
+          <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
+            <div className="text-xs text-muted-foreground">
+              Dessa objekt har varken egna koordinater eller entrékoordinater och kan därför inte visas på kartan:
+            </div>
+            {onGeocodeMissing && (
+              <button
+                type="button"
+                disabled={geocodeRunning}
+                onClick={() => onGeocodeMissing(missingCoordObjects.map(o => o.id))}
+                className="inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs font-medium hover:bg-muted disabled:opacity-50"
+                data-testid="button-geocode-missing-coords"
+              >
+                {geocodeRunning ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <MapPin className="h-3.5 w-3.5" />}
+                {geocodeRunning ? "Geokodar..." : `Geokoda dessa (${missingCoordObjects.length})`}
+              </button>
+            )}
           </div>
           <ul className="space-y-0.5">
             {missingCoordObjects.map(o => (

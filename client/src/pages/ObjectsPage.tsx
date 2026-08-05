@@ -1223,6 +1223,24 @@ export default function ObjectsPage() {
     }
   };
 
+  // Task #1403: geokoda exakt de objekt som listas i kartans saknar-koordinater-
+  // panel (befintlig batch-geocode-endpoint med explicita objekt-id:n).
+  const [mapGeocodeRunning, setMapGeocodeRunning] = useState(false);
+  const runMissingCoordsGeocode = async (ids: string[]) => {
+    if (mapGeocodeRunning || ids.length === 0) return;
+    setMapGeocodeRunning(true);
+    try {
+      const res = await apiRequest("POST", "/api/objects/batch-geocode", { objectIds: ids });
+      const data: { geocoded: number; updated: number } = await res.json();
+      queryClient.invalidateQueries({ queryKey: ["/api/objects"], exact: false });
+      toast({ title: "Geokodning klar", description: `${data.updated} objekt uppdaterade (${data.geocoded} geokodade)` });
+    } catch (err) {
+      toast({ title: "Geokodning misslyckades", description: err instanceof Error ? err.message : "Okänt fel", variant: "destructive" });
+    } finally {
+      setMapGeocodeRunning(false);
+    }
+  };
+
   const runBulkParentMove = async () => {
     await runBulkUpdate({ parentId: bulkNewParentId }, (n) => `${n} objekt flyttade`);
     setBulkParentDialogOpen(false);
@@ -2185,6 +2203,8 @@ export default function ObjectsPage() {
             missingCoordObjects={objectsMissingCoords}
             onOpenObject={(id) => navigate(`/objects/${id}`)}
             onBackToList={() => setViewMode("list")}
+            onGeocodeMissing={runMissingCoordsGeocode}
+            geocodeRunning={mapGeocodeRunning}
           />
         </TabsContent>
       </Tabs>
