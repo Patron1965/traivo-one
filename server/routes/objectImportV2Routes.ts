@@ -35,7 +35,10 @@ import {
   objects,
   type MetadataKatalog,
 } from "@shared/schema";
-import { ensurePrimaryPayer as ensurePrimaryCustomerMetadata } from "../services/object-customer";
+import {
+  ensurePrimaryPayer as ensurePrimaryCustomerMetadata,
+  getObjectsPrimaryCustomerIds,
+} from "../services/object-customer";
 import { storage } from "../storage";
 import { writeObjectImportMetadataBatch } from "../metadata-queries";
 import {
@@ -66,7 +69,10 @@ import {
   findImportDuplicateWarnings,
   type ImportDuplicateWarning,
 } from "../services/object-duplicates";
-import { OBJEKTMALL_INTERIM_PREFIX } from "@shared/objektmall-template";
+import {
+  OBJEKTMALL_INTERIM_METADATA_FALT,
+  OBJEKTMALL_INTERIM_PREFIX,
+} from "@shared/objektmall-template";
 import { classifyExecuteRowNotes } from "../services/import-result-notes";
 
 function getUserId(req: Request): string | null {
@@ -967,20 +973,131 @@ export function registerObjectImportV2Routes(app: Express): void {
           }
         }
 
-        // Befintliga objekt via interimsnummer (3:e prioritet) — interim-skapade
-        // objekt lagras med objectNumber MALL-<interim> (v1-konvention), så
-        // re-import av samma interim uppdaterar istället för att duplicera.
+        // Befintliga objekt via interimsnummer (3:e prioritet).
+        //
+        // Task #1433: interimsnumret lagras som metadata ('interimsnummer') och
+        // matchas KUNDSKOPAT — samma interimsnummer i listor till OLIKA kunder är
+        // OLIKA objekt (återanvända interimnummer får aldrig uppdatera fel kunds
+        // objekt). Radens kund vid matchning = radens eget kundvärde → annars
+        // standardkunden (förälder-ärvd kund är inte känd förrän vid execute; en
+        // rad utan eget kundvärde matchar alltså mot standardkundens objekt).
+        //
+        // Bakåtkompat (expand-contract): objekt skapade före Task #1433 har
+        // objectNumber MALL-<interim> (v1-konvention) och matchas fortsatt
+        // tenant-brett — men bara för interim som inte redan fått en kundskopad
+        // träff via metadatat.
+        // Task #1433: interim-identiteten är KUNDSKOPAD — samma interimnummer i
+        // samma fil till OLIKA kunder är olika objekt. Nyckelrymden för
+        // gruppering, matchning och parent-uppslag är `${interim}\u0000${kund}`
+        // där radens kund = eget kundvärde → annars standardkunden.
+        // Utrustnings-/barnrader lämnar ofta kundkolumnen tom fast butiksraden
+        // anger kund — en rad utan eget kundvärde ärver därför sitt interims
+        // ENTYDIGT deklarerade kund (exakt en kund angiven bland raderna med
+        // samma interim), annars standardkunden.
+        const declaredCustByInterim = new Map<string, Set<string>>();
+        for (const r of resolvedAll) {
+          const interim = r.fields.interim_id;
+          if (!interim) continue;
+          const own = resolveOwnRowCustomerId(r);
+          if (!own) continue;
+          (declaredCustByInterim.get(interim) ?? declaredCustByInterim.set(interim, new Set()).get(interim)!).add(own);
+        }
+        const custForInterim = (r: ResolvedRow, interim: string): string => {
+          const own = resolveOwnRowCustomerId(r);
+          if (own) return own;
+          const declared = declaredCustByInterim.get(interim);
+          if (declared && declared.size === 1) return Array.from(declared)[0];
+          return fallbackCustomerId;
+        };
+        const rowCustFor = (r: ResolvedRow): string =>
+          r.fields.interim_id
+            ? custForInterim(r, r.fields.interim_id)
+            : resolveOwnRowCustomerId(r) ?? fallbackCustomerId;
+        const interimKeyOf = (r: ResolvedRow): string | null =>
+          r.fields.interim_id ? `${r.fields.interim_id}\u0000${rowCustFor(r)}` : null;
+        const parentKeyOf = (r: ResolvedRow): string | null =>
+          r.fields.interim_parent_id
+            ? `${r.fields.interim_parent_id}\u0000${custForInterim(r, r.fields.interim_parent_id)}`
+            : null;
+
         const interimIds = resolved.map((r) => r.fields.interim_id).filter(Boolean) as string[];
-        const existingByInterim = new Map<string, string>(); // interim_id → objectId
+        const existingByInterim = new Map<string, string>(); // interimKey → objectId
         if (interimIds.length) {
-          const mallNumbers = Array.from(new Set(interimIds)).map((i) => OBJEKTMALL_INTERIM_PREFIX + i);
-          const rows = await db
-            .select({ id: objects.id, objectNumber: objects.objectNumber })
-            .from(objects)
-            .where(and(eq(objects.tenantId, tenantId), inArray(objects.objectNumber, mallNumbers)));
-          for (const r of rows) {
-            if (r.objectNumber?.startsWith(OBJEKTMALL_INTERIM_PREFIX)) {
-              existingByInterim.set(r.objectNumber.slice(OBJEKTMALL_INTERIM_PREFIX.length), r.id);
+          const uniqueInterims = Array.from(new Set(interimIds));
+          // interim → kandidater (objekt-id + härledd kund). Kund null = objektet
+          // saknar kundkoppling helt — det kan inte "tillhöra fel kund" och får
+          // därför matcha vilken radkund som helst (annars skulle en saknad
+          // 'Kund'-koppling tyst ge dubbletter vid varje re-import).
+          const interimCandidates = new Map<string, { objektId: string; cust: string | null }[]>();
+          const [interimKatalog] = await db
+            .select({ id: metadataKatalog.id })
+            .from(metadataKatalog)
+            .where(
+              and(
+                eq(metadataKatalog.tenantId, tenantId),
+                eq(metadataKatalog.namn, OBJEKTMALL_INTERIM_METADATA_FALT),
+              ),
+            );
+          if (interimKatalog) {
+            const metaRows = await db
+              .select({ objektId: metadataVarden.objektId, varde: metadataVarden.vardeString })
+              .from(metadataVarden)
+              .where(
+                and(
+                  eq(metadataVarden.tenantId, tenantId),
+                  eq(metadataVarden.status, "aktiv"),
+                  eq(metadataVarden.metadataKatalogId, interimKatalog.id),
+                  inArray(metadataVarden.vardeString, uniqueInterims),
+                ),
+              );
+            const candidateIds = Array.from(
+              new Set(metaRows.map((r) => r.objektId).filter(Boolean) as string[]),
+            );
+            const customerByObjId = await getObjectsPrimaryCustomerIds(candidateIds);
+            for (const r of metaRows) {
+              if (!r.varde || !r.objektId) continue;
+              const arr = interimCandidates.get(r.varde) ?? [];
+              arr.push({ objektId: r.objektId, cust: customerByObjId.get(r.objektId) ?? null });
+              interimCandidates.set(r.varde, arr);
+            }
+          }
+          for (const r of resolved) {
+            const key = interimKeyOf(r);
+            if (!key || existingByInterim.has(key)) continue;
+            const rowCust = rowCustFor(r);
+            const candidates = interimCandidates.get(r.fields.interim_id!) ?? [];
+            // Exakt kundträff vinner; annars kund-lös kandidat. En kandidat med
+            // en ANNAN känd kund matchas ALDRIG (kärnan i Task #1433).
+            const hit =
+              candidates.find((c) => c.cust === rowCust) ??
+              candidates.find((c) => c.cust === null);
+            if (hit) existingByInterim.set(key, hit.objektId);
+          }
+          // Bakåtkompat: MALL-<interim> i objectNumber (tenant-brett, som förr).
+          // Ett legacy-objekt binds till HÖGST EN kundskopad nyckel (första
+          // omatchade raden i filordning) — två kunder får aldrig samma träff.
+          const mallNumbers = uniqueInterims.map((i) => OBJEKTMALL_INTERIM_PREFIX + i);
+          if (mallNumbers.length) {
+            const legacyByInterim = new Map<string, string>();
+            const rows = await db
+              .select({ id: objects.id, objectNumber: objects.objectNumber })
+              .from(objects)
+              .where(and(eq(objects.tenantId, tenantId), inArray(objects.objectNumber, mallNumbers)));
+            for (const r of rows) {
+              if (r.objectNumber?.startsWith(OBJEKTMALL_INTERIM_PREFIX)) {
+                legacyByInterim.set(r.objectNumber.slice(OBJEKTMALL_INTERIM_PREFIX.length), r.id);
+              }
+            }
+            const consumedLegacy = new Set<string>();
+            for (const r of resolved) {
+              const key = interimKeyOf(r);
+              const interim = r.fields.interim_id;
+              if (!key || !interim || existingByInterim.has(key)) continue;
+              const legacyId = legacyByInterim.get(interim);
+              if (legacyId && !consumedLegacy.has(legacyId)) {
+                existingByInterim.set(key, legacyId);
+                consumedLegacy.add(legacyId);
+              }
             }
           }
         }
@@ -990,6 +1107,8 @@ export function registerObjectImportV2Routes(app: Express): void {
           new Set(existingByObjectNumber.keys()),
           new Set(existingByExternalId.keys()),
           new Set(existingByInterim.keys()),
+          // Task #1433: kundskopad interim-identitet i gruppering + topologi.
+          { groupKeyOf: interimKeyOf, parentKeyOf },
         );
 
         // Cykel-rader hoppas över (ska redan vara fångade i validering).
@@ -1158,10 +1277,11 @@ export function registerObjectImportV2Routes(app: Express): void {
         const resolveParentId = (item: (typeof ordered)[number]): string | null => {
           const f = item.row.fields;
           if (item.kind === "equipment") {
-            return item.interimId ? interimToObjectId.get(item.interimId) ?? null : null;
+            return item.interimKey ? interimToObjectId.get(item.interimKey) ?? null : null;
           }
           if (f.system_parent_id) return objectNumberToId.get(f.system_parent_id) ?? null;
-          if (f.interim_parent_id) return interimToObjectId.get(f.interim_parent_id) ?? null;
+          const parentKey = parentKeyOf(item.row);
+          if (parentKey) return interimToObjectId.get(parentKey) ?? null;
           return null;
         };
 
@@ -1186,6 +1306,9 @@ export function registerObjectImportV2Routes(app: Express): void {
           row: ResolvedRow,
           isNewObject: boolean,
           objectParentId: string | null,
+          // Task #1433: interim-primärens interimsnummer sparas som metadata
+          // ('interimsnummer') — den kundskopade matchningsnyckeln vid re-import.
+          interimForMatch?: string | null,
         ) => {
           // Sammansatta metadata-punktnycklar (metadata.<grupp>.<underfält>) ska
           // grupperas till ETT json-metadatafält per grupp (tvingad json-datatyp),
@@ -1205,6 +1328,8 @@ export function registerObjectImportV2Routes(app: Express): void {
           const contact = buildCompositeObject(row.composite.contact ?? {});
           if (Object.keys(contact).length) fields.push({ namn: "kontaktperson", varde: contact, datatyp: "json" });
           if (row.fields.external_id) fields.push({ namn: "externt_id", varde: row.fields.external_id, datatyp: "string" });
+          if (interimForMatch)
+            fields.push({ namn: OBJEKTMALL_INTERIM_METADATA_FALT, varde: interimForMatch, datatyp: "string" });
           if (fields.length === 0) return;
 
           const katalogByName = new Map<string, MetadataKatalog>();
@@ -1309,14 +1434,23 @@ export function registerObjectImportV2Routes(app: Express): void {
 
             // Bestäm mål-objekt-id för uppdatering (Systemnummer > externt_id >
             // Interimsnummer).
+            // Task #1433: interim-primärens interimsnummer sparas som metadata
+            // ('interimsnummer') på både nyskapade och uppdaterade objekt —
+            // uppdateringar migrerar då befintliga MALL-objekt framåt till den
+            // nya kundskopade matchningsnyckeln (expand-contract).
+            const rowInterim =
+              item.kind === "primary" && item.interimId && !row.fields.system_id
+                ? item.interimId
+                : null;
+
             let targetId: string | null = null;
             if (item.action === "update") {
               if (row.fields.system_id) targetId = existingByObjectNumber.get(row.fields.system_id) ?? null;
               if (!targetId && row.fields.external_id) targetId = existingByExternalId.get(row.fields.external_id) ?? null;
               // Equipment får ALDRIG matchas via det delade interim_id:t (skulle
               // träffa butiks-objektet) — bara primärer.
-              if (!targetId && item.kind !== "equipment" && row.fields.interim_id)
-                targetId = existingByInterim.get(row.fields.interim_id) ?? null;
+              if (!targetId && item.kind !== "equipment" && item.interimKey)
+                targetId = existingByInterim.get(item.interimKey) ?? null;
             }
 
             if (targetId) {
@@ -1479,7 +1613,7 @@ export function registerObjectImportV2Routes(app: Express): void {
                 afterJson: { ids: null } as any,
                 status: "applied",
               });
-              await writeRowMetadata(targetId, row, false, effectiveParentId);
+              await writeRowMetadata(targetId, row, false, effectiveParentId, rowInterim);
               const metaIdsAfter = await metadataIdsFor(targetId);
               const newMetaIds = Array.from(metaIdsAfter).filter((x) => !metaIdsBefore.has(x));
               await db
@@ -1487,7 +1621,7 @@ export function registerObjectImportV2Routes(app: Express): void {
                 .set({ afterJson: { ids: newMetaIds } as any })
                 .where(and(eq(importActions.id, metaActionId), eq(importActions.tenantId, tenantId)));
               customerByObjectId.set(targetId, rowCustomerId);
-              if (item.interimId && item.kind === "primary") interimToObjectId.set(item.interimId, targetId);
+              if (item.interimKey && item.kind === "primary") interimToObjectId.set(item.interimKey, targetId);
               if (row.fields.system_id) objectNumberToId.set(row.fields.system_id, targetId);
               depthByObjectId.set(targetId, parentId ? (depthByObjectId.get(parentId) ?? 0) + 1 : 0);
               if (!parentId) rootObjectIds.add(targetId);
@@ -1506,12 +1640,11 @@ export function registerObjectImportV2Routes(app: Express): void {
                 unresolvedParent ? "kept_existing_placement" : undefined,
               );
             } else {
-              // Interim-primärer utan systemnummer får objectNumber MALL-<interim>
-              // så re-import matchar dem (uppdaterar istället för dubblerar).
-              const interimObjectNumber =
-                item.kind === "primary" && item.interimId && !row.fields.system_id
-                  ? OBJEKTMALL_INTERIM_PREFIX + item.interimId
-                  : undefined;
+              // Task #1433: interim-primärer får ett SYSTEMMYNTAT löpnummer
+              // (OBJ-NNN via createObject, objectNumber utelämnas) i stället för
+              // MALL-<interim>. Interimsnumret sparas separat som metadata
+              // (rowInterim → writeRowMetadata) och används som kundskopad
+              // matchningsnyckel vid re-import.
               // Objektnamn är inte hårt obligatoriskt: saknas namn får objektet
               // sitt nummer som namn (uppdateras manuellt efteråt).
               const fallbackName =
@@ -1527,7 +1660,6 @@ export function registerObjectImportV2Routes(app: Express): void {
                 name: fallbackName,
                 // Ångra-funktion: koppla objektet till batchen för spårbarhet.
                 importBatchId: batchId,
-                ...(interimObjectNumber ? { objectNumber: interimObjectNumber } : {}),
                 ...(known as any),
               } as any);
               await syncPrimaryParent(createdObj.id, parentId, true);
@@ -1578,9 +1710,9 @@ export function registerObjectImportV2Routes(app: Express): void {
                   })
                   .where(and(eq(objects.id, createdObj.id), eq(objects.tenantId, tenantId)));
               }
-              await writeRowMetadata(createdObj.id, row, true, parentId);
+              await writeRowMetadata(createdObj.id, row, true, parentId, rowInterim);
               customerByObjectId.set(createdObj.id, rowCustomerId);
-              if (item.interimId && item.kind === "primary") interimToObjectId.set(item.interimId, createdObj.id);
+              if (item.interimKey && item.kind === "primary") interimToObjectId.set(item.interimKey, createdObj.id);
               depthByObjectId.set(createdObj.id, parentId ? (depthByObjectId.get(parentId) ?? 0) + 1 : 0);
               if (!parentId) rootObjectIds.add(createdObj.id);
               created++;

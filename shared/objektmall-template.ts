@@ -37,7 +37,15 @@ export const OBJEKTMALL_FILENAME = `Traivo_objektimport_mall_${OBJEKTMALL_VERSIO
 export const OBJEKTMALL_BATCH_PREFIX = "objektmall-";
 // Prefix vi sätter framför interimsnumret när vi sparar `objectNumber`
 // så vi inte krockar med användarens egna objektsnummer.
+// LEGACY (Task #1433): nya importer sparar INTE längre interimsnumret i
+// objectNumber — objektet får ett systemmyntat OBJ-NNN och interimsnumret
+// lagras separat som metadata (se OBJEKTMALL_INTERIM_METADATA_FALT).
+// Prefixet behålls för bakåtkompatibel matchning av redan skapade MALL-objekt.
 export const OBJEKTMALL_INTERIM_PREFIX = "MALL-";
+// Metadata-katalogfältets `namn` (universell matchningsnyckel) där importens
+// interimsnummer lagras. Re-importmatchning sker på detta värde + objektets
+// kund — så samma interimsnummer i listor till OLIKA kunder blir olika objekt.
+export const OBJEKTMALL_INTERIM_METADATA_FALT = "interimsnummer";
 
 // Flik-namn i arbetsboken.
 export const OBJEKTMALL_README_SHEET_NAME = "Läs mig först";

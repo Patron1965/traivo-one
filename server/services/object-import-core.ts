@@ -490,6 +490,20 @@ export interface PlanItem {
   kind: "primary" | "equipment";
   /** Interim-id raden tillhör (för equipment = butikens interim). */
   interimId: string | null;
+  /**
+   * Task #1433: grupperingsnyckeln raden hör till (default = interim_id, men
+   * callern kan skopa den, t.ex. interim+kund så att samma interimnummer hos
+   * OLIKA kunder blir OLIKA objekt). Null för rader utan interim.
+   */
+  interimKey: string | null;
+}
+
+/** Task #1433: valfri kundskopning av interim-identiteten. */
+export interface HierarchyPlanOptions {
+  /** Grupperingsnyckel per rad (default: radens interim_id). */
+  groupKeyOf?: (r: ResolvedRow) => string | null;
+  /** Föräldernyckel per rad, i samma nyckelrymd (default: interim_parent_id). */
+  parentKeyOf?: (r: ResolvedRow) => string | null;
 }
 
 export interface HierarchyPlan {
@@ -514,12 +528,18 @@ export function buildHierarchyPlan(
   existingByObjectNumber: Set<string> = new Set(),
   existingByExternalId: Set<string> = new Set(),
   existingByInterim: Set<string> = new Set(),
+  opts: HierarchyPlanOptions = {},
 ): HierarchyPlan {
-  // 1. Gruppera per interim_id.
+  // Task #1433: gruppering/topologi/match sker på en (ev. kundskopad) nyckel.
+  // existingByInterim förväntas vara i SAMMA nyckelrymd som groupKeyOf.
+  const groupKeyOf = opts.groupKeyOf ?? ((r: ResolvedRow) => r.fields.interim_id ?? null);
+  const parentKeyOf = opts.parentKeyOf ?? ((r: ResolvedRow) => r.fields.interim_parent_id ?? null);
+
+  // 1. Gruppera per nyckel (default interim_id).
   const groups = new Map<string, ResolvedRow[]>();
   const noInterim: ResolvedRow[] = [];
   for (const r of rows) {
-    const id = r.fields.interim_id;
+    const id = groupKeyOf(r);
     if (id) {
       (groups.get(id) ?? groups.set(id, []).get(id)!).push(r);
     } else {
@@ -546,7 +566,8 @@ export function buildHierarchyPlan(
   const actionFor = (r: ResolvedRow, isEquipment = false): PlanAction => {
     if (r.fields.system_id && existingByObjectNumber.has(r.fields.system_id)) return "update";
     if (r.fields.external_id && existingByExternalId.has(r.fields.external_id)) return "update";
-    if (!isEquipment && r.fields.interim_id && existingByInterim.has(r.fields.interim_id)) return "update";
+    const key = groupKeyOf(r);
+    if (!isEquipment && key && existingByInterim.has(key)) return "update";
     return "create";
   };
 
@@ -557,7 +578,7 @@ export function buildHierarchyPlan(
   const children = new Map<string, string[]>();
   for (const id of ids) indeg.set(id, 0);
   for (const id of ids) {
-    const parent = primaries.get(id)!.fields.interim_parent_id;
+    const parent = parentKeyOf(primaries.get(id)!);
     if (parent && idSet.has(parent) && parent !== id) {
       indeg.set(id, (indeg.get(id) ?? 0) + 1);
       (children.get(parent) ?? children.set(parent, []).get(parent)!).push(id);
@@ -584,11 +605,18 @@ export function buildHierarchyPlan(
   //    först om de är root, sedan primärer topologiskt, sedan utrustning.
   const ordered: PlanItem[] = [];
   for (const r of noInterim) {
-    ordered.push({ rowNumber: r.rowNumber, row: r, action: actionFor(r), kind: "primary", interimId: null });
+    ordered.push({ rowNumber: r.rowNumber, row: r, action: actionFor(r), kind: "primary", interimId: null, interimKey: null });
   }
   for (const id of sortedIds) {
     const r = primaries.get(id)!;
-    ordered.push({ rowNumber: r.rowNumber, row: r, action: actionFor(r), kind: "primary", interimId: id });
+    ordered.push({
+      rowNumber: r.rowNumber,
+      row: r,
+      action: actionFor(r),
+      kind: "primary",
+      interimId: r.fields.interim_id ?? null,
+      interimKey: id,
+    });
   }
   for (const r of equipment) {
     ordered.push({
@@ -597,6 +625,7 @@ export function buildHierarchyPlan(
       action: actionFor(r, true),
       kind: "equipment",
       interimId: r.fields.interim_id ?? null,
+      interimKey: groupKeyOf(r),
     });
   }
   return { ordered, cycleRowNumbers };

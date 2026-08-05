@@ -59,6 +59,7 @@ import {
   OBJEKTMALL_FILENAME,
   OBJEKTMALL_BATCH_PREFIX,
   OBJEKTMALL_INTERIM_PREFIX,
+  OBJEKTMALL_INTERIM_METADATA_FALT,
   OBJEKTMALL_README_SHEET_NAME,
   OBJEKTMALL_IMPORT_SHEET_NAME,
   OBJEKTMALL_INTERIM_FLAG_MARKER,
@@ -1242,6 +1243,60 @@ async function validateAll(
     for (const e of existing) indexExisting(toExistingObject(e));
   }
 
+  // Task #1433: nya modellen — interimsnumret lagras som metadata
+  // ('interimsnummer') på objektet, inte i objectNumber. Förladda matchningar
+  // interim → objekt-id:n. Flera träffar (samma interim hos t.ex. olika kunder)
+  // är tvetydigt i detta flöde (som saknar kundkolumn) och blockerar raden.
+  const interimNos = new Set<string>();
+  for (const row of valRows) {
+    const interimNo = trim(row.data, "interim");
+    if (interimNo) interimNos.add(interimNo);
+  }
+  const interimMetaMatch = new Map<string, string[]>(); // interim → objekt-id:n
+  if (interimNos.size > 0) {
+    const [interimKatalog] = await db
+      .select({ id: metadataKatalog.id })
+      .from(metadataKatalog)
+      .where(
+        and(
+          eq(metadataKatalog.tenantId, tenantId),
+          eq(metadataKatalog.namn, OBJEKTMALL_INTERIM_METADATA_FALT),
+        ),
+      );
+    if (interimKatalog) {
+      const metaRows = await db
+        .select({ objektId: metadataVarden.objektId, varde: metadataVarden.vardeString })
+        .from(metadataVarden)
+        .innerJoin(objects, eq(objects.id, metadataVarden.objektId))
+        .where(
+          and(
+            eq(metadataVarden.tenantId, tenantId),
+            eq(metadataVarden.status, "aktiv"),
+            eq(metadataVarden.metadataKatalogId, interimKatalog.id),
+            inArray(metadataVarden.vardeString, Array.from(interimNos)),
+            isNull(objects.deletedAt),
+          ),
+        );
+      const matchedIds = new Set<string>();
+      for (const r of metaRows) {
+        if (!r.varde || !r.objektId) continue;
+        const arr = interimMetaMatch.get(r.varde) ?? [];
+        if (!arr.includes(r.objektId)) arr.push(r.objektId);
+        interimMetaMatch.set(r.varde, arr);
+        matchedIds.add(r.objektId);
+      }
+      // Ladda objekt-detaljer för träffar som inte redan indexerats.
+      const missing = Array.from(matchedIds).filter((id) => !byId.has(id));
+      if (missing.length > 0) {
+        const extra = await db
+          .select(EXISTING_OBJECT_SELECT)
+          .from(objects)
+          .where(and(eq(objects.tenantId, tenantId), inArray(objects.id, missing), isNull(objects.deletedAt)));
+        for (const e of extra) indexExisting(toExistingObject(e));
+      }
+    }
+  }
+
   // 2b. Task #643: externt-ID-matchning. Rader utan system-/interimsnummer kan
   // matchas mot ett befintligt objekt via kundens egna butiksnummer/externt ID
   // (lagrat som metadata-värde). Förladda befintliga objekts externt-ID-värden →
@@ -1395,8 +1450,18 @@ async function validateAll(
         }
       }
     } else if (interimNo) {
-      // Endast interim → re-import uppdaterar om MALL-<interim> redan finns.
-      target = byObjNum.get(OBJEKTMALL_INTERIM_PREFIX + interimNo);
+      // Endast interim → re-import uppdaterar om objektet redan finns.
+      // Task #1433: nya modellen matchar via metadatat 'interimsnummer';
+      // bakåtkompat: objectNumber MALL-<interim> (v1-konvention).
+      const metaIds = interimMetaMatch.get(interimNo) ?? [];
+      if (metaIds.length > 1) {
+        row.errors.push(
+          `Interimsnummer "${interimNo}" matchar flera befintliga objekt (t.ex. hos olika kunder). Ange ett exakt Systemnummer för att peka ut rätt objekt.`,
+        );
+        continue;
+      }
+      target = (metaIds.length === 1 ? byId.get(metaIds[0]) : undefined) ??
+        byObjNum.get(OBJEKTMALL_INTERIM_PREFIX + interimNo);
       if (target) matchKey = "interim";
     } else {
       // Task #643: varken systemnummer eller interimsnummer — försök matcha mot
@@ -1857,6 +1922,62 @@ async function commitImport(
 
     const interimToObjectId = new Map<string, string>();
 
+    // Task #1433: nya objekt får ett SYSTEMMYNTAT löpnummer (OBJ-NNN) i stället
+    // för MALL-<interim>. Samma advisory-lås + MAX+1-mönster som i
+    // storage.createObject, men inne i importens befintliga transaktion (låset är
+    // transaktionsbundet och tas en gång — egna oköade inserts syns i MAX-frågan).
+    let objectNumberLockTaken = false;
+    async function mintObjectNumber(): Promise<string> {
+      if (!objectNumberLockTaken) {
+        await tx.execute(
+          sql`SELECT pg_advisory_xact_lock(hashtext('object_number'), hashtext(${tenantId}))`,
+        );
+        objectNumberLockTaken = true;
+      }
+      const res = await tx.execute(sql`
+        SELECT COALESCE(MAX(CAST(substring(object_number FROM '^OBJ-([0-9]+)$') AS INTEGER)), 0) AS max_num
+        FROM objects
+        WHERE tenant_id = ${tenantId} AND object_number ~ '^OBJ-[0-9]+$'
+      `);
+      const rows = (res as any).rows ?? (Array.isArray(res) ? res : []);
+      const maxNum = Number(rows?.[0]?.max_num ?? 0);
+      return `OBJ-${String(maxNum + 1).padStart(3, "0")}`;
+    }
+
+    // Task #1433: interimsnumret sparas separat som metadata ('interimsnummer')
+    // — matchningsnyckeln vid re-import. Katalogposten säkerställs lat.
+    let interimKatalogCache: MetadataKatalog | null | undefined;
+    async function writeInterimMetadata(objId: string, interimNo: string): Promise<void> {
+      if (interimKatalogCache === undefined) {
+        const [existing] = await tx
+          .select()
+          .from(metadataKatalog)
+          .where(
+            and(
+              eq(metadataKatalog.tenantId, tenantId),
+              eq(metadataKatalog.namn, OBJEKTMALL_INTERIM_METADATA_FALT),
+            ),
+          );
+        if (existing) {
+          interimKatalogCache = existing as MetadataKatalog;
+        } else {
+          const [created] = await tx
+            .insert(metadataKatalog)
+            .values({ tenantId, namn: OBJEKTMALL_INTERIM_METADATA_FALT, datatyp: "string", kategori: "import" })
+            .returning();
+          interimKatalogCache = (created as MetadataKatalog) ?? null;
+        }
+      }
+      if (!interimKatalogCache) return;
+      await writeImportedMetadataValue(tx, {
+        tenantId,
+        objektId: objId,
+        katalog: interimKatalogCache,
+        rawValue: interimNo,
+        andradAv: userId,
+      });
+    }
+
     // Cache av (resolverad) adress-triplett per objekt-id, så att barn som skapas
     // senare i samma körning kan ärva förälderns adress utan extra DB-frågor.
     const addrCache = new Map<string, { address: string | null; city: string | null; postalCode: string | null }>();
@@ -2028,7 +2149,8 @@ async function commitImport(
             customerId,
             parentId: parentObjectId ?? null,
             name: res.name,
-            objectNumber: OBJEKTMALL_INTERIM_PREFIX + res.interimNo,
+            // Task #1433: systemmyntat löpnummer i stället för MALL-<interim>.
+            objectNumber: await mintObjectNumber(),
             objectType: meta.objectType,
             hierarchyLevel: meta.hierarchyLevel,
             address,
@@ -2039,7 +2161,10 @@ async function commitImport(
             importBatchId: batchId,
           } as any)
           .returning({ id: objects.id });
-        if (res.interimNo) interimToObjectId.set(res.interimNo, inserted.id);
+        if (res.interimNo) {
+          interimToObjectId.set(res.interimNo, inserted.id);
+          await writeInterimMetadata(inserted.id, res.interimNo);
+        }
         addrCache.set(inserted.id, { address, city, postalCode });
         await syncPrimaryObjectParent(inserted.id, parentObjectId ?? null);
         await writeRowMetadata(inserted.id, res);
@@ -2076,7 +2201,16 @@ async function commitImport(
           .update(objects)
           .set(set)
           .where(and(eq(objects.id, res.targetObjectId), eq(objects.tenantId, tenantId)));
-        if (res.interimNo) interimToObjectId.set(res.interimNo, res.targetObjectId);
+        if (res.interimNo) {
+          interimToObjectId.set(res.interimNo, res.targetObjectId);
+          // Task #1433: forward-migrera befintliga MALL-objekt till den nya
+          // matchningsnyckeln (metadatat 'interimsnummer') vid re-import — men
+          // BARA när raden faktiskt matchades via interim (en systemnummer-rad
+          // får inte binda sitt interim-värde till ett annat objekt).
+          if (row.matchKey === "interim") {
+            await writeInterimMetadata(res.targetObjectId, res.interimNo);
+          }
+        }
         // Invalidera adress-cachen så ev. barn senare i körningen ärver färska värden.
         addrCache.delete(res.targetObjectId);
         if (parentObjectId !== undefined) await syncPrimaryObjectParent(res.targetObjectId, parentObjectId);

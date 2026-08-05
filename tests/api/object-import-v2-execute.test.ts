@@ -177,7 +177,10 @@ describe("Import 2.0 execute — API-nivå E2E", () => {
 
     expect(org).toBeTruthy();
     expect(butik.parentId).toBe(org.id); // butik under org
-    expect(butik.objectNumber).toBe("MALL-10"); // interim-primär → MALL-prefix
+    // Task #1433: interim-primärer får ett SYSTEMMYNTAT löpnummer (OBJ-NNN),
+    // inte MALL-<interim> — interimsnumret lagras separat som metadata.
+    expect(butik.objectNumber).toMatch(/^OBJ-\d+$/);
+    expect(org.objectNumber).toMatch(/^OBJ-\d+$/);
     // Utrustning parentas under butiken (delar interim 10).
     expect(pant.parentId).toBe(butik.id);
     expect(matavfall.parentId).toBe(butik.id);
@@ -190,17 +193,17 @@ describe("Import 2.0 execute — API-nivå E2E", () => {
   it("re-import: butik/org uppdateras, utrustning skapas, butiken korrumperas inte", async () => {
     const { result } = await runImport();
 
-    // org + butik matchar via MALL-nummer → update; 2 utrustning → create.
+    // org + butik matchar via interim-metadatat (kundskopat, Task #1433) → update;
+    // 2 utrustning → create.
     expect(result.summary.updated).toBe(2);
     expect(result.summary.created).toBe(2);
 
-    // Butiks-objektet (MALL-10) får ALDRIG överskrivas av en utrustningsrad.
+    // Butiks-objektet får ALDRIG överskrivas av en utrustningsrad.
     const butikRows = await db
       .select()
       .from(objects)
-      .where(and(eq(objects.tenantId, TENANT), eq(objects.objectNumber, "MALL-10")));
-    expect(butikRows).toHaveLength(1);
-    expect(butikRows[0].name).toBe("Hemköp Centrum"); // ej "Pantkärl"/"Matavfallskärl"
+      .where(and(eq(objects.tenantId, TENANT), eq(objects.name, "Hemköp Centrum")));
+    expect(butikRows).toHaveLength(1); // ingen dubblett skapades vid re-import
   });
 });
 
