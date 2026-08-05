@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ObjectArchiveControl } from "@/components/objects/ObjectArchiveControl";
 import { ObjectHeaderPanel } from "@/components/ObjectHeaderPanel";
-import { type MetadataFormEntry, type MetadataFormType, type MetadataRelatedParent, type MetadataRelatedChild } from "@/components/ObjectMetadataForm";
+import { type MetadataFormEntry, type MetadataFormType, type MetadataRelatedChild } from "@/components/ObjectMetadataForm";
 import { ObjectTemplateMetadataForm, type TemplateMetadataType } from "@/components/ObjectTemplateMetadataForm";
 import { ObjectSystemGeneratedPanel } from "@/components/ObjectSystemGeneratedPanel";
 import { TelinkSyncButton } from "@/components/TelinkSyncButton";
@@ -246,12 +246,6 @@ interface ParentRelation {
   relationContext?: string | null;
 }
 
-interface CustomerSummary {
-  id: string;
-  name: string;
-  customerNumber?: string | null;
-}
-
 interface ObjectEditForm {
   name?: string;
   objectNumber?: string;
@@ -388,10 +382,8 @@ export default function ObjectDetailPage() {
     enabled: !!objectId && !isCreate,
   });
 
-  const { data: customer } = useQuery<CustomerSummary>({
-    queryKey: ["/api/customers", resolvedObject?.customerId],
-    enabled: !!resolvedObject?.customerId,
-  });
+  // Task #1399: kund visas inte längre på objektnivå (kund hör hemma på
+  // uppgiftsnivå); payer-relationen används enbart för hierarki-sökningen nedan.
 
   // Task #1128: scrollar till en sektion via dess id. Gamla flik-värden och
   // ObjectMetadataForm-navigeringen (onNavigateToTab) mappas hit.
@@ -769,7 +761,6 @@ export default function ObjectDetailPage() {
     setEditForm({
       name: resolvedObject.name || "",
       objectNumber: resolvedObject.objectNumber || "",
-      objectType: resolvedObject.objectType || "",
       hierarchyLevel: resolvedObject.hierarchyLevel || "",
       status: resolvedObject.status || "active",
     });
@@ -904,7 +895,7 @@ export default function ObjectDetailPage() {
             {createParentId ? (
               <>Nytt objekt under <span className="font-medium text-foreground">{createParentName}</span>. Ärvda metadatavärden är förifyllda nedan.</>
             ) : (
-              "Fyll i uppgifterna för det nya objektet. Objekttyp, adress och kund läggs till som metadata."
+              "Fyll i uppgifterna för det nya objektet. Adress och övriga egenskaper läggs till som metadata."
             )}
           </p>
         </div>
@@ -958,7 +949,7 @@ export default function ObjectDetailPage() {
             </div>
             <div className="border-t pt-4">
               <Label className="mb-2 block">Metadata</Label>
-              <p className="text-xs text-muted-foreground mb-3">Objekttyp, adress, kund m.m. läggs till som metadatafält. Ärvda värden från överordnat objekt är förifyllda.</p>
+              <p className="text-xs text-muted-foreground mb-3">Adress och övriga egenskaper läggs till som metadatafält. Ärvda värden från överordnat objekt är förifyllda.</p>
               <MetadataFieldBuilder
                 key={createBuilderKey}
                 customerId={null}
@@ -975,10 +966,11 @@ export default function ObjectDetailPage() {
           </Button>
           <Button
             onClick={() => createObjectMutation.mutate({
+              // Task #1399: objectType skickas inte längre — kolumnen får
+              // serverns DB-default (fältet är pensionerat i UI).
               data: {
                 name: createName,
                 parentId: createParentId || undefined,
-                objectType: "fastighet",
               },
               metadata: createMetadataFields,
             })}
@@ -1022,15 +1014,6 @@ export default function ObjectDetailPage() {
   for (const a of ancestors) relationNameById.set(a.id, a.name || a.objectNumber || a.id.slice(0, 8));
   for (const d of descendants) relationNameById.set(d.id, d.name || d.objectNumber || d.id.slice(0, 8));
   relationNameById.set(obj.id, obj.name || obj.objectNumber || obj.id.slice(0, 8));
-  // objects.parentId speglar alltid den primära föräldern.
-  const relatedParents: MetadataRelatedParent[] = parentRelations
-    .filter((p): p is ParentRelation & { parentId: string } => !!p.parentId)
-    .map((p) => ({
-      id: p.parentId,
-      name: relationNameById.get(p.parentId) || p.parentName || `Objekt ${p.parentId.slice(0, 8)}`,
-      isPrimary: p.isPrimary ?? p.parentId === obj.parentId,
-      relationContext: p.relationContext ?? null,
-    }));
   const relatedChildren: MetadataRelatedChild[] = descendants
     .filter((d) => d.parentId === objectId)
     .map((d) => ({
@@ -1039,8 +1022,6 @@ export default function ObjectDetailPage() {
       objectType: d.objectType ?? null,
       hierarchyLevel: d.hierarchyLevel ?? null,
     }));
-  // Task #1128: primär förälder för header-sammanfattningen.
-  const primaryParent = relatedParents.find((p) => p.isPrimary) ?? relatedParents[0] ?? null;
 
 
   // Task #863: objektet som flytt-dialogen avser — sidans objekt eller ett barn
@@ -1070,7 +1051,6 @@ export default function ObjectDetailPage() {
     };
   };
 
-  const objectTypeLabel = (obj.objectType && objectTypeLabels[obj.objectType]) || obj.objectType || "";
 
 
   return (
@@ -1218,78 +1198,9 @@ export default function ObjectDetailPage() {
               canRestore={user?.role === "admin" || user?.role === "owner"}
             />
           </div>
-          {/* Task #1128: släktskap direkt i headern — redigerbar förälder + underordnade. */}
-          <div className="flex items-center gap-x-4 gap-y-1 mt-2 flex-wrap text-sm">
-            <div className="flex items-center gap-1.5" data-testid="header-parent-summary">
-              <GitFork className="h-4 w-4 text-muted-foreground shrink-0" />
-              <span className="text-muted-foreground">Förälder:</span>
-              {primaryParent ? (
-                <span className="flex items-center gap-1">
-                  <button
-                    type="button"
-                    onClick={() => navigate(`/objects/${primaryParent.id}`)}
-                    className="font-medium text-foreground hover:underline"
-                    data-testid="link-header-parent"
-                  >
-                    {primaryParent.name}
-                  </button>
-                  <span className="text-[10px] uppercase tracking-wide text-muted-foreground">(primär)</span>
-                </span>
-              ) : (
-                <span className="text-muted-foreground" data-testid="text-header-parent-none">Ingen förälder</span>
-              )}
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-6 w-6 p-0"
-                onClick={() => scrollToSection("hierarchy")}
-                data-testid="button-edit-parent"
-                title="Redigera förälder"
-              >
-                <Pencil className="h-3.5 w-3.5" />
-              </Button>
-              {/* Task #1128: alternativa föräldrar (multi-parent). Arv sker ALLTID från
-                  primär förälder — alternativa påverkar endast visningsnamn. */}
-              {relatedParents.length > 1 && (
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <span
-                      className="flex items-center gap-1 text-muted-foreground cursor-help flex-wrap"
-                      data-testid="header-alternate-parents"
-                    >
-                      <span className="text-xs">Alternativ:</span>
-                      {relatedParents
-                        .filter((p) => p.id !== primaryParent?.id)
-                        .map((p, i, arr) => (
-                          <button
-                            key={p.id}
-                            type="button"
-                            onClick={() => navigate(`/objects/${p.id}`)}
-                            className="text-xs hover:underline hover:text-foreground"
-                            data-testid={`link-header-alternate-parent-${p.id}`}
-                          >
-                            {p.name}{i < arr.length - 1 ? "," : ""}
-                          </button>
-                        ))}
-                    </span>
-                  </TooltipTrigger>
-                  <TooltipContent className="max-w-xs">
-                    Alternativa föräldrar påverkar endast visningsnamn. Metadata- och
-                    fältarv sker alltid från den primära föräldern.
-                  </TooltipContent>
-                </Tooltip>
-              )}
-            </div>
-            <button
-              type="button"
-              onClick={() => scrollToSection("hierarchy")}
-              className="flex items-center gap-1.5 text-muted-foreground hover:text-foreground"
-              data-testid="link-header-children"
-            >
-              <Layers className="h-4 w-4 shrink-0" />
-              <span>Underordnade ({descendants.length})</span>
-            </button>
-          </div>
+          {/* Task #1399: förälder-/underordnade-sammanfattningen är borttagen ur
+              headern — informationen framgår redan av brödsmulan ovan och av
+              korten "Föräldrar / Överordnade" och "Barn / Underordnade" nedan. */}
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           {/* Snabbmeny (ersätter tidigare sticky-navigering): hoppa till sektion. */}
@@ -1319,7 +1230,6 @@ export default function ObjectDetailPage() {
       <ObjectHeaderPanel
         objectId={obj.id}
         objectType={obj.objectType}
-        objectTypeLabel={objectTypeLabel}
         latitude={obj.latitude}
         longitude={obj.longitude}
         entranceLatitude={obj.entranceLatitude}
@@ -1340,7 +1250,7 @@ export default function ObjectDetailPage() {
               onChange={(e) => { setSearchInput(e.target.value); setSearchOpen(true); }}
               onFocus={() => setSearchOpen(true)}
               onBlur={() => setTimeout(() => setSearchOpen(false), 150)}
-              placeholder={`Sök i ${customer?.name ? `${customer.name}s ` : ""}hierarki (namn, adress, objektnummer)...`}
+              placeholder="Sök i hierarkin (namn, adress, objektnummer)..."
               className="pl-8 pr-8"
               data-testid="input-tree-search"
             />
@@ -1620,19 +1530,8 @@ export default function ObjectDetailPage() {
                     Hela hierarkin (rot → detta objekt). Uppdateras automatiskt vid flytt.
                   </p>
                 </div>
-                <div className="space-y-2">
-                  <Label>Objekttyp</Label>
-                  <Select value={editForm.objectType} onValueChange={(v) => setEditForm({ ...editForm, objectType: v })}>
-                    <SelectTrigger data-testid="select-edit-objectType">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {Object.entries(objectTypeLabels).map(([val, label]) => (
-                        <SelectItem key={val} value={val}>{label}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
+                {/* Task #1399: "Objekttyp" är pensionerat i UI (äldre metadatafält);
+                    DB-kolumnen behålls (expand-contract). */}
               </>
           </div>
           <DialogFooter>
@@ -1644,7 +1543,6 @@ export default function ObjectDetailPage() {
                 const payload: ObjectEditForm = {
                   name: editForm.name,
                   objectNumber: editForm.objectNumber,
-                  objectType: editForm.objectType,
                 };
                 updateObjectMutation.mutate(payload as Partial<ServiceObject>);
               }}

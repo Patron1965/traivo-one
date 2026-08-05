@@ -109,7 +109,6 @@ interface ImageMetadataOption {
 interface Props {
   objectId: string;
   objectType?: string | null;
-  objectTypeLabel?: string;
   latitude?: number | string | null;
   longitude?: number | string | null;
   entranceLatitude?: number | string | null;
@@ -189,7 +188,7 @@ interface SystemGeoResponse {
 }
 
 export function ObjectHeaderPanel({
-  objectId, objectType, objectTypeLabel,
+  objectId, objectType,
   latitude, longitude, entranceLatitude, entranceLongitude,
   name, objectNumber, metadata, canEdit,
 }: Props) {
@@ -297,9 +296,9 @@ export function ObjectHeaderPanel({
         : null;
       slots.push({ key: f.katalogId, label, value: entryDisplayValue(entry), inheritedFrom });
     }
-  } else {
-    slots.push({ key: "objtype", label: "Objekttyp", value: objectTypeLabel || objectType || null });
   }
+  // Task #1399: fallback-slotten "Objekttyp" är borttagen — fältet är
+  // pensionerat i UI; utan snabbfältskonfig visas tomt-läget istället.
 
   const lat = toNum(latitude) ?? toNum(entranceLatitude);
   const lng = toNum(longitude) ?? toNum(entranceLongitude);

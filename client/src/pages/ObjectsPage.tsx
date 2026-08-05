@@ -557,11 +557,10 @@ export default function ObjectsPage() {
     },
   });
 
-  const customerMap = customerNameMap;
 
   const topLevelObjects = useMemo(() => objects.filter(obj => !obj.parentId), [objects]);
 
-  type SortField = "name" | "children" | "city" | "customer";
+  type SortField = "name" | "children" | "city";
   const [sortConfig, setSortConfig] = useState<{ field: SortField; direction: "asc" | "desc" }>({ field: "name", direction: "asc" });
 
   const childrenMap = useMemo(() => {
@@ -601,17 +600,11 @@ export default function ObjectsPage() {
           cmp = (a.city || "").localeCompare(b.city || "", "sv", { sensitivity: "base" });
           break;
         }
-        case "customer": {
-          const ac = customerNameMap.get(a.customerId ?? "") || "";
-          const bc = customerNameMap.get(b.customerId ?? "") || "";
-          cmp = ac.localeCompare(bc, "sv", { sensitivity: "base" });
-          break;
-        }
       }
       return cmp * dir;
     });
     return copy;
-  }, [sortConfig, childrenMap, customerNameMap]);
+  }, [sortConfig, childrenMap]);
 
   const getChildren = useCallback((parentId: string) =>
     sortObjects(childrenMap.get(parentId) || []), [childrenMap, sortObjects]);
@@ -1312,7 +1305,6 @@ export default function ObjectsPage() {
     const children = getChildren(obj.id);
     const isExpanded = expandedAreas.has(obj.id);
     const hasChildren = children.length > 0;
-    const customerName = customerMap.get(obj.customerId ?? "") || "";
 
     return (
       <div key={obj.id} className="border-b last:border-b-0">
@@ -1448,21 +1440,8 @@ export default function ObjectsPage() {
                   <TooltipContent>Stad saknas</TooltipContent>
                 </Tooltip>
               )}
-              {level === 0 && customerName && (
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <span
-                      className="flex items-center gap-1 cursor-pointer text-foreground/70 hover:text-foreground hover:underline"
-                      onClick={(e) => { e.stopPropagation(); if (obj.customerId) addCustomerFilter(obj.customerId); }}
-                      data-testid={`link-customer-${obj.id}`}
-                    >
-                      <Building2 className="h-3 w-3" />
-                      {customerName}
-                    </span>
-                  </TooltipTrigger>
-                  <TooltipContent>Kommun / Kund — klicka för att filtrera</TooltipContent>
-                </Tooltip>
-              )}
+              {/* Task #1399: kund visas inte längre per objekt — kund hör hemma
+                  på uppgiftsnivå (payer-relationen finns kvar i backend). */}
               {/* Task #859: förälder/barn-relation. Barn på samma sida ligger redan
                   indenterat under föräldern; toppnivå-rader som ändå har en förälder
                   får en explicit "under {förälder}"-indikator. */}
@@ -2204,13 +2183,6 @@ export default function ObjectsPage() {
                   data-testid="button-sort-city"
                 >
                   Stad <SortIcon field="city" />
-                </button>
-                <button
-                  onClick={() => toggleSort("customer")}
-                  className={`hidden lg:flex items-center gap-1 hover:text-foreground w-40 shrink-0 ${sortConfig.field === "customer" ? "text-primary font-semibold" : ""}`}
-                  data-testid="button-sort-customer"
-                >
-                  Kund <SortIcon field="customer" />
                 </button>
                 <button
                   onClick={() => toggleSort("children")}

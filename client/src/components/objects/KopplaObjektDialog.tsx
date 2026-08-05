@@ -64,7 +64,6 @@ export function KopplaObjektDialog({
   const [debounced, setDebounced] = useState("");
   const [selected, setSelected] = useState<ObjectParentSearchHit | null>(null);
   const [newName, setNewName] = useState("");
-  const [newType, setNewType] = useState("");
   // Kom ihåg ett redan skapat objekt så ett nytt försök efter ett kopplingsfel
   // återanvänder samma objekt i stället för att skapa en dubblett.
   const createdIdRef = useRef<string | null>(null);
@@ -81,7 +80,6 @@ export function KopplaObjektDialog({
       setDebounced("");
       setSelected(null);
       setNewName("");
-      setNewType("");
       createdIdRef.current = null;
     }
   }, [open]);
@@ -158,7 +156,7 @@ export function KopplaObjektDialog({
           method: "POST",
           headers: { "Content-Type": "application/json" },
           credentials: "include",
-          body: JSON.stringify({ name, ...(newType ? { objectType: newType } : {}) }),
+          body: JSON.stringify({ name }),
         });
         if (!createRes.ok) {
           let msg = "Kunde inte skapa objektet.";
@@ -334,23 +332,8 @@ export function KopplaObjektDialog({
                   data-testid="input-koppla-new-name"
                 />
               </div>
-              {objectTypeLabels && Object.keys(objectTypeLabels).length > 0 && (
-                <div className="space-y-1.5">
-                  <Label>Objekttyp</Label>
-                  <Select value={newType} onValueChange={setNewType}>
-                    <SelectTrigger data-testid="select-koppla-new-type">
-                      <SelectValue placeholder="Standard (område)" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {Object.entries(objectTypeLabels).map(([code, label]) => (
-                        <SelectItem key={code} value={code}>
-                          {label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              )}
+              {/* Task #1399: Objekttyp-väljaren är borttagen — fältet är
+                  pensionerat i UI; servern sätter standardtyp. */}
               <p className="text-xs text-muted-foreground">
                 Objektet skapas och kopplas direkt som {relWord} till {objectName}.
               </p>

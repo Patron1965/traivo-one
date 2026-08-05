@@ -316,9 +316,6 @@ export function ObjectApplicableArticlesPanel({ object, controlled, open: contro
 
         <div className="mt-6 pt-4 border-t">
           <p className="text-xs text-muted-foreground">
-            <strong>Objekttyp:</strong> {object.objectType || "-"}
-          </p>
-          <p className="text-xs text-muted-foreground">
             <strong>Hierarkinivå:</strong> {object.hierarchyLevel || "-"}
           </p>
         </div>

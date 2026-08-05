@@ -6,18 +6,6 @@ import { DoorOpen, MapPinOff, ChevronDown, ChevronUp, List } from "lucide-react"
 import type { ServiceObject } from "@shared/schema";
 import { BaseMap } from "@/components/ui/map";
 
-const objectTypeLabels: Record<string, string> = {
-  omrade: "Område",
-  fastighet: "Fastighet",
-  serviceboende: "Serviceboende",
-  rum: "Rum",
-  soprum: "Soprum",
-  kok: "Kök",
-  uj_hushallsavfall: "UJ Hushållsavfall",
-  matafall: "Matavfall",
-  atervinning: "Återvinning",
-};
-
 const createObjectIcon = () => {
   const color = "#4A9B9B";
   return L.divIcon({
@@ -334,9 +322,7 @@ export const ObjectsMapTab = memo(function ObjectsMapTab({
                     <div className="p-1">
                       <div className="font-medium">{obj.name}</div>
                       <div className="text-sm text-gray-600">{obj.address}, {obj.city}</div>
-                      <div className="text-sm mt-1">
-                        <span className="font-medium">Typ:</span> {objectTypeLabels[obj.objectType] ?? obj.objectType}
-                      </div>
+                      {/* Task #1399: "Typ" (objekttyp) är pensionerad i UI. */}
                       {!(obj.latitude && obj.longitude) && (
                         <div className="text-chart-2 text-xs mt-1 flex items-center gap-1">
                           <DoorOpen className="h-3 w-3" /> Visar entrékoordinater

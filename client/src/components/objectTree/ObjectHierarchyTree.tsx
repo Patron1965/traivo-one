@@ -558,11 +558,9 @@ export function ObjectHierarchyTree({
                 {desc} underobjekt
               </Badge>
             )}
-            {node.customerName && (
-              <span className="text-xs text-muted-foreground truncate hidden md:inline">
-                · {node.customerName}
-              </span>
-            )}
+            {/* Task #1399: kundnamn visas inte längre per objekt i trädet
+                (kund hör hemma på uppgiftsnivå); söktext-blobben behåller
+                kundnamnet så filtrering fortsätter fungera. */}
             {(node.orderStatuses?.length ?? 0) > 0 && (
               <Badge
                 className={`${getWorkOrderStatusBadge(node.orderStatuses[0])} text-xs shrink-0 hidden lg:inline-flex`}

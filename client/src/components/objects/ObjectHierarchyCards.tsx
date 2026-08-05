@@ -135,11 +135,6 @@ export function ObjectHierarchyCards({
       >
         {depth > 0 && <ChevronRight className="h-3 w-3 text-muted-foreground shrink-0" />}
         <span className="text-sm font-medium">{child.name || child.objectNumber}</span>
-        {child.objectType && (
-          <Badge variant="secondary" className="text-[10px]">
-            {objectTypeLabels[child.objectType] || child.objectType}
-          </Badge>
-        )}
         <div className="ml-auto flex items-center gap-1 shrink-0">
           <Button
             variant="ghost"
