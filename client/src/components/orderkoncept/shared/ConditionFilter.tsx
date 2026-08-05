@@ -95,6 +95,8 @@ interface ConditionFilterRowProps {
   onRemove: () => void;
   /** Tillåt fritext för värdet via Input (default). Annars endast operator. */
   fieldPlaceholder?: string;
+  /** Begränsa/etikettera operatorerna (default: alla CONDITION_OPERATORS). */
+  operators?: { value: string; label: string; noValue?: boolean }[];
 }
 
 export function ConditionFilterRow({
@@ -105,8 +107,9 @@ export function ConditionFilterRow({
   onChange,
   onRemove,
   fieldPlaceholder,
+  operators = CONDITION_OPERATORS,
 }: ConditionFilterRowProps) {
-  const op = CONDITION_OPERATORS.find((o) => o.value === filter.operator);
+  const op = operators.find((o) => o.value === filter.operator) ?? CONDITION_OPERATORS.find((o) => o.value === filter.operator);
   return (
     <div className="flex flex-wrap items-center gap-2" data-testid={`filter-row-${index}`}>
       <MetadataFieldSelect
@@ -122,7 +125,7 @@ export function ConditionFilterRow({
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
-          {CONDITION_OPERATORS.map((o) => (
+          {operators.map((o) => (
             <SelectItem key={o.value} value={o.value}>
               {o.label}
             </SelectItem>
@@ -161,6 +164,8 @@ interface ConditionFilterListProps {
   fieldPlaceholder?: string;
   /** testid-prefix för "lägg till"-knappen. */
   addTestId?: string;
+  /** Begränsa/etikettera operatorerna (default: alla CONDITION_OPERATORS). */
+  operators?: { value: string; label: string; noValue?: boolean }[];
 }
 
 /**
@@ -177,6 +182,7 @@ export function ConditionFilterList({
   emptyText = "Inga villkor — alla rader visas.",
   fieldPlaceholder,
   addTestId = "button-add-condition",
+  operators,
 }: ConditionFilterListProps) {
   const addFilter = () =>
     onChange([...filters, { metadataKey: "", operator: "equals", filterValue: "" }]);
@@ -198,6 +204,7 @@ export function ConditionFilterList({
               fields={fields}
               definitions={definitions}
               fieldPlaceholder={fieldPlaceholder}
+              operators={operators}
               onChange={(patch) => updateFilter(i, patch)}
               onRemove={() => removeFilter(i)}
             />

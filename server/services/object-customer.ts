@@ -91,66 +91,6 @@ export function objectPrimaryCustomerInSql(customerIds: string[]): SQL<boolean> 
 }
 
 /**
- * Filter för "objektet har en KOPPLAD UPGIFT (work order) som matchar"
- * (Task #1083 — sök på kopplade uppgifter). Alla fält är valfria; minst ett
- * måste vara satt för att hjälparen ska anropas (annars matchar den allt).
- */
-export interface LinkedTaskFilter {
-  /** work_orders.order_type (uppgiftstyp, t.ex. "service"). */
-  taskType?: string;
-  /**
-   * Order-/faktureringskund för uppgiften. ADR v3: kunden härleds via
-   * orderkoncept/order (work_orders.customer_id stämplas vid expansion) — INTE
-   * via objektets kund-metadata. Vi filtrerar därför på work_orders.customer_id.
-   */
-  customerId?: string;
-  /** Endast uppgifter utförda (completed_at) från och med denna tidpunkt. */
-  completedFrom?: Date;
-  /** Endast uppgifter utförda (completed_at) till och med denna tidpunkt. */
-  completedTo?: Date;
-}
-
-/**
- * SQL-fragment för predikat: "objektet har minst en UTFÖRD kopplad uppgift som
- * matchar filtret". Korrelerar mot yttre objects-raden via "objects"."id"
- * (samma mönster som hjälparna ovan). Tenant-scopas i subqueryn (defense-in-
- * depth) och kräver att uppgiften är utförd (order_status IN utford/fakturerad)
- * samt inte soft-deletad.
- *
- * Returnerar `null` om inget delkriterium är satt — anroparen ska då hoppa över
- * filtret (annars skulle ett tomt filter matcha alla objekt med någon utförd
- * uppgift, vilket inte är avsett).
- */
-export function objectHasLinkedTaskSql(
-  tenantId: string,
-  filter: LinkedTaskFilter,
-): SQL<boolean> | null {
-  const extra: SQL[] = [];
-  if (filter.taskType) {
-    extra.push(sql`wo.order_type = ${filter.taskType}`);
-  }
-  if (filter.customerId) {
-    extra.push(sql`wo.customer_id = ${filter.customerId}`);
-  }
-  if (filter.completedFrom) {
-    extra.push(sql`wo.completed_at >= ${filter.completedFrom}`);
-  }
-  if (filter.completedTo) {
-    extra.push(sql`wo.completed_at <= ${filter.completedTo}`);
-  }
-  if (extra.length === 0) return null;
-
-  const extraSql = sql.join(extra.map(e => sql` AND ${e}`), sql``);
-  return sql<boolean>`EXISTS (
-    SELECT 1 FROM work_orders wo
-    WHERE wo.object_id = "objects"."id"
-      AND wo.tenant_id = ${tenantId}
-      AND wo.deleted_at IS NULL
-      AND wo.order_status IN ('utford', 'fakturerad')${extraSql}
-  )`;
-}
-
-/**
  * SQL-fragment för predikat: "objektet saknar kund (=ingen kund-koppling i
  * Ekonomi-metadatat)". Används för issue=no-customer-filtret. Kräver att den
  * härledda kunden dessutom finns och är aktiv i kundregistret.

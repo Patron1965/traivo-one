@@ -190,9 +190,7 @@ import {
   objectHasPrimaryCustomerSql,
   objectPrimaryCustomerInSql,
   objectHasNoPrimaryCustomerSql,
-  objectHasLinkedTaskSql,
   getObjectPrimaryCustomerId,
-  type LinkedTaskFilter,
 } from "./services/object-customer";
 import { objectMetadataTextValueSql } from "./services/object-metadata-sql";
 
@@ -509,7 +507,7 @@ export interface IStorage {
   
   /** Föredragen API: hämtar samtliga objekt för en tenant. */
   getObjects(tenantId: string): Promise<ServiceObject[]>;
-  getObjectsPaginated(tenantId: string, limit: number, offset: number, search?: string, customerIds?: string[], filters?: { objectType?: string; hierarchyLevel?: string; isInterimObject?: boolean; issue?: string; reported?: boolean; locationType?: string; linkedTask?: LinkedTaskFilter; importBatchId?: string }): Promise<{ objects: ServiceObject[]; total: number }>;
+  getObjectsPaginated(tenantId: string, limit: number, offset: number, search?: string, customerIds?: string[], filters?: { objectType?: string; hierarchyLevel?: string; isInterimObject?: boolean; issue?: string; reported?: boolean; locationType?: string; importBatchId?: string }): Promise<{ objects: ServiceObject[]; total: number }>;
   getObjectsByIds(tenantId: string, ids: string[]): Promise<ServiceObject[]>;
   getObjectsWithIssues(tenantId: string, options?: { issueType?: string; status?: string; customerId?: string; limit?: number }): Promise<{
     totalObjectsWithIssues: number;
@@ -2408,7 +2406,7 @@ export class DatabaseStorage implements IStorage {
     return db.select(objectColumnsWithPrimaryCustomer()).from(objects).where(and(eq(objects.tenantId, tenantId), isNull(objects.deletedAt)));
   }
 
-  async getObjectsPaginated(tenantId: string, limit: number, offset: number, search?: string, customerIds?: string[], filters?: { objectType?: string; hierarchyLevel?: string; isInterimObject?: boolean; issue?: string; reported?: boolean; locationType?: string; linkedTask?: LinkedTaskFilter; importBatchId?: string }): Promise<{ objects: ServiceObject[]; total: number }> {
+  async getObjectsPaginated(tenantId: string, limit: number, offset: number, search?: string, customerIds?: string[], filters?: { objectType?: string; hierarchyLevel?: string; isInterimObject?: boolean; issue?: string; reported?: boolean; locationType?: string; importBatchId?: string }): Promise<{ objects: ServiceObject[]; total: number }> {
     const { sql, count } = await import("drizzle-orm");
     
     let whereConditions = and(eq(objects.tenantId, tenantId), isNull(objects.deletedAt));
@@ -2454,17 +2452,6 @@ export class DatabaseStorage implements IStorage {
         whereConditions = and(whereConditions, sql`(${objects.locationType} = 'area' OR (${objects.locationType} IS NULL AND ${objects.polylineData} IS NOT NULL AND NOT ${anyUsable}))`);
       } else if (filters.locationType === "none") {
         whereConditions = and(whereConditions, sql`(${objects.locationType} = 'none' OR (${objects.locationType} IS NULL AND ${objects.polylineData} IS NULL AND NOT ${anyUsable}))`);
-      }
-    }
-
-    // Task #1083: sök på kopplade uppgifter (uppgiftstyp / order-kund / utförd
-    // tidsperiod). Filtrerar objekt på minst en UTFÖRD work order som matchar.
-    // Kunden härleds via work_orders.customer_id (order-/koncept-kund), aldrig
-    // via objektets primär-payer. Tenant-scopas i subqueryn (defense-in-depth).
-    if (filters?.linkedTask) {
-      const linkedTaskSql = objectHasLinkedTaskSql(tenantId, filters.linkedTask);
-      if (linkedTaskSql) {
-        whereConditions = and(whereConditions, linkedTaskSql);
       }
     }
 

@@ -50,23 +50,26 @@ import { ObjectSystemGeneratedPanel } from "@/components/ObjectSystemGeneratedPa
 import { useLocalizedObjectName } from "@/lib/object-name";
 import { OBJECT_LOCATION_TYPE_LABELS, effectiveObjectPosition } from "@/lib/object-location";
 import { AddressSearch } from "@/components/AddressSearch";
-import { CustomerCombobox, CustomerMultiCombobox, useCustomerLookup } from "@/components/CustomerCombobox";
 import { GeocodedObjectsMap, ObjectsMapTab } from "@/components/ObjectsMapView";
 import { BulkActionBar } from "@/components/BulkActionBar";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import type { ServiceObject, MetadataDefinition } from "@shared/schema";
 import {
   ConditionFilterList,
   CONDITION_OPERATORS,
   type ConditionFilter,
+  type ConditionField,
 } from "@/components/orderkoncept/shared/ConditionFilter";
 import { ObjectHierarchyTree, computeBranchSeedRoots, type TreeNode } from "@/components/objectTree/ObjectHierarchyTree";
+import { CustomerMultiCombobox, useCustomerLookup } from "@/components/CustomerCombobox";
+import type { ServiceObject } from "@shared/schema";
 
 const PAGE_SIZE = 100;
 
-// Task #859: valbara metadatakolumner i objektlistan persisteras per användare
-// (per webbläsare) via localStorage — "spara enkelt"-nivån i taskspecen.
+const OBJECT_CONDITION_OPERATORS: { value: string; label: string; noValue?: boolean }[] = [
+  { value: "equals", label: "är lika med" },
+  { value: "not_equals", label: "skiljer sig från" },
+];
 const METADATA_COLUMNS_STORAGE_KEY = "traivo:objects:metadataColumns";
 const METADATA_COLUMNS_COLLAPSED_STORAGE_KEY = "traivo:objects:metadataColumnsCollapsed";
 
@@ -177,16 +180,9 @@ export default function ObjectsPage() {
   const setLocationTypeFilter = (v: string) => { setLocationTypeFilterRaw(v); setCurrentPage(0); };
   const [reportedFilter, setReportedFilterRaw] = useState(false);
   const setReportedFilter = (v: boolean) => { setReportedFilterRaw(v); setCurrentPage(0); };
-  // Task #1083: sök på kopplade uppgifter (uppgiftstyp / order-kund / utförd tidsperiod).
-  const [taskTypeFilter, setTaskTypeFilterRaw] = useState<string>("all");
-  const setTaskTypeFilter = (v: string) => { setTaskTypeFilterRaw(v); setCurrentPage(0); };
-  const [taskCustomerFilter, setTaskCustomerFilterRaw] = useState<string | null>(null);
-  const setTaskCustomerFilter = (v: string | null) => { setTaskCustomerFilterRaw(v); setCurrentPage(0); };
-  const [taskCompletedFrom, setTaskCompletedFromRaw] = useState<string>("");
-  const setTaskCompletedFrom = (v: string) => { setTaskCompletedFromRaw(v); setCurrentPage(0); };
-  const [taskCompletedTo, setTaskCompletedToRaw] = useState<string>("");
-  const setTaskCompletedTo = (v: string) => { setTaskCompletedToRaw(v); setCurrentPage(0); };
-  const hasLinkedTaskFilter = taskTypeFilter !== "all" || !!taskCustomerFilter || !!taskCompletedFrom || !!taskCompletedTo;
+  // Task #1400: legacy-filtret "kopplade uppgifter" (uppgiftstyp/order-kund/
+  // tidsperiod från gamla systemet) är borttaget — det fördjupade filtret är
+  // metadatavillkor + geografiska filter.
   const [interimFilter, setInterimFilter] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const toggleSelected = useCallback((id: string) => {
@@ -265,19 +261,8 @@ export default function ObjectsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Task #940: metadatafält för det standardiserade villkorsfiltret (engelska
-  // metadataDefinitions — samma system som orderkoncept-inpekningen använder).
-  const { data: metadataDefinitions = [] } = useQuery<MetadataDefinition[]>({
-    queryKey: ["/api/metadata-definitions"],
-  });
-
-  // Task #1083: uppgiftstyper för "sök på kopplade uppgifter"-filtret.
-  const { data: taskTypeOptions = [] } = useQuery<{ key: string; label: string }[]>({
-    queryKey: ["/api/reference/task-types"],
-  });
-
   const { data: objectsData, isLoading, isError: objectsIsError, error: objectsError, refetch: objectsRefetch } = useQuery<{ objects: ServiceObject[]; total: number }>({
-    queryKey: ["/api/objects", "paginated", currentPage, debouncedSearch, customerFilter, JSON.stringify(activeConditions), reportedFilter, interimFilter, issueFilter, locationTypeFilter, taskTypeFilter, taskCustomerFilter, taskCompletedFrom, taskCompletedTo, importBatchFilter],
+    queryKey: ["/api/objects", "paginated", currentPage, debouncedSearch, customerFilter, JSON.stringify(activeConditions), reportedFilter, interimFilter, issueFilter, locationTypeFilter, importBatchFilter],
     queryFn: async () => {
       const params = new URLSearchParams({
         limit: PAGE_SIZE.toString(),
@@ -306,18 +291,6 @@ export default function ObjectsPage() {
       }
       if (importBatchFilter) {
         params.append("importBatchId", importBatchFilter);
-      }
-      if (taskTypeFilter !== "all") {
-        params.append("taskType", taskTypeFilter);
-      }
-      if (taskCustomerFilter) {
-        params.append("taskCustomerId", taskCustomerFilter);
-      }
-      if (taskCompletedFrom) {
-        params.append("taskCompletedFrom", taskCompletedFrom);
-      }
-      if (taskCompletedTo) {
-        params.append("taskCompletedTo", taskCompletedTo);
       }
       const res = await fetch(`/api/objects?${params.toString()}`, { credentials: "include" });
       if (!res.ok) throw new Error("Failed to fetch objects");
@@ -737,6 +710,14 @@ export default function ObjectsPage() {
       .filter((f): f is MetadataCatalogType & { displayLabel: string } => f != null);
   }, [metadataCatalog]);
 
+  // Task #1400: villkorsfiltrets fältkälla är den svenska metadata-katalogen.
+  // Nyckeln är katalogens `namn` — serverns buildObjectMetadataMap nycklar varje
+  // värde på namn/beteckning/punktnotation, så namn resolvar alltid.
+  const conditionFields = useMemo<ConditionField[]>(
+    () => metadataCatalog.map((t) => ({ value: t.namn, label: t.namn })),
+    [metadataCatalog],
+  );
+
   const metadataObjectIds = useMemo(() => filteredObjects.map((o) => o.id), [filteredObjects]);
 
   const metadataBatchKatalogIds = useMemo(() => {
@@ -791,9 +772,8 @@ export default function ObjectsPage() {
     interimFilter ? 1 : 0,
     issueFilter ? 1 : 0,
     locationTypeFilter !== "all" ? 1 : 0,
-    hasLinkedTaskFilter ? 1 : 0,
     importBatchFilter ? 1 : 0,
-  ].reduce((a, b) => a + b, 0), [activeConditions, customerFilter, reportedFilter, interimFilter, issueFilter, locationTypeFilter, hasLinkedTaskFilter, importBatchFilter]);
+  ].reduce((a, b) => a + b, 0), [activeConditions, customerFilter, reportedFilter, interimFilter, issueFilter, locationTypeFilter, importBatchFilter]);
 
   const clearAllFilters = () => {
     setConditionFilters([]);
@@ -802,10 +782,6 @@ export default function ObjectsPage() {
     setInterimFilter(false);
     setIssueFilter(null);
     setLocationTypeFilter("all");
-    setTaskTypeFilter("all");
-    setTaskCustomerFilter(null);
-    setTaskCompletedFrom("");
-    setTaskCompletedTo("");
     setImportBatchFilterRaw(null);
     // Task #1401: bevara vyläget (?view=) när filtren rensas.
     const viewParam = new URLSearchParams(window.location.search).get("view");
@@ -869,12 +845,8 @@ export default function ObjectsPage() {
     if (importBatchFilter) params.append("importBatchId", importBatchFilter);
     // Task #1397: uppgiftsfiltren måste med — annars exporterar vi ett större
     // urval än listan (och antalet i exportmenyn) visar.
-    if (taskTypeFilter !== "all") params.append("taskType", taskTypeFilter);
-    if (taskCustomerFilter) params.append("taskCustomerId", taskCustomerFilter);
-    if (taskCompletedFrom) params.append("taskCompletedFrom", taskCompletedFrom);
-    if (taskCompletedTo) params.append("taskCompletedTo", taskCompletedTo);
     return params;
-  }, [debouncedSearch, customerFilter, activeConditions, reportedFilter, interimFilter, issueFilter, locationTypeFilter, importBatchFilter, taskTypeFilter, taskCustomerFilter, taskCompletedFrom, taskCompletedTo]);
+  }, [debouncedSearch, customerFilter, activeConditions, reportedFilter, interimFilter, issueFilter, locationTypeFilter, importBatchFilter]);
 
   const downloadCSV = (filename: string, rows: (string | number)[][]) => {
     const csv = rows.map(row => row.map(sanitizeCSVCell).join(",")).join("\n");
@@ -1905,8 +1877,8 @@ export default function ObjectsPage() {
             <div className="flex items-center gap-2 flex-wrap mt-3">
               {conditionFilters.map((f, i) => f.metadataKey ? (
                 <Badge key={`cond-${i}`} variant="secondary" className="gap-1 cursor-pointer" onClick={() => setConditionFilters(conditionFilters.filter((_, idx) => idx !== i))} data-testid={`badge-filter-condition-${i}`}>
-                  {(metadataDefinitions.find(d => d.fieldKey === f.metadataKey)?.fieldLabel ?? f.metadataKey)}
-                  {" "}{(CONDITION_OPERATORS.find(o => o.value === f.operator)?.label ?? f.operator)}
+                  {f.metadataKey}
+                  {" "}{(OBJECT_CONDITION_OPERATORS.find(o => o.value === f.operator)?.label ?? CONDITION_OPERATORS.find(o => o.value === f.operator)?.label ?? f.operator)}
                   {CONDITION_OPERATORS.find(o => o.value === f.operator)?.noValue ? "" : ` ${String(f.filterValue ?? "")}`}
                   <X className="h-3 w-3" />
                 </Badge>
@@ -1938,30 +1910,6 @@ export default function ObjectsPage() {
               {importBatchFilter && (
                 <Badge variant="secondary" className="gap-1 cursor-pointer" onClick={clearImportBatchFilter} data-testid="badge-filter-import-batch">
                   Import: {importBatchFilter}
-                  <X className="h-3 w-3" />
-                </Badge>
-              )}
-              {taskTypeFilter !== "all" && (
-                <Badge variant="secondary" className="gap-1 cursor-pointer" onClick={() => setTaskTypeFilter("all")} data-testid="badge-filter-task-type">
-                  Uppgiftstyp: {taskTypeOptions.find(t => t.key === taskTypeFilter)?.label ?? taskTypeFilter}
-                  <X className="h-3 w-3" />
-                </Badge>
-              )}
-              {taskCustomerFilter && (
-                <Badge variant="secondary" className="gap-1 cursor-pointer" onClick={() => setTaskCustomerFilter(null)} data-testid="badge-filter-task-customer">
-                  Uppgiftskund vald
-                  <X className="h-3 w-3" />
-                </Badge>
-              )}
-              {taskCompletedFrom && (
-                <Badge variant="secondary" className="gap-1 cursor-pointer" onClick={() => setTaskCompletedFrom("")} data-testid="badge-filter-task-from">
-                  Utförd fr.o.m. {taskCompletedFrom}
-                  <X className="h-3 w-3" />
-                </Badge>
-              )}
-              {taskCompletedTo && (
-                <Badge variant="secondary" className="gap-1 cursor-pointer" onClick={() => setTaskCompletedTo("")} data-testid="badge-filter-task-to">
-                  Utförd t.o.m. {taskCompletedTo}
                   <X className="h-3 w-3" />
                 </Badge>
               )}
@@ -2017,80 +1965,12 @@ export default function ObjectsPage() {
               </p>
               <ConditionFilterList
                 filters={conditionFilters}
-                definitions={metadataDefinitions}
+                fields={conditionFields}
+                operators={OBJECT_CONDITION_OPERATORS}
                 onChange={setConditionFilters}
                 emptyText="Inga villkor — alla objekt visas."
                 addTestId="button-add-condition-object"
               />
-            </div>
-            {/* Task #1083: sök på kopplade uppgifter (uppgiftstyp / kund / utförd tidsperiod). */}
-            <div className="space-y-2">
-              <Label className="text-sm flex items-center gap-1.5">
-                <Clock className="h-3.5 w-3.5" /> Kopplade uppgifter
-              </Label>
-              <p className="text-xs text-muted-foreground">
-                Visa objekt med utförda uppgifter — filtrera på uppgiftstyp, kund (order-/faktureringskund) och utförd tidsperiod.
-              </p>
-              <div className="flex items-end gap-4 flex-wrap">
-                <div className="space-y-1">
-                  <Label className="text-xs text-muted-foreground">Uppgiftstyp</Label>
-                  <Select value={taskTypeFilter} onValueChange={setTaskTypeFilter}>
-                    <SelectTrigger className="w-[180px]" data-testid="select-task-type-filter">
-                      <SelectValue placeholder="Alla uppgiftstyper" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">Alla uppgiftstyper</SelectItem>
-                      {taskTypeOptions.map((t) => (
-                        <SelectItem key={t.key} value={t.key} data-testid={`option-task-type-${t.key}`}>
-                          {t.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-xs text-muted-foreground">Kund</Label>
-                  <CustomerCombobox
-                    value={taskCustomerFilter}
-                    onChange={(id) => setTaskCustomerFilter(id)}
-                    placeholder="Alla kunder"
-                    className="w-[200px]"
-                    testId="select-task-customer-filter"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-xs text-muted-foreground">Utförd fr.o.m.</Label>
-                  <Input
-                    type="date"
-                    value={taskCompletedFrom}
-                    onChange={(e) => setTaskCompletedFrom(e.target.value)}
-                    className="w-[160px]"
-                    data-testid="input-task-completed-from"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-xs text-muted-foreground">Utförd t.o.m.</Label>
-                  <Input
-                    type="date"
-                    value={taskCompletedTo}
-                    onChange={(e) => setTaskCompletedTo(e.target.value)}
-                    className="w-[160px]"
-                    data-testid="input-task-completed-to"
-                  />
-                </div>
-                {hasLinkedTaskFilter && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="gap-1 text-muted-foreground"
-                    onClick={() => { setTaskTypeFilter("all"); setTaskCustomerFilter(null); setTaskCompletedFrom(""); setTaskCompletedTo(""); }}
-                    data-testid="button-clear-linked-task-filter"
-                  >
-                    <X className="h-3.5 w-3.5" />
-                    Rensa
-                  </Button>
-                )}
-              </div>
             </div>
           </CardContent>
         )}
