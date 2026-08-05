@@ -52,7 +52,8 @@ export const KNOWN_FIELDS: Record<string, string> = {
   systemföräldranummer: "system_parent_id",
   systemforaldranummer: "system_parent_id",
   objektnamn: "name",
-  namn: "name",
+  // OBS: alias:a ALDRIG bara "namn" → name — en kolumn "Namn" är oftast
+  // kontaktpersonens namn och ska inte auto-matchas till objektnamnet.
   // Tre-fils-export (Task #1176): Fil 1/Fil 2 använder "Objektnummer"/"Huvudobjekt"
   // för objektets eget systemnummer och "Koppling uppåt" för förälderns nummer.
   objektnummer: "system_id",
@@ -146,7 +147,7 @@ export const FIELD_CATALOG: FieldDefinition[] = [
   // Standardfält
   { key: "system_id", label: "Systemnummer", description: "Traivos unika ID – ifyllt = uppdatera", category: "standard", type: "text_id", required: false },
   { key: "system_parent_id", label: "Systemföräldranummer", description: "Peka mot befintlig förälder", category: "standard", type: "text_id", required: false },
-  { key: "name", label: "Objektnamn", description: "Obligatoriskt – namn på objektet", category: "standard", type: "text", required: true },
+  { key: "name", label: "Objektnamn", description: "Namn på objektet – saknas namn får objektet sitt nummer som namn", category: "standard", type: "text", required: true },
   { key: "interim_id", label: "Interimsnummer", description: "Temporärt ID för hierarki", category: "standard", type: "text_id", required: false },
   { key: "interim_parent_id", label: "Interimföräldranummer", description: "Temporär förälderreferens", category: "standard", type: "text_id", required: false },
   { key: "external_id", label: "externt_id", description: "Kundens egna referensnummer", category: "standard", type: "text_id", required: false },

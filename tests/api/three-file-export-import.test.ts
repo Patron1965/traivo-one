@@ -13,7 +13,10 @@ describe("Tre-fils-export ↔ återimport (Task #1176)", () => {
 
     it("mappar Fil 2-kolumner till rätt importmål", () => {
       expect(autoMatchColumn("Huvudobjekt")).toBe("system_id");
-      expect(autoMatchColumn("Namn")).toBe("name");
+      // Bare "Namn" auto-matchas INTE längre — kolumnen är oftast kontakt-
+      // personens namn och får inte fastna på objektnamnet (produktregel
+      // 2026-08-05). Exporten emitterar "Objektnamn".
+      expect(autoMatchColumn("Namn")).toBeNull();
       expect(autoMatchColumn("Koppling uppåt")).toBe("system_parent_id");
     });
   });

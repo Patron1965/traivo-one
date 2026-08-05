@@ -17,7 +17,7 @@ import {
   metadataVarden,
   metadataHistorik,
 } from "@shared/schema";
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 
 // Task #828 (code-review finding #4): API-nivå E2E över hela validate→execute-
 // flödet genom de RIKTIGA route-handlers (inte bara core-logiken). Monteras bakom
@@ -207,6 +207,42 @@ describe("Import 2.0 execute — API-nivå E2E", () => {
 // system_parent_id måste peka på ett FAKTISKT DB-objekt. Ett påhittat värde får
 // inte passera validering (skulle annars tyst importeras som rot), och ett äkta
 // DB-nummer måste både passera validering OCH parentas korrekt vid execute.
+describe("Import 2.0 — objektnamn är inte obligatoriskt (produktregel 2026-08-05)", () => {
+  it("importerar utan namn-mappning; objekten får sitt interimnummer som namn", async () => {
+    const matrix = [
+      ["Interimsnummer", "Interims-förälder"],
+      ["NONAME-1", ""],
+      ["NONAME-2", "NONAME-1"],
+    ];
+    const mappings = {
+      "0": { target: "interim_id", type: "standard" as const },
+      "1": { target: "interim_parent_id", type: "standard" as const },
+    };
+    const up = await req("POST", "/api/import/objects-v2/upload", { userId: ADMIN, body: { matrix, fileName: "noname.xlsx" } });
+    expect(up.status).toBe(200);
+    const sessionId = up.body.session_id as string;
+    const mp = await req("PUT", `/api/import/objects-v2/${sessionId}/mappings`, { userId: ADMIN, body: { mappings } });
+    expect(mp.status).toBe(200);
+    const val = await req("POST", `/api/import/objects-v2/${sessionId}/validate`, { userId: ADMIN });
+    expect(val.status).toBe(200);
+    expect(val.body.summary.invalid).toBe(0);
+    const exec = await req("POST", `/api/import/objects-v2/${sessionId}/execute`, { userId: ADMIN, body: { customerId: CUSTOMER_ID } });
+    expect(exec.status).toBe(202);
+    for (let i = 0; i < 50; i++) {
+      const st = await req("GET", `/api/import/objects-v2/${sessionId}/status`, { userId: ADMIN });
+      if (st.body.status === "completed" || st.body.status === "failed") break;
+      await sleep(150);
+    }
+    const result = await req("GET", `/api/import/objects-v2/${sessionId}/result`, { userId: ADMIN });
+    expect(result.body?.status).toBe("completed");
+
+    // Objekten skapades med interimnumret som namn (inte "Namnlöst objekt").
+    const created = await db.select({ name: objects.name }).from(objects)
+      .where(and(eq(objects.tenantId, TENANT), inArray(objects.name, ["NONAME-1", "NONAME-2"])));
+    expect(created.map((r) => r.name).sort()).toEqual(["NONAME-1", "NONAME-2"]);
+  });
+});
+
 describe("Import 2.0 — uppdaterings-rad med påhittad förälder behåller placering (Task #1356)", () => {
   it("kopplar ALDRIG loss ett befintligt objekt när föräldern inte kan hittas", async () => {
     // Befintlig hierarki: förälder → barn.

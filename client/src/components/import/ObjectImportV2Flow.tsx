@@ -857,10 +857,13 @@ export function ObjectImportV2Flow() {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
+            {/* Objektnamn är inte längre ett hårt krav: saknas namnmatchning
+                (eller är celler tomma) importeras objekten ändå och får sitt
+                nummer som namn. Informativ hint, ingen spärr. */}
             {!hasNameMapping && (
-              <div className="flex items-center gap-2 rounded-md bg-warning/10 p-3 text-sm text-warning-foreground">
-                <AlertCircle className="h-4 w-4 text-warning" />
-                Minst en kolumn måste matchas till <strong>Objektnamn</strong>.
+              <div className="flex items-center gap-2 rounded-md bg-muted p-3 text-sm text-muted-foreground">
+                <AlertCircle className="h-4 w-4" />
+                Ingen kolumn är matchad till <strong className="mx-1">Objektnamn</strong> — objekten får sitt nummer som namn och kan uppdateras manuellt efteråt.
               </div>
             )}
             <div className="space-y-3">
@@ -873,8 +876,20 @@ export function ObjectImportV2Flow() {
                     data-testid={`mapping-row-${c.index}`}
                   >
                     <div className="min-w-0">
-                      <p className="truncate text-sm font-medium text-foreground">
-                        {c.userHeader || c.header || `Kolumn ${c.index + 1}`}
+                      <p className="truncate text-sm font-medium text-foreground flex items-center gap-2">
+                        <span className="truncate">{c.userHeader || c.header || `Kolumn ${c.index + 1}`}</span>
+                        {/* Röd markering på kolumner matchade mot obligatoriska fält
+                            (Objektnamn). Tomma celler fäller inte raden — objektet får
+                            sitt nummer som namn. */}
+                        {current === "name" && (
+                          <Badge
+                            variant="outline"
+                            className="shrink-0 border-destructive/50 text-destructive px-1.5 py-0 text-[10px] font-normal"
+                            data-testid={`badge-required-${c.index}`}
+                          >
+                            Obligatoriskt
+                          </Badge>
+                        )}
                       </p>
                       {c.header && c.userHeader && c.header !== c.userHeader && (
                         <p className="truncate text-xs text-muted-foreground">{c.header}</p>
@@ -953,7 +968,7 @@ export function ObjectImportV2Flow() {
               </div>
               <Button
                 onClick={() => saveMappingsMutation.mutate()}
-                disabled={!hasNameMapping || saveMappingsMutation.isPending}
+                disabled={saveMappingsMutation.isPending}
                 data-testid="button-save-mappings"
               >
                 {saveMappingsMutation.isPending ? (

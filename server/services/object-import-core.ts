@@ -315,10 +315,22 @@ export function validateRow(
     const field = mapping.target;
     if (!field || field === "__empty") continue;
     const rule = FIELD_RULES[field] ?? { type: "text" as ValidatorType, required: false };
-    const required = mapping.required ?? rule.required;
+    // Metadata är ALDRIG obligatorisk — tomma celler är OK, värden plockas där
+    // de finns (produktregel 2026-08-05).
+    const required = mapping.type === "metadata" ? false : (mapping.required ?? rule.required);
     const value = cellValue(raw, columnKey).trim();
     if (required && value === "") {
-      issues.push({ field, message: `Obligatoriskt fält "${field}" saknas`, severity: "error" });
+      // Objektnamn: tom cell fäller inte raden — objektet importeras och får
+      // sitt nummer som namn (uppdateras manuellt efteråt).
+      if (field === "name") {
+        issues.push({
+          field,
+          message: "Objektnamn saknas — objektet får sitt nummer som namn",
+          severity: "warning",
+        });
+      } else {
+        issues.push({ field, message: `Obligatoriskt fält "${field}" saknas`, severity: "error" });
+      }
       continue;
     }
     if (value !== "" && !validateValue(rule.type, value)) {

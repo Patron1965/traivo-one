@@ -1512,12 +1512,19 @@ export function registerObjectImportV2Routes(app: Express): void {
                 item.kind === "primary" && item.interimId && !row.fields.system_id
                   ? OBJEKTMALL_INTERIM_PREFIX + item.interimId
                   : undefined;
+              // Objektnamn är inte hårt obligatoriskt: saknas namn får objektet
+              // sitt nummer som namn (uppdateras manuellt efteråt).
+              const fallbackName =
+                row.fields.name ||
+                row.fields.system_id ||
+                item.interimId ||
+                "Namnlöst objekt";
               const createdObj = await storage.createObject({
                 tenantId,
                 // Etapp 5: kundkopplingen skrivs som Ekonomi-metadata ('Kund')
                 // via ensurePrimaryPayer direkt efter create nedan.
                 parentId: parentId ?? null,
-                name: row.fields.name || "Namnlöst objekt",
+                name: fallbackName,
                 // Ångra-funktion: koppla objektet till batchen för spårbarhet.
                 importBatchId: batchId,
                 ...(interimObjectNumber ? { objectNumber: interimObjectNumber } : {}),
@@ -1532,7 +1539,7 @@ export function registerObjectImportV2Routes(app: Express): void {
               {
                 const k = known as any;
                 const afterSnapshot: ObjectSnapshot = {
-                  name: row.fields.name || "Namnlöst objekt",
+                  name: fallbackName,
                   parentId: parentId ?? null,
                   address: k.address ?? null,
                   city: k.city ?? null,

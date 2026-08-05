@@ -27,3 +27,9 @@ chars intact (e.g. `"överordnat objekt"`, `"e-post"`).
 very mis-map trap we are removing. Leave it as a manual one-click mapping. (Axfood's
 file is the unusual case that uses `Objektnamn` for the object and `Namn` for the
 contact person.)
+
+## Obligatorisk-regler (produktregel 2026-08-05)
+- Metadata-mappningar är ALDRIG required i validateRow (även om klienten skickar required:true).
+- Tomt objektnamn = WARNING, inte error: raden importeras och objektet får fallback-namn (name → system_id → interimId → "Namnlöst objekt") i execute.
+- Klienten får inte hårdspärra på namn-mappning ("Validera"-knappen ska funka utan) — bara informativ hint + röd "Obligatoriskt"-badge på name-mappad kolumn.
+- Bare "namn"-alias borttaget ur KNOWN_FIELDS (kontaktpersons-fälla); exporterna emitterar "Objektnamn".

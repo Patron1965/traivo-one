@@ -158,10 +158,18 @@ describe("validateRow", () => {
     "1": { target: "system_id", type: "standard" },
     "2": { target: "contact.email", type: "contact" },
   };
-  it("flags missing required name as invalid", () => {
+  it("saknat objektnamn ger varning (inte fel) — objektet får sitt nummer som namn", () => {
     const v = validateRow(1, { "0": "", "1": "OBJ-1", "2": "" }, mappings);
-    expect(v.status).toBe("invalid");
-    expect(v.issues.some((i) => i.field === "name" && i.severity === "error")).toBe(true);
+    expect(v.status).toBe("warning");
+    expect(v.issues.some((i) => i.field === "name" && i.severity === "warning")).toBe(true);
+  });
+  it("metadata är aldrig obligatorisk — tomma celler är OK", () => {
+    const metaMappings: ColumnMappings = {
+      "0": { target: "metadata.Färg", type: "metadata", required: true },
+    };
+    const v = validateRow(1, { "0": "" }, metaMappings);
+    expect(v.status).toBe("valid");
+    expect(v.issues).toHaveLength(0);
   });
   it("flags bad optional value as warning", () => {
     const v = validateRow(2, { "0": "Hemköp", "1": "OBJ-1", "2": "not-an-email" }, mappings);
