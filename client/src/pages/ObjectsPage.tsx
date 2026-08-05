@@ -99,7 +99,10 @@ type SearchInputProps = {
 const SearchInput = memo(function SearchInput({ placeholder, initialValue, onDebouncedChange }: SearchInputProps) {
   const [value, setValue] = useState(initialValue);
   useEffect(() => {
-    const timer = setTimeout(() => onDebouncedChange(value), 300);
+    // Task #1396: sökningen startar först vid minst 2 tecken — en enda bokstav
+    // triggade tidigare en sökning direkt och gjorde skrivandet trögt.
+    const effective = value.trim().length >= 2 ? value : "";
+    const timer = setTimeout(() => onDebouncedChange(effective), 300);
     return () => clearTimeout(timer);
   }, [value, onDebouncedChange]);
   return (
@@ -185,6 +188,26 @@ export default function ObjectsPage() {
   const [bulkParentDialogOpen, setBulkParentDialogOpen] = useState(false);
   const [bulkNewParentId, setBulkNewParentId] = useState<string | null>(null);
   const [filtersOpen, setFiltersOpen] = useState(false);
+  // Task #1396: stabil debounced-sök-callback (annars nollställs SearchInputs
+  // debounce-effekt av orelaterade renders).
+  const handleDebouncedSearch = useCallback((v: string) => { setDebouncedSearch(v); setCurrentPage(0); }, []);
+  // Task #1396: sök/filter-kortet är sticky; sorteringsraden i listan behöver
+  // sticka strax under kortet, vars höjd varierar (chips/öppet filter) — mät den.
+  const [stickyOffset, setStickyOffset] = useState(0);
+  const stickyRO = useMemo(() => ({ current: null as ResizeObserver | null }), []);
+  const stickyCardRef = useCallback((el: HTMLDivElement | null) => {
+    stickyRO.current?.disconnect();
+    stickyRO.current = null;
+    if (!el) return;
+    const update = () => setStickyOffset(el.getBoundingClientRect().height);
+    update();
+    if (typeof ResizeObserver !== "undefined") {
+      const ro = new ResizeObserver(update);
+      ro.observe(el);
+      stickyRO.current = ro;
+    }
+  }, [stickyRO]);
+  useEffect(() => () => { stickyRO.current?.disconnect(); }, [stickyRO]);
   const [servicePatternDialog, setServicePatternDialog] = useState<{ open: boolean; loading: boolean; data?: { summary: string; patterns: { label: string; value: string }[]; anomalies: { objectId: string; objectName: string; reason: string }[] } }>({ open: false, loading: false });
   const [maintenanceDialog, setMaintenanceDialog] = useState<{ open: boolean; loading: boolean; data?: { overdue: { objectName: string; predictedDate: string; daysUntil: number; confidence: number }[]; upcoming: { objectName: string; predictedDate: string; daysUntil: number; confidence: number }[]; summary: string; totalPredicted: number } }>({ open: false, loading: false });
   const [overflowPanel, setOverflowPanel] = useState<{ objectId: string; panel: "parents" } | null>(null);
@@ -1760,14 +1783,14 @@ export default function ObjectsPage() {
         ]}
       />
 
-      <Card>
+      <Card ref={stickyCardRef} className="sticky top-0 z-20 shadow-sm">
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4 flex-1">
               <SearchInput
                 placeholder={`Sök ${t("object_plural").toLowerCase()}, kund, adress, stad...`}
                 initialValue={debouncedSearch}
-                onDebouncedChange={(v) => { setDebouncedSearch(v); setCurrentPage(0); }}
+                onDebouncedChange={handleDebouncedSearch}
               />
               <Button
                 variant="outline"
@@ -1886,7 +1909,7 @@ export default function ObjectsPage() {
           )}
         </CardHeader>
         {filtersOpen && (
-          <CardContent className="space-y-4 pt-0">
+          <CardContent className="space-y-4 pt-0 max-h-[45vh] overflow-y-auto">
             <div className="flex items-center gap-4 flex-wrap">
               <CustomerMultiCombobox
                 selected={customerFilter}
@@ -2084,7 +2107,7 @@ export default function ObjectsPage() {
           </BulkActionBar>
           <div className="border rounded-md bg-card">
             {filteredTopLevel.length > 0 && (
-              <div className="flex items-center gap-3 px-3 py-2 border-b bg-muted/40 text-xs font-medium text-muted-foreground sticky top-0 z-10" data-testid="header-sort-row">
+              <div className="flex items-center gap-3 px-3 py-2 border-b bg-muted text-xs font-medium text-muted-foreground sticky z-10" style={{ top: stickyOffset }} data-testid="header-sort-row">
                 <div className="w-4 shrink-0" />
                 <div className="w-4 shrink-0" />
                 <button
@@ -2198,7 +2221,7 @@ export default function ObjectsPage() {
               variant="outline"
               size="sm"
               disabled={currentPage === 0}
-              onClick={() => setCurrentPage(p => Math.max(0, p - 1))}
+              onClick={() => { setCurrentPage(p => Math.max(0, p - 1)); window.scrollTo({ top: 0 }); }}
               data-testid="button-prev-page"
             >
               <ChevronLeft className="h-4 w-4" />
@@ -2211,7 +2234,7 @@ export default function ObjectsPage() {
               variant="outline"
               size="sm"
               disabled={currentPage >= totalPages - 1}
-              onClick={() => setCurrentPage(p => Math.min(totalPages - 1, p + 1))}
+              onClick={() => { setCurrentPage(p => Math.min(totalPages - 1, p + 1)); window.scrollTo({ top: 0 }); }}
               data-testid="button-next-page"
             >
               Nästa

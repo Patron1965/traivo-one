@@ -52,7 +52,10 @@ export function FloatingActionButton() {
     return allActions.filter((action) => canAccessRoute(userRole, action.url) && isNavItemEnabled(action.url));
   }, [userRole, t, isNavItemEnabled]);
 
-  if (isTechnicianRole(userRole) || quickActions.length === 0 || location.startsWith("/mobile")) {
+  // Task #1396: dölj snabbåtgärds-pluset på objektsidorna — knappen täckte
+  // bl.a. sidnumreringens Nästa-knapp. Funktionen finns kvar för övriga sidor
+  // tills innehåll/placering för snabbåtgärderna är omdefinierade.
+  if (isTechnicianRole(userRole) || quickActions.length === 0 || location.startsWith("/mobile") || location.startsWith("/objects")) {
     return null;
   }
 
