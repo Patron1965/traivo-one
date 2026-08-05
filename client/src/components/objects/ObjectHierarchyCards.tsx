@@ -35,7 +35,6 @@ interface ObjectHierarchyCardsProps {
   objectId: string;
   slaktnamnChain: Array<{ id: string; name: string }>;
   descendants: ServiceObject[];
-  objectTypeLabels: Record<string, string>;
   /** Öppnar objektets flytta-dialog för valfritt objekt (self eller ett barn). */
   onMoveObject: (targetId: string) => void;
   /** Öppnar kopiera-dialogen för det aktuella objektet. */
@@ -53,7 +52,6 @@ export function ObjectHierarchyCards({
   objectId,
   slaktnamnChain,
   descendants,
-  objectTypeLabels,
   onMoveObject,
   onCopy,
 }: ObjectHierarchyCardsProps) {
@@ -312,7 +310,6 @@ export function ObjectHierarchyCards({
         objectId={objectId}
         objectName={object.name || object.objectNumber || "objektet"}
         excludeIds={kopplaMode === "parent" ? parentExcludeIds : childExcludeIds}
-        objectTypeLabels={objectTypeLabels}
       />
     </>
   );

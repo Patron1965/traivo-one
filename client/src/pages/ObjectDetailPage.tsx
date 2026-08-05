@@ -249,27 +249,12 @@ interface ParentRelation {
 interface ObjectEditForm {
   name?: string;
   objectNumber?: string;
-  objectType?: string;
   hierarchyLevel?: string;
   status?: string;
   locationType?: string | null;
   latitude?: number | string | null;
   longitude?: number | string | null;
 }
-
-const objectTypeLabels: Record<string, string> = {
-  omrade: "Område",
-  fastighet: "Fastighet",
-  serviceboende: "Serviceboende",
-  rum: "Rum",
-  soprum: "Soprum",
-  kok: "Kök",
-  uj_hushallsavfall: "UJ Hushållsavfall",
-  matafall: "Matavfall",
-  atervinning: "Återvinning",
-  miljokarl: "Miljökärl",
-  underjord: "Underjordsbehållare",
-};
 
 
 const CONTACT_TYPES = [
@@ -1341,7 +1326,6 @@ export default function ObjectDetailPage() {
           objectId={objectId}
           slaktnamnChain={slaktnamnChain}
           descendants={descendants}
-          objectTypeLabels={objectTypeLabels}
           onMoveObject={openMoveDialog}
           onCopy={() => { setCopyName(obj.name || obj.objectNumber || ""); setCopyMode("single"); setCopyDialogOpen(true); }}
         />

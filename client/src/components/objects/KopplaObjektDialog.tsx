@@ -22,7 +22,6 @@ interface ObjectParentSearchHit {
   objectNumber: string | null;
   address: string | null;
   city: string | null;
-  objectType: string | null;
   hierarchyLevel: string | null;
   path: Array<{ id: string; name: string }>;
 }
@@ -36,8 +35,6 @@ export interface KopplaObjektDialogProps {
   objectName: string;
   /** Objekt-id:n som inte får väljas (self + descendants + ancestors [+ befintliga föräldrar]). */
   excludeIds: string[];
-  /** Etiketter för objekttyper (kod → label) — driver typväljaren i "Skapa nytt". */
-  objectTypeLabels?: Record<string, string>;
   onLinked?: () => void;
 }
 
@@ -55,7 +52,6 @@ export function KopplaObjektDialog({
   objectId,
   objectName,
   excludeIds,
-  objectTypeLabels,
   onLinked,
 }: KopplaObjektDialogProps) {
   const { toast } = useToast();
