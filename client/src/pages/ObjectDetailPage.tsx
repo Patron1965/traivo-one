@@ -1193,6 +1193,21 @@ export default function ObjectDetailPage() {
                 </PopoverContent>
               </Popover>
             )}
+            {/* Task #1419: dialogen "Redigera grundinformation" saknade synlig
+                trigger efter omstruktureringen (onEditGeo-vägen är död) — en
+                penna i sidhuvudet gör den nåbar igen. */}
+            {isAdmin && !(obj as any).deletedAt && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-6 gap-1 px-2 text-xs text-muted-foreground"
+                onClick={openEditDialog}
+                data-testid="button-edit-object"
+              >
+                <Pencil className="h-3 w-3" />
+                Redigera
+              </Button>
+            )}
             {/* Arkivera/återställ flyttat hit från separat kort längre ner. */}
             <ObjectArchiveControl
               objectId={objectId}

@@ -227,12 +227,16 @@ describe("ObjectDetailPage — översikt: navigering & sektioner", () => {
     }
   });
 
-  it("header-pennan (button-edit-parent) scrollar till huvud-sektionen (hierarki)", async () => {
-    const { getByTestId } = await mountAndWaitForNav();
-    const scroll = installScrollSpy();
-    // scrollToSection("hierarchy") mappas via TAB_TO_SECTION till "huvud".
-    fireEvent.click(getByTestId("button-edit-parent"));
-    expect(scroll.lastScrolledId()).toBe("object-section-huvud");
+  // Gamla "button-edit-parent" togs bort ur headern i Task #1399 (förälder-
+  // summeringen försvann). Header-pennan är nu "button-edit-object" (Task #1419)
+  // och öppnar dialogen "Redigera grundinformation" i stället för att scrolla;
+  // scroll-till-hierarkin täcks av barn-chippen (object-slaktnamn-links.test.tsx).
+  it("header-pennan (button-edit-object) öppnar redigera-dialogen", async () => {
+    const { getByTestId, queryByTestId } = await mountAndWaitForNav();
+    fireEvent.click(getByTestId("button-edit-object"));
+    await waitFor(() => {
+      expect(queryByTestId("text-slaktnamn")).toBeTruthy();
+    });
   });
 
   it("bakåtkompatibel ?tab=ekonomi-djuplänk scrollar till huvud-sektionen", async () => {
