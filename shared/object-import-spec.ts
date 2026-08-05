@@ -27,6 +27,23 @@ export interface FieldDefinition {
   category: FieldCategory;
   type: ValidatorType;
   required: boolean;
+  // Task #1430 — presentation i "Matcha data"-väljaren. `category` styr fortsatt
+  // skrivlogiken (ColumnMapping.type); `group`/`area` styr ENBART hur fältet
+  // grupperas i väljaren: "system" = matchnings-systemfälten (egen grupp),
+  // "metadata" = metadata-redovisningen (områdesgrupper som övriga metadata-ytor).
+  group?: "system" | "metadata";
+  /** Metadata-område (metadata_katalog.area / METADATA_AREA_OPTIONS-värde). */
+  area?: string | null;
+  /** Katalogens datatyp (för datatyp-bricka i UI). */
+  datatyp?: string | null;
+  /** Katalogens immutabla namn (slug) — endast tenant-definierade fält. */
+  namn?: string | null;
+  /** Underfält i en punktnotationsfamilj (indenteras under parentKey). */
+  isChild?: boolean;
+  /** Förälderfältets key ("metadata.<föräldernamn>") för underfält. */
+  parentKey?: string;
+  displayNumber?: number | null;
+  sortOrder?: number | null;
 }
 
 // §6.3 — exakta matchningar (case-insensitive, mot rad 1 systemfältnamn).

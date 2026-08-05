@@ -126,6 +126,14 @@ const executeSchema = z.object({
   overwriteMetadata: z.boolean().optional(),
 });
 
+// Task #1430 — systemfält som behövs för matchning (egen grupp i "Matcha data").
+const SYSTEM_MATCH_KEYS = new Set([
+  "system_id",
+  "system_parent_id",
+  "interim_id",
+  "interim_parent_id",
+]);
+
 function toCell(v: string | number | boolean | null): string {
   if (v == null) return "";
   return String(v).trim();
@@ -139,21 +147,60 @@ export function registerObjectImportV2Routes(app: Express): void {
       const tenantId = getTenantIdWithFallback(req);
       const q = String(req.query.q ?? "").trim().toLowerCase();
 
-      // Tenant-definierade metadatafält → metadata.<namn>.
+      // Task #1430 — Tenant-definierade metadatafält → metadata.<namn>.
+      // Endast DEFINIERADE, AKTIVA katalograder: arkiverade (deleted_at satt)
+      // och trasiga rader (tomt namn) filtreras bort ur väljaren. Lagrade
+      // värden/historik på objekt påverkas inte — endast val-listan.
       const katalog = await db
-        .select({ namn: metadataKatalog.namn, beskrivning: metadataKatalog.beskrivning })
+        .select({
+          id: metadataKatalog.id,
+          namn: metadataKatalog.namn,
+          visningsnamn: metadataKatalog.visningsnamn,
+          beskrivning: metadataKatalog.beskrivning,
+          datatyp: metadataKatalog.datatyp,
+          area: metadataKatalog.area,
+          displayNumber: metadataKatalog.displayNumber,
+          sortOrder: metadataKatalog.sortOrder,
+          parentMetadataId: metadataKatalog.parentMetadataId,
+        })
         .from(metadataKatalog)
-        .where(eq(metadataKatalog.tenantId, tenantId));
-      const metadataFields: FieldDefinition[] = katalog.map((k) => ({
-        key: `metadata.${k.namn}`,
-        label: `metadata.${k.namn}`,
-        description: k.beskrivning ?? "Kunddefinierat metadatafält",
-        category: "metadata",
-        type: "text",
-        required: false,
-      }));
+        .where(and(eq(metadataKatalog.tenantId, tenantId), isNull(metadataKatalog.deletedAt)));
+      const active = katalog.filter((k) => (k.namn ?? "").trim() !== "");
+      const byId = new Map(active.map((k) => [k.id, k]));
+      const metadataFields: FieldDefinition[] = active.map((k) => {
+        // Förälder räknas bara om den själv är aktiv (arkiverad förälder ⇒ barnet
+        // visas som fristående fält istället för föräldralös indentering).
+        const parent = k.parentMetadataId ? byId.get(k.parentMetadataId) : undefined;
+        const display = (k.visningsnamn ?? "").trim() || k.namn.replace(/_/g, " ");
+        return {
+          key: `metadata.${k.namn}`,
+          label: display,
+          description: k.beskrivning ?? "Definierat metadatafält",
+          category: "metadata",
+          type: "text",
+          required: false,
+          group: "metadata",
+          area: (parent?.area ?? k.area) ?? null,
+          datatyp: k.datatyp ?? "string",
+          namn: k.namn,
+          isChild: !!parent,
+          parentKey: parent ? `metadata.${parent.namn}` : undefined,
+          displayNumber: k.displayNumber ?? null,
+          sortOrder: k.sortOrder ?? null,
+        };
+      });
 
-      let all = [...FIELD_CATALOG, ...metadataFields];
+      // Systemfälten som behövs för matchning — egen grupp i väljaren.
+      const systemFields: FieldDefinition[] = FIELD_CATALOG.filter((f) =>
+        SYSTEM_MATCH_KEYS.has(f.key),
+      ).map((f) => ({ ...f, group: "system" }));
+
+      // Task #1430: väljaren erbjuder ENDAST (1) systemfälten för matchning och
+      // (2) definierade metadatafält. Övriga inbyggda fält (objektnamn, kund,
+      // adress, kontakt, __empty …) utgår ur val-listan — den tekniska
+      // mappningen bakom kulisserna (auto-matchning/execute mot t.ex. "name")
+      // finns kvar och redan matchade kolumner fortsätter fungera.
+      let all = [...systemFields, ...metadataFields];
       if (q) {
         all = all.filter(
           (f) =>

@@ -48,6 +48,22 @@ import type { Customer } from "@shared/schema";
 // favorit-stjärna, grupprubrik-stil, Favoriter-grupp). Värdena förblir f.key.
 import { datatypeBadgeLabel } from "@/components/metadata/MetadataFieldPicker";
 import { useMetadataFavorites } from "@/hooks/use-metadata-favorites";
+import { useMetadataAreas } from "@/hooks/use-metadata-areas";
+// Task #1430: de inbyggda fälten (name, address.*, contact.* …) erbjuds inte
+// längre i val-listan, men auto-matchade/sparade kolumner mot dem ska fortsätta
+// fungera och visas — etiketter/giltighet hämtas ur den delade katalogen.
+import { FIELD_CATALOG } from "@shared/object-import-spec";
+
+const BUILTIN_FIELD_LABELS = new Map(FIELD_CATALOG.map((f) => [f.key, f.label]));
+
+// Härleder ColumnMapping.type ur en API-nyckel (spegel av serverns
+// categoryForTarget) — behövs eftersom inbyggda fält inte längre finns i /fields.
+function mappingTypeForKey(key: string): "standard" | "address" | "contact" | "metadata" {
+  if (key.startsWith("address.") || key.startsWith("position.")) return "address";
+  if (key.startsWith("contact.")) return "contact";
+  if (key.startsWith("metadata.")) return "metadata";
+  return "standard";
+}
 
 type StepNum = 1 | 2 | 3 | 4 | 5;
 
@@ -66,6 +82,16 @@ interface FieldDef {
   category: "standard" | "address" | "contact" | "metadata";
   type: string;
   required?: boolean;
+  // Task #1430 — presentation: "system" = matchnings-systemfält (egen grupp),
+  // "metadata" = metadata-redovisningens områdesgrupper.
+  group?: "system" | "metadata";
+  area?: string | null;
+  datatyp?: string | null;
+  namn?: string | null;
+  isChild?: boolean;
+  parentKey?: string;
+  displayNumber?: number | null;
+  sortOrder?: number | null;
 }
 
 interface Mapping {
@@ -325,11 +351,64 @@ export function ObjectImportV2Flow() {
   });
   const fields = fieldsData?.fields ?? [];
 
-  const groupedFields = useMemo(() => {
-    const groups: Record<string, FieldDef[]> = { standard: [], address: [], contact: [], metadata: [] };
-    for (const f of fields) (groups[f.category] ??= []).push(f);
+  // Task #1430 — gruppering enligt reglerna: (1) systemfält för matchning som
+  // egen grupp, (2) alla övriga fält i metadata-redovisningens områdesgrupper
+  // (samma områden/ordning som övriga metadata-ytor). Underfält i punktnotations-
+  // familjer indenteras under sitt gruppfält men är valbara enskilt.
+  const { order: areaOrder, areaLabel } = useMetadataAreas();
+  const systemFields = useMemo(() => fields.filter((f) => f.group === "system"), [fields]);
+  const metadataFields = useMemo(() => fields.filter((f) => f.group !== "system"), [fields]);
+  const areaGroups = useMemo(() => {
+    const byArea = new Map<string, FieldDef[]>();
+    for (const f of metadataFields) {
+      const a = (f.area ?? "").trim() || "annat";
+      if (!byArea.has(a)) byArea.set(a, []);
+      byArea.get(a)!.push(f);
+    }
+    const orderIndex = new Map<string, number>();
+    areaOrder.forEach((v, i) => orderIndex.set(v, i));
+    const fieldSort = (a: FieldDef, b: FieldDef) => {
+      const an = a.displayNumber ?? 9999;
+      const bn = b.displayNumber ?? 9999;
+      if (an !== bn) return an - bn;
+      const as = a.sortOrder ?? 9999;
+      const bs = b.sortOrder ?? 9999;
+      if (as !== bs) return as - bs;
+      return a.label.localeCompare(b.label, "sv");
+    };
+    const groups = Array.from(byArea.entries()).map(([area, list]) => {
+      const keysInGroup = new Set(list.map((f) => f.key));
+      const childrenByParent = new Map<string, FieldDef[]>();
+      for (const f of list) {
+        if (f.isChild && f.parentKey && keysInGroup.has(f.parentKey)) {
+          const kids = childrenByParent.get(f.parentKey) ?? [];
+          kids.push(f);
+          childrenByParent.set(f.parentKey, kids);
+        }
+      }
+      const roots = list.filter(
+        (f) => !(f.isChild && f.parentKey && keysInGroup.has(f.parentKey)),
+      );
+      roots.sort(fieldSort);
+      const rows: FieldDef[] = [];
+      for (const r of roots) {
+        rows.push(r);
+        const kids = childrenByParent.get(r.key) ?? [];
+        kids.sort(fieldSort);
+        rows.push(...kids);
+      }
+      return {
+        area,
+        label: areaLabel(area),
+        sortOrder: orderIndex.get(area) ?? 5000,
+        rows,
+      };
+    });
+    groups.sort((a, b) =>
+      a.sortOrder !== b.sortOrder ? a.sortOrder - b.sortOrder : a.label.localeCompare(b.label, "sv"),
+    );
     return groups;
-  }, [fields]);
+  }, [metadataFields, areaOrder, areaLabel]);
 
   // Task #1421: katalog-typer (delad react-query-cache) för att slå upp datatyp
   // per metadatafält. Importens metadata-FieldDef bär bara type:"text", så vi
@@ -350,27 +429,31 @@ export function ObjectImportV2Flow() {
   // som sparas förblir f.key = "metadata.<namn>").
   const favoriteMetadataFields = useMemo(
     () =>
-      (groupedFields.metadata ?? []).filter((f) => {
-        const namn = metaNamnFromKey(f.key);
+      metadataFields.filter((f) => {
+        const namn = f.namn ?? metaNamnFromKey(f.key);
         return namn != null && favoriteSet.has(namn);
       }),
-    [groupedFields.metadata, favoriteSet],
+    [metadataFields, favoriteSet],
   );
 
   // Task #1421: en metadata-option renderad i den delade väljarens stil
   // (datatyp-bricka + favorit-stjärna). Värdet förblir f.key ("metadata.<namn>").
-  const renderMetadataOption = (f: FieldDef) => {
-    const namn = metaNamnFromKey(f.key);
+  const renderMetadataOption = (f: FieldDef, opts?: { indent?: boolean }) => {
+    const namn = f.namn ?? metaNamnFromKey(f.key);
     const isFav = namn != null && favoriteSet.has(namn);
     return (
-      <SelectItem key={f.key} value={f.key} className="pr-14">
+      <SelectItem
+        key={f.key}
+        value={f.key}
+        className={opts?.indent ? "pl-8 pr-14" : "pr-14"}
+      >
         <span className="flex items-center gap-2 w-full">
           <span className="flex-1 truncate">{f.label}</span>
           <Badge
             variant="outline"
             className="ml-2 shrink-0 px-1.5 py-0 text-[10px] font-normal text-muted-foreground"
           >
-            {datatypeBadgeLabel(namn ? datatypByNamn.get(namn) : undefined)}
+            {datatypeBadgeLabel(f.datatyp ?? (namn ? datatypByNamn.get(namn) : undefined))}
           </Badge>
         </span>
         {namn != null && (
@@ -517,7 +600,9 @@ export function ObjectImportV2Flow() {
     restoredSigRef.current = sig;
     const saved = loadSavedMapping();
     if (!saved || saved.signature !== sig) return;
-    const validKeys = new Set(fields.map((f) => f.key));
+    // Inbyggda tekniska nycklar (name, address.* …) är fortsatt giltiga targets
+    // även om de inte erbjuds i val-listan (Task #1430).
+    const validKeys = new Set([...fields.map((f) => f.key), ...FIELD_CATALOG.map((f) => f.key)]);
     const restored: Mappings = {};
     for (const c of columns) {
       const m = saved.byIndex[String(c.index)];
@@ -546,10 +631,9 @@ export function ObjectImportV2Flow() {
       if (target === TARGET_NONE) {
         delete next[String(colIndex)];
       } else {
-        const field = fields.find((f) => f.key === target);
         next[String(colIndex)] = {
           target,
-          type: field?.category ?? "metadata",
+          type: mappingTypeForKey(target),
           required: target === "name",
         };
       }
@@ -807,6 +891,14 @@ export function ObjectImportV2Flow() {
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value={TARGET_NONE}>— Ignorera kolumn —</SelectItem>
+                        {/* Task #1430: auto-matchad/sparad mappning mot ett inbyggt
+                            fält (t.ex. Objektnamn) visas som valt värde men erbjuds
+                            inte i övriga listan. */}
+                        {current !== TARGET_NONE && !fields.some((f) => f.key === current) && (
+                          <SelectItem value={current} data-testid={`option-import-current-${c.index}`}>
+                            {BUILTIN_FIELD_LABELS.get(current) ?? current}
+                          </SelectItem>
+                        )}
                         {/* Task #1421: Favoriter-grupp överst (endast metadatafält;
                             värdet förblir f.key). Samma stjärn-/brick-design som den
                             delade metadata-väljaren. */}
@@ -819,28 +911,31 @@ export function ObjectImportV2Flow() {
                             {favoriteMetadataFields.map((f) => renderMetadataOption(f))}
                           </SelectGroup>
                         )}
-                        {(["standard", "address", "contact", "metadata"] as const).map((cat) =>
-                          (groupedFields[cat]?.length ?? 0) > 0 ? (
-                            <SelectGroup key={cat}>
-                              <SelectLabel className="bg-muted/70 -mx-1 mb-0.5 rounded-sm pl-2 pr-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                                {cat === "standard"
-                                  ? "Standardfält"
-                                  : cat === "address"
-                                  ? "Adress"
-                                  : cat === "contact"
-                                  ? "Kontakt"
-                                  : "Metadata"}
-                              </SelectLabel>
-                              {cat === "metadata"
-                                ? groupedFields[cat].map((f) => renderMetadataOption(f))
-                                : groupedFields[cat].map((f) => (
-                                    <SelectItem key={f.key} value={f.key}>
-                                      {f.label}
-                                    </SelectItem>
-                                  ))}
-                            </SelectGroup>
-                          ) : null,
+                        {/* Task #1430: (1) systemfälten för matchning som egen
+                            grupp, (2) alla övriga fält i metadata-redovisningens
+                            områdesgrupper — inga standard/adress/kontakt-rubriker. */}
+                        {systemFields.length > 0 && (
+                          <SelectGroup>
+                            <SelectLabel className="bg-muted/70 -mx-1 mb-0.5 rounded-sm pl-2 pr-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                              Systemfält för matchning
+                            </SelectLabel>
+                            {systemFields.map((f) => (
+                              <SelectItem key={f.key} value={f.key} data-testid={`option-import-field-${f.key}`}>
+                                {f.label}
+                              </SelectItem>
+                            ))}
+                          </SelectGroup>
                         )}
+                        {areaGroups.map((g) => (
+                          <SelectGroup key={g.area}>
+                            <SelectLabel className="bg-muted/70 -mx-1 mb-0.5 rounded-sm pl-2 pr-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                              {g.label}
+                            </SelectLabel>
+                            {g.rows.map((f) =>
+                              renderMetadataOption(f, { indent: !!f.isChild }),
+                            )}
+                          </SelectGroup>
+                        ))}
                       </SelectContent>
                     </Select>
                   </div>
