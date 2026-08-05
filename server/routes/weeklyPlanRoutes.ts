@@ -52,6 +52,7 @@ import {
   buildGrovplaneringFullCsvExport,
   sanitizeGrovExportColumns,
   TASK_TYPE_KEYS,
+  GRID_DATE_FIELDS,
   type GroupBy,
   type GridFilters,
   type RoughStatus,
@@ -230,6 +231,8 @@ export function registerWeeklyPlanRoutes(app: Express) {
     city: z.string().trim().max(120).optional(),
     from: z.coerce.date().optional(),
     to: z.coerce.date().optional(),
+    // Uppgiftsnavet: valbart datumfält för from/to (default = önskad leveranstid).
+    dateField: z.enum(GRID_DATE_FIELDS).default("onskad"),
     objectId: z.string().trim().max(64).optional(), // Mikro-grovplanering: begränsa till ett objekt + subträd
   });
 
@@ -251,6 +254,7 @@ export function registerWeeklyPlanRoutes(app: Express) {
       city: query.city,
       from: query.from,
       to: query.to,
+      dateField: query.dateField,
       objectId: query.objectId,
     });
     if (!parsed.success) {
@@ -260,6 +264,10 @@ export function registerWeeklyPlanRoutes(app: Express) {
     const districtIds = csv(query.districtIds);
     const teamIds = csv(query.teamIds);
     const executionCodes = csv(query.executionCodes);
+    // Uppgiftsnavet: tidskod-, kund- och resursfilter.
+    const timeCodes = csv(query.timeCodes);
+    const customerIds = csv(query.customerIds);
+    const resourceIds = csv(query.resourceIds);
     const taskTypes = csv(query.taskTypes).filter((t) =>
       (TASK_TYPE_KEYS as readonly string[]).includes(t),
     );
@@ -271,6 +279,10 @@ export function registerWeeklyPlanRoutes(app: Express) {
       districtIds: districtIds.length ? districtIds : undefined,
       teamIds: teamIds.length ? teamIds : undefined,
       executionCodes: executionCodes.length ? executionCodes : undefined,
+      timeCodes: timeCodes.length ? timeCodes : undefined,
+      customerIds: customerIds.length ? customerIds : undefined,
+      resourceIds: resourceIds.length ? resourceIds : undefined,
+      dateField: parsed.data.dateField,
       postalCode: parsed.data.postalCode || undefined,
       city: parsed.data.city || undefined,
       from: parsed.data.from,

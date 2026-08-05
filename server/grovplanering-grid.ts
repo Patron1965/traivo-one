@@ -49,6 +49,10 @@ export type RoughStatus =
 
 export type GroupBy = "objekt" | "kund" | "orderkoncept" | "ingen";
 
+// Uppgiftsnavet: vilket datumfält period-filtret (from/to) appliceras på.
+export const GRID_DATE_FIELDS = ["onskad", "skapad", "planerad", "utford"] as const;
+export type GridDateField = (typeof GRID_DATE_FIELDS)[number];
+
 export interface GridFilters {
   districtIds?: string[];
   postalCode?: string;
@@ -59,6 +63,14 @@ export interface GridFilters {
   statuses?: RoughStatus[];
   teamIds?: string[]; // "Fler filter" — filtrera på tilldelat team
   executionCodes?: string[]; // Task #1110 — filtrera på utförandekod (work_orders.execution_code)
+  // Uppgiftsnavet: kompletterande planeringsfilter.
+  timeCodes?: string[]; // tidskod (work_orders.frozen_time_code — fryses vid expansion)
+  customerIds?: string[]; // kund (work_orders.customer_id)
+  resourceIds?: string[]; // tilldelad resurs (work_orders.resource_id)
+  // Vilket datumfält from/to filtrerar på. Default "onskad" (= dagens beteende:
+  // överlapp mot önskad leveranstid). "skapad" = created_at, "planerad" =
+  // planerat fönster (planned_window_start/end), "utford" = completed_at.
+  dateField?: GridDateField;
   rootObjectId?: string; // Mikro-grovplanering: begränsa till ett objekt + dess ättlingar (subträd)
   // Task #1410: objekturval via metadatavillkor (delade motorn filterObjectsByConditions
   // i weeklyPlanRoutes resolvar villkoren → matchande objekt-id:n). undefined = inget
@@ -264,6 +276,16 @@ function buildConditions(tenantId: string, filters: GridFilters): SQL[] {
   if (filters.executionCodes && filters.executionCodes.length > 0) {
     conditions.push(inArray(workOrders.executionCode, filters.executionCodes));
   }
+  // Uppgiftsnavet: tidskod (fryst per uppgift vid expansion), kund och tilldelad resurs.
+  if (filters.timeCodes && filters.timeCodes.length > 0) {
+    conditions.push(inArray(workOrders.frozenTimeCode, filters.timeCodes));
+  }
+  if (filters.customerIds && filters.customerIds.length > 0) {
+    conditions.push(inArray(workOrders.customerId, filters.customerIds));
+  }
+  if (filters.resourceIds && filters.resourceIds.length > 0) {
+    conditions.push(inArray(workOrders.resourceId, filters.resourceIds));
+  }
   // Mikro-grovplanering: objektets egna uppgifter + ättlingarnas (subträd via hierarchy_path).
   // Tenant-predikat på subquery:n (aldrig läcka objekt tvärs tenant).
   if (filters.rootObjectId) {
@@ -294,14 +316,33 @@ function buildConditions(tenantId: string, filters: GridFilters): SQL[] {
   if (filters.city) {
     conditions.push(sql`${objects.city} ILIKE ${filters.city}`);
   }
-  // Tidsperiod = överlapp mot önskad leveranstid (start..COALESCE(end,start)).
-  if (filters.from) {
-    conditions.push(
-      sql`COALESCE(${workOrders.desiredDeliveryEnd}, ${workOrders.desiredDeliveryStart}) >= ${filters.from}`,
-    );
-  }
-  if (filters.to) {
-    conditions.push(sql`${workOrders.desiredDeliveryStart} <= ${filters.to}`);
+  // Tidsperiod: valbart datumfält (Uppgiftsnavet). Default "onskad" = dagens
+  // beteende (överlapp mot önskad leveranstid, start..COALESCE(end,start)).
+  const dateField = filters.dateField ?? "onskad";
+  if (dateField === "onskad") {
+    if (filters.from) {
+      conditions.push(
+        sql`COALESCE(${workOrders.desiredDeliveryEnd}, ${workOrders.desiredDeliveryStart}) >= ${filters.from}`,
+      );
+    }
+    if (filters.to) {
+      conditions.push(sql`${workOrders.desiredDeliveryStart} <= ${filters.to}`);
+    }
+  } else if (dateField === "planerad") {
+    // Planerat fönster — överlapp mot planned_window_start/end (samma semantik).
+    if (filters.from) {
+      conditions.push(
+        sql`COALESCE(${workOrders.plannedWindowEnd}, ${workOrders.plannedWindowStart}) >= ${filters.from}`,
+      );
+    }
+    if (filters.to) {
+      conditions.push(sql`${workOrders.plannedWindowStart} <= ${filters.to}`);
+    }
+  } else {
+    // Punktdatum: skapad (created_at) eller utförd (completed_at).
+    const col = dateField === "skapad" ? workOrders.createdAt : workOrders.completedAt;
+    if (filters.from) conditions.push(sql`${col} >= ${filters.from}`);
+    if (filters.to) conditions.push(sql`${col} <= ${filters.to}`);
   }
   if (filters.statuses && filters.statuses.length > 0) {
     conditions.push(

@@ -174,7 +174,9 @@ export function visibleFieldsForRole<TRow>(
   return fields.filter((f) => isFieldVisibleForRole(f, role));
 }
 
-export const savedFilterScopeValues = ["uppgiftsnav", "objektnav", "portal", "utforarapp", "administration"] as const;
+// "uppgiftsnav-panel" = Grovplaneringens/Uppgiftsnavets huvudfilterpanel
+// (FilterState-payload, inte filtermotorns villkorsträd) — samma CRUD/roll-scoping.
+export const savedFilterScopeValues = ["uppgiftsnav", "uppgiftsnav-panel", "objektnav", "portal", "utforarapp", "administration"] as const;
 export type SavedFilterScope = (typeof savedFilterScopeValues)[number];
 
 export const savedFilterDefinitionSchema = z.object({

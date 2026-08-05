@@ -64,7 +64,9 @@ import {
   RoughFilterPanel,
   createDefaultFilter,
   type FilterState,
+  type GridDateField,
 } from "@/components/grovplanering/RoughFilterPanel";
+import { SavedFilterLibrary } from "@/components/grovplanering/SavedFilterLibrary";
 import type { ConditionFilter } from "@/components/orderkoncept/shared/ConditionFilter";
 import { RoughGridTable } from "@/components/grovplanering/RoughGridTable";
 import type { TaskClusters } from "@/components/grovplanering/RoughGridTable";
@@ -102,6 +104,11 @@ interface AppliedFilter {
   city: string;
   from?: string;
   to?: string;
+  // Uppgiftsnavet: valbart datumfält + tidskod/kund/resurs.
+  dateField: GridDateField;
+  timeCodes: string[];
+  customerIds: string[];
+  resourceIds: string[];
   taskTypes: string[];
   statuses: RoughStatus[];
   executionCodes: string[];
@@ -114,6 +121,10 @@ const EMPTY_APPLIED: AppliedFilter = {
   teamIds: [],
   postalCode: "",
   city: "",
+  dateField: "onskad",
+  timeCodes: [],
+  customerIds: [],
+  resourceIds: [],
   taskTypes: [],
   statuses: [],
   executionCodes: [],
@@ -183,6 +194,11 @@ function buildFilterParams(applied: AppliedFilter, groupBy: GroupBy): URLSearchP
   if (applied.city) p.set("city", applied.city);
   if (applied.from) p.set("from", applied.from);
   if (applied.to) p.set("to", applied.to);
+  if (applied.dateField && applied.dateField !== "onskad")
+    p.set("dateField", applied.dateField);
+  if (applied.timeCodes.length) p.set("timeCodes", applied.timeCodes.join(","));
+  if (applied.customerIds.length) p.set("customerIds", applied.customerIds.join(","));
+  if (applied.resourceIds.length) p.set("resourceIds", applied.resourceIds.join(","));
   if (applied.taskTypes.length) p.set("taskTypes", applied.taskTypes.join(","));
   if (applied.statuses.length) p.set("statuses", applied.statuses.join(","));
   if (applied.executionCodes.length)
@@ -239,6 +255,10 @@ function deriveApplied(draft: FilterState): AppliedFilter {
     city: draft.city,
     from,
     to,
+    dateField: draft.dateField ?? "onskad",
+    timeCodes: draft.timeCodes ?? [],
+    customerIds: draft.customerIds ?? [],
+    resourceIds: draft.resourceIds ?? [],
     taskTypes: draft.taskTypes,
     statuses: draft.statuses,
     executionCodes: draft.executionCodes,
@@ -843,6 +863,19 @@ export default function GrovplaneringPage() {
       </div>
 
       <TeamDeviationsPanel teams={teams.map((t) => ({ id: t.id, name: t.name }))} periodAnchor={applied.from} />
+
+      {/* Filterbibliotek — namngivna sparade filterkombinationer (Uppgiftsnavet) */}
+      <div className="flex justify-end">
+        <SavedFilterLibrary
+          current={draft}
+          onApply={(next) => {
+            setDraft(next);
+            setApplied(deriveApplied(next));
+            setOffset(0);
+            persistFilter(next);
+          }}
+        />
+      </div>
 
       {/* Filterpanel */}
       <RoughFilterPanel

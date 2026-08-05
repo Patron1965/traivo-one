@@ -43,6 +43,17 @@ import {
   type RoughStatus,
 } from "@/lib/rough-planning";
 
+// Uppgiftsnavet: vilket datumfält perioden filtrerar på (matchar serverns
+// GRID_DATE_FIELDS i server/grovplanering-grid.ts).
+export type GridDateField = "onskad" | "skapad" | "planerad" | "utford";
+
+export const DATE_FIELD_OPTIONS: { value: GridDateField; label: string }[] = [
+  { value: "onskad", label: "Önskad leveranstid" },
+  { value: "skapad", label: "Skapad" },
+  { value: "planerad", label: "Planerat fönster" },
+  { value: "utford", label: "Utförd" },
+];
+
 export interface FilterState {
   districtIds: string[];
   teamIds: string[];
@@ -55,6 +66,11 @@ export interface FilterState {
   taskTypes: string[];
   statuses: RoughStatus[];
   executionCodes: string[];
+  // Uppgiftsnavet: valbart datumfält + tidskod/kund/resurs-filter.
+  dateField: GridDateField;
+  timeCodes: string[];
+  customerIds: string[];
+  resourceIds: string[];
   // Task #1410: objekturval via metadatavillkor — samma villkorsrader och
   // delade motor (shared/condition-matching) som objektlistans fördjupade filter.
   conditions: ConditionFilter[];
@@ -74,6 +90,10 @@ export function createDefaultFilter(): FilterState {
     taskTypes: [],
     statuses: [],
     executionCodes: [],
+    dateField: "onskad",
+    timeCodes: [],
+    customerIds: [],
+    resourceIds: [],
     conditions: [],
   };
 }
@@ -100,6 +120,71 @@ interface RoughFilterPanelProps {
 }
 
 const NO_CITY = "__all__";
+
+// Återanvändbar flervals-plockare (select + borttagbara taggar) för registerdrivna
+// filter (tidskod/kund/resurs) — samma interaktionsmönster som distrikt/team.
+function MultiPick({
+  label,
+  placeholder,
+  testId,
+  selected,
+  options,
+  labelFor,
+  onChange,
+}: {
+  label: string;
+  placeholder: string;
+  testId: string;
+  selected: string[];
+  options: { value: string; label: string }[];
+  labelFor: (v: string) => string;
+  onChange: (next: string[]) => void;
+}) {
+  const available = options.filter((o) => !selected.includes(o.value));
+  return (
+    <div className="space-y-2">
+      <Label className="text-xs">{label}</Label>
+      <Select
+        value=""
+        onValueChange={(v) => onChange([...selected, v])}
+        disabled={available.length === 0}
+      >
+        <SelectTrigger data-testid={`select-${testId}-filter`}>
+          <SelectValue placeholder={placeholder} />
+        </SelectTrigger>
+        <SelectContent>
+          {available.map((o) => (
+            <SelectItem key={o.value} value={o.value}>
+              {o.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      {selected.length > 0 && (
+        <div className="flex flex-wrap gap-1.5 pt-1">
+          {selected.map((v) => (
+            <Badge
+              key={v}
+              variant="secondary"
+              className="gap-1"
+              data-testid={`tag-${testId}-${v}`}
+            >
+              {labelFor(v)}
+              <button
+                type="button"
+                onClick={() => onChange(selected.filter((x) => x !== v))}
+                className="rounded-sm hover-elevate"
+                aria-label={`Ta bort ${labelFor(v)}`}
+              >
+                <X className="h-3 w-3" />
+              </button>
+            </Badge>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export function RoughFilterPanel({
   value,
@@ -143,6 +228,32 @@ export function RoughFilterPanel({
     value: t.namn,
     label: t.namn,
   }));
+
+  // Uppgiftsnavet: register-källor för tidskod-, kund- och resursfiltren.
+  const { data: timeCodeDefs = [] } = useQuery<{ key: string; label: string; deletedAt: string | null }[]>({
+    queryKey: ["/api/time-codes"],
+    staleTime: 5 * 60 * 1000,
+  });
+  const timeCodeOptions = timeCodeDefs.filter((t) => !t.deletedAt);
+  const timeCodeLabel = (key: string) =>
+    timeCodeOptions.find((t) => t.key === key)?.label ?? key;
+
+  const { data: customerData = [] } = useQuery<{ id: string; name: string }[]>({
+    queryKey: ["/api/customers"],
+    staleTime: 5 * 60 * 1000,
+  });
+  // /api/customers utan params ger bar array (dubbel svarsform — se memory).
+  const customerOptions = Array.isArray(customerData) ? customerData : [];
+  const customerLabel = (id: string) =>
+    customerOptions.find((c) => c.id === id)?.name ?? id;
+
+  const { data: resourceData = [] } = useQuery<{ id: string; name: string }[]>({
+    queryKey: ["/api/resources"],
+    staleTime: 5 * 60 * 1000,
+  });
+  const resourceOptions = Array.isArray(resourceData) ? resourceData : [];
+  const resourceLabel = (id: string) =>
+    resourceOptions.find((r) => r.id === id)?.name ?? id;
 
   const toggleArray = <T extends string>(arr: T[], item: T): T[] =>
     arr.includes(item) ? arr.filter((x) => x !== item) : [...arr, item];
@@ -251,10 +362,25 @@ export function RoughFilterPanel({
           </div>
         </div>
 
-        {/* Tidsperiod */}
+        {/* Tidsperiod — valbart datumfält (Uppgiftsnavet) */}
         <div className="space-y-2">
-          <Label className="text-xs">Tidsperiod (önskad leveranstid)</Label>
+          <Label className="text-xs">Tidsperiod</Label>
           <div className="flex flex-wrap items-center gap-3">
+            <Select
+              value={value.dateField}
+              onValueChange={(v) => patch({ dateField: v as GridDateField })}
+            >
+              <SelectTrigger className="w-[190px]" data-testid="select-date-field">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {DATE_FIELD_OPTIONS.map((o) => (
+                  <SelectItem key={o.value} value={o.value}>
+                    {o.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
             <Tabs
               value={value.periodMode}
               onValueChange={(v) => patch({ periodMode: v as PeriodMode })}
@@ -504,6 +630,35 @@ export function RoughFilterPanel({
               </div>
             )}
           </div>
+
+          {/* Uppgiftsnavet: tidskod, kund och tilldelad resurs */}
+          <MultiPick
+            label="Tidskod"
+            placeholder="Lägg till tidskod"
+            testId="time-code"
+            selected={value.timeCodes}
+            options={timeCodeOptions.map((t) => ({ value: t.key, label: t.label }))}
+            labelFor={timeCodeLabel}
+            onChange={(timeCodes) => patch({ timeCodes })}
+          />
+          <MultiPick
+            label="Kund"
+            placeholder="Lägg till kund"
+            testId="customer"
+            selected={value.customerIds}
+            options={customerOptions.map((c) => ({ value: c.id, label: c.name }))}
+            labelFor={customerLabel}
+            onChange={(customerIds) => patch({ customerIds })}
+          />
+          <MultiPick
+            label="Tilldelad resurs"
+            placeholder="Lägg till resurs"
+            testId="resource"
+            selected={value.resourceIds}
+            options={resourceOptions.map((r) => ({ value: r.id, label: r.name }))}
+            labelFor={resourceLabel}
+            onChange={(resourceIds) => patch({ resourceIds })}
+          />
           </div>
         )}
 

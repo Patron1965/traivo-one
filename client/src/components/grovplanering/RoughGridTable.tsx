@@ -1,10 +1,12 @@
 import { Fragment } from "react";
+import { useLocation } from "wouter";
 import {
   Building2,
   Users,
   Layers,
   ChevronRight,
   ChevronDown,
+  ExternalLink,
   MoreVertical,
   RotateCcw,
   UserPlus,
@@ -108,6 +110,7 @@ function TaskRow({
   onOpenCluster?: (ref: ClusterRef) => void;
   taskClusters?: TaskClusters;
 }) {
+  const [, navigate] = useLocation();
   const chip = weekChip(row.roughPlannedWeek);
   const sourceLabel = creationSourceLabel(row.source);
   return (
@@ -234,37 +237,47 @@ function TaskRow({
         {formatSekFromOre(row.value)}
       </TableCell>
       <TableCell className="w-9">
-        {!readOnly && (
-          <DropdownMenu modal={false}>
-            <DropdownMenuTrigger asChild>
-              <Button
-                size="icon"
-                variant="ghost"
-                className="h-7 w-7"
-                data-testid={`button-row-actions-${row.id}`}
-              >
-                <MoreVertical className="h-4 w-4" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem
-                onClick={() => onAssignRow(row)}
-                data-testid={`action-assign-${row.id}`}
-              >
-                <UserPlus className="h-4 w-4" />
-                Tilldela…
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                disabled={row.status !== "tilldelad"}
-                onClick={() => onRevokeRow(row)}
-                data-testid={`action-revoke-${row.id}`}
-              >
-                <RotateCcw className="h-4 w-4" />
-                Återkalla tilldelning
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        )}
+        <DropdownMenu modal={false}>
+          <DropdownMenuTrigger asChild>
+            <Button
+              size="icon"
+              variant="ghost"
+              className="h-7 w-7"
+              data-testid={`button-row-actions-${row.id}`}
+            >
+              <MoreVertical className="h-4 w-4" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            {/* Uppgiftsnavet: hopp till uppgiftens fullständiga detaljvy */}
+            <DropdownMenuItem
+              onClick={() => navigate(`/work-orders/${row.id}`)}
+              data-testid={`action-details-${row.id}`}
+            >
+              <ExternalLink className="h-4 w-4" />
+              Visa detaljer
+            </DropdownMenuItem>
+            {!readOnly && (
+              <>
+                <DropdownMenuItem
+                  onClick={() => onAssignRow(row)}
+                  data-testid={`action-assign-${row.id}`}
+                >
+                  <UserPlus className="h-4 w-4" />
+                  Tilldela…
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  disabled={row.status !== "tilldelad"}
+                  onClick={() => onRevokeRow(row)}
+                  data-testid={`action-revoke-${row.id}`}
+                >
+                  <RotateCcw className="h-4 w-4" />
+                  Återkalla tilldelning
+                </DropdownMenuItem>
+              </>
+            )}
+          </DropdownMenuContent>
+        </DropdownMenu>
       </TableCell>
     </TableRow>
   );
