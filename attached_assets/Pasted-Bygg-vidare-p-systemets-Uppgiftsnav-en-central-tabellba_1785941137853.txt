@@ -1,0 +1,197 @@
+Bygg vidare på systemets Uppgiftsnav – en central, tabellbaserad vy för planerare där samtliga uppgifter i systemet kan sökas, filtreras, prioriteras, följas upp och exporteras.
+
+Använd de bifogade skärmbilderna som visuell referens för befintlig design, särskilt sidorna för Utförandekoder, Uppgiftstyper och Tidskoder. Behåll samma mörka visuella språk, tabellstruktur, rubrikkort, statusetiketter, knappar och ikoner.
+
+Grundprincip
+En uppgift är något som ska utföras och baseras på en artikel. Det kan exempelvis vara:
+
+En tjänst, exempelvis tvätt, besiktning eller reparation.
+En fysisk vara eller reservdel.
+En systemskapad reseuppgift för ett team/en resurs.
+Personalens egentid.
+Andra arbetsrelaterade aktiviteter.
+Alla uppgifter som skapas i systemet ska på sikt finnas i Uppgiftsnavet, inklusive resor och egentid – inte enbart tjänsteuppgifter.
+
+Uppgiftsnavet ska även kunna återanvändas i en objektskontext: när användaren öppnar uppgifter på ett specifikt objekt ska samma eller en mycket liknande vy visas, men automatiskt begränsas till objektets uppgifter.
+
+Uppgiftsnavets lista
+Skapa en huvudvy med en tabell över uppgifter. Tabellen ska ge en snabb överblick, men varje rad ska kunna öppnas för en detaljerad vy.
+
+Exempel på relevanta kolumner i översikten:
+
+Uppgiftsnamn / artikel
+Artikelnummer
+Uppgiftstyp
+Utförandekod
+Tidskod
+Kund
+Objekt
+Tilldelad resurs eller team
+Status
+Prioritet
+Önskat datum/tid
+Faktiskt utförandedatum/tid
+Planerad tid
+Kostnad och/eller pris
+Det ska vara möjligt att:
+
+Klicka på en rad och öppna en detaljerad uppgiftsvy.
+Välja vilka kolumner/fält som visas i tabellen.
+Sortera på relevanta kolumner och datumfält.
+Visa uppgifter i flera detaljnivåer:
+Översikt: viktig planeringsinformation direkt i listan.
+Detaljvy: samtliga uppgiftsuppgifter/fält, inklusive historik och bakgrundsinformation.
+En uppgift innehåller i praktiken cirka 84 datafält. Alla behöver inte synas i listan, men de ska vara tillgängliga i detaljvyn och vid export.
+
+Filterpanel
+Bygg om eller uppdatera filterfunktionen. Det ska finnas en tydlig filterpanel där följande filter kan kombineras.
+
+1. Geografi
+Användaren ska kunna filtrera uppgifter baserat på:
+
+Ort
+Postnummer
+Geografiskt område/polygon
+Polygonfunktionen ska följa samma princip som motsvarande funktioner på andra håll i systemet.
+
+2. Tid och datum
+Det räcker inte med ett enda datumintervall. Användaren ska först kunna välja vilket datumfält som ska användas i filtreringen/sorteringen och därefter välja datumintervall.
+
+Minst följande tidsperspektiv ska stödjas:
+
+Skapad datum/tid
+Orderdatum, om detta finns
+Önskat leverans- eller utförandedatum
+Planerat datum/tid
+Faktiskt utförandedatum/tid
+Detta behövs både för planering framåt och för historisk uppföljning, exempelvis för att se vad som utförts hos en kund under augusti–oktober 2026.
+
+3. Status
+Filtrera på uppgiftsstatus, exempelvis:
+
+Otilldelad
+Tilldelad
+Påbörjad
+Utförd
+Delvis utförd
+Avbruten / avvikande
+Delvis utförd och avbruten ska kunna hanteras eftersom en uppgift kan vara kvantitetsbaserad. Exempel: en uppgift gäller tvätt av tio kärl, men endast åtta utförs.
+
+4. Utförandekoder
+Utförandekod är det viktigaste planeringsfiltret. Det beskriver vilken kompetens, tjänstetyp eller resursprofil som krävs för att kunna utföra uppgiften.
+
+Planeraren ska kunna välja en eller flera utförandekoder för att exempelvis hitta uppgifter som kan utföras av personal med kompetens för:
+
+Rullbara kärl
+Bottenöppnande kärl
+Reparation och underhåll
+Avisering
+Inhyrd kranbil
+Inhyrd sugbil
+Transport
+Det ska gå att kombinera flera utförandekoder i samma filter.
+
+5. Uppgiftstyp / artikeltyp
+Uppgiftstypen beskriver vad uppgiften avser, snarare än vem som kan utföra den. Benämn gärna detta som Artikel-/uppgiftstyp där det passar i gränssnittet.
+
+Exempel:
+
+BÖK
+RBK
+Service
+Driftkontroll
+Tvätt
+Besiktning
+Administration
+Konsultation
+Filtret ska användas för sökning, kategorisering och prioritering. Exempelvis kan en akut reparation av en trasig behållare prioriteras högre än en vanlig tvätt.
+
+6. Tidskoder
+Tidskoder ska användas för att klassificera arbetstid för tjänster och utförandeuppgifter, exempelvis:
+
+Inställelseresa / pendling
+Rast och lunch
+Egentid
+Nattvila
+Helgvila
+Utbildning
+Reparation och underhåll
+Städning
+Varor genererar normalt inte tidskod, medan tjänster, produktion, städning, resor och andra utföranden kan göra det.
+
+Detta ska möjliggöra analys av exempelvis teamets restid, kostnader och arbete under en viss period eller för en specifik kund.
+
+7. Metadata
+Metadata är en central filtreringsdel och ska fungera konsekvent överallt i systemet.
+
+Exempel: filtrera på uppgifter som avser en viss typ av objekt eller egenskap, såsom “tvätta [viss typ av kärl]”.
+
+Regel för metadata:
+
+När metadata skapas eller väljs på ett objekt ska relaterad metadatafamilj följa med.
+När användaren söker eller filtrerar direkt på uppgifter kan valet ske på rubrik-/fält-nivå.
+Undvik gamla eller otydliga “avancerade filter” om de inte fyller ett konkret syfte. Huvudfilterpanelen ovan ska vara det primära sättet att filtrera.
+
+8. Tilldelning och kund
+Det ska också gå att filtrera på:
+
+Tilldelad person, resurs eller team
+Kund
+Gärna fritextsökning som komplement till strukturerade filter
+Sparade filter
+Skapa ett filterbibliotek.
+
+Användaren ska kunna:
+
+Spara en aktuell filterkombination.
+Namnge filtret.
+Återanvända sparade filter.
+Redigera eller ta bort ett sparat filter.
+Exempel på sparade filter:
+
+“Besiktningar – Norra distriktet”
+“Tvätt – ej tilldelade”
+“Team A – nästa vecka”
+“Kund X – utfört under hösten”
+“Resor – augusti”
+Export
+Lägg till en exportfunktion för det filtrerade urvalet.
+
+Krav:
+
+Exportera det urval som är aktivt efter filtrering.
+Användaren ska kunna välja vilka fält/kolumner som tas med i en enklare rapportexport.
+Det ska även gå att göra en full export med samtliga tillgängliga uppgiftsfält, cirka 84 fält.
+Exporten ska fungera som underlag för analys, statistik, kundunderlag och löneunderlag.
+Ett exempel är att en kund ska kunna få en lista med objektnamn, planerat datum och eventuell kostnad – utan att alla interna fält behöver tas med.
+
+Administrationssidor för klassificeringar
+Behåll eller skapa administrationsvyer enligt skärmbilderna för:
+
+Utförandekoder
+Uppgiftstyper
+Tidskoder
+Gemensamma krav:
+
+Lista registrerade koder i tabellform.
+Skapa ny kod.
+Redigera befintlig kod.
+Mjuk radering/inaktivering i stället för hård radering där koden redan används.
+Sorteringsordning.
+Stabil nyckel/slug för systemanvändning.
+Visningsnamn.
+Ikon där det är relevant.
+För tidskoder ska även följande kunna administreras:
+
+Grupp, exempelvis Egentid eller Internt
+Prioritet
+Sortering
+Regler, exempelvis “Ej ekonomi”
+Design och UX
+Följ befintligt mörkt gränssnitt från skärmbilderna.
+Gör filterpanelen tydlig och snabb att använda för planerare.
+Visa aktiva filter tydligt och ge möjlighet att återställa dem.
+Stöd kombinering av flera filter samtidigt.
+Utforma tabellen för stora mängder uppgifter med god läsbarhet, sortering och sidindelning eller effektiv lazy loading.
+Gör det tydligt om en uppgift är delvis utförd, avbruten eller avvikande.
+Säkerställ att samma metadata- och filterlogik används konsekvent i hela systemet.

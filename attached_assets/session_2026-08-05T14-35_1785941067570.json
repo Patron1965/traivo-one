@@ -1,0 +1,236 @@
+{
+  "sessionId": "go4luxwlgyl",
+  "exportedAt": "2026-08-05T14:35:31.672Z",
+  "summary": "### Key Topics Discussed\n- Introduktion till uppgiftsnavet, en central del av systemet som hanterar olika typer av uppgifter inklusive resor, personalens \"egentid\" och artiklar som representerar tjänster eller fysiska ting.\n- Filtreringsfunktioner i uppgiftsnavet, inklusive geografisk filtrering (ort, postnummer, polyfunktion) och tidsfiltrering.\n- Möjligheten att spara och namnge filter i uppgiftsnavet.\n- Tidsperioder för uppgifter och sorteringsalternativ i uppgiftsnavet baserat på multipla tidsfält.\n- Export av uppgiftslistor baserat på filter och valda datafält, inklusive export av upp till 84 datafält.\n- Flera nivåer av detalj i uppgiftsnavet, från översikt till fördjupad information om enskild uppgift.\n- Hantering av delvis utförda uppgifter och avbrutna arbeten.\n- Utförandekoder som en primär filtreringsmekanism för planeraren, för att tilldela uppgifter baserat på personalens kompetens (t.ex. rullbara skärmar, aviseringar, transporter).\n- Uppgiftstyp (benämns även \"artikel slash uppgiftstyp\") som en sekundär sök- och filtreringsmekanism, viktig för beskrivning och prioritering (t.ex. besiktning, tvätt, reparation av behållare).\n- Tidskoder för tjänster och utförandeuppgifter för att representera produktion- eller städarbete. Alla uppgifter, inklusive reseuppgifter för team, kommer att hamna i uppgiftsnavet.\n- Vikten av metadata som en central del av hela systemet för att kunna välja objekt eller uppgifter, exempelvis \"tvätta blåsottunnor\".\n- Hantering av metadatafält: när man skapar metadatafält på ett objekt ska familjen följa med, medan vid sökning eller direktpekning på uppgifter kan det vara på rubriknivå.\n- Möjlighet att söka på tilldelning av uppgifter (vem uppgiften är tilldelad till).\n- Möjlighet att söka på uppgifter som tillhör en specifik kund.\n- Uppgiftslistan i uppgiftsnavet kommer att fungera som grund för analys, statistik och underlag för lönesystem.\n\n### Important Points & Insights\n- Uppgiftsnavet är i grunden en lista på uppgifter som är central för planeraren att se alla uppgifter och artiklar.\n- En uppgift är något som ska göras och baseras på en artikel, vilket kan inkludera fysiska ting eller fakturerbara tjänster (t.ex. 30 minuter tvätt).\n- Systemet hanterar olika typer av uppgifter, vilket gör det speciellt, inklusive resor kopplade till enheter och personalens \"egentid\", båda baserade på artiklar.\n- Uppgiftsnavets vy kommer att vara kopplad till objekt och visas likartat vid klick på objekt-specifika uppgifter.\n- Geografisk filtrering är viktig i navet för spridda uppgifter, hanteras med postnummer eller \"polyvinyl\" (polyfunktion).\n- Möjligheten att spara och namnge filter är avgörande för snabb åtkomst till specifika job typer, kunder eller distrikt.\n- Viktiga tidsperspektiv och sorteringsalternativ måste finnas för alla tider som kopplas till uppgiftspaketet, för både planering och historik.\n- En uppgift består av cirka 84 datafält, där navlistan ger en översikt och möjlighet att dyka ner till fullständig information.\n- Användare ska kunna anpassa visning av uppgiftsfält och exportera listor för t.ex. kundplanering.\n- Navet behöver flera nivåer: en övergripande för snabb info (tvätt, artikelnummer, pris, tid) och en fördjupande för detaljer.\n- Hela syftet med navet är att kunna sålla, lägga ihop och utvärdera uppgifter.\n- Systemet ska hantera delvis utförda eller avbrutna uppgifter, relevant för användarrapportering.\n- Utförandekoder är den viktigaste mekanismen för planeraren att tilldela uppgifter baserat på personalspecifik kompetens och ska kunna kombineras för filter.\n- Uppgiftstypen (artikel slash uppgiftstyp) är sekundärt för sökning men primärt för att beskriva vad uppgiften avser (t.ex. tvätt, besiktning, dekal) och för att prioritera (t.ex. reparation av trasig behållare > tvätt).\n- Tidskoder kommer att genereras för alla tjänster och utföranden, inte för varor, för att representera produktion eller städning.\n- Möjlighet att analysera tid och kostnader för reseuppgifter för ett team under en viss tidsperiod eller för en specifik kund med hjälp av tidskoder.\n- Metadata är en central del i systemet för att kunna välja och filtrera på objekt och uppgifter (t.ex. \"tvätta blåsottunnor\") och denna funktion måste fortsätta att finnas.\n- Vid val av metadatafält, om de skapas på ett objekt, ska \"familjen\" (relaterade fält) följa med. Vid direkt peking på uppgifter kan det vara på rubriknivå.\n- En exportfunktion ska inkludera alla 84 datafält för det valda urvalet av uppgifter för att kvittera fullständig information.\n- Uppgiftslistan kommer att vara grunden för analyser, statistik och underlag för lönesystem, oavsett om det sker internt i Trivoo eller externt.\n- Hela systemet kommer att centreras kring att sortera uppgiftslistan och ändra status på uppgifter.\n\n### Open Questions/Pending Items\n- Hur ska val av tidsperiod för sortering implementeras i gränssnittet i uppgiftsnavet?\n- Hur ska tre filter (ännu ej specificerade) implementeras gällande delvis utförda eller avbrutna uppgifter?\n- Abacus ska ge en lista till Replit för att uppdatera filterfunktionaliteten, då det nuvarande filtret inte är helt korrekt.\n- Hur avancerade filter utöver de diskuterade ska hanteras, med en notering om att vissa avancerade filtermöjligheter kanske inte är relevanta för nuvarande omfattning.\n- Hur ska en fullständig logik för uppgifter implementeras för att inkludera inte bara tjänster utan även varor i uppgiftsnavet? Detta behöver ses över för att säkerställa att sökning på \"tilldelning\" och \"kund\" är intuitivt, eventuellt via fritext eller egna sökfält.",
+  "conversation": [],
+  "transcripts": [
+    {
+      "text": "Och så försöker vi då se vad den får- ...och framför dem till mig. Men du, är du med nu? Ja. Jo, nu ska vi då lägga handen på en utav systemets kanske absolut viktigaste delar och det är det så kallade uppgiftsnavet då. Och uppgiftsnavet då har ju-- det är ju egentligen en lista i grund och botten på uppgifter då. Och för planeraren så kommer ju den här vyn att bli central då, för det är ju där han ser alla uppgifter- ...som ska göras av olika typer, eller rättare sagt artiklar. Och det är också viktigt här att...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. Systemet och vi själva förstår då att en uppgift är någonting som ska göras, men det baseras på en artikel, eh, så att en uppgift kan också vara en fysisk sak. Ja, ja, ja. Mm. Eh, men förhoppningsvis så är det saker som vi kan ta betalt för. Ja. 30 minuter tvätt eller en skruv eller vad det nu är. Samtidigt så-- som det som gör att systemet blir, blir, eh, speciellt då är att vi har även då andra uppgifter som system",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "et skapar, som till exempel då resan- Ja, ja, ja ...emellan. Och den baseras också då på en artikel- Ja ...som man knyter då till den enheten som ska resa då- Mm ...med kostnader och allt vad som ligger runt i kring, i kring. Kostnader och eventuellt pris då- Ja ...för det, för, för det, den. Och sen har vi då, eh, personalens egentid- Mm, mm ...som ju också är en uppgift kopplad till en artikel då. Och här kommer vi då behöva, kanske inte på en gång, va, för att systemet kommer ju att kunna funka även om t",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "iden inte styrs in på rätt stället-- sätt då. Men, eh, uppgiftsnavet då, eller den här listan som listar uppgifter, den kommer ju då, som jag sa, att användas för planeraren. Men samma vy kommer ju också då att bli kopplad till objektet. Mm. Så när man klickar på de uppgifter som är kopplade till ett objekt, då ska man ju då komma in i samma, alltså en likartad vy. Ja, ja. Mm.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Eh, och vad kommer att finnas mer då i den här? Jo, en-- Utifrån planerarens perspektiv då, eh, men det är inget som hindrar att, att det även på objektnivå finns de funktionerna. Så, så va-- Så ska det då finnas ett filter då. Och, eh, det som är minst intressant på objektet eftersom objektet vet var den finns då. Men däremot i navet så, så är ju det uppgifter spridda över, över ytor då. Så behöver det finnas då en geografisk...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Eh, filtrering. Ja, ja. Och den, eh, bör ju då kunna skrivas då som, eh, ja, vad ska vi säga? Eh, ort eller postnummer eller... Men kanske också, eller inte bara kanske, utan också med, med polyvinyl då. För, för tanken med det här filtret då...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Åtminstone, eh, eller rättare sagt i navläget är ju då att du ska kunna spara filter och namnge dem. Så du kan alltså plocka fram ett filter för en viss typ av jobb eller för en viss kund eller för en viss, ett visst distrikt då. Och nu kommer vi då gå in på vad själva filtret behöver innehålla. Och den väsentliga delen, åtminstone i navet men inte på objektet då, är, eh, orten då. Och där kan man ju då helt enkelt, eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Ja, med postnummer och ort så att säga, m-malla in det hela då. Men där behöver det då finnas en, den här polyfunktionen som finns. Den är ju, den, den går ju jättelätt att lägga till, men den finns ju på, på andra ställen. Sen har vi, så då har vi den geografin då. Det är viktigt att vi kan pe-pe-peka in den. Nästa, eh, filtrering då är tidsperspektivet då. När ska det här utföras eller när",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "utfördes det? Och där är det ju viktigt då att man kan välja, för i det nuvarande här nu så finns det bara en tidsperiod då. Men, eh, uppgiftspaketet kring uppgiften kommer ju att ha flera tider. Är uppgiften skapad så finns det ju ett ska, ett orderdatum eller vad man ska säga, när den skapades då. Och finns det en önskad leveranstid som, som då den här motorn som levererar leveranstiden har, har hittat så finns det ju en öns",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "kad leveranstid. Och är den utförd, den är, är, finns det en då. Så här behöver det liksom finnas då ett klickläge då att man, man, man kan klicka in då som, som man visar så att säga. Eller att man väljer alltså vilket, vilken tid är det den ska sortera den på. Eh, och det kommer ju då finnas många tider, men det, grunden är ju så att säga önskad leveranstid, alternativt då verkligt utförande datum. För att navet kommer ju inte bara användas i planering, utan det kommer ju att användas när man går tillbaka och tittar då vad man har gjort hos en kund. Och då",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "kommer man ju behöva, eh, kunden säga att vi var här i höstas. Ja, då ska du kunna liksom pricka i då och säga att vi, eh, augusti, september, oktober 2026. Och så ska den då hitta den utförda uppgiften då där. Så tiden här behöver då kunna fungeras utifrån alla tider som finns på uppgiftspaketet. Och när jag säger uppgiftspaketet så är det också väldigt viktigt och det är lika bra att ha det också nu då. Att vi ser ju en uppgift som ungefär 84 datafält. O",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "ch den här listan kommer ju att innehålla inte alla de datafälten, men från listan så måste du kunna gå in på varje uppgift och se hel-helheten. Eh, till exempel när du spårar ett fel eller någonting. Sen behöver du då kunna styra då vilka uppgiftsfält som du, som du jobbar med och du behöver kunna exportera. Om vi till exempel har en kund som vill ha... Nu, nu kommer vi att ha en kundportal här, men vi säger att vi har en kund som vill ha en lista med en plan när vi har planerat att komma. Ja, då ska vi med filter",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "et kunna sålla ut den och så exportera då kanske bara objektnamnet och sedan så datum och möjligtvis då vad, vad, vad det är för en kostnad eller vad det nu är då på uppgiften. Men, men det jag säger är att vi behöver ha en fördjupad... Det måste vara flera nivåer på, på navet. Alltså en övergripande som så att säga beskriver, eh, uppgiften tvätt, kärltvätt och artikelnumret och priset och tiden och det. Och, och sen en fördjupande då när man går in. Eh,",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "och, och där ligger liksom bakgrunden då. Och hela syftet med navet här då och hela syftet med uppgifterna är ju att kunna sålla på uppgifter och lägga ihop och utvärdera sådana. Nästa steg i filtret här då...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Äh, då vilken status uppgiften har. Och det är ju då rätt från så att säga otilldelad till tilldelad, utförd och delvis utförd och avvikande då, äh, går det i att utföra. Äh, det är väl...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Det är väl liksom då okej. Jag är lite osäker på här nu då, äh, en delvis utförd uppgift. Antingen är en uppgift i min värld utförd eller så är den inte utförd. Ja, om den är påbörjad och man var tvungen att av-- Inte avsluta den. Ja, då är den ju inte utförd. Nej, exakt. Ja, ja, ja, ja. Nej, men alltså grejen är att systemet kommer inte att veta. Om du ska tvätta tio kärl och det står i uppgiften att du ska tvätta kärl och du tvättar åtta då. Ja. Äh, och du... Ja, då, ja, man skulle kunna tänka sig då att du stannar upp och du har tvättat åtta.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Ja, visst. Ja. Och då, då kvitterar du den inte som slutförd då på något vis. Och det blir ju en del i använderrapporten. Jag förstår att det kan behövas, det skulle kunna behövas i vissa sammanhang att du avbryter arbetet då. Äh, så den är väl logisk och ska, ska finnas där då. Äh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Sedan nästa filtrering är då de här tre...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Typerna då. Jag, jag har ju då tre stycken, eh, skärmdumpar då. Eh, och den viktigaste skärmdumpen eller listan här då är ju den här som, som vi då kallar, åtminstone i navet här då, är den som vi kallar då utförandekoder då. För att det, det, det planeraren kommer att göra, det är att han kommer ju liksom att sortera den här listan utifrån utförandekod, det vill säga vem som kan, han kan tilldela uppgiften till. Och det innebär ju att filtret måste kunna då välja att ja, men det här har vi någon som kan jobba med rullbara skärmar.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Eh, de kan jobba med aviseringar, eh, och de kanske kan göra en viss typ av transport då, säger vi, och leverera ett nytt kärl eller vad det är då. Och, och, och då ska han ju kunna skapa ett filter med de, eh, varianterna på dem, eller med de, de utförandekoderna. Eh, sen så finns det ju då uppgiftstyp då. Och den kan ju då sekundärt vara intressant då att, att, att söka på då. För att den beskriver då vad",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "uppgiften är. Om det till exempel, om, om den första beskriver vem som kan göra det och det kommer ju då vara förhoppningsvis färre sådana koder, eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "För det styr ju just utifrån vem som ska göra det då. Eh, men sen har du då, eh, den här typen utav uppgifter. Och här är det också viktigt att understryka det där. I vår värld tror jag ju då, som vi inledde nu, på att en uppgift kan ju även vara en artikel då. Så att den här uppgiftstypen ska egentligen heta artikel slash uppgiftstyp då. Det vi beskriver att det här är då en uppgift där vi tvättar, det här är en uppgift där vi besiktar, det här är en reservdel, det här är en dekal, det här är en besiktnings",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "tjänst och så vidare då. Och, eh, det kan ju vara intressant i navet då att kunna liksom söka då för att se. För det här är ju också ett sätt att prioritera kanske uppgifter då. Om du har en besiktning kan ju då vara viktigare eller en, viktigare då än en tvätt. Och ett, en uppgift som är alltså reparation utav en behållare som är trasig kan ha högre prioritet då. Och det har ju då inget med utförarkoden att göra, utan det är alltså hur, ja vilken typ av uppgift det är. Och, och syftet med det är ju liksom kunna sortera och prioritera",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "då vad, vilken typ av, av, av uppgift det är då. Så den behöver man då kunna hålla där. Sen den sista...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Eh, eh, listan då, det är då, eh, tidskoder då. För att alla uppgifter som en, en vara kommer ju då normalt sett inte att generera en tidskod då. Men alla tjänster och utförande då kommer då att generera...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Eh, en tidskod, produktion eller städning eller vad, vad det nu är. En hård nöt att knäcka nu då, eller den kanske inte är så hård nöt att knäcka, men, men i det här navet nu bland alla uppgifterna och så, så har vi ju i, i nuläget så har vi enbart uppgifterna för... Ja, vi har inga uppgifter än. Det finns inte ens i... Men, men vi har, eller jag åtminstone har ju primärt tänkt att det är uppgifterna i tjänsten som ska göras. Men med en fullständig logik så",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "ska ju alla uppgifter som skapas i systemet hamna här. Så även reseuppgifterna som skapas för team kommer ju då att hamna här. Är du med? Ja, ja. Och det innebär ju då att då kan, då kan jag alltså slå ut då på en, på en viss tidsperiod och se hur mycket har, hur mycket uppgifter att resa i tid och kostnader har då ett team gjort för en viss tidsperiod eller för en viss kund eller vad, vad det nu är då. Så att de här tidskoderna också då för uppgifterna är ju då intressanta.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Se på här då. Och den sista biten då med själva det här filtret då blir ju då att kunna spara filtret.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Som en, eh, som en, eh, eh, ja, alltså ett litet filterbibliotek helt enkelt på ett snyggt och smart sätt så att planeraren då kan, kan, kan spara ner ett filter för kanske en viss typ av jobb eller, eller en viss, ett visst team eller en viss kund. Och en grej som jag också glömde bort, eh, i den här finns det ju då fler filter då. Och, eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Eh, den funktionen ska ju även finnas fortsättningsvis då att du kan alltså gå in och, och, och lägga då grunden i hela s-- det är inte grunden i hela systemet, men, men en central del i hela systemet är ju villkoret för metadata. Så att du ska, du, du, du kan alltså titta här och, och, och sen så välja, välja då, eh, objekt eller välja uppgifter, vi tvät-- tvätta blåsottunnor säger vi då som ett dåligt exempel. Det vi också ser nu i den här hal",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "-hal-halv gamla filtret nu som syftet med hela den här diskussionen är ju att Abacus ska försöka ge en, en lista till Replit för att uppdatera filtret. Ja. Är ju också att vi ser då att här, här är inte, det här är inte rätt. Nej, nej, den där, den där trodde jag var uppdaterad faktiskt. Ja. Men, men, men det är återigen då och, och det får vi väl också understryka då. I alla lägen då, och det är ju många ställen nu som Replit eller Tribor då jobbar med",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "metadata-fält, så ska ju det se likadant ut. Och, och sen gäller det att hålla tungan i, i rätt i mun då. Är det att man väljer att man ska mata in metadata-fält eller skapa metadata-fält på ett objekt, då ska familjen komma med. Medan om man då söker eller pekar in direkta uppgifter, då, då, då, då, då kan det ju bli på, på, på rubriknivå också. Ja, ja.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Namn-namnet kommer med, med, eh, namnet enbart kom-kommer med där då. Eh, sen finns, ska vi se, det finns någonting som det kallar avancerat filter här också. Jag, jag, jag tror det här är ingenting som...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Eh, vilket är det villkor va det för något? Ja, det här är något gammalt, något, något som inte finns utan... Man, man ska ha den här filter, filter, eh, tablån där man, där man väljer, eh, geografi, tid, eh, och sen så har vi då de här koderna, alltså utförartyp, uppgiftstyp och tidstyp och sen så status på uppgiften. Och sen så",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "val av, av, av metadata-fält då. Eh, ja, en grej som vi glömmer här är ju då faktiskt... Man, man skulle kunna antingen i ett fritextfält eller ha, alltså kunna söka på tilldelning på uppgiften så att... Den finns ju här, det står team där då, men man skulle kunna tilldela. Då kan man, då kan man alltså söka på vilka uppgifter som har blivit tilldelade. Ja, just det. Eh, på samma sätt så,",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "så, så behöver du också ha då kanske kunna söka på uppgifter som tö-- tillhör en viss kund. Mm.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och en biuppgift då för hela det här filtret då är också att det ska finnas då en, en, en, en liten exportfunktion då. Och den- Ja ...exportfunktionen ska ju då l-- exportera urvalet och bara för att syna nu Trivo, eh, och egentligen få med all information. Så den lista på uppgifter som exporteras ska ju då innehålla de här åttiofyra datafälten. Ja, precis. För då kommer vi då få en kvittering på att- Mm",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "...allting är som det ska. Mm. Och vi kommer antingen i, i Trivo eller externt då kunna vi, k-kommer vi att kunna analysera den här listan och, och, och ta ut statistik. Den listan blir ju grund och botten då för både underlag för lönesystem och allting. Ja, ja, ja. Allt vad vi kommer att göra nu sen. Det kanske är lite tråkigt, men allt, hela systemet kommer bara att vara att sortera den här listan- Ja ...med uppgifter och ändra status på det. Ja.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    }
+  ]
+}
