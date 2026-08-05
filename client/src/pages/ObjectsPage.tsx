@@ -70,6 +70,13 @@ const METADATA_COLUMNS_STORAGE_KEY = "traivo:objects:metadataColumns";
 const METADATA_COLUMNS_COLLAPSED_STORAGE_KEY = "traivo:objects:metadataColumnsCollapsed";
 
 // Delmängd av metadataKatalog som klienten behöver för kolumnväljaren.
+// Task #1428: svar från POST /api/objects/bulk-delete.
+type BulkDeleteResult = {
+  deleted: number;
+  blocked: number;
+  results: Array<{ id: string; status: "deleted" | "blocked"; reason?: string }>;
+};
+
 type MetadataCatalogType = {
   id: string;
   namn: string;
@@ -188,6 +195,11 @@ export default function ObjectsPage() {
   const [bulkNewStatus, setBulkNewStatus] = useState("active");
   const [isExporting, setIsExporting] = useState(false);
   const [bulkBusy, setBulkBusy] = useState(false);
+  // Task #1428: resultat från senaste massraderingen (visas när något blockerades).
+  const [bulkDeleteResult, setBulkDeleteResult] = useState<BulkDeleteResult | null>(null);
+  const [bulkArchiveBusy, setBulkArchiveBusy] = useState(false);
+  // Utfall av "Arkivera blockerade" — misslyckade arkiveringar visas kvar i dialogen.
+  const [bulkArchiveOutcome, setBulkArchiveOutcome] = useState<{ archived: number; failures: Array<{ id: string; reason: string }> } | null>(null);
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
   const [bulkParentDialogOpen, setBulkParentDialogOpen] = useState(false);
   const [bulkNewParentId, setBulkNewParentId] = useState<string | null>(null);
@@ -1272,29 +1284,77 @@ export default function ObjectsPage() {
     setBulkNewParentId(null);
   };
 
+  // Task #1428: massradering = ETT batch-anrop med per-objekt-resultat.
+  // Servern raderar barn-först inom urvalet och returnerar läsbara orsaker
+  // för blockerade objekt (uppgifter/historik/underobjekt/abonnemang).
   const runBulkDelete = async () => {
     if (bulkBusy) return;
     setBulkBusy(true);
-    const ids = Array.from(selectedIds);
-    let deleted = 0;
-    let failed = 0;
-    for (const id of ids) {
+    try {
+      const res = await apiRequest("POST", "/api/objects/bulk-delete", { ids: Array.from(selectedIds) });
+      const data: BulkDeleteResult = await res.json();
+      queryClient.invalidateQueries({ queryKey: ["/api/objects"], exact: false });
+      setSelectedIds(new Set());
+      setBulkDeleteOpen(false);
+      if (data.blocked > 0) {
+        setBulkDeleteResult(data);
+      } else {
+        toast({ title: "Borttagning klar", description: `${data.deleted} objekt borttagna` });
+      }
+    } catch (err) {
+      toast({
+        title: "Massradering misslyckades",
+        description: err instanceof Error ? err.message : "Okänt fel",
+        variant: "destructive",
+      });
+    } finally {
+      setBulkBusy(false);
+    }
+  };
+
+  // "Arkivera blockerade" från resultatdialogen — befintlig arkiv-väg per objekt,
+  // i serverns resultatordning (barn före föräldrar) så att föräldrar inte
+  // blockeras av redan-markerade barn. Objekt som ändå inte kan arkiveras
+  // (t.ex. förälder med OMARKERAT aktivt underobjekt) stannar kvar i dialogen
+  // med sin arkiv-orsak — aldrig tysta misslyckanden.
+  const runArchiveBlocked = async () => {
+    if (!bulkDeleteResult || bulkArchiveBusy) return;
+    setBulkArchiveBusy(true);
+    const blockedIds = bulkDeleteResult.results
+      .filter((r) => r.status === "blocked" && r.reason !== "Objektet hittades inte")
+      .map((r) => r.id);
+    let archived = 0;
+    const failures: Array<{ id: string; reason: string }> = [];
+    for (const id of blockedIds) {
       try {
-        await apiRequest("DELETE", `/api/objects/${id}`);
-        deleted++;
+        await apiRequest("POST", `/api/objects/${id}/archive`, { reason: "Massradering: kunde inte raderas, arkiverad istället" });
+        archived++;
       } catch {
-        failed++;
+        // Hämta den läsbara arkiv-orsaken (t.ex. "N underobjekt är fortfarande aktiva").
+        let reason = "Kunde inte arkiveras";
+        try {
+          const pfRes = await apiRequest("GET", `/api/objects/${id}/archive-preflight`);
+          const pf: { blockers?: string[] } = await pfRes.json();
+          if (pf.blockers && pf.blockers.length > 0) reason = pf.blockers.join(", ");
+        } catch {
+          // behåll generisk orsak
+        }
+        failures.push({ id, reason });
       }
     }
     queryClient.invalidateQueries({ queryKey: ["/api/objects"], exact: false });
-    setSelectedIds(new Set());
-    setBulkBusy(false);
-    setBulkDeleteOpen(false);
-    toast({
-      title: failed > 0 ? "Borttagning klar med varningar" : "Borttagning klar",
-      description: `${deleted} objekt borttagna${failed > 0 ? `, ${failed} misslyckades` : ""}`,
-      variant: failed > 0 ? "destructive" : undefined,
-    });
+    setBulkArchiveBusy(false);
+    setBulkArchiveOutcome({ archived, failures });
+    if (failures.length === 0) {
+      setBulkDeleteResult(null);
+      toast({ title: "Arkivering klar", description: `${archived} objekt arkiverade` });
+    } else {
+      toast({
+        title: "Arkivering klar med varningar",
+        description: `${archived} objekt arkiverade, ${failures.length} kunde inte arkiveras — se orsakerna i dialogen`,
+        variant: "destructive",
+      });
+    }
   };
 
 
@@ -2438,7 +2498,7 @@ export default function ObjectsPage() {
           <AlertDialogHeader>
             <AlertDialogTitle>Ta bort {selectedIds.size} markerade objekt?</AlertDialogTitle>
             <AlertDialogDescription>
-              Detta tar bort {selectedIds.size} markerade objekt. Objekt med underordnade objekt kan misslyckas. Åtgärden kan inte ångras.
+              Endast helt oanvända objekt raderas permanent. Objekt med uppgifter (även historik), abonnemang eller omarkerade underobjekt blockeras och kan istället arkiveras i nästa steg. Markerade delträd raderas i rätt ordning (underobjekt först). Raderingen kan inte ångras.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -2455,6 +2515,49 @@ export default function ObjectsPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Task #1428: resultat av massradering — grupperade orsaker + arkivera blockerade. */}
+      <Dialog open={bulkDeleteResult !== null} onOpenChange={(open) => { if (!open && !bulkArchiveBusy) setBulkDeleteResult(null); }}>
+        <DialogContent data-testid="dialog-bulk-delete-result">
+          <DialogHeader>
+            <DialogTitle>Borttagning klar</DialogTitle>
+            <DialogDescription>
+              {bulkDeleteResult?.deleted ?? 0} objekt raderade, {bulkDeleteResult?.blocked ?? 0} blockerade.
+            </DialogDescription>
+          </DialogHeader>
+          {bulkDeleteResult && bulkDeleteResult.blocked > 0 && (
+            <div className="space-y-2 max-h-60 overflow-y-auto text-sm" data-testid="list-bulk-delete-reasons">
+              {Object.entries(
+                bulkDeleteResult.results
+                  .filter((r) => r.status === "blocked")
+                  .reduce<Record<string, number>>((acc, r) => {
+                    const key = r.reason ?? "Okänd orsak";
+                    acc[key] = (acc[key] ?? 0) + 1;
+                    return acc;
+                  }, {}),
+              )
+                .sort((a, b) => b[1] - a[1])
+                .map(([reason, count]) => (
+                  <div key={reason} className="flex items-start gap-2">
+                    <Badge variant="secondary" className="shrink-0">{count}</Badge>
+                    <span className="text-muted-foreground">{reason}</span>
+                  </div>
+                ))}
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" disabled={bulkArchiveBusy} onClick={() => setBulkDeleteResult(null)} data-testid="button-close-bulk-delete-result">
+              Stäng
+            </Button>
+            {bulkDeleteResult && bulkDeleteResult.results.some((r) => r.status === "blocked" && r.reason !== "Objektet hittades inte") && (
+              <Button onClick={runArchiveBlocked} disabled={bulkArchiveBusy} data-testid="button-archive-blocked">
+                {bulkArchiveBusy ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Archive className="h-4 w-4 mr-2" />}
+                Arkivera blockerade
+              </Button>
+            )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={bulkParentDialogOpen} onOpenChange={(open) => { if (!bulkBusy) { setBulkParentDialogOpen(open); if (!open) setBulkNewParentId(null); } }}>
         <DialogContent>

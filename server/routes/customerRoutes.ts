@@ -1479,6 +1479,25 @@ app.put("/api/objects/:id/reject", asyncHandler(async (req, res) => {
 // (hard delete) ENDAST om helt oanvänt (inga uppgifter, ingen historik,
 // inga barn, inga abonnemang). Annars 409 med hänvisning till arkivering
 // (POST /api/objects/:id/archive).
+// Task #1428: massradering som EN batch-operation. Samma raderingsregler som
+// enkelradering, men batchad preflight, topologisk ordning (barn före
+// föräldrar inom urvalet) och per-objekt-resultat med läsbar orsak.
+app.post("/api/objects/bulk-delete", asyncHandler(async (req, res) => {
+  const tenantId = getTenantIdWithFallback(req);
+  const ids = Array.isArray(req.body?.ids)
+    ? (req.body.ids as unknown[]).filter((v): v is string => typeof v === "string" && v.length > 0)
+    : null;
+  if (!ids || ids.length === 0) {
+    throw new ValidationError("ids måste vara en icke-tom lista med objekt-id");
+  }
+  if (ids.length > 1000) {
+    throw new ValidationError("Max 1000 objekt per massradering");
+  }
+  const { bulkDeleteObjects } = await import("../services/object-archive");
+  const result = await bulkDeleteObjects(ids, tenantId);
+  res.json(result);
+}));
+
 app.delete("/api/objects/:id", asyncHandler(async (req, res) => {
   const tenantId = getTenantIdWithFallback(req);
   const existing = await storage.getObject(req.params.id);

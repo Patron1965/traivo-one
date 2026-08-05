@@ -166,17 +166,242 @@ export async function deleteObjectPreflight(objectId: string, tenantId: string):
   };
 }
 
+// ============================================================
+// Massradering (Task #1428): batch-variant av raderingsregeln ovan.
+// Samma regler som enkelradering, men:
+//  - preflight körs batchat (inga N+1-queries per objekt),
+//  - urvalet raderas i topologisk ordning (barn före föräldrar) så att
+//    hela markerade delträd kan raderas i ett svep,
+//  - per-objekt-resultat med läsbar orsak för blockerade objekt.
+// ============================================================
+
+export type BulkDeleteItemResult = {
+  id: string;
+  status: "deleted" | "blocked";
+  reason?: string;
+};
+
+export type BulkDeleteResult = {
+  deleted: number;
+  blocked: number;
+  results: BulkDeleteItemResult[];
+};
+
+const DELETE_CHUNK_SIZE = 100;
+
+// drizzle sql`` expanderar en JS-array till ($1,$2,...) — bygg IN-listor explicit.
+const sqlIdList = (arr: string[]) => sql.join(arr.map((v) => sql`${v}`), sql`, `);
+
+export async function bulkDeleteObjects(rawIds: string[], tenantId: string): Promise<BulkDeleteResult> {
+  const ids = Array.from(new Set(rawIds));
+  const results = new Map<string, BulkDeleteItemResult>();
+  if (ids.length === 0) return { deleted: 0, blocked: 0, results: [] };
+
+  // 1) Ladda urvalets objekt (tenant-scopat). Saknade id:n = fel tenant eller
+  //    redan borttagna → blockerade med "hittades inte" (ingen cross-tenant-läcka).
+  const objRows = await db.execute(sql`
+    SELECT id, parent_id FROM objects
+    WHERE tenant_id = ${tenantId} AND id IN (${sqlIdList(ids)})
+  `).then(r => r.rows as Array<{ id: string; parent_id: string | null }>);
+  const inSelection = new Set(objRows.map(r => r.id));
+  const notFound: BulkDeleteItemResult[] = [];
+  for (const id of ids) {
+    if (!inSelection.has(id)) {
+      notFound.push({ id, status: "blocked", reason: "Objektet hittades inte" });
+    }
+  }
+  // Hela urvalet fanns inte i tenanten (fel tenant/redan borttagna) → svara
+  // direkt; tomma IN-listor är dessutom ogiltig SQL.
+  if (inSelection.size === 0) {
+    return { deleted: 0, blocked: notFound.length, results: notFound };
+  }
+
+  // 2) Batchad preflight — samma räkningar som deleteObjectPreflight, grupperade.
+  const selIds = Array.from(inSelection);
+  const [childRows, altChildRows, woRows, asgRows, subRows] = await Promise.all([
+    db.execute(sql`
+      SELECT id, parent_id FROM objects
+      WHERE tenant_id = ${tenantId} AND parent_id IN (${sqlIdList(selIds)})
+    `).then(r => r.rows as Array<{ id: string; parent_id: string }>),
+    db.execute(sql`
+      SELECT object_id, parent_id FROM object_parents
+      WHERE tenant_id = ${tenantId} AND parent_id IN (${sqlIdList(selIds)})
+    `).then(r => r.rows as Array<{ object_id: string; parent_id: string }>),
+    db.execute(sql`
+      SELECT object_id, COUNT(*)::int AS cnt FROM work_orders
+      WHERE tenant_id = ${tenantId} AND object_id IN (${sqlIdList(selIds)}) GROUP BY object_id
+    `).then(r => r.rows as Array<{ object_id: string; cnt: number }>),
+    db.execute(sql`
+      SELECT object_id, COUNT(*)::int AS cnt FROM assignments
+      WHERE tenant_id = ${tenantId} AND object_id IN (${sqlIdList(selIds)}) GROUP BY object_id
+    `).then(r => r.rows as Array<{ object_id: string; cnt: number }>),
+    db.execute(sql`
+      SELECT object_id, COUNT(*)::int AS cnt FROM subscriptions
+      WHERE tenant_id = ${tenantId} AND object_id IN (${sqlIdList(selIds)}) GROUP BY object_id
+    `).then(r => r.rows as Array<{ object_id: string; cnt: number }>),
+  ]);
+
+  const woCount = new Map(woRows.map(r => [r.object_id, Number(r.cnt)]));
+  const asgCount = new Map(asgRows.map(r => [r.object_id, Number(r.cnt)]));
+  const subCount = new Map(subRows.map(r => [r.object_id, Number(r.cnt)]));
+
+  // Kvarvarande barn per förälder = alla barn minus de barn i urvalet som
+  // faktiskt raderas. Barn UTANFÖR urvalet kan aldrig raderas här → blockerar.
+  const remainingChildren = new Map<string, number>();
+  // förälder → barn-id:n som ligger i urvalet (avgörs före föräldern).
+  const inSelectionChildren = new Map<string, string[]>();
+  const addChild = (parentId: string, childId: string) => {
+    remainingChildren.set(parentId, (remainingChildren.get(parentId) ?? 0) + 1);
+    if (inSelection.has(childId)) {
+      const arr = inSelectionChildren.get(parentId) ?? [];
+      arr.push(childId);
+      inSelectionChildren.set(parentId, arr);
+    }
+  };
+  for (const r of childRows) addChild(r.parent_id, r.id);
+  for (const r of altChildRows) addChild(r.parent_id, r.object_id);
+
+  // 3) Avgör i topologisk ordning: en förälder avgörs först när alla dess
+  //    barn i urvalet är avgjorda (Kahn). Ev. cykler (object_parents) faller
+  //    ur kön och blockeras på sina räknare i uppsamlingssteget.
+  const pendingInSelectionChildren = new Map<string, number>();
+  for (const id of selIds) pendingInSelectionChildren.set(id, 0);
+  for (const [parentId, children] of Array.from(inSelectionChildren.entries())) {
+    if (inSelection.has(parentId)) {
+      pendingInSelectionChildren.set(parentId, children.length);
+    }
+  }
+  const parentsOf = new Map<string, string[]>(); // barn → föräldrar i urvalet
+  for (const [parentId, children] of Array.from(inSelectionChildren.entries())) {
+    if (!inSelection.has(parentId)) continue;
+    for (const childId of children) {
+      const arr = parentsOf.get(childId) ?? [];
+      arr.push(parentId);
+      parentsOf.set(childId, arr);
+    }
+  }
+
+  const queue = selIds.filter(id => (pendingInSelectionChildren.get(id) ?? 0) === 0);
+  const decidedOrder: string[] = [];
+  const toDelete: string[] = []; // barn-först-ordning bevaras för chunkad radering
+  const decide = (id: string) => {
+    const blockers: string[] = [];
+    const children = remainingChildren.get(id) ?? 0;
+    const wo = woCount.get(id) ?? 0;
+    const asg = asgCount.get(id) ?? 0;
+    const subs = subCount.get(id) ?? 0;
+    if (children > 0) blockers.push(`${children} underobjekt`);
+    if (wo > 0) blockers.push(`${wo} uppgift${wo === 1 ? "" : "er"} (inkl. historik)`);
+    if (asg > 0) blockers.push(`${asg} planerad${asg === 1 ? "" : "e"} uppgift${asg === 1 ? "" : "er"}`);
+    if (subs > 0) blockers.push(`${subs} abonnemang`);
+    if (blockers.length > 0) {
+      results.set(id, {
+        id,
+        status: "blocked",
+        reason: `Används av ${blockers.join(", ")} — kan arkiveras istället`,
+      });
+    } else {
+      results.set(id, { id, status: "deleted" });
+      toDelete.push(id);
+      // Objektet raderas → räkna ner föräldrarnas kvarvarande barn.
+      for (const parentId of parentsOf.get(id) ?? []) {
+        remainingChildren.set(parentId, Math.max(0, (remainingChildren.get(parentId) ?? 1) - 1));
+      }
+    }
+  };
+  const seen = new Set<string>();
+  while (queue.length > 0) {
+    const id = queue.shift()!;
+    if (seen.has(id)) continue;
+    seen.add(id);
+    decidedOrder.push(id);
+    decide(id);
+    for (const parentId of parentsOf.get(id) ?? []) {
+      const left = (pendingInSelectionChildren.get(parentId) ?? 1) - 1;
+      pendingInSelectionChildren.set(parentId, left);
+      if (left <= 0 && !seen.has(parentId)) queue.push(parentId);
+    }
+  }
+  // Cykel-rest (bör inte hända med parent_id, men object_parents saknar cykelvakt
+  // historiskt): avgör i godtycklig ordning — deras barn-räknare blockerar korrekt.
+  for (const id of selIds) {
+    if (!seen.has(id)) {
+      seen.add(id);
+      decidedOrder.push(id);
+      decide(id);
+    }
+  }
+
+  // 4) Radera i barn-först-ordning, chunkat med batchade DELETE-satser.
+  //    Varje chunk körs i EN transaktion — kringdata (metadata/länkar) får
+  //    aldrig förstöras för ett objekt vars slutliga DELETE blockeras av en
+  //    oförutsedd FK. Vid fel rullas chunken tillbaka och körs om per objekt
+  //    (egen transaktion per objekt) så exakt rätt objekt märks som blockerat.
+  for (let i = 0; i < toDelete.length; i += DELETE_CHUNK_SIZE) {
+    const chunk = toDelete.slice(i, i + DELETE_CHUNK_SIZE);
+    try {
+      await db.transaction(async (tx) => {
+        await hardDeleteUnusedObjectsBatch(tx, chunk, tenantId);
+      });
+    } catch {
+      for (const id of chunk) {
+        try {
+          await db.transaction(async (tx) => {
+            await hardDeleteUnusedObjectsBatch(tx, [id], tenantId);
+          });
+        } catch (err: any) {
+          if (err?.code === "23503" || err?.cause?.code === "23503") {
+            results.set(id, {
+              id,
+              status: "blocked",
+              reason: "Refereras av annan data — kan arkiveras istället",
+            });
+          } else {
+            throw err;
+          }
+        }
+      }
+    }
+  }
+
+  // Resultat i faktisk avgörande-ordning (barn före föräldrar) — klientens
+  // "Arkivera blockerade" itererar denna ordning så föräldrar inte stoppas
+  // av ännu-aktiva barn. Saknade id:n läggs sist.
+  const ordered: BulkDeleteItemResult[] = [];
+  for (const id of decidedOrder) {
+    const r = results.get(id);
+    if (r) ordered.push(r);
+  }
+  ordered.push(...notFound);
+  const deleted = ordered.filter(r => r.status === "deleted").length;
+  return { deleted, blocked: ordered.length - deleted, results: ordered };
+}
+
+type DbOrTx = Pick<typeof db, "execute">;
+
+// Batchad motsvarighet till hardDeleteUnusedObject — samma tabeller, IN-listor.
+// Körs alltid inom en transaktion (tx) så att kringdata-rensning + objekt-DELETE
+// är atomära: blockeras objektet av en FK rullas allt tillbaka.
+async function hardDeleteUnusedObjectsBatch(tx: DbOrTx, objectIds: string[], tenantId: string): Promise<void> {
+  if (objectIds.length === 0) return;
+  await tx.execute(sql`DELETE FROM metadata_historik WHERE tenant_id = ${tenantId} AND metadata_varden_id IN (
+    SELECT id FROM metadata_varden WHERE tenant_id = ${tenantId} AND objekt_id IN (${sqlIdList(objectIds)})
+  )`);
+  await tx.execute(sql`DELETE FROM metadata_varden WHERE tenant_id = ${tenantId} AND objekt_id IN (${sqlIdList(objectIds)})`);
+  await tx.execute(sql`DELETE FROM object_parents WHERE tenant_id = ${tenantId} AND (object_id IN (${sqlIdList(objectIds)}) OR parent_id IN (${sqlIdList(objectIds)}))`);
+  await tx.execute(sql`DELETE FROM object_articles WHERE tenant_id = ${tenantId} AND object_id IN (${sqlIdList(objectIds)})`);
+  await tx.execute(sql`DELETE FROM objects WHERE tenant_id = ${tenantId} AND id IN (${sqlIdList(objectIds)})`);
+}
+
 /**
  * Hard-delete av ett helt oanvänt objekt. Rensar objektets egna kringdata
  * (metadata, föräldralänkar, artikelkopplingar) och tar bort raden. Kastar
  * aldrig själv vid FK-konflikt — anroparen fångar och hänvisar till arkivering.
  */
 export async function hardDeleteUnusedObject(objectId: string, tenantId: string): Promise<void> {
-  await db.execute(sql`DELETE FROM metadata_historik WHERE tenant_id = ${tenantId} AND metadata_varden_id IN (
-    SELECT id FROM metadata_varden WHERE tenant_id = ${tenantId} AND objekt_id = ${objectId}
-  )`).catch(() => undefined);
-  await db.execute(sql`DELETE FROM metadata_varden WHERE tenant_id = ${tenantId} AND objekt_id = ${objectId}`);
-  await db.execute(sql`DELETE FROM object_parents WHERE tenant_id = ${tenantId} AND (object_id = ${objectId} OR parent_id = ${objectId})`);
-  await db.execute(sql`DELETE FROM object_articles WHERE tenant_id = ${tenantId} AND object_id = ${objectId}`);
-  await db.execute(sql`DELETE FROM objects WHERE tenant_id = ${tenantId} AND id = ${objectId}`);
+  // Task #1428: atomärt — kringdata-rensning + objekt-DELETE i en transaktion
+  // så att en FK-blockerad radering inte hinner förstöra objektets metadata.
+  await db.transaction(async (tx) => {
+    await hardDeleteUnusedObjectsBatch(tx, [objectId], tenantId);
+  });
 }

@@ -1,0 +1,56 @@
+{
+  "sessionId": "g1ax6hl9jyuy",
+  "exportedAt": "2026-08-05T13:06:55.003Z",
+  "summary": "### Key Topics Discussed\n- Viktigheten av ett klarläggande vid inläsning och matchning av data.\n- Hur metadata ska hanteras och grupperas i systemet.\n- Hantering av arkiverade metadatafält som har historisk data kopplad till sig.\n- Vikten av att systemet endast visar definierade metadatafält vid bläddring i matchningsposter.\n- Hantering av grupperade metadatafält, som kontaktpersonens information, som enskilda poster vid avvikelser.\n\n### Important Points & Insights\n- I systemet ska endast metadata kunna väljas i grunden.\n- Metadata ska grupperas på samma sätt som det alltid redovisas, inte som \"metadata typ\" eller \"metadata yta\".\n- Systemfält som interimnummer, interimföräldranummer, systemföräldranummer och systemnummer behövs för systemmässig matchning och gruppering.\n- Objektnamn betraktas som ett metadatafält.\n- Externa ID:n, kund, kundnummer, aktivitetsstatus, MTU-någonting, och adresser (leveransadress, adress, gatuadress, gatunummer, postnummer, delivery, longitude, latitud) är metadatafält.\n- Kontakt är ett metadatafält.\n- När metadatafält arkiveras, ska de inte vara synliga för val, och Replit behöver hantera detta. Arkiverade metadatafält med associerad historisk data måste dock finnas kvar på de objekt där de ursprungligen fanns för att undvika datahaverier i registren.\n- Vid bläddring i matchningsposter ska systemet enbart visa de metadatafält som är definierade och byggda som metadatainställningar.\n- Grupperade metadatafält, som kontaktperson (namn, titel), måste kunna hanteras som enskilda poster vid avvikelser från den vanliga grupperingen.",
+  "conversation": [],
+  "transcripts": [
+    {
+      "text": "Ja. Ja, eh, det är viktigt att vi gör ett klarläggande här nu f-vid inläsning. Nu, nu är vi alltså vid inläsning av matchning utav data och det här speglar ju också registren här bakom då. Eh, och vi måste understryka det att i vår värld, det enda som vi vill kunna välja här i grunden är alltså metadata. Och då behöver så att säga inte-- Då ska det ju inte stå metadata typ och metadata yta och så vidare, utan det ska ju då vara grupperat på samma sätt som metadata redovisas alltid.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Sen, för att systemmässigt, matchningsmässigt kunna hantera det hära, så finns det då några systemfält som behövs. Och dels har vi då det hära för grupperingen, interimnummer och interimföräldranummer. De behövs. Eh, objektnamn är ett metadatafält, så det är metadata, eh, i, i, i vår värld. Eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Systemföräldranummer och systemnummer är ju då också, eh, för matchning. De måste då finnas med här. Däremot externt ID, det är metadata. Kund är metadata, kundnummer är metadata, aktivitetsstatus är metadata och, eh, MTU-någonting är metadata. Adresser i alla former, lever",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "ansadress, adress, gataadress, gatunummer, adress, postnummer, delivery, longitude och latitud, det är metadatafält. Samma sak gäller kontakt. Det är metadatafält och som, som definieras under då, eh, definitionen utav metadata. Och, eh, när metadatafält arkiveras, då ska de då inte synas här. Och sen behöver Replit ha, och det har säkert Replit redan, att om man arkiverar ett metadatafält...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Som har data på sig, så måste ju det kunna hanteras särskilt. Och den affärsmässiga regeln tror jag är där då att om vi, om, om vi under en period till exempel har haft skostorlek på kontaktpersonen, men sen bestämmer vi att visst inte ska ha stor-- Skostorlek, då ska vi kunna ak-arkivera metadataposten skostorlek och ersätta den med, med, med längd istället för, eller vikt. Och-- Men då ska då den här gamla skostorleken ska ju naturligtvis leva kvar och finnas då på de objekt där den",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "finns. Annars så kan det ju bli haverier då i registerna om man gör det. Men däremot ska den inte bli sy-synlig då i att kunna välja i framtiden då. Som en regel då, hur man hanterar de här datafälten.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. Och för övrigt kan vi väl också säga, när vi bläddrar då i matchningsposterna här då enligt den här bilden då i att matcha data här, så finns det ju alltså många, många fler metadatafält än vad vi har definierade. Och här är det viktigt att den enbart ska re-- visa då de metadatafält som är definierade. Som finns, som är byggda metadatainställningar. Ja, och också viktigt här att vi stryker und",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "an då att om det finns metadatafält som är grupper, till exempel då kontaktperson, namn, titel och så vidare. Så, så i det här fallet så måste de ju kunna hanteras då som enskilda poster då, som en avvikelse från de andra då, där de ska komma i klump då.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    }
+  ]
+}
