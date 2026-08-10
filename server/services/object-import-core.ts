@@ -730,3 +730,126 @@ export function groupMetadataForWrite(metadata: Record<string, string>): {
     .map(([namn, varde]) => ({ namn, varde }));
   return { strings, jsonGroups };
 }
+
+// ─────────────────────────────────────── strikt matchningsgate (Task #1494)
+//
+// Produktägarens krav: importen skriver ENDAST till objektets tre kärnfält
+// (objektnamn, objektnummer, överordnat objektnummer) + metadatakatalogen.
+// Varje mappad kolumn måste spåras till exakt en giltig destination; omatchade
+// kolumner med data blockerar importen (explicit "Ignorera kolumn" = __empty
+// är alltid tillåtet). Rena helpers utan DB — routen levererar katalog-status.
+
+export const STRICT_NO_MATCH_MESSAGE =
+  "Ingen matchning – välj metadatafält eller skapa ett metadatafält innan importen kan genomföras";
+
+export interface ColumnError {
+  index: number;
+  header: string;
+  target: string | null;
+  message: string;
+}
+
+export interface StrictColumnInput {
+  index: number;
+  header: string;
+  /** Har kolumnen data i någon rad? Tomma kolumner får sakna mappning. */
+  hasData: boolean;
+}
+
+/**
+ * Beräknar blockerande kolumnfel för den strikta matchningsgaten:
+ *  1. Omatchad kolumn med data (ingen mappning alls) → STRICT_NO_MATCH_MESSAGE.
+ *  2. Mappning mot okänd/legacy destination (varken inbyggd nyckel eller
+ *     metadata.<namn>) → fel.
+ *  3. metadata.<namn> där namnet varken är aktivt eller arkiverat i katalogen
+ *     → STRICT_NO_MATCH_MESSAGE (arkiverade hanteras separat via
+ *     restore-flödet och är inte ett kolumnfel här).
+ *  4. Två kolumner mot samma singelvärdes-destination (systemfält, eller
+ *     metadatafält utan allowDuplicates) → fel på båda kolumnerna.
+ *
+ * "typ"-specialfallet: metadata.typ routas vid execute till det kanoniska
+ * fältet "Objekttyp" — namnet accepteras när "Objekttyp" eller "typ" finns.
+ * Punktnycklar (metadata.grupp.sub) valideras mot GRUPPENS katalognamn (json).
+ */
+export function computeStrictColumnErrors(args: {
+  columns: StrictColumnInput[];
+  mappings: ColumnMappings;
+  builtinKeys: Set<string>;
+  activeMetadataNames: Set<string>;
+  archivedMetadataNames: Set<string>;
+  /** Metadatafält med allowDuplicates=true (får ta emot flera kolumner). */
+  allowDuplicatesNames: Set<string>;
+}): ColumnError[] {
+  const { columns, mappings, builtinKeys, activeMetadataNames, archivedMetadataNames, allowDuplicatesNames } = args;
+  const errors: ColumnError[] = [];
+  const byIndex = new Map(columns.map((c) => [c.index, c]));
+
+  const metadataBaseName = (target: string): string => {
+    const rest = target.slice("metadata.".length);
+    const dot = rest.indexOf(".");
+    return dot >= 0 ? rest.slice(0, dot) : rest;
+  };
+  const nameKnown = (namn: string, set: Set<string>): boolean => {
+    if (set.has(namn)) return true;
+    // Task #1484: "typ" är alias för kanoniska "Objekttyp".
+    if (namn === "typ" && set.has("Objekttyp")) return true;
+    return false;
+  };
+
+  // 1–3: per kolumn.
+  for (const c of columns) {
+    const m = mappings[String(c.index)];
+    const target = m?.target ?? null;
+    if (!target || target === "") {
+      if (c.hasData) errors.push({ index: c.index, header: c.header, target: null, message: STRICT_NO_MATCH_MESSAGE });
+      continue;
+    }
+    if (target === "__empty") continue; // explicit "Ignorera kolumn"
+    if (target.startsWith("metadata.")) {
+      const namn = metadataBaseName(target);
+      if (!nameKnown(namn, activeMetadataNames) && !nameKnown(namn, archivedMetadataNames)) {
+        errors.push({ index: c.index, header: c.header, target, message: STRICT_NO_MATCH_MESSAGE });
+      }
+      continue;
+    }
+    if (!builtinKeys.has(target)) {
+      errors.push({
+        index: c.index,
+        header: c.header,
+        target,
+        message: `Okänd destination "${target}" — ${STRICT_NO_MATCH_MESSAGE}`,
+      });
+    }
+  }
+
+  // 4: dubblettmål mot singelvärdesfält.
+  const byTarget = new Map<string, number[]>();
+  for (const [key, m] of Object.entries(mappings)) {
+    const target = m?.target;
+    if (!target || target === "__empty") continue;
+    const idx = Number(key);
+    if (!byIndex.has(idx)) continue; // mappning för borttagen kolumn
+    (byTarget.get(target) ?? byTarget.set(target, []).get(target)!).push(idx);
+  }
+  for (const [target, indices] of byTarget) {
+    if (indices.length < 2) continue;
+    if (target.startsWith("metadata.")) {
+      const namn = metadataBaseName(target);
+      if (nameKnown(namn, allowDuplicatesNames)) continue; // kompletterande fält
+    }
+    const headers = indices
+      .sort((a, b) => a - b)
+      .map((i) => byIndex.get(i)?.header ?? `Kolumn ${i + 1}`);
+    for (const i of indices) {
+      const c = byIndex.get(i)!;
+      errors.push({
+        index: i,
+        header: c.header,
+        target,
+        message: `Flera kolumner (${headers.join(", ")}) skriver till samma fält — ett singelvärdesfält kan bara ta emot en kolumn.`,
+      });
+    }
+  }
+
+  return errors.sort((a, b) => a.index - b.index);
+}

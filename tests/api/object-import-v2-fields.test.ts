@@ -95,11 +95,13 @@ afterAll(async () => {
 }, 30000);
 
 describe("GET /api/import/objects-v2/fields (Task #1430)", () => {
-  it("returnerar systemfälten för matchning som egen grupp", async () => {
+  it("returnerar de TRE kärnfälten som 'Systemfält – Objekt' (Task #1494)", async () => {
     const { status, fields } = await getFields();
     expect(status).toBe(200);
-    const systemKeys = fields.filter((f) => f.group === "system").map((f) => f.key).sort();
-    expect(systemKeys).toEqual(["interim_id", "interim_parent_id", "system_id", "system_parent_id"]);
+    const system = fields.filter((f) => f.group === "system");
+    // Fast ordning: Objektnamn, Objektnummer, Överordnat objektnummer.
+    expect(system.map((f) => f.key)).toEqual(["name", "system_id", "system_parent_id"]);
+    expect(system.map((f) => f.label)).toEqual(["Objektnamn", "Objektnummer", "Överordnat objektnummer"]);
   });
 
   it("filtrerar bort arkiverade och trasiga (tomt namn) katalograder", async () => {
@@ -138,9 +140,10 @@ describe("GET /api/import/objects-v2/fields (Task #1430)", () => {
   it("erbjuder ENDAST systemfält + definierade metadatafält — inga inbyggda fält", async () => {
     const { fields } = await getFields();
     const keys = new Set(fields.map((f) => f.key));
-    // Inbyggda standard/adress/kontakt-fält och __empty utgår ur val-listan
-    // (teknisk mappning bakom kulisserna finns kvar i auto-match/execute).
-    for (const k of ["name", "external_id", "customer_name", "customer_ref", "active_status", "address.full", "position.lat", "contact.name", "__empty"]) {
+    // Inbyggda standard/adress/kontakt-fält, interim-nycklarna och __empty
+    // utgår ur val-listan (teknisk mappning bakom kulisserna finns kvar i
+    // auto-match/execute). Task #1494: endast de tre kärnfälten erbjuds.
+    for (const k of ["interim_id", "interim_parent_id", "external_id", "customer_name", "customer_ref", "active_status", "address.full", "position.lat", "contact.name", "__empty"]) {
       expect(keys.has(k)).toBe(false);
     }
     // Varje fält är antingen system-gruppens matchningsfält eller metadata.<namn>.

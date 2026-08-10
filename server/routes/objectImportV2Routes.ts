@@ -40,7 +40,7 @@ import {
   getObjectsPrimaryCustomerIds,
 } from "../services/object-customer";
 import { storage } from "../storage";
-import { isInterimKatalogNamn, writeObjectImportMetadataBatch } from "../metadata-queries";
+import { coerceMetadataVardeFromRaw, isInterimKatalogNamn, writeObjectImportMetadataBatch } from "../metadata-queries";
 import {
   IMPORT_UNDO_WINDOW_MS,
   objectSnapshotColumns,
@@ -53,6 +53,7 @@ import {
   groupMetadataForWrite,
   buildHierarchyPlan,
   categoryForTarget,
+  computeStrictColumnErrors,
   detectHeaderRows,
   resolveRow,
   validateCrossRow,
@@ -60,6 +61,7 @@ import {
   type ResolvedRow,
 } from "../services/object-import-core";
 import {
+  ALL_KNOWN_KEYS,
   ColumnMappings,
   FIELD_CATALOG,
   FieldDefinition,
@@ -137,19 +139,21 @@ const executeSchema = z.object({
   // importens värden (äkta export → redigera → importera). Default false =
   // bakåtkompatibelt "första-skrivningen-vinner" (befintliga värden bevaras).
   overwriteMetadata: z.boolean().optional(),
-  // Task #1478: uttryckligt kvitto på att kolumner med data som saknar mappning
-  // INTE importeras. Krävs av servern när valideringens unmapped_columns är
-  // icke-tom — UI-checkboxen är bara spegeln av detta fält.
-  acknowledgeUnmappedColumns: z.boolean().optional(),
+  // Task #1494: mappade metadata-mål som är ARKIVERADE i katalogen kräver ett
+  // uttryckligt val — återställ fälten (true) eller stoppa importen. Aldrig
+  // tyst återställning/skapande.
+  restoreArchivedMetadataFields: z.boolean().optional(),
 });
 
-// Task #1430 — systemfält som behövs för matchning (egen grupp i "Matcha data").
-const SYSTEM_MATCH_KEYS = new Set([
-  "system_id",
-  "system_parent_id",
-  "interim_id",
-  "interim_parent_id",
-]);
+// Task #1494 — "Systemfält – Objekt": importen skriver till objektets TRE
+// kärnfält (objektnamn, objektnummer, överordnat objektnummer) + metadata.
+// Interim-nycklarna döljs ur väljaren (auto-matchade/sparade mappningar mot dem
+// fortsätter fungera); alla övriga tekniska systemnycklar förblir dolda.
+const SYSTEM_MATCH_FIELDS: Array<{ key: string; label: string; description: string }> = [
+  { key: "name", label: "Objektnamn", description: "Namn på objektet – saknas namn får objektet sitt nummer som namn" },
+  { key: "system_id", label: "Objektnummer", description: "Traivos unika objektnummer – ifyllt = uppdatera befintligt objekt" },
+  { key: "system_parent_id", label: "Överordnat objektnummer", description: "Peka mot befintlig förälder i Traivo" },
+];
 
 function toCell(v: string | number | boolean | null): string {
   if (v == null) return "";
@@ -207,10 +211,14 @@ export function registerObjectImportV2Routes(app: Express): void {
         };
       });
 
-      // Systemfälten som behövs för matchning — egen grupp i väljaren.
-      const systemFields: FieldDefinition[] = FIELD_CATALOG.filter((f) =>
-        SYSTEM_MATCH_KEYS.has(f.key),
-      ).map((f) => ({ ...f, group: "system" }));
+      // "Systemfält – Objekt": de tre kärnfälten i fast ordning med import-
+      // väljarens egna etiketter (Task #1494).
+      const catalogByKey = new Map(FIELD_CATALOG.map((f) => [f.key, f]));
+      const systemFields: FieldDefinition[] = SYSTEM_MATCH_FIELDS.flatMap((s) => {
+        const base = catalogByKey.get(s.key);
+        if (!base) return [];
+        return [{ ...base, label: s.label, description: s.description, group: "system" }];
+      });
 
       // Task #1430: väljaren erbjuder ENDAST (1) systemfälten för matchning och
       // (2) definierade metadatafält. Övriga inbyggda fält (objektnamn, kund,
@@ -694,17 +702,100 @@ export function registerObjectImportV2Routes(app: Express): void {
         ),
       );
       let archivedMetadataFields: string[] = [];
-      if (mappedMetadataNames.length) {
+      // Task #1494: alla mappade metadata-BASNAMN (även punktnycklarnas grupp
+      // och "typ"→"Objekttyp") behövs för den strikta gaten + datatypkollen.
+      const mappedMetadataBaseNames = new Set<string>();
+      for (const m of Object.values(mappings)) {
+        if (!m.target.startsWith("metadata.")) continue;
+        const rest = m.target.slice("metadata.".length);
+        const dot = rest.indexOf(".");
+        const base = dot >= 0 ? rest.slice(0, dot) : rest;
+        mappedMetadataBaseNames.add(base);
+        if (base === "typ") mappedMetadataBaseNames.add("Objekttyp");
+      }
+      // Katalogstatus för strikt gate + datatypvalidering.
+      const activeKatalogByName = new Map<
+        string,
+        { namn: string; datatyp: string | null; allowedValues: string[] | null; allowDuplicates: boolean | null }
+      >();
+      const archivedNamesSet = new Set<string>();
+      if (mappedMetadataBaseNames.size) {
         const katRows = await db
-          .select({ namn: metadataKatalog.namn, deletedAt: metadataKatalog.deletedAt })
+          .select({
+            namn: metadataKatalog.namn,
+            deletedAt: metadataKatalog.deletedAt,
+            datatyp: metadataKatalog.datatyp,
+            allowedValues: metadataKatalog.allowedValues,
+            allowDuplicates: metadataKatalog.allowDuplicates,
+          })
           .from(metadataKatalog)
-          .where(and(eq(metadataKatalog.tenantId, tenantId), inArray(metadataKatalog.namn, mappedMetadataNames)));
+          .where(and(eq(metadataKatalog.tenantId, tenantId), inArray(metadataKatalog.namn, Array.from(mappedMetadataBaseNames))));
         // Ett namn räknas som arkiverat ENDAST om ingen aktiv rad finns
         // (katalogen kan ha en arkiverad klon + en aktiv rad med samma namn).
-        const activeNames = new Set(katRows.filter((k) => k.deletedAt == null).map((k) => k.namn));
-        archivedMetadataFields = Array.from(
-          new Set(katRows.filter((k) => k.deletedAt != null && !activeNames.has(k.namn)).map((k) => k.namn)),
+        for (const k of katRows) if (k.deletedAt == null) activeKatalogByName.set(k.namn, k);
+        for (const k of katRows)
+          if (k.deletedAt != null && !activeKatalogByName.has(k.namn)) archivedNamesSet.add(k.namn);
+        archivedMetadataFields = Array.from(archivedNamesSet).filter((n) =>
+          // Endast namn användaren faktiskt mappat (inte alias-expansionen).
+          mappedMetadataNames.includes(n) ||
+          Object.values(mappings).some((m) => {
+            if (!m.target.startsWith("metadata.")) return false;
+            const rest = m.target.slice("metadata.".length);
+            const dot = rest.indexOf(".");
+            return (dot >= 0 ? rest.slice(0, dot) : rest) === n;
+          }),
         );
+      }
+
+      // Task #1494 — strikt matchningsgate: omatchade kolumner med data, okända
+      // destinationer, metadata utan katalogpost och dubblettmål mot singel-
+      // värdesfält är BLOCKERANDE kolumnfel (importen kan inte startas).
+      const allowDuplicatesNames = new Set(
+        Array.from(activeKatalogByName.values())
+          .filter((k) => k.allowDuplicates === true)
+          .map((k) => k.namn),
+      );
+      const columnErrors = computeStrictColumnErrors({
+        columns: sessionColumns.map((c) => ({
+          index: c.index,
+          header: c.userHeader || c.header || `Kolumn ${c.index + 1}`,
+          hasData: rawRows.some((r) => (r[String(c.index)] ?? "").trim() !== ""),
+        })),
+        mappings,
+        builtinKeys: new Set(ALL_KNOWN_KEYS),
+        activeMetadataNames: new Set(activeKatalogByName.keys()),
+        archivedMetadataNames: archivedNamesSet,
+        allowDuplicatesNames,
+      });
+
+      // Task #1494 — datatypvalidering: varje mappad metadata-kolumns värden
+      // kontrolleras mot fältets datatyp/allowedValues med SAMMA coercion som
+      // execute-skrivningen använder (coerceMetadataVardeFromRaw) — "28" mot
+      // Heltal passerar, "tjugoåtta" flaggas som radfel före import.
+      // Punktnycklar (json-grupper) valideras inte per delvärde (gruppen skrivs
+      // som json och sub-värdena är fri text).
+      for (const r of resolved) {
+        const row = byRow.get(r.rowNumber);
+        if (!row) continue;
+        for (const [namn, varde] of Object.entries(r.metadata)) {
+          if (namn.includes(".")) continue; // json-grupp — ingen skalär datatyp
+          const effectiveName = namn === "typ" && !activeKatalogByName.has("typ") ? "Objekttyp" : namn;
+          const katalog = activeKatalogByName.get(effectiveName);
+          if (!katalog) continue; // saknad/arkiverad hanteras av gaten ovan
+          try {
+            coerceMetadataVardeFromRaw(
+              { namn: katalog.namn, datatyp: (katalog.datatyp ?? "string") as any, allowedValues: katalog.allowedValues as any },
+              varde,
+            );
+          } catch (e) {
+            row.issues.push({
+              field: `metadata.${namn}`,
+              message: e instanceof Error ? e.message : `Ogiltigt värde "${varde}" för "${effectiveName}".`,
+              severity: "error",
+            });
+            row.status = "invalid";
+          }
+        }
       }
 
       const rows = Array.from(byRow.values());
@@ -728,6 +819,9 @@ export function registerObjectImportV2Routes(app: Express): void {
         // metadata-mål (återställs vid execute) — visas i wizardens sammanfattning.
         unmapped_columns: unmappedColumns,
         archived_metadata_fields: archivedMetadataFields,
+        // Task #1494: blockerande kolumnfel (strikt matchningsgate) — importen
+        // kan inte startas förrän listan är tom.
+        column_errors: columnErrors,
       };
       const validation = {
         summary,
@@ -902,14 +996,16 @@ export function registerObjectImportV2Routes(app: Express): void {
         throw new ValidationError("Inga kolumnmappningar — matcha kolumner och validera först.");
       }
 
-      // Task #1478: serverauktoritativ gate mot tyst datatapp. Execute kräver en
-      // AKTUELL validering (PUT /mappings nollar session.validation, så en
-      // sparad validering är alltid bunden till gällande mappningar). Om
-      // valideringen flaggar kolumner med data utan mappning krävs dessutom ett
-      // uttryckligt kvitto i request-bodyn — UI-vägen kan inte förbigås via API.
+      // Task #1478/#1494: serverauktoritativ gate mot tyst datatapp. Execute
+      // kräver en AKTUELL validering (PUT /mappings nollar session.validation,
+      // så en sparad validering är alltid bunden till gällande mappningar).
       const storedValidation = session.validation as
         | {
-            summary?: { unmapped_columns?: Array<{ index: number; header: string }> };
+            summary?: {
+              unmapped_columns?: Array<{ index: number; header: string }>;
+              archived_metadata_fields?: string[];
+              column_errors?: Array<{ index: number; header: string; message: string }>;
+            };
             mappingsSnapshot?: string;
           }
         | null;
@@ -921,12 +1017,58 @@ export function registerObjectImportV2Routes(app: Express): void {
       if (storedValidation.mappingsSnapshot !== canonicalMappings(mappings)) {
         throw new ValidationError("Valideringen gjordes mot äldre mappningar — kör validering igen.");
       }
-      const unmappedWithData = storedValidation.summary.unmapped_columns ?? [];
-      if (unmappedWithData.length > 0 && parsed.data.acknowledgeUnmappedColumns !== true) {
+      // Task #1494 — strikt matchningsgate: blockerande kolumnfel (omatchade
+      // kolumner med data, okända destinationer, saknade metadatafält,
+      // dubblettmål) stoppar importen. Inga kvitton/förbigångar.
+      const columnErrs = storedValidation.summary.column_errors ?? [];
+      if (columnErrs.length > 0) {
         throw new ValidationError(
-          `Kolumner med data importeras inte: ${unmappedWithData.map((c) => c.header).join(", ")}. ` +
-            "Mappa kolumnerna eller bekräfta uttryckligen att de ska hoppas över (acknowledgeUnmappedColumns).",
+          `Kolumnmatchningen är inte giltig: ${columnErrs
+            .map((c) => `${c.header} — ${c.message}`)
+            .join("; ")}`,
         );
+      }
+      // Task #1494 — arkiverade metadata-mål kräver uttryckligt val: återställ
+      // fälten (restoreArchivedMetadataFields=true) eller stoppa. Aldrig tyst.
+      const archivedTargets = storedValidation.summary.archived_metadata_fields ?? [];
+      const restoreArchived = parsed.data.restoreArchivedMetadataFields === true;
+      if (archivedTargets.length > 0 && !restoreArchived) {
+        throw new ValidationError(
+          `Arkiverade metadatafält är mappade: ${archivedTargets.join(", ")}. ` +
+            "Välj att återställa fälten (restoreArchivedMetadataFields) eller stoppa och åtgärda i inställningarna.",
+        );
+      }
+      // Task #1494 — live-preflight: katalogen kan ha ändrats EFTER valideringen
+      // (fält arkiverat/raderat i annan flik). Re-verifiera att varje mappat
+      // metadata-basnamn fortfarande finns; execute skapar ALDRIG fält tyst.
+      {
+        const baseNames = new Set<string>();
+        for (const m of Object.values(mappings)) {
+          if (!m.target.startsWith("metadata.")) continue;
+          const rest = m.target.slice("metadata.".length);
+          const dot = rest.indexOf(".");
+          baseNames.add(dot >= 0 ? rest.slice(0, dot) : rest);
+        }
+        baseNames.delete("typ"); // routas till systemfältet "Objekttyp" (ensure:as internt)
+        if (baseNames.size) {
+          const katRows = await db
+            .select({ namn: metadataKatalog.namn, deletedAt: metadataKatalog.deletedAt })
+            .from(metadataKatalog)
+            .where(and(eq(metadataKatalog.tenantId, tenantId), inArray(metadataKatalog.namn, Array.from(baseNames))));
+          const activeNames = new Set(katRows.filter((k) => k.deletedAt == null).map((k) => k.namn));
+          const archivedOnly = new Set(
+            katRows.filter((k) => k.deletedAt != null && !activeNames.has(k.namn)).map((k) => k.namn),
+          );
+          const missing = Array.from(baseNames).filter(
+            (n) => !activeNames.has(n) && !(archivedOnly.has(n) && restoreArchived),
+          );
+          if (missing.length) {
+            throw new ValidationError(
+              `Metadatafält saknas eller är arkiverade i katalogen: ${missing.join(", ")}. ` +
+                "Skapa/återställ fälten i inställningarna och kör validering igen — importen skapar aldrig fält automatiskt.",
+            );
+          }
+        }
       }
 
       // Task #1437: INGEN automatisk kundkoppling. En kund kopplas ENDAST när
@@ -1318,6 +1460,16 @@ export function registerObjectImportV2Routes(app: Express): void {
             }
           }
         }
+        // Task #1494 — strikt matchning: ENDAST importens interna systemfält får
+        // lazy-skapas/återställas automatiskt. Användar-mappade metadatafält
+        // måste redan finnas (preflight ovan); arkiverade återställs ENBART när
+        // restoreArchivedMetadataFields=true skickades med.
+        const INTERNAL_IMPORT_FALT = new Set<string>([
+          OBJEKTMALL_INTERIM_METADATA_FALT,
+          "externt_id",
+          "kontaktperson",
+          "Objekttyp",
+        ]);
         const ensureKatalogRow = async (
           namn: string,
           datatyp: "string" | "json",
@@ -1325,8 +1477,25 @@ export function registerObjectImportV2Routes(app: Express): void {
           const cached = katalogCache.get(namn);
           // Aktiv cachad rad → använd direkt (cachen föredrar aktiva rader).
           if (cached && cached.deletedAt == null) return cached;
+          const isInternal = INTERNAL_IMPORT_FALT.has(namn);
+          if (!isInternal) {
+            // Användarfält: aldrig tyst skapande. Arkiverad post får återställas
+            // endast med uttryckligt medgivande; saknad post = hårt stopp
+            // (preflighten ska redan ha fångat detta — detta är säkerhetsnätet).
+            if (cached && cached.deletedAt != null && !restoreArchived) {
+              throw new Error(
+                `Metadatafältet "${namn}" är arkiverat — återställ det eller stoppa importen (inget tyst återställande).`,
+              );
+            }
+            if (!cached) {
+              throw new Error(
+                `Metadatafältet "${namn}" finns inte i katalogen — importen skapar aldrig fält automatiskt.`,
+              );
+            }
+          }
           // Task #1478: arkiverad post återställs (skriva in i en arkiverad post
-          // vore ett nytt tyst tapp) och saknad post lazy-skapas. Namn-unikhet är
+          // vore ett nytt tyst tapp) och saknad post lazy-skapas (numera endast
+          // interna systemfält, Task #1494). Namn-unikhet är
           // app-nivå (ingen DB-constraint), så restore/skapande serialiseras per
           // (tenant, namn) med ett transaktionsbundet advisory-lock — annars kan
           // parallella körningar lämna två aktiva rader med samma namn.

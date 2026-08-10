@@ -226,6 +226,9 @@ describe("Tre-fils-export → återimport round-trip (Task #1177)", () => {
     const mappings = {
       "0": { target: "system_id", type: "standard" as const },
       "1": { target: "name", type: "standard" as const, required: true },
+      // Task #1494: info-kolumner måste ignoreras EXPLICIT (__empty) — en
+      // omatchad kolumn med data är numera ett blockerande kolumnfel.
+      "2": { target: "__empty", type: "standard" as const },
       "3": { target: "active_status", type: "standard" as const },
     };
     const result = await runImport(matrix, mappings);

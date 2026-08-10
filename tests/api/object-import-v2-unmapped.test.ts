@@ -214,6 +214,73 @@ describe("Import 2.0 — omatchade kolumner tappas aldrig tyst (Task #1478)", ()
     expect(ok.status).toBe(202);
   });
 
+  it("strikt gate (Task #1494): okänt metadatafält och datatypfel blockerar importen", async () => {
+    const upload = await api("POST", "/upload", {
+      fileName: "strict.xlsx",
+      matrix: [
+        ["Objektnamn", "Okänt fält", "Antal"],
+        ["Butik S", "x", "tjugoåtta"],
+      ],
+    });
+    const sessionId = upload.body.session_id as string;
+
+    // Heltalsfält för datatypkollen.
+    await db.insert(metadataKatalog).values([
+      { tenantId: TENANT, namn: "Antal kärl", datatyp: "heltal", kategori: "test" },
+    ]);
+
+    await api("PUT", `/${sessionId}/mappings`, {
+      mappings: {
+        "0": { target: "name", type: "standard", required: true },
+        "1": { target: "metadata.Finns Ej I Katalogen", type: "metadata" },
+        "2": { target: "metadata.Antal kärl", type: "metadata" },
+      },
+    });
+    const validate = await api("POST", `/${sessionId}/validate`, {});
+    expect(validate.status).toBe(200);
+    const errs = validate.body.summary.column_errors as Array<{ index: number; header: string; message: string }>;
+    // Okänt katalogfält → blockerande kolumnfel med den exakta frasen.
+    expect(errs.some((e) => e.index === 1 && e.message.includes("Ingen matchning"))).toBe(true);
+    // Datatypfel ("tjugoåtta" mot Heltal) → radfel som gör raden ogiltig.
+    const rows = validate.body.rows as Array<{ status: string; issues: Array<{ field: string; severity: string }> }>;
+    expect(rows[0].status).toBe("invalid");
+    expect(rows[0].issues.some((i) => i.field === "metadata.Antal kärl" && i.severity === "error")).toBe(true);
+
+    // Execute stoppas av kolumnfelen — inga fält skapas tyst.
+    const exec = await api("POST", `/${sessionId}/execute`, {});
+    expect(exec.status).toBe(400);
+    expect(String(exec.body?.message ?? "")).toContain("Kolumnmatchningen är inte giltig");
+    const created = await db
+      .select()
+      .from(metadataKatalog)
+      .where(and(eq(metadataKatalog.tenantId, TENANT), eq(metadataKatalog.namn, "Finns Ej I Katalogen")));
+    expect(created).toHaveLength(0);
+  });
+
+  it("strikt gate (Task #1494): två kolumner mot samma singelvärdesfält blockerar", async () => {
+    const upload = await api("POST", "/upload", {
+      fileName: "dup.xlsx",
+      matrix: [
+        ["Objektnamn", "T1", "T2"],
+        ["Butik D", "Måndag", "Tisdag"],
+      ],
+    });
+    const sessionId = upload.body.session_id as string;
+    await api("PUT", `/${sessionId}/mappings`, {
+      mappings: {
+        "0": { target: "name", type: "standard", required: true },
+        "1": { target: "metadata.Tömningsdag", type: "metadata" },
+        "2": { target: "metadata.Tömningsdag", type: "metadata" },
+      },
+    });
+    const validate = await api("POST", `/${sessionId}/validate`, {});
+    const errs = validate.body.summary.column_errors as Array<{ index: number; message: string }>;
+    expect(errs.map((e) => e.index).sort()).toEqual([1, 2]);
+    expect(errs[0].message).toContain("samma fält");
+    const exec = await api("POST", `/${sessionId}/execute`, {});
+    expect(exec.status).toBe(400);
+  });
+
   it("execute återställer arkiverat fält och skriver till aktiv rad när arkiverad klon finns", async () => {
     const upload = await api("POST", "/upload", {
       fileName: "test4.xlsx",
@@ -232,7 +299,12 @@ describe("Import 2.0 — omatchade kolumner tappas aldrig tyst (Task #1478)", ()
       },
     });
     await api("POST", `/${sessionId}/validate`, {});
-    const exec = await api("POST", `/${sessionId}/execute`, {});
+    // Task #1494: arkiverade metadata-mål återställs ALDRIG tyst — utan det
+    // uttryckliga valet stoppas importen.
+    const blocked = await api("POST", `/${sessionId}/execute`, {});
+    expect(blocked.status).toBe(400);
+    expect(String(blocked.body?.message ?? "")).toContain("Arkiverade metadatafält");
+    const exec = await api("POST", `/${sessionId}/execute`, { restoreArchivedMetadataFields: true });
     expect(exec.status).toBe(202);
     for (let i = 0; i < 50; i++) {
       const st = await api("GET", `/${sessionId}/status`);

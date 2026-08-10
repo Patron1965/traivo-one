@@ -4804,6 +4804,13 @@ export class DatabaseStorage implements IStorage {
   }
 
   /**
+   * Hämta artiklar som är applicerbara för ett specifikt objekt baserat på hookLevel (Traivo fasthakning)
+   *
+   * Fasthakning-logik:
+   * - Artikeln matchar om objektets nivå/typ EXAKT motsvarar artikelns hookLevel
+   * - hookConditions kan användas för ytterligare filtrering (t.ex. container_type)
+   * - "kod"-hook matchar objekt med accessCode satt
+   *
    * Hook-nivåer:
    * - koncern: Endast objekt på koncern-nivå (hierarchyLevel=koncern)
    * - brf: Endast BRF-objekt (hierarchyLevel=brf)
@@ -11000,6 +11007,7 @@ PROTO.getInvoiceConsolidationPolicy = async function (
     .where(and(
       eq(invoiceConsolidationPolicies.id, id),
       eq(invoiceConsolidationPolicies.tenantId, tenantId),
+      isNull(invoiceConsolidationPolicies.deletedAt),
     ));
   return row;
 };
@@ -11007,10 +11015,7 @@ PROTO.getInvoiceConsolidationPolicy = async function (
 PROTO.createInvoiceConsolidationPolicy = async function (
   data: InsertInvoiceConsolidationPolicy,
 ): Promise<InvoiceConsolidationPolicy> {
-  const [row] = await db
-    .insert(invoiceConsolidationPolicies)
-    .values(data)
-    .returning();
+  const [row] = await db.insert(invoiceConsolidationPolicies).values(data).returning();
   return row;
 };
 

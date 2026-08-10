@@ -133,6 +133,7 @@
 - [Kontaktkort & livscykel](kontakt-consolidation-lifecycle.md) — area='kontakt' visas ENBART i kontaktkortet (ej lösa rader); hård delete spärras vid riktig historik/kopplingar (409→arkivera); anonymisering rör aldrig interimsnummer.
 - [Metadata hård-raderingsspärr](metadata-hard-delete-guard.md) — ALLA delete-vägar (kompat-API, fält-tömning, objekt-enkel/bulk-radering) måste blocka vid verklig historik; endast rollback-flöden undantagna.
 - [Clerk reverterad → Replit Auth](auth-clerk-reverted.md) — webbinlogg = Replit Auth + magiska länkar igen (2026-08-10); CLERK_*-secrets kvar men oanvända.
+- [Objektimport strikt matchning](object-import-strict-matching.md) — Import 2.0: bara 3 kärnfält + AKTIVA katalogfält; column_errors blockerar execute; lazy-create endast interna systemfält; arkiverat mål kräver restore-flagga.
 - [allowed_values sväljer importvärden tyst](import-allowed-values-silent-skip.md) — mappad kolumn kan ge 0 metadata_varden; backfill via sparade sessioners raw_rows + interim.
 - [Objektklassificering som metadata](object-classification-metadata.md) — Objekttyp/Anläggningstyp-metadata är källan; objectType/hierarchyLevel-kolumnerna = enkelriktad cache; nya skrivvägar måste spegla.
 - [Lagersaldo concurrency-lås](stock-balance-concurrency.md) — delta-beräknande saldo-writes (reconcile/inventering) måste läsa utgångsvärdet under FOR UPDATE i samma tx, annars dubbelbokning.

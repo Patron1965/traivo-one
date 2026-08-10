@@ -558,3 +558,123 @@ describe("buildMetadataHeaderAliases + autoMatchColumn (Task #1478)", () => {
     expect(cols[2]).toMatchObject({ autoMatch: null, matched: false });
   });
 });
+
+// ─────────────────────────────────────── Task #1494: strikt matchningsgate
+import { computeStrictColumnErrors, STRICT_NO_MATCH_MESSAGE } from "../../server/services/object-import-core";
+
+describe("computeStrictColumnErrors (Task #1494)", () => {
+  const builtinKeys = new Set(["name", "system_id", "system_parent_id", "address.street", "contact.email", "contact.phone", "contact.name"]);
+  const base = {
+    builtinKeys,
+    activeMetadataNames: new Set(["Telefon", "Objekttyp", "kontraktinfo"]),
+    archivedMetadataNames: new Set(["Gammalt fält"]),
+    allowDuplicatesNames: new Set(["kompletterande"]),
+  };
+  const col = (index: number, header: string, hasData = true) => ({ index, header, hasData });
+
+  it("unmapped column with data blocks with the strict message", () => {
+    const errs = computeStrictColumnErrors({
+      ...base,
+      columns: [col(0, "Objekt typ")],
+      mappings: {},
+    });
+    expect(errs).toHaveLength(1);
+    expect(errs[0].message).toBe(STRICT_NO_MATCH_MESSAGE);
+  });
+
+  it("empty unmapped column and explicit __empty are allowed", () => {
+    const errs = computeStrictColumnErrors({
+      ...base,
+      columns: [col(0, "Tom", false), col(1, "Ignorerad")],
+      mappings: { "1": { target: "__empty", type: "standard" } } as any,
+    });
+    expect(errs).toHaveLength(0);
+  });
+
+  it("metadata target without catalog row blocks; archived does not (handled by restore flow)", () => {
+    const errs = computeStrictColumnErrors({
+      ...base,
+      columns: [col(0, "Okänt"), col(1, "Arkiverat")],
+      mappings: {
+        "0": { target: "metadata.Finns Inte", type: "metadata" },
+        "1": { target: "metadata.Gammalt fält", type: "metadata" },
+      } as any,
+    });
+    expect(errs).toHaveLength(1);
+    expect(errs[0].index).toBe(0);
+    expect(errs[0].message).toBe(STRICT_NO_MATCH_MESSAGE);
+  });
+
+  it("metadata.typ accepted via canonical Objekttyp", () => {
+    const errs = computeStrictColumnErrors({
+      ...base,
+      columns: [col(0, "Objekt typ")],
+      mappings: { "0": { target: "metadata.typ", type: "metadata" } } as any,
+    });
+    expect(errs).toHaveLength(0);
+  });
+
+  it("dotted metadata key validates against the group name", () => {
+    const errs = computeStrictColumnErrors({
+      ...base,
+      columns: [col(0, "Kontrakt start"), col(1, "Okänd grupp")],
+      mappings: {
+        "0": { target: "metadata.kontraktinfo.start", type: "metadata" },
+        "1": { target: "metadata.saknas.start", type: "metadata" },
+      } as any,
+    });
+    expect(errs).toHaveLength(1);
+    expect(errs[0].index).toBe(1);
+  });
+
+  it("unknown legacy destination blocks", () => {
+    const errs = computeStrictColumnErrors({
+      ...base,
+      columns: [col(0, "Typ")],
+      mappings: { "0": { target: "object_type", type: "standard" } } as any,
+    });
+    expect(errs).toHaveLength(1);
+    expect(errs[0].message).toContain("Okänd destination");
+  });
+
+  it("two columns to the same single-value target block both; allowDuplicates passes", () => {
+    const errs = computeStrictColumnErrors({
+      ...base,
+      activeMetadataNames: new Set(["Telefon", "kompletterande"]),
+      columns: [col(0, "A"), col(1, "B"), col(2, "C"), col(3, "D")],
+      mappings: {
+        "0": { target: "metadata.Telefon", type: "metadata" },
+        "1": { target: "metadata.Telefon", type: "metadata" },
+        "2": { target: "metadata.kompletterande", type: "metadata" },
+        "3": { target: "metadata.kompletterande", type: "metadata" },
+      } as any,
+    });
+    expect(errs.map((e) => e.index).sort()).toEqual([0, 1]);
+    expect(errs[0].message).toContain("samma fält");
+  });
+
+  it("two columns to the same system field block", () => {
+    const errs = computeStrictColumnErrors({
+      ...base,
+      columns: [col(0, "Namn 1"), col(1, "Namn 2")],
+      mappings: {
+        "0": { target: "name", type: "standard" },
+        "1": { target: "name", type: "standard" },
+      } as any,
+    });
+    expect(errs).toHaveLength(2);
+  });
+
+  it("contact subfields to different targets stay one cohesive contact (no duplicate errors)", () => {
+    const errs = computeStrictColumnErrors({
+      ...base,
+      columns: [col(0, "Kontaktnamn"), col(1, "Telefon"), col(2, "E-post")],
+      mappings: {
+        "0": { target: "contact.name", type: "contact" },
+        "1": { target: "contact.phone", type: "contact" },
+        "2": { target: "contact.email", type: "contact" },
+      } as any,
+    });
+    expect(errs).toHaveLength(0);
+  });
+});

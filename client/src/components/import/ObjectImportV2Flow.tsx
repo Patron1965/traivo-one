@@ -138,6 +138,9 @@ interface ValidationResponse {
     // metadatafält vars katalogpost är arkiverad (återställs vid import).
     unmapped_columns?: Array<{ index: number; header: string }>;
     archived_metadata_fields?: string[];
+    // Task #1494: blockerande kolumnfel (strikt matchningsgate) — importen
+    // kan inte startas förrän listan är tom.
+    column_errors?: Array<{ index: number; header: string; target: string | null; message: string }>;
   } | null;
   rows: ValidatedRow[];
   duplicateWarnings?: DuplicateWarning[];
@@ -540,7 +543,7 @@ export function ObjectImportV2Flow() {
       // Task #1478: ändrade mappningar gör tidigare validering (och bekräftelsen
       // av omatchade kolumner) inaktuell — kräv ny valideringskörning.
       setValidation(null);
-      setConfirmUnmapped(false);
+      setRestoreArchived(false);
       setStep(4);
     },
     onError: (err: Error) => toast({ title: "Kunde inte spara mappning", description: err.message, variant: "destructive" }),
@@ -553,8 +556,8 @@ export function ObjectImportV2Flow() {
     },
     onSuccess: (data) => {
       setValidation(data);
-      // Task #1478: ny valideringskörning kräver ny bekräftelse av omatchade kolumner.
-      setConfirmUnmapped(false);
+      // Task #1494: ny valideringskörning kräver nytt aktivt val för arkiverade fält.
+      setRestoreArchived(false);
     },
     onError: (err: Error) => toast({ title: "Validering misslyckades", description: err.message, variant: "destructive" }),
   });
@@ -567,9 +570,9 @@ export function ObjectImportV2Flow() {
         customerId: customerId || undefined,
         skipRowNumbers: Array.from(skippedRows),
         overwriteMetadata,
-        // Task #1478: servern kräver uttryckligt kvitto när kolumner med data
-        // saknar mappning — checkboxen i steg 4 speglar detta fält.
-        acknowledgeUnmappedColumns: confirmUnmapped,
+        // Task #1494: arkiverade metadata-mål kräver uttryckligt val — återställ
+        // fälten (true) eller stoppa. Checkboxen i steg 4 speglar detta fält.
+        restoreArchivedMetadataFields: restoreArchived,
       });
       return (await res.json()) as { session_id: string; status: string };
     },
@@ -682,7 +685,7 @@ export function ObjectImportV2Flow() {
     setTotalRows(0);
     setMappings({});
     setValidation(null);
-    setConfirmUnmapped(false);
+    setRestoreArchived(false);
     setResult(null);
     setCustomerId("");
     setSkippedRows(new Set());
@@ -694,8 +697,8 @@ export function ObjectImportV2Flow() {
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
-  // Task #1478: omatchade kolumner kräver aktiv bekräftelse innan import.
-  const [confirmUnmapped, setConfirmUnmapped] = useState(false);
+  // Task #1494: arkiverade metadata-mål kräver aktivt val (återställ/stoppa).
+  const [restoreArchived, setRestoreArchived] = useState(false);
 
   const mappedCount = Object.keys(mappings).length;
   // Task #1478: kolumner utan mappning importeras inte — de ska aldrig försvinna
@@ -904,14 +907,14 @@ export function ObjectImportV2Flow() {
                 <AlertTriangle className="h-5 w-5 shrink-0 mt-0.5 text-warning" />
                 <div className="space-y-1">
                   <p className="font-medium text-foreground">
-                    {unmappedColumns.length} kolumn(er) är inte matchade och importeras inte
+                    {unmappedColumns.length} kolumn(er) saknar matchning
                   </p>
                   <p className="text-muted-foreground">
                     {unmappedColumns
                       .map((c) => c.userHeader || c.header || `Kolumn ${c.index + 1}`)
                       .join(", ")}{" "}
-                    — välj ett fält i listan för varje kolumn du vill ha med, eller lämna som det är
-                    för att medvetet hoppa över dem.
+                    — Ingen matchning – välj metadatafält eller skapa ett metadatafält innan importen
+                    kan genomföras. Vill du medvetet hoppa över en kolumn, välj "Ignorera kolumn".
                   </p>
                 </div>
               </div>
@@ -997,7 +1000,7 @@ export function ObjectImportV2Flow() {
                         {systemFields.length > 0 && (
                           <SelectGroup>
                             <SelectLabel className="bg-muted/70 -mx-1 mb-0.5 rounded-sm pl-2 pr-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                              Systemfält för matchning
+                              Systemfält – Objekt
                             </SelectLabel>
                             {systemFields.map((f) => (
                               <SelectItem key={f.key} value={f.key} data-testid={`option-import-field-${f.key}`}>
@@ -1112,48 +1115,60 @@ export function ObjectImportV2Flow() {
                     </a>
                   </div>
                 )}
-                {(validation.summary.unmapped_columns?.length ?? 0) > 0 && (
+                {(validation.summary.column_errors?.length ?? 0) > 0 && (
+                  <div
+                    className="space-y-2 rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm"
+                    data-testid="banner-column-errors"
+                  >
+                    <div className="flex items-start gap-2">
+                      <AlertCircle className="h-5 w-5 shrink-0 mt-0.5 text-destructive" />
+                      <div className="space-y-1">
+                        <p className="font-medium text-foreground">
+                          {validation.summary.column_errors!.length} kolumnfel — importen kan inte
+                          genomföras
+                        </p>
+                        <p className="text-muted-foreground">
+                          Åtgärda matchningen i steg 3 (eller skapa metadatafält i inställningarna) och
+                          kör valideringen igen.
+                        </p>
+                      </div>
+                    </div>
+                    <ul className="ml-7 list-disc space-y-1 text-muted-foreground">
+                      {validation.summary.column_errors!.map((c, i) => (
+                        <li key={`${c.index}-${i}`} data-testid={`column-error-${c.index}`}>
+                          <span className="text-foreground">{c.header}</span> — {c.message}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                {(validation.summary.archived_metadata_fields?.length ?? 0) > 0 && (
                   <div
                     className="space-y-2 rounded-md border border-warning/40 bg-warning/10 p-3 text-sm"
-                    data-testid="banner-validation-unmapped-columns"
+                    data-testid="banner-archived-metadata-fields"
                   >
                     <div className="flex items-start gap-2">
                       <AlertTriangle className="h-5 w-5 shrink-0 mt-0.5 text-warning" />
                       <div className="space-y-1">
                         <p className="font-medium text-foreground">
-                          {validation.summary.unmapped_columns!.length} kolumn(er) med data importeras
-                          inte
+                          Arkiverade metadatafält är mappade — välj återställ eller stoppa
                         </p>
                         <p className="text-muted-foreground">
-                          {validation.summary.unmapped_columns!.map((c) => c.header).join(", ")} — gå
-                          tillbaka till matchningen om värdena ska med.
+                          {validation.summary.archived_metadata_fields!.join(", ")} är arkiverade i
+                          inställningarna. Bocka i rutan för att återställa fälten vid importen, eller
+                          stoppa och åtgärda matchningen/inställningarna. Fälten återställs aldrig
+                          tyst.
                         </p>
                       </div>
                     </div>
                     <label className="ml-7 flex items-center gap-2 text-foreground">
                       <Checkbox
-                        checked={confirmUnmapped}
-                        onCheckedChange={(v) => setConfirmUnmapped(v === true)}
-                        data-testid="checkbox-confirm-unmapped"
+                        checked={restoreArchived}
+                        onCheckedChange={(v) => setRestoreArchived(v === true)}
+                        data-testid="checkbox-restore-archived"
                       />
-                      Jag förstår att dessa kolumner inte importeras
+                      Återställ de arkiverade fälten vid importen
                     </label>
-                  </div>
-                )}
-                {(validation.summary.archived_metadata_fields?.length ?? 0) > 0 && (
-                  <div
-                    className="flex items-start gap-2 rounded-md border border-warning/40 bg-warning/10 p-3 text-sm"
-                    data-testid="banner-archived-metadata-fields"
-                  >
-                    <AlertTriangle className="h-5 w-5 shrink-0 mt-0.5 text-warning" />
-                    <div className="space-y-1">
-                      <p className="font-medium text-foreground">Arkiverade metadatafält återställs</p>
-                      <p className="text-muted-foreground">
-                        {validation.summary.archived_metadata_fields!.join(", ")} är arkiverade i
-                        inställningarna. Fälten återställs automatiskt vid importen så att värdena
-                        blir synliga på objekten.
-                      </p>
-                    </div>
                   </div>
                 )}
                 {(validation.summary.new_roots ?? 0) > 0 && (
@@ -1255,7 +1270,8 @@ export function ObjectImportV2Flow() {
                 onClick={() => setStep(5)}
                 disabled={
                   !validation?.summary ||
-                  ((validation.summary.unmapped_columns?.length ?? 0) > 0 && !confirmUnmapped)
+                  (validation.summary.column_errors?.length ?? 0) > 0 ||
+                  ((validation.summary.archived_metadata_fields?.length ?? 0) > 0 && !restoreArchived)
                 }
                 data-testid="button-to-import"
               >
