@@ -1,0 +1,137 @@
+Uppgifter till Replit – Metadata, objektöversikt och uppgiftslista
+Prioritet 1 – Kritisk bugg: Systemgenererad kund på objekt
+Problem (bekräftat i bild 12.20):
+Fältet Kund under Ekonomi visar Telgebostäder AB med märkningen SYS · Systemgenererad · Ärvd från Tredo Sverige. Systemet har alltså automatiskt satt en kund på objektet via arv. Detta ska inte ske.
+
+Uppgift:
+
+Identifiera varifrån systemet hämtar och sätter kunden automatiskt.
+Ta bort logiken som skapar eller ärver en kund till ett objekt automatiskt.
+Metadatafältet Kund ska fungera precis som kontaktfält – det är ett vanligt metadatafält som fylls i manuellt eller via orderkoncept.
+Kontrollera om fältet är definierat som ett referensfält och om det felaktigt ärver från förälderobjekt.
+Säkerställ att befintliga objekt med felaktigt systemgenererad kund kan identifieras och rättas.
+Kund ska aldrig sättas av systemet på ett objekt utan att en användare eller ett orderkoncept uttryckligen har angett det.
+Acceptanskriterier:
+
+Inga objekt har en systemgenererad kund efter rättningen.
+Fältet Kund under Ekonomi är tomt om ingen kund har angetts manuellt.
+Arv av kundvärde från förälderobjekt sker inte automatiskt.
+Kund kan fortfarande anges manuellt eller via orderkoncept.
+Prioritet 2 – Metadataordning ska genomsyra hela systemet
+Problem:
+Ordningen på metadataområden definieras i Hantera områden (bekräftat i bild 12.22 (1)), men denna ordning följs inte konsekvent i objektvyn och andra delar av systemet.
+
+Definierad ordning (från bilden):
+
+Grunduppgifter
+Geografi
+Bild
+Status
+Produktion
+Ekonomi
+Kontaktinformation
+Kundreferens
+Administration
+Artiklar & Priser
+Leverans
+Kvantiteter
+(fler nedan)
+Uppgift:
+
+Säkerställ att ordningen från Hantera områden används konsekvent i:
+Objektdetaljvyn
+Importvyn
+Metadatainställningar
+Snabbfält
+Alla andra vyer där metadata visas
+Kontrollera att ändringar i ordningen i Hantera områden slår igenom direkt utan cache-rensning.
+Säkerställ att ett område inte visas på flera ställen (t.ex. Geografi som dök upp dubbelt i föregående session).
+Acceptanskriterier:
+
+Metadataområden visas i exakt den ordning som är definierad i Hantera områden.
+Ordningsändring i Hantera områden reflekteras omedelbart i alla vyer.
+Inget område visas mer än en gång på ett objekt.
+Prioritet 3 – Karusell för metadatafält
+Problem/Krav:
+Metadatafält ska kunna visas i en karusell-komponent. För fält med ett aktuellt värde ska karusellen visa fältets historik.
+
+Uppgift:
+
+Implementera eller verifiera karusell-komponenten för metadatafält på objektsidan.
+För fält med ett aktuellt värde: visa historiken i karusellen (tidigare värden med datum och källa).
+För fält med flera aktuella värden (t.ex. flera kontaktpersoner): visa ett värde per steg i karusellen.
+Säkerställ att karusellen fungerar för alla metadatatyper: text, heltal, referens, bild, kontakt.
+Karusellen ska visa vem som ändrade värdet och när.
+Acceptanskriterier:
+
+Karusellen bläddrar korrekt mellan värden eller historikposter.
+Historik visas med datum, källa och användare.
+Karusellen fungerar för alla relevanta metadatatyper.
+Karusellen är tillgänglig utan att öppna ett separat redigeringsläge.
+Prioritet 4 – Objektöversiktens struktur
+Krav:
+Objektsidan ska ha en tydlig och konsekvent struktur i följande ordning:
+
+Översikt/sammanfattning – objektnamn, vignettbild, position
+Släktskap – föräldrar och barn (bekräftat fungerar bra)
+Metadatafält – grupperade efter metadataområden i definierad ordning
+Kopplade orderkoncept och ordrar
+Kopplade uppgifter – fungerar som ett nav i miniatyr
+Uppgift:
+
+Kontrollera och justera sidans layout så att den följer ovanstående ordning.
+Ta bort eller flytta element som hamnar på fel plats (t.ex. Ekonomi/Kund som visas felaktigt högt upp).
+Säkerställ att sektionerna är tydligt avgränsade och namngivna.
+Bilder ska inte hamna sist utan placeras enligt metadataområdets ordning (Bild är nr 3 i listan).
+Acceptanskriterier:
+
+Objektsidan följer den definierade strukturen.
+Inga sektioner visas på fel plats.
+Bilder visas i rätt position enligt metadataordningen.
+Prioritet 5 – Kopplade uppgifter som nav i miniatyr
+Krav:
+Listan med kopplade uppgifter längst ner på objektsidan ska fungera som ett litet nav där användaren kan:
+
+Se alla uppgifter kopplade till objektet
+Filtrera på status (gjord / ej gjord / pågående)
+Se vilket orderkoncept eller vilken snabborder uppgiften tillhör
+Navigera till uppgiften
+Uppgift:
+
+Implementera sökbar och filterbar uppgiftslista på objektsidan.
+Visa minst: uppgiftens namn, status, kopplat orderkoncept/order, datum.
+Lägg till statusfilter: Gjord / Ej gjord / Pågående / Alla.
+Länka varje uppgift till sin detaljsida.
+Separera kopplade orderkoncept/ordrar från kopplade uppgifter i två distinkta sektioner.
+Acceptanskriterier:
+
+Uppgiftslistan visar alla uppgifter kopplade till objektet.
+Statusfiltrering fungerar.
+Varje uppgift är klickbar och leder till rätt detaljsida.
+Orderkoncept och uppgifter visas i separata sektioner.
+Listan uppdateras utan sidladdning när en uppgifts status ändras.
+Prioritet 6 – Metadatainställningar: Numrering och ordning (bild 12.22)
+Observation från bilden:
+
+Objektnamn har nr 1000, Fastighetsägare saknar nummer (–).
+Under Geografi saknar Område och What3words nummer.
+Kolumnen Standard-ärvning visar Ärvs för vissa fält men – för andra.
+Uppgift:
+
+Kontrollera att numreringen av metadatafält är konsekvent och meningsfull.
+Säkerställ att fält utan nummer (–) antingen tilldelas ett nummer eller att det är ett medvetet val som visas tydligt.
+Kontrollera att Standard-ärvning är korrekt konfigurerad för alla fält och att arvsbeteendet stämmer med vad som visas i objektvyn.
+Säkerställ att Fastighetsägare med Ärvs faktiskt ärvs korrekt i objekthierarkin utan att felaktigt märkas som systemgenererad.
+Acceptanskriterier:
+
+Alla metadatafält har ett tydligt nummer eller ett förklarat skäl till att det saknas.
+Arvsbeteendet i metadatainställningarna stämmer med vad som faktiskt visas på objekten.
+Inga fält ärvs oavsiktligt (som kundproblemet ovan).
+Samlad prioritering
+#	Uppgift
+1	Ta bort systemgenererad kund från objekt
+2	Metadataordning genomsyrar hela systemet
+3	Karusell för metadatafält och historik
+4	Objektöversiktens struktur och layout
+5	Kopplade uppgifter som sökbart nav i miniatyr
+6	Kontrollera numrering och arv i metadatainställningar
