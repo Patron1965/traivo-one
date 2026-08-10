@@ -127,6 +127,7 @@ export type DeletePreflight = {
   workOrders: number;
   assignments: number;
   subscriptions: number;
+  metadataHistorik: number;
   blockers: string[];
 };
 
@@ -142,19 +143,28 @@ export async function deleteObjectPreflight(objectId: string, tenantId: string):
       (SELECT COUNT(*)::int FROM assignments
         WHERE tenant_id = ${tenantId} AND object_id = ${objectId}) AS assignments,
       (SELECT COUNT(*)::int FROM subscriptions
-        WHERE tenant_id = ${tenantId} AND object_id = ${objectId}) AS subscriptions
+        WHERE tenant_id = ${tenantId} AND object_id = ${objectId}) AS subscriptions,
+      (SELECT COUNT(*)::int FROM metadata_historik
+        WHERE tenant_id = ${tenantId} AND objekt_id = ${objectId}
+          AND gammalt_varde IS NOT NULL) AS metadata_historik
   `).then(r => r.rows as any[]);
 
   const children = Number(counts?.children ?? 0) + Number(counts?.alt_children ?? 0);
   const workOrderCount = Number(counts?.work_orders ?? 0);
   const assignmentCount = Number(counts?.assignments ?? 0);
   const subscriptionCount = Number(counts?.subscriptions ?? 0);
+  const metadataHistorikCount = Number(counts?.metadata_historik ?? 0);
 
   const blockers: string[] = [];
   if (children > 0) blockers.push(`${children} underobjekt`);
   if (workOrderCount > 0) blockers.push(`${workOrderCount} uppgift${workOrderCount === 1 ? "" : "er"} (inkl. historik)`);
   if (assignmentCount > 0) blockers.push(`${assignmentCount} planerad${assignmentCount === 1 ? "" : "e"} uppgift${assignmentCount === 1 ? "" : "er"}`);
   if (subscriptionCount > 0) blockers.push(`${subscriptionCount} abonnemang`);
+  // Task #1460: objekt-raderingen hård-raderar all metadata + historik i ett
+  // svep — samma "verklig historik"-spärr som DELETE /api/metadata/:id
+  // (gammalt_varde IS NOT NULL = dokumenterade ändringar) måste gälla här,
+  // annars kan spärren kringgås genom att radera hela objektet.
+  if (metadataHistorikCount > 0) blockers.push(`${metadataHistorikCount} metadatahistorikpost${metadataHistorikCount === 1 ? "" : "er"}`);
 
   return {
     objectId,
@@ -162,6 +172,7 @@ export async function deleteObjectPreflight(objectId: string, tenantId: string):
     workOrders: workOrderCount,
     assignments: assignmentCount,
     subscriptions: subscriptionCount,
+    metadataHistorik: metadataHistorikCount,
     blockers,
   };
 }
@@ -218,7 +229,7 @@ export async function bulkDeleteObjects(rawIds: string[], tenantId: string): Pro
 
   // 2) Batchad preflight — samma räkningar som deleteObjectPreflight, grupperade.
   const selIds = Array.from(inSelection);
-  const [childRows, altChildRows, woRows, asgRows, subRows] = await Promise.all([
+  const [childRows, altChildRows, woRows, asgRows, subRows, histRows] = await Promise.all([
     db.execute(sql`
       SELECT id, parent_id FROM objects
       WHERE tenant_id = ${tenantId} AND parent_id IN (${sqlIdList(selIds)})
@@ -239,11 +250,19 @@ export async function bulkDeleteObjects(rawIds: string[], tenantId: string): Pro
       SELECT object_id, COUNT(*)::int AS cnt FROM subscriptions
       WHERE tenant_id = ${tenantId} AND object_id IN (${sqlIdList(selIds)}) GROUP BY object_id
     `).then(r => r.rows as Array<{ object_id: string; cnt: number }>),
+    // Task #1460: verklig metadatahistorik (dokumenterade ändringar) blockerar
+    // hård radering — samma spärr som DELETE /api/metadata/:id.
+    db.execute(sql`
+      SELECT objekt_id AS object_id, COUNT(*)::int AS cnt FROM metadata_historik
+      WHERE tenant_id = ${tenantId} AND objekt_id IN (${sqlIdList(selIds)})
+        AND gammalt_varde IS NOT NULL GROUP BY objekt_id
+    `).then(r => r.rows as Array<{ object_id: string; cnt: number }>),
   ]);
 
   const woCount = new Map(woRows.map(r => [r.object_id, Number(r.cnt)]));
   const asgCount = new Map(asgRows.map(r => [r.object_id, Number(r.cnt)]));
   const subCount = new Map(subRows.map(r => [r.object_id, Number(r.cnt)]));
+  const histCount = new Map(histRows.map(r => [r.object_id, Number(r.cnt)]));
 
   // Kvarvarande barn per förälder = alla barn minus de barn i urvalet som
   // faktiskt raderas. Barn UTANFÖR urvalet kan aldrig raderas här → blockerar.
@@ -290,10 +309,12 @@ export async function bulkDeleteObjects(rawIds: string[], tenantId: string): Pro
     const wo = woCount.get(id) ?? 0;
     const asg = asgCount.get(id) ?? 0;
     const subs = subCount.get(id) ?? 0;
+    const hist = histCount.get(id) ?? 0;
     if (children > 0) blockers.push(`${children} underobjekt`);
     if (wo > 0) blockers.push(`${wo} uppgift${wo === 1 ? "" : "er"} (inkl. historik)`);
     if (asg > 0) blockers.push(`${asg} planerad${asg === 1 ? "" : "e"} uppgift${asg === 1 ? "" : "er"}`);
     if (subs > 0) blockers.push(`${subs} abonnemang`);
+    if (hist > 0) blockers.push(`${hist} metadatahistorikpost${hist === 1 ? "" : "er"}`);
     if (blockers.length > 0) {
       results.set(id, {
         id,

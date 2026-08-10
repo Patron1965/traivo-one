@@ -3,6 +3,7 @@ import express from "express";
 import type { AddressInfo } from "net";
 import { registerObjectRoutes } from "../../server/routes/objectRoutes";
 import { registerCustomerRoutes } from "../../server/routes/customerRoutes";
+import { registerKPIRoutes } from "../../server/routes/kpiRoutes";
 import { metadataRouter } from "../../server/metadata-routes";
 import { requireTenantWithFallback } from "../../server/tenant-middleware";
 import { errorHandler } from "../../server/middleware/errorHandler";
@@ -107,6 +108,7 @@ beforeAll(async () => {
   app.use("/api", requireTenantWithFallback);
   await registerObjectRoutes(app);
   await registerCustomerRoutes(app);
+  await registerKPIRoutes(app);
   app.use("/api/metadata", metadataRouter);
   app.use(errorHandler);
 
@@ -398,6 +400,144 @@ describe("Task #1440 — hård radering vs arkivering", () => {
         await db.delete(metadataVarden).where(eq(metadataVarden.id, id));
       }
     }
+  });
+});
+
+describe("Task #1460 — spärren kan inte kringgås via kompat-/objekt-/bulkvägar", () => {
+  // Hjälpare: nytt objekt med eget metadata-värde (och ev. verklig historik).
+  async function createObjectWithValue(
+    suffix: string,
+    opts: { withHistory: boolean },
+  ): Promise<{ objId: string; vardenId: string }> {
+    const objRes = await req("POST", "/api/objects", {
+      userId: ADMIN,
+      body: { name: `${NS} ${suffix}`, customerId, objectType: "karl", objectLevel: 1, status: "active" },
+    });
+    expect(objRes.status).toBe(201);
+    const objId = objRes.body.id as string;
+    const create = await req("POST", "/api/metadata", {
+      userId: ADMIN,
+      body: { objektId: objId, metadataTypNamn: `${NS}_Fält`, varde: `${suffix}-v1` },
+    });
+    expect(create.status).toBe(201);
+    const vardenId = create.body.id as string;
+    if (opts.withHistory) {
+      const upd = await req("PUT", `/api/metadata/${vardenId}`, {
+        userId: ADMIN,
+        body: { varde: `${suffix}-v2` },
+      });
+      expect(upd.status).toBe(200);
+    }
+    return { objId, vardenId };
+  }
+
+  it("kompat-API:t DELETE /api/objects/:objectId/metadata/:id blockeras vid historik (409 USE_ARCHIVE)", async () => {
+    const { objId, vardenId } = await createObjectWithValue("kompat", { withHistory: true });
+
+    const del = await req("DELETE", `/api/objects/${objId}/metadata/${vardenId}`, { userId: ADMIN });
+    expect(del.status).toBe(409);
+    expect(del.body?.code).toBe("USE_ARCHIVE");
+
+    const rows = await db.select().from(metadataVarden).where(eq(metadataVarden.id, vardenId));
+    expect(rows.length).toBe(1);
+    expect(rows[0].vardeString).toBe("kompat-v2");
+  });
+
+  it("kompat-API:t får fortfarande radera färska värden utan historik (204)", async () => {
+    const { objId, vardenId } = await createObjectWithValue("kompat2", { withHistory: false });
+    const del = await req("DELETE", `/api/objects/${objId}/metadata/${vardenId}`, { userId: ADMIN });
+    expect(del.status).toBe(204);
+    const rows = await db.select().from(metadataVarden).where(eq(metadataVarden.id, vardenId));
+    expect(rows.length).toBe(0);
+  });
+
+  it("what3words-tömning arkiverar (mjuk-raderar) när värdet har historik — raden hård-raderas aldrig", async () => {
+    const objRes = await req("POST", "/api/objects", {
+      userId: ADMIN,
+      body: { name: `${NS} w3w`, customerId, objectType: "karl", objectLevel: 1, status: "active" },
+    });
+    expect(objRes.status).toBe(201);
+    const objId = objRes.body.id as string;
+
+    // Sätt + ändra → verklig historik på what3words-värdet.
+    const set1 = await req("POST", `/api/objects/${objId}/what3words`, {
+      userId: ADMIN,
+      body: { what3words: "index.home.raft" },
+    });
+    expect(set1.status).toBe(200);
+    const set2 = await req("POST", `/api/objects/${objId}/what3words`, {
+      userId: ADMIN,
+      body: { what3words: "daring.lion.race" },
+    });
+    expect(set2.status).toBe(200);
+
+    const [row] = await db
+      .select()
+      .from(metadataVarden)
+      .where(and(eq(metadataVarden.objektId, objId), eq(metadataVarden.tenantId, TENANT), eq(metadataVarden.raderad, false)));
+    expect(row).toBeTruthy();
+
+    // Tömning: raden ska finnas kvar (mjuk-raderad), inte hård-raderas.
+    const clear = await req("POST", `/api/objects/${objId}/what3words`, {
+      userId: ADMIN,
+      body: { what3words: null },
+    });
+    expect(clear.status).toBe(200);
+
+    const [after] = await db.select().from(metadataVarden).where(eq(metadataVarden.id, row.id));
+    expect(after).toBeTruthy();
+    expect(after.raderad).toBe(true);
+    expect(after.vardeString).toBe("daring.lion.race"); // värdet bevarat i arkivet
+  });
+
+  it("DELETE /api/objects/:id blockeras när objektets metadata har verklig historik (409)", async () => {
+    const { objId, vardenId } = await createObjectWithValue("objdel", { withHistory: true });
+
+    const del = await req("DELETE", `/api/objects/${objId}`, { userId: ADMIN });
+    expect(del.status).toBe(409);
+    expect(String(del.body?.message ?? del.body?.error)).toMatch(/[Aa]rkivera/);
+
+    // Objekt + värde + historik orörda.
+    const objRows = await db.select({ id: objects.id }).from(objects).where(eq(objects.id, objId));
+    expect(objRows.length).toBe(1);
+    const valRows = await db.select().from(metadataVarden).where(eq(metadataVarden.id, vardenId));
+    expect(valRows.length).toBe(1);
+    const hist = await db
+      .select()
+      .from(metadataHistorik)
+      .where(and(eq(metadataHistorik.metadataVardenId, vardenId), isNotNull(metadataHistorik.gammaltVarde)));
+    expect(hist.length).toBeGreaterThan(0);
+  });
+
+  it("DELETE /api/objects/:id tillåts för objekt vars metadata bara har skapande-historik", async () => {
+    const { objId } = await createObjectWithValue("objdel2", { withHistory: false });
+    const del = await req("DELETE", `/api/objects/${objId}`, { userId: ADMIN });
+    expect(del.status).toBe(204);
+    const objRows = await db.select({ id: objects.id }).from(objects).where(eq(objects.id, objId));
+    expect(objRows.length).toBe(0);
+  });
+
+  it("bulk-delete blockerar objekt med metadatahistorik men raderar de utan", async () => {
+    const a = await createObjectWithValue("bulk-hist", { withHistory: true });
+    const b = await createObjectWithValue("bulk-fresh", { withHistory: false });
+
+    const res = await req("POST", "/api/objects/bulk-delete", {
+      userId: ADMIN,
+      body: { ids: [a.objId, b.objId] },
+    });
+    expect(res.status).toBe(200);
+    const byId = new Map((res.body.results as any[]).map((r) => [r.id, r]));
+    expect(byId.get(a.objId)?.status).toBe("blocked");
+    expect(String(byId.get(a.objId)?.reason ?? "")).toMatch(/metadatahistorik/);
+    expect(byId.get(b.objId)?.status).toBe("deleted");
+
+    // Blockerat objekt + dess värde/historik finns kvar; det färska är borta.
+    const aRows = await db.select({ id: objects.id }).from(objects).where(eq(objects.id, a.objId));
+    expect(aRows.length).toBe(1);
+    const aVal = await db.select().from(metadataVarden).where(eq(metadataVarden.id, a.vardenId));
+    expect(aVal.length).toBe(1);
+    const bRows = await db.select({ id: objects.id }).from(objects).where(eq(objects.id, b.objId));
+    expect(bRows.length).toBe(0);
   });
 });
 

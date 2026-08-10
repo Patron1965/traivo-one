@@ -8,7 +8,7 @@ import { formatZodError, verifyTenantOwnership, DEFAULT_TENANT_ID } from "./help
 import { getTenantIdWithFallback } from "../tenant-middleware";
 import { asyncHandler } from "../asyncHandler";
 import { NotFoundError, ValidationError, ForbiddenError, ConflictError } from "../errors";
-import { validateParentMetadataLink, softDeleteMetadataType, getObjectWithAllMetadata, getDisplayValue, getMetadataKatalogUsage, getMetadataDefinitionsCompat, getMetadataDefinitionCompat, isInterimKatalogNamn, katalogToDefinitionCompat, mapEnglishDataTypeToDatatyp, createMetadata, updateMetadata, deleteMetadata, ensurePackageMetadataKatalog, findMetadataTypeByIdentity, setMetadataInheritanceFlags } from "../metadata-queries";
+import { validateParentMetadataLink, softDeleteMetadataType, getObjectWithAllMetadata, getDisplayValue, getMetadataKatalogUsage, getMetadataDefinitionsCompat, getMetadataDefinitionCompat, isInterimKatalogNamn, katalogToDefinitionCompat, mapEnglishDataTypeToDatatyp, createMetadata, updateMetadata, deleteMetadataGuarded, ReadonlyMetadataError, ensurePackageMetadataKatalog, findMetadataTypeByIdentity, setMetadataInheritanceFlags } from "../metadata-queries";
 import { requireAdmin, requirePlanner } from "../tenant-middleware";
 import { isReasoningModel } from "../ai-model-capabilities";
 import { objects, workOrders, metadataVarden, apiUsageLogs, apiBudgets, invitations, metadataKatalog, insertMetadataKatalogSchema, workOrderLines, articles, weeklyReportNotes, weeklyReportActionItemSchema, type WeeklyReportActionItem } from "@shared/schema";
@@ -2527,8 +2527,9 @@ app.delete("/api/objects/:objectId/metadata/:id", asyncHandler(async (req, res) 
       throw new ForbiddenError("Åtkomst nekad");
     }
     // Task #992: :id === metadata_varden.id. Verifiera ägarskap (objekt + tenant)
-    // innan radering — deleteMetadata kollar bara tenant. Hård radering men loggar
-    // metadata_historik (X → ∅) så tidslinjen bevaras.
+    // innan radering. Task #1460: samma spärr som DELETE /api/metadata/:id —
+    // värden med verklig historik/konceptkopplingar får ALDRIG hård-raderas via
+    // kompat-API:t heller (409 USE_ARCHIVE, arkivera istället).
     const [existing] = await db.select({ id: metadataVarden.id }).from(metadataVarden)
       .where(and(
         eq(metadataVarden.id, req.params.id),
@@ -2537,7 +2538,28 @@ app.delete("/api/objects/:objectId/metadata/:id", asyncHandler(async (req, res) 
       ));
     if (!existing) throw new NotFoundError("Metadata not found or does not belong to this object");
     const userId = req.user?.claims?.sub;
-    await deleteMetadata(req.params.id, tenantId, userId);
+    let result;
+    try {
+      result = await deleteMetadataGuarded(req.params.id, tenantId, userId);
+    } catch (err) {
+      if (err instanceof ReadonlyMetadataError) throw new ForbiddenError(err.message);
+      throw err;
+    }
+    if (result.status === "blocked") {
+      const skal: string[] = [];
+      if (result.changedHistorikCount > 0) skal.push(`${result.changedHistorikCount} historikpost(er)`);
+      if (result.conceptFilterCount > 0) skal.push(`${result.conceptFilterCount} koppling(ar) i orderkoncept`);
+      const message =
+        `Värdet kan inte raderas permanent: det har ${skal.join(" och ")}. ` +
+        `Arkivera fältet istället — det döljs i normala vyer men historiken bevaras.`;
+      return res.status(409).json({
+        error: message,
+        message,
+        code: "USE_ARCHIVE",
+        changedHistorikCount: result.changedHistorikCount,
+        conceptFilterCount: result.conceptFilterCount,
+      });
+    }
     res.status(204).send();
 }));
 

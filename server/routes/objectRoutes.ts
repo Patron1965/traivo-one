@@ -29,7 +29,7 @@ import {
   getObjectSystemGeneratedMetadata,
   WHAT3WORDS_METADATA_NAME,
 } from "../services/object-system-metadata";
-import { createMetadata, updateMetadata, deleteMetadata, getPrimaryChainObjectIds, resolveQuickFieldConfig } from "../metadata-queries";
+import { createMetadata, updateMetadata, deleteMetadataGuarded, softDeleteObjectMetadata, getPrimaryChainObjectIds, resolveQuickFieldConfig } from "../metadata-queries";
 import { getObjectInfoPackageTree } from "../services/object-info-package-tree";
 import { metadataKatalog, metadataVarden, objectHeaderConfigs, objectQuickFieldConfigs } from "@shared/schema";
 import { getMapProvider } from "../services/mapProvider";
@@ -882,7 +882,14 @@ app.post("/api/objects/:id/what3words", asyncHandler(async (req, res) => {
       });
     }
   } else if (localRow) {
-    await deleteMetadata(localRow.id, tenantId, actor, "manuell-radering");
+    // Task #1460: tömning får aldrig kringgå hård-raderingsspärren. Färska
+    // värden (utan verklig historik) raderas; värden MED historik arkiveras
+    // istället (mjuk-radering) så att UX:et "fältet töms" bevaras utan att
+    // audit-spåret förstörs.
+    const result = await deleteMetadataGuarded(localRow.id, tenantId, actor, "manuell-radering");
+    if (result.status === "blocked") {
+      await softDeleteObjectMetadata(req.params.id, katalog.id, tenantId, actor, "manuell-radering");
+    }
   }
 
   const data = await getObjectSystemGeneratedMetadata(tenantId, req.params.id);
