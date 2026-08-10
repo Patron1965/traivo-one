@@ -1201,9 +1201,19 @@ export function registerObjectImportV2Routes(app: Express): void {
           const cached = katalogCache.get(namn);
           if (cached) return cached;
           try {
+            // Task #1441: interim-katalogposten klassas som system-/internfält
+            // direkt vid lat-skapande (dold från vanliga metadatavyer, värde-
+            // read-only utanför importvägen).
+            const isInterim = namn === OBJEKTMALL_INTERIM_METADATA_FALT;
             const [created] = await db
               .insert(metadataKatalog)
-              .values({ tenantId, namn, datatyp, kategori: "import" })
+              .values({
+                tenantId,
+                namn,
+                datatyp,
+                kategori: "import",
+                ...(isInterim ? { isSystem: true, systemlast: true, visasIKarusell: false } : {}),
+              })
               .returning();
             if (created) katalogCache.set(namn, created);
             return created ?? null;

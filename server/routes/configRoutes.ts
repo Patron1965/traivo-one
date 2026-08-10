@@ -12,7 +12,7 @@ import { getISOWeek, getStartOfISOWeek } from "./helpers";
 import { notificationService } from "../notifications";
 import { TASK_TYPE_KEYS, TASK_TYPE_LABELS } from "../grovplanering-grid";
 import { parseFormula } from "../metadata-formula";
-import { getAllMetadataTypes } from "../metadata-queries";
+import { getAllMetadataTypes, isInterimKatalogNamn } from "../metadata-queries";
 import { buildTimeCodeRuleMap, resolveTimeCodeRule } from "../services/time-code-rules";
 
 // Validerar artikelns antals-formel (Antalskälla "Formel") vid spara. Kastar
@@ -36,7 +36,8 @@ async function validateQuantityFormulaOrThrow(formula: string | null | undefined
     throw new ValidationError("Formeln måste referera minst ett metadatafält, t.ex. [Antal kärl] * 2.");
   }
   const types = await getAllMetadataTypes(tenantId);
-  const known = new Set(types.map((t) => t.namn));
+  // Task #1441: interimnummer (dolt importfält) får inte refereras i formler.
+  const known = new Set(types.filter((t) => !isInterimKatalogNamn(t.namn)).map((t) => t.namn));
   const unknown = refs.filter((r) => !known.has(r));
   if (unknown.length > 0) {
     throw new ValidationError(

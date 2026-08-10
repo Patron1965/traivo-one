@@ -12,6 +12,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 interface SystemInfoGroup {
   internalId: string;
   objectNumber: string | null;
+  // Task #1441: interimnummer = temporärt import-matchningsnummer, visas
+  // enbart här (read-only felsökning) — aldrig bland vanliga metadatafält.
+  interimNumber: string | null;
   status: string | null;
   createdAt: string | null;
   archivedAt: string | null;
@@ -76,6 +79,7 @@ export function ObjectSystemInfoSection({ objectId }: { objectId: string }) {
           <div className="max-w-xl">
             <Row label="Internt objekt-ID" value={info.internalId} testId="text-sysinfo-id" />
             <Row label="Objektnummer" value={info.objectNumber} testId="text-sysinfo-objectnumber" />
+            <Row label="Interimsnummer (import)" value={info.interimNumber} testId="text-sysinfo-interim" />
             <Row
               label="Status"
               value={info.status ? STATUS_LABELS[info.status] ?? info.status : null}

@@ -8,7 +8,7 @@ import { formatZodError, verifyTenantOwnership, DEFAULT_TENANT_ID } from "./help
 import { getTenantIdWithFallback } from "../tenant-middleware";
 import { asyncHandler } from "../asyncHandler";
 import { NotFoundError, ValidationError, ForbiddenError, ConflictError } from "../errors";
-import { validateParentMetadataLink, softDeleteMetadataType, getObjectWithAllMetadata, getDisplayValue, getMetadataKatalogUsage, getMetadataDefinitionsCompat, getMetadataDefinitionCompat, katalogToDefinitionCompat, mapEnglishDataTypeToDatatyp, createMetadata, updateMetadata, deleteMetadata, ensurePackageMetadataKatalog, findMetadataTypeByIdentity, setMetadataInheritanceFlags } from "../metadata-queries";
+import { validateParentMetadataLink, softDeleteMetadataType, getObjectWithAllMetadata, getDisplayValue, getMetadataKatalogUsage, getMetadataDefinitionsCompat, getMetadataDefinitionCompat, isInterimKatalogNamn, katalogToDefinitionCompat, mapEnglishDataTypeToDatatyp, createMetadata, updateMetadata, deleteMetadata, ensurePackageMetadataKatalog, findMetadataTypeByIdentity, setMetadataInheritanceFlags } from "../metadata-queries";
 import { requireAdmin, requirePlanner } from "../tenant-middleware";
 import { isReasoningModel } from "../ai-model-capabilities";
 import { objects, workOrders, metadataVarden, apiUsageLogs, apiBudgets, invitations, metadataKatalog, insertMetadataKatalogSchema, workOrderLines, articles, weeklyReportNotes, weeklyReportActionItemSchema, type WeeklyReportActionItem } from "@shared/schema";
@@ -2173,7 +2173,9 @@ app.get("/api/metadata-labels", asyncHandler(async (req, res) => {
       ))
       .orderBy(metadataKatalog.area, metadataKatalog.sortOrder, metadataKatalog.namn);
     
-    let filtered = results;
+    // Task #1441: interimnummer är ett dolt temporärt importfält — exponeras
+    // aldrig i etikett-/katalog-listor (fältväljare, konfiguration).
+    let filtered = results.filter(r => !isInterimKatalogNamn(r.namn));
     if (kategori) {
       filtered = filtered.filter(r => r.kategori === kategori);
     }
@@ -2195,7 +2197,8 @@ app.get("/api/metadata-labels/:id", asyncHandler(async (req, res) => {
         eq(metadataKatalog.tenantId, tenantId),
         isNull(metadataKatalog.deletedAt),
       ));
-    if (!label) throw new NotFoundError("Etikett hittades inte");
+    // Task #1441: interim-fältet är dolt även i detalj-uppslaget.
+    if (!label || isInterimKatalogNamn(label.namn)) throw new NotFoundError("Etikett hittades inte");
     res.json(label);
 }));
 

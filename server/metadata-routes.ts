@@ -20,6 +20,7 @@ import {
   setObjectMetadataOrder,
   ReadonlyMetadataError,
   InvalidMetadataInputError,
+  isAutomaticOrigin,
   NoLocalMetadataToAnonymizeError,
   getCrossFertilizedMetadata,
   getGeographicPosition,
@@ -29,6 +30,7 @@ import {
   seedDefaultMetadataTypes,
   ensureSystemlastaFalt,
   ensureSystemomradenFalt,
+  ensureInterimSystemFalt,
   getWorkOrderMetadata,
   createWorkOrderMetadata,
   deleteWorkOrderMetadata,
@@ -156,6 +158,13 @@ metadataRouter.get("/types", async (req: Request, res: Response) => {
       await ensureSystemomradenFalt(tenantId);
     } catch (omrErr) {
       console.warn("[metadata] systemområdes-seed misslyckades (fortsätter):", omrErr);
+    }
+    // Task #1441: interimnummer (temporärt importfält) — idempotent backfill av
+    // system-/dold-klassningen på lat-skapade katalogposter. Best-effort.
+    try {
+      await ensureInterimSystemFalt(tenantId);
+    } catch (intErr) {
+      console.warn("[metadata] interim-systemklassning misslyckades (fortsätter):", intErr);
     }
     // Task #663: returnera varje typ berikad med dess kundlås-kopplingar
     // (customerIds[]). Med ?customerId=... filtreras katalogen hierarki-medvetet
@@ -1247,6 +1256,16 @@ metadataRouter.post("/", async (req: Request, res: Response) => {
 
     const validated = createMetadataSchema.parse(req.body);
 
+    // Task #1441: ursprung (metod) med auto-betydelse (system/tjänst/import/…)
+    // etableras ENBART av betrodda server-interna tjänster — aldrig från
+    // klient-payload. Utan denna spärr kan en klient spoofa metod="import" och
+    // kringgå read-only-guards för system-/importfält (t.ex. interimsnummer).
+    if (isAutomaticOrigin(validated.metod)) {
+      return res.status(403).json({
+        error: `Ursprunget "${validated.metod}" sätts av systemet och kan inte anges via API:t.`,
+      });
+    }
+
     const newMetadata = await createMetadata({
       tenantId,
       objektId: validated.objektId,
@@ -1302,6 +1321,13 @@ metadataRouter.put("/:id", async (req: Request, res: Response) => {
     const { id } = req.params;
     const validated = updateMetadataSchema.parse(req.body);
 
+    // Task #1441: klient-spoofad auto-ursprung avvisas (se POST "/" ovan).
+    if (isAutomaticOrigin(validated.metod)) {
+      return res.status(403).json({
+        error: `Ursprunget "${validated.metod}" sätts av systemet och kan inte anges via API:t.`,
+      });
+    }
+
     // Audit: server-auktoritativ attribution (se POST "/" ovan).
     const actor = (req as any).user?.claims?.sub ?? validated.uppdateradAv;
     const updated = await updateMetadata(id, validated.varde, tenantId, actor, validated.metod);
@@ -1346,6 +1372,10 @@ metadataRouter.delete("/:id", async (req: Request, res: Response) => {
 
     res.status(204).send();
   } catch (error: any) {
+    // Task #1441: read-only-/importfält (t.ex. interimsnummer) kan inte raderas.
+    if (error instanceof ReadonlyMetadataError) {
+      return res.status(403).json({ error: error.message });
+    }
     console.error("Error deleting metadata:", error);
     res.status(500).json({ error: "Kunde inte radera metadata" });
   }
@@ -1607,6 +1637,10 @@ metadataRouter.post(
       }
       if (error instanceof NoLocalMetadataToAnonymizeError) {
         return res.status(409).json({ error: error.message });
+      }
+      // Task #1441: interimnummer (tekniskt importfält) omfattas inte av anonymisering.
+      if (error instanceof ReadonlyMetadataError) {
+        return res.status(403).json({ error: error.message });
       }
       if (error instanceof InvalidMetadataInputError) {
         return res.status(404).json({ error: error.message });

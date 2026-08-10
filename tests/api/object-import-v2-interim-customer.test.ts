@@ -3,6 +3,8 @@ import express from "express";
 import type { AddressInfo } from "net";
 import { registerObjectImportV2Routes } from "../../server/routes/objectImportV2Routes";
 import { requireTenantWithFallback } from "../../server/tenant-middleware";
+import { metadataRouter } from "../../server/metadata-routes";
+import { registerKPIRoutes } from "../../server/routes/kpiRoutes";
 import { db } from "../../server/db";
 import {
   tenants,
@@ -19,6 +21,14 @@ import {
 } from "@shared/schema";
 import { and, eq, sql } from "drizzle-orm";
 import { OBJEKTMALL_INTERIM_METADATA_FALT, OBJEKTMALL_INTERIM_PREFIX } from "@shared/objektmall-template";
+import {
+  getAllMetadataTypesWithCustomers,
+  getMetadataDefinitionsCompat,
+  getObjectWithAllMetadata,
+  getMetadataDefinitionCompat,
+  createMetadata,
+  anonymizeObjectMetadataField,
+} from "../../server/metadata-queries";
 
 // Task #1433: återanvända interimnummer får ALDRIG krocka mellan listor.
 //  1. Nya interim-objekt får systemmyntat OBJ-NNN (inte MALL-<interim>) och
@@ -105,6 +115,10 @@ beforeAll(async () => {
   });
   app.use(requireTenantWithFallback);
   registerObjectImportV2Routes(app);
+  // Task #1441: publika metadata-endpoints — spoof-skydds-regression.
+  app.use("/api/metadata", metadataRouter);
+  // Task #1441: etikett-/katalogytor (/api/metadata-labels) — dolt-fält-regression.
+  await registerKPIRoutes(app);
 
   await new Promise<void>((r) => {
     server = app.listen(0, "127.0.0.1", () => r());
@@ -308,5 +322,138 @@ describe("Import 2.0 — interimsnummer är kundskopad matchningsnyckel (Task #1
     expect(result.summary.updated).toBe(1);
     expect(await objectsNamed("Legacy-butik uppdaterad")).toHaveLength(1);
     expect(await objectsNamed("Legacy-butik")).toHaveLength(0);
+  });
+
+  // Task #1441: interimnummer är ett TEMPORÄRT importfält — klassat som system-
+  // fält, dolt från vanliga metadatavyer, skyddat mot manuell redigering och
+  // GDPR-anonymisering. Matchningsförmågan (testerna ovan) är opåverkad.
+  it("Task #1441: interim-fältet klassas som systemfält och döljs/skyddas", async () => {
+    const [kat] = await db
+      .select()
+      .from(metadataKatalog)
+      .where(and(eq(metadataKatalog.tenantId, TENANT), eq(metadataKatalog.namn, OBJEKTMALL_INTERIM_METADATA_FALT)));
+    expect(kat).toBeTruthy();
+    // Lat-skapad av importen med systemklassning (Task #1441).
+    expect(kat.isSystem).toBe(true);
+    expect(kat.systemlast).toBe(true);
+    expect(kat.visasIKarusell).toBe(false);
+
+    // Dolt från katalog-/fältlistor (UI-/API-läsvägarna).
+    const types = await getAllMetadataTypesWithCustomers(TENANT);
+    expect(types.some((t) => t.namn === OBJEKTMALL_INTERIM_METADATA_FALT)).toBe(false);
+    const defs = await getMetadataDefinitionsCompat(TENANT);
+    expect(defs.some((d) => d.fieldKey === OBJEKTMALL_INTERIM_METADATA_FALT)).toBe(false);
+
+    // Dolt bland objektets metadatarader — men värdet finns kvar i
+    // metadata_varden (re-import-nyckeln, verifierat i testet ovan).
+    const obj = (await objectsNamed("Butik Alfa uppdaterad"))[0];
+    expect(obj).toBeTruthy();
+    const full = await getObjectWithAllMetadata(obj.id, TENANT);
+    expect(full?.metadata.some((m) => m.katalog?.namn === OBJEKTMALL_INTERIM_METADATA_FALT)).toBe(false);
+
+    // Manuell skrivning blockeras (import-vägen med auto-ursprung släpps igenom).
+    await expect(
+      createMetadata({
+        tenantId: TENANT,
+        objektId: obj.id,
+        metadataTypNamn: OBJEKTMALL_INTERIM_METADATA_FALT,
+        varde: "HACK-1",
+      }),
+    ).rejects.toThrow(/systemfält|importfält/);
+
+    // GDPR-anonymisering rör aldrig interimnumret.
+    await expect(
+      anonymizeObjectMetadataField(obj.id, kat.id, TENANT, ADMIN),
+    ).rejects.toThrow(/anonymisering/);
+
+    // Värdet är fortfarande intakt efter de blockerade försöken.
+    const meta = await db
+      .select({ varde: metadataVarden.vardeString })
+      .from(metadataVarden)
+      .where(
+        and(
+          eq(metadataVarden.tenantId, TENANT),
+          eq(metadataVarden.objektId, obj.id),
+          eq(metadataVarden.metadataKatalogId, kat.id),
+          eq(metadataVarden.status, "aktiv"),
+        ),
+      );
+    expect(meta.map((m) => m.varde)).toEqual(["BUT3"]);
+  });
+
+  // Task #1441 (review): auto-ursprung (metod) får ALDRIG etableras från
+  // klient-payload — spoofad metod="import" ska avvisas av API:t, och
+  // interim-raden ska inte kunna raderas via generiska DELETE-vägen.
+  it("Task #1441: spoofad metod via publika metadata-API:t avvisas (create/update/delete)", async () => {
+    const obj = (await objectsNamed("Butik Alfa uppdaterad"))[0];
+    const [kat] = await db
+      .select({ id: metadataKatalog.id })
+      .from(metadataKatalog)
+      .where(and(eq(metadataKatalog.tenantId, TENANT), eq(metadataKatalog.namn, OBJEKTMALL_INTERIM_METADATA_FALT)));
+    const [row] = await db
+      .select({ id: metadataVarden.id })
+      .from(metadataVarden)
+      .where(
+        and(
+          eq(metadataVarden.tenantId, TENANT),
+          eq(metadataVarden.objektId, obj.id),
+          eq(metadataVarden.metadataKatalogId, kat.id),
+          eq(metadataVarden.status, "aktiv"),
+        ),
+      );
+    expect(row).toBeTruthy();
+
+    // CREATE med spoofad auto-metod → 403 (avvisas i routen, når aldrig guards).
+    const created = await req("POST", "/api/metadata", {
+      userId: ADMIN,
+      body: {
+        objektId: obj.id,
+        metadataTypNamn: OBJEKTMALL_INTERIM_METADATA_FALT,
+        varde: "SPOOF-1",
+        metod: "import",
+      },
+    });
+    expect(created.status).toBe(403);
+
+    // UPDATE med spoofad auto-metod → 403.
+    const updated = await req("PUT", `/api/metadata/${row.id}`, {
+      userId: ADMIN,
+      body: { varde: "SPOOF-2", metod: "import" },
+    });
+    expect(updated.status).toBe(403);
+
+    // Manuell UPDATE (utan metod) → blockeras av systemfälts-guarden.
+    const manual = await req("PUT", `/api/metadata/${row.id}`, {
+      userId: ADMIN,
+      body: { varde: "SPOOF-3" },
+    });
+    expect(manual.status).toBeGreaterThanOrEqual(400);
+
+    // DELETE via generiska vägen → 403 (interim = re-import-nyckel).
+    const deleted = await req("DELETE", `/api/metadata/${row.id}`, { userId: ADMIN });
+    expect(deleted.status).toBe(403);
+
+    // Detalj-uppslaget i compat-API:t exponerar inte interim-definitionen.
+    expect(await getMetadataDefinitionCompat(TENANT, kat.id)).toBeUndefined();
+
+    // Etikett-/katalogytorna (fältväljare/konfiguration) exponerar inte fältet.
+    const labels = await req("GET", "/api/metadata-labels", { userId: ADMIN });
+    expect(labels.status).toBe(200);
+    expect(
+      (labels.body as any[]).some((l) => l.namn?.toLowerCase() === OBJEKTMALL_INTERIM_METADATA_FALT),
+    ).toBe(false);
+    const labelDetail = await req("GET", `/api/metadata-labels/${kat.id}`, { userId: ADMIN });
+    expect(labelDetail.status).toBe(404);
+    const defDetail = await req("GET", `/api/metadata-definitions/${kat.id}`, { userId: ADMIN });
+    expect(defDetail.status).toBe(404);
+
+    // Värdet är orört efter alla försök.
+    const meta = await db
+      .select({ varde: metadataVarden.vardeString, raderad: metadataVarden.raderad })
+      .from(metadataVarden)
+      .where(and(eq(metadataVarden.tenantId, TENANT), eq(metadataVarden.id, row.id)));
+    expect(meta).toHaveLength(1);
+    expect(meta[0].varde).toBe("BUT3");
+    expect(meta[0].raderad).toBe(false);
   });
 });

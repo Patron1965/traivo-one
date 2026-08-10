@@ -38,6 +38,7 @@ import {
   deriveConceptTargets,
   evaluateConditionsForObject,
 } from "./order-concept-targeting";
+import { OBJEKTMALL_INTERIM_METADATA_FALT } from "@shared/objektmall-template";
 import {
   getObjectWithAllMetadata,
   getObjectGeoFields,
@@ -185,6 +186,10 @@ export type SystemUnperformedTask = {
 export type SystemInfoGroup = {
   internalId: string;
   objectNumber: string | null;
+  // Task #1441: interimnummer = temporärt import-matchningsnummer (metadata
+  // 'interimsnummer', lokal rad). Dolt från vanliga metadatavyer — visas ENBART
+  // här som read-only felsökningsinformation.
+  interimNumber: string | null;
   status: string | null;
   createdAt: string | null;
   archivedAt: string | null;
@@ -639,7 +644,7 @@ export async function getObjectSystemGeneratedMetadata(
   // Task #1370: Systeminformation — riktiga objekt-kolumner + förälder/barn.
   let systemInfo: SystemInfoGroup | null = null;
   if (object && object.tenantId === tenantId) {
-    const [parentRow, childRow] = await Promise.all([
+    const [parentRow, childRow, interimRow] = await Promise.all([
       object.parentId
         ? db
             .select({ id: objects.id, name: objects.name })
@@ -655,6 +660,22 @@ export async function getObjectSystemGeneratedMetadata(
           eq(objects.parentId, objectId),
           isNull(objects.deletedAt),
         )),
+      // Task #1441: interimnummer (temporärt import-matchningsnummer) — LOKAL
+      // aktiv metadata_varden-rad för katalogfältet 'interimsnummer'. Läses
+      // direkt här (fältet är bortfiltrerat från vanliga metadata-läsvägar).
+      db
+        .select({ varde: metadataVarden.vardeString })
+        .from(metadataVarden)
+        .innerJoin(metadataKatalog, eq(metadataVarden.metadataKatalogId, metadataKatalog.id))
+        .where(and(
+          eq(metadataVarden.tenantId, tenantId),
+          eq(metadataVarden.objektId, objectId),
+          eq(metadataVarden.raderad, false),
+          eq(metadataVarden.status, "aktiv"),
+          eq(metadataKatalog.tenantId, tenantId),
+          sql`LOWER(${metadataKatalog.namn}) = ${OBJEKTMALL_INTERIM_METADATA_FALT}`,
+        ))
+        .limit(1),
     ]);
     // Källsystem härleds ur riktiga kolumner: importBatchId (importerad) och
     // isInterimObject (interim från import). Saknas båda ⇒ skapad i Traivo.
@@ -666,6 +687,7 @@ export async function getObjectSystemGeneratedMetadata(
     systemInfo = {
       internalId: object.id,
       objectNumber: object.objectNumber ?? null,
+      interimNumber: interimRow[0]?.varde ?? null,
       status: object.deletedAt ? "archived" : (object.status ?? null),
       createdAt: toIso(object.createdAt),
       archivedAt: toIso(object.deletedAt),

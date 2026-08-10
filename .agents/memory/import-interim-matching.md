@@ -29,3 +29,11 @@ interimnummer till en ANNAN kund uppdaterade fel kunds objekt.
   radfel (kräv systemnummer).
 - Testfälla: isolerade test-tenants saknar 'Kund'-katalogposten → objekten blir
   kund-lösa; seeda katalogposten för att testa kundskopning på riktigt.
+
+## Interim = dolt systemfält (2026-08)
+Katalogfältet 'interimsnummer' klassas som system-/internfält (isSystem+systemlast+visasIKarusell=false, lat-skapande + idempotent backfill via ensureInterimSystemFalt på /types-vägen). Det filtreras namn-baserat (isInterimKatalogNamn) från getAllMetadataTypesWithCustomers, getMetadataDefinitionsCompat och getObjectWithAllMetadata; manuella create/update/delete + GDPR-anonymisering blockeras (auto-ursprung/import släpps igenom). Visas ENBART read-only i objektets systeminformation (SystemInfoGroup.interimNumber). Re-import-matchningen är opåverkad — den läser metadata_varden direkt via katalognamnet, aldrig via de filtrerade läsvägarna. Lägg ALDRIG interim-läsning i vanliga metadata-vyer igen; nya läsvägar för objekt-metadata måste också filtrera fältet.
+
+## Auto-ursprung får aldrig komma från klienten
+Publika metadata-endpoints (POST/PUT /api/metadata) avvisar klient-skickad metod med auto-betydelse (isAutomaticOrigin) med 403 — annars kan metod="import" spoofas för att kringgå read-only-guards. Auto-ursprung etableras endast av server-interna tjänster. Generiska DELETE /api/metadata/:id mappar ReadonlyMetadataError→403. getMetadataDefinitionCompat (detalj-uppslag) måste filtrera samma fält som list-varianten.
+
+Dolda katalogfält har flera list-ytor: förutom compat-listan/detaljen finns /api/metadata-labels (kpiRoutes, rå katalog-select) och formel-valideringens known-set (configRoutes) — filtrera alla via samma predikat (isInterimKatalogNamn). getAllMetadataTypes lämnas ofiltrerad (import-lookups + interna värde-skrivvägar kräver fältet).

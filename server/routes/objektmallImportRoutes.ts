@@ -1958,7 +1958,18 @@ async function commitImport(
         } else {
           const [created] = await tx
             .insert(metadataKatalog)
-            .values({ tenantId, namn: OBJEKTMALL_INTERIM_METADATA_FALT, datatyp: "string", kategori: "import" })
+            // Task #1441: interim är ett temporärt importfält — klassa som system-/
+            // internfält direkt vid skapandet (värde-read-only, definitionslåst,
+            // dold i karusell/vanliga metadatavyer).
+            .values({
+              tenantId,
+              namn: OBJEKTMALL_INTERIM_METADATA_FALT,
+              datatyp: "string",
+              kategori: "import",
+              isSystem: true,
+              systemlast: true,
+              visasIKarusell: false,
+            })
             .returning();
           interimKatalogCache = (created as MetadataKatalog) ?? null;
         }

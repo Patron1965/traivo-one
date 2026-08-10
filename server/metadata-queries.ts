@@ -27,6 +27,39 @@ import {
 } from "@shared/schema";
 import { primaryPayerCustomerIdSql, getObjectPrimaryCustomerId } from "./services/object-customer";
 import { parseCoordinateJson } from "./services/object-location";
+import { OBJEKTMALL_INTERIM_METADATA_FALT } from "@shared/objektmall-template";
+
+// ============================================================================
+// INTERIMNUMMER = TEMPORÄRT IMPORTFÄLT (Task #1441)
+// ----------------------------------------------------------------------------
+// 'interimsnummer' är en kundskopad matchningsnyckel för re-import — INTE ett
+// vanligt metadatafält. Det ska:
+//   • filtreras bort från alla vanliga metadatalistor/fältväljare/objektvyer,
+//   • aldrig kunna redigeras/raderas via de manuella metadata-vägarna
+//     (import-vägen skriver via auto-ursprung och släpps igenom),
+//   • aldrig omfattas av GDPR-anonymisering (tekniskt matchningsnummer),
+//   • enbart visas read-only i objektets systeminformationssektion.
+// Lagringen ligger kvar i metadata_varden (expand-contract) — enbart
+// klassning/visning ändras, så re-import-matchningen (som läser
+// metadata_varden direkt via katalognamnet) är opåverkad.
+// ============================================================================
+export function isInterimKatalogNamn(namn: string | null | undefined): boolean {
+  return (namn ?? "").trim().toLowerCase() === OBJEKTMALL_INTERIM_METADATA_FALT;
+}
+
+// Idempotent backfill: klassar en redan lat-skapad interim-katalogpost som
+// system-/internfält (isSystem = värde-read-only, systemlast = definitionslås,
+// visasIKarusell=false = dold i karusellytor). Best-effort, anropas från
+// /types-läsvägen precis som övriga ensure-funktioner.
+export async function ensureInterimSystemFalt(tenantId: string): Promise<void> {
+  await db.execute(sql`
+    UPDATE metadata_katalog
+    SET is_system = TRUE, systemlast = TRUE, visas_i_karusell = FALSE
+    WHERE tenant_id = ${tenantId}
+      AND LOWER(namn) = ${OBJEKTMALL_INTERIM_METADATA_FALT}
+      AND (is_system = FALSE OR systemlast = FALSE OR visas_i_karusell = TRUE)
+  `);
+}
 
 // Task #663: katalogtyp berikad med dess kundlås-kopplingar (tom array = generellt
 // fält, gäller alla kunder; en eller flera customerIds = kundlåst).
@@ -542,7 +575,11 @@ export async function getMetadataDefinitionsCompat(
   // byId från samma resultatmängd (inkl. arkiverade när includeDeleted=true) så
   // att punktnotationsnycklar för underfält förblir stabila även i arkivvyn.
   const byId = new Map(rows.map((r) => [r.id, r]));
-  return rows.map((r) => katalogToDefinitionCompat(r, byId));
+  // Task #1441: interimnummer är ett temporärt importfält — aldrig valbart som
+  // vanlig metadatadefinition (fältväljare/exportkolumner/compat-vyn).
+  return rows
+    .filter((r) => !isInterimKatalogNamn(r.namn))
+    .map((r) => katalogToDefinitionCompat(r, byId));
 }
 
 export async function getMetadataDefinitionCompat(
@@ -554,6 +591,9 @@ export async function getMetadataDefinitionCompat(
     .from(metadataKatalog)
     .where(and(eq(metadataKatalog.id, id), eq(metadataKatalog.tenantId, tenantId)));
   if (!row) return undefined;
+  // Task #1441: interimnummer är ett dolt temporärt importfält — exponeras inte
+  // heller via detalj-uppslaget (samma regel som listfiltret ovan).
+  if (isInterimKatalogNamn(row.namn)) return undefined;
   const byId = new Map<string, Pick<MetadataKatalog, "namn">>([[row.id, { namn: row.namn }]]);
   if (row.parentMetadataId) {
     const [parent] = await db
@@ -1029,6 +1069,10 @@ export async function getObjectWithAllMetadata(
   for (const katalogId of katalogOrder) {
     const group = rowsByKatalog.get(katalogId)!;
     const nearest = group[0];
+
+    // Task #1441: interimnummer (temporärt importfält) visas aldrig bland
+    // objektets metadatarader — det renderas enbart i systeminformationen.
+    if (isInterimKatalogNamn(nearest.katalog_namn)) continue;
 
     // Task #710: ursprung/override/mjuk-radering per katalog-grupp. Gruppen är
     // ordnad närmast-först; den lokala raden (om någon) ligger först, ärvda rader
@@ -1509,6 +1553,13 @@ export async function createMetadata(data: {
   // eller utelämnad) avvisas så att read-only-garantin håller även på API-nivån.
   if (metadataTyp.isSystem && !isAutomaticOrigin(data.metod)) {
     throw new Error(`"${metadataTyp.namn}" är ett systemfält och sätts automatiskt — det kan inte anges manuellt.`);
+  }
+
+  // Task #1441: interimnummer är ett temporärt importfält (matchningsnyckel för
+  // re-import) — endast import-vägen (auto-ursprung) får skriva det. Namn-baserad
+  // guard oberoende av isSystem-flaggan (defense-in-depth, täcker äldre rader).
+  if (isInterimKatalogNamn(metadataTyp.namn) && !isAutomaticOrigin(data.metod)) {
+    throw new ReadonlyMetadataError(`"${metadataTyp.namn}" är ett tekniskt importfält och kan inte anges manuellt.`);
   }
 
   // Rubrik/samlingsfält: ett rent gruppfält som bara grupperar underfält och
@@ -2356,6 +2407,11 @@ export async function updateMetadata(
   if (metadataTyp.isSystem && !isAutomaticOrigin(metod)) {
     throw new Error(`"${metadataTyp.namn}" är ett systemfält och sätts automatiskt — det kan inte ändras manuellt.`);
   }
+  // Task #1441: interimnummer (temporärt importfält) får endast skrivas via
+  // import-vägen (auto-ursprung) — aldrig redigeras manuellt.
+  if (isInterimKatalogNamn(metadataTyp.namn) && !isAutomaticOrigin(metod)) {
+    throw new ReadonlyMetadataError(`"${metadataTyp.namn}" är ett tekniskt importfält och kan inte ändras manuellt.`);
+  }
   if (isReadonlyOrigin(existing.metod) && !isAutomaticOrigin(metod)) {
     throw new Error(`"${metadataTyp.namn}" sattes av ${existing.metod === 'system' ? 'systemet' : 'en tjänst'} och kan inte redigeras manuellt.`);
   }
@@ -2508,6 +2564,19 @@ export async function deleteMetadata(
     `);
     const existing = (lockedRows.rows as any[])[0];
     if (!existing) return; // redan raderad — idempotent
+
+    // Task #1441: interimnummer (temporärt importfält) är re-import-matchnings-
+    // nyckeln — manuell radering skulle tyst bryta matchningsförmågan.
+    const katalogIdForDelete = existing.metadata_katalog_id ?? existing.metadataKatalogId;
+    if (katalogIdForDelete && !isAutomaticOrigin(metod)) {
+      const [kat] = await tx
+        .select({ namn: metadataKatalog.namn })
+        .from(metadataKatalog)
+        .where(and(eq(metadataKatalog.id, katalogIdForDelete), eq(metadataKatalog.tenantId, tenantId)));
+      if (kat && isInterimKatalogNamn(kat.namn)) {
+        throw new ReadonlyMetadataError('Interimsnummer är ett tekniskt importfält och kan inte tas bort manuellt.');
+      }
+    }
 
     await tx.insert(metadataHistorik).values({
       tenantId,
@@ -2827,6 +2896,12 @@ export async function anonymizeObjectMetadataField(
     .limit(1);
   if (!katalog) {
     throw new InvalidMetadataInputError('Metadatadefinition hittades inte');
+  }
+
+  // Task #1441: interimnummer är ett tekniskt matchningsnummer (ingen persondata)
+  // och är dessutom re-import-nyckeln — GDPR-anonymisering får aldrig röra det.
+  if (isInterimKatalogNamn(katalog.namn)) {
+    throw new ReadonlyMetadataError('Interimsnummer är ett tekniskt importfält och omfattas inte av anonymisering.');
   }
 
   const now = new Date();
@@ -4085,6 +4160,9 @@ export async function getAllMetadataTypesWithCustomers(
     : null;
   const enriched: MetadataKatalogWithCustomers[] = [];
   for (const t of types) {
+    // Task #1441: interimnummer (temporärt importfält) döljs från katalog-/
+    // fältlistor — det visas enbart i objektets systeminformationssektion.
+    if (isInterimKatalogNamn(t.namn)) continue;
     const customerIds = links.get(t.id) ?? [];
     if (scope && !isMetadataAllowedForCustomerScope(customerIds, scope)) continue;
     enriched.push({ ...t, customerIds });
