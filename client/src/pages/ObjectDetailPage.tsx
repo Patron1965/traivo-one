@@ -8,7 +8,6 @@ import { ObjectArchiveControl } from "@/components/objects/ObjectArchiveControl"
 import { ObjectHeaderPanel } from "@/components/ObjectHeaderPanel";
 import { type MetadataFormEntry, type MetadataFormType, type MetadataRelatedChild } from "@/components/ObjectMetadataForm";
 import { ObjectTemplateMetadataForm, type TemplateMetadataType } from "@/components/ObjectTemplateMetadataForm";
-import { ObjectSystemGeneratedPanel } from "@/components/ObjectSystemGeneratedPanel";
 import { TelinkSyncButton } from "@/components/TelinkSyncButton";
 import { SnabborderDialog } from "@/components/SnabborderDialog";
 import { ObjectHierarchyCards } from "@/components/objects/ObjectHierarchyCards";

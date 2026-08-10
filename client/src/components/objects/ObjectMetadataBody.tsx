@@ -5,18 +5,17 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
-  Cog, Link as LinkIcon, Calendar, Users, Info, ListFilter,
+  Link as LinkIcon, Calendar, Users, Info, ListFilter,
 } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Checkbox } from "@/components/ui/checkbox";
-import { KallaBadge, KallaLegend } from "@/lib/metadata-kalla";
+import { KallaLegend } from "@/lib/metadata-kalla";
 import {
   MetadataAddButton,
   MetadataSourceLegend,
   type MetadataFormEntry,
   type MetadataFormType,
 } from "@/components/ObjectMetadataForm";
-import { ObjectSystemGeneratedPanel } from "@/components/ObjectSystemGeneratedPanel";
 import { MetadataCarousel } from "./MetadataCarousel";
 import { MetadataAreaSection } from "./MetadataAreaSection";
 import { MetadataCreateFieldDialog } from "./MetadataCreateFieldDialog";
@@ -291,20 +290,9 @@ export function ObjectMetadataBody({
 
         {!filterActive && (
         <>
-        {/* Systemgenererad metadata — read-only, live-härledd. */}
-        <section id="meta-area-system" className="scroll-mt-24">
-          <Card data-testid="card-system-generated-metadata">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base flex items-center gap-2">
-                <Cog className="h-4 w-4" /> Systemgenererad metadata
-                <KallaBadge kalla="SYS" />
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <ObjectSystemGeneratedPanel objectId={objectId} />
-            </CardContent>
-          </Card>
-        </section>
+        {/* "Systemgenererad metadata"-kortet borttaget på produktägarens begäran
+            (2026-08-10): systemursprung anges redan per post via KÄLLA-badgen,
+            så en separat samlingssektion behövs inte. */}
 
         {/* Orderkoncept-uppgifter — planerade uppgifter från koncept. */}
         <section id="meta-area-assignments" className="scroll-mt-24">

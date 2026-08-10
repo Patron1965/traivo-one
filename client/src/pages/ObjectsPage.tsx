@@ -46,7 +46,6 @@ import { ObjectMetadataPanel } from "@/components/ObjectMetadataPanel";
 import { ObjectParentsPanel } from "@/components/ObjectParentsPanel";
 import { ObjectDisplayNames } from "@/components/ObjectDisplayNames";
 import { ObjectInheritedMetadataPanel } from "@/components/ObjectInheritedMetadataPanel";
-import { ObjectSystemGeneratedPanel } from "@/components/ObjectSystemGeneratedPanel";
 import { useLocalizedObjectName } from "@/lib/object-name";
 import { OBJECT_LOCATION_TYPE_LABELS, effectiveObjectPosition } from "@/lib/object-location";
 import { AddressSearch } from "@/components/AddressSearch";
