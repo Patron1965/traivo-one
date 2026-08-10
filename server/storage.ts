@@ -4562,19 +4562,18 @@ export class DatabaseStorage implements IStorage {
         values.clusterId ?? null,
       );
     }
-    // Uppgiftspaket-fyllnad är en read-baserad härledning → före transaktionen.
-    // Task #1506: artikel-SNAPSHOTEN stämplas däremot INNE i transaktionen
-    // (efter rad-inserterna, via CAS) så att snapshoten speglar exakt det
-    // atomära skapandeögonblicket — aldrig ett pre-tx-uppslag som kan hinna
-    // bli inaktuellt.
-    await this.fillWorkOrderUppgiftspaket(
-      values,
-      values.frozenIsFixedPrice != null
-        ? { debiteringsmodell: values.frozenIsFixedPrice ? "fast" : "lopande" }
-        : null,
-    );
-
     const result = await db.transaction(async (tx) => {
+      // Task #1506: HELA paketbygget + artikel-snapshoten sker i SAMMA
+      // transaktion som WO- och rad-inserterna, så att alla snapshotfält
+      // (namn/nummer från registret, pris/kostnad/tid från raderna) kommer
+      // från ett och samma konsistenta ögonblick. Ett paketfel avbryter
+      // hela skapandet (fillWorkOrderUppgiftspaket kastar → tx rullas tillbaka).
+      await this.fillWorkOrderUppgiftspaket(
+        values,
+        values.frozenIsFixedPrice != null
+          ? { debiteringsmodell: values.frozenIsFixedPrice ? "fast" : "lopande" }
+          : null,
+      );
       // Snabborder: mynta löpande "SO-<n>" per tenant under transaktionsbundet
       // advisory-lås (samma mönster som OBJ-NNN i createObject) så två samtidiga
       // skapanden inte kan landa på samma nummer. Klientsatt orderNumber strippas
