@@ -1464,7 +1464,7 @@ export default function ObjectDetailPage() {
         <section id="object-section-linked-tasks" className="space-y-6 scroll-mt-4">
           <div className="flex items-center justify-between">
             <h2 className="text-base font-semibold flex items-center gap-2">
-              <Layers className="h-4 w-4" /> Kopplade uppgifter
+              <Layers className="h-4 w-4" /> Kopplade orderkoncept, ordrar och uppgifter
             </h2>
             <Button
               variant="outline"
@@ -1476,8 +1476,9 @@ export default function ObjectDetailPage() {
             </Button>
           </div>
 
-          {/* Task #1370 (krav 11): sammanställning av kopplade order + uppgifter
-              med källa, orderkoncept, status (deriveUppgiftStatus) och datum. */}
+          {/* Task #1442: separata sektioner för kopplade ordrar (aktiva),
+              orderhistorik (utförda) och kopplade uppgifter (assignments),
+              med källa, orderkoncept-länk och status (deriveUppgiftStatus). */}
           <ObjectLinkedOrdersTable
             workOrders={workOrders as any}
             assignments={objectAssignments as any}
