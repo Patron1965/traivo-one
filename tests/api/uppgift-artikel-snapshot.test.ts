@@ -16,7 +16,7 @@ import { storage } from "../../server/storage";
 import { materializeCompletedAssignmentForInvoice } from "../../server/services/assignment-invoice-materializer";
 import { propagateUppgiftspaket } from "../../server/services/uppgiftspaket";
 import type { Uppgiftspaket } from "@shared/uppgift-contract";
-import { chooseWoSnapshotValues } from "../../scripts/backfill-uppgiftspaket";
+import { chooseWoSnapshotValues, runBackfill } from "../../scripts/backfill-uppgiftspaket";
 
 // Task #1506 — Fundament: uppgifts-ID + garanterad artikel-snapshot.
 // DB-integrationstest mot dev-DB. Verifierar:
@@ -326,6 +326,38 @@ describe("uppgiftspaket artikel-snapshot (Task #1506)", () => {
     );
     expect(openVals).toMatchObject({ frozen: false, prisOre: 99900, kostnadOre: 88800, produktionstidMin: 120 });
   });
+
+  it("backfill-omkörning rör ALDRIG en fryst rad med satt snapshot (idempotens)", async () => {
+    // Fryst WO med snapshot från skapandet.
+    const { workOrder } = await storage.createWorkOrderWithLines(
+      {
+        tenantId: TENANT,
+        customerId,
+        objectId,
+        title: "Idempotens-WO",
+        orderStatus: "utford",
+        executionStatus: "completed",
+      },
+      [{ articleId, quantity: 1, resolvedPrice: 50000, resolvedCost: 30000, resolvedProductionMinutes: 45 }],
+    );
+    const fore = await getWoPaket(workOrder.id);
+    expect(fore?.artikel?.artikelId).toBe(articleId);
+
+    // Ändra artikeln i registret och kör backfillen igen.
+    await db
+      .update(articles)
+      .set({ listPrice: 123456, name: "Register-drift" })
+      .where(eq(articles.id, articleId));
+    await runBackfill({ dryRun: false });
+
+    const efter = await getWoPaket(workOrder.id);
+    expect(efter).toEqual(fore); // varje fält oförändrat — inkl. tidsstämplar
+
+    await db
+      .update(articles)
+      .set({ listPrice: 50000, name: "Snapshot-tjänst" })
+      .where(eq(articles.id, articleId));
+  }, 60000);
 
   it("ID-kedjan: materialiserad WO bär sourceAssignmentId", async () => {
     const assignment = await storage.createAssignment({

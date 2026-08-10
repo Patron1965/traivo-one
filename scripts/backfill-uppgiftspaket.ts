@@ -97,7 +97,12 @@ async function primaryAssignmentArticle(assignmentId: string) {
   return row ?? null;
 }
 
-async function main() {
+export async function runBackfill(opts: { dryRun?: boolean } = {}) {
+  const dryRun = opts.dryRun ?? DRY_RUN;
+  return backfillOnce(dryRun);
+}
+
+async function backfillOnce(DRY_RUN: boolean) {
   const report = {
     woPaketFilled: 0,
     woSnapshotAdded: 0,
@@ -138,11 +143,9 @@ async function main() {
     .from(workOrders)
     .where(and(
       isNull(workOrders.deletedAt),
-      // Sista villkoret: reparera snapshots som en tidigare backfill-körning
-      // myntade (uppdateradAv='backfill') — endast dessa får skrivas om.
-      sql`(${workOrders.uppgiftspaket} IS NULL
-        OR ${workOrders.uppgiftspaket}->'artikel'->>'artikelId' IS NULL
-        OR ${workOrders.uppgiftspaket}->>'uppdateradAv' = 'backfill')`,
+      // Strikt idempotent: en rad med satt artikel-snapshot röres ALDRIG igen —
+      // omkörning får aldrig läsa om registret för redan frysta snapshots.
+      sql`(${workOrders.uppgiftspaket} IS NULL OR ${workOrders.uppgiftspaket}->'artikel'->>'artikelId' IS NULL)`,
     ));
 
   console.log(`work_orders att behandla: ${wos.length}`);
@@ -183,10 +186,7 @@ async function main() {
             .where(and(eq(workOrders.id, wo.id), eq(workOrders.tenantId, wo.tenantId)));
         }
         report.woPaketFilled++;
-      } else if (
-        artikelExtra?.artikelId &&
-        (prev.artikel?.artikelId == null || prev.uppdateradAv === "backfill")
-      ) {
+      } else if (artikelExtra?.artikelId && prev.artikel?.artikelId == null) {
         const artikel: UppgiftspaketArtikel = {
           utforandekod: prev.artikel?.utforandekod ?? wo.executionCode ?? null,
           tidskod: prev.artikel?.tidskod ?? wo.frozenTimeCode ?? null,
@@ -330,6 +330,11 @@ async function main() {
 
   console.log(`\n=== Backfill-rapport${DRY_RUN ? " (DRY RUN)" : ""} ===`);
   console.log(JSON.stringify(report, null, 2));
+  return report;
+}
+
+async function main() {
+  await backfillOnce(DRY_RUN);
   await pool.end();
 }
 
