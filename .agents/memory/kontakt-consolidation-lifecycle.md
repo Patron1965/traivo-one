@@ -12,5 +12,7 @@ description: Kontaktfamiljen (area='kontakt') visas ENBART i kontaktkortet; rade
 - Spärr-utvärdering + delete körs atomiskt i EN FOR UPDATE-tx (deleteMetadataGuarded) — pre-check utanför tx:n är race-bar mot samtidig update-historik.
 - Livscykel: hård DELETE /api/metadata/:id spärras (409 USE_ARCHIVE) när `metadata_historik` har rader med `gammalt_varde IS NOT NULL` (rena skapande-rader blockerar inte) eller konceptfilter-kopplingar; arkivering = softDelete (bevarar allt); anonymisering vägrar katalognamn 'interimsnummer'/'interimnummer' (403) — interim är matchningsnyckel, ej personuppgift.
 
+- Kontaktkortet har trippel-livscykelmeny (radera=rad-exakt hård DELETE per vardenId, admin; arkivera/anonymisera=fält-nivå-endpoints, ENDAST när objektet har exakt en kontakt — fältendpoints träffar hela fältet); 409 USE_ARCHIVE vid radering → dialogen erbjuder arkivering istället (ObjectContactLifecycleDialog).
+
 **Why:** annars dubblerad kontaktvisning, oklara raderingssemantiker och risk att interim-nyckeln förstörs av GDPR-flödet.
 **How to apply:** nya raderings-/anonymiseringsytor måste återanvända samma serverspärrar; nya kontaktytor läser kontaktkortets endpoint, inte råa metadatarader.

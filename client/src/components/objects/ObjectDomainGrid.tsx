@@ -4,6 +4,7 @@ import {
   Contact, Image as ImageIcon, ClipboardList, MapPin, Target,
   Phone, Mail, Calendar, CalendarClock, CircleSlash,
   Link as LinkIcon, Users, Map as MapIcon, Zap, Pencil, Copy,
+  MoreVertical, Trash2, Archive, EyeOff,
 } from "lucide-react";
 import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
 import L from "leaflet";
@@ -28,6 +29,18 @@ import { DomainCarouselCard } from "./DomainCarouselCard";
 //     list-block (bläddra + sök). Systemgenererade domäner (SYS) läses från den
 //     delade endpointen `GET /api/objects/:id/system-generated-metadata`.
 import { ObjectContactEditDialog, type EditableContact } from "./ObjectContactEditDialog";
+import {
+  ObjectContactLifecycleDialog,
+  type ContactLifecycleAction,
+} from "./ObjectContactLifecycleDialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { useToast } from "@/hooks/use-toast";
 
 interface ObjectContactLite extends EditableContact {
@@ -215,6 +228,9 @@ export interface ObjectDomainGridProps {
   /** Task #1440: redigeringsknappen i kontaktkortet visas bara för roller med
    *  redigeringsrätt (servern kräver dessutom planner/admin för mutationerna). */
   canEditContacts?: boolean;
+  /** Task #1468: permanent radering och anonymisering är admin-åtgärder
+   *  (servern kräver requireAdmin — UI-gating är bara bekvämlighet). */
+  isAdmin?: boolean;
   onEditGeo: () => void;
   navigate: (path: string) => void;
 }
@@ -226,6 +242,7 @@ export function ObjectDomainGrid({
   contacts,
   workOrders = [],
   canEditContacts = false,
+  isAdmin = false,
   onEditGeo,
   navigate,
 }: ObjectDomainGridProps) {
@@ -234,6 +251,12 @@ export function ObjectDomainGrid({
   const [mapOpen, setMapOpen] = useState(false);
   // Task #1440: kontakt som redigeras i kortets metadata-dialog.
   const [editingContact, setEditingContact] = useState<ObjectContactLite | null>(null);
+  // Task #1468: kontakt + livscykelåtgärd (radera/arkivera/anonymisera) med
+  // separata bekräftelsedialoger.
+  const [lifecycleTarget, setLifecycleTarget] = useState<{
+    contact: ObjectContactLite;
+    action: ContactLifecycleAction;
+  } | null>(null);
 
   const { data, isLoading } = useQuery<SystemGeneratedMetadata>({
     queryKey: ["/api/objects", objectId, "system-generated-metadata"],
@@ -281,6 +304,11 @@ export function ObjectDomainGrid({
     }
   };
 
+  // Task #1468: arkivering/anonymisering går via fält-nivå-endpoints som
+  // träffar HELA fältet på objektet — bara säkert med exakt en kontakt (samma
+  // konvention som tömning i redigeringsdialogen).
+  const fieldLevelActionsSafe = contacts.length === 1;
+
   const renderContact = (c: ObjectContactLite) => (
     <div className="p-3 border rounded-lg" data-testid={`contact-card-${c.id}`}>
       <div className="flex items-center justify-between mb-1 gap-2">
@@ -308,6 +336,72 @@ export function ObjectDomainGrid({
             >
               <Pencil className="h-3 w-3" />
             </Button>
+          )}
+          {canEditContacts && !c.inherited && (
+            <DropdownMenu modal={false}>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-6 w-6 p-0"
+                  aria-label="Fler åtgärder"
+                  data-testid={`button-contact-actions-${c.id}`}
+                >
+                  <MoreVertical className="h-3 w-3" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuLabel>Kontaktåtgärder</DropdownMenuLabel>
+                <DropdownMenuItem
+                  disabled={!fieldLevelActionsSafe}
+                  onClick={() => setLifecycleTarget({ contact: c, action: "archive" })}
+                  data-testid={`menu-archive-contact-${c.id}`}
+                >
+                  <Archive className="h-3.5 w-3.5 mr-2" />
+                  <div className="flex flex-col">
+                    <span>Arkivera</span>
+                    <span className="text-xs text-muted-foreground">
+                      {fieldLevelActionsSafe
+                        ? "Inaktiv men bevarad — kan återställas"
+                        : "Kräver att objektet har exakt en kontakt"}
+                    </span>
+                  </div>
+                </DropdownMenuItem>
+                {isAdmin && (
+                  <>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      disabled={!fieldLevelActionsSafe}
+                      onClick={() => setLifecycleTarget({ contact: c, action: "anonymize" })}
+                      data-testid={`menu-anonymize-contact-${c.id}`}
+                    >
+                      <EyeOff className="h-3.5 w-3.5 mr-2" />
+                      <div className="flex flex-col">
+                        <span>Anonymisera (GDPR)</span>
+                        <span className="text-xs text-muted-foreground">
+                          {fieldLevelActionsSafe
+                            ? "Skrubbar personuppgifter, bevarar historik"
+                            : "Kräver att objektet har exakt en kontakt"}
+                        </span>
+                      </div>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      className="text-destructive focus:text-destructive"
+                      onClick={() => setLifecycleTarget({ contact: c, action: "delete" })}
+                      data-testid={`menu-delete-contact-${c.id}`}
+                    >
+                      <Trash2 className="h-3.5 w-3.5 mr-2" />
+                      <div className="flex flex-col">
+                        <span>Radera permanent</span>
+                        <span className="text-xs text-muted-foreground">
+                          Spärras vid historik/kopplingar
+                        </span>
+                      </div>
+                    </DropdownMenuItem>
+                  </>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
           )}
         </div>
       </div>
@@ -605,6 +699,17 @@ export function ObjectDomainGrid({
             structuralEditsSafe={contacts.length === 1}
             open={!!editingContact}
             onOpenChange={(o) => { if (!o) setEditingContact(null); }}
+          />
+        )}
+
+        {lifecycleTarget && (
+          <ObjectContactLifecycleDialog
+            objectId={objectId}
+            contact={lifecycleTarget.contact}
+            action={lifecycleTarget.action}
+            archiveSafe={fieldLevelActionsSafe}
+            open={!!lifecycleTarget}
+            onOpenChange={(o) => { if (!o) setLifecycleTarget(null); }}
           />
         )}
 

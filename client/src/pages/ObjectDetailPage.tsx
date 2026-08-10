@@ -1469,6 +1469,7 @@ export default function ObjectDetailPage() {
             obj={obj}
             contacts={contacts as any}
             canEditContacts={["owner", "admin", "planner", "technician", "user"].includes(user?.role ?? "")}
+            isAdmin={isAdmin}
             onEditGeo={() => openEditDialog()}
             navigate={navigate}
           />
