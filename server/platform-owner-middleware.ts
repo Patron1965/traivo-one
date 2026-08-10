@@ -53,8 +53,9 @@ async function logDeniedAccess(
  * `platform.access.denied` för säkerhetsspårning.
  */
 export const requirePlatformOwner: RequestHandler = async (req, res, next) => {
-  const { resolveRequestUser } = await import("./middlewares/requireAuth");
-  const userId: string | undefined = (await resolveRequestUser(req))?.id;
+  const replitUser = (req as Request & { user?: ReplitSessionClaims }).user;
+  const sessionUserId = (req.session as ReplitSessionData | undefined)?.userId;
+  const userId: string | undefined = replitUser?.claims?.sub || sessionUserId;
 
   if (!userId) {
     await logDeniedAccess(req, "unauthenticated", null);

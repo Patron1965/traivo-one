@@ -1,7 +1,7 @@
-import { useEffect, useRef, lazy, Suspense } from "react";
-import { Switch, Route, useLocation, Redirect, Router as WouterRouter } from "wouter";
+import { useEffect, useState, lazy, Suspense } from "react";
+import { Switch, Route, useLocation, Redirect } from "wouter";
 import { queryClient } from "./lib/queryClient";
-import { QueryClientProvider, useQueryClient } from "@tanstack/react-query";
+import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { TopNav } from "@/components/layout/TopNav";
@@ -16,63 +16,11 @@ import { CommandPalette } from "@/components/CommandPalette";
 import { KeyboardShortcutsDialog } from "@/components/KeyboardShortcutsDialog";
 import { TenantBrandingProvider } from "@/components/TenantBrandingProvider";
 import { FeatureProvider } from "@/lib/feature-context";
-import { resolveClerkProxyUrl } from "@/lib/clerk-proxy";
 import { TourProvider } from "@/hooks/use-tour";
 import { TourGuide } from "@/components/TourGuide";
 import { TourAutoStart } from "@/components/TourAutoStart";
 import { Loader2 } from "lucide-react";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
-import { ClerkProvider, SignIn, SignUp, useClerk } from "@clerk/react";
-
-// REQUIRED — set via VITE_CLERK_PUBLISHABLE_KEY env var
-const clerkPubKey = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY as string;
-
-// Proxy-URL resolvas deterministiskt: dev = direkt mot Clerk (ingen proxy),
-// prod = alltid serverns /api/__clerk-proxy (ingen env-var krävs).
-const clerkProxyUrl = resolveClerkProxyUrl(import.meta.env);
-
-const basePath = import.meta.env.BASE_URL.replace(/\/$/, "");
-
-function stripBase(path: string): string {
-  return basePath && path.startsWith(basePath)
-    ? path.slice(basePath.length) || "/"
-    : path;
-}
-
-function ClerkQueryClientCacheInvalidator() {
-  const { addListener } = useClerk();
-  const qc = useQueryClient();
-  const prevUserIdRef = useRef<string | null | undefined>(undefined);
-
-  useEffect(() => {
-    const unsubscribe = addListener(({ user }) => {
-      const userId = user?.id ?? null;
-      if (prevUserIdRef.current !== undefined && prevUserIdRef.current !== userId) {
-        qc.clear();
-      }
-      prevUserIdRef.current = userId;
-    });
-    return unsubscribe;
-  }, [addListener, qc]);
-
-  return null;
-}
-
-function SignInPage() {
-  return (
-    <div className="flex min-h-[100dvh] items-center justify-center bg-background px-4">
-      <SignIn routing="path" path={`${basePath}/sign-in`} signUpUrl={`${basePath}/sign-up`} />
-    </div>
-  );
-}
-
-function SignUpPage() {
-  return (
-    <div className="flex min-h-[100dvh] items-center justify-center bg-background px-4">
-      <SignUp routing="path" path={`${basePath}/sign-up`} signInUrl={`${basePath}/sign-in`} />
-    </div>
-  );
-}
 
 const NotFound = lazy(() => import("@/pages/not-found"));
 const AccessDeniedPage = lazy(() => import("@/pages/AccessDeniedPage"));
@@ -636,44 +584,19 @@ function AuthenticatedApp() {
   );
 }
 
-function ClerkProviderWithRoutes() {
-  const [, setLocation] = useLocation();
-
-  return (
-    <ClerkProvider
-      publishableKey={clerkPubKey}
-      proxyUrl={clerkProxyUrl}
-      signInUrl={`${basePath}/sign-in`}
-      signUpUrl={`${basePath}/sign-up`}
-      routerPush={(to) => setLocation(stripBase(to))}
-      routerReplace={(to) => setLocation(stripBase(to), { replace: true })}
-    >
-      <QueryClientProvider client={queryClient}>
-        <ClerkQueryClientCacheInvalidator />
-        <FeatureProvider>
-          <LanguageProvider>
-            <ThemeProvider>
-              <TooltipProvider>
-                <Switch>
-                  {/* REQUIRED — copy "/sign-in/*?" and "/sign-up/*?" verbatim */}
-                  <Route path="/sign-in/*?" component={SignInPage} />
-                  <Route path="/sign-up/*?" component={SignUpPage} />
-                  <Route component={AppContent} />
-                </Switch>
-                <Toaster />
-              </TooltipProvider>
-            </ThemeProvider>
-          </LanguageProvider>
-        </FeatureProvider>
-      </QueryClientProvider>
-    </ClerkProvider>
-  );
-}
-
 export default function App() {
   return (
-    <WouterRouter base={basePath}>
-      <ClerkProviderWithRoutes />
-    </WouterRouter>
+    <QueryClientProvider client={queryClient}>
+      <FeatureProvider>
+        <LanguageProvider>
+          <ThemeProvider>
+            <TooltipProvider>
+              <AppContent />
+              <Toaster />
+            </TooltipProvider>
+          </ThemeProvider>
+        </LanguageProvider>
+      </FeatureProvider>
+    </QueryClientProvider>
   );
 }

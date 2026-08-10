@@ -1,19 +1,65 @@
-// Inbjudningsmejl (fd. magic-link). Efter Clerk-migreringen finns inga
-// engångstoken eller consume-endpoint kvar — issueMagicLink() validerar
-// inbjudans behörighet, skickar ett mejl som länkar till /sign-in och
-// uppdaterar leveransstatus på invitation-raden. Tenant-rollen tilldelas
-// av JIT-provisioneringens processInvitations() vid första Clerk-inloggning.
-import type { Express, Request } from "express";
-import { and, eq, gt, sql } from "drizzle-orm";
+// Magic-link authentication — låter inbjudna användare logga in utan
+// Replit-konto via en engångslänk skickad till deras e-post.
+//
+// Flöde:
+//   1. POST /api/auth/magic-link/request { email } → returnerar alltid 204.
+//      Om e-posten matchar en pending invitation ELLER en aktiv tenant-medlem
+//      skapas en token (lagrad som SHA-256-hash, råtoken bara i mejlet) och
+//      en länk skickas via Resend. TTL 15 min, engångsbruk.
+//   2. GET /api/auth/magic-link/consume?token=… → slår upp hash, validerar
+//      expiresAt + consumedAt=null, upsert:ar users-rad, kör
+//      processInvitations(), loggar in med req.logIn() och redirectar till /.
+import crypto from "crypto";
+import type { Express, Request, Response } from "express";
+import { and, eq, isNull, gt, sql } from "drizzle-orm";
 import { db } from "../../db";
-import { invitations, userTenantRoles, users } from "@shared/schema";
+import {
+  invitations,
+  magicLinkTokens,
+  userTenantRoles,
+  users,
+  type InsertMagicLinkToken,
+} from "@shared/schema";
+import { authStorage } from "./storage";
 import { sendEmail } from "../resend";
+import { logLoginEvent } from "../../login-audit";
+import { magicLinkLimiter } from "../../middleware/rate-limit";
+
+const TOKEN_TTL_MS = 15 * 60 * 1000;
+const SESSION_TTL_SECONDS = 7 * 24 * 60 * 60;
+
+function hashToken(rawToken: string): string {
+  return crypto.createHash("sha256").update(rawToken).digest("hex");
+}
+
+function getClientIp(req: Request): string | null {
+  const xff = req.headers["x-forwarded-for"];
+  if (typeof xff === "string") {
+    const first = xff.split(",")[0]?.trim();
+    if (first) return first;
+  }
+  return req.ip || req.socket?.remoteAddress || null;
+}
+
+function getUserAgent(req: Request): string | null {
+  const ua = req.headers["user-agent"];
+  return typeof ua === "string" ? ua : null;
+}
 
 function getAllowedHosts(): string[] {
   return (process.env.REPLIT_DOMAINS ?? "")
     .split(",")
     .map(d => d.trim().toLowerCase())
     .filter(Boolean);
+}
+
+function isHostAllowed(req: Request): boolean {
+  // Dev/test: tillåt alltid (ingen REPLIT_DOMAINS-config förväntas lokalt).
+  if (process.env.NODE_ENV !== "production") return true;
+  const allowed = getAllowedHosts();
+  if (allowed.length === 0) return true; // fail-open om ingen lista konfigurerad
+  const host = (req.hostname || "").toLowerCase();
+  return allowed.some(a => host === a || host.endsWith("." + a));
 }
 
 function getBaseUrl(req: Request): string {
@@ -124,10 +170,11 @@ function renderEmailHtml(magicLinkUrl: string, isInvitation: boolean): string {
           <p style="margin:0 0 32px;">
             <a href="${magicLinkUrl}" style="display:inline-block;background:#1B4B6B;color:#ffffff;text-decoration:none;padding:14px 28px;border-radius:8px;font-size:15px;font-weight:600;">Logga in</a>
           </p>
+          <p style="margin:0 0 8px;font-size:13px;color:#6B7C8C;">Länken är giltig i 15 minuter och kan bara användas en gång.</p>
           <p style="margin:0 0 24px;font-size:13px;color:#6B7C8C;">Om knappen inte fungerar, kopiera och klistra in följande adress i din webbläsare:</p>
           <p style="margin:0 0 24px;font-size:12px;color:#1B4B6B;word-break:break-all;">${magicLinkUrl}</p>
           <hr style="border:none;border-top:1px solid #E8F4F8;margin:24px 0;" />
-          <p style="margin:0;font-size:12px;color:#6B7C8C;">Fick du detta mejl av misstag? Ignorera det.</p>
+          <p style="margin:0;font-size:12px;color:#6B7C8C;">Fick du detta mejl av misstag? Ignorera det — ingen ändring sker utan att länken används.</p>
         </td></tr>
       </table>
       <p style="margin:16px 0 0;font-size:12px;color:#6B7C8C;">Traivo — fältserviceplattform för nordiska företag</p>
@@ -188,11 +235,23 @@ export async function issueMagicLink(opts: IssueMagicLinkOptions): Promise<Issue
     }
   }
 
-  // Efter Clerk-migreringen mintas inga engångstoken längre —
-  // mejlet länkar till Clerk-inloggningen. Vid första inloggningen matchar
-  // JIT-provisioneringen (processInvitations) e-postadressen mot väntande
-  // inbjudningar och tilldelar tenant-roll automatiskt.
-  const magicLinkUrl = `${opts.baseUrl}/sign-in`;
+  const rawToken = crypto.randomBytes(32).toString("base64url");
+  const tokenHash = hashToken(rawToken);
+  const expiresAt = new Date(Date.now() + TOKEN_TTL_MS);
+
+  const insertData: InsertMagicLinkToken = {
+    tokenHash,
+    email: emailLower,
+    invitationId: context.invitationId,
+    tenantId: context.tenantId,
+    requestedIp: opts.req ? getClientIp(opts.req) : null,
+    requestedUserAgent: opts.req ? getUserAgent(opts.req) : null,
+    expiresAt,
+  };
+
+  await db.insert(magicLinkTokens).values(insertData);
+
+  const magicLinkUrl = `${opts.baseUrl}/api/auth/magic-link/consume?token=${encodeURIComponent(rawToken)}`;
   const isInvitation = context.invitationId !== null;
 
   try {
@@ -231,13 +290,166 @@ export async function issueMagicLink(opts: IssueMagicLinkOptions): Promise<Issue
   return { ok: true, invitationId: context.invitationId, tenantId: context.tenantId };
 }
 
-/**
- * registerMagicLinkRoutes — stub after Clerk migration.
- * The consume endpoint used passport req.logIn() which is no longer available.
- * Invitation emails now direct users to /sign-in where Clerk handles auth;
- * JIT provisioning runs on first login and processes pending invitations.
- */
-export function registerMagicLinkRoutes(_app: Express): void {
-  // No-op: magic link HTTP routes removed (Clerk replaced the auth flow).
-  // issueMagicLink() is still exported and used by invitation emails.
+function buildSessionUser(userId: string, email: string): any {
+  const nowSec = Math.floor(Date.now() / 1000);
+  return {
+    claims: {
+      sub: userId,
+      email,
+      exp: nowSec + SESSION_TTL_SECONDS,
+    },
+    access_token: null,
+    refresh_token: null,
+    expires_at: nowSec + SESSION_TTL_SECONDS,
+    auth_method: "magic_link",
+  };
+}
+
+export function registerMagicLinkRoutes(app: Express): void {
+  app.post("/api/auth/magic-link/request", magicLinkLimiter, async (req, res) => {
+    const email = typeof req.body?.email === "string" ? req.body.email.trim() : "";
+    // Minimal e-postvalidering — bara form, ingen MX-lookup.
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      // Returnera ändå 204 så caller inte kan probe-a för giltig form.
+      return res.status(204).end();
+    }
+    try {
+      await issueMagicLink({ email, baseUrl: getBaseUrl(req), req });
+    } catch (err) {
+      console.error("[magic-link] request handler failed", err);
+    }
+    // Konstant svar oavsett resultat → ingen e-post-enumeration.
+    return res.status(204).end();
+  });
+
+  app.get("/api/auth/magic-link/consume", async (req, res) => {
+    // Host-allowlist: i prod måste request-värden matcha en konfigurerad
+    // REPLIT_DOMAINS-host (eller subdomän av den). Skyddar mot att en
+    // angripare lurar någon att klicka en länk som pekar mot en
+    // angripar-kontrollerad domän som proxyar mot vår backend.
+    if (!isHostAllowed(req)) {
+      console.warn("[magic-link] consume blocked — host not allowed", req.hostname);
+      void logLoginEvent({
+        req,
+        method: "magic_link",
+        outcome: "failed",
+        reason: "host_not_allowed",
+        extra: { host: req.hostname },
+      });
+      return res.redirect("/login?magic_error=server");
+    }
+    const rawToken = typeof req.query?.token === "string" ? req.query.token : "";
+    if (!rawToken) {
+      return res.redirect("/login?magic_error=missing");
+    }
+    const tokenHash = hashToken(rawToken);
+    const now = new Date();
+
+    const [tokenRow] = await db
+      .select()
+      .from(magicLinkTokens)
+      .where(
+        and(
+          eq(magicLinkTokens.tokenHash, tokenHash),
+          isNull(magicLinkTokens.consumedAt),
+          gt(magicLinkTokens.expiresAt, now),
+        ),
+      )
+      .limit(1);
+
+    if (!tokenRow) {
+      void logLoginEvent({
+        req,
+        method: "magic_link",
+        outcome: "failed",
+        reason: "invalid_or_expired_token",
+      });
+      return res.redirect("/login?magic_error=expired");
+    }
+
+    try {
+      // Markera tokenen som consumed FÖRST (engångsbruk, race-safe).
+      const consumed = await db
+        .update(magicLinkTokens)
+        .set({
+          consumedAt: now,
+          consumedIp: getClientIp(req),
+          consumedUserAgent: getUserAgent(req),
+        })
+        .where(
+          and(
+            eq(magicLinkTokens.id, tokenRow.id),
+            isNull(magicLinkTokens.consumedAt),
+          ),
+        )
+        .returning({ id: magicLinkTokens.id });
+
+      if (consumed.length === 0) {
+        // Någon annan request hann först.
+        void logLoginEvent({
+          req,
+          method: "magic_link",
+          outcome: "failed",
+          reason: "token_already_consumed",
+        });
+        return res.redirect("/login?magic_error=expired");
+      }
+
+      // Upsert:a users-rad. Återanvänd existerande userId om e-posten redan finns.
+      const emailLower = tokenRow.email;
+      const [existing] = await db
+        .select()
+        .from(users)
+        .where(eq(users.email, emailLower))
+        .limit(1);
+
+      const userId = existing?.id ?? crypto.randomUUID();
+      const userRow = await authStorage.upsertUser({
+        id: userId,
+        email: emailLower,
+        firstName: existing?.firstName ?? null,
+        lastName: existing?.lastName ?? null,
+        profileImageUrl: existing?.profileImageUrl ?? null,
+      });
+
+      // Kör invitations + default-tilldelning (samma som Replit-flödet).
+      await authStorage.processInvitations(userRow.id, emailLower);
+      await authStorage.ensureDefaultTenantAssignment(userRow.id);
+
+      const sessionUser = buildSessionUser(userRow.id, emailLower);
+
+      req.logIn(sessionUser, (loginErr) => {
+        if (loginErr) {
+          void logLoginEvent({
+            req,
+            method: "magic_link",
+            outcome: "failed",
+            reason: "session_login_error",
+            email: emailLower,
+            extra: { error: String(loginErr?.message ?? loginErr) },
+          });
+          return res.redirect("/login?magic_error=session");
+        }
+        void logLoginEvent({
+          req,
+          method: "magic_link",
+          outcome: "success",
+          userId: userRow.id,
+          tenantId: tokenRow.tenantId,
+          email: emailLower,
+        });
+        return res.redirect("/?login=1");
+      });
+    } catch (err: any) {
+      console.error("[magic-link] consume failed", err);
+      void logLoginEvent({
+        req,
+        method: "magic_link",
+        outcome: "failed",
+        reason: "consume_exception",
+        extra: { error: String(err?.message ?? err) },
+      });
+      return res.redirect("/login?magic_error=server");
+    }
+  });
 }

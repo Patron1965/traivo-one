@@ -1,61 +1,36 @@
-import { useUser, useAuth as useClerkAuth } from "@clerk/react";
 import { useQuery } from "@tanstack/react-query";
+import type { User } from "@shared/schema";
 
-type AuthUser = {
-  id?: string;
-  email?: string | null;
-  firstName?: string | null;
-  lastName?: string | null;
-  profileImageUrl?: string | null;
-  role?: string | null;
-  tenantId?: string | null;
-  accessGranted?: boolean;
-  [key: string]: any;
-};
+type AuthUser = User & { accessGranted?: boolean; tenantId?: string | null; role?: string | null };
 
-async function fetchServerUser(): Promise<AuthUser | null> {
+async function fetchUser(): Promise<AuthUser | null> {
   const response = await fetch("/api/auth/user", {
     credentials: "include",
   });
-  if (response.status === 401) return null;
-  if (!response.ok) throw new Error(`${response.status}: ${response.statusText}`);
+
+  if (response.status === 401) {
+    return null;
+  }
+
+  if (!response.ok) {
+    throw new Error(`${response.status}: ${response.statusText}`);
+  }
+
   return response.json();
 }
 
 export function useAuth() {
-  const { isLoaded, isSignedIn } = useClerkAuth();
-  const { user: clerkUser } = useUser();
-
-  // Fetch app-specific data (role, tenantId, accessGranted) from server.
-  // Only runs when Clerk has loaded and the user is signed in to avoid transient 401s.
-  const { data: serverUser, isLoading: serverLoading } = useQuery<AuthUser | null>({
+  const { data: user, isLoading } = useQuery<AuthUser | null>({
     queryKey: ["/api/auth/user"],
-    queryFn: fetchServerUser,
-    enabled: isLoaded && !!isSignedIn,
+    queryFn: fetchUser,
     retry: false,
     staleTime: 1000 * 60 * 5, // 5 minutes
   });
 
-  const isLoading = !isLoaded || (!!isSignedIn && serverLoading && serverUser === undefined);
-
-  const user: AuthUser | null =
-    isSignedIn && serverUser
-      ? {
-          // Use externalId (original Replit Auth ID) for migrated users so existing
-          // app data keyed by the legacy ID continues to work.
-          id: clerkUser?.externalId ?? clerkUser?.id ?? serverUser?.id,
-          email: clerkUser?.primaryEmailAddress?.emailAddress ?? serverUser?.email,
-          firstName: clerkUser?.firstName ?? serverUser?.firstName,
-          lastName: clerkUser?.lastName ?? serverUser?.lastName,
-          profileImageUrl: clerkUser?.imageUrl ?? serverUser?.profileImageUrl,
-          ...serverUser,
-        }
-      : null;
-
   return {
     user,
     isLoading,
-    isAuthenticated: !!isSignedIn && serverUser !== null && serverUser !== undefined,
-    accessGranted: serverUser?.accessGranted ?? false,
+    isAuthenticated: !!user,
+    accessGranted: user?.accessGranted ?? false,
   };
 }

@@ -4,14 +4,13 @@ import { mobileLoginLimiter } from "../../middleware/rate-limit";
     MobileAuthenticatedRequest,
     storage, db, eq,
     mobileTokens, generateMobileToken, validateMobileToken, isMobileAuthenticated,
-    asyncHandler,
+    getTenantIdWithFallback, asyncHandler,
     NotFoundError, ValidationError,
     notificationService,
   } from "./shared";
   import type { Resource } from "./shared";
   import type { Response } from "express";
-  import { USER_ROLES, resources as resourcesTable, type UserRole } from "@shared/schema";
-  import { and, or, ilike } from "drizzle-orm";
+  import { USER_ROLES, type UserRole } from "@shared/schema";
 import { logLoginEvent } from "../../login-audit";
 
   const VALID_RBAC_ROLES = new Set<string>(USER_ROLES);
@@ -46,64 +45,41 @@ app.post("/api/mobile/login", mobileLoginLimiter, asyncHandler(async (req, res) 
       }
     }
 
-    // Pre-auth: tenant kan inte resolvas här (endpointen ligger utanför den
-    // globala tenant-middlewaren och anroparen är ännu inte autentiserad).
-    // Härled istället kandidater direkt från inloggningsuppgifterna
-    // (cross-tenant) och kräv en ENTYDIG träff — tenant tas sedan från den
-    // matchade resursen. Ingen fallback-tenant används (prod-säkert).
+    const tenantId = getTenantIdWithFallback(req);
+    const resources = await storage.getResources(tenantId);
     let resource: Resource | undefined;
-    let candidates: Resource[] = [];
 
     if (pin && !email && !username) {
-      candidates = (await db
-        .select()
-        .from(resourcesTable)
-        .where(and(eq(resourcesTable.status, "active"), eq(resourcesTable.pin, pin)))) as Resource[];
+      resource = resources.find(r => !!r.pin && r.pin === pin && r.status === 'active');
     } else if (username && password) {
-      candidates = (await db
-        .select()
-        .from(resourcesTable)
-        .where(and(
-          eq(resourcesTable.status, "active"),
-          or(ilike(resourcesTable.email, username), ilike(resourcesTable.name, username)),
-        ))) as Resource[];
+      resource = resources.find(r =>
+        (r.email?.toLowerCase() === username.toLowerCase() || r.name?.toLowerCase() === username.toLowerCase()) && r.status === 'active'
+      );
       // En resurs utan konfigurerad PIN kan inte logga in — annars skulle
       // vilket lösenord som helst accepteras (auth-bypass).
-      candidates = candidates.filter(r => !!r.pin && r.pin === password);
+      if (resource && (!resource.pin || resource.pin !== password)) {
+        resource = undefined;
+      }
     } else if (email && pin) {
-      candidates = (await db
-        .select()
-        .from(resourcesTable)
-        .where(and(eq(resourcesTable.status, "active"), ilike(resourcesTable.email, email)))) as Resource[];
+      resource = resources.find(r =>
+        r.email?.toLowerCase() === email.toLowerCase() && r.status === 'active'
+      );
       // Kräv att resursen har en PIN OCH att den matchar. Tidigare accepterades
       // vilken 4–6-siffrig PIN som helst för resurser utan PIN (auth-bypass).
-      candidates = candidates.filter(r => !!r.pin && r.pin === pin);
+      if (resource && (!resource.pin || resource.pin !== pin)) {
+        resource = undefined;
+      }
     } else {
       await logLoginEvent({
         req,
         method: "mobile",
         outcome: "failed",
+        tenantId,
         email: email || username || null,
         reason: "missing_credentials",
       });
       throw new ValidationError("PIN or username/password required");
     }
-
-    // Tenant-isolering: om uppgifterna matchar resurser i FLERA tenants är
-    // inloggningen tvetydig — neka istället för att gissa (kräv e-post + PIN).
-    const candidateTenants = new Set(candidates.map(c => c.tenantId));
-    if (candidateTenants.size > 1) {
-      await logLoginEvent({
-        req,
-        method: "mobile",
-        outcome: "failed",
-        email: email || username || null,
-        reason: "ambiguous_credentials_multi_tenant",
-      });
-      return res.status(401).json({ error: "Ogiltiga inloggningsuppgifter. Använd e-post + PIN." });
-    }
-    resource = candidates[0];
-    const tenantId = resource?.tenantId ?? null;
 
     if (!resource) {
       const existing = loginAttempts.get(clientIp);

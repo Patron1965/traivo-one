@@ -107,7 +107,7 @@ export function registerObjectStorageRoutes(app: Express): void {
         return res.status(400).json({ error: "Invalid object path" });
       }
 
-      const userId = ((req as any).dbUser?.id ?? (req as any).user?.claims?.sub) as string;
+      const userId = (req as any).user?.claims?.sub as string;
       if (!userId) {
         return res.status(401).json({ error: "Unauthorized" });
       }
@@ -156,7 +156,7 @@ export function registerObjectStorageRoutes(app: Express): void {
       // Files without an ACL policy (no confirm-upload step completed) are
       // inaccessible by design — the confirm step must be called after each upload.
       const canAccess = await objectStorageService.canAccessObjectEntity({
-        userId: (req as any).dbUser?.id ?? (req as any).user?.claims?.sub,
+        userId: (req as any).user?.claims?.sub,
         tenantId: getTenantIdWithFallback(req),
         objectFile,
       });

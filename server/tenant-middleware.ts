@@ -4,8 +4,6 @@ import { userTenantRoles, tenants, type UserRole } from "@shared/schema";
 import { eq, and } from "drizzle-orm";
 import { readFileSync, existsSync } from "node:fs";
 import { resolve } from "node:path";
-import { getAuth } from "@clerk/express";
-import { jitProvisionUser } from "./middlewares/requireAuth";
 
 let cachedInternalAdminToken: string | null | undefined = undefined;
 function getInternalAdminToken(): string | null {
@@ -79,39 +77,20 @@ async function getUserTenantRole(userId: string): Promise<TenantContext | null> 
   };
 }
 
-
-// Clerk getAuth() kastar om clerkMiddleware inte är monterad (t.ex. isolerade
-// test-appar). Behandla det som oautentiserad istället för 500/hängning.
-function safeGetAuth(req: Request): ReturnType<typeof getAuth> | null {
-  try {
-    return getAuth(req);
-  } catch {
-    return null;
-  }
-}
-
 export const requireTenant: RequestHandler = async (req, res, next) => {
-  // Support both Clerk sessions and backwards-compat req.user shim
-  let userId: string | undefined = (req as any).user?.claims?.sub;
-
-  if (!userId) {
-    const auth = safeGetAuth(req);
-    if (!auth?.userId) {
-      return res.status(401).json({ error: "Ej autentiserad" });
-    }
-    const dbUser = await jitProvisionUser(auth.userId, (auth.sessionClaims as Record<string, any>) ?? {});
-    if (!dbUser) return res.status(401).json({ error: "Ej autentiserad" });
-    req.dbUser = dbUser;
-    (req as any).user = { claims: { sub: dbUser.id } };
-    userId = dbUser.id;
+  const user = req.user;
+  
+  if (!user || !user.claims?.sub) {
+    return res.status(401).json({ error: "Ej autentiserad" });
   }
 
+  const userId = user.claims.sub;
   const tenantContext = await getUserTenantRole(userId);
 
   if (!tenantContext) {
-    return res.status(403).json({
-      error: "Ingen organisation kopplad",
-      message: "Din användare är inte kopplad till någon organisation. Kontakta administratör."
+    return res.status(403).json({ 
+      error: "Ingen organisation kopplad", 
+      message: "Din användare är inte kopplad till någon organisation. Kontakta administratör." 
     });
   }
 
@@ -129,9 +108,9 @@ export const requireRole = (...allowedRoles: UserRole[]): RequestHandler => {
     }
 
     if (!allowedRoles.includes(req.tenantRole)) {
-      return res.status(403).json({
-        error: "Behörighet saknas",
-        message: `Denna åtgärd kräver någon av rollerna: ${allowedRoles.join(", ")}`
+      return res.status(403).json({ 
+        error: "Behörighet saknas", 
+        message: `Denna åtgärd kräver någon av rollerna: ${allowedRoles.join(", ")}` 
       });
     }
 
@@ -154,8 +133,8 @@ export function getTenantId(req: Request): string {
 }
 
 export async function assignUserToTenant(
-  userId: string,
-  tenantId: string,
+  userId: string, 
+  tenantId: string, 
   role: UserRole = "user",
   assignedBy?: string
 ): Promise<void> {
@@ -204,7 +183,7 @@ export async function getUserTenants(userId: string): Promise<TenantContext[]> {
  * - Unauthenticated users: rejected with 401
  * - Authenticated users without tenant membership: rejected with 403 (must be explicitly assigned)
  * - Authenticated users with tenant membership: granted access to their assigned tenant
- *
+ * 
  * NOTE: Unauthenticated fallback removed for security (2026-01-05)
  */
 export const requireTenantWithFallback: RequestHandler = async (req, res, next) => {
@@ -227,36 +206,22 @@ export const requireTenantWithFallback: RequestHandler = async (req, res, next) 
     }
   }
 
-  // Support both Clerk sessions and backwards-compat req.user shim
-  let userId: string | undefined = (req as any).user?.claims?.sub;
-
-  if (!userId) {
-    const auth = safeGetAuth(req);
-    if (!auth?.userId) {
-      return res.status(401).json({
-        error: "Ej autentiserad",
-        message: "Du måste logga in för att komma åt denna resurs."
-      });
-    }
-    const dbUser = await jitProvisionUser(auth.userId, (auth.sessionClaims as Record<string, any>) ?? {});
-    if (!dbUser) {
-      return res.status(401).json({
-        error: "Ej autentiserad",
-        message: "Du måste logga in för att komma åt denna resurs."
-      });
-    }
-    req.dbUser = dbUser;
-    (req as any).user = { claims: { sub: dbUser.id } };
-    userId = dbUser.id;
+  const user = req.user;
+  
+  if (!user || !user.claims?.sub) {
+    return res.status(401).json({ 
+      error: "Ej autentiserad", 
+      message: "Du måste logga in för att komma åt denna resurs." 
+    });
   }
-  // If req.user was already set by requireAuth, userId is set above; nothing else to do.
 
+  const userId = user.claims.sub;
   const tenantContext = await getUserTenantRole(userId);
 
   if (!tenantContext) {
-    return res.status(403).json({
-      error: "Ingen organisation kopplad",
-      message: "Din användare är inte kopplad till någon organisation. Kontakta administratör för att bli tilldelad en organisation."
+    return res.status(403).json({ 
+      error: "Ingen organisation kopplad", 
+      message: "Din användare är inte kopplad till någon organisation. Kontakta administratör för att bli tilldelad en organisation." 
     });
   }
 
@@ -305,7 +270,7 @@ export function getTenantIdWithFallback(req: Request): string {
     }
 
     const isDevelopment = process.env.NODE_ENV !== "production";
-
+    
     if (isDevelopment) {
       console.warn(
         "[SECURITY WARNING] getTenantIdWithFallback called without req.tenantId. " +
@@ -317,6 +282,6 @@ export function getTenantIdWithFallback(req: Request): string {
       throw new Error("Tenant ID missing - Access denied");
     }
   }
-
+  
   return req.tenantId;
 }

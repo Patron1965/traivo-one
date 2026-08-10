@@ -1,6 +1,5 @@
 import express, { type Request, Response, NextFunction } from "express";
 import compression from "compression";
-import { clerkMiddleware } from "@clerk/express";
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
@@ -11,16 +10,9 @@ import { logger } from "./logger";
 import { requestIdMiddleware } from "./middleware/request-id";
 import { errorHandler } from "./middleware/errorHandler";
 import { registerHealthRoutes } from "./routes/healthRoutes";
-import {
-  CLERK_PROXY_PATH,
-  clerkProxyMiddleware,
-} from "./middlewares/clerkProxyMiddleware";
 
 const app = express();
 const httpServer = createServer(app);
-
-// Mount Clerk proxy BEFORE body parsers (the proxy streams raw bytes)
-app.use(CLERK_PROXY_PATH, clerkProxyMiddleware());
 
 app.use(requestIdMiddleware);
 
@@ -82,9 +74,6 @@ app.use(
 );
 
 app.use(express.urlencoded({ extended: false }));
-
-// Mount Clerk session middleware after body parsers
-app.use(clerkMiddleware());
 
 app.get("/health", (_req, res) => {
   res.status(200).json({ status: "ok" });

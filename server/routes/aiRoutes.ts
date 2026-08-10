@@ -1529,8 +1529,9 @@ app.post("/api/ai/optimize-vrp/apply", requirePlanner, asyncHandler(async (req, 
 }));
 
 const requireSystemAdmin = async (req: any, res: any, next: any) => {
-  const { resolveRequestUser } = await import("../middlewares/requireAuth");
-  const userId = (await resolveRequestUser(req))?.id;
+  const replitUser = req.user;
+  const sessionUserId = (req.session as any)?.userId;
+  const userId = replitUser?.claims?.sub || sessionUserId;
   if (!userId) {
     return next(new UnauthorizedError("Ej autentiserad"));
   }

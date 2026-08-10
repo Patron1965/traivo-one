@@ -1,6 +1,5 @@
 import { Link, useLocation } from "wouter";
 import traivoLogo from "@assets/traivo_logo_transparent.png";
-import { useClerk } from "@clerk/react";
 import {
   Sidebar,
   SidebarContent,
@@ -114,7 +113,6 @@ function Badge({ count }: { count: number }) {
 function UserFooter() {
   const { user } = useAuth();
   const { t: tl } = useLanguage();
-  const { signOut } = useClerk();
   
   const displayName = user?.firstName && user?.lastName 
     ? `${user.firstName} ${user.lastName}`
@@ -136,14 +134,13 @@ function UserFooter() {
       </div>
       <Tooltip>
         <TooltipTrigger asChild>
-          <button
-            type="button"
-            onClick={() => signOut({ redirectUrl: "/" })}
+          <a 
+            href="/api/logout"
             className="p-2 rounded-md hover-elevate active-elevate-2"
             data-testid="button-logout"
           >
             <LogOut className="h-4 w-4 text-muted-foreground" />
-          </button>
+          </a>
         </TooltipTrigger>
         <TooltipContent side="top">
           <p>{tl("user.logout")}</p>
