@@ -92,6 +92,9 @@ export type SystemTaskHistory = {
   // orderkoncept. Klienten härleder ursprungsetiketten + länk från dessa.
   orderNumber: string | null;
   orderConceptId: string | null;
+  /** Materialiserad från assignment — låter klienten deduplicera mot
+   *  planerade koncept-uppgifter (en logisk uppgift = EN rad). */
+  sourceAssignmentId: string | null;
 };
 
 export type SystemTaskFuture = {
@@ -335,6 +338,7 @@ async function computeTasksHistory(
     lineCount: lineCounts.get(wo.id) ?? 0,
     orderNumber: wo.orderNumber ?? null,
     orderConceptId: wo.orderConceptId ?? null,
+    sourceAssignmentId: (wo as any).sourceAssignmentId ?? null,
   }));
 }
 

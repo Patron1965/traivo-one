@@ -31,6 +31,7 @@ interface SystemOrderRow {
   lineCount: number;
   orderNumber: string | null;
   orderConceptId: string | null;
+  sourceAssignmentId?: string | null;
 }
 
 interface SystemMetaResponse {
@@ -94,9 +95,15 @@ export function ObjectLinkedTasksUnified({
 
   const orders = data?.tasksHistory ?? [];
 
+  // En logisk uppgift = EN rad: en assignment som materialiserats till en
+  // order (wo.sourceAssignmentId) visas bara som ordern — aldrig dubbelt.
+  const materializedAssignmentIds = new Set(
+    orders.map((o) => o.sourceAssignmentId).filter((x): x is string => !!x),
+  );
+
   const rows: UnifiedRow[] = [
     // Planerade uppgifter från orderkoncept (assignments — ej materialiserade).
-    ...assignments.map((a): UnifiedRow => ({
+    ...assignments.filter((a) => !materializedAssignmentIds.has(a.id)).map((a): UnifiedRow => ({
       key: `assignment-${a.id}`,
       title: a.title || "Uppgift",
       scheduledDate: a.scheduledDate ?? null,
