@@ -4803,6 +4803,7 @@ export class DatabaseStorage implements IStorage {
     return article || undefined;
   }
 
+  /**
    * Hook-nivåer:
    * - koncern: Endast objekt på koncern-nivå (hierarchyLevel=koncern)
    * - brf: Endast BRF-objekt (hierarchyLevel=brf)
@@ -10994,13 +10995,12 @@ PROTO.getInvoiceConsolidationPolicy = async function (
   id: string,
 ): Promise<InvoiceConsolidationPolicy | undefined> {
   const [row] = await db
-    .update(invoiceConsolidationPolicies)
-    .set({ ...patch, updatedAt: new Date() })
+    .select()
+    .from(invoiceConsolidationPolicies)
     .where(and(
       eq(invoiceConsolidationPolicies.id, id),
       eq(invoiceConsolidationPolicies.tenantId, tenantId),
-    ))
-    .returning();
+    ));
   return row;
 };
 
@@ -11008,12 +11008,8 @@ PROTO.createInvoiceConsolidationPolicy = async function (
   data: InsertInvoiceConsolidationPolicy,
 ): Promise<InvoiceConsolidationPolicy> {
   const [row] = await db
-    .update(invoiceConsolidationPolicies)
-    .set({ ...patch, updatedAt: new Date() })
-    .where(and(
-      eq(invoiceConsolidationPolicies.id, id),
-      eq(invoiceConsolidationPolicies.tenantId, tenantId),
-    ))
+    .insert(invoiceConsolidationPolicies)
+    .values(data)
     .returning();
   return row;
 };

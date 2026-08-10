@@ -218,6 +218,9 @@ interface ArticleFormData {
   informationRequirements: InformationRequirement[];
   showMetadataFields: ShowMetadataRow[];
   leaveMetadataFields: LeaveMetadataRow[];
+  // Task #1496: executionCode är kanoniska utförandekod-fältet (läses av
+  // planering/resursmatchning). performerCategory är legacy-spegeln.
+  executionCode: string;
   performerCategory: string;
   timeCodeKey: string;
   iconKey: string;
@@ -312,6 +315,7 @@ const emptyFormData: ArticleFormData = {
   informationRequirements: [],
   showMetadataFields: [],
   leaveMetadataFields: [],
+  executionCode: "",
   performerCategory: "",
   timeCodeKey: "",
   iconKey: "",
@@ -396,7 +400,7 @@ function getSectionStats(
       fd.groupSize > 1,
       fd.productionTime > 0,
       fd.timeCodeKey.trim() !== "",
-      fd.performerCategory.trim() !== "",
+      fd.executionCode.trim() !== "",
     ]),
     struktur: { filled: componentDraft.length > 0 ? 1 : 0, total: 1 },
     fasthakning: { filled: assocCount > 0 ? 1 : 0, total: 1 },
@@ -707,9 +711,9 @@ export default function ArticleFormPage() {
   const isEditMode = !!id;
 
   const [formData, setFormData] = useState<ArticleFormData>(emptyFormData);
-  // Task #1108: Utförarkategori väljs från utförandekod-registret med
+  // Task #1108/#1496: Utförandekod väljs från utförandekod-registret med
   // fritext-bakåtkompatibilitet — befintliga fritextvärden förblir valbara.
-  const { options: executionCodeOptions } = useExecutionCodes([formData.performerCategory]);
+  const { options: executionCodeOptions } = useExecutionCodes([formData.executionCode]);
   const { options: timeCodeOptions } = useTimeCodes([formData.timeCodeKey]);
   const groupedTimeCodeOptions = useMemo(() => {
     const GROUP_ORDER = ["produktion", "stalltid", "restid", "internt", "egentid"];
@@ -1275,6 +1279,9 @@ export default function ArticleFormPage() {
       leaveMetadataFields: Array.isArray((article as any).leaveMetadataFields)
         ? ((article as any).leaveMetadataFields as LeaveMetadataRow[])
         : [],
+      // Task #1496: executionCode kanoniskt; äldre artiklar kan bara ha
+      // performerCategory satt → fall tillbaka så valet syns i formuläret.
+      executionCode: (article as any).executionCode || (article as any).performerCategory || "",
       performerCategory: (article as any).performerCategory || "",
       timeCodeKey: (article as any).timeCodeKey || "",
       iconKey: (article as any).iconKey || "",
@@ -2451,25 +2458,29 @@ export default function ArticleFormPage() {
                 </p>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="performerCategory">Utförarkategori</Label>
+                <Label htmlFor="executionCode">Utförandekod</Label>
                 <Select
-                  value={formData.performerCategory || "__none__"}
-                  onValueChange={(v) => setFormData({ ...formData, performerCategory: v === "__none__" ? "" : v })}
+                  value={formData.executionCode || "__none__"}
+                  onValueChange={(v) => {
+                    const code = v === "__none__" ? "" : v;
+                    // Task #1496: executionCode är kanoniskt; performerCategory speglas (legacy).
+                    setFormData({ ...formData, executionCode: code, performerCategory: code });
+                  }}
                 >
-                  <SelectTrigger id="performerCategory" data-testid="select-performer-category">
+                  <SelectTrigger id="executionCode" data-testid="select-execution-code">
                     <SelectValue placeholder="Välj utförandekod" />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="__none__">Ingen</SelectItem>
                     {executionCodeOptions.map((opt) => (
-                      <SelectItem key={opt.value} value={opt.value} data-testid={`option-performer-category-${opt.value}`}>
+                      <SelectItem key={opt.value} value={opt.value} data-testid={`option-execution-code-${opt.value}`}>
                         {opt.isLegacy ? `${opt.label} (fritext)` : opt.label}
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
                 <p className="text-xs text-muted-foreground">
-                  Vilken utförandekod (utförartyp) som normalt utför artikeln. Hanteras i utförandekod-registret.
+                  Vem som kan utföra uppgiften baserat på artikeln. Hanteras i utförandekod-registret.
                 </p>
               </div>
             </div>

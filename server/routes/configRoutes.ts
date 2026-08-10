@@ -13,6 +13,7 @@ import { notificationService } from "../notifications";
 import { parseFormula } from "../metadata-formula";
 import { getAllMetadataTypes, isInterimKatalogNamn } from "../metadata-queries";
 import { buildTimeCodeRuleMap, resolveTimeCodeRule } from "../services/time-code-rules";
+import { validateAndCanonicalizeArticleClassification } from "../services/article-register-validation";
 
 // Validerar artikelns antals-formel (Antalskälla "Formel") vid spara. Kastar
 // ValidationError (400, svenska) vid syntaxfel, tom formel, eller referens till ett
@@ -120,6 +121,8 @@ app.get("/api/articles/:id", asyncHandler(async (req, res) => {
 app.post("/api/articles", requireAdmin, asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const data = insertArticleSchema.parse({ ...req.body, tenantId });
+    // Task #1496: klassificeringsnycklar valideras mot registren + utförandekod kanoniseras.
+    await validateAndCanonicalizeArticleClassification(tenantId, data);
     if (data.quantityMode === "formula") {
       await validateQuantityFormulaOrThrow(data.quantityFormula, tenantId);
     }
@@ -178,6 +181,10 @@ app.patch("/api/articles/:id", requireAdmin, asyncHandler(async (req, res) => {
       return res.status(400).json(formatZodError(parseResult.error));
     }
     const { tenantId: _t, id: _id, createdAt: _c, deletedAt: _d, ...updateData } = parseResult.data as any;
+    // Task #1496: nya/ändrade klassificeringsnycklar valideras mot registren
+    // (oförändrade legacy-värden tillåts); utförandekod kanoniseras (spegel
+    // executionCode ↔ performerCategory).
+    await validateAndCanonicalizeArticleClassification(tenantId, updateData, existing);
     // Validera formeln när den sparade artikeln blir/förblir formel-läge.
     const effectiveQuantityMode = updateData.quantityMode ?? existing?.quantityMode;
     if (effectiveQuantityMode === "formula") {
