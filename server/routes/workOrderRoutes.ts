@@ -1431,11 +1431,17 @@ app.post("/api/work-orders/with-lines", requirePlanner, asyncHandler(async (req,
     ensureObjectNotArchived(obj);
     // Task #1514: kund↔objekt-integritet — när klienten explicit anger BÅDE
     // kund och objekt måste objektet tillhöra kunden (annars kan en order
-    // faktureras kund B mot kund A:s objekt). Intern-kund-fallback (utelämnad
-    // customerId) undantas eftersom den fylls i server-side ovan.
+    // faktureras kund B mot kund A:s objekt). Auktoritativ kund = primär
+    // betalare i object_payers (raw-objektets customerId är bara ett
+    // read-model-overlay och är inte ifyllt här). Intern-kund-fallback
+    // (utelämnad customerId) undantas eftersom den fylls i server-side ovan.
     const clientSentCustomer = !!parsedBody.data.workOrder.customerId;
-    if (clientSentCustomer && obj.customerId && obj.customerId !== data.customerId) {
-      throw new ValidationError("Objektet tillhör inte den valda kunden");
+    if (clientSentCustomer) {
+      const { getObjectPrimaryCustomerId } = await import("../services/object-customer");
+      const primaryCustomerId = await getObjectPrimaryCustomerId(data.objectId);
+      if (primaryCustomerId && primaryCustomerId !== data.customerId) {
+        throw new ValidationError("Objektet tillhör inte den valda kunden");
+      }
     }
   }
 
