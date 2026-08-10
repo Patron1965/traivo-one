@@ -1,0 +1,216 @@
+Utifrån bilderna och din beskrivning skulle jag formulera detta som ett sammanhållet utvecklingskrav för Replit, där objektöversikten definieras som objektets centrala informations- och navigationsyta:
+Utvecklingskrav – ny Objektöversikt i Traivo
+Syfte
+Objektöversikten ska byggas om så att den blir den centrala översikten för ett objekt och dess del av objekthierarkin.
+Användaren ska från en enda sida snabbt kunna förstå:
+    •    vilket objekt man befinner sig på,
+    •    objektets viktigaste information,
+    •    var objektet ligger i hierarkin,
+    •    vilka metadata som gäller för objektet,
+    •    aktuella och historiska värden,
+    •    vilka uppgifter som finns på objektet och dess underordnade objekt,
+    •    vilka orderkoncept, snabborder eller andra källor som genererat uppgifterna,
+    •    samt objektets tekniska/systemmässiga information.
+Objektöversikten ska därför byggas upp i fem tydliga huvudområden.
+
+1. Objektets huvud / vinjett
+Överst på objektet ska finnas en tydlig sammanfattande vinjett.
+Den ska innehålla:
+Objektidentitet
+    •    Objektnamn
+    •    Objektnummer
+    •    Status
+    •    Typ eller annan relevant systeminformation där det behövs
+Tre valfria metadatafält
+Administratören/användaren ska kunna välja tre metadatafält som visas särskilt framträdande i objektets huvud.
+Det kan exempelvis vara:
+    •    Kund
+    •    Fastighetsägare
+    •    Adress
+    •    Antal
+    •    Fraktion
+    •    Kontaktperson
+    •    Behållartyp
+Det viktiga är att dessa inte hårdkodas. Vilka tre metadatafält som visas ska kunna konfigureras.
+Bild/vinjettbild
+Det ska finnas plats för en bild. Bilden kan exempelvis vara:
+    •    kundens logotyp,
+    •    bild på objektet,
+    •    bild på fastigheten,
+    •    annan vald vinjettbild.
+Karta
+En mindre kartvy ska visa objektets geografiska position när koordinater finns.
+Kartdelen ska kunna öppnas till större kartvy.
+Huvudet ska alltså fungera som en snabb visuell identifiering av objektet, inte försöka visa all information.
+
+2. Hierarki och metadata
+Direkt därefter ska objektets relation till andra objekt visas.
+Föräldrar / överordnade
+Visa objektets väg uppåt i hierarkin, exempelvis:
+Tredo Sverige → Tredo market kedjan → Göteborg Egenägd → Tredo butik Göteborg Lundby Park → Pantkärl
+Det ska vara möjligt att klicka på respektive nivå och navigera direkt till objektet.
+Barn / underordnade
+Visa objektets direkta barn och möjlighet att navigera nedåt i strukturen.
+Nuvarande princip för föräldrar/barn är i huvudsak bra och kan behållas.
+
+Metadata visas därefter områdesvis
+Efter hierarkin ska samtliga metadatafält presenteras.
+Metadata ska inte visas som en enda lång osorterad lista.
+De ska grupperas enligt de metadataområden som administreras under Hantera områden, exempelvis:
+    •    Grunduppgifter
+    •    Geografi
+    •    Bild
+    •    Status
+    •    Produktion
+    •    Ekonomi
+    •    Kontaktinformation
+    •    Kundreferens
+    •    Administration
+    •    Artiklar & priser
+    •    Leverans
+    •    Kvantiteter
+    •    osv.
+Det är alltså konfigurationen av metadataområden som ska styra hur objektöversikten struktureras.
+Metadata visas som kort/karuseller
+Nuvarande metadata-kort ska utvecklas till karuseller där ett metadatafält kan innehålla flera poster eller historiska värden.
+Exempel:
+Antal
+Aktuellt värde:
+11 st
+Användaren ska kunna bläddra bakåt:
+11 st ← 10 st ← 8 st ← 12 st
+Varje historiskt värde ska kunna visa exempelvis:
+    •    värde,
+    •    datum/tid,
+    •    vem/system som ändrade värdet,
+    •    källa,
+    •    eventuell ärvning.
+Detta gör att metadatahistoriken blir tillgänglig direkt på objektet utan att användaren behöver lämna objektöversikten.
+Grupperade metadatafält
+Vissa metadata består logiskt av flera sammanhängande fält och ska då visas som en gemensam post, inte som separata fristående kort.
+Det tydligaste exemplet är Kontakt.
+En kontaktpost kan innehålla:
+Jennifer Berggren
+Titel: BC
+Telefon: 010-4744222
+E-post: …
+Mobil: …
+Roll: …
+Finns flera kontakter ska dessa kunna bläddras som poster i samma karusell:
+Kontakt 1 av 3 < >
+Samma princip ska kunna användas för andra metadata som naturligt hör ihop.
+Det måste därför finnas stöd för skillnaden mellan:
+Metadatafält – exempelvis Antal.
+och
+Metadatagrupp/post – exempelvis Kontakt, som består av flera metadatafält.
+
+3. Kopplade uppgifter – Uppgiftsnav i miniatyr
+Nästa huvudområde ska vara Kopplade uppgifter.
+Detta ska inte bara vara en statisk lista utan fungera som ett Uppgiftsnav i miniatyr direkt på objektet.
+Här ska användaren kunna:
+    •    se öppna uppgifter,
+    •    se planerade uppgifter,
+    •    se utförda uppgifter,
+    •    se historiska uppgifter,
+    •    söka bland uppgifterna,
+    •    filtrera på status,
+    •    filtrera på uppgiftstyp,
+    •    filtrera på tidsperiod,
+    •    öppna en uppgift.
+Mycket viktigt – inkludera underordnade objekt
+När användaren står på ett objekt ska systemet kunna visa:
+1. Uppgifter direkt kopplade till aktuellt objekt
+och
+2. Uppgifter kopplade till objektets samtliga underordnade objekt/grenar.
+Detta är en central funktion.
+Om användaren exempelvis befinner sig på:
+Fastighet
+ska användaren kunna se uppgifter för hela fastigheten, även om uppgifterna egentligen ligger på:
+    •    återvinningsrum,
+    •    behållare,
+    •    komprimator,
+    •    pantkärl,
+    •    annan underordnad utrustning.
+På ännu högre nivå, exempelvis Område, ska användaren kunna få motsvarande överblick över alla underliggande fastigheter och objekt.
+Varje uppgift måste då tydligt märkas med vilket objekt i hierarkin uppgiften faktiskt tillhör.
+Exempel:
+Reparera pantkärl
+Status: Pågående
+Objekt: Pantkärl / Tredo butik Göteborg Lundby Park
+Det ska gå att klicka på objektreferensen och navigera till objektet.
+Spårbarhet bakåt
+Från en uppgift ska användaren kunna följa dess ursprung bakåt.
+Exempel:
+Uppgift → Snabborder → Objekt
+eller:
+Uppgift → Order → Orderkoncept → Kund/Objekt
+Det ska alltså alltid vara möjligt att förstå varför uppgiften finns och varifrån den skapades.
+
+4. Kopplade orderkoncept, order och snabborder
+Nästa område ska visa de strukturer som pekar mot eller har genererat arbete för objektet.
+Det kan exempelvis vara:
+    •    Orderkoncept
+    •    Order
+    •    Snabborder
+    •    andra framtida order-/uppgiftskällor.
+Även här ska hierarkiprincipen användas.
+Användaren ska kunna växla mellan exempelvis:
+Endast detta objekt
+och
+Detta objekt + underordnade objekt
+Om användaren står på en butik ska man alltså kunna se alla relevanta orderkoncept/snabborder som är kopplade till butikens underliggande objekt.
+Om användaren står på ett område eller en kundnivå ska samma funktion kunna ge en större aggregerad överblick.
+Varje träff ska tydligt visa:
+Typ → Nummer/namn → Status → Objekt → Datum
+och vara klickbar.
+
+5. Systeminformation
+Sist på objektöversikten ska finnas en separat och visuellt nedtonad Systeminformation.
+Denna information är främst administrativ och teknisk och ska därför inte konkurrera med den operativa informationen högre upp.
+Exempel på information:
+    •    Internt objekt-ID
+    •    Objektnummer
+    •    Objektstatus
+    •    Skapad datum/tid
+    •    Senast ändrad
+    •    Källa/källsystem
+    •    Importbatch
+    •    Antal direkta barn
+    •    Antal totalt underordnade objekt
+    •    Hierarkidjup
+    •    eventuell synkroniseringsstatus
+    •    tekniska systemreferenser.
+
+Grundprincip för hela objektöversikten
+Objektsidan ska byggas enligt följande informationshierarki:
+1. Vad är detta?
+→ Objektets huvud, tre viktiga metadatafält, bild och karta.
+2. Var befinner sig objektet och vad vet vi om det?
+→ Föräldrar/barn + metadata organiserad efter metadataområde.
+3. Vad händer eller har hänt här?
+→ Uppgifter, inklusive uppgifter på underordnade objekt.
+4. Varifrån kommer arbetet?
+→ Orderkoncept, order, snabborder och andra källor.
+5. Vad vet systemet tekniskt om objektet?
+→ Systeminformation.
+Viktigt utvecklingskrav: objektet ska fungera hierarkiskt
+Det centrala konceptet är att objektöversikten inte får behandla ett objekt som en isolerad post.
+Objektet är en nod i ett objektträd.
+När användaren befinner sig högre upp i hierarkin ska objektöversikten därför successivt bli en sammanställning av det som finns längre ned.
+Exempel:
+Kund
+↓
+Område
+↓
+Fastighet/butik
+↓
+Återvinningsmiljö
+↓
+Behållare/pantkärl/utrustning
+På nivån Pantkärl visas information om just pantkärlet skulle underställt objekt finnas med uppgift visas detta.
+På nivån Butik ska användaren kunna se butikens egna uppgifter plus uppgifter på underliggande objekt.
+På nivån Område ska samma princip ge en operativ överblick över hela området.
+Detta gör objektöversikten till mer än ett objektregister. Den blir en operativ ingång till hela den aktuella grenen i Traivo.
+Kort kravbild till utvecklarna
+Bygg objektöversikten som en hierarkisk dashboard för objektet och dess gren. Metadata ska grupperas enligt Metadataområden och kunna visa både flera poster och historiska värden genom karuseller. Uppgifter och orderrelaterade objekt ska kunna visas både för aktuellt objekt och aggregerat från samtliga underordnade objekt. Alla relationer ska vara navigerbara och en uppgift ska kunna spåras bakåt till den order, snabborder eller det orderkoncept som skapade den. Systeminformation placeras separat längst ned.
+Det här bör också innebära att den nuvarande separata presentationen av exempelvis Kontakt, Geografi, Orderkoncept-uppgifter, Systemkopplade order, Kopplade uppgifter och Systeminformation konsolideras. Informationen ska inte dupliceras på flera ställen; varje informationsslag ska ha en tydlig hemvist i de fem områdena ovan.
