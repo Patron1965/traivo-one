@@ -67,3 +67,6 @@ via egen aktiv-katalog-SELECT) så UI kan skapa första värdet.
 `scripts/geo-metadata-backfill.ts` — manuellt, dry-run default, `--tenant`,
 `--confirm GEO-BACKFILL`. Additivt (skriver bara saknade metod='auto'-värden där
 kolumn är ifylld men eget metadatavärde saknas). Kör ALDRIG vid startup.
+
+## Import & ursprung
+**Regel:** geo-värden som ska ärvas eller badge-klassas måste finnas som metadata-rader — kolumnskrivning ensam ger varken arv eller rätt ursprung. **Why:** EAV-arvet och KÄLLA-badgen läser bara metadata_varden; importflöden som bara fyller objekt-kolumner ser ut som "Systemgenererad" och ärvs aldrig. **How to apply:** varje ny skrivväg för adress/koordinater ska gå via metadata (rätt metod) och låta kolumnerna vara cache; badge-mappningen är centraliserad i shared-modulen för metadata-ursprung.

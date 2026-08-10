@@ -2094,6 +2094,57 @@ async function commitImport(
       }
     }
 
+    // Task #1438: skriv radens kända geo-fält (adress/postnummer/ort) ÄVEN som
+    // metadata på de systemlåsta katalogfälten (Gatuadress/Postnummer/Postort)
+    // med metod='import'. Tidigare skrevs de enbart till objekt-kolumnerna,
+    // vilket gjorde att (a) ursprunget visades som "Systemgenererad" i stället
+    // för "Importerad" och (b) värdena aldrig ärvdes i butiksvyn/hierarkin
+    // (EAV-arvet läser metadata_varden, inte kolumnerna). Kolumnskrivningen
+    // behålls (ruttbar cache, geo-field-sync konvergerar till samma värde).
+    // Skrivs ENBART för radens egna värden — förälder-kopierade adresser (create
+    // utan egen adress) får i stället ÄRVAS via metadata-arvet.
+    let geoKatalogCache: Map<string, MetadataKatalog> | null = null;
+    async function getGeoKatalog(): Promise<Map<string, MetadataKatalog>> {
+      if (geoKatalogCache) return geoKatalogCache;
+      const rows = await tx
+        .select()
+        .from(metadataKatalog)
+        .where(and(eq(metadataKatalog.tenantId, tenantId), isNull(metadataKatalog.deletedAt)));
+      const m = new Map<string, MetadataKatalog>();
+      for (const k of rows) {
+        const key = (k.namn ?? "").trim().toLowerCase();
+        if ((key === "gatuadress" || key === "postnummer" || key === "postort") && !m.has(key)) {
+          m.set(key, k as MetadataKatalog);
+        }
+      }
+      geoKatalogCache = m;
+      return m;
+    }
+    async function writeKnownGeoMetadata(objId: string, known: KnownObjectFields): Promise<void> {
+      const geo = await getGeoKatalog();
+      const pairs: Array<[string, string | undefined]> = [
+        ["gatuadress", known.address],
+        ["postnummer", known.postalCode],
+        ["postort", known.city],
+      ];
+      for (const [key, value] of pairs) {
+        const kat = geo.get(key);
+        const v = (value ?? "").trim();
+        if (!kat || !v) continue; // katalogfält ej seedat i tenanten → hoppa över
+        const status = await writeImportedMetadataValue(tx, {
+          tenantId,
+          objektId: objId,
+          katalog: kat,
+          rawValue: v,
+          andradAv: userId,
+        });
+        if (status !== "unchanged") {
+          metadataValuesWritten++;
+          metadataAffectedObjectIds.add(objId);
+        }
+      }
+    }
+
     // Task #619: håll object_parents i synk med objektets primära förälder.
     async function syncPrimaryObjectParent(objectId: string, parentId: string | null) {
       if (!parentId) return; // rot/ingen förälder → ingen relation
@@ -2173,6 +2224,8 @@ async function commitImport(
         addrCache.set(inserted.id, { address, city, postalCode });
         await syncPrimaryObjectParent(inserted.id, parentObjectId ?? null);
         await writeRowMetadata(inserted.id, res);
+        // Task #1438: endast radens EGNA geo-värden — förälder-kopior ärvs via EAV.
+        await writeKnownGeoMetadata(inserted.id, known);
         created[level]++;
       } else if (res.targetObjectId) {
         const set: Record<string, unknown> = { name: res.name, importBatchId: batchId };
@@ -2220,6 +2273,7 @@ async function commitImport(
         addrCache.delete(res.targetObjectId);
         if (parentObjectId !== undefined) await syncPrimaryObjectParent(res.targetObjectId, parentObjectId);
         await writeRowMetadata(res.targetObjectId, res);
+        await writeKnownGeoMetadata(res.targetObjectId, known);
         if (res.action === "repoint") repointed[level]++;
         else updated[level]++;
       }

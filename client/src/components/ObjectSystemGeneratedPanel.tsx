@@ -8,8 +8,6 @@ import {
   Loader2,
   Cog,
   Building,
-  MapPin,
-  Navigation as NavigationIcon,
   Target,
   CalendarClock,
   CircleSlash,
@@ -221,8 +219,6 @@ export function ObjectSystemGeneratedPanel({ objectId }: Props) {
   // (t.ex. äldre serverversion) inte kraschar hela panelen med
   // "Cannot read properties of undefined".
   const {
-    address = {} as SystemGeneratedMetadata["address"],
-    position = { geocoded: false } as SystemGeneratedMetadata["position"],
     propertyOwner,
     pointedInConcepts = [],
     tasksHistory = [],
@@ -232,7 +228,6 @@ export function ObjectSystemGeneratedPanel({ objectId }: Props) {
     issueReports = [],
     ratings = [],
   } = data;
-  const hasAddress = !!(address?.gatuadress || address?.postnummer || address?.ort);
 
   return (
     <div className="space-y-2" data-testid="panel-system-generated">
@@ -240,59 +235,10 @@ export function ObjectSystemGeneratedPanel({ objectId }: Props) {
         Systemgenererade fält härleds automatiskt från objektets data och är skrivskyddade.
       </p>
 
-      <Section
-        title="Adress"
-        icon={<MapPin className="h-4 w-4" />}
-        testId="system-address"
-        locked
-        defaultOpen
-        isEmpty={!hasAddress}
-      >
-        {!hasAddress ? (
-          <Empty text="Ingen adress registrerad." testId="text-no-address" />
-        ) : (
-          <div>
-            <Field label="Gatuadress" value={address.gatuadress} testId="field-gatuadress" />
-            <Field label="Postnummer" value={address.postnummer} testId="field-postnummer" />
-            <Field label="Ort" value={address.ort} testId="field-ort" />
-          </div>
-        )}
-      </Section>
-
-      <Section
-        title="Geokodad position"
-        icon={<NavigationIcon className="h-4 w-4" />}
-        testId="system-position"
-        locked
-        isEmpty={!position.geocoded}
-      >
-        {!position.geocoded ? (
-          <Empty text="Ej geokodad." testId="text-no-position" />
-        ) : (
-          <div>
-            <Field
-              label="Latitud"
-              value={position.latitude != null ? position.latitude.toFixed(6) : null}
-              testId="field-latitude"
-            />
-            <Field
-              label="Longitud"
-              value={position.longitude != null ? position.longitude.toFixed(6) : null}
-              testId="field-longitude"
-            />
-            {position.entranceLatitude != null && position.entranceLongitude != null && (
-              <Field
-                label="Entré"
-                value={`${position.entranceLatitude.toFixed(6)}, ${position.entranceLongitude.toFixed(6)}`}
-                testId="field-entrance"
-              />
-            )}
-            {position.locationType && (
-              <Field label="Platstyp" value={position.locationType} testId="field-location-type" />
-            )}
-          </div>
-        )}
-      </Section>
+      {/* Task #1438: Adress- och Geokodad position-sektionerna är borttagna härifrån —
+          all geografi (inkl. koordinater/what3words) visas nu EN gång, i den samlade
+          Geografi-sektionen (ObjectDomainGrid), med korrekta ursprungs-badges
+          (Importerad/Systemgenererad/Egen/Ärvd) per fält. */}
 
       <Section
         title="Fastighetsägare"

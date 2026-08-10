@@ -21,6 +21,7 @@ import { MetadataCarousel } from "./MetadataCarousel";
 import { MetadataAreaSection } from "./MetadataAreaSection";
 import { MetadataCreateFieldDialog } from "./MetadataCreateFieldDialog";
 import { ObjectSystemOrdersList } from "./ObjectSystemOrdersList";
+import { isCanonicalGeoFieldName } from "@shared/geo-fields";
 import {
   groupEntriesByArea,
   type MetadataAreaMeta,
@@ -108,8 +109,14 @@ export function ObjectMetadataBody({
 
   // Task #1218: fält med visasIKarusell===false döljs från karusell-ytan
   // (default true → äldre fält utan flaggan visas fortsatt).
+  // Task #1438: kanoniska systemlåsta geografifält (Gatuadress/Postnummer/
+  // Postort/Koordinater/Fördjupad position/Avdelning-Port-Våning) visas ENBART
+  // i den samlade Geografi-sektionen (ObjectDomainGrid) — aldrig dubblerade här.
   const carouselEntries = useMemo(
-    () => entries.filter((e) => e.katalog?.visasIKarusell !== false),
+    () =>
+      entries.filter(
+        (e) => e.katalog?.visasIKarusell !== false && !isCanonicalGeoFieldName(e.katalog?.namn),
+      ),
     [entries],
   );
 

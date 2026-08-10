@@ -14,6 +14,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
 } from "@/components/ui/dialog";
 import { KallaBadge } from "@/lib/metadata-kalla";
+import { deriveMetadataOriginBadge, METADATA_ORIGIN_BADGE_LABELS } from "@shared/metadata-origin";
 import { getWorkOrderStatusBadge } from "@/lib/status-colors";
 import { useMapConfig } from "@/hooks/use-map-config";
 import { PolylineEditor } from "@/components/PolylineEditor";
@@ -102,6 +103,10 @@ interface GeoFieldLite {
   point: { lat: number; lng: number } | null;
   source: "own" | "inherited" | "missing";
   fromObject: { id: string; namn: string } | null;
+  metod?: string | null;
+}
+interface SystemPositionLite {
+  what3words?: string | null;
 }
 interface SystemGeneratedMetadata {
   pointedInConcepts: PointedInConcept[];
@@ -119,7 +124,34 @@ interface SystemGeneratedMetadata {
     fordjupadPosition: GeoFieldLite;
     avdelningPortVaning: GeoFieldLite;
   };
+  /** Expand-contract: systemhärledd position (what3words m.m.). */
+  position?: SystemPositionLite;
 }
+
+// Task #1438: ursprungs-badge per geo-rad enligt den delade mappningen
+// (import→Importerad, auto/geokodad→Systemgenererad, ärvd→Ärvd, annars Egen).
+const geoOriginBadge = (field: GeoFieldLite) => {
+  if (field.source === "missing") return null;
+  const badge = deriveMetadataOriginBadge(field.metod ?? null, field.source === "inherited");
+  const label = METADATA_ORIGIN_BADGE_LABELS[badge];
+  const title =
+    badge === "arvd" && field.fromObject
+      ? `Ärvd från ${field.fromObject.namn}`
+      : badge === "systemgenererad"
+        ? "Automatiskt härledd av systemet (t.ex. geokodad från adressen)"
+        : badge === "importerad"
+          ? "Värdet skrevs av en import"
+          : "Satt direkt på objektet";
+  return (
+    <Badge
+      variant={badge === "egen" ? "secondary" : "outline"}
+      className="text-[10px] px-1 py-0 font-normal shrink-0"
+      title={title}
+    >
+      {label}
+    </Badge>
+  );
+};
 
 const geoFieldRow = (label: string, field: GeoFieldLite | undefined) => {
   if (!field || (field.value == null && field.source === "missing")) return null;
@@ -128,11 +160,7 @@ const geoFieldRow = (label: string, field: GeoFieldLite | undefined) => {
       <span className="text-muted-foreground">{label}</span>
       <span className="flex items-center gap-1 min-w-0">
         <span className="truncate text-right">{field.value ?? "—"}</span>
-        {field.source === "inherited" && field.fromObject && (
-          <Badge variant="outline" className="text-[10px] px-1 py-0 font-normal shrink-0" title={`Ärvd från ${field.fromObject.namn}`}>
-            Ärvd
-          </Badge>
-        )}
+        {geoOriginBadge(field)}
       </span>
     </div>
   );
@@ -553,9 +581,18 @@ export function ObjectDomainGrid({
               {standardAddress?.koordinater?.point && (
                 <div className="flex items-center justify-between gap-2 text-xs" data-testid="text-location-coords">
                   <span className="text-muted-foreground">Koordinater</span>
-                  <span className="tabular-nums">
-                    {standardAddress.koordinater.point.lat.toFixed(5)}, {standardAddress.koordinater.point.lng.toFixed(5)}
+                  <span className="flex items-center gap-1 min-w-0">
+                    <span className="tabular-nums">
+                      {standardAddress.koordinater.point.lat.toFixed(5)}, {standardAddress.koordinater.point.lng.toFixed(5)}
+                    </span>
+                    {geoOriginBadge(standardAddress.koordinater)}
                   </span>
+                </div>
+              )}
+              {data?.position?.what3words && (
+                <div className="flex items-center justify-between gap-2 text-xs" data-testid="text-geo-what3words">
+                  <span className="text-muted-foreground">what3words</span>
+                  <span className="truncate text-right">{data.position.what3words}</span>
                 </div>
               )}
             </div>

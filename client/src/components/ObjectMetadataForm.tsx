@@ -22,8 +22,9 @@ import {
   Link as LinkIcon, Plus, Loader2, Type, Hash, ToggleLeft, Pencil,
   Calendar, Braces, MapPin, FileIcon, Eye, Layers, Server, Tag, AlignLeft,
   SlidersHorizontal, Users, ClipboardList, AlertTriangle, LayoutGrid, ChevronRight,
-  Star, GitFork, Network, Package, ChevronsUpDown, Check,
+  Star, GitFork, Network, Package, ChevronsUpDown, Check, FileInput,
 } from "lucide-react";
+import { AUTO_DERIVED_ORIGIN_METHODS } from "@shared/metadata-origin";
 import { KallaBadge, KallaLegend, deriveEntryKalla } from "@/lib/metadata-kalla";
 import { MetadataFieldSelect } from "@/components/metadata/MetadataFieldPicker";
 
@@ -164,6 +165,11 @@ interface MetadataAreaItem {
 export const READONLY_METADATA_ORIGINS = new Set(["system", "tjanst", "utforande"]);
 export function isReadonlyOrigin(metod?: string | null): boolean {
   return !!metod && READONLY_METADATA_ORIGINS.has(metod);
+}
+// Task #1438: automatiskt härledda ursprung (geokodning m.m.) badges också som
+// "Systemgenererad" — men är inte read-only (kan skrivas över manuellt).
+export function isAutoDerivedOrigin(metod?: string | null): boolean {
+  return !!metod && AUTO_DERIVED_ORIGIN_METHODS.has(metod);
 }
 
 // Datatyper som lagrar en object-storage-sökväg i vardeString.
@@ -472,7 +478,7 @@ export function MetadataSourceBadge({ entry }: { entry: MetadataFormEntry }) {
         </Tooltip>
       )}
 
-      {isSystem ? (
+      {isSystem || (!isInherited && !isSoftDeleted && isAutoDerivedOrigin(entry.metod)) ? (
         <Tooltip>
           <TooltipTrigger asChild>
             <Badge
@@ -483,7 +489,11 @@ export function MetadataSourceBadge({ entry }: { entry: MetadataFormEntry }) {
               <Cog className="h-3 w-3" /> Systemgenererad
             </Badge>
           </TooltipTrigger>
-          <TooltipContent>Automatiskt satt av systemet ({entry.metod})</TooltipContent>
+          <TooltipContent>
+            {isSystem
+              ? `Automatiskt satt av systemet (${entry.metod})`
+              : `Automatiskt härledd, t.ex. geokodad från adressen (${entry.metod})`}
+          </TooltipContent>
         </Tooltip>
       ) : isInherited ? (
         <Tooltip>
@@ -504,6 +514,19 @@ export function MetadataSourceBadge({ entry }: { entry: MetadataFormEntry }) {
                 ? `Ärvd från: ${inheritedName}`
                 : "Ärvd från förälder"}
           </TooltipContent>
+        </Tooltip>
+      ) : !isSoftDeleted && entry.metod === "import" ? (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Badge
+              variant="outline"
+              className="text-[10px] cursor-help inline-flex items-center gap-1"
+              data-testid={`badge-metadata-origin-${entry.id}`}
+            >
+              <FileInput className="h-3 w-3" /> Importerad
+            </Badge>
+          </TooltipTrigger>
+          <TooltipContent>Värdet skrevs av en import</TooltipContent>
         </Tooltip>
       ) : !isSoftDeleted ? (
         <Badge variant="secondary" className="text-[10px]" data-testid={`badge-metadata-origin-${entry.id}`}>
@@ -555,6 +578,14 @@ export function MetadataSourceLegend() {
         </Badge>
       ),
       text: "Ärvt men överskrivet lokalt",
+    },
+    {
+      node: (
+        <Badge variant="outline" className="text-[10px] inline-flex items-center gap-1">
+          <FileInput className="h-3 w-3" /> Importerad
+        </Badge>
+      ),
+      text: "Värdet skrevs av en import",
     },
     {
       node: (
