@@ -1,6 +1,7 @@
 /**
- * Lint: fånga "frusen knapp"-mönstret — en modal Radix DropdownMenu vars
- * items öppnar en modal Dialog/AlertDialog/Sheet.
+ * Lint: fånga "frusen knapp"-mönstret — en modal Radix DropdownMenu ELLER
+ * ContextMenu (högerklicksmeny) vars items öppnar en modal
+ * Dialog/AlertDialog/Sheet.
  *
  * Bakgrund: en `<DropdownMenu>` (default modal={true}) vars item sätter en
  * dialog-open-state ger kvarhängande scroll-/fokuslås som "sväljer" alla
@@ -16,9 +17,13 @@
  * `set*Open(true)` synkront (utan omgivande `setTimeout`) — gäller ÄVEN menyer
  * som redan har `modal={false}`.
  *
+ * Samma två regler tillämpas på `<ContextMenu>`/`<ContextMenuContent>` —
+ * Radix ContextMenu har exakt samma fokus-/låsmönster.
+ *
  * Falska positiva undantas med kommentaren `lint-allow-modal-dropdown`
- * på raden före eller samma rad som `<DropdownMenu` (hela menyn), eller på
- * raden före/samma rad som en enskild `onSelect` (bara den handlern).
+ * på raden före eller samma rad som `<DropdownMenu`/`<ContextMenu` (hela
+ * menyn), eller på raden före/samma rad som en enskild `onSelect` (bara
+ * den handlern).
  *
  * Körs via: npx tsx scripts/lint-frozen-dropdown-dialog.ts
  * Exit code 1 vid fynd.
@@ -65,14 +70,14 @@ function lineOfIndex(source: string, index: number): number {
   return source.slice(0, index).split("\n").length;
 }
 
-/** Hittar index för matchande `</DropdownMenu>` (hanterar nästlade menyer). */
-function findMenuEnd(source: string, openTagEnd: number): number {
-  const tokenRe = /<DropdownMenu(?=[\s/>])|<\/DropdownMenu>/g;
+/** Hittar index för matchande `</MenuName>` (hanterar nästlade menyer). */
+function findMenuEnd(source: string, openTagEnd: number, menu: string): number {
+  const tokenRe = new RegExp(`<${menu}(?=[\\s/>])|</${menu}>`, "g");
   tokenRe.lastIndex = openTagEnd;
   let depth = 1;
   let m: RegExpExecArray | null;
   while ((m = tokenRe.exec(source)) !== null) {
-    if (m[0] === "</DropdownMenu>") {
+    if (m[0] === `</${menu}>`) {
       depth -= 1;
       if (depth === 0) return m.index;
     } else {
@@ -282,11 +287,31 @@ export function checkSyncOpenInRegion(
   }
 }
 
+/** Menykomponenter som delar samma frusen knapp-mönster. */
+const MENU_COMPONENTS = [
+  { menu: "DropdownMenu", content: "DropdownMenuContent" },
+  { menu: "ContextMenu", content: "ContextMenuContent" },
+] as const;
+
 function checkFile(file: string, violations: Violation[]): void {
   const source = readFileSync(file, "utf8");
-  if (!source.includes("<DropdownMenu")) return;
 
-  const openRe = /<DropdownMenu(?=[\s>])/g;
+  for (const { menu, content } of MENU_COMPONENTS) {
+    if (!source.includes(`<${menu}`)) continue;
+    checkMenuComponent(source, file, menu, content, violations);
+  }
+}
+
+function checkMenuComponent(
+  source: string,
+  file: string,
+  menu: string,
+  content: string,
+  violations: Violation[],
+): void {
+  // Lookahead på whitespace/`>` gör att `<ContextMenu` inte matchar
+  // `<ContextMenuContent`/`<ContextMenuTrigger` osv.
+  const openRe = new RegExp(`<${menu}(?=[\\s>])`, "g");
   let m: RegExpExecArray | null;
   while ((m = openRe.exec(source)) !== null) {
     const tagStart = m.index;
@@ -296,9 +321,9 @@ function checkFile(file: string, violations: Violation[]): void {
     if (/modal\s*=\s*\{\s*false\s*\}/.test(attrs)) continue;
     if (hasAllowComment(source, tagStart)) continue;
 
-    const menuEnd = findMenuEnd(source, tagEnd + 1);
-    // Kolla enbart innehållet i DropdownMenuContent-delen (items).
-    const contentStart = source.indexOf("<DropdownMenuContent", tagEnd);
+    const menuEnd = findMenuEnd(source, tagEnd + 1, menu);
+    // Kolla enbart innehållet i *MenuContent-delen (items).
+    const contentStart = source.indexOf(`<${content}`, tagEnd);
     const region =
       contentStart !== -1 && contentStart < menuEnd
         ? source.slice(contentStart, menuEnd)
@@ -309,25 +334,25 @@ function checkFile(file: string, violations: Violation[]): void {
       violations.push({
         file,
         line: lineOfIndex(source, tagStart),
-        evidence: hit[0],
+        evidence: `${hit[0]} (${menu})`,
         kind: "modal",
       });
     }
     // Hoppa förbi denna menys slut så nästlade menyer inte dubbelräknas fel;
-    // nästlade <DropdownMenu> hanteras ändå eftersom vi bara flyttar lastIndex
+    // nästlade menyer hanteras ändå eftersom vi bara flyttar lastIndex
     // till efter öppningstaggen.
   }
 
   // Del 2: synkron set*Open(true) i onSelect — gäller ÄVEN menyer med modal={false}.
-  const contentRe = /<DropdownMenuContent(?=[\s/>])/g;
+  const contentRe = new RegExp(`<${content}(?=[\\s/>])`, "g");
   let c: RegExpExecArray | null;
   while ((c = contentRe.exec(source)) !== null) {
     const contentStart = c.index;
-    const contentEnd = source.indexOf("</DropdownMenuContent>", contentStart);
+    const contentEnd = source.indexOf(`</${content}>`, contentStart);
     const regionEnd = contentEnd === -1 ? source.length : contentEnd;
 
-    // Menynivå-undantag: allow-kommentar på omslutande <DropdownMenu>.
-    const menuTagRe = /<DropdownMenu(?=[\s>])/g;
+    // Menynivå-undantag: allow-kommentar på omslutande meny-tagg.
+    const menuTagRe = new RegExp(`<${menu}(?=[\\s>])`, "g");
     let menuTagIndex = -1;
     let mm: RegExpExecArray | null;
     while ((mm = menuTagRe.exec(source)) !== null && mm.index < contentStart) {
@@ -352,7 +377,7 @@ function main(): void {
 
   if (violations.length === 0) {
     console.log(
-      `✓ Inga modala DropdownMenu:er som öppnar dialoger hittades (${files.length} filer skannade).`,
+      `✓ Inga modala DropdownMenu/ContextMenu:er som öppnar dialoger hittades (${files.length} filer skannade).`,
     );
     return;
   }
@@ -361,14 +386,14 @@ function main(): void {
   for (const v of violations) {
     const label =
       v.kind === "modal"
-        ? "DropdownMenu utan modal={false} vars items öppnar dialog"
+        ? "Meny (DropdownMenu/ContextMenu) utan modal={false} vars items öppnar dialog"
         : "onSelect sätter open-flaggan synkront (saknar setTimeout)";
     console.error(
       `  ${relative(process.cwd(), v.file)}:${v.line}  ${label}  (mönster: ${v.evidence})`,
     );
   }
   console.error(
-    `\nFix: sätt modal={false} på <DropdownMenu> och öppna dialogen uppskjutet via\n  onSelect={() => setTimeout(() => setXOpen(true), 0)}\nSynkron state (t.ex. setItemToDelete(...)) kan sättas direkt — bara open-flaggan skjuts upp.\nFalskt positivt? Lägg kommentaren "${ALLOW_COMMENT}" på raden före <DropdownMenu>.\nSe .agents/memory/radix-dropdown-menu-bar.md för mönsterbeskrivningen.`,
+    `\nFix: sätt modal={false} på <DropdownMenu>/<ContextMenu> och öppna dialogen uppskjutet via\n  onSelect={() => setTimeout(() => setXOpen(true), 0)}\nSynkron state (t.ex. setItemToDelete(...)) kan sättas direkt — bara open-flaggan skjuts upp.\nFalskt positivt? Lägg kommentaren "${ALLOW_COMMENT}" på raden före meny-taggen.\nSe .agents/memory/radix-dropdown-menu-bar.md för mönsterbeskrivningen.`,
   );
   process.exit(1);
 }

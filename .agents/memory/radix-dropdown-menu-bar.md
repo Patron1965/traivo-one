@@ -25,7 +25,7 @@ När två Popovers ligger som syskon-fält (t.ex. `AddressSearch` direkt följt 
 ## DropdownMenu-item som öppnar Dialog/AlertDialog: modal={false} + uppskjuten öppning
 En modal DropdownMenu vars item öppnar en modal Dialog/AlertDialog ger "frusen knapp": menyns scroll-/fokuslås krockar med dialogens, och när dialogen stängs lämnas ett kvarhängande lås som sväljer alla klick (Snabborderns "+ Lägg till" var första fallet).
 
-**Vakt:** `npm run lint:frozen-dropdown` vaktar båda delarna av regeln — saknad `modal={false}` OCH synkron dialogöppning i `onSelect` (öppningen måste ligga strukturellt inuti ett `setTimeout`). Falskt positivt undantas med kommentaren `lint-allow-modal-dropdown` på raden före `<DropdownMenu>` (hela menyn) eller före enskild `onSelect`.
+**Vakt:** `npm run lint:frozen-dropdown` vaktar båda delarna av regeln — saknad `modal={false}` OCH synkron dialogöppning i `onSelect` (öppningen måste ligga strukturellt inuti ett `setTimeout`) — för BÅDE `<DropdownMenu>` och `<ContextMenu>` (högerklicksmenyer, samma fokus-/låsmönster). Falskt positivt undantas med kommentaren `lint-allow-modal-dropdown` på raden före meny-taggen (hela menyn) eller före enskild `onSelect`.
 
 **Regel:** varje `DropdownMenu` vars items öppnar en Dialog/AlertDialog/Sheet ska ha (1) `modal={false}` på `<DropdownMenu>`, och (2) dialogöppningen via `onSelect={() => setTimeout(() => setXOpen(true), 0)}` — så att menyn hinner stänga klart innan dialogen tar över fokus/lås. Synkron state (t.ex. `setItemToDelete(...)`) kan sättas direkt; bara själva open-flaggan skjuts upp. Items som bara navigerar/kör en åtgärd utan dialog behöver inget av detta.
 

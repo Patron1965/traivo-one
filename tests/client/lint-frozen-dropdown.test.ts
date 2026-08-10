@@ -112,6 +112,15 @@ describe("checkSyncOpenInRegion (regionnivå)", () => {
     expect(regionViolations(jsx)).toHaveLength(0);
   });
 
+  it("flaggar synkron öppning i ContextMenuContent-region", () => {
+    const jsx = `<ContextMenuContent>
+      <ContextMenuItem onSelect={() => setDialogOpen(true)}>x</ContextMenuItem>
+    </ContextMenuContent>`;
+    expect(regionViolations(jsx).map((v) => v.evidence)).toEqual([
+      "setDialogOpen(true)",
+    ]);
+  });
+
   it("respekterar allow-kommentar på onSelect-raden", () => {
     const jsx = `<DropdownMenuContent>
       {/* lint-allow-modal-dropdown */}
