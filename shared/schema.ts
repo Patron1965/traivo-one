@@ -6772,6 +6772,31 @@ export const objectImportRows = pgTable("object_import_rows", {
 export type ObjectImportRow = typeof objectImportRows.$inferSelect;
 export type InsertObjectImportRow = typeof objectImportRows.$inferInsert;
 
+// Task #1495 — namngivna, återanvändbara kolumnmatchningar för Import 2.0.
+// Ersätter localStorage som primär mekanism: mallen lagras tenant-scopat med en
+// rubriksignatur (kolumnrubriker joinade med "|") + mappning per kolumnindex.
+// OBS: skild från `import_templates` (Excel-mallgeneratorn) och
+// `customer_import_mappings` (kundimporten) — blanda inte ihop dem.
+export const objectImportMappingTemplates = pgTable("object_import_mapping_templates", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
+  name: text("name").notNull(),
+  // Signatur av kolumnrubrikerna (userHeader||header per kolumn, joinade "|").
+  headerSignature: text("header_signature").notNull(),
+  // Kolumnindex → ColumnMapping ({ target, type, required? }).
+  mappings: jsonb("mappings").default({}).notNull(),
+  createdBy: varchar("created_by"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_oimt_tenant").on(table.tenantId),
+  index("idx_oimt_tenant_signature").on(table.tenantId, table.headerSignature),
+  uniqueIndex("uniq_oimt_tenant_name").on(table.tenantId, table.name),
+]);
+
+export type ObjectImportMappingTemplate = typeof objectImportMappingTemplates.$inferSelect;
+export type InsertObjectImportMappingTemplate = typeof objectImportMappingTemplates.$inferInsert;
+
 // ============================================
 // Tenant Labels — branschanpassad terminologi
 // ============================================

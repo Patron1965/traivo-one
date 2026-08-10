@@ -29,6 +29,7 @@ import {
   importBatches,
   metadataKatalog,
   metadataVarden,
+  objectImportMappingTemplates,
   objectImportRows,
   objectImportSessions,
   objectParents,
@@ -235,6 +236,241 @@ export function registerObjectImportV2Routes(app: Express): void {
         );
       }
       res.json({ fields: all });
+    }),
+  );
+
+  // ══════════════════════════════════════════════════════════════════════
+  // Task #1495 — Sparade matchningsmallar (namngivna, tenant-scopade).
+  // OBS: registreras FÖRE GET /:id — annars skulle "mapping-templates"
+  // matchas som ett sessions-id.
+  // Skild från import_templates (Excel-mallgeneratorn) och
+  // customer_import_mappings (kundimporten).
+  // ══════════════════════════════════════════════════════════════════════
+
+  const templateBodySchema = z.object({
+    name: z.string().trim().min(1).max(120),
+    headerSignature: z.string().min(1).max(10000),
+    mappings: mappingsSchema.shape.mappings,
+  });
+
+  const templateSummary = (t: {
+    id: string;
+    name: string;
+    headerSignature: string;
+    mappings: unknown;
+    createdAt: Date;
+    updatedAt: Date;
+  }) => ({
+    id: t.id,
+    name: t.name,
+    header_signature: t.headerSignature,
+    column_count: Object.keys((t.mappings as Record<string, unknown>) ?? {}).length,
+    created_at: t.createdAt,
+    updated_at: t.updatedAt,
+  });
+
+  // Validera en mallmappning mot dagens fältkatalog: inbyggda nycklar är alltid
+  // giltiga; metadata.<namn> kräver AKTIV katalogpost (arkiverad/borttagen
+  // flaggas som stale i stället för att appliceras tyst).
+  async function resolveTemplateMappings(tenantId: string, raw: ColumnMappings) {
+    const metadataNames = Array.from(
+      new Set(
+        Object.values(raw)
+          .map((m) => m.target)
+          .filter((t) => t.startsWith("metadata."))
+          .map((t) => t.slice("metadata.".length)),
+      ),
+    );
+    const activeNames = new Set<string>();
+    if (metadataNames.length) {
+      const rows = await db
+        .select({ namn: metadataKatalog.namn })
+        .from(metadataKatalog)
+        .where(
+          and(
+            eq(metadataKatalog.tenantId, tenantId),
+            isNull(metadataKatalog.deletedAt),
+            inArray(metadataKatalog.namn, metadataNames),
+          ),
+        );
+      for (const r of rows) activeNames.add(r.namn);
+    }
+    const builtinKeys = new Set(ALL_KNOWN_KEYS);
+    const mappings: ColumnMappings = {};
+    const stale: Array<{ column_index: number; target: string; reason: string }> = [];
+    for (const [key, m] of Object.entries(raw)) {
+      if (m.target.startsWith("metadata.")) {
+        const namn = m.target.slice("metadata.".length);
+        if (activeNames.has(namn)) {
+          mappings[key] = m;
+        } else {
+          stale.push({
+            column_index: Number(key),
+            target: m.target,
+            reason: `Metadatafältet "${namn}" finns inte längre som aktivt katalogfält — kolumnen behöver matchas om.`,
+          });
+        }
+      } else if (builtinKeys.has(m.target) || m.target === "__empty") {
+        mappings[key] = m;
+      } else {
+        stale.push({
+          column_index: Number(key),
+          target: m.target,
+          reason: `Fältet "${m.target}" är inte längre ett giltigt importmål — kolumnen behöver matchas om.`,
+        });
+      }
+    }
+    return { mappings, stale };
+  }
+
+  // ── GET /mapping-templates — lista (ev. med signatur-matchning)
+  app.get(
+    "/api/import/objects-v2/mapping-templates",
+    asyncHandler(async (req, res) => {
+      const tenantId = getTenantIdWithFallback(req);
+      const signature = typeof req.query.signature === "string" ? req.query.signature : null;
+      const rows = await db
+        .select()
+        .from(objectImportMappingTemplates)
+        .where(eq(objectImportMappingTemplates.tenantId, tenantId));
+      rows.sort((a, b) => a.name.localeCompare(b.name, "sv"));
+      res.json({
+        templates: rows.map((t) => ({
+          ...templateSummary(t),
+          matches_signature: signature != null && t.headerSignature === signature,
+        })),
+      });
+    }),
+  );
+
+  // ── POST /mapping-templates — spara ny mall
+  app.post(
+    "/api/import/objects-v2/mapping-templates",
+    asyncHandler(async (req, res) => {
+      const tenantId = getTenantIdWithFallback(req);
+      const parsed = templateBodySchema.safeParse(req.body);
+      if (!parsed.success) throw new ValidationError("Ogiltig mall — ange namn, signatur och mappningar.");
+      if (Object.keys(parsed.data.mappings).length === 0) {
+        throw new ValidationError("Mallen måste innehålla minst en kolumnmappning.");
+      }
+      const [existing] = await db
+        .select({ id: objectImportMappingTemplates.id })
+        .from(objectImportMappingTemplates)
+        .where(
+          and(
+            eq(objectImportMappingTemplates.tenantId, tenantId),
+            sql`lower(${objectImportMappingTemplates.name}) = lower(${parsed.data.name})`,
+          ),
+        );
+      if (existing) throw new ConflictError(`En mall med namnet "${parsed.data.name}" finns redan.`);
+      const [created] = await db
+        .insert(objectImportMappingTemplates)
+        .values({
+          tenantId,
+          name: parsed.data.name,
+          headerSignature: parsed.data.headerSignature,
+          mappings: parsed.data.mappings as any,
+          createdBy: getUserId(req),
+        })
+        .returning();
+      res.status(201).json({ template: templateSummary(created) });
+    }),
+  );
+
+  async function loadTemplate(id: string, tenantId: string) {
+    const [t] = await db
+      .select()
+      .from(objectImportMappingTemplates)
+      .where(
+        and(
+          eq(objectImportMappingTemplates.id, id),
+          eq(objectImportMappingTemplates.tenantId, tenantId),
+        ),
+      );
+    if (!t) throw new NotFoundError("Matchningsmallen hittades inte.");
+    return t;
+  }
+
+  // ── PATCH /mapping-templates/:id — byt namn (och/eller uppdatera innehåll)
+  app.patch(
+    "/api/import/objects-v2/mapping-templates/:id",
+    asyncHandler(async (req, res) => {
+      const tenantId = getTenantIdWithFallback(req);
+      const t = await loadTemplate(req.params.id, tenantId);
+      const patchSchema = z.object({
+        name: z.string().trim().min(1).max(120).optional(),
+        headerSignature: z.string().min(1).max(10000).optional(),
+        mappings: mappingsSchema.shape.mappings.optional(),
+      });
+      const parsed = patchSchema.safeParse(req.body);
+      if (!parsed.success) throw new ValidationError("Ogiltig malluppdatering.");
+      if (parsed.data.name && parsed.data.name.toLowerCase() !== t.name.toLowerCase()) {
+        const [dup] = await db
+          .select({ id: objectImportMappingTemplates.id })
+          .from(objectImportMappingTemplates)
+          .where(
+            and(
+              eq(objectImportMappingTemplates.tenantId, tenantId),
+              ne(objectImportMappingTemplates.id, t.id),
+              sql`lower(${objectImportMappingTemplates.name}) = lower(${parsed.data.name})`,
+            ),
+          );
+        if (dup) throw new ConflictError(`En mall med namnet "${parsed.data.name}" finns redan.`);
+      }
+      const [updated] = await db
+        .update(objectImportMappingTemplates)
+        .set({
+          ...(parsed.data.name ? { name: parsed.data.name } : {}),
+          ...(parsed.data.headerSignature ? { headerSignature: parsed.data.headerSignature } : {}),
+          ...(parsed.data.mappings ? { mappings: parsed.data.mappings as any } : {}),
+          updatedAt: new Date(),
+        })
+        .where(
+          and(
+            eq(objectImportMappingTemplates.id, t.id),
+            eq(objectImportMappingTemplates.tenantId, tenantId),
+          ),
+        )
+        .returning();
+      res.json({ template: templateSummary(updated) });
+    }),
+  );
+
+  // ── DELETE /mapping-templates/:id — ta bort mall
+  app.delete(
+    "/api/import/objects-v2/mapping-templates/:id",
+    asyncHandler(async (req, res) => {
+      const tenantId = getTenantIdWithFallback(req);
+      const t = await loadTemplate(req.params.id, tenantId);
+      await db
+        .delete(objectImportMappingTemplates)
+        .where(
+          and(
+            eq(objectImportMappingTemplates.id, t.id),
+            eq(objectImportMappingTemplates.tenantId, tenantId),
+          ),
+        );
+      res.json({ deleted: true });
+    }),
+  );
+
+  // ── POST /mapping-templates/:id/apply — hämta mallens mappningar validerade
+  // mot dagens katalog. Stale mappningar (arkiverat/borttaget målfält) flaggas
+  // och appliceras ALDRIG tyst.
+  app.post(
+    "/api/import/objects-v2/mapping-templates/:id/apply",
+    asyncHandler(async (req, res) => {
+      const tenantId = getTenantIdWithFallback(req);
+      const t = await loadTemplate(req.params.id, tenantId);
+      const { mappings, stale } = await resolveTemplateMappings(
+        tenantId,
+        (t.mappings as ColumnMappings) ?? {},
+      );
+      res.json({
+        template: templateSummary(t),
+        mappings,
+        stale,
+      });
     }),
   );
 

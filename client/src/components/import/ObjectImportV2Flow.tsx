@@ -3,8 +3,17 @@
 // Additivt; pratar med /api/import/objects-v2/*. Klientsidig xlsx/csv-parsning.
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "wouter";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
+import { Input } from "@/components/ui/input";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { ImportUndoButton } from "@/components/import/ImportUndoButton";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -178,47 +187,27 @@ const STEPS: { num: StepNum; label: string; icon: typeof Upload }[] = [
 
 const TARGET_NONE = "__empty";
 
-// Senaste kolumnmatchning sparas lokalt (per webbläsare) så att samma
-// filstruktur slipper matchas om vid nästa import. En signatur av
-// kolumnrubrikerna avgör om strukturen är densamma; matchningen lagras
-// per kolumnindex.
-const LAST_MAPPING_KEY = "traivo:import-v2:last-mapping";
+// Task #1495: kolumnmatchningar sparas som namngivna, tenant-scopade mallar
+// server-side (/api/import/objects-v2/mapping-templates) i stället för i
+// localStorage. Rubriksignaturen avgör om en uppladdad fil har samma struktur
+// som en sparad mall — då föreslås mallen automatiskt.
+interface MappingTemplate {
+  id: string;
+  name: string;
+  header_signature: string;
+  column_count: number;
+  created_at: string;
+  updated_at: string;
+}
 
-interface SavedMapping {
-  signature: string;
-  byIndex: Record<string, Mapping>;
+interface ApplyTemplateResponse {
+  template: MappingTemplate;
+  mappings: Mappings;
+  stale: Array<{ column_index: number; target: string; reason: string }>;
 }
 
 function headerSignature(cols: DetectedColumn[]): string {
   return cols.map((c) => c.userHeader || c.header || "").join("|");
-}
-
-function loadSavedMapping(): SavedMapping | null {
-  try {
-    const raw = localStorage.getItem(LAST_MAPPING_KEY);
-    return raw ? (JSON.parse(raw) as SavedMapping) : null;
-  } catch {
-    return null;
-  }
-}
-
-function persistMapping(cols: DetectedColumn[], mappings: Mappings) {
-  try {
-    // Lagra per kolumnindex (inte rubriktext) så att dubblettrubriker inte
-    // skriver över varandra. Signaturen garanterar att index matchar exakt
-    // vid återanvändning av samma filstruktur.
-    const byIndex: Record<string, Mapping> = {};
-    for (const c of cols) {
-      const m = mappings[String(c.index)];
-      if (m) byIndex[String(c.index)] = m;
-    }
-    localStorage.setItem(
-      LAST_MAPPING_KEY,
-      JSON.stringify({ signature: headerSignature(cols), byIndex } satisfies SavedMapping),
-    );
-  } catch {
-    // localStorage kan vara otillgängligt (privat läge) — ignorera tyst.
-  }
 }
 
 // Parsa uppladdad fil till en matris (alla rader inkl. headers).
@@ -538,8 +527,6 @@ export function ObjectImportV2Flow() {
       return await res.json();
     },
     onSuccess: () => {
-      // Spara matchningen som användaren faktiskt bekräftat (inte mellanlägen).
-      persistMapping(columns, mappings);
       // Task #1478: ändrade mappningar gör tidigare validering (och bekräftelsen
       // av omatchade kolumner) inaktuell — kräv ny valideringskörning.
       setValidation(null);
@@ -614,31 +601,130 @@ export function ObjectImportV2Flow() {
     }
   }, [importing, statusQuery.data, sessionId, toast]);
 
-  // Återanvänd senaste sparade matchning när en fil med samma rubrikstruktur
-  // laddas upp. Körs först när fältkatalogen finns så att ogiltiga targets
-  // (t.ex. borttagna metadatafält) kan filtreras bort och falla till auto.
+  // ── Task #1495: sparade matchningsmallar (server-side, tenant-scopade) ──
+  const queryClient = useQueryClient();
+  const currentSignature = useMemo(() => headerSignature(columns), [columns]);
+  const { data: templatesData } = useQuery<{ templates: MappingTemplate[] }>({
+    queryKey: ["/api/import/objects-v2/mapping-templates"],
+  });
+  const templates = templatesData?.templates ?? [];
+  const suggestedTemplate = useMemo(
+    () =>
+      columns.length > 0
+        ? templates.find((t) => t.header_signature === currentSignature) ?? null
+        : null,
+    [templates, currentSignature, columns.length],
+  );
+  const [appliedTemplateId, setAppliedTemplateId] = useState<string | null>(null);
+  // Vilken rubriksignatur mall-förslaget redan auto-applicerats för.
+  const [templateDialog, setTemplateDialog] = useState<null | { mode: "save" | "rename" }>(null);
+  const [templateName, setTemplateName] = useState("");
+  const [staleTemplateEntries, setStaleTemplateEntries] = useState<
+    ApplyTemplateResponse["stale"]
+  >([]);
+
+  const invalidateTemplates = () =>
+    queryClient.invalidateQueries({ queryKey: ["/api/import/objects-v2/mapping-templates"] });
+
+  const applyTemplateMutation = useMutation({
+    mutationFn: async (templateId: string) => {
+      const res = await apiRequest(
+        "POST",
+        `/api/import/objects-v2/mapping-templates/${templateId}/apply`,
+        {},
+      );
+      return (await res.json()) as ApplyTemplateResponse;
+    },
+    onSuccess: (data) => {
+      // Applicera ENDAST mappningar vars kolumnindex finns i den uppladdade
+      // filen. Stale mappningar (arkiverat/borttaget målfält) appliceras aldrig
+      // — de flaggas för ommatchning.
+      const validIndexes = new Set(columns.map((c) => String(c.index)));
+      const applied: Mappings = {};
+      for (const [k, m] of Object.entries(data.mappings)) {
+        if (validIndexes.has(k)) applied[k] = m;
+      }
+      setMappings(applied);
+      setAppliedTemplateId(data.template.id);
+      setStaleTemplateEntries(data.stale);
+      setValidation(null);
+      if (data.stale.length > 0) {
+        toast({
+          title: `Mall "${data.template.name}" applicerad — ${data.stale.length} fält behöver matchas om`,
+          description: data.stale.map((s) => s.reason).join(" "),
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: "Mall applicerad",
+          description: `Kolumnmatchningen från "${data.template.name}" har applicerats.`,
+        });
+      }
+    },
+    onError: (err: Error) =>
+      toast({ title: "Kunde inte applicera mall", description: err.message, variant: "destructive" }),
+  });
+
+  const saveTemplateMutation = useMutation({
+    mutationFn: async (name: string) => {
+      const res = await apiRequest("POST", "/api/import/objects-v2/mapping-templates", {
+        name,
+        headerSignature: currentSignature,
+        mappings,
+      });
+      return (await res.json()) as { template: MappingTemplate };
+    },
+    onSuccess: (data) => {
+      invalidateTemplates();
+      setAppliedTemplateId(data.template.id);
+      setTemplateDialog(null);
+      toast({ title: "Mall sparad", description: `Matchningen sparades som "${data.template.name}".` });
+    },
+    onError: (err: Error) =>
+      toast({ title: "Kunde inte spara mall", description: err.message, variant: "destructive" }),
+  });
+
+  const renameTemplateMutation = useMutation({
+    mutationFn: async (input: { id: string; name: string }) => {
+      const res = await apiRequest(
+        "PATCH",
+        `/api/import/objects-v2/mapping-templates/${input.id}`,
+        { name: input.name },
+      );
+      return (await res.json()) as { template: MappingTemplate };
+    },
+    onSuccess: (data) => {
+      invalidateTemplates();
+      setTemplateDialog(null);
+      toast({ title: "Mall omdöpt", description: `Mallen heter nu "${data.template.name}".` });
+    },
+    onError: (err: Error) =>
+      toast({ title: "Kunde inte byta namn", description: err.message, variant: "destructive" }),
+  });
+
+  const deleteTemplateMutation = useMutation({
+    mutationFn: async (id: string) => {
+      await apiRequest("DELETE", `/api/import/objects-v2/mapping-templates/${id}`);
+    },
+    onSuccess: () => {
+      invalidateTemplates();
+      setAppliedTemplateId(null);
+      toast({ title: "Mall borttagen" });
+    },
+    onError: (err: Error) =>
+      toast({ title: "Kunde inte ta bort mall", description: err.message, variant: "destructive" }),
+  });
+
+  // Förslag: när en fil med samma rubriksignatur som en sparad mall laddas upp
+  // föreslås mallen (banner i steg 3) — den appliceras aldrig tyst.
   useEffect(() => {
-    if (columns.length === 0 || fields.length === 0) return;
+    if (columns.length === 0) return;
     const sig = headerSignature(columns);
     if (restoredSigRef.current === sig) return;
     restoredSigRef.current = sig;
-    const saved = loadSavedMapping();
-    if (!saved || saved.signature !== sig) return;
-    // Inbyggda tekniska nycklar (name, address.* …) är fortsatt giltiga targets
-    // även om de inte erbjuds i val-listan (Task #1430).
-    const validKeys = new Set([...fields.map((f) => f.key), ...FIELD_CATALOG.map((f) => f.key)]);
-    const restored: Mappings = {};
-    for (const c of columns) {
-      const m = saved.byIndex[String(c.index)];
-      if (m && validKeys.has(m.target)) restored[String(c.index)] = m;
-    }
-    if (Object.keys(restored).length === 0) return;
-    setMappings(restored);
-    toast({
-      title: "Senaste matchning återanvänd",
-      description: "Din tidigare kolumnmatchning för samma filstruktur har återställts.",
-    });
-  }, [columns, fields, toast]);
+    setAppliedTemplateId(null);
+    setStaleTemplateEntries([]);
+  }, [columns]);
 
   const toggleSkipRow = (rowNumber: number) => {
     setSkippedRows((prev) => {
@@ -716,6 +802,51 @@ export function ObjectImportV2Flow() {
 
   return (
     <div className="space-y-6" data-testid="object-import-v2-flow">
+      {/* Task #1495 — dialog för att namnge (spara/byta namn på) en matchningsmall */}
+      <Dialog open={templateDialog != null} onOpenChange={(open) => !open && setTemplateDialog(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              {templateDialog?.mode === "rename" ? "Byt namn på mall" : "Spara matchning som mall"}
+            </DialogTitle>
+            <DialogDescription>
+              {templateDialog?.mode === "rename"
+                ? "Ange ett nytt namn för mallen."
+                : 'Namnge mallen (t.ex. "Tredo objektimport v1") så kan den återanvändas vid nästa import med samma kolumnstruktur.'}
+            </DialogDescription>
+          </DialogHeader>
+          <Input
+            value={templateName}
+            onChange={(e) => setTemplateName(e.target.value)}
+            placeholder="Mallnamn"
+            maxLength={120}
+            data-testid="input-template-name"
+          />
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setTemplateDialog(null)} data-testid="button-template-dialog-cancel">
+              Avbryt
+            </Button>
+            <Button
+              disabled={
+                templateName.trim().length === 0 ||
+                saveTemplateMutation.isPending ||
+                renameTemplateMutation.isPending
+              }
+              onClick={() => {
+                const name = templateName.trim();
+                if (templateDialog?.mode === "rename" && appliedTemplateId) {
+                  renameTemplateMutation.mutate({ id: appliedTemplateId, name });
+                } else {
+                  saveTemplateMutation.mutate(name);
+                }
+              }}
+              data-testid="button-template-dialog-confirm"
+            >
+              {templateDialog?.mode === "rename" ? "Byt namn" : "Spara mall"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       {/* Stegindikator */}
       <div className="flex items-center justify-between gap-2">
         {STEPS.map((s, i) => {
@@ -896,6 +1027,121 @@ export function ObjectImportV2Flow() {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
+            {/* Task #1495 — sparade matchningsmallar: applicera/spara/byt namn/ta bort. */}
+            <div
+              className="space-y-2 rounded-md border border-border bg-muted/30 p-3"
+              data-testid="panel-mapping-templates"
+            >
+              <p className="text-sm font-medium text-foreground">Matchningsmallar</p>
+              {suggestedTemplate && appliedTemplateId !== suggestedTemplate.id && (
+                <div
+                  className="flex flex-wrap items-center gap-2 rounded-md border border-primary/40 bg-primary/5 p-2 text-sm"
+                  data-testid="banner-suggested-template"
+                >
+                  <span>
+                    Filens kolumnstruktur matchar mallen{" "}
+                    <strong>"{suggestedTemplate.name}"</strong>.
+                  </span>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => applyTemplateMutation.mutate(suggestedTemplate.id)}
+                    disabled={applyTemplateMutation.isPending}
+                    data-testid="button-apply-suggested-template"
+                  >
+                    Använd mallen
+                  </Button>
+                </div>
+              )}
+              <div className="flex flex-wrap items-center gap-2">
+                <Select
+                  value={appliedTemplateId ?? ""}
+                  onValueChange={(v) => v && applyTemplateMutation.mutate(v)}
+                >
+                  <SelectTrigger className="w-64" data-testid="select-mapping-template">
+                    <SelectValue placeholder="Välj sparad mall…" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {templates.length === 0 && (
+                      <div className="px-2 py-1.5 text-sm text-muted-foreground">
+                        Inga sparade mallar ännu
+                      </div>
+                    )}
+                    {templates.map((t) => (
+                      <SelectItem key={t.id} value={t.id} data-testid={`option-template-${t.id}`}>
+                        {t.name} ({t.column_count} kolumner)
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    setTemplateName("");
+                    setTemplateDialog({ mode: "save" });
+                  }}
+                  disabled={mappedCount === 0}
+                  data-testid="button-save-template"
+                >
+                  Spara som mall
+                </Button>
+                {appliedTemplateId && (
+                  <>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => {
+                        setTemplateName(
+                          templates.find((t) => t.id === appliedTemplateId)?.name ?? "",
+                        );
+                        setTemplateDialog({ mode: "rename" });
+                      }}
+                      data-testid="button-rename-template"
+                    >
+                      Byt namn
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="text-destructive"
+                      onClick={() => {
+                        if (window.confirm("Ta bort den valda mallen? Detta går inte att ångra.")) {
+                          deleteTemplateMutation.mutate(appliedTemplateId);
+                        }
+                      }}
+                      data-testid="button-delete-template"
+                    >
+                      Ta bort
+                    </Button>
+                  </>
+                )}
+              </div>
+              {staleTemplateEntries.length > 0 && (
+                <div
+                  className="flex items-start gap-2 rounded-md border border-destructive/40 bg-destructive/10 p-2 text-sm"
+                  data-testid="banner-stale-template-mappings"
+                >
+                  <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
+                  <div className="space-y-1">
+                    <p className="font-medium text-foreground">
+                      {staleTemplateEntries.length} mappning(ar) i mallen kunde inte appliceras
+                    </p>
+                    <ul className="list-disc pl-4 text-muted-foreground">
+                      {staleTemplateEntries.map((s) => (
+                        <li key={`${s.column_index}-${s.target}`}>
+                          {(columns.find((c) => c.index === s.column_index)?.userHeader ||
+                            columns.find((c) => c.index === s.column_index)?.header ||
+                            `Kolumn ${s.column_index + 1}`) + ": "}
+                          {s.reason}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                </div>
+              )}
+            </div>
+
             {/* Objektnamn är inte längre ett hårt krav: saknas namnmatchning
                 (eller är celler tomma) importeras objekten ändå och får sitt
                 nummer som namn. Informativ hint, ingen spärr. */}
