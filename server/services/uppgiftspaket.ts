@@ -214,7 +214,17 @@ async function buildArtikelDel(
 ): Promise<UppgiftspaketArtikel | null> {
   let snapshot: Partial<UppgiftspaketArtikel> = { ...(extra ?? {}) };
 
-  if (extra?.artikelId) {
+  // Registret läses ENDAST för fält som callern lämnat helt odefinierade.
+  // Om alla snapshotfält är explicit satta (värde eller null — t.ex. frozen-
+  // trogen backfill) sker INGET registeruppslag alls.
+  const needsRegister =
+    extra?.artikelId != null &&
+    (extra.artikelnummer === undefined ||
+      extra.namn === undefined ||
+      extra.produktionstidMin === undefined ||
+      extra.prisOre === undefined ||
+      extra.kostnadOre === undefined);
+  if (extra?.artikelId && needsRegister) {
     const [art] = await dbx
       .select({
         articleNumber: articlesTable.articleNumber,

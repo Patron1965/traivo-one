@@ -158,17 +158,29 @@ async function backfillOnce(DRY_RUN: boolean) {
       if (!line?.articleId) report.woWithoutArticle++;
 
       const vals = chooseWoSnapshotValues(wo, line);
+      // Fryst rad: ALLA snapshotfält sätts explicit (värde från frysta kolumner
+      // eller null när historiken saknas) — då gör paketbygget INGET
+      // registeruppslag alls (namn/nummer förblir null, aldrig dagens register).
       const artikelExtra: Partial<UppgiftspaketArtikel> | null = line?.articleId
-        ? {
-            artikelId: line.articleId,
-            // Fryst rad: explicit null när fryst värde saknas, så att
-            // paketbygget ALDRIG fyller ut från dagens artikelregister.
-            prisOre: vals.frozen ? (vals.prisOre ?? null) : vals.prisOre,
-            kostnadOre: vals.frozen ? (vals.kostnadOre ?? null) : vals.kostnadOre,
-            produktionstidMin: vals.frozen ? (vals.produktionstidMin ?? null) : vals.produktionstidMin,
-            debiteringsmodell:
-              wo.frozenIsFixedPrice != null ? (wo.frozenIsFixedPrice ? "fast" : "lopande") : undefined,
-          }
+        ? vals.frozen
+          ? {
+              artikelId: line.articleId,
+              artikelnummer: null,
+              namn: null,
+              prisOre: vals.prisOre ?? null,
+              kostnadOre: vals.kostnadOre ?? null,
+              produktionstidMin: vals.produktionstidMin ?? null,
+              debiteringsmodell:
+                wo.frozenIsFixedPrice != null ? (wo.frozenIsFixedPrice ? "fast" : "lopande") : null,
+            }
+          : {
+              artikelId: line.articleId,
+              prisOre: vals.prisOre,
+              kostnadOre: vals.kostnadOre,
+              produktionstidMin: vals.produktionstidMin,
+              debiteringsmodell:
+                wo.frozenIsFixedPrice != null ? (wo.frozenIsFixedPrice ? "fast" : "lopande") : undefined,
+            }
         : null;
 
       const prev = wo.uppgiftspaket as Uppgiftspaket | null;
@@ -226,6 +238,7 @@ async function backfillOnce(DRY_RUN: boolean) {
       plannedWindowStart: assignments.plannedWindowStart,
       plannedWindowEnd: assignments.plannedWindowEnd,
       quantity: assignments.quantity,
+      status: assignments.status,
       executionCode: assignments.executionCode,
       frozenTimeCode: assignments.frozenTimeCode,
       isFixedPrice: assignments.isFixedPrice,
@@ -242,14 +255,30 @@ async function backfillOnce(DRY_RUN: boolean) {
     try {
       const art = await primaryAssignmentArticle(a.id);
       if (!art?.articleId) report.aWithoutArticle++;
+      const aFrozen = isUppgiftFrozen(
+        deriveUppgiftStatus({ executionStatus: a.status as any, materialized: false }),
+      );
+      // Fryst assignment: unit*-kolumnerna på assignment_articles ÄR persistade
+      // snapshots (säkra), men namn/nummer sätts explicit null så att inget
+      // registeruppslag sker.
       const artikelExtra: Partial<UppgiftspaketArtikel> | null = art?.articleId
-        ? {
-            artikelId: art.articleId,
-            prisOre: art.unitPrice ?? undefined,
-            kostnadOre: art.unitCost ?? undefined,
-            produktionstidMin: art.unitTime ?? undefined,
-            debiteringsmodell: a.isFixedPrice != null ? (a.isFixedPrice ? "fast" : "lopande") : undefined,
-          }
+        ? aFrozen
+          ? {
+              artikelId: art.articleId,
+              artikelnummer: null,
+              namn: null,
+              prisOre: art.unitPrice ?? null,
+              kostnadOre: art.unitCost ?? null,
+              produktionstidMin: art.unitTime ?? null,
+              debiteringsmodell: a.isFixedPrice != null ? (a.isFixedPrice ? "fast" : "lopande") : null,
+            }
+          : {
+              artikelId: art.articleId,
+              prisOre: art.unitPrice ?? undefined,
+              kostnadOre: art.unitCost ?? undefined,
+              produktionstidMin: art.unitTime ?? undefined,
+              debiteringsmodell: a.isFixedPrice != null ? (a.isFixedPrice ? "fast" : "lopande") : undefined,
+            }
         : a.isFixedPrice != null
           ? { debiteringsmodell: a.isFixedPrice ? "fast" : "lopande" }
           : null;

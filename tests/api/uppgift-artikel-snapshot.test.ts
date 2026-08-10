@@ -372,6 +372,48 @@ describe("uppgiftspaket artikel-snapshot (Task #1506)", () => {
       .where(eq(articles.id, articleId));
   }, 60000);
 
+  it("backfill av paketlös FRYST rad läser aldrig dagens register (namn/nummer/pris)", async () => {
+    // Fryst legacy-WO utan paket, med frysta kolumner satta.
+    const { workOrder } = await storage.createWorkOrderWithLines(
+      {
+        tenantId: TENANT,
+        customerId,
+        objectId,
+        title: "Legacy-fryst WO",
+        orderStatus: "utford",
+        executionStatus: "completed",
+        frozenUnitPrice: 40000,
+        frozenUnitCost: 25000,
+        frozenUnitTime: 30,
+      },
+      [{ articleId, quantity: 1, resolvedPrice: 50000, resolvedCost: 30000, resolvedProductionMinutes: 45 }],
+    );
+    // Simulera legacy: ta bort paketet helt.
+    await db.update(workOrders).set({ uppgiftspaket: null }).where(eq(workOrders.id, workOrder.id));
+    // Drifta registret efter frysningen.
+    await db
+      .update(articles)
+      .set({ articleNumber: "DRIFTAT-999", name: "Driftat namn", listPrice: 777777 })
+      .where(eq(articles.id, articleId));
+
+    await runBackfill({ dryRun: false });
+
+    const paket = await getWoPaket(workOrder.id);
+    expect(paket?.artikel?.artikelId).toBe(articleId);
+    // Historiskt okända fält = null, ALDRIG dagens registervärden.
+    expect(paket?.artikel?.artikelnummer).toBeNull();
+    expect(paket?.artikel?.namn).toBeNull();
+    // Värden uteslutande från frysta kolumner.
+    expect(paket?.artikel?.prisOre).toBe(40000);
+    expect(paket?.artikel?.kostnadOre).toBe(25000);
+    expect(paket?.artikel?.produktionstidMin).toBe(30);
+
+    await db
+      .update(articles)
+      .set({ articleNumber: "SNAP-100", name: "Snapshot-tjänst", listPrice: 50000 })
+      .where(eq(articles.id, articleId));
+  }, 60000);
+
   it("ID-kedjan: materialiserad WO bär sourceAssignmentId", async () => {
     const assignment = await storage.createAssignment({
       tenantId: TENANT,
