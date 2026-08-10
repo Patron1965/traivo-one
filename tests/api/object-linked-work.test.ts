@@ -39,6 +39,11 @@ let rootId = "";
 let childId = "";
 let grandchildId = "";
 let objectBId = "";
+let capObjectId = "";
+
+// Task #1475: kapningskontraktet — CAP=300 per lista + truncated-flaggor.
+const CAP = 300;
+const SEED_COUNT = CAP + 5;
 
 async function req(path: string, userId: string) {
   const res = await fetch(`${baseUrl}${path}`, {
@@ -99,7 +104,34 @@ beforeAll(async () => {
     { tenantId: TENANT_A, customerId: customerA, objectId: childId, title: `${NS} Uppgift barn`, status: "not_planned" },
     { tenantId: TENANT_A, customerId: customerA, objectId: rootId, title: `${NS} Uppgift raderad`, status: "not_planned", deletedAt: new Date() },
   ]);
-}, 60000);
+
+  // Task #1475: eget objekt med > CAP rader per lista, med distinkta createdAt
+  // så att "de 300 senaste" är deterministiskt (nr SEED_COUNT är nyast).
+  capObjectId = (await storage.createObject({ tenantId: TENANT_A, name: `${NS} Kapobjekt`, objectType: "fastighet", status: "active" } as any)).id;
+  const base = Date.parse("2026-01-01T00:00:00Z");
+  const woSeed = Array.from({ length: SEED_COUNT }, (_, i) => ({
+    tenantId: TENANT_A,
+    customerId: customerA,
+    objectId: capObjectId,
+    title: `${NS} Kap-WO ${i + 1}`,
+    createdAt: new Date(base + (i + 1) * 60_000),
+  }));
+  const asgSeed = Array.from({ length: SEED_COUNT }, (_, i) => ({
+    tenantId: TENANT_A,
+    customerId: customerA,
+    objectId: capObjectId,
+    title: `${NS} Kap-uppgift ${i + 1}`,
+    status: "not_planned",
+    createdAt: new Date(base + (i + 1) * 60_000),
+  }));
+  // Batcha insert (undvik parameter-tak för fler-rads-INSERT).
+  for (let i = 0; i < woSeed.length; i += 100) {
+    await db.insert(workOrders).values(woSeed.slice(i, i + 100));
+  }
+  for (let i = 0; i < asgSeed.length; i += 100) {
+    await db.insert(assignments).values(asgSeed.slice(i, i + 100));
+  }
+}, 120000);
 
 afterAll(async () => {
   await new Promise<void>((r) => server?.close(() => r()));
@@ -141,6 +173,24 @@ describe("GET /api/objects/:id/linked-work (Task #1474)", () => {
     const { body } = await req(`/api/objects/${childId}/linked-work?scope=subtree`, USER_A);
     const titles = body.workOrders.map((w: any) => w.title).sort();
     expect(titles).toEqual([`${NS} WO barn`, `${NS} WO barnbarn`].sort());
+  });
+
+  it("kapar work_orders vid exakt 300 rader, sätter truncated.workOrders och behåller de senaste (createdAt DESC)", async () => {
+    const { status, body } = await req(`/api/objects/${capObjectId}/linked-work`, USER_A);
+    expect(status).toBe(200);
+    expect(body.workOrders).toHaveLength(CAP);
+    expect(body.truncated.workOrders).toBe(true);
+    // De 300 senaste = nr SEED_COUNT ned till nr (SEED_COUNT - CAP + 1), i DESC-ordning.
+    const expected = Array.from({ length: CAP }, (_, i) => `${NS} Kap-WO ${SEED_COUNT - i}`);
+    expect(body.workOrders.map((w: any) => w.title)).toEqual(expected);
+  });
+
+  it("kapar assignments vid exakt 300 rader, sätter truncated.assignments och behåller de senaste (createdAt DESC)", async () => {
+    const { body } = await req(`/api/objects/${capObjectId}/linked-work`, USER_A);
+    expect(body.assignments).toHaveLength(CAP);
+    expect(body.truncated.assignments).toBe(true);
+    const expected = Array.from({ length: CAP }, (_, i) => `${NS} Kap-uppgift ${SEED_COUNT - i}`);
+    expect(body.assignments.map((a: any) => a.title)).toEqual(expected);
   });
 
   it("cross-tenant objekt-id ger 404", async () => {
