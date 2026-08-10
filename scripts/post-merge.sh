@@ -114,7 +114,8 @@ if command -v psql >/dev/null 2>&1 && [ -n "$DATABASE_URL" ]; then
            migrations/0145_objektvinjett.sql \
            migrations/0146_task_source_type.sql \
            migrations/0147_metadata_varden_grupp_nyckel.sql \
-          migrations/0148_kund_ingen_automatisk_arvning.sql; do
+          migrations/0148_kund_ingen_automatisk_arvning.sql \
+          migrations/0149_metadata_katalog_active_namn_unique.sql; do
     if [ -f "$f" ]; then
       echo "[post-merge] Applying $f"
       psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f "$f"

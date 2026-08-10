@@ -35,6 +35,20 @@ became invisible yet kept its key → users could neither recreate it nor see/re
 
 ## How to apply
 Whenever you touch any metadata_katalog writer (create, rename, import, label CRUD),
-run the CI+archived check on namn and beteckning. Future hardening: a DB functional
-unique index on `(tenant_id, lower(namn))` and `(tenant_id, lower(beteckning))` after
-existing prod duplicates are cleaned up, for race resistance.
+run the CI+archived check on namn and beteckning.
+
+## DB-level guard (since 2026-08-10)
+A partial unique index `uidx_metadata_katalog_active_tenant_namn` on
+`(tenant_id, lower(namn)) WHERE deleted_at IS NULL` now exists in dev AND prod
+(migrations/0149, self-guarding: skips with NOTICE if active duplicates remain).
+Archived rows may still share names. Writers must therefore expect a unique-violation
+error on concurrent create/rename/restore — the app-level 409 remains the friendly path.
+Cleanup tool: `scripts/cleanup-metadata-katalog-dubbletter.ts` (dry-run default,
+archive-never-delete, repoints varden/historik/refs to the canonical row).
+
+## Merge caution: datatype mismatch
+Never repoint metadata_varden between catalog rows with DIFFERENT datatyp — e.g. a
+legacy json 'kontaktperson' vs the systemlast rubrik 'Kontaktperson' whose values live
+on child fields (Namn/Titel/Telefon/E-post via grupp_nyckel). Such merges need a real
+data migration, not an id repoint. Prod kinab still has 219 json contact values parked
+on the archived 'kontaktperson' row awaiting that migration.
