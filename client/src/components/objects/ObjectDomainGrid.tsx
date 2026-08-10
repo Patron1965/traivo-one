@@ -2,8 +2,8 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   Contact, Image as ImageIcon, ClipboardList, MapPin, Target,
-  Phone, Mail, Calendar, CalendarClock, CircleSlash,
-  Link as LinkIcon, Users, Map as MapIcon, Zap, Pencil, Copy,
+  Phone, Mail,
+  Link as LinkIcon, Map as MapIcon, Pencil, Copy,
   MoreVertical, Trash2, Archive, EyeOff,
 } from "lucide-react";
 import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
@@ -63,16 +63,6 @@ interface ObjectImageLite {
   createdAt?: string | Date | null;
   imageDate?: string | Date | null;
 }
-interface ObjectWorkOrderLite {
-  id: string;
-  title?: string | null;
-  status?: string | null;
-  orderStatus?: string | null;
-  scheduledDate?: string | Date | null;
-  lineCount?: number;
-  resourceName?: string;
-}
-
 interface PointedInConcept {
   id: string;
   name: string;
@@ -181,10 +171,6 @@ const geoFieldRow = (label: string, field: GeoFieldLite | undefined) => {
   );
 };
 
-type LinkedTaskItem =
-  | { kind: "future"; data: SystemTaskFuture }
-  | { kind: "unperformed"; data: SystemUnperformedTask };
-
 const fmtDate = (v: string | Date | null | undefined): string | null => {
   if (!v) return null;
   const d = new Date(v);
@@ -202,9 +188,6 @@ const fmtTime = (v: string | Date | null | undefined): string | null => {
 const contactTypeLabel = (c: ObjectContactLite): string =>
   c.contactType === "primary" ? "Primär kontakt" : (c.role || c.contactType || "Kontakt");
 
-const woNumberOf = (o: ObjectWorkOrderLite): string =>
-  String((o as any).workOrderNumber ?? (o as any).orderNumber ?? "");
-
 const defaultIcon = L.icon({
   iconUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
   iconRetinaUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png",
@@ -219,12 +202,12 @@ const GRID_CARD = "h-full";
 
 export interface ObjectDomainGridProps {
   /** "collections" = METADATA-samlingar (Kontakt/Produktion/Geografi);
-   *  "linked" = KOPPLADE list-block (Orderkoncept/Snabbordrar/Uppgifter/Bilder). */
+   *  "linked" = KOPPLADE list-block (Orderkoncept/Bilder) — snabbordrar och
+   *  uppgifter visas i de subträds-medvetna sektionerna (Task #1474). */
   section: "collections" | "linked";
   objectId: string;
   obj: any;
   contacts: ObjectContactLite[];
-  workOrders?: ObjectWorkOrderLite[];
   /** Task #1440: redigeringsknappen i kontaktkortet visas bara för roller med
    *  redigeringsrätt (servern kräver dessutom planner/admin för mutationerna). */
   canEditContacts?: boolean;
@@ -240,7 +223,6 @@ export function ObjectDomainGrid({
   objectId,
   obj,
   contacts,
-  workOrders = [],
   canEditContacts = false,
   isAdmin = false,
   onEditGeo,
@@ -268,18 +250,11 @@ export function ObjectDomainGrid({
   // system-generated-metadata — object_images-tabellen är borttagen.
   const images = data?.images ?? [];
   const history = data?.tasksHistory ?? [];
-  const future = data?.tasksFuture ?? [];
-  const unperformed = data?.unperformedTasks ?? [];
 
   // Slå ihop primär + övriga kontakter till EN samling; primär överst.
   const sortedContacts = [...contacts].sort(
     (a, b) => (b.contactType === "primary" ? 1 : 0) - (a.contactType === "primary" ? 1 : 0),
   );
-
-  const linkedTasks: LinkedTaskItem[] = [
-    ...future.map((d): LinkedTaskItem => ({ kind: "future", data: d })),
-    ...unperformed.map((d): LinkedTaskItem => ({ kind: "unperformed", data: d })),
-  ];
 
   const standardAddress = data?.standardAddress;
   const advancedPosition = data?.advancedPosition;
@@ -459,99 +434,8 @@ export function ObjectDomainGrid({
     </button>
   );
 
-  const renderWorkOrder = (o: ObjectWorkOrderLite) => {
-    const num = woNumberOf(o);
-    const badge = o.orderStatus || o.status;
-    return (
-      <button
-        type="button"
-        onClick={() => navigate(`/work-orders/${o.id}`)}
-        className="w-full text-left rounded-lg border border-border p-3 hover-elevate"
-        data-testid={`row-workorder-${o.id}`}
-      >
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0 flex-1">
-            <div className="text-sm font-medium truncate">{o.title || "Snabborder"}</div>
-            <div className="mt-1 flex items-center gap-3 flex-wrap text-xs text-muted-foreground">
-              {num && <span className="font-mono">#{num}</span>}
-              {fmtDate(o.scheduledDate) && (
-                <span className="flex items-center gap-1"><Calendar className="h-3 w-3" />{fmtDate(o.scheduledDate)}</span>
-              )}
-              {typeof o.lineCount === "number" && o.lineCount > 0 && <span>{o.lineCount} rader</span>}
-              {o.resourceName && <span className="truncate">{o.resourceName}</span>}
-            </div>
-          </div>
-          {badge && (
-            <Badge className={`text-[10px] shrink-0 ${getWorkOrderStatusBadge(badge)}`}>{badge}</Badge>
-          )}
-        </div>
-      </button>
-    );
-  };
-
-  const renderLinkedTask = (item: LinkedTaskItem) => {
-    if (item.kind === "future") {
-      const a = item.data;
-      return (
-        <div className="rounded-lg border border-border p-3" data-testid={`linked-task-future-${a.id}`}>
-          <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0 flex-1">
-              <div className="text-sm font-medium truncate">{a.title || "Uppgift"}</div>
-              <div className="mt-1 flex items-center gap-3 flex-wrap text-xs text-muted-foreground">
-                <span className="flex items-center gap-1"><CalendarClock className="h-3 w-3" /> Kommande</span>
-                {fmtDate(a.scheduledDate) && (
-                  <span className="flex items-center gap-1"><Calendar className="h-3 w-3" />{fmtDate(a.scheduledDate)}</span>
-                )}
-                {typeof a.quantity === "number" && a.quantity > 0 && <span>{a.quantity} st</span>}
-              </div>
-            </div>
-            {a.status && (
-              <Badge className={`text-[10px] shrink-0 ${getWorkOrderStatusBadge(a.status)}`}>{a.status}</Badge>
-            )}
-          </div>
-          {(a.orderConceptId || a.customerId) && (
-            <div className="mt-2 flex items-center gap-2 flex-wrap">
-              {a.orderConceptId && (
-                <Button
-                  variant="outline" size="sm" className="h-7 px-2 text-xs"
-                  onClick={() => navigate(`/order-concepts/${a.orderConceptId}/edit`)}
-                  data-testid={`link-linked-task-concept-${a.id}`}
-                >
-                  <LinkIcon className="h-3 w-3 mr-1" />{a.orderConceptName || "Orderkoncept"}
-                </Button>
-              )}
-              {a.customerId && (
-                <Button
-                  variant="ghost" size="sm" className="h-7 px-2 text-xs"
-                  onClick={() => navigate(`/customers/${a.customerId}`)}
-                  data-testid={`link-linked-task-customer-${a.id}`}
-                >
-                  <Users className="h-3 w-3 mr-1" />{a.customerName || "Kund"}
-                </Button>
-              )}
-            </div>
-          )}
-        </div>
-      );
-    }
-    const u = item.data;
-    return (
-      <div className="rounded-lg border border-destructive/30 p-3" data-testid={`linked-task-unperformed-${u.id}`}>
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <div className="text-sm font-medium truncate flex items-center gap-1.5">
-              <CircleSlash className="h-3.5 w-3.5 text-destructive" />{u.title || "Uppgift"}
-            </div>
-            {u.reasonText && <div className="text-xs text-muted-foreground truncate">{u.reasonText}</div>}
-          </div>
-          <div className="flex items-center gap-2 shrink-0 text-muted-foreground">
-            {u.reason && <Badge variant="destructive" className="text-[10px]">{u.reason}</Badge>}
-            {fmtDate(u.impossibleAt) && <span className="text-xs">{fmtDate(u.impossibleAt)}</span>}
-          </div>
-        </div>
-      </div>
-    );
-  };
+  // Task #1474: renderWorkOrder/renderLinkedTask borttagna — snabbordrar och
+  // uppgifter visas nu i den subträds-medvetna ordertabellen resp. uppgiftsnavet.
 
   const renderConcept = (c: PointedInConcept) => (
     <div className="rounded-lg border border-border p-3" data-testid={`linked-concept-${c.id}`}>
@@ -599,42 +483,10 @@ export function ObjectDomainGrid({
           renderItem={renderConcept}
         />
 
-        <DomainCarouselCard<ObjectWorkOrderLite>
-          className={GRID_CARD}
-          icon={Zap}
-          title="Snabbordrar"
-          description="Objektets arbetsordrar."
-          items={workOrders}
-          getKey={(o) => o.id}
-          emptyText="Inga arbetsordrar."
-          testidPrefix="workorders"
-          getFooter={(o) => ({ time: o.scheduledDate, kalla: "M" })}
-          getSearchText={(o) => `${o.title ?? ""} ${o.orderStatus ?? o.status ?? ""} ${woNumberOf(o)}`}
-          renderItem={renderWorkOrder}
-        />
-
-        <DomainCarouselCard<LinkedTaskItem>
-          className={GRID_CARD}
-          icon={ClipboardList}
-          title="Uppgifter"
-          description="Kommande (planeringslager) och ej-utförda uppgifter."
-          items={linkedTasks}
-          getKey={(t) => `${t.kind}-${t.data.id}`}
-          loading={isLoading}
-          emptyText="Inga kopplade uppgifter."
-          testidPrefix="linked-tasks"
-          getFooter={(t) => ({
-            time: t.kind === "future" ? t.data.scheduledDate : t.data.impossibleAt,
-            kalla: "SYS",
-          })}
-          getSearchText={(t) =>
-            t.kind === "future"
-              ? `${t.data.title ?? ""} ${t.data.orderConceptName ?? ""} ${t.data.customerName ?? ""}`
-              : `${t.data.title ?? ""} ${t.data.reason ?? ""} ${t.data.reasonText ?? ""}`
-          }
-          renderItem={renderLinkedTask}
-        />
-
+        {/* Task #1474 konsolidering: "Snabbordrar"- och "Uppgifter"-korten är
+            borttagna — samma information visas nu (med subträds-växel) i
+            ordertabellen resp. uppgiftsnavet. Kvar här: orderkoncept-
+            inpekningarna (SYS) och bilderna. */}
         <DomainCarouselCard<ObjectImageLite>
           className={GRID_CARD}
           icon={ImageIcon}

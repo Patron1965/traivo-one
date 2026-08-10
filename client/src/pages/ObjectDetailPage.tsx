@@ -435,15 +435,8 @@ export default function ObjectDetailPage() {
     enabled: !!objectId && !isCreate,
   });
 
-  const { data: workOrders = [] } = useQuery<WorkOrderListItem[]>({
-    queryKey: ["/api/objects", objectId, "work-orders"],
-    queryFn: async () => {
-      const res = await fetch(`/api/objects/${objectId}/work-orders`);
-      if (!res.ok) return [];
-      return res.json();
-    },
-    enabled: !!objectId && !isCreate,
-  });
+  // Task #1474: work-orders-listan hämtas numera av ordertabellen/uppgiftsnavet
+  // själva via /api/objects/:id/linked-work (subträds-medveten).
 
   // Task #857: planeringslager-uppgifter (assignments) kopplade till objektet,
   // berikade med orderkoncept + kund för djuplänkning objekt → uppgift → koncept → kund.
@@ -1491,22 +1484,19 @@ export default function ObjectDetailPage() {
             </Button>
           </div>
 
-          {/* Task #1442: separata kort för kopplade ordrar (aktiva) och
-              orderhistorik (utförda), med källa, orderkoncept-länk och status
-              (deriveUppgiftStatus). Uppgifterna visas i egen sektion nedan. */}
-          <ObjectLinkedOrdersTable
-            workOrders={workOrders as any}
-            assignments={objectAssignments as any}
-            ordersOnly
-          />
+          {/* Task #1474: separata kort för kopplade ordrar (aktiva) och
+              orderhistorik (utförda) med subträds-växel — komponenten hämtar
+              själv via /api/objects/:id/linked-work. */}
+          <ObjectLinkedOrdersTable objectId={objectId} />
 
-          {/* List-block (bläddra + sök): orderkoncept, snabbordrar, bilder */}
+          {/* List-block (bläddra + sök): orderkoncept + bilder (uppgifter/
+              snabbordrar visas i ordertabellen ovan resp. uppgiftsnavet nedan
+              — Task #1474 konsolidering, ingen duplicering). */}
           <ObjectDomainGrid
             section="linked"
             objectId={objectId}
             obj={obj}
             contacts={contacts as any}
-            workOrders={workOrders as any}
             onEditGeo={() => openEditDialog()}
             navigate={navigate}
           />
@@ -1518,11 +1508,9 @@ export default function ObjectDetailPage() {
             <ClipboardList className="h-4 w-4" /> Kopplade uppgifter
           </h2>
 
-          {/* Sökbart och statusfiltrerat uppgiftsnav (work_orders + assignments) */}
-          <ObjectTasksNav
-            workOrders={workOrders as any}
-            assignments={objectAssignments as any}
-          />
+          {/* Sökbart uppgiftsnav (work_orders + assignments) med status-, typ-
+              och tidsperiodfilter samt subträds-växel (Task #1474). */}
+          <ObjectTasksNav objectId={objectId} />
 
           {/* Mikro-grovplanering: subträd + källa, exakt grovplaneringslayout (readOnly) */}
           <ObjectLinkedTasksGrid objectId={objectId} />

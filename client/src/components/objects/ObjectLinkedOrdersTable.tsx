@@ -1,11 +1,21 @@
 import { useMemo, useState } from "react";
 import { Link } from "wouter";
+import { useQuery } from "@tanstack/react-query";
 // OBS: lucide `History` aliasas — oaliasad import skuggar globala inbyggda (lint:icon-shadowing).
 import { ClipboardList, History as HistoryIcon, ListChecks, Search } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Table,
   TableBody,
@@ -24,14 +34,21 @@ import {
 import type { ExecutionStatus, OrderStatus } from "@shared/schema";
 
 // Task #1442: "Kopplade ordrar" och "Kopplade uppgifter" är olika relationstyper
-// och redovisas i SEPARATA sektioner (tidigare en kombinerad tabell, Task #1370).
-// Inom varje sektion skiljs aktiva/kommande rader från historik (utförda m.fl.)
-// via deriveUppgiftStatus (kontraktets enda mappning) — ingen egen statuslogik.
+// och redovisas i SEPARATA sektioner. Inom varje sektion skiljs aktiva/kommande
+// rader från historik (utförda m.fl.) via deriveUppgiftStatus (kontraktets enda
+// mappning) — ingen egen statuslogik.
+//
+// Task #1474: båda sektionerna läser nu den subträds-medvetna endpointen
+// GET /api/objects/:id/linked-work?scope=self|subtree och har en växel
+// "Endast detta objekt / Inkl. underordnade objekt". Varje rad märks med sitt
+// objekt (klickbar länk) när subträdet är på. Uppgiftsnavet har dessutom
+// typ- och tidsperiodfilter samt spårbarhetslänkar till källan.
 
 interface LinkedWorkOrder {
   id: string;
   orderNumber?: string | null;
   title?: string | null;
+  orderType?: string | null;
   sourceType?: string | null;
   orderConceptId?: string | null;
   orderConceptName?: string | null;
@@ -41,6 +58,8 @@ interface LinkedWorkOrder {
   impossibleReason?: string | null;
   scheduledDate?: string | Date | null;
   createdAt?: string | Date | null;
+  objectId?: string | null;
+  objectName?: string | null;
 }
 
 interface LinkedAssignment {
@@ -52,13 +71,31 @@ interface LinkedAssignment {
   orderConceptName?: string | null;
   scheduledDate?: string | null;
   createdAt?: string | null;
+  objectId?: string | null;
+  objectName?: string | null;
 }
 
-interface Props {
+interface LinkedWorkResponse {
+  scope: "self" | "subtree";
   workOrders: LinkedWorkOrder[];
   assignments: LinkedAssignment[];
-  /** true = rendera ENBART order-sektionerna (uppgifterna visas separat i ObjectTasksNav). */
-  ordersOnly?: boolean;
+  truncated: { workOrders: boolean; assignments: boolean };
+}
+
+/** Delad hämtning av objektets uppgifter/ordrar, med valfritt subträd. */
+function useLinkedWork(objectId: string, includeSubtree: boolean) {
+  const scope = includeSubtree ? "subtree" : "self";
+  return useQuery<LinkedWorkResponse>({
+    queryKey: ["/api/objects", objectId, "linked-work", scope],
+    queryFn: async () => {
+      const res = await fetch(`/api/objects/${objectId}/linked-work?scope=${scope}`, {
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("Kunde inte hämta kopplade uppgifter");
+      return res.json();
+    },
+    enabled: !!objectId,
+  });
 }
 
 interface LinkedRow {
@@ -67,9 +104,13 @@ interface LinkedRow {
   orderNumber: string | null;
   orderId: string | null;
   title: string;
+  sourceType: string | null;
   sourceLabel: string;
+  orderType: string | null;
   orderConceptId: string | null;
   orderConceptName: string | null;
+  objectId: string | null;
+  objectName: string | null;
   status: UppgiftStatus;
   statusLabel: string;
   date: Date | null;
@@ -83,6 +124,18 @@ const HISTORY_STATUSES = new Set<UppgiftStatus>([
   "omojlig_att_utfora",
   "avbruten",
 ]);
+
+// Läsbara etiketter för de vanligaste ordertyperna; okända värden visas rått.
+const ORDER_TYPE_LABELS: Record<string, string> = {
+  service: "Service",
+  installation: "Installation",
+  inspection: "Inspektion",
+  emergency: "Akut",
+  maintenance: "Underhåll",
+  startpunkt: "Startpunkt",
+};
+const orderTypeLabel = (v: string | null): string | null =>
+  v ? (ORDER_TYPE_LABELS[v] ?? v) : null;
 
 function toDate(v: string | Date | null | undefined): Date | null {
   if (!v) return null;
@@ -103,20 +156,26 @@ function LinkedRowsTable({
   rows,
   testidPrefix,
   showOrderColumn,
+  showObjectColumn = false,
+  showTypeColumn = false,
 }: {
   rows: LinkedRow[];
   testidPrefix: string;
   showOrderColumn: boolean;
+  showObjectColumn?: boolean;
+  showTypeColumn?: boolean;
 }) {
   return (
     <div className="overflow-x-auto">
       <Table>
         <TableHeader>
           <TableRow>
+            {showTypeColumn && <TableHead>Typ</TableHead>}
             {showOrderColumn && <TableHead>Order</TableHead>}
             <TableHead>Titel</TableHead>
             <TableHead>Källa</TableHead>
             <TableHead>Orderkoncept</TableHead>
+            {showObjectColumn && <TableHead>Objekt</TableHead>}
             <TableHead>Status</TableHead>
             <TableHead>Datum</TableHead>
           </TableRow>
@@ -124,6 +183,11 @@ function LinkedRowsTable({
         <TableBody>
           {rows.map((row) => (
             <TableRow key={row.key} data-testid={`row-${testidPrefix}-${row.key}`}>
+              {showTypeColumn && (
+                <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
+                  {orderTypeLabel(row.orderType) ?? "—"}
+                </TableCell>
+              )}
               {showOrderColumn && (
                 <TableCell>
                   {row.orderId ? (
@@ -153,7 +217,17 @@ function LinkedRowsTable({
                 )}
               </TableCell>
               <TableCell>
-                <Badge variant="outline">{row.sourceLabel}</Badge>
+                {/* Spårbarhet: snabborder/order öppnar ordern; koncept-födda
+                    rader länkas via Orderkoncept-kolumnen intill. */}
+                {row.orderId ? (
+                  <Link href={`/work-orders/${row.orderId}`} data-testid={`link-source-${row.key}`}>
+                    <Badge variant="outline" className="cursor-pointer hover-elevate">
+                      {row.sourceLabel}
+                    </Badge>
+                  </Link>
+                ) : (
+                  <Badge variant="outline">{row.sourceLabel}</Badge>
+                )}
               </TableCell>
               <TableCell>
                 {row.orderConceptId ? (
@@ -168,6 +242,22 @@ function LinkedRowsTable({
                   <span className="text-muted-foreground">—</span>
                 )}
               </TableCell>
+              {showObjectColumn && (
+                <TableCell className="max-w-[200px] truncate">
+                  {row.objectId ? (
+                    <Link
+                      href={`/objects/${row.objectId}`}
+                      className="text-primary hover:underline"
+                      title={row.objectName ?? undefined}
+                      data-testid={`link-object-${row.key}`}
+                    >
+                      {row.objectName || "Objekt"}
+                    </Link>
+                  ) : (
+                    <span className="text-muted-foreground">—</span>
+                  )}
+                </TableCell>
+              )}
               <TableCell>
                 <Badge variant="secondary">{row.statusLabel}</Badge>
               </TableCell>
@@ -199,9 +289,13 @@ function useWoRows(workOrders: LinkedWorkOrder[]): LinkedRow[] {
             orderNumber: wo.orderNumber ?? null,
             orderId: wo.id,
             title: wo.title || "(utan titel)",
+            sourceType: wo.sourceType ?? null,
             sourceLabel: taskSourceLabel(wo.sourceType),
+            orderType: wo.orderType ?? null,
             orderConceptId: wo.orderConceptId ?? null,
             orderConceptName: wo.orderConceptName ?? null,
+            objectId: wo.objectId ?? null,
+            objectName: wo.objectName ?? null,
             status,
             statusLabel: UPPGIFT_STATUS_LABELS[status],
             date: toDate(wo.scheduledDate) ?? toDate(wo.createdAt),
@@ -227,9 +321,13 @@ function useAsgRows(assignments: LinkedAssignment[]): LinkedRow[] {
             orderNumber: null,
             orderId: null,
             title: a.title || "(utan titel)",
+            sourceType: a.sourceType ?? null,
             sourceLabel: taskSourceLabel(a.sourceType),
+            orderType: null,
             orderConceptId: a.orderConceptId ?? null,
             orderConceptName: a.orderConceptName ?? null,
+            objectId: a.objectId ?? null,
+            objectName: a.objectName ?? null,
             status,
             statusLabel: UPPGIFT_STATUS_LABELS[status],
             date: toDate(a.scheduledDate) ?? toDate(a.createdAt),
@@ -240,34 +338,78 @@ function useAsgRows(assignments: LinkedAssignment[]): LinkedRow[] {
   );
 }
 
-export function ObjectLinkedOrdersTable({ workOrders, assignments, ordersOnly = false }: Props) {
-  const woRows = useWoRows(workOrders);
-  const asgRows = useAsgRows(assignments);
+/** Växeln "Endast detta objekt / Inkl. underordnade objekt". */
+function SubtreeToggle({
+  id,
+  checked,
+  onChange,
+}: {
+  id: string;
+  checked: boolean;
+  onChange: (v: boolean) => void;
+}) {
+  return (
+    <div className="flex items-center gap-2">
+      <Switch id={id} checked={checked} onCheckedChange={onChange} data-testid={`switch-${id}`} />
+      <Label htmlFor={id} className="text-xs text-muted-foreground cursor-pointer">
+        Inkl. underordnade objekt
+      </Label>
+    </div>
+  );
+}
+
+interface ObjectScopedProps {
+  objectId: string;
+}
+
+export function ObjectLinkedOrdersTable({ objectId }: ObjectScopedProps) {
+  const [includeSubtree, setIncludeSubtree] = useState(false);
+  const { data } = useLinkedWork(objectId, includeSubtree);
+  const woRows = useWoRows(data?.workOrders ?? []);
 
   const activeOrders = woRows.filter((r) => !HISTORY_STATUSES.has(r.status));
   const historyOrders = woRows.filter((r) => HISTORY_STATUSES.has(r.status));
-  const activeTasks = asgRows.filter((r) => !HISTORY_STATUSES.has(r.status));
-  const historyTasks = asgRows.filter((r) => HISTORY_STATUSES.has(r.status));
+  const showObjectColumn = includeSubtree;
 
   return (
     <div className="space-y-4">
       {/* ---------- Kopplade ordrar (work_orders) ---------- */}
       <Card data-testid="card-linked-orders">
         <CardHeader className="pb-3">
-          <CardTitle className="text-sm flex items-center gap-2">
-            <ClipboardList className="h-4 w-4" /> Kopplade ordrar
-            {activeOrders.length > 0 && (
-              <Badge variant="secondary" className="text-[10px]">{activeOrders.length}</Badge>
-            )}
-          </CardTitle>
+          <div className="flex items-center justify-between gap-2 flex-wrap">
+            <CardTitle className="text-sm flex items-center gap-2">
+              <ClipboardList className="h-4 w-4" /> Kopplade ordrar
+              {activeOrders.length > 0 && (
+                <Badge variant="secondary" className="text-[10px]">{activeOrders.length}</Badge>
+              )}
+            </CardTitle>
+            <SubtreeToggle
+              id="orders-subtree"
+              checked={includeSubtree}
+              onChange={setIncludeSubtree}
+            />
+          </div>
+          {data?.truncated.workOrders && (
+            <p className="text-xs text-muted-foreground">
+              Listan är kapad — visar de senaste {data.workOrders.length} ordrarna.
+            </p>
+          )}
         </CardHeader>
         <CardContent>
           {activeOrders.length === 0 ? (
             <p className="text-sm text-muted-foreground py-4" data-testid="empty-linked-orders">
-              Inga aktiva ordrar kopplade till objektet.
+              {includeSubtree
+                ? "Inga aktiva ordrar i objektet eller dess underordnade objekt."
+                : "Inga aktiva ordrar kopplade till objektet."}
             </p>
           ) : (
-            <LinkedRowsTable rows={activeOrders} testidPrefix="linked-order" showOrderColumn />
+            <LinkedRowsTable
+              rows={activeOrders}
+              testidPrefix="linked-order"
+              showOrderColumn
+              showObjectColumn={showObjectColumn}
+              showTypeColumn
+            />
           )}
         </CardContent>
       </Card>
@@ -288,46 +430,16 @@ export function ObjectLinkedOrdersTable({ workOrders, assignments, ordersOnly = 
               Inga utförda eller avslutade ordrar ännu.
             </p>
           ) : (
-            <LinkedRowsTable rows={historyOrders} testidPrefix="history-order" showOrderColumn />
+            <LinkedRowsTable
+              rows={historyOrders}
+              testidPrefix="history-order"
+              showOrderColumn
+              showObjectColumn={showObjectColumn}
+              showTypeColumn
+            />
           )}
         </CardContent>
       </Card>
-
-      {/* ---------- Kopplade uppgifter (assignments, planeringslager) ---------- */}
-      {!ordersOnly && (
-      <Card data-testid="card-linked-assignments">
-        <CardHeader className="pb-3">
-          <CardTitle className="text-sm flex items-center gap-2">
-            <ListChecks className="h-4 w-4" /> Kopplade uppgifter
-            {activeTasks.length > 0 && (
-              <Badge variant="secondary" className="text-[10px]">{activeTasks.length}</Badge>
-            )}
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {activeTasks.length === 0 ? (
-            <p className="text-sm text-muted-foreground py-4" data-testid="empty-linked-assignments">
-              Inga aktiva eller kommande uppgifter kopplade till objektet.
-            </p>
-          ) : (
-            <LinkedRowsTable rows={activeTasks} testidPrefix="linked-task" showOrderColumn={false} />
-          )}
-
-          <div className="space-y-2" data-testid="section-task-history">
-            <div className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
-              <HistoryIcon className="h-3.5 w-3.5" /> Historik (utförda/avslutade uppgifter)
-            </div>
-            {historyTasks.length === 0 ? (
-              <p className="text-sm text-muted-foreground py-2" data-testid="empty-task-history">
-                Inga utförda eller avslutade uppgifter ännu.
-              </p>
-            ) : (
-              <LinkedRowsTable rows={historyTasks} testidPrefix="history-task" showOrderColumn={false} />
-            )}
-          </div>
-        </CardContent>
-      </Card>
-      )}
     </div>
   );
 }
@@ -335,9 +447,10 @@ export function ObjectLinkedOrdersTable({ workOrders, assignments, ordersOnly = 
 // ============================================================================
 // UPPGIFTSNAV I MINIATYR (objektsidan, sista sektionen)
 // ----------------------------------------------------------------------------
-// Samlar ALLA uppgifter kopplade till objektet (work_orders + assignments) i en
-// sökbar, statusfiltrerad lista. Statusgrupperna mappar kontraktets
-// deriveUppgiftStatus (enda status-mappningen — ingen egen logik):
+// Samlar ALLA uppgifter kopplade till objektet — och valfritt hela dess gren —
+// (work_orders + assignments) i en sökbar lista med status-, typ- och
+// tidsperiodfilter. Statusgrupperna mappar kontraktets deriveUppgiftStatus
+// (enda status-mappningen — ingen egen logik):
 //   Ej gjord  = skapad / i_masterplanering / planerad / omöjlig / avbruten
 //   Pågående  = på väg / på plats
 //   Gjord     = utförd / fakturakontroll / fakturerad
@@ -358,13 +471,51 @@ const TASKNAV_FILTER_LABELS: Record<TaskNavFilter, string> = {
   gjord: "Gjord",
 };
 
-export function ObjectTasksNav({ workOrders, assignments }: Omit<Props, "ordersOnly">) {
+// Tidsperiodfilter: relativa fönster bakåt + "Kommande" (datum i framtiden).
+type PeriodFilter = "alla" | "kommande" | "30d" | "90d" | "365d";
+const PERIOD_LABELS: Record<PeriodFilter, string> = {
+  alla: "Alla perioder",
+  kommande: "Kommande",
+  "30d": "Senaste 30 dagarna",
+  "90d": "Senaste 90 dagarna",
+  "365d": "Senaste året",
+};
+const PERIOD_DAYS: Record<Exclude<PeriodFilter, "alla" | "kommande">, number> = {
+  "30d": 30,
+  "90d": 90,
+  "365d": 365,
+};
+
+function matchesPeriod(date: Date | null, period: PeriodFilter, now: Date): boolean {
+  if (period === "alla") return true;
+  if (!date) return false;
+  if (period === "kommande") return date.getTime() >= now.getTime();
+  const from = now.getTime() - PERIOD_DAYS[period] * 24 * 60 * 60 * 1000;
+  return date.getTime() >= from && date.getTime() <= now.getTime();
+}
+
+const ALL = "all";
+
+export function ObjectTasksNav({ objectId }: ObjectScopedProps) {
+  const [includeSubtree, setIncludeSubtree] = useState(false);
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<TaskNavFilter>("alla");
+  const [typeFilter, setTypeFilter] = useState<string>(ALL);
+  const [periodFilter, setPeriodFilter] = useState<PeriodFilter>("alla");
 
-  const woRows = useWoRows(workOrders);
-  const asgRows = useAsgRows(assignments);
+  const { data } = useLinkedWork(objectId, includeSubtree);
+  const woRows = useWoRows(data?.workOrders ?? []);
+  const asgRows = useAsgRows(data?.assignments ?? []);
   const allRows = useMemo(() => sortNewestFirst([...woRows, ...asgRows]), [woRows, asgRows]);
+
+  // Typalternativ härleds ur faktiskt närvarande rader (aldrig hårdkodade).
+  const typeOptions = useMemo(() => {
+    const types = new Map<string, string>();
+    for (const r of allRows) {
+      if (r.orderType) types.set(r.orderType, orderTypeLabel(r.orderType) ?? r.orderType);
+    }
+    return Array.from(types.entries()).sort((a, b) => a[1].localeCompare(b[1], "sv"));
+  }, [allRows]);
 
   const counts = useMemo(() => {
     const c: Record<TaskNavFilter, number> = { alla: allRows.length, ej_gjord: 0, pagaende: 0, gjord: 0 };
@@ -378,32 +529,48 @@ export function ObjectTasksNav({ workOrders, assignments }: Omit<Props, "ordersO
 
   const visible = useMemo(() => {
     const q = search.trim().toLowerCase();
+    const now = new Date();
     return allRows.filter((r) => {
       if (filter !== "alla" && !TASKNAV_GROUPS[filter].has(r.status)) return false;
+      if (typeFilter !== ALL && (r.orderType ?? "") !== typeFilter) return false;
+      if (!matchesPeriod(r.date, periodFilter, now)) return false;
       if (!q) return true;
       return (
         r.title.toLowerCase().includes(q) ||
         (r.orderNumber ?? "").toLowerCase().includes(q) ||
         (r.orderConceptName ?? "").toLowerCase().includes(q) ||
+        (r.objectName ?? "").toLowerCase().includes(q) ||
         r.statusLabel.toLowerCase().includes(q) ||
         r.sourceLabel.toLowerCase().includes(q)
       );
     });
-  }, [allRows, filter, search]);
+  }, [allRows, filter, typeFilter, periodFilter, search]);
+
+  const truncated = !!data && (data.truncated.workOrders || data.truncated.assignments);
 
   return (
     <Card data-testid="card-object-tasks-nav">
       <CardHeader className="pb-3">
-        <CardTitle className="text-sm flex items-center gap-2">
-          <ListChecks className="h-4 w-4" /> Kopplade uppgifter
-          {allRows.length > 0 && (
-            <Badge variant="secondary" className="text-[10px]" data-testid="badge-tasks-nav-count">
-              {allRows.length}
-            </Badge>
-          )}
-        </CardTitle>
+        <div className="flex items-center justify-between gap-2 flex-wrap">
+          <CardTitle className="text-sm flex items-center gap-2">
+            <ListChecks className="h-4 w-4" /> Kopplade uppgifter
+            {allRows.length > 0 && (
+              <Badge variant="secondary" className="text-[10px]" data-testid="badge-tasks-nav-count">
+                {allRows.length}
+              </Badge>
+            )}
+          </CardTitle>
+          <SubtreeToggle
+            id="tasks-nav-subtree"
+            checked={includeSubtree}
+            onChange={setIncludeSubtree}
+          />
+        </div>
         <p className="text-xs text-muted-foreground">
-          Alla uppgifter kopplade till objektet — sök och filtrera på status.
+          {includeSubtree
+            ? "Alla uppgifter i objektet och dess underordnade objekt — sök och filtrera."
+            : "Alla uppgifter kopplade till objektet — sök och filtrera."}
+          {truncated && " Listan är kapad till de senaste raderna."}
         </p>
       </CardHeader>
       <CardContent className="space-y-3">
@@ -413,7 +580,7 @@ export function ObjectTasksNav({ workOrders, assignments }: Omit<Props, "ordersO
             <Input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Sök uppgift, order, orderkoncept…"
+              placeholder="Sök uppgift, order, orderkoncept, objekt…"
               className="h-8 pl-8 text-sm"
               data-testid="input-tasks-nav-search"
             />
@@ -433,6 +600,33 @@ export function ObjectTasksNav({ workOrders, assignments }: Omit<Props, "ordersO
               </Button>
             ))}
           </div>
+          {typeOptions.length > 0 && (
+            <Select value={typeFilter} onValueChange={setTypeFilter}>
+              <SelectTrigger className="h-8 w-[160px] text-xs" data-testid="select-tasks-nav-type">
+                <SelectValue placeholder="Uppgiftstyp" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={ALL}>Alla uppgiftstyper</SelectItem>
+                {typeOptions.map(([value, label]) => (
+                  <SelectItem key={value} value={value}>
+                    {label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+          <Select value={periodFilter} onValueChange={(v) => setPeriodFilter(v as PeriodFilter)}>
+            <SelectTrigger className="h-8 w-[170px] text-xs" data-testid="select-tasks-nav-period">
+              <SelectValue placeholder="Tidsperiod" />
+            </SelectTrigger>
+            <SelectContent>
+              {(Object.keys(PERIOD_LABELS) as PeriodFilter[]).map((p) => (
+                <SelectItem key={p} value={p}>
+                  {PERIOD_LABELS[p]}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
 
         {visible.length === 0 ? (
@@ -442,7 +636,13 @@ export function ObjectTasksNav({ workOrders, assignments }: Omit<Props, "ordersO
               : "Inga uppgifter matchar sökningen/filtret."}
           </p>
         ) : (
-          <LinkedRowsTable rows={visible} testidPrefix="tasks-nav" showOrderColumn />
+          <LinkedRowsTable
+            rows={visible}
+            testidPrefix="tasks-nav"
+            showOrderColumn
+            showObjectColumn={includeSubtree}
+            showTypeColumn
+          />
         )}
       </CardContent>
     </Card>

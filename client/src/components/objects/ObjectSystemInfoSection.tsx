@@ -23,6 +23,7 @@ interface SystemInfoGroup {
   parentId: string | null;
   parentName: string | null;
   childCount: number;
+  descendantCount: number;
   hierarchyDepth: number | null;
 }
 
@@ -92,6 +93,12 @@ export function ObjectSystemInfoSection({ objectId }: { objectId: string }) {
             {/* Task #1418: "Förälder"-raden borttagen — överordnat objekt framgår
                 redan av släktnamnet (klickbart per led) högre upp på sidan. */}
             <Row label="Antal underordnade objekt" value={String(info.childCount)} testId="text-sysinfo-children" />
+            {/* Task #1474: hela grenen rekursivt (subträds-CTE server-side). */}
+            <Row
+              label="Totalt underordnade i grenen"
+              value={String(info.descendantCount)}
+              testId="text-sysinfo-descendants"
+            />
             <Row
               label="Hierarkidjup"
               value={info.hierarchyDepth != null ? String(info.hierarchyDepth) : null}

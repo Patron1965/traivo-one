@@ -991,6 +991,103 @@ app.get("/api/objects/:id/assignments", asyncHandler(async (req, res) => {
   res.json(rows);
 }));
 
+// Task #1474: Hierarkisk objektöversikt — uppgifter (work_orders + assignments)
+// för objektet OCH valfritt hela dess subträd (`?scope=subtree`). Varje rad
+// märks med objectId/objectName så klienten kan visa klickbar objektreferens.
+// Subträdet resolvas server-side via storage.getObjectSubtreeIds (rekursiv CTE,
+// tenant-scopad, exkl. soft-deletade) — aldrig N klientanrop. Cap per lista med
+// `truncated`-flaggor så UI:t kan visa att listan är kapad.
+app.get("/api/objects/:id/linked-work", asyncHandler(async (req, res) => {
+  const tenantId = getTenantIdWithFallback(req);
+  const object = await storage.getObject(req.params.id);
+  if (!verifyTenantOwnership(object, tenantId)) {
+    throw new NotFoundError("Objekt");
+  }
+  const scope = req.query.scope === "subtree" ? "subtree" : "self";
+  const objectIds = scope === "subtree"
+    ? await storage.getObjectSubtreeIds(tenantId, req.params.id)
+    : [req.params.id];
+  const CAP = 300;
+
+  const [woRows, asgRows] = await Promise.all([
+    db
+      .select({
+        id: workOrders.id,
+        orderNumber: workOrders.orderNumber,
+        title: workOrders.title,
+        orderType: workOrders.orderType,
+        sourceType: workOrders.sourceType,
+        orderConceptId: workOrders.orderConceptId,
+        orderConceptName: orderConcepts.name,
+        orderStatus: workOrders.orderStatus,
+        executionStatus: workOrders.executionStatus,
+        invoiceQueueState: workOrders.invoiceQueueState,
+        impossibleReason: workOrders.impossibleReason,
+        scheduledDate: workOrders.scheduledDate,
+        createdAt: workOrders.createdAt,
+        objectId: workOrders.objectId,
+        objectName: objects.name,
+      })
+      .from(workOrders)
+      .leftJoin(orderConcepts, and(
+        eq(workOrders.orderConceptId, orderConcepts.id),
+        eq(orderConcepts.tenantId, tenantId),
+      ))
+      .leftJoin(objects, eq(workOrders.objectId, objects.id))
+      .where(and(
+        eq(workOrders.tenantId, tenantId),
+        inArray(workOrders.objectId, objectIds),
+        isNull(workOrders.deletedAt),
+      ))
+      .orderBy(sql`${workOrders.createdAt} DESC`)
+      .limit(CAP + 1),
+    db
+      .select({
+        id: assignments.id,
+        title: assignments.title,
+        status: assignments.status,
+        priority: assignments.priority,
+        sourceType: assignments.sourceType,
+        orderConceptId: assignments.orderConceptId,
+        orderConceptName: orderConcepts.name,
+        customerId: orderConcepts.customerId,
+        customerName: customers.name,
+        scheduledDate: assignments.scheduledDate,
+        createdAt: assignments.createdAt,
+        objectId: assignments.objectId,
+        objectName: objects.name,
+      })
+      .from(assignments)
+      .leftJoin(orderConcepts, and(
+        eq(assignments.orderConceptId, orderConcepts.id),
+        eq(orderConcepts.tenantId, tenantId),
+      ))
+      .leftJoin(customers, and(
+        eq(orderConcepts.customerId, customers.id),
+        eq(customers.tenantId, tenantId),
+      ))
+      .leftJoin(objects, eq(assignments.objectId, objects.id))
+      .where(and(
+        eq(assignments.tenantId, tenantId),
+        inArray(assignments.objectId, objectIds),
+        isNull(assignments.deletedAt),
+      ))
+      .orderBy(sql`${assignments.createdAt} DESC`)
+      .limit(CAP + 1),
+  ]);
+
+  res.set("Cache-Control", "no-cache, must-revalidate");
+  res.json({
+    scope,
+    workOrders: woRows.slice(0, CAP),
+    assignments: asgRows.slice(0, CAP),
+    truncated: {
+      workOrders: woRows.length > CAP,
+      assignments: asgRows.length > CAP,
+    },
+  });
+}));
+
 // Task #714: kronologisk lista över felanmälningar på ett objekt (för galleri
 // med bläddringsbara foton). Tenant-scopad — cross-tenant ger 404.
 app.get("/api/objects/:id/issue-reports", asyncHandler(async (req, res) => {

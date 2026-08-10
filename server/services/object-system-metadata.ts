@@ -198,6 +198,9 @@ export type SystemInfoGroup = {
   parentId: string | null;
   parentName: string | null;
   childCount: number;
+  // Task #1474: totalt antal underordnade i HELA grenen (rekursivt), inte bara
+  // direkta barn. Härleds via subträds-CTE:n — ingen ny kolumn.
+  descendantCount: number;
   hierarchyDepth: number | null;
 };
 
@@ -644,7 +647,7 @@ export async function getObjectSystemGeneratedMetadata(
   // Task #1370: Systeminformation — riktiga objekt-kolumner + förälder/barn.
   let systemInfo: SystemInfoGroup | null = null;
   if (object && object.tenantId === tenantId) {
-    const [parentRow, childRow, interimRow] = await Promise.all([
+    const [parentRow, childRow, interimRow, subtreeIds] = await Promise.all([
       object.parentId
         ? db
             .select({ id: objects.id, name: objects.name })
@@ -676,6 +679,9 @@ export async function getObjectSystemGeneratedMetadata(
           sql`LOWER(${metadataKatalog.namn}) = ${OBJEKTMALL_INTERIM_METADATA_FALT}`,
         ))
         .limit(1),
+      // Task #1474: totalt antal underordnade i grenen (rekursivt, tenant-scopad
+      // CTE — inkluderar roten, därav -1 nedan).
+      storage.getObjectSubtreeIds(tenantId, objectId),
     ]);
     // Källsystem härleds ur riktiga kolumner: importBatchId (importerad) och
     // isInterimObject (interim från import). Saknas båda ⇒ skapad i Traivo.
@@ -696,6 +702,7 @@ export async function getObjectSystemGeneratedMetadata(
       parentId: object.parentId ?? null,
       parentName: parentRow[0]?.name ?? null,
       childCount: Number(childRow[0]?.count ?? 0),
+      descendantCount: Math.max(0, subtreeIds.length - 1),
       hierarchyDepth: object.hierarchyDepth ?? null,
     };
   }
