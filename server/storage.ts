@@ -3132,6 +3132,9 @@ export class DatabaseStorage implements IStorage {
     if (insertObject.objectNumber && String(insertObject.objectNumber).trim() !== "") {
       const runner = tx ?? db;
       const [object] = await runner.insert(objects).values(insertObject).returning();
+      // Task #1484: spegla klassificering även för explicit-nummer-skapanden
+      // (import/kopiering). Tx-säkert: speglingen väntar på att raden committats.
+      this.mirrorClassificationBestEffort(object.tenantId, object.id, insertObject);
       return { ...object, customerId: null };
     }
     // Auto-generera sekventiellt systemnummer concurrency-safe: ett advisory-lås
@@ -3149,13 +3152,46 @@ export class DatabaseStorage implements IStorage {
     // Om en yttre transaktion redan finns (t.ex. atomär gren-kopiering) återanvänds
     // den så hela trädet skapas eller rullas tillbaka som en enhet — annars öppnas
     // en egen transaktion för bakåtkompatibilitet med enskilda skapanden.
-    if (tx) return run(tx);
-    return await db.transaction(run);
+    if (tx) {
+      const created = await run(tx);
+      // Task #1484: tx-säker uppskjuten spegling — väntar på att yttre tx:n
+      // committats (retry-poll); vid rollback ger den upp tyst.
+      this.mirrorClassificationBestEffort(created.tenantId, created.id, insertObject);
+      return created;
+    }
+    const created = await db.transaction(run);
+    // Task #1484: spegla EXPLICIT satta klassificeringskolumner till metadata
+    // (auto-rader). Best-effort, uppskjuten.
+    this.mirrorClassificationBestEffort(created.tenantId, created.id, insertObject);
+    return created;
+  }
+
+  // Task #1484: fire-and-forget-spegling kolumn→metadata när en skrivväg
+  // explicit satte objectType/hierarchyLevel. Rör aldrig manuella metadata-rader.
+  private mirrorClassificationBestEffort(
+    tenantId: string,
+    objectId: string,
+    data: Partial<InsertObject>,
+  ): void {
+    if (data.objectType === undefined && data.hierarchyLevel === undefined) return;
+    setImmediate(async () => {
+      try {
+        // Tx-säker uppskjuten spegling — väntar på committad rad, ger upp vid rollback.
+        const { scheduleClassificationMirror } = await import('./services/object-classification');
+        scheduleClassificationMirror(tenantId, objectId, {
+          objectType: data.objectType ?? null,
+          hierarchyLevel: data.hierarchyLevel ?? null,
+        });
+      } catch (err) {
+        console.error(`[storage] classification mirror failed object=${objectId}:`, err);
+      }
+    });
   }
 
   async updateObject(id: string, data: Partial<InsertObject>): Promise<ServiceObject | undefined> {
     const [object] = await db.update(objects).set(data).where(eq(objects.id, id)).returning();
     if (!object) return undefined;
+    this.mirrorClassificationBestEffort(object.tenantId, object.id, data);
     return { ...object, customerId: await getObjectPrimaryCustomerId(object.id) };
   }
 
@@ -4807,29 +4843,30 @@ export class DatabaseStorage implements IStorage {
     // (ej migrerade) faller tillbaka på legacy hookLevel/hookConditions med samma matchare.
     // Etapp 5: åtkomstkod läses ur metadata (systemområdet Åtkomst).
     const atkomstForHook = await getObjectAtkomstFields(objectId, tenantId);
+    // Task #1484: klassificering läses metadata-först (Objekttyp/Anläggningstyp)
+    // med kolumn-fallback under expand-fasen. Metadatat hämtas därför alltid för
+    // detta enskilda objekt (behövs nu även utan metadata-villkor på artiklarna).
+    const objMeta = await getObjectWithAllMetadata(objectId, tenantId);
+    const { getObjectHookClassification } = await import('./services/object-classification');
+    const klassificering = await getObjectHookClassification(
+      tenantId,
+      objectId,
+      { objectType: object.objectType, hierarchyLevel: object.hierarchyLevel },
+      objMeta,
+    );
     const hookCtx: HookObjectContext = {
-      objectType: object.objectType || '',
-      hierarchyLevel: object.hierarchyLevel || '',
+      objectType: klassificering.objectType,
+      hierarchyLevel: klassificering.hierarchyLevel,
       accessCode: atkomstForHook.portkod,
     };
 
-    // Hämta objektets metadata bara om någon artikel faktiskt har metadata-villkor (perf).
-    const needsMeta = allArticles.some(
-      (a) =>
-        Array.isArray(a.associationRules) &&
-        (a.associationRules as AssociationCondition[]).some((c) => c.source === 'metadata'),
-    );
-    let lookupMeta: (label: string) => string | null = () => null;
-    if (needsMeta) {
-      const objMeta = await getObjectWithAllMetadata(objectId, tenantId);
-      const metaList = objMeta?.metadata ?? [];
-      lookupMeta = (label: string) => {
-        const m = metaList.find(
-          (mm: any) => mm.katalog.beteckning === label || mm.katalog.namn === label,
-        );
-        return m ? extractMetaDisplayValue(m) : null;
-      };
-    }
+    const metaList = objMeta?.metadata ?? [];
+    const lookupMeta = (label: string): string | null => {
+      const m = metaList.find(
+        (mm: any) => mm.katalog.beteckning === label || mm.katalog.namn === label,
+      );
+      return m ? extractMetaDisplayValue(m) : null;
+    };
 
     return allArticles.filter((article) => {
       const rules = (article.associationRules as AssociationCondition[] | null) || [];

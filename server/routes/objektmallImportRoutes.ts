@@ -71,6 +71,7 @@ import {
   parseCompositeRef,
   type ObjektmallColumn,
 } from "@shared/objektmall-template";
+import { scheduleClassificationMirror } from "../services/object-classification";
 
 const xlsxUpload = multer({
   storage: multer.memoryStorage(),
@@ -2217,6 +2218,11 @@ async function commitImport(
             importBatchId: batchId,
           } as any)
           .returning({ id: objects.id });
+        // Task #1484: tx-säker spegling av klassificering till metadata (efter commit).
+        scheduleClassificationMirror(tenantId, inserted.id, {
+          objectType: meta.objectType ?? null,
+          hierarchyLevel: meta.hierarchyLevel ?? null,
+        });
         if (res.interimNo) {
           interimToObjectId.set(res.interimNo, inserted.id);
           await writeInterimMetadata(inserted.id, res.interimNo);

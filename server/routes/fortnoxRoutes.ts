@@ -44,6 +44,7 @@ import {
   buildCustomerLookup,
   resolveConceptCustomerForObject,
 } from "../services/concept-customer-resolver";
+import { scheduleClassificationMirror } from "../services/object-classification";
 
 async function verifyObjectTenant(objectId: string, tenantId: string): Promise<boolean> {
   try {
@@ -3946,6 +3947,8 @@ app.post("/api/fortnox/full-import", asyncHandler(async (req, res) => {
               status: "active",
               importBatchId,
             }).returning();
+            // Task #1484: tx-säker spegling av klassificering till metadata (efter commit).
+            scheduleClassificationMirror(tenantId, created.id, { objectType: "fastighet", hierarchyLevel: "fastighet" });
             await tx.insert(fortnoxMappings).values({
               tenantId,
               entityType: "object",

@@ -136,6 +136,14 @@ else
   echo "[post-merge] DATABASE_URL unset — skipping schema-drift check"
 fi
 
+# Task #1484: klassificerings-backfill (Objekttyp/Anläggningstyp som metadata).
+# Idempotent, insert-only (skriver aldrig över/nollar). Icke-blockerande.
+if [ -n "$DATABASE_URL" ]; then
+  echo "[post-merge] Running object classification backfill (Task #1484)"
+  npx tsx scripts/backfill-object-classification.ts --confirm KLASSIFICERING-BACKFILL \
+    || echo "[post-merge] ⚠ KLASSIFICERINGS-BACKFILL misslyckades — se loggen ovan. Blockerar ej (kolumn-fallback täcker)."
+fi
+
 # Task #835: paritetstest mellan legacy-fasthakning och den nya regelbaserade resolvern.
 # Körs efter migration 0075 (back-fill av association_rules). Icke-blockerande: rapporterar
 # avvikelser HÖGT i loggen utan att brick:a reconciliationen. Eventuella avvikelser måste

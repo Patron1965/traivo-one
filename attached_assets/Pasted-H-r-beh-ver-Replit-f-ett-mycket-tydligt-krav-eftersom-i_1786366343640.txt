@@ -1,0 +1,241 @@
+Här behöver Replit få ett mycket tydligt krav, eftersom importen annars riskerar att förstöra hela principen med metadata.
+KRITISKT UTVECKLINGSKRAV – IMPORT OCH MATCHNING MOT METADATA
+Vid import av objekt är det avgörande att varje kolumn i importfilen kopplas till rätt definierat metadatafält.
+Importfunktionen får inte skapa egna tillfälliga fält, använda gamla legacyfält eller försöka tolka kolumnrubriker mot tidigare objektregister.
+Grundprincipen är:
+Objektet innehåller endast namn, objektnummer och referens till överordnat objekt. All övrig objektinformation ska importeras till definierade metadatafält.
+Detta innebär att importfunktionen måste utgå från metadatakatalogen som single source of truth.
+I bifogad importmatris finns exempelvis kolumner som:
+    •    Objektnamn
+    •    Internnummer
+    •    Överordnat objekt
+    •    Postadress
+    •    Postnummer
+    •    Ort
+    •    Region
+    •    Namn
+    •    Titel
+    •    Telefon
+    •    E-post
+    •    Antal
+    •    Tömningsdag
+    •    Objekttyp
+    •    Färg
+Av dessa är bara objektets identitet och hierarkikoppling kärndata. Övriga kolumner ska matchas mot metadatafält.
+1. Tre särskilda importfält för objektet
+Importdialogen ska tydligt skilja på objektets tre kärnfält:
+Objektnamn
+→ Objektets namn.
+Objektnummer / internnummer
+→ Objektets unika objektnummer.
+Överordnat objektnummer
+→ Referens till parent/överordnat objekt.
+Dessa tre fält ska ligga i en egen kategori i matchningen, exempelvis:
+Systemfält – Objekt
+De ska inte blandas med metadata.
+Allt annat ska matchas mot metadatafält.
+
+2. Importdialogen ska endast visa verkligt definierade metadatafält
+När användaren öppnar dropdownen för exempelvis Excelkolumnen:
+Objekt typ
+ska systemet visa alla metadatafält som finns definierade i metadatakatalogen och som användaren har rätt att använda.
+Om metadatafältet:
+Typ
+eller
+Objekttyp
+är definierat i metadatakatalogen ska det vara valbart.
+Om det inte finns definierat ska systemet inte hitta på ett sådant fält.
+Detta är precis problemet som nu syns i bifogad bild:
+Excel innehåller kolumnen:
+Objekt typ
+men motsvarande metadatafält verkar inte kunna hittas i matchningsdialogen.
+Detta måste felsökas.
+Kontrollera särskilt:
+    •    om metadatafältet faktiskt finns i metadata definition table,
+    •    om det är aktivt,
+    •    om det filtreras bort på grund av kund/organisation,
+    •    om det ligger i fel metadataområde,
+    •    om det är fel datatyp,
+    •    om dropdownen bara hämtar ett subset av metadatafält,
+    •    om ett äldre legacyregister fortfarande används i importlogiken,
+    •    om metadatafält har olika interna ID:n mellan frontend och backend,
+    •    om importerbara metadatafält filtreras felaktigt.
+
+3. Ingen automatisk fallback till gamla objektfält
+Om importfilen innehåller:
+Objekt typ
+får systemet absolut inte göra:
+object.type = "område"
+eller motsvarande.
+Det ska i stället vara:
+metadataDefinition = Objekttyp
+metadataValue = område
+om ett sådant metadatafält finns definierat.
+Finns det inget metadatafält ska importen säga:
+Ingen matchning – välj metadatafält eller skapa ett metadatafält innan importen kan genomföras.
+Det är mycket bättre att stoppa importen än att lägga data på fel plats.
+
+4. Matchningsvyn ska delas upp tydligt
+Dropdownen för matchning bör ha tre tydliga sektioner:
+SYSTEMFÄLT – OBJEKT
+    •    Objektnamn
+    •    Objektnummer
+    •    Överordnat objektnummer
+METADATA
+Grupperat efter metadataområde, exempelvis:
+Grunduppgifter
+    •    Fastighetsägare
+    •    Objekttyp
+    •    etc.
+Geografi
+    •    Adress
+    •    Postnummer
+    •    Ort
+    •    Region
+    •    Koordinater
+Kontaktinformation
+    •    Namn
+    •    Titel
+    •    Telefon
+    •    E-post
+Produktion
+    •    Antal
+    •    Tömningsdag
+    •    Färg
+osv.
+IGNORERA KOLUMN
+Om en kolumn inte ska importeras.
+Detta gör att användaren tydligt ser skillnaden mellan systemfält och metadata.
+
+5. Metadataområden ska användas i importdialogen
+Metadatakatalogens områdesstruktur ska också synas i matchningen.
+Exempel:
+Excelkolumn: Telefon
+Dropdown:
+Kontaktinformation
+└ Telefon – Text
+Excelkolumn: Antal
+Dropdown:
+Produktion
+└ Antal – Heltal
+Excelkolumn: Färg
+Dropdown:
+Produktion
+└ Färg – Text
+Excelkolumn: Region
+Dropdown:
+Geografi
+└ Region – Text
+Detta gör det betydligt svårare att välja fel metadatafält.
+
+6. Kontroll av datatyp före import
+Systemet ska kontrollera att kolumnen kan konverteras till metadatafältets definierade datatyp.
+Exempel:
+Antal → Heltal
+ska acceptera:
+28
+men inte utan varning:
+tjugoåtta
+På samma sätt ska:
+    •    datum valideras mot datumfält,
+    •    tal mot numeriska fält,
+    •    ja/nej mot boolean,
+    •    referenser mot referensfält,
+    •    koordinater mot koordinattyp osv.
+Fel ska redovisas före import.
+
+7. Grupperade metadata – särskilt Kontakt
+Detta är viktigt i den bifogade importmatrisen.
+Kolumnerna:
+    •    Namn
+    •    Titel
+    •    Telefon
+    •    E-post
+är inte fyra fristående logiska poster.
+De hör till samma kontaktpost.
+Importlogiken måste därför förstå att dessa metadatafält tillhör samma metadatagrupp, exempelvis:
+Kontaktinformation / Kontakt
+och skapa:
+Kontaktpost 1
+    •    Namn: Jennifer Berggren
+    •    Titel: BC
+    •    Telefon: 010-4744222
+    •    E-post: ...
+inte fyra separata orelaterade metadataobjekt.
+Samma princip måste fungera för andra framtida grupperade metadata.
+
+8. Metadata ska hamna på rätt objekt
+Varje rad i importfilen representerar ett objekt.
+När raden importeras ska systemet:
+    1    identifiera objektet genom objektnummer,
+    2    skapa eller uppdatera objektet,
+    3    koppla parent genom överordnat objektnummer,
+    4    läsa varje matchad metadatakolumn,
+    5    skriva metadata till just detta objekt,
+    6    skapa eventuell historik,
+    7    hantera ärvningslogik efteråt.
+Det är kritiskt att metadata från en rad aldrig kan hamna på föräldraobjektet eller ett syskonobjekt på grund av importerad hierarkilogik.
+
+9. Eget och ärvt metadata
+Importfilen ska normalt skapa eget metadata på det objekt vars rad importeras.
+Arv ska därefter beräknas enligt metadatadefinitionens ärvningsregel.
+Exempel:
+Tredo Sverige:
+Kund = Tredo Sverige
+Barnobjekt behöver inte få en fysisk kopia om metadatafältet är ärvbart.
+När användaren tittar på barnet kan systemet visa:
+Kund: Tredo Sverige – Ärvt
+Importfunktionen ska alltså inte duplicera ärvda värden ned genom hela objektträdet om det inte finns ett särskilt skäl.
+
+10. Matchningen måste sparas som importmall
+När användaren har matchat en viss Excelstruktur ska matchningen kunna sparas.
+Exempel:
+Importmall: Tredo objektimport v1
+Med:
+Objektnamn → system.objectName
+Internnummer → system.objectNumber
+Överordnat objekt → system.parentObjectNumber
+Postadress → metadata.adress
+Postnr → metadata.postnummer
+Ort → metadata.ort
+Region → metadata.region
+Namn → metadata.kontakt.namn
+Titel → metadata.kontakt.titel
+Telefon → metadata.kontakt.telefon
+E-post → metadata.kontakt.epost
+Antal → metadata.antal
+Tömningsdag → metadata.tomningsdag
+Objekt typ → metadata.objekttyp
+Färg → metadata.farg
+Vid nästa import med samma struktur ska detta kunna återanvändas.
+
+11. Validering innan användaren får trycka Importera
+Innan importen körs ska systemet visa:
+15 av 15 kolumner matchade
+men detta får inte bara betyda att systemet hittat något fält.
+Det ska betyda att matchningen är semantiskt och tekniskt giltig.
+Systemet ska kontrollera:
+    •    obligatoriska systemfält finns,
+    •    parent-referenser går att lösa eller kommer skapas i batchen,
+    •    metadatafält existerar,
+    •    metadatafält är aktiva,
+    •    datatyper är kompatibla,
+    •    inga två Excelkolumner felaktigt skriver till samma singelvärdesfält,
+    •    grupperade metadata är korrekt sammanhållna,
+    •    inga legacyfält används,
+    •    inga okända destinationer finns.
+Först därefter ska importen få starta.
+Särskilt fel att lösa nu
+Det nuvarande konkreta problemet är:
+Kolumnen ”Objekt typ” finns i importfilen men rätt metadatafält kan inte hittas/väljas i matchningen.
+Replit ska felsöka detta från metadatadefinitionen hela vägen till importdialogen.
+Kontrollera:
+Metadata definition → API → organisation/kundfilter → dropdown → importmappning → lagring av metadataValue
+Det ska gå att verifiera med ett faktiskt objekt efter import:
+Pantkärl – [objektnummer]
+och därefter på objektöversikten:
+Metadataområde X → Objekttyp → Pantkärl/område/etc.
+Värdet får inte samtidigt finnas som object.type, hierarchyLevel eller något annat legacyfält.
+Slutlig princip till utvecklarna
+Importen är inte en import till ett traditionellt objektschema. Den är en import till objektets tre kärnfält plus Traivos metadatamodell. Varje importerad kolumn utöver namn, objektnummer och parent-referens måste därför kunna spåras till exakt en aktiv metadata-definition. Om den definitionen inte finns eller inte kan hittas ska importen stoppas – aldrig falla tillbaka till ett gammalt objektfält.
+Det här är särskilt viktigt nu när den gamla Traivo-modellen rensas bort. Annars riskerar importfunktionen att återinföra precis de parallella datamodeller som vi försöker eliminera.

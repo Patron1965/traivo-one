@@ -21,6 +21,7 @@ import type { ServiceObject } from "@shared/schema";
 import { ensurePrimaryPayer, primaryPayerCustomerIdSql } from "./object-customer";
 import { storage } from "../storage";
 import { copyObjectLocalMetadata } from "../metadata-queries";
+import { scheduleClassificationMirror } from "./object-classification";
 
 export type CopyMode = "single" | "branch";
 
@@ -174,6 +175,14 @@ export async function copyObjectTree(
     const res = await copyMetadataForClone(s, clone.id, tenantId);
     copiedMetadata += res.metaCount;
     if (res.metaError && !metadataCopyError) metadataCopyError = res.metaError;
+    // Task #1484: spegla klassificeringskolumnerna till metadata EFTER att
+    // källans metadata kopierats — kopierade (ev. manuella) rader vinner alltid
+    // (mirror rör aldrig manuella rader); källor med enbart legacy-kolumner
+    // får auto-rader så klonen blir metadata-först direkt.
+    scheduleClassificationMirror(tenantId, clone.id, {
+      objectType: s.objectType ?? null,
+      hierarchyLevel: s.hierarchyLevel ?? null,
+    });
   }
 
   const rootClone = clonePairs[0].clone;

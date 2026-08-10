@@ -653,7 +653,7 @@ export function registerObjectImportV2Routes(app: Express): void {
           const rowNames = new Set<string>();
           for (const s of strings) rowNames.add(s.namn);
           for (const g of jsonGroups) rowNames.add(g.namn);
-          if (r.metadata.typ) rowNames.add("typ");
+          if (r.metadata.typ) rowNames.add("Objekttyp"); // Task #1484: kanoniskt klassificeringsfält
           const collisions = Array.from(rowNames).filter((n) => existingNames.has(n));
           if (collisions.length === 0) continue;
           const row = byRow.get(r.rowNumber);
@@ -1489,7 +1489,11 @@ export function registerObjectImportV2Routes(app: Express): void {
           const fields: { namn: string; varde: string | Record<string, unknown>; datatyp: "string" | "json" }[] = [];
           for (const s of strings) fields.push({ namn: s.namn, varde: s.varde, datatyp: "string" });
           for (const g of jsonGroups) fields.push({ namn: g.namn, varde: g.varde, datatyp: "json" });
-          if (row.metadata.typ) fields.push({ namn: "typ", varde: row.metadata.typ, datatyp: "string" });
+          // Task #1484: klassificering skrivs till det KANONISKA katalogfältet
+          // "Objekttyp" (systemområdet Klassificering) — inte ett eget "typ"-fält.
+          // objects.objectType sätts fortfarande av buildKnownFields = avsiktlig
+          // kolumn-cache under expand-fasen.
+          if (row.metadata.typ) fields.push({ namn: "Objekttyp", varde: row.metadata.typ, datatyp: "string" });
           const contact = buildCompositeObject(row.composite.contact ?? {});
           if (Object.keys(contact).length) fields.push({ namn: "kontaktperson", varde: contact, datatyp: "json" });
           if (row.fields.external_id) fields.push({ namn: "externt_id", varde: row.fields.external_id, datatyp: "string" });
@@ -1701,6 +1705,19 @@ export function registerObjectImportV2Routes(app: Express): void {
                 .where(and(eq(objects.id, targetId), eq(objects.tenantId, tenantId)))
                 .returning({ parentId: objects.parentId });
               const effectiveParentId = updatedRow?.parentId ?? parentId ?? null;
+              // Task #1484: importens direkta kolumn-UPDATE går förbi storage.updateObject —
+              // spegla explicit satt objekttyp till metadata (auto-rad, manuell rad vinner).
+              if ((updateData as any).objectType || (updateData as any).hierarchyLevel) {
+                try {
+                  const { mirrorClassificationToMetadata } = await import("../services/object-classification");
+                  await mirrorClassificationToMetadata(tenantId, targetId, {
+                    objectType: (updateData as any).objectType ?? null,
+                    hierarchyLevel: (updateData as any).hierarchyLevel ?? null,
+                  });
+                } catch (err) {
+                  console.error(`[objects-v2] classification mirror failed object=${targetId}:`, err);
+                }
+              }
               // Ångra-funktion: stämpla update_object DIREKT efter scalar-UPDATE:n och
               // FÖRE de sekundära best-effort-stegen (parent/payer/metadata). Då blir
               // skalär-ändringen alltid ångringsbar även om ett senare steg kastar

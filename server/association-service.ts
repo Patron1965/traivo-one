@@ -2,6 +2,7 @@ import { db } from "./db";
 import { eq, and, isNull, sql } from "drizzle-orm";
 import { articles, objects, metadataKatalog, metadataVarden, type AssociationCondition } from "@shared/schema";
 import { getObjectWithAllMetadata, getObjectAtkomstFields } from "./metadata-queries";
+import { getObjectHookClassification } from "./services/object-classification";
 
 // Task #835: utökade operatorer. greater/less = numerisk jämförelse om båda är tal,
 // annars lexikografisk. has_value = fältet har ett (icke-tomt) värde ("ungefärlig träff").
@@ -177,9 +178,17 @@ export async function getMatchingArticlesForObject(
     .from(objects)
     .where(and(eq(objects.id, objectId), eq(objects.tenantId, tenantId)));
   const atkomst = await getObjectAtkomstFields(objectId, tenantId, objMeta ?? undefined);
+  // Task #1484: klassificering läses metadata-först (Objekttyp/Anläggningstyp i
+  // systemområdet Klassificering) med kolumn-fallback under expand-fasen.
+  const klassificering = await getObjectHookClassification(
+    tenantId,
+    objectId,
+    { objectType: objRow?.objectType, hierarchyLevel: objRow?.hierarchyLevel },
+    objMeta,
+  );
   const hookCtx: HookObjectContext = {
-    objectType: objRow?.objectType || "",
-    hierarchyLevel: objRow?.hierarchyLevel || "",
+    objectType: klassificering.objectType,
+    hierarchyLevel: klassificering.hierarchyLevel,
     accessCode: atkomst.portkod,
   };
 

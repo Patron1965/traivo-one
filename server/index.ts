@@ -207,6 +207,31 @@ process.on('exit', (code) => {
       console.error("[startup] Failed to run owner role fix:", error);
     }
 
+    // Task #1484: garantera att systemkatalogfälten (inkl. Objekttyp/
+    // Anläggningstyp i området Klassificering) finns för ALLA tenants —
+    // metadata-först-modellen får inte bero på att en admin öppnat
+    // metadata-inställningarna eller att post-merge hunnit köra.
+    try {
+      const { ensureSystemomradenFalt } = await import("./metadata-queries");
+      const { tenants } = await import("@shared/schema");
+      const { db: bootDb } = await import("./db");
+      const allTenants = await bootDb.select({ id: tenants.id }).from(tenants);
+      let ensured = 0;
+      let conflicts = 0;
+      for (const t of allTenants) {
+        try {
+          const res = await ensureSystemomradenFalt(t.id);
+          ensured++;
+          conflicts += res.conflicts?.length ?? 0;
+        } catch (err) {
+          console.error(`[startup] ensureSystemomradenFalt failed for tenant ${t.id}:`, err);
+        }
+      }
+      console.log(`[startup] Systemomraden-fält säkrade för ${ensured}/${allTenants.length} tenants (conflicts=${conflicts})`);
+    } catch (error) {
+      console.error("[startup] Failed to ensure systemomraden fields:", error);
+    }
+
     // Återhämta avbrutna berikningskörningar (Task #253). Vid uppstart är alla
     // import_batches med metadata.status='in_progress' per definition övergivna
     // — processen som ägde dem är död. Markera dem som failed med tydlig orsak

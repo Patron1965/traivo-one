@@ -4871,6 +4871,12 @@ export const SYSTEMOMRADEN_FALT: SystemomradeFaltDef[] = [
   { key: 'antal kärl', namn: 'Antal kärl', visningsnamn: 'Antal kärl', datatyp: 'integer', standardArvs: false, sortOrder: 1, icon: 'Container', beskrivning: 'Antal kärl på platsen.', area: 'kärl' },
   { key: 'serviceperioder', namn: 'Serviceperioder', visningsnamn: 'Serviceperioder', datatyp: 'string', standardArvs: true, sortOrder: 2, icon: 'CalendarRange', beskrivning: 'Serviceperioder (t.ex. vecka/månad/säsong).', area: 'kärl' },
   { key: 'ställtid', namn: 'Ställtid', visningsnamn: 'Ställtid', datatyp: 'integer', standardArvs: true, sortOrder: 3, icon: 'Timer', beskrivning: 'Ställtid i minuter.', area: 'kärl' },
+  // --- Klassificering (Task #1484: objekttyp/nivå blir metadata, kolumner = cache) ---
+  // standardArvs=false: varje objekt har sin EGEN typ/nivå — ett rum får aldrig
+  // ärva "fastighet" från sin förälder. Fri sträng under expand-fasen (paritet
+  // med dagens kolumnvärden); allowed_values kan stramas åt i contract-fasen.
+  { key: 'objekttyp', namn: 'Objekttyp', visningsnamn: 'Objekttyp', datatyp: 'string', standardArvs: false, sortOrder: 1, icon: 'Shapes', beskrivning: 'Objektets typ (t.ex. fastighet, omrade, utrustning). Källa för artikel-fasthakning; objektkolumnen är en cache.', area: 'klassificering' },
+  { key: 'anläggningstyp', namn: 'Anläggningstyp', visningsnamn: 'Anläggningstyp', datatyp: 'string', standardArvs: false, sortOrder: 2, icon: 'Layers', beskrivning: 'Objektets nivå/anläggningstyp (t.ex. koncern, brf, fastighet, rum, karl). Källa för nivåbaserad artikel-fasthakning; objektkolumnen hierarchyLevel är en cache.', area: 'klassificering' },
   // --- Bild ---
   { key: 'bilder', namn: 'Bilder', visningsnamn: 'Bilder', datatyp: 'image', standardArvs: false, sortOrder: 1, icon: 'Image', beskrivning: 'Bilder kopplade till objektet (flera tillåtna).', area: 'bild', allowDuplicates: true, arLogisk: false },
   { key: 'vinjetbild', namn: 'Vinjetbild', visningsnamn: 'Vinjettbild', datatyp: 'image', standardArvs: false, sortOrder: 2, icon: 'ImagePlus', beskrivning: 'Utpekad vinjettbild för objektet.', area: 'bild', arLogisk: false },

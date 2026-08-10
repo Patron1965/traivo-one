@@ -1,0 +1,319 @@
+Här är en kompletterande och skarpare prompt till Replit som rensar upp sidoregistren för artiklar och skapade uppgifter och tar bort dubbleringen mellan Uppgiftstyp och Utförandekod.
+KRITISKT UTVECKLINGSKRAV – RENSA SIDOREGISTER FÖR ARTIKLAR OCH UPPGIFTER
+Det finns fortfarande kvar dubblerade och felaktigt separerade register i artikel- och uppgiftsmodellen. Detta behöver nu städas upp innan mer logik byggs ovanpå strukturen.
+Grundprincipen ska vara:
+Artikeln definierar vilket arbete eller vilken vara som avses. När artikeln skapar en uppgift ska rätt klassificeringar och planeringsdata följa med från artikeln.
+Vi ska inte ha flera parallella register som beskriver samma sak.
+Följande tre sidoregister ska finnas kopplade till Artikel
+1. Artikeltyp
+Artikeltyp beskriver vad artikeln är för slags artikel.
+Exempel:
+    •    Tvättjänst
+    •    Servicetjänst
+    •    Kontroll-/besiktningstjänst
+    •    Aviseringstjänst
+    •    Administrationstjänst
+    •    Reservdel OEM
+    •    Reservdel MRO
+    •    Förbrukningsmaterial
+    •    Vara
+    •    Transporttjänst
+Artikeltypen används för kategorisering, statistik, sökning, ekonomisk logik och struktur i artikelregistret.
+Detta ska vara ett eget sidoregister.
+
+2. Utförandekod
+Utförandekoden beskriver vilken typ av kompetens, resurs eller utförarprofil som krävs för att genomföra den uppgift som artikeln skapar.
+Exempel:
+    •    RBK
+    •    BÖK
+    •    Service
+    •    Avisering
+    •    Felanmälan
+    •    Transport
+    •    Kranbil
+    •    Sugbil
+    •    Rullbara kärl
+    •    Bottenöppnande kärl
+    •    Reparation och underhåll
+Utförandekoden är alltså i första hand en planerings- och kompetenskod.
+Den används för att planeraren ska kunna:
+    •    filtrera uppgifter,
+    •    gruppera uppgifter,
+    •    skapa uppgiftsklumpar,
+    •    matcha uppgifter mot rätt utförare,
+    •    matcha uppgifter mot rätt team,
+    •    matcha uppgifter mot rätt kompetens eller utrustning.
+När en artikel skapar en uppgift ska uppgiften normalt ärva artikelns utförandekod.
+Exempel:
+Artikel: Tvätt BÖK 5 m³
+Artikeltyp: Tvättjänst
+Utförandekod: BÖK
+När uppgiften skapas ska den bära med sig:
+Utförandekod: BÖK
+Därmed kan Uppgiftsnavet filtrera fram alla BÖK-arbeten och planeraren kan matcha dem mot rätt personal.
+
+Uppgiftstyp ska tas bort som parallellt register
+I nuvarande meny finns både:
+    •    Utförandekoder
+    •    Uppgiftstyper
+Detta ser ut att vara en felaktig dubblering.
+Om Uppgiftstyp innehåller sådant som:
+    •    BÖK
+    •    Service
+    •    Tvätt
+    •    Besiktning
+    •    Administration
+    •    Driftkontroll
+    •    RBK
+    •    Konsultation
+så överlappar detta både Artikeltyp och Utförandekod.
+Det ska inte finnas tre olika sätt att klassificera samma arbete.
+Därför:
+Det separata sidoregistret Uppgiftstyp ska tas bort om det inte kan visas att det har en unik funktion som inte redan täcks av Artikeltyp eller Utförandekod.
+Befintlig data ska först analyseras och migreras:
+    •    om värdet beskriver artikelns kategori → flytta till Artikeltyp
+    •    om värdet beskriver kompetens/utförande → flytta till Utförandekod
+    •    om det är legacydata utan funktion → ta bort
+Inga nya funktioner ska byggas mot det gamla Uppgiftstyp-registret.
+
+3. Tidstyp / Tidskod
+Det tredje sidoregistret ska definiera vilken typ av tid en artikel och den skapade uppgiften genererar.
+Det är viktigt att skilja detta från produktionstidens längd.
+Tidstyp beskriver vad tiden är, inte hur många minuter den tar.
+Exempel:
+    •    Produktion
+    •    Resa
+    •    Egentid
+    •    Rast/lunch
+    •    Nattvila
+    •    Helgvila
+    •    Intern utbildning
+    •    Intern administration
+    •    Intern reparation
+    •    annan definierad tidstyp
+Tidstypen behövs framför allt för kapacitets- och överlappningslogiken i Traivos 168-timmars veckoplan.
+
+Tidslogiken ska styra vad som får överlappa
+Olika tidstyper ska kunna ha regler för överlappning och prioritet.
+Exempel:
+Produktionstid
+Produktionstid betyder att personen faktiskt utför produktivt arbete.
+Den kan normalt:
+    •    överlappa viss egentid som ännu inte är låst,
+    •    ersätta annan planerad produktion genom omplanering,
+men den kan inte samtidigt genomföras under fysisk restid om arbetet kräver att personen är på plats.
+
+Restid
+Restid innebär att utföraren förflyttar sig.
+En fysisk service-, tvätt- eller reparationsuppgift kan normalt inte utföras under samma tid.
+Däremot kan vissa administrativa arbetsuppgifter vara möjliga.
+Exempel:
+Avisering eller viss administration kan eventuellt utföras under resa, beroende på arbetsform och regelverk.
+Systemet behöver därför inte bara en enkel prioritetssiffra utan en tydlig överlappningsmatris/regellogik mellan tidstyper.
+Exempel:
+Tidstyp A
+Tidstyp B
+Överlappning
+Produktion
+Produktion
+Normalt nej / kräver omplanering
+Produktion
+Resa
+Nej
+Produktion
+Egentid
+Ja, produktion kan ersätta egentid
+Administration
+Resa
+Kan tillåtas
+Avisering
+Resa
+Kan tillåtas
+Rast
+Produktion
+Nej
+Nattvila
+Produktion
+Nej
+Exakt regelverk kan konfigureras senare, men datamodellen måste stödja det.
+
+PRODUKTIONSTID ÄR INTE ETT SIDOREGISTER
+Detta är ytterligare ett viktigt fel i nuvarande struktur.
+I menyn finns idag:
+Produktionstider
+och dialogen visar:
+Ny produktionstid
+Artikel
+Utförare
+Utrustning
+Produktionstid (minuter)
+Denna separata modell ska i grunden tas bort.
+Produktionsestimatet ska ligga på ARTIKELN
+Varje artikel ska ha ett fält såsom:
+Estimerad produktionstid per enhet
+Exempel:
+Artikel: Tvätt BÖK
+Enhet: st
+Estimerad produktionstid: 25 minuter/st
+Om ordern innehåller:
+4 st
+ska grundberäkningen bli:
+4 × 25 min = 100 min produktionstid
+Detta är artikelns kalkyl- och planeringsdata och hör därför hemma direkt på artikeln.
+Det ska inte krävas ett separat sidoregister bara för att tala om att en artikel tar 25 minuter.
+
+Skillnaden mellan TIDSTYP och PRODUKTIONSTID
+Detta måste hållas helt isär.
+Tidstyp
+Svarar på:
+Vad är detta för slags tid?
+Exempel:
+Produktion
+Produktionstid
+Svarar på:
+Hur mycket tid kräver artikeln?
+Exempel:
+25 minuter/st
+En artikel kan därför exempelvis innehålla:
+Artikel: Tvätt av bottenöppnande kärl
+Artikeltyp: Tvättjänst
+Utförandekod: BÖK
+Tidstyp: Produktion
+Estimerad tid: 25 minuter/st
+Det är komplett information för att generera en uppgift.
+
+När en artikel skapar en uppgift
+När artikeln används i Orderkoncept, Order eller Snabborder och genererar en uppgift ska relevanta värden följa med.
+Exempel:
+Artikel
+    •    Artikelnummer: TV-BÖK-001
+    •    Namn: Tvätt BÖK
+    •    Artikeltyp: Tvättjänst
+    •    Utförandekod: BÖK
+    •    Tidstyp: Produktion
+    •    Estimerad tid: 25 min/st
+    •    Enhet: st
+Ordern innehåller:
+4 st
+Systemet skapar då en uppgift med exempelvis:
+    •    Uppgift: Tvätt BÖK
+    •    Kvantitet: 4
+    •    Utförandekod: BÖK
+    •    Tidstyp: Produktion
+    •    Planerad grundtid: 100 minuter
+    •    Uppgiftsstatus: Skapad
+Uppgiften behöver alltså inte ett separat Uppgiftstyp-fält för att återigen klassificera arbetet.
+
+Viktig skillnad – artikelns data och uppgiftens data
+Artikeldata är definitionen/mallen.
+Uppgiften är den konkreta instansen av arbetet.
+När uppgiften skapas bör relevanta planeringsvärden kopieras eller versioneras så att en framtida förändring av artikeln inte förstör historiken.
+Exempel:
+Artikeln säger idag:
+25 min/st
+En uppgift skapas med:
+4 st = 100 minuter
+Om artikeln nästa år ändras till:
+30 min/st
+ska den gamla utförda uppgiften fortfarande kunna visa att dess ursprungliga planering var 100 minuter, inte räknas om retroaktivt.
+
+SIDOREGISTER SOM SKA FINNAS
+För artikel-/uppgiftsområdet ska den principiella strukturen därför vara:
+Artikeltyper
+Kategoriserar artikeln.
+Utförandekoder
+Anger kompetens/resurs/typ av utförande.
+Tidskoder / Tidstyper
+Anger vilken sorts tid uppgiften belastar veckoplanen med och vilka överlappningsregler som gäller.
+Ikoner
+Kan finnas som visuellt stödsystem om detta används generellt.
+Detta är legitima sidoregister.
+
+DET SOM INTE SKA FINNAS SOM SIDOREGISTER
+Uppgiftstyper
+Tas bort om registret bara duplicerar Artikeltyp/Utförandekod.
+Produktionstider
+Tas bort som fristående register.
+Estimerad produktionstid per enhet ska anges på artikeln.
+Eventuella variationer beroende på utförare eller utrustning kan i framtiden hanteras som en särskild produktionsfaktor/kapacitetsfaktor, men grundtiden måste fortfarande ägas av artikeln.
+Exempel:
+Artikelgrundtid:
+30 min/st
+Mycket snabb utrustning:
+faktor 0,8
+Då kan systemet beräkna:
+30 × 0,8 = 24 minuter
+Men detta förändrar inte principen att artikelns grundtid finns på artikeln.
+
+Föreslagen slutmodell för Artikel
+En artikel ska i relevanta fall kunna innehålla:
+Artikelnummer
+Namn
+Beskrivning
+Artikeltyp
+Utförandekod
+Tidstyp
+Enhet
+Estimerad tid per enhet
+Pris
+Kostnad
+inköps-/lagerinformation där relevant
+övrig artikeldata
+När artikeln inte genererar arbete, exempelvis en ren reservdel, ska tid och utförandekod kunna vara tomma där det är logiskt.
+
+Föreslagen slutmodell för Uppgift
+En skapad uppgift ska bland annat innehålla:
+Uppgifts-ID
+Källa – Orderkoncept / Order / Snabborder / manuell uppgift etc.
+Artikelreferens
+Objektreferens
+Kvantitet
+Utförandekod
+Tidstyp
+Beräknad tid
+Planerad tid
+Faktisk tid
+Utförare/team
+Uppgiftsstatus
+Artikeltyp behöver normalt inte dupliceras på uppgiften om den kan spåras via artikelreferensen, såvida det inte krävs för historisk snapshot eller prestanda.
+
+MENYN SKA OCKSÅ RENSAS
+Nuvarande meny under Artiklar & tjänster innehåller bland annat:
+    •    Artiklar
+    •    Artikelkomponenter
+    •    Strukturartiklar
+    •    Produktionstider
+    •    Artikeltyper
+    •    Utförandekoder
+    •    Uppgiftstyper
+    •    Tidskoder
+    •    Ikoner
+Efter saneringen ska:
+Produktionstider tas bort.
+Uppgiftstyper tas bort.
+Kvar ska i princip vara:
+    •    Artiklar
+    •    Artikelkomponenter
+    •    Strukturartiklar
+    •    Artikeltyper
+    •    Utförandekoder
+    •    Tidskoder
+    •    Ikoner
+samt andra verkligt separata register som har en tydligt definierad funktion.
+
+ACCEPTANSKRITERIER
+Saneringen är klar först när:
+    1    En artikel kan ha exakt en definierad Artikeltyp.
+    2    En artikel kan tilldelas relevant Utförandekod.
+    3    En artikel kan tilldelas relevant Tidstyp/Tidskod.
+    4    Estimerad produktionstid anges direkt på artikeln per enhet.
+    5    Separata menyn/registret Produktionstider är borttaget eller migrerat.
+    6    Separata registret Uppgiftstyper är borttaget om det inte har en dokumenterad unik betydelse.
+    7    Befintliga Uppgiftstyp-värden har migrerats till rätt Artikeltyp eller Utförandekod.
+    8    När artikeln genererar en uppgift följer Utförandekod, Tidstyp och beräknad tid med korrekt.
+    9    Uppgiftsstatus fortsätter vara ett helt separat systembegrepp som beskriver uppgiftens livscykel.
+    10    Uppgiftsnavets filter använder Utförandekod, Artikeltyp, Tidstyp och Uppgiftsstatus där respektive begrepp är relevant – inte ett ospecificerat legacyfält ”Uppgiftstyp”.
+    11    168-timmarsplaneringen kan skilja på Produktion, Resa, Egentid osv. och använda tidstypens prioritet/överlappningsregler.
+    12    Historiska uppgifter förändras inte retroaktivt när artikelns framtida grundtid eller klassificering ändras.
+Huvudprincip
+Artikeltyp beskriver VAD artikeln är. Utförandekod beskriver VEM/VILKEN KOMPETENS som kan utföra arbetet. Tidstyp beskriver HUR TIDEN ska behandlas i planeringen. Estimerad produktionstid beskriver HUR LÅNG TID artikeln normalt tar per enhet. Uppgiftsstatus beskriver VAR I PROCESSEN den skapade uppgiften befinner sig. Dessa begrepp ska vara strikt separerade och inga parallella legacyregister ska finnas kvar.

@@ -24,6 +24,7 @@ import { metadataVarden } from "@shared/schema";
 import { restoreEnrichModusBatch } from "../enrich-modus-restore";
 import { invalidateAreaSearchCityCache } from "./plannerRoutes";
 import { getImportTemplate, IMPORT_TEMPLATES, type ImportTemplateDefinition } from "@shared/import-templates";
+import { scheduleClassificationMirror } from "../services/object-classification";
 
 async function buildTemplateWorkbook(def: ImportTemplateDefinition): Promise<Buffer> {
   const wb = new ExcelJS.Workbook();
@@ -3108,6 +3109,8 @@ app.post("/api/import/fortnox-customers/bulk", xlsxUpload.single("file"), asyncH
               status: "active",
               importBatchId,
             }).returning();
+            // Task #1484: tx-säker spegling av klassificering till metadata (efter commit).
+            scheduleClassificationMirror(tenantId, createdObject.id, { objectType: "fastighet", hierarchyLevel: "fastighet" });
             // ADR v3: kund-koppling via primär payer (ej längre objects.customer_id).
             await ensurePrimaryPayer(tenantId, createdObject.id, customerId, "import-explicit");
             await tx.insert(fortnoxMappings).values({
@@ -3137,6 +3140,8 @@ app.post("/api/import/fortnox-customers/bulk", xlsxUpload.single("file"), asyncH
               status: "active",
               importBatchId,
             }).returning();
+            // Task #1484: tx-säker spegling av klassificering till metadata (efter commit).
+            scheduleClassificationMirror(tenantId, createdObject.id, { objectType: "fastighet", hierarchyLevel: "fastighet" });
             // ADR v3: kund-koppling via primär payer (ej längre objects.customer_id).
             await ensurePrimaryPayer(tenantId, createdObject.id, customerId, "import-explicit");
             await tx.insert(fortnoxMappings).values({
@@ -6399,6 +6404,8 @@ app.post("/api/import/customer-fastighetslista/commit", requireAdmin, asyncHandl
         hierarchyLevel: "fastighet",
         importBatchId: batchId,
       }).returning();
+      // Task #1484: tx-säker spegling av klassificering till metadata (efter commit).
+      scheduleClassificationMirror(tenantId, created.id, { objectType: "fastighet", hierarchyLevel: "fastighet" });
       // ADR v3: kund-koppling via primär payer (ej längre objects.customer_id).
       await ensurePrimaryPayer(tenantId, created.id, customerId, "import-explicit");
       createdIds.push(created.id);

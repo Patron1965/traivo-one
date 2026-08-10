@@ -114,6 +114,17 @@ async function runMetadataChangeJob(tenantId: string, objectIds: string[]): Prom
     console.error(`[metadata-change-jobs] geo-field sync failed:`, err);
   }
 
+  // 4b. Klassificering (Task #1484): synka Objekttyp/Anläggningstyp-metadata ned
+  //     i objektkolumnerna objectType/hierarchyLevel (enkelriktad cache, present-
+  //     value-only). Ingen cascade — klassificering ärvs inte (standardArvs=false).
+  let classificationSynced = 0;
+  try {
+    const { syncClassificationColumns } = await import("./object-classification");
+    classificationSynced = await syncClassificationColumns(tenantId, objectIds);
+  } catch (err) {
+    console.error(`[metadata-change-jobs] classification sync failed:`, err);
+  }
+
   // 5. Uppgiftspaketet (Task #1215): full uppdatering av arbetskopian + tekniska
   //    spegelkolumner för alla ÖPPNA/FRAMTIDA uppgifter kopplade till de ändrade
   //    objekten (inkl. subträd — barn ärver metadata). Körs EFTER geo-synken (steg 4)
@@ -133,7 +144,7 @@ async function runMetadataChangeJob(tenantId: string, objectIds: string[]): Prom
   }
 
   const ms = Date.now() - start;
-  console.log(`[metadata-change-jobs] tenant=${tenantId} objects=${objectIds.length} recalc=${recalcCount} clusterDelta=${clusterAssigned} taskQty=${taskQtyUpdated} geoSynced=${geoSynced} paketWo=${paketWo} paketAssignments=${paketAssignments} ms=${ms}`);
+  console.log(`[metadata-change-jobs] tenant=${tenantId} objects=${objectIds.length} recalc=${recalcCount} clusterDelta=${clusterAssigned} taskQty=${taskQtyUpdated} geoSynced=${geoSynced} classificationSynced=${classificationSynced} paketWo=${paketWo} paketAssignments=${paketAssignments} ms=${ms}`);
 }
 
 // Räknar om antal + cachade totaler för icke-finaliserade assignments vars artikel

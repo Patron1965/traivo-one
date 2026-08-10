@@ -391,6 +391,17 @@ export default function ArticlesPage() {
     enabled: !!selectedObjectId && testDialogOpen,
   });
 
+  // Task #1484: objektets metadata (löst arv) för klassificeringsraderna i test-dialogen.
+  const { data: selectedObjectMetadata = [] } = useQuery<Array<{ id: string; key: string; value: string | null }>>({
+    queryKey: ["/api/objects", selectedObjectId, "metadata"],
+    queryFn: async () => {
+      const res = await fetch(`/api/objects/${selectedObjectId}/metadata`);
+      if (!res.ok) throw new Error("Failed to fetch object metadata");
+      return res.json();
+    },
+    enabled: !!selectedObjectId && testDialogOpen,
+  });
+
   const { data: metadataDefinitions = [] } = useQuery<MetadataDefinition[]>({
     queryKey: ["/api/metadata-definitions"],
   });
@@ -1103,9 +1114,10 @@ export default function ArticlesPage() {
                     {objects.map(obj => (
                       <SelectItem key={obj.id} value={obj.id}>
                         <div className="flex items-center gap-2">
-                          <span className="font-mono text-xs text-muted-foreground">{obj.hierarchyLevel || "fastighet"}</span>
                           <span>{obj.name}</span>
-                          <span className="text-muted-foreground text-xs">({obj.objectType})</span>
+                          {obj.objectNumber && (
+                            <span className="font-mono text-xs text-muted-foreground">– {obj.objectNumber}</span>
+                          )}
                         </div>
                       </SelectItem>
                     ))}
@@ -1119,13 +1131,23 @@ export default function ArticlesPage() {
                 {(() => {
                   const selectedObj = objects.find(o => o.id === selectedObjectId);
                   if (!selectedObj) return null;
+                  // Task #1484: typ/nivå visas endast som uttrycklig metadata
+                  // (Objekttyp/Anläggningstyp), inte som fasta objektfält.
+                  const classificationMeta = selectedObjectMetadata.filter(m => {
+                    const key = (m.key || "").toLowerCase();
+                    return key === "objekttyp" || key === "anläggningstyp";
+                  });
                   return (
                     <Card className="bg-muted/30">
                       <CardContent className="pt-4">
                         <div className="grid grid-cols-2 gap-2 text-sm">
                           <div><span className="text-muted-foreground">Namn:</span> {selectedObj.name}</div>
-                          <div><span className="text-muted-foreground">Typ:</span> {selectedObj.objectType}</div>
-                          <div><span className="text-muted-foreground">Hierarkinivå:</span> {selectedObj.hierarchyLevel || "Inte definierad"}</div>
+                          <div><span className="text-muted-foreground">Objektnummer:</span> {selectedObj.objectNumber || "—"}</div>
+                          {classificationMeta.map(m => (
+                            <div key={m.id}>
+                              <span className="text-muted-foreground">{m.key} (metadata):</span> {m.value ?? "—"}
+                            </div>
+                          ))}
                         </div>
                       </CardContent>
                     </Card>
