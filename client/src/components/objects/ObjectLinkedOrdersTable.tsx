@@ -378,7 +378,7 @@ export function ObjectLinkedOrdersTable({ objectId }: ObjectScopedProps) {
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between gap-2 flex-wrap">
             <CardTitle className="text-sm flex items-center gap-2">
-              <ClipboardList className="h-4 w-4" /> Kopplade ordrar
+              <ClipboardList className="h-4 w-4" /> Snabbordrar och ordrar
               {activeOrders.length > 0 && (
                 <Badge variant="secondary" className="text-[10px]">{activeOrders.length}</Badge>
               )}
@@ -399,8 +399,8 @@ export function ObjectLinkedOrdersTable({ objectId }: ObjectScopedProps) {
           {activeOrders.length === 0 ? (
             <p className="text-sm text-muted-foreground py-4" data-testid="empty-linked-orders">
               {includeSubtree
-                ? "Inga aktiva ordrar i objektet eller dess underordnade objekt."
-                : "Inga aktiva ordrar kopplade till objektet."}
+                ? "Inga aktiva snabbordrar eller ordrar i objektet eller dess underordnade objekt."
+                : "Inga aktiva snabbordrar eller ordrar kopplade till objektet."}
             </p>
           ) : (
             <LinkedRowsTable

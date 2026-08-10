@@ -1499,7 +1499,7 @@ export default function ObjectDetailPage() {
         <section id="object-section-linked-tasks" className="space-y-6 scroll-mt-4">
           <div className="flex items-center justify-between">
             <h2 className="text-base font-semibold flex items-center gap-2">
-              <Layers className="h-4 w-4" /> Kopplade orderkoncept och ordrar
+              <Layers className="h-4 w-4" /> Kopplade uppgiftskällor
             </h2>
             <Button
               variant="outline"
