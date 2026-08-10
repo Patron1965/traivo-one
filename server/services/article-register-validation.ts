@@ -58,10 +58,9 @@ async function validateKey(
 /**
  * Validerar och kanoniserar klassificeringsfälten i en artikel-payload (POST/PATCH).
  *
- * Kanonisering av utförandekod: `executionCode` är det kanoniska fältet (läses av
- * planering/resursmatchning/Fortnox). `performerCategory` är legacy-dubbletten som
- * artikelformuläret historiskt skrev. Här synkas de: sätts det ena speglas det
- * andra (executionCode vinner om båda skickas med olika värden).
+ * Utförandekod: `executionCode` är det enda fältet (läses av
+ * planering/resursmatchning/Fortnox). Legacy-dubbletten `performerCategory`
+ * är utfasad (Task #1500) — spegeln borttagen, kolumnen droppad (migration 0152).
  *
  * Muterar och returnerar payload-objektet.
  */
@@ -70,7 +69,6 @@ export async function validateAndCanonicalizeArticleClassification<
     articleType?: string | null;
     executionCode?: string | null;
     timeCodeKey?: string | null;
-    performerCategory?: string | null;
   },
 >(
   tenantId: string,
@@ -79,19 +77,9 @@ export async function validateAndCanonicalizeArticleClassification<
 ): Promise<T> {
   // Normalisera inkommande nycklar till trimmade värden FÖRE kanonisering/lagring
   // — annars valideras "kranbil" men " kranbil " sparas (matchar aldrig registret).
-  for (const falt of ["articleType", "executionCode", "timeCodeKey", "performerCategory"] as const) {
+  for (const falt of ["articleType", "executionCode", "timeCodeKey"] as const) {
     const v = payload[falt];
     if (typeof v === "string") payload[falt] = v.trim() as T[typeof falt];
-  }
-
-  // Kanonisera utförandekod ↔ utförarkategori (spegel under expand-fasen).
-  const hasExec = payload.executionCode !== undefined;
-  const hasPerf = payload.performerCategory !== undefined;
-  if (hasExec) {
-    payload.performerCategory = payload.executionCode ?? null;
-  } else if (hasPerf) {
-    // Legacy-klient som bara skickar performerCategory → styr kanoniska fältet.
-    payload.executionCode = payload.performerCategory ?? null;
   }
 
   await validateKey("artikeltyp", tenantId, payload.articleType, existing?.articleType);

@@ -1,5 +1,5 @@
 // Task #1506 — Backfill: uppgiftspaket + artikel-snapshot + sourceAssignmentId
-// ============================================================================
+// ----------------------------------------------------------------------------
 // Idempotent. Kör med:  npx tsx scripts/backfill-uppgiftspaket.ts [--dry-run]
 //
 // 1) work_orders/assignments UTAN paket får ett paket byggt från radens egna

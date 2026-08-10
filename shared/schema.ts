@@ -1125,8 +1125,7 @@ export const articles = pgTable("articles", {
   // metadataField = metadata_katalog.namn (svenska katalogen, samma källa som UI:t).
   showMetadataFields: jsonb("show_metadata_fields").default([]),
   leaveMetadataFields: jsonb("leave_metadata_fields").default([]),
-  // Utförarkategori (sektion 10):
-  performerCategory: text("performer_category"),
+  // (performer_category droppad — Task #1500; executionCode är enda utförandekod-fältet)
   competencyRequirements: text("competency_requirements").array().default([]),
   unit: text("unit").default("st"),
   status: text("status").default("active").notNull(),

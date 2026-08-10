@@ -219,9 +219,8 @@ interface ArticleFormData {
   showMetadataFields: ShowMetadataRow[];
   leaveMetadataFields: LeaveMetadataRow[];
   // Task #1496: executionCode är kanoniska utförandekod-fältet (läses av
-  // planering/resursmatchning). performerCategory är legacy-spegeln.
+  // planering/resursmatchning). Legacy-spegeln performerCategory är utfasad (Task #1500).
   executionCode: string;
-  performerCategory: string;
   timeCodeKey: string;
   iconKey: string;
 }
@@ -316,7 +315,6 @@ const emptyFormData: ArticleFormData = {
   showMetadataFields: [],
   leaveMetadataFields: [],
   executionCode: "",
-  performerCategory: "",
   timeCodeKey: "",
   iconKey: "",
 };
@@ -1279,10 +1277,9 @@ export default function ArticleFormPage() {
       leaveMetadataFields: Array.isArray((article as any).leaveMetadataFields)
         ? ((article as any).leaveMetadataFields as LeaveMetadataRow[])
         : [],
-      // Task #1496: executionCode kanoniskt; äldre artiklar kan bara ha
-      // performerCategory satt → fall tillbaka så valet syns i formuläret.
-      executionCode: (article as any).executionCode || (article as any).performerCategory || "",
-      performerCategory: (article as any).performerCategory || "",
+      // Task #1496/#1500: executionCode är enda utförandekod-fältet
+      // (legacy performerCategory backfillad → droppad).
+      executionCode: (article as any).executionCode || "",
       timeCodeKey: (article as any).timeCodeKey || "",
       iconKey: (article as any).iconKey || "",
     });
@@ -2463,8 +2460,7 @@ export default function ArticleFormPage() {
                   value={formData.executionCode || "__none__"}
                   onValueChange={(v) => {
                     const code = v === "__none__" ? "" : v;
-                    // Task #1496: executionCode är kanoniskt; performerCategory speglas (legacy).
-                    setFormData({ ...formData, executionCode: code, performerCategory: code });
+                    setFormData({ ...formData, executionCode: code });
                   }}
                 >
                   <SelectTrigger id="executionCode" data-testid="select-execution-code">

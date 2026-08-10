@@ -182,8 +182,8 @@ app.patch("/api/articles/:id", requireAdmin, asyncHandler(async (req, res) => {
     }
     const { tenantId: _t, id: _id, createdAt: _c, deletedAt: _d, ...updateData } = parseResult.data as any;
     // Task #1496: nya/ändrade klassificeringsnycklar valideras mot registren
-    // (oförändrade legacy-värden tillåts); utförandekod kanoniseras (spegel
-    // executionCode ↔ performerCategory).
+    // (oförändrade legacy-värden tillåts). executionCode är enda utförandekod-
+    // fältet (legacy performerCategory utfasad, Task #1500).
     await validateAndCanonicalizeArticleClassification(tenantId, updateData, existing);
     // Validera formeln när den sparade artikeln blir/förblir formel-läge.
     const effectiveQuantityMode = updateData.quantityMode ?? existing?.quantityMode;

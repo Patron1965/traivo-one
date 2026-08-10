@@ -1,5 +1,5 @@
 // Task #1215 (Etapp 3) — Uppgiftspaketet: den operativa arbetskopian.
-// ============================================================================
+// ----------------------------------------------------------------------------
 // EN delad service för att FYLLA uppgiftspaketet vid all uppgiftsskapning och
 // UPPDATERA det för öppna/framtida uppgifter när objektets metadata ändras.
 // Motorerna ska läsa paketet — inte objektet.
@@ -37,9 +37,9 @@ import { resolveObjectLocation } from "./object-location";
 /** Minimal databas-yta så stampArtikelSnapshot kan köras i en yttre transaktion. */
 type DbClient = Pick<typeof db, "select" | "update">;
 
-// ============================================================================
+// ----------------------------------------------------------------------------
 // GEOGRAFIMOTORNS KONTRAKT — primär (körbar) + sekundär (utförandeplats)
-// ============================================================================
+// ----------------------------------------------------------------------------
 
 export interface UppgiftGeografi {
   primar: UppgiftspaketPrimarPlats;
@@ -136,9 +136,9 @@ export async function resolveUppgiftGeografi(
   return { primar, sekundar };
 }
 
-// ============================================================================
+// ----------------------------------------------------------------------------
 // PAKETFYLLNAD (skapande + propagering delar samma bygge)
-// ============================================================================
+// ----------------------------------------------------------------------------
 
 export interface BuildUppgiftspaketArgs {
   tenantId: string;
@@ -306,13 +306,13 @@ export async function buildUppgiftspaket(args: BuildUppgiftspaketArgs): Promise<
   };
 }
 
-// ============================================================================
+// ----------------------------------------------------------------------------
 // ARTIKEL-SNAPSHOT-STÄMPLING (Task #1506) — orderrader/assignment-artiklar
 // skapas ofta EFTER själva uppgiften; första artikelbärande raden fryser då
 // snapshotfälten i paketet. Idempotent: en redan satt artikelId röres aldrig
 // (första artikeln = primär artikel; "en uppgift = en artikel").
 // Frysta uppgifter röres aldrig.
-// ============================================================================
+// ----------------------------------------------------------------------------
 
 export async function stampArtikelSnapshot(opts: {
   tenantId: string;
@@ -440,14 +440,14 @@ export async function stampArtikelSnapshot(opts: {
     ));
 }
 
-// ============================================================================
+// ----------------------------------------------------------------------------
 // PROPAGERING — full paketuppdatering för öppna/framtida uppgifter
 // ----------------------------------------------------------------------------
 // Körs från metadata-change-jobs när objektmetadata ändrats (enskild redigering
 // OCH massimport — batch-writern enqueue:ar samma jobb). Träffar BÅDA lagren
 // (assignments + work_orders, uppgiftskontrakt v1) och uppdaterar dessutom de
 // tekniska spegelkolumnerna present-value-only. Frysta uppgifter röres aldrig.
-// ============================================================================
+// ----------------------------------------------------------------------------
 
 // Larmtröskel för subtree-storlek: propageringen trunkeras ALDRIG (kravet är
 // att ALLA öppna/framtida uppgifter uppdateras), men vid ändringar mycket högt
@@ -714,7 +714,7 @@ export async function propagateUppgiftspaket(
   return { workOrdersUpdated, assignmentsUpdated };
 }
 
-// ============================================================================
+// ----------------------------------------------------------------------------
 // Task #1218 (Etapp 6): GDPR-ANONYMISERING — scrubba paket-kopior
 // ----------------------------------------------------------------------------
 // Anonymisering måste träffa ALLA kopior — även FRYSTA uppgifter som
@@ -723,7 +723,7 @@ export async function propagateUppgiftspaket(
 // uppgifter (öppna + frysta) i objektets subträd. Öppna uppgifter byggs
 // därefter om av caller via propagateUppgiftspaket (från den nu anonymiserade
 // källan) — frysta behåller det scrubbade paketet.
-// ============================================================================
+// ----------------------------------------------------------------------------
 
 export interface ScrubUppgiftspaketOpts {
   /** Nolla paketets åtkomst-del (portkod/nyckelnummer/info/typ). */
