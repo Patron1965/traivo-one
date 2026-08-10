@@ -802,22 +802,25 @@ export default function ResourcesPage() {
                           </TooltipTrigger>
                           <TooltipContent><p>Redigera</p></TooltipContent>
                         </Tooltip>
-                        <DropdownMenu>
+                        {/* modal={false} + uppskjuten dialogöppning via onSelect: menyn öppnar modala
+                            dialoger — annars krockar menyns fokus-/scroll-lås med dialogens och
+                            lämnar ett kvarhängande lås ("frusen knapp"). */}
+                        <DropdownMenu modal={false}>
                           <DropdownMenuTrigger asChild>
                             <Button size="icon" variant="ghost" onClick={(e) => e.stopPropagation()} data-testid={`button-more-resource-${resource.id}`}>
                               <MoreHorizontal className="h-4 w-4" />
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
-                            <DropdownMenuItem onClick={() => openAvailabilityDialog(resource)} data-testid={`menu-availability-resource-${resource.id}`}>
+                            <DropdownMenuItem onSelect={() => setTimeout(() => openAvailabilityDialog(resource), 0)} data-testid={`menu-availability-resource-${resource.id}`}>
                               <CalendarOff className="h-4 w-4 mr-2" />
                               Ange frånvaro
                             </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => openKompetensDialog(resource)} data-testid={`menu-kompetens-resource-${resource.id}`}>
+                            <DropdownMenuItem onSelect={() => setTimeout(() => openKompetensDialog(resource), 0)} data-testid={`menu-kompetens-resource-${resource.id}`}>
                               <Wrench className="h-4 w-4 mr-2" />
                               Hantera kompetenser
                             </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => openDeleteDialog(resource)} className="text-destructive" data-testid={`menu-delete-resource-${resource.id}`}>
+                            <DropdownMenuItem onSelect={() => setTimeout(() => openDeleteDialog(resource), 0)} className="text-destructive" data-testid={`menu-delete-resource-${resource.id}`}>
                               <Trash2 className="h-4 w-4 mr-2" />
                               Ta bort resurs
                             </DropdownMenuItem>

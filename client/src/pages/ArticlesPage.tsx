@@ -993,7 +993,9 @@ export default function ArticlesPage() {
                           </TooltipTrigger>
                           <TooltipContent><p>Redigera</p></TooltipContent>
                         </Tooltip>
-                        <DropdownMenu>
+                        {/* modal={false} + uppskjuten dialogöppning via onSelect: menyn öppnar
+                            modala dialoger — annars lämnas menyns fokus-/scroll-lås kvar ("frusen knapp"). */}
+                        <DropdownMenu modal={false}>
                           <DropdownMenuTrigger asChild>
                             <Button variant="ghost" size="icon" data-testid={`button-more-article-${article.id}`}>
                               <MoreHorizontal className="h-4 w-4" />
@@ -1001,9 +1003,9 @@ export default function ArticlesPage() {
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
                             <DropdownMenuItem
-                              onClick={() => {
+                              onSelect={() => {
                                 setSelectedObjectId("");
-                                setTestDialogOpen(true);
+                                setTimeout(() => setTestDialogOpen(true), 0);
                               }}
                               data-testid={`menu-test-article-${article.id}`}
                             >
@@ -1012,9 +1014,9 @@ export default function ArticlesPage() {
                             </DropdownMenuItem>
                             <DropdownMenuItem
                               className="text-destructive"
-                              onClick={() => {
+                              onSelect={() => {
                                 setArticleToDelete(article);
-                                setDeleteDialogOpen(true);
+                                setTimeout(() => setDeleteDialogOpen(true), 0);
                               }}
                               data-testid={`menu-delete-article-${article.id}`}
                             >

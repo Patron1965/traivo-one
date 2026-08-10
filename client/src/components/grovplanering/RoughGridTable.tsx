@@ -270,7 +270,7 @@ function TaskRow({
             {!readOnly && (
               <>
                 <DropdownMenuItem
-                  onClick={() => onAssignRow(row)}
+                  onSelect={() => setTimeout(() => onAssignRow(row), 0)}
                   data-testid={`action-assign-${row.id}`}
                 >
                   <UserPlus className="h-4 w-4" />
@@ -278,7 +278,7 @@ function TaskRow({
                 </DropdownMenuItem>
                 <DropdownMenuItem
                   disabled={row.status !== "tilldelad"}
-                  onClick={() => onRevokeRow(row)}
+                  onSelect={() => setTimeout(() => onRevokeRow(row), 0)}
                   data-testid={`action-revoke-${row.id}`}
                 >
                   <RotateCcw className="h-4 w-4" />

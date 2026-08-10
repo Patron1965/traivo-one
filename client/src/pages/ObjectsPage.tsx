@@ -1679,7 +1679,7 @@ export default function ObjectsPage() {
                     )}
                     <DropdownMenuSeparator />
                     <DropdownMenuItem
-                      onClick={() => setDeleteTarget(obj)}
+                      onSelect={() => setTimeout(() => setDeleteTarget(obj), 0)}
                       className="text-destructive focus:text-destructive"
                       data-testid={`menu-delete-${obj.id}`}
                     >
@@ -1811,7 +1811,7 @@ export default function ObjectsPage() {
               </div>
             </DropdownMenuItem>
             <DropdownMenuItem
-              onClick={() => { setRefExportFieldIds(new Set()); setRefExportSearch(""); setRefExportDialogOpen(true); }}
+              onSelect={() => { setRefExportFieldIds(new Set()); setRefExportSearch(""); setTimeout(() => setRefExportDialogOpen(true), 0); }}
               data-testid="menu-export-objekt-kundreferens"
             >
               <FileSpreadsheet className="h-4 w-4 mr-2 mt-0.5 shrink-0" />
@@ -2139,7 +2139,9 @@ export default function ObjectsPage() {
             >
               Ändra status
             </Button>
-            <DropdownMenu>
+            {/* modal={false} + uppskjuten dialogöppning via onSelect: menyn öppnar modala
+                dialoger — annars lämnas menyns fokus-/scroll-lås kvar ("frusen knapp"). */}
+            <DropdownMenu modal={false}>
               <DropdownMenuTrigger asChild>
                 <Button size="sm" variant="outline" disabled={bulkBusy} data-testid="button-bulk-more">
                   {bulkBusy ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <MoreHorizontal className="h-4 w-4 mr-1" />}
@@ -2151,7 +2153,7 @@ export default function ObjectsPage() {
                   <MapPin className="h-4 w-4 mr-2" />
                   Geokoda markerade
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => setBulkParentDialogOpen(true)} data-testid="menu-bulk-move-parent">
+                <DropdownMenuItem onSelect={() => setTimeout(() => setBulkParentDialogOpen(true), 0)} data-testid="menu-bulk-move-parent">
                   <FolderPlus className="h-4 w-4 mr-2" />
                   Flytta till förälder…
                 </DropdownMenuItem>
@@ -2160,7 +2162,7 @@ export default function ObjectsPage() {
                   Exportera markerade (för återimport)
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={() => setBulkDeleteOpen(true)} className="text-destructive focus:text-destructive" data-testid="menu-bulk-delete">
+                <DropdownMenuItem onSelect={() => setTimeout(() => setBulkDeleteOpen(true), 0)} className="text-destructive focus:text-destructive" data-testid="menu-bulk-delete">
                   <Trash2 className="h-4 w-4 mr-2" />
                   Ta bort markerade
                 </DropdownMenuItem>

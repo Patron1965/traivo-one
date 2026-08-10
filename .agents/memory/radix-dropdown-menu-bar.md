@@ -22,6 +22,11 @@ När två Popovers ligger som syskon-fält (t.ex. `AddressSearch` direkt följt 
 
 **Generell regel (alla sök-comboboxes):** Varje Popover vars innehåll är ett sök-/Command-fält och som stänger-på-val måste ha `onCloseAutoFocus`-prevent — annars läcker close-fokus till nästa fokuserbara trigger. Det gäller även när nästa trigger ligger i ett separat barn (t.ex. `ObjectParentCombobox` följt av `MetadataFieldBuilder`-popovers) och när samma combobox staplas en-per-rad i en `.map` (ImportPage kund-mappning → fokus hoppar till nästa rads trigger). Standardiserade fält: `AddressSearch`, `CustomerCombobox`/`CustomerMultiCombobox`, `ObjectCombobox`/`ClusterCombobox` (`AnnualPlanningCombos`), `ObjectParentCombobox` samt ImportPages lokala `CustomerCombobox`. Harmonisera även `modal`: `ObjectCombobox`/`ClusterCombobox` sattes till `modal={false}` så de matchar syskonet `CustomerCombobox` i "Nytt årsmål"-dialogen.
 
+## DropdownMenu-item som öppnar Dialog/AlertDialog: modal={false} + uppskjuten öppning
+En modal DropdownMenu vars item öppnar en modal Dialog/AlertDialog ger "frusen knapp": menyns scroll-/fokuslås krockar med dialogens, och när dialogen stängs lämnas ett kvarhängande lås som sväljer alla klick (Snabborderns "+ Lägg till" var första fallet).
+
+**Regel:** varje `DropdownMenu` vars items öppnar en Dialog/AlertDialog/Sheet ska ha (1) `modal={false}` på `<DropdownMenu>`, och (2) dialogöppningen via `onSelect={() => setTimeout(() => setXOpen(true), 0)}` — så att menyn hinner stänga klart innan dialogen tar över fokus/lås. Synkron state (t.ex. `setItemToDelete(...)`) kan sättas direkt; bara själva open-flaggan skjuts upp. Items som bara navigerar/kör en åtgärd utan dialog behöver inget av detta.
+
 ## Command-combobox inuti en redan-modal Dialog: klick registreras inte alls
 Ett Popover+Command (sök-combobox) som ligger INUTI en `<Dialog>` (t.ex. "Lägg till metadata"-dialogen, `ObjectMetadataForm.tsx`) kan få ett värre symptom än fokusläckage: klick på ett `CommandItem` gör ingenting alls — dropdownen förblir öppen, inget väljs. Orsak: utan `modal={false}` på Popovern konkurrerar dess fokus-/pointer-hantering med den yttre Dialogens fokusfälla, så pointerdown-eventet "sväljs" innan cmdk:s `onSelect` hinner triggas.
 

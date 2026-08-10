@@ -334,7 +334,7 @@ export function ObjectDomainGrid({
                 <DropdownMenuLabel>Kontaktåtgärder</DropdownMenuLabel>
                 <DropdownMenuItem
                   disabled={!fieldLevelActionsSafe}
-                  onClick={() => setLifecycleTarget({ contact: c, action: "archive" })}
+                  onSelect={() => setTimeout(() => setLifecycleTarget({ contact: c, action: "archive" }), 0)}
                   data-testid={`menu-archive-contact-${c.id}`}
                 >
                   <Archive className="h-3.5 w-3.5 mr-2" />
@@ -352,7 +352,7 @@ export function ObjectDomainGrid({
                     <DropdownMenuSeparator />
                     <DropdownMenuItem
                       disabled={!fieldLevelActionsSafe}
-                      onClick={() => setLifecycleTarget({ contact: c, action: "anonymize" })}
+                      onSelect={() => setTimeout(() => setLifecycleTarget({ contact: c, action: "anonymize" }), 0)}
                       data-testid={`menu-anonymize-contact-${c.id}`}
                     >
                       <EyeOff className="h-3.5 w-3.5 mr-2" />
@@ -367,7 +367,7 @@ export function ObjectDomainGrid({
                     </DropdownMenuItem>
                     <DropdownMenuItem
                       className="text-destructive focus:text-destructive"
-                      onClick={() => setLifecycleTarget({ contact: c, action: "delete" })}
+                      onSelect={() => setTimeout(() => setLifecycleTarget({ contact: c, action: "delete" }), 0)}
                       data-testid={`menu-delete-contact-${c.id}`}
                     >
                       <Trash2 className="h-3.5 w-3.5 mr-2" />

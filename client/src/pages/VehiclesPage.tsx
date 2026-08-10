@@ -530,7 +530,9 @@ export default function VehiclesPage() {
                             </TooltipTrigger>
                             <TooltipContent><p>Redigera</p></TooltipContent>
                           </Tooltip>
-                          <DropdownMenu>
+                          {/* modal={false} + uppskjuten dialogöppning via onSelect: menyn öppnar en
+                              modal dialog — annars lämnas menyns fokus-/scroll-lås kvar ("frusen knapp"). */}
+                          <DropdownMenu modal={false}>
                             <DropdownMenuTrigger asChild>
                               <Button variant="ghost" size="icon" data-testid={`button-more-vehicle-${vehicle.id}`}>
                                 <MoreHorizontal className="h-4 w-4" />
@@ -545,9 +547,9 @@ export default function VehiclesPage() {
                               </DropdownMenuItem>
                               <DropdownMenuItem
                                 className="text-destructive"
-                                onClick={() => {
+                                onSelect={() => {
                                   setItemToDelete({ type: "vehicle", id: vehicle.id, name: vehicle.name });
-                                  setDeleteDialogOpen(true);
+                                  setTimeout(() => setDeleteDialogOpen(true), 0);
                                 }}
                                 data-testid={`menu-delete-vehicle-${vehicle.id}`}
                               >

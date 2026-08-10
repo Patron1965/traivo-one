@@ -256,7 +256,7 @@ function RouteRow({
           <DropdownMenuContent align="end">
             {onAssignCluster && allTasks.length > 0 && (
               <DropdownMenuItem
-                onClick={() => onAssignCluster(allTasks)}
+                onSelect={() => setTimeout(() => onAssignCluster(allTasks), 0)}
                 data-testid={`action-route-assign-${route.id}`}
               >
                 <UserPlus className="h-4 w-4" />
@@ -265,7 +265,7 @@ function RouteRow({
             )}
             {onRevokeCluster && assignedTasks.length > 0 && (
               <DropdownMenuItem
-                onClick={() => onRevokeCluster(assignedTasks)}
+                onSelect={() => setTimeout(() => onRevokeCluster(assignedTasks), 0)}
                 data-testid={`action-route-revoke-${route.id}`}
               >
                 <RotateCcw className="h-4 w-4" />
@@ -384,7 +384,7 @@ function StopRow({
             <DropdownMenuContent align="end">
               {onAssignCluster && stop.tasks.length > 0 && (
                 <DropdownMenuItem
-                  onClick={() => onAssignCluster(stop.tasks)}
+                  onSelect={() => setTimeout(() => onAssignCluster(stop.tasks), 0)}
                   data-testid={`action-stop-assign-${stop.id ?? "ungrouped"}`}
                 >
                   <UserPlus className="h-4 w-4" />
@@ -393,7 +393,7 @@ function StopRow({
               )}
               {onRevokeCluster && assignedTasks.length > 0 && (
                 <DropdownMenuItem
-                  onClick={() => onRevokeCluster(assignedTasks)}
+                  onSelect={() => setTimeout(() => onRevokeCluster(assignedTasks), 0)}
                   data-testid={`action-stop-revoke-${stop.id ?? "ungrouped"}`}
                 >
                   <RotateCcw className="h-4 w-4" />
@@ -515,7 +515,7 @@ function TaskRow({
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
             <DropdownMenuItem
-              onClick={() => onAssignRow(row)}
+              onSelect={() => setTimeout(() => onAssignRow(row), 0)}
               data-testid={`action-hier-assign-${row.id}`}
             >
               <UserPlus className="h-4 w-4" />
@@ -523,7 +523,7 @@ function TaskRow({
             </DropdownMenuItem>
             <DropdownMenuItem
               disabled={row.status !== "tilldelad"}
-              onClick={() => onRevokeRow(row)}
+              onSelect={() => setTimeout(() => onRevokeRow(row), 0)}
               data-testid={`action-hier-revoke-${row.id}`}
             >
               <RotateCcw className="h-4 w-4" />
