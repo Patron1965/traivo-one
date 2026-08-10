@@ -321,8 +321,8 @@ export function SnabborderDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <ScrollArea className="flex-1 pr-4 -mr-4">
-          <div className="space-y-5">
+        <ScrollArea className="flex-1 pr-3 -mr-4">
+          <div className="space-y-5 px-1 py-1">
             {/* Titel */}
             <div className="space-y-1.5">
               <Label htmlFor="snabborder-title">Ordertitel</Label>
