@@ -64,6 +64,8 @@ export interface ObjectMetadataBodyProps {
   kontaktSection?: ReactNode;
   /** Geografikortet (geografimotorn) — renderas under metadataområdet Geografi. */
   geografiSection?: ReactNode;
+  /** Bildkortet — renderas under metadataområdet Bild. */
+  bilderSection?: ReactNode;
 }
 
 function anchorSlug(area: string): string {
@@ -84,6 +86,7 @@ export function ObjectMetadataBody({
   isAdding,
   kontaktSection,
   geografiSection,
+  bilderSection,
   onSoftDelete,
   onRestore,
   softDeletePending,
@@ -292,10 +295,13 @@ export function ObjectMetadataBody({
             areaKey={anchorSlug(g.area)}
             label={g.label}
             cards={[
-              // Geografikortet (geografimotorn) leder området Geografi —
-              // fria geografifält följer efter i samma sektion.
+              // System-/samlingskorten leder sina metadataområden —
+              // fria fält följer efter i samma sektion.
               ...(g.area === "geografi" && geografiSection
                 ? [{ key: "__geografi-kort__", node: geografiSection }]
+                : []),
+              ...(g.area === "bild" && bilderSection
+                ? [{ key: "__bilder-kort__", node: bilderSection }]
                 : []),
               ...g.items.map((entry) => ({ key: entry.id, node: renderField(entry) })),
             ]}
@@ -313,6 +319,19 @@ export function ObjectMetadataBody({
             </h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
               {geografiSection}
+            </div>
+          </section>
+        )}
+
+        {/* Bildkortet ligger under metadataområdet Bild — egen sektion
+            ENDAST när området saknar fria metadatafält. */}
+        {bilderSection && !visibleGroups.some((g) => g.area === "bild") && (!filterActive || areaFilter.has("bild")) && (
+          <section id="meta-area-bild" className="scroll-mt-24 space-y-3">
+            <h3 className="text-sm font-semibold" data-testid="heading-area-bild">
+              Bild
+            </h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+              {bilderSection}
             </div>
           </section>
         )}

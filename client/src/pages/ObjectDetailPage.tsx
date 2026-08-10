@@ -1452,6 +1452,17 @@ export default function ObjectDetailPage() {
                     objectAssignments={objectAssignments}
                     navigate={navigate}
                     canEditFields={isAdmin}
+                    bilderSection={
+                      <ObjectDomainGrid
+                        section="bilder"
+                        objectId={objectId}
+                        obj={obj}
+                        contacts={contacts as any}
+                        isAdmin={isAdmin}
+                        onEditGeo={() => openEditDialog()}
+                        navigate={navigate}
+                      />
+                    }
                     geografiSection={
                       <ObjectDomainGrid
                         section="geografi"

@@ -205,9 +205,11 @@ export interface ObjectDomainGridProps {
    *  "kontakt" = ENBART kontaktkortet, "geografi" = ENBART geografikortet —
    *  båda renderas under sina metadataområden (Kontaktinformation resp.
    *  Geografi) i ObjectMetadataBody (produktägarbeslut 2026-08-10);
-   *  "linked" = KOPPLADE list-block (Orderkoncept/Bilder) — snabbordrar och
+   *  "bilder" = ENBART bildkortet — renderas under metadataområdet Bild
+   *  i ObjectMetadataBody (produktägarbeslut 2026-08-10);
+   *  "linked" = KOPPLADE list-block (Orderkoncept) — snabbordrar och
    *  uppgifter visas i de subträds-medvetna sektionerna (Task #1474). */
-  section: "collections" | "kontakt" | "geografi" | "linked";
+  section: "collections" | "kontakt" | "geografi" | "bilder" | "linked";
   objectId: string;
   obj: any;
   contacts: ObjectContactLite[];
@@ -488,9 +490,17 @@ export function ObjectDomainGrid({
 
         {/* Task #1474 konsolidering: "Snabbordrar"- och "Uppgifter"-korten är
             borttagna — samma information visas nu (med subträds-växel) i
-            ordertabellen resp. uppgiftsnavet. Kvar här: orderkoncept-
-            inpekningarna (SYS) och bilderna. */}
-        <DomainCarouselCard<ObjectImageLite>
+            ordertabellen resp. uppgiftsnavet. Bilder ligger under
+            metadataområdet Bild (produktägarbeslut 2026-08-10). */}
+      </div>
+    );
+  }
+
+  // ==================== BILDER (under metadataområdet Bild) ====================
+  // Bilder är metadata som övriga fält och redovisas under sitt metadataområde.
+  if (section === "bilder") {
+    return (
+      <DomainCarouselCard<ObjectImageLite>
           className={GRID_CARD}
           icon={ImageIcon}
           title="Bilder"
@@ -510,7 +520,6 @@ export function ObjectDomainGrid({
           getSearchText={(img) => `${img.description ?? ""} ${img.title ?? ""}`}
           renderItem={renderImage}
         />
-      </div>
     );
   }
 
