@@ -62,7 +62,6 @@ const PlanningParametersPage = lazy(() => import("@/pages/PlanningParametersPage
 const PlannerSearchFiltersPage = lazy(() => import("@/pages/PlannerSearchFiltersPage"));
 const ArticleComponentsPage = lazy(() => import("@/pages/ArticleComponentsPage"));
 const SuppliersPage = lazy(() => import("@/pages/SuppliersPage"));
-const ProductionTimeListsPage = lazy(() => import("@/pages/ProductionTimeListsPage"));
 const StructureArticlesPage = lazy(() => import("@/pages/StructureArticlesPage"));
 const InvoiceRecalculationLogPage = lazy(() => import("@/pages/InvoiceRecalculationLogPage"));
 const InvoiceQueuePage = lazy(() => import("@/pages/InvoiceQueuePage"));
@@ -200,7 +199,8 @@ function Router() {
         <Route path="/planner-search-filters">{() => <ProtectedRoute component={PlannerSearchFiltersPage} path="/planner-search-filters" />}</Route>
         <Route path="/article-components">{() => <ProtectedRoute component={ArticleComponentsPage} path="/article-components" />}</Route>
         <Route path="/structure-articles">{() => <ProtectedRoute component={StructureArticlesPage} path="/structure-articles" />}</Route>
-        <Route path="/production-time-lists">{() => <ProtectedRoute component={ProductionTimeListsPage} path="/production-time-lists" />}</Route>
+        {/* Produktionstider-registret avvecklat — artikelns tidsfält är enda källan */}
+        <Route path="/production-time-lists">{() => <Redirect to="/articles" />}</Route>
         <Route path="/suppliers">{() => <ProtectedRoute component={SuppliersPage} path="/suppliers" />}</Route>
         <Route path="/invoice-recalculation-log">{() => <ProtectedRoute component={InvoiceRecalculationLogPage} path="/invoice-recalculation-log" />}</Route>
         <Route path="/invoice-queue">{() => <ProtectedRoute component={InvoiceQueuePage} path="/invoice-queue" />}</Route>

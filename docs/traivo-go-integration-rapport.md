@@ -122,22 +122,16 @@ om Go behöver det som kontext.
   artikelns för just den delen.
 
 ### 3.6 Produktionstid / ställtid **[LIVE — exponerat på mobil]**
-`production_time_lists` ger per-artikel produktionstid som kan vara override per
-`resourceId` eller `equipmentId` (komplement till `articles.productionTime`).
-Den **effektiva** tiden är nu upplöst server-side per artikel på `articles[]`
-(v1 + v2):
+Produktionstider-registret (`production_time_lists`) är **avvecklat** —
+artikelns eget tidsfält (`articles.productionTime`, minuter per enhet) är den
+enda källan för planerad grundtid. Fälten på `articles[]` (v1 + v2) kvarstår:
 
-- **`productionTimeMinutes`** — effektiv produktionstid i minuter (eller `null`).
-- **`productionTimeSource`** — varifrån värdet kom:
-  `"resource"` (utförarunik listrad för orderns resurs) ›
-  `"list"` (generisk listrad för artikeln) ›
-  `"article"` (artikelns bas-`productionTime`).
+- **`productionTimeMinutes`** — artikelns produktionstid i minuter (eller `null`).
+- **`productionTimeSource`** — `"article"` när artikeln har tid, annars `null`.
+  (Värdena `"resource"`/`"list"` förekommer inte längre.)
 
-Upplösningsprioritet: resurs-specifik giltig rad → generisk giltig rad →
-artikelns bas-tid. Endast rader vars `validFrom/validTo`-fönster täcker nu räknas.
-**Begränsning:** work orders saknar utrustnings-koppling, så utrustnings-unika
-listrader matchas inte (kräver känd `equipmentId` på ordern) — säg till om det
-behövs.
+Framtida utförar-/utrustningsvariationer hanteras som kapacitetsfaktor ovanpå
+artikelns grundtid, inte som fristående register.
 
 ---
 

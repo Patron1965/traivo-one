@@ -7,7 +7,6 @@ import { NotFoundError, ValidationError, ConflictError } from "../errors";
 import {
   insertSupplierSchema,
   insertSupplierArticleLinkSchema,
-  insertProductionTimeListSchema,
 } from "@shared/schema";
 
 export async function registerSession11Routes(app: Express) {
@@ -128,79 +127,16 @@ export async function registerSession11Routes(app: Express) {
   }));
 
   // ============================================
-  // Register 3: Produktionstidslista
+  // Register 3: Produktionstidslista — AVVECKLAT (Gone)
+  // Artikelns tidsfält (productionTime) är enda källan för planerad grundtid.
+  // Tabellen production_time_lists ligger kvar tills data är omhändertagen
+  // (expand-contract); API:et är stängt för alla konsumenter.
   // ============================================
-  app.get("/api/production-time-lists", asyncHandler(async (req, res) => {
-    const tenantId = getTenantIdWithFallback(req);
-    const articleId = typeof req.query.articleId === "string" ? req.query.articleId : undefined;
-    const list = await storage.getProductionTimeLists(tenantId, articleId);
-    res.json(list);
-  }));
-
-  app.get("/api/production-time-lists/:id", asyncHandler(async (req, res) => {
-    const tenantId = getTenantIdWithFallback(req);
-    const row = await storage.getProductionTimeList(req.params.id, tenantId);
-    if (!row) throw new NotFoundError("Produktionstid hittades inte");
-    res.json(row);
-  }));
-
-  // Validera att ev. utförare/utrustning tillhör tenant (förhindrar
-  // korstenant-referensinjektion via FK utan tenant-villkor).
-  async function assertProductionRefsInTenant(
-    tenantId: string,
-    performerResourceId?: string | null,
-    equipmentId?: string | null,
-  ) {
-    if (performerResourceId) {
-      const resource = await storage.getResource(performerResourceId);
-      if (!verifyTenantOwnership(resource, tenantId)) {
-        throw new ValidationError("Utförare (resurs) hittades inte i tenant");
-      }
-    }
-    if (equipmentId) {
-      const equipmentList = await storage.getEquipment(tenantId);
-      if (!equipmentList.some((e) => e.id === equipmentId)) {
-        throw new ValidationError("Utrustning hittades inte i tenant");
-      }
-    }
-  }
-
-  app.post("/api/production-time-lists", requireAdmin, asyncHandler(async (req, res) => {
-    const tenantId = getTenantIdWithFallback(req);
-    const parsed = insertProductionTimeListSchema.safeParse({ ...req.body, tenantId });
-    if (!parsed.success) return res.status(400).json(formatZodError(parsed.error));
-    if (parsed.data.productionTimeMinutes <= 0) {
-      throw new ValidationError("Produktionstid måste vara större än 0");
-    }
-    const article = await storage.getArticle(parsed.data.articleId);
-    if (!verifyTenantOwnership(article, tenantId)) throw new ValidationError("Artikel hittades inte i tenant");
-    await assertProductionRefsInTenant(tenantId, parsed.data.performerResourceId, parsed.data.equipmentId);
-    const row = await storage.createProductionTimeList(parsed.data);
-    res.status(201).json(row);
-  }));
-
-  app.patch("/api/production-time-lists/:id", requireAdmin, asyncHandler(async (req, res) => {
-    const tenantId = getTenantIdWithFallback(req);
-    const existing = await storage.getProductionTimeList(req.params.id, tenantId);
-    if (!existing) throw new NotFoundError("Produktionstid hittades inte");
-    const partial = insertProductionTimeListSchema.partial().safeParse(req.body);
-    if (!partial.success) return res.status(400).json(formatZodError(partial.error));
-    const { tenantId: _t, articleId: _a, ...patch } = partial.data as any;
-    if (patch.productionTimeMinutes !== undefined && patch.productionTimeMinutes <= 0) {
-      throw new ValidationError("Produktionstid måste vara större än 0");
-    }
-    await assertProductionRefsInTenant(tenantId, patch.performerResourceId, patch.equipmentId);
-    const row = await storage.updateProductionTimeList(req.params.id, tenantId, patch);
-    res.json(row);
-  }));
-
-  app.delete("/api/production-time-lists/:id", requireAdmin, asyncHandler(async (req, res) => {
-    const tenantId = getTenantIdWithFallback(req);
-    const existing = await storage.getProductionTimeList(req.params.id, tenantId);
-    if (!existing) throw new NotFoundError("Produktionstid hittades inte");
-    await storage.deleteProductionTimeList(req.params.id, tenantId);
-    res.status(204).send();
-  }));
+  app.all(["/api/production-time-lists", "/api/production-time-lists/:id"], (_req, res) => {
+    res.status(410).json({
+      message: "Produktionstider-registret är avvecklat. Artikelns tidsfält (minuter per enhet) är den enda källan för produktionstid.",
+    });
+  });
 
   // ============================================
   // Register 4: Strukturartikelregister (eget register-yta över
