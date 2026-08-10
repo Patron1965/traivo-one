@@ -132,4 +132,5 @@
 - [Kontakt grupp-nyckel](kontakt-grupp-nyckel.md) — kontaktens underfält paras via metadata_varden.grupp_nyckel (aldrig index); alla kontakt-skrivvägar måste stämpla samma nyckel per person.
 - [Kontaktkort & livscykel](kontakt-consolidation-lifecycle.md) — area='kontakt' visas ENBART i kontaktkortet (ej lösa rader); hård delete spärras vid riktig historik/kopplingar (409→arkivera); anonymisering rör aldrig interimsnummer.
 - [Metadata hård-raderingsspärr](metadata-hard-delete-guard.md) — ALLA delete-vägar (kompat-API, fält-tömning, objekt-enkel/bulk-radering) måste blocka vid verklig historik; endast rollback-flöden undantagna.
+- [Clerk reverterad → Replit Auth](auth-clerk-reverted.md) — webbinlogg = Replit Auth + magiska länkar igen (2026-08-10); CLERK_*-secrets kvar men oanvända.
 - [Lagersaldo concurrency-lås](stock-balance-concurrency.md) — delta-beräknande saldo-writes (reconcile/inventering) måste läsa utgångsvärdet under FOR UPDATE i samma tx, annars dubbelbokning.
