@@ -142,6 +142,13 @@ export type MetadataExecutor =
 
 export type ImportMetadataWriteStatus = "create" | "replace" | "add" | "unchanged";
 
+// Task #1459: mynta en explicit grupp-nyckel som binder ihop sammanhörande
+// flervärdesrader (t.ex. en kontaktpersons Namn/Titel/Telefon/E-post) så att
+// parningen är deterministisk oberoende av skapandeordning/id-sortering.
+export function mintMetadataGruppNyckel(prefix = "kontakt"): string {
+  return `${prefix}-${crypto.randomUUID()}`;
+}
+
 type VardeFields = {
   vardeString: string | null;
   vardeInteger: number | null;
@@ -362,6 +369,9 @@ export async function writeImportedMetadataValue(
     katalog: MetadataKatalog;
     rawValue: string;
     andradAv?: string | null;
+    // Task #1459: explicit grupp-nyckel för sammanhörande flervärdesrader
+    // (kontaktpersonens underfält). Sätts på nya rader när den anges.
+    gruppNyckel?: string | null;
   },
 ): Promise<ImportMetadataWriteStatus> {
   const { tenantId, objektId, katalog } = args;
@@ -386,6 +396,7 @@ export async function writeImportedMetadataValue(
       arvsNedat: katalog.standardArvs,
       skapadAv: andradAv ?? undefined,
       metod: "import",
+      gruppNyckel: args.gruppNyckel ?? null,
     }).returning();
     return inserted.id;
   };
@@ -951,6 +962,7 @@ export async function getObjectWithAllMetadata(
         mv.skapad_av,
         mv.uppdaterad_av,
         mv.metod,
+        mv.grupp_nyckel,
         mv.raderad,
         mv.status,
         mv.created_at,
@@ -1149,6 +1161,9 @@ export async function getObjectWithAllMetadata(
               displayValue: rawRowDisplay(r),
               vardeJson: r.varde_json ?? null,
               createdAt: r.created_at ?? null,
+              // Task #1459: explicit gruppering av sammanhörande flervärdesrader
+              // (kontaktpersonens underfält). NULL = legacy-rad (index-parning).
+              gruppNyckel: r.grupp_nyckel ?? null,
             }))
         : undefined;
 
@@ -1515,6 +1530,9 @@ export async function createMetadata(data: {
   koppladTillMetadataId?: string | null;
   skapadAv?: string;
   metod?: string;
+  // Task #1459: explicit grupp-nyckel för sammanhörande flervärdesrader
+  // (t.ex. kontaktpersonens underfält) — sätts på den nya raden.
+  gruppNyckel?: string | null;
 }): Promise<MetadataVarden> {
   // SECURITY: Verify object belongs to tenant before allowing metadata creation
   const [objekt] = await db
@@ -1708,6 +1726,7 @@ export async function createMetadata(data: {
           arvsNedat: data.arvsNedat ?? target.arvsNedat,
           nivaLas: data.nivaLas ?? target.nivaLas,
           koppladTillMetadataId: data.koppladTillMetadataId ?? target.koppladTillMetadataId,
+          gruppNyckel: data.gruppNyckel ?? target.gruppNyckel,
           uppdateradAv: data.skapadAv,
           metod: data.metod ?? 'manuell',
           status: 'aktiv',
@@ -1751,6 +1770,7 @@ export async function createMetadata(data: {
     koppladTillMetadataId: data.koppladTillMetadataId ?? null,
     skapadAv: data.skapadAv,
     metod: data.metod ?? 'manuell',
+    gruppNyckel: data.gruppNyckel ?? null,
   }).returning();
 
   await db.insert(metadataHistorik).values({
@@ -5270,6 +5290,9 @@ export interface ObjectKontaktPerson {
   inherited: boolean;
   inheritedFromObjectName: string | null;
   createdAt: string | null;
+  /** Task #1459: explicit grupp-nyckel som binder ihop personens underfält.
+   *  NULL = legacy-kontakt (index-parad) — kompletteringar är då inte rad-säkra. */
+  gruppNyckel: string | null;
 }
 
 const KONTAKT_SUBFIELD_KEYS = ['namn', 'titel', 'telefon', 'e-post'] as const;
@@ -5293,6 +5316,9 @@ export async function getObjectKontaktPersons(
     inherited: boolean;
     fromObjectName: string | null;
     createdAt: string | null;
+    // Task #1459: explicit grupp-nyckel — rader med samma nyckel hör till samma
+    // person. NULL = legacy-rad som paras per index (kronologisk fallback).
+    gruppNyckel: string | null;
   };
   const valuesByKey = new Map<string, KontaktCell[]>();
   const katalogNamnByKey = new Map<string, string>();
@@ -5342,7 +5368,8 @@ export async function getObjectKontaktPersons(
           vardenId: inst.source === 'local' ? inst.id : null,
           inherited: inst.source === 'inherited',
           fromObjectName: inst.source === 'inherited' ? (inst.fromObjectName ?? null) : null,
-          createdAt: null,
+          createdAt: (inst as any).createdAt ? String((inst as any).createdAt) : null,
+          gruppNyckel: (inst as any).gruppNyckel ?? null,
         });
       }
     } else if (!(m.source === 'local' && m.raderad === true)) {
@@ -5355,6 +5382,7 @@ export async function getObjectKontaktPersons(
           inherited,
           fromObjectName: inherited ? ((m as any).fromObjectName ?? (m as any).fromObject?.namn ?? null) : null,
           createdAt: entryCreatedAt,
+          gruppNyckel: (m as any).gruppNyckel ?? null,
         });
       }
     }
@@ -5368,15 +5396,71 @@ export async function getObjectKontaktPersons(
     fromObjectName: cell?.fromObjectName ?? null,
   });
 
-  const maxLen = Math.max(...KONTAKT_SUBFIELD_KEYS.map((k) => valuesByKey.get(k)!.length), 0);
-  const persons: ObjectKontaktPerson[] = [];
-  for (let i = 0; i < maxLen; i++) {
-    const cells = {
-      namn: valuesByKey.get('namn')![i],
-      titel: valuesByKey.get('titel')![i],
-      telefon: valuesByKey.get('telefon')![i],
-      epost: valuesByKey.get('e-post')![i],
+  // Task #1459: explicit grupp-nyckel är primär parning — alla rader med samma
+  // nyckel hör till samma person, oavsett skapandeordning. Rader UTAN nyckel
+  // (legacy, före backfill) paras per index precis som förr, som egna personer
+  // efter de nyckel-grupperade.
+  type CellQuad = {
+    namn?: KontaktCell;
+    titel?: KontaktCell;
+    telefon?: KontaktCell;
+    epost?: KontaktCell;
+  };
+  const KEY_TO_PROP: Record<string, keyof CellQuad> = {
+    namn: 'namn',
+    titel: 'titel',
+    telefon: 'telefon',
+    'e-post': 'epost',
+  };
+  const grouped = new Map<string, CellQuad>(); // gruppNyckel → cells (insättningsordning = första förekomst)
+  const legacyByKey = new Map<string, KontaktCell[]>();
+  for (const key of KONTAKT_SUBFIELD_KEYS) legacyByKey.set(key, []);
+  for (const key of KONTAKT_SUBFIELD_KEYS) {
+    const prop = KEY_TO_PROP[key];
+    for (const cell of valuesByKey.get(key)!) {
+      if (cell.gruppNyckel) {
+        const quad = grouped.get(cell.gruppNyckel) ?? {};
+        // Första värdet per underfält vinner (dubblett inom samma grupp = data-
+        // anomali; visa deterministiskt den kronologiskt första).
+        if (!quad[prop]) quad[prop] = cell;
+        grouped.set(cell.gruppNyckel, quad);
+      } else {
+        legacyByKey.get(key)!.push(cell);
+      }
+    }
+  }
+
+  const quads: Array<{ cells: CellQuad; gruppNyckel: string | null }> = [];
+  // Nyckel-grupperade personer, sorterade på tidigast skapad rad (stabil ordning).
+  const groupedEntries = Array.from(grouped.entries()).sort((a, b) => {
+    const minTs = (q: CellQuad) => {
+      const ts = [q.namn, q.titel, q.telefon, q.epost]
+        .filter((c): c is KontaktCell => !!c && !!c.createdAt)
+        .map((c) => new Date(c.createdAt!).getTime());
+      return ts.length > 0 ? Math.min(...ts) : Number.MAX_SAFE_INTEGER;
     };
+    const ta = minTs(a[1]);
+    const tb = minTs(b[1]);
+    if (ta !== tb) return ta - tb;
+    return a[0].localeCompare(b[0]);
+  });
+  for (const [gruppNyckel, cells] of groupedEntries) quads.push({ cells, gruppNyckel });
+  // Legacy-rader utan nyckel: index-parning (samma regel som före Task #1459).
+  const legacyMax = Math.max(...KONTAKT_SUBFIELD_KEYS.map((k) => legacyByKey.get(k)!.length), 0);
+  for (let i = 0; i < legacyMax; i++) {
+    quads.push({
+      cells: {
+        namn: legacyByKey.get('namn')![i],
+        titel: legacyByKey.get('titel')![i],
+        telefon: legacyByKey.get('telefon')![i],
+        epost: legacyByKey.get('e-post')![i],
+      },
+      gruppNyckel: null,
+    });
+  }
+
+  const persons: ObjectKontaktPerson[] = [];
+  for (const { cells, gruppNyckel } of quads) {
     const namn = cells.namn?.value || null;
     const titel = cells.titel?.value || null;
     const telefon = cells.telefon?.value || null;
@@ -5400,6 +5484,7 @@ export async function getObjectKontaktPersons(
       inherited,
       inheritedFromObjectName: present.find((c) => c.inherited)?.fromObjectName ?? null,
       createdAt: present.find((c) => c.createdAt)?.createdAt ?? null,
+      gruppNyckel,
     });
   }
   return persons;
@@ -5431,6 +5516,9 @@ export async function writeObjectKontaktPerson(
     ['telefon', person.telefon],
     ['e-post', person.epost],
   ];
+  // Task #1459: alla underfält för EN person stämplas med samma grupp-nyckel så
+  // att läsvägen kan para dem deterministiskt (aldrig per index/id-ordning).
+  const gruppNyckel = mintMetadataGruppNyckel('kontakt');
   for (const [key, raw] of writes) {
     const value = (raw ?? '').trim();
     if (!value) continue;
@@ -5442,6 +5530,7 @@ export async function writeObjectKontaktPerson(
       katalog,
       rawValue: value,
       andradAv: andradAv ?? 'system',
+      gruppNyckel,
     });
   }
 }

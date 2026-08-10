@@ -1246,6 +1246,10 @@ const createMetadataSchema = z.object({
   koppladTillMetadataId: z.string().nullable().optional(),
   skapadAv: z.string().optional(),
   metod: z.string().optional(),
+  // Task #1459: explicit grupp-nyckel för sammanhörande flervärdesrader —
+  // klienten skickar personens nyckel när ett saknat kontakt-underfält
+  // kompletteras, så att raden hamnar hos rätt person.
+  gruppNyckel: z.string().min(1).max(64).optional(),
 });
 
 // Task #1440 (review-fix): värde-mutationer kräver planeringsroll server-side.
@@ -1281,6 +1285,7 @@ metadataRouter.post("/", requireMember, async (req: Request, res: Response) => {
       // för interna/skriptade anrop utan användarsession).
       skapadAv: (req as any).user?.claims?.sub ?? validated.skapadAv,
       metod: validated.metod,
+      gruppNyckel: validated.gruppNyckel ?? null,
     });
 
     res.status(201).json(newMetadata);

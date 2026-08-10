@@ -129,6 +129,7 @@
 - [API-tester körs mot dev-servern](api-tests-dev-server.md) — vitest-API-tester kräver körande dev-server + ENABLE_REALTIME_TEST_ROUTES (rate-limit-skip); mobil-login kräver PIN-fixtur; team-join sker vid accept ej invite.
 - [Uppgiftsnav panelfilter](uppgiftsnav-panel-filters.md) — sparade panel-filter via saved_filters-scope "uppgiftsnav-panel" (aldrig egen tabell); normalisera definition vid apply; PATCH/DELETE endast egna rader.
 - [Ingen auto-kund vid import](import-no-auto-customer.md) — importen kopplar aldrig kund automatiskt; ensurePrimaryPayer tar origin→skapad_av (`system`=legacy-fallback städbar, `*-explicit`=röres aldrig).
+- [Kontakt grupp-nyckel](kontakt-grupp-nyckel.md) — kontaktens underfält paras via metadata_varden.grupp_nyckel (aldrig index); alla kontakt-skrivvägar måste stämpla samma nyckel per person.
 - [Kontaktkort & livscykel](kontakt-consolidation-lifecycle.md) — area='kontakt' visas ENBART i kontaktkortet (ej lösa rader); hård delete spärras vid riktig historik/kopplingar (409→arkivera); anonymisering rör aldrig interimsnummer.
 - [Metadata hård-raderingsspärr](metadata-hard-delete-guard.md) — ALLA delete-vägar (kompat-API, fält-tömning, objekt-enkel/bulk-radering) måste blocka vid verklig historik; endast rollback-flöden undantagna.
 - [Lagersaldo concurrency-lås](stock-balance-concurrency.md) — delta-beräknande saldo-writes (reconcile/inventering) måste läsa utgångsvärdet under FOR UPDATE i samma tx, annars dubbelbokning.

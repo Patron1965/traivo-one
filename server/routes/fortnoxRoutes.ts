@@ -912,6 +912,9 @@ app.get("/api/objects/:objectId/contacts", asyncHandler(async (req, res) => {
       inherited: k.inherited,
       inheritedFromObjectName: k.inheritedFromObjectName,
       createdAt: k.createdAt,
+      // Task #1459: personens grupp-nyckel — låter klienten komplettera saknade
+      // underfält rad-säkert (POST /api/metadata med gruppNyckel).
+      gruppNyckel: k.gruppNyckel,
     })));
 }));
 

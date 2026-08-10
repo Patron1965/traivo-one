@@ -28,6 +28,10 @@ export interface ContactSubfieldRef {
 
 export interface EditableContact {
   id: string;
+  /** Task #1459: explicit grupp-nyckel som binder ihop personens underfält.
+   *  Finns nyckeln kan saknade underfält kompletteras rad-säkert även när
+   *  objektet har flera kontakter (POST med gruppNyckel). */
+  gruppNyckel?: string | null;
   name?: string | null;
   role?: string | null;
   phone?: string | null;
@@ -92,10 +96,14 @@ export function ObjectContactEditDialog({
         if (newVal === oldVal) continue;
         // Ärvda värden redigeras vid källan — hoppa över (inputen är låst).
         if (ref?.inherited) continue;
-        // Strukturella ändringar (lägga till saknat underfält / tömma) är bara
-        // säkra när objektet har exakt en kontakt — annars kan indexparningen
-        // flytta värdet till fel kontakt.
-        if (!structuralEditsSafe && (!ref?.vardenId || !newVal)) {
+        // Strukturella ändringar: att LÄGGA TILL ett saknat underfält är säkert
+        // när kontakten har en explicit grupp-nyckel (raden stämplas med nyckeln
+        // och paras deterministiskt, Task #1459) eller när objektet bara har en
+        // kontakt. Tömning (fält-nivå-arkivering) är fortsatt bara säker med en
+        // kontakt — den träffar hela fältet, inte en enskild rad.
+        const addSafe = structuralEditsSafe || !!contact.gruppNyckel;
+        const clearSafe = structuralEditsSafe;
+        if ((!ref?.vardenId && newVal && !addSafe) || (ref?.vardenId && !newVal && !clearSafe)) {
           throw new Error(
             `${sf.label} kan inte ${ref?.vardenId ? "tömmas" : "läggas till"} här när objektet har flera kontakter — redigera fältet via metadatavyn.`,
           );
@@ -134,7 +142,14 @@ export function ObjectContactEditDialog({
             method: "POST",
             headers: { "Content-Type": "application/json" },
             credentials: "include",
-            body: JSON.stringify({ objektId: objectId, metadataTypNamn: ref.katalogNamn, varde: newVal }),
+            body: JSON.stringify({
+              objektId: objectId,
+              metadataTypNamn: ref.katalogNamn,
+              varde: newVal,
+              // Task #1459: stämpla raden med personens grupp-nyckel så att
+              // kompletteringen hamnar hos rätt kontakt (aldrig index-parning).
+              gruppNyckel: contact.gruppNyckel ?? undefined,
+            }),
           });
           if (!res.ok) {
             const body = await res.json().catch(() => null);
@@ -171,7 +186,8 @@ export function ObjectContactEditDialog({
           {SUBFIELDS.map((sf) => {
             const ref = contact.fields?.[sf.key];
             const locked = !!ref?.inherited;
-            const structurallyLocked = !structuralEditsSafe && !ref?.vardenId && !locked;
+            const structurallyLocked =
+              !structuralEditsSafe && !contact.gruppNyckel && !ref?.vardenId && !locked;
             return (
               <div key={sf.key} className="space-y-1">
                 <Label htmlFor={`contact-${sf.key}`}>{sf.label}</Label>

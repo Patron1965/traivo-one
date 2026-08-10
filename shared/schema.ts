@@ -5077,6 +5077,13 @@ export const metadataVarden = pgTable("metadata_varden", {
   // Metod: manuell, automatisk, extern, utforande, arvd
   metod: varchar("metod", { length: 50 }).default("manuell"),
 
+  // === Task #1459: EXPLICIT GRUPP-NYCKEL FÖR SAMMANHÖRANDE FLERVÄRDESRADER ===
+  // Kontaktpersoner lagras som parallella flervärdesfält (Namn/Titel/Telefon/
+  // E-post). Rader som hör till SAMMA person delar en gemensam grupp-nyckel så
+  // att parningen är deterministisk även när ett saknat underfält kompletteras
+  // i efterhand. NULL = legacy-rad utan gruppering (paras per index som förr).
+  gruppNyckel: varchar("grupp_nyckel", { length: 64 }),
+
   // === Task #710: MJUK-RADERING (SOFT DELETE) AV METADATA-VÄRDEN ===
   // En rad kan mjuk-raderas i stället för att tas bort hårt (Session 7 §4).
   // Två fall:
@@ -5245,6 +5252,10 @@ export interface MetadataInstance {
   metod: string;
   displayValue: string | null;
   vardeJson: unknown;
+  createdAt?: string | Date | null;
+  // Task #1459: explicit grupp-nyckel för sammanhörande flervärdesrader
+  // (kontaktpersonens underfält). NULL = legacy-rad (index-parning).
+  gruppNyckel?: string | null;
 }
 
 export interface ObjectWithAllMetadataEAV {
