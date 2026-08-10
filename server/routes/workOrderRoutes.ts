@@ -1371,6 +1371,18 @@ const withLinesBodySchema = z.object({
   // Top-level flagga: när true myntar servern ett löpande "SO-<n>"-ordernummer
   // (snabborder). Klientsatt workOrder.orderNumber ignoreras alltid (strippas).
   assignOrderNumber: z.boolean().optional(),
+  // Task #1517: manuell leveransadress (snabborder utan objekt). Lagras
+  // strukturerat i work_orders.metadata.deliveryAddress och geokodas
+  // best-effort till taskLatitude/taskLongitude så ordern kan ruttoptimeras
+  // och visas på karta. Notes-texten ("Leveransadress: ...") behålls som
+  // läsbar spegel men är inte längre enda lagringen.
+  deliveryAddress: z.object({
+    adressrad1: z.string().trim().min(1),
+    adressrad2: z.string().trim().optional(),
+    postnummer: z.string().trim().min(1),
+    ort: z.string().trim().min(1),
+    land: z.string().trim().optional(),
+  }).optional(),
   lines: z.array(z.object({
     articleId: z.string().optional().nullable(),
     quantity: z.number().int().positive().optional(),
@@ -1404,6 +1416,39 @@ app.post("/api/work-orders/with-lines", requirePlanner, asyncHandler(async (req,
     if (bodyData[field] && typeof bodyData[field] === 'string') {
       const dateStr = bodyData[field] as string;
       bodyData[field] = dateStr.includes('T') ? new Date(dateStr) : new Date(dateStr + 'T12:00:00Z');
+    }
+  }
+
+  // Task #1517: strukturerad manuell leveransadress. Lagras i metadata (så
+  // Fortnox-underlag m.fl. kan läsa den strukturerat) och geokodas best-effort
+  // till uppgiftskoordinater. Geokodningsfel får aldrig blockera skapandet —
+  // ordern sparas då utan koordinat (som tidigare) men med strukturerad adress.
+  const deliveryAddress = parsedBody.data.deliveryAddress;
+  if (deliveryAddress) {
+    const existingMeta = (bodyData.metadata && typeof bodyData.metadata === "object")
+      ? bodyData.metadata as Record<string, unknown>
+      : {};
+    bodyData.metadata = { ...existingMeta, deliveryAddress };
+
+    const hasClientCoords = typeof bodyData.taskLatitude === "number" && typeof bodyData.taskLongitude === "number";
+    if (!hasClientCoords) {
+      try {
+        const { geocodeAddress } = await import("../geoapify-geocoding");
+        const addrText = [
+          deliveryAddress.adressrad1,
+          [deliveryAddress.postnummer, deliveryAddress.ort].join(" "),
+          deliveryAddress.land || "Sverige",
+        ].join(", ");
+        const geo = await geocodeAddress(addrText, tenantId);
+        if (geo && typeof geo.latitude === "number" && typeof geo.longitude === "number") {
+          bodyData.taskLatitude = geo.latitude;
+          bodyData.taskLongitude = geo.longitude;
+        } else {
+          console.warn("[task-1517] Geokodning gav ingen träff för leveransadress:", addrText);
+        }
+      } catch (e) {
+        console.error("[task-1517] Geokodning av leveransadress misslyckades (ordern skapas ändå):", e);
+      }
     }
   }
 

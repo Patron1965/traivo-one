@@ -506,6 +506,18 @@ export default function SnabborderPage() {
 
     const window = buildDesiredWindow();
     const notes = buildNotes();
+    // Task #1517: skicka manuell leveransadress strukturerat (inte bara som
+    // notes-text) så servern kan geokoda den till uppgiftskoordinater och
+    // Fortnox-underlag kan läsa den strukturerat.
+    const deliveryAddress = principle === "manual" && hasManualAddress
+      ? {
+          adressrad1: adressrad1.trim(),
+          adressrad2: adressrad2.trim() || undefined,
+          postnummer: postnummer.trim(),
+          ort: ort.trim(),
+          land: land.trim() || undefined,
+        }
+      : undefined;
     const created: Array<{ id: string; orderNumber: string | null; label: string }> = [];
     const failures: string[] = [];
 
@@ -538,6 +550,7 @@ export default function SnabborderPage() {
           workOrder,
           assignOrderNumber: true,
           lines: linePayloads,
+          ...(deliveryAddress ? { deliveryAddress } : {}),
         });
         const wo = await res.json();
         created.push({ id: wo.id, orderNumber: wo.orderNumber ?? null, label: group.objectId ? group.label : "Utan objekt" });

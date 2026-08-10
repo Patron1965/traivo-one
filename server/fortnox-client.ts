@@ -124,6 +124,13 @@ export interface FortnoxInvoice {
   Currency?: string;
   TermsOfPayment?: string;
   Language?: string;
+  // Task #1517: strukturerad leveransadress (snabborderns manuella adress,
+  // lagrad i work_orders.metadata.deliveryAddress) → Fortnox fakturahuvud.
+  DeliveryAddress1?: string;
+  DeliveryAddress2?: string;
+  DeliveryZipCode?: string;
+  DeliveryCity?: string;
+  DeliveryCountry?: string;
   // Task #1243 idempotens: exportId speglas hit så en avbruten/omprövad export
   // kan hittas igen via findInvoiceByExternalReference2 innan en dubblett skapas.
   ExternalInvoiceReference2?: string;

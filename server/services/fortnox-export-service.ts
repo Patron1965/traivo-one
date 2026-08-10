@@ -90,6 +90,38 @@ async function shouldMaskPricesForDeliveryNote(
 
 // === Task #1243: idempotens + exportlogg-hjälpare ===
 
+// Task #1517: snabborderns manuella leveransadress lagras strukturerat i
+// work_orders.metadata.deliveryAddress ({adressrad1, adressrad2?, postnummer,
+// ort, land?}). Mappa den till Fortnox fakturahuvudets DeliveryAddress-fält
+// (utelämna helt när ordern saknar strukturerad adress — Fortnox använder då
+// kundens standardleveransadress).
+function buildDeliveryAddressFields(workOrder: { metadata?: unknown }): Partial<FortnoxInvoice> {
+  const meta = workOrder?.metadata;
+  const addr = (meta && typeof meta === "object" ? (meta as Record<string, unknown>).deliveryAddress : null) as
+    | Record<string, unknown>
+    | null
+    | undefined;
+  if (!addr || typeof addr !== "object") return {};
+  const s = (v: unknown, max: number): string | undefined => {
+    const t = typeof v === "string" ? v.trim() : "";
+    return t ? t.slice(0, max) : undefined;
+  };
+  const line1 = s(addr.adressrad1, 1024);
+  const zip = s(addr.postnummer, 10);
+  const city = s(addr.ort, 1024);
+  if (!line1 || !zip || !city) return {};
+  const out: Partial<FortnoxInvoice> = {
+    DeliveryAddress1: line1,
+    DeliveryZipCode: zip,
+    DeliveryCity: city,
+  };
+  const line2 = s(addr.adressrad2, 1024);
+  if (line2) out.DeliveryAddress2 = line2;
+  const country = s(addr.land, 1024);
+  if (country) out.DeliveryCountry = country;
+  return out;
+}
+
 function newMetrics(): FortnoxApiCallMetrics {
   return { calls: 0, retries: 0, waitMs: 0 };
 }
@@ -427,6 +459,9 @@ export async function exportWorkOrderToFortnox(
         Project: invoiceExport.project || undefined,
         ExternalInvoiceReference2: exportId,
         ...headerRefs,
+        // Task #1517: snabborderns manuella leveransadress (strukturerad i
+        // work_orders.metadata.deliveryAddress) → Fortnox fakturahuvud.
+        ...buildDeliveryAddressFields(workOrder as any),
       };
 
       try {
