@@ -1115,10 +1115,9 @@ app.post("/api/annual-planning/apply-distribution", asyncHandler(async (req, res
           objectId: assignedObjectId,
           tidsfonsterStart: scheduledDate,
           kundId: customerIdForOrder ?? null,
-        }).catch((err) => {
-          console.error("[uppgiftspaket] fyllnad vid AI-distribution misslyckades:", err);
-          return undefined;
         });
+        // Task #1506: paketfyllnad är obligatorisk — ett paketfel avbryter
+        // distributionen högljutt i stället för att mynta uppgifter utan paket.
 
         // Task #1369: ursprung stämplat vid skapandet (AI-distribution av årsmål).
         const [created] = await db.insert(workOrders).values({ ...orderData, uppgiftspaket, sourceType: "automatisk" }).returning();

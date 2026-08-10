@@ -78,7 +78,7 @@ describe("isUppgiftFrozen", () => {
     ).toBe(true);
   });
 
-  it("paketversionen är 1", () => {
-    expect(UPPGIFTSPAKET_VERSION).toBe(1);
+  it("paketversionen är 2 (artikel-snapshot, Task #1506)", () => {
+    expect(UPPGIFTSPAKET_VERSION).toBe(2);
   });
 });

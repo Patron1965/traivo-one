@@ -15,10 +15,11 @@
 //    work_orders.taskLatitude/taskLongitude) uppdateras present-value-only från
 //    samma paketbygge — generaliserar geo-field-sync-mönstret till uppgiftslagret.
 //
-// Skapande-fyllnaden är BEST-EFFORT: den får aldrig blockera en insert — fel
-// loggas och uppgiften skapas utan paket (legacy-beteende).
+// Skapande-fyllnaden är OBLIGATORISK sedan Task #1506: ett paketfel avbryter
+// skapandet högljutt (storage-hooks kastar). Artikel-snapshoten stämplas
+// atomärt tillsammans med orderraden/assignment-artikeln (samma transaktion).
 import { db } from "../db";
-import { objects, workOrders, assignments } from "@shared/schema";
+import { objects, workOrders, assignments, articles as articlesTable } from "@shared/schema";
 import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import {
   UPPGIFTSPAKET_VERSION,
@@ -28,9 +29,13 @@ import {
   type UppgiftspaketPrimarPlats,
   type UppgiftspaketSekundarPlats,
   type UppgiftspaketAtkomst,
+  type UppgiftspaketArtikel,
   type InvoiceQueueState,
 } from "@shared/uppgift-contract";
 import { resolveObjectLocation } from "./object-location";
+
+/** Minimal databas-yta så stampArtikelSnapshot kan köras i en yttre transaktion. */
+type DbClient = Pick<typeof db, "select" | "update">;
 
 // ============================================================================
 // GEOGRAFIMOTORNS KONTRAKT — primär (körbar) + sekundär (utförandeplats)
@@ -146,7 +151,13 @@ export interface BuildUppgiftspaketArgs {
   tidskod?: string | null;
   kundId?: string | null;
   frystFakturamottagareId?: string | null;
-  uppdateradAv?: "skapande" | "propagering";
+  /**
+   * Artikel-snapshot (Task #1506, paket v2). Ange artikelId för att frysa
+   * registervärden vid skapandet; explicit angivna fält (t.ex. resolvedPrice
+   * från orderraden) vinner över registeruppslaget.
+   */
+  artikel?: Partial<UppgiftspaketArtikel> | null;
+  uppdateradAv?: "skapande" | "propagering" | "backfill";
   /** Förberäknat objekt (bulk-paths) — hoppar över objekt-fetch. */
   preloadedObject?: ObjectRowForPaket | null;
 }
@@ -188,6 +199,59 @@ async function buildAtkomst(
   }
 }
 
+/**
+ * Bygger artikel-snapshotdelen (paket v2). Explicita fält från caller vinner;
+ * saknade fält fylls från artikelregistret (frysta vid detta ögonblick).
+ * Best-effort på registeruppslaget: saknad artikelrad ger snapshot med de
+ * fält caller angav.
+ */
+async function buildArtikelDel(
+  tenantId: string,
+  utforandekod: string | null,
+  tidskod: string | null,
+  extra: Partial<UppgiftspaketArtikel> | null | undefined,
+  dbx: DbClient = db,
+): Promise<UppgiftspaketArtikel | null> {
+  let snapshot: Partial<UppgiftspaketArtikel> = { ...(extra ?? {}) };
+
+  if (extra?.artikelId) {
+    const [art] = await dbx
+      .select({
+        articleNumber: articlesTable.articleNumber,
+        name: articlesTable.name,
+        productionTime: articlesTable.productionTime,
+        cost: articlesTable.cost,
+        listPrice: articlesTable.listPrice,
+        executionCode: articlesTable.executionCode,
+        timeCodeKey: articlesTable.timeCodeKey,
+      })
+      .from(articlesTable)
+      .where(and(eq(articlesTable.id, extra.artikelId), eq(articlesTable.tenantId, tenantId)))
+      .limit(1);
+    if (art) {
+      snapshot = {
+        artikelId: extra.artikelId,
+        artikelnummer: extra.artikelnummer ?? art.articleNumber ?? null,
+        namn: extra.namn ?? art.name ?? null,
+        produktionstidMin: extra.produktionstidMin ?? art.productionTime ?? null,
+        prisOre: extra.prisOre ?? art.listPrice ?? null,
+        kostnadOre: extra.kostnadOre ?? art.cost ?? null,
+        debiteringsmodell: extra.debiteringsmodell ?? null,
+      };
+      if (utforandekod == null && art.executionCode != null) utforandekod = art.executionCode;
+      if (tidskod == null && art.timeCodeKey != null) tidskod = art.timeCodeKey;
+    }
+  }
+
+  const hasSnapshot = Object.values(snapshot).some((v) => v != null);
+  if (utforandekod == null && tidskod == null && !hasSnapshot) return null;
+  return {
+    utforandekod: utforandekod ?? null,
+    tidskod: tidskod ?? null,
+    ...snapshot,
+  };
+}
+
 /** Bygger ett komplett uppgiftspaket. Kastar ALDRIG för saknat objekt — position blir null. */
 export async function buildUppgiftspaket(args: BuildUppgiftspaketArgs): Promise<Uppgiftspaket> {
   const uppdateradAv = args.uppdateradAv ?? "skapande";
@@ -213,10 +277,12 @@ export async function buildUppgiftspaket(args: BuildUppgiftspaketArgs): Promise<
     position,
     tidsfonster: start != null || slut != null ? { start, slut } : null,
     antal: args.antal ?? null,
-    artikel:
-      args.utforandekod != null || args.tidskod != null
-        ? { utforandekod: args.utforandekod ?? null, tidskod: args.tidskod ?? null }
-        : null,
+    artikel: await buildArtikelDel(
+      args.tenantId,
+      args.utforandekod ?? null,
+      args.tidskod ?? null,
+      args.artikel,
+    ),
     kund:
       args.kundId != null || args.frystFakturamottagareId != null
         ? {
@@ -226,6 +292,140 @@ export async function buildUppgiftspaket(args: BuildUppgiftspaketArgs): Promise<
         : null,
     atkomst,
   };
+}
+
+// ============================================================================
+// ARTIKEL-SNAPSHOT-STÄMPLING (Task #1506) — orderrader/assignment-artiklar
+// skapas ofta EFTER själva uppgiften; första artikelbärande raden fryser då
+// snapshotfälten i paketet. Idempotent: en redan satt artikelId röres aldrig
+// (första artikeln = primär artikel; "en uppgift = en artikel").
+// Frysta uppgifter röres aldrig.
+// ============================================================================
+
+export async function stampArtikelSnapshot(opts: {
+  tenantId: string;
+  lager: "work_order" | "assignment";
+  uppgiftId: string;
+  artikelId: string;
+  /** Explicita frysvärden (t.ex. resolvedPrice från orderraden) vinner över registret. */
+  overrides?: Partial<UppgiftspaketArtikel>;
+  /** Kör i en yttre transaktion (atomärt med rad-inserten). */
+  dbx?: DbClient;
+  /**
+   * ENDAST för skapandeflödet (createWorkOrderWithLines): uppgiften skapas i
+   * samma transaktion och kan vara fryst-vid-födsel (t.ex. materialiserade
+   * utförda avrop) — snapshoten ÄR då skapandefaktumet. Aldrig för efterhands-
+   * stämpling.
+   */
+  skipFrozenGate?: boolean;
+}): Promise<void> {
+  const { tenantId, lager, uppgiftId, artikelId, overrides } = opts;
+  const dbx = opts.dbx ?? db;
+
+  if (lager === "work_order") {
+    const [wo] = await dbx
+      .select({
+        orderStatus: workOrders.orderStatus,
+        executionStatus: workOrders.executionStatus,
+        invoiceQueueState: workOrders.invoiceQueueState,
+        impossibleReason: workOrders.impossibleReason,
+        executionCode: workOrders.executionCode,
+        frozenTimeCode: workOrders.frozenTimeCode,
+        uppgiftspaket: workOrders.uppgiftspaket,
+      })
+      .from(workOrders)
+      .where(and(eq(workOrders.id, uppgiftId), eq(workOrders.tenantId, tenantId)))
+      .limit(1);
+    if (!wo) return;
+    const status = deriveUppgiftStatus({
+      orderStatus: wo.orderStatus as any,
+      executionStatus: wo.executionStatus as any,
+      invoiceQueueState: (wo.invoiceQueueState as InvoiceQueueState | null) ?? null,
+      impossible: wo.impossibleReason != null,
+    });
+    if (!opts.skipFrozenGate && isUppgiftFrozen(status)) return;
+    const prev = wo.uppgiftspaket as Uppgiftspaket | null;
+    if (prev?.artikel?.artikelId) return; // primär artikel redan fryst
+    const artikel = await buildArtikelDel(
+      tenantId,
+      prev?.artikel?.utforandekod ?? wo.executionCode ?? null,
+      prev?.artikel?.tidskod ?? wo.frozenTimeCode ?? null,
+      { ...(overrides ?? {}), artikelId },
+      dbx,
+    );
+    if (!artikel) return;
+    const paket: Uppgiftspaket = prev
+      ? { ...prev, uppdateradVid: new Date().toISOString(), artikel }
+      : {
+          version: UPPGIFTSPAKET_VERSION,
+          uppdateradVid: new Date().toISOString(),
+          uppdateradAv: "skapande",
+          position: null,
+          tidsfonster: null,
+          antal: null,
+          artikel,
+          kund: null,
+          atkomst: null,
+        };
+    // Compare-and-set: skriv ENDAST om artikel-snapshoten fortfarande saknas —
+    // två samtidiga första-rader kan annars skriva över varandras snapshot.
+    await dbx
+      .update(workOrders)
+      .set({ uppgiftspaket: paket })
+      .where(and(
+        eq(workOrders.id, uppgiftId),
+        eq(workOrders.tenantId, tenantId),
+        sql`(${workOrders.uppgiftspaket} IS NULL OR ${workOrders.uppgiftspaket}->'artikel'->>'artikelId' IS NULL)`,
+      ));
+    return;
+  }
+
+  const [a] = await dbx
+    .select({
+      status: assignments.status,
+      executionCode: assignments.executionCode,
+      frozenTimeCode: assignments.frozenTimeCode,
+      uppgiftspaket: assignments.uppgiftspaket,
+    })
+    .from(assignments)
+    .where(and(eq(assignments.id, uppgiftId), eq(assignments.tenantId, tenantId)))
+    .limit(1);
+  if (!a) return;
+  if (a.status === "cancelled") return;
+  const status = deriveUppgiftStatus({ executionStatus: a.status as any, materialized: false });
+  if (isUppgiftFrozen(status)) return;
+  const prev = a.uppgiftspaket as Uppgiftspaket | null;
+  if (prev?.artikel?.artikelId) return;
+  const artikel = await buildArtikelDel(
+    tenantId,
+    prev?.artikel?.utforandekod ?? a.executionCode ?? null,
+    prev?.artikel?.tidskod ?? a.frozenTimeCode ?? null,
+    { ...(overrides ?? {}), artikelId },
+    dbx,
+  );
+  if (!artikel) return;
+  const paket: Uppgiftspaket = prev
+    ? { ...prev, uppdateradVid: new Date().toISOString(), artikel }
+    : {
+        version: UPPGIFTSPAKET_VERSION,
+        uppdateradVid: new Date().toISOString(),
+        uppdateradAv: "skapande",
+        position: null,
+        tidsfonster: null,
+        antal: null,
+        artikel,
+        kund: null,
+        atkomst: null,
+      };
+  // Compare-and-set — se kommentaren i WO-grenen ovan.
+  await dbx
+    .update(assignments)
+    .set({ uppgiftspaket: paket })
+    .where(and(
+      eq(assignments.id, uppgiftId),
+      eq(assignments.tenantId, tenantId),
+      sql`(${assignments.uppgiftspaket} IS NULL OR ${assignments.uppgiftspaket}->'artikel'->>'artikelId' IS NULL)`,
+    ));
 }
 
 // ============================================================================
@@ -377,9 +577,15 @@ export async function propagateUppgiftspaket(
         tidsfonster:
           start != null || slut != null ? { start, slut } : (prev?.tidsfonster ?? null),
         antal: wo.frozenQuantity ?? prev?.antal ?? null,
+        // Bevara artikel-SNAPSHOTEN (v2, frysta skapandefakta) — propageringen
+        // uppdaterar bara koderna från radens kolumner, aldrig snapshotfälten.
         artikel:
           wo.executionCode != null || wo.frozenTimeCode != null
-            ? { utforandekod: wo.executionCode ?? null, tidskod: wo.frozenTimeCode ?? null }
+            ? {
+                ...(prev?.artikel ?? {}),
+                utforandekod: wo.executionCode ?? prev?.artikel?.utforandekod ?? null,
+                tidskod: wo.frozenTimeCode ?? prev?.artikel?.tidskod ?? null,
+              }
             : (prev?.artikel ?? null),
         kund: {
           kundId: wo.customerId ?? prev?.kund?.kundId ?? null,
@@ -458,9 +664,14 @@ export async function propagateUppgiftspaket(
         tidsfonster:
           start != null || slut != null ? { start, slut } : (prev?.tidsfonster ?? null),
         antal: a.quantity ?? prev?.antal ?? null,
+        // Bevara artikel-SNAPSHOTEN (v2) — se kommentaren i WO-loopen ovan.
         artikel:
           a.executionCode != null || a.frozenTimeCode != null
-            ? { utforandekod: a.executionCode ?? null, tidskod: a.frozenTimeCode ?? null }
+            ? {
+                ...(prev?.artikel ?? {}),
+                utforandekod: a.executionCode ?? prev?.artikel?.utforandekod ?? null,
+                tidskod: a.frozenTimeCode ?? prev?.artikel?.tidskod ?? null,
+              }
             : (prev?.artikel ?? null),
         kund: {
           kundId: a.customerId ?? prev?.kund?.kundId ?? null,

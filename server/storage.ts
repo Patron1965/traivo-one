@@ -228,7 +228,7 @@ import {
   type HookObjectContext,
 } from "./association-service";
 import { getObjectWithAllMetadata, getObjectAtkomstFields } from "./metadata-queries";
-import { buildUppgiftspaket } from "./services/uppgiftspaket";
+import { buildUppgiftspaket, stampArtikelSnapshot } from "./services/uppgiftspaket";
 import type { InsertAssignment as InsertAssignmentType } from "@shared/schema";
 import { haversineDistanceKm } from "./distance-matrix-service";
 import { groupTeamLiveRows } from "./services/team-live-positions";
@@ -4444,10 +4444,15 @@ export class DatabaseStorage implements IStorage {
     return result?.count || 0;
   }
 
-  // Task #1215 (Etapp 3): fyll uppgiftspaketet (arbetskopian) best-effort vid
-  // skapande — får ALDRIG blockera inserten. Delas av alla skapande-paths som
-  // går via storage; direkta db.insert-callers anropar buildUppgiftspaket själva.
-  private async fillWorkOrderUppgiftspaket(values: InsertWorkOrder): Promise<void> {
+  // Task #1215 (Etapp 3) + #1506: fyll uppgiftspaketet (arbetskopian) vid
+  // skapande. OBLIGATORISK sedan #1506 — misslyckas paketbygget avbryts
+  // skapandet högljutt i stället för att tyst mynta en uppgift utan paket.
+  // Delas av alla skapande-paths som går via storage; direkta db.insert-callers
+  // anropar buildUppgiftspaket själva.
+  private async fillWorkOrderUppgiftspaket(
+    values: InsertWorkOrder,
+    artikel?: Partial<import("@shared/uppgift-contract").UppgiftspaketArtikel> | null,
+  ): Promise<void> {
     if (values.uppgiftspaket || !values.tenantId) return;
     try {
       values.uppgiftspaket = await buildUppgiftspaket({
@@ -4460,9 +4465,14 @@ export class DatabaseStorage implements IStorage {
         tidskod: values.frozenTimeCode ?? null,
         kundId: values.customerId ?? null,
         frystFakturamottagareId: values.frozenInvoiceRecipientId ?? null,
+        artikel: artikel ?? null,
       });
     } catch (err) {
       console.error("[uppgiftspaket] fyllnad vid createWorkOrder misslyckades:", err);
+      throw new Error(
+        "Uppgiftspaketet kunde inte byggas — arbetsordern skapades inte. Försök igen.",
+        { cause: err },
+      );
     }
   }
 
@@ -4478,9 +4488,17 @@ export class DatabaseStorage implements IStorage {
         utforandekod: values.executionCode ?? null,
         tidskod: values.frozenTimeCode ?? null,
         kundId: values.customerId ?? null,
+        artikel:
+          values.isFixedPrice != null
+            ? { debiteringsmodell: values.isFixedPrice ? "fast" : "lopande" }
+            : null,
       });
     } catch (err) {
       console.error("[uppgiftspaket] fyllnad vid createAssignment misslyckades:", err);
+      throw new Error(
+        "Uppgiftspaketet kunde inte byggas — uppgiften skapades inte. Försök igen.",
+        { cause: err },
+      );
     }
   }
 
@@ -4545,7 +4563,16 @@ export class DatabaseStorage implements IStorage {
       );
     }
     // Uppgiftspaket-fyllnad är en read-baserad härledning → före transaktionen.
-    await this.fillWorkOrderUppgiftspaket(values);
+    // Task #1506: artikel-SNAPSHOTEN stämplas däremot INNE i transaktionen
+    // (efter rad-inserterna, via CAS) så att snapshoten speglar exakt det
+    // atomära skapandeögonblicket — aldrig ett pre-tx-uppslag som kan hinna
+    // bli inaktuellt.
+    await this.fillWorkOrderUppgiftspaket(
+      values,
+      values.frozenIsFixedPrice != null
+        ? { debiteringsmodell: values.frozenIsFixedPrice ? "fast" : "lopande" }
+        : null,
+    );
 
     const result = await db.transaction(async (tx) => {
       // Snabborder: mynta löpande "SO-<n>" per tenant under transaktionsbundet
@@ -4589,7 +4616,37 @@ export class DatabaseStorage implements IStorage {
         cachedProductionMinutes: totalMinutes,
       }).where(eq(workOrders.id, workOrder.id)).returning();
 
-      return { workOrder: updated ?? workOrder, lines: insertedLines };
+      // Task #1506: frys artikel-snapshoten ATOMÄRT i samma transaktion —
+      // första artikelbärande raden = primär artikel (CAS i stämplaren).
+      const primaryInserted = insertedLines.find((l) => l.articleId);
+      if (primaryInserted?.articleId && workOrder.tenantId) {
+        await stampArtikelSnapshot({
+          tenantId: workOrder.tenantId,
+          lager: "work_order",
+          uppgiftId: workOrder.id,
+          artikelId: primaryInserted.articleId,
+          overrides: {
+            prisOre: primaryInserted.resolvedPrice ?? undefined,
+            kostnadOre: primaryInserted.resolvedCost ?? undefined,
+            produktionstidMin: primaryInserted.resolvedProductionMinutes ?? undefined,
+            debiteringsmodell:
+              values.frozenIsFixedPrice != null
+                ? values.frozenIsFixedPrice
+                  ? "fast"
+                  : "lopande"
+                : undefined,
+          },
+          dbx: tx,
+          // Skapandeögonblicket: även fryst-vid-födsel (materialiserade utförda
+          // avrop) ska få sin snapshot — den ÄR skapandefaktumet.
+          skipFrozenGate: true,
+        });
+      }
+      const [withSnapshot] = primaryInserted
+        ? await tx.select().from(workOrders).where(eq(workOrders.id, workOrder.id)).limit(1)
+        : [undefined];
+
+      return { workOrder: withSnapshot ?? updated ?? workOrder, lines: insertedLines };
     });
 
     if (result.workOrder?.tenantId) invalidateWorkflowCaches(result.workOrder.tenantId);
@@ -5500,7 +5557,28 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createWorkOrderLine(line: InsertWorkOrderLine, options?: { skipRecalc?: boolean }): Promise<WorkOrderLine> {
-    const [wol] = await db.insert(workOrderLines).values(line).returning();
+    // Task #1506: rad-insert + artikel-snapshot-stämpling är ATOMÄRT (samma tx) —
+    // misslyckas stämplingen rullas raden tillbaka; ingen artikelbärande uppgift
+    // kan bli stående utan snapshot. Stämplingen är idempotent CAS (första
+    // artikeln vinner, frysta uppgifter röres aldrig).
+    const wol = await db.transaction(async (tx) => {
+      const [inserted] = await tx.insert(workOrderLines).values(line).returning();
+      if (inserted?.articleId && inserted.tenantId && inserted.workOrderId) {
+        await stampArtikelSnapshot({
+          tenantId: inserted.tenantId,
+          lager: "work_order",
+          uppgiftId: inserted.workOrderId,
+          artikelId: inserted.articleId,
+          overrides: {
+            prisOre: inserted.resolvedPrice ?? undefined,
+            kostnadOre: inserted.resolvedCost ?? undefined,
+            produktionstidMin: inserted.resolvedProductionMinutes ?? undefined,
+          },
+          dbx: tx,
+        });
+      }
+      return inserted;
+    });
     if (!options?.skipRecalc && wol?.workOrderId) {
       await this.recalculateWorkOrderTotals(wol.workOrderId);
     }
@@ -8135,8 +8213,34 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createAssignmentArticle(article: InsertAssignmentArticle): Promise<AssignmentArticle> {
-    const [result] = await db.insert(assignmentArticles).values(article).returning();
-    return result;
+    // Task #1506: artikel-insert + snapshot-stämpling är ATOMÄRT (samma tx) —
+    // misslyckas stämplingen rullas artikelkopplingen tillbaka. Idempotent CAS.
+    // OBS: assignment_articles saknar tenant_id — hämta den från assignmenten.
+    return await db.transaction(async (tx) => {
+      const [result] = await tx.insert(assignmentArticles).values(article).returning();
+      if (result?.articleId && result.assignmentId) {
+        const [parent] = await tx
+          .select({ tenantId: assignments.tenantId })
+          .from(assignments)
+          .where(eq(assignments.id, result.assignmentId))
+          .limit(1);
+        if (parent?.tenantId) {
+          await stampArtikelSnapshot({
+            tenantId: parent.tenantId,
+            lager: "assignment",
+            uppgiftId: result.assignmentId,
+            artikelId: result.articleId,
+            overrides: {
+              prisOre: result.unitPrice ?? undefined,
+              kostnadOre: result.unitCost ?? undefined,
+              produktionstidMin: result.unitTime ?? undefined,
+            },
+            dbx: tx,
+          });
+        }
+      }
+      return result;
+    });
   }
 
   async updateAssignmentArticle(id: string, assignmentId: string, data: Partial<InsertAssignmentArticle>): Promise<AssignmentArticle | undefined> {

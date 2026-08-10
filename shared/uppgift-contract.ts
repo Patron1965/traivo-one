@@ -314,7 +314,30 @@ export const INFORMATIONSPAKET_FALT: InformationspaketFalt[] = [
  * Lagras i work_orders.uppgiftspaket + assignments.uppgiftspaket (jsonb,
  * nullable — expand-contract: legacy-rader utan paket beter sig som idag).
  */
-export const UPPGIFTSPAKET_VERSION = 1 as const;
+export const UPPGIFTSPAKET_VERSION = 2 as const;
+
+/**
+ * Artikel-snapshot i paketet (v2, Task #1506):
+ * Frysta fakta från skapandeögonblicket — en artikeländring i registret får
+ * ALDRIG retroaktivt ändra en redan skapad uppgifts snapshotvärden.
+ * Alla nya fält är valfria (v1-paket saknar dem; expand-contract).
+ */
+export interface UppgiftspaketArtikel {
+  utforandekod: string | null;
+  tidskod: string | null;
+  /** Primär artikel (articles.id) — spårbarhet, ej uppslagskälla. */
+  artikelId?: string | null;
+  artikelnummer?: string | null;
+  namn?: string | null;
+  /** Produktionstid i minuter vid skapandet. */
+  produktionstidMin?: number | null;
+  /** Pris (öre) vid skapandet. */
+  prisOre?: number | null;
+  /** Kostnad (öre) vid skapandet. */
+  kostnadOre?: number | null;
+  /** Debiteringsmodell vid skapandet: fast eller löpande pris. */
+  debiteringsmodell?: "fast" | "lopande" | null;
+}
 
 /** Primär plats = KÖRBAR position (geografimotorns ruttkontrakt). */
 export interface UppgiftspaketPrimarPlats {
@@ -352,7 +375,7 @@ export interface Uppgiftspaket {
   /** ISO-tidsstämpel för senaste fyllnad/uppdatering. */
   uppdateradVid: string;
   /** Vem som senast skrev paketet. */
-  uppdateradAv: "skapande" | "propagering";
+  uppdateradAv: "skapande" | "propagering" | "backfill";
   /** Geografimotorns kontrakt: primär (körbar) + sekundär (utförandeplats). Null för objektlösa uppgifter. */
   position: {
     primar: UppgiftspaketPrimarPlats;
@@ -363,7 +386,7 @@ export interface Uppgiftspaket {
   /** Aktuellt antal (hålls i synk av antals-propageringen). */
   antal: number | null;
   /** Artikelinfo-snapshot (utförandekod/tidskod/enhet). */
-  artikel: { utforandekod: string | null; tidskod: string | null } | null;
+  artikel: UppgiftspaketArtikel | null;
   /** Kund-/fakturainformation. */
   kund: { kundId: string | null; frystFakturamottagareId: string | null } | null;
   /** Åtkomstinfo från objektet (resolved, arvs-medveten). */

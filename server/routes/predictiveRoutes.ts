@@ -358,10 +358,9 @@ export async function registerPredictiveRoutes(app: Express) {
       tenantId,
       objectId,
       kundId: obj.customerId ?? null,
-    }).catch((err) => {
-      console.error("[uppgiftspaket] fyllnad vid predictive create-order misslyckades:", err);
-      return undefined;
     });
+    // Task #1506: paketfyllnad är obligatorisk — misslyckas bygget avbryts
+    // skapandet högljutt (felet propagerar till route-felhanteraren).
 
     if (!obj.customerId) {
       throw new ValidationError("Objektet saknar kund — arbetsorder kan inte skapas");
