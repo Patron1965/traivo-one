@@ -51,7 +51,10 @@ export function chooseWoSnapshotValues(
     impossible: wo.impossibleReason != null,
   });
   const frozen = isUppgiftFrozen(status);
-  if (frozen && (wo.frozenUnitPrice != null || wo.frozenUnitCost != null || wo.frozenUnitTime != null)) {
+  if (frozen) {
+    // Fryst rad: värdena kommer UTESLUTANDE från de kanoniska frysta
+    // kolumnerna — saknas de förblir fältet okänt (undefined). Dagens
+    // orderrader kan ha ändrats efter frysningen och får ALDRIG användas.
     return {
       frozen,
       prisOre: wo.frozenUnitPrice != null ? Math.round(wo.frozenUnitPrice) : undefined,
@@ -158,9 +161,11 @@ async function backfillOnce(DRY_RUN: boolean) {
       const artikelExtra: Partial<UppgiftspaketArtikel> | null = line?.articleId
         ? {
             artikelId: line.articleId,
-            prisOre: vals.prisOre,
-            kostnadOre: vals.kostnadOre,
-            produktionstidMin: vals.produktionstidMin,
+            // Fryst rad: explicit null när fryst värde saknas, så att
+            // paketbygget ALDRIG fyller ut från dagens artikelregister.
+            prisOre: vals.frozen ? (vals.prisOre ?? null) : vals.prisOre,
+            kostnadOre: vals.frozen ? (vals.kostnadOre ?? null) : vals.kostnadOre,
+            produktionstidMin: vals.frozen ? (vals.produktionstidMin ?? null) : vals.produktionstidMin,
             debiteringsmodell:
               wo.frozenIsFixedPrice != null ? (wo.frozenIsFixedPrice ? "fast" : "lopande") : undefined,
           }

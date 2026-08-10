@@ -319,6 +319,19 @@ describe("uppgiftspaket artikel-snapshot (Task #1506)", () => {
     const frozenVals = chooseWoSnapshotValues(frozenWo, driftedLine);
     expect(frozenVals).toMatchObject({ frozen: true, prisOre: 40000, kostnadOre: 25000, produktionstidMin: 30 });
 
+    // Fryst WO HELT utan frysta kolumner: värden förblir okända — aldrig
+    // dagens (driftade) orderrad.
+    const nullFrozenVals = chooseWoSnapshotValues(
+      { ...frozenWo, frozenUnitPrice: null, frozenUnitCost: null, frozenUnitTime: null },
+      driftedLine,
+    );
+    expect(nullFrozenVals).toEqual({
+      frozen: true,
+      prisOre: undefined,
+      kostnadOre: undefined,
+      produktionstidMin: undefined,
+    });
+
     // Öppen WO tar radens resolved*-värden.
     const openVals = chooseWoSnapshotValues(
       { ...frozenWo, orderStatus: "skapad", executionStatus: "not_planned" },

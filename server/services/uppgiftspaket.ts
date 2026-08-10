@@ -229,13 +229,15 @@ async function buildArtikelDel(
       .where(and(eq(articlesTable.id, extra.artikelId), eq(articlesTable.tenantId, tenantId)))
       .limit(1);
     if (art) {
+      // Explicit null från caller respekteras (t.ex. fryst rad utan känt
+      // värde) — registret fyller BARA fält som är helt utelämnade (undefined).
       snapshot = {
         artikelId: extra.artikelId,
-        artikelnummer: extra.artikelnummer ?? art.articleNumber ?? null,
-        namn: extra.namn ?? art.name ?? null,
-        produktionstidMin: extra.produktionstidMin ?? art.productionTime ?? null,
-        prisOre: extra.prisOre ?? art.listPrice ?? null,
-        kostnadOre: extra.kostnadOre ?? art.cost ?? null,
+        artikelnummer: extra.artikelnummer !== undefined ? extra.artikelnummer : (art.articleNumber ?? null),
+        namn: extra.namn !== undefined ? extra.namn : (art.name ?? null),
+        produktionstidMin: extra.produktionstidMin !== undefined ? extra.produktionstidMin : (art.productionTime ?? null),
+        prisOre: extra.prisOre !== undefined ? extra.prisOre : (art.listPrice ?? null),
+        kostnadOre: extra.kostnadOre !== undefined ? extra.kostnadOre : (art.cost ?? null),
         debiteringsmodell: extra.debiteringsmodell ?? null,
       };
       if (utforandekod == null && art.executionCode != null) utforandekod = art.executionCode;
