@@ -58,6 +58,20 @@ Schema når prod **enbart via Publish** (aldrig startup-DDL). Vid nästa Publish
 Dev/task-miljöer: migration `migrations/0151_drop_objects_legacy_classification.sql`
 (idempotent `DROP COLUMN IF EXISTS`) körs via post-merge-replay-listan.
 
+## Post-publish-verifiering (Task #1502, 2026-08-10)
+
+Verifierat mot prod-replikan efter Publish:
+
+- Kolumnerna `object_type`/`hierarchy_level`/`object_level`/`article_id`/
+  `last_service_date` är **borta** ur `objects` i prod.
+- `metadata_katalog` innehåller aktiva Objekttyp/Anläggningstyp för **alla**
+  tenants (0 tenants saknar något av fälten).
+- Snapshotens kinab-demovärden (11 objekt, tabellen ovan) återinsatta som
+  metadata (`metod='auto'`, `skapad_av='system'`) via
+  `scripts/restore-kinab-classification-prod.ts` (dry-run + skarp körning,
+  22 rader skapade, 0 hoppade). Testtenanternas rader (`oqfc-*`/`eres-*`/
+  `test-tenant-b`) är testartefakter och återinsattes avsiktligt inte.
+
 ## Kodrevision A/B/C/D (steg 4)
 
 Klassning: **A** = kärndata behålls (rätt domän, ej objects-kolumn),
