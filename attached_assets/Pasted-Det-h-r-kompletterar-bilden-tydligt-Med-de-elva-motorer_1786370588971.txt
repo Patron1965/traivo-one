@@ -1,0 +1,560 @@
+Det här kompletterar bilden tydligt. Med de elva motorerna blir Uppgiften själva masterobjektet i Traivo, medan motorerna analyserar, skapar, grupperar, styr och uppdaterar uppgifter. Jag skulle skicka följande till Replit för en uttrycklig arkitekturbekräftelse innan nästa utvecklingssteg.
+TRAIVO – BEKRÄFTELSE AV ARKITEKTUR FÖR UPPGIFT, NAV OCH MOTORER
+Bakgrund och syfte
+Nästa avgörande steg i utvecklingen av Traivo är att säkerställa den centrala arkitekturen kring Uppgiften.
+Orderkoncept, Snabborder och övriga funktioner skall kunna skapa uppgifter baserat på:
+    •    Artikel
+    •    Kund
+    •    Objekt
+    •    Metadata
+    •    Önskad leveranstid
+    •    Geografiska data
+    •    Artikelns regler och parametrar
+    •    Order-/faktureringsregler
+En uppgift är alltså inte bara en enkel rad med artikel, datum och adress.
+Uppgiften skall vara Traivos centrala operativa informationspaket och bära de drygt 90 informationsfält som behövs från skapande till fakturering.
+Vi behöver därför att Replit-utvecklarna granskar nuvarande datamodell och uttryckligen bekräftar att nedanstående princip är förstådd och att systemarkitekturen stödjer den.
+
+1. UPPGIFTEN ÄR TRAIVOS CENTRALA OPERATIVA MASTEROBJEKT
+En skapad uppgift skall knyta samman hela kedjan:
+Artikel → Order/Orderkoncept → Kund → Objekt → Metadata → Geografi → Tid → Planering → Utförare → Verkligt utfall → Fakturering
+Uppgiften skall därför innehålla eller ha stabila relationer till samtliga data som krävs genom hela livscykeln.
+Det gäller bland annat:
+    •    artikelnummer
+    •    unikt uppgiftsnummer
+    •    uppgiftskälla
+    •    artikeltyp
+    •    artikelområde
+    •    namn och beskrivningar
+    •    dokument
+    •    pris
+    •    kostnad
+    •    debiteringsmodell
+    •    produktionstid
+    •    tidstyp
+    •    utförandekod
+    •    antal
+    •    fakturerbart antal
+    •    abonnemangsstatus
+    •    strukturartikel
+    •    beroenden
+    •    offset
+    •    metadataregler
+    •    geografiska data
+    •    kund
+    •    objekt
+    •    fakturareferenser
+    •    leveranstider
+    •    tidsfönster
+    •    planerad tid
+    •    verklig tid
+    •    status
+    •    utförare/team
+    •    kostnadsställe
+    •    projekt
+    •    fakturamodell
+Det är alltså viktigt att inte bygga olika parallella versioner av en uppgift för order, planering, utförande och fakturering.
+Det skall i grunden vara samma uppgift genom hela Traivo.
+
+2. SNAPSHOT OCH LEVANDE DATA
+När en artikel skapar en uppgift måste Traivo veta vilka uppgifter som skall:
+    1    kopieras från artikeln vid skapandet,
+    2    fortsätta vara dynamiskt kopplade till artikel, objekt eller metadata,
+    3    kunna förändras under uppgiftens livstid,
+    4    uppdateras av planerare,
+    5    uppdateras av utförare,
+    6    uppdateras automatiskt av motorerna.
+Detta är viktigt eftersom en artikel kan ändras i artikelregistret efter att en uppgift skapats.
+En redan skapad uppgift får normalt inte förändras retroaktivt på ett okontrollerat sätt bara för att artikelregistret senare ändras.
+Replit behöver därför säkerställa en tydlig modell för:
+Masterdata → snapshot vid uppgiftsskapande → dynamiska relationer → verkligt utfall.
+
+3. MASTERLISTAN – UPPGIFTSNAVET
+Alla uppgifter skall hamna i samma centrala uppgiftsmängd.
+Detta gäller oavsett om uppgiften skapats genom:
+    •    Orderkoncept
+    •    Snabborder
+    •    Manuell snabbuppgift
+    •    Felanmälan
+    •    Uppgiftsmotor
+    •    Metadataanalys
+    •    Systemskapad reseuppgift
+    •    Systemskapad plock-/hämtningsuppgift
+    •    Beroendeuppgift
+    •    Annan framtida systemfunktion
+Uppgifterna skall sedan kunna visas på minst två centrala sätt:
+A. Under respektive objekt
+Här visas de uppgifter som hör till objektet.
+B. I Uppgiftsnavet
+Här skall samtliga relevanta uppgifter kunna analyseras, filtreras, grupperas och planeras.
+Navet är alltså inte en separat databas. Det är ett kraftfullt arbetsgränssnitt mot Traivos gemensamma uppgiftsdata.
+
+4. FILTERBIBLIOTEK I NAVET
+Planeraren skall kunna skapa, namnge, spara och återanvända filter.
+Exempel:
+    •    Alla BÖK-uppgifter i Stockholms län
+    •    RBK nästa två veckor
+    •    Uppgifter med önskad leverans före fredag
+    •    Ej grovplanerade uppgifter
+    •    Uppgifter för viss kund
+    •    Uppgifter inom polygon
+    •    Uppgifter som kräver viss utförandekod
+    •    Uppgifter som kräver en viss artikel eller reservdel
+    •    Uppgifter med konflikt mot leveranstid
+    •    Uppgifter möjliga att kombinera geografiskt
+    •    Uppgifter som ännu saknar utförare
+Filtret skall kunna använda de drygt 90 uppgiftsfälten samt beräknad information från motorerna.
+Ett sparat filter skall kunna fungera som ett återkommande arbetsverktyg för planeraren.
+
+5. PLANERINGSFLÖDE
+Grundprincipen är:
+Alla uppgifter → Uppgiftsnav → filter/analys → urval → tilldelning → utförarens 168h-plan → finplanering/ruttoptimering → utförande → verkligt utfall → fakturering
+Planeraren skall exempelvis kunna filtrera fram ett antal uppgifter baserat på:
+    •    geografi
+    •    tid
+    •    leveranskrav
+    •    utförandekod
+    •    kompetens
+    •    kund
+    •    artikel
+    •    arbetsområde
+    •    rutt
+    •    tillgänglig kapacitet
+Därefter kan planeraren markera ett antal uppgifter och tilldela dessa till en utförare eller ett team.
+De läggs då in i utförarens 168-timmars veckoplan.
+Därefter kan veckan finplaneras av planeraren eller utföraren med stöd av Ruttoptimering Light.
+
+6. PLANERAD INFORMATION OCH VERKLIG INFORMATION
+Traivo måste konsekvent skilja mellan:
+Begärt/önskat
+Vad kunden eller ordern kräver.
+Planerat
+Vad Traivo/planeraren beslutat.
+Verkligt
+Vad som faktiskt inträffade.
+Exempel:
+Önskad leveranstid
+→ planerad leveranstid
+→ verklig utförandetid.
+Beräknad produktionstid
+→ planerad produktionstid
+→ verklig produktionstid.
+Planerad resa
+→ verklig resa.
+Planerat antal
+→ faktiskt/fakturerbart antal.
+Det är avgörande för:
+    •    produktionsuppföljning
+    •    kalkyler
+    •    lönsamhetsanalys
+    •    resursplanering
+    •    tidsanalys
+    •    kundrapportering
+    •    framtida AI-/optimeringsfunktioner.
+
+7. MOTORARKITEKTUR
+Traivo skall initialt hantera minst följande 11 motorer.
+Motorerna skall inte bygga egna isolerade informationsvärldar.
+De skall läsa och bearbeta Traivos gemensamma data och skapa eller uppdatera information som kan användas av uppgifterna och övriga motorer.
+
+MOTOR 1 – GEOGRAFISK MOTOR
+Motorn sammanställer uppgiftens geografiska position från tillgängliga data.
+Exempel på källor:
+    •    adress
+    •    GPS
+    •    koordinater
+    •    What3words
+    •    metadata
+    •    framtida yta/polygon
+    •    framtida sträcka/slinga
+Motorn skall väga samman tillgänglig information och leverera en beräknad/bästa position för uppgiften.
+Denna position används sedan av bland annat:
+    •    navet
+    •    geografiska filter
+    •    stoppklumpning
+    •    ruttmotor
+    •    planering
+    •    kartfunktioner.
+
+MOTOR 2 – UTFÖRANDETIDSMOTOR
+Motorn analyserar alla relevanta tidsuppgifter för att avgöra när uppgiften lämpligen kan eller bör utföras.
+Motorn skall bland annat ta hänsyn till:
+    •    önskad leveranstid
+    •    hårda tidsfönster
+    •    mjuka tidsfönster
+    •    perioder
+    •    repetition
+    •    offset
+    •    beroendeuppgifter
+    •    geografi
+    •    eventuell tillgänglig kapacitet
+    •    planerad vecka.
+Resultatet skall vara ett dynamiskt förslag/bästa tidsposition för uppgiften.
+Motorn får inte skriva över ursprunglig önskad leveranstid. Skillnaden mellan krav och optimerad tid måste bevaras.
+
+MOTOR 3 – KLUMPNINGSMOTOR / STOPPMOTOR
+Motorn identifierar uppgifter som lämpligen skall utföras vid samma stopp.
+Den analyserar bland annat:
+    •    geografisk position
+    •    tidsfönster
+    •    objekt
+    •    adress
+    •    uppgiftstyp
+    •    utförandekod
+    •    planerad tid.
+Flera uppgifter kan då samlas till ett Stop.
+Ett Stop är en planerings-/utförandegruppering och ersätter inte de individuella uppgifterna.
+Varje underliggande uppgift måste fortfarande behålla:
+    •    eget uppgiftsnummer
+    •    egen status
+    •    egen artikel
+    •    egen fakturering
+    •    egen tidsinformation
+    •    egen metadata.
+
+MOTOR 4 – RUTTMOTOR
+Ruttmotorn håller reda på:
+    •    startposition
+    •    slutposition
+    •    ordningsföljd
+    •    kilometer
+    •    beräknad restid
+    •    verklig restid
+    •    relation mellan stopp.
+Det viktiga är att en resa i Traivo inte endast är en osynlig sträcka mellan två punkter.
+När det behövs skall motorn skapa en systemskapad reseuppgift/researtikel.
+Exempel:
+Stop A
+→ reseuppgift
+→ Stop B.
+Det kan även gälla exempelvis:
+    •    inställelseresa
+    •    resa till lager
+    •    resa till nattvila
+    •    resa från nattvila
+    •    annan tjänsteresa.
+Resan kan därmed bli en riktig del av utförarens tidslinje och produktionsdata.
+
+MOTOR 5 – FAKTURA-/ORDERMOTOR
+Denna motor betraktar uppgifterna ur kundens och affärsdokumentens perspektiv.
+Motorn skall kunna gruppera uppgifter enligt minsta gemensamma nämnare för exempelvis:
+    •    kund
+    •    fakturamottagare
+    •    vår referens
+    •    er referens
+    •    ert referensnummer
+    •    orderreferens
+    •    fakturareferens på objekt/plats
+    •    faktureringsperiod.
+Exempel:
+Samma kund + samma fakturareferenser
+→ samma fakturaunderlag.
+Motorn skall stödja exempelvis:
+    •    en faktura per uppgift
+    •    samlingsfaktura
+    •    dagssamling
+    •    veckosamling
+    •    månadssamling
+    •    krav på att alla uppgifter måste vara klara
+    •    löpande delleverans.
+Samma princip skall kunna användas för:
+    •    ordererkännande
+    •    följesedel
+    •    leveransbekräftelse
+    •    faktura.
+
+MOTOR 6 – ABONNEMANGSFAKTURERINGSMOTOR
+Motorn skall hantera abonnemangsavtal där kunden faktureras exempelvis:
+    •    månadsvis
+    •    kvartalsvis.
+Den skall hålla reda på vilka uppgifter och volymer som ingår i abonnemanget.
+Exempel:
+Ett abonnemang innehåller ett antal återkommande uppgifter per månad.
+Motorn skall:
+    1    beräkna abonnemangsbeloppet,
+    2    skapa fakturaunderlag vid rätt datum,
+    3    kunna låsa beloppet enligt avtal,
+    4    skicka rätt artikel och belopp till Fortnox,
+    5    säkerställa rätt kontering/kundfordran,
+    6    därefter följa de faktiska uppgifternas utförande.
+När en ingående uppgift senare utförs skall systemet kunna använda kvittningsartikel/0-faktura så att kostnaden för det faktiska utförandet kan redovisas mot den redan fakturerade abonnemangsintäkten utan att kunden faktureras ytterligare.
+
+MOTOR 7 – BEROENDEUPPGIFTSMOTOR
+Motorn håller reda på relationer mellan uppgifter.
+Exempel:
+A måste utföras före B.
+B får utföras två dagar efter A.
+C måste utföras samtidigt som B.
+D får bara utföras efter att A och B är klara.
+Relationerna kan styras av:
+    •    beroendeartikel
+    •    objekt
+    •    metadata
+    •    geografisk position
+    •    offsettid.
+Om en föregående uppgift inte utförs skall efterföljande beroendeuppgifter kunna:
+    •    stoppas
+    •    flyttas
+    •    flaggas
+    •    omplaneras.
+
+MOTOR 8 – FYSISK ARTIKEL-, LAGER- OCH PLOCKMOTOR
+Motorn hanterar fysiska artiklar som krävs för att en uppgift skall kunna utföras.
+Den behöver ta hänsyn till bland annat:
+    •    lagerplats
+    •    saldo
+    •    leveranstid
+    •    beställningspunkt
+    •    standardleverantör
+    •    säkerhetslager
+    •    förbrukningsartikel
+    •    ej förbrukningsartikel.
+Om en fysisk artikel måste hämtas från en annan plats innan arbetet kan utföras skall Traivo kunna skapa en separat:
+plock-/hämtningsuppgift.
+Denna blir en beroendeuppgift till huvuduppgiften.
+Exempel:
+Lager
+→ plockuppgift
+→ reseuppgift
+→ kunduppgift.
+För artiklar som inte förbrukas, exempelvis:
+    •    nyckel
+    •    verktyg
+    •    specialutrustning
+skall systemet även kunna skapa en efterföljande returuppgift.
+Exempel:
+Kunduppgift
+→ reseuppgift
+→ återlämningsuppgift på lager.
+
+MOTOR 9 – STATUS-, LEVERANSBEVAKNINGS- OCH AVISERINGSMOTOR
+Motorn bevakar varje uppgifts:
+    •    önskade leveranstid
+    •    planerade leveranstid
+    •    verkliga utförandetid
+    •    tidsfönster
+    •    status
+    •    beroenden.
+Om planeringen förändras skall motorn kontrollera att det inte uppstår konflikt mot:
+    •    önskad leveranstid
+    •    hårda tidsfönster
+    •    mjuka tidsfönster
+    •    beroendeuppgifter.
+Motorn skall kunna signalera avvikelser till exempelvis:
+    •    planerare
+    •    utförare
+    •    kund.
+Statusflödet skall bland annat stödja:
+Skapad → Grovplanerad → Finplanerad → På väg → På plats → Utförd → Fakturerad
+samt avvikande statusar som:
+    •    Omöjlig att utföra
+    •    Överbokad
+    •    Raderad/arkiverad
+    •    annan avvikelsestatus.
+Exempel:
+En uppgift är finplanerad på en utförare under vecka 38.
+Utföraren hinner inte utföra den.
+Uppgiften får då inte bara ligga kvar som om inget hänt.
+Motorn skall kunna återföra den till exempelvis:
+Grovplanerad
+och samtidigt flagga eventuell leveransrisk.
+
+MOTOR 10 – UPPGIFTSMOTOR / METADATABEVAKNING
+Denna motor bevakar:
+    •    valt objekt
+    •    objektgrupp
+    •    kluster
+och ett eller flera utpekade metadatafält.
+Motorn skall kunna använda ett eller flera villkor.
+Exempel:
+Om:
+Behållartyp = BÖK
+och
+Senaste kontroll > 12 månader
+skapa:
+Artikel: BÖK årsinspektion.
+Eller:
+Om:
+Felstatus = Trasig
+skapa:
+    •    inspektionsuppgift
+    •    serviceuppgift
+    •    eventuell avisering.
+Resultatet skall vara vanliga riktiga Traivo-uppgifter som hamnar i samma masterlista och därefter behandlas av samma motorer, nav och planeringsfunktioner som alla andra uppgifter.
+
+MOTOR 11 – METADATAMOTOR
+Metadatamotorns uppgift är att säkerställa att inkommande metadata hamnar:
+på rätt objekt och i rätt metadatafält.
+Metadata kan exempelvis komma från:
+    •    utförandeappen
+    •    felanmälan
+    •    rating
+    •    formulär
+    •    importer
+    •    externa system
+    •    API
+    •    sensorer
+    •    kundsystem.
+Motorn behöver därför kunna hantera:
+    1    identifiering av objekt,
+    2    matchning av inkommande data,
+    3    val av rätt metadatafält,
+    4    validering,
+    5    uppdatering,
+    6    historik,
+    7    källa,
+    8    tidpunkt,
+    9    eventuell konflikt.
+Felaktig metadata får inte godtyckligt skapa nya fält eller hamna på fel objekt.
+Detta är särskilt viktigt eftersom metadata därefter kan styra Uppgiftsmotor 10 och därmed automatiskt skapa nya operativa uppgifter.
+
+8. MOTORERNA MÅSTE KUNNA SAMVERKA
+Motorerna skall inte ses som elva separata funktioner.
+De bildar en kedja.
+Exempel:
+Metadatamotor
+↓
+Uppgiftsmotor
+↓
+ny uppgift
+↓
+Geografisk motor
+↓
+Utförandetidsmotor
+↓
+Beroendemotor
+↓
+Lager-/plockmotor
+↓
+Stoppmotor
+↓
+Ruttmotor
+↓
+Statusmotor
+↓
+Faktura-/abonnemangsmotor.
+Det innebär att datamodellen måste vara byggd så att motorerna kan arbeta på samma uppgiftsdata utan att skapa parallella eller motstridiga versioner.
+
+9. EXPORT AV UPPGIFTER
+Uppgiftsnavet skall kunna exportera:
+    •    samtliga uppgifter
+    •    filtrerat urval
+    •    planerade uppgifter
+    •    utförda uppgifter
+    •    fakturerade uppgifter
+    •    valda perioder
+    •    valda kunder
+    •    valda objekt
+    •    valda utförare.
+Export skall minst kunna ske som CSV.
+Användaren skall kunna välja vilka uppgiftsfält som skall ingå.
+Det skall även vara möjligt att exportera samtliga tillgängliga uppgiftsfält.
+Detta behövs för:
+    •    Excelanalys
+    •    produktivitetsanalys
+    •    tidsanalys
+    •    efterkalkyl
+    •    kundrapporter
+    •    kvalitetssäkring
+    •    extern BI
+    •    framtida AI-analys.
+
+10. TEKNISKT VIKTIG PRINCIP – MOTORRESULTAT SKALL VARA SPÅRBARA
+När en motor ändrar eller kompletterar en uppgift måste Traivo kunna skilja mellan exempelvis:
+Ursprungsvärde:
+Önskad leverans 14 september.
+Beräknat motorvärde:
+Optimal leverans 12 september 10:20.
+Planerarens beslut:
+Planerad leverans 12 september 13:00.
+Verkligt utfall:
+Utförd 12 september 13:17.
+Samma princip bör gälla där det är relevant för:
+    •    geografi
+    •    tider
+    •    antal
+    •    tilldelning
+    •    stopp
+    •    rutt
+    •    fakturering.
+Systemet får alltså inte bara skriva över information så att historiken försvinner.
+
+11. KRITISK PRINCIP – EN UPPGIFT SKALL KUNNA FÖLJAS GENOM HELA SYSTEMET
+Från ett unikt uppgiftsnummer skall vi i framtiden kunna förstå:
+    •    varför uppgiften skapades
+    •    vilken artikel som skapade den
+    •    vilket orderkoncept den kommer från
+    •    vilken kund den hör till
+    •    vilket objekt den hör till
+    •    vilken metadata som styrt den
+    •    var den skall utföras
+    •    när den önskades utförd
+    •    när den planerades
+    •    vem som tilldelades den
+    •    vilket stopp den ingick i
+    •    vilken rutt den ingick i
+    •    vilka resor som skapades
+    •    vilka beroenden den hade
+    •    vilka artiklar som behövdes
+    •    när den faktiskt utfördes
+    •    vilken metadata utföraren lämnade
+    •    vilken faktura den hamnade på
+    •    vilket pris som fakturerades.
+Detta är en grundläggande princip i Traivo.
+
+BEKRÄFTELSE SOM ÖNSKAS FRÅN REPLIT
+Innan vi går vidare med nästa utvecklingssteg vill vi att ni granskar nuvarande implementation och bekräftar följande:
+1. Har ni förstått principen att Uppgiften är Traivos centrala operativa masterobjekt?
+2. Kan nuvarande datamodell bära de drygt 90 informationsfält och relationer som beskrivits, eller behöver den refaktoreras?
+3. Skapas idag uppgifter från Orderkoncept på ett sådant sätt att dessa kan följa hela kedjan till planering, utförande och fakturering?
+4. Kan Snabborder använda exakt samma uppgiftsmodell?
+5. Kan även systemskapade uppgifter – resa, plock, beroendeuppgift och metadatautlösta uppgifter – använda samma modell?
+6. Finns tydlig skillnad mellan artikel-masterdata, snapshot på uppgiften och dynamiska data?
+7. Finns tydlig skillnad mellan önskat, planerat, motorberäknat och verkligt utfall?
+8. Kan uppgiftsnavet läsa och filtrera hela denna gemensamma uppgiftsmängd?
+9. Kan filterbiblioteket byggas ovanpå samtliga relevanta uppgiftsfält?
+10. Kan en grupp uppgifter från navet tilldelas en utförare och placeras i dennes 168h-veckoplan utan att uppgifterna dupliceras?
+11. Kan samtliga uppgifter exporteras till CSV inklusive alla relevanta fält?
+12. Är datamodellen förberedd för att motorerna kan läsa, analysera och uppdatera samma uppgifter?
+13. Kan motorernas beräknade värden lagras separat från originaldata och verkligt utfall?
+14. Finns spårbarhet på vilka motorer eller användare som skapat eller förändrat värden?
+15. Kan en uppgift behålla sitt unika ID genom hela flödet från skapande till fakturering?
+16. Finns det idag något i arkitekturen som står i konflikt med denna modell?
+17. Vilka delar av detta finns redan implementerade?
+18. Vilka delar finns endast i frontend/UI men saknar korrekt backend/datamodell?
+19. Vilka delar behöver byggas eller refaktoreras innan vi börjar utveckla avancerad navplanering och motorerna?
+20. Ser ni några tekniska risker med modellen som vi bör lösa nu innan systemet får mer data?
+
+PRIORITERING
+Vi vill inte att samtliga elva motorer byggs samtidigt.
+Det viktiga just nu är först att säkerställa fundamentet:
+Steg 1
+Gemensam och komplett Uppgiftsmodell.
+Steg 2
+Orderkoncept → riktiga uppgifter.
+Steg 3
+Snabborder → samma typ av riktiga uppgifter.
+Steg 4
+Uppgifter synliga både under Objekt och i Uppgiftsnavet.
+Steg 5
+Navets filter, gruppering, sparade filter och CSV-export.
+Steg 6
+Tilldelning från Nav → utförare → 168h-plan.
+Steg 7
+Planerad tid kontra verklig tid.
+Steg 8
+Motorerna ansluts stegvis mot denna gemensamma uppgiftsmodell.
+Bygg alltså inte motorerna som separata speciallösningar innan den gemensamma uppgiftsarkitekturen är verifierad.
+Önskad återkoppling
+Återkom med en teknisk genomgång av hur nuvarande implementation förhåller sig till ovanstående modell.
+Markera varje huvudområde som:
+GRÖN – finns och fungerar enligt modellen
+GUL – finns delvis eller behöver modifieras
+RÖD – saknas eller nuvarande arkitektur behöver byggas om
+För varje gul eller röd punkt vill vi också ha en kort beskrivning av:
+    •    vad som finns idag,
+    •    vad problemet är,
+    •    vilken förändring ni rekommenderar,
+    •    vilka andra delar av Traivo förändringen påverkar.
+Detta skall göras innan nästa större utvecklingssteg så att vi säkerställer att Traivos centrala datamodell är korrekt innan ytterligare funktionalitet byggs ovanpå den.
+En detalj jag tycker är särskilt viktig här är snapshot-principen. Om exempelvis artikel 1001 idag säger 45 min produktionstid och ändras till 60 min nästa år, får gamla utförda uppgifter inte plötsligt se ut som om de planerades för 60 min. Det är just den typen av arkitekturfråga som bör tvingas fram och lösas nu, innan Navet och motorerna blir beroende av datamodellen.
