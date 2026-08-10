@@ -25,6 +25,8 @@ När två Popovers ligger som syskon-fält (t.ex. `AddressSearch` direkt följt 
 ## DropdownMenu-item som öppnar Dialog/AlertDialog: modal={false} + uppskjuten öppning
 En modal DropdownMenu vars item öppnar en modal Dialog/AlertDialog ger "frusen knapp": menyns scroll-/fokuslås krockar med dialogens, och när dialogen stängs lämnas ett kvarhängande lås som sväljer alla klick (Snabborderns "+ Lägg till" var första fallet).
 
+**Vakt:** `npm run lint:frozen-dropdown` (workflow `frozen-dropdown`, `scripts/lint-frozen-dropdown-dialog.ts`) flaggar `<DropdownMenu>` utan `modal={false}` vars content matchar `set*Open(true)`/`set*Target(`/`set*Dialog`; falskt positivt undantas med kommentaren `lint-allow-modal-dropdown` på raden före.
+
 **Regel:** varje `DropdownMenu` vars items öppnar en Dialog/AlertDialog/Sheet ska ha (1) `modal={false}` på `<DropdownMenu>`, och (2) dialogöppningen via `onSelect={() => setTimeout(() => setXOpen(true), 0)}` — så att menyn hinner stänga klart innan dialogen tar över fokus/lås. Synkron state (t.ex. `setItemToDelete(...)`) kan sättas direkt; bara själva open-flaggan skjuts upp. Items som bara navigerar/kör en åtgärd utan dialog behöver inget av detta.
 
 ## Command-combobox inuti en redan-modal Dialog: klick registreras inte alls

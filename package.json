@@ -9,6 +9,7 @@
     "start": "NODE_ENV=production node dist/index.cjs",
     "check": "tsc",
     "lint:icon-shadowing": "tsx scripts/lint-lucide-builtin-shadowing.ts",
+    "lint:frozen-dropdown": "tsx scripts/lint-frozen-dropdown-dialog.ts",
     "db:push": "drizzle-kit push",
     "test": "vitest run"
   },
