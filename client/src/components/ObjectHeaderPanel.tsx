@@ -23,6 +23,15 @@ import {
   MetadataFieldSelect,
   type MetadataPickerType,
 } from "@/components/metadata/MetadataFieldPicker";
+// Task #1439: delad värdesupplösning för snabbfält (metadata-rad → objektkolumn-
+// fallback för systemfält som Objektnamn/Postnummer/Koordinater) + vinjettbilds-
+// fallback när objekttyps-konfigen saknar inpekat bildfält.
+import {
+  resolveQuickFieldValue,
+  resolveVignetteKatalogId,
+  entryDisplayValue as sharedEntryDisplayValue,
+  isImagePath,
+} from "@/lib/quick-field-values";
 
 // Fältvärdena kommer från objektets metadata-array som ObjectDetailPage redan
 // laddar (["/api/metadata/objects", objectId]). Vi tar bara det vi behöver.
@@ -117,6 +126,11 @@ interface Props {
   entranceLongitude?: number | string | null;
   name?: string | null;
   objectNumber?: string | null;
+  // Task #1439: adresskolumnerna behövs som fallback-värden för de kanoniska
+  // geo-snabbfälten (Postnummer/Postort/Gatuadress) när metadata-raden saknas.
+  address?: string | null;
+  postalCode?: string | null;
+  city?: string | null;
   metadata: PanelMetadataEntry[];
   canEdit: boolean;
 }
@@ -135,19 +149,43 @@ const DEFAULT_CONFIG: HeaderConfig = {
 
 const NONE_VALUE = "__none__";
 
-function entryDisplayValue(entry: PanelMetadataEntry | undefined): string | null {
-  if (!entry) return null;
-  if (entry.vardeString != null && entry.vardeString !== "") return entry.vardeString;
-  if (entry.vardeInteger != null) return String(entry.vardeInteger);
-  if (entry.vardeDecimal != null) return String(entry.vardeDecimal);
-  if (entry.vardeBoolean != null) return entry.vardeBoolean ? "Ja" : "Nej";
-  if (entry.vardeDatetime) return new Date(entry.vardeDatetime).toLocaleDateString("sv-SE");
-  if (entry.vardeJson != null) {
-    return typeof entry.vardeJson === "object"
-      ? JSON.stringify(entry.vardeJson)
-      : String(entry.vardeJson);
+// Task #1439: värdesupplösningen delas nu med tester via
+// @/lib/quick-field-values (entryDisplayValue/resolveQuickFieldValue).
+const entryDisplayValue = sharedEntryDisplayValue;
+
+// Bild med fallback: trasig/otillgänglig bildsökväg renderar ikonen i stället
+// för en trasig <img>. (state per URL — återställs när src byter.)
+function SafeImg({
+  src, alt, className, contain, testId,
+}: {
+  src: string;
+  alt: string;
+  className?: string;
+  contain?: boolean;
+  testId?: string;
+}) {
+  const [failedSrc, setFailedSrc] = useState<string | null>(null);
+  if (failedSrc === src) {
+    return (
+      <div
+        className="w-full h-full flex flex-col items-center justify-center gap-1 text-muted-foreground/60"
+        data-testid={testId ? `${testId}-broken` : undefined}
+        title="Bilden kunde inte laddas"
+      >
+        <ImageIcon className="h-6 w-6" />
+        <span className="text-[10px]">Bild saknas</span>
+      </div>
+    );
   }
-  return null;
+  return (
+    <img
+      src={src}
+      alt={alt}
+      className={className ?? (contain ? "max-w-full max-h-full object-contain" : "w-full h-full object-cover")}
+      onError={() => setFailedSrc(src)}
+      data-testid={testId}
+    />
+  );
 }
 
 function toNum(v: number | string | null | undefined): number | null {
@@ -192,7 +230,7 @@ interface SystemGeoResponse {
 export function ObjectHeaderPanel({
   objectId, objectType,
   latitude, longitude, entranceLatitude, entranceLongitude,
-  name, objectNumber, metadata, canEdit,
+  name, objectNumber, address, postalCode, city, metadata, canEdit,
 }: Props) {
   const mapConfig = useMapConfig();
   const { toast } = useToast();
@@ -247,11 +285,18 @@ export function ObjectHeaderPanel({
   const defLabel = (id: string): string | undefined =>
     definitions.find((d) => d.id === id)?.fieldLabel;
 
-  const imageEntry = effective.imageMetadataKatalogId
-    ? entryByKatalog.get(effective.imageMetadataKatalogId)
+  // Task #1439: saknar objekttyps-konfigen ett inpekat bildfält faller vi
+  // tillbaka på objektets egen/ärvda Vinjetbild-metadata så att t.ex. en
+  // importerad bild visas direkt utan att fältet måste läggas till igen.
+  const effectiveImageKatalogId = resolveVignetteKatalogId(
+    effective.imageMetadataKatalogId,
+    metadata,
+  );
+  const imageEntry = effectiveImageKatalogId
+    ? entryByKatalog.get(effectiveImageKatalogId)
     : undefined;
   const imageUrl: string | null =
-    effective.showImage && effective.imageMetadataKatalogId
+    effective.showImage && effectiveImageKatalogId
       ? imageEntry?.vardeString ?? null
       : null;
 
@@ -287,7 +332,13 @@ export function ObjectHeaderPanel({
     (m) => !m.softDeleted && !m.raderad && m.katalog?.namn === "Koordinater",
   );
 
-  type Slot = { key: string; label: string; value: string | null; inheritedFrom?: string | null };
+  type Slot = {
+    key: string;
+    label: string;
+    value: string | null;
+    inheritedFrom?: string | null;
+    imageUrl?: string | null;
+  };
   const slots: Slot[] = [];
   if (qfc?.source?.level && qfc.source.level !== "none") {
     for (const f of qfc.fields ?? []) {
@@ -296,7 +347,14 @@ export function ObjectHeaderPanel({
       const inheritedFrom = entry?.source === "inherited"
         ? (entry?.fromObject?.namn || entry?.inheritedFromName || null)
         : null;
-      slots.push({ key: f.katalogId, label, value: entryDisplayValue(entry), inheritedFrom });
+      // Task #1439: metadata-rad → objektkolumn-fallback (Objektnamn, Postnummer,
+      // Postort, Gatuadress, Koordinater). Bildfält får en miniatyr i stället
+      // för rå sökväg.
+      const resolved = resolveQuickFieldValue(f, entry, {
+        name, objectNumber, address, postalCode, city,
+        latitude, longitude, entranceLatitude, entranceLongitude,
+      });
+      slots.push({ key: f.katalogId, label, value: resolved.value, inheritedFrom, imageUrl: resolved.imageUrl });
     }
   }
   // Task #1399: fallback-slotten "Objekttyp" är borttagen — fältet är
@@ -343,9 +401,18 @@ export function ObjectHeaderPanel({
                       {s.label}
                     </div>
                     <div className="text-sm font-medium flex items-center gap-1.5 mt-0.5">
-                      <span className="truncate" data-testid={`header-field-value-${s.key}`}>
-                        {s.value ?? "—"}
-                      </span>
+                      {s.imageUrl ? (
+                        <span
+                          className="w-9 h-9 rounded overflow-hidden border bg-muted inline-flex items-center justify-center shrink-0"
+                          data-testid={`header-field-value-${s.key}`}
+                        >
+                          <SafeImg src={s.imageUrl} alt={s.label} testId={`img-header-field-${s.key}`} />
+                        </span>
+                      ) : (
+                        <span className="truncate" data-testid={`header-field-value-${s.key}`}>
+                          {s.value ?? "—"}
+                        </span>
+                      )}
                       {s.inheritedFrom && (
                         <Badge
                           variant="outline"
@@ -429,14 +496,17 @@ export function ObjectHeaderPanel({
               <button
                 type="button"
                 className="w-28 h-28 md:w-32 md:h-32 rounded-md overflow-hidden border bg-muted flex items-center justify-center relative group"
-                onClick={() => effective.imageMetadataKatalogId && setImageDialogOpen(true)}
-                title={effective.imageMetadataKatalogId ? "Visa vinjettbild, byt bild eller se historik" : "Inget bildfält konfigurerat"}
+                onClick={() => effectiveImageKatalogId && setImageDialogOpen(true)}
+                title={effectiveImageKatalogId ? "Visa vinjettbild, byt bild eller se historik" : "Inget bildfält konfigurerat"}
                 data-testid="header-image-tile"
               >
                 {imageUrl ? (
-                  <img src={imageUrl} alt={name || objectNumber || "Objektbild"} className="w-full h-full object-cover" data-testid="img-header-object" />
+                  <SafeImg src={imageUrl} alt={name || objectNumber || "Objektbild"} testId="img-header-object" />
                 ) : (
-                  <ImageIcon className="h-7 w-7 text-muted-foreground/60" />
+                  <div className="flex flex-col items-center gap-1 text-muted-foreground/60" data-testid="header-image-empty">
+                    <ImageIcon className="h-7 w-7" />
+                    <span className="text-[10px]">Ingen bild</span>
+                  </div>
                 )}
               </button>
             )}
@@ -450,7 +520,7 @@ export function ObjectHeaderPanel({
                   data-testid="header-logo-tile"
                 >
                   {logoUrl ? (
-                    <img src={logoUrl} alt="Kundlogotyp" className="max-w-full max-h-full object-contain" data-testid="img-header-logo" />
+                    <SafeImg src={logoUrl} alt="Kundlogotyp" contain testId="img-header-logo" />
                   ) : (
                     <ImageIcon className="h-7 w-7 text-muted-foreground/60" />
                   )}
@@ -546,12 +616,12 @@ export function ObjectHeaderPanel({
         </div>
       </CardContent>
       {/* Task #1366: vinjettbild-/logotypdialoger (visa, byt/ladda upp, historik). */}
-      {effective.imageMetadataKatalogId && (
+      {effectiveImageKatalogId && (
         <HeaderImageDialog
           open={imageDialogOpen}
           onOpenChange={setImageDialogOpen}
           objectId={objectId}
-          katalogId={effective.imageMetadataKatalogId}
+          katalogId={effectiveImageKatalogId}
           entry={imageEntry}
           title="Vinjettbild"
           canEdit={canEdit}
@@ -610,10 +680,6 @@ const HISTORIK_METOD_LABELS: Record<string, string> = {
   import: "Import",
   system: "System",
 };
-
-function isImagePath(v: string | null | undefined): boolean {
-  return !!v && (v.startsWith("/") || v.startsWith("http"));
-}
 
 function HeaderImageDialog({
   open, onOpenChange, objectId, katalogId, entry, title, canEdit, badge, contain,
@@ -732,11 +798,11 @@ function HeaderImageDialog({
         <div className="space-y-4">
           <div className="rounded-md border bg-muted flex items-center justify-center min-h-40 max-h-72 overflow-hidden">
             {currentUrl ? (
-              <img
+              <SafeImg
                 src={currentUrl}
                 alt={title}
                 className={contain ? "max-h-72 max-w-full object-contain p-3" : "max-h-72 w-full object-contain"}
-                data-testid="img-header-dialog-current"
+                testId="img-header-dialog-current"
               />
             ) : (
               <div className="flex flex-col items-center gap-1 py-8 text-muted-foreground">

@@ -1253,6 +1253,9 @@ export default function ObjectDetailPage() {
         entranceLongitude={obj.entranceLongitude}
         name={obj.name}
         objectNumber={obj.objectNumber}
+        address={obj.address}
+        postalCode={obj.postalCode}
+        city={obj.city}
         metadata={metadata}
         canEdit={user?.role === "admin" || user?.role === "owner"}
       />
