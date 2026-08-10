@@ -920,21 +920,31 @@ export default function SnabborderPage() {
             <Card>
               <CardContent className="pt-6 space-y-4">
                 <div className="flex flex-wrap items-center gap-2">
-                  <DropdownMenu>
+                  {/* modal={false}: menyn öppnar modala dialoger (artikel-/objektväljare).
+                      Med default modal-läge krockar menyns scroll-/fokuslås med dialogens,
+                      och när dialogen stängs lämnas ett kvarhängande lås som gör knappen "frusen". */}
+                  <DropdownMenu modal={false}>
                     <DropdownMenuTrigger asChild>
                       <Button size="sm" data-testid="button-add-menu">
                         <Plus className="h-4 w-4 mr-1" /> Lägg till <ChevronDown className="h-3.5 w-3.5 ml-1" />
                       </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="start">
-                      <DropdownMenuItem onClick={() => setArticlePickerOpen(true)} data-testid="menu-add-article">
+                      <DropdownMenuItem
+                        onSelect={() => {
+                          // Låt menyn stänga klart innan dialogen öppnas så att
+                          // två Radix-primitiver inte hanterar fokus/lås samtidigt.
+                          setTimeout(() => setArticlePickerOpen(true), 0);
+                        }}
+                        data-testid="menu-add-article"
+                      >
                         <Package className="h-4 w-4 mr-2" />
                         <div>
                           <div className="text-sm">Artikel</div>
                           <div className="text-xs text-muted-foreground">Lägg till artikelrad</div>
                         </div>
                       </DropdownMenuItem>
-                      <DropdownMenuItem onClick={addFreeTextLine} data-testid="menu-add-freetext">
+                      <DropdownMenuItem onSelect={addFreeTextLine} data-testid="menu-add-freetext">
                         <PencilLine className="h-4 w-4 mr-2" />
                         <div>
                           <div className="text-sm">Fritextrad</div>
@@ -942,14 +952,14 @@ export default function SnabborderPage() {
                         </div>
                       </DropdownMenuItem>
                       <DropdownMenuItem
-                        onClick={() => {
+                        onSelect={() => {
                           if (!customer) { toast({ title: "Välj kund först", variant: "destructive" }); return; }
                           if (principle === "manual") {
                             setPrincipleSwitchTarget("objekt");
                             return;
                           }
                           if (principle === null) setPrinciple("objekt");
-                          setObjectPickerOpen(true);
+                          setTimeout(() => setObjectPickerOpen(true), 0);
                         }}
                         data-testid="menu-add-object"
                       >
