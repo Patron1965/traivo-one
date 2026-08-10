@@ -62,6 +62,8 @@ export interface ObjectMetadataBodyProps {
   /** Kontaktkortet — renderas under metadataområdet Kontaktinformation
    *  (produktägarbeslut 2026-08-10). */
   kontaktSection?: ReactNode;
+  /** Geografikortet (geografimotorn) — renderas under metadataområdet Geografi. */
+  geografiSection?: ReactNode;
 }
 
 function anchorSlug(area: string): string {
@@ -81,6 +83,7 @@ export function ObjectMetadataBody({
   onAdd,
   isAdding,
   kontaktSection,
+  geografiSection,
   onSoftDelete,
   onRestore,
   softDeletePending,
@@ -288,9 +291,31 @@ export function ObjectMetadataBody({
             key={g.area}
             areaKey={anchorSlug(g.area)}
             label={g.label}
-            cards={g.items.map((entry) => ({ key: entry.id, node: renderField(entry) }))}
+            cards={[
+              // Geografikortet (geografimotorn) leder området Geografi —
+              // fria geografifält följer efter i samma sektion.
+              ...(g.area === "geografi" && geografiSection
+                ? [{ key: "__geografi-kort__", node: geografiSection }]
+                : []),
+              ...g.items.map((entry) => ({ key: entry.id, node: renderField(entry) })),
+            ]}
           />
         ))}
+
+        {/* Geografikortet (geografimotorn: gatuadress/postnummer/postort/
+            koordinater/what3words + fördjupad position) ligger under
+            metadataområdet Geografi (produktägarbeslut 2026-08-10) — egen
+            sektion ENDAST när området saknar fria metadatafält. */}
+        {geografiSection && !visibleGroups.some((g) => g.area === "geografi") && (!filterActive || areaFilter.has("geografi")) && (
+          <section id="meta-area-geografi" className="scroll-mt-24 space-y-3">
+            <h3 className="text-sm font-semibold" data-testid="heading-area-geografi">
+              Geografi
+            </h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+              {geografiSection}
+            </div>
+          </section>
+        )}
 
         {/* Kontaktkortet ligger under metadataområdet Kontaktinformation
             (produktägarbeslut 2026-08-10) — inte i en separat samlingsgrid. */}

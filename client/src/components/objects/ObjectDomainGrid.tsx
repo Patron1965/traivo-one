@@ -201,12 +201,13 @@ const defaultIcon = L.icon({
 const GRID_CARD = "h-full";
 
 export interface ObjectDomainGridProps {
-  /** "collections" = METADATA-samlingar (Produktion/Geografi);
-   *  "kontakt" = ENBART kontaktkortet (renderas under metadataområdet
-   *  Kontaktinformation i ObjectMetadataBody — produktägarbeslut 2026-08-10);
+  /** "collections" = METADATA-samlingar (Produktion);
+   *  "kontakt" = ENBART kontaktkortet, "geografi" = ENBART geografikortet —
+   *  båda renderas under sina metadataområden (Kontaktinformation resp.
+   *  Geografi) i ObjectMetadataBody (produktägarbeslut 2026-08-10);
    *  "linked" = KOPPLADE list-block (Orderkoncept/Bilder) — snabbordrar och
    *  uppgifter visas i de subträds-medvetna sektionerna (Task #1474). */
-  section: "collections" | "kontakt" | "linked";
+  section: "collections" | "kontakt" | "geografi" | "linked";
   objectId: string;
   obj: any;
   contacts: ObjectContactLite[];
@@ -573,6 +574,127 @@ export function ObjectDomainGrid({
     );
   }
 
+  // Geografikortet (äkta metadatafält: standardadress P1 + fördjupad position P2)
+  const geografiCard = (
+    <Card className={`${GRID_CARD}`} data-testid="card-location">
+      <CardHeader className="pb-3">
+        <div className="flex items-center justify-between gap-2">
+          <CardTitle className="text-base flex items-center gap-2">
+            <MapPin className="h-4 w-4" /> Geografi
+            <KallaBadge kalla="SYS" />
+          </CardTitle>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <div className="space-y-1.5">
+          {geoFieldRow("Gatuadress", standardAddress?.gatuadress)}
+          {geoFieldRow("Postnummer", standardAddress?.postnummer)}
+          {geoFieldRow("Postort", standardAddress?.postort)}
+          {standardAddress?.koordinater?.point && (
+            <div className="flex items-center justify-between gap-2 text-xs" data-testid="text-location-coords">
+              <span className="text-muted-foreground">Koordinater</span>
+              <span className="flex items-center gap-1 min-w-0">
+                <span className="tabular-nums">
+                  {standardAddress.koordinater.point.lat.toFixed(5)}, {standardAddress.koordinater.point.lng.toFixed(5)}
+                </span>
+                {geoOriginBadge(standardAddress.koordinater)}
+              </span>
+            </div>
+          )}
+          {data?.position?.what3words && (
+            <div className="flex items-center justify-between gap-2 text-xs" data-testid="text-geo-what3words">
+              <span className="text-muted-foreground">what3words</span>
+              <span className="truncate text-right">{data.position.what3words}</span>
+            </div>
+          )}
+        </div>
+        {(advancedPosition?.fordjupadPosition?.point || advancedPosition?.avdelningPortVaning?.value) && (
+          <div className="pt-2 border-t space-y-1.5">
+            <div className="text-[11px] uppercase tracking-wide text-muted-foreground">
+              Fördjupad position (ej ruttbar)
+            </div>
+            {geoFieldRow("Avdelning/Port/Våning", advancedPosition?.avdelningPortVaning)}
+          </div>
+        )}
+        <Button
+          variant="outline"
+          size="sm"
+          className="mt-1 w-full"
+          onClick={() => setMapOpen(true)}
+          disabled={!hasCoordinates}
+          data-testid="button-show-map"
+        >
+          <MapIcon className="h-3.5 w-3.5 mr-1" /> Visa på karta
+        </Button>
+      </CardContent>
+    </Card>
+  );
+
+  // Karta-dialog (mount-on-open) — hör till geografikortet.
+  const mapDialog = (
+    <Dialog open={mapOpen} onOpenChange={setMapOpen}>
+      <DialogContent className="max-w-3xl">
+        <DialogHeader>
+          <DialogTitle>Karta — {obj?.name || obj?.objectNumber || "Objekt"}</DialogTitle>
+          <DialogDescription>Objektets position, entrékoordinat och rutt.</DialogDescription>
+        </DialogHeader>
+        {mapOpen && hasCoordinates ? (
+          <div className="space-y-4">
+            <div className="rounded-lg overflow-hidden border" style={{ height: 400 }}>
+              <MapContainer
+                center={[Number(obj.latitude), Number(obj.longitude)]}
+                zoom={16}
+                style={{ height: "100%", width: "100%" }}
+              >
+                <TileLayer url={mapConfig.tileUrl} attribution={mapConfig.attribution} />
+                <Marker position={[Number(obj.latitude), Number(obj.longitude)]} icon={defaultIcon}>
+                  <Popup>
+                    <strong>{obj.name || obj.objectNumber}</strong>
+                    {obj.address && <br />}
+                    {obj.address}
+                  </Popup>
+                </Marker>
+                {hasEntrance && (
+                  <Marker
+                    position={[Number(obj.entranceLatitude), Number(obj.entranceLongitude)]}
+                    icon={L.divIcon({
+                      className: "entrance-marker",
+                      html: '<div style="background:#22c55e;width:12px;height:12px;border-radius:50%;border:2px solid white;box-shadow:0 1px 3px rgba(0,0,0,.3)"></div>',
+                      iconSize: [12, 12],
+                      iconAnchor: [6, 6],
+                    })}
+                  >
+                    <Popup>Entrékoordinat</Popup>
+                  </Marker>
+                )}
+              </MapContainer>
+            </div>
+            <PolylineEditor object={obj as ServiceObject} />
+          </div>
+        ) : (
+          <div className="flex items-center justify-center h-48 bg-muted/30 rounded-lg">
+            <div className="text-center text-muted-foreground">
+              <MapPin className="h-8 w-8 mx-auto mb-2 opacity-50" />
+              <p>Inga koordinater tillgängliga</p>
+            </div>
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+
+  // ==================== GEOGRAFI (under metadataområdet Geografi) ====================
+  // Geografimotorns fält (gatuadress/postnummer/postort/koordinater/what3words
+  // + fördjupad position) — redovisas under metadataområdet Geografi.
+  if (section === "geografi") {
+    return (
+      <>
+        {geografiCard}
+        {mapDialog}
+      </>
+    );
+  }
+
   // ==================== METADATA-SAMLINGAR (karuseller) ====================
   return (
     <>
@@ -593,112 +715,7 @@ export function ObjectDomainGrid({
           getFooter={(o) => ({ time: o.scheduledDate, kalla: "SYS" })}
           renderItem={renderProduction}
         />
-
-        {/* Geografi (äkta metadatafält: standardadress P1 + fördjupad position P2) */}
-        <Card className={`${GRID_CARD}`} data-testid="card-location">
-          <CardHeader className="pb-3">
-            <div className="flex items-center justify-between gap-2">
-              <CardTitle className="text-base flex items-center gap-2">
-                <MapPin className="h-4 w-4" /> Geografi
-                <KallaBadge kalla="SYS" />
-              </CardTitle>
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <div className="space-y-1.5">
-              {geoFieldRow("Gatuadress", standardAddress?.gatuadress)}
-              {geoFieldRow("Postnummer", standardAddress?.postnummer)}
-              {geoFieldRow("Postort", standardAddress?.postort)}
-              {standardAddress?.koordinater?.point && (
-                <div className="flex items-center justify-between gap-2 text-xs" data-testid="text-location-coords">
-                  <span className="text-muted-foreground">Koordinater</span>
-                  <span className="flex items-center gap-1 min-w-0">
-                    <span className="tabular-nums">
-                      {standardAddress.koordinater.point.lat.toFixed(5)}, {standardAddress.koordinater.point.lng.toFixed(5)}
-                    </span>
-                    {geoOriginBadge(standardAddress.koordinater)}
-                  </span>
-                </div>
-              )}
-              {data?.position?.what3words && (
-                <div className="flex items-center justify-between gap-2 text-xs" data-testid="text-geo-what3words">
-                  <span className="text-muted-foreground">what3words</span>
-                  <span className="truncate text-right">{data.position.what3words}</span>
-                </div>
-              )}
-            </div>
-            {(advancedPosition?.fordjupadPosition?.point || advancedPosition?.avdelningPortVaning?.value) && (
-              <div className="pt-2 border-t space-y-1.5">
-                <div className="text-[11px] uppercase tracking-wide text-muted-foreground">
-                  Fördjupad position (ej ruttbar)
-                </div>
-                {geoFieldRow("Avdelning/Port/Våning", advancedPosition?.avdelningPortVaning)}
-              </div>
-            )}
-            <Button
-              variant="outline"
-              size="sm"
-              className="mt-1 w-full"
-              onClick={() => setMapOpen(true)}
-              disabled={!hasCoordinates}
-              data-testid="button-show-map"
-            >
-              <MapIcon className="h-3.5 w-3.5 mr-1" /> Visa på karta
-            </Button>
-          </CardContent>
-        </Card>
       </div>
-
-      {/* Karta-dialog (mount-on-open) */}
-      <Dialog open={mapOpen} onOpenChange={setMapOpen}>
-        <DialogContent className="max-w-3xl">
-          <DialogHeader>
-            <DialogTitle>Karta — {obj?.name || obj?.objectNumber || "Objekt"}</DialogTitle>
-            <DialogDescription>Objektets position, entrékoordinat och rutt.</DialogDescription>
-          </DialogHeader>
-          {mapOpen && hasCoordinates ? (
-            <div className="space-y-4">
-              <div className="rounded-lg overflow-hidden border" style={{ height: 400 }}>
-                <MapContainer
-                  center={[Number(obj.latitude), Number(obj.longitude)]}
-                  zoom={16}
-                  style={{ height: "100%", width: "100%" }}
-                >
-                  <TileLayer url={mapConfig.tileUrl} attribution={mapConfig.attribution} />
-                  <Marker position={[Number(obj.latitude), Number(obj.longitude)]} icon={defaultIcon}>
-                    <Popup>
-                      <strong>{obj.name || obj.objectNumber}</strong>
-                      {obj.address && <br />}
-                      {obj.address}
-                    </Popup>
-                  </Marker>
-                  {hasEntrance && (
-                    <Marker
-                      position={[Number(obj.entranceLatitude), Number(obj.entranceLongitude)]}
-                      icon={L.divIcon({
-                        className: "entrance-marker",
-                        html: '<div style="background:#22c55e;width:12px;height:12px;border-radius:50%;border:2px solid white;box-shadow:0 1px 3px rgba(0,0,0,.3)"></div>',
-                        iconSize: [12, 12],
-                        iconAnchor: [6, 6],
-                      })}
-                    >
-                      <Popup>Entrékoordinat</Popup>
-                    </Marker>
-                  )}
-                </MapContainer>
-              </div>
-              <PolylineEditor object={obj as ServiceObject} />
-            </div>
-          ) : (
-            <div className="flex items-center justify-center h-48 bg-muted/30 rounded-lg">
-              <div className="text-center text-muted-foreground">
-                <MapPin className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                <p>Inga koordinater tillgängliga</p>
-              </div>
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
     </>
   );
 }
