@@ -1,8 +1,10 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { Link } from "wouter";
 // OBS: lucide `History` aliasas — oaliasad import skuggar globala inbyggda (lint:icon-shadowing).
-import { ClipboardList, History as HistoryIcon, ListChecks } from "lucide-react";
+import { ClipboardList, History as HistoryIcon, ListChecks, Search } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Table,
@@ -55,6 +57,8 @@ interface LinkedAssignment {
 interface Props {
   workOrders: LinkedWorkOrder[];
   assignments: LinkedAssignment[];
+  /** true = rendera ENBART order-sektionerna (uppgifterna visas separat i ObjectTasksNav). */
+  ordersOnly?: boolean;
 }
 
 interface LinkedRow {
@@ -178,8 +182,9 @@ function LinkedRowsTable({
   );
 }
 
-export function ObjectLinkedOrdersTable({ workOrders, assignments }: Props) {
-  const woRows = useMemo<LinkedRow[]>(
+/** Bygger kontraktsstatus-rader ur work_orders. Delas av order- och uppgiftsvyerna. */
+function useWoRows(workOrders: LinkedWorkOrder[]): LinkedRow[] {
+  return useMemo<LinkedRow[]>(
     () =>
       sortNewestFirst(
         workOrders.map((wo) => {
@@ -205,8 +210,11 @@ export function ObjectLinkedOrdersTable({ workOrders, assignments }: Props) {
       ),
     [workOrders],
   );
+}
 
-  const asgRows = useMemo<LinkedRow[]>(
+/** Bygger kontraktsstatus-rader ur assignments (planeringslagret). */
+function useAsgRows(assignments: LinkedAssignment[]): LinkedRow[] {
+  return useMemo<LinkedRow[]>(
     () =>
       sortNewestFirst(
         assignments.map((a) => {
@@ -230,6 +238,11 @@ export function ObjectLinkedOrdersTable({ workOrders, assignments }: Props) {
       ),
     [assignments],
   );
+}
+
+export function ObjectLinkedOrdersTable({ workOrders, assignments, ordersOnly = false }: Props) {
+  const woRows = useWoRows(workOrders);
+  const asgRows = useAsgRows(assignments);
 
   const activeOrders = woRows.filter((r) => !HISTORY_STATUSES.has(r.status));
   const historyOrders = woRows.filter((r) => HISTORY_STATUSES.has(r.status));
@@ -281,6 +294,7 @@ export function ObjectLinkedOrdersTable({ workOrders, assignments }: Props) {
       </Card>
 
       {/* ---------- Kopplade uppgifter (assignments, planeringslager) ---------- */}
+      {!ordersOnly && (
       <Card data-testid="card-linked-assignments">
         <CardHeader className="pb-3">
           <CardTitle className="text-sm flex items-center gap-2">
@@ -313,6 +327,124 @@ export function ObjectLinkedOrdersTable({ workOrders, assignments }: Props) {
           </div>
         </CardContent>
       </Card>
+      )}
     </div>
+  );
+}
+
+// ============================================================================
+// UPPGIFTSNAV I MINIATYR (objektsidan, sista sektionen)
+// ----------------------------------------------------------------------------
+// Samlar ALLA uppgifter kopplade till objektet (work_orders + assignments) i en
+// sökbar, statusfiltrerad lista. Statusgrupperna mappar kontraktets
+// deriveUppgiftStatus (enda status-mappningen — ingen egen logik):
+//   Ej gjord  = skapad / i_masterplanering / planerad / omöjlig / avbruten
+//   Pågående  = på väg / på plats
+//   Gjord     = utförd / fakturakontroll / fakturerad
+// ============================================================================
+
+type TaskNavFilter = "alla" | "ej_gjord" | "pagaende" | "gjord";
+
+const TASKNAV_GROUPS: Record<Exclude<TaskNavFilter, "alla">, Set<UppgiftStatus>> = {
+  ej_gjord: new Set(["skapad", "i_masterplanering", "planerad", "omojlig_att_utfora", "avbruten"]),
+  pagaende: new Set(["pa_vag", "pa_plats"]),
+  gjord: new Set(["utford", "fakturakontroll", "fakturerad"]),
+};
+
+const TASKNAV_FILTER_LABELS: Record<TaskNavFilter, string> = {
+  alla: "Alla",
+  ej_gjord: "Ej gjord",
+  pagaende: "Pågående",
+  gjord: "Gjord",
+};
+
+export function ObjectTasksNav({ workOrders, assignments }: Omit<Props, "ordersOnly">) {
+  const [search, setSearch] = useState("");
+  const [filter, setFilter] = useState<TaskNavFilter>("alla");
+
+  const woRows = useWoRows(workOrders);
+  const asgRows = useAsgRows(assignments);
+  const allRows = useMemo(() => sortNewestFirst([...woRows, ...asgRows]), [woRows, asgRows]);
+
+  const counts = useMemo(() => {
+    const c: Record<TaskNavFilter, number> = { alla: allRows.length, ej_gjord: 0, pagaende: 0, gjord: 0 };
+    for (const r of allRows) {
+      for (const key of ["ej_gjord", "pagaende", "gjord"] as const) {
+        if (TASKNAV_GROUPS[key].has(r.status)) c[key]++;
+      }
+    }
+    return c;
+  }, [allRows]);
+
+  const visible = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return allRows.filter((r) => {
+      if (filter !== "alla" && !TASKNAV_GROUPS[filter].has(r.status)) return false;
+      if (!q) return true;
+      return (
+        r.title.toLowerCase().includes(q) ||
+        (r.orderNumber ?? "").toLowerCase().includes(q) ||
+        (r.orderConceptName ?? "").toLowerCase().includes(q) ||
+        r.statusLabel.toLowerCase().includes(q) ||
+        r.sourceLabel.toLowerCase().includes(q)
+      );
+    });
+  }, [allRows, filter, search]);
+
+  return (
+    <Card data-testid="card-object-tasks-nav">
+      <CardHeader className="pb-3">
+        <CardTitle className="text-sm flex items-center gap-2">
+          <ListChecks className="h-4 w-4" /> Kopplade uppgifter
+          {allRows.length > 0 && (
+            <Badge variant="secondary" className="text-[10px]" data-testid="badge-tasks-nav-count">
+              {allRows.length}
+            </Badge>
+          )}
+        </CardTitle>
+        <p className="text-xs text-muted-foreground">
+          Alla uppgifter kopplade till objektet — sök och filtrera på status.
+        </p>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="relative flex-1 min-w-[200px]">
+            <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Sök uppgift, order, orderkoncept…"
+              className="h-8 pl-8 text-sm"
+              data-testid="input-tasks-nav-search"
+            />
+          </div>
+          <div className="flex items-center gap-1">
+            {(Object.keys(TASKNAV_FILTER_LABELS) as TaskNavFilter[]).map((key) => (
+              <Button
+                key={key}
+                variant={filter === key ? "default" : "outline"}
+                size="sm"
+                className="h-8 px-2.5 text-xs"
+                onClick={() => setFilter(key)}
+                data-testid={`button-tasks-nav-filter-${key}`}
+              >
+                {TASKNAV_FILTER_LABELS[key]}
+                <span className="ml-1 opacity-70">({counts[key]})</span>
+              </Button>
+            ))}
+          </div>
+        </div>
+
+        {visible.length === 0 ? (
+          <p className="text-sm text-muted-foreground py-4" data-testid="empty-tasks-nav">
+            {allRows.length === 0
+              ? "Inga uppgifter kopplade till objektet ännu."
+              : "Inga uppgifter matchar sökningen/filtret."}
+          </p>
+        ) : (
+          <LinkedRowsTable rows={visible} testidPrefix="tasks-nav" showOrderColumn />
+        )}
+      </CardContent>
+    </Card>
   );
 }

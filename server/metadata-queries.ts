@@ -4835,7 +4835,10 @@ export interface SystemomradeFaltDef {
 
 export const SYSTEMOMRADEN_FALT: SystemomradeFaltDef[] = [
   // --- Ekonomi ---
-  { key: 'kund', namn: 'Kund', visningsnamn: 'Kund', datatyp: 'referens', referensTabell: 'customers', standardArvs: true, sortOrder: 1, icon: 'Building2', beskrivning: 'Kund kopplad till objektet (referens till kundregistret).', area: 'ekonomi' },
+  // OBS: standardArvs MÅSTE vara false för Kund — ett objekt får ALDRIG ärva kund
+  // automatiskt från förälderobjekt (olika aktörer kan beställa på samma objekt).
+  // Kund sätts manuellt eller via orderkoncept. Se migration 0148 (backfill).
+  { key: 'kund', namn: 'Kund', visningsnamn: 'Kund', datatyp: 'referens', referensTabell: 'customers', standardArvs: false, sortOrder: 1, icon: 'Building2', beskrivning: 'Kund kopplad till objektet (referens till kundregistret).', area: 'ekonomi' },
   { key: 'kundnummer', namn: 'Kundnummer', visningsnamn: 'Kundnummer', datatyp: 'string', standardArvs: true, sortOrder: 2, icon: 'Hash', beskrivning: 'Kundnummer för matchning mot kundregistret.', area: 'ekonomi', adoptIsSystem: true },
   { key: 'betalare', namn: 'Betalare', visningsnamn: 'Betalare', datatyp: 'string', standardArvs: true, sortOrder: 3, icon: 'Wallet', beskrivning: 'Betalare (om annan än kunden).', area: 'ekonomi' },
   { key: 'betalarnummer', namn: 'Betalarnummer', visningsnamn: 'Betalarnummer', datatyp: 'string', standardArvs: true, sortOrder: 4, icon: 'Hash', beskrivning: 'Betalarens kundnummer.', area: 'ekonomi' },

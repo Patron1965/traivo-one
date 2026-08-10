@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from "react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -17,7 +17,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import {
   Pencil, Trash2, RotateCcw, AlertTriangle, ChevronLeft, ChevronRight, Link as LinkIcon,
-  ShieldOff, Lock, Settings2, Archive as ArchiveIcon,
+  ShieldOff, Lock, Settings2, Archive as ArchiveIcon, History as HistoryIcon,
 } from "lucide-react";
 import type { MetadataInstance } from "@shared/schema";
 import { KallaBadge, deriveEntryKalla } from "@/lib/metadata-kalla";
@@ -31,7 +31,7 @@ import {
   type MetadataFormEntry,
   type MetadataFormType,
 } from "@/components/ObjectMetadataForm";
-import { selectRenderKind, isCompositeValue, type MetadataAreaMeta } from "./metadata-carousel-utils";
+import { selectRenderKind, isCompositeValue, type MetadataAreaMeta, type MetadataDefinitionHistorikResponse } from "./metadata-carousel-utils";
 import { InheritedEditDialog } from "./InheritedEditDialog";
 import { MetadataFieldSettingsDialog } from "./MetadataFieldSettingsDialog";
 
@@ -125,6 +125,127 @@ function InstancesCarousel({ instances }: { instances: MetadataInstance[] }) {
           </Button>
         </div>
       )}
+    </div>
+  );
+}
+
+/**
+ * Bläddringsbar historik-karusell för ett single-value-fält: steg 1 = aktuellt
+ * värde, följande steg = tidigare värden med datum, källa (metod) och användare.
+ * Historiken hämtas lazily först när användaren fäller ut den (annars N anrop
+ * per objektsida).
+ */
+function FieldHistoryCarousel({
+  objectId,
+  katalogId,
+  currentValue,
+}: {
+  objectId: string;
+  katalogId: string;
+  currentValue: ReactNode;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const [idx, setIdx] = useState(0);
+
+  const { data, isLoading } = useQuery<MetadataDefinitionHistorikResponse>({
+    queryKey: ["/api/metadata/objects", objectId, "definition", katalogId, "historik"],
+    queryFn: async () => {
+      const res = await fetch(`/api/metadata/objects/${objectId}/definition/${katalogId}/historik`);
+      if (!res.ok) throw new Error("Kunde inte hämta historik");
+      return res.json();
+    },
+    enabled: expanded,
+  });
+
+  // Steg: [aktuellt värde, ...historikposter (nyast först, exkl. den som satte
+  // aktuellt värde visas ändå — den bär datum/användare för nuvarande värde)].
+  const history = data?.history ?? [];
+  const steps = 1 + history.length;
+  const safeIdx = Math.min(idx, steps - 1);
+
+  if (!expanded) {
+    return (
+      <button
+        type="button"
+        onClick={() => setExpanded(true)}
+        className="mt-2 inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground transition-colors"
+        data-testid={`button-expand-field-history-${katalogId}`}
+      >
+        <HistoryIcon className="h-3 w-3" /> Visa historik
+      </button>
+    );
+  }
+
+  const post = safeIdx === 0 ? null : history[safeIdx - 1];
+
+  return (
+    <div className="mt-2 space-y-1.5" data-testid={`field-history-carousel-${katalogId}`}>
+      <div className="rounded-md border bg-muted/30 p-2.5">
+        {post === null ? (
+          <>
+            <div className="text-sm font-medium break-words">{currentValue}</div>
+            <Badge variant="secondary" className="mt-1.5 text-[10px]">Aktuellt värde</Badge>
+          </>
+        ) : (
+          <>
+            <div className="text-sm font-medium break-words">
+              {post.nyttVarde === null ? (
+                <span className="text-destructive italic">Raderad</span>
+              ) : (
+                post.nyttVarde
+              )}
+            </div>
+            <div className="mt-1.5 flex items-center gap-x-2 gap-y-0.5 flex-wrap text-[11px] text-muted-foreground">
+              <span>{new Date(post.andradVid).toLocaleString("sv-SE", { dateStyle: "short", timeStyle: "short" })}</span>
+              {post.andradAv && <span>· av {post.andradAv}</span>}
+              {post.andringsMetod && (
+                <Badge variant="outline" className="text-[10px]">{metodLabel(post.andringsMetod) ?? post.andringsMetod}</Badge>
+              )}
+              {post.gammaltVarde !== null && (
+                <span className="w-full text-muted-foreground/80">
+                  Ersatte: <span className="line-through">{post.gammaltVarde}</span>
+                </span>
+              )}
+            </div>
+          </>
+        )}
+      </div>
+      <div className="flex items-center justify-between">
+        <Button
+          variant="ghost" size="sm" className="h-6 w-6 p-0"
+          disabled={safeIdx === 0}
+          onClick={() => setIdx((i) => Math.max(0, i - 1))}
+          aria-label="Nyare"
+          data-testid={`button-field-history-prev-${katalogId}`}
+        >
+          <ChevronLeft className="h-3.5 w-3.5" />
+        </Button>
+        <span className="text-[11px] text-muted-foreground">
+          {isLoading
+            ? "Laddar historik…"
+            : history.length === 0
+              ? "Ingen historik ännu"
+              : `${safeIdx + 1} / ${steps}`}
+        </span>
+        <div className="flex items-center gap-1">
+          <Button
+            variant="ghost" size="sm" className="h-6 w-6 p-0"
+            disabled={isLoading || safeIdx >= steps - 1}
+            onClick={() => setIdx((i) => Math.min(steps - 1, i + 1))}
+            aria-label="Äldre"
+            data-testid={`button-field-history-next-${katalogId}`}
+          >
+            <ChevronRight className="h-3.5 w-3.5" />
+          </Button>
+          <Button
+            variant="ghost" size="sm" className="h-6 px-1.5 text-[11px]"
+            onClick={() => { setExpanded(false); setIdx(0); }}
+            data-testid={`button-collapse-field-history-${katalogId}`}
+          >
+            Dölj
+          </Button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -389,7 +510,18 @@ export function MetadataCarousel({
         ) : kind === "composite" ? (
           <CompositeValue value={entry.vardeJson} />
         ) : (
-          <MetadataValue entry={entry} datatyp={datatyp} onPreviewImage={onPreviewImage} />
+          <>
+            <MetadataValue entry={entry} datatyp={datatyp} onPreviewImage={onPreviewImage} />
+            {/* Historik-karusell i kortet: aktuellt värde + tidigare värden med
+                datum/källa/användare — utan att öppna separat dialog. */}
+            {kind === "historik" && !isSoftDeleted && entry.metadataKatalogId && (
+              <FieldHistoryCarousel
+                objectId={objectId}
+                katalogId={entry.metadataKatalogId}
+                currentValue={<MetadataValue entry={entry} datatyp={datatyp} onPreviewImage={onPreviewImage} />}
+              />
+            )}
+          </>
         )}
 
         {/* Task #1368: diskret systeminfo längst ned — endast verklig proveniens

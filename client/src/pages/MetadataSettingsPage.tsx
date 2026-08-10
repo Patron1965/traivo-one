@@ -545,7 +545,9 @@ export default function MetadataSettingsPage() {
                       return (
                         <TableRow key={type.id} data-testid={`metadata-type-row-${type.namn}`}>
                           <TableCell className="text-muted-foreground tabular-nums" data-testid={`text-displaynumber-${type.namn}`}>
-                            {type.displayNumber ?? '–'}
+                            {type.displayNumber ?? (
+                              <span title="Inget nummer tilldelat — fältet sorteras efter numrerade fält. Sätt ett nummer via Redigera.">–</span>
+                            )}
                           </TableCell>
                           <TableCell>
                             <div className={`flex items-center gap-2${isChild ? ' pl-6' : ''}`}>
@@ -616,12 +618,20 @@ export default function MetadataSettingsPage() {
                           </TableCell>
                           <TableCell>
                             {type.standardArvs ? (
-                              <Badge variant="outline">
+                              <Badge
+                                variant="outline"
+                                title="Standardvärde för NYA värden — befintliga värden på objekt kan ha arv av/på per värde."
+                              >
                                 <ArrowDownToLine className="h-3 w-3 mr-1" />
                                 Ärvs
                               </Badge>
                             ) : (
-                              <span className="text-muted-foreground">-</span>
+                              <span
+                                className="text-muted-foreground"
+                                title="Ärvs inte som standard — nya värden stannar på objektet där de sätts."
+                              >
+                                –
+                              </span>
                             )}
                           </TableCell>
                           <TableCell className="text-right">

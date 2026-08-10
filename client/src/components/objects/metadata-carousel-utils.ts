@@ -44,6 +44,21 @@ export function selectRenderKind(entry: MetadataFormEntry): MetadataRenderKind {
   return "historik";
 }
 
+// Delad svarstyp för GET /api/metadata/objects/:objectId/definition/:katalogId/historik.
+// Används av BÅDE historik-dialogen (ObjectDetailPage) och FieldHistoryCarousel —
+// de delar react-query-nyckel, så cache-formen MÅSTE vara identisk.
+export interface MetadataDefinitionHistorikResponse {
+  katalog: { id: string; namn: string; datatyp: string; kronologiskVisning: boolean };
+  history: Array<{
+    id: string;
+    gammaltVarde: string | null;
+    nyttVarde: string | null;
+    andradAv: string | null;
+    andradVid: string;
+    andringsMetod: string | null;
+  }>;
+}
+
 export interface MetadataAreaMeta {
   value: string;
   label: string;

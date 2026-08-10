@@ -30,14 +30,15 @@ import {
   ArrowLeft, Building2, MapPin, Key, Keyboard, Users, DoorOpen,
   Clock, Package, FileText, Image as ImageIcon, Contact, GitFork, AlertTriangle,
   Calendar, Loader2, ChevronRight, Wrench,
-  Box, Layers, Plus,
+  Box, Layers, Plus, ClipboardList,
   Trash2, Pencil, Save, X, Phone, Mail, LinkIcon, Search, History as HistoryIcon,
   ArrowUp, ArrowDown, RotateCcw, Cog, Copy, Gauge, Zap, Network
 } from "lucide-react";
 import { ObjectMetadataBody } from "@/components/objects/ObjectMetadataBody";
 import { ObjectDomainGrid } from "@/components/objects/ObjectDomainGrid";
 import { ObjectLinkedTasksGrid } from "@/components/objects/ObjectLinkedTasksGrid";
-import { ObjectLinkedOrdersTable } from "@/components/objects/ObjectLinkedOrdersTable";
+import { ObjectLinkedOrdersTable, ObjectTasksNav } from "@/components/objects/ObjectLinkedOrdersTable";
+import type { MetadataDefinitionHistorikResponse } from "@/components/objects/metadata-carousel-utils";
 import { ObjectSystemInfoSection } from "@/components/objects/ObjectSystemInfoSection";
 import { DomainCarouselCard } from "@/components/objects/DomainCarouselCard";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
@@ -1230,6 +1231,9 @@ export default function ObjectDetailPage() {
               Metadata
             </Button>
             <Button variant="ghost" size="sm" onClick={() => scrollToSection("linked-tasks")} data-testid="nav-linked-tasks">
+              Ordrar
+            </Button>
+            <Button variant="ghost" size="sm" onClick={() => scrollToSection("tasks-nav")} data-testid="nav-tasks-nav">
               Uppgifter
             </Button>
           </div>
@@ -1470,11 +1474,11 @@ export default function ObjectDetailPage() {
           />
         </section>
 
-        {/* ==================== (3) KOPPLADE UPPGIFTER ==================== */}
+        {/* ==================== (3) KOPPLADE ORDERKONCEPT & ORDRAR ==================== */}
         <section id="object-section-linked-tasks" className="space-y-6 scroll-mt-4">
           <div className="flex items-center justify-between">
             <h2 className="text-base font-semibold flex items-center gap-2">
-              <Layers className="h-4 w-4" /> Kopplade orderkoncept, ordrar och uppgifter
+              <Layers className="h-4 w-4" /> Kopplade orderkoncept och ordrar
             </h2>
             <Button
               variant="outline"
@@ -1486,18 +1490,16 @@ export default function ObjectDetailPage() {
             </Button>
           </div>
 
-          {/* Task #1442: separata sektioner för kopplade ordrar (aktiva),
-              orderhistorik (utförda) och kopplade uppgifter (assignments),
-              med källa, orderkoncept-länk och status (deriveUppgiftStatus). */}
+          {/* Task #1442: separata kort för kopplade ordrar (aktiva) och
+              orderhistorik (utförda), med källa, orderkoncept-länk och status
+              (deriveUppgiftStatus). Uppgifterna visas i egen sektion nedan. */}
           <ObjectLinkedOrdersTable
             workOrders={workOrders as any}
             assignments={objectAssignments as any}
+            ordersOnly
           />
 
-          {/* Mikro-grovplanering: subträd + källa, exakt grovplaneringslayout (readOnly) */}
-          <ObjectLinkedTasksGrid objectId={objectId} />
-
-          {/* List-block (bläddra + sök): orderkoncept, snabbordrar, uppgifter, bilder */}
+          {/* List-block (bläddra + sök): orderkoncept, snabbordrar, bilder */}
           <ObjectDomainGrid
             section="linked"
             objectId={objectId}
@@ -1507,6 +1509,22 @@ export default function ObjectDetailPage() {
             onEditGeo={() => openEditDialog()}
             navigate={navigate}
           />
+        </section>
+
+        {/* ==================== (4) KOPPLADE UPPGIFTER — NAV I MINIATYR ==================== */}
+        <section id="object-section-tasks-nav" className="space-y-6 scroll-mt-4">
+          <h2 className="text-base font-semibold flex items-center gap-2">
+            <ClipboardList className="h-4 w-4" /> Kopplade uppgifter
+          </h2>
+
+          {/* Sökbart och statusfiltrerat uppgiftsnav (work_orders + assignments) */}
+          <ObjectTasksNav
+            workOrders={workOrders as any}
+            assignments={objectAssignments as any}
+          />
+
+          {/* Mikro-grovplanering: subträd + källa, exakt grovplaneringslayout (readOnly) */}
+          <ObjectLinkedTasksGrid objectId={objectId} />
         </section>
 
         {/* ==================== (4) SYSTEMINFORMATION ====================
@@ -1743,17 +1761,8 @@ function MetadataHistorikButton({
 }) {
   const [open, setOpen] = useState(false);
 
-  const { data, isLoading } = useQuery<{
-    katalog: { id: string; namn: string; datatyp: string; kronologiskVisning: boolean };
-    history: Array<{
-      id: string;
-      gammaltVarde: string | null;
-      nyttVarde: string | null;
-      andradAv: string | null;
-      andradVid: string;
-      andringsMetod: string | null;
-    }>;
-  }>({
+  // Delad typ med FieldHistoryCarousel (samma query-nyckel → samma cache-form).
+  const { data, isLoading } = useQuery<MetadataDefinitionHistorikResponse>({
     queryKey: ["/api/metadata/objects", objectId, "definition", katalogId, "historik"],
     queryFn: async () => {
       const res = await fetch(
