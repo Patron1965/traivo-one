@@ -1426,7 +1426,18 @@ app.post("/api/work-orders/with-lines", requirePlanner, asyncHandler(async (req,
   if (data.resourceId) await ensureResourceInTenant(data.resourceId, tenantId);
   if (data.teamId) await ensureTeamInTenant(data.teamId, tenantId);
   if (data.customerId) await ensureCustomerInTenant(data.customerId, tenantId);
-  if (data.objectId) ensureObjectNotArchived(await ensureObjectInTenant(data.objectId, tenantId));
+  if (data.objectId) {
+    const obj = await ensureObjectInTenant(data.objectId, tenantId);
+    ensureObjectNotArchived(obj);
+    // Task #1514: kund↔objekt-integritet — när klienten explicit anger BÅDE
+    // kund och objekt måste objektet tillhöra kunden (annars kan en order
+    // faktureras kund B mot kund A:s objekt). Intern-kund-fallback (utelämnad
+    // customerId) undantas eftersom den fylls i server-side ovan.
+    const clientSentCustomer = !!parsedBody.data.workOrder.customerId;
+    if (clientSentCustomer && obj.customerId && obj.customerId !== data.customerId) {
+      throw new ValidationError("Objektet tillhör inte den valda kunden");
+    }
+  }
 
   const prefFlags = await computeOutsidePreferredWindow(
     data.objectId,

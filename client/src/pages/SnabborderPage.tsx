@@ -131,6 +131,9 @@ export default function SnabborderPage() {
   const [customer, setCustomer] = useState<CustomerOption | null>(null);
   const [customerSearch, setCustomerSearch] = useState("");
   const [customerOpen, setCustomerOpen] = useState(false);
+  // Kundbyte medan objektgrupper finns kräver bekräftelse (objekten tillhör
+  // den gamla kunden och måste tas bort — kund↔objekt-integritet).
+  const [pendingCustomerSwitch, setPendingCustomerSwitch] = useState<CustomerOption | null>(null);
 
   const [deliveryDate, setDeliveryDate] = useState("");
   const [deliveryTimeFrom, setDeliveryTimeFrom] = useState("");
@@ -428,8 +431,31 @@ export default function SnabborderPage() {
 
   const allLines = useMemo(() => groups.flatMap((g) => g.lines), [groups]);
 
+  const selectCustomer = (c: CustomerOption) => {
+    if (customer && customer.id !== c.id && groups.some((g) => g.objectId !== null)) {
+      setPendingCustomerSwitch(c);
+      return;
+    }
+    setCustomer(c);
+    setCustomerOpen(false);
+    setCustomerSearch("");
+  };
+
+  const confirmCustomerSwitch = () => {
+    const c = pendingCustomerSwitch;
+    setPendingCustomerSwitch(null);
+    if (!c) return;
+    // Ta bort objektgrupper (de tillhör den gamla kunden); ordernivå-rader behålls.
+    setGroups((prev) => prev.filter((g) => g.objectId === null));
+    setAddTargetGroupId(ORDER_LEVEL_GROUP_ID);
+    setCustomer(c);
+    setCustomerOpen(false);
+    setCustomerSearch("");
+  };
+
   // ── Validering ─────────────────────────────────────────────────────────
-  const headerValid = !!customer && principle !== null;
+  const manualAddressValid = !!(adressrad1.trim() && postnummer.trim() && ort.trim());
+  const headerValid = !!customer && principle !== null && (principle !== "manual" || manualAddressValid);
   const contentValid =
     allLines.length > 0 &&
     allLines.every((l) => (l.articleId ? true : l.description.trim().length > 0));
@@ -438,6 +464,7 @@ export default function SnabborderPage() {
   const validationHints: string[] = [];
   if (!customer) validationHints.push("Välj kund");
   if (principle === null) validationHints.push("Välj leveransprincip");
+  if (principle === "manual" && !manualAddressValid) validationHints.push("Ange leveransadress (adressrad 1, postnummer och ort)");
   if (allLines.length === 0) validationHints.push("Lägg till minst en orderrad");
   if (allLines.some((l) => !l.articleId && !l.description.trim())) validationHints.push("Fritextrader måste ha text");
 
@@ -731,7 +758,7 @@ export default function SnabborderPage() {
                               <button
                                 key={c.id}
                                 type="button"
-                                onClick={() => { setCustomer(c); setCustomerOpen(false); setCustomerSearch(""); }}
+                                onClick={() => selectCustomer(c)}
                                 className="flex w-full items-center justify-between px-3 py-2 text-left text-sm hover:bg-muted"
                                 data-testid={`option-customer-${c.id}`}
                               >
@@ -1292,6 +1319,28 @@ export default function SnabborderPage() {
               ))
             )}
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Kundbyte med objektgrupper ── */}
+      <Dialog open={pendingCustomerSwitch !== null} onOpenChange={(v) => !v && setPendingCustomerSwitch(null)}>
+        <DialogContent className="max-w-md" data-testid="dialog-customer-switch">
+          <DialogHeader>
+            <DialogTitle>Byta kund?</DialogTitle>
+            <DialogDescription>
+              Orderinnehållet innehåller objekt som tillhör {customer?.name ?? "den nuvarande kunden"}.
+              Om du byter till {pendingCustomerSwitch?.name ?? "en annan kund"} tas objektgrupperna och
+              deras rader bort. Rader utan objekt behålls.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPendingCustomerSwitch(null)} data-testid="button-cancel-customer-switch">
+              Avbryt
+            </Button>
+            <Button onClick={confirmCustomerSwitch} data-testid="button-confirm-customer-switch">
+              Byt kund
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 
