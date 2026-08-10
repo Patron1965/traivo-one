@@ -17,6 +17,7 @@ import { requireAdmin, requirePlanner } from "../tenant-middleware";
 import { hashPassword } from "../password";
 import { getArticleMetadataForObject, writeArticleMetadataOnObject, createMetadata, getAllMetadataTypes, writeSystemMetadataOnObject } from "../metadata-queries";
 import { deriveFortnoxCodesForWorkOrder } from "../services/fortnox-code-derivation";
+import { resolveRequestUser, syncClerkUserLock } from "../middlewares/requireAuth";
 import { signDynamicQrToken, verifyDynamicQrToken, verifyObjectQrToken } from "../dynamic-qr-token";
 import { checkPublicReportRateLimit, getClientKeyForRequest } from "../public-report-rate-limit";
 import { RateLimitError } from "../errors";
@@ -1054,7 +1055,7 @@ app.post("/api/cases/:source/:id/create-order", requirePlanner, asyncHandler(asy
 
     const { DEVIATION_CATEGORY_LABELS } = await import("@shared/schema");
     const catLabel = (DEVIATION_CATEGORY_LABELS as Record<string, string>)[existing.category] || existing.category || "Ärende";
-    const userId = (req.user as any)?.claims?.sub ?? (req.session as any)?.userId ?? null;
+    const userId = (req as any).dbUser?.id ?? (req.user as any)?.claims?.sub ?? null;
 
     const title = existing.title || catLabel;
     const description = [
@@ -1632,9 +1633,7 @@ app.get("/api/system/api-costs/recent", requireAdmin, asyncHandler(async (req, r
 }));
 
 const requireSystemAdmin = async (req: Request, res: Response, next: NextFunction) => {
-  const replitUser = req.user;
-  const sessionUserId = (req.session as unknown as Record<string, string>)?.userId;
-  const userId = replitUser?.claims?.sub || sessionUserId;
+  const userId = (await resolveRequestUser(req))?.id;
   if (!userId) {
     return next(new UnauthorizedError("Ej autentiserad"));
   }
@@ -1766,7 +1765,7 @@ app.get("/api/system/budget-status/all-tenants", requireSystemAdmin, asyncHandle
  * Returns null when the user has no linked resource.
  */
 async function getCallerResourceId(req: Request): Promise<string | null> {
-  const userId: string | null = (req.user as any)?.claims?.sub ?? (req.session as any)?.userId ?? null;
+  const userId: string | null = (req as any).dbUser?.id ?? (req.user as any)?.claims?.sub ?? null;
   if (!userId) return null;
   const user = await storage.getUser(userId);
   return user?.resourceId ?? null;
@@ -2451,9 +2450,7 @@ app.post("/api/ai/communications/send-manual", requirePlanner, asyncHandler(asyn
 // ============================================
 
 const requireAdminAuth = async (req: any, res: any, next: any) => {
-  const replitUser = req.user;
-  const sessionUserId = (req.session as any)?.userId;
-  const userId = replitUser?.claims?.sub || sessionUserId;
+  const userId = (await resolveRequestUser(req))?.id;
   if (!userId) {
     return next(new UnauthorizedError("Du måste logga in för att komma åt denna resurs."));
   }
@@ -2476,6 +2473,7 @@ const requireAdminAuth = async (req: any, res: any, next: any) => {
     if (!tenantRole || (tenantRole.role !== "admin" && tenantRole.role !== "owner")) {
       return next(new ForbiddenError("Administratörsrättigheter inom organisationen krävs."));
     }
+    req.callerTenantRole = tenantRole.role;
     return next();
   } catch {
     return res.status(500).json({ error: "Kunde inte verifiera behörighet" });
@@ -2490,78 +2488,88 @@ app.get("/api/admin/users", requireAdminAuth, asyncHandler(async (req, res) => {
 }));
 
 app.post("/api/admin/users", requireAdminAuth, asyncHandler(async (req, res) => {
-    const { email, firstName, lastName, password, role, resourceId } = req.body;
+    // Efter Clerk-migreringen skapar admin inte längre lokala konton med
+    // lösenord (Clerk är enda inloggningsvägen för webbanvändare). Endpointen
+    // skapar istället en inbjudan: användaren får ett mejl som pekar på
+    // /sign-in, och vid första Clerk-inloggningen konsumerar JIT-provisioneringen
+    // inbjudan och tilldelar tenant-rollen.
+    const { email, role } = req.body;
 
-    if (!email || !password) {
-      throw new ValidationError("E-post och lösenord krävs");
+    if (!email) {
+      throw new ValidationError("E-post krävs");
     }
 
-    const validRoles = ["owner", "admin", "planner", "technician", "user", "viewer", "customer", "reporter"];
+    // "owner" kan ALDRIG bjudas in via e-post — ägarskap tilldelas endast av
+    // en befintlig ägare direkt på en befintlig användare.
+    const validRoles = ["admin", "planner", "technician", "user", "viewer", "customer", "reporter"];
     if (role && !validRoles.includes(role)) {
       throw new ValidationError(`Ogiltig roll: ${role}`);
     }
 
     const tenantId = (req as any).tenantId;
-    const hashedPassword = hashPassword(password);
+    if (!tenantId) {
+      throw new ValidationError("Ingen organisation vald");
+    }
 
-    const existing = await storage.getUserByUsername(email);
-    let user;
+    const emailLower = String(email).toLowerCase().trim();
+
+    const existing = await storage.getUserByUsername(emailLower);
     if (existing) {
-      // Kontrollera om användaren är medlem någonstans. Om hen är "föräldralös"
-      // (raderad från alla organisationer men användarraden låg kvar pga FK:er)
-      // återanvänder vi raden och kopplar in hen i denna organisation med nya
-      // uppgifter. Det matchar förväntningen att en raderad användare kan
-      // återskapas med samma e-post.
       const memberships = await getUserTenants(existing.id);
-      const inThisTenant = memberships.some((m) => m.tenantId === tenantId);
-      if (inThisTenant) {
+      if (memberships.some((m) => m.tenantId === tenantId)) {
         throw new ConflictError("En användare med den e-postadressen finns redan i denna organisation");
       }
-      if (memberships.length > 0) {
-        throw new ConflictError("E-postadressen används redan av en användare i en annan organisation");
-      }
-      const updated = await storage.updateUser(existing.id, {
-        firstName: firstName || existing.firstName || null,
-        lastName: lastName || existing.lastName || null,
-        passwordHash: hashedPassword,
-        resourceId: resourceId ?? existing.resourceId ?? null,
-        isActive: true,
-      });
-      user = updated ?? existing;
-      console.log(`[user-mgmt] Återaktiverade befintlig användare "${email}"`);
+    }
+
+    // Upserta pending-inbjudan (återanvänd ev. befintlig pending-rad).
+    const [pendingExisting] = await db
+      .select()
+      .from(invitations)
+      .where(and(
+        eq(invitations.email, emailLower),
+        eq(invitations.tenantId, tenantId),
+        eq(invitations.status, "pending"),
+      ))
+      .limit(1);
+
+    let invitation = pendingExisting;
+    if (invitation) {
+      const [updated] = await db
+        .update(invitations)
+        .set({ role: role || "user", invitedBy: (req as any).userId || null })
+        .where(eq(invitations.id, invitation.id))
+        .returning();
+      invitation = updated ?? invitation;
     } else {
-      user = await storage.createUser({
-        email,
-        firstName: firstName || null,
-        lastName: lastName || null,
-        passwordHash: hashedPassword,
-        role: "user",
-        resourceId: resourceId || null,
-        isActive: true,
-      });
-    }
-
-    if (tenantId) {
-      await assignUserToTenant(user.id, tenantId, (role || "user") as UserRole, (req as any).userId);
-    }
-
-    if (tenantId) {
-      await db
+      const [created] = await db
         .insert(invitations)
         .values({
-          email: email.toLowerCase(),
+          email: emailLower,
           tenantId,
           role: role || "user",
           invitedBy: (req as any).userId || null,
           status: "pending",
         })
-        .onConflictDoNothing();
-      console.log(`[user-mgmt] Auto-invitation created for "${email}" in tenant "${tenantId}"`);
+        .returning();
+      invitation = created;
     }
 
-    const { passwordHash: _, ...safeUser } = user;
-    console.log(`[user-mgmt] User "${email}" created with role "${role || 'user'}"`);
-    res.status(201).json(safeUser);
+    const { issueMagicLink } = await import("../replit_integrations/auth/magicLinkAuth");
+    const protocol = req.headers["x-forwarded-proto"] ?? req.protocol ?? "https";
+    const host = req.headers["x-forwarded-host"] ?? req.get("host");
+    const sendResult = await issueMagicLink({
+      invitationId: invitation.id,
+      baseUrl: `${protocol}://${host}`,
+      req,
+    });
+
+    console.log(`[user-mgmt] Invitation ${invitation.id} for "${emailLower}" (role "${role || "user"}") — email ${sendResult.ok ? "sent" : "FAILED"}`);
+    res.status(201).json({
+      invited: true,
+      invitation,
+      emailDelivered: sendResult.ok,
+      emailError: sendResult.ok ? null : sendResult.reason ?? null,
+    });
 }));
 
 app.patch("/api/admin/users/bulk", requireAdminAuth, asyncHandler(async (req, res) => {
@@ -2574,6 +2582,9 @@ app.patch("/api/admin/users/bulk", requireAdminAuth, asyncHandler(async (req, re
       const validRoles = ["owner", "admin", "planner", "technician", "user", "viewer", "customer", "reporter"];
       if (!validRoles.includes(updates.role)) {
         throw new ValidationError(`Ogiltig roll: ${updates.role}`);
+      }
+      if (updates.role === "owner" && (req as any).callerTenantRole !== "owner") {
+        throw new ForbiddenError("Endast en ägare kan tilldela ägarroll");
       }
       tenantRoleToAssign = updates.role;
     }
@@ -2591,6 +2602,9 @@ app.patch("/api/admin/users/bulk", requireAdminAuth, asyncHandler(async (req, re
       }
       if (Object.keys(accountUpdates).length > 0) {
         await storage.updateUser(id, accountUpdates);
+        if (accountUpdates.isActive !== undefined) {
+          await syncClerkUserLock(id, accountUpdates.isActive === false);
+        }
       }
       if (tenantRoleToAssign) {
         await assignUserToTenant(id, tenantId, tenantRoleToAssign as UserRole, (req as any).userId);
@@ -2608,12 +2622,16 @@ app.patch("/api/admin/users/:id", requireAdminAuth, asyncHandler(async (req, res
       throw new ForbiddenError("Ej behörig", { message: "Användaren tillhör inte din organisation." });
     }
 
-    const { email, firstName, lastName, password, role, resourceId, isActive } = req.body;
+    // `password` accepteras inte längre — Clerk är enda inloggningsvägen.
+    const { email, firstName, lastName, role, resourceId, isActive } = req.body;
 
     if (role !== undefined) {
       const validRoles = ["owner", "admin", "planner", "technician", "user", "viewer", "customer", "reporter"];
       if (!validRoles.includes(role)) {
         throw new ValidationError(`Ogiltig roll: ${role}`);
+      }
+      if (role === "owner" && (req as any).callerTenantRole !== "owner") {
+        throw new ForbiddenError("Endast en ägare kan tilldela ägarroll");
       }
     }
 
@@ -2623,9 +2641,6 @@ app.patch("/api/admin/users/:id", requireAdminAuth, asyncHandler(async (req, res
     if (lastName !== undefined) accountData.lastName = lastName;
     if (resourceId !== undefined) accountData.resourceId = resourceId;
     if (isActive !== undefined) accountData.isActive = isActive;
-    if (password) {
-      accountData.passwordHash = hashPassword(password);
-    }
 
     let user = await storage.getUser(req.params.id);
     if (!user) throw new NotFoundError("Användaren hittades inte");
@@ -2633,6 +2648,9 @@ app.patch("/api/admin/users/:id", requireAdminAuth, asyncHandler(async (req, res
     if (Object.keys(accountData).length > 0) {
       const updated = await storage.updateUser(req.params.id, accountData);
       if (updated) user = updated;
+      if (accountData.isActive !== undefined) {
+        await syncClerkUserLock(req.params.id, accountData.isActive === false);
+      }
     }
 
     let effectiveRole: string | null = membership.role ?? user.role ?? "user";
@@ -2659,46 +2677,17 @@ app.delete("/api/admin/users/:id", requireAdminAuth, asyncHandler(async (req, re
     res.json({ success: true });
 }));
 
-// Login with email + password (returns session)
-app.post("/api/auth/login", asyncHandler(async (req, res) => {
-    const { email, password } = req.body;
-    const { logLoginEvent } = await import("../login-audit");
-    if (!email || !password) {
-      await logLoginEvent({ req, method: "password", outcome: "failed", email: email || null, reason: "missing_credentials" });
-      throw new ValidationError("E-post och lösenord krävs");
-    }
+// Legacy password login — borttagen efter Clerk-migreringen (express-session
+// finns inte längre). Inloggning sker via Clerk på /sign-in.
+app.post("/api/auth/login", (_req, res) => {
+    res.status(410).json({
+      error: "Borttagen",
+      message: "Lösenordsinloggning har ersatts av Clerk. Logga in via /sign-in.",
+    });
+});
 
-    const { verifyPassword } = await import("../password");
-    const user = await storage.getUserByUsername(email);
-    if (!user || !user.passwordHash) {
-      await logLoginEvent({ req, method: "password", outcome: "failed", email, reason: "unknown_user_or_no_password" });
-      throw new UnauthorizedError("Felaktig e-post eller lösenord");
-    }
-    if (user.isActive === false) {
-      await logLoginEvent({ req, method: "password", outcome: "failed", email, userId: user.id, reason: "inactive_account" });
-      throw new ForbiddenError("Kontot är inaktiverat");
-    }
-
-    const valid = verifyPassword(password, user.passwordHash);
-    if (!valid) {
-      await logLoginEvent({ req, method: "password", outcome: "failed", email, userId: user.id, reason: "bad_password" });
-      throw new UnauthorizedError("Felaktig e-post eller lösenord");
-    }
-
-    (req.session as any).userId = user.id;
-    (req.session as any).userEmail = user.email;
-    (req.session as any).userRole = user.role;
-
-    await storage.updateUser(user.id, { lastLoginAt: new Date() });
-    await logLoginEvent({ req, method: "password", outcome: "success", email, userId: user.id });
-
-    const { passwordHash: _, ...safeUser } = user;
-    console.log(`[auth] User "${email}" logged in successfully`);
-    res.json({ success: true, user: safeUser });
-}));
-
-app.get("/api/auth/me", asyncHandler(async (req, res) => {
-    const userId = (req.session as any)?.userId;
+app.get("/api/auth/me", asyncHandler(async (req: any, res) => {
+    const userId = req.dbUser?.id ?? req.user?.claims?.sub;
     if (!userId) {
       throw new UnauthorizedError("Inte inloggad");
     }
@@ -2710,10 +2699,10 @@ app.get("/api/auth/me", asyncHandler(async (req, res) => {
     res.json(safeUser);
 }));
 
-app.post("/api/auth/logout", (req, res) => {
-  req.session.destroy(() => {
-    res.json({ success: true });
-  });
+// Utloggning hanteras klient-side via Clerk signOut(); denna endpoint är kvar
+// som no-op för bakåtkompatibilitet med ev. gamla klienter.
+app.post("/api/auth/logout", (_req, res) => {
+  res.json({ success: true });
 });
 
 // ============================================
@@ -2721,11 +2710,14 @@ app.post("/api/auth/logout", (req, res) => {
 // ============================================
 
 app.post("/api/field/mobile-token", asyncHandler(async (req: any, res) => {
-    const user = req.user || (req.session as any)?.passport?.user;
-    if (!user) {
+    const userId = req.dbUser?.id ?? req.user?.claims?.sub;
+    if (!userId) {
       throw new ForbiddenError("Ej autentiserad");
     }
-    const userResourceId = user.resourceId;
+    // Slå alltid upp resourceId i databasen — auth-shimmets req.user bär bara
+    // claims, och req.dbUser kan saknas på vägar som bara kört tenant-middleware.
+    const userResourceId =
+      req.dbUser?.resourceId ?? (await storage.getUser(userId))?.resourceId ?? null;
 
     if (!userResourceId) {
       throw new ValidationError("Ingen resurs-ID kopplad till din användare");

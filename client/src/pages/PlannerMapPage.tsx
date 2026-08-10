@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { UrgentJobDialog } from "@/components/UrgentJobDialog";
-import { goToLogin } from "@/lib/auth-utils";
+import { useClerk } from "@clerk/react";
 
 export default function PlannerMapPage() {
   const iframeRef = useRef<HTMLIFrameElement>(null);
@@ -40,8 +40,10 @@ export default function PlannerMapPage() {
     return () => window.removeEventListener("focus", onFocus);
   }, [sessionExpired]);
 
+  const { redirectToSignIn } = useClerk();
+
   const startRelogin = () => {
-    goToLogin("/planner-map");
+    redirectToSignIn({ signInFallbackRedirectUrl: "/planner-map" });
   };
 
   const openPopout = () => {

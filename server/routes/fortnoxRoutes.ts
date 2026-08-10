@@ -2107,7 +2107,7 @@ app.get("/api/order-concepts/:id", asyncHandler(async (req, res) => {
 
 app.post("/api/order-concepts", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
-    const userId = req.session?.user?.id;
+    const userId = (req as any).dbUser?.id ?? (req as any).user?.claims?.sub;
     
     if (req.body.customerMode && !["HARDCODED", "FROM_METADATA"].includes(req.body.customerMode)) {
       throw new ValidationError("customerMode måste vara HARDCODED eller FROM_METADATA");
@@ -2306,7 +2306,7 @@ app.delete("/api/order-concepts/:conceptId/filters/:filterId", asyncHandler(asyn
 // Execute order concept - generates assignments from filters
 app.post("/api/order-concepts/:id/execute", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
-    const userId = req.session?.user?.id;
+    const userId = (req as any).dbUser?.id ?? (req as any).user?.claims?.sub;
     const rawConcept = await storage.getOrderConcept(req.params.id);
     const concept = verifyTenantOwnership(rawConcept, tenantId);
     if (!concept) {
@@ -3011,7 +3011,7 @@ app.post("/api/order-concepts/:id/preview", asyncHandler(async (req, res) => {
 // Rolling schedule execution - generate assignments for upcoming windows
 app.post("/api/order-concepts/:id/run-rolling", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
-    const userId = req.session?.user?.id;
+    const userId = (req as any).dbUser?.id ?? (req as any).user?.claims?.sub;
     const rawConcept = await storage.getOrderConcept(req.params.id);
     const concept = verifyTenantOwnership(rawConcept, tenantId);
     if (!concept) {
@@ -3182,7 +3182,7 @@ app.get("/api/subscription-changes", asyncHandler(async (req, res) => {
 
 app.patch("/api/subscription-changes/:id", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
-    const userId = req.session?.user?.id;
+    const userId = (req as any).dbUser?.id ?? (req as any).user?.claims?.sub;
     const { approvalStatus } = req.body;
     if (!approvalStatus || !["approved", "rejected"].includes(approvalStatus)) {
       throw new ValidationError("Ogiltig status");

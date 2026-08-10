@@ -43,14 +43,16 @@ test.describe("Focused login page (/)", () => {
     await expect(page.locator('[data-testid="text-login-footer"]')).toBeVisible();
   });
 
-  test("primary login button points to /api/login", async ({ page }) => {
+  test("primary login button navigates to Clerk sign-in (/sign-in)", async ({ page }) => {
     await mockUnauthenticated(page);
     await page.goto("/");
     await page.waitForLoadState("networkidle");
 
     const loginBtn = page.locator('[data-testid="button-login"]');
     await expect(loginBtn).toBeVisible({ timeout: 10000 });
-    await expect(loginBtn).toHaveAttribute("href", "/api/login");
+    await loginBtn.click();
+    await page.waitForURL(/\/sign-in/, { timeout: 10000 });
+    expect(page.url()).toContain("/sign-in");
   });
 
   test("marketing link opens external Traivo site in new tab", async ({ page }) => {

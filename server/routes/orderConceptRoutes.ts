@@ -942,7 +942,7 @@ app.get("/api/order-concept-run-logs", asyncHandler(async (req, res) => {
 
 app.post("/api/order-concepts/:id/rerun", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
-    const userId = req.session?.user?.id;
+    const userId = (req as any).dbUser?.id ?? (req as any).user?.claims?.sub;
     const rawConcept = await storage.getOrderConcept(req.params.id);
     const concept = verifyTenantOwnership(rawConcept, tenantId);
     if (!concept) throw new NotFoundError("Orderkoncept hittades inte");
@@ -1333,7 +1333,7 @@ app.get("/api/order-concepts/:id/assignments", asyncHandler(async (req, res) => 
 
 app.post("/api/assignments", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
-    const userId = req.session?.user?.id;
+    const userId = (req as any).dbUser?.id ?? (req as any).user?.claims?.sub;
 
     // Task #1369: källtyp — klienten får bara ange snabborder/uppgiftseditor;
     // "orderkoncept" myntas enbart server-side vid koncept-expansion, och
@@ -2896,7 +2896,7 @@ app.get("/api/order-concepts/:id/export-pdf", asyncHandler(async (req, res) => {
 
 app.post("/api/order-concepts/:id/save-as-template", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
-    const userId = req.session?.user?.id;
+    const userId = (req as any).dbUser?.id ?? (req as any).user?.claims?.sub;
     const source = verifyTenantOwnership(await storage.getOrderConcept(req.params.id), tenantId);
     if (!source) throw new NotFoundError("Orderkoncept hittades inte");
 
@@ -2915,7 +2915,7 @@ app.post("/api/order-concepts/:id/save-as-template", asyncHandler(async (req, re
 // Steg 7 & list: Kopiera koncept (valfritt peka om till andra kluster/grenar).
 app.post("/api/order-concepts/:id/copy", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
-    const userId = req.session?.user?.id;
+    const userId = (req as any).dbUser?.id ?? (req as any).user?.claims?.sub;
     const source = verifyTenantOwnership(await storage.getOrderConcept(req.params.id), tenantId);
     if (!source) throw new NotFoundError("Orderkoncept hittades inte");
 

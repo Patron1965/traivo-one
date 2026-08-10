@@ -1,8 +1,11 @@
 import { ShieldX, LogOut, Mail } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { useClerk } from "@clerk/react";
 
 export default function AccessDeniedPage() {
+  const { signOut } = useClerk();
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-background to-muted flex items-center justify-center p-4">
       <Card className="max-w-md w-full">
@@ -39,9 +42,7 @@ export default function AccessDeniedPage() {
             variant="outline"
             className="w-full"
             data-testid="button-logout-access-denied"
-            onClick={() => {
-              window.location.href = "/api/logout";
-            }}
+            onClick={() => signOut({ redirectUrl: "/" })}
           >
             <LogOut className="h-4 w-4 mr-2" />
             Logga ut

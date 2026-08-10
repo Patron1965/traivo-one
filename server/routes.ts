@@ -4,8 +4,8 @@ import { storage } from "./storage";
 import { db } from "./db";
 import { sql } from "drizzle-orm";
 import { z } from "zod";
-import { setupAuth, registerAuthRoutes, isAuthenticated } from "./replit_integrations/auth";
-import { registerMagicLinkRoutes } from "./replit_integrations/auth/magicLinkAuth";
+import { isAuthenticated } from "./middlewares/requireAuth";
+import { requireAuth, resolveRequestUser } from "./middlewares/requireAuth";
 import { registerInvitationsRoutes } from "./routes/invitationsRoutes";
 import { registerRouteGeometryRoutes } from "./routes/routeGeometryRoutes";
 import { registerClusteringRoutes } from "./routes/clusteringRoutes";
@@ -148,21 +148,49 @@ export async function registerRoutes(
     });
   });
 
-  await setupAuth(app);
-  registerAuthRoutes(app);
-  registerMagicLinkRoutes(app);
   registerInvitationsRoutes(app);
   
   await ensureDefaultTenant();
 
+  // /api/auth/user — replaces the old Replit Auth user endpoint, now backed by Clerk
+  {
+    const ROLE_PRIVILEGE_ORDER = ["owner","admin","planner","technician","user","viewer","customer","reporter"];
+    function getMostPrivilegedRole(roles: { role: string }[]): string | null {
+      if (roles.length === 0) return null;
+      let best: string | null = null;
+      let bestIndex = ROLE_PRIVILEGE_ORDER.length;
+      for (const r of roles) {
+        const idx = ROLE_PRIVILEGE_ORDER.indexOf(r.role);
+        if (idx !== -1 && idx < bestIndex) { bestIndex = idx; best = r.role; }
+      }
+      return best;
+    }
+    const { userTenantRoles } = await import("@shared/schema");
+    const { eq } = await import("drizzle-orm");
+    app.get("/api/auth/user", requireAuth, async (req: any, res) => {
+      try {
+        const dbUser = req.dbUser;
+        if (!dbUser) return res.status(404).json({ message: "User not found" });
+        const roles = await db.select({ tenantId: userTenantRoles.tenantId, role: userTenantRoles.role, assignedBy: userTenantRoles.assignedBy })
+          .from(userTenantRoles)
+          .where(eq(userTenantRoles.userId, dbUser.id));
+        const accessGranted = roles.some(r => r.tenantId !== "kinab" || r.assignedBy !== null || r.role !== "user");
+        const tenantRole = getMostPrivilegedRole(roles);
+        const primaryTenantId = roles.find(r => r.tenantId !== "kinab" || r.assignedBy !== null || r.role !== "user")?.tenantId ?? roles[0]?.tenantId ?? null;
+        res.json({ ...dbUser, role: tenantRole || dbUser.role, tenantId: primaryTenantId, accessGranted });
+      } catch (error) {
+        console.error("Error fetching user:", error);
+        res.status(500).json({ message: "Failed to fetch user" });
+      }
+    });
+  }
+
   app.get("/api/me/tenant", async (req, res) => {
     try {
-      const user = req.user;
-      if (!user?.claims?.sub) {
-        // Säkerhet: returnera ingen tenant för oinloggade besökare. Tidigare
-        // returnerade vi `kinab/user` som back-compat-fallback, vilket lät
-        // frontend-flöden tro att besökaren hade access. Frontend hanterar
-        // null-tenant korrekt via useAuth/AccessDeniedPage.
+      // Registrerad före globala tenant-middlewaren — resolva Clerk-sessionen
+      // själv (JIT-provisionerar och sätter req.dbUser + shim).
+      const userId = (await resolveRequestUser(req))?.id;
+      if (!userId) {
         return res.json({
           tenantId: null,
           role: null,
@@ -172,7 +200,7 @@ export async function registerRoutes(
         });
       }
 
-      const tenants = await getUserTenants(user.claims.sub);
+      const tenants = await getUserTenants(userId);
       
       if (tenants.length > 0) {
         res.json({
@@ -293,7 +321,7 @@ export async function registerRoutes(
   // In-app user notifications (planners/admins) — bell in header
   app.get("/api/notifications", async (req, res) => {
     try {
-      const userId = req.user?.claims?.sub;
+      const userId = (req as any).user?.claims?.sub ?? (req as any).dbUser?.id;
       if (!userId) return res.status(401).json({ error: "Ej autentiserad" });
       const tenantId = getTenantIdWithFallback(req);
       const limit = Math.min(Number(req.query.limit) || 20, 100);
@@ -319,7 +347,7 @@ export async function registerRoutes(
 
   app.get("/api/notifications/types", async (req, res) => {
     try {
-      const userId = req.user?.claims?.sub;
+      const userId = (req as any).user?.claims?.sub ?? (req as any).dbUser?.id;
       if (!userId) return res.status(401).json({ error: "Ej autentiserad" });
       const tenantId = getTenantIdWithFallback(req);
       const types = await storage.getUserNotificationTypes(userId, tenantId);
@@ -332,7 +360,7 @@ export async function registerRoutes(
 
   app.patch("/api/notifications/:id/read", async (req, res) => {
     try {
-      const userId = req.user?.claims?.sub;
+      const userId = (req as any).user?.claims?.sub ?? (req as any).dbUser?.id;
       if (!userId) return res.status(401).json({ error: "Ej autentiserad" });
       const updated = await storage.markUserNotificationRead(req.params.id, userId);
       if (!updated) return res.status(404).json({ error: "Notis hittades inte" });
@@ -345,9 +373,9 @@ export async function registerRoutes(
 
   // Issue a short-lived WS token bound to the authenticated user so the
   // header bell can subscribe to live in-app notifications without polling.
-  app.post("/api/notifications/user-token", isAuthenticated, async (req: any, res) => {
+  app.post("/api/notifications/user-token", requireAuth, async (req: any, res) => {
     try {
-      const userId = req.user?.claims?.sub;
+      const userId = req.dbUser?.id ?? req.user?.claims?.sub;
       if (!userId) return res.status(401).json({ error: "Ej autentiserad" });
       const tenantId = getTenantIdWithFallback(req);
       const token = notificationService.generateUserAuthToken(userId, tenantId);
@@ -369,7 +397,7 @@ export async function registerRoutes(
       const tokenOk = !!token && provided === token;
 
       if (!tokenOk) {
-        const userId = req.user?.claims?.sub;
+        const userId = (req as any).user?.claims?.sub ?? (req as any).dbUser?.id;
         if (!userId) {
           return res.status(401).json({ error: "Ej autentiserad" });
         }
@@ -398,7 +426,7 @@ export async function registerRoutes(
       const tokenOk = !!token && provided === token;
 
       if (!tokenOk) {
-        const userId = req.user?.claims?.sub;
+        const userId = (req as any).user?.claims?.sub ?? (req as any).dbUser?.id;
         if (!userId) {
           return res.status(401).json({ error: "Ej autentiserad" });
         }
@@ -427,7 +455,7 @@ export async function registerRoutes(
       const tokenOk = !!token && provided === token;
 
       if (!tokenOk) {
-        const userId = req.user?.claims?.sub;
+        const userId = (req as any).user?.claims?.sub ?? (req as any).dbUser?.id;
         if (!userId) {
           return res.status(401).json({ error: "Ej autentiserad" });
         }
@@ -451,7 +479,7 @@ export async function registerRoutes(
   // sitt eget preference.
   app.get("/api/notifications/preferences", async (req: any, res) => {
     try {
-      const userId = req.user?.claims?.sub;
+      const userId = (req as any).user?.claims?.sub ?? (req as any).dbUser?.id;
       if (!userId) return res.status(401).json({ error: "Ej autentiserad" });
       const tenantId = getTenantIdWithFallback(req);
       const prefs = await storage.getUserNotificationPreferences(userId, tenantId);
@@ -464,7 +492,7 @@ export async function registerRoutes(
 
   app.put("/api/notifications/preferences/:type", async (req: any, res) => {
     try {
-      const userId = req.user?.claims?.sub;
+      const userId = (req as any).user?.claims?.sub ?? (req as any).dbUser?.id;
       if (!userId) return res.status(401).json({ error: "Ej autentiserad" });
       const tenantId = getTenantIdWithFallback(req);
       const type = String(req.params.type || "").trim();
@@ -545,7 +573,7 @@ export async function registerRoutes(
 
   app.patch("/api/notifications/read-all", async (req, res) => {
     try {
-      const userId = req.user?.claims?.sub;
+      const userId = (req as any).user?.claims?.sub ?? (req as any).dbUser?.id;
       if (!userId) return res.status(401).json({ error: "Ej autentiserad" });
       const tenantId = getTenantIdWithFallback(req);
       const count = await storage.markAllUserNotificationsRead(userId, tenantId);

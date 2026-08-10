@@ -1,6 +1,7 @@
 import { useMemo, useState, useCallback, useEffect } from "react";
 import { Link, useLocation } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
+import { useClerk } from "@clerk/react";
 import { useTerminology } from "@/hooks/use-terminology";
 import { useTenantBranding } from "@/components/TenantBrandingProvider";
 import traivoLogo from "@assets/traivo_logo_transparent.png";
@@ -358,6 +359,7 @@ function GlobalSearch() {
 function UserMenu() {
   const { user } = useAuth();
   const { t: tl } = useLanguage();
+  const { signOut } = useClerk();
 
   const displayName =
     user?.firstName && user?.lastName
@@ -406,11 +408,13 @@ function UserMenu() {
           </Link>
         </DropdownMenuItem>
         <DropdownMenuSeparator />
-        <DropdownMenuItem asChild>
-          <a href="/api/logout" className="cursor-pointer text-destructive" data-testid="button-logout">
-            <LogOut className="h-4 w-4 mr-2" />
-            {tl("user.logout")}
-          </a>
+        <DropdownMenuItem
+          className="cursor-pointer text-destructive"
+          data-testid="button-logout"
+          onClick={() => signOut({ redirectUrl: "/" })}
+        >
+          <LogOut className="h-4 w-4 mr-2" />
+          {tl("user.logout")}
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>

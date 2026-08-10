@@ -15,7 +15,6 @@ import { objects, workOrders, metadataVarden, apiUsageLogs, apiBudgets, invitati
 import { getISOWeek, getStartOfISOWeek } from "./helpers";
 import { sendEmail } from "../replit_integrations/resend";
 import { issueMagicLink } from "../replit_integrations/auth/magicLinkAuth";
-import { hashPassword } from "../password";
 import { dashboardCache, DASHBOARD_CACHE_TTL } from "../services/dashboardCache";
 import { mapTileLimiter, TILE_HOURLY_ALERT_THRESHOLD } from "../middleware/rate-limit";
 import { generateAndSendWeeklyReports } from "../weekly-report";
@@ -1301,10 +1300,13 @@ app.get("/api/system/user-roles", requireAdmin, asyncHandler(async (req, res) =>
 // User Tenant Roles - Create new user role (admin only)
 app.post("/api/system/user-roles", requireAdmin, asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
-    const { userId, name, role, permissions, password } = req.body;
+    const { userId, name, role, permissions } = req.body;
     
     if (!userId || !role) {
       throw new ValidationError("userId och roll krävs");
+    }
+    if (role === "owner") {
+      throw new ValidationError("Ägarroll kan inte tilldelas via detta flöde");
     }
     
     // Check if user already has a role
@@ -1313,17 +1315,16 @@ app.post("/api/system/user-roles", requireAdmin, asyncHandler(async (req, res) =
       throw new ValidationError("Användaren har redan en roll i detta företag");
     }
     
-    // Create or update user record with password if provided
+    // Skapa/uppdatera användarraden (utan lösenord — inloggning sker via Clerk;
+    // raden adopteras via verifierad e-post vid första inloggningen).
     const email = userId.startsWith("email:") ? userId.replace("email:", "") : null;
     if (email) {
-      const passwordHash = password ? hashPassword(password) : undefined;
       const [firstName, ...lastNameParts] = (name || "").split(" ");
       await storage.upsertUser({
         id: userId,
         email,
         firstName: firstName || null,
         lastName: lastNameParts.join(" ") || null,
-        passwordHash,
       });
     }
     
@@ -1340,7 +1341,7 @@ app.post("/api/system/user-roles", requireAdmin, asyncHandler(async (req, res) =
       action: "create_user_role",
       resourceType: "user_tenant_roles",
       resourceId: result.id,
-      changes: { userId, role, permissions, hasPassword: !!password },
+      changes: { userId, role, permissions },
     });
     
     res.status(201).json(result);
@@ -1348,8 +1349,11 @@ app.post("/api/system/user-roles", requireAdmin, asyncHandler(async (req, res) =
 
 // User Tenant Roles - Update role (admin only)
 app.patch("/api/system/user-roles/:id", requireAdmin, asyncHandler(async (req, res) => {
-    const { role, permissions, isActive, password } = req.body;
+    const { role, permissions, isActive } = req.body;
     
+    if (role === "owner") {
+      throw new ValidationError("Ägarroll kan inte tilldelas via detta flöde");
+    }
     const result = await storage.updateUserTenantRole(req.params.id, {
       role,
       permissions,
@@ -1360,26 +1364,13 @@ app.patch("/api/system/user-roles/:id", requireAdmin, asyncHandler(async (req, r
       throw new NotFoundError("Användarroll hittades inte");
     }
     
-    // Update password if provided
-    if (password && result.userId) {
-      const email = result.userId.startsWith("email:") ? result.userId.replace("email:", "") : null;
-      if (email) {
-        const passwordHash = hashPassword(password);
-        await storage.upsertUser({
-          id: result.userId,
-          email,
-          passwordHash,
-        });
-      }
-    }
-    
     const tenantId = getTenantIdWithFallback(req);
     await storage.createAuditLog({
       tenantId,
       action: "update_user_role",
       resourceType: "user_tenant_roles",
       resourceId: result.id,
-      changes: { role, permissions, isActive, passwordChanged: !!password },
+      changes: { role, permissions, isActive },
     });
     
     res.json(result);
@@ -1723,12 +1714,12 @@ app.post("/api/system/onboard-tenant", requireAdmin, asyncHandler(async (req, re
       }
     }
 
-    const hashedPassword = hashPassword(adminUser.password);
+    // Inget lösenord — inloggning sker via Clerk; raden adopteras via
+    // verifierad e-post vid ägarens första inloggning.
     const user = await storage.createUser({
       email: adminUser.email,
       firstName: adminUser.firstName || null,
       lastName: adminUser.lastName || null,
-      passwordHash: hashedPassword,
       role: "admin",
       isActive: true,
     });
@@ -2689,7 +2680,9 @@ app.post("/api/invitations", requireAdmin, asyncHandler(async (req, res) => {
       throw new ValidationError("Giltig e-postadress krävs");
     }
 
-    const validRoles = ["owner", "admin", "planner", "technician", "user", "viewer"];
+    // "owner" kan ALDRIG bjudas in — ägarskap tilldelas endast via explicita
+    // ägarflöden, aldrig via e-postinbjudan (privilege escalation annars).
+    const validRoles = ["admin", "planner", "technician", "user", "viewer"];
     if (role && !validRoles.includes(role)) {
       throw new ValidationError("Ogiltig roll");
     }

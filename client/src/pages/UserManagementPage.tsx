@@ -50,8 +50,6 @@ import {
   Shield,
   ShieldCheck,
   UserCog,
-  Eye,
-  EyeOff,
   Mail,
   UserCircle,
   UsersRound,
@@ -134,7 +132,6 @@ export default function UserManagementPage() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<UserData | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<UserData | null>(null);
-  const [showPassword, setShowPassword] = useState(false);
 
   const [teamDialogOpen, setTeamDialogOpen] = useState(false);
   const [editingTeam, setEditingTeam] = useState<Team | null>(null);
@@ -258,7 +255,8 @@ export default function UserManagementPage() {
     mutationFn: (data: typeof form) => apiRequest("POST", "/api/admin/users", data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
-      toast({ title: "Användare skapad", description: "Kontot har skapats." });
+      queryClient.invalidateQueries({ queryKey: ["/api/invitations"] });
+      toast({ title: "Inbjudan skickad", description: "Användaren får ett mejl och loggar in via inloggningssidan. Rollen tilldelas automatiskt vid första inloggningen." });
       closeDialog();
     },
     onError: (err: any) => {
@@ -388,7 +386,6 @@ export default function UserManagementPage() {
   const closeDialog = () => {
     setDialogOpen(false);
     setEditingUser(null);
-    setShowPassword(false);
     setForm({ email: "", firstName: "", lastName: "", password: "", role: "user", resourceId: "" });
   };
 
@@ -438,11 +435,10 @@ export default function UserManagementPage() {
         role: form.role,
         resourceId: form.resourceId || null,
       };
-      if (form.password) data.password = form.password;
       updateMutation.mutate({ id: editingUser.id, data });
     } else {
-      if (!form.email || !form.password) {
-        toast({ title: "Saknade uppgifter", description: "E-post och lösenord krävs", variant: "destructive" });
+      if (!form.email) {
+        toast({ title: "Saknade uppgifter", description: "E-post krävs", variant: "destructive" });
         return;
       }
       createMutation.mutate(form);
@@ -729,7 +725,7 @@ export default function UserManagementPage() {
                         {pendingCount} {pendingCount === 1 ? "väntande inbjudan" : "väntande inbjudningar"}
                       </p>
                       <p className="text-muted-foreground">
-                        Inbjudna användare visas här först när de loggat in via sin magic-link.
+                        Inbjudna användare visas här först när de loggat in första gången via inloggningssidan.
                       </p>
                     </div>
                     <Button
@@ -1276,27 +1272,12 @@ export default function UserManagementPage() {
                 data-testid="input-email"
               />
             </div>
-            <div className="space-y-2">
-              <Label>{editingUser ? "Nytt lösenord (valfritt)" : "Lösenord *"}</Label>
-              <div className="relative">
-                <Input
-                  type={showPassword ? "text" : "password"}
-                  value={form.password}
-                  onChange={(e) => setForm({ ...form, password: e.target.value })}
-                  placeholder={editingUser ? "Lämna tomt för att behålla" : "Minst 6 tecken"}
-                  data-testid="input-password"
-                />
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="absolute right-0 top-0 h-full px-3"
-                  onClick={() => setShowPassword(!showPassword)}
-                >
-                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                </Button>
-              </div>
-            </div>
+            {!editingUser && (
+              <p className="text-sm text-muted-foreground">
+                Användaren får en inbjudan via e-post och loggar in via inloggningssidan.
+                Rollen tilldelas automatiskt vid första inloggningen.
+              </p>
+            )}
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Roll</Label>

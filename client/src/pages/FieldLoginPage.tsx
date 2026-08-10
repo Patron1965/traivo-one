@@ -1,12 +1,16 @@
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Truck } from "lucide-react";
-import { goToLogin } from "@/lib/auth-utils";
+import { useClerk } from "@clerk/react";
+import { useLocation } from "wouter";
 
 export default function FieldLoginPage() {
+  const { redirectToSignIn } = useClerk();
+  const [, setLocation] = useLocation();
+
   const handleLogin = () => {
     sessionStorage.setItem("field_login_redirect", "/mobile");
-    goToLogin("/mobile");
+    redirectToSignIn({ signInFallbackRedirectUrl: "/mobile" });
   };
 
   return (

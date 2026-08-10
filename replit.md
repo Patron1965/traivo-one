@@ -4,6 +4,7 @@
 **Frontend:** React, TypeScript, Vite, shadcn/ui, react-leaflet
 **Backend:** Express.js (primärt och enda API-ramverk — inför inte parallella ramverk), Node.js
 **Database:** PostgreSQL, Drizzle ORM
+**Auth:** Clerk (migrerat från Replit Auth 2026-08-10). Clerk middleware via `@clerk/express` i `server/index.ts`. JIT-provisioning i `server/middlewares/requireAuth.ts`. Session via `sessionClaims.userId` (migrated users = original Replit Auth ID som Clerk externalId; nya users = Clerk native ID).
 **AI/Optimization:** OpenAI, Geoapify (Routing/VRP), OSRM, OR-Tools (Python FastAPI)
 **Geocoding:** Geoapify, OpenStreetMap Nominatim
 **Validation:** Zod
@@ -38,6 +39,8 @@ Route-optimering & prediktiv planering (WeekPlanner: drag-drop, What-If, constra
 Aktiva "var-uppmärksam-på"-regler. Djupare detalj i `.agents/memory/`, `CHANGELOG.md` och ADR-docs.
 
 ### Säkerhet / prod
+- **Auth: Clerk (ej Replit Auth):** Inloggning via `/sign-in` (Clerk `<SignIn>`). Utloggning via `useClerk().signOut()`. JIT-provisioning i `server/middlewares/requireAuth.ts` (upsert users + processInvitations + ensureDefaultTenantAssignment vid första login). Bakåtkompatibel: `req.user.claims.sub` = `dbUser.id` via shim. Konfigurera i Auth-panelen, ej Clerk Dashboard.
+- **Mobil fältapp-auth (Traivo Go) är MEDVETET separat från Clerk:** `/api/mobile/login` (e-post+PIN / enbart PIN) autentiserar `resources` (fältarbetare), inte `users`, och mintar egna 24h-bearer-tokens (`isMobileAuthenticated`). Flödet har aldrig använt Replit Auth/passport och behölls avsiktligt vid Clerk-migreringen — fältarbetare har ofta inga användarkonton. Skydd: rate-limit + PIN-krav (resurs utan PIN kan ej logga in) + login-audit. Webbanvändare kan brygga till mobilappen via `/api/field/mobile-token` (kräver Clerk-session).
 - **Auto-tilldelning AV i prod:** `resolveFallbackTenantId()`=null i prod; nya användare måste bjudas in explicit (override `AUTO_ASSIGN_TENANT=true`, avrådes). `/api/me/tenant`=null för oinloggade.
 - **Demo-seed AV i prod:** `seedDatabase()` skippar demo utan `ENABLE_DEMO_SEED`; rensa rester via `scripts/kinab-reset-operational-data.ts --confirm RENSA-KINAB`.
 - **Auto-checkpoint kan committa raderingar:** kör `scripts/check-mass-deletion.ts --commits 50 --threshold 50` före `git push github main`. Recovery: `docs/disaster-recovery.md` §Scenario D.
