@@ -74,6 +74,10 @@ async function runImport(matrix: string[][], executeBody: Record<string, unknown
   });
   expect(mp.status).toBe(200);
 
+  // Task #1478: execute kräver aktuell validering (serverauktoritativ gate).
+  const val = await req("POST", `/api/import/objects-v2/${sessionId}/validate`, { userId: ADMIN });
+  expect(val.status).toBe(200);
+
   const exec = await req("POST", `/api/import/objects-v2/${sessionId}/execute`, {
     userId: ADMIN,
     body: executeBody,

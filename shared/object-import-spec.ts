@@ -118,6 +118,25 @@ export const CONTACT_PATTERNS: Record<string, string> = {
   telefon: "contact.phone",
 };
 
+// Task #1478 — kundrubriker → KANDIDAT-katalognamn (normaliserade). En synonym
+// ger bara träff om tenantens metadata_katalog faktiskt innehåller något av
+// kandidatnamnen (case-insensitive) — vi mappar aldrig blint till ett namn som
+// inte finns. Tröskeln för fuzzy sänks ALDRIG; det här är exakta alias.
+// OBS: alias:a aldrig bara "namn" (objektnamns-/kontaktfälla, se KNOWN_FIELDS).
+export const METADATA_HEADER_SYNONYMS: Record<string, string[]> = {
+  "objekt typ": ["objekttyp", "typ"],
+  objekttyp: ["objekttyp", "typ"],
+  objekttype: ["objekttyp", "typ"],
+  region: ["område", "region"],
+  omrade: ["område"],
+  butik: ["butiksnummer", "butik"],
+  butiksnr: ["butiksnummer"],
+  "butik nr": ["butiksnummer"],
+  pantkarl: ["pantkärl"],
+  tomningsdag: ["tömningsdag"],
+  farg: ["färg"],
+};
+
 // §6.4 — valideringsregler per fält.
 export const FIELD_RULES: Record<string, { type: ValidatorType; required: boolean }> = {
   name: { type: "text", required: true },

@@ -28,6 +28,22 @@ very mis-map trap we are removing. Leave it as a manual one-click mapping. (Axfo
 file is the unusual case that uses `Objektnamn` for the object and `Namn` for the
 contact person.)
 
+## Tenant-katalogmedvetna alias & aldrig-tyst-tapp (2026-08-10)
+- Auto-match får även mappa mot tenantens AKTIVA metadata-katalog (namn/visningsnamn
+  + kundrubrik-synonymer), men en synonym ger BARA träff om kandidatnamnet faktiskt
+  finns i katalogen — aldrig blind mappning. Statiska alias + "namn" vinner alltid;
+  fuzzy-tröskeln 0.8 gäller även katalognamn.
+- **Regel: omatchade kolumner med data får aldrig tappas tyst.** Gaten måste vara
+  serverauktoritativ: execute kräver aktuell validering (mappningsändring ogiltiggör
+  den) + uttryckligt kvitto när data-bärande kolumner saknar mappning. En ren
+  UI-checkbox räcker inte — API-klienter kan förbigå den.
+- "Ignorera kolumn" måste persisteras som explicit `__empty`-mappning (aldrig
+  delete:as) — annars går medvetet ignorerad inte att skilja från omatchad.
+- Arkiverad katalog-klon kan skugga aktiv rad med samma namn (Objekttyp-fällan):
+  läs-/skrivvägar måste föredra aktiv rad, och restore/lazy-create av katalograd
+  måste serialiseras per (tenant, namn) med tx-bundet advisory-lock (namn-unikhet
+  är app-nivå utan DB-constraint).
+
 ## Obligatorisk-regler (produktregel 2026-08-05)
 - Metadata-mappningar är ALDRIG required i validateRow (även om klienten skickar required:true).
 - Tomt objektnamn = WARNING, inte error: raden importeras och objektet får fallback-namn (name → system_id → interimId → "Namnlöst objekt") i execute.

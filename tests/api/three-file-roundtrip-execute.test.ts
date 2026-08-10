@@ -94,7 +94,13 @@ async function runImport(
 
   const exec = await req("POST", `/api/import/objects-v2/${sessionId}/execute`, {
     userId: ADMIN,
-    body: { customerId: CUSTOMER_ID, overwriteMetadata: opts.overwriteMetadata ?? false },
+    body: {
+      customerId: CUSTOMER_ID,
+      overwriteMetadata: opts.overwriteMetadata ?? false,
+      // Task #1478: exportfilerna innehåller info-kolumner utan mappning —
+      // kvittera uttryckligen att de hoppas över (serverauktoritativ gate).
+      acknowledgeUnmappedColumns: (val.body.summary.unmapped_columns?.length ?? 0) > 0,
+    },
   });
   expect(exec.status).toBe(202);
 

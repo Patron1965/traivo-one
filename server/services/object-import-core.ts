@@ -17,6 +17,7 @@ import {
   ColumnMappings,
   FIELD_RULES,
   KNOWN_FIELDS,
+  METADATA_HEADER_SYNONYMS,
   normalizeHeader,
   ValidatorType,
 } from "@shared/object-import-spec";
@@ -82,11 +83,64 @@ const ALIAS_TO_KEY: Record<string, string> = {
 };
 const ALIAS_KEYS = Object.keys(ALIAS_TO_KEY);
 
+// Task #1478 — tenant-katalogmedvetna alias: normaliserad rubrik → "metadata.<exakt namn>".
+// Byggs per upload från tenantens AKTIVA metadata_katalog-namn (+ visningsnamn
+// + METADATA_HEADER_SYNONYMS). Namn som redan ägs av de statiska aliasen
+// (KNOWN_FIELDS/ADDRESS/CONTACT) eller är "namn" (kontakt-/objektnamnsfälla)
+// utesluts — statiska alias vinner alltid.
+export type MetadataHeaderAliases = Record<string, string>;
+
+export function buildMetadataHeaderAliases(
+  catalog: { namn: string; visningsnamn?: string | null }[],
+): MetadataHeaderAliases {
+  const staticKeys = new Set([
+    ...Object.keys(KNOWN_FIELDS),
+    ...Object.keys(ADDRESS_PATTERNS),
+    ...Object.keys(CONTACT_PATTERNS),
+    "namn",
+  ]);
+  const byNormalizedName = new Map<string, string>(); // normaliserat namn → exakt namn
+  for (const k of catalog) {
+    const namn = (k.namn ?? "").trim();
+    if (!namn) continue;
+    const norm = normalizeHeader(namn);
+    if (!byNormalizedName.has(norm)) byNormalizedName.set(norm, namn);
+  }
+  const aliases: MetadataHeaderAliases = {};
+  const add = (aliasNorm: string, exactNamn: string) => {
+    if (!aliasNorm || staticKeys.has(aliasNorm)) return;
+    if (!(aliasNorm in aliases)) aliases[aliasNorm] = `metadata.${exactNamn}`;
+  };
+  // 1. Katalognamn + visningsnamn som exakta alias.
+  for (const k of catalog) {
+    const namn = (k.namn ?? "").trim();
+    if (!namn) continue;
+    add(normalizeHeader(namn), namn);
+    const visning = (k.visningsnamn ?? "").trim();
+    if (visning) add(normalizeHeader(visning), namn);
+  }
+  // 2. Kända kundrubrik-synonymer — endast om kandidatnamnet finns i katalogen.
+  for (const [aliasNorm, candidates] of Object.entries(METADATA_HEADER_SYNONYMS)) {
+    for (const cand of candidates) {
+      const exact = byNormalizedName.get(normalizeHeader(cand));
+      if (exact) {
+        add(aliasNorm, exact);
+        break;
+      }
+    }
+  }
+  return aliases;
+}
+
 /**
- * §6.3 auto_match: exakt → adress/kontakt-punktnotation → metadata.* → fuzzy.
- * Returnerar API-nyckeln eller null (kräver manuell koppling).
+ * §6.3 auto_match: exakt → adress/kontakt-punktnotation → metadata.* →
+ * tenant-katalogalias → fuzzy. Returnerar API-nyckeln eller null (kräver
+ * manuell koppling). Fuzzy-tröskeln (0.8) sänks aldrig.
  */
-export function autoMatchColumn(header: string | null | undefined): string | null {
+export function autoMatchColumn(
+  header: string | null | undefined,
+  metadataAliases?: MetadataHeaderAliases,
+): string | null {
   if (header == null) return null;
   const normalized = normalizeHeader(header);
   if (!normalized) return null;
@@ -94,10 +148,17 @@ export function autoMatchColumn(header: string | null | undefined): string | nul
   if (normalized in ADDRESS_PATTERNS) return ADDRESS_PATTERNS[normalized];
   if (normalized in CONTACT_PATTERNS) return CONTACT_PATTERNS[normalized];
   if (normalized.startsWith("metadata.")) return normalized; // behåll som metadata-fält
+  // Task #1478: exakt träff mot tenantens metadata-katalog (namn/visningsnamn/synonym).
+  if (metadataAliases && normalized in metadataAliases) return metadataAliases[normalized];
   // Steg 4: fuzzy mot alias-rubrikerna (mappa träffen tillbaka till API-nyckel),
   // med API-nycklarna som sista fallback.
   const aliasHit = fuzzyMatch(normalized, ALIAS_KEYS);
   if (aliasHit) return ALIAS_TO_KEY[aliasHit.key];
+  // Fuzzy mot tenantens katalognamn (fångar stavfel som "tömningsdg").
+  if (metadataAliases) {
+    const metaHit = fuzzyMatch(normalized, Object.keys(metadataAliases));
+    if (metaHit) return metadataAliases[metaHit.key];
+  }
   const keyHit = fuzzyMatch(normalized, ALL_KNOWN_KEYS);
   return keyHit ? keyHit.key : null;
 }
@@ -124,6 +185,7 @@ export interface DetectedColumn {
 export function buildColumns(
   systemHeaders: (string | null)[],
   userHeaders: (string | null)[],
+  metadataAliases?: MetadataHeaderAliases,
 ): DetectedColumn[] {
   const count = Math.max(systemHeaders.length, userHeaders.length);
   const cols: DetectedColumn[] = [];
@@ -131,7 +193,8 @@ export function buildColumns(
     const header = systemHeaders[i] ?? null;
     const userHeader = userHeaders[i] ?? null;
     // Försök matcha på systemrubriken först, annars på användarrubriken.
-    const autoMatch = autoMatchColumn(header) ?? autoMatchColumn(userHeader);
+    const autoMatch =
+      autoMatchColumn(header, metadataAliases) ?? autoMatchColumn(userHeader, metadataAliases);
     cols.push({
       index: i,
       header,

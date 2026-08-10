@@ -4,6 +4,7 @@ import {
   similarity,
   fuzzyMatch,
   autoMatchColumn,
+  buildMetadataHeaderAliases,
   categoryForTarget,
   buildColumns,
   detectHeaderRows,
@@ -493,5 +494,67 @@ describe("detectHeaderRows — single header with long-value data row", () => {
     const detection = detectHeaderRows(matrix);
     expect(detection.systemHeaderRow).toBe(0);
     expect(detection.dataStartRow).toBe(1); // ingen datarad klassas som header
+  });
+});
+
+// Task #1478 — tenant-katalogmedvetna alias: kundrubriker som "Objekt typ",
+// "Region", "Butik" auto-matchas mot befintliga katalogfält; omatchade
+// kolumner får aldrig tappas tyst.
+describe("buildMetadataHeaderAliases + autoMatchColumn (Task #1478)", () => {
+  const katalog = [
+    { namn: "Typ" },
+    { namn: "Område" },
+    { namn: "Butiksnummer" },
+    { namn: "Tömningsdag" },
+    { namn: "Färg", visningsnamn: "Kulör" },
+    { namn: "Antal" },
+    { namn: "Namn" }, // kontaktfält — får ALDRIG bli alias
+    { namn: "Titel" }, // krockar med statiskt CONTACT_PATTERNS-alias
+  ];
+  const aliases = buildMetadataHeaderAliases(katalog);
+
+  it("matchar exakta katalognamn (case-insensitive) till metadata.<exakt namn>", () => {
+    expect(autoMatchColumn("Tömningsdag", aliases)).toBe("metadata.Tömningsdag");
+    expect(autoMatchColumn("typ", aliases)).toBe("metadata.Typ");
+    expect(autoMatchColumn("ANTAL", aliases)).toBe("metadata.Antal");
+  });
+
+  it("matchar visningsnamn", () => {
+    expect(autoMatchColumn("Kulör", aliases)).toBe("metadata.Färg");
+  });
+
+  it("matchar kundrubrik-synonymer endast när kandidatfältet finns i katalogen", () => {
+    expect(autoMatchColumn("Objekt typ", aliases)).toBe("metadata.Typ");
+    expect(autoMatchColumn("Objekttyp", aliases)).toBe("metadata.Typ");
+    expect(autoMatchColumn("Region", aliases)).toBe("metadata.Område");
+    expect(autoMatchColumn("Butik", aliases)).toBe("metadata.Butiksnummer");
+    // Pantkärl finns inte i katalogen → ingen auto-match (manuell mappning krävs).
+    const utanPant = buildMetadataHeaderAliases([{ namn: "Typ" }]);
+    expect(autoMatchColumn("Pantkärl", utanPant)).toBeNull();
+    // Med Pantkärl i katalogen matchas rubriken.
+    const medPant = buildMetadataHeaderAliases([{ namn: "Pantkärl" }]);
+    expect(autoMatchColumn("Pantkärl", medPant)).toBe("metadata.Pantkärl");
+  });
+
+  it("statiska alias vinner alltid över katalogfält med samma rubrik", () => {
+    // "Titel" är kontaktfält (contact.title) — katalogfältet "Titel" får inte kapa det.
+    expect(autoMatchColumn("Titel", aliases)).toBe("contact.title");
+    // "Namn" alias:as aldrig (objektnamns-/kontaktfälla).
+    expect(autoMatchColumn("Namn", aliases)).toBeNull();
+    // Befintliga kända fält opåverkade.
+    expect(autoMatchColumn("Objektnamn", aliases)).toBe("name");
+    expect(autoMatchColumn("Intrumnummer", aliases)).toBe("interim_id");
+  });
+
+  it("fuzzy-matchar stavfel mot katalognamn utan att sänka tröskeln", () => {
+    expect(autoMatchColumn("Tömningsdg", aliases)).toBe("metadata.Tömningsdag"); // 0.9
+    expect(autoMatchColumn("Xyz", aliases)).toBeNull();
+  });
+
+  it("buildColumns använder aliasen och markerar omatchade kolumner", () => {
+    const cols = buildColumns(["Objektnamn", "Objekt typ", "Pantkärl"], [], aliases);
+    expect(cols[0]).toMatchObject({ autoMatch: "name", matched: true });
+    expect(cols[1]).toMatchObject({ autoMatch: "metadata.Typ", matched: true });
+    expect(cols[2]).toMatchObject({ autoMatch: null, matched: false });
   });
 });

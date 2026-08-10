@@ -128,7 +128,17 @@ interface DuplicateWarning {
   existing: Array<{ id: string; objectNumber: string | null; name: string; address: string | null }>;
 }
 interface ValidationResponse {
-  summary: { total_rows: number; valid: number; warning: number; invalid: number; new_roots?: number } | null;
+  summary: {
+    total_rows: number;
+    valid: number;
+    warning: number;
+    invalid: number;
+    new_roots?: number;
+    // Task #1478: kolumner med data som INTE importeras (omatchade) + mappade
+    // metadatafält vars katalogpost är arkiverad (återställs vid import).
+    unmapped_columns?: Array<{ index: number; header: string }>;
+    archived_metadata_fields?: string[];
+  } | null;
   rows: ValidatedRow[];
   duplicateWarnings?: DuplicateWarning[];
 }
@@ -527,6 +537,10 @@ export function ObjectImportV2Flow() {
     onSuccess: () => {
       // Spara matchningen som användaren faktiskt bekräftat (inte mellanlägen).
       persistMapping(columns, mappings);
+      // Task #1478: ändrade mappningar gör tidigare validering (och bekräftelsen
+      // av omatchade kolumner) inaktuell — kräv ny valideringskörning.
+      setValidation(null);
+      setConfirmUnmapped(false);
       setStep(4);
     },
     onError: (err: Error) => toast({ title: "Kunde inte spara mappning", description: err.message, variant: "destructive" }),
@@ -537,7 +551,11 @@ export function ObjectImportV2Flow() {
       const res = await apiRequest("POST", `/api/import/objects-v2/${sessionId}/validate`, {});
       return (await res.json()) as ValidationResponse;
     },
-    onSuccess: (data) => setValidation(data),
+    onSuccess: (data) => {
+      setValidation(data);
+      // Task #1478: ny valideringskörning kräver ny bekräftelse av omatchade kolumner.
+      setConfirmUnmapped(false);
+    },
     onError: (err: Error) => toast({ title: "Validering misslyckades", description: err.message, variant: "destructive" }),
   });
 
@@ -549,6 +567,9 @@ export function ObjectImportV2Flow() {
         customerId: customerId || undefined,
         skipRowNumbers: Array.from(skippedRows),
         overwriteMetadata,
+        // Task #1478: servern kräver uttryckligt kvitto när kolumner med data
+        // saknar mappning — checkboxen i steg 4 speglar detta fält.
+        acknowledgeUnmappedColumns: confirmUnmapped,
       });
       return (await res.json()) as { session_id: string; status: string };
     },
@@ -629,7 +650,10 @@ export function ObjectImportV2Flow() {
     setMappings((prev) => {
       const next = { ...prev };
       if (target === TARGET_NONE) {
-        delete next[String(colIndex)];
+        // Task #1478: "Ignorera kolumn" persisteras som explicit __empty-mappning
+        // (inte borttagen) så att servern kan skilja MEDVETET ignorerad från
+        // omatchad — bara omatchade kolumner varnas som "importeras inte".
+        next[String(colIndex)] = { target: TARGET_NONE, type: "standard" };
       } else {
         next[String(colIndex)] = {
           target,
@@ -658,6 +682,7 @@ export function ObjectImportV2Flow() {
     setTotalRows(0);
     setMappings({});
     setValidation(null);
+    setConfirmUnmapped(false);
     setResult(null);
     setCustomerId("");
     setSkippedRows(new Set());
@@ -669,7 +694,18 @@ export function ObjectImportV2Flow() {
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
+  // Task #1478: omatchade kolumner kräver aktiv bekräftelse innan import.
+  const [confirmUnmapped, setConfirmUnmapped] = useState(false);
+
   const mappedCount = Object.keys(mappings).length;
+  // Task #1478: kolumner utan mappning importeras inte — de ska aldrig försvinna
+  // tyst. Visas som banner + badge i steg 3 och kräver bekräftelse i steg 4.
+  // Explicit "Ignorera kolumn" (target __empty) räknas INTE som omatchad —
+  // endast kolumner helt utan mappning flaggas.
+  const unmappedColumns = columns.filter((c) => {
+    const m = mappings[String(c.index)];
+    return !m || !m.target;
+  });
   const hasNameMapping = Object.values(mappings).some((m) => m.target === "name");
   const hasCustomerMapping = Object.values(mappings).some(
     (m) => m.target === "customer_name" || m.target === "customer_ref",
@@ -860,6 +896,26 @@ export function ObjectImportV2Flow() {
             {/* Objektnamn är inte längre ett hårt krav: saknas namnmatchning
                 (eller är celler tomma) importeras objekten ändå och får sitt
                 nummer som namn. Informativ hint, ingen spärr. */}
+            {unmappedColumns.length > 0 && (
+              <div
+                className="flex items-start gap-2 rounded-md border border-warning/40 bg-warning/10 p-3 text-sm"
+                data-testid="banner-unmapped-columns"
+              >
+                <AlertTriangle className="h-5 w-5 shrink-0 mt-0.5 text-warning" />
+                <div className="space-y-1">
+                  <p className="font-medium text-foreground">
+                    {unmappedColumns.length} kolumn(er) är inte matchade och importeras inte
+                  </p>
+                  <p className="text-muted-foreground">
+                    {unmappedColumns
+                      .map((c) => c.userHeader || c.header || `Kolumn ${c.index + 1}`)
+                      .join(", ")}{" "}
+                    — välj ett fält i listan för varje kolumn du vill ha med, eller lämna som det är
+                    för att medvetet hoppa över dem.
+                  </p>
+                </div>
+              </div>
+            )}
             {!hasNameMapping && (
               <div className="flex items-center gap-2 rounded-md bg-muted p-3 text-sm text-muted-foreground">
                 <AlertCircle className="h-4 w-4" />
@@ -881,6 +937,15 @@ export function ObjectImportV2Flow() {
                         {/* Röd markering på kolumner matchade mot obligatoriska fält
                             (Objektnamn). Tomma celler fäller inte raden — objektet får
                             sitt nummer som namn. */}
+                        {!mappings[String(c.index)] && (
+                          <Badge
+                            variant="outline"
+                            className="shrink-0 border-warning/50 text-warning px-1.5 py-0 text-[10px] font-normal"
+                            data-testid={`badge-unmapped-${c.index}`}
+                          >
+                            Importeras inte
+                          </Badge>
+                        )}
                         {current === "name" && (
                           <Badge
                             variant="outline"
@@ -1047,6 +1112,50 @@ export function ObjectImportV2Flow() {
                     </a>
                   </div>
                 )}
+                {(validation.summary.unmapped_columns?.length ?? 0) > 0 && (
+                  <div
+                    className="space-y-2 rounded-md border border-warning/40 bg-warning/10 p-3 text-sm"
+                    data-testid="banner-validation-unmapped-columns"
+                  >
+                    <div className="flex items-start gap-2">
+                      <AlertTriangle className="h-5 w-5 shrink-0 mt-0.5 text-warning" />
+                      <div className="space-y-1">
+                        <p className="font-medium text-foreground">
+                          {validation.summary.unmapped_columns!.length} kolumn(er) med data importeras
+                          inte
+                        </p>
+                        <p className="text-muted-foreground">
+                          {validation.summary.unmapped_columns!.map((c) => c.header).join(", ")} — gå
+                          tillbaka till matchningen om värdena ska med.
+                        </p>
+                      </div>
+                    </div>
+                    <label className="ml-7 flex items-center gap-2 text-foreground">
+                      <Checkbox
+                        checked={confirmUnmapped}
+                        onCheckedChange={(v) => setConfirmUnmapped(v === true)}
+                        data-testid="checkbox-confirm-unmapped"
+                      />
+                      Jag förstår att dessa kolumner inte importeras
+                    </label>
+                  </div>
+                )}
+                {(validation.summary.archived_metadata_fields?.length ?? 0) > 0 && (
+                  <div
+                    className="flex items-start gap-2 rounded-md border border-warning/40 bg-warning/10 p-3 text-sm"
+                    data-testid="banner-archived-metadata-fields"
+                  >
+                    <AlertTriangle className="h-5 w-5 shrink-0 mt-0.5 text-warning" />
+                    <div className="space-y-1">
+                      <p className="font-medium text-foreground">Arkiverade metadatafält återställs</p>
+                      <p className="text-muted-foreground">
+                        {validation.summary.archived_metadata_fields!.join(", ")} är arkiverade i
+                        inställningarna. Fälten återställs automatiskt vid importen så att värdena
+                        blir synliga på objekten.
+                      </p>
+                    </div>
+                  </div>
+                )}
                 {(validation.summary.new_roots ?? 0) > 0 && (
                   <div
                     className="flex items-start gap-2 rounded-md border border-warning/40 bg-warning/10 p-3 text-sm"
@@ -1144,7 +1253,10 @@ export function ObjectImportV2Flow() {
               </Button>
               <Button
                 onClick={() => setStep(5)}
-                disabled={!validation?.summary}
+                disabled={
+                  !validation?.summary ||
+                  ((validation.summary.unmapped_columns?.length ?? 0) > 0 && !confirmUnmapped)
+                }
                 data-testid="button-to-import"
               >
                 Fortsätt till import

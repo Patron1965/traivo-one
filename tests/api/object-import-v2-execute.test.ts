@@ -276,6 +276,8 @@ describe("Import 2.0 — uppdaterings-rad med påhittad förälder behåller pla
     const up = await req("POST", "/api/import/objects-v2/upload", { userId: ADMIN, body: { matrix } });
     const sessionId = up.body.session_id as string;
     await req("PUT", `/api/import/objects-v2/${sessionId}/mappings`, { userId: ADMIN, body: { mappings } });
+    // Task #1478: execute kräver aktuell validering.
+    await req("POST", `/api/import/objects-v2/${sessionId}/validate`, { userId: ADMIN });
     const exec = await req("POST", `/api/import/objects-v2/${sessionId}/execute`, {
       userId: ADMIN,
       body: { customerId: CUSTOMER_ID },
@@ -417,7 +419,9 @@ describe("Import 2.0 — system_parent_id DB-referens", () => {
     const sessionId = up.body.session_id as string;
     await req("PUT", `/api/import/objects-v2/${sessionId}/mappings`, { userId: ADMIN, body: { mappings: SP_MAPPINGS } });
 
-    // OBS: ingen validate här — direkt till execute.
+    // Task #1478: execute kräver numera en aktuell validering (serverauktoritativ
+    // gate mot tyst datatapp) — became_roots-varningen testas fortfarande nedan.
+    await req("POST", `/api/import/objects-v2/${sessionId}/validate`, { userId: ADMIN });
     const exec = await req("POST", `/api/import/objects-v2/${sessionId}/execute`, {
       userId: ADMIN,
       body: { customerId: CUSTOMER_ID },

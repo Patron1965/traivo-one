@@ -40,7 +40,7 @@ import {
   getObjectsPrimaryCustomerIds,
 } from "../services/object-customer";
 import { storage } from "../storage";
-import { writeObjectImportMetadataBatch } from "../metadata-queries";
+import { isInterimKatalogNamn, writeObjectImportMetadataBatch } from "../metadata-queries";
 import {
   IMPORT_UNDO_WINDOW_MS,
   objectSnapshotColumns,
@@ -48,6 +48,7 @@ import {
 } from "../services/import-undo";
 import {
   buildColumns,
+  buildMetadataHeaderAliases,
   buildCompositeObject,
   groupMetadataForWrite,
   buildHierarchyPlan,
@@ -86,13 +87,19 @@ type RawRow = Record<string, string>;
 function autoMappings(columns: DetectedColumn[]): ColumnMappings {
   const mappings: ColumnMappings = {};
   for (const col of columns) {
-    if (col.autoMatch && col.autoMatch !== "__empty") {
-      mappings[String(col.index)] = {
-        target: col.autoMatch,
-        type: categoryForTarget(col.autoMatch),
-        required: col.autoMatch === "name",
-      };
+    if (!col.autoMatch) continue;
+    // Task #1478: auto-ignorerade kolumner (t.ex. "Släktnamn" → __empty)
+    // persisteras som explicit __empty-mappning så att de inte falskflaggas
+    // som omatchade i valideringens unmapped_columns.
+    if (col.autoMatch === "__empty") {
+      mappings[String(col.index)] = { target: "__empty", type: "standard" };
+      continue;
     }
+    mappings[String(col.index)] = {
+      target: col.autoMatch,
+      type: categoryForTarget(col.autoMatch),
+      required: col.autoMatch === "name",
+    };
   }
   return mappings;
 }
@@ -130,6 +137,10 @@ const executeSchema = z.object({
   // importens värden (äkta export → redigera → importera). Default false =
   // bakåtkompatibelt "första-skrivningen-vinner" (befintliga värden bevaras).
   overwriteMetadata: z.boolean().optional(),
+  // Task #1478: uttryckligt kvitto på att kolumner med data som saknar mappning
+  // INTE importeras. Krävs av servern när valideringens unmapped_columns är
+  // icke-tom — UI-checkboxen är bara spegeln av detta fält.
+  acknowledgeUnmappedColumns: z.boolean().optional(),
 });
 
 // Task #1430 — systemfält som behövs för matchning (egen grupp i "Matcha data").
@@ -232,7 +243,17 @@ export function registerObjectImportV2Routes(app: Express): void {
       const detection = detectHeaderRows(matrix);
       const systemHeaders = matrix[detection.systemHeaderRow] ?? [];
       const userHeaders = detection.userHeaderRow != null ? matrix[detection.userHeaderRow] ?? [] : [];
-      const columns = buildColumns(systemHeaders, userHeaders);
+      // Task #1478: auto-matcha även mot tenantens AKTIVA metadata-katalog
+      // (namn/visningsnamn + kända kundrubrik-synonymer) så att rubriker som
+      // "Tömningsdag", "Objekt typ" eller "Region" inte lämnas omatchade.
+      const aktivKatalog = await db
+        .select({ namn: metadataKatalog.namn, visningsnamn: metadataKatalog.visningsnamn })
+        .from(metadataKatalog)
+        .where(and(eq(metadataKatalog.tenantId, tenantId), isNull(metadataKatalog.deletedAt)));
+      const metadataAliases = buildMetadataHeaderAliases(
+        aktivKatalog.filter((k) => !isInterimKatalogNamn(k.namn)),
+      );
+      const columns = buildColumns(systemHeaders, userHeaders, metadataAliases);
 
       const dataRows = matrix.slice(detection.dataStartRow);
       const rawRows: RawRow[] = dataRows
@@ -309,6 +330,21 @@ export function registerObjectImportV2Routes(app: Express): void {
     }),
   );
 
+  // Task #1478: kanonisk representation av mappningarna (sorterade nycklar).
+  // Valideringen persisterar snapshoten av de mappningar den räknade på, och
+  // execute godkänner bara valideringen om sessionens AKTUELLA mappningar
+  // matchar — då är gaten revision-säker även om PUT /mappings och POST
+  // /validate interfolieras (stale validering avvisas alltid).
+  const canonicalMappings = (mappings: ColumnMappings): string =>
+    JSON.stringify(
+      Object.keys(mappings)
+        .sort()
+        .map((k) => {
+          const m = mappings[k] as unknown as Record<string, unknown>;
+          return [k, Object.keys(m).sort().map((f) => [f, m[f]])];
+        }),
+    );
+
   // ── PUT /:id/mappings — spara mappningar
   app.put(
     "/api/import/objects-v2/:id/mappings",
@@ -320,7 +356,9 @@ export function registerObjectImportV2Routes(app: Express): void {
 
       const [updated] = await db
         .update(objectImportSessions)
-        .set({ mappings: parsed.data.mappings as any, status: "mapping", updatedAt: new Date() })
+        // Task #1478: ändrade mappningar gör tidigare valideringsresultat
+        // inaktuellt — rensa det så att sammanfattningen aldrig visar gammal data.
+        .set({ mappings: parsed.data.mappings as any, status: "mapping", validation: null, updatedAt: new Date() })
         .where(and(eq(objectImportSessions.id, req.params.id), eq(objectImportSessions.tenantId, tenantId)))
         .returning();
       res.json({ session_id: updated.id, mappings: updated.mappings, status: updated.status });
@@ -629,6 +667,46 @@ export function registerObjectImportV2Routes(app: Express): void {
         }
       }
 
+      // Task #1478: omatchade kolumner får ALDRIG tappas tyst. Lista kolumner
+      // som (a) saknar mappning (explicit "__empty" = medvetet ignorerad och
+      // räknas inte) och (b) faktiskt innehåller data i någon rad.
+      const sessionColumns = (session.columns as { index: number; header: string | null; userHeader: string | null }[]) ?? [];
+      const unmappedColumns = sessionColumns
+        .filter((c) => {
+          const m = mappings[String(c.index)];
+          if (m && m.target && m.target !== "__empty") return false;
+          if (m && m.target === "__empty") return false; // medvetet ignorerad
+          return rawRows.some((r) => (r[String(c.index)] ?? "").trim() !== "");
+        })
+        .map((c) => ({
+          index: c.index,
+          header: c.userHeader || c.header || `Kolumn ${c.index + 1}`,
+        }));
+
+      // Task #1478: mappade metadata-fält vars katalogpost är ARKIVERAD skulle
+      // annars skrivas osynligt (värdena filtreras bort i alla läsvägar).
+      // Flagga dem — vid execute återställs (avarkiveras) fältet så värdena syns.
+      const mappedMetadataNames = Array.from(
+        new Set(
+          Object.values(mappings)
+            .filter((m) => m.target.startsWith("metadata.") && !m.target.slice("metadata.".length).includes("."))
+            .map((m) => m.target.slice("metadata.".length)),
+        ),
+      );
+      let archivedMetadataFields: string[] = [];
+      if (mappedMetadataNames.length) {
+        const katRows = await db
+          .select({ namn: metadataKatalog.namn, deletedAt: metadataKatalog.deletedAt })
+          .from(metadataKatalog)
+          .where(and(eq(metadataKatalog.tenantId, tenantId), inArray(metadataKatalog.namn, mappedMetadataNames)));
+        // Ett namn räknas som arkiverat ENDAST om ingen aktiv rad finns
+        // (katalogen kan ha en arkiverad klon + en aktiv rad med samma namn).
+        const activeNames = new Set(katRows.filter((k) => k.deletedAt == null).map((k) => k.namn));
+        archivedMetadataFields = Array.from(
+          new Set(katRows.filter((k) => k.deletedAt != null && !activeNames.has(k.namn)).map((k) => k.namn)),
+        );
+      }
+
       const rows = Array.from(byRow.values());
       const summary = {
         total_rows: rows.length,
@@ -646,8 +724,18 @@ export function registerObjectImportV2Routes(app: Express): void {
                 (i.field === "interim_parent_id" || i.field === "system_parent_id"),
             ),
         ).length,
+        // Task #1478: kolumner med data som inte importeras + arkiverade
+        // metadata-mål (återställs vid execute) — visas i wizardens sammanfattning.
+        unmapped_columns: unmappedColumns,
+        archived_metadata_fields: archivedMetadataFields,
       };
-      const validation = { summary, rows, duplicateWarnings };
+      const validation = {
+        summary,
+        rows,
+        duplicateWarnings,
+        // Task #1478: bind valideringen till exakt de mappningar den räknades på.
+        mappingsSnapshot: canonicalMappings(mappings),
+      };
 
       // §6.1 ImportRow: persistera per-rad-livscykel (pending → valid/invalid).
       // Skriv om hela radmängden för sessionen (delete + bulk-insert) så att
@@ -812,6 +900,33 @@ export function registerObjectImportV2Routes(app: Express): void {
       const rawRows = (session.rawRows as RawRow[]) ?? [];
       if (Object.keys(mappings).length === 0) {
         throw new ValidationError("Inga kolumnmappningar — matcha kolumner och validera först.");
+      }
+
+      // Task #1478: serverauktoritativ gate mot tyst datatapp. Execute kräver en
+      // AKTUELL validering (PUT /mappings nollar session.validation, så en
+      // sparad validering är alltid bunden till gällande mappningar). Om
+      // valideringen flaggar kolumner med data utan mappning krävs dessutom ett
+      // uttryckligt kvitto i request-bodyn — UI-vägen kan inte förbigås via API.
+      const storedValidation = session.validation as
+        | {
+            summary?: { unmapped_columns?: Array<{ index: number; header: string }> };
+            mappingsSnapshot?: string;
+          }
+        | null;
+      if (!storedValidation?.summary) {
+        throw new ValidationError("Ingen aktuell validering — kör validering efter senaste mappningsändring.");
+      }
+      // Revision-check: valideringen måste vara räknad på exakt de mappningar
+      // sessionen har NU (skyddar mot interfolierad PUT /mappings ↔ validate).
+      if (storedValidation.mappingsSnapshot !== canonicalMappings(mappings)) {
+        throw new ValidationError("Valideringen gjordes mot äldre mappningar — kör validering igen.");
+      }
+      const unmappedWithData = storedValidation.summary.unmapped_columns ?? [];
+      if (unmappedWithData.length > 0 && parsed.data.acknowledgeUnmappedColumns !== true) {
+        throw new ValidationError(
+          `Kolumner med data importeras inte: ${unmappedWithData.map((c) => c.header).join(", ")}. ` +
+            "Mappa kolumnerna eller bekräfta uttryckligen att de ska hoppas över (acknowledgeUnmappedColumns).",
+        );
       }
 
       // Task #1437: INGEN automatisk kundkoppling. En kund kopplas ENDAST när
@@ -1192,39 +1307,79 @@ export function registerObjectImportV2Routes(app: Express): void {
             .select()
             .from(metadataKatalog)
             .where(eq(metadataKatalog.tenantId, tenantId));
-          for (const k of rows) katalogCache.set(k.namn, k);
+          // Task #1478: katalogen kan innehålla både en AKTIV rad och arkiverade
+          // kloner med samma namn — den aktiva raden måste alltid vinna i cachen,
+          // annars fastnar importvärden på en arkiverad post och döljs i alla
+          // läsvägar (Objekttyp-fällan).
+          for (const k of rows) {
+            const prev = katalogCache.get(k.namn);
+            if (!prev || (prev.deletedAt != null && k.deletedAt == null)) {
+              katalogCache.set(k.namn, k);
+            }
+          }
         }
         const ensureKatalogRow = async (
           namn: string,
           datatyp: "string" | "json",
         ): Promise<MetadataKatalog | null> => {
           const cached = katalogCache.get(namn);
-          if (cached) return cached;
+          // Aktiv cachad rad → använd direkt (cachen föredrar aktiva rader).
+          if (cached && cached.deletedAt == null) return cached;
+          // Task #1478: arkiverad post återställs (skriva in i en arkiverad post
+          // vore ett nytt tyst tapp) och saknad post lazy-skapas. Namn-unikhet är
+          // app-nivå (ingen DB-constraint), så restore/skapande serialiseras per
+          // (tenant, namn) med ett transaktionsbundet advisory-lock — annars kan
+          // parallella körningar lämna två aktiva rader med samma namn.
           try {
-            // Task #1441: interim-katalogposten klassas som system-/internfält
-            // direkt vid lat-skapande (dold från vanliga metadatavyer, värde-
-            // read-only utanför importvägen).
-            const isInterim = namn === OBJEKTMALL_INTERIM_METADATA_FALT;
-            const [created] = await db
-              .insert(metadataKatalog)
-              .values({
-                tenantId,
-                namn,
-                datatyp,
-                kategori: "import",
-                ...(isInterim ? { isSystem: true, systemlast: true, visasIKarusell: false } : {}),
-              })
-              .returning();
-            if (created) katalogCache.set(namn, created);
-            return created ?? null;
+            const row = await db.transaction(async (tx) => {
+              await tx.execute(
+                sql`SELECT pg_advisory_xact_lock(hashtext(${`${tenantId}:metadata_katalog:${namn}`}))`,
+              );
+              // Re-läs under låset: en parallell transaktion kan ha hunnit
+              // aktivera/skapa raden innan vi fick låset.
+              const existing = await tx
+                .select()
+                .from(metadataKatalog)
+                .where(and(eq(metadataKatalog.tenantId, tenantId), eq(metadataKatalog.namn, namn)));
+              const active = existing.find((k) => k.deletedAt == null);
+              if (active) return active;
+              const archived = existing[0];
+              if (archived) {
+                const [restored] = await tx
+                  .update(metadataKatalog)
+                  .set({ deletedAt: null, archivedBy: null, archivedReason: null })
+                  .where(and(eq(metadataKatalog.id, archived.id), eq(metadataKatalog.tenantId, tenantId)))
+                  .returning();
+                return restored ?? null;
+              }
+              // Task #1441: interim-katalogposten klassas som system-/internfält
+              // direkt vid lat-skapande (dold från vanliga metadatavyer, värde-
+              // read-only utanför importvägen).
+              const isInterim = namn === OBJEKTMALL_INTERIM_METADATA_FALT;
+              const [created] = await tx
+                .insert(metadataKatalog)
+                .values({
+                  tenantId,
+                  namn,
+                  datatyp,
+                  kategori: "import",
+                  ...(isInterim ? { isSystem: true, systemlast: true, visasIKarusell: false } : {}),
+                })
+                .returning();
+              return created ?? null;
+            });
+            if (row) katalogCache.set(namn, row);
+            return row;
           } catch {
-            // Race: en parallell skrivning hann skapa katalogen — läs om.
-            const [existing] = await db
+            // Sista utväg: läs om utanför transaktionen — föredra AKTIV rad så
+            // att en arkiverad klon aldrig cache:as framför en aktiv.
+            const rows = await db
               .select()
               .from(metadataKatalog)
               .where(and(eq(metadataKatalog.tenantId, tenantId), eq(metadataKatalog.namn, namn)));
+            const existing = rows.find((k) => k.deletedAt == null) ?? rows[0] ?? null;
             if (existing) katalogCache.set(namn, existing);
-            return existing ?? null;
+            return existing;
           }
         };
 

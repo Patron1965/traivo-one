@@ -85,6 +85,10 @@ async function runImport(matrix: string[][], customerId: string): Promise<any> {
   });
   expect(mp.status).toBe(200);
 
+  // Task #1478: execute kräver aktuell validering (serverauktoritativ gate).
+  const val = await req("POST", `/api/import/objects-v2/${sessionId}/validate`, { userId: ADMIN });
+  expect(val.status).toBe(200);
+
   const exec = await req("POST", `/api/import/objects-v2/${sessionId}/execute`, {
     userId: ADMIN,
     body: { customerId },
@@ -257,6 +261,8 @@ describe("Import 2.0 — interimsnummer är kundskopad matchningsnyckel (Task #1
         userId: ADMIN,
         body: { mappings: MAPPINGS_WITH_CUST },
       });
+      // Task #1478: execute kräver aktuell validering.
+      await req("POST", `/api/import/objects-v2/${sessionId}/validate`, { userId: ADMIN });
       const exec = await req("POST", `/api/import/objects-v2/${sessionId}/execute`, {
         userId: ADMIN,
         body: { customerId: CUST_A },
