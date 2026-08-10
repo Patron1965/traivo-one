@@ -24,6 +24,7 @@ import { ObjectSystemOrdersList } from "./ObjectSystemOrdersList";
 import { isCanonicalGeoFieldName } from "@shared/geo-fields";
 import {
   groupEntriesByArea,
+  entryAreaKey,
   type MetadataAreaMeta,
 } from "./metadata-carousel-utils";
 
@@ -51,6 +52,9 @@ export interface ObjectMetadataBodyProps {
   canAnonymize?: boolean;
   onAnonymize?: (katalogId: string) => void;
   anonymizePending?: boolean;
+  /** Task #1440: permanent radering (separat flöde; servern spärrar vid historik). */
+  onHardDelete?: (metadataId: string) => void;
+  hardDeletePending?: boolean;
   renderHistoryButton?: (entry: MetadataFormEntry) => ReactNode;
   objectAssignments: AssignmentItem[];
   navigate: (path: string) => void;
@@ -81,6 +85,8 @@ export function ObjectMetadataBody({
   canAnonymize,
   onAnonymize,
   anonymizePending,
+  onHardDelete,
+  hardDeletePending,
   renderHistoryButton,
   objectAssignments,
   navigate,
@@ -109,13 +115,19 @@ export function ObjectMetadataBody({
 
   // Task #1218: fält med visasIKarusell===false döljs från karusell-ytan
   // (default true → äldre fält utan flaggan visas fortsatt).
+  // Task #1440: kontaktfamiljens fält (område "kontakt") renderas INTE som lösa
+  // metadatarader — de visas konsoliderat i kontaktkortet/karusellen
+  // (ObjectDomainGrid "Kontakt"), där redigering och kopiering sker.
   // Task #1438: kanoniska systemlåsta geografifält (Gatuadress/Postnummer/
   // Postort/Koordinater/Fördjupad position/Avdelning-Port-Våning) visas ENBART
   // i den samlade Geografi-sektionen (ObjectDomainGrid) — aldrig dubblerade här.
   const carouselEntries = useMemo(
     () =>
       entries.filter(
-        (e) => e.katalog?.visasIKarusell !== false && !isCanonicalGeoFieldName(e.katalog?.namn),
+        (e) =>
+          e.katalog?.visasIKarusell !== false &&
+          entryAreaKey(e) !== "kontakt" &&
+          !isCanonicalGeoFieldName(e.katalog?.namn),
       ),
     [entries],
   );
@@ -148,6 +160,8 @@ export function ObjectMetadataBody({
       canAnonymize={canAnonymize}
       onAnonymize={onAnonymize}
       anonymizePending={anonymizePending}
+      onHardDelete={onHardDelete}
+      hardDeletePending={hardDeletePending}
       onPreviewImage={setPreviewUrl}
       renderHistoryButton={renderHistoryButton}
       canEditField={canEditFields}

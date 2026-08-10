@@ -29,7 +29,7 @@ import { primaryPayerCustomerIdSql, getObjectPrimaryCustomerId } from "./service
 import { parseCoordinateJson } from "./services/object-location";
 import { OBJEKTMALL_INTERIM_METADATA_FALT } from "@shared/objektmall-template";
 
-// ============================================================================
+// ======
 // INTERIMNUMMER = TEMPORÄRT IMPORTFÄLT (Task #1441)
 // ----------------------------------------------------------------------------
 // 'interimsnummer' är en kundskopad matchningsnyckel för re-import — INTE ett
@@ -42,7 +42,7 @@ import { OBJEKTMALL_INTERIM_METADATA_FALT } from "@shared/objektmall-template";
 // Lagringen ligger kvar i metadata_varden (expand-contract) — enbart
 // klassning/visning ändras, så re-import-matchningen (som läser
 // metadata_varden direkt via katalognamnet) är opåverkad.
-// ============================================================================
+// ======
 export function isInterimKatalogNamn(namn: string | null | undefined): boolean {
   return (namn ?? "").trim().toLowerCase() === OBJEKTMALL_INTERIM_METADATA_FALT;
 }
@@ -125,13 +125,13 @@ export function getDisplayValue(existing: MetadataVarden): string | null {
     existing.vardeReferens ?? null;
 }
 
-// ============================================================================
+// ======
 // IMPORT-SKRIVHJÄLPARE (Task #632)
 // Transaktionssäkra hjälpare för att skriva per-objekt-metadatavärden under
 // Excel-objektimporten (post-it-modellen §6.12): ersättande (allowDuplicates=
 // false) ersätter befintligt värde + arkiverar gamla till historik;
 // kompletterande (allowDuplicates=true) lägger till värdet parallellt.
-// ============================================================================
+// ======
 
 // En exekverare som antingen är den globala db-anslutningen eller en pågående
 // transaktion (commitImport kör allt i db.transaction). Båda exponerar samma
@@ -245,7 +245,7 @@ export function coerceMetadataVardeFromRaw(
   return { vardeFields, displayValue };
 }
 
-// ============================================================================
+// ======
 // KANONISERING AV METADATA-SYSTEMEN (Task #992)
 // ----------------------------------------------------------------------------
 // Det engelska legacy-systemet (metadata_definitions.data_type / object_metadata)
@@ -432,7 +432,7 @@ export async function writeImportedMetadataValue(
   return "replace";
 }
 
-// ============================================================================
+// ======
 // METADATAREFERENS SOM STABIL UNIVERSELL NYCKEL (Task #645)
 // ----------------------------------------------------------------------------
 // Referensnamnet på en metadatatyp (`metadata_katalog.namn` + den korta
@@ -511,7 +511,7 @@ export async function getMetadataKatalogUsage(
   };
 }
 
-// ============================================================================
+// ======
 // KOMPATIBILITETS-VY: /api/metadata-definitions som vy över metadata_katalog
 // ----------------------------------------------------------------------------
 // (Task #992) Det engelska metadata_definitions-systemet är nu read-only
@@ -605,7 +605,7 @@ export async function getMetadataDefinitionCompat(
   return katalogToDefinitionCompat(row, byId);
 }
 
-// ============================================================================
+// ======
 // SAMMANSATTA (JSON) FÄLT — PER-UNDERFÄLT-ARV (Task #644)
 // ----------------------------------------------------------------------------
 // Sammansatta metadatafält (punktnotation `adress.gata`, `kontaktperson.namn`
@@ -645,7 +645,7 @@ export function mergeCompositeJsonValues(valuesNearestFirst: unknown[]): unknown
   return merged;
 }
 
-// ============================================================================
+// ======
 // BATCH: METADATAVÄRDEN (INKL. ÄRVD) FÖR FLERA OBJEKT + URVAL KATALOGFÄLT
 // Task #859: driver de valbara metadatakolumnerna i objektlistan. En enda
 // rekursiv CTE går uppåt i hierarkin för ALLA efterfrågade objekt samtidigt
@@ -653,7 +653,7 @@ export function mergeCompositeJsonValues(valuesNearestFirst: unknown[]): unknown
 // Returnerar { [objektId]: { [katalogId]: visningsvärde } }. Endast värden som
 // faktiskt finns lokalt eller ärvs från en förälder tas med; mjuk-raderade
 // (raderad=TRUE) lokala tombstones ger inget värde.
-// ============================================================================
+// ======
 
 export async function getObjectsMetadataValuesForCatalog(
   tenantId: string,
@@ -801,7 +801,7 @@ export async function getObjectsMetadataValuesForCatalog(
   return result;
 }
 
-// ============================================================================
+// ======
 // BATCH: METADATA FÖR VILLKORSMATCHNING (orderkoncept steg 4)
 // Task #992: enda kanoniska källan för "objekt → {nyckel → värde}" som
 // orderkoncept-villkorsmotorn (server/services/order-concept-targeting.ts)
@@ -813,7 +813,7 @@ export async function getObjectsMetadataValuesForCatalog(
 // (back-fillen matchar fieldKey → namn|beteckning). Beräknade fält
 // (ar_beraknad) utelämnas — de härleds vid läsning och deltog aldrig i
 // villkorsmatchningen (det engelska systemet exponerade dem aldrig).
-// ============================================================================
+// ======
 
 export async function getObjectsConditionMetadata(
   tenantId: string,
@@ -868,10 +868,10 @@ export async function getObjectsConditionMetadata(
   return out;
 }
 
-// ============================================================================
+// ======
 // HÄMTA OBJEKT MED ALL METADATA (INKL. ÄRVD)
 // Rekursiv CTE som går uppåt i hierarkin och samlar metadata
-// ============================================================================
+// ======
 
 export async function getObjectWithAllMetadata(
   objektId: string,
@@ -1148,6 +1148,7 @@ export async function getObjectWithAllMetadata(
               metod: r.metod ?? "manuell",
               displayValue: rawRowDisplay(r),
               vardeJson: r.varde_json ?? null,
+              createdAt: r.created_at ?? null,
             }))
         : undefined;
 
@@ -1423,9 +1424,9 @@ export async function getObjectWithAllMetadata(
   };
 }
 
-// ============================================================================
+// ======
 // HÄMTA METADATA-VÄRDE (med ärvning)
-// ============================================================================
+// ======
 
 export async function getMetadataValue(
   objektId: string,
@@ -1460,9 +1461,9 @@ export async function getMetadataValue(
   }
 }
 
-// ============================================================================
+// ======
 // SKAPA METADATA
-// ============================================================================
+// ======
 
 // Task #681: kopiera ett objekts LOKALA (direkta) metadatavärden till ett annat
 // objekt. Endast rader som faktiskt ligger på källobjektet kopieras — ärvda
@@ -1774,7 +1775,7 @@ export async function createMetadata(data: {
   return newMetadata;
 }
 
-// ============================================================================
+// ======
 // BATCHAD IMPORT-METADATASKRIVNING (perf — Objektimport 2.0 steg 5)
 // ----------------------------------------------------------------------------
 // Steg 5 skrev tidigare metadata via createMetadata() en gång per fält.
@@ -2096,7 +2097,7 @@ export async function writeObjectImportMetadataBatch(args: {
   }
 }
 
-// ============================================================================
+// ======
 // PRIMÄR ARVSKEDJA (delad primitiv)
 // ----------------------------------------------------------------------------
 // Returnerar objekt-id:n längs objektets PRIMÄRA förälderkedja, ordnade
@@ -2105,7 +2106,7 @@ export async function writeObjectImportMetadataBatch(args: {
 // vandring ger exakt den kedja som metadata-arv följer. Icke-primära föräldrar
 // ärver aldrig nedåt och ingår därför inte. Används av arvs-skrivsemantiken
 // (edit-på-källan / ny-instans-på-nivå) och snabbfälts-konfigens nedåt-arv.
-// ============================================================================
+// ======
 
 export async function getPrimaryChainObjectIds(
   tenantId: string,
@@ -2127,7 +2128,7 @@ export async function getPrimaryChainObjectIds(
   return (result.rows as any[]).map((r) => r.id as string);
 }
 
-// ============================================================================
+// ======
 // SNABBFÄLTS-KONFIG (objektvy 360, P1)
 // Löser upp vilka (upp till tre) katalogfält som ska visas som "snabbfält" högst
 // upp på ett objekt. Arvsmodellen speglar objekt-metadata: närmast-vinner uppåt
@@ -2135,7 +2136,7 @@ export async function getPrimaryChainObjectIds(
 // om inget objekt i kedjan har en egen rad faller vi tillbaka på den tenant-
 // omfattande objectHeaderConfigs för objektets objectType. En per-objekt-rad
 // gäller ÄVEN om alla tre slots är tomma (= medvetet inga snabbfält här).
-// ============================================================================
+// ======
 
 export interface ResolvedQuickFieldSlot {
   katalogId: string;
@@ -2287,7 +2288,7 @@ export async function resolveQuickFieldConfig(
   return { fields, source, hasOwnOverride, rawKatalogIds };
 }
 
-// ============================================================================
+// ======
 // Task #1213 (G1): ARKIVERING AV ERSATTA VÄRDEN — enkelvärdesfält
 // ----------------------------------------------------------------------------
 // När ett enkelvärdesfält (allowDuplicates=false) får ett NYTT värde arkiveras
@@ -2296,7 +2297,7 @@ export async function resolveQuickFieldConfig(
 // eller närmaste-värde-visning). Den befintliga raden uppdateras därefter
 // in-place så att metadata_varden.id förblir stabilt för alla referenser
 // (koppladTillMetadataId, historik-pekare, klient-cachar).
-// ============================================================================
+// ======
 
 async function insertArchivedClone(
   existing: MetadataVarden,
@@ -2354,9 +2355,9 @@ export async function getArchivedMetadataPosts(
   }));
 }
 
-// ============================================================================
+// ======
 // UPPDATERA METADATA
-// ============================================================================
+// ======
 
 export async function updateMetadata(
   metadataId: string,
@@ -2519,6 +2520,13 @@ export async function updateMetadata(
     .where(and(eq(metadataVarden.id, metadataId), eq(metadataVarden.tenantId, tenantId)))
     .returning();
 
+  // Race: raden kan ha raderats (deleteMetadataGuarded) mellan pre-läsningen och
+  // UPDATE:n — då matchar WHERE inget. Svara med definierat "not found" (→404)
+  // istället för att dereferera undefined (500).
+  if (!updated) {
+    throw new Error(`Metadata with id ${metadataId} not found`);
+  }
+
   await db.insert(metadataHistorik).values({
     tenantId,
     metadataVardenId: metadataId,
@@ -2541,9 +2549,11 @@ export async function updateMetadata(
   return updated;
 }
 
-// ============================================================================
-// RADERA METADATA
-// ============================================================================
+export interface GuardedDeleteResult {
+  status: 'deleted' | 'not_found' | 'blocked';
+  changedHistorikCount: number;
+  conceptFilterCount: number;
+}
 
 export async function deleteMetadata(
   metadataId: string,
@@ -2603,12 +2613,12 @@ export async function deleteMetadata(
   });
 }
 
-// ============================================================================
+// ======
 // Task #1213: CENTRALT SKRIVLAGER — flagg-uppdatering & rollback-radering
 // ----------------------------------------------------------------------------
 // Alla metadata-writes ska gå via detta modul-API. Routes/services får inte
 // köra egna db.update/db.delete direkt mot metadata_varden.
-// ============================================================================
+// ======
 
 // Uppdaterar arvs-flaggor (arvsNedat / stoppaVidareArvning) på en befintlig
 // metadata-post. Tenant-scoped; rör aldrig värdefält eller status.
@@ -2648,9 +2658,9 @@ export async function rollbackDeleteMetadataRows(
   return del.length;
 }
 
-// ============================================================================
+// ======
 // Task #710: MJUK-RADERING & ÅTERSTÄLLNING AV OBJEKT-METADATA (Session 7 §4)
-// ============================================================================
+// ======
 
 // Bygg getDisplayValue-kompatibelt objekt från en rå (snake_case) varden-rad.
 function rawVardenForDisplay(existing: any): any {
@@ -2850,7 +2860,7 @@ export async function restoreObjectMetadata(
   });
 }
 
-// ============================================================================
+// ======
 // Task #1218 (Etapp 6): GDPR-ANONYMISERING AV ETT METADATA-FÄLT PÅ ETT OBJEKT
 // ----------------------------------------------------------------------------
 // Oåterkalleligt: förstör värdet i ALLA kopior —
@@ -2862,7 +2872,7 @@ export async function restoreObjectMetadata(
 //     spegelkolumner scrubbas om fältet matar paketet (åtkomst-/geo-fält).
 //  5. Geo-spegelkolumner på objects (address/postalCode/city/koordinater).
 // Ingen restore-väg finns eller får byggas.
-// ============================================================================
+// ======
 
 // Katalog-namn (lowercase) som matar uppgiftspaketets åtkomst-del.
 const ANON_ATKOMST_NAMN = new Set(['åtkomsttyp', 'åtkomstkod', 'nyckelnummer', 'åtkomstinfo']);
@@ -3065,13 +3075,13 @@ export async function setObjectMetadataOrder(
   }
 }
 
-// ============================================================================
+// ======
 // Task #579: HÄMTA HISTORIK PER (OBJEKT, DEFINITION)
 // Kronologisk tidslinje för ett specifikt fält på ett objekt — fungerar även
 // efter att själva metadata_varden-raden har raderats (cascade), eftersom vi
 // filtrerar på katalog-id direkt och låter NULL-värden från cascade-radade
 // historik-rader filtreras bort på applikationsnivå om de förekommer.
-// ============================================================================
+// ======
 
 export interface MetadataDefinitionHistoryEntry {
   id: string;
@@ -3128,9 +3138,9 @@ export async function getLatestChangedAtForObjectMetadata(
   return map;
 }
 
-// ============================================================================
+// ======
 // PROPAGERA METADATA NEDÅT TILL BARNOBJEKT
-// ============================================================================
+// ======
 
 export interface PropagationResult {
   inserted: number;
@@ -3308,9 +3318,9 @@ export async function propagateMetadataDown(
   return { inserted, updated, skipped, affectedObjectIds };
 }
 
-// ============================================================================
+// ======
 // PROPAGERINGS-PREVIEW - visa vilka objekt som påverkas
-// ============================================================================
+// ======
 
 export interface PropagationPreviewItem {
   objektId: string;
@@ -3464,9 +3474,9 @@ export async function getPropagationPreview(
   };
 }
 
-// ============================================================================
+// ======
 // ARVSTRADSVY - visa metadata-arv genom hierarkin
-// ============================================================================
+// ======
 
 export interface InheritanceTreeNode {
   id: string;
@@ -3550,9 +3560,9 @@ export async function getInheritanceTree(
   return nodeMap.get(rootId) || null;
 }
 
-// ============================================================================
+// ======
 // HÄMTA METADATA FÖR ARBETSORDER (artikel-koppling)
-// ============================================================================
+// ======
 
 export async function getArticleMetadataForObject(
   objektId: string,
@@ -3674,9 +3684,9 @@ export async function writeSystemMetadataOnObject(
   });
 }
 
-// ============================================================================
+// ======
 // HÄMTA METADATA-HISTORIK
-// ============================================================================
+// ======
 
 export async function getMetadataHistorik(
   metadataVardenId: string,
@@ -3722,9 +3732,9 @@ export async function getObjectMetadataHistorik(
   return results;
 }
 
-// ============================================================================
+// ======
 // HÄMTA KORSBEFRUKTAD METADATA
-// ============================================================================
+// ======
 
 export async function getCrossFertilizedMetadata(
   objektId: string,
@@ -3767,10 +3777,10 @@ export async function getCrossFertilizedMetadata(
   return result.rows as any[];
 }
 
-// ============================================================================
+// ======
 // GEOGRAFISK UPPLÖSNINGSORDNING
 // GPS (exakt) > Adress (grov)
-// ============================================================================
+// ======
 
 export async function getGeographicPosition(
   objektId: string,
@@ -3803,9 +3813,9 @@ export async function getGeographicPosition(
   return null;
 }
 
-// ============================================================================
+// ======
 // HÄMTA KLUSTERTRÄD
-// ============================================================================
+// ======
 
 export interface ClusterTreeNode {
   id: string;
@@ -3880,9 +3890,9 @@ export async function getClusterTree(
   return nodeMap.get(rootId) || null;
 }
 
-// ============================================================================
+// ======
 // HITTA OBJEKT MED SPECIFIK METADATA
-// ============================================================================
+// ======
 
 export async function findObjectsWithMetadata(
   metadataTypNamn: string,
@@ -3932,9 +3942,9 @@ export async function findObjectsWithMetadata(
   return objectsWithMetadata;
 }
 
-// ============================================================================
+// ======
 // HÄMTA ALLA METADATATYPER FÖR EN TENANT
-// ============================================================================
+// ======
 
 export async function getAllMetadataTypes(tenantId: string): Promise<MetadataKatalog[]> {
   // Task #716: arkiverade typer (deleted_at satt) döljs från katalog/objektvyer.
@@ -4076,9 +4086,9 @@ export async function listArchivedMetadataTypes(tenantId: string): Promise<Metad
     .orderBy(desc(metadataKatalog.deletedAt));
 }
 
-// ============================================================================
+// ======
 // KUNDLÅSTA METADATAFÄLT (Task #663)
-// ============================================================================
+// ======
 
 // Hämtar alla kundlås-kopplingar för en tenant som Map<katalogId, customerId[]>.
 // Ett katalogfält som SAKNAS i kartan (eller har tom array) är ett generellt fält
@@ -4188,9 +4198,9 @@ export async function getAvailableMetadataTypesForObject(
   return getAllMetadataTypesWithCustomers(tenantId, customerId ?? "__none__");
 }
 
-// ============================================================================
+// ======
 // METADATA-FAMILJER: PUNKTNOTATION (Task #662)
-// ============================================================================
+// ======
 
 // Härleder punktnotationsnyckeln för ett underfält: förälder.namn + "." + barn.namn.
 // Returnerar null för rotfält (utan förälder) eller om föräldern saknas i kartan.
@@ -4259,9 +4269,9 @@ export function buildMetadataTypeLookup(
   return map;
 }
 
-// ============================================================================
+// ======
 // METADATA-GRUPPER (familjer): expansion grupp-förälder → barn (Alternativ B)
-// ============================================================================
+// ======
 // En grupp-förälder (t.ex. "Kontakt") är ETT katalogfält med ≥1 barn som pekar på
 // den via parentMetadataId. När en artikels "Visa/Lämna metadata" pekar ut en
 // grupp-förälder ska HELA familjen (alla barn) tas med — både för visning och för
@@ -4375,9 +4385,9 @@ export async function validateParentMetadataLink(
   return null;
 }
 
-// ============================================================================
+// ======
 // SEED STANDARD METADATATYPER FÖR EN TENANT
-// ============================================================================
+// ======
 
 // PDF §7: standardkatalog grupperad per område (idempotent per namn).
 // Lägg till nya typer utan att röra existerande (analogt med seedKarlMetadataTypes).
@@ -4431,7 +4441,7 @@ export const STANDARD_METADATA_DEFINITIONS: Array<{
   { namn: 'Objektnamn', datatyp: 'string', arLogisk: true, standardArvs: false, kategori: 'grunduppgifter', beskrivning: 'Objektets namn (systemfält)', sortOrder: 1000, icon: 'Type', area: 'grunduppgifter', displayNumber: 1000, isSystem: true, isRequired: true },
 ];
 
-// ============================================================================
+// ======
 // METADATA-OMRÅDEN (REDIGERBARA KATEGORIER) — Task #675
 // ----------------------------------------------------------------------------
 // Område är det enda grupperingsfältet (metadata_katalog.area). Listan är nu
@@ -4439,7 +4449,7 @@ export const STANDARD_METADATA_DEFINITIONS: Array<{
 // listan (isSystem=true) idempotent och backfillar dessutom eventuella område-
 // värden som redan används av katalogfält men saknar en rad (så inget i bruk
 // hamnar utanför väljaren). De hårdkodade konstanterna behålls som fallback i UI.
-// ============================================================================
+// ======
 
 export async function seedDefaultMetadataAreas(tenantId: string): Promise<void> {
   const existing = await db
@@ -4599,7 +4609,7 @@ async function seedLegacyDefaultMetadataTypes(tenantId: string, skipNames: Set<s
   }
 }
 
-// ============================================================================
+// ======
 // SYSTEMLÅST GEOGRAFIMODELL — kanoniska positionsfält
 // ----------------------------------------------------------------------------
 // Två positioner som RIKTIGA ärvda metadatafält (metadata_katalog), systemlåsta
@@ -4622,7 +4632,7 @@ async function seedLegacyDefaultMetadataTypes(tenantId: string, skipNames: Set<s
 // Idempotent: andra körningen är no-op (alreadyOk). Rör ALDRIG metadata_varden.
 // Exporteras som ENDA källan för geo-modellen (T004 sync / T005 objekthuvud läser
 // `ruttbar` härifrån).
-// ============================================================================
+// ======
 
 export interface SystemlastGeoFaltDef {
   key: string;          // lower(namn) — kanonisk identitet för skiftlägesokänslig matchning
@@ -4766,7 +4776,7 @@ export async function ensureSystemlastaFalt(tenantId: string): Promise<EnsureSys
   return result;
 }
 
-// ============================================================================
+// ======
 // Task #1214 (Etapp 2): SYSTEMOMRÅDEN — systemdefinierade metadataområden
 // ----------------------------------------------------------------------------
 // Generalisering av Geografi-systemlast-mönstret till fler områden: Ekonomi,
@@ -4784,7 +4794,7 @@ export async function ensureSystemlastaFalt(tenantId: string): Promise<EnsureSys
 //     auto-ifyllda vid import) i standardkatalogen; de adopteras in i Ekonomi-
 //     området UTAN att isSystem röras (värdelåset behålls som det är).
 // Rör ALDRIG namn/datatyp/metadata_varden. Idempotent (andra körningen no-op).
-// ============================================================================
+// ======
 
 export interface SystemomradeFaltDef {
   key: string;            // lower(namn) — kanonisk identitet för matchning
@@ -5002,7 +5012,7 @@ export async function ensureSystemomradenFalt(tenantId: string): Promise<EnsureS
   return result;
 }
 
-// ============================================================================
+// ======
 // T005: LÄS OBJEKTETS GEO-FÄLT (arvs-medvetet) FÖR OBJEKTHUVUD / SYSTEM-METADATA
 // ----------------------------------------------------------------------------
 // Exponerar den kanoniska systemlåsta geografimodellen som TVÅ grupper —
@@ -5013,7 +5023,7 @@ export async function ensureSystemomradenFalt(tenantId: string): Promise<EnsureS
 //
 // VIKTIGT: getMetadataValue:s datatyp-switch saknar 'location'-fall → returnerar
 // null för Koordinater/Fördjupad position. Här läses vardeJson DIREKT i stället.
-// ============================================================================
+// ======
 
 export type GeoFieldSource = 'own' | 'inherited' | 'missing';
 
@@ -5163,12 +5173,12 @@ export async function getObjectGeoFields(
   };
 }
 
-// ============================================================================
+// ======
 // ÅTKOMST-METADATA (Etapp 5) — ersätter objects.access*/key_number-kolumnerna.
 // Arvs-medveten läsning (närmast-vinner) av systemområdet "Åtkomst":
 // Åtkomsttyp / Åtkomstkod / Nyckelnummer / Åtkomstinfo. Delar
 // getObjectWithAllMetadata-resolutionen (tombstones/multi-förälder hanteras där).
-// ============================================================================
+// ======
 
 export interface ObjectAtkomstFields {
   typ: string | null;
@@ -5237,18 +5247,29 @@ export async function getObjectAtkomstFields(
   return result;
 }
 
-// ============================================================================
-// KONTAKT-METADATA (Etapp 5) — ersätter object_contacts-tabellen.
-// Läser kontaktpersonsfamiljen (rubrik "Kontaktperson" + underfälten
-// Namn/Titel/Telefon/E-post, flervärdes) arvs-medvetet. Multi-instansdata
-// exponeras via `instances` från getObjectWithAllMetadata.
-// ============================================================================
-
+export interface ObjectKontaktSubfield {
+  vardenId: string | null;
+  katalogNamn: string | null;
+  /** Katalog-id — behövs för arkivering (DELETE /objects/:oid/field/:kid)
+   *  när ett underfält töms i kontaktkortet (hård delete används aldrig där). */
+  katalogId: string | null;
+  inherited: boolean;
+  fromObjectName: string | null;
+}
 export interface ObjectKontaktPerson {
   namn: string | null;
   titel: string | null;
   telefon: string | null;
   epost: string | null;
+  fields: {
+    namn: ObjectKontaktSubfield;
+    titel: ObjectKontaktSubfield;
+    telefon: ObjectKontaktSubfield;
+    epost: ObjectKontaktSubfield;
+  };
+  inherited: boolean;
+  inheritedFromObjectName: string | null;
+  createdAt: string | null;
 }
 
 const KONTAKT_SUBFIELD_KEYS = ['namn', 'titel', 'telefon', 'e-post'] as const;
@@ -5266,35 +5287,120 @@ export async function getObjectKontaktPersons(
   const owm = await getObjectWithAllMetadata(objektId, tenantId);
   if (!owm) return [];
 
-  const valuesByKey = new Map<string, string[]>();
+  type KontaktCell = {
+    value: string;
+    vardenId: string | null;
+    inherited: boolean;
+    fromObjectName: string | null;
+    createdAt: string | null;
+  };
+  const valuesByKey = new Map<string, KontaktCell[]>();
+  const katalogNamnByKey = new Map<string, string>();
   for (const key of KONTAKT_SUBFIELD_KEYS) valuesByKey.set(key, []);
+
+  // Katalognamn per underfält hämtas från katalogen (inte bara från värdena) så
+  // att kortet kan skapa ett SAKNAT underfält (POST med metadataTypNamn).
+  const katalogIdByKey = new Map<string, string>();
+  const kontaktKatalogRows = await db
+    .select({ id: metadataKatalog.id, namn: metadataKatalog.namn })
+    .from(metadataKatalog)
+    .where(and(
+      eq(metadataKatalog.tenantId, tenantId),
+      isNull(metadataKatalog.deletedAt),
+      eq(metadataKatalog.area, 'kontakt'),
+    ));
+  for (const k of kontaktKatalogRows) {
+    const key = (k.namn ?? '').toLowerCase();
+    if (valuesByKey.has(key) && k.namn) {
+      katalogNamnByKey.set(key, k.namn);
+      katalogIdByKey.set(key, k.id);
+    }
+  }
 
   for (const m of owm.metadata) {
     const k = (m.katalog?.namn ?? '').toLowerCase();
     if (!valuesByKey.has(k)) continue;
     // Endast Kontakt-områdets fält (skydd mot namnkrock med andra områden).
     if ((m.katalog?.area ?? '') !== 'kontakt') continue;
+    if (m.katalog?.namn) katalogNamnByKey.set(k, m.katalog.namn);
     const list = valuesByKey.get(k)!;
+    const entryCreatedAt = (m as any).createdAt ? String((m as any).createdAt) : null;
     if (m.instances && m.instances.length > 0) {
-      const sorted = [...m.instances].sort((a, b) => String(a.id).localeCompare(String(b.id)));
+      // Kontaktparning per index: sortera KRONOLOGISKT (created_at, sedan id) så
+      // att underfälten paras i skapandeordning — lexikal id-sortering kan para
+      // titel/telefon med fel kontakt.
+      const sorted = [...m.instances].sort((a, b) => {
+        const ta = (a as any).createdAt ? new Date(String((a as any).createdAt)).getTime() : 0;
+        const tb = (b as any).createdAt ? new Date(String((b as any).createdAt)).getTime() : 0;
+        if (ta !== tb) return ta - tb;
+        return String(a.id).localeCompare(String(b.id));
+      });
       for (const inst of sorted) {
         const v = (inst.displayValue ?? '').trim();
-        list.push(v);
+        list.push({
+          value: v,
+          vardenId: inst.source === 'local' ? inst.id : null,
+          inherited: inst.source === 'inherited',
+          fromObjectName: inst.source === 'inherited' ? (inst.fromObjectName ?? null) : null,
+          createdAt: null,
+        });
       }
     } else if (!(m.source === 'local' && m.raderad === true)) {
       const v = (m.vardeString ?? '').trim();
-      if (v) list.push(v);
+      if (v) {
+        const inherited = m.source === 'inherited';
+        list.push({
+          value: v,
+          vardenId: inherited ? null : m.id,
+          inherited,
+          fromObjectName: inherited ? ((m as any).fromObjectName ?? (m as any).fromObject?.namn ?? null) : null,
+          createdAt: entryCreatedAt,
+        });
+      }
     }
   }
+
+  const subfield = (key: string, cell: KontaktCell | undefined): ObjectKontaktSubfield => ({
+    vardenId: cell?.vardenId ?? null,
+    katalogNamn: katalogNamnByKey.get(key) ?? null,
+    katalogId: katalogIdByKey.get(key) ?? null,
+    inherited: cell?.inherited ?? false,
+    fromObjectName: cell?.fromObjectName ?? null,
+  });
 
   const maxLen = Math.max(...KONTAKT_SUBFIELD_KEYS.map((k) => valuesByKey.get(k)!.length), 0);
   const persons: ObjectKontaktPerson[] = [];
   for (let i = 0; i < maxLen; i++) {
-    const namn = valuesByKey.get('namn')![i] || null;
-    const titel = valuesByKey.get('titel')![i] || null;
-    const telefon = valuesByKey.get('telefon')![i] || null;
-    const epost = valuesByKey.get('e-post')![i] || null;
-    if (namn || titel || telefon || epost) persons.push({ namn, titel, telefon, epost });
+    const cells = {
+      namn: valuesByKey.get('namn')![i],
+      titel: valuesByKey.get('titel')![i],
+      telefon: valuesByKey.get('telefon')![i],
+      epost: valuesByKey.get('e-post')![i],
+    };
+    const namn = cells.namn?.value || null;
+    const titel = cells.titel?.value || null;
+    const telefon = cells.telefon?.value || null;
+    const epost = cells.epost?.value || null;
+    if (!(namn || titel || telefon || epost)) continue;
+    const present = [cells.namn, cells.titel, cells.telefon, cells.epost].filter(
+      (c): c is KontaktCell => !!c && !!c.value,
+    );
+    const inherited = present.some((c) => c.inherited);
+    persons.push({
+      namn,
+      titel,
+      telefon,
+      epost,
+      fields: {
+        namn: subfield('namn', cells.namn),
+        titel: subfield('titel', cells.titel),
+        telefon: subfield('telefon', cells.telefon),
+        epost: subfield('e-post', cells.epost),
+      },
+      inherited,
+      inheritedFromObjectName: present.find((c) => c.inherited)?.fromObjectName ?? null,
+      createdAt: present.find((c) => c.createdAt)?.createdAt ?? null,
+    });
   }
   return persons;
 }
@@ -5367,10 +5473,10 @@ export async function getObjectKontaktEmails(
   return Array.from(emails);
 }
 
-// ============================================================================
+// ======
 // SEED KÄRL-METADATATYPER (Modus-berikning, Task #241)
 // Idempotent: kontrollerar per (tenantId, namn) och skippar om typen redan finns.
-// ============================================================================
+// ======
 
 export const KARL_METADATA_DEFINITIONS: Array<{
   namn: string;
@@ -5412,9 +5518,9 @@ export async function seedKarlMetadataTypes(tenantId: string): Promise<{ created
   return { created, existing: skipped };
 }
 
-// ============================================================================
+// ======
 // WORK ORDER METADATA - CRUD operations for work order metadata
-// ============================================================================
+// ======
 
 export interface WorkOrderMetadataWithKatalog {
   id: string;
@@ -5628,9 +5734,9 @@ export async function deleteWorkOrderMetadata(
   );
 }
 
-// ============================================================================
+// ======
 // METADATA KOPPLAD TILL ORDERTYP (Task #665)
-// ============================================================================
+// ======
 
 // Ett kopplat fält som ska visas i orderformuläret. `dotKey` är punktnotation för
 // underfält (förälder.namn), annars null. `linkSortOrder` kommer från kopplingen,
@@ -5962,4 +6068,84 @@ export async function writeProvidedLeaveMetadataFields(
       await writeArticleMetadataOnObject(objectId, field, String(provided), tenantId, setBy);
     }
   }
+}
+
+
+export async function deleteMetadataGuarded(
+  metadataId: string,
+  tenantId: string,
+  raderadAv?: string,
+  metod?: string,
+): Promise<GuardedDeleteResult> {
+  return await db.transaction(async (tx) => {
+    const lockedRows = await tx.execute(sql`
+      SELECT * FROM metadata_varden
+      WHERE id = ${metadataId} AND tenant_id = ${tenantId}
+      FOR UPDATE
+    `);
+    const existing = (lockedRows.rows as any[])[0];
+    if (!existing) {
+      return { status: 'not_found' as const, changedHistorikCount: 0, conceptFilterCount: 0 };
+    }
+
+    // Task #1441-invariant: interim-fält är en intern matchningsnyckel för
+    // re-import och får aldrig hård-raderas manuellt (samma guard som
+    // deleteMetadata) — mappas till 403 i routen.
+    const katalogIdForGuard = existing.metadata_katalog_id ?? existing.metadataKatalogId ?? null;
+    if (katalogIdForGuard) {
+      const [kat] = await tx
+        .select({ namn: metadataKatalog.namn })
+        .from(metadataKatalog)
+        .where(and(eq(metadataKatalog.id, katalogIdForGuard), eq(metadataKatalog.tenantId, tenantId)));
+      if (kat && isInterimKatalogNamn(kat.namn)) {
+        throw new ReadonlyMetadataError('Interimsnummer är ett tekniskt importfält och kan inte tas bort manuellt.');
+      }
+    }
+
+    // Blockerare 1: verklig historik (dokumenterade ändringar; rena
+    // skapande-rader har gammalt_varde IS NULL och blockerar inte).
+    const historikRes = await tx.execute(sql`
+      SELECT COUNT(*)::int AS cnt
+      FROM metadata_historik
+      WHERE metadata_varden_id = ${metadataId}
+        AND tenant_id = ${tenantId}
+        AND gammalt_varde IS NOT NULL
+    `);
+    const changedHistorikCount = Number((historikRes.rows as any[])[0]?.cnt ?? 0);
+
+    // Blockerare 2: kopplingar (villkorsfilter i orderkoncept/artiklar).
+    const katalogId = existing.metadata_katalog_id ?? existing.metadataKatalogId ?? null;
+    let conceptFilterCount = 0;
+    if (katalogId) {
+      const usage = await getMetadataKatalogUsage(katalogId, tenantId);
+      conceptFilterCount = usage.conceptFilterCount ?? 0;
+    }
+
+    if (changedHistorikCount > 0 || conceptFilterCount > 0) {
+      return { status: 'blocked' as const, changedHistorikCount, conceptFilterCount };
+    }
+
+    await tx.insert(metadataHistorik).values({
+      tenantId,
+      metadataVardenId: existing.id,
+      objektId: existing.objekt_id ?? existing.objektId,
+      metadataKatalogId: katalogId,
+      gammaltVarde: getDisplayValue({
+        vardeString: existing.varde_string ?? existing.vardeString ?? null,
+        vardeInteger: existing.varde_integer ?? existing.vardeInteger ?? null,
+        vardeDecimal: existing.varde_decimal ?? existing.vardeDecimal ?? null,
+        vardeBoolean: existing.varde_boolean ?? existing.vardeBoolean ?? null,
+        vardeDatetime: existing.varde_datetime ?? existing.vardeDatetime ?? null,
+        vardeJson: existing.varde_json ?? existing.vardeJson ?? null,
+        vardeReferens: existing.varde_referens ?? existing.vardeReferens ?? null,
+      } as any),
+      nyttVarde: null,
+      andradAv: raderadAv ?? 'system',
+      andringsMetod: metod ?? 'manuell-radering',
+    });
+    await tx.delete(metadataVarden).where(
+      and(eq(metadataVarden.id, metadataId), eq(metadataVarden.tenantId, tenantId))
+    );
+    return { status: 'deleted' as const, changedHistorikCount, conceptFilterCount };
+  });
 }

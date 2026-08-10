@@ -14,6 +14,7 @@ import {
   createMetadata,
   updateMetadata,
   deleteMetadata,
+  deleteMetadataGuarded,
   softDeleteObjectMetadata,
   restoreObjectMetadata,
   anonymizeObjectMetadataField,
@@ -58,7 +59,7 @@ import {
   findMetadataTypeByIdentity,
   setMetadataInheritanceFlags,
 } from "./metadata-queries";
-import { getTenantIdWithFallback, requireAdmin } from "./tenant-middleware";
+import { getTenantIdWithFallback, requireAdmin, requireMember } from "./tenant-middleware";
 
 export const metadataRouter = Router();
 
@@ -182,7 +183,7 @@ metadataRouter.get("/types", async (req: Request, res: Response) => {
   }
 });
 
-metadataRouter.post("/types/seed", async (req: Request, res: Response) => {
+metadataRouter.post("/types/seed", requireAdmin, async (req: Request, res: Response) => {
   try {
     const tenantId = getTenantIdWithFallback(req);
     if (!tenantId) {
@@ -1247,7 +1248,8 @@ const createMetadataSchema = z.object({
   metod: z.string().optional(),
 });
 
-metadataRouter.post("/", async (req: Request, res: Response) => {
+// Task #1440 (review-fix): värde-mutationer kräver planeringsroll server-side.
+metadataRouter.post("/", requireMember, async (req: Request, res: Response) => {
   try {
     const tenantId = getTenantIdWithFallback(req);
     if (!tenantId) {
@@ -1311,7 +1313,8 @@ const updateMetadataSchema = z.object({
   metod: z.string().optional(),
 });
 
-metadataRouter.put("/:id", async (req: Request, res: Response) => {
+// Task #1440 (review-fix): värde-mutationer kräver planeringsroll server-side.
+metadataRouter.put("/:id", requireMember, async (req: Request, res: Response) => {
   try {
     const tenantId = getTenantIdWithFallback(req);
     if (!tenantId) {
@@ -1346,9 +1349,13 @@ metadataRouter.put("/:id", async (req: Request, res: Response) => {
     if (error.message?.includes('anonymiserat')) {
       return res.status(409).json({ error: error.message });
     }
-    // Return 400 for validation errors (invalid values, not found, etc.)
+    // Task #1440: raden finns inte (t.ex. raderad av samtidig hård radering) →
+    // definierad 404, aldrig 500.
+    if (error.message?.includes('not found')) {
+      return res.status(404).json({ error: error.message });
+    }
+    // Return 400 for validation errors (invalid values, etc.)
     if (error.message?.includes('Invalid') ||
-        error.message?.includes('not found') ||
         error.message?.includes('Unknown datatype') ||
         error.message?.includes('Ogiltigt värde') ||
         error.message?.includes('Dubblett') ||
@@ -1359,7 +1366,9 @@ metadataRouter.put("/:id", async (req: Request, res: Response) => {
   }
 });
 
-metadataRouter.delete("/:id", async (req: Request, res: Response) => {
+// Task #1440: hård radering är destruktiv och därför admin-gated (UI-gating
+// är inte auktorisation).
+metadataRouter.delete("/:id", requireAdmin, async (req: Request, res: Response) => {
   try {
     const tenantId = getTenantIdWithFallback(req);
     if (!tenantId) {
@@ -1367,8 +1376,28 @@ metadataRouter.delete("/:id", async (req: Request, res: Response) => {
     }
 
     const { id } = req.params;
+    const actor = (req as any).user?.claims?.sub;
 
-    await deleteMetadata(id, tenantId);
+    // Task #1440: hård radering är ett separat flöde från arkivering.
+    // Spärr-utvärderingen (verklig historik / konceptkopplingar) körs ATOMISKT
+    // i samma FOR UPDATE-transaktion som raderingen (deleteMetadataGuarded) —
+    // en samtidig uppdatering kan inte smita in historik mellan check och delete.
+    const result = await deleteMetadataGuarded(id, tenantId, actor);
+    if (result.status === "blocked") {
+      const skal: string[] = [];
+      if (result.changedHistorikCount > 0) skal.push(`${result.changedHistorikCount} historikpost(er)`);
+      if (result.conceptFilterCount > 0) skal.push(`${result.conceptFilterCount} koppling(ar) i orderkoncept`);
+      const message =
+        `Värdet kan inte raderas permanent: det har ${skal.join(" och ")}. ` +
+        `Arkivera fältet istället — det döljs i normala vyer men historiken bevaras.`;
+      return res.status(409).json({
+        error: message,
+        message,
+        code: "USE_ARCHIVE",
+        changedHistorikCount: result.changedHistorikCount,
+        conceptFilterCount: result.conceptFilterCount,
+      });
+    }
 
     res.status(204).send();
   } catch (error: any) {
@@ -1403,7 +1432,7 @@ metadataRouter.get("/search", async (req: Request, res: Response) => {
   }
 });
 
-metadataRouter.patch("/:id/inheritance", async (req: Request, res: Response) => {
+metadataRouter.patch("/:id/inheritance", requireMember, async (req: Request, res: Response) => {
   try {
     const tenantId = getTenantIdWithFallback(req);
     if (!tenantId) {
@@ -1498,7 +1527,7 @@ async function assertObjectAndKatalogInTenant(
   objectId: string,
   katalogId: string,
   tenantId: string,
-): Promise<{ ok: boolean; status?: number; error?: string; isSystem?: boolean }> {
+): Promise<{ ok: boolean; status?: number; error?: string; isSystem?: boolean; namn?: string | null }> {
   const [obj] = await db
     .select({ id: objects.id })
     .from(objects)
@@ -1506,12 +1535,12 @@ async function assertObjectAndKatalogInTenant(
     .limit(1);
   if (!obj) return { ok: false, status: 404, error: "Objekt hittades inte" };
   const [katalog] = await db
-    .select({ id: metadataKatalog.id, isSystem: metadataKatalog.isSystem })
+    .select({ id: metadataKatalog.id, isSystem: metadataKatalog.isSystem, namn: metadataKatalog.namn })
     .from(metadataKatalog)
     .where(and(eq(metadataKatalog.id, katalogId), eq(metadataKatalog.tenantId, tenantId)))
     .limit(1);
   if (!katalog) return { ok: false, status: 404, error: "Metadatadefinition hittades inte" };
-  return { ok: true, isSystem: katalog.isSystem };
+  return { ok: true, isSystem: katalog.isSystem, namn: katalog.namn };
 }
 
 const softDeleteSchema = z.object({
@@ -1523,6 +1552,7 @@ const softDeleteSchema = z.object({
 // stryks via tombstone). Bevarar historik. Idempotent.
 metadataRouter.delete(
   "/objects/:objectId/field/:katalogId",
+  requireMember,
   async (req: Request, res: Response) => {
     try {
       const tenantId = getTenantIdWithFallback(req);
@@ -1565,6 +1595,7 @@ metadataRouter.delete(
 // Återställ ett mjuk-raderat metadata-fält.
 metadataRouter.post(
   "/objects/:objectId/field/:katalogId/restore",
+  requireMember,
   async (req: Request, res: Response) => {
     try {
       const tenantId = getTenantIdWithFallback(req);
@@ -1628,6 +1659,16 @@ metadataRouter.post(
       if (check.isSystem) {
         return res.status(403).json({ error: "Systemfält kan inte anonymiseras" });
       }
+      // Task #1440: interimnummer är en teknisk matchningsnyckel (import/koppling
+      // per kund) — ingen personuppgift. Den omfattas ALDRIG av anonymisering och
+      // måste lämnas orörd även vid direkt API-anrop.
+      const katalogNamnLower = (check.namn ?? "").trim().toLowerCase();
+      if (katalogNamnLower === "interimsnummer" || katalogNamnLower === "interimnummer") {
+        return res.status(403).json({
+          error: "Interimnummer omfattas inte av anonymisering och lämnas alltid orört",
+          message: "Interimnummer omfattas inte av anonymisering och lämnas alltid orört",
+        });
+      }
 
       const result = await anonymizeObjectMetadataField(objectId, katalogId, tenantId, actor);
       res.json(result);
@@ -1658,6 +1699,7 @@ const orderSchema = z.object({
 // Sätt per-objekt sorteringsordning för metadata-fält (ärvs nedåt).
 metadataRouter.put(
   "/objects/:objectId/order",
+  requireMember,
   async (req: Request, res: Response) => {
     try {
       const tenantId = getTenantIdWithFallback(req);
@@ -1731,7 +1773,7 @@ const createWorkOrderMetadataSchema = z.object({
   skapadAv: z.string().optional(),
 });
 
-metadataRouter.post("/work-orders/:workOrderId", async (req: Request, res: Response) => {
+metadataRouter.post("/work-orders/:workOrderId", requireMember, async (req: Request, res: Response) => {
   try {
     const tenantId = getTenantIdWithFallback(req);
     if (!tenantId) {
@@ -1767,7 +1809,7 @@ metadataRouter.post("/work-orders/:workOrderId", async (req: Request, res: Respo
   }
 });
 
-metadataRouter.delete("/work-orders/metadata/:id", async (req: Request, res: Response) => {
+metadataRouter.delete("/work-orders/metadata/:id", requireMember, async (req: Request, res: Response) => {
   try {
     const tenantId = getTenantIdWithFallback(req);
     if (!tenantId) {
@@ -1786,7 +1828,7 @@ metadataRouter.delete("/work-orders/metadata/:id", async (req: Request, res: Res
   }
 });
 
-metadataRouter.post("/work-orders/bulk-apply", async (req: Request, res: Response) => {
+metadataRouter.post("/work-orders/bulk-apply", requireMember, async (req: Request, res: Response) => {
   try {
     const tenantId = getTenantIdWithFallback(req);
     if (!tenantId) {
@@ -1887,7 +1929,7 @@ const propagateSchema = z.object({
   metadataKatalogId: z.string().optional(),
 });
 
-metadataRouter.post("/propagate/:objectId", async (req: Request, res: Response) => {
+metadataRouter.post("/propagate/:objectId", requireMember, async (req: Request, res: Response) => {
   try {
     const tenantId = getTenantIdWithFallback(req);
     if (!tenantId) {
@@ -1996,7 +2038,7 @@ metadataRouter.get("/article-preview/:objectId/:articleId", async (req: Request,
   }
 });
 
-metadataRouter.post("/article-writeback/:objectId/:articleId", async (req: Request, res: Response) => {
+metadataRouter.post("/article-writeback/:objectId/:articleId", requireMember, async (req: Request, res: Response) => {
   try {
     const tenantId = getTenantIdWithFallback(req);
     if (!tenantId) {
@@ -2066,7 +2108,7 @@ const writeArticleMetadataSchema = z.object({
   executedBy: z.string().optional(),
 });
 
-metadataRouter.post("/article-write/:objectId", async (req: Request, res: Response) => {
+metadataRouter.post("/article-write/:objectId", requireMember, async (req: Request, res: Response) => {
   try {
     const tenantId = getTenantIdWithFallback(req);
     if (!tenantId) {

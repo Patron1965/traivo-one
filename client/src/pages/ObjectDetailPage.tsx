@@ -489,7 +489,6 @@ export default function ObjectDetailPage() {
   });
 
 
-
   const { data: parentRelations = [] } = useQuery<ParentRelation[]>({
     queryKey: ["/api/objects", objectId, "parents"],
     queryFn: async () => {
@@ -654,10 +653,6 @@ export default function ObjectDetailPage() {
   });
 
 
-
-
-
-
   const addMetadataMutation = useMutation({
     mutationFn: async (data: any) => {
       await apiRequest("POST", "/api/metadata", data);
@@ -671,16 +666,26 @@ export default function ObjectDetailPage() {
     },
   });
 
+  // Task #1440: PERMANENT radering — separat flöde från arkivering. Servern
+  // vägrar (409 USE_ARCHIVE) när historik/kopplingar finns; visa dess läsbara
+  // meddelande i toasten (rå fetch för strukturerad felkropp).
   const deleteMetadataMutation = useMutation({
     mutationFn: async (metadataId: string) => {
-      await apiRequest("DELETE", `/api/metadata/${metadataId}`);
+      const res = await fetch(`/api/metadata/${metadataId}`, {
+        method: "DELETE",
+        credentials: "include",
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => null);
+        throw new Error(body?.message || body?.error || `Radering misslyckades (${res.status})`);
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/metadata/objects", objectId] });
-      toast({ title: "Metadata borttagen" });
+      toast({ title: "Värdet raderat permanent" });
     },
     onError: (error: Error) => {
-      toast({ title: "Kunde inte ta bort metadata", description: error.message, variant: "destructive" });
+      toast({ title: "Kunde inte radera permanent", description: error.message, variant: "destructive" });
     },
   });
 
@@ -1035,7 +1040,6 @@ export default function ObjectDetailPage() {
       sourceName: source?.sourceName || "",
     };
   };
-
 
 
   return (
@@ -1442,6 +1446,8 @@ export default function ObjectDetailPage() {
                     canAnonymize={isAdmin}
                     onAnonymize={(katalogId) => anonymizeMetadataMutation.mutate(katalogId)}
                     anonymizePending={anonymizeMetadataMutation.isPending}
+                    onHardDelete={(id) => deleteMetadataMutation.mutate(id)}
+                    hardDeletePending={deleteMetadataMutation.isPending}
                     renderHistoryButton={renderHistory}
                     objectAssignments={objectAssignments}
                     navigate={navigate}
@@ -1458,6 +1464,7 @@ export default function ObjectDetailPage() {
             objectId={objectId}
             obj={obj}
             contacts={contacts as any}
+            canEditContacts={["owner", "admin", "planner", "technician", "user"].includes(user?.role ?? "")}
             onEditGeo={() => openEditDialog()}
             navigate={navigate}
           />
@@ -1705,7 +1712,6 @@ export default function ObjectDetailPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
 
 
       {/* Snabborder: rik direktorder (kund + fakturareferenser + löpande SO-nr +

@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import {
   Contact, Image as ImageIcon, ClipboardList, MapPin, Target,
   Phone, Mail, Calendar, CalendarClock, CircleSlash,
-  Link as LinkIcon, Users, Map as MapIcon, Zap,
+  Link as LinkIcon, Users, Map as MapIcon, Zap, Pencil, Copy,
 } from "lucide-react";
 import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
 import L from "leaflet";
@@ -27,8 +27,10 @@ import { DomainCarouselCard } from "./DomainCarouselCard";
 //   - "linked" (KOPPLADE): Orderkoncept, Snabbordrar, Uppgifter, Bilder — sökbara
 //     list-block (bläddra + sök). Systemgenererade domäner (SYS) läses från den
 //     delade endpointen `GET /api/objects/:id/system-generated-metadata`.
+import { ObjectContactEditDialog, type EditableContact } from "./ObjectContactEditDialog";
+import { useToast } from "@/hooks/use-toast";
 
-interface ObjectContactLite {
+interface ObjectContactLite extends EditableContact {
   id: string;
   name: string;
   contactType?: string;
@@ -210,6 +212,9 @@ export interface ObjectDomainGridProps {
   obj: any;
   contacts: ObjectContactLite[];
   workOrders?: ObjectWorkOrderLite[];
+  /** Task #1440: redigeringsknappen i kontaktkortet visas bara för roller med
+   *  redigeringsrätt (servern kräver dessutom planner/admin för mutationerna). */
+  canEditContacts?: boolean;
   onEditGeo: () => void;
   navigate: (path: string) => void;
 }
@@ -220,11 +225,15 @@ export function ObjectDomainGrid({
   obj,
   contacts,
   workOrders = [],
+  canEditContacts = false,
   onEditGeo,
   navigate,
 }: ObjectDomainGridProps) {
   const mapConfig = useMapConfig();
+  const { toast } = useToast();
   const [mapOpen, setMapOpen] = useState(false);
+  // Task #1440: kontakt som redigeras i kortets metadata-dialog.
+  const [editingContact, setEditingContact] = useState<ObjectContactLite | null>(null);
 
   const { data, isLoading } = useQuery<SystemGeneratedMetadata>({
     queryKey: ["/api/objects", objectId, "system-generated-metadata"],
@@ -254,12 +263,52 @@ export function ObjectDomainGrid({
   const hasCoordinates = obj?.latitude != null && obj?.longitude != null;
   const hasEntrance = obj?.entranceLatitude != null && obj?.entranceLongitude != null;
 
+  // Task #1440: kontaktkortet är HUVUDVISNINGEN för kontaktpersoner — med
+  // redigering (metadata-vägen) och kopiering direkt i kortet. Delvis ifyllda
+  // kontakter renderas med "—" för saknat namn.
+  const copyContact = async (c: ObjectContactLite) => {
+    const lines = [
+      c.name ? `Namn: ${c.name}` : null,
+      c.role ? `Titel: ${c.role}` : null,
+      c.phone ? `Telefon: ${c.phone}` : null,
+      c.email ? `E-post: ${c.email}` : null,
+    ].filter(Boolean);
+    try {
+      await navigator.clipboard.writeText(lines.join("\n"));
+      toast({ title: "Kontakt kopierad" });
+    } catch {
+      toast({ title: "Kunde inte kopiera", variant: "destructive" });
+    }
+  };
+
   const renderContact = (c: ObjectContactLite) => (
     <div className="p-3 border rounded-lg" data-testid={`contact-card-${c.id}`}>
-      <div className="flex items-center justify-between mb-1">
-        <span className="font-medium text-sm truncate">{c.name}</span>
-        <div className="flex items-center gap-1">
+      <div className="flex items-center justify-between mb-1 gap-2">
+        <span className="font-medium text-sm truncate">{c.name || "—"}</span>
+        <div className="flex items-center gap-1 shrink-0">
           {c.inherited && <Badge variant="outline" className="text-[10px]">Ärvd</Badge>}
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-6 w-6 p-0"
+            onClick={() => copyContact(c)}
+            aria-label="Kopiera kontakt"
+            data-testid={`button-copy-contact-${c.id}`}
+          >
+            <Copy className="h-3 w-3" />
+          </Button>
+          {canEditContacts && !c.inherited && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-6 w-6 p-0"
+              onClick={() => setEditingContact(c)}
+              aria-label="Redigera kontakt"
+              data-testid={`button-edit-contact-${c.id}`}
+            >
+              <Pencil className="h-3 w-3" />
+            </Button>
+          )}
         </div>
       </div>
       <div className="text-xs text-muted-foreground">{contactTypeLabel(c)}</div>
@@ -548,6 +597,16 @@ export function ObjectDomainGrid({
           })}
           renderItem={renderContact}
         />
+
+        {editingContact && (
+          <ObjectContactEditDialog
+            objectId={objectId}
+            contact={editingContact}
+            structuralEditsSafe={contacts.length === 1}
+            open={!!editingContact}
+            onOpenChange={(o) => { if (!o) setEditingContact(null); }}
+          />
+        )}
 
         <DomainCarouselCard<SystemTaskHistory>
           className={GRID_CARD}

@@ -17,7 +17,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import {
   Pencil, Trash2, RotateCcw, AlertTriangle, ChevronLeft, ChevronRight, Link as LinkIcon,
-  ShieldOff, Lock, Settings2,
+  ShieldOff, Lock, Settings2, Archive as ArchiveIcon,
 } from "lucide-react";
 import type { MetadataInstance } from "@shared/schema";
 import { KallaBadge, deriveEntryKalla } from "@/lib/metadata-kalla";
@@ -142,6 +142,10 @@ export interface MetadataCarouselProps {
   canAnonymize?: boolean;
   onAnonymize?: (katalogId: string) => void;
   anonymizePending?: boolean;
+  /** Task #1440: permanent radering av ett LOKALT värde (servern vägrar med 409
+   *  och hänvisar till arkivering när historik/kopplingar finns). */
+  onHardDelete?: (metadataId: string) => void;
+  hardDeletePending?: boolean;
   onPreviewImage: (url: string) => void;
   renderHistoryButton?: (entry: MetadataFormEntry) => ReactNode;
   /** Task #1368: admin får ändra fältets katalog-inställningar (område/datatyp/vinjett). */
@@ -166,6 +170,8 @@ export function MetadataCarousel({
   canAnonymize,
   onAnonymize,
   anonymizePending,
+  onHardDelete,
+  hardDeletePending,
   onPreviewImage,
   renderHistoryButton,
   canEditField,
@@ -175,6 +181,8 @@ export function MetadataCarousel({
   const queryClient = useQueryClient();
   const [editOpen, setEditOpen] = useState(false);
   const [anonymizeOpen, setAnonymizeOpen] = useState(false);
+  const [archiveOpen, setArchiveOpen] = useState(false);
+  const [hardDeleteOpen, setHardDeleteOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
 
   const datatyp = entry.katalog?.datatyp ?? type?.datatyp ?? "string";
@@ -202,6 +210,23 @@ export function MetadataCarousel({
     !isAnonymized &&
     !isInherited &&
     !!entry.metadataKatalogId;
+  // Task #1440: kontaktfamiljens fält (område "kontakt") konfigureras ENDAST via
+  // den centrala metadatauppsättningen — ingen Fältinställningar-knapp på
+  // objektsidan. Värdet kan fortfarande redigeras.
+  const isKontaktField = (entry.katalog?.area ?? type?.area ?? "") === "kontakt";
+  const fieldLabel = entry.katalog?.namn || type?.namn || "fältet";
+  // Permanent radering: endast LOKALA, aktiva, icke-system-värden med riktigt
+  // varden-id — och inte multi-instansgrupper (raderas per värde via editering).
+  // Server-side kräver DELETE /:id admin-roll — UI:t gate:ar på samma flagga.
+  const showHardDelete =
+    !!onHardDelete &&
+    !!canAnonymize &&
+    !isSystem &&
+    !isSoftDeleted &&
+    !isAnonymized &&
+    !isInherited &&
+    !!entry.id &&
+    kind !== "instances";
 
   return (
     <Card
@@ -253,7 +278,7 @@ export function MetadataCarousel({
 
               {renderHistoryButton?.(entry)}
 
-              {canEditField && type?.id && (
+              {canEditField && type?.id && !isKontaktField && (
                 <Button
                   variant="ghost"
                   size="sm"
@@ -293,17 +318,42 @@ export function MetadataCarousel({
                 </Button>
               ) : (
                 !isSystem && !isAnonymized && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-7 w-7 p-0 text-destructive hover:text-destructive"
-                    onClick={() => onSoftDelete(entry.metadataKatalogId || "")}
-                    disabled={softDeletePending || !entry.metadataKatalogId}
-                    data-testid={`button-delete-metadata-${entry.id}`}
-                    aria-label="Ta bort"
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </Button>
+                  <>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 w-7 p-0"
+                          onClick={() => setArchiveOpen(true)}
+                          disabled={softDeletePending || !entry.metadataKatalogId}
+                          data-testid={`button-archive-metadata-${entry.id}`}
+                          aria-label="Arkivera"
+                        >
+                          <ArchiveIcon className="h-3.5 w-3.5" />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>Arkivera — dölj men bevara historik</TooltipContent>
+                    </Tooltip>
+                    {showHardDelete && (
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 w-7 p-0 text-destructive hover:text-destructive"
+                            onClick={() => setHardDeleteOpen(true)}
+                            disabled={hardDeletePending}
+                            data-testid={`button-delete-metadata-${entry.id}`}
+                            aria-label="Radera permanent"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>Radera permanent</TooltipContent>
+                      </Tooltip>
+                    )}
+                  </>
                 )
               )}
 
@@ -381,7 +431,65 @@ export function MetadataCarousel({
         })()}
       </CardContent>
 
-      {canEditField && type?.id && settingsOpen && (
+      {/* Task #1440: tre SEPARATA livscykelflöden med egna bekräftelser —
+          arkivering (dölj/bevara), permanent radering (spärras av servern vid
+          historik/kopplingar) och anonymisering (GDPR, nedan). */}
+      <AlertDialog open={archiveOpen} onOpenChange={setArchiveOpen}>
+        <AlertDialogContent data-testid={`dialog-archive-${entry.id}`}>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <ArchiveIcon className="h-4 w-4" />
+              Arkivera "{fieldLabel}"?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              Arkivering döljer värdet i normala vyer men <strong>bevarar all historik</strong>.
+              Fältet kan när som helst återställas. Detta är inte en radering — ingenting
+              förstörs.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid={`button-cancel-archive-${entry.id}`}>Avbryt</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => onSoftDelete(entry.metadataKatalogId || "")}
+              disabled={softDeletePending}
+              data-testid={`button-confirm-archive-${entry.id}`}
+            >
+              Arkivera
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {showHardDelete && (
+        <AlertDialog open={hardDeleteOpen} onOpenChange={setHardDeleteOpen}>
+          <AlertDialogContent data-testid={`dialog-hard-delete-${entry.id}`}>
+            <AlertDialogHeader>
+              <AlertDialogTitle className="flex items-center gap-2">
+                <AlertTriangle className="h-4 w-4 text-destructive" />
+                Radera "{fieldLabel}" permanent?
+              </AlertDialogTitle>
+              <AlertDialogDescription>
+                Detta tar bort värdet <strong>permanent</strong>. Om värdet har historik eller
+                kopplingar (t.ex. orderkoncept) vägras raderingen — arkivera fältet istället,
+                så döljs det men historiken bevaras.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel data-testid={`button-cancel-hard-delete-${entry.id}`}>Avbryt</AlertDialogCancel>
+              <AlertDialogAction
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                onClick={() => onHardDelete?.(entry.id)}
+                disabled={hardDeletePending}
+                data-testid={`button-confirm-hard-delete-${entry.id}`}
+              >
+                Radera permanent
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      )}
+
+      {canEditField && type?.id && !isKontaktField && settingsOpen && (
         <MetadataFieldSettingsDialog
           type={type}
           areas={areas}

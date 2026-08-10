@@ -79,12 +79,23 @@ async function getUserTenantRole(userId: string): Promise<TenantContext | null> 
   };
 }
 
+
+// Clerk getAuth() kastar om clerkMiddleware inte är monterad (t.ex. isolerade
+// test-appar). Behandla det som oautentiserad istället för 500/hängning.
+function safeGetAuth(req: Request): ReturnType<typeof getAuth> | null {
+  try {
+    return getAuth(req);
+  } catch {
+    return null;
+  }
+}
+
 export const requireTenant: RequestHandler = async (req, res, next) => {
   // Support both Clerk sessions and backwards-compat req.user shim
   let userId: string | undefined = (req as any).user?.claims?.sub;
 
   if (!userId) {
-    const auth = getAuth(req);
+    const auth = safeGetAuth(req);
     if (!auth?.userId) {
       return res.status(401).json({ error: "Ej autentiserad" });
     }
@@ -130,6 +141,9 @@ export const requireRole = (...allowedRoles: UserRole[]): RequestHandler => {
 
 export const requireAdmin: RequestHandler = requireRole("owner", "admin");
 export const requirePlanner: RequestHandler = requireRole("owner", "admin", "planner");
+// Skrivande medlemsroller: får mutera VÄRDEN (inte katalogdefinitioner).
+// Task #1443-policy: vanliga användare får lägga till godkända befintliga fält.
+export const requireMember: RequestHandler = requireRole("owner", "admin", "planner", "technician", "user");
 export const requireOwner: RequestHandler = requireRole("owner");
 
 export function getTenantId(req: Request): string {
@@ -217,7 +231,7 @@ export const requireTenantWithFallback: RequestHandler = async (req, res, next) 
   let userId: string | undefined = (req as any).user?.claims?.sub;
 
   if (!userId) {
-    const auth = getAuth(req);
+    const auth = safeGetAuth(req);
     if (!auth?.userId) {
       return res.status(401).json({
         error: "Ej autentiserad",

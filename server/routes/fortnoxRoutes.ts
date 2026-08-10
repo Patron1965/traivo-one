@@ -906,6 +906,12 @@ app.get("/api/objects/:objectId/contacts", asyncHandler(async (req, res) => {
       role: k.titel,
       phone: k.telefon,
       email: k.epost,
+      // Task #1440: redigerings- och ursprungsinfo för det konsoliderade
+      // kontaktkortet (varden-id per underfält, ärvt/eget, skapad).
+      fields: k.fields,
+      inherited: k.inherited,
+      inheritedFromObjectName: k.inheritedFromObjectName,
+      createdAt: k.createdAt,
     })));
 }));
 
