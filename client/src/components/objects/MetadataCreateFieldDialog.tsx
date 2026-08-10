@@ -16,6 +16,8 @@ import { apiRequest } from "@/lib/queryClient";
 import { DATATYPE_META } from "@/components/ObjectMetadataForm";
 import type { MetadataAreaMeta } from "./metadata-carousel-utils";
 import { MetadataAreaCombobox, NO_AREA } from "./MetadataAreaCombobox";
+import { useAuth } from "@/hooks/use-auth";
+import { isAdminRole } from "@/lib/role-config";
 
 /**
  * Task #1368: skapa ett nytt katalogfält direkt från objektsidan — namn,
@@ -32,6 +34,7 @@ export function MetadataCreateFieldDialog({
 }) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { user } = useAuth();
   const [open, setOpen] = useState(false);
   const [namn, setNamn] = useState("");
   const [datatyp, setDatatyp] = useState("string");
@@ -65,6 +68,12 @@ export function MetadataCreateFieldDialog({
       toast({ title: "Kunde inte skapa fältet", description: err.message, variant: "destructive" });
     },
   });
+
+  // Task #1466: bara admin/owner får skapa nya katalogfält (servern kräver
+  // redan requireAdmin på POST /api/metadata/types) — dölj knappen för övriga.
+  if (!isAdminRole(user?.role)) {
+    return null;
+  }
 
   return (
     <>
