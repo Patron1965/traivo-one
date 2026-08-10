@@ -1,0 +1,211 @@
+Traivo – utvecklingsspecifikation för Snabborder
+1. Syfte
+Traivo behöver en Snabborder som komplement till det mer avancerade Orderkonceptet.
+Orderkonceptet är byggt för mer komplexa beställningar och kan exempelvis appliceras mot ett stort antal objekt hos en större kund. Snabborder ska istället vara ett enkelt, snabbt och klassiskt sätt att manuellt skapa en order, exempelvis när en kund ringer och beställer en tjänst, några varor eller en kombination av dessa.
+Snabborder ska samtidigt behålla Traivos viktigaste princip: objektstrukturen.
+Det innebär att Snabborder måste kunna användas på två sätt:
+    1    Traditionell order utan objekt – kund + leveransadress + artiklar.
+    2    Objektbaserad order – kund + ett eller flera objekt + artiklar kopplade till respektive objekt.
+Kund är alltid obligatorisk. Objekt är valfritt.
+
+2. Grundprincip
+Snabborder ska visuellt och funktionellt kännas som ett klassiskt orderformulär.
+Användaren börjar med ett orderhuvud och bygger därefter orderns innehåll rad för rad.
+Ordern ska kunna innehålla:
+    •    artiklar,
+    •    fritextrader,
+    •    ett eller flera objekt med underliggande artiklar.
+Det ska alltså inte krävas att ett objekt finns registrerat för att skapa en Snabborder.
+
+3. Steg 1 – Orderhuvud
+Första steget är alltid att välja kund.
+När kunden valts ska orderhuvudet kunna innehålla de normala uppgifterna för en beställning, bland annat:
+    •    Kund
+    •    Önskat leveransdatum/leveranstid
+    •    Kundens referens/beställningsreferens
+    •    Vår referens
+    •    Övriga fakturareferenser som behövs
+    •    Leveransadress, om ordern inte är objektbaserad
+    •    Fakturatext
+Fakturatext
+Fortnox API har möjlighet till en fri faktura-/ordertext ovanför orderraderna.
+Traivo ska därför ha ett fält där användaren kan skriva en ostrukturerad fritext som beskriver beställningen i klartext. Denna text ska överföras till motsvarande fält i Fortnox.
+
+4. Två alternativa arbetssätt
+Efter orderhuvudet måste användaren i praktiken välja mellan två principer.
+A. Traditionell order
+Användaren anger en leveransadress manuellt och lägger därefter till exempelvis:
+    •    artikel
+    •    antal
+    •    artikel
+    •    antal
+    •    fritextrad
+    •    osv.
+Detta ska fungera även om det inte finns något objekt registrerat i Traivo.
+Exempel:
+Kund:
+Företag AB
+Leveransadress:
+Industrigatan 10, Stockholm
+Orderrader:
+    •    Reservdelssats × 1
+    •    Skruv × 2
+    •    Frakt × 1
+    •    Fritextrad: "Levereras enligt överenskommelse"
+Detta är en helt normal traditionell order.
+B. Objektbaserad order
+Användaren väljer istället ett befintligt objekt som tillhör kunden.
+Objektet innehåller redan adress och övrig relevant metadata och blir därmed platsen för leveransen/utförandet.
+Under objektet lägger användaren sedan artiklar.
+Exempel:
+Objekt A – Återvinningsrum Storgatan 10
+    •    Reservdelssats × 1
+    •    Skruv × 2
+    •    Frakt × 1
+Därefter kan användaren trycka + och lägga till ytterligare ett objekt:
+Objekt B – Återvinningsrum Storgatan 20
+    •    Tvättjänst × 10 kärl
+    •    Kontroll × 1
+På detta sätt kan en Snabborder innehålla flera objekt, förutsatt att objekten tillhör den valda kunden.
+
+5. "+" är central funktion i orderbyggaren
+Efter orderhuvudet ska användaren mötas av ett enkelt område där ordern byggs.
+En tydlig + Lägg till-funktion bör vara central.
+När användaren trycker på + ska minst tre alternativ finnas:
++ Artikel
+Lägger till en artikelrad.
+Användaren väljer exempelvis:
+    •    artikelnummer/artikel
+    •    antal
+    •    eventuella övriga artikeluppgifter.
++ Fritextrad
+Lägger till en vanlig ostrukturerad textrad i ordern.
++ Objekt
+Låter användaren välja ett av kundens objekt.
+När objektet har lagts till blir efterföljande artiklar underordnade det objektet tills nästa struktur/objekt skapas.
+
+6. Hierarkin är viktig
+Snabbordern måste därför stödja en enkel hierarkisk struktur.
+Exempel:
+ORDER
+Kund
+Referenser
+Leveransdatum
+Fakturatext
+↓
+Objekt A
+→ Artikel 1
+→ Artikel 2
+→ Artikel 3
+↓
+Objekt B
+→ Artikel 4
+→ Artikel 5
+Det måste vara tydligt både för användaren och i datamodellen vilket objekt respektive artikel/orderuppgift tillhör.
+Detta är en viktig skillnad mot ett traditionellt ordersystem.
+
+7. Leveransadress kontra objekt
+Här finns en viktig regel som systemet måste hantera.
+En användare ska inte kunna blanda en manuellt angiven leveransadress med objektstrukturen på ett sätt som skapar två olika destinationskällor.
+Om användaren har valt:
+Manuell leveransadress
+och därefter försöker lägga till ett objekt ska Traivo reagera.
+På motsvarande sätt bör systemet reagera om användaren först väljer ett objekt och därefter försöker ange en fristående leveransadress för samma orderstruktur.
+Systemet bör då exempelvis fråga:
+Ordern använder redan en manuell leveransadress. Vill du istället använda kundens objekt och objektens adresser?
+Användaren måste alltså välja vilken adressprincip som styr ordern.
+Detta är viktigt för att undvika oklarheter senare i produktion, leverans, ruttplanering och fakturering.
+
+8. Objekt är det rekommenderade Traivo-sättet
+Även om Snabborder måste kunna fungera utan objekt bör Traivo normalt uppmuntra användaren att använda objektstrukturen.
+Ett objekt kan exempelvis vara:
+    •    återvinningsrum,
+    •    miljörum,
+    •    anläggning,
+    •    behållare,
+    •    maskin,
+    •    annan fysisk leverans- eller produktionspunkt.
+Objektet innehåller adress och metadata och ger betydligt bättre struktur för senare planering, produktion, historik och uppföljning.
+Snabborder utan objekt behövs dock för att Traivo även ska kunna fungera som ett traditionellt ordersystem när situationen kräver det.
+
+9. Artiklarna driver efterföljande processer
+Snabborder ska inte själv behöva hantera all efterföljande logik.
+När artiklarna lagts på ordern ska Traivos övriga motorer kunna ta över.
+Exempel:
+En fysisk artikel kan senare generera:
+    •    plockuppgift,
+    •    lagerhantering,
+    •    utleverans,
+    •    frakt,
+    •    eventuellt fraktsedel.
+En tjänsteartikel kan generera:
+    •    produktionsuppgift,
+    •    tidsbehov,
+    •    kompetens-/utförarkod,
+    •    planeringsunderlag,
+    •    utförande på objektet.
+Snabborderns huvuduppgift är alltså att snabbt och korrekt skapa ordern och dess underliggande uppgifter. Befintliga motorer ska därefter behandla artiklarna enligt respektive artikeltyp.
+
+10. Exempel på typiskt användningsfall
+En mindre kund ringer KINAB och säger:
+"Vi behöver tvätta tio kärl i vårt återvinningsrum. Kan ni samtidigt ta med en reservdelssats och två skruvar?"
+Kundservice öppnar Snabborder.
+    1    Väljer kunden.
+    2    Anger kundreferens och vår referens.
+    3    Anger önskad leveranstid.
+    4    Väljer kundens återvinningsrum som objekt.
+    5    Lägger till:
+    ◦    Tvättjänst × 10
+    ◦    Reservdelssats × 1
+    ◦    Skruv × 2
+    ◦    eventuell frakt.
+    6    Sparar ordern.
+Traivo skapar därefter relevanta uppgifter från artiklarna.
+Det är denna typ av arbetsflöde som Snabborder framför allt ska göra mycket snabbt att administrera.
+
+11. Skillnaden mellan Orderkoncept och Snabborder
+Orderkoncept
+Används när en mer avancerad struktur ska skapa order/uppgifter, exempelvis mot många objekt hos en större kund. Konceptet kan återanvändas och appliceras systematiskt.
+Snabborder
+Används när användaren manuellt och snabbt vill bygga en konkret order genom att välja kund och därefter lägga till artiklar, fritext och eventuellt ett eller flera objekt.
+Man kan därför beskriva Snabborder som att användaren manuellt gör en förenklad version av det som Orderkonceptet annars gör mer automatiserat och strukturerat.
+
+12. Funktioner som kan komma senare
+Följande behöver inte ingå i första versionen men arkitekturen bör inte förhindra dem:
+    •    tillåt delleverans,
+    •    delleveransstatus,
+    •    automatisk fraktsedel,
+    •    mer avancerad lager-/plocklogik,
+    •    transportbokning,
+    •    automatiska leveransaviseringar,
+    •    ytterligare leveransvillkor.
+Första versionen bör hållas enkel.
+
+13. Krav för första versionen
+Första fungerande versionen av Snabborder ska minst kunna:
+    1    Välja kund – obligatoriskt.
+    2    Ange önskat leveransdatum/tid.
+    3    Ange kundens referens/beställningsreferens.
+    4    Ange vår referens och relevanta fakturareferenser.
+    5    Ange fri fakturatext för Fortnox.
+    6    Skapa order utan objekt.
+    7    Ange manuell leveransadress vid traditionell order.
+    8    Lägga till artikel.
+    9    Ange antal på artikel.
+    10    Lägga till fritextrad.
+    11    Lägga till objekt från vald kund.
+    12    Lägga till flera objekt på samma order.
+    13    Koppla artiklar till rätt objekt.
+    14    Tydligt visa hierarkin Order → Objekt → Artiklar.
+    15    Förhindra/varna för konflikt mellan manuell leveransadress och objektbaserad adress.
+    16    Spara ordern så att artiklarna därefter kan behandlas av Traivos befintliga motorer.
+Sammanfattande utvecklingsprincip
+Snabborder ska vara klassisk i gränssnittet men Traivo-baserad i datamodellen.
+Användaren ska kunna skapa en traditionell order lika enkelt som i ett vanligt affärssystem, men när objekt används ska Traivos objektstruktur slå igenom fullt ut.
+Den centrala modellen blir:
+KUND → ORDER → [LEVERANSADRESS eller OBJEKT] → ARTIKLAR/UPPGIFTER
+och vid objektbaserad order:
+KUND → ORDER → OBJEKT 1 → ARTIKLAR
+**　　　　　　　→ OBJEKT 2 → ARTIKLAR**
+**　　　　　　　→ OBJEKT 3 → ARTIKLAR**
+Detta ger Traivo både den flexibilitet som krävs av ett traditionellt ordersystem och den objektorienterade struktur som är en av systemets viktigaste styrkor.
