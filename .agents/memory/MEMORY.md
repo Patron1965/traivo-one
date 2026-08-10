@@ -137,4 +137,5 @@
 - [Objektimport strikt matchning](object-import-strict-matching.md) — Import 2.0: bara 3 kärnfält + AKTIVA katalogfält; column_errors blockerar execute; lazy-create endast interna systemfält; arkiverat mål kräver restore-flagga.
 - [allowed_values sväljer importvärden tyst](import-allowed-values-silent-skip.md) — mappad kolumn kan ge 0 metadata_varden; backfill via sparade sessioners raw_rows + interim.
 - [Objektklassificering som metadata](object-classification-metadata.md) — legacy-kolumnerna DROPPADE; läs via getObjectHookClassification/getClassificationForObjects eller objectOwnMetadataTextValueSql; skriv via mirror.
+- [WorkOrder select-list drift](workorder-select-list-drift.md) — nya work_orders-kolumner måste läggas till manuellt i storage.ts duplicerade select-listor; `(wo as any).col` blir tyst null.
 - [Lagersaldo concurrency-lås](stock-balance-concurrency.md) — delta-beräknande saldo-writes (reconcile/inventering) måste läsa utgångsvärdet under FOR UPDATE i samma tx, annars dubbelbokning.

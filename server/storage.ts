@@ -3328,6 +3328,12 @@ export class DatabaseStorage implements IStorage {
       desiredDeliveryStart: workOrders.desiredDeliveryStart,
       desiredDeliveryEnd: workOrders.desiredDeliveryEnd,
       etaSmsSent: workOrders.etaSmsSent,
+      // Task #1512: "född ur"-fält för objektets Kopplade uppgifter-lista —
+      // utan dessa blir sourceAssignmentId/orderConceptId/orderNumber alltid
+      // null i computeTasksHistory → dedup + käll-etikett slutar fungera.
+      orderNumber: workOrders.orderNumber,
+      orderConceptId: workOrders.orderConceptId,
+      sourceAssignmentId: workOrders.sourceAssignmentId,
       objectName: objects.name,
       objectNameTranslations: objects.nameTranslations,
       objectAddress: objects.address,
