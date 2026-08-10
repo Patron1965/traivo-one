@@ -1,11 +1,11 @@
 import { useMemo, useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
-  Link as LinkIcon, Calendar, Users, Info, ListFilter,
+  Info, ListFilter,
 } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -19,7 +19,7 @@ import {
 import { MetadataCarousel } from "./MetadataCarousel";
 import { MetadataAreaSection } from "./MetadataAreaSection";
 import { MetadataCreateFieldDialog } from "./MetadataCreateFieldDialog";
-import { ObjectSystemOrdersList } from "./ObjectSystemOrdersList";
+import { ObjectLinkedTasksUnified } from "./ObjectLinkedTasksUnified";
 import { isCanonicalGeoFieldName } from "@shared/geo-fields";
 import {
   groupEntriesByArea,
@@ -59,6 +59,9 @@ export interface ObjectMetadataBodyProps {
   navigate: (path: string) => void;
   /** Task #1368: admin får skapa fält och ändra katalog-inställningar härifrån. */
   canEditFields?: boolean;
+  /** Kontaktkortet — renderas under metadataområdet Kontaktinformation
+   *  (produktägarbeslut 2026-08-10). */
+  kontaktSection?: ReactNode;
 }
 
 function anchorSlug(area: string): string {
@@ -77,6 +80,7 @@ export function ObjectMetadataBody({
   types,
   onAdd,
   isAdding,
+  kontaktSection,
   onSoftDelete,
   onRestore,
   softDeletePending,
@@ -288,94 +292,35 @@ export function ObjectMetadataBody({
           />
         ))}
 
+        {/* Kontaktkortet ligger under metadataområdet Kontaktinformation
+            (produktägarbeslut 2026-08-10) — inte i en separat samlingsgrid. */}
+        {kontaktSection && (!filterActive || areaFilter.has("kontakt")) && (
+          <section id="meta-area-kontakt" className="scroll-mt-24 space-y-3">
+            <h3 className="text-sm font-semibold" data-testid="heading-area-kontakt">
+              Kontaktinformation
+            </h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+              {kontaktSection}
+            </div>
+          </section>
+        )}
+
         {!filterActive && (
         <>
         {/* "Systemgenererad metadata"-kortet borttaget på produktägarens begäran
             (2026-08-10): systemursprung anges redan per post via KÄLLA-badgen,
             så en separat samlingssektion behövs inte. */}
 
-        {/* Orderkoncept-uppgifter — planerade uppgifter från koncept. */}
+        {/* Produktägarbeslut 2026-08-10: alla uppgiftskällor (orderkoncept,
+            snabbordrar, ordrar) redovisas i EN gemensam lista med källänk per
+            rad — ersätter de tidigare korten "Orderkoncept-uppgifter" och
+            "Systemkopplade ordrar". */}
         <section id="meta-area-assignments" className="scroll-mt-24">
-          <Card data-testid="card-object-assignments">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base flex items-center gap-2">
-                <LinkIcon className="h-4 w-4" /> Orderkoncept-uppgifter
-                {objectAssignments.length > 0 && (
-                  <Badge variant="secondary" className="text-xs" data-testid="badge-assignment-count">
-                    {objectAssignments.length}
-                  </Badge>
-                )}
-              </CardTitle>
-              <p className="text-xs text-muted-foreground">
-                Planerade uppgifter som genererats från orderkoncept för detta objekt. Klicka för att navigera till orderkonceptet eller kunden.
-              </p>
-            </CardHeader>
-            <CardContent>
-              {objectAssignments.length > 0 ? (
-                <div className="space-y-2">
-                  {objectAssignments.map((a) => (
-                    <div
-                      key={a.id}
-                      className="rounded-lg border border-border p-3"
-                      data-testid={`assignment-row-${a.id}`}
-                    >
-                      <div className="min-w-0 flex-1">
-                        <div className="text-sm font-medium truncate" data-testid={`text-assignment-title-${a.id}`}>
-                          {a.title}
-                        </div>
-                        <div className="mt-1 flex items-center gap-3 flex-wrap text-xs text-muted-foreground">
-                          {a.scheduledDate && (
-                            <span className="flex items-center gap-1">
-                              <Calendar className="h-3 w-3" />
-                              {new Date(a.scheduledDate).toLocaleDateString("sv-SE")}
-                            </span>
-                          )}
-                          {typeof a.quantity === "number" && a.quantity > 0 && (
-                            <span>{a.quantity} st</span>
-                          )}
-                        </div>
-                      </div>
-                      <div className="mt-2 flex items-center gap-2 flex-wrap">
-                        {a.orderConceptId && (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="h-7 px-2 text-xs"
-                            onClick={() => navigate(`/order-concepts/${a.orderConceptId}/edit`)}
-                            data-testid={`link-assignment-concept-${a.id}`}
-                          >
-                            <LinkIcon className="h-3 w-3 mr-1" />
-                            {a.orderConceptName || "Orderkoncept"}
-                          </Button>
-                        )}
-                        {a.customerId && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-7 px-2 text-xs"
-                            onClick={() => navigate(`/customers/${a.customerId}`)}
-                            data-testid={`link-assignment-customer-${a.id}`}
-                          >
-                            <Users className="h-3 w-3 mr-1" />
-                            {a.customerName || "Kund"}
-                          </Button>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-sm text-muted-foreground" data-testid="empty-object-assignments">
-                  Inga orderkoncept-uppgifter genererade för detta objekt ännu.
-                </p>
-              )}
-            </CardContent>
-          </Card>
-        </section>
-
-        {/* Systemkopplade ordrar ("född ur") — utfällbar lista. */}
-        <section id="meta-area-orders" className="scroll-mt-24">
-          <ObjectSystemOrdersList objectId={objectId} navigate={navigate} />
+          <ObjectLinkedTasksUnified
+            objectId={objectId}
+            assignments={objectAssignments}
+            navigate={navigate}
+          />
         </section>
         </>
         )}

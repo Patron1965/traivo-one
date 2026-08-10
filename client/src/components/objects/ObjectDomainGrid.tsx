@@ -201,10 +201,12 @@ const defaultIcon = L.icon({
 const GRID_CARD = "h-full";
 
 export interface ObjectDomainGridProps {
-  /** "collections" = METADATA-samlingar (Kontakt/Produktion/Geografi);
+  /** "collections" = METADATA-samlingar (Produktion/Geografi);
+   *  "kontakt" = ENBART kontaktkortet (renderas under metadataområdet
+   *  Kontaktinformation i ObjectMetadataBody — produktägarbeslut 2026-08-10);
    *  "linked" = KOPPLADE list-block (Orderkoncept/Bilder) — snabbordrar och
    *  uppgifter visas i de subträds-medvetna sektionerna (Task #1474). */
-  section: "collections" | "linked";
+  section: "collections" | "kontakt" | "linked";
   objectId: string;
   obj: any;
   contacts: ObjectContactLite[];
@@ -511,13 +513,35 @@ export function ObjectDomainGrid({
     );
   }
 
-  // ==================== METADATA-SAMLINGAR (karuseller) ====================
-  return (
+  // Kontakt-redigerings-/livscykeldialoger — hör till kontaktkortet.
+  const kontaktDialogs = (
     <>
-      <div
-        className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4"
-        data-testid="object-domain-grid-collections"
-      >
+      {editingContact && (
+        <ObjectContactEditDialog
+          objectId={objectId}
+          contact={editingContact}
+          structuralEditsSafe={contacts.length === 1}
+          open={!!editingContact}
+          onOpenChange={(o) => { if (!o) setEditingContact(null); }}
+        />
+      )}
+      {lifecycleTarget && (
+        <ObjectContactLifecycleDialog
+          objectId={objectId}
+          contact={lifecycleTarget.contact}
+          action={lifecycleTarget.action}
+          archiveSafe={fieldLevelActionsSafe}
+          open={!!lifecycleTarget}
+          onOpenChange={(o) => { if (!o) setLifecycleTarget(null); }}
+        />
+      )}
+    </>
+  );
+
+  // ==================== KONTAKT (under metadataområdet Kontaktinformation) ====================
+  if (section === "kontakt") {
+    return (
+      <>
         <DomainCarouselCard<ObjectContactLite>
           className={GRID_CARD}
           icon={Contact}
@@ -544,27 +568,18 @@ export function ObjectDomainGrid({
           renderItem={renderContact}
         />
 
-        {editingContact && (
-          <ObjectContactEditDialog
-            objectId={objectId}
-            contact={editingContact}
-            structuralEditsSafe={contacts.length === 1}
-            open={!!editingContact}
-            onOpenChange={(o) => { if (!o) setEditingContact(null); }}
-          />
-        )}
+        {kontaktDialogs}
+      </>
+    );
+  }
 
-        {lifecycleTarget && (
-          <ObjectContactLifecycleDialog
-            objectId={objectId}
-            contact={lifecycleTarget.contact}
-            action={lifecycleTarget.action}
-            archiveSafe={fieldLevelActionsSafe}
-            open={!!lifecycleTarget}
-            onOpenChange={(o) => { if (!o) setLifecycleTarget(null); }}
-          />
-        )}
-
+  // ==================== METADATA-SAMLINGAR (karuseller) ====================
+  return (
+    <>
+      <div
+        className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4"
+        data-testid="object-domain-grid-collections"
+      >
         <DomainCarouselCard<SystemTaskHistory>
           className={GRID_CARD}
           icon={ClipboardList}

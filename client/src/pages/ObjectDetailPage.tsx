@@ -1452,13 +1452,26 @@ export default function ObjectDetailPage() {
                     objectAssignments={objectAssignments}
                     navigate={navigate}
                     canEditFields={isAdmin}
+                    kontaktSection={
+                      <ObjectDomainGrid
+                        section="kontakt"
+                        objectId={objectId}
+                        obj={obj}
+                        contacts={contacts as any}
+                        canEditContacts={["owner", "admin", "planner", "technician", "user"].includes(user?.role ?? "")}
+                        isAdmin={isAdmin}
+                        onEditGeo={() => openEditDialog()}
+                        navigate={navigate}
+                      />
+                    }
                   />
                 )}
               </div>
             );
           })()}
 
-          {/* Samlingskaruseller: Kontakt / Produktion / Geografi */}
+          {/* Samlingskaruseller: Produktion / Geografi (Kontakt ligger under
+              metadataområdet Kontaktinformation ovan). */}
           <ObjectDomainGrid
             section="collections"
             objectId={objectId}
