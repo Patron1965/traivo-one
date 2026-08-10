@@ -181,7 +181,8 @@ export default function SnabborderPage() {
   });
 
   const restore = (d: DraftState) => {
-    setStep(d.step || 1);
+    // Steg 1+2 är en gemensam redigeringssida — normalisera äldre utkast med step=2.
+    setStep((d.step || 1) >= 3 ? 3 : 1);
     setCustomer(d.customer ?? null);
     setDeliveryDate(d.deliveryDate ?? "");
     setDeliveryTimeFrom(d.deliveryTimeFrom ?? "");
@@ -641,7 +642,7 @@ export default function SnabborderPage() {
   // ── Render: wizard ─────────────────────────────────────────────────────
   return (
     <div className="min-h-screen bg-background">
-      <div className="max-w-5xl mx-auto px-4 sm:px-6 py-6">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6">
         {/* Sidhuvud + stegindikator + knapprad */}
         <div className="flex flex-wrap items-center gap-4 mb-6">
           <div className="flex items-center gap-3 min-w-0">
@@ -658,30 +659,35 @@ export default function SnabborderPage() {
           </div>
 
           <div className="flex items-center gap-1 mx-auto" data-testid="snabborder-steps">
-            {STEPS.map((s, i) => (
+            {STEPS.map((s, i) => {
+              // Steg 1+2 redigeras på samma sida (mockupens layout): båda är
+              // aktiva när formuläret visas; steg 3 är bekräftelse-läget.
+              const isActive = step < 3 ? s.n <= 2 : s.n === 3;
+              const isDone = step === 3 && s.n <= 2;
+              return (
               <div key={s.n} className="flex items-center">
                 <button
                   type="button"
-                  onClick={() => setStep(s.n)}
-                  // Framåthopp kräver giltigt orderhuvud (steg 3 även innehåll).
-                  disabled={(s.n >= 2 && !headerValid) || (s.n === 3 && !contentValid)}
+                  onClick={() => setStep(s.n <= 2 ? 1 : 3)}
+                  // Bekräfta kräver giltigt orderhuvud + innehåll.
+                  disabled={s.n === 3 && (!headerValid || !contentValid)}
                   className="flex items-center gap-2 px-2 py-1 rounded-md hover:bg-accent disabled:opacity-50 disabled:cursor-not-allowed"
                   data-testid={`step-${s.n}`}
                 >
                   <span
                     className={`flex h-6 w-6 items-center justify-center rounded-full text-xs font-semibold ${
-                      step === s.n ? "bg-primary text-primary-foreground"
-                        : step > s.n ? "bg-primary/20 text-primary"
+                      isActive ? "bg-primary text-primary-foreground"
+                        : isDone ? "bg-primary/20 text-primary"
                         : "bg-muted text-muted-foreground"
                     }`}
                   >
-                    {step > s.n ? <Check className="h-3.5 w-3.5" /> : s.n}
+                    {isDone ? <Check className="h-3.5 w-3.5" /> : s.n}
                   </span>
-                  <span className={`text-xs ${step === s.n ? "font-medium" : "text-muted-foreground"}`}>{s.label}</span>
+                  <span className={`text-xs ${isActive ? "font-medium" : "text-muted-foreground"}`}>{s.label}</span>
                 </button>
                 {i < STEPS.length - 1 && <div className="w-6 h-px bg-border mx-1" />}
               </div>
-            ))}
+            );})}
           </div>
 
           <div className="flex items-center gap-2 ml-auto">
@@ -728,15 +734,19 @@ export default function SnabborderPage() {
           </div>
         )}
 
-        {/* ============== STEG 1: ORDERHUVUD ============== */}
-        {step === 1 && (
+        <div className="flex items-start gap-6">
+        <div className="flex-1 min-w-0">
+        {/* ============== ORDERHUVUD + ORDERINNEHÅLL (en sida, enligt mockup) ============== */}
+        {step < 3 && (
           <div className="space-y-4">
             <Card>
               <CardContent className="pt-6 space-y-5">
                 <h2 className="text-sm font-semibold">Orderhuvud</h2>
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-x-6 gap-y-4">
+                  {/* Kolumn 1: Kund + referenser + fakturatext */}
+                  <div className="space-y-4 min-w-0">
                   {/* Kund */}
-                  <div className="space-y-1.5 lg:col-span-1">
+                  <div className="space-y-1.5">
                     <Label>Kund <span className="text-destructive">*</span></Label>
                     {customer && !customerOpen ? (
                       <div className="flex items-center justify-between rounded-md border px-3 py-2" data-testid="selected-customer">
@@ -787,16 +797,47 @@ export default function SnabborderPage() {
                     )}
                   </div>
 
+                  <div className="space-y-1.5">
+                    <Label htmlFor="sb-kundreferens">Kundens referens</Label>
+                    <Input id="sb-kundreferens" value={kundreferens} onChange={(e) => setKundreferens(e.target.value)} placeholder="T.ex. beställning via telefon" data-testid="input-kundreferens" />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="sb-varreferens">Vår referens</Label>
+                    <Input id="sb-varreferens" value={varReferens} onChange={(e) => setVarReferens(e.target.value)} data-testid="input-varreferens" />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="sb-fakturatext">Fakturatext (fri text till order/faktura)</Label>
+                    <Textarea id="sb-fakturatext" value={fakturatext} onChange={(e) => setFakturatext(e.target.value)} rows={3} placeholder="Fritext som följer med till Fortnox ovanför orderraderna" data-testid="input-fakturatext" />
+                  </div>
+                  </div>
+
+                  {/* Kolumn 2: leveransfönster + fakturareferenser */}
+                  <div className="space-y-4 min-w-0">
                   {/* Leveransdatum/-tid */}
                   <div className="space-y-1.5">
                     <Label>Önskat leveransdatum / leveranstid</Label>
-                    <div className="flex gap-2">
-                      <Input type="date" value={deliveryDate} onChange={(e) => setDeliveryDate(e.target.value)} data-testid="input-delivery-date" />
-                      <Input type="time" value={deliveryTimeFrom} onChange={(e) => setDeliveryTimeFrom(e.target.value)} className="w-28" data-testid="input-delivery-time-from" />
-                      <Input type="time" value={deliveryTimeTo} onChange={(e) => setDeliveryTimeTo(e.target.value)} className="w-28" data-testid="input-delivery-time-to" />
+                    <div className="flex flex-wrap gap-2">
+                      <Input type="date" value={deliveryDate} onChange={(e) => setDeliveryDate(e.target.value)} className="flex-1 min-w-[8.5rem]" data-testid="input-delivery-date" />
+                      <Input type="time" value={deliveryTimeFrom} onChange={(e) => setDeliveryTimeFrom(e.target.value)} className="w-[6.5rem]" data-testid="input-delivery-time-from" />
+                      <Input type="time" value={deliveryTimeTo} onChange={(e) => setDeliveryTimeTo(e.target.value)} className="w-[6.5rem]" data-testid="input-delivery-time-to" />
                     </div>
                   </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="sb-fakturaref1">Fakturareferens 1</Label>
+                    <Input id="sb-fakturaref1" value={fakturaref1} onChange={(e) => setFakturaref1(e.target.value)} data-testid="input-fakturaref1" />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="sb-fakturaref2">Fakturareferens 2</Label>
+                    <Input id="sb-fakturaref2" value={fakturaref2} onChange={(e) => setFakturaref2(e.target.value)} data-testid="input-fakturaref2" />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="sb-ovrigreferens">Övrig referens / information</Label>
+                    <Input id="sb-ovrigreferens" value={ovrigReferens} onChange={(e) => setOvrigReferens(e.target.value)} placeholder="Ex. avtal, ordernr hos kund etc." data-testid="input-ovrigreferens" />
+                  </div>
+                  </div>
 
+                  {/* Kolumn 3: leveransprincip + intern kommentar */}
+                  <div className="space-y-4 min-w-0">
                   {/* Leveransprincip */}
                   <div className="space-y-1.5">
                     <Label>Leveransprincip <span className="text-destructive">*</span></Label>
@@ -834,39 +875,11 @@ export default function SnabborderPage() {
                       </p>
                     )}
                   </div>
-                </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                  <div className="space-y-1.5">
-                    <Label htmlFor="sb-kundreferens">Kundens referens</Label>
-                    <Input id="sb-kundreferens" value={kundreferens} onChange={(e) => setKundreferens(e.target.value)} placeholder="T.ex. beställning via telefon" data-testid="input-kundreferens" />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label htmlFor="sb-varreferens">Vår referens</Label>
-                    <Input id="sb-varreferens" value={varReferens} onChange={(e) => setVarReferens(e.target.value)} data-testid="input-varreferens" />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label htmlFor="sb-fakturaref1">Fakturareferens 1</Label>
-                    <Input id="sb-fakturaref1" value={fakturaref1} onChange={(e) => setFakturaref1(e.target.value)} data-testid="input-fakturaref1" />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label htmlFor="sb-fakturaref2">Fakturareferens 2</Label>
-                    <Input id="sb-fakturaref2" value={fakturaref2} onChange={(e) => setFakturaref2(e.target.value)} data-testid="input-fakturaref2" />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label htmlFor="sb-ovrigreferens">Övrig referens / information</Label>
-                    <Input id="sb-ovrigreferens" value={ovrigReferens} onChange={(e) => setOvrigReferens(e.target.value)} placeholder="Ex. avtal, ordernr hos kund etc." data-testid="input-ovrigreferens" />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                  <div className="space-y-1.5">
-                    <Label htmlFor="sb-fakturatext">Fakturatext (fri text till order/faktura)</Label>
-                    <Textarea id="sb-fakturatext" value={fakturatext} onChange={(e) => setFakturatext(e.target.value)} rows={3} placeholder="Fritext som följer med till Fortnox ovanför orderraderna" data-testid="input-fakturatext" />
-                  </div>
                   <div className="space-y-1.5">
                     <Label htmlFor="sb-kommentar">Kommentar (intern)</Label>
                     <Textarea id="sb-kommentar" value={internKommentar} onChange={(e) => setInternKommentar(e.target.value)} rows={3} placeholder="Syns endast internt i Traivo" data-testid="input-intern-kommentar" />
+                  </div>
                   </div>
                 </div>
               </CardContent>
@@ -903,17 +916,7 @@ export default function SnabborderPage() {
               </Card>
             )}
 
-            <div className="flex justify-end">
-              <Button onClick={() => setStep(2)} disabled={!headerValid} data-testid="button-next-step2">
-                Nästa: Orderinnehåll <ChevronRight className="h-4 w-4 ml-1" />
-              </Button>
-            </div>
-          </div>
-        )}
-
-        {/* ============== STEG 2: ORDERINNEHÅLL ============== */}
-        {step === 2 && (
-          <div className="space-y-4">
+            {/* Orderbyggaren (samma sida, enligt mockup) */}
             <Card>
               <CardContent className="pt-6 space-y-4">
                 <div className="flex flex-wrap items-center gap-2">
@@ -985,8 +988,21 @@ export default function SnabborderPage() {
                   </p>
                 )}
 
+                {/* Tabell: kolumnrubriker enligt mockup */}
+                <div className="overflow-x-auto">
+                <div className="min-w-[680px]">
+                <div className="grid grid-cols-[minmax(0,1fr)_7rem_5rem_3.5rem_6rem_7rem_2.25rem] items-center gap-2 rounded-md bg-muted/60 px-3 py-2 text-xs font-medium text-muted-foreground" data-testid="orderbuilder-table-header">
+                  <span>Typ / Beskrivning</span>
+                  <span>Artikelnummer</span>
+                  <span className="text-right">Antal</span>
+                  <span>Enhet</span>
+                  <span className="text-right">Pris</span>
+                  <span className="text-right">Summa</span>
+                  <span />
+                </div>
+
                 {/* Grupper */}
-                <div className="space-y-3">
+                <div className="space-y-3 mt-2">
                   {groups.map((group) => {
                     const isOrderLevel = group.objectId === null;
                     const isCollapsed = collapsed.has(group.id);
@@ -1046,21 +1062,24 @@ export default function SnabborderPage() {
                               </div>
                             ) : (
                               group.lines.map((l) => (
-                                <div key={l.id} className="px-3 py-2 flex flex-wrap items-center gap-2" data-testid={`line-${l.id}`}>
-                                  <div className="flex items-center gap-2 min-w-0 flex-1 basis-64">
+                                <div
+                                  key={l.id}
+                                  className="grid grid-cols-[minmax(0,1fr)_7rem_5rem_3.5rem_6rem_7rem_2.25rem] items-center gap-2 px-3 py-2"
+                                  data-testid={`line-${l.id}`}
+                                >
+                                  {/* Typ / Beskrivning (indragen under gruppen) */}
+                                  <div className="flex items-center gap-2 min-w-0 pl-5">
                                     {l.articleId ? (
                                       <>
                                         <Package className="h-4 w-4 text-muted-foreground shrink-0" />
                                         <span className="text-sm truncate">
                                           <span className="font-medium">Artikel:</span> {l.label}
                                         </span>
-                                        {l.articleNumber && (
-                                          <span className="text-xs font-mono text-muted-foreground shrink-0">{l.articleNumber}</span>
-                                        )}
                                       </>
                                     ) : (
                                       <>
                                         <PencilLine className="h-4 w-4 text-muted-foreground shrink-0" />
+                                        <span className="text-sm font-medium shrink-0">Fritext:</span>
                                         <Input
                                           className="h-8 text-sm"
                                           value={l.description}
@@ -1071,41 +1090,48 @@ export default function SnabborderPage() {
                                       </>
                                     )}
                                   </div>
-                                  <div className="flex items-center gap-2 ml-auto">
+                                  {/* Artikelnummer */}
+                                  <span className="text-xs font-mono text-muted-foreground truncate">
+                                    {l.articleNumber ?? ""}
+                                  </span>
+                                  {/* Antal */}
+                                  <Input
+                                    type="number"
+                                    min={1}
+                                    className="h-8 text-sm text-right"
+                                    value={l.quantity}
+                                    onChange={(e) => updateLine(group.id, l.id, { quantity: Math.max(1, parseInt(e.target.value) || 1) })}
+                                    data-testid={`input-line-qty-${l.id}`}
+                                  />
+                                  {/* Enhet */}
+                                  <span className="text-xs text-muted-foreground">{l.unit || "st"}</span>
+                                  {/* Pris */}
+                                  {l.articleId ? (
+                                    <span className="text-sm text-right tabular-nums">{formatSekFromOre(l.listPriceOre ?? 0)}</span>
+                                  ) : (
                                     <Input
                                       type="number"
-                                      min={1}
-                                      className="h-8 w-20 text-sm text-right"
-                                      value={l.quantity}
-                                      onChange={(e) => updateLine(group.id, l.id, { quantity: Math.max(1, parseInt(e.target.value) || 1) })}
-                                      data-testid={`input-line-qty-${l.id}`}
+                                      min={0}
+                                      step="0.01"
+                                      className="h-8 text-sm text-right"
+                                      value={l.unitPriceKr || ""}
+                                      onChange={(e) => updateLine(group.id, l.id, { unitPriceKr: parseFloat(e.target.value) || 0 })}
+                                      placeholder="Pris kr"
+                                      data-testid={`input-line-price-${l.id}`}
                                     />
-                                    <span className="text-xs text-muted-foreground w-8">{l.unit || "st"}</span>
-                                    {l.articleId ? (
-                                      <span className="text-sm w-24 text-right tabular-nums">{formatSekFromOre(l.listPriceOre ?? 0)}</span>
-                                    ) : (
-                                      <Input
-                                        type="number"
-                                        min={0}
-                                        step="0.01"
-                                        className="h-8 w-24 text-sm text-right"
-                                        value={l.unitPriceKr || ""}
-                                        onChange={(e) => updateLine(group.id, l.id, { unitPriceKr: parseFloat(e.target.value) || 0 })}
-                                        placeholder="Pris kr"
-                                        data-testid={`input-line-price-${l.id}`}
-                                      />
-                                    )}
-                                    <span className="text-sm font-medium w-28 text-right tabular-nums" data-testid={`text-line-sum-${l.id}`}>
-                                      {formatSekFromOre(lineTotalOre(l))}
-                                    </span>
-                                    <Button
-                                      variant="ghost" size="sm" className="h-8 w-8 p-0"
-                                      onClick={() => removeLine(group.id, l.id)}
-                                      data-testid={`button-remove-line-${l.id}`}
-                                    >
-                                      <Trash2 className="h-4 w-4" />
-                                    </Button>
-                                  </div>
+                                  )}
+                                  {/* Summa */}
+                                  <span className="text-sm font-medium text-right tabular-nums" data-testid={`text-line-sum-${l.id}`}>
+                                    {formatSekFromOre(lineTotalOre(l))}
+                                  </span>
+                                  {/* Radera */}
+                                  <Button
+                                    variant="ghost" size="sm" className="h-8 w-8 p-0"
+                                    onClick={() => removeLine(group.id, l.id)}
+                                    data-testid={`button-remove-line-${l.id}`}
+                                  >
+                                    <Trash2 className="h-4 w-4" />
+                                  </Button>
                                 </div>
                               ))
                             )}
@@ -1114,6 +1140,8 @@ export default function SnabborderPage() {
                       </div>
                     );
                   })}
+                </div>
+                </div>
                 </div>
 
                 <Separator />
@@ -1124,9 +1152,8 @@ export default function SnabborderPage() {
               </CardContent>
             </Card>
 
-            <div className="flex justify-between">
-              <Button variant="outline" onClick={() => setStep(1)} data-testid="button-back-step1">Tillbaka</Button>
-              <Button onClick={() => setStep(3)} disabled={!contentValid} data-testid="button-next-step3">
+            <div className="flex justify-end">
+              <Button onClick={() => setStep(3)} disabled={!headerValid || !contentValid} data-testid="button-next-step3">
                 Nästa: Bekräfta <ChevronRight className="h-4 w-4 ml-1" />
               </Button>
             </div>
@@ -1210,7 +1237,7 @@ export default function SnabborderPage() {
             </Card>
 
             <div className="flex justify-between">
-              <Button variant="outline" onClick={() => setStep(2)} data-testid="button-back-step2">Tillbaka</Button>
+              <Button variant="outline" onClick={() => setStep(1)} data-testid="button-back-step2">Tillbaka</Button>
               <Button onClick={handleSaveOrder} disabled={!canSave} data-testid="button-confirm-save">
                 {submitting && <Loader2 className="h-4 w-4 mr-1 animate-spin" />}
                 Spara order
@@ -1219,12 +1246,65 @@ export default function SnabborderPage() {
           </div>
         )}
 
-        {/* Infofot */}
-        <p className="mt-6 text-xs text-muted-foreground flex items-start gap-1.5">
-          <Info className="h-3.5 w-3.5 mt-0.5 shrink-0" />
-          När du sparar ordern skapas uppgifter från alla artiklar och levereras till Uppgiftsnavet.
-          Systemets motorer beräknar och uppdaterar t.ex. optimal tid, rutt, status och andra datafält.
-        </p>
+        {/* Info-remsa + flödesremsa (enligt mockup) */}
+        <div className="mt-6 grid grid-cols-1 xl:grid-cols-2 gap-4">
+          <div className="rounded-lg border bg-primary/5 px-4 py-3 text-xs text-muted-foreground flex items-start gap-2" data-testid="strip-save-info">
+            <Info className="h-4 w-4 mt-0.5 shrink-0 text-primary" />
+            <span>
+              När du sparar ordern skapas uppgifter från alla artiklar och levereras till Uppgiftsnavet.
+              Uppgifterna innehåller automatiskt de data som kommer från kund, objekt, artikel och orderhuvud.
+              Systemets motorer beräknar och uppdaterar t.ex. optimal tid, rutt, status och andra datafält.
+            </span>
+          </div>
+          <div className="rounded-lg border px-4 py-3" data-testid="strip-next-steps">
+            <p className="text-xs font-semibold mb-2">Nästa steg efter att ordern sparats</p>
+            <div className="flex flex-wrap items-start gap-x-2 gap-y-3">
+              {[
+                { icon: Package, label: "Artiklar skapar uppgifter" },
+                { icon: ShoppingCart, label: "Uppgifter till Uppgiftsnavet" },
+                { icon: Loader2, label: "Motorer beräknar optimal tid, rutt m.m." },
+                { icon: MapPin, label: "Planering och utförande" },
+                { icon: Check, label: "Uppföljning och fakturering" },
+              ].map((s, i, arr) => (
+                <div key={s.label} className="flex items-start gap-2">
+                  <div className="flex flex-col items-center w-20 text-center">
+                    <div className="flex h-8 w-8 items-center justify-center rounded-md bg-primary/10 mb-1">
+                      <s.icon className="h-4 w-4 text-primary" />
+                    </div>
+                    <span className="text-[10px] leading-tight text-muted-foreground">{s.label}</span>
+                  </div>
+                  {i < arr.length - 1 && <ChevronRight className="h-4 w-4 text-muted-foreground mt-2" />}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+        </div>
+
+        {/* Hjälppanel (breda skärmar) */}
+        <aside className="hidden xl:block w-64 shrink-0 space-y-4 sticky top-6" data-testid="snabborder-help-panel">
+          <div className="rounded-lg border bg-muted/30 px-4 py-3 text-xs space-y-1.5">
+            <p className="font-semibold">Leveransprincip</p>
+            <p className="text-muted-foreground">Välj hur leveransen ska hanteras på denna order.</p>
+            <p className="text-muted-foreground"><span className="font-medium text-foreground">Manuell leveransadress</span> — du anger adress här.</p>
+            <p className="text-muted-foreground"><span className="font-medium text-foreground">Kundens objekt</span> — du väljer ett eller flera objekt som innehåller adress och metadata.</p>
+            <p className="text-muted-foreground">Principen kan inte ändras när du har börjat bygga orderinnehållet.</p>
+          </div>
+          <div className="rounded-lg border bg-muted/30 px-4 py-3 text-xs space-y-1.5">
+            <p className="font-semibold">+ Lägg till</p>
+            <p className="text-muted-foreground">Bygg ordern med tre val:</p>
+            <p className="text-muted-foreground"><span className="font-medium text-foreground">Artikel</span> — lägg till en artikelrad.</p>
+            <p className="text-muted-foreground"><span className="font-medium text-foreground">Fritextrad</span> — fri text på ordernivå.</p>
+            <p className="text-muted-foreground"><span className="font-medium text-foreground">Objekt</span> — välj ett av kundens objekt. Artiklar som läggs därefter hamnar under detta objekt tills nästa objekt skapas.</p>
+          </div>
+          <div className="rounded-lg border bg-muted/30 px-4 py-3 text-xs space-y-1.5">
+            <p className="font-semibold">Hierarki och struktur</p>
+            <p className="text-muted-foreground">Rader utan objekt ligger på ordernivå.</p>
+            <p className="text-muted-foreground">Artiklar under ett objekt hör till det objektets adress och metadata.</p>
+            <p className="text-muted-foreground">Flera objekt kan läggas på samma order.</p>
+          </div>
+        </aside>
+        </div>
       </div>
 
       {/* ── Artikelväljare ── */}
