@@ -8,11 +8,13 @@ import {
   teams,
   workOrders,
   workOrderLines,
+  articles,
 } from "@shared/schema";
 import { eq } from "drizzle-orm";
 import {
   getGrovplaneringGrid,
   buildGrovplaneringExport,
+  sanitizeGrovExportColumns,
   ROUGH_STATUS_LABELS,
   TASK_TYPE_LABELS,
   type GridFilters,
@@ -39,7 +41,7 @@ const COL = {
   customer: 3,
   object: 4,
   title: 5,
-  taskType: 6,
+  articleType: 6, // Task #1485 — ersätter "Uppgiftstyp"
   executionCode: 7,
   desired: 8,
   minutes: 9,
@@ -309,7 +311,23 @@ describe("Grovplanering Excel-export speglar gridet", () => {
     expect(rows.length).toBe(1);
     expect(rowCount).toBe(1);
     expect(cellText(ws, 2, COL.title)).toBe(titles.bok);
-    expect(cellText(ws, 2, COL.taskType)).toBe(TASK_TYPE_LABELS.bok);
+    // Task #1485: "Uppgiftstyp" utgått ur exporten; artikeltyp-kolumnen visar
+    // legacy-etiketten för rader utan artikelkoppling.
+    expect(cellText(ws, 2, COL.articleType)).toBe(TASK_TYPE_LABELS.bok);
+  });
+
+  it("exportkontraktet saknar 'Uppgiftstyp' och avvisar taskType-kolumnnyckeln", async () => {
+    const { ws } = await exportRows(tenantA, {}, "kund");
+    const headers: string[] = [];
+    ws.getRow(1).eachCell((c) => headers.push(String(c.value ?? "")));
+    expect(headers).not.toContain("Uppgiftstyp");
+    expect(headers).toContain("Artikeltyp");
+    expect(headers).toContain("Utförandekod");
+
+    // Persisterade kolumnval med utgångna nycklar: okända filtreras bort;
+    // blir urvalet tomt faller exporten tillbaka till fullt kolumnset.
+    expect(sanitizeGrovExportColumns(["taskType", "task"])).toEqual(["task"]);
+    expect(sanitizeGrovExportColumns(["taskType"]).length).toBeGreaterThan(1);
   });
 
   it("export matchar gridet under status-filter (utford)", async () => {
@@ -370,5 +388,134 @@ describe("Grovplanering Excel-export speglar gridet", () => {
     expect(rowCount).toBe(1);
     expect(cellText(ws, 2, COL.title)).toBe(titles.drift);
     expect(ws.getRow(2).getCell(COL.desired).value).toBeFalsy();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Task #1485: artikeltyp-härledning — artikelkoppling vinner, fritext-heuristik
+// är uttalad legacy-fallback, och artikel-lookupen är tenant-scopead.
+// ---------------------------------------------------------------------------
+describe("Grovplanering artikeltyp-härledning", () => {
+  let tenC: string;
+  let tenD: string;
+  let custC: string;
+  let objC: string;
+  const articleTitle = `Artikelrad ${randomId()}`;
+  const legacyTitle = `Legacy ${randomId()}`;
+  const crossTitle = `Cross-artikel ${randomId()}`;
+
+  beforeAll(async () => {
+    const [tC] = await db.insert(tenants).values({ name: `Art-C ${randomId()}` }).returning();
+    const [tD] = await db.insert(tenants).values({ name: `Art-D ${randomId()}` }).returning();
+    tenC = tC.id;
+    tenD = tD.id;
+
+    const [c] = await db
+      .insert(customers)
+      .values({ tenantId: tenC, name: `Kund C ${randomId()}`, customerNumber: randomId() })
+      .returning();
+    custC = c.id;
+    const [o] = await db
+      .insert(objects)
+      .values({ tenantId: tenC, name: `Objekt C ${randomId()}` })
+      .returning();
+    objC = o.id;
+
+    // Artikel i tenant C (typ "vara") + artikel i tenant D (typ "kontroll").
+    const [artC] = await db
+      .insert(articles)
+      .values({ tenantId: tenC, articleNumber: randomId(), name: "Vara C", articleType: "vara" })
+      .returning();
+    const [artD] = await db
+      .insert(articles)
+      .values({ tenantId: tenD, articleNumber: randomId(), name: "Kontroll D", articleType: "kontroll" })
+      .returning();
+
+    // WO1: artikelkopplad rad → articleType "vara" (source artikel).
+    const wo1 = await insertWo({
+      tenantId: tenC,
+      customerId: custC,
+      objectId: objC,
+      title: articleTitle,
+      orderType: "BÖK", // heuristiken skulle säga "bok" — artikeln ska vinna
+    });
+    await db.insert(workOrderLines).values({
+      tenantId: tenC,
+      workOrderId: wo1,
+      articleId: artC.id,
+    });
+
+    // WO2: ingen artikelrad → legacy-fallback via fritext ("Tvätt" → tvatt).
+    await insertWo({
+      tenantId: tenC,
+      customerId: custC,
+      objectId: objC,
+      title: legacyTitle,
+      orderType: "Tvätt",
+    });
+
+    // WO3: rad som (felaktigt) pekar på ANNAN tenants artikel — lookupen är
+    // tenant-scopead så typen får ALDRIG läcka; raden faller till legacy.
+    const wo3 = await insertWo({
+      tenantId: tenC,
+      customerId: custC,
+      objectId: objC,
+      title: crossTitle,
+      orderType: "Service",
+    });
+    await db.insert(workOrderLines).values({
+      tenantId: tenC,
+      workOrderId: wo3,
+      articleId: artD.id,
+    });
+  });
+
+  afterAll(async () => {
+    for (const t of [tenC, tenD]) {
+      await db.delete(workOrderLines).where(eq(workOrderLines.tenantId, t)).catch(() => {});
+      await db.delete(workOrders).where(eq(workOrders.tenantId, t)).catch(() => {});
+      await db.delete(articles).where(eq(articles.tenantId, t)).catch(() => {});
+      await db.delete(objects).where(eq(objects.tenantId, t)).catch(() => {});
+      await db.delete(customers).where(eq(customers.tenantId, t)).catch(() => {});
+      await db.delete(tenants).where(eq(tenants.id, t)).catch(() => {});
+    }
+  });
+
+  it("artikelkopplad uppgift får artikelns typ (source=artikel)", async () => {
+    const rows = await gridRows(tenC, {}, "kund");
+    const r = rows.find((x) => x.title === articleTitle)!;
+    expect(r.articleType).toBe("vara");
+    expect(r.articleTypeSource).toBe("artikel");
+  });
+
+  it("uppgift utan artikelkoppling faller till fritext-heuristiken (source=legacy)", async () => {
+    const rows = await gridRows(tenC, {}, "kund");
+    const r = rows.find((x) => x.title === legacyTitle)!;
+    expect(r.articleType).toBe("tvatt");
+    expect(r.articleTypeSource).toBe("legacy");
+    expect(r.articleTypeLabel).toBe(TASK_TYPE_LABELS.tvatt);
+  });
+
+  it("tenant-isolering: annan tenants artikel läcker aldrig sin typ", async () => {
+    const rows = await gridRows(tenC, {}, "kund");
+    const r = rows.find((x) => x.title === crossTitle)!;
+    expect(r.articleType).not.toBe("kontroll");
+    expect(r.articleTypeSource).toBe("legacy"); // fallback via "Service"
+    expect(r.articleType).toBe("service");
+  });
+
+  it("articleTypes-filtret matchar artikelhärledd typ i grid och export", async () => {
+    const rows = await gridRows(tenC, { articleTypes: ["vara"] }, "kund");
+    expect(rows.map((r) => r.title)).toEqual([articleTitle]);
+
+    const { ws, rowCount } = await exportRows(tenC, { articleTypes: ["vara"] }, "kund");
+    expect(rowCount).toBe(1);
+    expect(cellText(ws, 2, COL.title)).toBe(articleTitle);
+    expect(cellText(ws, 2, COL.articleType)).toBe("vara");
+  });
+
+  it("articleTypes-filtret matchar legacy-nyckel för rader utan artikel", async () => {
+    const rows = await gridRows(tenC, { articleTypes: ["tvatt"] }, "kund");
+    expect(rows.map((r) => r.title)).toEqual([legacyTitle]);
   });
 });

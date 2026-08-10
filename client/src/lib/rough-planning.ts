@@ -39,9 +39,14 @@ export interface GridTaskRow {
   objectId: string | null;
   objectName: string | null;
   title: string | null;
-  taskType: string;
+  taskType: string; // LEGACY (Task #1485) — behålls för bakåtkompatibilitet
   taskTypeLabel: string;
   executionCode: string | null;
+  // Task #1485: artikeltyp härledd från artikelkopplingen (source="artikel")
+  // eller fritext-heuristiken (source="legacy") för gamla rader utan artikel.
+  articleType: string | null;
+  articleTypeLabel: string | null;
+  articleTypeSource: "artikel" | "legacy";
   desiredDeliveryStart: string | null;
   desiredDeliveryEnd: string | null;
   productionMinutes: number;

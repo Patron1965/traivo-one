@@ -19,7 +19,8 @@ export const GROVPLANERING_FILTER_FIELDS: FilterFieldDef<GridTaskRow>[] = [
   { key: "customerName", label: "Kund", type: "text", getValue: (r) => r.customerName, searchable: true, group: "Uppgift" },
   { key: "objectName", label: "Objekt", type: "text", getValue: (r) => r.objectName, searchable: true, group: "Uppgift" },
   { key: "title", label: "Uppgift", type: "text", getValue: (r) => r.title, searchable: true, group: "Uppgift" },
-  { key: "taskTypeLabel", label: "Uppgiftstyp", type: "select", getValue: (r) => r.taskTypeLabel, group: "Uppgift" },
+  // Task #1485: Uppgiftstyp ersatt av artikelhärledd Artikeltyp.
+  { key: "articleTypeLabel", label: "Artikeltyp", type: "select", getValue: (r) => r.articleTypeLabel ?? "", group: "Uppgift" },
   { key: "executionCode", label: "Utförandekod", type: "select", getValue: (r) => r.executionCode, group: "Uppgift" },
   { key: "teamName", label: "Team", type: "select", getValue: (r) => r.teamName, group: "Planering" },
   { key: "roughPlannedWeek", label: "Vecka", type: "text", getValue: (r) => r.roughPlannedWeek, group: "Planering" },

@@ -34,6 +34,7 @@ import {
   metadataVarden,
   metadataKatalog,
   taskTypes,
+  articleTypeDefinitions,
 } from "@shared/schema";
 import { haversineDistanceKm } from "./distance-matrix-service";
 
@@ -59,7 +60,14 @@ export interface GridFilters {
   city?: string;
   from?: Date; // önskad leveranstid – intervallstart
   to?: Date; // önskad leveranstid – intervallslut
+  // LEGACY (Task #1485): gamla uppgiftstyp-nycklar (task_types-registret). Stöds
+  // fortfarande server-side för gamla sparade filter/länkar, men UI:t skickar
+  // numera articleTypes/executionCodes i stället.
   taskTypes?: string[]; // normaliserade nycklar (se TASK_TYPE_KEYS)
+  // Task #1485: artikeltyp-filter (article_type_definitions.key). Matchar radens
+  // artikelhärledda artikeltyp; rader utan artikelkoppling matchas via legacy-
+  // heuristikens nyckel (uttalad fallback för gamla rader).
+  articleTypes?: string[];
   statuses?: RoughStatus[];
   teamIds?: string[]; // "Fler filter" — filtrera på tilldelat team
   executionCodes?: string[]; // Task #1110 — filtrera på utförandekod (work_orders.execution_code)
@@ -94,9 +102,15 @@ export interface GridTaskRow {
   objectId: string | null;
   objectName: string | null;
   title: string | null;
-  taskType: string; // normaliserad nyckel
+  taskType: string; // normaliserad nyckel (LEGACY — behålls för bakåtkompatibilitet)
   taskTypeLabel: string;
   executionCode: string | null; // Task #1110 — utförandekod (registernyckel/fritext)
+  // Task #1485: artikeltyp härledd från uppgiftens artikelkoppling (första
+  // orderraden med artikel). Saknas artikel faller vi tillbaka på fritext-
+  // heuristiken (legacy) och markerar det via articleTypeSource.
+  articleType: string | null;
+  articleTypeLabel: string | null;
+  articleTypeSource: "artikel" | "legacy";
   desiredDeliveryStart: string | null;
   desiredDeliveryEnd: string | null;
   productionMinutes: number;
@@ -219,6 +233,55 @@ export async function loadTaskTypeMatcher(tenantId: string): Promise<TaskTypeMat
       return labels.get(key) ?? TASK_TYPE_LABELS[key] ?? "Övrigt";
     },
   };
+}
+
+// ---------------------------------------------------------------------------
+// Artikeltyp-härledning (Task #1485). En uppgifts artikeltyp härleds från dess
+// artikelkoppling (första orderraden med artikel). Etiketter hämtas från
+// artikeltypregistret (article_type_definitions), inklusive arkiverade typer så
+// att gamla rader behåller sin läsbara etikett.
+// ---------------------------------------------------------------------------
+export interface ArticleTypeLabeler {
+  labelFor(key: string): string;
+}
+
+export async function loadArticleTypeLabeler(tenantId: string): Promise<ArticleTypeLabeler> {
+  const registry = await db
+    .select({ key: articleTypeDefinitions.key, label: articleTypeDefinitions.label })
+    .from(articleTypeDefinitions)
+    .where(eq(articleTypeDefinitions.tenantId, tenantId));
+  const labels = new Map(registry.map((r) => [r.key, r.label]));
+  return {
+    labelFor(key) {
+      return labels.get(key) ?? key;
+    },
+  };
+}
+
+// Korrelerad subquery: artikeltypen för uppgiftens första orderrad med artikel.
+// Kolumner refereras med LITTERALA kvalificerade namn — drizzle renderar
+// ${table.col} okvalificerat i korrelerade subqueries (se memory:
+// drizzle-correlated-subquery-column-qualification).
+const ARTICLE_TYPE_SQL = sql<string | null>`(
+  SELECT a.article_type
+  FROM work_order_lines wol
+  JOIN articles a
+    ON a.id = wol.article_id
+   AND a.tenant_id = "work_orders"."tenant_id"
+  WHERE wol.work_order_id = "work_orders"."id"
+    AND wol.article_id IS NOT NULL
+  ORDER BY wol.created_at, wol.id
+  LIMIT 1
+)`;
+
+// Delad radhärledning: artikelkopplad typ vinner; annars legacy-heuristiken på
+// fritext-orderType (uttalad fallback för gamla rader utan artikelkoppling).
+function deriveArticleType(
+  rawArticleType: string | null,
+  orderType: string | null | undefined,
+): { articleType: string; articleTypeSource: "artikel" | "legacy" } {
+  if (rawArticleType) return { articleType: rawArticleType, articleTypeSource: "artikel" };
+  return { articleType: normalizeTaskType(orderType), articleTypeSource: "legacy" };
 }
 
 // ---------------------------------------------------------------------------
@@ -365,6 +428,7 @@ interface RawRow {
   title: string | null;
   orderType: string | null;
   executionCode: string | null;
+  rawArticleType: string | null;
   desiredDeliveryStart: Date | null;
   desiredDeliveryEnd: Date | null;
   productionMinutes: number | null;
@@ -465,7 +529,10 @@ async function buildOrderedGroups(
   grouping: GroupBy,
 ): Promise<OrderedGroupsResult> {
   const conditions = buildConditions(tenantId, filters);
-  const typeMatcher = await loadTaskTypeMatcher(tenantId);
+  const [typeMatcher, articleTypeLabeler] = await Promise.all([
+    loadTaskTypeMatcher(tenantId),
+    loadArticleTypeLabeler(tenantId),
+  ]);
 
   const fetched = (await db
     .select({
@@ -478,6 +545,7 @@ async function buildOrderedGroups(
       title: workOrders.title,
       orderType: workOrders.orderType,
       executionCode: workOrders.executionCode,
+      rawArticleType: ARTICLE_TYPE_SQL,
       desiredDeliveryStart: workOrders.desiredDeliveryStart,
       desiredDeliveryEnd: workOrders.desiredDeliveryEnd,
       productionMinutes: workOrders.cachedProductionMinutes,
@@ -508,16 +576,28 @@ async function buildOrderedGroups(
   const truncated = fetched.length > ROW_CAP;
   const raw = truncated ? fetched.slice(0, ROW_CAP) : fetched;
 
-  // Uppgiftstyp-filter i applagret (fuzzy normalisering).
+  // Uppgiftstyp-filter i applagret (fuzzy normalisering) — LEGACY, endast gamla
+  // sparade filter/länkar. UI:t skickar articleTypes/executionCodes (Task #1485).
   const typeFilter =
     filters.taskTypes && filters.taskTypes.length > 0
       ? new Set(filters.taskTypes)
+      : null;
+  // Artikeltyp-filter (Task #1485) — matchar artikelhärledd typ (legacy-nyckel
+  // för rader utan artikelkoppling).
+  const articleTypeFilter =
+    filters.articleTypes && filters.articleTypes.length > 0
+      ? new Set(filters.articleTypes)
       : null;
 
   const rows: (GridTaskRow & { lat: number | null; lng: number | null })[] = [];
   for (const r of raw) {
     const taskType = typeMatcher.normalize(r.orderType);
     if (typeFilter && !typeFilter.has(taskType)) continue;
+    const { articleType, articleTypeSource } = deriveArticleType(
+      r.rawArticleType,
+      r.orderType,
+    );
+    if (articleTypeFilter && !articleTypeFilter.has(articleType)) continue;
     rows.push({
       id: r.id,
       status: r.status,
@@ -529,6 +609,14 @@ async function buildOrderedGroups(
       taskType,
       taskTypeLabel: typeMatcher.labelFor(taskType),
       executionCode: r.executionCode ?? null,
+      articleType,
+      // Legacy-härledda nycklar etiketteras via uppgiftstyps-etiketterna
+      // (BÖK/Tvätt/…), artikelkopplade via artikeltypregistret.
+      articleTypeLabel:
+        articleTypeSource === "artikel"
+          ? articleTypeLabeler.labelFor(articleType)
+          : typeMatcher.labelFor(articleType),
+      articleTypeSource,
       desiredDeliveryStart: toIso(r.desiredDeliveryStart),
       desiredDeliveryEnd: toIso(r.desiredDeliveryEnd),
       productionMinutes: r.productionMinutes ?? 0,
@@ -843,7 +931,7 @@ export type GrovExportColumnKey =
   | "customer"
   | "object"
   | "task"
-  | "taskType"
+  | "articleType"
   | "executionCode"
   | "desiredDelivery"
   | "productionMinutes"
@@ -873,7 +961,8 @@ const GROV_EXPORT_COLUMN_DEFS: GrovExportColumnDef[] = [
   { key: "customer", label: "Kund", width: 26, value: (_l, r) => safeCell(r.customerName ?? "") },
   { key: "object", label: "Objekt", width: 28, value: (_l, r) => safeCell(r.objectName ?? "") },
   { key: "task", label: "Uppgift", width: 28, value: (_l, r) => safeCell(r.title ?? "") },
-  { key: "taskType", label: "Uppgiftstyp", width: 16, value: (_l, r) => safeCell(r.taskTypeLabel) },
+  // Task #1485: "Uppgiftstyp" utgått ur exportkontraktet — ersatt av Artikeltyp.
+  { key: "articleType", label: "Artikeltyp", width: 16, value: (_l, r) => safeCell(r.articleTypeLabel ?? "") },
   { key: "executionCode", label: "Utförandekod", width: 18, value: (_l, r) => safeCell(r.executionCode ?? "") },
   {
     key: "desiredDelivery",
@@ -1115,6 +1204,7 @@ export async function buildGrovplaneringFullCsvExport(
       clusterExclusionReason: workOrders.clusterExclusionReason,
       taskLatitude: workOrders.taskLatitude,
       taskLongitude: workOrders.taskLongitude,
+      rawArticleType: ARTICLE_TYPE_SQL,
       customerName: customers.name,
       customerNumber: customers.customerNumber,
       objectName: objects.name,
@@ -1150,15 +1240,28 @@ export async function buildGrovplaneringFullCsvExport(
   const raw = truncated ? fetched.slice(0, CSV_CAP) : fetched;
 
   // Uppgiftstyp-filter i applagret (fuzzy normalisering, samma som buildOrderedGroups).
+  // LEGACY (taskTypes) + artikeltyp-filter (Task #1485) — samma semantik som rutnätet.
   const typeFilter =
     filters.taskTypes && filters.taskTypes.length > 0
       ? new Set(filters.taskTypes)
       : null;
+  const articleTypeFilter =
+    filters.articleTypes && filters.articleTypes.length > 0
+      ? new Set(filters.articleTypes)
+      : null;
 
-  const typeMatcher = await loadTaskTypeMatcher(tenantId);
-  const rows = typeFilter
-    ? raw.filter((r) => typeFilter.has(typeMatcher.normalize(r.orderType)))
-    : raw;
+  const [typeMatcher, articleTypeLabeler] = await Promise.all([
+    loadTaskTypeMatcher(tenantId),
+    loadArticleTypeLabeler(tenantId),
+  ]);
+  const rows = raw.filter((r) => {
+    if (typeFilter && !typeFilter.has(typeMatcher.normalize(r.orderType))) return false;
+    if (articleTypeFilter) {
+      const { articleType } = deriveArticleType(r.rawArticleType, r.orderType);
+      if (!articleTypeFilter.has(articleType)) return false;
+    }
+    return true;
+  });
 
   // ---------------------------------------------------------------------------
   // Fas 2: Hierarki-batch — predecessorer, efterföljare, reseuppgiftslänk
@@ -1365,8 +1468,9 @@ export async function buildGrovplaneringFullCsvExport(
     "Klumpexklusionsorsak",
     // Typ/kategori
     "Ordertyp (rådata)",
-    "Uppgiftstyp (nyckel)",
-    "Uppgiftstyp",
+    "Artikeltyp (nyckel)",
+    "Artikeltyp",
+    "Artikeltyp-källa",
     "Uppgiftskategori",
     "Platskrav",
     "Utförandekod",
@@ -1439,8 +1543,16 @@ export async function buildGrovplaneringFullCsvExport(
   lines.push(ALL_HEADERS.map((h) => escapeCsvField(safeCell(h))).join(","));
 
   for (const r of rows) {
-    const taskType = typeMatcher.normalize(r.orderType);
-    const taskTypeLabel = typeMatcher.labelFor(taskType);
+    // Task #1485: artikeltyp härledd från artikelkopplingen; legacy-fallback
+    // via fritext-heuristiken markeras uttryckligen i "Artikeltyp-källa".
+    const { articleType, articleTypeSource } = deriveArticleType(
+      r.rawArticleType,
+      r.orderType,
+    );
+    const articleTypeLabel =
+      articleTypeSource === "artikel"
+        ? articleTypeLabeler.labelFor(articleType)
+        : typeMatcher.labelFor(articleType);
     const prodMin = r.cachedProductionMinutes ?? 0;
     const isTravel = r.logisticsRole === "travel";
     const travelChildId = travelChildMap.get(r.id) ?? "";
@@ -1501,8 +1613,9 @@ export async function buildGrovplaneringFullCsvExport(
       r.clusterExclusionReason ?? "",
       // Typ/kategori
       r.orderType ?? "",
-      taskType,
-      taskTypeLabel,
+      articleType,
+      articleTypeLabel,
+      articleTypeSource,
       r.taskCategory ?? "",
       r.locationRequirement ?? "",
       r.executionCode ?? "",

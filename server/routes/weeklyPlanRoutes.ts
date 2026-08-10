@@ -271,6 +271,8 @@ export function registerWeeklyPlanRoutes(app: Express) {
     const taskTypes = csv(query.taskTypes).filter((t) =>
       (TASK_TYPE_KEYS as readonly string[]).includes(t),
     );
+    // Task #1485: artikeltyp-filter (article_type_definitions.key / legacy-nyckel).
+    const articleTypes = csv(query.articleTypes);
     const statuses = csv(query.statuses).filter((s) =>
       (ROUGH_STATUS_KEYS as readonly string[]).includes(s),
     ) as RoughStatus[];
@@ -288,6 +290,7 @@ export function registerWeeklyPlanRoutes(app: Express) {
       from: parsed.data.from,
       to: parsed.data.to,
       taskTypes: taskTypes.length ? taskTypes : undefined,
+      articleTypes: articleTypes.length ? articleTypes : undefined,
       statuses: statuses.length ? statuses : undefined,
       rootObjectId: parsed.data.objectId || undefined,
     };

@@ -109,7 +109,7 @@ interface AppliedFilter {
   timeCodes: string[];
   customerIds: string[];
   resourceIds: string[];
-  taskTypes: string[];
+  articleTypes: string[];
   statuses: RoughStatus[];
   executionCodes: string[];
   // Task #1410: objekturval via metadatavillkor (delade motorn med objektlistan).
@@ -125,7 +125,7 @@ const EMPTY_APPLIED: AppliedFilter = {
   timeCodes: [],
   customerIds: [],
   resourceIds: [],
-  taskTypes: [],
+  articleTypes: [],
   statuses: [],
   executionCodes: [],
   conditions: [],
@@ -148,7 +148,8 @@ type ExportColumnKey =
   | "customer"
   | "object"
   | "task"
-  | "taskType"
+  | "articleType"
+  | "executionCode"
   | "desiredDelivery"
   | "productionMinutes"
   | "productionHours"
@@ -164,7 +165,8 @@ const EXPORT_COLUMNS: { key: ExportColumnKey; label: string }[] = [
   { key: "customer", label: "Kund" },
   { key: "object", label: "Objekt" },
   { key: "task", label: "Uppgift" },
-  { key: "taskType", label: "Uppgiftstyp" },
+  { key: "articleType", label: "Artikeltyp" },
+  { key: "executionCode", label: "Utförandekod" },
   { key: "desiredDelivery", label: "Önskad leverans" },
   { key: "productionMinutes", label: "Produktionstid (min)" },
   { key: "productionHours", label: "Produktionstid (tim)" },
@@ -199,7 +201,7 @@ function buildFilterParams(applied: AppliedFilter, groupBy: GroupBy): URLSearchP
   if (applied.timeCodes.length) p.set("timeCodes", applied.timeCodes.join(","));
   if (applied.customerIds.length) p.set("customerIds", applied.customerIds.join(","));
   if (applied.resourceIds.length) p.set("resourceIds", applied.resourceIds.join(","));
-  if (applied.taskTypes.length) p.set("taskTypes", applied.taskTypes.join(","));
+  if (applied.articleTypes.length) p.set("articleTypes", applied.articleTypes.join(","));
   if (applied.statuses.length) p.set("statuses", applied.statuses.join(","));
   if (applied.executionCodes.length)
     p.set("executionCodes", applied.executionCodes.join(","));
@@ -259,7 +261,7 @@ function deriveApplied(draft: FilterState): AppliedFilter {
     timeCodes: draft.timeCodes ?? [],
     customerIds: draft.customerIds ?? [],
     resourceIds: draft.resourceIds ?? [],
-    taskTypes: draft.taskTypes,
+    articleTypes: draft.articleTypes ?? [],
     statuses: draft.statuses,
     executionCodes: draft.executionCodes,
     // Endast kompletta villkor (valt fält) skickas till servern.

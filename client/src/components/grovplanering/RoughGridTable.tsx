@@ -191,8 +191,21 @@ function TaskRow({
         })()}
       </TableCell>
       <TableCell>
-        <Badge variant="outline" className="font-normal">
-          {row.taskTypeLabel}
+        {/* Task #1485: artikeltyp från artikelkopplingen; legacy = härledd från
+            fritext-orderType (gamla rader utan artikel). */}
+        <Badge
+          variant="outline"
+          className="font-normal"
+          title={
+            row.articleTypeSource === "legacy"
+              ? "Härledd från fritext (saknar artikelkoppling)"
+              : undefined
+          }
+        >
+          {row.articleTypeLabel ?? "–"}
+          {row.articleTypeSource === "legacy" && (
+            <span className="ml-1 text-muted-foreground">*</span>
+          )}
         </Badge>
       </TableCell>
       <TableCell className="whitespace-nowrap text-sm" data-testid={`text-execution-code-${row.id}`}>
@@ -326,7 +339,7 @@ export function RoughGridTable({
             <TableHead>Status</TableHead>
             <TableHead>Kund</TableHead>
             <TableHead>Objekt / Uppgift</TableHead>
-            <TableHead>Uppgiftstyp</TableHead>
+            <TableHead>Artikeltyp</TableHead>
             <TableHead>Utförandekod</TableHead>
             <TableHead>Önskad lev.</TableHead>
             <TableHead className="text-right">Tid</TableHead>

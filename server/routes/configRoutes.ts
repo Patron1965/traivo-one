@@ -7,10 +7,9 @@ import { formatZodError, verifyTenantOwnership, DEFAULT_TENANT_ID } from "./help
 import { getTenantIdWithFallback, requireAdmin } from "../tenant-middleware";
 import { asyncHandler } from "../asyncHandler";
 import { AppError, NotFoundError, ValidationError, ForbiddenError, ConflictError } from "../errors";
-import { insertArticleSchema, insertArticleTypeDefinitionSchema, insertExecutionCodeDefinitionSchema, insertTimeCodeDefinitionSchema, insertIconDefinitionSchema, insertArticleComponentSchema, insertPriceListSchema, insertPriceListArticleSchema, insertResourceArticleSchema, insertVehicleSchema, insertEquipmentSchema, insertResourceVehicleSchema, insertResourceEquipmentSchema, insertResourceAvailabilitySchema, insertVehicleScheduleSchema, insertSubscriptionSchema, insertTeamSchema, insertTeamMemberSchema, insertTaskTypeSchema, insertPlanningParameterSchema, insertResourceProfileSchema, insertResourceProfileAssignmentSchema, insertWorkSessionSchema, insertWorkEntrySchema, insertFuelLogSchema, insertMaintenanceLogSchema, workSessions, workEntries, timeLogs, equipmentBookings } from "@shared/schema";
+import { insertArticleSchema, insertArticleTypeDefinitionSchema, insertExecutionCodeDefinitionSchema, insertTimeCodeDefinitionSchema, insertIconDefinitionSchema, insertArticleComponentSchema, insertPriceListSchema, insertPriceListArticleSchema, insertResourceArticleSchema, insertVehicleSchema, insertEquipmentSchema, insertResourceVehicleSchema, insertResourceEquipmentSchema, insertResourceAvailabilitySchema, insertVehicleScheduleSchema, insertSubscriptionSchema, insertTeamSchema, insertTeamMemberSchema, insertPlanningParameterSchema, insertResourceProfileSchema, insertResourceProfileAssignmentSchema, insertWorkSessionSchema, insertWorkEntrySchema, insertFuelLogSchema, insertMaintenanceLogSchema, workSessions, workEntries, timeLogs, equipmentBookings } from "@shared/schema";
 import { getISOWeek, getStartOfISOWeek } from "./helpers";
 import { notificationService } from "../notifications";
-import { TASK_TYPE_KEYS, TASK_TYPE_LABELS } from "../grovplanering-grid";
 import { parseFormula } from "../metadata-formula";
 import { getAllMetadataTypes, isInterimKatalogNamn } from "../metadata-queries";
 import { buildTimeCodeRuleMap, resolveTimeCodeRule } from "../services/time-code-rules";
@@ -1795,107 +1794,15 @@ app.post("/api/subscriptions/generate-orders", asyncHandler(async (req, res) => 
     res.json({ success: true, generatedCount });
 }));
 
-// ============== REFERENS: UPPGIFTSTYP-REGISTER ==============
-// Dynamiskt, per-tenant register som driver Uppgiftstyp-filtret i Grovplaneringen.
-// Tenant härleds server-side (aldrig från klient-angiven ?tenantId — threat-model).
-// Saknar tenant register-rader helt (ny tenant innan seed) → syntetisera de 8 standardtyperna.
-// OBS: har tenanten rader men ALLA är inaktiverade returneras [] — registret är auktoritativt,
-// hårdkodade defaults får aldrig återinföras efter att registret initierats.
-app.get("/api/reference/task-types", asyncHandler(async (req, res) => {
-    const tenantId = getTenantIdWithFallback(req);
-    const allTypes = await storage.getAllTaskTypes(tenantId);
-    if (allTypes.length > 0) {
-      res.json(
-        allTypes
-          .filter((t) => t.isActive)
-          .map((t) => ({ key: t.key, label: t.label })),
-      );
-      return;
-    }
-    res.json(
-      TASK_TYPE_KEYS.map((k) => ({ key: k, label: TASK_TYPE_LABELS[k] ?? k })),
-    );
-}));
-
-// ============== UPPGIFTSTYP-REGISTER: ADMIN-CRUD ==============
-// Per-tenant hantering av uppgiftstyper (Grovplaneringens filter m.m.).
-// Läsning öppen för tenant-medlemmar (seed-on-read, insert-only), skrivning kräver admin.
-// Nyckeln är immutabel; typer inaktiveras (is_active=false) i stället för hard-delete
-// så att befintliga uppgifters härledning aldrig tappar historiken.
-const DEFAULT_TASK_TYPE_SEED = TASK_TYPE_KEYS.map((k, i) => ({
-  key: k,
-  label: TASK_TYPE_LABELS[k] ?? k,
-  sortOrder: i + 1,
-}));
-
-app.get("/api/task-types", asyncHandler(async (req, res) => {
-    const tenantId = getTenantIdWithFallback(req);
-    let list = await storage.getAllTaskTypes(tenantId);
-    if (list.length === 0) {
-      await storage.seedTaskTypes(tenantId, DEFAULT_TASK_TYPE_SEED);
-      list = await storage.getAllTaskTypes(tenantId);
-    }
-    res.json(list);
-}));
-
-app.post("/api/task-types", requireAdmin, asyncHandler(async (req, res) => {
-    const tenantId = getTenantIdWithFallback(req);
-    const data = insertTaskTypeSchema.parse({ ...req.body, tenantId });
-    const key = data.key.trim().toLowerCase();
-    if (!/^[a-z0-9_]{1,50}$/.test(key)) {
-      throw new ValidationError("Nyckeln får bara innehålla a–z, 0–9 och _ (max 50 tecken).");
-    }
-    const label = data.label.trim();
-    if (!label) throw new ValidationError("Etikett krävs.");
-    const existing = await storage.getAllTaskTypes(tenantId);
-    if (existing.some((t) => t.key === key)) {
-      throw new ConflictError(`Uppgiftstypen med nyckel "${key}" finns redan.`);
-    }
-    if (existing.some((t) => t.label.trim().toLowerCase() === label.toLowerCase())) {
-      throw new ConflictError(`Uppgiftstypen med etikett "${label}" finns redan.`);
-    }
-    const created = await storage.createTaskType({ ...data, key, label });
-    res.status(201).json(created);
-}));
-
-app.patch("/api/task-types/:id", requireAdmin, asyncHandler(async (req, res) => {
-    const tenantId = getTenantIdWithFallback(req);
-    const existing = await storage.getTaskType(req.params.id, tenantId);
-    if (!existing) throw new NotFoundError("Uppgiftstypen hittades inte");
-    const patchSchema = insertTaskTypeSchema
-      .partial()
-      .omit({ tenantId: true, key: true });
-    const parsed = patchSchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json(formatZodError(parsed.error));
-    const patch = { ...parsed.data };
-    if (patch.label !== undefined) {
-      patch.label = patch.label.trim();
-      if (!patch.label) throw new ValidationError("Etikett krävs.");
-      const all = await storage.getAllTaskTypes(tenantId);
-      if (all.some((t) => t.id !== existing.id && t.label.trim().toLowerCase() === patch.label!.toLowerCase())) {
-        throw new ConflictError(`Uppgiftstypen med etikett "${patch.label}" finns redan.`);
-      }
-    }
-    const updated = await storage.updateTaskType(req.params.id, tenantId, patch);
-    res.json(updated);
-}));
-
-// Radering med användnings-vakt (samma mönster som utförandekoder):
-// oanvänd typ → hard-delete; typ som används av befintliga uppgifter → inaktivering
-// (arkiv) så att historikens klassning/etikett aldrig tappas.
-app.delete("/api/task-types/:id", requireAdmin, asyncHandler(async (req, res) => {
-    const tenantId = getTenantIdWithFallback(req);
-    const existing = await storage.getTaskType(req.params.id, tenantId);
-    if (!existing) throw new NotFoundError("Uppgiftstypen hittades inte");
-    const usage = await storage.countTaskTypeUsage(tenantId, existing.key, existing.label);
-    if (usage > 0) {
-      await storage.updateTaskType(req.params.id, tenantId, { isActive: false });
-      res.json({ deleted: false, deactivated: true, usage });
-      return;
-    }
-    await storage.deleteTaskType(req.params.id, tenantId);
-    res.json({ deleted: true, deactivated: false, usage: 0 });
-}));
+// ============== UPPGIFTSTYP-REGISTER: AVVECKLAT (Task #1485) ==============
+// task_types-registret är avvecklat ur UI/API. Uppgiftsnavets/Grovplaneringens
+// filter drivs numera av utförandekodsregistret (/api/execution-codes) och
+// artikeltypregistret (/api/article-types); en uppgifts typ härleds från dess
+// artikelkoppling med fritext-heuristiken som uttalad legacy-fallback.
+// Contract-plan: tabellen task_types + storage-metoderna ligger kvar
+// (expand-contract) tills gamla rader är omklassade — läses fortfarande av
+// loadTaskTypeMatcher för legacy-etiketter. Referens-/CRUD-endpoints är
+// borttagna och får inte återinföras för nya konsumenter.
 
 // ============== TEAMS ==============
 app.get("/api/teams", asyncHandler(async (req, res) => {

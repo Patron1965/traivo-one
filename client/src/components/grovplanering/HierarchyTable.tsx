@@ -456,7 +456,7 @@ function TaskRow({
       </TableCell>
       {/* Utförandetyp — L3 */}
       <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
-        {row.executionCode ?? row.taskTypeLabel ?? "–"}
+        {row.executionCode ?? row.articleTypeLabel ?? "–"}
       </TableCell>
       <TableCell className="min-w-[220px]">
         <div className={indentPx}>

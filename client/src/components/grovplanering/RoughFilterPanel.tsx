@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { Link } from "wouter";
 import { addWeeks, addMonths } from "date-fns";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -8,7 +7,6 @@ import {
   ChevronRight,
   Filter,
   Loader2,
-  Settings2,
   SlidersHorizontal,
   X,
 } from "lucide-react";
@@ -63,7 +61,9 @@ export interface FilterState {
   anchor: string; // yyyy-MM-dd
   rangeFrom: string;
   rangeTo: string;
-  taskTypes: string[];
+  // Task #1485: Uppgiftstyp-filtret ersatt av Artikeltyp (artikeltypregistret)
+  // + Utförandekod (utförandekodsregistret) — separata, korrekt namngivna filter.
+  articleTypes: string[];
   statuses: RoughStatus[];
   executionCodes: string[];
   // Uppgiftsnavet: valbart datumfält + tidskod/kund/resurs-filter.
@@ -87,7 +87,7 @@ export function createDefaultFilter(): FilterState {
     anchor: today.toISOString().slice(0, 10),
     rangeFrom: "",
     rangeTo: "",
-    taskTypes: [],
+    articleTypes: [],
     statuses: [],
     executionCodes: [],
     dateField: "onskad",
@@ -101,11 +101,6 @@ export function createDefaultFilter(): FilterState {
 interface DistrictOption {
   id: string;
   name: string;
-}
-
-interface TaskTypeOption {
-  key: string;
-  label: string;
 }
 
 interface RoughFilterPanelProps {
@@ -204,17 +199,18 @@ export function RoughFilterPanel({
   const { options: executionCodeOptions, labelFor: executionCodeLabel } =
     useExecutionCodes(value.executionCodes);
 
-  // Uppgiftstyper kommer enbart från det per-tenant registret
-  // (/api/reference/task-types). Backend returnerar tenantens egna typer, eller — för
-  // ännu oseedade tenants — de rimliga standardtyperna. Ingen hårdkodad klient-fallback:
-  // en sådan kunde visa typer som inte existerar för tenanten och göra filtret
-  // missvisande (Task #980).
-  const { data: taskTypeData, isLoading: taskTypesLoading } = useQuery<
-    TaskTypeOption[]
+  // Task #1485: Artikeltyp-filtret hämtas från artikeltypregistret
+  // (/api/article-types). Arkiverade typer (deletedAt) erbjuds inte som nya val,
+  // men redan valda nycklar förblir läsbara via labelFor-fallback.
+  const { data: articleTypeDefs = [] } = useQuery<
+    { key: string; label: string; deletedAt: string | null }[]
   >({
-    queryKey: ["/api/reference/task-types"],
+    queryKey: ["/api/article-types"],
+    staleTime: 5 * 60 * 1000,
   });
-  const taskTypeOptions: TaskTypeOption[] = taskTypeData ?? [];
+  const articleTypeOptions = articleTypeDefs.filter((t) => !t.deletedAt);
+  const articleTypeLabel = (key: string) =>
+    articleTypeDefs.find((t) => t.key === key)?.label ?? key;
 
   // Task #1410: objekturvalets fältkälla = den svenska metadata-katalogen
   // (samma som objektlistans fördjupade filter). Nyckeln är katalogens `namn` —
@@ -449,54 +445,72 @@ export function RoughFilterPanel({
           </div>
         </div>
 
-        {/* Uppgiftstyp + status */}
-        <div className="grid gap-5 md:grid-cols-2">
+        {/* Utförandekod + Artikeltyp + status (Task #1485: uppgiftstyp ersatt av
+            två separata, registerdrivna filter) */}
+        <div className="grid gap-5 md:grid-cols-3">
           <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <Label className="text-xs">Uppgiftstyp</Label>
-              <Link
-                href="/task-types"
-                className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
-                data-testid="link-manage-task-types"
-              >
-                <Settings2 className="h-3 w-3" />
-                Hantera
-              </Link>
-            </div>
-            {taskTypesLoading ? (
-              <p
-                className="text-sm text-muted-foreground"
-                data-testid="text-tasktypes-loading"
-              >
-                Laddar uppgiftstyper…
-              </p>
-            ) : taskTypeOptions.length === 0 ? (
-              <p
-                className="text-sm text-muted-foreground"
-                data-testid="text-tasktypes-empty"
-              >
-                Inga uppgiftstyper i registret.
-              </p>
-            ) : (
-              <div className="grid grid-cols-2 gap-2">
-                {taskTypeOptions.map((t) => (
-                  <label
-                    key={t.key}
-                    className="flex items-center gap-2 text-sm"
-                    data-testid={`check-tasktype-${t.key}`}
+            <Label className="text-xs">Utförandekod</Label>
+            <Select
+              value=""
+              onValueChange={(code) =>
+                patch({ executionCodes: [...value.executionCodes, code] })
+              }
+              disabled={executionCodeOptions.every((o) =>
+                value.executionCodes.includes(o.value),
+              )}
+            >
+              <SelectTrigger data-testid="select-execution-code-filter">
+                <SelectValue placeholder="Lägg till utförandekod" />
+              </SelectTrigger>
+              <SelectContent>
+                {executionCodeOptions
+                  .filter((o) => !value.executionCodes.includes(o.value))
+                  .map((o) => (
+                    <SelectItem key={o.value} value={o.value}>
+                      {o.label}
+                    </SelectItem>
+                  ))}
+              </SelectContent>
+            </Select>
+            {value.executionCodes.length > 0 && (
+              <div className="flex flex-wrap gap-1.5 pt-1">
+                {value.executionCodes.map((code) => (
+                  <Badge
+                    key={code}
+                    variant="secondary"
+                    className="gap-1"
+                    data-testid={`tag-execution-code-${code}`}
                   >
-                    <Checkbox
-                      checked={value.taskTypes.includes(t.key)}
-                      onCheckedChange={() =>
-                        patch({ taskTypes: toggleArray(value.taskTypes, t.key) })
+                    {executionCodeLabel(code)}
+                    <button
+                      type="button"
+                      onClick={() =>
+                        patch({
+                          executionCodes: value.executionCodes.filter(
+                            (x) => x !== code,
+                          ),
+                        })
                       }
-                    />
-                    {t.label}
-                  </label>
+                      className="rounded-sm hover-elevate"
+                      aria-label={`Ta bort ${executionCodeLabel(code)}`}
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </Badge>
                 ))}
               </div>
             )}
           </div>
+
+          <MultiPick
+            label="Artikeltyp"
+            placeholder="Lägg till artikeltyp"
+            testId="article-type"
+            selected={value.articleTypes}
+            options={articleTypeOptions.map((t) => ({ value: t.key, label: t.label }))}
+            labelFor={articleTypeLabel}
+            onChange={(articleTypes) => patch({ articleTypes })}
+          />
 
           <div className="space-y-2">
             <Label className="text-xs">Uppgiftsstatus</Label>
@@ -568,60 +582,6 @@ export function RoughFilterPanel({
                       }
                       className="rounded-sm hover-elevate"
                       aria-label={`Ta bort ${t.name}`}
-                    >
-                      <X className="h-3 w-3" />
-                    </button>
-                  </Badge>
-                ))}
-              </div>
-            )}
-          </div>
-
-          <div className="space-y-2">
-            <Label className="text-xs">Utförandekod</Label>
-            <Select
-              value=""
-              onValueChange={(code) =>
-                patch({ executionCodes: [...value.executionCodes, code] })
-              }
-              disabled={executionCodeOptions.every((o) =>
-                value.executionCodes.includes(o.value),
-              )}
-            >
-              <SelectTrigger data-testid="select-execution-code-filter">
-                <SelectValue placeholder="Lägg till utförandekod" />
-              </SelectTrigger>
-              <SelectContent>
-                {executionCodeOptions
-                  .filter((o) => !value.executionCodes.includes(o.value))
-                  .map((o) => (
-                    <SelectItem key={o.value} value={o.value}>
-                      {o.label}
-                    </SelectItem>
-                  ))}
-              </SelectContent>
-            </Select>
-            {value.executionCodes.length > 0 && (
-              <div className="flex flex-wrap gap-1.5 pt-1">
-                {value.executionCodes.map((code) => (
-                  <Badge
-                    key={code}
-                    variant="secondary"
-                    className="gap-1"
-                    data-testid={`tag-execution-code-${code}`}
-                  >
-                    {executionCodeLabel(code)}
-                    <button
-                      type="button"
-                      onClick={() =>
-                        patch({
-                          executionCodes: value.executionCodes.filter(
-                            (x) => x !== code,
-                          ),
-                        })
-                      }
-                      className="rounded-sm hover-elevate"
-                      aria-label={`Ta bort ${executionCodeLabel(code)}`}
                     >
                       <X className="h-3 w-3" />
                     </button>

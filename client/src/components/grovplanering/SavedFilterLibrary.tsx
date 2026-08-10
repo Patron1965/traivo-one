@@ -32,6 +32,32 @@ const DATE_FIELDS: GridDateField[] = ["onskad", "skapad", "planerad", "utford"];
 const strArray = (v: unknown): string[] =>
   Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : [];
 
+/**
+ * Task #1485: migrering av sparade filter som refererar det avvecklade
+ * uppgiftstyp-registret (taskTypes). Nycklar mappas till utförandekods- resp.
+ * artikeltypregistret (exakt nyckel- eller etikett-match, case-insensitive);
+ * omappbara nycklar returneras så att anroparen kan visa en varning —
+ * filtreringen får aldrig degradera i tysthet.
+ */
+export function migrateLegacyTaskTypes(
+  legacyKeys: string[],
+  executionCodeKeys: Map<string, string>, // lower(key|label) -> key
+  articleTypeKeys: Map<string, string>, // lower(key|label) -> key
+): { executionCodes: string[]; articleTypes: string[]; unmapped: string[] } {
+  const executionCodes: string[] = [];
+  const articleTypes: string[] = [];
+  const unmapped: string[] = [];
+  for (const k of legacyKeys) {
+    const lower = k.trim().toLowerCase();
+    const ec = executionCodeKeys.get(lower);
+    const at = articleTypeKeys.get(lower);
+    if (ec) executionCodes.push(ec);
+    else if (at) articleTypes.push(at);
+    else unmapped.push(k);
+  }
+  return { executionCodes, articleTypes, unmapped };
+}
+
 /** Runtime-normalisering av en sparad panel-definition till giltig FilterState. */
 function normalizePanelFilter(raw: Record<string, unknown>): FilterState {
   const d = createDefaultFilter();
@@ -49,7 +75,7 @@ function normalizePanelFilter(raw: Record<string, unknown>): FilterState {
     anchor: str(r.anchor, d.anchor),
     rangeFrom: str(r.rangeFrom, d.rangeFrom),
     rangeTo: str(r.rangeTo, d.rangeTo),
-    taskTypes: strArray(r.taskTypes),
+    articleTypes: strArray(r.articleTypes),
     statuses: strArray(r.statuses) as FilterState["statuses"],
     executionCodes: strArray(r.executionCodes),
     dateField: DATE_FIELDS.includes(r.dateField as GridDateField)
@@ -90,6 +116,15 @@ export function SavedFilterLibrary({
     queryFn: async () =>
       (await apiRequest("GET", `/api/saved-filters?scope=${SCOPE}`)).json(),
   });
+
+  const toKeyMap = (defs: { key: string; label: string }[]) => {
+    const m = new Map<string, string>();
+    for (const d of defs) {
+      m.set(d.key.toLowerCase(), d.key);
+      m.set(d.label.trim().toLowerCase(), d.key);
+    }
+    return m;
+  };
 
   const invalidate = () =>
     queryClient.invalidateQueries({ queryKey: ["/api/saved-filters", SCOPE] });
@@ -133,10 +168,59 @@ export function SavedFilterLibrary({
       toast({ title: "Kunde inte ta bort filtret", description: e.message, variant: "destructive" }),
   });
 
-  const applyRow = (row: SavedFilterRow) => {
+  const applyRow = async (row: SavedFilterRow) => {
     // Normalisera mot defaults — äldre/malformade sparade former (fel typer,
     // saknade nycklar, ogiltigt datumfält) får aldrig korrumpera FilterState.
-    onApply(normalizePanelFilter(row.definition));
+    const next = normalizePanelFilter(row.definition);
+
+    // Task #1485: sparade filter från det avvecklade uppgiftstyp-registret
+    // migreras till utförandekod/artikeltyp; omappbara nycklar rapporteras
+    // öppet i stället för att filtreringen tyst blir tom/felaktig.
+    const legacyKeys = strArray((row.definition as Record<string, unknown>)?.taskTypes);
+    if (legacyKeys.length > 0) {
+      // Registren hämtas garanterat FÖRE migreringen (fetchQuery använder
+      // cachen när den är färsk) — annars skulle en snabb apply mot tomma
+      // default-arrayer tyst tappa alla legacy-nycklar som "omappbara".
+      let executionCodeDefs: { key: string; label: string }[] = [];
+      let articleTypeDefs: { key: string; label: string }[] = [];
+      try {
+        [executionCodeDefs, articleTypeDefs] = await Promise.all([
+          queryClient.fetchQuery<{ key: string; label: string }[]>({
+            queryKey: ["/api/execution-codes"],
+            staleTime: 5 * 60 * 1000,
+          }),
+          queryClient.fetchQuery<{ key: string; label: string }[]>({
+            queryKey: ["/api/article-types"],
+            staleTime: 5 * 60 * 1000,
+          }),
+        ]);
+      } catch {
+        toast({
+          title: "Kunde inte migrera filtret",
+          description:
+            "Registren för utförandekoder/artikeltyper kunde inte hämtas. Uppgiftstyp-delen av det sparade filtret ignorerades — försök igen.",
+          variant: "destructive",
+        });
+        onApply(next);
+        setOpen(false);
+        return;
+      }
+      const { executionCodes, articleTypes, unmapped } = migrateLegacyTaskTypes(
+        legacyKeys,
+        toKeyMap(executionCodeDefs),
+        toKeyMap(articleTypeDefs),
+      );
+      next.executionCodes = [...new Set([...next.executionCodes, ...executionCodes])];
+      next.articleTypes = [...new Set([...next.articleTypes, ...articleTypes])];
+      if (unmapped.length > 0) {
+        toast({
+          title: "Delar av filtret kunde inte migreras",
+          description: `Uppgiftstyp-filtret är ersatt av Utförandekod/Artikeltyp. Följande värden saknar motsvarighet och ignorerades: ${unmapped.join(", ")}.`,
+        });
+      }
+    }
+
+    onApply(next);
     setOpen(false);
   };
 

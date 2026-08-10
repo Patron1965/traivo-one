@@ -94,7 +94,6 @@ export function getGrunddataItems(t: (key: string, fallback: string) => string, 
     { title: "Produktionstider", url: "/production-time-lists", icon: Clock, description: "Produktionstidslista per artikel, utförare och utrustning", subSection: "Artiklar & tjänster" },
     { title: "Artikeltyper", url: "/article-types", icon: Tag, description: "Hantera artikeltyper (kategorier) per organisation", adminOnly: true, subSection: "Artiklar & tjänster" },
     { title: "Utförandekoder", url: "/execution-codes", icon: Workflow, description: "Hantera utförandekoder (tjänstetyper) per organisation", adminOnly: true, subSection: "Artiklar & tjänster" },
-    { title: "Uppgiftstyper", url: "/task-types", icon: ListChecks, description: "Hantera uppgiftstyper (Grovplaneringens filter) per organisation", adminOnly: true, subSection: "Artiklar & tjänster" },
     { title: "Tidskoder", url: "/time-codes", icon: Clock, description: "Hantera tidskoder (grupp + prioritet) för finplanering och löneunderlag", adminOnly: true, subSection: "Artiklar & tjänster" },
     { title: "Ikoner", url: "/icons", icon: Shapes, description: "Hantera ikonbibliotek för artiklar per organisation", adminOnly: true, subSection: "Artiklar & tjänster" },
     // Inköp & pris

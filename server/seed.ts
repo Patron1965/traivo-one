@@ -1183,6 +1183,10 @@ async function migrateDefaultTenantToKinab() {
     // sammanslagningen, sa rensa krockande OLD-rader innan rename.
     const COLLISION_KEYS: Record<string, string[]> = {
       geocoding_missing_snapshots: ["date"],
+      // task_types: unikt (tenant_id, key) och båda tenanterna hann seedas med
+      // standardtyperna via det (numera avvecklade, Task #1485) seed-on-read-
+      // API:t. OLD-raderna är redundanta dubbletter av samma standardnycklar.
+      task_types: ["key"],
     };
     for (const [table, keyCols] of Object.entries(COLLISION_KEYS)) {
       if (!childTables.includes(table)) continue;
