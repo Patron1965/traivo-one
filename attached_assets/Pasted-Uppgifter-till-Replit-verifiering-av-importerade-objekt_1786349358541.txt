@@ -1,0 +1,343 @@
+Uppgifter till Replit – verifiering av importerade objekt och metadata
+Nedan är en samlad och prioriterad kravlista baserad på genomgången av importerade objekt i Traivo samt tillhörande skärmbilder.
+
+Prioritet 1 – Kritiska logiska fel
+1. Ta bort systemgenererad kund från objekt
+Problem:
+Objektet har fått en kund, exempelvis Telge Bostäder, som systemgenererad information. Detta är felaktigt.
+
+Ett objekt ska inte automatiskt kopplas till en kund. Olika aktörer kan lägga order på samma objekt, exempelvis:
+
+Boende
+Fastighetsägare
+Fastighetsskötselföretag
+Kommunalt bolag
+Annan extern part
+Kunden ska istället anges:
+
+Manuellt på ordern, eller
+Via ett särskilt metadatafält på objektet, som orderkonceptet kan läsa
+Uppgift:
+
+Ta bort automatisk kundtilldelning vid import av objekt.
+Kontrollera varför kunden visas som Systemgenererad.
+Förhindra att importen skapar eller kopplar en kund till objektet.
+Kontrollera befintliga importerade objekt och identifiera felaktiga kundkopplingar.
+Säkerställ att orderkoncept och snabborder fortsatt kan ange kund manuellt eller via metadata.
+Acceptanskriterier:
+
+Nya importerade objekt saknar automatisk kundkoppling.
+Ekonomi-sektionen visar ingen systemgenererad kund om ingen kund uttryckligen har angetts.
+Kund kan fortfarande väljas på ordernivå.
+Ett metadatafält kan användas som underlag för kund i orderkoncept.
+Befintliga korrekta orderkopplingar påverkas inte.
+Prioritet 2 – Geografi ska samlas och klassificeras korrekt
+2. Samla all geografisk metadata på ett ställe
+Problem:
+Geografisk information visas på flera olika ställen. Just nu visas exempelvis koordinater under Geografi, medan gatuadress, postnummer och ort visas som systemgenererad metadata. Geografi förekommer dessutom flera gånger.
+
+Följande information ska tillhöra området Geografi:
+
+Gatuadress
+Postnummer
+Ort
+Longitud
+Latitud
+What3words
+Övrig geografisk tilläggsinformation, exempelvis instruktioner om entré eller placering
+Uppgift:
+
+Samla all metadata med metadataområdet Geografi i en gemensam sektion.
+Visa sektionen endast en gång på objektsidan.
+Ta bort dubbla eller separata geografisektioner.
+Visa informationen kompakt och tydligt.
+Behåll respektive fälts korrekta datatyp och källa.
+Acceptanskriterier:
+
+All geografisk information visas under en enda sektion.
+Gatuadress, postnummer, ort och koordinater visas tillsammans.
+What3words och tilläggsinformation kan visas i samma sektion när de finns.
+Inget geografiskt fält visas felaktigt under ”Systemgenererad metadata”.
+Informationen visas på samma sätt för importerade och manuellt skapade objekt.
+3. Korrigera klassificering av systemgenererade och importerade fält
+Problem:
+Adress, postnummer och ort är importerade metadatafält men visas som systemgenererade. Longitud och latitud skapas däremot automatiskt från adressen, men visas som Egen.
+
+Uppgift:
+
+Gå igenom logiken för fältens källa och ursprung.
+Markera importerade fält som importerade metadatafält.
+Markera koordinater som systemgenererade när de har beräknats från adressen.
+Visa korrekt källa för varje fält.
+Säkerställ att Egen, Systemgenererad och Importerad används konsekvent.
+Förväntad logik:
+
+Gatuadress, postnummer och ort som kommer från importfilen: Importerad.
+Longitud och latitud som beräknas från adressen: Systemgenererad.
+Manuellt skapade eller ändrade fält: Manuellt ändrad eller motsvarande befintlig källa.
+Källa ska inte ändras till Egen om användaren inte själv har skapat eller matat in fältet.
+Prioritet 3 – Snabbfält och objektets sammanfattning
+4. Korrigera snabbfält för importerade objekt
+Problem:
+När Objektnamn väljs som snabbfält visas inget värde, trots att objektnamnet är obligatoriskt och finns på objektet.
+
+Även följande uppgifter verkar saknas eller visas felaktigt i snabbfältet:
+
+Objektnamn
+Postnummer
+Position
+Vignettbild
+Uppgift:
+
+Kontrollera hur snabbfält hämtar data från objekt och metadata.
+Säkerställ att obligatoriska systemfält kan användas som snabbfält.
+Kontrollera mappningen mellan importfält, metadatafält och snabbfält.
+Lägg till stöd för geografiska fält och bildfält.
+Kontrollera att snabbfälten fungerar både före och efter import.
+Kontrollera varför snabbfält inte hittas eller visas korrekt i vissa vyer.
+Acceptanskriterier:
+
+Objektnamn visas när det väljs som snabbfält.
+Postnummer visas med korrekt värde.
+Position visas med koordinat eller kartrepresentation enligt befintlig design.
+Vignettbild visas när den är vald och finns på objektet.
+Snabbfält uppdateras när underliggande metadata ändras.
+Samma snabbfält fungerar i objektdetalj, listvy och relevanta sammanfattningar.
+5. Förbättra objektets sammanfattningskort
+På objektsidan ska det översta sammanfattningskortet visa relevant information på ett tillförlitligt sätt.
+
+Uppgift:
+
+Visa korrekt objektnamn.
+Visa vald vignettbild.
+Visa position när sådan finns.
+Visa objektets viktigaste geografiska information.
+Säkerställ att tomma fält visar ett tydligt tomt läge och inte bara försvinner utan förklaring.
+Prioritet 4 – Kontaktinformation
+6. Slå ihop kontaktkort och kontaktkarusell
+Problem:
+Kontaktpersonen visas både som separata metadatafält, exempelvis:
+
+Namn
+Titel
+Telefon
+och som ett separat kompakt kontaktkort/karusell. Det blir dubblerat och visuellt splittrat.
+
+Uppgift:
+
+Använd den kompakta kontaktpresentationen som huvudvisning.
+Slå ihop namn, titel och telefonnummer i samma kontaktkort.
+Behåll stöd för flera kontaktpersoner genom karusell eller motsvarande komponent.
+Visa kontaktens källa och ändringsinformation där det är relevant.
+Tillåt redigering och kopiering av kontaktposter från kontaktkortet.
+Säkerställ att kontakter kan visas korrekt även om endast vissa fält finns.
+Acceptanskriterier:
+
+En kontaktperson visas samlat på ett ställe.
+Namn, titel och telefonnummer presenteras i samma kort.
+Flera kontaktpersoner kan bläddras fram.
+Redigering och kopiering fungerar.
+Kontaktens skapande- och ändringsinformation finns kvar.
+Samma kontaktdata visas inte dubbelt utan tydlig anledning.
+7. Ta bort ”Fältinställningar, namn”
+Problem:
+Funktionen ”Fältinställningar, namn” är överflödig. Fältets egenskaper ska styras av metadata-definitionen och inte ändras lokalt på objektet.
+
+Uppgift:
+
+Ta bort knappen eller menyalternativet Fältinställningar för metadatafältet Namn.
+Behåll möjligheten att redigera själva värdet, exempelvis byta namn på en kontaktperson.
+Låt systemansvarigs metadata-definition styra fälttyp och egenskaper.
+Acceptanskriterier:
+
+Användaren kan ändra ett metadatafälts värde.
+Användaren kan inte ändra fältets systemdefinition från objektsidan.
+Fältets datatyp och konfiguration hämtas från metadatauppsättningen.
+Prioritet 5 – Radering, arkivering och anonymisering
+8. Tydliggör skillnaden mellan radering och anonymisering
+Problem:
+Det är otydligt om radering och GDPR-anonymisering leder till samma resultat.
+
+Uppgift:
+
+Definiera och implementera separata funktioner:
+
+Radering
+
+Ska ta bort posten när det är tillåtet.
+Ska inte kunna användas om historik eller kopplade uppgifter kräver att posten bevaras.
+Ska ersättas med arkivering när radering inte är tillåten.
+Arkivering
+
+Ska göra kontakten inaktiv/ej synlig i normala vyer.
+Ska bevara historik och kopplingar.
+Anonymisering
+
+Ska anonymisera personrelaterade kontaktuppgifter.
+Ska inte radera historik.
+Ska i första hand påverka namn, telefon, e-post och andra personuppgifter.
+Ska inte automatiskt anonymisera interimnummer.
+Acceptanskriterier:
+
+Radering, arkivering och anonymisering har separata funktioner och bekräftelser.
+Användaren ser tydligt vilken åtgärd som kommer att utföras.
+En borttagen kontakt arkiveras om historik eller kopplingar finns.
+Anonymisering ersätter personuppgifter utan att ta bort uppgiftens historik.
+Interimnummer hanteras separat från kontaktuppgifter.
+9. Hantera interimnummer som tillfälligt importfält
+Problem:
+Interimnummer visas som ett vanligt metadatafält, men ska endast användas som ett temporärt nummer under import.
+
+Uppgift:
+
+Separera interimnummer från vanliga metadatafält i datamodellen och gränssnittet.
+Visa det endast under import eller systeminformation om det behövs för felsökning.
+Ta bort eller dölj interimnumret efter att importen har slutförts, enligt fastställd importlogik.
+Säkerställ att det inte kan ändras eller behandlas som vanlig objektmetadata.
+Acceptanskriterier:
+
+Interimnummer visas inte som ett användardefinierat metadatafält.
+Det används endast för importens interna matchning/spårbarhet.
+Det försvinner eller arkiveras enligt definierad importregel efter lyckad import.
+Det påverkas inte av GDPR-anonymisering.
+Prioritet 6 – Kopplade ordrar, orderkoncept och uppgifter
+10. Visa kopplingar separat och tydligt
+Problem:
+Objektets kopplade orderkoncept, ordrar och uppgifter behöver redovisas tydligt. Dessa är olika typer av relationer och ska inte blandas ihop.
+
+Uppgift:
+
+Skapa eller säkerställ separata sektioner för:
+
+Orderkoncept-uppgifter
+Systemkopplade ordrar
+Kopplade order och uppgifter
+Acceptanskriterier:
+
+Det framgår vilka orderkoncept som är kopplade till objektet.
+Det framgår vilka ordrar som är kopplade till objektet.
+Det framgår vilka uppgifter som är kopplade till objektet.
+Varje rad länkar till sitt ursprung.
+Tomma sektioner har tydliga meddelanden.
+Orderhistorik och aktiva uppgifter skiljs åt.
+Prioritet 7 – Bilder och vignettbilder
+11. Återställ och stabilisera bildvisningen
+Problem:
+Bilder som tidigare visades kopplade till objekt fungerar inte alltid efter import. När ett bildfält läggs till visas bilden ibland först efter att den läggs till igen.
+
+Uppgift:
+
+Kontrollera lagring och hämtning av importerade bilder.
+Kontrollera bildfältets koppling till objektet.
+Säkerställ att bilden visas direkt när metadatafältet Vignettbild aktiveras.
+Kontrollera cache, filreferenser, behörighet och laddningslogik.
+Testa både importerade bilder och manuellt uppladdade bilder.
+Stöd användningsfall där en bild visar exempelvis ett soprum eller en specifik plats.
+Acceptanskriterier:
+
+En tillgänglig bild visas direkt när motsvarande metadatafält aktiveras.
+Bilden visas i objektets sammanfattning om den är vald som vignettbild.
+Bilden visas även i metadataområdet.
+Importerade och manuellt uppladdade bilder fungerar.
+Trasiga eller saknade bilder visar ett tydligt fallback-läge.
+Prioritet 8 – Behörighet för metadatafält
+12. Ta bort fri skapning av metadatafält för vanliga användare
+Beslut:
+Vanliga användare ska inte kunna skapa egna metadatafält fritt. Metadatafält ska definieras av systemansvarig för att undvika olika benämningar och oordning.
+
+Uppgift:
+
+Ta bort eller dölj funktionen Nytt fält för vanliga användare.
+Tillåt endast systemansvariga att definiera nya metadatafält.
+Behåll möjligheten för användare att lägga till befintliga, godkända metadatafält på objekt.
+Implementera rollbaserad behörighetskontroll både i gränssnitt och backend/API.
+Visa ett tydligt meddelande om användaren saknar behörighet.
+Acceptanskriterier:
+
+Vanliga användare kan inte skapa nya metadatafält.
+Systemansvarig kan skapa och konfigurera metadatafält.
+Behörigheten kontrolleras även om API-anrop görs direkt.
+Användaren kan fortsatt välja bland godkända metadatafält.
+13. Lägg till sökning vid val av metadataområde
+Problem:
+Listan över metadataområden kan bli lång och är svår att använda med enbart scrollning.
+
+Uppgift:
+
+Lägg till ett sökfält i dialogen för att välja metadataområde.
+Sökningen ska filtrera områden medan användaren skriver.
+Visa tydligt när inga områden matchar.
+Behåll möjlighet att välja område och därefter metadatafält.
+Acceptanskriterier:
+
+Användaren kan söka på metadataområdets namn.
+Resultatet uppdateras direkt.
+Sökningen fungerar oavsett versaler/gemener.
+Befintligt valflöde påverkas inte negativt.
+Prioritet 9 – Visuella buggar
+14. Fixa osynlig text i rullgardinsmenyer
+Problem:
+I vissa dropdown-menyer blir bakgrunden svart eller texten svart mot mörk bakgrund. Det går då inte att se vilket alternativ som valts.
+
+Uppgift:
+
+Identifiera vilka dropdown-komponenter som har problemet.
+Kontrollera färgvariabler för bakgrund, text, hover och valt alternativ.
+Säkerställ att komponenterna fungerar i Traivos mörka tema.
+Testa både öppnad meny, valt värde, hover-läge och fokusläge.
+Använd samma standardiserade dropdown-komponent i hela systemet.
+Acceptanskriterier:
+
+All text är läsbar i öppna och stängda dropdown-menyer.
+Valt alternativ har tydlig visuell markering.
+Hover och fokus kan urskiljas.
+Problemet är åtgärdat i alla vyer där samma komponent används.
+Prioritet 10 – Problem med arv i butiksvyn
+15. Utred varför importerad metadata inte ärvs korrekt
+Problem:
+Det verkar som att metadata inte alltid ärvs eller visas korrekt när man går från objektet till butiksvyn/hierarkin.
+
+Uppgift:
+
+Kartlägg hur metadata ska ärvas mellan föräldrar, objekt och underobjekt.
+Kontrollera varför importerad geografisk information inte visas i rätt nivå.
+Kontrollera om arv fungerar olika för importerad, systemgenererad och manuellt skapad metadata.
+Säkerställ att arvets källa visas korrekt.
+Testa arv i flera nivåer i objektträdet.
+Acceptanskriterier:
+
+Metadata visas på rätt objekt och rätt hierarkinivå.
+Ärvd metadata markeras tydligt som ärvd.
+Lokalt överstyrda värden ersätter ärvda värden enligt definierad regel.
+Importerad metadata försvinner inte när objektet visas via en överordnad nod eller butiksvy.
+Samlad prioritering
+Ta bort felaktig systemgenererad kund från objekt.
+Samla och korrigera geografisk metadata.
+Fixa snabbfält för objektnamn, postnummer, position och vignettbild.
+Utred arv av metadata i butiksvyn.
+Slå ihop kontaktinformation till en kompakt kontaktkomponent.
+Tydliggör radering, arkivering och anonymisering.
+Hantera interimnummer som temporärt importfält.
+Visa orderkoncept, ordrar och uppgifter separat.
+Stabiliserа bild- och vignettbildsvisning.
+Begränsa skapande av metadatafält till systemansvarig.
+Lägg till sökning bland metadataområden.
+Fixa osynlig text i dropdown-menyer.
+Ta bort ”Fältinställningar, namn”.
+Tekniska övergripande krav
+Använd samma affärslogik i listvy, trädvy, objektdetalj och butiksvy.
+Separera importerad metadata, systemgenererad metadata och manuellt ändrad metadata.
+Lägg inte in kundrelation direkt på objekt om den inte uttryckligen har skapats.
+Säkerställ att ändringar uppdateras utan manuell cache-rensning.
+Lägg till tester för:
+Import av geografiska fält
+Kundlös import
+Arv mellan objekt och föräldrar
+Snabbfält
+Kontaktredigering
+Arkivering och anonymisering
+Bildvisning
+Behörighet för metadatafält
+Dropdown-rendering
+Kontrollera befintliga importerade data innan migrering eller rättning genomförs.
+Gör inte destruktiva databasändringar utan migreringsplan och möjlighet till återställning.
