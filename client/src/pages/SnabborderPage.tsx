@@ -841,26 +841,26 @@ export default function SnabborderPage() {
                   {/* Leveransprincip */}
                   <div className="space-y-1.5">
                     <Label>Leveransprincip <span className="text-destructive">*</span></Label>
-                    <div className="flex gap-2">
+                    <div className="flex flex-wrap gap-2">
                       <Button
                         type="button"
                         variant={principle === "manual" ? "default" : "outline"}
                         size="sm"
-                        className="flex-1"
+                        className="flex-1 basis-[12rem] justify-start"
                         onClick={() => requestPrinciple("manual")}
                         data-testid="button-principle-manual"
                       >
-                        <MapPin className="h-3.5 w-3.5 mr-1" /> Manuell leveransadress
+                        <MapPin className="h-3.5 w-3.5 mr-1 shrink-0" /> Manuell leveransadress
                       </Button>
                       <Button
                         type="button"
                         variant={principle === "objekt" ? "default" : "outline"}
                         size="sm"
-                        className="flex-1"
+                        className="flex-1 basis-[12rem] justify-start"
                         onClick={() => requestPrinciple("objekt")}
                         data-testid="button-principle-objekt"
                       >
-                        <Building2 className="h-3.5 w-3.5 mr-1" /> Kundens objekt
+                        <Building2 className="h-3.5 w-3.5 mr-1 shrink-0" /> Kundens objekt
                       </Button>
                     </div>
                     {principle === "objekt" && (
