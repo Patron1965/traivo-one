@@ -1,0 +1,262 @@
+Här är en skarp prompt till Replit som tydligt separerar objektdata, metadata och uppgifts-/artikeldata och samtidigt kräver bortstädning av gammal Traivo-logik:
+KRITISKT UTVECKLINGSKRAV – RENSA OBJEKTMODELL, METADATA OCH GAMLA REGISTER
+Det finns fortfarande kvar logik, register, etiketter och visningar från tidigare versioner av Traivo som strider mot den nu beslutade datamodellen. Detta ska betraktas som ett allvarligt arkitekturfel och rensas konsekvent i databas, backend, API och frontend.
+Grundregel för Objekt
+Ett objekt får i sin grundmodell ENBART innehålla följande objektdata:
+    1    Namn
+    2    Objektnummer
+    3    Objektnummer/ID till överordnat objekt
+Detta är objektets kärnidentitet och dess koppling i objekthierarkin.
+ALL ANNAN verksamhetsinformation om objektet ska vara metadata.
+Det innebär exempelvis att följande INTE får finnas som separata fasta objektfält eller äldre sidoregister:
+    •    Kund
+    •    Område
+    •    Objekttyp
+    •    Fastighet
+    •    Hierarkinivå
+    •    Kategori
+    •    Region
+    •    Adress
+    •    Geografiskt område
+    •    Kontakt
+    •    Antal
+    •    Fraktion
+    •    Statusuppgift om objektets egenskaper
+    •    andra äldre fasta attribut från tidigare Traivo-versioner
+Om sådan information behövs ska den finnas som definierade metadatafält och värdet ska vara antingen:
+    •    eget metadata på objektet, eller
+    •    ärvd metadata från överordnat objekt enligt metadatareglerna.
+INGA DOLDA ELLER PARALLELLA OBJEKTFÄLT
+Det räcker alltså inte att frontend slutar visa gamla fält.
+Replit ska kontrollera hela systemet efter äldre modellering och ta bort eller migrera den.
+Sök efter:
+    •    gamla databaskolumner,
+    •    gamla tabeller/register,
+    •    gamla enums,
+    •    gamla API-fält,
+    •    gamla TypeScript-typer,
+    •    fallback-logik,
+    •    importer,
+    •    filter,
+    •    dropdowns,
+    •    sökindex,
+    •    testdata,
+    •    seeds,
+    •    migrations,
+    •    UI-komponenter,
+    •    labels,
+    •    härledda fält,
+    •    legacy-mappningar.
+Det får inte existera två parallella källor till samma information.
+Exempel:
+customer, area, objectType, hierarchyLevel eller motsvarande får inte ligga kvar som fasta objektattribut samtidigt som Kund, Område eller motsvarande finns i metadatamodellen.
+Metadata ska vara single source of truth för all sådan objektinformation.
+
+FEL SOM SYNS I BIFOGADE BILDER
+I dialogen ”Testa artikelfasthakning” visas bland annat information vid objekten som exempelvis:
+fastighet Pantkärl (område)
+Detta tyder på att systemet fortfarande använder äldre klassificering såsom fastighet och område utanför metadatamodellen.
+Detta ska bort.
+Objektväljaren ska i grunden identifiera objektet genom exempelvis:
+Pantkärl – OBJ-256
+Eventuell ytterligare information får endast hämtas från definierad metadata och ska då uttryckligen behandlas som metadata.
+Bild 2 – felaktiga fasta fält
+I nästa vy visas:
+    •    Namn: Pantkärl
+    •    Typ: område
+    •    Hierarkinivå: fastighet
+Detta är fel enligt beslutad modell.
+Namn är korrekt eftersom det är kärndata på objektet.
+Men:
+    •    Typ
+    •    Hierarkinivå
+ska inte finnas som fasta objektfält.
+Om verksamheten behöver exempelvis:
+    •    Objektstyp = Pantkärl
+    •    Anläggningstyp = Fastighet
+    •    Område = Göteborg
+ska detta definieras i metadatakatalogen och lagras/ärvas som metadata.
+Hierarkin ska bestämmas av själva parent/child-relationen, inte av ett separat fält kallat hierarchyLevel.
+Systemet behöver alltså inte ett register som säger att ett objekt ligger på ”fastighetsnivå”. Objektets plats i trädet framgår av relationerna mellan objekten.
+
+METADATA – ABSOLUT PRINCIP
+ENBART DATA SOM FINNS I DEFINIERADE METADATAFÄLT FÅR BEHANDLAS SOM METADATA.
+Metadata måste vara definierad i Traivos metadatakatalog.
+Metadata ska ha exempelvis:
+    •    metadata-ID,
+    •    namn,
+    •    datatyp,
+    •    metadataområde,
+    •    eventuell grupp,
+    •    ärvningsregler,
+    •    logik,
+    •    historik,
+    •    behörigheter,
+    •    eventuella val/listvärden.
+Ett värde får inte plötsligt skapas som ett ”nästan metadatafält” någon annanstans i systemet.
+Ingen legacy-information får automatiskt behandlas som metadata utan att motsvarande metadatafält faktiskt finns definierat.
+
+VIKTIGT – ALL DATA ÄR INTE METADATA
+Denna sanering får inte leda till att all systemdata flyttas till metadata.
+Traivo består även av andra domänmodeller.
+Metadata beskriver objekt.
+Uppgifter, artiklar, order, planering m.m. har sina egna strukturer.
+Framför allt ska följande hållas helt separerat från metadata:
+Uppgiftsstatus
+Uppgiftsstatus beskriver var en uppgift befinner sig i arbetsflödet.
+Detta ska styras av Traivos uppgiftslogik, exempelvis:
+Skapad → Navet → Veckoplan → Tilldelad/planerad → På väg → På plats → Utförd → Fakturakontroll → Fakturerad
+samt relevanta avvikelse-/mellanstatus enligt systemets fastställda statusmodell.
+Uppgiftsstatus är alltså inte metadata på objektet.
+
+UTFÖRANDEKODER
+Utförandekoder definierar vem eller vilken kompetens/resurs som får utföra uppgiften.
+Exempel kan vara:
+    •    BÖK
+    •    RBK
+    •    Service
+    •    Tvätt
+    •    Besiktning
+    •    Driftkontroll
+    •    teknikerkompetenser etc.
+Detta är ett separat register kopplat till uppgift/artikel och personal-/kompetenslogiken.
+Det är inte metadata.
+
+ARTIKELTYP
+Artikeltyp är också ett separat register.
+Det beskriver vilken sorts artikel Traivo hanterar.
+Exempel:
+    •    Tvättjänst
+    •    Servicetjänst
+    •    Reservdel OEM
+    •    Reservdel MRO
+    •    Förbrukningsmaterial
+    •    Avisering
+    •    Administration
+    •    Konsultation
+    •    fysisk produkt
+    •    annan definierad artikelkategori.
+Artikeltyp är inte objekttyp och är inte metadata.
+
+FEL I UPPGIFTSNAVET
+I bifogad bild från Uppgiftsnavet finns under rubriken ”Uppgiftstyp” bland annat:
+    •    BÖK
+    •    Service
+    •    Tvätt
+    •    Administration
+    •    RBK
+    •    Driftkontroll
+    •    Besiktning
+    •    Konsultation
+Detta ser ut att vara ett arv från tidigare datamodell där olika koncept har blandats ihop.
+Det måste analyseras och korrigeras.
+Vi ska inte ha ett löst legacy-register ”Uppgiftstyp” om informationen egentligen kommer från artikelmodellen.
+En uppgift skapas utifrån en artikel eller annan definierad källa.
+Uppgiftens egenskaper ska därför härledas från rätt domänregister.
+Tre separata strukturer ska vara tydliga:
+1. Utförandekod
+Beskriver vem/vilken kompetens som kan utföra arbetet.
+2. Artikeltyp
+Beskriver vilken typ av artikel/tjänst det är.
+Exempel:
+Tvättjänst, Servicetjänst, Reservdel OEM, Reservdel MRO, Avisering.
+3. Uppgiftsstatus
+Beskriver var uppgiften befinner sig i processen.
+Dessa tre får inte blandas ihop.
+
+EXEMPEL PÅ KORREKT LOGIK
+En artikel kan exempelvis vara:
+Artikel: Tvätt BÖK 5 m³
+Artikeltyp: Tvättjänst
+Utförandekod: BÖK
+Beräknad produktionstid: 45 minuter
+När artikeln genererar en uppgift kan uppgiften ha:
+Status: Skapad
+Senare:
+Status: Planerad
+Därefter:
+Status: På väg
+och slutligen:
+Status: Utförd
+Objektet som uppgiften gäller kan exempelvis heta:
+Pantkärl – OBJ-256
+Objektet kan genom metadata ha:
+Kund: Tredo
+Område: Göteborg
+Fraktion: Pant
+Antal: 11
+Kontakt: Jennifer Berggren
+Men inget av dessa värden får ligga som parallella fasta kolumner på objektet.
+
+ÖNSKAD DATAMODELL
+Tänk systemet strikt enligt följande separation:
+OBJECT
+id
+objectNumber
+name
+parentObjectId
+↓
+OBJECT METADATA
+objectId
+metadataDefinitionId
+value
+validFrom
+validTo
+source
+inheritedFromObjectId
+etc.
+↓
+METADATA DEFINITIONS
+Här definieras exempelvis Kund, Fraktion, Antal, Kontakt, Geografi osv.
+Separat från detta finns:
+ARTICLE
+↓
+ARTICLE TYPE
+↓
+EXECUTION CODE
+och:
+TASK
+↓
+TASK STATUS
+↓
+ORDER / SNABBORDER / ORDERKONCEPT
+Detta är separata domäner och ska inte blandas ihop med objektmetadata.
+
+KRAV PÅ SANERING
+Gör en fullständig kod- och databasrevision innan ytterligare funktionalitet byggs ovanpå detta.
+Identifiera varje förekomst av gamla begrepp såsom exempelvis:
+objectType
+object_type
+hierarchyLevel
+hierarchy_level
+area
+customer
+property
+facilityType
+taskType
+och motsvarande svenska namn.
+För varje träff ska det avgöras:
+A. Är detta legitim kärndata?
+Behåll.
+B. Är detta objektinformation som enligt nya modellen ska vara metadata?
+Migrera till metadata och ta bort legacyfältet.
+C. Är detta artikel-/uppgiftsdata?
+Flytta/koppla till rätt domänmodell.
+D. Är det gammal, oanvänd legacylogik?
+Ta bort.
+
+ACCEPTANSKRITERIER
+Arbetet är inte klart förrän följande kan verifieras:
+    1    Ett objekt kan existera med endast namn, objektnummer och parent-relation.
+    2    Ingen kund, område, objekttyp, hierarkinivå eller motsvarande krävs för att skapa ett objekt.
+    3    Kund, område, fraktion, kontakt, antal osv. förekommer endast om motsvarande metadatafält finns definierat.
+    4    Ärvt metadata hämtas genom metadatans ärvningsmodell, inte genom gamla fasta objektfält.
+    5    Typ: område och Hierarkinivå: fastighet i visningen Testa artikelfasthakning är borttagna eller ersatta med korrekt definierad metadata där sådan verkligen behövs.
+    6    Objektlistor och dropdowns använder inte gamla fastighet, område etc. som dolda objektklassificeringar.
+    7    Uppgiftsnavet använder rätt struktur för Utförandekod, Artikeltyp och Uppgiftsstatus.
+    8    Det finns inte längre ett gammalt sidoregister ”Uppgiftstyp” som duplicerar eller sammanblandar dessa begrepp.
+    9    API och frontend returnerar inte legacyfält bara för bakåtkompatibilitet.
+    10    Databasen innehåller ingen aktiv parallell modell som konkurrerar med metadatakatalogen.
+Slutlig princip
+Objektet ska vara extremt rent. Objektet identifieras av namn och objektnummer och placeras i hierarkin genom sin parent-relation. All övrig beskrivande information om objektet ska finnas i Traivos definierade metadatafält, antingen som eget eller ärvt metadata. Uppgiftsstatus, utförandekoder och artikeltyper är separata domänregister och får aldrig sammanblandas med metadata eller med gamla objektklassificeringar. All legacylogik från tidigare Traivo-versioner som bryter mot denna modell ska nu rensas bort, inte döljas eller byggas vidare på.
+Viktigt: Gör först inventering och migreringsplan så att befintliga korrekta data inte förloras. Därefter migreras nödvändiga värden och legacystrukturen tas bort. Bygg inte ytterligare kompatibilitetslager ovanpå den gamla modellen.
