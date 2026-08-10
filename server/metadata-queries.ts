@@ -4132,6 +4132,436 @@ export async function listArchivedMetadataTypes(tenantId: string): Promise<Metad
 }
 
 // ======
+// IMPORTSKAPADE KATALOGFÄLT — STÄDNING/KANONISERING (Task #1497)
+// ----------------------------------------------------------------------------
+// Före Task #1494 kunde importflöden lazy-skapa katalogfält (kategori 'import'
+// eller 'importerad') utan att någon medvetet definierat dem. Dessa hjälpare
+// listar sådana fält med användningsräkning och kan slå ihop ett importskapat
+// fält mot ett kanoniskt fält (repoint av värden/historik/kopplingar) med samma
+// hårda skydd som övriga katalog-writes: usage-bekräftelse krävs, källfältet
+// arkiveras (soft-delete) — ALDRIG hard-delete med historik.
+// ======
+
+export const IMPORT_CREATED_KATEGORIER = ["import", "importerad"] as const;
+
+export type ImportCreatedMetadataType = MetadataKatalog & {
+  valueCount: number;
+  conceptFilterCount: number;
+  configRefCount: number;
+  usageTotal: number;
+};
+
+// Räkna KONFIGURATIONS-referenser till en katalogpost: ordertyp-länkar, kundlås,
+// objekthuvud-konfigar (bild/logo/fält-slots) och snabbfälts-konfigar. Dessa är
+// "i bruk" i lika hög grad som lagrade värden — ett fält med enbart sådana
+// referenser får inte arkiveras via städvyn (konfigen skulle peka på ett
+// arkiverat fält). Ett enda DB-anrop; kan räkna flera fält åt gången.
+export async function countMetadataKatalogConfigRefs(
+  tenantId: string,
+  katalogIds: string[],
+): Promise<Map<string, number>> {
+  const result = new Map<string, number>();
+  if (katalogIds.length === 0) return result;
+  const idList = sql.join(katalogIds, sql`, `);
+  const res = await db.execute(sql`
+    SELECT id, SUM(c)::int AS c FROM (
+      SELECT metadata_katalog_id AS id, COUNT(*) AS c
+      FROM order_type_metadata_links
+      WHERE tenant_id = ${tenantId} AND metadata_katalog_id IN (${idList})
+      GROUP BY metadata_katalog_id
+      UNION ALL
+      SELECT metadata_katalog_id, COUNT(*)
+      FROM metadata_katalog_customers
+      WHERE tenant_id = ${tenantId} AND metadata_katalog_id IN (${idList})
+      GROUP BY metadata_katalog_id
+      UNION ALL
+      SELECT k.kid, COUNT(*)
+      FROM object_header_configs ohc,
+        LATERAL unnest(ARRAY[
+          ohc.image_metadata_katalog_id, ohc.logo_metadata_katalog_id,
+          ohc.field1_katalog_id, ohc.field2_katalog_id, ohc.field3_katalog_id
+        ]) AS k(kid)
+      WHERE ohc.tenant_id = ${tenantId} AND k.kid IN (${idList})
+      GROUP BY k.kid
+      UNION ALL
+      SELECT fid, COUNT(*)
+      FROM import_templates it, LATERAL unnest(it.field_ids) AS f(fid)
+      WHERE it.tenant_id = ${tenantId} AND f.fid IN (${idList})
+      GROUP BY fid
+      UNION ALL
+      SELECT metadata_katalog_id, COUNT(*)
+      FROM metadata_editor_fields
+      WHERE tenant_id = ${tenantId} AND metadata_katalog_id IN (${idList})
+      GROUP BY metadata_katalog_id
+      UNION ALL
+      SELECT sv.metadata_katalog_id, COUNT(*)
+      FROM metadata_editor_submission_values sv
+      JOIN metadata_editor_submissions s ON s.id = sv.submission_id
+      WHERE s.tenant_id = ${tenantId} AND s.status = 'pending'
+        AND sv.metadata_katalog_id IN (${idList})
+      GROUP BY sv.metadata_katalog_id
+      UNION ALL
+      SELECT k.kid, COUNT(*)
+      FROM object_quick_field_configs oqc,
+        LATERAL unnest(ARRAY[
+          oqc.field1_katalog_id, oqc.field2_katalog_id, oqc.field3_katalog_id
+        ]) AS k(kid)
+      WHERE oqc.tenant_id = ${tenantId} AND k.kid IN (${idList})
+      GROUP BY k.kid
+    ) refs
+    GROUP BY id
+  `);
+  for (const row of res.rows as Array<{ id: string; c: number }>) {
+    result.set(row.id, Number(row.c));
+  }
+  return result;
+}
+
+// Fullständig användningsräkning för ett importskapat fält: lagrade värden +
+// koncept-filter + konfigurations-referenser. Används av arkiverings-vakten.
+export async function getImportCreatedFieldTotalUsage(
+  tenantId: string,
+  katalogId: string,
+): Promise<{ valueCount: number; conceptFilterCount: number; configRefCount: number; total: number }> {
+  const usage = await getMetadataKatalogUsage(katalogId, tenantId);
+  const configRefs = await countMetadataKatalogConfigRefs(tenantId, [katalogId]);
+  const configRefCount = configRefs.get(katalogId) ?? 0;
+  return {
+    valueCount: usage.valueCount,
+    conceptFilterCount: usage.conceptFilterCount,
+    configRefCount,
+    total: usage.valueCount + usage.conceptFilterCount + configRefCount,
+  };
+}
+
+// Lista aktiva katalogfält skapade av importflödet (kategori 'import'/'importerad')
+// med användningsräkning (metadata_varden-rader + koncept-filter som refererar
+// fältet via namn/beteckning). System-/definitionslåsta fält (t.ex. interim-
+// nyckeln) exkluderas — de är avsiktliga interna systemfält, inte städkandidater.
+export async function listImportCreatedMetadataTypes(
+  tenantId: string,
+): Promise<ImportCreatedMetadataType[]> {
+  const rows = await db
+    .select()
+    .from(metadataKatalog)
+    .where(and(
+      eq(metadataKatalog.tenantId, tenantId),
+      isNull(metadataKatalog.deletedAt),
+      inArray(metadataKatalog.kategori, [...IMPORT_CREATED_KATEGORIER]),
+      eq(metadataKatalog.isSystem, false),
+      eq(metadataKatalog.systemlast, false),
+    ))
+    .orderBy(asc(metadataKatalog.namn));
+  const active = rows.filter((r) => !isInterimKatalogNamn(r.namn));
+  if (active.length === 0) return [];
+
+  const ids = active.map((r) => r.id);
+  const valuesRes = await db.execute(sql`
+    SELECT metadata_katalog_id AS id, COUNT(*)::int AS c
+    FROM metadata_varden
+    WHERE tenant_id = ${tenantId}
+      AND metadata_katalog_id IN (${sql.join(ids, sql`, `)})
+    GROUP BY metadata_katalog_id
+  `);
+  const valueCounts = new Map<string, number>(
+    (valuesRes.rows as Array<{ id: string; c: number }>).map((r) => [r.id, Number(r.c)]),
+  );
+
+  // Koncept-filter refererar fält via metadata_key = namn ELLER beteckning
+  // (concept_filters saknar tenant_id — scopas via order_concepts).
+  const refKeys = Array.from(new Set(
+    active.flatMap((r) => [r.namn, r.beteckning]).filter(
+      (k): k is string => typeof k === "string" && k.length > 0,
+    ),
+  ));
+  const filterCounts = new Map<string, number>();
+  if (refKeys.length > 0) {
+    const filtersRes = await db.execute(sql`
+      SELECT cf.metadata_key AS k, COUNT(*)::int AS c
+      FROM concept_filters cf
+      JOIN order_concepts oc ON oc.id = cf.order_concept_id
+      WHERE oc.tenant_id = ${tenantId}
+        AND oc.deleted_at IS NULL
+        AND cf.metadata_key IN (${sql.join(refKeys, sql`, `)})
+      GROUP BY cf.metadata_key
+    `);
+    for (const row of filtersRes.rows as Array<{ k: string; c: number }>) {
+      filterCounts.set(row.k, Number(row.c));
+    }
+  }
+
+  const configRefCounts = await countMetadataKatalogConfigRefs(tenantId, ids);
+
+  return active.map((r) => {
+    const valueCount = valueCounts.get(r.id) ?? 0;
+    const conceptFilterCount =
+      (r.namn ? filterCounts.get(r.namn) ?? 0 : 0) +
+      (r.beteckning ? filterCounts.get(r.beteckning) ?? 0 : 0);
+    const configRefCount = configRefCounts.get(r.id) ?? 0;
+    return {
+      ...r,
+      valueCount,
+      conceptFilterCount,
+      configRefCount,
+      usageTotal: valueCount + conceptFilterCount + configRefCount,
+    };
+  });
+}
+
+export type MergeImportMetadataTypeResult =
+  | { ok: true; movedValues: number; movedHistorik: number; updatedConceptFilters: number }
+  | { ok: false; status: number; error: string; code?: string; expectedUsage?: number };
+
+// Slå ihop ett importskapat katalogfält (source) mot ett kanoniskt fält (target):
+// repointar metadata_varden/metadata_historik/ordertyp-länkar/kundlås/header- och
+// snabbfälts-konfigar + koncept-filter (namn-nyckel), och arkiverar därefter
+// källfältet (soft-delete, historiken bevaras). Kräver exakt usage-bekräftelse
+// (confirmUsage === källfältets valueCount) — samma hårda skydd som övriga
+// katalog-writes.
+export async function mergeImportMetadataType(
+  tenantId: string,
+  sourceId: string,
+  targetId: string,
+  opts: { confirmUsage: number; mergedBy?: string | null },
+): Promise<MergeImportMetadataTypeResult> {
+  if (sourceId === targetId) {
+    return { ok: false, status: 400, error: "Käll- och målfält kan inte vara samma fält." };
+  }
+  const rows = await db
+    .select()
+    .from(metadataKatalog)
+    .where(and(
+      eq(metadataKatalog.tenantId, tenantId),
+      inArray(metadataKatalog.id, [sourceId, targetId]),
+    ));
+  const source = rows.find((r) => r.id === sourceId);
+  const target = rows.find((r) => r.id === targetId);
+  if (!source) return { ok: false, status: 404, error: "Källfältet hittades inte." };
+  if (!target) return { ok: false, status: 404, error: "Målfältet hittades inte." };
+  if (source.deletedAt) return { ok: false, status: 409, error: "Källfältet är redan arkiverat." };
+  if (target.deletedAt) {
+    return { ok: false, status: 409, error: "Målfältet är arkiverat — återställ det först." };
+  }
+  if (!IMPORT_CREATED_KATEGORIER.includes((source.kategori ?? "") as any)) {
+    return {
+      ok: false, status: 400,
+      error: "Endast importskapade fält (kategori 'import'/'importerad') kan slås ihop via städvyn.",
+    };
+  }
+  if (source.isSystem || source.systemlast || isInterimKatalogNamn(source.namn)) {
+    return { ok: false, status: 403, error: "Systemlåsta fält kan inte slås ihop." };
+  }
+  // Målet måste vara ett KANONISKT fält — att slå ihop ett importskapat fält
+  // mot ett annat importskapat fält skulle bara flytta röran (server-side-vakt,
+  // klientens väljare filtrerar redan).
+  if (IMPORT_CREATED_KATEGORIER.includes((target.kategori ?? "") as any)) {
+    return {
+      ok: false, status: 400,
+      error: "Målfältet är också importskapat — välj ett kanoniskt (medvetet definierat) fält som mål.",
+    };
+  }
+  if (target.arBeraknad) {
+    return { ok: false, status: 400, error: "Målfältet är ett beräknat fält och kan inte ta emot lagrade värden." };
+  }
+  if (target.datatyp === "rubrik" || source.datatyp === "rubrik") {
+    return { ok: false, status: 400, error: "Rubrik-/samlingsfält kan inte slås ihop — de lagrar inga värden." };
+  }
+  if (source.datatyp !== target.datatyp) {
+    return {
+      ok: false, status: 400,
+      error: `Fälten har olika datatyp (${source.datatyp} ≠ ${target.datatyp}) — värdena kan inte flyttas säkert.`,
+    };
+  }
+  // Källfält som är förälder i en familj kan inte slås ihop (barnen skulle bli föräldralösa).
+  const [child] = await db
+    .select({ id: metadataKatalog.id })
+    .from(metadataKatalog)
+    .where(and(
+      eq(metadataKatalog.tenantId, tenantId),
+      eq(metadataKatalog.parentMetadataId, sourceId),
+      isNull(metadataKatalog.deletedAt),
+    ))
+    .limit(1);
+  if (child) {
+    return { ok: false, status: 409, error: "Källfältet har underfält — flytta eller arkivera underfälten först." };
+  }
+
+  // Hård usage-bekräftelse: confirmUsage måste vara exakt antalet värde-rader.
+  const usage = await getMetadataKatalogUsage(sourceId, tenantId);
+  if (opts.confirmUsage !== usage.valueCount) {
+    return {
+      ok: false, status: 409, code: "USAGE_CONFIRMATION_MISMATCH",
+      expectedUsage: usage.valueCount,
+      error: `Bekräftelsen matchar inte — fältet har ${usage.valueCount} lagrade värden. Skicka confirmUsage=${usage.valueCount} för att slå ihop.`,
+    };
+  }
+
+  // Kollisionskontroll: när målet INTE tillåter flervärden får inget objekt/WO
+  // ha lokala värden i BÅDA fälten (skulle ge dubbla "ersättande" värden).
+  if (!target.allowDuplicates) {
+    const conflictRes = await db.execute(sql`
+      SELECT COUNT(*)::int AS c FROM (
+        SELECT COALESCE(objekt_id, work_order_id) AS holder
+        FROM metadata_varden
+        WHERE tenant_id = ${tenantId} AND metadata_katalog_id = ${sourceId}
+        INTERSECT
+        SELECT COALESCE(objekt_id, work_order_id) AS holder
+        FROM metadata_varden
+        WHERE tenant_id = ${tenantId} AND metadata_katalog_id = ${targetId}
+      ) x
+    `);
+    const conflicts = Number((conflictRes.rows[0] as { c: number } | undefined)?.c ?? 0);
+    if (conflicts > 0) {
+      return {
+        ok: false, status: 409, code: "VALUE_CONFLICTS",
+        error: `${conflicts} objekt/arbetsordrar har värden i BÅDA fälten och målet tillåter bara ett värde. Rensa dubbletterna först eller välj ett annat målfält.`,
+      };
+    }
+  }
+
+  return await db.transaction(async (tx) => {
+    // 1) Värden + historik pekas om till målfältet (historiken följer med).
+    const movedValuesRes = await tx.execute(sql`
+      UPDATE metadata_varden SET metadata_katalog_id = ${targetId}
+      WHERE tenant_id = ${tenantId} AND metadata_katalog_id = ${sourceId}
+    `);
+    const movedHistorikRes = await tx.execute(sql`
+      UPDATE metadata_historik SET metadata_katalog_id = ${targetId}
+      WHERE tenant_id = ${tenantId} AND metadata_katalog_id = ${sourceId}
+    `);
+
+    // 2) Ordertyp-länkar: ta bort käll-länkar som kolliderar med befintlig
+    //    mål-länk (unik per tenant+ordertyp+katalog), repointa resten.
+    await tx.execute(sql`
+      DELETE FROM order_type_metadata_links s
+      WHERE s.tenant_id = ${tenantId} AND s.metadata_katalog_id = ${sourceId}
+        AND EXISTS (
+          SELECT 1 FROM order_type_metadata_links t
+          WHERE t.tenant_id = s.tenant_id AND t.order_type = s.order_type
+            AND t.metadata_katalog_id = ${targetId}
+        )
+    `);
+    await tx.execute(sql`
+      UPDATE order_type_metadata_links SET metadata_katalog_id = ${targetId}
+      WHERE tenant_id = ${tenantId} AND metadata_katalog_id = ${sourceId}
+    `);
+
+    // 3) Kundlås-kopplingar: dedupe + repoint.
+    await tx.execute(sql`
+      DELETE FROM metadata_katalog_customers s
+      WHERE s.tenant_id = ${tenantId} AND s.metadata_katalog_id = ${sourceId}
+        AND EXISTS (
+          SELECT 1 FROM metadata_katalog_customers t
+          WHERE t.tenant_id = s.tenant_id AND t.customer_id = s.customer_id
+            AND t.metadata_katalog_id = ${targetId}
+        )
+    `);
+    await tx.execute(sql`
+      UPDATE metadata_katalog_customers SET metadata_katalog_id = ${targetId}
+      WHERE tenant_id = ${tenantId} AND metadata_katalog_id = ${sourceId}
+    `);
+
+    // 4) Header-/snabbfälts-konfigar som pekar in källfältet.
+    for (const col of [
+      "image_metadata_katalog_id", "logo_metadata_katalog_id",
+      "field1_katalog_id", "field2_katalog_id", "field3_katalog_id",
+    ]) {
+      await tx.execute(sql`
+        UPDATE object_header_configs SET ${sql.raw(`"${col}"`)} = ${targetId}
+        WHERE tenant_id = ${tenantId} AND ${sql.raw(`"${col}"`)} = ${sourceId}
+      `);
+    }
+    for (const col of ["field1_katalog_id", "field2_katalog_id", "field3_katalog_id"]) {
+      await tx.execute(sql`
+        UPDATE object_quick_field_configs SET ${sql.raw(`"${col}"`)} = ${targetId}
+        WHERE tenant_id = ${tenantId} AND ${sql.raw(`"${col}"`)} = ${sourceId}
+      `);
+    }
+
+    // 4a) Importmallar: byt ut käll-id mot mål-id i field_ids-arrayen —
+    // bevara ordningen (positionsvis ersättning) och deduplicera om målet
+    // redan finns i mallen (behåll första förekomsten).
+    await tx.execute(sql`
+      UPDATE import_templates it SET field_ids = sub.new_ids, updated_at = NOW()
+      FROM (
+        SELECT t.id, ARRAY(
+          SELECT fid FROM (
+            SELECT CASE WHEN f.fid = ${sourceId} THEN ${targetId} ELSE f.fid END AS fid,
+                   f.ord,
+                   ROW_NUMBER() OVER (
+                     PARTITION BY CASE WHEN f.fid = ${sourceId} THEN ${targetId} ELSE f.fid END
+                     ORDER BY f.ord
+                   ) AS rn
+            FROM unnest(t.field_ids) WITH ORDINALITY AS f(fid, ord)
+          ) mapped
+          WHERE rn = 1
+          ORDER BY ord
+        ) AS new_ids
+        FROM import_templates t
+        WHERE t.tenant_id = ${tenantId} AND ${sourceId} = ANY(t.field_ids)
+      ) sub
+      WHERE it.id = sub.id
+    `);
+
+    // 4b) Metadata-editorer: fält som skriver in i källfältet repointas till
+    // målet så framtida inlämningar landar i det kanoniska fältet.
+    await tx.execute(sql`
+      UPDATE metadata_editor_fields SET metadata_katalog_id = ${targetId}
+      WHERE tenant_id = ${tenantId} AND metadata_katalog_id = ${sourceId}
+    `);
+    // Inlämnings-snapshots: PENDING inlämningar godkänns senare mot snapshotens
+    // katalog-id — repointa dem så approve skriver till det kanoniska fältet.
+    // Godkända/avvisade inlämningar är historik och lämnas orörda (medvetet
+    // beslut: snapshoten dokumenterar vad som gällde vid inlämningen; redan
+    // godkända värden flyttas ändå via metadata_varden-repointen ovan).
+    await tx.execute(sql`
+      UPDATE metadata_editor_submission_values sv SET metadata_katalog_id = ${targetId}
+      FROM metadata_editor_submissions s
+      WHERE s.id = sv.submission_id
+        AND s.tenant_id = ${tenantId} AND s.status = 'pending'
+        AND sv.tenant_id = ${tenantId} AND sv.metadata_katalog_id = ${sourceId}
+    `);
+
+    // 5) Koncept-filter (namn-nyckel): repointa metadata_key mot målets namn.
+    const sourceKeys = [source.namn, source.beteckning].filter(
+      (k): k is string => typeof k === "string" && k.length > 0,
+    );
+    let updatedConceptFilters = 0;
+    if (sourceKeys.length > 0) {
+      const cfRes = await tx.execute(sql`
+        UPDATE concept_filters cf SET metadata_key = ${target.namn}
+        FROM order_concepts oc
+        WHERE oc.id = cf.order_concept_id
+          AND oc.tenant_id = ${tenantId}
+          AND cf.metadata_key IN (${sql.join(sourceKeys, sql`, `)})
+      `);
+      updatedConceptFilters = Number(cfRes.rowCount ?? 0);
+    }
+
+    // 6) Arkivera källfältet (soft-delete — historiken finns kvar, ingen hard-delete).
+    await tx
+      .update(metadataKatalog)
+      .set({
+        deletedAt: new Date(),
+        archivedBy: opts.mergedBy ?? null,
+        archivedReason: `Sammanslagen till "${target.namn}" (importstädning)`,
+      })
+      .where(and(
+        eq(metadataKatalog.id, sourceId),
+        eq(metadataKatalog.tenantId, tenantId),
+        isNull(metadataKatalog.deletedAt),
+      ));
+
+    return {
+      ok: true as const,
+      movedValues: Number(movedValuesRes.rowCount ?? 0),
+      movedHistorik: Number(movedHistorikRes.rowCount ?? 0),
+      updatedConceptFilters,
+    };
+  });
+}
+
+// ======
 // KUNDLÅSTA METADATAFÄLT (Task #663)
 // ======
 

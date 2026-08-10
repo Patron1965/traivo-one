@@ -58,6 +58,9 @@ import {
   listArchivedMetadataTypes,
   findMetadataTypeByIdentity,
   setMetadataInheritanceFlags,
+  listImportCreatedMetadataTypes,
+  mergeImportMetadataType,
+  getImportCreatedFieldTotalUsage,
 } from "./metadata-queries";
 import { getTenantIdWithFallback, requireAdmin, requireMember } from "./tenant-middleware";
 
@@ -1004,6 +1007,32 @@ metadataRouter.delete("/types/:id", requireAdmin, async (req: Request, res: Resp
       });
     }
 
+    // Task #1497: importskapade fält (kategori 'import'/'importerad') får bara
+    // arkiveras när de är helt OANVÄNDA — inga lagrade värden, koncept-filter
+    // eller konfigurations-referenser (ordertyp-länkar/kundlås/header- och
+    // snabbfälts-slots). Använda fält ska slås ihop mot ett kanoniskt fält i
+    // stället (annars pekar konfigurationen på ett arkiverat fält). Server-side-
+    // vakt — UI:ts räkning kan vara stale.
+    const [typeRow] = await db
+      .select({ kategori: metadataKatalog.kategori })
+      .from(metadataKatalog)
+      .where(and(eq(metadataKatalog.id, id), eq(metadataKatalog.tenantId, tenantId), isNull(metadataKatalog.deletedAt)))
+      .limit(1);
+    if (typeRow && ["import", "importerad"].includes(typeRow.kategori ?? "")) {
+      const usage = await getImportCreatedFieldTotalUsage(tenantId, id);
+      if (usage.total > 0) {
+        return res.status(409).json({
+          code: "IMPORT_FIELD_IN_USE",
+          error:
+            `Kan inte arkivera — det importskapade fältet används fortfarande ` +
+            `(${usage.valueCount} värden, ${usage.conceptFilterCount} konceptfilter, ` +
+            `${usage.configRefCount} konfigurationsreferenser). ` +
+            `Slå ihop det mot ett kanoniskt fält i stället.`,
+          usage,
+        });
+      }
+    }
+
     // Task #716: arkivering (soft-delete) istället för permanent radering. Historiska
     // metadata_snapshot/varden förblir läsbara; typen döljs från katalog/objektvyer.
     const archivedBy = (req as any).session?.user?.id ?? null;
@@ -1016,6 +1045,63 @@ metadataRouter.delete("/types/:id", requireAdmin, async (req: Request, res: Resp
   } catch (error: any) {
     console.error("Error archiving metadata type:", error);
     res.status(500).json({ error: "Kunde inte arkivera metadatatyp" });
+  }
+});
+
+// ============================================================================
+// Task #1497: STÄDVY FÖR IMPORTSKAPADE KATALOGFÄLT
+// Före Task #1494 kunde importflöden lazy-skapa katalogfält (kategori 'import'/
+// 'importerad'). Dessa endpoints listar sådana fält med användningsräkning och
+// slår ihop dem mot kanoniska fält. Arkivering av oanvända sker via befintlig
+// DELETE /types/:id (soft-delete). OBS: registreras FÖRE ev. /types/:id-GET.
+// ============================================================================
+
+metadataRouter.get("/types/import-created", requireAdmin, async (req: Request, res: Response) => {
+  try {
+    const tenantId = getTenantIdWithFallback(req);
+    if (!tenantId) {
+      return res.status(401).json({ error: "Ingen tenant hittad" });
+    }
+    const fields = await listImportCreatedMetadataTypes(tenantId);
+    res.json(fields);
+  } catch (error: any) {
+    console.error("Error listing import-created metadata types:", error);
+    res.status(500).json({ error: "Kunde inte hämta importskapade metadatafält" });
+  }
+});
+
+// Slå ihop ett importskapat fält mot ett kanoniskt fält. Kräver exakt usage-
+// bekräftelse (confirmUsage = källfältets antal lagrade värden) — samma hårda
+// skydd som övriga katalog-writes. Källfältet arkiveras, aldrig hard-delete.
+const mergeImportTypeSchema = z.object({
+  targetId: z.string().trim().min(1),
+  confirmUsage: z.number().int().min(0),
+});
+metadataRouter.post("/types/:id/merge-into", requireAdmin, async (req: Request, res: Response) => {
+  try {
+    const tenantId = getTenantIdWithFallback(req);
+    if (!tenantId) {
+      return res.status(401).json({ error: "Ingen tenant hittad" });
+    }
+    const parsed = mergeImportTypeSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ error: "Ogiltig sammanslagning — ange targetId och confirmUsage." });
+    }
+    const result = await mergeImportMetadataType(tenantId, req.params.id, parsed.data.targetId, {
+      confirmUsage: parsed.data.confirmUsage,
+      mergedBy: getAuthenticatedUserId(req),
+    });
+    if (!result.ok) {
+      return res.status(result.status).json({
+        error: result.error,
+        ...(result.code ? { code: result.code } : {}),
+        ...(result.expectedUsage != null ? { expectedUsage: result.expectedUsage } : {}),
+      });
+    }
+    res.json(result);
+  } catch (error: any) {
+    console.error("Error merging import-created metadata type:", error);
+    res.status(500).json({ error: "Kunde inte slå ihop metadatafälten" });
   }
 });
 

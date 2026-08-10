@@ -1,0 +1,58 @@
+Definitioner orderkoncept, snabborder, upogiftsskapare samt metadataeditor. Absolut. Jag skulle sammanfatta det så här, som ett protokoll:
+
+Traivo ska ha ett gemensamt uppgiftsnav där i princip allt som ska göras i verksamheten hamnar. Oavsett hur en uppgift skapas ska den till slut bli en uppgift i samma struktur, som sedan kan sorteras, planeras och tilldelas rätt person, team eller resurs.
+
+Det finns hittills fyra huvudsakliga mekanismer runt detta:
+
+1. Orderkonceptet – den avancerade uppgiftsgeneratorn.
+Det här är den mest kraftfulla modellen och används för exempelvis fleråriga serviceavtal, återkommande arbeten och avancerad fakturering. Ett orderkoncept kan exempelvis skapa tre tvättar per år under fyra år för ett dynamiskt urval av objekt.
+
+Orderkonceptet ska vara helt metadataorienterat. Det ska kunna använda villkor mot de drygt 90 datafälten i systemet – exempelvis kundnummer, leveranstider, lämpliga veckodagar och andra egenskaper – för att avgöra vilka objekt och uppgifter som omfattas.
+
+Om objektklustret eller relevant metadata förändras ska de framtida uppgifterna kunna förändras dynamiskt. Orderkonceptet kopplas dessutom till faktureringsmotorer för exempelvis månads-, vecko- eller annan faktureringslogik.
+
+En viktig princip är att den nya lösningen inte får vara beroende av gammal hårdkodad logik. Orderkonceptet ska styras av metadata och regler.
+
+2. Snabborder – den enkla manuella vägen.
+Snabbordern är motsatsen till orderkonceptet. Här ska användaren snabbt kunna skapa arbete genom att välja:
+
+Kund → objekt/adress → artikel/uppgift.
+
+Den är avsedd för enkla, direkta behov där man inte behöver bygga ett avancerat regelverk eller återkommande orderstruktur.
+
+3. Metadataeditorn – tillför kunskap utan att skapa en uppgift.
+Det behöver finnas en separat mekanism för att uppdatera information om ett objekt utan att detta i sig skapar en arbetsuppgift.
+
+Metadataeditorn ska vara konfigurerbar. Man ska exempelvis kunna skapa ett formulär där någon ombeds att fotografera ett objekt, ange antal kärl, mata in en kod eller betygsätta kvaliteten på ett utfört arbete.
+
+Formuläret kan nås exempelvis via QR-kod, URL, SMS eller mejllänk.
+
+När mottagaren öppnar formuläret ska rätt objekt identifieras eller väljas. Det kan vara förvalt i länken eller föreslås utifrån geografisk närhet, varefter användaren bekräftar objektet.
+
+Därefter visas bara de metadatafält som just det formuläret är konfigurerat för.
+
+Grundprincipen är alltså:
+
+Identifiera objekt → visa definierade metadatafält → användaren fyller i → metadata uppdateras på objektet.
+
+Detta skapar ingen uppgift i uppgiftsnavet. Det tillför eller uppdaterar kunskap i systemet.
+
+Här finns samtidigt en viktig säkerhetsfråga: externa länkar blir en kanal direkt in i Traivos datamodell. Därför måste det finnas regler för exakt vilka metadatafält en viss länk får läsa eller skriva, så att felaktig eller obehörig metadata inte kan matas in.
+
+4. Uppgiftsskaparen – metadataeditorns ”kusin”.
+Den fjärde mekanismen bygger på ungefär samma idé som metadataeditorn, men skillnaden är fundamental:
+
+Metadataeditorn skapar/ändrar information. Uppgiftsskaparen skapar något som ska göras.
+
+När uppgiftsskaparen används ska resultatet alltså bli en riktig uppgift som hamnar i Traivos gemensamma uppgiftsnav och därifrån kan sorteras, prioriteras, planeras och tilldelas.
+
+Det här öppnar för att bygga konfigurerbara ingångar till Traivo för exempelvis felanmälningar, kundönskemål, interna arbetsbeställningar och andra händelser som ska leda till konkret arbete.
+
+Den övergripande arkitekturprincipen blir därför väldigt tydlig:
+
+Orderkoncept → genererar avancerade och återkommande uppgifter.
+Snabborder → skapar enkla direkta uppgifter.
+Metadataeditor → uppdaterar kunskap om objekt utan att skapa uppgift.
+Uppgiftsskapare → skapar en uppgift som skickas in i uppgiftsnavet.
+
+Och ovanpå allt detta ligger samma centrala idé: uppgiftsnavet ska vara den gemensamma sanningen för allt som återstår att göra i företaget, oavsett varifrån uppgiften ursprungligen kommer.

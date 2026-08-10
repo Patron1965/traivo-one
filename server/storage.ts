@@ -5581,6 +5581,31 @@ export class DatabaseStorage implements IStorage {
     if (!options?.skipRecalc && wol?.workOrderId) {
       await this.recalculateWorkOrderTotals(wol.workOrderId);
     }
+    // Task #1506: första artikelbärande raden fryser artikel-snapshoten i
+    // uppgiftspaketet (idempotent CAS — redan satt artikelId röres aldrig).
+    // OBLIGATORISK: misslyckas stämplingen propagerar felet högljutt (raden är
+    // redan skriven; stämplingen är idempotent så en omkörning läker snapshoten).
+    if (wol?.articleId && wol.tenantId && wol.workOrderId) {
+      try {
+        await stampArtikelSnapshot({
+          tenantId: wol.tenantId,
+          lager: "work_order",
+          uppgiftId: wol.workOrderId,
+          artikelId: wol.articleId,
+          overrides: {
+            prisOre: wol.resolvedPrice ?? undefined,
+            kostnadOre: wol.resolvedCost ?? undefined,
+            produktionstidMin: wol.resolvedProductionMinutes ?? undefined,
+          },
+        });
+      } catch (err) {
+        console.error("[uppgiftspaket] artikel-snapshot vid orderradsskapande misslyckades:", err);
+        throw new Error(
+          "Artikel-snapshoten kunde inte frysas i uppgiftspaketet — försök igen.",
+          { cause: err },
+        );
+      }
+    }
     return wol;
   }
 
@@ -11117,7 +11142,10 @@ PROTO.getInvoiceConsolidationPolicy = async function (
 PROTO.createInvoiceConsolidationPolicy = async function (
   data: InsertInvoiceConsolidationPolicy,
 ): Promise<InvoiceConsolidationPolicy> {
-  const [row] = await db.insert(invoiceConsolidationPolicies).values(data).returning();
+  const [row] = await db
+    .insert(invoiceConsolidationPolicies)
+    .values(data)
+    .returning();
   return row;
 };
 

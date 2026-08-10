@@ -118,6 +118,14 @@ interface MetadataKatalog {
   createdAt: string;
 }
 
+// Task #1497: importskapat katalogfält berikat med användningsräkning.
+interface ImportCreatedType extends MetadataKatalog {
+  valueCount: number;
+  conceptFilterCount: number;
+  configRefCount: number;
+  usageTotal: number;
+}
+
 interface CustomerOption {
   id: string;
   name: string;
@@ -273,6 +281,14 @@ export default function MetadataSettingsPage() {
     queryKey: ['/api/metadata/types/archived'],
   });
 
+  // Task #1497: katalogfält som lazy-skapades av gamla importflöden (kategori
+  // 'import'/'importerad') listas i en egen städsektion med användningsräkning,
+  // så att de kan slås ihop mot kanoniska fält eller arkiveras.
+  const { data: importCreatedTypes } = useQuery<ImportCreatedType[]>({
+    queryKey: ['/api/metadata/types/import-created'],
+    retry: false,
+  });
+
   // Task #675: läs tenantens (redigerbara) områden för gruppering/etiketter.
   const { order: AREA_ORDER, areaLabel } = useMetadataAreas();
 
@@ -375,6 +391,27 @@ export default function MetadataSettingsPage() {
     },
     onError: (error: Error) => {
       toast({ title: 'Kunde inte återställa metadatatyp', description: error.message, variant: 'destructive' });
+    },
+  });
+
+  // Task #1497: slå ihop ett importskapat fält mot ett kanoniskt fält.
+  // confirmUsage måste matcha serverns värde-räkning exakt (hårt skydd).
+  const [mergeSource, setMergeSource] = useState<ImportCreatedType | null>(null);
+  const [mergeTargetId, setMergeTargetId] = useState<string>('');
+  const mergeMutation = useMutation({
+    mutationFn: async ({ sourceId, targetId, confirmUsage }: { sourceId: string; targetId: string; confirmUsage: number }) => {
+      return apiRequest('POST', `/api/metadata/types/${sourceId}/merge-into`, { targetId, confirmUsage });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/metadata/types'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/metadata/types/archived'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/metadata/types/import-created'] });
+      setMergeSource(null);
+      setMergeTargetId('');
+      toast({ title: 'Fälten sammanslagna', description: 'Värden och kopplingar har flyttats till målfältet. Källfältet arkiverades.' });
+    },
+    onError: (error: Error) => {
+      toast({ title: 'Kunde inte slå ihop fälten', description: error.message, variant: 'destructive' });
     },
   });
 
@@ -663,6 +700,143 @@ export default function MetadataSettingsPage() {
             </Card>
           ))
       )}
+
+      {importCreatedTypes && importCreatedTypes.length > 0 && (
+        <Card className="mt-4 border-dashed" data-testid="card-import-created-types">
+          <CardHeader>
+            <CardTitle className="text-lg flex items-center gap-2">
+              <ArrowDownToLine className="h-5 w-5 text-muted-foreground" />
+              Importskapade fält
+            </CardTitle>
+            <CardDescription>
+              Fält som skapades automatiskt av gamla importer utan att någon definierat dem medvetet.
+              Slå ihop dem mot ett kanoniskt fält (värden och historik flyttas med) eller arkivera oanvända.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Namn</TableHead>
+                  <TableHead>Datatyp</TableHead>
+                  <TableHead className="text-right">Lagrade värden</TableHead>
+                  <TableHead className="text-right">Konceptfilter</TableHead>
+                  <TableHead className="text-right">Konfig-referenser</TableHead>
+                  <TableHead className="text-right">Åtgärder</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {importCreatedTypes.map((type) => (
+                  <TableRow key={type.id} data-testid={`import-created-row-${type.namn}`}>
+                    <TableCell>
+                      <span className="font-medium">{metadataDisplayName(type)}</span>
+                      {type.beteckning && (
+                        <Badge variant="outline" className="ml-2 text-[10px] font-mono">
+                          {type.beteckning}
+                        </Badge>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant="outline">
+                        {datatypOptions.find(d => d.value === type.datatyp)?.label || type.datatyp}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums" data-testid={`text-import-usage-${type.namn}`}>
+                      {type.valueCount}
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums">
+                      {type.conceptFilterCount}
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums">
+                      {type.configRefCount}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <div className="flex justify-end gap-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => { setMergeSource(type); setMergeTargetId(''); }}
+                          data-testid={`button-merge-type-${type.namn}`}
+                        >
+                          <Layers className="h-4 w-4 mr-1" />
+                          Slå ihop…
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          disabled={type.usageTotal > 0 || deleteMutation.isPending}
+                          title={type.usageTotal > 0 ? 'Fältet används — slå ihop det mot ett kanoniskt fält i stället.' : undefined}
+                          onClick={() => deleteMutation.mutate(type.id)}
+                          data-testid={`button-archive-import-type-${type.namn}`}
+                        >
+                          <Archive className="h-4 w-4 mr-1" />
+                          Arkivera
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      )}
+
+      <Dialog open={!!mergeSource} onOpenChange={(open) => { if (!open) { setMergeSource(null); setMergeTargetId(''); } }}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Slå ihop {mergeSource ? metadataDisplayName(mergeSource) : ''} med kanoniskt fält</DialogTitle>
+          </DialogHeader>
+          {mergeSource && (
+            <div className="space-y-4">
+              <p className="text-sm text-muted-foreground">
+                {mergeSource.valueCount} lagrade värden (inkl. historik) och eventuella kopplingar flyttas
+                till målfältet. Källfältet arkiveras efteråt — inget raderas hårt.
+              </p>
+              <div className="space-y-2">
+                <Label>Målfält (samma datatyp)</Label>
+                <Select value={mergeTargetId} onValueChange={setMergeTargetId}>
+                  <SelectTrigger data-testid="select-merge-target">
+                    <SelectValue placeholder="Välj kanoniskt fält…" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {(metadataTypes || [])
+                      .filter((t) =>
+                        t.id !== mergeSource.id &&
+                        t.datatyp === mergeSource.datatyp &&
+                        !t.arBeraknad &&
+                        t.datatyp !== 'rubrik' &&
+                        !['import', 'importerad'].includes(t.kategori ?? ''),
+                      )
+                      .sort((a, b) => a.namn.localeCompare(b.namn, 'sv'))
+                      .map((t) => (
+                        <SelectItem key={t.id} value={t.id} data-testid={`merge-target-option-${t.namn}`}>
+                          {metadataDisplayName(t)}{t.beteckning ? ` (${t.beteckning})` : ''}
+                        </SelectItem>
+                      ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex justify-end gap-2">
+                <Button variant="outline" onClick={() => { setMergeSource(null); setMergeTargetId(''); }}>
+                  Avbryt
+                </Button>
+                <Button
+                  disabled={!mergeTargetId || mergeMutation.isPending}
+                  onClick={() => mergeMutation.mutate({
+                    sourceId: mergeSource.id,
+                    targetId: mergeTargetId,
+                    confirmUsage: mergeSource.valueCount,
+                  })}
+                  data-testid="button-confirm-merge"
+                >
+                  Slå ihop och arkivera källfältet
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
 
       {archivedTypes && archivedTypes.length > 0 && (
         <Card className="mt-4 border-dashed" data-testid="card-archived-types">
