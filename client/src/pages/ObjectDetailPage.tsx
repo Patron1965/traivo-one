@@ -9,7 +9,6 @@ import { ObjectHeaderPanel } from "@/components/ObjectHeaderPanel";
 import { type MetadataFormEntry, type MetadataFormType, type MetadataRelatedChild } from "@/components/ObjectMetadataForm";
 import { ObjectTemplateMetadataForm, type TemplateMetadataType } from "@/components/ObjectTemplateMetadataForm";
 import { TelinkSyncButton } from "@/components/TelinkSyncButton";
-import { SnabborderDialog } from "@/components/SnabborderDialog";
 import { ObjectHierarchyCards } from "@/components/objects/ObjectHierarchyCards";
 import { ObjectParentCombobox } from "@/components/ObjectParentCombobox";
 import { MetadataFieldBuilder, type BuilderFieldValue, type InheritedFieldSeed } from "@/components/MetadataFieldBuilder";
@@ -333,7 +332,6 @@ export default function ObjectDetailPage() {
   const didInitialScroll = useRef(false);
 
   const [editForm, setEditForm] = useState<ObjectEditForm>({});
-  const [snabborderOpen, setSnabborderOpen] = useState(false);
   // Task #713: flytta- och kopiera-dialoger
   const [moveDialogOpen, setMoveDialogOpen] = useState(false);
   const [moveSearch, setMoveSearch] = useState("");
@@ -1236,7 +1234,7 @@ export default function ObjectDetailPage() {
           {(user?.role === "admin" || user?.role === "owner" || user?.role === "planner") && (
             <Button
               size="sm"
-              onClick={() => setSnabborderOpen(true)}
+              onClick={() => navigate(buildSnabborderUrl(obj))}
               data-testid="button-open-snabborder"
             >
               <Zap className="h-4 w-4 mr-1" /> Snabborder
@@ -1515,7 +1513,7 @@ export default function ObjectDetailPage() {
             <Button
               variant="outline"
               size="sm"
-              onClick={() => setSnabborderOpen(true)}
+              onClick={() => navigate(buildSnabborderUrl(obj))}
               data-testid="button-add-workorder"
             >
               <Plus className="h-3.5 w-3.5 mr-1" /> Ny snabborder
@@ -1759,19 +1757,17 @@ export default function ObjectDetailPage() {
       </Dialog>
 
 
-      {/* Snabborder: rik direktorder (kund + fakturareferenser + löpande SO-nr +
-          rader) — blir fakturaunderlag direkt. Ersätter tidigare minimala
-          arbetsorder-dialog. */}
-      <SnabborderDialog
-        open={snabborderOpen}
-        onOpenChange={setSnabborderOpen}
-        objectId={objectId}
-        objectName={obj.name}
-        objectNumber={obj.objectNumber}
-        defaultCustomerId={obj.customerId}
-      />
     </div>
   );
+}
+
+// Task #1514: Snabborder är nu en egen wizard-sida — objektvyns ingång
+// förifyller kund + objekt via query-parametrar.
+function buildSnabborderUrl(obj: { id: string; name?: string | null; objectNumber?: string | null; customerId?: string | null }): string {
+  const params = new URLSearchParams({ objectId: obj.id, objectName: obj.name ?? "" });
+  if (obj.objectNumber) params.set("objectNumber", obj.objectNumber);
+  if (obj.customerId) params.set("customerId", obj.customerId);
+  return `/snabborder?${params.toString()}`;
 }
 
 // Task #579: Knapp + dialog som visar kronologisk historik för ett
