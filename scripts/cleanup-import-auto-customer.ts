@@ -26,6 +26,9 @@
 //   npx tsx scripts/cleanup-import-auto-customer.ts \
 //       --tenant <id> --customer <id> --execute                          # skarp radering
 //   npx tsx scripts/cleanup-import-auto-customer.ts --restore <loggfil>  # återställ raderade rader
+//   npx tsx scripts/cleanup-import-auto-customer.ts --restamp [--tenant <id>] [--execute]
+//       # Task #1467: restampa gamla skapad_av='import-explicit'-rader från
+//       # metod='system' → metod='import' ("Importerad"-badge). Idempotent.
 //
 // Reversibilitet: vid --execute skrivs FÖRST en fullständig JSON-logg av alla
 // rader som ska raderas till logs/import-auto-customer-cleanup-<ts>.json.
@@ -43,13 +46,15 @@ type Args = {
   tenant: string | null;
   customer: string | null;
   restore: string | null;
+  restamp: boolean;
 };
 
 function parseArgs(argv: string[]): Args {
-  const args: Args = { execute: false, tenant: null, customer: null, restore: null };
+  const args: Args = { execute: false, tenant: null, customer: null, restore: null, restamp: false };
   for (let i = 2; i < argv.length; i++) {
     const a = argv[i];
     if (a === "--execute") args.execute = true;
+    else if (a === "--restamp") args.restamp = true;
     else if (a === "--tenant") args.tenant = argv[++i] ?? null;
     else if (a === "--customer") args.customer = argv[++i] ?? null;
     else if (a === "--restore") args.restore = argv[++i] ?? null;
@@ -123,11 +128,41 @@ async function restore(file: string) {
   console.log(`Återställde ${restored} av ${rows.length} rader (redan befintliga hoppades över).`);
 }
 
+// Task #1467: äldre explicit importerade rader skrevs med metod='system'
+// (visas som "Systemgenererad"). Restampa dem till metod='import' så de visas
+// som "Importerad". Idempotent, precist predikat (skapad_av='import-explicit'),
+// rör aldrig legacy-fallbackens skapad_av='system'-rader.
+async function restampImportExplicit(execute: boolean, tenant: string | null) {
+  const where = sql`
+    metod = 'system'
+      AND skapad_av = 'import-explicit'
+      AND metadata_katalog_id IN (
+        SELECT id FROM metadata_katalog
+        WHERE lower(namn) = 'kund' AND deleted_at IS NULL
+      )
+      ${tenant ? sql`AND tenant_id = ${tenant}` : sql``}
+  `;
+  if (!execute) {
+    const res = await db.execute(sql`SELECT count(*)::int AS n FROM metadata_varden WHERE ${where}`);
+    const n = Number(((res as any).rows ?? [])[0]?.n ?? 0);
+    console.log(`Restamp (dry-run): ${n} Kund-rader med skapad_av='import-explicit' och metod='system' → skulle sättas till metod='import'.`);
+    console.log("Kör med --restamp --execute för skarp uppdatering.");
+    return;
+  }
+  const upd = await db.execute(sql`UPDATE metadata_varden SET metod = 'import', updated_at = now() WHERE ${where}`);
+  console.log(`Restamp: uppdaterade ${Number((upd as any).rowCount ?? 0)} rader till metod='import'.`);
+}
+
 async function main() {
   const args = parseArgs(process.argv);
 
   if (args.restore) {
     await restore(args.restore);
+    return;
+  }
+
+  if (args.restamp) {
+    await restampImportExplicit(args.execute, args.tenant);
     return;
   }
 

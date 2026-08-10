@@ -153,7 +153,11 @@ export async function ensurePrimaryPayer(
         vardeReferens: customerId,
         arvsNedat: katalog.standardArvs ?? true,
         skapadAv: origin,
-        metod: "system",
+        // Task #1467: en uttryckligen importerad kund ska visas som
+        // "Importerad" (metod 'import') i Ekonomi-sektionen — inte
+        // "Systemgenererad". Övriga vägar (user/portal/copy/seed) behåller
+        // metod 'system'. Badge-mappningen bor i shared/metadata-origin.ts.
+        metod: origin.startsWith("import") ? "import" : "system",
       })
       .returning({ id: metadataVarden.id });
     return ins?.id ?? null;

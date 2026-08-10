@@ -208,10 +208,13 @@ describe("Task #1437 — ingen automatisk kundkoppling vid import", () => {
 
     // Task #1437 proveniens: uttryckligt vald kund stämplas 'import-explicit'
     // (skapad_av) så att städskriptet ALDRIG klassar den som legacy-fallback.
+    // Task #1467: metod='import' så kunden visas som "Importerad" (inte
+    // "Systemgenererad") i Ekonomi-sektionen.
     const res = await db.execute(sql`
-      SELECT skapad_av FROM metadata_varden WHERE id = ${kund[0].id}
+      SELECT skapad_av, metod FROM metadata_varden WHERE id = ${kund[0].id}
     `);
     expect(((res as any).rows ?? [])[0]?.skapad_av).toBe("import-explicit");
+    expect(((res as any).rows ?? [])[0]?.metod).toBe("import");
   });
 
   it("städskriptet fångar bara legacy-fallback-rader — explicit valda kunder bevaras", async () => {
