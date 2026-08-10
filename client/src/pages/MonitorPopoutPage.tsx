@@ -7,7 +7,7 @@ import { useMapConfig } from "@/hooks/use-map-config";
 import { useRouteGeometries, type RouteGeometryInput } from "@/hooks/useRouteGeometry";
 import { format } from "date-fns";
 import { sv } from "date-fns/locale";
-import { apiRequest } from "@/lib/queryClient";
+import { apiRequest, refetchActiveQueriesAfterReconnect } from "@/lib/queryClient";
 import type { Resource, WorkOrderWithObject } from "@shared/schema";
 import {
   ChevronDown,
@@ -184,11 +184,37 @@ export default function MonitorPopoutPage() {
 
   useEffect(() => {
     let ws: WebSocket | null = null;
-    const connect = () => {
+    let closed = false;
+    let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+    // Exponentiell backoff så vi inte hamrar servern vid längre avbrott.
+    let reconnectAttempts = 0;
+    let hadConnection = false;
+
+    const scheduleReconnect = () => {
+      if (closed) return;
+      const delay = Math.min(5000 * 2 ** reconnectAttempts, 60000);
+      reconnectAttempts += 1;
+      reconnectTimer = setTimeout(connect, delay);
+    };
+
+    const connect = async () => {
+      if (closed) return;
       try {
+        // WS-lagret kräver ett engångstoken — hämta ett nytt per (åter)anslutning.
+        const res = await apiRequest("POST", "/api/notifications/user-token", {});
+        const { token } = await res.json();
+        if (closed || !token) return;
         const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-        ws = new WebSocket(`${protocol}//${window.location.host}/ws/notifications`);
-        ws.onopen = () => setWsConnected(true);
+        ws = new WebSocket(`${protocol}//${window.location.host}/ws/notifications?token=${token}`);
+        ws.onopen = () => {
+          setWsConnected(true);
+          reconnectAttempts = 0;
+          if (hadConnection) {
+            // Data kan ha missats under avbrottet — hämta ikapp aktiva queries.
+            refetchActiveQueriesAfterReconnect();
+          }
+          hadConnection = true;
+        };
         ws.onmessage = (event) => {
           try {
             const data = JSON.parse(event.data);
@@ -209,12 +235,21 @@ export default function MonitorPopoutPage() {
             }
           } catch {}
         };
-        ws.onclose = () => { setWsConnected(false); setTimeout(connect, 5000); };
+        ws.onclose = () => { setWsConnected(false); scheduleReconnect(); };
         ws.onerror = () => setWsConnected(false);
-      } catch {}
+      } catch {
+        scheduleReconnect();
+      }
     };
     connect();
-    return () => { if (ws) ws.close(); };
+    return () => {
+      closed = true;
+      if (reconnectTimer) clearTimeout(reconnectTimer);
+      if (ws) {
+        ws.onclose = null;
+        ws.close();
+      }
+    };
   }, []);
 
   const todaysOrders = useMemo(() => {

@@ -8,6 +8,7 @@ import { Loader2, RefreshCw, Wifi, WifiOff, Users } from "lucide-react";
 import { format } from "date-fns";
 import { sv } from "date-fns/locale";
 import { BaseMap, MapFitBounds, statusDivIcon, getResourceStatusColor } from "@/components/ui/map";
+import { apiRequest, refetchActiveQueriesAfterReconnect } from "@/lib/queryClient";
 
 const USER_SVG = '<path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>';
 
@@ -69,15 +70,39 @@ export function LiveResourceMap({
 
   useEffect(() => {
     let ws: WebSocket | null = null;
-    
-    const connect = () => {
+    let closed = false;
+    let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+    // Exponentiell backoff så vi inte hamrar servern vid längre avbrott.
+    let reconnectAttempts = 0;
+    let hadConnection = false;
+
+    const scheduleReconnect = () => {
+      if (closed) return;
+      const delay = Math.min(5000 * 2 ** reconnectAttempts, 60000);
+      reconnectAttempts += 1;
+      reconnectTimer = setTimeout(connect, delay);
+    };
+
+    const connect = async () => {
+      if (closed) return;
       try {
+        // WS-lagret kräver ett engångstoken (single-use, kort TTL) —
+        // hämta ett nytt inför varje (åter)anslutning.
+        const res = await apiRequest("POST", "/api/notifications/user-token", {});
+        const { token } = await res.json();
+        if (closed || !token) return;
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-        ws = new WebSocket(`${protocol}//${window.location.host}/ws/notifications`);
+        ws = new WebSocket(`${protocol}//${window.location.host}/ws/notifications?token=${token}`);
         
         ws.onopen = () => {
           setWsConnected(true);
+          reconnectAttempts = 0;
           console.log('[LiveMap] WebSocket connected');
+          if (hadConnection) {
+            // Positionsuppdateringar kan ha missats under avbrottet — hämta ikapp.
+            refetchActiveQueriesAfterReconnect();
+          }
+          hadConnection = true;
         };
         
         ws.onmessage = (event) => {
@@ -106,7 +131,7 @@ export function LiveResourceMap({
         
         ws.onclose = () => {
           setWsConnected(false);
-          setTimeout(connect, 5000);
+          scheduleReconnect();
         };
         
         ws.onerror = () => {
@@ -114,13 +139,19 @@ export function LiveResourceMap({
         };
       } catch (e) {
         console.error('[LiveMap] WebSocket error:', e);
+        scheduleReconnect();
       }
     };
     
     connect();
     
     return () => {
-      if (ws) ws.close();
+      closed = true;
+      if (reconnectTimer) clearTimeout(reconnectTimer);
+      if (ws) {
+        ws.onclose = null;
+        ws.close();
+      }
     };
   }, []);
 

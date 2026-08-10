@@ -1,4 +1,5 @@
-import { QueryClient, QueryFunction } from "@tanstack/react-query";
+import { QueryClient, QueryFunction, QueryCache, MutationCache } from "@tanstack/react-query";
+import { goToLogin } from "@/lib/auth-utils";
 
 export const API_VERSION_PREFIX = "/api/v1";
 
@@ -146,7 +147,14 @@ export async function apiRequest(
     credentials: "include",
   });
 
-  await throwIfResNotOk(res);
+  try {
+    await throwIfResNotOk(res);
+  } catch (err) {
+    // Global 401-hantering även för imperativa anrop (t.ex. WS-tokenhämtning)
+    // som inte går via QueryCache/MutationCache.
+    handleGlobalAuthError(err);
+    throw err;
+  }
   return res;
 }
 
@@ -169,7 +177,45 @@ export const getQueryFn: <T>(options: {
     return await res.json();
   };
 
+// ---------------------------------------------------------------------------
+// Global 401-hantering: när sessionen gått ut ska användaren ledas till
+// inloggningen istället för att appen fastnar i ett tyst fruset felläge.
+// Portal-/publika ytor har egen autentisering (egna inloggningssidor) och
+// ska INTE skickas till Replit-inloggningen.
+// ---------------------------------------------------------------------------
+const SESSION_EXEMPT_PATH_PREFIXES = [
+  "/portal",
+  "/report/",
+  "/feedback/",
+  "/metadata-form/",
+];
+
+function isSessionExemptPath(): boolean {
+  if (typeof window === "undefined") return true;
+  const p = window.location.pathname;
+  // OBS: "/portal-messages" är en intern (Replit Auth-skyddad) sida — undanta
+  // den inte trots att den delar "/portal"-prefixet.
+  if (p.startsWith("/portal-messages")) return false;
+  return SESSION_EXEMPT_PATH_PREFIXES.some((prefix) => p === prefix || p.startsWith(prefix));
+}
+
+let sessionRedirectTriggered = false;
+
+function handleGlobalAuthError(error: unknown) {
+  if (sessionRedirectTriggered) return;
+  if (!(error instanceof ApiError) || error.status !== 401) return;
+  if (isSessionExemptPath()) return;
+  sessionRedirectTriggered = true;
+  goToLogin(window.location.pathname + window.location.search);
+}
+
 export const queryClient = new QueryClient({
+  queryCache: new QueryCache({
+    onError: handleGlobalAuthError,
+  }),
+  mutationCache: new MutationCache({
+    onError: handleGlobalAuthError,
+  }),
   defaultOptions: {
     queries: {
       queryFn: getQueryFn({ on401: "throw" }),
@@ -183,3 +229,35 @@ export const queryClient = new QueryClient({
     },
   },
 });
+
+// ---------------------------------------------------------------------------
+// Fokus-återhämtning: all query-data cachas för evigt (staleTime: Infinity)
+// och skärmarna förlitar sig på realtidshändelser för uppdatering. Har fliken
+// varit dold en längre stund (websocket kan ha dött / händelser missats)
+// hämtas aktiva queries om när användaren kommer tillbaka — en måttlig
+// engångs-refetch, inte kontinuerlig polling.
+// ---------------------------------------------------------------------------
+const HIDDEN_REFRESH_THRESHOLD_MS = 5 * 60 * 1000;
+let lastHiddenAt: number | null = null;
+
+if (typeof document !== "undefined") {
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "hidden") {
+      lastHiddenAt = Date.now();
+    } else if (document.visibilityState === "visible") {
+      if (lastHiddenAt !== null && Date.now() - lastHiddenAt >= HIDDEN_REFRESH_THRESHOLD_MS) {
+        queryClient.invalidateQueries({ refetchType: "active" });
+      }
+      lastHiddenAt = null;
+    }
+  });
+}
+
+/**
+ * Anropas när en realtidsanslutning ÅTERupprättats efter ett avbrott —
+ * händelser kan ha missats under avbrottet, så aktiva queries hämtas om
+ * för att skärmen ska komma ikapp.
+ */
+export function refetchActiveQueriesAfterReconnect() {
+  queryClient.invalidateQueries({ refetchType: "active" });
+}

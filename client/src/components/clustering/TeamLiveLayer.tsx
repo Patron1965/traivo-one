@@ -22,7 +22,7 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { Badge } from "@/components/ui/badge";
-import { apiRequest } from "@/lib/queryClient";
+import { apiRequest, refetchActiveQueriesAfterReconnect } from "@/lib/queryClient";
 import type { GridResponse, GridTaskRow } from "@/lib/rough-planning";
 
 // ---------------------------------------------------------------------------
@@ -204,6 +204,16 @@ export function useTeamLivePositions(enabled: boolean): TeamLivePositionDto[] {
     let ws: WebSocket | null = null;
     let closed = false;
     let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+    // Exponentiell backoff så vi inte hamrar servern vid längre avbrott.
+    let reconnectAttempts = 0;
+    let hadConnection = false;
+
+    const scheduleReconnect = () => {
+      if (closed) return;
+      const delay = Math.min(5000 * 2 ** reconnectAttempts, 60000);
+      reconnectAttempts += 1;
+      reconnectTimer = setTimeout(connect, delay);
+    };
 
     const connect = async () => {
       if (closed) return;
@@ -215,6 +225,14 @@ export function useTeamLivePositions(enabled: boolean): TeamLivePositionDto[] {
         if (closed || !token) return;
         const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
         ws = new WebSocket(`${protocol}//${window.location.host}/ws/notifications?token=${token}`);
+        ws.onopen = () => {
+          reconnectAttempts = 0;
+          if (hadConnection) {
+            // Positioner kan ha missats under avbrottet — hämta ikapp.
+            refetchActiveQueriesAfterReconnect();
+          }
+          hadConnection = true;
+        };
         ws.onmessage = (event) => {
           try {
             const msg = JSON.parse(event.data) as PositionUpdateMsg;
@@ -226,10 +244,10 @@ export function useTeamLivePositions(enabled: boolean): TeamLivePositionDto[] {
           }
         };
         ws.onclose = () => {
-          if (!closed) reconnectTimer = setTimeout(connect, 5000);
+          scheduleReconnect();
         };
       } catch {
-        if (!closed) reconnectTimer = setTimeout(connect, 5000);
+        scheduleReconnect();
       }
     };
 

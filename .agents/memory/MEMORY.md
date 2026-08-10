@@ -138,4 +138,5 @@
 - [allowed_values sväljer importvärden tyst](import-allowed-values-silent-skip.md) — mappad kolumn kan ge 0 metadata_varden; backfill via sparade sessioners raw_rows + interim.
 - [Objektklassificering som metadata](object-classification-metadata.md) — legacy-kolumnerna DROPPADE; läs via getObjectHookClassification/getClassificationForObjects eller objectOwnMetadataTextValueSql; skriv via mirror.
 - [WorkOrder select-list drift](workorder-select-list-drift.md) — nya work_orders-kolumner måste läggas till manuellt i storage.ts duplicerade select-listor; `(wo as any).col` blir tyst null.
+- [Frozen-UI recovery model](frozen-ui-recovery-model.md) — staleTime Infinity ⇒ WS-invalidation är enda färskhetskällan; reconnect/visibility/401/SW-mekanismer + fällor (WS-hook teardown, exempt-paths).
 - [Lagersaldo concurrency-lås](stock-balance-concurrency.md) — delta-beräknande saldo-writes (reconcile/inventering) måste läsa utgångsvärdet under FOR UPDATE i samma tx, annars dubbelbokning.

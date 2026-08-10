@@ -25,7 +25,7 @@ import { TourMenu } from "@/components/TourMenu";
 import { getNavGroups, type NavItem } from "@/lib/navItems";
 import { getDisruptionDisplay } from "@/lib/disruption-display";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { apiRequest, queryClient } from "@/lib/queryClient";
+import { apiRequest, queryClient, refetchActiveQueriesAfterReconnect } from "@/lib/queryClient";
 import {
   Popover,
   PopoverContent,
@@ -491,6 +491,17 @@ function NotificationsBell() {
     let ws: WebSocket | null = null;
     let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
     let cancelled = false;
+    // Exponentiell backoff + spårning av tappad tidigare anslutning så att
+    // aktiva queries hämtas om när kopplingen väl är tillbaka.
+    let reconnectAttempts = 0;
+    let hadConnection = false;
+
+    const scheduleReconnect = () => {
+      if (cancelled) return;
+      const delay = Math.min(5000 * 2 ** reconnectAttempts, 60000);
+      reconnectAttempts += 1;
+      reconnectTimer = setTimeout(connect, delay);
+    };
 
     const connect = async () => {
       if (cancelled) return;
@@ -502,6 +513,15 @@ function NotificationsBell() {
         const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
         const url = `${protocol}//${window.location.host}/ws/notifications?token=${token}`;
         ws = new WebSocket(url);
+        ws.onopen = () => {
+          reconnectAttempts = 0;
+          if (hadConnection) {
+            // Återansluten efter avbrott — händelser kan ha missats, hämta
+            // om aktiva queries så skärmen kommer ikapp utan omladdning.
+            refetchActiveQueriesAfterReconnect();
+          }
+          hadConnection = true;
+        };
         ws.onmessage = (event) => {
           try {
             const raw = JSON.parse(event.data);
@@ -513,17 +533,13 @@ function NotificationsBell() {
           }
         };
         ws.onclose = () => {
-          if (!cancelled) {
-            reconnectTimer = setTimeout(connect, 10000);
-          }
+          scheduleReconnect();
         };
         ws.onerror = () => {
           // close handler will schedule reconnect
         };
       } catch {
-        if (!cancelled) {
-          reconnectTimer = setTimeout(connect, 10000);
-        }
+        scheduleReconnect();
       }
     };
 

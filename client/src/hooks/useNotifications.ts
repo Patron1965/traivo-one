@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { apiRequest } from "@/lib/queryClient";
+import { apiRequest, refetchActiveQueriesAfterReconnect } from "@/lib/queryClient";
 import {
   validateServerEvent,
   type ServerEvent,
@@ -71,6 +71,12 @@ export function useNotifications({
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const tokenRef = useRef<string | null>(null);
+  // Exponentiell backoff + "har vi tappat en tidigare lyckad anslutning?"
+  const reconnectAttemptsRef = useRef(0);
+  const hadConnectionRef = useRef(false);
+  // Sätts av disconnect() — spärrar sena timer-callbacks/token-svar från att
+  // återuppliva anslutningen efter avsiktlig nedkoppling.
+  const stoppedRef = useRef(false);
 
   const unreadCount = notifications.filter((n) => !n.read).length;
 
@@ -78,6 +84,8 @@ export function useNotifications({
     if (!resourceId || wsRef.current?.readyState === WebSocket.OPEN) {
       return;
     }
+    // Explicit connect häver en tidigare avsiktlig nedkoppling.
+    stoppedRef.current = false;
 
     try {
       const response = await apiRequest("POST", "/api/notifications/token", {
@@ -90,6 +98,7 @@ export function useNotifications({
       }
       
       const data = await response.json();
+      if (stoppedRef.current) return; // nedkopplad medan token hämtades
       tokenRef.current = data.token;
 
       const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
@@ -101,7 +110,14 @@ export function useNotifications({
 
       ws.onopen = () => {
         setIsConnected(true);
+        reconnectAttemptsRef.current = 0;
         console.log("[Notifications] WebSocket connected");
+        if (hadConnectionRef.current) {
+          // Återansluten efter avbrott — händelser kan ha missats medan
+          // kopplingen var nere, hämta om aktiva queries så skärmen kommer ikapp.
+          refetchActiveQueriesAfterReconnect();
+        }
+        hadConnectionRef.current = true;
       };
 
       ws.onmessage = (event) => {
@@ -146,10 +162,12 @@ export function useNotifications({
         setIsConnected(false);
         console.log("[Notifications] WebSocket disconnected");
         
-        if (autoConnect && resourceId) {
+        if (autoConnect && resourceId && !stoppedRef.current) {
+          const attempt = reconnectAttemptsRef.current++;
+          const delay = Math.min(5000 * 2 ** attempt, 60000);
           reconnectTimeoutRef.current = setTimeout(() => {
             connect();
-          }, 10000);
+          }, delay);
         }
       };
 
@@ -157,17 +175,33 @@ export function useNotifications({
         console.error("[Notifications] WebSocket error:", error);
       };
     } catch (err) {
+      // Token-hämtningen misslyckades (t.ex. servern nere) — försök igen med backoff.
       console.error("[Notifications] Failed to get token:", err);
       setIsConnected(false);
+      if (autoConnect && resourceId && !stoppedRef.current) {
+        const attempt = reconnectAttemptsRef.current++;
+        const delay = Math.min(5000 * 2 ** attempt, 60000);
+        reconnectTimeoutRef.current = setTimeout(() => {
+          connect();
+        }, delay);
+      }
     }
   }, [resourceId, onNotification, autoConnect]);
 
   const disconnect = useCallback(() => {
+    // Avsiktlig nedkoppling (unmount/resurs-byte): stoppa auto-återanslutning
+    // och koppla loss handlers INNAN close, annars schemalägger onclose en ny
+    // anslutning → dubbla sockets och setState efter unmount.
+    stoppedRef.current = true;
     if (reconnectTimeoutRef.current) {
       clearTimeout(reconnectTimeoutRef.current);
       reconnectTimeoutRef.current = null;
     }
     if (wsRef.current) {
+      wsRef.current.onopen = null;
+      wsRef.current.onmessage = null;
+      wsRef.current.onclose = null;
+      wsRef.current.onerror = null;
       wsRef.current.close();
       wsRef.current = null;
     }
