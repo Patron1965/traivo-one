@@ -14,8 +14,7 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { DATATYPE_META, type MetadataFormType } from "@/components/ObjectMetadataForm";
 import type { MetadataAreaMeta } from "./metadata-carousel-utils";
-
-const NO_AREA = "__ovrigt__";
+import { MetadataAreaCombobox, NO_AREA } from "./MetadataAreaCombobox";
 
 /**
  * Task #1368: fältinställningar direkt från objektsidan — byta metadataområde,
@@ -98,19 +97,14 @@ export function MetadataFieldSettingsDialog({
         <div className="space-y-4">
           <div className="space-y-1.5">
             <Label>Metadataområde</Label>
-            <Select value={area} onValueChange={setArea} disabled={isSystemLocked}>
-              <SelectTrigger data-testid="select-field-area">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={NO_AREA}>Övrigt (inget område)</SelectItem>
-                {areas.map((a) => (
-                  <SelectItem key={a.value} value={a.value} data-testid={`option-area-${a.value}`}>
-                    {a.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            {/* Task #1443: sökbar områdesväljare (case-insensitiv filtrering + tomt-läge). */}
+            <MetadataAreaCombobox
+              value={area}
+              onValueChange={setArea}
+              areas={areas}
+              disabled={isSystemLocked}
+              triggerTestId="select-field-area"
+            />
           </div>
 
           <div className="space-y-1.5">

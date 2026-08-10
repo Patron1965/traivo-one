@@ -15,8 +15,7 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { DATATYPE_META } from "@/components/ObjectMetadataForm";
 import type { MetadataAreaMeta } from "./metadata-carousel-utils";
-
-const NO_AREA = "__ovrigt__";
+import { MetadataAreaCombobox, NO_AREA } from "./MetadataAreaCombobox";
 
 /**
  * Task #1368: skapa ett nytt katalogfält direkt från objektsidan — namn,
@@ -115,17 +114,13 @@ export function MetadataCreateFieldDialog({
 
             <div className="space-y-1.5">
               <Label>Metadataområde</Label>
-              <Select value={area} onValueChange={setArea}>
-                <SelectTrigger data-testid="select-new-field-area">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={NO_AREA}>Övrigt (inget område)</SelectItem>
-                  {areas.map((a) => (
-                    <SelectItem key={a.value} value={a.value}>{a.label}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              {/* Task #1443: sökbar områdesväljare (case-insensitiv filtrering + tomt-läge). */}
+              <MetadataAreaCombobox
+                value={area}
+                onValueChange={setArea}
+                areas={areas}
+                triggerTestId="select-new-field-area"
+              />
             </div>
 
             <div className="flex items-center justify-between rounded-md border p-3">
