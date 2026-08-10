@@ -11,8 +11,6 @@ let testObjectId: string;
 function makeInsertObject(overrides: Partial<InsertObject> & Pick<InsertObject, "name" | "customerId">): InsertObject {
   return {
     tenantId: TEST_TENANT,
-    objectType: "karl",
-    objectLevel: 2,
     ...overrides,
   };
 }
@@ -29,8 +27,6 @@ describe("Interim Objects & Object Verification", () => {
     const obj = await storage.createObject(makeInsertObject({
       customerId: testCustomerId,
       name: "Befintligt objekt",
-      objectType: "fastighet",
-      objectLevel: 1,
       status: "active",
     }));
     testObjectId = obj.id;
@@ -144,7 +140,6 @@ describe("Interim Objects & Object Verification", () => {
       const interimObj = await storage.createObject(makeInsertObject({
         customerId: testCustomerId,
         name: "Interimobjekt från felanmälan",
-        objectLevel: 1,
         isInterimObject: true,
         status: "active",
         latitude: 59.3293,

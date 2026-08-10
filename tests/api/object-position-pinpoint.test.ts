@@ -113,7 +113,7 @@ beforeAll(async () => {
 
   const created = await req("POST", "/api/objects", {
     userId: ADMIN,
-    body: { name: `${NS} Objekt`, customerId, objectType: "karl", objectLevel: 1, status: "active" },
+    body: { name: `${NS} Objekt`, customerId, status: "active" },
   });
   expect(created.status).toBe(201);
   objektId = created.body.id;

@@ -75,9 +75,6 @@ describe("Portal scope isolation — kunder ser aldrig data utanför sin scope",
         customerId,
         name,
         objectNumber: randomId(),
-        objectType: "fastighet",
-        objectLevel: parentId ? 3 : 2,
-        hierarchyLevel: parentId ? "rum" : "fastighet",
         parentId: parentId ?? undefined,
       } as InsertObject);
       await setObjectKund(TENANT_ID, obj.id, customerId);

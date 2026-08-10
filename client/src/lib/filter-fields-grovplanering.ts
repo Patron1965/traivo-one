@@ -25,7 +25,6 @@ export const GROVPLANERING_FILTER_FIELDS: FilterFieldDef<GridTaskRow>[] = [
   { key: "teamName", label: "Team", type: "select", getValue: (r) => r.teamName, group: "Planering" },
   { key: "roughPlannedWeek", label: "Vecka", type: "text", getValue: (r) => r.roughPlannedWeek, group: "Planering" },
   { key: "desiredDeliveryStart", label: "Önskad leverans (start)", type: "date", getValue: (r) => (r.desiredDeliveryStart ? new Date(r.desiredDeliveryStart) : null), group: "Planering" },
-  { key: "lastServiceDate", label: "Senast utförd", type: "date", getValue: (r) => (r.lastServiceDate ? new Date(r.lastServiceDate) : null), group: "Planering" },
   { key: "productionMinutes", label: "Produktionstid (min)", type: "number", getValue: (r) => r.productionMinutes, group: "Tid" },
   { key: "source", label: "Källa (skapad via)", type: "select", getValue: (r) => r.source, group: "System" },
   {

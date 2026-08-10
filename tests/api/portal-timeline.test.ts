@@ -78,9 +78,6 @@ describe("GET /api/portal/timeline — kalender-tidslinje respekterar portal-sco
         customerId,
         name,
         objectNumber: randomId(),
-        objectType: "fastighet",
-        objectLevel: parentId ? 3 : 2,
-        hierarchyLevel: parentId ? "rum" : "fastighet",
         parentId: parentId ?? undefined,
       } as InsertObject);
       await setObjectKund(TENANT_ID, obj.id, customerId);

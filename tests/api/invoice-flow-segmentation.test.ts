@@ -70,7 +70,6 @@ async function insertObject(name: string, parentId: string | null): Promise<stri
       tenantId: TENANT,
       customerId,
       name,
-      objectType: "fastighet",
       parentId: parentId ?? null,
     })
     .returning();

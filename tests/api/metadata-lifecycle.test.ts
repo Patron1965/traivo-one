@@ -139,7 +139,7 @@ beforeAll(async () => {
 
   const objRes = await req("POST", "/api/objects", {
     userId: ADMIN,
-    body: { name: `${NS} Objekt`, customerId, objectType: "karl", objectLevel: 1, status: "active" },
+    body: { name: `${NS} Objekt`, customerId, status: "active" },
   });
   expect(objRes.status).toBe(201);
   objectId = objRes.body.id;
@@ -411,7 +411,7 @@ describe("Task #1460 — spärren kan inte kringgås via kompat-/objekt-/bulkvä
   ): Promise<{ objId: string; vardenId: string }> {
     const objRes = await req("POST", "/api/objects", {
       userId: ADMIN,
-      body: { name: `${NS} ${suffix}`, customerId, objectType: "karl", objectLevel: 1, status: "active" },
+      body: { name: `${NS} ${suffix}`, customerId, status: "active" },
     });
     expect(objRes.status).toBe(201);
     const objId = objRes.body.id as string;
@@ -454,7 +454,7 @@ describe("Task #1460 — spärren kan inte kringgås via kompat-/objekt-/bulkvä
   it("what3words-tömning arkiverar (mjuk-raderar) när värdet har historik — raden hård-raderas aldrig", async () => {
     const objRes = await req("POST", "/api/objects", {
       userId: ADMIN,
-      body: { name: `${NS} w3w`, customerId, objectType: "karl", objectLevel: 1, status: "active" },
+      body: { name: `${NS} w3w`, customerId, status: "active" },
     });
     expect(objRes.status).toBe(201);
     const objId = objRes.body.id as string;

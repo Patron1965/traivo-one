@@ -201,7 +201,7 @@ function sectionA() {
   }
   // DEFAULT
   const defChecks: Array<[string, string]> = [
-    ["objects", "object_type"], ["customers", "created_at"], ["articles", "quantity_mode"],
+    ["customers", "created_at"], ["articles", "quantity_mode"],
   ];
   for (const [t, c] of defChecks) {
     const cc = col(t, c);
@@ -393,7 +393,7 @@ async function sectionD() {
 
   const queries: Array<[string, string, any[]]> = [];
   if (tid) {
-    queries.push(["Objekt per tenant + objekttyp", `EXPLAIN (ANALYZE, BUFFERS) SELECT * FROM objects WHERE tenant_id=$1 AND object_type='avfallsrum' LIMIT 100`, [tid]]);
+    queries.push(["Objekt per tenant + objekttyp (metadata)", `EXPLAIN (ANALYZE, BUFFERS) SELECT o.* FROM objects o JOIN metadata_varden mv ON mv.objekt_id = o.id AND mv.tenant_id = o.tenant_id JOIN metadata_katalog mk ON mk.id = mv.metadata_katalog_id AND lower(mk.namn) = 'objekttyp' WHERE o.tenant_id=$1 AND mv.varde_string='avfallsrum' LIMIT 100`, [tid]]);
     if (hasTable("assignments") && hasCol("assignments", "scheduled_date"))
       queries.push(["Uppgifter per tenant sorterat på leveranstid", `EXPLAIN (ANALYZE, BUFFERS) SELECT * FROM assignments WHERE tenant_id=$1 ORDER BY scheduled_date NULLS LAST LIMIT 100`, [tid]]);
     queries.push(["Orderkoncept per tenant", `EXPLAIN (ANALYZE, BUFFERS) SELECT * FROM order_concepts WHERE tenant_id=$1 LIMIT 100`, [tid]]);

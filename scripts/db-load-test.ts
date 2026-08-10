@@ -58,8 +58,8 @@ async function main() {
     // 1. Bulk-insert objekt — sprid lat/lng över en grov Sverige-bbox.
     const tObj = Date.now();
     await client.query(
-      `INSERT INTO objects (tenant_id, customer_id, name, object_type, object_level, latitude, longitude, status)
-       SELECT $1::varchar, $2::varchar, 'LoadTest ' || g, 'omrade', 1,
+      `INSERT INTO objects (tenant_id, customer_id, name, latitude, longitude, status)
+       SELECT $1::varchar, $2::varchar, 'LoadTest ' || g,
               55 + random() * 14, 11 + random() * 13, 'active'
        FROM generate_series(1, $3::int) g`,
       [tenant_id, customer_id, N],

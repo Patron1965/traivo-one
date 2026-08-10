@@ -12,6 +12,7 @@ import { NotFoundError, ValidationError, ForbiddenError } from "../errors";
 import { objects, workOrders, customerCommunications, orderConceptArticles, orderConceptObjects, articleObjectMappings, conceptFilters, priceLists, deliverySchedules, assignments as assignmentsTable, articles, type InsertOrderConceptArticle } from "@shared/schema";
 import { getISOWeek, getStartOfISOWeek, getDateFromWeekdayInMonth } from "./helpers";
 import { getOrderConceptMethod } from "@shared/order-concept-method";
+import { objectOwnMetadataTextValueSql } from "../services/object-metadata-sql";
 import { resolveArticleCostBasisOre } from "@shared/article-pricing";
 import { computeConceptOrderValue } from "@shared/order-concept-value";
 import { buildScheduleDateTargets } from "../services/order-concept-schedule";
@@ -83,7 +84,8 @@ app.get("/api/order-concepts/:id/wizard", asyncHandler(async (req, res) => {
         createdAt: oco.createdAt,
         objectName: objects.name,
         objectAddress: objects.address,
-        objectType: objects.objectType,
+        // Klassificering (Objekttyp) läses ur metadata — kolumnen finns inte längre.
+        objectType: objectOwnMetadataTextValueSql("Objekttyp"),
       })
       .from(oco)
       .leftJoin(objects, eq(oco.objectId, objects.id))
@@ -127,7 +129,8 @@ app.get("/api/order-concepts/:id/objects", asyncHandler(async (req, res) => {
         createdAt: oco.createdAt,
         objectName: objects.name,
         objectAddress: objects.address,
-        objectType: objects.objectType,
+        // Klassificering (Objekttyp) läses ur metadata — kolumnen finns inte längre.
+        objectType: objectOwnMetadataTextValueSql("Objekttyp"),
       })
       .from(oco)
       .leftJoin(objects, eq(oco.objectId, objects.id))
@@ -2651,7 +2654,8 @@ app.get("/api/order-concepts/:id/export-pdf", asyncHandler(async (req, res) => {
         .select({
           objectName: objects.name,
           objectAddress: objects.address,
-          objectType: objects.objectType,
+          // Klassificering (Objekttyp) läses ur metadata — kolumnen finns inte längre.
+          objectType: objectOwnMetadataTextValueSql("Objekttyp"),
           included: orderConceptObjects.included,
         })
         .from(orderConceptObjects)

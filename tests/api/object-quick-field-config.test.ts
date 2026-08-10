@@ -60,10 +60,15 @@ async function req(
 async function createObject(name: string): Promise<string> {
   const res = await req("POST", "/api/objects", {
     userId: ADMIN,
-    body: { name, customerId, objectType: "karl", objectLevel: 1, status: "active" },
+    body: { name, customerId, status: "active" },
   });
   expect(res.status).toBe(201);
-  return res.body.id as string;
+  const id = res.body.id as string;
+  // Klassificering (objekttyp) är nu metadata (Task #1486) — objectHeaderConfigs-
+  // fallbacken slår upp objekttypen "karl" ur metadatat, så spegla in den.
+  const { mirrorClassificationToMetadata } = await import("../../server/services/object-classification");
+  await mirrorClassificationToMetadata(TENANT, id, { objectType: "karl" });
+  return id;
 }
 
 beforeAll(async () => {

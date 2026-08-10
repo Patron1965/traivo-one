@@ -38,18 +38,6 @@ const statusColors: Record<string, "default" | "secondary" | "outline" | "destru
   lost: "destructive",
 };
 
-const objectTypeLabels: Record<string, string> = {
-  omrade: "Område",
-  fastighet: "Fastighet",
-  serviceboende: "Serviceboende",
-  rum: "Rum",
-  soprum: "Soprum",
-  kok: "Kök",
-  uj_hushallsavfall: "UJ Hushållsavfall",
-  matafall: "Matavfall",
-  atervinning: "Återvinning",
-};
-
 export default function ProcurementsPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
@@ -850,9 +838,6 @@ export default function ProcurementsPage() {
                         <div className="flex-1">
                           <div className="flex items-center gap-2 flex-wrap">
                             <span className="font-medium">{obj.name}</span>
-                            <Badge variant="outline" className="text-xs">
-                              {objectTypeLabels[obj.objectType] || obj.objectType}
-                            </Badge>
                           </div>
                           {obj.address && (
                             <p className="text-sm text-muted-foreground">{obj.address}, {obj.city}</p>

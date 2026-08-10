@@ -191,7 +191,7 @@ import {
   objectHasNoPrimaryCustomerSql,
   getObjectPrimaryCustomerId,
 } from "./services/object-customer";
-import { objectMetadataTextValueSql } from "./services/object-metadata-sql";
+import { objectMetadataTextValueSql, objectOwnMetadataTextValueSql, objectOwnMetadataTextValueSqlFor } from "./services/object-metadata-sql";
 
 /**
  * Returnerar en Drizzle "select-shape" för objects där `customerId` är
@@ -1287,13 +1287,13 @@ export interface IStorage {
   getResourceArticlesByResourceIds(resourceIds: string[]): Promise<ResourceArticle[]>;
   createPlanningDecisionLog(log: { tenantId: string; userId?: string; weekStart: string; weekEnd: string; summary: unknown; moveCount: number; violationCount: number; riskScore: number; totalOrdersScheduled: number }): Promise<void>;
 
-  // ============== Task #1240: Delad filtermotor — sparade filter ==============
+  // ====== Task #1240: Delad filtermotor — sparade filter ======
   getSavedFilters(tenantId: string, scope: string, userId: string): Promise<SavedFilter[]>;
   createSavedFilter(tenantId: string, userId: string, data: InsertSavedFilter): Promise<SavedFilter>;
   updateSavedFilter(tenantId: string, userId: string, id: string, data: Partial<InsertSavedFilter>): Promise<SavedFilter | undefined>;
   deleteSavedFilter(tenantId: string, userId: string, id: string): Promise<void>;
 
-  // ============== Task #785: Veckoplanering – datafundament ==============
+  // ====== Task #785: Veckoplanering – datafundament ======
   // Alla queries är tenant-scopade; alla UPDATE/DELETE har tenant_id i WHERE.
   // Geografiska distrikt
   getGeographicDistricts(tenantId: string): Promise<GeographicDistrict[]>;
@@ -2016,10 +2016,10 @@ export class DatabaseStorage implements IStorage {
     const objectIsForCustomerSql = sql`(${primaryPayerCustomerIdSqlFor(sql.raw('"objects"."id"'))} IN (${customerIdList}))`;
     const [levelsRes, ordersRes, subsRes, invoicedRes] = await Promise.all([
       db.execute(sql`
-        SELECT COALESCE(hierarchy_level, 'fastighet') as level, COUNT(*)::int as count
+        SELECT COALESCE(${objectOwnMetadataTextValueSql("Anläggningstyp")}, 'fastighet') as level, COUNT(*)::int as count
         FROM objects
         WHERE tenant_id = ${tenantId} AND ${objectIsForCustomerSql} AND deleted_at IS NULL
-        GROUP BY COALESCE(hierarchy_level, 'fastighet')
+        GROUP BY COALESCE(${objectOwnMetadataTextValueSql("Anläggningstyp")}, 'fastighet')
       `),
       db.execute(sql`
         SELECT
@@ -2411,12 +2411,14 @@ export class DatabaseStorage implements IStorage {
       }
     }
     
+    // Task #1486: klassificerings-filter matchar objektets EGNA metadata
+    // (Objekttyp/Anläggningstyp) — legacy-kolumnerna finns inte längre.
     if (filters?.objectType) {
-      whereConditions = and(whereConditions, eq(objects.objectType, filters.objectType));
+      whereConditions = and(whereConditions, sql`${objectOwnMetadataTextValueSql("Objekttyp")} = ${filters.objectType}`);
     }
     
     if (filters?.hierarchyLevel) {
-      whereConditions = and(whereConditions, eq(objects.hierarchyLevel, filters.hierarchyLevel));
+      whereConditions = and(whereConditions, sql`${objectOwnMetadataTextValueSql("Anläggningstyp")} = ${filters.hierarchyLevel}`);
     }
     
     if (filters?.isInterimObject !== undefined) {
@@ -2666,7 +2668,7 @@ export class DatabaseStorage implements IStorage {
         o.id,
         o.name,
         o.parent_id AS "parentId",
-        o.hierarchy_level AS "hierarchyLevel",
+        ${objectOwnMetadataTextValueSqlFor("Anläggningstyp", sql.raw("o.id"))} AS "hierarchyLevel",
         o.address,
         (o.latitude IS NOT NULL AND o.longitude IS NOT NULL) AS "hasCoords",
         (
@@ -2697,7 +2699,7 @@ export class DatabaseStorage implements IStorage {
         o.id,
         o.name,
         o.parent_id AS "parentId",
-        o.hierarchy_level AS "hierarchyLevel",
+        ${objectOwnMetadataTextValueSqlFor("Anläggningstyp", sql.raw("o.id"))} AS "hierarchyLevel",
         o.address,
         (o.latitude IS NOT NULL AND o.longitude IS NOT NULL) AS "hasCoords",
         (
@@ -2730,7 +2732,7 @@ export class DatabaseStorage implements IStorage {
         o.address,
         o.latitude,
         o.longitude,
-        o.hierarchy_level AS "hierarchyLevel"
+        ${objectOwnMetadataTextValueSqlFor("Anläggningstyp", sql.raw("o.id"))} AS "hierarchyLevel"
       FROM objects o
       WHERE (${primaryPayerCustomerIdSqlFor(sql.raw('o.id'))} = ${customerId})
         AND o.tenant_id = ${tenantId}
@@ -2767,7 +2769,7 @@ export class DatabaseStorage implements IStorage {
         o.name,
         o.object_number AS "objectNumber",
         o.address,
-        o.hierarchy_level AS "hierarchyLevel",
+        ${objectOwnMetadataTextValueSqlFor("Anläggningstyp", sql.raw("o.id"))} AS "hierarchyLevel",
         o.parent_id AS "parentId"
       FROM objects o
       WHERE (${primaryPayerCustomerIdSqlFor(sql.raw('o.id'))} = ${customerId})
@@ -2804,7 +2806,7 @@ export class DatabaseStorage implements IStorage {
           o.id,
           o.name,
           o.parent_id,
-          o.hierarchy_level,
+          ${objectOwnMetadataTextValueSqlFor("Anläggningstyp", sql.raw("o.id"))} AS hierarchy_level,
           0 AS depth
         FROM objects o
         WHERE o.id IN (${sql.join(ids.map((id) => sql`${id}`), sql`, `)})
@@ -2816,7 +2818,7 @@ export class DatabaseStorage implements IStorage {
           p.id,
           p.name,
           p.parent_id,
-          p.hierarchy_level,
+          ${objectOwnMetadataTextValueSqlFor("Anläggningstyp", sql.raw("p.id"))} AS hierarchy_level,
           c.depth + 1
         FROM chain c
         JOIN objects p ON p.id = c.parent_id
@@ -2902,8 +2904,8 @@ export class DatabaseStorage implements IStorage {
         o.object_number AS "objectNumber",
         o.address,
         o.city,
-        o.object_type AS "objectType",
-        o.hierarchy_level AS "hierarchyLevel"
+        ${objectOwnMetadataTextValueSqlFor("Objekttyp", sql.raw("o.id"))} AS "objectType",
+        ${objectOwnMetadataTextValueSqlFor("Anläggningstyp", sql.raw("o.id"))} AS "hierarchyLevel"
       FROM objects o
       JOIN agg ag ON ag.leaf_id = o.id
       CROSS JOIN LATERAL (
@@ -3011,7 +3013,7 @@ export class DatabaseStorage implements IStorage {
           o.address,
           o.latitude,
           o.longitude,
-          o.hierarchy_level AS "hierarchyLevel"
+          ${objectOwnMetadataTextValueSqlFor("Anläggningstyp", sql.raw("o.id"))} AS "hierarchyLevel"
         FROM objects o
         WHERE (${primaryPayerCustomerIdSqlFor(sql.raw('o.id'))} = ${customerId})
           AND o.tenant_id = ${tenantId}
@@ -3158,21 +3160,25 @@ export class DatabaseStorage implements IStorage {
     return created;
   }
 
-  // Task #1484: fire-and-forget-spegling kolumn→metadata när en skrivväg
-  // explicit satte objectType/hierarchyLevel. Rör aldrig manuella metadata-rader.
+  // Task #1486: fire-and-forget-spegling → metadata när en legacy-skrivväg
+  // explicit skickar med objectType/hierarchyLevel. Kolumnerna är rivna (metadata
+  // är enda källan), men skrivvägar (import/portal/kopiering) skickar dem som
+  // extra fält på payloaden så att klassificeringen persisteras TILL metadata via
+  // scheduleClassificationMirror. Rör aldrig manuella metadata-rader.
   private mirrorClassificationBestEffort(
     tenantId: string,
     objectId: string,
     data: Partial<InsertObject>,
   ): void {
-    if (data.objectType === undefined && data.hierarchyLevel === undefined) return;
+    const cls = data as { objectType?: string | null; hierarchyLevel?: string | null };
+    if (cls.objectType === undefined && cls.hierarchyLevel === undefined) return;
     setImmediate(async () => {
       try {
         // Tx-säker uppskjuten spegling — väntar på committad rad, ger upp vid rollback.
         const { scheduleClassificationMirror } = await import('./services/object-classification');
         scheduleClassificationMirror(tenantId, objectId, {
-          objectType: data.objectType ?? null,
-          hierarchyLevel: data.hierarchyLevel ?? null,
+          objectType: cls.objectType ?? null,
+          hierarchyLevel: cls.hierarchyLevel ?? null,
         });
       } catch (err) {
         console.error(`[storage] classification mirror failed object=${objectId}:`, err);
@@ -4804,13 +4810,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   /**
-   * Hämta artiklar som är applicerbara för ett specifikt objekt baserat på hookLevel (Traivo fasthakning)
-   *
-   * Fasthakning-logik:
-   * - Artikeln matchar om objektets nivå/typ EXAKT motsvarar artikelns hookLevel
-   * - hookConditions kan användas för ytterligare filtrering (t.ex. container_type)
-   * - "kod"-hook matchar objekt med accessCode satt
-   *
+   * Artiklar som är applicerbara för ett objekt via fasthakningsregler.
    * Hook-nivåer:
    * - koncern: Endast objekt på koncern-nivå (hierarchyLevel=koncern)
    * - brf: Endast BRF-objekt (hierarchyLevel=brf)
@@ -4835,15 +4835,14 @@ export class DatabaseStorage implements IStorage {
     // (ej migrerade) faller tillbaka på legacy hookLevel/hookConditions med samma matchare.
     // Etapp 5: åtkomstkod läses ur metadata (systemområdet Åtkomst).
     const atkomstForHook = await getObjectAtkomstFields(objectId, tenantId);
-    // Task #1484: klassificering läses metadata-först (Objekttyp/Anläggningstyp)
-    // med kolumn-fallback under expand-fasen. Metadatat hämtas därför alltid för
-    // detta enskilda objekt (behövs nu även utan metadata-villkor på artiklarna).
+    // Task #1486: klassificering läses ENBART ur metadata (Objekttyp/Anläggningstyp).
+    // Metadatat hämtas därför alltid för detta enskilda objekt (behövs nu även
+    // utan metadata-villkor på artiklarna).
     const objMeta = await getObjectWithAllMetadata(objectId, tenantId);
     const { getObjectHookClassification } = await import('./services/object-classification');
     const klassificering = await getObjectHookClassification(
       tenantId,
       objectId,
-      { objectType: object.objectType, hierarchyLevel: object.hierarchyLevel },
       objMeta,
     );
     const hookCtx: HookObjectContext = {
@@ -6110,7 +6109,7 @@ export class DatabaseStorage implements IStorage {
     return { recalculated: workOrderIds.length, changed: totalChanged };
   }
 
-  // ============== VEHICLES ==============
+  // ====== VEHICLES ======
   async getVehicles(tenantId: string): Promise<Vehicle[]> {
     return db.select().from(vehicles).where(and(eq(vehicles.tenantId, tenantId), isNull(vehicles.deletedAt)));
   }
@@ -6134,7 +6133,7 @@ export class DatabaseStorage implements IStorage {
     await db.update(vehicles).set({ deletedAt: new Date() }).where(eq(vehicles.id, id));
   }
 
-  // ============== EQUIPMENT ==============
+  // ====== EQUIPMENT ======
   async getEquipment(tenantId: string): Promise<Equipment[]> {
     return db.select().from(equipment).where(and(eq(equipment.tenantId, tenantId), isNull(equipment.deletedAt)));
   }
@@ -6158,7 +6157,7 @@ export class DatabaseStorage implements IStorage {
     await db.update(equipment).set({ deletedAt: new Date() }).where(eq(equipment.id, id));
   }
 
-  // ============== RESOURCE VEHICLES ==============
+  // ====== RESOURCE VEHICLES ======
   async getResourceVehicles(resourceId: string): Promise<ResourceVehicle[]> {
     return db.select().from(resourceVehicles).where(eq(resourceVehicles.resourceId, resourceId));
   }
@@ -6187,7 +6186,7 @@ export class DatabaseStorage implements IStorage {
     await db.delete(resourceVehicles).where(eq(resourceVehicles.id, id));
   }
 
-  // ============== RESOURCE EQUIPMENT ==============
+  // ====== RESOURCE EQUIPMENT ======
   async getResourceEquipment(resourceId: string): Promise<ResourceEquipment[]> {
     return db.select().from(resourceEquipment).where(eq(resourceEquipment.resourceId, resourceId));
   }
@@ -6211,7 +6210,7 @@ export class DatabaseStorage implements IStorage {
     await db.delete(resourceEquipment).where(eq(resourceEquipment.id, id));
   }
 
-  // ============== RESOURCE AVAILABILITY ==============
+  // ====== RESOURCE AVAILABILITY ======
   async getResourceAvailability(resourceId: string): Promise<ResourceAvailability[]> {
     return db.select().from(resourceAvailability).where(eq(resourceAvailability.resourceId, resourceId));
   }
@@ -6239,7 +6238,7 @@ export class DatabaseStorage implements IStorage {
     return db.select().from(resourceAvailability).where(eq(resourceAvailability.tenantId, tenantId));
   }
 
-  // ============== VEHICLE SCHEDULE ==============
+  // ====== VEHICLE SCHEDULE ======
   async getVehicleSchedule(vehicleId: string): Promise<VehicleSchedule[]> {
     return db.select().from(vehicleSchedule).where(eq(vehicleSchedule.vehicleId, vehicleId));
   }
@@ -6267,7 +6266,7 @@ export class DatabaseStorage implements IStorage {
     return db.select().from(vehicleSchedule).where(eq(vehicleSchedule.tenantId, tenantId));
   }
 
-  // ============== PLANNING DECISION LOG ==============
+  // ====== PLANNING DECISION LOG ======
   async createPlanningDecisionLog(log: {
     tenantId: string;
     userId?: string;
@@ -6282,7 +6281,7 @@ export class DatabaseStorage implements IStorage {
     await db.insert(planningDecisionLog).values(log);
   }
 
-  // ============== SUBSCRIPTIONS ==============
+  // ====== SUBSCRIPTIONS ======
   async getSubscriptions(tenantId: string): Promise<Subscription[]> {
     return db.select().from(subscriptions).where(and(eq(subscriptions.tenantId, tenantId), isNull(subscriptions.deletedAt)));
   }
@@ -6306,7 +6305,7 @@ export class DatabaseStorage implements IStorage {
     await db.update(subscriptions).set({ deletedAt: new Date() }).where(eq(subscriptions.id, id));
   }
 
-  // ============== TEAMS ==============
+  // ====== TEAMS ======
   async getTeams(tenantId: string): Promise<Team[]> {
     return db.select().from(teams).where(and(eq(teams.tenantId, tenantId), isNull(teams.deletedAt)));
   }
@@ -6410,7 +6409,7 @@ export class DatabaseStorage implements IStorage {
     if (team?.tenantId) invalidateTeamInferenceCache(team.tenantId);
   }
 
-  // ============== TEAM MEMBERS ==============
+  // ====== TEAM MEMBERS ======
   async getAllTeamMembers(tenantId: string): Promise<TeamMember[]> {
     return db.select().from(teamMembers)
       .innerJoin(teams, eq(teamMembers.teamId, teams.id))
@@ -6665,7 +6664,7 @@ export class DatabaseStorage implements IStorage {
     if (tenantId) invalidateTeamInferenceCache(tenantId);
   }
 
-  // ============== PLANNING PARAMETERS ==============
+  // ====== PLANNING PARAMETERS ======
   async getPlanningParameters(tenantId: string): Promise<PlanningParameter[]> {
     return db.select().from(planningParameters).where(eq(planningParameters.tenantId, tenantId));
   }
@@ -7228,9 +7227,9 @@ export class DatabaseStorage implements IStorage {
       .orderBy(fortnoxExportLogEntries.createdAt);
   }
 
-  // ============================================
+  // ======
   // Manual Invoice Lines
-  // ============================================
+  // ======
 
   async getManualInvoiceLines(tenantId: string, customerId?: string, status?: string): Promise<ManualInvoiceLine[]> {
     const conditions = [eq(manualInvoiceLines.tenantId, tenantId)];
@@ -7266,9 +7265,9 @@ export class DatabaseStorage implements IStorage {
       .where(and(eq(manualInvoiceLines.id, id), eq(manualInvoiceLines.tenantId, tenantId)));
   }
 
-  // ============================================
+  // ======
   // Task Desired Timewindows
-  // ============================================
+  // ======
   
   async getAllTaskTimewindows(tenantId: string): Promise<TaskDesiredTimewindow[]> {
     return db.select().from(taskDesiredTimewindows)
@@ -7325,9 +7324,9 @@ export class DatabaseStorage implements IStorage {
     ));
   }
 
-  // ============================================
+  // ======
   // Task Dependencies
-  // ============================================
+  // ======
   
   async getTaskDependencies(workOrderId: string): Promise<TaskDependency[]> {
     return db.select().from(taskDependencies)
@@ -7387,9 +7386,9 @@ export class DatabaseStorage implements IStorage {
     ));
   }
 
-  // ============================================
+  // ======
   // Task Information
-  // ============================================
+  // ======
   
   async getTaskInformation(workOrderId: string): Promise<TaskInformation[]> {
     return db.select().from(taskInformation)
@@ -7421,13 +7420,13 @@ export class DatabaseStorage implements IStorage {
     ));
   }
 
-  // ============================================
+  // ======
   // Object Time Restrictions (C9)
-  // ============================================
+  // ======
 
-  // ============================================
+  // ======
   // Structural Articles
-  // ============================================
+  // ======
   
   async getStructuralArticles(tenantId: string): Promise<StructuralArticle[]> {
     return db.select().from(structuralArticles)
@@ -7464,9 +7463,9 @@ export class DatabaseStorage implements IStorage {
     ));
   }
 
-  // ============================================
+  // ======
   // Order Concepts
-  // ============================================
+  // ======
   
   async getOrderConcepts(tenantId: string): Promise<OrderConcept[]> {
     return db.select().from(orderConcepts)
@@ -7512,9 +7511,9 @@ export class DatabaseStorage implements IStorage {
       ));
   }
 
-  // ============================================
+  // ======
   // Concept Filters
-  // ============================================
+  // ======
   
   async getConceptFilters(orderConceptId: string): Promise<ConceptFilter[]> {
     return db.select().from(conceptFilters)
@@ -7545,9 +7544,9 @@ export class DatabaseStorage implements IStorage {
     ));
   }
 
-  // ============================================
+  // ======
   // ADR v3 (F3): Planner Search Filters
-  // ============================================
+  // ======
   async getPlannerSearchFilters(tenantId: string, userId?: string): Promise<PlannerSearchFilter[]> {
     const visibility = userId
       ? or(
@@ -7584,9 +7583,9 @@ export class DatabaseStorage implements IStorage {
       .where(and(eq(plannerSearchFilters.id, id), eq(plannerSearchFilters.tenantId, tenantId)));
   }
 
-  // ============================================
+  // ======
   // ADR v3 (F4): Article Components (BOM)
-  // ============================================
+  // ======
   async getArticleComponents(parentArticleId: string, tenantId: string): Promise<ArticleComponent[]> {
     return db.select().from(articleComponents)
       .where(and(
@@ -7620,9 +7619,9 @@ export class DatabaseStorage implements IStorage {
       .where(and(eq(articleComponents.id, id), eq(articleComponents.tenantId, tenantId)));
   }
 
-  // ============================================
+  // ======
   // Session 11 (Register 5): Leverantörsregister
-  // ============================================
+  // ======
   async getSuppliers(tenantId: string, opts?: { includeDeleted?: boolean }): Promise<Supplier[]> {
     return db.select().from(suppliers)
       .where(opts?.includeDeleted
@@ -7713,9 +7712,9 @@ export class DatabaseStorage implements IStorage {
       .where(and(eq(supplierArticleLinks.id, id), eq(supplierArticleLinks.tenantId, tenantId)));
   }
 
-  // ============================================
+  // ======
   // ADR v3 (F6): Index-justering pa prislista
-  // ============================================
+  // ======
   async applyIndexAdjustmentToPriceList(
     priceListId: string,
     tenantId: string,
@@ -7748,9 +7747,9 @@ export class DatabaseStorage implements IStorage {
     return { priceListId, percentage, updatedArticles: updated, indexDate };
   }
 
-  // ============================================
+  // ======
   // ADR v3 (F5): Frozen WO snapshot + Recalculation Log
-  // ============================================
+  // ======
   async freezeWorkOrder(
     workOrderId: string,
     tenantId: string,
@@ -7828,9 +7827,9 @@ export class DatabaseStorage implements IStorage {
     return { workOrderId, frozenUnit, frozenQuantity, frozenUnitPrice, frozenUnitCost, frozenUnitTime, frozenAt, alreadyFrozen };
   }
 
-  // ============================================
+  // ======
   // ADR v3 §2.3 (Task #556): Fakturamottagare med arv + konfliktresolver
-  // ============================================
+  // ======
   async getInvoiceRecipients(tenantId: string, customerId: string): Promise<InvoiceRecipient[]> {
     return db.select().from(invoiceRecipients).where(and(
       eq(invoiceRecipients.tenantId, tenantId),
@@ -8028,9 +8027,9 @@ export class DatabaseStorage implements IStorage {
     return row;
   }
 
-  // ============================================
+  // ======
   // Assignments
-  // ============================================
+  // ======
   
   async getAssignments(tenantId: string, options?: { 
     status?: string; 
@@ -8115,9 +8114,9 @@ export class DatabaseStorage implements IStorage {
     invalidateWorkflowCaches(tenantId);
   }
 
-  // ============================================
+  // ======
   // Assignment Articles
-  // ============================================
+  // ======
   
   async getAssignmentArticles(assignmentId: string): Promise<AssignmentArticle[]> {
     return db.select().from(assignmentArticles)
@@ -8158,9 +8157,9 @@ export class DatabaseStorage implements IStorage {
     ));
   }
 
-  // ============================================
+  // ======
   // Subscription Changes
-  // ============================================
+  // ======
   
   async getSubscriptionChanges(tenantId: string, conceptId?: string, status?: string): Promise<SubscriptionChange[]> {
     const conditions = [eq(subscriptionChanges.tenantId, tenantId)];
@@ -8186,9 +8185,9 @@ export class DatabaseStorage implements IStorage {
     return result || undefined;
   }
 
-  // ============================================
+  // ======
   // Task Dependency Templates
-  // ============================================
+  // ======
 
   async getTaskDependencyTemplates(tenantId: string, articleId?: string): Promise<TaskDependencyTemplate[]> {
     const conditions = [eq(taskDependencyTemplates.tenantId, tenantId)];
@@ -8221,9 +8220,9 @@ export class DatabaseStorage implements IStorage {
     ));
   }
 
-  // ============================================
+  // ======
   // Task Dependency Instances
-  // ============================================
+  // ======
 
   async getTaskDependencyInstances(tenantId: string, parentWorkOrderId?: string): Promise<TaskDependencyInstance[]> {
     const conditions = [eq(taskDependencyInstances.tenantId, tenantId)];
@@ -8244,9 +8243,9 @@ export class DatabaseStorage implements IStorage {
     return result || undefined;
   }
 
-  // ============================================
+  // ======
   // Invoice Rules
-  // ============================================
+  // ======
 
   async getInvoiceRules(tenantId: string, orderConceptId?: string): Promise<InvoiceRule[]> {
     const conditions = [eq(invoiceRules.tenantId, tenantId)];
@@ -8279,9 +8278,9 @@ export class DatabaseStorage implements IStorage {
     ));
   }
 
-  // ============================================
+  // ======
   // Order Concept Run Logs
-  // ============================================
+  // ======
 
   async getOrderConceptRunLogs(tenantId: string, orderConceptId?: string): Promise<OrderConceptRunLog[]> {
     const conditions = [eq(orderConceptRunLogs.tenantId, tenantId)];
@@ -8294,9 +8293,9 @@ export class DatabaseStorage implements IStorage {
     return result;
   }
 
-  // ============================================
+  // ======
   // Order Concept Wizard - Objects
-  // ============================================
+  // ======
 
   async getOrderConceptObjects(orderConceptId: string): Promise<OrderConceptObject[]> {
     return db.select().from(orderConceptObjects)
@@ -8316,9 +8315,9 @@ export class DatabaseStorage implements IStorage {
     ));
   }
 
-  // ============================================
+  // ======
   // Order Concept Wizard - Articles
-  // ============================================
+  // ======
 
   async getOrderConceptArticles(orderConceptId: string): Promise<OrderConceptArticle[]> {
     return db.select().from(orderConceptArticles)
@@ -8353,9 +8352,9 @@ export class DatabaseStorage implements IStorage {
     return result;
   }
 
-  // ============================================
+  // ======
   // Order Concept Wizard - Article-Object Mappings
-  // ============================================
+  // ======
 
   async getArticleObjectMappings(orderConceptId: string): Promise<ArticleObjectMapping[]> {
     const conceptArticleIds = await db.select({ id: orderConceptArticles.id })
@@ -8380,9 +8379,9 @@ export class DatabaseStorage implements IStorage {
       .where(inArray(articleObjectMappings.orderConceptArticleId, conceptArticleIds.map(a => a.id)));
   }
 
-  // ============================================
+  // ======
   // Order Concept Wizard - Invoice Configuration
-  // ============================================
+  // ======
 
   async getInvoiceConfiguration(orderConceptId: string): Promise<InvoiceConfiguration | undefined> {
     const [result] = await db.select().from(invoiceConfigurations)
@@ -8403,9 +8402,9 @@ export class DatabaseStorage implements IStorage {
     return result;
   }
 
-  // ============================================
+  // ======
   // Order Concept Wizard - Document Configurations
-  // ============================================
+  // ======
 
   async getDocumentConfigurations(orderConceptId: string): Promise<DocumentConfiguration[]> {
     return db.select().from(documentConfigurations)
@@ -8418,9 +8417,9 @@ export class DatabaseStorage implements IStorage {
     return db.insert(documentConfigurations).values(configs).returning();
   }
 
-  // ============================================
+  // ======
   // Order Concept Wizard - Delivery Schedules
-  // ============================================
+  // ======
 
   async getDeliverySchedules(orderConceptId: string): Promise<DeliverySchedule[]> {
     return db.select().from(deliverySchedules)
@@ -8433,9 +8432,9 @@ export class DatabaseStorage implements IStorage {
     return db.insert(deliverySchedules).values(schedules).returning();
   }
 
-  // ============================================
+  // ======
   // Customer Portal Tokens
-  // ============================================
+  // ======
   
   async createPortalToken(token: InsertCustomerPortalToken): Promise<CustomerPortalToken> {
     const [result] = await db.insert(customerPortalTokens).values(token).returning();
@@ -8486,9 +8485,9 @@ export class DatabaseStorage implements IStorage {
     return linked || undefined;
   }
 
-  // ============================================
+  // ======
   // Customer Portal Sessions
-  // ============================================
+  // ======
   
   async createPortalSession(session: InsertCustomerPortalSession): Promise<CustomerPortalSession> {
     const [result] = await db.insert(customerPortalSessions).values(session).returning();
@@ -8515,9 +8514,9 @@ export class DatabaseStorage implements IStorage {
       .where(eq(customerPortalSessions.id, id));
   }
 
-  // ============================================
+  // ======
   // Portal Users (per-objekt-scope)
-  // ============================================
+  // ======
   async upsertPortalUser(data: InsertPortalUser): Promise<PortalUser> {
     const normalizedEmail = data.email.trim().toLowerCase();
     const existing = await this.getPortalUserByEmail(data.tenantId, data.customerId, normalizedEmail);
@@ -8619,9 +8618,9 @@ export class DatabaseStorage implements IStorage {
     return set;
   }
 
-  // ============================================
+  // ======
   // Customer Booking Requests
-  // ============================================
+  // ======
   
   async getBookingRequests(tenantId: string, customerId?: string): Promise<CustomerBookingRequest[]> {
     if (customerId) {
@@ -8669,9 +8668,9 @@ export class DatabaseStorage implements IStorage {
       .orderBy(desc(workOrders.scheduledDate));
   }
 
-  // ============================================
+  // ======
   // Customer Portal Messages (Legacy)
-  // ============================================
+  // ======
   
   async getLegacyPortalMessages(tenantId: string, customerId: string): Promise<CustomerPortalMessage[]> {
     return db.select().from(customerPortalMessages)
@@ -8750,9 +8749,9 @@ export class DatabaseStorage implements IStorage {
       ));
   }
 
-  // ============================================
+  // ======
   // CUSTOMER PORTAL - INVOICES
-  // ============================================
+  // ======
   
   async getCustomerInvoices(tenantId: string, customerId: string): Promise<CustomerInvoice[]> {
     return db.select().from(customerInvoices)
@@ -8768,9 +8767,9 @@ export class DatabaseStorage implements IStorage {
     return result;
   }
 
-  // ============================================
+  // ======
   // CUSTOMER PORTAL - ISSUE REPORTS
-  // ============================================
+  // ======
   
   async getCustomerIssueReports(tenantId: string, customerId: string): Promise<CustomerIssueReport[]> {
     return db.select().from(customerIssueReports)
@@ -8797,9 +8796,9 @@ export class DatabaseStorage implements IStorage {
     return result;
   }
 
-  // ============================================
+  // ======
   // CUSTOMER PORTAL - SERVICE CONTRACTS
-  // ============================================
+  // ======
   
   async getCustomerServiceContracts(tenantId: string, customerId: string): Promise<CustomerServiceContract[]> {
     return db.select().from(customerServiceContracts)
@@ -8815,9 +8814,9 @@ export class DatabaseStorage implements IStorage {
     return result;
   }
 
-  // ============================================
+  // ======
   // FORTNOX INVOICE → CONTRACT SUGGESTIONS
-  // ============================================
+  // ======
 
   async listFortnoxContractSuggestions(tenantId: string, opts: { status?: string; importBatchId?: string; customerId?: string } = {}): Promise<FortnoxContractSuggestion[]> {
     const conds = [eq(fortnoxContractSuggestions.tenantId, tenantId)];
@@ -8855,9 +8854,9 @@ export class DatabaseStorage implements IStorage {
     return result.length;
   }
 
-  // ============================================
+  // ======
   // CUSTOMER PORTAL - NOTIFICATION SETTINGS
-  // ============================================
+  // ======
   
   async getCustomerNotificationSettings(tenantId: string, customerId: string): Promise<CustomerNotificationSettings | undefined> {
     const [result] = await db.select().from(customerNotificationSettings)
@@ -8883,9 +8882,9 @@ export class DatabaseStorage implements IStorage {
     return result;
   }
 
-  // ============================================
+  // ======
   // PROTOCOLS
-  // ============================================
+  // ======
   
   async getProtocols(tenantId: string, options?: { workOrderId?: string; objectId?: string; protocolType?: string; status?: string }): Promise<Protocol[]> {
     const conditions = [eq(protocols.tenantId, tenantId)];
@@ -8931,9 +8930,9 @@ export class DatabaseStorage implements IStorage {
       .where(and(eq(protocols.id, id), eq(protocols.tenantId, tenantId)));
   }
 
-  // ============================================
+  // ======
   // DEVIATION REPORTS
-  // ============================================
+  // ======
   
   async getDeviationReports(tenantId: string, options?: { objectId?: string; status?: string; category?: string; severity?: string }): Promise<DeviationReport[]> {
     const conditions = [eq(deviationReports.tenantId, tenantId)];
@@ -8974,9 +8973,9 @@ export class DatabaseStorage implements IStorage {
     return result;
   }
 
-  // ============================================
+  // ======
   // QR CODE LINKS
-  // ============================================
+  // ======
   
   async getQrCodeLinks(tenantId: string, objectId?: string): Promise<QrCodeLink[]> {
     const conditions = [eq(qrCodeLinks.tenantId, tenantId)];
@@ -9026,9 +9025,9 @@ export class DatabaseStorage implements IStorage {
       .where(and(eq(qrCodeLinks.id, id), eq(qrCodeLinks.tenantId, tenantId)));
   }
 
-  // ============================================
+  // ======
   // PUBLIC ISSUE REPORTS
-  // ============================================
+  // ======
   
   async getPublicIssueReports(tenantId: string, options?: { objectId?: string; status?: string }): Promise<PublicIssueReport[]> {
     const conditions = [eq(publicIssueReports.tenantId, tenantId)];
@@ -9061,9 +9060,9 @@ export class DatabaseStorage implements IStorage {
     return result;
   }
 
-  // ============================================
+  // ======
   // METADATA EDITORS ("Metadata Lämnare", Task #956)
-  // ============================================
+  // ======
 
   async getMetadataEditors(tenantId: string, options?: { type?: string; isActive?: boolean }): Promise<MetadataEditor[]> {
     const conditions = [eq(metadataEditors.tenantId, tenantId)];
@@ -9169,9 +9168,9 @@ export class DatabaseStorage implements IStorage {
     return result;
   }
 
-  // ============================================
+  // ======
   // CUSTOMER CHANGE REQUESTS
-  // ============================================
+  // ======
 
   async getCustomerChangeRequests(options: { tenantId: string; customerId?: string; objectId?: string; status?: string; category?: string; dateFrom?: string; dateTo?: string; createdByResourceId?: string; limit?: number; offset?: number }): Promise<{ items: CustomerChangeRequest[]; total: number }> {
     const conditions = [eq(customerChangeRequests.tenantId, options.tenantId)];
@@ -9230,9 +9229,9 @@ export class DatabaseStorage implements IStorage {
     return result;
   }
 
-  // ============================================
+  // ======
   // ENVIRONMENTAL DATA
-  // ============================================
+  // ======
   
   async getEnvironmentalData(tenantId: string, options?: { workOrderId?: string; resourceId?: string; startDate?: Date; endDate?: Date }): Promise<EnvironmentalData[]> {
     const conditions = [eq(environmentalData.tenantId, tenantId)];
@@ -9670,7 +9669,7 @@ export class DatabaseStorage implements IStorage {
     return result;
   }
 
-  // ============== FUEL LOGS ==============
+  // ====== FUEL LOGS ======
   async getFuelLogs(tenantId: string, vehicleId?: string): Promise<FuelLog[]> {
     const conditions = [eq(fuelLogs.tenantId, tenantId)];
     if (vehicleId) conditions.push(eq(fuelLogs.vehicleId, vehicleId));
@@ -9686,7 +9685,7 @@ export class DatabaseStorage implements IStorage {
     await db.delete(fuelLogs).where(and(eq(fuelLogs.id, id), eq(fuelLogs.tenantId, tenantId)));
   }
 
-  // ============== MAINTENANCE LOGS ==============
+  // ====== MAINTENANCE LOGS ======
   async getMaintenanceLogs(tenantId: string, vehicleId?: string): Promise<MaintenanceLog[]> {
     const conditions = [eq(maintenanceLogs.tenantId, tenantId)];
     if (vehicleId) conditions.push(eq(maintenanceLogs.vehicleId, vehicleId));
@@ -9702,7 +9701,7 @@ export class DatabaseStorage implements IStorage {
     await db.delete(maintenanceLogs).where(and(eq(maintenanceLogs.id, id), eq(maintenanceLogs.tenantId, tenantId)));
   }
 
-  // ============== OBJECT PARENTS (multi-parent relationships) ==============
+  // ====== OBJECT PARENTS (multi-parent relationships) ======
   async getObjectParents(objectId: string): Promise<ObjectParent[]> {
     return db.select().from(objectParents).where(eq(objectParents.objectId, objectId)).orderBy(desc(objectParents.isPrimary), objectParents.createdAt);
   }
@@ -10259,7 +10258,7 @@ export class DatabaseStorage implements IStorage {
     return { avgRating, totalCount, byCategory, byResource, ratingDistribution, byDay };
   }
 
-  // ============== Task #785: Veckoplanering – datafundament ==============
+  // ====== Task #785: Veckoplanering – datafundament ======
   // Geografiska distrikt
   async getGeographicDistricts(tenantId: string): Promise<GeographicDistrict[]> {
     return db.select().from(geographicDistricts)
@@ -10290,7 +10289,7 @@ export class DatabaseStorage implements IStorage {
       .where(and(eq(geographicDistricts.id, id), eq(geographicDistricts.tenantId, tenantId)));
   }
 
-  // ============== Task #1240: Delad filtermotor — sparade filter ==============
+  // ====== Task #1240: Delad filtermotor — sparade filter ======
   // Synliga för en användare inom en yta: egna filter + delade filter (isShared)
   // vars roles-lista är tom eller innehåller inget krav (rollfiltrering görs av
   // anropande route utifrån den inloggades roll, se filterRoutes.ts).
@@ -10955,9 +10954,9 @@ export class DatabaseStorage implements IStorage {
   }
 }
 
-// ============================================
+// ======
 // ADR v3 §2.5 (Task #558): Konsoliderings-policy CRUD
-// ============================================
+// ======
 interface InvoiceConsolidationPolicyProto {
   listInvoiceConsolidationPolicies(
     tenantId: string,

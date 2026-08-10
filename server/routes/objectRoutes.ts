@@ -31,6 +31,7 @@ import {
 } from "../services/object-system-metadata";
 import { createMetadata, updateMetadata, deleteMetadataGuarded, softDeleteObjectMetadata, getPrimaryChainObjectIds, resolveQuickFieldConfig } from "../metadata-queries";
 import { getObjectInfoPackageTree } from "../services/object-info-package-tree";
+import { getClassificationForObjects, scheduleClassificationMirror } from "../services/object-classification";
 import { metadataKatalog, metadataVarden, objectHeaderConfigs, objectQuickFieldConfigs } from "@shared/schema";
 import { getMapProvider } from "../services/mapProvider";
 import { syncObjectGeoFields } from "../services/geo-field-sync";
@@ -226,6 +227,9 @@ app.post("/api/objects/geocoded", asyncHandler(async (req, res) => {
 
   const withEntrance = matched.filter(o => o.entranceLatitude && o.entranceLongitude).length;
 
+  // Klassificering (Objekttyp) läses ur metadata — kolumnen finns inte längre.
+  const geoClassification = await getClassificationForObjects(tenantId, filtered.map(o => o.id));
+
   res.json({
     totalGeocoded: geocoded.length,
     filteredCount: matched.length,
@@ -241,7 +245,7 @@ app.post("/api/objects/geocoded", asyncHandler(async (req, res) => {
       longitude: o.longitude,
       entranceLatitude: o.entranceLatitude,
       entranceLongitude: o.entranceLongitude,
-      objectType: o.objectType,
+      objectType: geoClassification.get(o.id)?.objectType ?? null,
     })),
   });
 }));
@@ -1466,34 +1470,26 @@ app.post("/api/objects/derive-hierarchy", asyncHandler(async (req, res) => {
     subtreeDepth.set(id, max);
     return max;
   };
-  const depthToLevel = (d: number) => {
-    if (d === 0) return { hierarchyLevel: "karl", objectLevel: 5, objectType: "karl" };
-    if (d === 1) return { hierarchyLevel: "rum", objectLevel: 4, objectType: "rum" };
-    if (d === 2) return { hierarchyLevel: "fastighet", objectLevel: 3, objectType: "fastighet" };
-    if (d === 3) return { hierarchyLevel: "brf", objectLevel: 2, objectType: "organizational" };
-    return { hierarchyLevel: "koncern", objectLevel: 1, objectType: "organizational" };
+  // objectLevel (numerisk) har ingen metadata-motsvarighet och är borttagen [D].
+  const depthToLevel = (d: number): { hierarchyLevel: string; objectType: string } => {
+    if (d === 0) return { hierarchyLevel: "karl", objectType: "karl" };
+    if (d === 1) return { hierarchyLevel: "rum", objectType: "rum" };
+    if (d === 2) return { hierarchyLevel: "fastighet", objectType: "fastighet" };
+    if (d === 3) return { hierarchyLevel: "brf", objectType: "organizational" };
+    return { hierarchyLevel: "koncern", objectType: "organizational" };
   };
 
   let updated = 0;
   for (const obj of all) {
     if (!scopeIds.has(obj.id)) continue;
     const target = depthToLevel(computeSubtreeDepth(obj.id));
-    if (
-      obj.hierarchyLevel !== target.hierarchyLevel ||
-      obj.objectType !== target.objectType ||
-      obj.objectLevel !== target.objectLevel
-    ) {
-      try {
-        await storage.updateObject(obj.id, {
-          hierarchyLevel: target.hierarchyLevel,
-          objectLevel: target.objectLevel,
-          objectType: target.objectType,
-        } as any);
-        updated++;
-      } catch (err) {
-        console.error("[derive-hierarchy] update failed:", obj.id, err);
-      }
-    }
+    // Klassificering speglas till metadata (kolumnerna finns inte längre). Speglingen
+    // är idempotent — den konvergerar auto-rader och rör aldrig manuella/tombstonade.
+    scheduleClassificationMirror(tenantId, obj.id, {
+      hierarchyLevel: target.hierarchyLevel,
+      objectType: target.objectType,
+    });
+    updated++;
   }
   res.json({ scanned: scope.length, updated });
 }));
@@ -1628,15 +1624,16 @@ app.post("/api/objects/import-modus", asyncHandler(async (req, res) => {
       longitude: typeof row.longitude === "number" ? row.longitude : null,
     };
 
-    const mapModusType = (raw: string | null | undefined): { hierarchyLevel: string; objectLevel: number; objectType: string } => {
+    // objectLevel (numerisk) har ingen metadata-motsvarighet och är borttagen [D].
+    const mapModusType = (raw: string | null | undefined): { hierarchyLevel: string; objectType: string } => {
       const t = (raw ?? "").trim().toLowerCase();
-      if (t.includes("koncern")) return { hierarchyLevel: "koncern", objectLevel: 1, objectType: "organizational" };
-      if (t.includes("brf")) return { hierarchyLevel: "brf", objectLevel: 2, objectType: "organizational" };
-      if (t === "rum" || t.includes("soprum") || t.includes("kök") || t.includes("kok")) return { hierarchyLevel: "rum", objectLevel: 4, objectType: "rum" };
-      if (t.includes("kärl") || t.includes("karl") || t.includes("behållare") || t.includes("behallare") || t.includes("container")) return { hierarchyLevel: "karl", objectLevel: 5, objectType: "karl" };
-      if (t.includes("fastighet") || t.includes("byggnad") || t.includes("hus")) return { hierarchyLevel: "fastighet", objectLevel: 3, objectType: "fastighet" };
-      if (t === "objekt") return { hierarchyLevel: "objekt", objectLevel: 3, objectType: "physical" };
-      return { hierarchyLevel: "fastighet", objectLevel: 3, objectType: "fastighet" };
+      if (t.includes("koncern")) return { hierarchyLevel: "koncern", objectType: "organizational" };
+      if (t.includes("brf")) return { hierarchyLevel: "brf", objectType: "organizational" };
+      if (t === "rum" || t.includes("soprum") || t.includes("kök") || t.includes("kok")) return { hierarchyLevel: "rum", objectType: "rum" };
+      if (t.includes("kärl") || t.includes("karl") || t.includes("behållare") || t.includes("behallare") || t.includes("container")) return { hierarchyLevel: "karl", objectType: "karl" };
+      if (t.includes("fastighet") || t.includes("byggnad") || t.includes("hus")) return { hierarchyLevel: "fastighet", objectType: "fastighet" };
+      if (t === "objekt") return { hierarchyLevel: "objekt", objectType: "physical" };
+      return { hierarchyLevel: "fastighet", objectType: "fastighet" };
     };
     const typeMap = mapModusType(row.type);
 
@@ -1645,15 +1642,17 @@ app.post("/api/objects/import-modus", asyncHandler(async (req, res) => {
         const created = await storage.createObject({
           tenantId,
           customerId: outcome.customerId,
-          objectType: typeMap.objectType,
-          hierarchyLevel: typeMap.hierarchyLevel,
-          objectLevel: typeMap.objectLevel,
           status: "active",
           accessType: "open",
           importBatchId,
           ...basePayload,
         } as any);
         if (created?.city) invalidateAreaSearchCityCache(tenantId);
+        // Klassificering speglas till metadata (kolumnerna finns inte längre).
+        scheduleClassificationMirror(tenantId, created.id, {
+          objectType: typeMap.objectType,
+          hierarchyLevel: typeMap.hierarchyLevel,
+        });
         modusIdToObjectId.set(row.modusId, created.id);
         createdCount++;
       } else {
@@ -1661,10 +1660,12 @@ app.post("/api/objects/import-modus", asyncHandler(async (req, res) => {
         await storage.updateObject(existingObj.id, {
           ...basePayload,
           customerId: outcome.customerId,
+        } as any);
+        // Klassificering speglas till metadata (kolumnerna finns inte längre).
+        scheduleClassificationMirror(tenantId, existingObj.id, {
           objectType: typeMap.objectType,
           hierarchyLevel: typeMap.hierarchyLevel,
-          objectLevel: typeMap.objectLevel,
-        } as any);
+        });
         modusIdToObjectId.set(row.modusId, existingObj.id);
         updatedCount++;
       }
@@ -1771,33 +1772,25 @@ app.post("/api/objects/import-modus", asyncHandler(async (req, res) => {
       subtreeDepth.set(id, max);
       return max;
     };
-    const depthToLevel = (d: number): { hierarchyLevel: string; objectLevel: number; objectType: string } => {
-      if (d === 0) return { hierarchyLevel: "karl", objectLevel: 5, objectType: "karl" };
-      if (d === 1) return { hierarchyLevel: "rum", objectLevel: 4, objectType: "rum" };
-      if (d === 2) return { hierarchyLevel: "fastighet", objectLevel: 3, objectType: "fastighet" };
-      if (d === 3) return { hierarchyLevel: "brf", objectLevel: 2, objectType: "organizational" };
-      return { hierarchyLevel: "koncern", objectLevel: 1, objectType: "organizational" };
+    // objectLevel (numerisk) har ingen metadata-motsvarighet och är borttagen [D].
+    const depthToLevel = (d: number): { hierarchyLevel: string; objectType: string } => {
+      if (d === 0) return { hierarchyLevel: "karl", objectType: "karl" };
+      if (d === 1) return { hierarchyLevel: "rum", objectType: "rum" };
+      if (d === 2) return { hierarchyLevel: "fastighet", objectType: "fastighet" };
+      if (d === 3) return { hierarchyLevel: "brf", objectType: "organizational" };
+      return { hierarchyLevel: "koncern", objectType: "organizational" };
     };
     for (const obj of refreshed) {
       if (!importedIds.has(obj.id)) continue;
       const d = computeSubtreeDepth(obj.id);
       const target = depthToLevel(d);
-      if (
-        obj.hierarchyLevel !== target.hierarchyLevel ||
-        obj.objectType !== target.objectType ||
-        obj.objectLevel !== target.objectLevel
-      ) {
-        try {
-          await storage.updateObject(obj.id, {
-            hierarchyLevel: target.hierarchyLevel,
-            objectLevel: target.objectLevel,
-            objectType: target.objectType,
-          } as any);
-          hierarchyUpdated++;
-        } catch (err) {
-          console.error("[modus-import] hierarchy update failed:", obj.id, err);
-        }
-      }
+      // Klassificering speglas till metadata (kolumnerna finns inte längre). Speglingen
+      // är idempotent — konvergerar auto-rader, rör aldrig manuella/tombstonade.
+      scheduleClassificationMirror(tenantId, obj.id, {
+        hierarchyLevel: target.hierarchyLevel,
+        objectType: target.objectType,
+      });
+      hierarchyUpdated++;
     }
   } catch (err) {
     console.error("[modus-import] hierarchy derivation failed:", err);

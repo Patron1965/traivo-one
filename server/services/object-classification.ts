@@ -1,24 +1,18 @@
-// ============================================================================
-// OBJEKT-KLASSIFICERING (Task #1484) — objekttyp/nivå som metadata (expand-fas).
+// ======
+// OBJEKT-KLASSIFICERING — objekttyp/nivå som metadata (contract-fas, Task #1486).
 // ----------------------------------------------------------------------------
-// Kanonisk modell (samma mönster som geo-field-sync): metadata_varden är KÄLLAN
-// för objektets klassificering (Objekttyp/Anläggningstyp i systemområdet
-// Klassificering). Objektkolumnerna objects.objectType/hierarchyLevel är en
-// ENKELRIKTAD CACHE som legacy-läsare (listor, VRP-plumbing, fasthakningens
-// fallback) fortsätter läsa under expand-fasen. Kolumnerna rivs i #1486.
+// Kanonisk modell: metadata_varden är ENDA källan för objektets klassificering
+// (fälten "Objekttyp"/"Anläggningstyp" i systemområdet Klassificering).
+// Legacy-kolumnerna objects.object_type/hierarchy_level/object_level är
+// BORTTAGNA (migration 0151) — det finns ingen kolumncache och ingen fallback.
 //
 // Grundregler:
-//   • PRESENT-VALUE-ONLY: en kolumn skrivs BARA när metadatavärdet är icke-tomt
-//     och skiljer sig. Tomt/saknat metadatavärde nollar ALDRIG en kolumn.
-//   • Spegling kolumn→metadata (legacy-skrivvägar: import, portal, Modus) rör
+//   • Spegling värde→metadata (legacy-skrivvägar: import, portal, Modus) rör
 //     ALDRIG en manuell metadata-rad — bara auto-rader uppdateras/skapas.
-//   • Fasthakningen läser metadata-först (eget värde; arv=false för dessa fält)
-//     med kolumn-fallback → paritet med dagens utfall efter backfill.
-//
-// Loop-säkerhet: metadata→kolumn-synken skriver kolumner via rå db.update (inte
-// storage.updateObject) så ingen ny spegling triggas; spegling kolumn→metadata
-// konvergerar (andra varvet jämför lika och skriver inget).
-// ============================================================================
+//   • Tombstonad egen rad (användaren tog bort värdet) respekteras — speglas ej.
+//   • Klassificering ärvs INTE (arv=false på katalogfälten): endast objektets
+//     EGNA rader räknas.
+// ======
 
 import { db } from "../db";
 import { sql } from "drizzle-orm";
@@ -32,10 +26,10 @@ import {
 export const OBJEKTTYP_FALT = "Objekttyp";
 export const ANLAGGNINGSTYP_FALT = "Anläggningstyp";
 
-// objects-kolumn ↔ katalogfält (lower(namn) = key i SYSTEMOMRADEN_FALT).
+// katalogfält (lower(namn) = key i SYSTEMOMRADEN_FALT) ↔ logisk egenskap.
 const FIELD_MAP = [
-  { key: "objekttyp", namn: OBJEKTTYP_FALT, column: "object_type" as const, prop: "objectType" as const },
-  { key: "anläggningstyp", namn: ANLAGGNINGSTYP_FALT, column: "hierarchy_level" as const, prop: "hierarchyLevel" as const },
+  { key: "objekttyp", namn: OBJEKTTYP_FALT, prop: "objectType" as const },
+  { key: "anläggningstyp", namn: ANLAGGNINGSTYP_FALT, prop: "hierarchyLevel" as const },
 ];
 
 export interface ClassificationValues {
@@ -98,9 +92,10 @@ async function hasTombstonedRow(tenantId: string, objektId: string, katalogId: s
 }
 
 /**
- * Speglar kolumnvärden (från legacy-skrivvägar) till metadata som auto-rader.
- * Skriver ALDRIG över en manuell rad, respekterar tombstones, no-op när
- * katalogfälten saknas. Best-effort — anropas fire-and-forget efter commit.
+ * Skriver klassificeringsvärden (från legacy-skrivvägar som import/portal/Modus)
+ * till metadata som auto-rader. Skriver ALDRIG över en manuell rad, respekterar
+ * tombstones, självläker saknade katalogfält. Best-effort — anropas
+ * fire-and-forget efter commit.
  */
 export async function mirrorClassificationToMetadata(
   tenantId: string,
@@ -153,11 +148,11 @@ export async function mirrorClassificationToMetadata(
 }
 
 /**
- * Tx-säker, uppskjuten spegling: schemalägger mirrorClassificationToMetadata
- * och väntar tills objektraden är COMMITTAD (synlig utanför transaktionen)
- * innan metadata skrivs. Rullas transaktionen tillbaka syns raden aldrig →
- * speglingen ger upp tyst efter maxförsöken. Fire-and-forget; får anropas
- * mitt i en pågående transaktion.
+ * Tx-säker, uppskjuten klassificerings-skrivning: schemalägger
+ * mirrorClassificationToMetadata och väntar tills objektraden är COMMITTAD
+ * (synlig utanför transaktionen) innan metadata skrivs. Rullas transaktionen
+ * tillbaka syns raden aldrig → speglingen ger upp tyst efter maxförsöken.
+ * Fire-and-forget; får anropas mitt i en pågående transaktion.
  */
 export function scheduleClassificationMirror(
   tenantId: string,
@@ -212,133 +207,54 @@ export function resolveClassificationFromMetadata(
 }
 
 /**
- * Metadata→kolumn-synk (cache-materialisering), present-value-only. Anropas från
- * metadata-change-jobs när metadata ändrats. Rå db.update → ingen ny spegling.
- * Returnerar antal objekt vars kolumner uppdaterades.
- */
-export async function syncClassificationColumns(
-  tenantId: string,
-  objectIds: string[],
-): Promise<number> {
-  if (objectIds.length === 0) return 0;
-  const katalog = await resolveKlassificeringKatalog(tenantId);
-  if (katalog.size === 0) return 0;
-
-  let updated = 0;
-  for (const objectId of objectIds) {
-    const sets: string[] = [];
-    const values: ClassificationValues = {};
-    for (const f of FIELD_MAP) {
-      const katalogId = katalog.get(f.key);
-      if (!katalogId) continue;
-      const own = await readOwnRow(tenantId, objectId, katalogId);
-      const value = own?.varde?.trim();
-      if (value) values[f.prop] = value;
-    }
-    if (values.objectType === undefined && values.hierarchyLevel === undefined) continue;
-
-    const res = await db.execute(sql`
-      UPDATE objects SET
-        object_type = COALESCE(${values.objectType ?? null}, object_type),
-        hierarchy_level = COALESCE(${values.hierarchyLevel ?? null}, hierarchy_level)
-      WHERE id = ${objectId} AND tenant_id = ${tenantId}
-        AND (
-          (${values.objectType ?? null}::text IS NOT NULL AND object_type IS DISTINCT FROM ${values.objectType ?? null}) OR
-          (${values.hierarchyLevel ?? null}::text IS NOT NULL AND hierarchy_level IS DISTINCT FROM ${values.hierarchyLevel ?? null})
-        )
-    `);
-    if ((res as any).rowCount > 0) updated++;
-    void sets;
-  }
-  return updated;
-}
-
-/**
- * Fasthakningens klassificeringskontext: metadata-först (eget värde), kolumn-
- * fallback under expand-fasen. objMeta kan skickas in om redan hämtat (perf).
+ * Klassificeringen (Objekttyp/Anläggningstyp) för ETT objekt, metadata-only —
+ * ingen kolumn-fallback (kolumnerna finns inte längre). objMeta kan skickas in
+ * om redan hämtat (perf). Tomma strängar när värde saknas.
  */
 export async function getObjectHookClassification(
   tenantId: string,
   objectId: string,
-  fallback: { objectType?: string | null; hierarchyLevel?: string | null },
   objMeta?: { metadata: Array<any> } | null,
 ): Promise<{ objectType: string; hierarchyLevel: string }> {
   const meta = objMeta !== undefined ? objMeta : await getObjectWithAllMetadata(objectId, tenantId);
   const resolved = resolveClassificationFromMetadata(meta);
   return {
-    objectType: resolved.objectType ?? fallback.objectType ?? "",
-    hierarchyLevel: resolved.hierarchyLevel ?? fallback.hierarchyLevel ?? "",
+    objectType: resolved.objectType ?? "",
+    hierarchyLevel: resolved.hierarchyLevel ?? "",
   };
-}
-
-export interface ClassificationBackfillResult {
-  tenantId: string;
-  scanned: number;
-  created: number;
-  skippedExisting: number;
-  skippedEmpty: number;
-  errors: number;
 }
 
 /**
- * Idempotent backfill: kopierar befintliga kolumnvärden till metadata för alla
- * aktiva objekt som saknar egen (aktiv eller tombstonad) rad. Dry-run default.
- * Present-value-only; skriver aldrig över befintliga rader.
+ * Klassificeringen för MÅNGA objekt i ett svep (list-/filtervägar). Läser bara
+ * objektens EGNA aktiva rader — klassificering ärvs inte. Objekt utan värde
+ * saknas i mappen.
  */
-export async function backfillClassificationMetadata(
+export async function getClassificationForObjects(
   tenantId: string,
-  opts: { dryRun?: boolean } = {},
-): Promise<ClassificationBackfillResult> {
-  const dryRun = opts.dryRun !== false;
-  const result: ClassificationBackfillResult = {
-    tenantId, scanned: 0, created: 0, skippedExisting: 0, skippedEmpty: 0, errors: 0,
-  };
-  const katalog = await resolveKlassificeringKatalog(tenantId);
-  if (katalog.size === 0) return result;
-
-  const objs = (
+  objectIds: string[],
+): Promise<Map<string, { objectType?: string; hierarchyLevel?: string }>> {
+  const out = new Map<string, { objectType?: string; hierarchyLevel?: string }>();
+  if (objectIds.length === 0) return out;
+  const rows = (
     await db.execute(sql`
-      SELECT id, object_type AS "objectType", hierarchy_level AS "hierarchyLevel"
-      FROM objects
-      WHERE tenant_id = ${tenantId} AND deleted_at IS NULL
+      SELECT mv.objekt_id AS "objektId", lower(mk.namn) AS key, mv.varde_string AS varde
+      FROM metadata_varden mv
+      JOIN metadata_katalog mk ON mk.id = mv.metadata_katalog_id
+        AND mk.tenant_id = mv.tenant_id
+        AND mk.deleted_at IS NULL
+        AND lower(mk.namn) IN ('objekttyp', 'anläggningstyp')
+      WHERE mv.tenant_id = ${tenantId}
+        AND mv.objekt_id IN (${sql.join(objectIds.map((id) => sql`${id}`), sql`, `)})
+        AND mv.status = 'aktiv'
+        AND COALESCE(mv.raderad, FALSE) = FALSE
+        AND COALESCE(mv.varde_string, '') <> ''
     `)
-  ).rows as unknown as { id: string; objectType: string | null; hierarchyLevel: string | null }[];
-
-  for (const obj of objs) {
-    result.scanned++;
-    for (const f of FIELD_MAP) {
-      const katalogId = katalog.get(f.key);
-      if (!katalogId) continue;
-      const value = (obj[f.prop] ?? "").trim();
-      if (!value) { result.skippedEmpty++; continue; }
-
-      // Finns NÅGON egen rad (aktiv eller tombstonad) → rör aldrig.
-      const existing = (
-        await db.execute(sql`
-          SELECT 1 FROM metadata_varden
-          WHERE tenant_id = ${tenantId} AND objekt_id = ${obj.id}
-            AND metadata_katalog_id = ${katalogId}
-          LIMIT 1
-        `)
-      ).rows as unknown[];
-      if (existing.length > 0) { result.skippedExisting++; continue; }
-
-      if (dryRun) { result.created++; continue; }
-      try {
-        await createMetadata({
-          tenantId,
-          objektId: obj.id,
-          metadataTypNamn: f.namn,
-          varde: value,
-          metod: "auto",
-          skapadAv: "system",
-        });
-        result.created++;
-      } catch (err) {
-        result.errors++;
-        console.error(`[object-classification] backfill misslyckades objekt=${obj.id} fält=${f.namn}:`, err);
-      }
-    }
+  ).rows as unknown as { objektId: string; key: string; varde: string }[];
+  for (const r of rows) {
+    const entry = out.get(r.objektId) ?? {};
+    if (r.key === "objekttyp" && entry.objectType === undefined) entry.objectType = r.varde;
+    if (r.key === "anläggningstyp" && entry.hierarchyLevel === undefined) entry.hierarchyLevel = r.varde;
+    out.set(r.objektId, entry);
   }
-  return result;
+  return out;
 }

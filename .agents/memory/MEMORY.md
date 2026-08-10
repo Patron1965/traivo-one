@@ -1,3 +1,4 @@
+// hint: Logic changed on both sides. Requires understanding intent of each change.
 - [CSV-export hardening](csv-export-hardening.md) — alla CSV-exporter måste neutralisera formula-injection (prefix `'` på celler som börjar med `= + - @ \t \r`).
 - [Branding/cache headers](branding-cache-headers.md) — mutable per-tenant config-endpoints får ej ha `max-age>0`; använd `no-cache, must-revalidate` + `setQueryData` i mutation onSuccess.
 - [SW + config endpoints](service-worker-stale-config.md) — alla konfig-endpoints måste bypassas i `sw.js` ALWAYS_BYPASS_PREFIXES; bumpa båda CACHE_NAME och API_CACHE_NAME vid varje SW-ändring.
@@ -135,5 +136,5 @@
 - [Clerk reverterad → Replit Auth](auth-clerk-reverted.md) — webbinlogg = Replit Auth + magiska länkar igen (2026-08-10); CLERK_*-secrets kvar men oanvända.
 - [Objektimport strikt matchning](object-import-strict-matching.md) — Import 2.0: bara 3 kärnfält + AKTIVA katalogfält; column_errors blockerar execute; lazy-create endast interna systemfält; arkiverat mål kräver restore-flagga.
 - [allowed_values sväljer importvärden tyst](import-allowed-values-silent-skip.md) — mappad kolumn kan ge 0 metadata_varden; backfill via sparade sessioners raw_rows + interim.
-- [Objektklassificering som metadata](object-classification-metadata.md) — Objekttyp/Anläggningstyp-metadata är källan; objectType/hierarchyLevel-kolumnerna = enkelriktad cache; nya skrivvägar måste spegla.
+- [Objektklassificering som metadata](object-classification-metadata.md) — legacy-kolumnerna DROPPADE; läs via getObjectHookClassification/getClassificationForObjects eller objectOwnMetadataTextValueSql; skriv via mirror.
 - [Lagersaldo concurrency-lås](stock-balance-concurrency.md) — delta-beräknande saldo-writes (reconcile/inventering) måste läsa utgångsvärdet under FOR UPDATE i samma tx, annars dubbelbokning.

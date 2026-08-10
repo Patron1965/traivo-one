@@ -26,6 +26,7 @@ import {
   MetadataDefinition,
 } from "@shared/schema";
 import { primaryPayerCustomerIdSql, getObjectPrimaryCustomerId } from "./services/object-customer";
+import { objectOwnMetadataTextValueSql, objectOwnMetadataTextValueSqlFor } from "./services/object-metadata-sql";
 import { parseCoordinateJson } from "./services/object-location";
 import { OBJEKTMALL_INTERIM_METADATA_FALT } from "@shared/objektmall-template";
 
@@ -1430,10 +1431,22 @@ export async function getObjectWithAllMetadata(
     filteredMetadata = decorated.map((x) => x.m);
   }
 
+  // Task #1486: objectType finns inte längre som objektkolumn — härled ur
+  // objektets EGNA klassificerings-metadata (Objekttyp, source=local, ärvs ej).
+  const ownObjectType = (() => {
+    for (const m of filteredMetadata) {
+      if ((m as any).source && (m as any).source !== "local") continue;
+      if (((m.katalog as any)?.namn ?? "").toLowerCase() !== "objekttyp") continue;
+      const v = typeof m.vardeString === "string" ? m.vardeString.trim() : "";
+      if (v) return v;
+    }
+    return null;
+  })();
+
   return {
     id: objekt.id,
     name: objekt.name,
-    objectType: objekt.objectType,
+    objectType: ownObjectType ?? "",
     parentId: objekt.parentId,
     metadata: filteredMetadata,
   };
@@ -2225,8 +2238,11 @@ export async function resolveQuickFieldConfig(
     rawKatalogIds = winning.ids;
   } else {
     // Fallback: tenant-omfattande objecttyp-default (objectHeaderConfigs).
+    // Task #1486: objekttypen läses ur objektets EGNA metadata (Objekttyp) —
+    // legacy-kolumnen objects.object_type finns inte längre. Uppslags-nyckeln
+    // in i objectHeaderConfigs.objectType (STRING) är oförändrad.
     const [self] = await db
-      .select({ objectType: objects.objectType })
+      .select({ objectType: objectOwnMetadataTextValueSql("Objekttyp") })
       .from(objects)
       .where(and(eq(objects.id, objektId), eq(objects.tenantId, tenantId)))
       .limit(1);
@@ -3514,19 +3530,21 @@ export async function getInheritanceTree(
   metadataKatalogId: string,
   tenantId: string
 ): Promise<InheritanceTreeNode | null> {
+  // Task #1486: objekttypen (typ) härleds ur objektets EGNA metadata (Objekttyp)
+  // i den yttre SELECT:en — legacy-kolumnen object_type finns inte längre.
   const treeQuery = sql`
     WITH RECURSIVE tree AS (
-      SELECT id, name, object_type, parent_id, 0 as level, ARRAY[id] as path
+      SELECT id, name, parent_id, 0 as level, ARRAY[id] as path
       FROM objects
       WHERE id = ${rootId} AND tenant_id = ${tenantId}
       UNION ALL
-      SELECT o.id, o.name, o.object_type, o.parent_id, t.level + 1, t.path || o.id
+      SELECT o.id, o.name, o.parent_id, t.level + 1, t.path || o.id
       FROM objects o
       INNER JOIN tree t ON o.parent_id = t.id
       WHERE o.tenant_id = ${tenantId}
     )
     SELECT 
-      t.id, t.name, t.object_type, t.parent_id, t.level,
+      t.id, t.name, ${objectOwnMetadataTextValueSqlFor("Objekttyp", sql.raw("t.id"))} AS object_type, t.parent_id, t.level,
       mv.id as metadata_id,
       COALESCE(mv.varde_string, CAST(mv.varde_integer AS TEXT), CAST(mv.varde_decimal AS TEXT), CAST(mv.varde_boolean AS TEXT), mv.varde_referens) as varde,
       COALESCE(mv.niva_las, FALSE) as niva_las,
@@ -3850,12 +3868,13 @@ export async function getClusterTree(
   rootId: string,
   tenantId: string
 ): Promise<ClusterTreeNode | null> {
+  // Task #1486: objekttypen (typ) härleds ur objektets EGNA metadata (Objekttyp)
+  // i den yttre SELECT:en — legacy-kolumnen object_type finns inte längre.
   const treeQuery = sql`
     WITH RECURSIVE tree AS (
       SELECT
         id,
         name,
-        object_type,
         parent_id,
         0 as level,
         ARRAY[id] as path
@@ -3867,7 +3886,6 @@ export async function getClusterTree(
       SELECT
         o.id,
         o.name,
-        o.object_type,
         o.parent_id,
         t.level + 1,
         t.path || o.id
@@ -3875,8 +3893,15 @@ export async function getClusterTree(
       INNER JOIN tree t ON o.parent_id = t.id
       WHERE o.tenant_id = ${tenantId}
     )
-    SELECT * FROM tree
-    ORDER BY path
+    SELECT
+      t.id,
+      t.name,
+      ${objectOwnMetadataTextValueSqlFor("Objekttyp", sql.raw("t.id"))} AS object_type,
+      t.parent_id,
+      t.level,
+      t.path
+    FROM tree t
+    ORDER BY t.path
   `;
 
   const result = await db.execute(treeQuery);

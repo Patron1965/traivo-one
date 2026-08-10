@@ -283,10 +283,12 @@ app.post("/api/public/report/:code/suggest-description", asyncHandler(async (req
       ? `Felanmälan i kategori "${parsed.data.category}": ${parsed.data.title}`
       : parsed.data.title;
     const { parseIssueReportAI } = await import("../services/issue-parser");
+    const { getObjectHookClassification } = await import("../services/object-classification");
+    const objClass = object ? await getObjectHookClassification(tenantId, object.id) : null;
     const result = await parseIssueReportAI({
       text,
       objectName: object?.name ?? null,
-      objectType: object?.objectType ?? null,
+      objectType: objClass?.objectType || null,
       model: enforcement.model,
       tenantId,
     });
@@ -1135,13 +1137,15 @@ app.get("/api/public/nearby-objects", asyncHandler(async (req, res) => {
     const { haversineDistanceKm } = await import("../distance-matrix-service");
     const objects = await storage.getObjects(tenantId);
 
-    const nearby = objects
-      .filter((o) => typeof o.latitude === "number" && typeof o.longitude === "number")
+    const withCoords = objects.filter((o) => typeof o.latitude === "number" && typeof o.longitude === "number");
+    const { getClassificationForObjects } = await import("../services/object-classification");
+    const nearbyClassMap = await getClassificationForObjects(tenantId, withCoords.map((o) => o.id));
+    const nearby = withCoords
       .map((o) => ({
         id: o.id,
         name: o.name,
         address: o.address,
-        objectType: o.objectType,
+        objectType: nearbyClassMap.get(o.id)?.objectType ?? null,
         distanceMeters: Math.round(haversineDistanceKm(lat, lng, o.latitude as number, o.longitude as number) * 1000),
       }))
       .filter((o) => o.distanceMeters <= radiusMeters)

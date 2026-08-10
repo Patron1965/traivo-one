@@ -30,8 +30,6 @@ function makeObject(
   return {
     tenantId,
     customerId: tenantId === TENANT_B ? customerB : customerA,
-    objectType: "karl",
-    objectLevel: 2,
     status: "active",
     ...overrides,
   } as InsertObject;
@@ -77,11 +75,11 @@ describe("storage.setPrimaryParent — byter primär utan att radera relationer"
   let obj: string;
 
   beforeAll(async () => {
-    const a = await storage.createObject(makeObject(TENANT_A, { name: `${NS} set-p1`, objectLevel: 1 }));
+    const a = await storage.createObject(makeObject(TENANT_A, { name: `${NS} set-p1` }));
     p1 = a.id;
-    const b = await storage.createObject(makeObject(TENANT_A, { name: `${NS} set-p2`, objectLevel: 1 }));
+    const b = await storage.createObject(makeObject(TENANT_A, { name: `${NS} set-p2` }));
     p2 = b.id;
-    const c = await storage.createObject(makeObject(TENANT_A, { name: `${NS} set-alt`, objectLevel: 1 }));
+    const c = await storage.createObject(makeObject(TENANT_A, { name: `${NS} set-alt` }));
     pAlt = c.id;
     const o = await storage.createObject(makeObject(TENANT_A, { name: `${NS} set-obj`, parentId: p1 }));
     obj = o.id;
@@ -125,9 +123,9 @@ describe("storage.setPrimaryParent — (d) tenant-isolering", () => {
   let obj: string;
 
   beforeAll(async () => {
-    const a = await storage.createObject(makeObject(TENANT_A, { name: `${NS} iso-p1`, objectLevel: 1 }));
+    const a = await storage.createObject(makeObject(TENANT_A, { name: `${NS} iso-p1` }));
     p1 = a.id;
-    const b = await storage.createObject(makeObject(TENANT_A, { name: `${NS} iso-p2`, objectLevel: 1 }));
+    const b = await storage.createObject(makeObject(TENANT_A, { name: `${NS} iso-p2` }));
     p2 = b.id;
     const o = await storage.createObject(makeObject(TENANT_A, { name: `${NS} iso-obj`, parentId: p1 }));
     obj = o.id;
@@ -221,9 +219,9 @@ describe("PATCH /api/objects/:id/primary-parent", () => {
 
   beforeAll(async () => {
     app = await buildApp(TENANT_A);
-    const a = await storage.createObject(makeObject(TENANT_A, { name: `${NS} route-p1`, objectLevel: 1 }));
+    const a = await storage.createObject(makeObject(TENANT_A, { name: `${NS} route-p1` }));
     p1 = a.id;
-    const b = await storage.createObject(makeObject(TENANT_A, { name: `${NS} route-p2`, objectLevel: 1 }));
+    const b = await storage.createObject(makeObject(TENANT_A, { name: `${NS} route-p2` }));
     p2 = b.id;
     const o = await storage.createObject(makeObject(TENANT_A, { name: `${NS} route-obj`, parentId: p1 }));
     obj = o.id;

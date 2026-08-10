@@ -74,7 +74,6 @@ interface DetailRow {
   address?: string;
   city?: string;
   objectType?: string;
-  objectLevel?: number;
   latitude?: number;
   longitude?: number;
 }
@@ -947,7 +946,6 @@ export function DataQualityDashboard() {
                   {(selectedIssue === "missing-coordinates" || selectedIssue === "missing-address") && <TableHead>Ort</TableHead>}
                   {selectedIssue === "missing-coordinates" && <TableHead>Lat</TableHead>}
                   {selectedIssue === "missing-coordinates" && <TableHead>Lng</TableHead>}
-                  {selectedIssue === "missing-parent" && <TableHead>Nivå</TableHead>}
                   {selectedIssue !== "customer-missing-address" && selectedIssue !== "missing-parent" && <TableHead className="w-24">Åtgärd</TableHead>}
                 </TableRow>
               </TableHeader>
@@ -1018,9 +1016,6 @@ export function DataQualityDashboard() {
                           row.longitude || "—"
                         )}
                       </TableCell>
-                    )}
-                    {selectedIssue === "missing-parent" && (
-                      <TableCell>{row.objectLevel || "—"}</TableCell>
                     )}
                     {selectedIssue !== "customer-missing-address" && selectedIssue !== "missing-parent" && (
                       <TableCell>

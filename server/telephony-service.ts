@@ -168,15 +168,20 @@ export async function lookupCustomerByPhone(tenantId: string, phone: string) {
           address: customer.address,
           city: customer.city,
         },
-        objects: customerObjects.map((o) => ({
-          id: o.id,
-          name: o.name,
-          objectNumber: o.objectNumber,
-          address: o.address,
-          city: o.city,
-          objectType: o.objectType,
-          status: o.status,
-        })),
+        objects: await (async () => {
+          // Task #1486: objekttyp läses ur metadata (kolumnen är riven).
+          const { getClassificationForObjects } = await import("./services/object-classification");
+          const telClassMap = await getClassificationForObjects(tenantId, customerObjects.map((o) => o.id));
+          return customerObjects.map((o) => ({
+            id: o.id,
+            name: o.name,
+            objectNumber: o.objectNumber,
+            address: o.address,
+            city: o.city,
+            objectType: telClassMap.get(o.id)?.objectType ?? null,
+            status: o.status,
+          }));
+        })(),
         recentOrders: recentOrders.map((wo) => ({
           id: wo.id,
           title: wo.title,

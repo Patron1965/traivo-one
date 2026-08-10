@@ -24,7 +24,8 @@ import { metadataVarden } from "@shared/schema";
 import { restoreEnrichModusBatch } from "../enrich-modus-restore";
 import { invalidateAreaSearchCityCache } from "./plannerRoutes";
 import { getImportTemplate, IMPORT_TEMPLATES, type ImportTemplateDefinition } from "@shared/import-templates";
-import { scheduleClassificationMirror } from "../services/object-classification";
+import { scheduleClassificationMirror, getClassificationForObjects } from "../services/object-classification";
+import { objectOwnMetadataTextValueSql } from "../services/object-metadata-sql";
 
 async function buildTemplateWorkbook(def: ImportTemplateDefinition): Promise<Buffer> {
   const wb = new ExcelJS.Workbook();
@@ -506,13 +507,14 @@ app.get("/api/export/:type", asyncHandler(async (req, res) => {
       const objects = await storage.getObjects(tenantId);
       const customers = await storage.getCustomers(tenantId);
       const customerMap = new Map(customers.map(c => [c.id, c.name]));
-      
-      headers = ["namn", "objektnummer", "typ", "nivå", "kund", "adress", "stad"];
+      // Task #1486: klassificering (typ) läses ur metadata, ej rivna kolumner.
+      const classificationMap = await getClassificationForObjects(tenantId, objects.map(o => o.id));
+
+      headers = ["namn", "objektnummer", "typ", "kund", "adress", "stad"];
       data = objects.map(o => ({
         namn: o.name,
         objektnummer: o.objectNumber || "",
-        typ: o.objectType,
-        nivå: o.objectLevel,
+        typ: classificationMap.get(o.id)?.objectType || "",
         kund: customerMap.get(o.customerId ?? "") || "",
         adress: o.address || "",
         stad: o.city || "",
@@ -1248,24 +1250,26 @@ async function runModusObjectsImportJob(params: {
         if (accessInfoText) modusMetadataWrites.push({ namn: "Åtkomstinfo", value: accessInfoText });
         if (containerCount > 0) modusMetadataWrites.push({ namn: "Antal kärl", value: String(containerCount) });
         
-        // Determine object level based on type hierarchy
-        let objectLevel = 1; // Område = top level
-        if (objectType === "fastighet") objectLevel = 2;
+        // Task #1486: klassificeringen (objectType/hierarchyLevel) speglas till
+        // metadata via scheduleClassificationMirror EFTER insert/update — den
+        // skrivs inte längre som kolumner på objects. Vi härleder ändå värdena
+        // här så speglingen får rätt indata (numerisk nivå har ingen metadata-
+        // motsvarighet och används inte längre).
+        let derivedLevel = 1; // Område = top level
+        if (objectType === "fastighet") derivedLevel = 2;
         else if (objectType === "rum" || objectType === "miljokarl" || objectType === "underjord" || 
                  objectType === "kok" || objectType === "matafall" || objectType === "atervinning" ||
-                 objectType === "uj_hushallsavfall") objectLevel = 3;
-        else if (objectType === "omrade" && parent) objectLevel = 2;
+                 objectType === "uj_hushallsavfall") derivedLevel = 3;
+        else if (objectType === "omrade" && parent) derivedLevel = 2;
         
         const objectNumber = `MODUS-${modusId}`;
 
         const hierarchyLevelMap: Record<number, string> = { 1: "omrade", 2: "fastighet", 3: "serviceenhet" };
+        const hierarchyLevel = hierarchyLevelMap[derivedLevel] || "serviceenhet";
         const objectFields = {
           parentId: null as string | null,
           name,
           objectNumber,
-          objectType,
-          objectLevel,
-          hierarchyLevel: hierarchyLevelMap[objectLevel] || "serviceenhet",
           address: row["Adress 1"] || row["Adress"] || null,
           city: row["Ort"] || null,
           postalCode: row["Postnummer"] || null,
@@ -1281,6 +1285,8 @@ async function runModusObjectsImportJob(params: {
             ...updateFields,
           });
           if (updatedObject) {
+            // Task #1486: spegla klassificering till metadata efter update.
+            scheduleClassificationMirror(tenantId, updatedObject.id, { objectType, hierarchyLevel });
             // ADR v3: kund-koppling via primär payer (ej längre objects.customer_id).
             await ensurePrimaryPayer(tenantId, updatedObject.id, customerId, "import-explicit");
             for (const mw of modusMetadataWrites) {
@@ -1303,6 +1309,8 @@ async function runModusObjectsImportJob(params: {
             importBatchId,
           });
           if (createdObject?.city) invalidateAreaSearchCityCache(tenantId);
+          // Task #1486: spegla klassificering till metadata efter create.
+          scheduleClassificationMirror(tenantId, createdObject.id, { objectType, hierarchyLevel });
           // ADR v3: kund-koppling via primär payer (ej längre objects.customer_id).
           await ensurePrimaryPayer(tenantId, createdObject.id, customerId, "import-explicit");
           for (const mw of modusMetadataWrites) {
@@ -3100,9 +3108,6 @@ app.post("/api/import/fortnox-customers/bulk", xlsxUpload.single("file"), asyncH
               tenantId,
               name: objectName,
               objectNumber: `${customerNumber}-${addrKey.slice(0, 16)}`,
-              objectType: "fastighet",
-              hierarchyLevel: "fastighet",
-              objectLevel: 1,
               address: r.address || null,
               city: r.city || null,
               postalCode: r.postalCode || null,
@@ -3131,9 +3136,6 @@ app.post("/api/import/fortnox-customers/bulk", xlsxUpload.single("file"), asyncH
               tenantId,
               name: objectName,
               objectNumber: customerNumber,
-              objectType: "fastighet",
-              hierarchyLevel: "fastighet",
-              objectLevel: 1,
               address: primary.address || null,
               city: primary.city || null,
               postalCode: primary.postalCode || null,
@@ -4171,7 +4173,7 @@ app.get("/api/import/data-quality", asyncHandler(async (req, res) => {
     const [noAddress] = await db.select({ count: sql<number>`count(*)` }).from(objects)
       .where(and(eq(objects.tenantId, tenantId), sql`(${objects.address} IS NULL OR ${objects.address} = '')`));
     const [noParent] = await db.select({ count: sql<number>`count(*)` }).from(objects)
-      .where(and(eq(objects.tenantId, tenantId), isNull(objects.parentId), sql`${objects.objectLevel} > 1`));
+      .where(and(eq(objects.tenantId, tenantId), isNull(objects.parentId), sql`${objects.hierarchyDepth} > 0`));
     const [totalObjects] = await db.select({ count: sql<number>`count(*)` }).from(objects)
       .where(eq(objects.tenantId, tenantId));
     const [custNoAddr] = await db.select({ count: sql<number>`count(*)` }).from(customers)
@@ -4199,7 +4201,7 @@ app.get("/api/import/data-quality", asyncHandler(async (req, res) => {
     const karlBase = and(
       eq(objects.tenantId, tenantId),
       isNull(objects.deletedAt),
-      eq(objects.hierarchyLevel, "karl"),
+      sql`${objectOwnMetadataTextValueSql("Anläggningstyp")} = 'karl'`,
     );
     const [karlTotal] = await db.select({ count: sql<number>`count(*)` }).from(objects).where(karlBase);
     const [karlPhone] = await db.select({ count: sql<number>`count(*)` }).from(objects)
@@ -4256,7 +4258,7 @@ app.post("/api/import/repair/hierarchy", requireAdmin, asyncHandler(async (req, 
     const tenantId = getTenantIdWithFallback(req);
 
     const orphanCount = await db.select({ count: sql<number>`count(*)` }).from(objects)
-      .where(and(eq(objects.tenantId, tenantId), isNull(objects.parentId), sql`${objects.objectLevel} > 1`));
+      .where(and(eq(objects.tenantId, tenantId), isNull(objects.parentId), sql`${objects.hierarchyDepth} > 0`));
 
     const totalCount = await db.select({ count: sql<number>`count(*)` }).from(objects)
       .where(eq(objects.tenantId, tenantId));
@@ -4400,7 +4402,8 @@ app.get("/api/import/data-quality/details", asyncHandler(async (req, res) => {
     if (issueType === "missing-coordinates") {
       const rows = await db.select({
         id: objects.id, name: objects.name, objectNumber: objects.objectNumber,
-        address: objects.address, city: objects.city, objectType: objects.objectType,
+        address: objects.address, city: objects.city,
+        objectType: objectOwnMetadataTextValueSql("Objekttyp"),
       }).from(objects).where(and(
         eq(objects.tenantId, tenantId),
         sql`(${objects.latitude} IS NULL OR ${objects.longitude} IS NULL)`,
@@ -4410,7 +4413,8 @@ app.get("/api/import/data-quality/details", asyncHandler(async (req, res) => {
       const rows = await db.select({
         id: objects.id, name: objects.name, objectNumber: objects.objectNumber,
         address: objects.address, city: objects.city,
-        latitude: objects.latitude, longitude: objects.longitude, objectType: objects.objectType,
+        latitude: objects.latitude, longitude: objects.longitude,
+        objectType: objectOwnMetadataTextValueSql("Objekttyp"),
       }).from(objects).where(and(
         eq(objects.tenantId, tenantId),
         sql`(${objects.address} IS NULL OR ${objects.address} = '')`,
@@ -4419,11 +4423,11 @@ app.get("/api/import/data-quality/details", asyncHandler(async (req, res) => {
     } else if (issueType === "missing-parent") {
       const rows = await db.select({
         id: objects.id, name: objects.name, objectNumber: objects.objectNumber,
-        objectLevel: objects.objectLevel, objectType: objects.objectType,
+        objectType: objectOwnMetadataTextValueSql("Objekttyp"),
       }).from(objects).where(and(
         eq(objects.tenantId, tenantId),
         isNull(objects.parentId),
-        sql`${objects.objectLevel} > 1`,
+        sql`${objects.hierarchyDepth} > 0`,
       )).limit(pageSize).offset(offset);
       res.json({ rows, page, pageSize });
     } else if (issueType === "customer-missing-address") {
@@ -4570,7 +4574,7 @@ app.get("/api/import/cleanup/names/preview", requireAdmin, asyncHandler(async (r
   }).from(objects).where(and(
     eq(objects.tenantId, tenantId),
     isNull(objects.deletedAt),
-    eq(objects.hierarchyLevel, "karl"),
+    sql`${objectOwnMetadataTextValueSql("Anläggningstyp")} = 'karl'`,
     sql`(${objects.name} ~ '^[\\d\\s\\-+()]{6,}$' OR ${objects.name} ~ '^\\d{1,5}$' OR ${objects.name} ~ '^[A-ZÅÄÖ][a-zåäöé]+ [A-ZÅÄÖ][a-zåäöé]+$' OR ${objects.name} ~* '(ring|kontakta|fastighetssk|skicka|tillträde|innan|nyckel|portkod|hämta)')`,
   )).limit(limit);
 
@@ -4632,7 +4636,7 @@ app.post("/api/import/cleanup/names/apply", requireAdmin, asyncHandler(async (re
       address: objects.address, parentId: objects.parentId,
     }).from(objects).where(and(
       eq(objects.tenantId, tenantId),
-      eq(objects.hierarchyLevel, "karl"),
+      sql`${objectOwnMetadataTextValueSql("Anläggningstyp")} = 'karl'`,
       inArray(objects.id, ids),
       isNull(objects.deletedAt),
     ));
@@ -4670,7 +4674,7 @@ app.post("/api/import/cleanup/names/apply", requireAdmin, asyncHandler(async (re
       const upd = await tx.update(objects).set(updates).where(and(
         eq(objects.id, t.id),
         eq(objects.tenantId, tenantId),
-        eq(objects.hierarchyLevel, "karl"),
+        sql`${objectOwnMetadataTextValueSql("Anläggningstyp")} = 'karl'`,
         eq(objects.name, t.name),
         isNull(objects.deletedAt),
       )).returning({ id: objects.id });
@@ -4725,7 +4729,7 @@ app.get("/api/import/cleanup/parents/preview", requireAdmin, asyncHandler(async 
   }).from(objects).where(and(
     eq(objects.tenantId, tenantId),
     isNull(objects.deletedAt),
-    eq(objects.hierarchyLevel, "karl"),
+    sql`${objectOwnMetadataTextValueSql("Anläggningstyp")} = 'karl'`,
     isNull(objects.parentId),
   )).limit(limit);
 
@@ -4740,7 +4744,7 @@ app.get("/api/import/cleanup/parents/preview", requireAdmin, asyncHandler(async 
         eq(objects.tenantId, tenantId),
         isNull(objects.deletedAt),
         objectPrimaryCustomerInSql(customerIds),
-        sql`${objects.hierarchyLevel} IN ('rum','fastighet','brf')`,
+        sql`${objectOwnMetadataTextValueSql("Anläggningstyp")} IN ('rum','fastighet','brf')`,
       ))
     : [];
 
@@ -4823,7 +4827,7 @@ app.post("/api/import/cleanup/parents/apply", requireAdmin, asyncHandler(async (
   const result = await db.transaction(async (tx) => {
     const objs = await tx.select({
       id: objects.id, parentId: objects.parentId, customerId: primaryPayerCustomerIdSql(),
-      hierarchyLevel: objects.hierarchyLevel,
+      hierarchyLevel: objectOwnMetadataTextValueSql("Anläggningstyp"),
     }).from(objects).where(and(
       eq(objects.tenantId, tenantId),
       inArray(objects.id, objIds),
@@ -4832,7 +4836,7 @@ app.post("/api/import/cleanup/parents/apply", requireAdmin, asyncHandler(async (
     const objMap = new Map(objs.map(o => [o.id, o]));
 
     const parents = await tx.select({
-      id: objects.id, customerId: primaryPayerCustomerIdSql(), hierarchyLevel: objects.hierarchyLevel,
+      id: objects.id, customerId: primaryPayerCustomerIdSql(), hierarchyLevel: objectOwnMetadataTextValueSql("Anläggningstyp"),
     }).from(objects).where(and(
       eq(objects.tenantId, tenantId),
       inArray(objects.id, parentIds),
@@ -4863,7 +4867,7 @@ app.post("/api/import/cleanup/parents/apply", requireAdmin, asyncHandler(async (
       }).where(and(
         eq(objects.id, a.objectId),
         eq(objects.tenantId, tenantId),
-        eq(objects.hierarchyLevel, "karl"),
+        sql`${objectOwnMetadataTextValueSql("Anläggningstyp")} = 'karl'`,
         isNull(objects.parentId),
         isNull(objects.deletedAt),
       )).returning({ id: objects.id });
@@ -4904,7 +4908,7 @@ app.get("/api/import/cleanup/address/preview", requireAdmin, asyncHandler(async 
   }).from(objects).where(and(
     eq(objects.tenantId, tenantId),
     isNull(objects.deletedAt),
-    eq(objects.hierarchyLevel, "karl"),
+    sql`${objectOwnMetadataTextValueSql("Anläggningstyp")} = 'karl'`,
     sql`(${objects.address} IS NULL OR ${objects.address} = '')`,
   )).limit(limit);
 
@@ -4976,7 +4980,7 @@ app.post("/api/import/cleanup/address/apply", requireAdmin, asyncHandler(async (
   const result = await db.transaction(async (tx) => {
     const existing = await tx.select({
       id: objects.id, address: objects.address, city: objects.city, postalCode: objects.postalCode,
-      hierarchyLevel: objects.hierarchyLevel,
+      hierarchyLevel: objectOwnMetadataTextValueSql("Anläggningstyp"),
     }).from(objects).where(and(
       eq(objects.tenantId, tenantId),
       inArray(objects.id, ids),
@@ -5004,7 +5008,7 @@ app.post("/api/import/cleanup/address/apply", requireAdmin, asyncHandler(async (
       const upd = await tx.update(objects).set(updates).where(and(
         eq(objects.id, item.id),
         eq(objects.tenantId, tenantId),
-        eq(objects.hierarchyLevel, "karl"),
+        sql`${objectOwnMetadataTextValueSql("Anläggningstyp")} = 'karl'`,
         sql`(${objects.address} IS NULL OR ${objects.address} = '')`,
         isNull(objects.deletedAt),
       )).returning({ id: objects.id });
@@ -5248,13 +5252,12 @@ app.post("/api/import/modus/objects/enrich/preview", requireAdmin, upload.single
   // vi inte träffar Postgres parameter-tak (~65k) vid stora filer.
   const objectNumbersToSearch = Array.from(modusIds).flatMap(id => [`MODUS-${id}`, id]);
   const LOOKUP_CHUNK = 5000;
-  const matchedObjs: Array<{ id: string; objectNumber: string | null; hierarchyLevel: string | null }> = [];
+  const matchedObjs: Array<{ id: string; objectNumber: string | null }> = [];
   for (let i = 0; i < objectNumbersToSearch.length; i += LOOKUP_CHUNK) {
     const slice = objectNumbersToSearch.slice(i, i + LOOKUP_CHUNK);
     const partial = await db.select({
       id: objects.id,
       objectNumber: objects.objectNumber,
-      hierarchyLevel: objects.hierarchyLevel,
     }).from(objects).where(and(
       eq(objects.tenantId, tenantId),
       inArray(objects.objectNumber, slice),
@@ -5264,11 +5267,11 @@ app.post("/api/import/modus/objects/enrich/preview", requireAdmin, upload.single
   }
 
   // Bygg map MODUS-id → object (normalisera bort ev. "MODUS-"-prefix)
-  const modusToObject = new Map<string, { id: string; hierarchyLevel: string | null }>();
+  const modusToObject = new Map<string, { id: string }>();
   for (const o of matchedObjs) {
     if (!o.objectNumber) continue;
     const normalized = o.objectNumber.replace(/^MODUS-/, "");
-    modusToObject.set(normalized, { id: o.id, hierarchyLevel: o.hierarchyLevel });
+    modusToObject.set(normalized, { id: o.id });
   }
 
   // Hämta existerande metadata för matchade objekt + våra metadatatyper
@@ -5800,7 +5803,7 @@ async function computeObjectsNotInExport(params: {
     .where(and(
       eq(objects.tenantId, tenantId),
       isNull(objects.deletedAt),
-      eq(objects.hierarchyLevel, "karl"),
+      sql`${objectOwnMetadataTextValueSql("Anläggningstyp")} = 'karl'`,
     ));
 
   const totalContainers = dbRows.length;
@@ -5945,7 +5948,7 @@ app.post(
       id: objects.id,
       objectNumber: objects.objectNumber,
       name: objects.name,
-      hierarchyLevel: objects.hierarchyLevel,
+      hierarchyLevel: objectOwnMetadataTextValueSql("Anläggningstyp"),
       deletedAt: objects.deletedAt,
     })
       .from(objects)
@@ -6400,8 +6403,6 @@ app.post("/api/import/customer-fastighetslista/commit", requireAdmin, asyncHandl
         postalCode: nr.postalCode || null,
         city: nr.city || null,
         objectNumber: nr.objectNumber || null,
-        objectType: "fastighet",
-        hierarchyLevel: "fastighet",
         importBatchId: batchId,
       }).returning();
       // Task #1484: tx-säker spegling av klassificering till metadata (efter commit).
@@ -6754,7 +6755,8 @@ async function loadObjectsForDiff(tenantId: string) {
       id: objects.id,
       objectNumber: objects.objectNumber,
       name: objects.name,
-      hierarchyLevel: objects.hierarchyLevel,
+      // Task #1486: klassificering (hierarchyLevel) läses ur metadata (Anläggningstyp).
+      hierarchyLevel: objectOwnMetadataTextValueSql("Anläggningstyp"),
       parentId: objects.parentId,
       // Etapp 5: primär kund härleds ur Ekonomi-metadatat 'Kund'.
       customerId: primaryPayerCustomerIdSql(),
@@ -7289,6 +7291,9 @@ app.post(
           // partiell uppdatering som missvisar operatören.
           const patch: Partial<typeof objects.$inferInsert> = {};
           let skipRow = false;
+          // Task #1486: hierarchyLevel är inte längre en kolumn — ändringen
+          // speglas till metadata (Anläggningstyp) efter en lyckad update.
+          let hierarchyLevelChange: string | null | undefined = undefined;
           for (const d of op.fieldDiffs) {
             const after = d.after ?? "";
             switch (d.field) {
@@ -7296,7 +7301,7 @@ app.post(
                 patch.name = after;
                 break;
               case "hierarchyLevel":
-                patch.hierarchyLevel = after || null;
+                hierarchyLevelChange = after || null;
                 break;
               case "parentObjectNumber": {
                 if (after === "") {
@@ -7328,8 +7333,10 @@ app.post(
             }
           }
           if (skipRow) continue;
-          if (Object.keys(patch).length === 0) continue;
-          // Defense-in-depth: tenant_id i WHERE även om vi redan slagit upp via tenant
+          if (Object.keys(patch).length === 0 && hierarchyLevelChange === undefined) continue;
+          // Defense-in-depth: tenant_id i WHERE även om vi redan slagit upp via tenant.
+          // importBatchId sätts alltid så raden är spårbar även om enbart
+          // klassificeringen (metadata) ändrats.
           const result = await db
             .update(objects)
             .set({ ...patch, importBatchId: batchId })
@@ -7342,6 +7349,10 @@ app.post(
             )
             .returning({ id: objects.id });
           if (result.length > 0) {
+            // Task #1486: spegla ev. klassificeringsändring till metadata.
+            if (hierarchyLevelChange !== undefined) {
+              scheduleClassificationMirror(tenantId, op.id, { hierarchyLevel: hierarchyLevelChange });
+            }
             appliedUpdated++;
             updatedIds.push(op.id);
             await db.insert(auditLogs).values({
@@ -7416,12 +7427,16 @@ app.post(
               parentId: parentId || undefined,
               name: row.name,
               objectNumber: row.objectNumber || null,
-              hierarchyLevel: row.hierarchyLevel || undefined,
               address: row.address || null,
               city: row.city || null,
               postalCode: row.postalCode || null,
               importBatchId: batchId,
             } as any);
+            // Task #1486: klassificering (hierarchyLevel) speglas till metadata,
+            // ej längre som kolumn på objects.
+            if (row.hierarchyLevel) {
+              scheduleClassificationMirror(tenantId, created.id, { hierarchyLevel: row.hierarchyLevel });
+            }
             appliedCreated++;
             createdIds.push(created.id);
             localCustomerById.set(created.id, customerId);

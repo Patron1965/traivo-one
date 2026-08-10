@@ -106,9 +106,6 @@ describe("Portal light-utförandevy — kvittering är fail-closed (Task #715)",
         customerId: payerCustomerId,
         name,
         objectNumber: randomId(),
-        objectType: "fastighet",
-        objectLevel: 2,
-        hierarchyLevel: "fastighet",
       } as InsertObject);
       await setObjectKund(TENANT_ID, obj.id, payerCustomerId);
       return obj.id;

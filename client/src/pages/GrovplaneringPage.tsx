@@ -155,7 +155,6 @@ type ExportColumnKey =
   | "productionHours"
   | "team"
   | "week"
-  | "lastService"
   | "value"
   | "cost";
 
@@ -172,7 +171,6 @@ const EXPORT_COLUMNS: { key: ExportColumnKey; label: string }[] = [
   { key: "productionHours", label: "Produktionstid (tim)" },
   { key: "team", label: "Team" },
   { key: "week", label: "Vecka" },
-  { key: "lastService", label: "Senast utförd" },
   { key: "value", label: "Ordervärde (kr)" },
   { key: "cost", label: "Kostnad (kr)" },
 ];

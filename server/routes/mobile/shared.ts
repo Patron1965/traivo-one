@@ -162,7 +162,9 @@ export async function enrichOrderForMobile(order: WorkOrder, storageRef: typeof 
     description: order.description || "",
     priority: order.priority || "normal",
     estimatedDuration: order.estimatedDuration || 60,
-    wasteType: object?.objectType || "",
+    wasteType: object
+      ? (await (await import("../../services/object-classification")).getObjectHookClassification(order.tenantId, object.id)).objectType || ""
+      : "",
     containerType: object?.name || "",
     executionCodes,
     dependencies: depDetails,

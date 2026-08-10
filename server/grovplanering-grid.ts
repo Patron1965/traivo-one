@@ -37,6 +37,7 @@ import {
   articleTypeDefinitions,
 } from "@shared/schema";
 import { haversineDistanceKm } from "./distance-matrix-service";
+import { objectOwnMetadataTextValueSql } from "./services/object-metadata-sql";
 
 // ---------------------------------------------------------------------------
 // Typer
@@ -118,7 +119,6 @@ export interface GridTaskRow {
   teamName: string | null;
   teamColor: string | null;
   roughPlannedWeek: string | null;
-  lastServiceDate: string | null;
   value: number; // öre
   cost: number; // öre
   source: string | null; // creation_method-nyckel (manual/import/external_report/performer/automatic)
@@ -436,7 +436,6 @@ interface RawRow {
   teamName: string | null;
   teamColor: string | null;
   roughPlannedWeek: string | null;
-  lastServiceDate: Date | null;
   value: number | null;
   cost: number | null;
   creationMethod: string | null;
@@ -553,7 +552,6 @@ async function buildOrderedGroups(
       teamName: teams.name,
       teamColor: teams.color,
       roughPlannedWeek: workOrders.roughPlannedWeek,
-      lastServiceDate: objects.lastServiceDate,
       value: workOrders.cachedValue,
       cost: workOrders.cachedCost,
       creationMethod: workOrders.creationMethod,
@@ -624,7 +622,6 @@ async function buildOrderedGroups(
       teamName: r.teamName,
       teamColor: r.teamColor,
       roughPlannedWeek: r.roughPlannedWeek,
-      lastServiceDate: toIso(r.lastServiceDate),
       value: r.value ?? 0,
       cost: r.cost ?? 0,
       source: r.creationMethod ?? null,
@@ -988,13 +985,6 @@ const GROV_EXPORT_COLUMN_DEFS: GrovExportColumnDef[] = [
   { key: "team", label: "Team", width: 20, value: (_l, r) => safeCell(r.teamName ?? "") },
   { key: "week", label: "Vecka", width: 12, value: (_l, r) => safeCell(r.roughPlannedWeek ?? "") },
   {
-    key: "lastService",
-    label: "Senast utförd",
-    width: 16,
-    numFmt: "yyyy-mm-dd",
-    value: (_l, r) => toDateOrNull(r.lastServiceDate),
-  },
-  {
     key: "value",
     label: "Ordervärde (kr)",
     width: 16,
@@ -1209,14 +1199,14 @@ export async function buildGrovplaneringFullCsvExport(
       customerNumber: customers.customerNumber,
       objectName: objects.name,
       objectNumber: objects.objectNumber,
-      objectType: objects.objectType,
-      objectHierarchyLevel: objects.hierarchyLevel,
+      // Task #1486: klassificering ur objektets EGNA metadata (Objekttyp/Anläggningstyp).
+      objectType: objectOwnMetadataTextValueSql("Objekttyp"),
+      objectHierarchyLevel: objectOwnMetadataTextValueSql("Anläggningstyp"),
       objectAddress: objects.address,
       objectCity: objects.city,
       objectPostalCode: objects.postalCode,
       objectLat: objects.latitude,
       objectLng: objects.longitude,
-      objectLastServiceDate: objects.lastServiceDate,
       objectParentId: objects.parentId,
       teamName: teams.name,
       resourceName: resources.name,
@@ -1455,7 +1445,6 @@ export async function buildGrovplaneringFullCsvExport(
     "Postnummer",
     "Objekt-lat",
     "Objekt-lng",
-    "Senast utförd (objekt)",
     "Objekt förälder-ID",
     // Utförare
     "Teamnamn",
@@ -1600,7 +1589,6 @@ export async function buildGrovplaneringFullCsvExport(
       r.objectPostalCode ?? "",
       numStr(r.objectLat),
       numStr(r.objectLng),
-      isoOrEmpty(r.objectLastServiceDate),
       r.objectParentId ?? "",
       // Utförare
       r.teamName ?? "",

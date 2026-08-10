@@ -66,8 +66,6 @@ function makeObject(
 ): InsertObject {
   return {
     tenantId,
-    objectType: "karl",
-    objectLevel: 2,
     status: "active",
     ...overrides,
   } as InsertObject;
@@ -155,7 +153,7 @@ describe("PATCH /api/objects/:id/move — cykelskydd", () => {
   let grandchild: string;
 
   beforeAll(async () => {
-    const r = await storage.createObject(makeObject(TENANT_A, { name: `${NS} cykel-rot`, objectLevel: 1 }));
+    const r = await storage.createObject(makeObject(TENANT_A, { name: `${NS} cykel-rot` }));
     root = r.id;
     const c = await storage.createObject(makeObject(TENANT_A, { name: `${NS} cykel-barn`, parentId: root }));
     child = c.id;
@@ -194,11 +192,11 @@ describe("Flytt/kopiera — tenant-isolering", () => {
   let objectB: string;
 
   beforeAll(async () => {
-    const oa = await storage.createObject(makeObject(TENANT_A, { name: `${NS} iso-A`, objectLevel: 1 }));
+    const oa = await storage.createObject(makeObject(TENANT_A, { name: `${NS} iso-A` }));
     objectA = oa.id;
-    const pb = await storage.createObject(makeObject(TENANT_B, { name: `${NS} iso-B-parent`, objectLevel: 1 }));
+    const pb = await storage.createObject(makeObject(TENANT_B, { name: `${NS} iso-B-parent` }));
     parentB = pb.id;
-    const ob = await storage.createObject(makeObject(TENANT_B, { name: `${NS} iso-B-obj`, objectLevel: 1 }));
+    const ob = await storage.createObject(makeObject(TENANT_B, { name: `${NS} iso-B-obj` }));
     objectB = ob.id;
   });
 
@@ -227,9 +225,9 @@ describe("POST /api/objects/:id/copy — gren-kopiering remappar parentId", () =
 
   beforeAll(async () => {
     // Förälder som roten hänger under (kopian ska hänga på samma förälder).
-    const p = await storage.createObject(makeObject(TENANT_A, { name: `${NS} branch-top`, objectLevel: 1 }));
+    const p = await storage.createObject(makeObject(TENANT_A, { name: `${NS} branch-top` }));
     parent = p.id;
-    const r = await storage.createObject(makeObject(TENANT_A, { name: `${NS} branch-rot`, objectLevel: 1, parentId: parent }));
+    const r = await storage.createObject(makeObject(TENANT_A, { name: `${NS} branch-rot`, parentId: parent }));
     root = r.id;
     const a = await storage.createObject(makeObject(TENANT_A, { name: `${NS} branch-c1`, parentId: root }));
     c1 = a.id;
@@ -285,7 +283,7 @@ describe("POST /api/objects/:id/copy — metadata-kopiering (egna kopieras, ärv
   let source: string;
 
   beforeAll(async () => {
-    const p = await storage.createObject(makeObject(TENANT_A, { name: `${NS} meta-parent`, objectLevel: 1 }));
+    const p = await storage.createObject(makeObject(TENANT_A, { name: `${NS} meta-parent` }));
     parent = p.id;
     const s = await storage.createObject(makeObject(TENANT_A, { name: `${NS} meta-source`, parentId: parent }));
     source = s.id;
@@ -341,9 +339,9 @@ describe("PATCH /api/objects/:id/move — parentId ↔ primär object_parents i 
   let obj: string;
 
   beforeAll(async () => {
-    const a = await storage.createObject(makeObject(TENANT_A, { name: `${NS} sync-p1`, objectLevel: 1 }));
+    const a = await storage.createObject(makeObject(TENANT_A, { name: `${NS} sync-p1` }));
     p1 = a.id;
-    const b = await storage.createObject(makeObject(TENANT_A, { name: `${NS} sync-p2`, objectLevel: 1 }));
+    const b = await storage.createObject(makeObject(TENANT_A, { name: `${NS} sync-p2` }));
     p2 = b.id;
     const o = await storage.createObject(makeObject(TENANT_A, { name: `${NS} sync-obj`, parentId: p1 }));
     obj = o.id;

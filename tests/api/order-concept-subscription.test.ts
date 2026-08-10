@@ -80,19 +80,19 @@ beforeAll(async () => {
 
   [objA] = await db
     .insert(objects)
-    .values({ tenantId: TENANT_A, customerId: custA, name: "Objekt A", objectType: "fastighet" })
+    .values({ tenantId: TENANT_A, customerId: custA, name: "Objekt A" })
     .returning();
   [objB] = await db
     .insert(objects)
-    .values({ tenantId: TENANT_A, customerId: custA, name: "Objekt B", objectType: "fastighet" })
+    .values({ tenantId: TENANT_A, customerId: custA, name: "Objekt B" })
     .returning();
   [objC] = await db
     .insert(objects)
-    .values({ tenantId: TENANT_A, customerId: custA, name: "Objekt C", objectType: "fastighet" })
+    .values({ tenantId: TENANT_A, customerId: custA, name: "Objekt C" })
     .returning();
   [objD] = await db
     .insert(objects)
-    .values({ tenantId: TENANT_A, customerId: custA, name: "Objekt D", objectType: "fastighet" })
+    .values({ tenantId: TENANT_A, customerId: custA, name: "Objekt D" })
     .returning();
 
   await setStringMeta(TENANT_A, objA.id, katFastighetA, "Hus 1");
@@ -112,15 +112,15 @@ beforeAll(async () => {
 
   const [bObj1] = await db
     .insert(objects)
-    .values({ tenantId: TENANT_B, customerId: custB, name: "B-Objekt 1", objectType: "fastighet" })
+    .values({ tenantId: TENANT_B, customerId: custB, name: "B-Objekt 1" })
     .returning();
   const [bObj2] = await db
     .insert(objects)
-    .values({ tenantId: TENANT_B, customerId: custB, name: "B-Objekt 2", objectType: "fastighet" })
+    .values({ tenantId: TENANT_B, customerId: custB, name: "B-Objekt 2" })
     .returning();
   const [bObj3] = await db
     .insert(objects)
-    .values({ tenantId: TENANT_B, customerId: custB, name: "B-Objekt 3", objectType: "fastighet" })
+    .values({ tenantId: TENANT_B, customerId: custB, name: "B-Objekt 3" })
     .returning();
   await setStringMeta(TENANT_B, bObj1.id, katFastighetB, "Hus 1");
   await setStringMeta(TENANT_B, bObj2.id, katFastighetB, "Hus 2");

@@ -67,7 +67,6 @@ describe("Work order totals - automatisk recalc i storage-lagret", () => {
         tenantId: TEST_TENANT,
         customerId,
         name: "Recalc Testobjekt",
-        objectType: "fastighet",
       })
       .returning();
     objectId = object.id;

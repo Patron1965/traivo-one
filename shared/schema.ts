@@ -165,11 +165,11 @@ export const objects = pgTable("objects", {
   // `name`. Skrivs av objektmall-importen via `namn_<lang>`-kolumner.
   nameTranslations: jsonb("name_translations"),
   objectNumber: text("object_number"),
-  objectType: text("object_type").default("omrade").notNull(),
-  // Hierarkinivå: koncern, brf, fastighet, rum, karl
-  hierarchyLevel: text("hierarchy_level").default("fastighet"),
-  // Legacy - numerisk nivå (1=överst, 5=kärl)
-  objectLevel: integer("object_level").default(1).notNull(),
+  // Task #1486 (contract-fas): legacy-klassificeringskolumnerna object_type,
+  // hierarchy_level och object_level är BORTTAGNA. Källan är metadata
+  // (metadata_katalog-fälten "Objekttyp"/"Anläggningstyp" i området
+  // Klassificering) — läs via server/services/object-classification.ts eller
+  // objectMetadataTextValueSql. Numerisk nivå härleds ur hierarchyDepth.
   
   // === ADRESS & POSITION ===
   address: text("address"),
@@ -190,7 +190,8 @@ export const objects = pgTable("objects", {
   // Etapp 5 (Task #1217): åtkomst-/tidspreferens-/kärl-/individ-specialkolumnerna
   // är borttagna — informationen bor nu i metadata_katalog/metadata_varden
   // (t.ex. 'Åtkomsttyp', 'Åtkomstkod', 'Nyckelnummer', 'Antal kärl', 'Ställtid').
-  articleId: varchar("article_id"), // Kopplad artikeltyp
+  // Task #1486: döda kolumnerna article_id och last_service_date är borttagna
+  // (aldrig skrivna i vare sig dev eller prod).
   // Djup i hierarkin (0 = rot, 1 = barn till rot, etc.)
   hierarchyDepth: integer("hierarchy_depth").default(0),
   // Fullständig sökväg i hierarkin (array av object IDs från rot)
@@ -201,7 +202,6 @@ export const objects = pgTable("objects", {
   polylineData: jsonb("polyline_data"),
   
   status: text("status").default("active").notNull(),
-  lastServiceDate: timestamp("last_service_date"),
   importBatchId: text("import_batch_id"),
   // === RECONCILIATION (årlig kundfastighetslista) ===
   // Sätts av customer-fastighetslista-importen när ett objekt finns i Traivo men

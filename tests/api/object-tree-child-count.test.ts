@@ -71,8 +71,6 @@ function makeObject(
   return {
     tenantId: TENANT,
     customerId: customerMain,
-    objectType: "fastighet",
-    objectLevel: 1,
     status: "active",
     ...overrides,
   } as InsertObject;
@@ -120,22 +118,22 @@ beforeAll(async () => {
     .values({ userId: ADMIN, tenantId: TENANT, role: "admin", isActive: true, assignedBy: ADMIN })
     .onConflictDoNothing();
 
-  const root = await storage.createObject(makeObject({ name: `${NS} root`, objectLevel: 1 }));
+  const root = await storage.createObject(makeObject({ name: `${NS} root` }));
   rootId = root.id;
-  const childA = await storage.createObject(makeObject({ name: `${NS} childA`, objectLevel: 2, parentId: rootId }));
+  const childA = await storage.createObject(makeObject({ name: `${NS} childA`, parentId: rootId }));
   childAId = childA.id;
-  const childB = await storage.createObject(makeObject({ name: `${NS} childB`, objectLevel: 2, parentId: rootId }));
+  const childB = await storage.createObject(makeObject({ name: `${NS} childB`, parentId: rootId }));
   childBId = childB.id;
-  const grandchild = await storage.createObject(makeObject({ name: `${NS} grandchild`, objectLevel: 3, parentId: childAId }));
+  const grandchild = await storage.createObject(makeObject({ name: `${NS} grandchild`, parentId: childAId }));
   grandchildId = grandchild.id;
 
   // Separat rot kopplad till en ANNAN kund för att verifiera kundfiltret.
   const otherRoot = await storage.createObject(
-    makeObject({ name: `${NS} otherRoot`, objectLevel: 1, customerId: customerOther }),
+    makeObject({ name: `${NS} otherRoot`, customerId: customerOther }),
   );
   otherRootId = otherRoot.id;
   await storage.createObject(
-    makeObject({ name: `${NS} otherChild`, objectLevel: 2, parentId: otherRootId, customerId: customerOther }),
+    makeObject({ name: `${NS} otherChild`, parentId: otherRootId, customerId: customerOther }),
   );
 
   await addPrimaryPayer(rootId, customerMain);

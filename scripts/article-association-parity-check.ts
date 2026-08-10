@@ -26,6 +26,7 @@ import {
   type HookObjectContext,
 } from "../server/association-service";
 import { getObjectWithAllMetadata } from "../server/metadata-queries";
+import { getObjectHookClassification } from "../server/services/object-classification";
 
 async function main() {
   const allArticles = await db.select().from(articles).where(isNull(articles.deletedAt));
@@ -57,15 +58,18 @@ async function main() {
     );
 
     for (const obj of tObjects) {
+      // Klassificeringen (objekttyp/nivå) är nu metadata (Task #1486) — läses ur
+      // objektets egna metadata-rader, inte från borttagna kolumner.
+      const om = await getObjectWithAllMetadata(obj.id, tenantId);
+      const cls = await getObjectHookClassification(tenantId, obj.id, om);
       const hookCtx: HookObjectContext = {
-        objectType: obj.objectType || "",
-        hierarchyLevel: obj.hierarchyLevel || "",
+        objectType: cls.objectType || "",
+        hierarchyLevel: cls.hierarchyLevel || "",
         accessCode: obj.accessCode ?? null,
       };
 
       let lookupMeta: (label: string) => string | null = () => null;
       if (needsMeta) {
-        const om = await getObjectWithAllMetadata(obj.id, tenantId);
         const list = om?.metadata ?? [];
         lookupMeta = (label: string) => {
           const m = list.find(
@@ -90,7 +94,7 @@ async function main() {
         if (legacy !== next) {
           deviations++;
           console.error(
-            `[parity] AVVIKELSE tenant=${tenantId} object=${obj.id} (${obj.objectType}/${obj.hierarchyLevel}) ` +
+            `[parity] AVVIKELSE tenant=${tenantId} object=${obj.id} (${hookCtx.objectType}/${hookCtx.hierarchyLevel}) ` +
               `article=${art.articleNumber} legacy=${legacy} ny=${next} rules=${JSON.stringify(rules)}`,
           );
         }

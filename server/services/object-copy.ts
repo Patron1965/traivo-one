@@ -44,9 +44,6 @@ function buildCloneInsert(
     tenantId,
     parentId: parentId ?? undefined,
     name,
-    objectType: src.objectType,
-    objectLevel: src.objectLevel,
-    hierarchyLevel: src.hierarchyLevel ?? undefined,
     address: src.address ?? undefined,
     city: src.city ?? undefined,
     postalCode: src.postalCode ?? undefined,
@@ -175,14 +172,8 @@ export async function copyObjectTree(
     const res = await copyMetadataForClone(s, clone.id, tenantId);
     copiedMetadata += res.metaCount;
     if (res.metaError && !metadataCopyError) metadataCopyError = res.metaError;
-    // Task #1484: spegla klassificeringskolumnerna till metadata EFTER att
-    // källans metadata kopierats — kopierade (ev. manuella) rader vinner alltid
-    // (mirror rör aldrig manuella rader); källor med enbart legacy-kolumner
-    // får auto-rader så klonen blir metadata-först direkt.
-    scheduleClassificationMirror(tenantId, clone.id, {
-      objectType: s.objectType ?? null,
-      hierarchyLevel: s.hierarchyLevel ?? null,
-    });
+    // Task #1486: klassificeringen följer med via metadata-kopian ovan —
+    // legacy-kolumnerna är rivna och ingen extra spegling behövs längre.
   }
 
   const rootClone = clonePairs[0].clone;

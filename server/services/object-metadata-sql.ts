@@ -24,6 +24,37 @@ export function objectMetadataTextValueSql(fieldName: string): SQL<string | null
 }
 
 /** Som objectMetadataTextValueSql men med valfri yttre id-referens (t.ex. sql.raw('o.id')). */
+/**
+ * Som objectMetadataTextValueSqlFor men UTAN arv — endast objektets EGNA rad
+ * räknas. Används för klassificeringsfälten (Objekttyp/Anläggningstyp) som per
+ * modell aldrig ärvs (Task #1486: ersätter de rivna kolumnerna
+ * object_type/hierarchy_level i list-/filterqueries).
+ */
+export function objectOwnMetadataTextValueSqlFor(
+  fieldName: string,
+  idRef: SQL,
+): SQL<string | null> {
+  return sql<string | null>`(
+    SELECT mv.varde_string
+    FROM metadata_varden mv
+    JOIN metadata_katalog mk ON mk.id = mv.metadata_katalog_id
+      AND mk.tenant_id = mv.tenant_id
+      AND lower(mk.namn) = lower(${fieldName})
+      AND mk.deleted_at IS NULL
+    WHERE mv.objekt_id = ${idRef}
+      AND mv.varde_string IS NOT NULL
+      AND COALESCE(mv.raderad, FALSE) = FALSE
+      AND (mv.status IS NULL OR mv.status = 'aktiv')
+    ORDER BY mv.updated_at DESC NULLS LAST
+    LIMIT 1
+  )`;
+}
+
+/** objectOwnMetadataTextValueSqlFor bunden till "objects"."id" (se memory-notis ovan). */
+export function objectOwnMetadataTextValueSql(fieldName: string): SQL<string | null> {
+  return objectOwnMetadataTextValueSqlFor(fieldName, sql.raw(`"objects"."id"`));
+}
+
 export function objectMetadataTextValueSqlFor(
   fieldName: string,
   idRef: SQL,

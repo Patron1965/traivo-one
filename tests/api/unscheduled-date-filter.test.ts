@@ -65,7 +65,6 @@ describe("getUnscheduledWorkOrdersPaginated — datumfilter", () => {
         tenantId: TEST_TENANT,
         customerId,
         name: "Datefilter Testobjekt",
-        objectType: "fastighet",
       })
       .returning();
     objectId = object.id;

@@ -136,8 +136,6 @@ export async function seedDatabase() {
     tenantId: DEFAULT_TENANT_ID,
     name: "Område syd",
     objectNumber: "OMR-SYD",
-    objectType: "omrade",
-    objectLevel: 1,
     city: "Södertälje",
     status: "active",
   }).returning();
@@ -146,8 +144,6 @@ export async function seedDatabase() {
     tenantId: DEFAULT_TENANT_ID,
     name: "Område nord",
     objectNumber: "OMR-NORD",
-    objectType: "omrade",
-    objectLevel: 1,
     city: "Södertälje",
     status: "active",
   }).returning();
@@ -157,8 +153,6 @@ export async function seedDatabase() {
     parentId: omradeSyd.id,
     name: "Stensätravägen 2",
     objectNumber: "FAST-001",
-    objectType: "fastighet",
-    objectLevel: 2,
     address: "Stensätravägen 2",
     city: "Södertälje",
     postalCode: "15138",
@@ -172,8 +166,6 @@ export async function seedDatabase() {
     parentId: omradeSyd.id,
     name: "Stensätravägen 4",
     objectNumber: "FAST-002",
-    objectType: "fastighet",
-    objectLevel: 2,
     address: "Stensätravägen 4",
     city: "Södertälje",
     postalCode: "15138",
@@ -187,8 +179,6 @@ export async function seedDatabase() {
     parentId: omradeNord.id,
     name: "Kungsgatan 3",
     objectNumber: "FAST-003",
-    objectType: "fastighet",
-    objectLevel: 2,
     address: "Kungsgatan 3",
     city: "Södertälje",
     postalCode: "15171",
@@ -202,8 +192,6 @@ export async function seedDatabase() {
     parentId: omradeNord.id,
     name: "Brinken 4",
     objectNumber: "FAST-004",
-    objectType: "fastighet",
-    objectLevel: 2,
     address: "Brinken 4",
     city: "Södertälje",
     postalCode: "15172",
@@ -218,8 +206,6 @@ export async function seedDatabase() {
       parentId: stensatravagen2.id,
       name: "Rum 1",
       objectNumber: "RUM-001",
-      objectType: "rum",
-      objectLevel: 3,
       status: "active",
     },
     {
@@ -227,8 +213,6 @@ export async function seedDatabase() {
       parentId: stensatravagen2.id,
       name: "Rum 2",
       objectNumber: "RUM-002",
-      objectType: "rum",
-      objectLevel: 3,
       status: "active",
     },
     {
@@ -236,8 +220,6 @@ export async function seedDatabase() {
       parentId: stensatravagen2.id,
       name: "Rum 3",
       objectNumber: "RUM-003",
-      objectType: "rum",
-      objectLevel: 3,
       status: "active",
     },
     {
@@ -245,8 +227,6 @@ export async function seedDatabase() {
       parentId: stensatravagen2.id,
       name: "UJ Hushållsavfall",
       objectNumber: "UJ-001",
-      objectType: "uj_hushallsavfall",
-      objectLevel: 3,
       status: "active",
     },
     {
@@ -254,8 +234,6 @@ export async function seedDatabase() {
       parentId: stensatravagen4.id,
       name: "Rum 1",
       objectNumber: "RUM-004",
-      objectType: "rum",
-      objectLevel: 3,
       status: "active",
     },
     {
@@ -263,8 +241,6 @@ export async function seedDatabase() {
       parentId: stensatravagen4.id,
       name: "UJ Hushållsavfall",
       objectNumber: "UJ-002",
-      objectType: "uj_hushallsavfall",
-      objectLevel: 3,
       status: "active",
     },
     {
@@ -272,8 +248,6 @@ export async function seedDatabase() {
       parentId: kungsgatan3.id,
       name: "Rum",
       objectNumber: "RUM-005",
-      objectType: "rum",
-      objectLevel: 3,
       status: "active",
     },
     {
@@ -281,8 +255,6 @@ export async function seedDatabase() {
       parentId: brinken4.id,
       name: "Matafall, Skåp",
       objectNumber: "MAT-001",
-      objectType: "matafall",
-      objectLevel: 3,
       status: "active",
     },
     {
@@ -290,8 +262,6 @@ export async function seedDatabase() {
       parentId: brinken4.id,
       name: "Återvinning, Rum",
       objectNumber: "AV-001",
-      objectType: "atervinning",
-      objectLevel: 3,
       status: "active",
     },
   ]).returning();
@@ -300,8 +270,6 @@ export async function seedDatabase() {
     tenantId: DEFAULT_TENANT_ID,
     name: "Äldregården Solstrålen",
     objectNumber: "SERV-001",
-    objectType: "serviceboende",
-    objectLevel: 1,
     address: "Solvägen 15",
     city: "Södertälje",
     postalCode: "15145",
@@ -314,8 +282,6 @@ export async function seedDatabase() {
     tenantId: DEFAULT_TENANT_ID,
     name: "Servicehuset Göken",
     objectNumber: "SERV-002",
-    objectType: "serviceboende",
-    objectLevel: 1,
     address: "Göksvägen 8",
     city: "Södertälje",
     postalCode: "15146",
@@ -330,8 +296,6 @@ export async function seedDatabase() {
       parentId: aldregardenSolstralen.id,
       name: "Köket",
       objectNumber: "KOK-001",
-      objectType: "kok",
-      objectLevel: 2,
       status: "active",
     },
     {
@@ -339,8 +303,6 @@ export async function seedDatabase() {
       parentId: aldregardenSolstralen.id,
       name: "Soprum 1",
       objectNumber: "SOP-001",
-      objectType: "soprum",
-      objectLevel: 2,
       status: "active",
     },
     {
@@ -348,8 +310,6 @@ export async function seedDatabase() {
       parentId: aldregardenSolstralen.id,
       name: "Soprum 2",
       objectNumber: "SOP-002",
-      objectType: "soprum",
-      objectLevel: 2,
       status: "active",
     },
     {
@@ -357,8 +317,6 @@ export async function seedDatabase() {
       parentId: servicehusetGoken.id,
       name: "Köket",
       objectNumber: "KOK-002",
-      objectType: "kok",
-      objectLevel: 2,
       status: "active",
     },
     {
@@ -366,8 +324,6 @@ export async function seedDatabase() {
       parentId: servicehusetGoken.id,
       name: "Soprum 1",
       objectNumber: "SOP-003",
-      objectType: "soprum",
-      objectLevel: 2,
       status: "active",
     },
   ]).returning();
@@ -386,12 +342,33 @@ export async function seedDatabase() {
   {
     const { ensureSystemomradenFalt } = await import("./metadata-queries");
     const { ensurePrimaryPayer } = await import("./services/object-customer");
+    const { mirrorClassificationToMetadata } = await import("./services/object-classification");
     await ensureSystemomradenFalt(DEFAULT_TENANT_ID);
     for (const objectId of telgeObjectIds) {
       await ensurePrimaryPayer(DEFAULT_TENANT_ID, objectId, telgebostader.id, "seed-demo");
     }
     for (const objectId of serviceObjectIds) {
       await ensurePrimaryPayer(DEFAULT_TENANT_ID, objectId, serviceboenden.id, "seed-demo");
+    }
+
+    // Klassificering är nu metadata (Objekttyp) — spegla in seed-demons
+    // objekttyper som metadata-rader (fältet Objekttyp i Klassificering).
+    const objektTyper: Array<[string, string]> = [
+      [omradeSyd.id, "omrade"], [omradeNord.id, "omrade"],
+      [stensatravagen2.id, "fastighet"], [stensatravagen4.id, "fastighet"],
+      [kungsgatan3.id, "fastighet"], [brinken4.id, "fastighet"],
+      [telgeChildren[0].id, "rum"], [telgeChildren[1].id, "rum"],
+      [telgeChildren[2].id, "rum"], [telgeChildren[3].id, "uj_hushallsavfall"],
+      [telgeChildren[4].id, "rum"], [telgeChildren[5].id, "uj_hushallsavfall"],
+      [telgeChildren[6].id, "rum"], [telgeChildren[7].id, "matafall"],
+      [telgeChildren[8].id, "atervinning"],
+      [aldregardenSolstralen.id, "serviceboende"], [servicehusetGoken.id, "serviceboende"],
+      [serviceChildren[0].id, "kok"], [serviceChildren[1].id, "soprum"],
+      [serviceChildren[2].id, "soprum"], [serviceChildren[3].id, "kok"],
+      [serviceChildren[4].id, "soprum"],
+    ];
+    for (const [objectId, objectType] of objektTyper) {
+      await mirrorClassificationToMetadata(DEFAULT_TENANT_ID, objectId, { objectType });
     }
   }
 
@@ -838,20 +815,21 @@ async function seedFieldAppDemoData(tomasResourceId: string) {
   ]);
 
   await db.insert(objects).values([
-    { id: "obj-1", tenantId: DEFAULT_TENANT_ID, name: "Stensätravägen 2 - Soprum A", objectNumber: "OBJ-001", objectType: "rum", objectLevel: 3, address: "Stensätravägen 2", city: "Södertälje", postalCode: "151 57", latitude: 59.1876, longitude: 17.6432, hierarchyLevel: "rum" },
-    { id: "obj-2", tenantId: DEFAULT_TENANT_ID, name: "Oxbacksleden 12 - Fastighet", objectNumber: "OBJ-002", objectType: "fastighet", objectLevel: 2, address: "Oxbacksleden 12", city: "Södertälje", postalCode: "151 42", latitude: 59.1923, longitude: 17.6198, hierarchyLevel: "fastighet" },
-    { id: "obj-3", tenantId: DEFAULT_TENANT_ID, name: "Strandvägen 15 - Kärl 240L", objectNumber: "OBJ-003", objectType: "karl", objectLevel: 4, address: "Strandvägen 15", city: "Södertälje", postalCode: "151 38", latitude: 59.1978, longitude: 17.6345, hierarchyLevel: "karl" },
-    { id: "obj-4", tenantId: DEFAULT_TENANT_ID, name: "Strandvägen 17 - Soprum", objectNumber: "OBJ-004", objectType: "rum", objectLevel: 3, address: "Strandvägen 17", city: "Södertälje", postalCode: "151 38", latitude: 59.1981, longitude: 17.6351, hierarchyLevel: "rum" },
-    { id: "obj-5", tenantId: DEFAULT_TENANT_ID, name: "Torekällbergets Skola", objectNumber: "OBJ-005", objectType: "fastighet", objectLevel: 2, address: "Torekällgatan 40", city: "Södertälje", postalCode: "151 72", latitude: 59.2012, longitude: 17.6287, hierarchyLevel: "fastighet" },
-    { id: "obj-6", tenantId: DEFAULT_TENANT_ID, name: "Brunnsängsparken - Container", objectNumber: "OBJ-006", objectType: "karl", objectLevel: 4, address: "Brunnsängsvägen 8", city: "Södertälje", postalCode: "151 45", latitude: 59.1834, longitude: 17.6512, hierarchyLevel: "karl" },
-    { id: "obj-7", tenantId: DEFAULT_TENANT_ID, name: "Järnagatan 4 - Tvättstuga", objectNumber: "OBJ-007", objectType: "rum", objectLevel: 3, address: "Järnagatan 4", city: "Södertälje", postalCode: "151 04", latitude: 59.2045, longitude: 17.6150, hierarchyLevel: "rum" },
-    { id: "obj-8", tenantId: DEFAULT_TENANT_ID, name: "Turingegatan 10 - Källare", objectNumber: "OBJ-008", objectType: "rum", objectLevel: 3, address: "Turingegatan 10", city: "Södertälje", postalCode: "151 72", latitude: 59.1912, longitude: 17.6380, hierarchyLevel: "rum" },
+    { id: "obj-1", tenantId: DEFAULT_TENANT_ID, name: "Stensätravägen 2 - Soprum A", objectNumber: "OBJ-001", address: "Stensätravägen 2", city: "Södertälje", postalCode: "151 57", latitude: 59.1876, longitude: 17.6432 },
+    { id: "obj-2", tenantId: DEFAULT_TENANT_ID, name: "Oxbacksleden 12 - Fastighet", objectNumber: "OBJ-002", address: "Oxbacksleden 12", city: "Södertälje", postalCode: "151 42", latitude: 59.1923, longitude: 17.6198 },
+    { id: "obj-3", tenantId: DEFAULT_TENANT_ID, name: "Strandvägen 15 - Kärl 240L", objectNumber: "OBJ-003", address: "Strandvägen 15", city: "Södertälje", postalCode: "151 38", latitude: 59.1978, longitude: 17.6345 },
+    { id: "obj-4", tenantId: DEFAULT_TENANT_ID, name: "Strandvägen 17 - Soprum", objectNumber: "OBJ-004", address: "Strandvägen 17", city: "Södertälje", postalCode: "151 38", latitude: 59.1981, longitude: 17.6351 },
+    { id: "obj-5", tenantId: DEFAULT_TENANT_ID, name: "Torekällbergets Skola", objectNumber: "OBJ-005", address: "Torekällgatan 40", city: "Södertälje", postalCode: "151 72", latitude: 59.2012, longitude: 17.6287 },
+    { id: "obj-6", tenantId: DEFAULT_TENANT_ID, name: "Brunnsängsparken - Container", objectNumber: "OBJ-006", address: "Brunnsängsvägen 8", city: "Södertälje", postalCode: "151 45", latitude: 59.1834, longitude: 17.6512 },
+    { id: "obj-7", tenantId: DEFAULT_TENANT_ID, name: "Järnagatan 4 - Tvättstuga", objectNumber: "OBJ-007", address: "Järnagatan 4", city: "Södertälje", postalCode: "151 04", latitude: 59.2045, longitude: 17.6150 },
+    { id: "obj-8", tenantId: DEFAULT_TENANT_ID, name: "Turingegatan 10 - Källare", objectNumber: "OBJ-008", address: "Turingegatan 10", city: "Södertälje", postalCode: "151 72", latitude: 59.1912, longitude: 17.6380 },
   ]);
 
   // Etapp 5: kundkoppling skrivs som Ekonomi-metadatat 'Kund' (via ensurePrimaryPayer).
   {
     const { ensureSystemomradenFalt } = await import("./metadata-queries");
     const { ensurePrimaryPayer } = await import("./services/object-customer");
+    const { mirrorClassificationToMetadata } = await import("./services/object-classification");
     await ensureSystemomradenFalt(DEFAULT_TENANT_ID);
     const kundPerObjekt: Array<[string, string]> = [
       ["obj-1", "cust-telge"], ["obj-2", "cust-telge"],
@@ -861,6 +839,17 @@ async function seedFieldAppDemoData(tomasResourceId: string) {
     ];
     for (const [objectId, customerId] of kundPerObjekt) {
       await ensurePrimaryPayer(DEFAULT_TENANT_ID, objectId, customerId, "seed-demo");
+    }
+
+    // Klassificering (objekttyp + anläggningstyp) är nu metadata — spegla in.
+    const klassPerObjekt: Array<[string, string, string]> = [
+      ["obj-1", "rum", "rum"], ["obj-2", "fastighet", "fastighet"],
+      ["obj-3", "karl", "karl"], ["obj-4", "rum", "rum"],
+      ["obj-5", "fastighet", "fastighet"], ["obj-6", "karl", "karl"],
+      ["obj-7", "rum", "rum"], ["obj-8", "rum", "rum"],
+    ];
+    for (const [objectId, objectType, hierarchyLevel] of klassPerObjekt) {
+      await mirrorClassificationToMetadata(DEFAULT_TENANT_ID, objectId, { objectType, hierarchyLevel });
     }
   }
 

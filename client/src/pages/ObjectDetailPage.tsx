@@ -250,7 +250,6 @@ interface ParentRelation {
 interface ObjectEditForm {
   name?: string;
   objectNumber?: string;
-  hierarchyLevel?: string;
   status?: string;
   locationType?: string | null;
   latitude?: number | string | null;
@@ -745,7 +744,6 @@ export default function ObjectDetailPage() {
     setEditForm({
       name: resolvedObject.name || "",
       objectNumber: resolvedObject.objectNumber || "",
-      hierarchyLevel: resolvedObject.hierarchyLevel || "",
       status: resolvedObject.status || "active",
     });
     setEditDialogOpen(true);
@@ -991,6 +989,14 @@ export default function ObjectDetailPage() {
   const obj = resolvedObject;
   const inheritanceSources: InheritanceSource[] = obj.inheritanceSources || [];
 
+  // Task #1486: klassificeringen (Objekttyp) läses ur objektets EGNA metadata —
+  // objects-kolumnen är riven och klassificering ärvs aldrig. Header-config
+  // slås fortfarande upp på typ-strängen (objectHeaderConfigs.objectType).
+  const objectTypeFromMetadata: string | null =
+    metadata.find(
+      (m) => m.katalog?.namn === "Objekttyp" && m.source !== "inherited",
+    )?.vardeString ?? null;
+
   // Task #1031: släktträd i 360-översikten. Namn slås upp ur redan hämtade
   // ancestors/descendants (täcker primär förälder + barn alltid); alternativa
   // föräldrar faller tillbaka på id-fragment om de saknas i kedjorna.
@@ -1003,8 +1009,6 @@ export default function ObjectDetailPage() {
     .map((d) => ({
       id: d.id,
       name: d.name || d.objectNumber || d.id.slice(0, 8),
-      objectType: d.objectType ?? null,
-      hierarchyLevel: d.hierarchyLevel ?? null,
     }));
 
 
@@ -1247,7 +1251,7 @@ export default function ObjectDetailPage() {
 
       <ObjectHeaderPanel
         objectId={obj.id}
-        objectType={obj.objectType}
+        objectType={objectTypeFromMetadata}
         latitude={obj.latitude}
         longitude={obj.longitude}
         entranceLatitude={obj.entranceLatitude}

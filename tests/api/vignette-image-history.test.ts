@@ -66,7 +66,7 @@ async function req(
 async function createObject(name: string): Promise<string> {
   const res = await req("POST", "/api/objects", {
     userId: ADMIN,
-    body: { name, customerId, objectType: "karl", objectLevel: 1, status: "active" },
+    body: { name, customerId, status: "active" },
   });
   expect(res.status).toBe(201);
   return res.body.id as string;

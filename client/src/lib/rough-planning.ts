@@ -54,7 +54,6 @@ export interface GridTaskRow {
   teamName: string | null;
   teamColor: string | null;
   roughPlannedWeek: string | null;
-  lastServiceDate: string | null;
   value: number; // öre
   cost: number; // öre
   source: string | null; // creation_method-nyckel (manual/import/external_report/performer/automatic)

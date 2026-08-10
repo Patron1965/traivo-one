@@ -78,8 +78,6 @@ function makeObject(
   return {
     tenantId,
     customerId,
-    objectType: "fastighet",
-    objectLevel: 1,
     status: "active",
     ...overrides,
   } as InsertObject;
@@ -134,22 +132,22 @@ beforeAll(async () => {
   }
 
   const root = await storage.createObject(
-    makeObject(TENANT, customerMain, { name: `${NS} root`, objectLevel: 1, address: `${NS} Storgatan 1` }),
+    makeObject(TENANT, customerMain, { name: `${NS} root`, address: `${NS} Storgatan 1` }),
   );
   rootId = root.id;
   rootObjectNumber = root.objectNumber!;
-  const childA = await storage.createObject(makeObject(TENANT, customerMain, { name: `${NS} childA`, objectLevel: 2, parentId: rootId }));
+  const childA = await storage.createObject(makeObject(TENANT, customerMain, { name: `${NS} childA`, parentId: rootId }));
   childAId = childA.id;
-  const childB = await storage.createObject(makeObject(TENANT, customerMain, { name: `${NS} childB`, objectLevel: 2, parentId: rootId }));
+  const childB = await storage.createObject(makeObject(TENANT, customerMain, { name: `${NS} childB`, parentId: rootId }));
   childBId = childB.id;
-  const grandchild = await storage.createObject(makeObject(TENANT, customerMain, { name: `${NS} grandchild`, objectLevel: 3, parentId: childAId }));
+  const grandchild = await storage.createObject(makeObject(TENANT, customerMain, { name: `${NS} grandchild`, parentId: childAId }));
   grandchildId = grandchild.id;
 
   // Sök-isolering: samma sökterm ("zebra") i båda tenants. MAIN-sökning ska
   // ALDRIG returnera TENANT2-objektet.
-  const zebraMain = await storage.createObject(makeObject(TENANT, customerMain, { name: `${NS} zebra main`, objectLevel: 1 }));
+  const zebraMain = await storage.createObject(makeObject(TENANT, customerMain, { name: `${NS} zebra main` }));
   zebraMainId = zebraMain.id;
-  const zebraOther = await storage.createObject(makeObject(TENANT2, customer2, { name: `${NS} zebra other`, objectLevel: 1 }));
+  const zebraOther = await storage.createObject(makeObject(TENANT2, customer2, { name: `${NS} zebra other` }));
   zebraOtherId = zebraOther.id;
 
   // Primära betalare. childB läggs på customerOther för att verifiera att

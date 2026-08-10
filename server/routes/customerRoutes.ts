@@ -9,6 +9,7 @@ import { NotFoundError, ValidationError, ConflictError } from "../errors";
 import { db } from "../db";
 import { eq, and, isNull, sql, or, inArray } from "drizzle-orm";
 import { primaryPayerCustomerIdSql, primaryPayerCustomerIdSqlFor, getObjectTreeLevel, objectHasPrimaryCustomerSql, ensurePrimaryPayer } from "../services/object-customer";
+import { objectOwnMetadataTextValueSql } from "../services/object-metadata-sql";
 import { triggerGeocodeIfMissing } from "../services/geocoding";
 import { copyObjectTree } from "../services/object-copy";
 import { signObjectQrToken } from "../dynamic-qr-token";
@@ -489,8 +490,8 @@ app.get("/api/objects/lookup", asyncHandler(async (req, res) => {
       id: objects.id,
       name: objects.name,
       objectNumber: objects.objectNumber,
-      hierarchyLevel: objects.hierarchyLevel,
-      objectType: objects.objectType,
+      hierarchyLevel: objectOwnMetadataTextValueSql("Anläggningstyp"),
+      objectType: objectOwnMetadataTextValueSql("Objekttyp"),
       customerId: primaryPayerCustomerIdSql(),
       parentId: objects.parentId,
     })
@@ -653,7 +654,7 @@ app.get("/api/objects/tree", asyncHandler(async (req, res) => {
         id: objects.id,
         name: objects.name,
         objectNumber: objects.objectNumber,
-        objectType: objects.objectType,
+        objectType: objectOwnMetadataTextValueSql("Objekttyp"),
         address: objects.address,
         customerId: primaryPayerCustomerIdSql(),
         customerName: customers.name,
@@ -701,8 +702,8 @@ app.get("/api/objects/hierarchy-tree", asyncHandler(async (req, res) => {
     id: objects.id,
     name: objects.name,
     parentId: objects.parentId,
-    hierarchyLevel: objects.hierarchyLevel,
-    objectType: objects.objectType,
+    hierarchyLevel: objectOwnMetadataTextValueSql("Anläggningstyp"),
+    objectType: objectOwnMetadataTextValueSql("Objekttyp"),
     latitude: objects.latitude,
     longitude: objects.longitude,
     entranceLatitude: objects.entranceLatitude,

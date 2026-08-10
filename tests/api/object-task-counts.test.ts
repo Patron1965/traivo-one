@@ -89,10 +89,10 @@ beforeAll(async () => {
   const [cB] = await db.insert(customers).values({ tenantId: TENANT_B, name: `${NS} Kund B` }).returning();
   customerB = cB.id;
 
-  objWithTasks = (await storage.createObject({ tenantId: TENANT_A, name: `${NS} Med uppgifter`, objectType: "fastighet", status: "active" } as any)).id;
-  objWithoutTasks = (await storage.createObject({ tenantId: TENANT_A, name: `${NS} Utan uppgifter`, objectType: "fastighet", status: "active" } as any)).id;
-  objDeletedTasks = (await storage.createObject({ tenantId: TENANT_A, name: `${NS} Raderade uppgifter`, objectType: "fastighet", status: "active" } as any)).id;
-  objectB = (await storage.createObject({ tenantId: TENANT_B, name: `${NS} Objekt B`, objectType: "fastighet", status: "active" } as any)).id;
+  objWithTasks = (await storage.createObject({ tenantId: TENANT_A, name: `${NS} Med uppgifter`, status: "active" } as any)).id;
+  objWithoutTasks = (await storage.createObject({ tenantId: TENANT_A, name: `${NS} Utan uppgifter`, status: "active" } as any)).id;
+  objDeletedTasks = (await storage.createObject({ tenantId: TENANT_A, name: `${NS} Raderade uppgifter`, status: "active" } as any)).id;
+  objectB = (await storage.createObject({ tenantId: TENANT_B, name: `${NS} Objekt B`, status: "active" } as any)).id;
 
   // objWithTasks: 2 work orders + 3 assignments = 5.
   await db.insert(workOrders).values([

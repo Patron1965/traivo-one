@@ -24,6 +24,7 @@ import {
   importBatches,
   auditLogs,
 } from "../shared/schema";
+import { objectOwnMetadataTextValueSqlFor } from "../server/services/object-metadata-sql";
 import {
   KARL_METADATA_DEFINITIONS,
   seedKarlMetadataTypes,
@@ -66,8 +67,10 @@ function autoDetectMetadataColumns(rows: Record<string, string>[]) {
 
 async function baselineCoverage() {
   const [{ total }] = await db.execute<any>(sql`
-    SELECT COUNT(*)::int AS total FROM objects
-    WHERE tenant_id = ${TENANT_ID} AND object_type = 'karl' AND deleted_at IS NULL
+    SELECT COUNT(*)::int AS total FROM objects o
+    WHERE o.tenant_id = ${TENANT_ID}
+      AND ${objectOwnMetadataTextValueSqlFor("Objekttyp", sql.raw("o.id"))} = 'karl'
+      AND o.deleted_at IS NULL
   `).then((r: any) => r.rows ?? r);
   return { karlTotal: Number(total) };
 }
@@ -86,7 +89,7 @@ async function metadataCoverage(typeNames: string[]) {
       JOIN objects o ON o.id = v.objekt_id
       WHERE v.tenant_id = ${TENANT_ID}
         AND v.metadata_katalog_id = ${t.id}
-        AND o.object_type = 'karl'
+        AND ${objectOwnMetadataTextValueSqlFor("Objekttyp", sql.raw("o.id"))} = 'karl'
         AND o.deleted_at IS NULL
     `).then((r: any) => r.rows ?? r);
     coverage[t.namn] = Number(rows[0]?.c ?? 0);
@@ -117,7 +120,7 @@ async function runPreview(csvPath: string) {
   for (let i = 0; i < objectNumbers.length; i += CHUNK) {
     const slice = objectNumbers.slice(i, i + CHUNK);
     const partial = await db
-      .select({ id: objects.id, objectNumber: objects.objectNumber, type: objects.objectType })
+      .select({ id: objects.id, objectNumber: objects.objectNumber, type: objectOwnMetadataTextValueSqlFor("Objekttyp", sql.raw(`"objects"."id"`)) })
       .from(objects)
       .where(
         and(

@@ -115,8 +115,6 @@ describe("ObjectDetailPage spara-flöde — POST/PATCH /api/objects mot dev-DB",
       body: {
         name: `${NS} Originalnamn`,
         customerId,
-        objectType: "karl",
-        objectLevel: 1,
         status: "active",
         address: `${NS} Gamla gatan 1`,
         city: "Gammelstad",

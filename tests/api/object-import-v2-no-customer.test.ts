@@ -231,8 +231,6 @@ describe("Task #1437 — ingen automatisk kundkoppling vid import", () => {
         tenantId: TENANT,
         name: "Legacy Auto-kund",
         objectNumber: `${NS}-LEG-1`,
-        objectType: "fastighet",
-        hierarchyLevel: "fastighet",
         importBatchId: `${NS}-legacy-batch`,
       } as any)
       .returning();
@@ -259,8 +257,6 @@ describe("Task #1437 — ingen automatisk kundkoppling vid import", () => {
           tenantId: TENANT,
           name: `Explicit via ${origin}`,
           objectNumber: `${NS}-${origin}`,
-          objectType: "fastighet",
-          hierarchyLevel: "fastighet",
           importBatchId: `${NS}-batch-${origin}`,
         } as any)
         .returning();

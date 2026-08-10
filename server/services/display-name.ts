@@ -14,6 +14,7 @@
 import { db } from "../db";
 import { objects, objectParents, tenants, displayNameRulesSchema, type DisplayNameRules } from "@shared/schema";
 import { and, eq, inArray, isNull } from "drizzle-orm";
+import { objectOwnMetadataTextValueSql } from "./object-metadata-sql";
 
 const DEFAULT_RULES: DisplayNameRules = {
   enabled: false,
@@ -73,11 +74,14 @@ function localizedName(o: MinimalObject, language?: string): string {
   return o.name ?? "";
 }
 
+// Task #1486: nivån (hierarchyLevel) för släktnamns-filtrering (includeLevels)
+// härleds ur klassificerings-metadatat "Anläggningstyp" (objektets EGNA rad,
+// aldrig ärvt) — legacy-kolumnen objects.hierarchy_level är borttagen.
 const OBJECT_NAME_COLUMNS = {
   id: objects.id,
   name: objects.name,
   parentId: objects.parentId,
-  hierarchyLevel: objects.hierarchyLevel,
+  hierarchyLevel: objectOwnMetadataTextValueSql("Anläggningstyp"),
   nameTranslations: objects.nameTranslations,
 } as const;
 

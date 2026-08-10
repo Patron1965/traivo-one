@@ -2,7 +2,7 @@ import { db } from "./db";
 import { eq, and, isNull, sql } from "drizzle-orm";
 import { articles, objects, metadataKatalog, metadataVarden, type AssociationCondition } from "@shared/schema";
 import { getObjectWithAllMetadata, getObjectAtkomstFields } from "./metadata-queries";
-import { getObjectHookClassification } from "./services/object-classification";
+import { getObjectHookClassification, getClassificationForObjects } from "./services/object-classification";
 
 // Task #835: utökade operatorer. greater/less = numerisk jämförelse om båda är tal,
 // annars lexikografisk. has_value = fältet har ett (icke-tomt) värde ("ungefärlig träff").
@@ -170,20 +170,12 @@ export async function getMatchingArticlesForObject(
 
   // Task #835: hämta objektets intrinsiska fält för hook_level-villkor.
   // Etapp 5: åtkomstkod läses ur metadata (systemområdet Åtkomst), ej objektkolumn.
-  const [objRow] = await db
-    .select({
-      objectType: objects.objectType,
-      hierarchyLevel: objects.hierarchyLevel,
-    })
-    .from(objects)
-    .where(and(eq(objects.id, objectId), eq(objects.tenantId, tenantId)));
   const atkomst = await getObjectAtkomstFields(objectId, tenantId, objMeta ?? undefined);
-  // Task #1484: klassificering läses metadata-först (Objekttyp/Anläggningstyp i
-  // systemområdet Klassificering) med kolumn-fallback under expand-fasen.
+  // Task #1486: klassificering läses ENBART ur metadata (Objekttyp/Anläggningstyp
+  // i systemområdet Klassificering) — legacy-kolumnerna finns inte längre.
   const klassificering = await getObjectHookClassification(
     tenantId,
     objectId,
-    { objectType: objRow?.objectType, hierarchyLevel: objRow?.hierarchyLevel },
     objMeta,
   );
   const hookCtx: HookObjectContext = {
@@ -307,7 +299,6 @@ export async function getMatchedObjectsForArticle(
       vardeReferens: metadataVarden.vardeReferens,
       objectName: objects.name,
       objectAddress: objects.address,
-      objectType: objects.objectType,
     })
     .from(metadataVarden)
     .innerJoin(objects, eq(objects.id, metadataVarden.objektId))
@@ -320,18 +311,23 @@ export async function getMatchedObjectsForArticle(
       )
     );
 
-  const matches = rows
-    .filter((r) => {
-      const actual = extractDisplayValue(r);
-      return matchValue(actual, expectedValue, operator);
-    })
-    .map((r) => ({
-      objectId: r.objektId,
-      objectName: r.objectName,
-      objectAddress: r.objectAddress,
-      objectType: r.objectType,
-      metadataValue: extractDisplayValue(r),
-    }));
+  const filtered = rows.filter((r) => {
+    const actual = extractDisplayValue(r);
+    return matchValue(actual, expectedValue, operator);
+  });
+  // Task #1486: objekttyp härleds ur klassificerings-metadatat (batch) — legacy
+  // kolumnen objects.object_type finns inte längre.
+  const classification = await getClassificationForObjects(
+    tenantId,
+    filtered.map((r) => r.objektId).filter((id): id is string => id != null),
+  );
+  const matches = filtered.map((r) => ({
+    objectId: r.objektId,
+    objectName: r.objectName,
+    objectAddress: r.objectAddress,
+    objectType: r.objektId ? classification.get(r.objektId)?.objectType ?? null : null,
+    metadataValue: extractDisplayValue(r),
+  }));
 
   return { article, matches };
 }

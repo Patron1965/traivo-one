@@ -113,14 +113,14 @@ beforeAll(async () => {
   customerA = cA.id;
   const [oA] = await db
     .insert(objects)
-    .values({ tenantId: TENANT_A, name: "Objekt A", objectType: "fastighet" } as any)
+    .values({ tenantId: TENANT_A, name: "Objekt A" } as any)
     .returning();
   objectA = oA.id;
   const [cB] = await db.insert(customers).values({ tenantId: TENANT_B, name: "Kund B" }).returning();
   customerB = cB.id;
   const [oB] = await db
     .insert(objects)
-    .values({ tenantId: TENANT_B, name: "Objekt B", objectType: "fastighet" } as any)
+    .values({ tenantId: TENANT_B, name: "Objekt B" } as any)
     .returning();
   objectB = oB.id;
 

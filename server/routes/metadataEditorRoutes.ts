@@ -527,8 +527,6 @@ export function registerMetadataEditorRoutes(app: Express) {
         tenantId,
         parentId: null,
         name: body.newObject.name,
-        objectType: "fastighet",
-        objectLevel: 1,
         address: body.newObject.address ?? null,
         latitude: body.newObject.latitude ?? body.latitude ?? null,
         longitude: body.newObject.longitude ?? body.longitude ?? null,
@@ -538,6 +536,9 @@ export function registerMetadataEditorRoutes(app: Express) {
       const interim = await storage.createObject(insertData);
       objectId = interim.id;
       createdInterimObject = true;
+      // Task #1486: klassificering skrivs som metadata (kolumnerna är rivna).
+      const { scheduleClassificationMirror } = await import("../services/object-classification");
+      scheduleClassificationMirror(tenantId, interim.id, { objectType: "fastighet" });
       triggerGeocodeIfMissing(interim.id);
     }
 

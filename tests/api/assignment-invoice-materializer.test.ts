@@ -69,7 +69,7 @@ beforeAll(async () => {
 
   const [object] = await db
     .insert(objects)
-    .values({ tenantId: TENANT, customerId, name: "AIM Objekt", objectType: "fastighet" })
+    .values({ tenantId: TENANT, customerId, name: "AIM Objekt" })
     .returning();
   objectId = object.id;
 

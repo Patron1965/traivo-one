@@ -48,9 +48,8 @@ const COL = {
   hours: 10,
   team: 11,
   week: 12,
-  lastService: 13,
-  valueKr: 14,
-  costKr: 15,
+  valueKr: 13,
+  costKr: 14,
 } as const;
 
 let tenantA: string;
@@ -73,7 +72,6 @@ const titles = {
 const tenantBTitle = `Cross Tenant ${randomId()}`;
 
 const desiredStartA1 = new Date("2026-06-15T12:00:00.000Z");
-const lastServiceA1 = new Date("2026-01-10T12:00:00.000Z");
 
 type WoInput = {
   tenantId: string;
@@ -168,7 +166,7 @@ describe("Grovplanering Excel-export speglar gridet", () => {
 
     const [oX] = await db
       .insert(objects)
-      .values({ tenantId: tenantA, name: `Objekt X ${randomId()}`, lastServiceDate: lastServiceA1 })
+      .values({ tenantId: tenantA, name: `Objekt X ${randomId()}` })
       .returning();
     const [oY] = await db
       .insert(objects)
@@ -189,7 +187,7 @@ describe("Grovplanering Excel-export speglar gridet", () => {
     teamA = tm.id;
 
     // WO1 — otilldelad, typ bok, värde 12345 öre / kostnad 6700 öre, 90 min,
-    // önskad leverans + senast utförd (på objektet).
+    // önskad leverans.
     await insertWo({
       tenantId: tenantA,
       customerId: customerA,
@@ -370,16 +368,13 @@ describe("Grovplanering Excel-export speglar gridet", () => {
     expect(ws.getRow(2).getCell(COL.hours).value).toBe(1.5);
   });
 
-  it("datum-celler skrivs som äkta Date-värden (önskad leverans + senast utförd)", async () => {
+  it("datum-celler skrivs som äkta Date-värden (önskad leverans)", async () => {
     const { ws, rowCount } = await exportRows(tenantA, { taskTypes: ["bok"] }, "kund");
     expect(rowCount).toBe(1);
     const desired = ws.getRow(2).getCell(COL.desired).value;
-    const lastService = ws.getRow(2).getCell(COL.lastService).value;
 
     expect(desired).toBeInstanceOf(Date);
     expect((desired as Date).toISOString()).toBe(desiredStartA1.toISOString());
-    expect(lastService).toBeInstanceOf(Date);
-    expect((lastService as Date).toISOString()).toBe(lastServiceA1.toISOString());
   });
 
   it("tomt datum ger tom cell (ingen önskad leverans)", async () => {

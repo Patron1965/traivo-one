@@ -116,7 +116,8 @@ if command -v psql >/dev/null 2>&1 && [ -n "$DATABASE_URL" ]; then
            migrations/0147_metadata_varden_grupp_nyckel.sql \
           migrations/0148_kund_ingen_automatisk_arvning.sql \
           migrations/0149_metadata_katalog_active_namn_unique.sql \
-          migrations/0150_object_import_mapping_templates.sql; do
+          migrations/0150_object_import_mapping_templates.sql \
+          migrations/0151_drop_objects_legacy_classification.sql; do
     if [ -f "$f" ]; then
       echo "[post-merge] Applying $f"
       psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f "$f"
@@ -137,13 +138,8 @@ else
   echo "[post-merge] DATABASE_URL unset — skipping schema-drift check"
 fi
 
-# Task #1484: klassificerings-backfill (Objekttyp/Anläggningstyp som metadata).
-# Idempotent, insert-only (skriver aldrig över/nollar). Icke-blockerande.
-if [ -n "$DATABASE_URL" ]; then
-  echo "[post-merge] Running object classification backfill (Task #1484)"
-  npx tsx scripts/backfill-object-classification.ts --confirm KLASSIFICERING-BACKFILL \
-    || echo "[post-merge] ⚠ KLASSIFICERINGS-BACKFILL misslyckades — se loggen ovan. Blockerar ej (kolumn-fallback täcker)."
-fi
+# Task #1486: klassificerings-backfillskriptet (Task #1484) är borttaget —
+# legacy-kolumnerna är rivna (migration 0151) och metadata är enda källan.
 
 # Task #835: paritetstest mellan legacy-fasthakning och den nya regelbaserade resolvern.
 # Körs efter migration 0075 (back-fill av association_rules). Icke-blockerande: rapporterar

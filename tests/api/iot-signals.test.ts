@@ -23,8 +23,6 @@ describe("IoT API", () => {
       tenantId: TEST_TENANT,
       name: `IoT Kärl ${randomId()}`,
       objectNumber: randomId(),
-      objectType: "container",
-      objectLevel: 2,
       customerId: customer.id,
     } as InsertObject);
     objectId = obj.id;

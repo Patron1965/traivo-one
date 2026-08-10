@@ -77,8 +77,6 @@ describe("Tenant ownership-helpers — cross-tenant id:n avvisas", () => {
       customerId: customerA,
       name: `TO-ObjA ${randomId()}`,
       objectNumber: randomId(),
-      objectType: "container",
-      objectLevel: 2,
     } as InsertObject);
     objectA = oA.id;
 
@@ -87,8 +85,6 @@ describe("Tenant ownership-helpers — cross-tenant id:n avvisas", () => {
       customerId: customerB,
       name: `TO-ObjB ${randomId()}`,
       objectNumber: randomId(),
-      objectType: "container",
-      objectLevel: 2,
     } as InsertObject);
     objectB = oB.id;
   });

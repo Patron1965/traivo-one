@@ -827,10 +827,6 @@ export default function SubscriptionsPage() {
                 <div className="space-y-4">
                   <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <div className="text-sm text-muted-foreground">Typ</div>
-                      <div className="font-medium">{selectedObject.objectType}</div>
-                    </div>
-                    <div>
                       <div className="text-sm text-muted-foreground">Adress</div>
                       <div className="font-medium">{selectedObject.address || "-"}</div>
                     </div>

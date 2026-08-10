@@ -1,7 +1,6 @@
 import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { OrderFilterBar, OrderSearchInput } from "@/components/orders/OrderFilterBar";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -20,7 +19,6 @@ import {
   ChevronLeft,
   ChevronRight,
   Layers,
-  Calendar,
   RotateCw,
   Repeat,
   CalendarClock,
@@ -98,14 +96,12 @@ interface AreaSearchUrlState {
   city: string;
   hierarchies: string[];
   statuses: PlannerStatusCat[];
-  from: string;
-  to: string;
   page: number;
 }
 const VALID_STATUS_CATS: ReadonlyArray<PlannerStatusCat> = ["oschemalagd", "forsenad", "schemalagd", "utford"];
 function readUrlState(): AreaSearchUrlState {
   if (typeof window === "undefined") {
-    return { open: false, city: "", hierarchies: [], statuses: [], from: "", to: "", page: 1 };
+    return { open: false, city: "", hierarchies: [], statuses: [], page: 1 };
   }
   const sp = new URLSearchParams(window.location.search);
   return {
@@ -115,8 +111,6 @@ function readUrlState(): AreaSearchUrlState {
     statuses: (sp.get("areaStatus") || "").split(",").filter((s): s is PlannerStatusCat =>
       (VALID_STATUS_CATS as readonly string[]).includes(s)
     ),
-    from: sp.get("areaFrom") || "",
-    to: sp.get("areaTo") || "",
     page: Math.max(1, parseInt(sp.get("areaPage") || "1", 10) || 1),
   };
 }
@@ -169,8 +163,6 @@ export const PlannerAreaSearchPanel = memo(function PlannerAreaSearchPanel({
   const [cityInput, setCityInput] = useState<string>(initial.city || "");
   const [hierarchies, setHierarchies] = useState<string[]>(initial.hierarchies || []);
   const [statusCats, setStatusCats] = useState<PlannerStatusCat[]>(initial.statuses || []);
-  const [from, setFrom] = useState<string>(initial.from || "");
-  const [to, setTo] = useState<string>(initial.to || "");
   const [page, setPage] = useState<number>(initial.page || 1);
   const [cityPopoverOpen, setCityPopoverOpen] = useState(false);
 
@@ -181,11 +173,9 @@ export const PlannerAreaSearchPanel = memo(function PlannerAreaSearchPanel({
       areaCity: city || null,
       areaHier: hierarchies.length ? hierarchies.join(",") : null,
       areaStatus: statusCats.length ? statusCats.join(",") : null,
-      areaFrom: from || null,
-      areaTo: to || null,
       areaPage: page > 1 ? String(page) : null,
     });
-  }, [open, city, hierarchies, statusCats, from, to, page]);
+  }, [open, city, hierarchies, statusCats, page]);
 
   // City autocomplete
   const citiesQuery = useQuery<string[]>({
@@ -206,12 +196,10 @@ export const PlannerAreaSearchPanel = memo(function PlannerAreaSearchPanel({
     if (city) sp.set("city", city);
     if (hierarchies.length) sp.set("hierarchyLevels", hierarchies.join(","));
     if (statusCats.length) sp.set("statusCategories", statusCats.join(","));
-    if (from) sp.set("lastServiceFrom", from);
-    if (to) sp.set("lastServiceTo", to);
     sp.set("page", String(page));
     sp.set("pageSize", String(PAGE_SIZE));
     return sp.toString();
-  }, [city, hierarchies, statusCats, from, to, page]);
+  }, [city, hierarchies, statusCats, page]);
 
   const searchQuery = useQuery<AreaSearchResponse>({
     queryKey: ["/api/planner/area-search", searchParams],
@@ -409,8 +397,6 @@ export const PlannerAreaSearchPanel = memo(function PlannerAreaSearchPanel({
     setCityInput("");
     setHierarchies([]);
     setStatusCats([]);
-    setFrom("");
-    setTo("");
     setPage(1);
   }, []);
 
@@ -595,34 +581,6 @@ export const PlannerAreaSearchPanel = memo(function PlannerAreaSearchPanel({
           </div>
         </div>
 
-        {/* Last service date */}
-        <div className="space-y-1.5">
-          <label className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide flex items-center gap-1">
-            <Calendar className="h-3 w-3" /> Senaste service
-          </label>
-          <div className="grid grid-cols-2 gap-2">
-            <div>
-              <span className="text-[10px] text-muted-foreground">Från</span>
-              <Input
-                type="date"
-                value={from}
-                onChange={(e) => { setFrom(e.target.value); setPage(1); }}
-                className="h-7 text-xs"
-                data-testid="input-area-last-service-from"
-              />
-            </div>
-            <div>
-              <span className="text-[10px] text-muted-foreground">Till</span>
-              <Input
-                type="date"
-                value={to}
-                onChange={(e) => { setTo(e.target.value); setPage(1); }}
-                className="h-7 text-xs"
-                data-testid="input-area-last-service-to"
-              />
-            </div>
-          </div>
-        </div>
       </div>
 
       {/* Results */}

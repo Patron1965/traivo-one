@@ -110,7 +110,7 @@ describe("Disruption-triggers (integration mot riktig DB)", () => {
 
     const [object] = await db
       .insert(objects)
-      .values({ tenantId: TENANT, customerId, name: "Trigger Testobjekt", objectType: "fastighet" })
+      .values({ tenantId: TENANT, customerId, name: "Trigger Testobjekt" })
       .returning();
     objectId = object.id;
 

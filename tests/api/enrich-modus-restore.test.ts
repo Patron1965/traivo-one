@@ -52,10 +52,12 @@ async function createTenantFixture(label: string): Promise<FixtureContext> {
       customerId: customer.id,
       name: `${RUN_TAG}-${label}-object`,
       objectNumber: `MODUS-${RUN_TAG}-${label}`,
-      objectType: "karl",
-      hierarchyLevel: "karl",
     })
     .returning();
+
+  // Klassificering (objekttyp/anläggningstyp) är nu metadata (Task #1486).
+  const { mirrorClassificationToMetadata } = await import("../../server/services/object-classification");
+  await mirrorClassificationToMetadata(tenant.id, object.id, { objectType: "karl", hierarchyLevel: "karl" });
 
   const [katalogString] = await db
     .insert(metadataKatalog)

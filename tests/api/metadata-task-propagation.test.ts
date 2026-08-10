@@ -61,7 +61,6 @@ describe("Å1 - dynamisk uppdatering av framtida ogjorda uppgifter (matches_fiel
         tenantId: TEST_TENANT,
         customerId,
         name: "Prop Testobjekt",
-        objectType: "fastighet",
       })
       .returning();
     objectId = object.id;
@@ -229,7 +228,6 @@ describe("Å1 - per_styck metadata-kapabelt + bakåtkompatibel fallback", () => 
         tenantId: psTenant,
         customerId: psCustomerId,
         name: "PS Testobjekt",
-        objectType: "fastighet",
       })
       .returning();
     psObjectId = object.id;

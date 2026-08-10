@@ -53,11 +53,13 @@ async function createTestObject(data: { name: string; objectType: string; object
     tenantId: TENANT_ID,
     customerId: "TESTCUST",
     name: data.name,
-    objectType: data.objectType,
     objectNumber: data.objectNumber,
     parentId: data.parentId || null,
     status: "active",
   } as any).returning();
+  // Klassificering (objekttyp) är nu metadata (Task #1486) — spegla in.
+  const { mirrorClassificationToMetadata } = await import("../server/services/object-classification");
+  await mirrorClassificationToMetadata(TENANT_ID, obj.id, { objectType: data.objectType });
   return obj;
 }
 

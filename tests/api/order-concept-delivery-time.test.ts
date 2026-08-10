@@ -94,19 +94,19 @@ beforeAll(async () => {
 
   const [objValid] = await db
     .insert(objects)
-    .values({ tenantId: TENANT, customerId, name: "Objekt giltig", objectType: "fastighet" })
+    .values({ tenantId: TENANT, customerId, name: "Objekt giltig" })
     .returning();
   objValidId = objValid.id;
 
   const [objInvalid] = await db
     .insert(objects)
-    .values({ tenantId: TENANT, customerId, name: "Objekt ogiltig", objectType: "fastighet" })
+    .values({ tenantId: TENANT, customerId, name: "Objekt ogiltig" })
     .returning();
   objInvalidId = objInvalid.id;
 
   const [objMissing] = await db
     .insert(objects)
-    .values({ tenantId: TENANT, customerId, name: "Objekt saknar", objectType: "fastighet" })
+    .values({ tenantId: TENANT, customerId, name: "Objekt saknar" })
     .returning();
   objMissingId = objMissing.id;
 

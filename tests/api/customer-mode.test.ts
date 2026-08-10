@@ -34,8 +34,6 @@ describe("CustomerMode — HARDCODED / FROM_METADATA", () => {
       customerId: customer1Id,
       name: `ObjCust1 ${randomId()}`,
       objectNumber: randomId(),
-      objectType: "container",
-      objectLevel: 2,
     } as InsertObject);
     objectWithCust1 = obj1.id;
     await setObjectKund(TENANT_ID, obj1.id, customer1Id);
@@ -45,8 +43,6 @@ describe("CustomerMode — HARDCODED / FROM_METADATA", () => {
       customerId: customer2Id,
       name: `ObjCust2 ${randomId()}`,
       objectNumber: randomId(),
-      objectType: "container",
-      objectLevel: 2,
     } as InsertObject);
     objectWithCust2 = obj2.id;
     await setObjectKund(TENANT_ID, obj2.id, customer2Id);

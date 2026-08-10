@@ -199,6 +199,9 @@ export function registerObjectLifecycleRoutes(app: Express): void {
 
     const childBatchId = `child-objects-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
     const childStartedBy = (req as any).user?.id || null;
+    // Task #1486: klassificering bor i metadata — läs förälderns för default.
+    const { getObjectHookClassification, scheduleClassificationMirror } = await import("../services/object-classification");
+    const parentClass = await getObjectHookClassification(tenantId, parent.id);
     const created: string[] = [];
     const failures: Array<{ index: number; message: string }> = [];
     for (let i = 0; i < parsed.data.rows.length; i++) {
@@ -209,13 +212,15 @@ export function registerObjectLifecycleRoutes(app: Express): void {
           parentId: parent.id,
           name: r.name,
           objectNumber: r.objectNumber ?? null,
-          objectType: r.objectType ?? parent.objectType ?? "byggnad",
-          hierarchyLevel: r.hierarchyLevel ?? null,
           address: r.address ?? parent.address ?? null,
           city: r.city ?? parent.city ?? null,
           postalCode: r.postalCode ?? parent.postalCode ?? null,
           importBatchId: childBatchId,
         } as any);
+        scheduleClassificationMirror(tenantId, obj.id, {
+          objectType: r.objectType ?? parentClass.objectType ?? "byggnad",
+          hierarchyLevel: r.hierarchyLevel ?? null,
+        });
         created.push(obj.id);
       } catch (err: any) {
         failures.push({ index: i, message: err?.message || String(err) });

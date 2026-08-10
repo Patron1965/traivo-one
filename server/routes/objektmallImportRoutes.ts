@@ -2208,8 +2208,8 @@ async function commitImport(
             name: res.name,
             // Task #1433: systemmyntat löpnummer i stället för MALL-<interim>.
             objectNumber: await mintObjectNumber(),
-            objectType: meta.objectType,
-            hierarchyLevel: meta.hierarchyLevel,
+            // Task #1486: klassificering (objectType/hierarchyLevel) speglas till
+            // metadata via scheduleClassificationMirror nedan — inga legacy-kolumner här.
             address,
             city,
             postalCode,

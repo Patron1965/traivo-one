@@ -11,6 +11,7 @@ import { AppError, NotFoundError, ValidationError, UnauthorizedError, ForbiddenE
 import { requireAdmin, requireRole } from "../tenant-middleware";
 import { insertPortalMessageSchema, insertSelfBookingSchema, insertVisitConfirmationSchema, insertTechnicianRatingSchema, insertQrCodeLinkSchema, insertSelfBookingSlotSchema, insertCustomerNotificationSettingsSchema, type InsertObject, taskMetadataUpdates } from "@shared/schema";
 import { getObjectWithAllMetadata, writeArticleMetadataOnObject, getDisplayValue, getObjectAtkomstFields } from "../metadata-queries";
+import { getClassificationForObjects, scheduleClassificationMirror, resolveClassificationFromMetadata } from "../services/object-classification";
 import { notificationService } from "../notifications";
 import { sendEmail } from "../replit_integrations/resend";
 import { isModuleEnabled } from "../feature-flags";
@@ -424,14 +425,17 @@ app.get("/api/portal/objects", asyncHandler(async (req, res) => {
     const objects = session.scopedObjectIds
       ? allObjects.filter(o => session.scopedObjectIds!.has(o.id))
       : allObjects;
-    
+
+    // Klassificering (Objekttyp) läses ur metadata — kolumnen finns inte längre.
+    const classification = await getClassificationForObjects(session.tenantId!, objects.map(o => o.id));
+
     res.json(objects.map(o => ({
       id: o.id,
       name: o.name,
       address: o.address,
       city: o.city,
       postalCode: o.postalCode,
-      objectType: o.objectType,
+      objectType: classification.get(o.id)?.objectType ?? null,
       latitude: o.latitude,
       longitude: o.longitude,
     })));
@@ -495,6 +499,9 @@ app.get("/api/portal/clusters", asyncHandler(async (req, res) => {
       }
     });
 
+    // Klassificering (Objekttyp/Anläggningstyp) läses ur metadata — kolumnerna finns inte längre.
+    const clusterClassification = await getClassificationForObjects(session.tenantId!, customerObjects.map(o => o.id));
+
     // Build hierarchy tree
     const objectMap = new Map<string, any>();
     const rootObjects: any[] = [];
@@ -502,11 +509,12 @@ app.get("/api/portal/clusters", asyncHandler(async (req, res) => {
     // First pass: create all node objects with enriched data
     customerObjects.forEach(obj => {
       const visitInfo = objectVisitInfo[obj.id] || {};
+      const cls = clusterClassification.get(obj.id);
       objectMap.set(obj.id, {
         id: obj.id,
         name: obj.name,
-        objectType: obj.objectType,
-        hierarchyLevel: obj.hierarchyLevel || "fastighet",
+        objectType: cls?.objectType ?? null,
+        hierarchyLevel: cls?.hierarchyLevel || "fastighet",
         address: obj.address,
         city: obj.city,
         postalCode: obj.postalCode,
@@ -648,12 +656,18 @@ app.get("/api/portal/clusters/children", asyncHandler(async (req: any, res: any)
     childObjects = childObjects.filter(o => matchIds!.has(o.id) || ancestorIds!.has(o.id));
   }
 
+  // Klassificering (Objekttyp/Anläggningstyp) läses ur metadata — kolumnerna finns inte längre.
+  const childClassification = await getClassificationForObjects(
+    session.tenantId!,
+    childObjects.map(o => o.id),
+  );
+
   const nodes = childObjects
     .map(o => ({
       id: o.id,
       name: o.name,
-      objectType: o.objectType,
-      hierarchyLevel: o.hierarchyLevel || "fastighet",
+      objectType: childClassification.get(o.id)?.objectType ?? null,
+      hierarchyLevel: childClassification.get(o.id)?.hierarchyLevel || "fastighet",
       address: o.address,
       city: o.city,
       postalCode: o.postalCode,
@@ -762,6 +776,12 @@ app.get("/api/portal/clusters/:objectId/ancestors", asyncHandler(async (req: any
     return visibleIds.has(raw) ? raw : null;
   };
 
+  // Klassificering (Anläggningstyp) läses ur metadata — kolumnen finns inte längre.
+  const ancestorClassification = await getClassificationForObjects(
+    session.tenantId!,
+    customerObjects.map(o => o.id),
+  );
+
   // Bygg kedja från target uppåt och vänd för rot→target-ordning.
   const chain: Array<{ id: string; name: string; hierarchyLevel: string }> = [];
   const seen = new Set<string>();
@@ -771,7 +791,7 @@ app.get("/api/portal/clusters/:objectId/ancestors", asyncHandler(async (req: any
     chain.push({
       id: cur.id,
       name: cur.name,
-      hierarchyLevel: cur.hierarchyLevel || "fastighet",
+      hierarchyLevel: ancestorClassification.get(cur.id)?.hierarchyLevel || "fastighet",
     });
     const p = effectiveParent(cur);
     cur = p ? objById.get(p) : null;
@@ -833,12 +853,17 @@ app.get("/api/portal/clusters/:objectId/stats", asyncHandler(async (req: any, re
   }
 
   const objsById = new Map(customerObjects.map(o => [o.id, o]));
+  // Klassificering (Anläggningstyp/Objekttyp) läses ur metadata — kolumnerna finns inte längre.
+  const statsClassification = await getClassificationForObjects(
+    session.tenantId!,
+    customerObjects.map(o => o.id),
+  );
   const countsByLevel: Record<string, number> = {};
   for (const id of descendants) {
     if (id === objectId) continue;
     const o = objsById.get(id);
     if (!o) continue;
-    const level = o.hierarchyLevel || "fastighet";
+    const level = statsClassification.get(id)?.hierarchyLevel || "fastighet";
     countsByLevel[level] = (countsByLevel[level] || 0) + 1;
   }
 
@@ -892,8 +917,8 @@ app.get("/api/portal/clusters/:objectId/stats", asyncHandler(async (req: any, re
     object: {
       id: targetObj.id,
       name: targetObj.name,
-      hierarchyLevel: targetObj.hierarchyLevel || "fastighet",
-      objectType: targetObj.objectType,
+      hierarchyLevel: statsClassification.get(targetObj.id)?.hierarchyLevel || "fastighet",
+      objectType: statsClassification.get(targetObj.id)?.objectType ?? null,
       address: targetObj.address,
       city: targetObj.city,
       postalCode: targetObj.postalCode,
@@ -2318,12 +2343,11 @@ app.post("/api/public-issue-reports/:id/create-interim-object", requireAdmin, as
       }
     }
     const objectName = name || report.title || "Rapporterat objekt från felanmälan";
+    const resolvedObjectType = objectType || "fastighet";
     const insertData: InsertObject = {
       tenantId,
       parentId: parentId || null,
       name: objectName,
-      objectType: objectType || "fastighet",
-      objectLevel: 1,
       address: report.description || null,
       latitude: report.latitude || null,
       longitude: report.longitude || null,
@@ -2331,6 +2355,8 @@ app.post("/api/public-issue-reports/:id/create-interim-object", requireAdmin, as
       status: "active",
     };
     const interimObject = await storage.createObject(insertData);
+    // Klassificering speglas till metadata (kolumnerna finns inte längre).
+    scheduleClassificationMirror(tenantId, interimObject.id, { objectType: resolvedObjectType });
     // Etapp 5: kund-koppling sker via Ekonomi-metadatat ("Kund"), inte objektkolumn.
     await ensurePrimaryPayer(tenantId, interimObject.id, customerId, "portal-explicit");
 
@@ -2367,13 +2393,19 @@ app.get("/api/portal/field/objects", asyncHandler(async (req, res) => {
       reportCountByObject[cr.objectId] = (reportCountByObject[cr.objectId] || 0) + 1;
     }
 
+    // Klassificering (Objekttyp) läses ur metadata — kolumnen finns inte längre.
+    const fieldClassification = await getClassificationForObjects(
+      session.tenantId!,
+      customerObjects.map(o => o.id),
+    );
+
     res.json(customerObjects.map(o => ({
       id: o.id,
       name: o.name,
       objectNumber: o.objectNumber,
       address: o.address,
       city: o.city,
-      objectType: o.objectType,
+      objectType: fieldClassification.get(o.id)?.objectType ?? null,
       latitude: o.latitude,
       longitude: o.longitude,
       reportCount: reportCountByObject[o.id] || 0,
@@ -2426,7 +2458,8 @@ app.get("/api/portal/field/object/:id", asyncHandler(async (req, res) => {
       objectNumber: obj.objectNumber,
       address: obj.address,
       city: obj.city,
-      objectType: obj.objectType,
+      // Klassificering (Objekttyp) läses ur redan hämtad metadata — kolumnen finns inte längre.
+      objectType: resolveClassificationFromMetadata(owm).objectType ?? null,
       latitude: obj.latitude,
       longitude: obj.longitude,
       accessCode: (await getObjectAtkomstFields(obj.id, session.tenantId!, owm)).portkod,
@@ -2962,11 +2995,14 @@ app.get("/api/portal/field/qr-lookup/:code", asyncHandler(async (req, res) => {
       throw new ForbiddenError("Detta objekt tillhör inte din organisation");
     }
 
+    // Klassificering (Objekttyp) läses ur metadata — kolumnen finns inte längre.
+    const qrClassification = await getClassificationForObjects(session.tenantId!, [obj.id]);
+
     res.json({
       objectId: obj.id,
       objectName: obj.name,
       address: obj.address,
-      objectType: obj.objectType,
+      objectType: qrClassification.get(obj.id)?.objectType ?? null,
     });
 }));
 

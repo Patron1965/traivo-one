@@ -55,7 +55,6 @@ beforeAll(async () => {
       tenantId: TENANT,
       customerId: customer.id,
       name: "Återvinning Nord",
-      objectType: "fastighet",
     })
     .returning();
   [bareObject] = await db
@@ -64,7 +63,6 @@ beforeAll(async () => {
       tenantId: TENANT,
       customerId: customer.id,
       name: "Tomt Objekt",
-      objectType: "fastighet",
     })
     .returning();
 

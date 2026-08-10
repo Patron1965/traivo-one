@@ -95,7 +95,7 @@ beforeAll(async () => {
   customerA = cA.id;
 
   const mk = async (name: string, tenantId = TENANT_A, parentId?: string) =>
-    (await storage.createObject({ tenantId, name: `${NS} ${name}`, objectType: "fastighet", status: "active", ...(parentId ? { parentId } : {}) } as any)).id;
+    (await storage.createObject({ tenantId, name: `${NS} ${name}`, status: "active", ...(parentId ? { parentId } : {}) } as any)).id;
 
   freeObj = await mk("Fritt");
   woObj = await mk("Med WO");
@@ -178,8 +178,8 @@ describe("POST /api/objects/bulk-delete (Task #1428)", () => {
   it("returnerar resultat i barn-först-ordning även när föräldern skickas först", async () => {
     // Nytt delträd där föräldern blockeras (barnet blockeras av en WO) —
     // resultatordningen ska ändå vara barn före förälder.
-    const pId = (await storage.createObject({ tenantId: TENANT_A, name: `${NS} Ordning F`, objectType: "fastighet", status: "active" } as any)).id;
-    const cId = (await storage.createObject({ tenantId: TENANT_A, name: `${NS} Ordning B`, objectType: "fastighet", status: "active", parentId: pId } as any)).id;
+    const pId = (await storage.createObject({ tenantId: TENANT_A, name: `${NS} Ordning F`, status: "active" } as any)).id;
+    const cId = (await storage.createObject({ tenantId: TENANT_A, name: `${NS} Ordning B`, status: "active", parentId: pId } as any)).id;
     await db.insert(workOrders).values({ tenantId: TENANT_A, customerId: customerA, objectId: cId, title: `${NS} WO ordning` });
 
     const { status, body } = await post("/api/objects/bulk-delete", USER_A, { ids: [pId, cId] });

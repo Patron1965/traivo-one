@@ -308,11 +308,13 @@ app.post("/api/ai/field-assistant", requirePlanner, asyncHandler(async (req, res
             o.address?.toLowerCase().includes(query)
           ).slice(0, 10);
           
+          const { getClassificationForObjects } = await import("../services/object-classification");
+          const classMap = await getClassificationForObjects(tenantId, matching.map(o => o.id));
           return JSON.stringify(matching.map(o => ({
             id: o.id,
             namn: o.name,
             adress: o.address,
-            typ: o.objectType
+            typ: classMap.get(o.id)?.objectType ?? null
           })));
         }
         
@@ -330,7 +332,7 @@ app.post("/api/ai/field-assistant", requirePlanner, asyncHandler(async (req, res
             adress: obj.address,
             portkod: atkomst.portkod,
             kund: customer?.name,
-            typ: obj.objectType,
+            typ: (await (await import("../services/object-classification")).getObjectHookClassification(tenantId, obj.id)).objectType || null,
             lat: obj.latitude,
             lng: obj.longitude
           });
@@ -638,6 +640,10 @@ app.post("/api/ai/service-patterns", requirePlanner, asyncHandler(async (req, re
 
     const objectSet = new Set(allObjects.map(o => o.id));
 
+    // Task #1486: klassificering läses ur metadata (kolumnen object_type är riven).
+    const { getClassificationForObjects: getClassMap } = await import("../services/object-classification");
+    const objClassMap = await getClassMap(tenantId, allObjects.map(o => o.id));
+
     for (const obj of allObjects) {
       const objOrders = orders
         .filter(o => o.objectId === obj.id && (o.completedAt || o.orderStatus === "utford"))
@@ -647,7 +653,7 @@ app.post("/api/ai/service-patterns", requirePlanner, asyncHandler(async (req, re
           return da - db;
         });
 
-      const objType = obj.objectType || "unknown";
+      const objType = objClassMap.get(obj.id)?.objectType || "unknown";
       if (!typeStats[objType]) {
         typeStats[objType] = { count: 0, totalOrders: 0, avgInterval: 0, intervals: [] };
       }
@@ -679,7 +685,7 @@ app.post("/api/ai/service-patterns", requirePlanner, asyncHandler(async (req, re
     }
 
     for (const obj of allObjects) {
-      const objType = obj.objectType || "unknown";
+      const objType = objClassMap.get(obj.id)?.objectType || "unknown";
       const stats = typeStats[objType];
       if (!stats || stats.avgInterval === 0) continue;
 
@@ -2032,7 +2038,9 @@ app.delete("/api/import/batch/:batchId", asyncHandler(async (req, res) => {
     
     const allObjects = await storage.getObjects(tenantId);
     const batchObjects = allObjects.filter(o => o.importBatchId === batchId);
-    const childFirst = batchObjects.sort((a, b) => (b.objectLevel || 0) - (a.objectLevel || 0));
+    // Barn-först: djupare i hierarkin raderas före sina föräldrar (Task #1486:
+    // objectLevel-kolumnen är riven — hierarchyDepth bär samma ordning).
+    const childFirst = batchObjects.sort((a, b) => (b.hierarchyDepth || 0) - (a.hierarchyDepth || 0));
     for (const obj of childFirst) {
       await storage.deleteObject(obj.id);
       deletedObjects++;

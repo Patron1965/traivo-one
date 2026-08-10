@@ -1,6 +1,7 @@
 import { sql, and, eq, isNull, type SQL } from "drizzle-orm";
 import { db } from "../db";
 import { objects, metadataVarden, metadataKatalog } from "@shared/schema";
+import { objectOwnMetadataTextValueSql } from "./object-metadata-sql";
 
 // ============================================================================
 // OBJEKTETS KUND-KOPPLING — KÄLLA: EKONOMI-METADATA (Etapp 5)
@@ -222,7 +223,9 @@ export async function getObjectTreeLevel(
       id: objects.id,
       name: objects.name,
       objectNumber: objects.objectNumber,
-      objectType: objects.objectType,
+      // Task #1486: objekttyp härleds ur klassificerings-metadatat "Objekttyp"
+      // (objektets EGNA rad) — legacy-kolumnen objects.object_type är borttagen.
+      objectType: objectOwnMetadataTextValueSql("Objekttyp"),
       address: objects.address,
       customerId: primaryPayerCustomerIdSql(),
       childCount: childCountSql,

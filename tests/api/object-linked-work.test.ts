@@ -89,10 +89,10 @@ beforeAll(async () => {
   const [cA] = await db.insert(customers).values({ tenantId: TENANT_A, name: `${NS} Kund A` }).returning();
   customerA = cA.id;
 
-  rootId = (await storage.createObject({ tenantId: TENANT_A, name: `${NS} Rot`, objectType: "fastighet", status: "active" } as any)).id;
-  childId = (await storage.createObject({ tenantId: TENANT_A, name: `${NS} Barn`, objectType: "fastighet", status: "active", parentId: rootId } as any)).id;
-  grandchildId = (await storage.createObject({ tenantId: TENANT_A, name: `${NS} Barnbarn`, objectType: "fastighet", status: "active", parentId: childId } as any)).id;
-  objectBId = (await storage.createObject({ tenantId: TENANT_B, name: `${NS} Objekt B`, objectType: "fastighet", status: "active" } as any)).id;
+  rootId = (await storage.createObject({ tenantId: TENANT_A, name: `${NS} Rot`, status: "active" } as any)).id;
+  childId = (await storage.createObject({ tenantId: TENANT_A, name: `${NS} Barn`, status: "active", parentId: rootId } as any)).id;
+  grandchildId = (await storage.createObject({ tenantId: TENANT_A, name: `${NS} Barnbarn`, status: "active", parentId: childId } as any)).id;
+  objectBId = (await storage.createObject({ tenantId: TENANT_B, name: `${NS} Objekt B`, status: "active" } as any)).id;
 
   await db.insert(workOrders).values([
     { tenantId: TENANT_A, customerId: customerA, objectId: rootId, title: `${NS} WO rot` },
@@ -107,7 +107,7 @@ beforeAll(async () => {
 
   // Task #1475: eget objekt med > CAP rader per lista, med distinkta createdAt
   // så att "de 300 senaste" är deterministiskt (nr SEED_COUNT är nyast).
-  capObjectId = (await storage.createObject({ tenantId: TENANT_A, name: `${NS} Kapobjekt`, objectType: "fastighet", status: "active" } as any)).id;
+  capObjectId = (await storage.createObject({ tenantId: TENANT_A, name: `${NS} Kapobjekt`, status: "active" } as any)).id;
   const base = Date.parse("2026-01-01T00:00:00Z");
   const woSeed = Array.from({ length: SEED_COUNT }, (_, i) => ({
     tenantId: TENANT_A,

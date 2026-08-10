@@ -27,8 +27,6 @@ function makeObject(
   return {
     tenantId,
     customerId: tenantId === TENANT_B ? customerB : customerA,
-    objectType: "karl",
-    objectLevel: 2,
     status: "active",
     ...overrides,
   } as InsertObject;
@@ -70,9 +68,9 @@ describe("storage.moveObject — flyttar objektet och håller object_parents i s
   let obj: string;
 
   beforeAll(async () => {
-    const a = await storage.createObject(makeObject(TENANT_A, { name: `${NS} synk-p1`, objectLevel: 1 }));
+    const a = await storage.createObject(makeObject(TENANT_A, { name: `${NS} synk-p1` }));
     p1 = a.id;
-    const b = await storage.createObject(makeObject(TENANT_A, { name: `${NS} synk-p2`, objectLevel: 1 }));
+    const b = await storage.createObject(makeObject(TENANT_A, { name: `${NS} synk-p2` }));
     p2 = b.id;
     const o = await storage.createObject(makeObject(TENANT_A, { name: `${NS} synk-obj`, parentId: p1 }));
     obj = o.id;
@@ -105,11 +103,11 @@ describe("storage.moveObject — (c) demotar tidigare primär-relation utan att 
   let obj: string;
 
   beforeAll(async () => {
-    const a = await storage.createObject(makeObject(TENANT_A, { name: `${NS} demote-p1`, objectLevel: 1 }));
+    const a = await storage.createObject(makeObject(TENANT_A, { name: `${NS} demote-p1` }));
     p1 = a.id;
-    const b = await storage.createObject(makeObject(TENANT_A, { name: `${NS} demote-p2`, objectLevel: 1 }));
+    const b = await storage.createObject(makeObject(TENANT_A, { name: `${NS} demote-p2` }));
     p2 = b.id;
-    const c = await storage.createObject(makeObject(TENANT_A, { name: `${NS} demote-alt`, objectLevel: 1 }));
+    const c = await storage.createObject(makeObject(TENANT_A, { name: `${NS} demote-alt` }));
     pAlt = c.id;
     const o = await storage.createObject(makeObject(TENANT_A, { name: `${NS} demote-obj`, parentId: p1 }));
     obj = o.id;
@@ -148,9 +146,9 @@ describe("storage.moveObject — (d) barnträdet lämnas intakt", () => {
   let grandchild: string;
 
   beforeAll(async () => {
-    const a = await storage.createObject(makeObject(TENANT_A, { name: `${NS} tree-p1`, objectLevel: 1 }));
+    const a = await storage.createObject(makeObject(TENANT_A, { name: `${NS} tree-p1` }));
     p1 = a.id;
-    const b = await storage.createObject(makeObject(TENANT_A, { name: `${NS} tree-p2`, objectLevel: 1 }));
+    const b = await storage.createObject(makeObject(TENANT_A, { name: `${NS} tree-p2` }));
     p2 = b.id;
     const o = await storage.createObject(makeObject(TENANT_A, { name: `${NS} tree-obj`, parentId: p1 }));
     obj = o.id;
@@ -198,7 +196,7 @@ describe("storage.moveObject — flytt till rotnivå (parentId=null)", () => {
   let obj: string;
 
   beforeAll(async () => {
-    const a = await storage.createObject(makeObject(TENANT_A, { name: `${NS} root-p1`, objectLevel: 1 }));
+    const a = await storage.createObject(makeObject(TENANT_A, { name: `${NS} root-p1` }));
     p1 = a.id;
     const o = await storage.createObject(makeObject(TENANT_A, { name: `${NS} root-obj`, parentId: p1 }));
     obj = o.id;
@@ -219,7 +217,7 @@ describe("storage.moveObject — defensiva spärrar", () => {
   let obj: string;
 
   beforeAll(async () => {
-    const o = await storage.createObject(makeObject(TENANT_A, { name: `${NS} guard-obj`, objectLevel: 1 }));
+    const o = await storage.createObject(makeObject(TENANT_A, { name: `${NS} guard-obj` }));
     obj = o.id;
   });
 

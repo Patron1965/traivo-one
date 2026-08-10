@@ -161,6 +161,7 @@ function toCell(v: string | number | boolean | null): string {
   return String(v).trim();
 }
 
+// hint: Structural and logic conflict. Both design and behavior differ.
 export function registerObjectImportV2Routes(app: Express): void {
   // ── /fields — fält-katalog för "Matcha data"-dialogen (inkl. tenant-metadata)
   app.get(
@@ -1867,7 +1868,9 @@ export function registerObjectImportV2Routes(app: Express): void {
           const lng = row.fields["position.lng"];
           if (lat) out.latitude = Number(lat.replace(",", "."));
           if (lng) out.longitude = Number(lng.replace(",", "."));
-          if (row.metadata.typ) out.objectType = row.metadata.typ;
+          // Task #1486: klassificering (objekttyp) skrivs INTE som kolumn på
+          // objects längre — den speglas till metadata (Objekttyp) via
+          // writeRowMetadata/mirrorClassificationToMetadata.
           return out;
         };
 
@@ -1894,10 +1897,9 @@ export function registerObjectImportV2Routes(app: Express): void {
           const fields: { namn: string; varde: string | Record<string, unknown>; datatyp: "string" | "json" }[] = [];
           for (const s of strings) fields.push({ namn: s.namn, varde: s.varde, datatyp: "string" });
           for (const g of jsonGroups) fields.push({ namn: g.namn, varde: g.varde, datatyp: "json" });
-          // Task #1484: klassificering skrivs till det KANONISKA katalogfältet
-          // "Objekttyp" (systemområdet Klassificering) — inte ett eget "typ"-fält.
-          // objects.objectType sätts fortfarande av buildKnownFields = avsiktlig
-          // kolumn-cache under expand-fasen.
+          // Task #1484/#1486: klassificering skrivs till det KANONISKA
+          // katalogfältet "Objekttyp" (systemområdet Klassificering) — inte ett
+          // eget "typ"-fält, och inte längre som kolumn på objects.
           if (row.metadata.typ) fields.push({ namn: "Objekttyp", varde: row.metadata.typ, datatyp: "string" });
           const contact = buildCompositeObject(row.composite.contact ?? {});
           if (Object.keys(contact).length) fields.push({ namn: "kontaktperson", varde: contact, datatyp: "json" });
@@ -2110,14 +2112,15 @@ export function registerObjectImportV2Routes(app: Express): void {
                 .where(and(eq(objects.id, targetId), eq(objects.tenantId, tenantId)))
                 .returning({ parentId: objects.parentId });
               const effectiveParentId = updatedRow?.parentId ?? parentId ?? null;
-              // Task #1484: importens direkta kolumn-UPDATE går förbi storage.updateObject —
-              // spegla explicit satt objekttyp till metadata (auto-rad, manuell rad vinner).
-              if ((updateData as any).objectType || (updateData as any).hierarchyLevel) {
+              // Task #1484/#1486: importens direkta kolumn-UPDATE går förbi
+              // storage.updateObject — spegla explicit satt objekttyp till
+              // metadata (auto-rad, manuell rad vinner). Klassificeringen bor
+              // enbart i metadata; källan är radens metadata.typ.
+              if (row.metadata.typ) {
                 try {
                   const { mirrorClassificationToMetadata } = await import("../services/object-classification");
                   await mirrorClassificationToMetadata(tenantId, targetId, {
-                    objectType: (updateData as any).objectType ?? null,
-                    hierarchyLevel: (updateData as any).hierarchyLevel ?? null,
+                    objectType: row.metadata.typ,
                   });
                 } catch (err) {
                   console.error(`[objects-v2] classification mirror failed object=${targetId}:`, err);
@@ -2137,7 +2140,6 @@ export function registerObjectImportV2Routes(app: Express): void {
                   postalCode: k.postalCode ?? preSnapshot.postalCode,
                   latitude: k.latitude ?? preSnapshot.latitude,
                   longitude: k.longitude ?? preSnapshot.longitude,
-                  objectType: k.objectType ?? preSnapshot.objectType,
                 };
                 // Aktivstatus-rader: stämpla med arkiv-fälten i BÅDA snapshots så
                 // undo blir livscykel-aware (jämför + återställer arkiv-tillstånd).
@@ -2266,7 +2268,6 @@ export function registerObjectImportV2Routes(app: Express): void {
                   postalCode: k.postalCode ?? null,
                   latitude: k.latitude ?? null,
                   longitude: k.longitude ?? null,
-                  objectType: k.objectType ?? "omrade",
                 };
                 await stampAction({
                   tenantId,

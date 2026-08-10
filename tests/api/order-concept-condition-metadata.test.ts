@@ -41,7 +41,7 @@ beforeAll(async () => {
 
   [parent] = await db
     .insert(objects)
-    .values({ tenantId: TENANT, customerId: customer.id, name: "Förälder", objectType: "fastighet" })
+    .values({ tenantId: TENANT, customerId: customer.id, name: "Förälder" })
     .returning();
   [child] = await db
     .insert(objects)
@@ -49,7 +49,6 @@ beforeAll(async () => {
       tenantId: TENANT,
       customerId: customer.id,
       name: "Barn",
-      objectType: "lagenhet",
       parentId: parent.id,
     })
     .returning();

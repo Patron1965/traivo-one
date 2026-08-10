@@ -42,7 +42,6 @@ async function createObj(name: string, parent: string | null): Promise<string> {
       name,
       objectNumber: `${NS}-${name.replace(/\s+/g, "")}`,
       parentId: parent,
-      objectType: parent ? "karl" : "fastighet",
     } as any)
     .returning({ id: objects.id });
   if (parent) {

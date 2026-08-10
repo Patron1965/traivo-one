@@ -133,7 +133,7 @@ describe("notifyDownstreamCustomers (integration mot riktig DB)", () => {
 
     const [object] = await db
       .insert(objects)
-      .values({ tenantId: TENANT, customerId, name: "Nedströmsobjekt", objectType: "fastighet" })
+      .values({ tenantId: TENANT, customerId, name: "Nedströmsobjekt" })
       .returning();
     objectId = object.id;
 

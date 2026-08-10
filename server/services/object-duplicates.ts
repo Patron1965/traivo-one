@@ -8,6 +8,7 @@ import { db } from "../db";
 import { sql, and, eq, inArray } from "drizzle-orm";
 import { objects } from "@shared/schema";
 import { primaryPayerCustomerIdSqlFor } from "./object-customer";
+import { objectOwnMetadataTextValueSqlFor } from "./object-metadata-sql";
 
 export interface DuplicateMember {
   id: string;
@@ -110,7 +111,8 @@ export async function listObjectDuplicateGroups(
       : sql`${primaryPayerSubquery} IS NULL`;
     const memberRows = await db.execute(sql`
       SELECT o.id, o.name, o.address, o.object_number, ${primaryPayerSubquery} AS customer_id,
-             o.latitude, o.longitude, o.city, o.postal_code, o.object_type,
+             o.latitude, o.longitude, o.city, o.postal_code,
+             ${objectOwnMetadataTextValueSqlFor("Objekttyp", sql.raw("o.id"))} AS object_type,
              o.created_at,
              (SELECT c.name FROM customers c WHERE c.id = ${primaryPayerSubquery}) as customer_name,
              (SELECT COUNT(*) FROM work_orders wo WHERE wo.object_id = o.id) as work_order_count,

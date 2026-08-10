@@ -42,7 +42,6 @@ export type ObjectSnapshot = {
   postalCode: string | null;
   latitude: number | null;
   longitude: number | null;
-  objectType: string | null;
   // Livscykel-fält (aktivstatus-import). VALFRIA: de stämplas bara på
   // update_object-actions som faktiskt arkiverar/återställer ett objekt. Äldre
   // (redan stämplade) actions saknar nycklarna och ska bete sig exakt som förr —
@@ -61,7 +60,6 @@ export const objectSnapshotColumns = {
   postalCode: objects.postalCode,
   latitude: objects.latitude,
   longitude: objects.longitude,
-  objectType: objects.objectType,
 } as const;
 
 // Normalisera ett snapshot-fält för drift-jämförelse: null/undefined → "",
@@ -82,7 +80,6 @@ function snapshotMatches(current: ObjectSnapshot, after: any): boolean {
     "postalCode",
     "latitude",
     "longitude",
-    "objectType",
   ];
   for (const k of keys) {
     const a = normField((current as any)[k]);
@@ -284,8 +281,8 @@ function restoreScalarSet(before: any): Record<string, unknown> {
     postalCode: toStr(b.postalCode),
     latitude: toNum(b.latitude),
     longitude: toNum(b.longitude),
-    // object_type är NOT NULL — fall tillbaka på "omrade" om snapshot saknar typ.
-    objectType: toStr(b.objectType) ?? "omrade",
+    // Task #1486: object_type-kolumnen är riven — klassificering bor i metadata
+    // och återställs inte här (metadata-domänen äger den återställningen).
   };
   // Livscykel-återställning: ENDAST om before-snapshot äger `deletedAt` (= en
   // aktivstatus-stämplad action). Då återställs arkiv-tillståndet exakt: null ⇒

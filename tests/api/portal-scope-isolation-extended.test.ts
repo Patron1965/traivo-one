@@ -118,9 +118,6 @@ describe("Portal scope isolation (extended) — mutations & list-läsning respek
         customerId,
         name,
         objectNumber: randomId(),
-        objectType: "fastighet",
-        objectLevel: parentId ? 3 : 2,
-        hierarchyLevel: parentId ? "rum" : "fastighet",
         parentId: parentId ?? undefined,
       } as InsertObject);
       return obj.id;

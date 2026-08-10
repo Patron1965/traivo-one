@@ -15,6 +15,7 @@ import { notificationService } from "../notifications";
 import { validateSchedule, type ConstraintContext, type ScheduleMove } from "../planning/constraintEngine";
 import { computeDeliveryRestrictionNotesByObject } from "../services/delivery-restriction-notes";
 import { logWorkOrderTransition } from "../services/task-event-log";
+import { objectOwnMetadataTextValueSqlFor } from "../services/object-metadata-sql";
 
 const requirePlannerAccess = requireRole("owner", "admin", "planner");
 
@@ -2028,7 +2029,9 @@ app.get("/api/planner/area-search", isAuthenticated, requireTenantWithFallback, 
     sql`o.deleted_at IS NULL`,
     sql`lower(o.city) = lower(${city})`,
   ];
-  if (hierarchyLevels.length) conds.push(sql`o.hierarchy_level = ANY(${hierarchyLevels}::text[])`);
+  // Task #1486: nivåfilter matchar objektets EGNA metadata (Anläggningstyp) —
+  // legacy-kolumnen o.hierarchy_level är borttagen.
+  if (hierarchyLevels.length) conds.push(sql`${objectOwnMetadataTextValueSqlFor("Anläggningstyp", sql.raw("o.id"))} = ANY(${hierarchyLevels}::text[])`);
   if (statusCategories.length) {
     const catConds = [];
     for (const cat of statusCategories) {
@@ -2049,8 +2052,9 @@ app.get("/api/planner/area-search", isAuthenticated, requireTenantWithFallback, 
     }
     if (catConds.length) conds.push(sql`(${sql.join(catConds, sql` OR `)})`);
   }
-  if (lastServiceFrom && !isNaN(lastServiceFrom.getTime())) conds.push(sql`o.last_service_date >= ${lastServiceFrom}`);
-  if (lastServiceTo && !isNaN(lastServiceTo.getTime())) conds.push(sql`o.last_service_date <= ${lastServiceTo}`);
+  // Task #1486: objects.last_service_date är borttaget (dött fält) → filtret
+  // finns inte längre. lastServiceFrom/To ignoreras.
+  void lastServiceFrom; void lastServiceTo;
 
   const whereClause = sql.join(conds, sql` AND `);
 
@@ -2064,7 +2068,7 @@ app.get("/api/planner/area-search", isAuthenticated, requireTenantWithFallback, 
       wo.order_type, wo.cached_value, wo.cached_cost, wo.cached_production_minutes,
       wo.is_simulated, wo.completed_at, wo.locked_at, wo.invoiced_at,
       o.name AS object_name, o.address AS object_address, o.city AS object_city,
-      o.hierarchy_level AS object_hierarchy_level, o.last_service_date AS object_last_service_date,
+      ${objectOwnMetadataTextValueSqlFor("Anläggningstyp", sql.raw("o.id"))} AS object_hierarchy_level,
       o.access_code AS object_access_code, o.key_number AS object_key_number,
       o.latitude AS object_latitude, o.longitude AS object_longitude,
       c.name AS customer_name,
@@ -2111,7 +2115,7 @@ app.get("/api/planner/area-search", isAuthenticated, requireTenantWithFallback, 
     is_simulated: boolean | null; completed_at: string | null;
     locked_at: string | null; invoiced_at: string | null;
     object_name: string | null; object_address: string | null; object_city: string | null;
-    object_hierarchy_level: string | null; object_last_service_date: string | null;
+    object_hierarchy_level: string | null;
     object_access_code: string | null; object_key_number: string | null;
     object_latitude: number | null; object_longitude: number | null;
     customer_name: string | null;
@@ -2155,7 +2159,6 @@ app.get("/api/planner/area-search", isAuthenticated, requireTenantWithFallback, 
     objectAddress: r.object_address,
     objectCity: r.object_city,
     objectHierarchyLevel: r.object_hierarchy_level,
-    objectLastServiceDate: r.object_last_service_date,
     objectAccessCode: r.object_access_code,
     objectKeyNumber: r.object_key_number,
     objectLatitude: r.object_latitude,

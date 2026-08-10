@@ -113,8 +113,6 @@ beforeAll(async () => {
       tenantId: TENANT,
       customerId,
       name: s.name,
-      objectType: "fastighet",
-      objectLevel: 1,
       status: "active",
     } as any);
     if (s.zon) {
@@ -191,7 +189,6 @@ describe("buildObjectMetadataMap chunk:ar stora id-listor", () => {
       tenantId: TENANT,
       customerId,
       name: `${NS} Bulk ${String(i).padStart(3, "0")}`,
-      objectType: "fastighet",
     }));
     const inserted = await db.insert(objects).values(objRows).returning({ id: objects.id });
     const bulkIds = inserted.map((r) => r.id);

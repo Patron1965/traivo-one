@@ -577,9 +577,6 @@ export default function CustomerPortalPage() {
                                   {obj.address && <div className="text-xs text-gray-600">{obj.address}</div>}
                                   {(obj.postalCode || obj.city) && <div className="text-xs text-gray-600">{[obj.postalCode, obj.city].filter(Boolean).join(" ")}</div>}
                                   <div className="mt-1 flex flex-wrap gap-1">
-                                    {obj.objectType && (
-                                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-700">{obj.objectType}</span>
-                                    )}
                                     {sub && (
                                       <span className="text-[10px] px-1.5 py-0.5 rounded bg-chart-2/15 text-chart-2">Aktivt abonnemang</span>
                                     )}
@@ -617,9 +614,6 @@ export default function CustomerPortalPage() {
                               <p className="text-sm text-muted-foreground">{obj.postalCode} {obj.city}</p>
                             )}
                             <div className="mt-2 flex flex-wrap gap-1">
-                              {obj.objectType && (
-                                <Badge variant="outline" className="text-xs">{obj.objectType}</Badge>
-                              )}
                               {sub && (
                                 <Badge variant="secondary" className="text-xs bg-chart-2/15 text-chart-2">
                                   Aktivt abonnemang
@@ -691,9 +685,6 @@ export default function CustomerPortalPage() {
                           <div className="text-xs text-gray-600">{[obj.postalCode, obj.city].filter(Boolean).join(" ")}</div>
                         )}
                         <div className="mt-1.5 flex flex-wrap gap-1">
-                          {obj.objectType && (
-                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-700">{obj.objectType}</span>
-                          )}
                           {sub && (
                             <span className="text-[10px] px-1.5 py-0.5 rounded bg-chart-2/15 text-chart-2">Aktivt abonnemang</span>
                           )}

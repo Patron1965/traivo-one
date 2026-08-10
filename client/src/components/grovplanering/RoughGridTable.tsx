@@ -59,7 +59,7 @@ const GROUP_ICON: Record<GroupBy, typeof Building2 | null> = {
   ingen: null,
 };
 
-const COL_COUNT = 13;
+const COL_COUNT = 12;
 
 interface RoughGridTableProps {
   groups: GridGroup[];
@@ -243,9 +243,6 @@ function TaskRow({
           <span className="text-muted-foreground">–</span>
         )}
       </TableCell>
-      <TableCell className="whitespace-nowrap text-sm tabular-nums">
-        {formatDateShort(row.lastServiceDate)}
-      </TableCell>
       <TableCell className="whitespace-nowrap text-right text-sm tabular-nums">
         {formatSekFromOre(row.value)}
       </TableCell>
@@ -345,7 +342,6 @@ export function RoughGridTable({
             <TableHead className="text-right">Tid</TableHead>
             <TableHead>Team</TableHead>
             <TableHead>Vecka</TableHead>
-            <TableHead>Senast utförd</TableHead>
             <TableHead className="text-right">Ordervärde</TableHead>
             <TableHead className="w-9" />
           </TableRow>

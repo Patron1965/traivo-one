@@ -92,9 +92,9 @@ beforeAll(async () => {
   const [cB] = await db.insert(customers).values({ tenantId: TENANT_B, name: `${NS} Kund B` }).returning();
   customerB = cB.id;
 
-  const oA = await storage.createObject({ tenantId: TENANT_A, name: `${NS} Objekt A`, objectType: "fastighet", status: "active" } as any);
+  const oA = await storage.createObject({ tenantId: TENANT_A, name: `${NS} Objekt A`, status: "active" } as any);
   objectA = oA.id;
-  const oB = await storage.createObject({ tenantId: TENANT_B, name: `${NS} Objekt B`, objectType: "fastighet", status: "active" } as any);
+  const oB = await storage.createObject({ tenantId: TENANT_B, name: `${NS} Objekt B`, status: "active" } as any);
   objectB = oB.id;
 
   const [ocA] = await db.insert(orderConcepts).values({
