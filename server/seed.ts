@@ -388,10 +388,10 @@ export async function seedDatabase() {
     const { ensurePrimaryPayer } = await import("./services/object-customer");
     await ensureSystemomradenFalt(DEFAULT_TENANT_ID);
     for (const objectId of telgeObjectIds) {
-      await ensurePrimaryPayer(DEFAULT_TENANT_ID, objectId, telgebostader.id);
+      await ensurePrimaryPayer(DEFAULT_TENANT_ID, objectId, telgebostader.id, "seed-demo");
     }
     for (const objectId of serviceObjectIds) {
-      await ensurePrimaryPayer(DEFAULT_TENANT_ID, objectId, serviceboenden.id);
+      await ensurePrimaryPayer(DEFAULT_TENANT_ID, objectId, serviceboenden.id, "seed-demo");
     }
   }
 
@@ -860,7 +860,7 @@ async function seedFieldAppDemoData(tomasResourceId: string) {
       ["obj-7", "cust-fastighet"], ["obj-8", "cust-fastighet"],
     ];
     for (const [objectId, customerId] of kundPerObjekt) {
-      await ensurePrimaryPayer(DEFAULT_TENANT_ID, objectId, customerId);
+      await ensurePrimaryPayer(DEFAULT_TENANT_ID, objectId, customerId, "seed-demo");
     }
   }
 

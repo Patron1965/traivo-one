@@ -119,6 +119,12 @@ export async function ensurePrimaryPayer(
   tenantId: string,
   objectId: string,
   customerId: string | null | undefined,
+  // Task #1437: proveniens-markör i skapad_av. Flöden där kunden UTTRYCKLIGEN
+  // valts (Import 2.0 body.customerId / per-rad-mappning, order, portal) ska
+  // skicka en distinkt origin (t.ex. "import-explicit") så att städverktyg kan
+  // skilja uttryckliga kopplingar från legacy-fallbackens "system"-rader.
+  // Obligatorisk med flit: nya writes får ALDRIG tyst defaulta till "system".
+  origin: string,
 ): Promise<string | null> {
   if (!customerId) return null;
   try {
@@ -146,7 +152,7 @@ export async function ensurePrimaryPayer(
         metadataKatalogId: katalog.id,
         vardeReferens: customerId,
         arvsNedat: katalog.standardArvs ?? true,
-        skapadAv: "system",
+        skapadAv: origin,
         metod: "system",
       })
       .returning({ id: metadataVarden.id });

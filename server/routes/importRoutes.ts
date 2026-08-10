@@ -1281,7 +1281,7 @@ async function runModusObjectsImportJob(params: {
           });
           if (updatedObject) {
             // ADR v3: kund-koppling via primär payer (ej längre objects.customer_id).
-            await ensurePrimaryPayer(tenantId, updatedObject.id, customerId);
+            await ensurePrimaryPayer(tenantId, updatedObject.id, customerId, "import-explicit");
             for (const mw of modusMetadataWrites) {
               try {
                 await writeSystemMetadataOnObject(updatedObject.id, mw.namn, mw.value, tenantId, "import");
@@ -1303,7 +1303,7 @@ async function runModusObjectsImportJob(params: {
           });
           if (createdObject?.city) invalidateAreaSearchCityCache(tenantId);
           // ADR v3: kund-koppling via primär payer (ej längre objects.customer_id).
-          await ensurePrimaryPayer(tenantId, createdObject.id, customerId);
+          await ensurePrimaryPayer(tenantId, createdObject.id, customerId, "import-explicit");
           for (const mw of modusMetadataWrites) {
             try {
               await writeSystemMetadataOnObject(createdObject.id, mw.namn, mw.value, tenantId, "import");
@@ -3109,7 +3109,7 @@ app.post("/api/import/fortnox-customers/bulk", xlsxUpload.single("file"), asyncH
               importBatchId,
             }).returning();
             // ADR v3: kund-koppling via primär payer (ej längre objects.customer_id).
-            await ensurePrimaryPayer(tenantId, createdObject.id, customerId);
+            await ensurePrimaryPayer(tenantId, createdObject.id, customerId, "import-explicit");
             await tx.insert(fortnoxMappings).values({
               tenantId, entityType: "object", unicornId: createdObject.id, fortnoxId: objectFortnoxId,
             });
@@ -3138,7 +3138,7 @@ app.post("/api/import/fortnox-customers/bulk", xlsxUpload.single("file"), asyncH
               importBatchId,
             }).returning();
             // ADR v3: kund-koppling via primär payer (ej längre objects.customer_id).
-            await ensurePrimaryPayer(tenantId, createdObject.id, customerId);
+            await ensurePrimaryPayer(tenantId, createdObject.id, customerId, "import-explicit");
             await tx.insert(fortnoxMappings).values({
               tenantId, entityType: "object", unicornId: createdObject.id, fortnoxId: objectFortnoxId,
             });
@@ -6400,7 +6400,7 @@ app.post("/api/import/customer-fastighetslista/commit", requireAdmin, asyncHandl
         importBatchId: batchId,
       }).returning();
       // ADR v3: kund-koppling via primär payer (ej längre objects.customer_id).
-      await ensurePrimaryPayer(tenantId, created.id, customerId);
+      await ensurePrimaryPayer(tenantId, created.id, customerId, "import-explicit");
       createdIds.push(created.id);
       createdCount++;
     }

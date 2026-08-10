@@ -1248,7 +1248,7 @@ app.post("/api/objects", asyncHandler(async (req, res) => {
   const object = await storage.createObject(data);
 
   if (bodyCustomerId) {
-    await ensurePrimaryPayer(tenantId, object.id, bodyCustomerId);
+    await ensurePrimaryPayer(tenantId, object.id, bodyCustomerId, "user-explicit");
   }
 
   triggerGeocodeIfMissing(object.id);

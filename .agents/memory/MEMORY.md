@@ -128,4 +128,5 @@
 - [Vinjett snabbfälts-fallback](vinjett-quickfield-fallback.md) — 3 nivåer (objektkedja→objekttyp→visaIVinjett-flagga); metadata-audit-actor är server-auktoritativ (req.user vinner); ärvd bildhistorik läses från källobjektets rad.
 - [API-tester körs mot dev-servern](api-tests-dev-server.md) — vitest-API-tester kräver körande dev-server + ENABLE_REALTIME_TEST_ROUTES (rate-limit-skip); mobil-login kräver PIN-fixtur; team-join sker vid accept ej invite.
 - [Uppgiftsnav panelfilter](uppgiftsnav-panel-filters.md) — sparade panel-filter via saved_filters-scope "uppgiftsnav-panel" (aldrig egen tabell); normalisera definition vid apply; PATCH/DELETE endast egna rader.
+- [Ingen auto-kund vid import](import-no-auto-customer.md) — importen kopplar aldrig kund automatiskt; ensurePrimaryPayer tar origin→skapad_av (`system`=legacy-fallback städbar, `*-explicit`=röres aldrig).
 - [Lagersaldo concurrency-lås](stock-balance-concurrency.md) — delta-beräknande saldo-writes (reconcile/inventering) måste läsa utgångsvärdet under FOR UPDATE i samma tx, annars dubbelbokning.

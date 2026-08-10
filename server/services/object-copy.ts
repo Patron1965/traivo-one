@@ -170,7 +170,7 @@ export async function copyObjectTree(
   for (const { src: s, clone } of clonePairs) {
     // ADR v3: kund-koppling bärs av object_payers, inte av objekt-kolumn. Spegla
     // källans primära kund till klonen (best-effort, utanför den atomära tx:n).
-    await ensurePrimaryPayer(tenantId, clone.id, s.customerId);
+    await ensurePrimaryPayer(tenantId, clone.id, s.customerId, "copy-explicit");
     const res = await copyMetadataForClone(s, clone.id, tenantId);
     copiedMetadata += res.metaCount;
     if (res.metaError && !metadataCopyError) metadataCopyError = res.metaError;

@@ -2332,7 +2332,7 @@ app.post("/api/public-issue-reports/:id/create-interim-object", requireAdmin, as
     };
     const interimObject = await storage.createObject(insertData);
     // Etapp 5: kund-koppling sker via Ekonomi-metadatat ("Kund"), inte objektkolumn.
-    await ensurePrimaryPayer(tenantId, interimObject.id, customerId);
+    await ensurePrimaryPayer(tenantId, interimObject.id, customerId, "portal-explicit");
 
     triggerGeocodeIfMissing(interimObject.id);
 

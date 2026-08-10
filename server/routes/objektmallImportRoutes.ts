@@ -1910,15 +1910,10 @@ async function commitImport(
     .sort((a, b) => (a.res!.depth - b.res!.depth));
 
   await db.transaction(async (tx) => {
-    // Behöver en kund att hänga objekten på. Objekt-tabellen kräver customer_id NOT NULL.
-    // Vi lägger objekten på första aktiva kund i tenant (interim-objekten ska ändå
-    // omfördelas via object_payers senare — se ADR v3). Saknas kund: kasta fel.
-    const customerRows = await tx.execute(sql`SELECT id FROM customers WHERE tenant_id = ${tenantId} AND deleted_at IS NULL ORDER BY created_at ASC LIMIT 1`);
-    const firstCustomer = (customerRows as any).rows?.[0] ?? (Array.isArray(customerRows) ? customerRows[0] : null);
-    if (!firstCustomer?.id) {
-      throw new ValidationError("Tenant saknar kunder — skapa minst en kund innan objektimport.");
-    }
-    const customerId = firstCustomer.id as string;
+    // Task #1437: INGEN automatisk kundkoppling vid import. Objekt är kund-
+    // neutrala (ADR v3, objects.customer_id borttagen) — kund anges manuellt på
+    // ordern eller via Kund-metadatafältet. Den gamla fallbacken "första aktiva
+    // kund i tenant" är borttagen; importen kräver inte längre att kunder finns.
 
     const interimToObjectId = new Map<string, string>();
 
@@ -2146,7 +2141,6 @@ async function commitImport(
           .insert(objects)
           .values({
             tenantId,
-            customerId,
             parentId: parentObjectId ?? null,
             name: res.name,
             // Task #1433: systemmyntat löpnummer i stället för MALL-<interim>.

@@ -3945,7 +3945,7 @@ app.post("/api/fortnox/full-import", asyncHandler(async (req, res) => {
             });
             return created.id;
           });
-          await ensurePrimaryPayer(tenantId, createdObjectId, unicornCustomerId);
+          await ensurePrimaryPayer(tenantId, createdObjectId, unicornCustomerId, "import-explicit");
           objectFortnoxIds.add(so.fortnoxId);
           objectSummary.created++;
           if (so.address && so.address.trim() !== "") {

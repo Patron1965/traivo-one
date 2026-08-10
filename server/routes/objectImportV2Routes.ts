@@ -391,7 +391,8 @@ export function registerObjectImportV2Routes(app: Express): void {
 
       // §5.3 Kund-referenskontroll (varning, ej blockerande): om en kund-kolumn
       // är mappad och ett rad-värde inte matchar någon kund i Traivo faller raden
-      // tillbaka på standardkunden vid execute. Varna så användaren ser det innan
+      // tillbaka utan kundkoppling vid execute (ingen standardkund, Task #1437).
+      // Varna så användaren ser det innan
       // körning istället för att tyst hamna under fel kund.
       const hasCustomerMapping = Object.values(mappings).some(
         (m) => m.target === "customer_name" || m.target === "customer_ref",
@@ -419,7 +420,7 @@ export function registerObjectImportV2Routes(app: Express): void {
           const label = r.fields.customer_ref || r.fields.customer_name || "";
           row.issues.push({
             field: ref ? "customer_ref" : "customer_name",
-            message: `Kund "${label}" hittades inte — raden hamnar under standardkunden`,
+            message: `Kund "${label}" hittades inte — objektet importeras utan kundkoppling (om ingen kund väljs vid körningen)`,
             severity: "warning",
           });
           if (row.status === "valid") row.status = "warning";
@@ -813,31 +814,26 @@ export function registerObjectImportV2Routes(app: Express): void {
         throw new ValidationError("Inga kolumnmappningar — matcha kolumner och validera först.");
       }
 
-      // Standardkund (fallback). Använd vald kund (tenant-verifierad) annars
-      // första aktiva kund. Etapp 5: objekt är neutrala — kopplingen skrivs som
-      // Ekonomi-metadatat 'Kund' (per-rad om en kund-kolumn är mappad, annars
-      // denna fallback).
+      // Task #1437: INGEN automatisk kundkoppling. En kund kopplas ENDAST när
+      // den uttryckligen valts (body.customerId, tenant-verifierad) eller när en
+      // kund-kolumn är mappad och raden resolverar mot en befintlig kund. Den
+      // gamla fallbacken "första aktiva kund i tenant" är borttagen — utan
+      // uttrycklig kund skapas objekten helt utan kundkoppling.
       const overwriteMetadata = parsed.data.overwriteMetadata === true;
-      let customerId = parsed.data.customerId ?? null;
+      const customerId = parsed.data.customerId ?? null;
       if (customerId) {
         const ownCheck = await db.execute(
           sql`SELECT id FROM customers WHERE id = ${customerId} AND tenant_id = ${tenantId} AND deleted_at IS NULL LIMIT 1`,
         );
         const ok = (ownCheck as any).rows?.[0] ?? (Array.isArray(ownCheck) ? (ownCheck as any)[0] : null);
         if (!ok) throw new ValidationError("Vald kund tillhör inte denna tenant.");
-      } else {
-        const rows = await db.execute(
-          sql`SELECT id FROM customers WHERE tenant_id = ${tenantId} AND deleted_at IS NULL ORDER BY created_at ASC LIMIT 1`,
-        );
-        const first = (rows as any).rows?.[0] ?? (Array.isArray(rows) ? (rows as any)[0] : null);
-        if (!first?.id) throw new ValidationError("Tenant saknar kunder — skapa minst en kund innan import.");
-        customerId = first.id as string;
       }
-      const fallbackCustomerId = customerId;
+      const fallbackCustomerId: string | null = customerId;
 
       // Per-rad kundmappning: om en kolumn mappats till customer_name/customer_ref
       // resolvas kunden per rad mot tenantens kunder (namn / kundnummer / org.nr).
-      // Oresolverbara värden faller tillbaka på standardkunden ovan.
+      // Oresolverbara värden ger INGEN kundkoppling (Task #1437) — såvida inte
+      // en kund uttryckligen valts i body.customerId.
       const perRowCustomer = Object.values(mappings).some(
         (m) => m.target === "customer_name" || m.target === "customer_ref",
       );
@@ -861,7 +857,7 @@ export function registerObjectImportV2Routes(app: Express): void {
       }
       // Resolverar radens EGNA kundvärde (kundnummer/org.nr → namn). Returnerar
       // null när raden saknar ett eget upplösbart värde, så att callern kan ärva
-      // förälderns kund (utrustning/barn) eller falla tillbaka på standardkunden.
+      // förälderns kund (utrustning/barn) eller lämnas utan kundkoppling.
       const resolveOwnRowCustomerId = (row: ResolvedRow): string | null => {
         if (!perRowCustomer) return null;
         const ref = (row.fields.customer_ref ?? "").trim().toLowerCase();
@@ -979,8 +975,7 @@ export function registerObjectImportV2Routes(app: Express): void {
         // matchas KUNDSKOPAT — samma interimsnummer i listor till OLIKA kunder är
         // OLIKA objekt (återanvända interimnummer får aldrig uppdatera fel kunds
         // objekt). Radens kund vid matchning = radens eget kundvärde → annars
-        // standardkunden (förälder-ärvd kund är inte känd förrän vid execute; en
-        // rad utan eget kundvärde matchar alltså mot standardkundens objekt).
+        // den uttryckligen valda kunden, annars kundlös identitet (Task #1437).
         //
         // Bakåtkompat (expand-contract): objekt skapade före Task #1433 har
         // objectNumber MALL-<interim> (v1-konvention) och matchas fortsatt
@@ -989,11 +984,11 @@ export function registerObjectImportV2Routes(app: Express): void {
         // Task #1433: interim-identiteten är KUNDSKOPAD — samma interimnummer i
         // samma fil till OLIKA kunder är olika objekt. Nyckelrymden för
         // gruppering, matchning och parent-uppslag är `${interim}\u0000${kund}`
-        // där radens kund = eget kundvärde → annars standardkunden.
+        // där radens kund = eget kundvärde → annars vald kund/kundlös.
         // Utrustnings-/barnrader lämnar ofta kundkolumnen tom fast butiksraden
         // anger kund — en rad utan eget kundvärde ärver därför sitt interims
         // ENTYDIGT deklarerade kund (exakt en kund angiven bland raderna med
-        // samma interim), annars standardkunden.
+        // samma interim), annars den uttryckligen valda kunden eller ingen alls.
         const declaredCustByInterim = new Map<string, Set<string>>();
         for (const r of resolvedAll) {
           const interim = r.fields.interim_id;
@@ -1002,22 +997,24 @@ export function registerObjectImportV2Routes(app: Express): void {
           if (!own) continue;
           (declaredCustByInterim.get(interim) ?? declaredCustByInterim.set(interim, new Set()).get(interim)!).add(own);
         }
-        const custForInterim = (r: ResolvedRow, interim: string): string => {
+        // Task #1437: kund kan vara null (ingen automatisk kundkoppling) — då
+        // blir nyckelrymden `${interim}\u0000` (kundlös identitet).
+        const custForInterim = (r: ResolvedRow, interim: string): string | null => {
           const own = resolveOwnRowCustomerId(r);
           if (own) return own;
           const declared = declaredCustByInterim.get(interim);
           if (declared && declared.size === 1) return Array.from(declared)[0];
           return fallbackCustomerId;
         };
-        const rowCustFor = (r: ResolvedRow): string =>
+        const rowCustFor = (r: ResolvedRow): string | null =>
           r.fields.interim_id
             ? custForInterim(r, r.fields.interim_id)
             : resolveOwnRowCustomerId(r) ?? fallbackCustomerId;
         const interimKeyOf = (r: ResolvedRow): string | null =>
-          r.fields.interim_id ? `${r.fields.interim_id}\u0000${rowCustFor(r)}` : null;
+          r.fields.interim_id ? `${r.fields.interim_id}\u0000${rowCustFor(r) ?? ""}` : null;
         const parentKeyOf = (r: ResolvedRow): string | null =>
           r.fields.interim_parent_id
-            ? `${r.fields.interim_parent_id}\u0000${custForInterim(r, r.fields.interim_parent_id)}`
+            ? `${r.fields.interim_parent_id}\u0000${custForInterim(r, r.fields.interim_parent_id) ?? ""}`
             : null;
 
         const interimIds = resolved.map((r) => r.fields.interim_id).filter(Boolean) as string[];
@@ -1268,10 +1265,13 @@ export function registerObjectImportV2Routes(app: Express): void {
         // null) så Ångra kan radera exakt den raden.
         const ensurePrimaryPayer = async (
           objectId: string,
-          custId: string,
+          custId: string | null,
           _isNew = false,
         ): Promise<string | null> => {
-          return ensurePrimaryCustomerMetadata(tenantId, objectId, custId);
+          // Task #1437: här är kunden alltid UTTRYCKLIGEN vald (body.customerId
+          // eller per-rad-mappad kolumn) — märk raden med "import-explicit" så
+          // städverktyg kan skilja den från legacy-fallbackens "system"-rader.
+          return ensurePrimaryCustomerMetadata(tenantId, objectId, custId, "import-explicit");
         };
 
         const resolveParentId = (item: (typeof ordered)[number]): string | null => {
@@ -1398,8 +1398,9 @@ export function registerObjectImportV2Routes(app: Express): void {
             // ⇒ ingen livscykel-åtgärd (objektets nuvarande tillstånd bevaras).
             const activeStatus = parseActiveStatus(row.fields.active_status);
 
-            // Resolvera radens kund: eget värde → förälderns kund → standardkund.
-            const rowCustomerId =
+            // Resolvera radens kund: eget värde → förälderns kund → uttryckligen
+            // vald standardkund (annars null = ingen kundkoppling, Task #1437).
+            const rowCustomerId: string | null =
               resolveOwnRowCustomerId(row) ??
               (parentId ? customerByObjectId.get(parentId) : undefined) ??
               fallbackCustomerId;
@@ -1620,7 +1621,7 @@ export function registerObjectImportV2Routes(app: Express): void {
                 .update(importActions)
                 .set({ afterJson: { ids: newMetaIds } as any })
                 .where(and(eq(importActions.id, metaActionId), eq(importActions.tenantId, tenantId)));
-              customerByObjectId.set(targetId, rowCustomerId);
+              if (rowCustomerId) customerByObjectId.set(targetId, rowCustomerId);
               if (item.interimKey && item.kind === "primary") interimToObjectId.set(item.interimKey, targetId);
               if (row.fields.system_id) objectNumberToId.set(row.fields.system_id, targetId);
               depthByObjectId.set(targetId, parentId ? (depthByObjectId.get(parentId) ?? 0) + 1 : 0);
@@ -1711,7 +1712,7 @@ export function registerObjectImportV2Routes(app: Express): void {
                   .where(and(eq(objects.id, createdObj.id), eq(objects.tenantId, tenantId)));
               }
               await writeRowMetadata(createdObj.id, row, true, parentId, rowInterim);
-              customerByObjectId.set(createdObj.id, rowCustomerId);
+              if (rowCustomerId) customerByObjectId.set(createdObj.id, rowCustomerId);
               if (item.interimKey && item.kind === "primary") interimToObjectId.set(item.interimKey, createdObj.id);
               depthByObjectId.set(createdObj.id, parentId ? (depthByObjectId.get(parentId) ?? 0) + 1 : 0);
               if (!parentId) rootObjectIds.add(createdObj.id);
