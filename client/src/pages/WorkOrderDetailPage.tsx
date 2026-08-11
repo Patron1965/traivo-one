@@ -345,74 +345,65 @@ function PaketRow({ label, value, testId }: { label: string; value: React.ReactN
   );
 }
 
-/** Uppgiftspaketets alla fält, grupperade (position/tid/artikel/kund/åtkomst). */
-function UppgiftspaketFields({ paket }: { paket: Uppgiftspaket }) {
+/**
+ * Uppgiftspaket-kortets URVAL (Task #1543, produktägarbeslut): paketet består
+ * av fler fält än vyn visar — detaljsidan visar medvetet ENBART
+ *   1) Tidsinformation: önskad leverans, planerad leverans, motorns förslag
+ *   2) Geografisk information: gatuadress + latitud/longitud
+ * Önskad/planerad läses från orderns fält (paketets tidsfonster projicerar
+ * ihop dem); motorns förslag hämtas från slot-registret via eget endpoint.
+ * Tomma värden visas som "–" — aldrig fabricerade.
+ */
+function UppgiftspaketFields({ paket, workOrderId, order }: { paket: Uppgiftspaket; workOrderId: string; order: WorkOrderDetail }) {
   const primar = paket.position?.primar ?? null;
-  const sekundar = paket.position?.sekundar ?? null;
   const dash = "–";
+
+  const { data: motorData } = useQuery<{
+    forslag: { windowStart: string | null; windowEnd: string | null; status: string; slotType: string } | null;
+  }>({
+    queryKey: ["/api/work-orders", workOrderId, "motor-forslag"],
+    enabled: !!workOrderId,
+  });
+  const forslag = motorData?.forslag ?? null;
+
+  const fmtRange = (start?: string | Date | null, end?: string | Date | null) => {
+    if (!start && !end) return dash;
+    return `${fmtDateTime(start) ?? "?"} – ${fmtDateTime(end) ?? "?"}`;
+  };
+
   return (
     <div className="grid gap-6 md:grid-cols-2">
       <div>
-        <h4 className="text-xs font-medium uppercase text-muted-foreground mb-1">Primär plats (körbar)</h4>
+        <h4 className="text-xs font-medium uppercase text-muted-foreground mb-1">Tidsinformation</h4>
+        <PaketRow
+          label="Önskad leverans"
+          value={fmtRange(order.desiredDeliveryStart, order.desiredDeliveryEnd)}
+          testId="tid-onskad-leverans"
+        />
+        <PaketRow
+          label="Planerad leverans"
+          value={fmtRange(order.plannedWindowStart, order.plannedWindowEnd)}
+          testId="tid-planerad-leverans"
+        />
+        <PaketRow
+          label="Föreslagen leverans (motor)"
+          value={forslag ? `${fmtRange(forslag.windowStart, forslag.windowEnd)}${forslag.status === "vald" ? " · vald" : ""}` : dash}
+          testId="tid-motor-forslag"
+        />
+      </div>
+      <div>
+        <h4 className="text-xs font-medium uppercase text-muted-foreground mb-1">Geografisk information</h4>
         {primar ? (
           <>
-            <PaketRow label="Adress" value={primar.adress ?? dash} testId="primar-adress" />
+            <PaketRow label="Gatuadress" value={primar.adress ?? dash} testId="primar-adress" />
             <PaketRow
-              label="Koordinater"
+              label="Lat/long"
               value={primar.latitude != null && primar.longitude != null ? `${primar.latitude.toFixed(5)}, ${primar.longitude.toFixed(5)}` : dash}
               testId="primar-koordinater"
-            />
-            <PaketRow label="Platstyp" value={primar.platstyp} testId="primar-platstyp" />
-            <PaketRow
-              label="Ruttbar"
-              value={primar.ruttbar ? "Ja" : `Nej${primar.orsak ? ` — ${primar.orsak}` : ""}`}
-              testId="primar-ruttbar"
             />
           </>
         ) : (
           <p className="text-sm text-muted-foreground">Ingen position (objektlös uppgift).</p>
-        )}
-      </div>
-      <div>
-        <h4 className="text-xs font-medium uppercase text-muted-foreground mb-1">Utförandeplats</h4>
-        {sekundar ? (
-          <>
-            <PaketRow label="Beskrivning" value={sekundar.beskrivning ?? dash} testId="sekundar-beskrivning" />
-            <PaketRow
-              label="Punkt"
-              value={sekundar.punkt ? `${sekundar.punkt.lat.toFixed(5)}, ${sekundar.punkt.lng.toFixed(5)}` : dash}
-              testId="sekundar-punkt"
-            />
-            <PaketRow label="Geometri" value={sekundar.geometri ? "Polygon/sträckning finns" : dash} testId="sekundar-geometri" />
-          </>
-        ) : (
-          <p className="text-sm text-muted-foreground">Ingen fördjupad utförandeplats.</p>
-        )}
-      </div>
-      <div>
-        <h4 className="text-xs font-medium uppercase text-muted-foreground mb-1">Tid & antal</h4>
-        <PaketRow label="Tidsfönster start" value={fmtDateTime(paket.tidsfonster?.start) ?? dash} testId="tidsfonster-start" />
-        <PaketRow label="Tidsfönster slut" value={fmtDateTime(paket.tidsfonster?.slut) ?? dash} testId="tidsfonster-slut" />
-        <PaketRow label="Antal" value={paket.antal != null ? String(paket.antal) : dash} testId="antal" />
-      </div>
-      <div>
-        <h4 className="text-xs font-medium uppercase text-muted-foreground mb-1">Artikel & kund</h4>
-        <PaketRow label="Utförandekod" value={paket.artikel?.utforandekod ?? dash} testId="artikel-utforandekod" />
-        <PaketRow label="Tidskod" value={paket.artikel?.tidskod ?? dash} testId="artikel-tidskod" />
-        <PaketRow label="Kund-id" value={paket.kund?.kundId ?? dash} testId="kund-id" />
-        <PaketRow label="Fryst fakturamottagare" value={paket.kund?.frystFakturamottagareId ?? dash} testId="kund-fakturamottagare" />
-      </div>
-      <div className="md:col-span-2">
-        <h4 className="text-xs font-medium uppercase text-muted-foreground mb-1">Åtkomst</h4>
-        {paket.atkomst ? (
-          <div className="grid gap-x-8 md:grid-cols-2">
-            <PaketRow label="Typ" value={paket.atkomst.typ ?? dash} testId="atkomst-typ" />
-            <PaketRow label="Portkod" value={paket.atkomst.portkod ?? dash} testId="atkomst-portkod" />
-            <PaketRow label="Nyckelnummer" value={paket.atkomst.nyckelnummer ?? dash} testId="atkomst-nyckel" />
-            <PaketRow label="Info" value={paket.atkomst.info ? JSON.stringify(paket.atkomst.info) : dash} testId="atkomst-info" />
-          </div>
-        ) : (
-          <p className="text-sm text-muted-foreground">Ingen åtkomstinfo.</p>
         )}
       </div>
     </div>
@@ -1222,7 +1213,7 @@ export default function WorkOrderDetailPage() {
         </CardContent>
       </Card>
 
-      {/* Uppgiftspaketet — alla frysta/propagerade fält (Uppgiftsnavet) */}
+      {/* Uppgiftspaketet — medvetet URVAL av paketets fält (Task #1543) */}
       {order.uppgiftspaket && (
         <Card>
           <CardHeader className="pb-3">
@@ -1238,7 +1229,7 @@ export default function WorkOrderDetailPage() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <UppgiftspaketFields paket={order.uppgiftspaket} />
+            <UppgiftspaketFields paket={order.uppgiftspaket} workOrderId={order.id} order={order} />
           </CardContent>
         </Card>
       )}

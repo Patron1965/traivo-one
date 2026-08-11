@@ -427,6 +427,32 @@ app.get("/api/work-orders/:id", asyncHandler(async (req, res) => {
 // primära navigeringsposition (skild från varje medlems position), för
 // fältappens kartvy över ett stopp (alla positioner samtidigt, per-position
 // korrigering/GPS-fångst återanvänder befintlig /api/mobile/objects/:id/location).
+// Task #1543: motorns föreslagna leverans för uppgiftspaket-kortet. Slottider
+// (slot_times) skrivs av tidsmotorn på assignment-nivå; en work_order når dem
+// via sourceAssignmentId (materialiserad uppgift). Saknas kopplingen ⇒ null —
+// aldrig fabricerat värde.
+app.get("/api/work-orders/:id/motor-forslag", asyncHandler(async (req, res) => {
+  const tenantId = getTenantIdWithFallback(req);
+  let workOrder = await storage.getWorkOrder(req.params.id);
+  // Detaljsidan kan visa avbrutna (soft-deleted) ordrar — spegla huvudroutens
+  // fallback så kortet inte 404:ar för dem. Tenant-verifiering sker efteråt.
+  if (!workOrder) {
+    const [deleted] = await db.select().from(workOrders).where(eq(workOrders.id, req.params.id));
+    if (deleted) workOrder = deleted;
+  }
+  const verified = verifyTenantOwnership(workOrder, tenantId);
+  if (!verified) throw new NotFoundError("Arbetsorder");
+
+  let forslag: { windowStart: Date; windowEnd: Date; status: string; slotType: string } | null = null;
+  if (verified.sourceAssignmentId) {
+    const slots = await storage.getSlotTimes(tenantId, { assignmentId: verified.sourceAssignmentId });
+    const candidates = slots.filter((s) => s.source === "tidsmotor" && s.plannerDecision !== "avvisad");
+    const best = candidates.find((s) => s.status === "vald") ?? candidates[0] ?? null;
+    if (best) forslag = { windowStart: best.windowStart, windowEnd: best.windowEnd, status: best.status, slotType: best.slotType };
+  }
+  res.json({ forslag });
+}));
+
 app.get("/api/work-orders/:id/stop-positions", asyncHandler(async (req, res) => {
   const tenantId = getTenantIdWithFallback(req);
   const workOrder = await storage.getWorkOrder(req.params.id);
