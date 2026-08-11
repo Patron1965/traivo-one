@@ -2,20 +2,18 @@ import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
-// Guardrail för Task #1514: kund↔objekt-integritet i POST /api/work-orders/with-lines.
-// När klienten explicit anger BÅDE customerId och objectId måste objektets
-// auktoritativa kund (primär betalare i object_payers, via
-// getObjectPrimaryCustomerId — ALDRIG raw-objektets customerId som är ett
-// read-model-overlay och inte ifyllt av storage.getObject) matcha den valda
-// kunden. Annars kan en planerare skapa en order fakturerad kund B mot
-// kund A:s objekt.
+// Guardrail för Task #1538: objekt är ALDRIG kopplade till kund — kund gäller
+// uppgiften; objektets kundinfo är enbart metadata (förslag i UI). Den gamla
+// kund↔objekt-mismatch-spärren (Task #1514, "Objektet tillhör inte den valda
+// kunden") är medvetet borttagen ur POST /api/work-orders/with-lines och får
+// inte återinföras. Tenant-validering av kund- och objekt-id var för sig
+// (ensureCustomerInTenant/ensureObjectInTenant) MÅSTE dock finnas kvar.
 //
-// Statisk guardrail (samma stil som task-source-immutability): tas raderna
-// bort ur routen regressar testet.
+// Statisk guardrail (samma stil som task-source-immutability).
 
 const read = (p: string) => readFileSync(resolve(__dirname, "../..", p), "utf8");
 
-describe("snabborder kund↔objekt-integritet (Task #1514)", () => {
+describe("snabborder objekt/kund-frikoppling (Task #1538)", () => {
   const src = read("server/routes/workOrderRoutes.ts");
   // Isolera with-lines-routens kropp (fram till nästa route-registrering).
   const start = src.indexOf('"/api/work-orders/with-lines"');
@@ -24,23 +22,14 @@ describe("snabborder kund↔objekt-integritet (Task #1514)", () => {
   const end = rest.indexOf("app.", 10);
   const routeBody = rest.slice(0, end === -1 ? undefined : end);
 
-  it("with-lines validerar objektets primära betalare mot explicit angiven kund", () => {
-    expect(routeBody).toContain("getObjectPrimaryCustomerId");
-    expect(routeBody).toContain("primaryCustomerId !== data.customerId");
-    expect(routeBody).toContain("Objektet tillhör inte den valda kunden");
+  it("with-lines blockerar INTE på objektets metadata-härledda kund", () => {
+    expect(routeBody).not.toContain("Objektet tillhör inte den valda kunden");
+    expect(routeBody).not.toContain("getObjectPrimaryCustomerId");
   });
 
-  it("kontrollen gate:as på att klienten själv skickade customerId (intern-kund-fallback undantas)", () => {
-    expect(routeBody).toContain("parsedBody.data.workOrder.customerId");
-  });
-
-  it("kontrollen läser INTE raw-objektets customerId-overlay", () => {
-    // Matcha bara integritetsblocket: obj.customerId får inte användas i villkoret.
-    expect(routeBody).not.toMatch(/obj\.customerId\s*!==\s*data\.customerId/);
-  });
-
-  it("objekt utan primär betalare avvisas inte (null ⇒ ingen mismatch)", () => {
-    // Villkoret kräver truthy primaryCustomerId före jämförelsen.
-    expect(routeBody).toMatch(/primaryCustomerId\s*&&\s*primaryCustomerId\s*!==\s*data\.customerId/);
+  it("tenant-validering av kund och objekt kvarstår var för sig", () => {
+    expect(routeBody).toContain("ensureCustomerInTenant(data.customerId, tenantId)");
+    expect(routeBody).toContain("ensureObjectInTenant(data.objectId, tenantId)");
+    expect(routeBody).toContain("ensureObjectNotArchived(obj)");
   });
 });

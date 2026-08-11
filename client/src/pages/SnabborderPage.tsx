@@ -133,7 +133,6 @@ export default function SnabborderPage() {
   const [customerOpen, setCustomerOpen] = useState(false);
   // Kundbyte medan objektgrupper finns kräver bekräftelse (objekten tillhör
   // den gamla kunden och måste tas bort — kund↔objekt-integritet).
-  const [pendingCustomerSwitch, setPendingCustomerSwitch] = useState<CustomerOption | null>(null);
 
   const [deliveryDate, setDeliveryDate] = useState("");
   const [deliveryTimeFrom, setDeliveryTimeFrom] = useState("");
@@ -242,6 +241,10 @@ export default function SnabborderPage() {
   }, []);
 
   const [pendingCustomerId, setPendingCustomerId] = useState<string | null>(null);
+  // Task #1538: generation för asynkrona kundförslag från valda objekt —
+  // bumpas när användaren väljer kund eller formuläret nollställs, så att
+  // sena svar inte skriver över ett aktivt val/förifyllning.
+  const suggestionGen = useRef(0);
 
   // ── Queries ────────────────────────────────────────────────────────────
   const { data: customers = [] } = useQuery<CustomerOption[]>({
@@ -294,17 +297,19 @@ export default function SnabborderPage() {
     staleTime: 15000,
   });
 
+  // Task #1538: objektval är frikopplat från kund — sök tenant-brett
+  // (parent-search matchar även förälder-namn i primärkedjan).
   const { data: objectHits = [], isFetching: objectsFetching } = useQuery<ObjectHit[]>({
-    queryKey: ["/api/customers", customer?.id, "objects", "snabborder-search", debouncedObject],
+    queryKey: ["/api/objects/parent-search", "snabborder-search", debouncedObject],
     queryFn: async () => {
       const res = await fetch(
-        versionedUrl(`/api/customers/${encodeURIComponent(customer!.id)}/objects/search?q=${encodeURIComponent(debouncedObject.trim())}&limit=30`),
+        versionedUrl(`/api/objects/parent-search?q=${encodeURIComponent(debouncedObject.trim())}&limit=30`),
         { credentials: "include" },
       );
       if (!res.ok) throw new Error("Kunde inte söka objekt");
       return (await res.json()) as ObjectHit[];
     },
-    enabled: objectPickerOpen && !!customer && debouncedObject.trim().length > 0,
+    enabled: objectPickerOpen && debouncedObject.trim().length > 0,
     staleTime: 15000,
   });
 
@@ -390,6 +395,24 @@ export default function SnabborderPage() {
       setObjectPickerOpen(false);
       return;
     }
+    // Task #1538: om ingen kund är vald, föreslå objektets metadata-härledda
+    // kund som förval (redigerbart — aldrig tvingande). Best-effort.
+    // Generation-guard: svaret ignoreras om användaren hunnit välja kund,
+    // formuläret nollställts eller en annan pending-kund redan finns
+    // (URL-förifyllning vinner alltid).
+    if (!customer) {
+      const gen = suggestionGen.current;
+      void (async () => {
+        try {
+          const res = await fetch(versionedUrl(`/api/objects/${encodeURIComponent(o.id)}/billing-customers`), { credentials: "include" });
+          if (!res.ok) return;
+          const data = (await res.json()) as { defaultCustomerId?: string | null };
+          if (data.defaultCustomerId && suggestionGen.current === gen) {
+            setPendingCustomerId((prev) => prev ?? data.defaultCustomerId ?? null);
+          }
+        } catch { /* noop */ }
+      })();
+    }
     const gid = crypto.randomUUID();
     setGroups((prev) => [...prev, {
       id: gid,
@@ -432,23 +455,11 @@ export default function SnabborderPage() {
 
   const allLines = useMemo(() => groups.flatMap((g) => g.lines), [groups]);
 
+  // Task #1538: objekt är inte kopplade till kund — kundbyte behåller
+  // objektgrupperna (kund gäller uppgiftsnivån, inte objekten).
   const selectCustomer = (c: CustomerOption) => {
-    if (customer && customer.id !== c.id && groups.some((g) => g.objectId !== null)) {
-      setPendingCustomerSwitch(c);
-      return;
-    }
-    setCustomer(c);
-    setCustomerOpen(false);
-    setCustomerSearch("");
-  };
-
-  const confirmCustomerSwitch = () => {
-    const c = pendingCustomerSwitch;
-    setPendingCustomerSwitch(null);
-    if (!c) return;
-    // Ta bort objektgrupper (de tillhör den gamla kunden); ordernivå-rader behålls.
-    setGroups((prev) => prev.filter((g) => g.objectId === null));
-    setAddTargetGroupId(ORDER_LEVEL_GROUP_ID);
+    suggestionGen.current += 1; // ogiltigförklara in-flight kundförslag
+    setPendingCustomerId(null);
     setCustomer(c);
     setCustomerOpen(false);
     setCustomerSearch("");
@@ -589,6 +600,8 @@ export default function SnabborderPage() {
   };
 
   const resetForm = () => {
+    suggestionGen.current += 1; // ogiltigförklara in-flight kundförslag
+    setPendingCustomerId(null);
     setStep(1);
     setCustomer(null);
     setDeliveryDate(""); setDeliveryTimeFrom(""); setDeliveryTimeTo("");
@@ -860,13 +873,13 @@ export default function SnabborderPage() {
                         onClick={() => requestPrinciple("objekt")}
                         data-testid="button-principle-objekt"
                       >
-                        <Building2 className="h-3.5 w-3.5 mr-1 shrink-0" /> Kundens objekt
+                        <Building2 className="h-3.5 w-3.5 mr-1 shrink-0" /> Objekt
                       </Button>
                     </div>
                     {principle === "objekt" && (
                       <p className="text-xs text-muted-foreground flex items-start gap-1.5 rounded-md border bg-muted/40 px-2.5 py-2">
                         <Info className="h-3.5 w-3.5 mt-0.5 shrink-0" />
-                        Du har valt att använda kundens objekt. Alla artiklar läggs under valda objekt.
+                        Du har valt att använda objekt. Alla artiklar läggs under valda objekt.
                       </p>
                     )}
                     {principle === null && (
@@ -953,7 +966,6 @@ export default function SnabborderPage() {
                       </DropdownMenuItem>
                       <DropdownMenuItem
                         onSelect={() => {
-                          if (!customer) { toast({ title: "Välj kund först", variant: "destructive" }); return; }
                           if (principle === "manual") {
                             setPrincipleSwitchTarget("objekt");
                             return;
@@ -966,7 +978,7 @@ export default function SnabborderPage() {
                         <Building2 className="h-4 w-4 mr-2" />
                         <div>
                           <div className="text-sm">Bygg objekt</div>
-                          <div className="text-xs text-muted-foreground">Välj ett objekt hos kunden</div>
+                          <div className="text-xs text-muted-foreground">Välj ett objekt</div>
                         </div>
                       </DropdownMenuItem>
                     </DropdownMenuContent>
@@ -1187,7 +1199,7 @@ export default function SnabborderPage() {
                   </div>
                   <div>
                     <span className="text-muted-foreground">Leveransprincip:</span>{" "}
-                    <span className="font-medium">{principle === "manual" ? "Manuell leveransadress" : principle === "objekt" ? "Kundens objekt" : "—"}</span>
+                    <span className="font-medium">{principle === "manual" ? "Manuell leveransadress" : principle === "objekt" ? "Objekt" : "—"}</span>
                   </div>
                   {kundreferens && <div><span className="text-muted-foreground">Kundens referens:</span> {kundreferens}</div>}
                   {varReferens && <div><span className="text-muted-foreground">Vår referens:</span> {varReferens}</div>}
@@ -1297,7 +1309,7 @@ export default function SnabborderPage() {
             <p className="font-semibold">Leveransprincip</p>
             <p className="text-muted-foreground">Välj hur leveransen ska hanteras på denna order.</p>
             <p className="text-muted-foreground"><span className="font-medium text-foreground">Manuell leveransadress</span> — du anger adress här.</p>
-            <p className="text-muted-foreground"><span className="font-medium text-foreground">Kundens objekt</span> — du väljer ett eller flera objekt som innehåller adress och metadata.</p>
+            <p className="text-muted-foreground"><span className="font-medium text-foreground">Objekt</span> — du väljer ett eller flera objekt som innehåller adress och metadata.</p>
             <p className="text-muted-foreground">Principen kan inte ändras när du har börjat bygga orderinnehållet.</p>
           </div>
           <div className="rounded-lg border bg-muted/30 px-4 py-3 text-xs space-y-1.5">
@@ -1305,7 +1317,7 @@ export default function SnabborderPage() {
             <p className="text-muted-foreground">Bygg ordern med tre val:</p>
             <p className="text-muted-foreground"><span className="font-medium text-foreground">Artikel</span> — lägg till en artikelrad.</p>
             <p className="text-muted-foreground"><span className="font-medium text-foreground">Fritextrad</span> — fri text på ordernivå.</p>
-            <p className="text-muted-foreground"><span className="font-medium text-foreground">Objekt</span> — välj ett av kundens objekt. Artiklar som läggs därefter hamnar under detta objekt tills nästa objekt skapas.</p>
+            <p className="text-muted-foreground"><span className="font-medium text-foreground">Objekt</span> — välj ett objekt. Artiklar som läggs därefter hamnar under detta objekt tills nästa objekt skapas.</p>
           </div>
           <div className="rounded-lg border bg-muted/30 px-4 py-3 text-xs space-y-1.5">
             <p className="font-semibold">Hierarki och struktur</p>
@@ -1378,7 +1390,7 @@ export default function SnabborderPage() {
           <DialogHeader>
             <DialogTitle>Bygg objekt</DialogTitle>
             <DialogDescription>
-              Välj ett av {customer?.name ?? "kundens"} objekt. Artiklar som läggs därefter hamnar under
+              Sök och välj ett objekt. Artiklar som läggs därefter hamnar under
               objektet tills nästa objekt skapas.
             </DialogDescription>
           </DialogHeader>
@@ -1395,7 +1407,7 @@ export default function SnabborderPage() {
           </div>
           <div className="max-h-64 overflow-y-auto rounded-md border divide-y">
             {debouncedObject.trim().length === 0 ? (
-              <div className="p-3 text-sm text-muted-foreground">Skriv för att söka bland kundens objekt.</div>
+              <div className="p-3 text-sm text-muted-foreground">Skriv för att söka bland alla objekt.</div>
             ) : objectsFetching ? (
               <div className="flex items-center gap-2 p-3 text-sm text-muted-foreground">
                 <Loader2 className="h-4 w-4 animate-spin" /> Söker…
@@ -1425,28 +1437,6 @@ export default function SnabborderPage() {
         </DialogContent>
       </Dialog>
 
-      {/* ── Kundbyte med objektgrupper ── */}
-      <Dialog open={pendingCustomerSwitch !== null} onOpenChange={(v) => !v && setPendingCustomerSwitch(null)}>
-        <DialogContent className="max-w-md" data-testid="dialog-customer-switch">
-          <DialogHeader>
-            <DialogTitle>Byta kund?</DialogTitle>
-            <DialogDescription>
-              Orderinnehållet innehåller objekt som tillhör {customer?.name ?? "den nuvarande kunden"}.
-              Om du byter till {pendingCustomerSwitch?.name ?? "en annan kund"} tas objektgrupperna och
-              deras rader bort. Rader utan objekt behålls.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setPendingCustomerSwitch(null)} data-testid="button-cancel-customer-switch">
-              Avbryt
-            </Button>
-            <Button onClick={confirmCustomerSwitch} data-testid="button-confirm-customer-switch">
-              Byt kund
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
       {/* ── Principkonflikt (spec §7) ── */}
       <Dialog open={principleSwitchTarget !== null} onOpenChange={(v) => !v && setPrincipleSwitchTarget(null)}>
         <DialogContent className="max-w-md" data-testid="dialog-principle-conflict">
@@ -1454,8 +1444,8 @@ export default function SnabborderPage() {
             <DialogTitle>Byta leveransprincip?</DialogTitle>
             <DialogDescription>
               {principleSwitchTarget === "objekt"
-                ? "Ordern använder redan en manuell leveransadress. Vill du istället använda kundens objekt och objektens adresser? Den manuella adressen tas bort."
-                : "Ordern använder redan kundens objekt. Vill du istället ange en manuell leveransadress? Objektgrupperna tas bort och deras rader flyttas till ordernivån."}
+                ? "Ordern använder redan en manuell leveransadress. Vill du istället använda objekt och objektens adresser? Den manuella adressen tas bort."
+                : "Ordern använder redan objekt. Vill du istället ange en manuell leveransadress? Objektgrupperna tas bort och deras rader flyttas till ordernivån."}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>

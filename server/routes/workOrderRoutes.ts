@@ -1474,20 +1474,10 @@ app.post("/api/work-orders/with-lines", requirePlanner, asyncHandler(async (req,
   if (data.objectId) {
     const obj = await ensureObjectInTenant(data.objectId, tenantId);
     ensureObjectNotArchived(obj);
-    // Task #1514: kund↔objekt-integritet — när klienten explicit anger BÅDE
-    // kund och objekt måste objektet tillhöra kunden (annars kan en order
-    // faktureras kund B mot kund A:s objekt). Auktoritativ kund = primär
-    // betalare i object_payers (raw-objektets customerId är bara ett
-    // read-model-overlay och är inte ifyllt här). Intern-kund-fallback
-    // (utelämnad customerId) undantas eftersom den fylls i server-side ovan.
-    const clientSentCustomer = !!parsedBody.data.workOrder.customerId;
-    if (clientSentCustomer) {
-      const { getObjectPrimaryCustomerId } = await import("../services/object-customer");
-      const primaryCustomerId = await getObjectPrimaryCustomerId(data.objectId);
-      if (primaryCustomerId && primaryCustomerId !== data.customerId) {
-        throw new ValidationError("Objektet tillhör inte den valda kunden");
-      }
-    }
+    // Task #1538: den tidigare kund↔objekt-matchningsspärren (Task #1514) är
+    // borttagen enligt produktregeln: objekt är aldrig kopplade till kund —
+    // kund gäller uppgiften, objektets kundinfo är enbart metadata (förslag).
+    // Tenant-validering av kund- och objekt-id sker var för sig ovan.
   }
 
   const prefFlags = await computeOutsidePreferredWindow(
