@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { queryClient, apiRequest } from "@/lib/queryClient";
@@ -13,6 +13,8 @@ import {
   Layers,
   GitFork,
   ChevronRight,
+  ChevronDown,
+  Search,
   ExternalLink,
   Link2,
   Trash2,
@@ -25,6 +27,193 @@ import {
   DialogTitle,
   DialogDescription,
 } from "@/components/ui/dialog";
+
+/**
+ * Task #1535: lazy-expanderat träd för "Visa hela hierarkin"-dialogen.
+ * Renderar bara expanderade grenar (DOM växer inte med hela trädet) och har
+ * ett sökfält som platt-listar träffar. Grenen ner till aktuellt objekt är
+ * expanderad från start och auto-scrollas in i vy.
+ */
+function FullHierarchyTree({
+  rootId,
+  rootName,
+  descendants,
+  currentId,
+  onNavigate,
+}: {
+  rootId: string;
+  rootName: string;
+  descendants: ServiceObject[];
+  currentId: string;
+  onNavigate: (id: string) => void;
+}) {
+  const [search, setSearch] = useState("");
+
+  const { byParent, orphans, pathToCurrent, childCount } = useMemo(() => {
+    const byParent = new Map<string, ServiceObject[]>();
+    const byId = new Map<string, ServiceObject>();
+    for (const d of descendants) {
+      byId.set(d.id, d);
+      const p = d.parentId || "";
+      if (!byParent.has(p)) byParent.set(p, []);
+      byParent.get(p)!.push(d);
+    }
+    // Bruten kedja (mellanled utanför svaret) → egen lista, visas sist.
+    const reachable = new Set<string>([rootId]);
+    const stack = [rootId];
+    while (stack.length) {
+      const id = stack.pop()!;
+      for (const k of byParent.get(id) || []) {
+        if (!reachable.has(k.id)) {
+          reachable.add(k.id);
+          stack.push(k.id);
+        }
+      }
+    }
+    const orphans = descendants.filter((d) => !reachable.has(d.id));
+    // Kedjan rot → aktuellt objekt, för initial expandering + synlighet.
+    const pathToCurrent = new Set<string>([rootId]);
+    let cursor = byId.get(currentId);
+    let guard = 0;
+    while (cursor && guard++ < 200) {
+      const pid = cursor.parentId || "";
+      if (!pid || pid === rootId) break;
+      pathToCurrent.add(pid);
+      cursor = byId.get(pid);
+    }
+    const childCount = (id: string) => (byParent.get(id) || []).length;
+    return { byParent, orphans, pathToCurrent, childCount };
+  }, [descendants, rootId, currentId]);
+
+  const [expanded, setExpanded] = useState<Set<string>>(() => new Set(pathToCurrent));
+  // Om datan laddas om (nytt rotträd) — se till att vägen till aktuellt objekt är öppen.
+  useEffect(() => {
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      for (const id of Array.from(pathToCurrent)) next.add(id);
+      return next;
+    });
+  }, [pathToCurrent]);
+
+  const toggle = (id: string) =>
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+
+  const nodeName = (d: ServiceObject) => d.name || d.objectNumber || d.id.slice(0, 8);
+
+  const query = search.trim().toLowerCase();
+  type Row = { id: string; name: string; depth: number; hasChildren: boolean };
+  const rows = useMemo<Row[]>(() => {
+    if (query) {
+      // Sökläge: platt lista av träffar (max 200) — ingen träd-walk i DOM.
+      const hits: Row[] = [];
+      if (rootName.toLowerCase().includes(query)) {
+        hits.push({ id: rootId, name: rootName, depth: 0, hasChildren: false });
+      }
+      for (const d of descendants) {
+        if (hits.length >= 200) break;
+        if (nodeName(d).toLowerCase().includes(query)) {
+          hits.push({ id: d.id, name: nodeName(d), depth: 0, hasChildren: false });
+        }
+      }
+      return hits;
+    }
+    const out: Row[] = [
+      { id: rootId, name: rootName, depth: 0, hasChildren: (byParent.get(rootId) || []).length > 0 },
+    ];
+    const walk = (parentId: string, depth: number) => {
+      for (const k of byParent.get(parentId) || []) {
+        out.push({ id: k.id, name: nodeName(k), depth, hasChildren: childCount(k.id) > 0 });
+        if (expanded.has(k.id)) walk(k.id, depth + 1);
+      }
+    };
+    if (expanded.has(rootId)) walk(rootId, 1);
+    for (const d of orphans) {
+      out.push({ id: d.id, name: nodeName(d), depth: 1, hasChildren: false });
+    }
+    return out;
+  }, [query, descendants, byParent, orphans, expanded, rootId, rootName, childCount]);
+
+  // Auto-scroll till aktuellt objekt när dialogen öppnats och trädet renderats.
+  const currentRef = useRef<HTMLButtonElement | null>(null);
+  const scrolledRef = useRef(false);
+  useEffect(() => {
+    if (!scrolledRef.current && currentRef.current) {
+      scrolledRef.current = true;
+      currentRef.current.scrollIntoView({ block: "center" });
+    }
+  }, [rows]);
+
+  return (
+    <div className="space-y-2">
+      <div className="relative">
+        <Search className="absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+        <input
+          type="text"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Sök i hierarkin…"
+          className="w-full rounded-md border bg-background py-1.5 pl-8 pr-2 text-sm outline-none focus-visible:ring-1 focus-visible:ring-ring"
+          data-testid="input-full-tree-search"
+        />
+      </div>
+      <div className="max-h-[60vh] overflow-y-auto space-y-0.5">
+        {rows.length === 0 && (
+          <p className="text-sm text-muted-foreground py-2" data-testid="text-full-tree-no-hits">
+            Inga träffar.
+          </p>
+        )}
+        {rows.map((node) => (
+          <div key={node.id} className="flex items-center">
+            {!query && node.hasChildren ? (
+              <button
+                type="button"
+                className="shrink-0 rounded p-0.5 hover:bg-muted"
+                style={{ marginLeft: `${node.depth * 16}px` }}
+                onClick={() => toggle(node.id)}
+                aria-label={expanded.has(node.id) ? "Fäll ihop" : "Expandera"}
+                data-testid={`full-tree-toggle-${node.id}`}
+              >
+                {expanded.has(node.id) ? (
+                  <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+                ) : (
+                  <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
+                )}
+              </button>
+            ) : (
+              <span className="shrink-0" style={{ marginLeft: `${node.depth * 16 + 18}px` }} />
+            )}
+            <button
+              ref={node.id === currentId ? currentRef : undefined}
+              type="button"
+              className={`flex min-w-0 flex-1 items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-muted/50 ${
+                node.id === currentId ? "bg-primary/10 font-semibold" : ""
+              }`}
+              onClick={() => onNavigate(node.id)}
+              data-testid={`full-tree-node-${node.id}`}
+            >
+              <span className="truncate">{node.name}</span>
+              {node.id === currentId && (
+                <Badge variant="secondary" className="ml-auto text-[10px] shrink-0">
+                  Detta objekt
+                </Badge>
+              )}
+            </button>
+          </div>
+        ))}
+        {query && rows.length >= 200 && (
+          <p className="text-xs text-muted-foreground py-1 px-2">
+            Visar de första 200 träffarna — förfina sökningen.
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
 
 interface ObjectParentRelation {
   id: string;
@@ -213,58 +402,16 @@ export function ObjectHierarchyCards({
           {fullTreeLoading ? (
             <p className="text-sm text-muted-foreground py-4">Laddar…</p>
           ) : (
-            <div className="max-h-[60vh] overflow-y-auto space-y-0.5">
-              {(() => {
-                const byParent = new Map<string, ServiceObject[]>();
-                for (const d of rootDescendants) {
-                  const p = d.parentId || "";
-                  if (!byParent.has(p)) byParent.set(p, []);
-                  byParent.get(p)!.push(d);
-                }
-                const ordered: Array<{ id: string; name: string; depth: number }> = [
-                  { id: rootId, name: rootName, depth: 0 },
-                ];
-                const walk = (parentId: string, depth: number) => {
-                  for (const k of byParent.get(parentId) || []) {
-                    ordered.push({ id: k.id, name: k.name || k.objectNumber || k.id.slice(0, 8), depth });
-                    walk(k.id, depth + 1);
-                  }
-                };
-                walk(rootId, 1);
-                // Bruten kedja (t.ex. mellanled utanför svaret) → lägg sist, odjupat.
-                const seen = new Set(ordered.map((o) => o.id));
-                for (const d of rootDescendants) {
-                  if (!seen.has(d.id)) {
-                    ordered.push({ id: d.id, name: d.name || d.objectNumber || d.id.slice(0, 8), depth: 1 });
-                  }
-                }
-                return ordered.map((node) => (
-                  <button
-                    key={node.id}
-                    type="button"
-                    className={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-muted/50 ${
-                      node.id === objectId ? "bg-primary/10 font-semibold" : ""
-                    }`}
-                    style={{ paddingLeft: `${node.depth * 16 + 8}px` }}
-                    onClick={() => {
-                      setFullTreeOpen(false);
-                      if (node.id !== objectId) navigate(`/objects/${node.id}`);
-                    }}
-                    data-testid={`full-tree-node-${node.id}`}
-                  >
-                    {node.depth > 0 && (
-                      <ChevronRight className="h-3 w-3 text-muted-foreground shrink-0" />
-                    )}
-                    <span className="truncate">{node.name}</span>
-                    {node.id === objectId && (
-                      <Badge variant="secondary" className="ml-auto text-[10px] shrink-0">
-                        Detta objekt
-                      </Badge>
-                    )}
-                  </button>
-                ));
-              })()}
-            </div>
+            <FullHierarchyTree
+              rootId={rootId}
+              rootName={rootName}
+              descendants={rootDescendants}
+              currentId={objectId}
+              onNavigate={(id) => {
+                setFullTreeOpen(false);
+                if (id !== objectId) navigate(`/objects/${id}`);
+              }}
+            />
           )}
         </DialogContent>
       </Dialog>
