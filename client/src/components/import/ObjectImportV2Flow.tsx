@@ -1546,7 +1546,7 @@ export function ObjectImportV2Flow() {
                   </Label>
                   <Select value={customerId} onValueChange={setCustomerId}>
                     <SelectTrigger id="customer-select" data-testid="select-import-customer">
-                      <SelectValue placeholder="Första kunden (standard)" />
+                      <SelectValue placeholder="Ingen kund (standard)" />
                     </SelectTrigger>
                     <SelectContent>
                       {customers.map((c) => (
@@ -1558,8 +1558,8 @@ export function ObjectImportV2Flow() {
                   </Select>
                   <p className="text-xs text-muted-foreground">
                     {hasCustomerMapping
-                      ? "Du har mappat en kund-kolumn — varje objekt kopplas till kunden i sin rad. Den här kunden används bara som fallback för rader vars kund inte kan hittas. Lämna tomt för tenantens första kund."
-                      : "Objekten kopplas till kunden för klustring. Lämna tomt för tenantens första kund. Tips: mappa en kolumn till \u201eKund (namn)\u201d eller \u201eKund (kundnummer)\u201d för att koppla varje objekt till olika kunder."}
+                      ? "Du har mappat en kund-kolumn — kunden i varje rad sparas som metadatafältet \u201eKund\u201d på objektet. Den här kunden används bara som fallback för rader vars kund inte kan hittas. Lämna tomt så lämnas sådana rader utan kund."
+                      : "Valfritt: kunden sparas som metadatafältet \u201eKund\u201d på objekten. Objekt är aldrig kopplade till en kund — kund väljs på uppgiften. Lämna tomt för att importera utan kund. Tips: mappa en kolumn till \u201eKund (namn)\u201d eller \u201eKund (kundnummer)\u201d för olika kunder per rad."}
                   </p>
                 </div>
                 <div className="flex max-w-md items-start gap-2">

@@ -654,6 +654,8 @@ app.post("/api/deviation-reports/:id/create-order", asyncHandler(async (req, res
     const workOrder = await storage.createWorkOrder({
       tenantId,
       objectId: report.objectId,
+      // object.customerId = metadata-härledd kund (read-model-overlay), inte
+      // en objektkolumn — kunden sätts på ORDERN, aldrig på objektet.
       customerId: object.customerId || '',
       title: `Åtgärd: ${categoryLabel} - ${report.title}`,
       orderType: 'manual',
@@ -1048,7 +1050,9 @@ app.post("/api/cases/:source/:id/create-order", requirePlanner, asyncHandler(asy
     let customerId: string | null = req.body?.customerId ?? null;
     if (!customerId) {
       const { getObjectPrimaryCustomerId } = await import("../services/object-customer");
-      customerId = (await getObjectPrimaryCustomerId(objectId)) ?? (object as any).customerId ?? null;
+      // object.customerId är samma metadata-härledning (read-model-overlay) —
+      // ingen separat legacy-fallback behövs (Task #1540).
+      customerId = await getObjectPrimaryCustomerId(objectId);
     }
     if (!customerId) {
       throw new ValidationError("Kunde inte härleda kund för objektet. Ange customerId.");

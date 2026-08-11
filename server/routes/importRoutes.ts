@@ -1664,7 +1664,9 @@ app.post("/api/import/modus/tasks", requireAdmin, upload.single("file"), asyncHa
       }
     } catch {}
     // Policy for rows where Kund in CSV doesn't match any known customer and no override is provided:
-    //   "skip" (default) = skip the row, "object" = fall back to object.customerId
+    //   "skip" (default) = skip the row, "object" = fall back to objektets
+    //   metadata-härledda kund (object.customerId är ett read-model-overlay
+    //   från Ekonomi-metadatat "Kund" — aldrig en direktkolumn).
     const unresolvedCustomerPolicy: "object" | "skip" = req.body?.unresolvedCustomerPolicy === "object" ? "object" : "skip";
 
     // Async-flagga: kör jobbet i bakgrund och returnera 202 + batchId omedelbart.
@@ -1783,7 +1785,8 @@ app.post("/api/import/modus/tasks", requireAdmin, upload.single("file"), asyncHa
         }
         if (!uppgiftsnamn) uppgiftsnamn = `Uppgift ${uppgiftsId}`;
 
-        // Resolve customer: prefer override (by Modus customer-id or name), else object.customerId
+        // Resolve customer: prefer override (by Modus customer-id or name),
+        // else objektets metadata-härledda kund (read-model-overlay).
         let resolvedCustomerId: string | undefined;
         const kundModusIdMatch = kundRaw.match(/\((\d+)\)\s*$/);
         const kundModusId = kundModusIdMatch ? kundModusIdMatch[1] : undefined;
