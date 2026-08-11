@@ -450,7 +450,9 @@ export function ObjectImportV2Flow() {
         className={opts?.indent ? "pl-8 pr-14" : "pr-14"}
       >
         <span className="flex items-center gap-2 w-full">
-          <span className="flex-1 truncate">{f.label}</span>
+          {/* Task #1541: hela fältnamnet ska alltid synas — radbryt istället
+              för att trunkera (gäller både listan och valt värde i triggern). */}
+          <span className="flex-1 min-w-0 whitespace-normal break-words text-left">{f.label}</span>
           <Badge
             variant="outline"
             className="ml-2 shrink-0 px-1.5 py-0 text-[10px] font-normal text-muted-foreground"
@@ -1215,7 +1217,13 @@ export function ObjectImportV2Flow() {
                       )}
                     </div>
                     <Select value={current} onValueChange={(v) => setColumnTarget(c.index, v)}>
-                      <SelectTrigger data-testid={`select-mapping-${c.index}`}>
+                      {/* Task #1541: triggern får växa på höjden och radbryta så
+                          hela det valda fältnamnet syns (line-clamp-1 i bas-
+                          komponenten klipper annars långa katalognamn). */}
+                      <SelectTrigger
+                        className="h-auto min-h-9 whitespace-normal [&>span]:line-clamp-none [&>span]:text-left"
+                        data-testid={`select-mapping-${c.index}`}
+                      >
                         <SelectValue placeholder="Välj fält…" />
                       </SelectTrigger>
                       <SelectContent>
