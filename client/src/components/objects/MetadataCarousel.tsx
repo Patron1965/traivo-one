@@ -139,10 +139,15 @@ function FieldHistoryCarousel({
   objectId,
   katalogId,
   currentValue,
+  chronological = false,
 }: {
   objectId: string;
   katalogId: string;
   currentValue: ReactNode;
+  /** Task #1533 (mockup-gap 4): fält med kronologisk visning (t.ex. Antal kärl)
+   *  visar en alltid-synlig historik-remsa (värde/datum/ursprung) — hämtas
+   *  eagert enbart för dessa fält. */
+  chronological?: boolean;
 }) {
   const [expanded, setExpanded] = useState(false);
   const [idx, setIdx] = useState(0);
@@ -154,7 +159,7 @@ function FieldHistoryCarousel({
       if (!res.ok) throw new Error("Kunde inte hämta historik");
       return res.json();
     },
-    enabled: expanded,
+    enabled: expanded || chronological,
   });
 
   // Steg: [aktuellt värde, ...historikposter (nyast först, exkl. den som satte
@@ -164,6 +169,53 @@ function FieldHistoryCarousel({
   const safeIdx = Math.min(idx, steps - 1);
 
   if (!expanded) {
+    // Task #1533 (mockup-gap 4): kronologisk remsa — senaste verkliga
+    // historikposter (värde/datum/ursprung), alltid synlig för fält med
+    // kronologisk visning. Ingen remsa utan verklig historik.
+    if (chronological && history.length > 0) {
+      return (
+        <div className="mt-2 space-y-1" data-testid={`chronological-strip-${katalogId}`}>
+          <div className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+            Historik
+          </div>
+          <div className="flex gap-2 overflow-x-auto pb-1">
+            {history.slice(0, 6).map((post) => (
+              <div
+                key={post.id}
+                className="shrink-0 rounded-md border bg-muted/30 px-2 py-1.5 min-w-[90px]"
+                data-testid={`chronological-step-${post.id}`}
+              >
+                <div className="text-xs font-medium break-words">
+                  {post.nyttVarde === null ? (
+                    <span className="text-destructive italic">Raderad</span>
+                  ) : (
+                    post.nyttVarde
+                  )}
+                </div>
+                <div className="mt-0.5 text-[10px] text-muted-foreground">
+                  {new Date(post.andradVid).toLocaleDateString("sv-SE")}
+                </div>
+                {post.andringsMetod && (
+                  <div className="text-[10px] text-muted-foreground">
+                    {metodLabel(post.andringsMetod) ?? post.andringsMetod}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+          {history.length > 6 && (
+            <button
+              type="button"
+              onClick={() => setExpanded(true)}
+              className="inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground transition-colors"
+              data-testid={`button-expand-field-history-${katalogId}`}
+            >
+              <HistoryIcon className="h-3 w-3" /> Visa alla ({history.length})
+            </button>
+          )}
+        </div>
+      );
+    }
     return (
       <button
         type="button"
@@ -519,6 +571,7 @@ export function MetadataCarousel({
                 objectId={objectId}
                 katalogId={entry.metadataKatalogId}
                 currentValue={<MetadataValue entry={entry} datatyp={datatyp} onPreviewImage={onPreviewImage} />}
+                chronological={!!entry.katalog?.kronologiskVisning}
               />
             )}
           </>

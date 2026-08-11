@@ -1217,6 +1217,55 @@ export default function ObjectDetailPage() {
           {/* Task #1399: förälder-/underordnade-sammanfattningen är borttagen ur
               headern — informationen framgår redan av brödsmulan ovan och av
               korten "Föräldrar / Överordnade" och "Barn / Underordnade" nedan. */}
+          {/* Task #1533 (mockup-gap 1): kompakt info-rad — enbart härledda
+              verkliga värden; tomma fält utelämnas helt (aldrig fabricerat). */}
+          {(() => {
+            const rootAncestor =
+              slaktnamnChain.length > 1 && slaktnamnChain[0]?.id !== objectId
+                ? slaktnamnChain[0]
+                : null;
+            const infoItems: { label: string; node: React.ReactNode; testId: string }[] = [
+              ...(objectTypeFromMetadata
+                ? [{ label: "Typ", node: <>{objectTypeFromMetadata}</>, testId: "header-info-typ" }]
+                : []),
+              ...((obj as any).createdAt
+                ? [{
+                    label: "Skapad",
+                    node: <>{new Date((obj as any).createdAt).toLocaleDateString("sv-SE")}</>,
+                    testId: "header-info-skapad",
+                  }]
+                : []),
+              ...(rootAncestor
+                ? [{
+                    label: "Tillhör",
+                    node: (
+                      <button
+                        type="button"
+                        className="text-primary hover:underline"
+                        onClick={() => navigate(`/objects/${rootAncestor.id}`)}
+                        data-testid="link-header-root-object"
+                      >
+                        {rootAncestor.name}
+                      </button>
+                    ),
+                    testId: "header-info-tillhor",
+                  }]
+                : []),
+            ];
+            return infoItems.length > 0 ? (
+              <div
+                className="mt-2 flex items-center gap-x-4 gap-y-1 flex-wrap text-xs text-muted-foreground"
+                data-testid="header-info-row"
+              >
+                {infoItems.map((it) => (
+                  <span key={it.testId} data-testid={it.testId}>
+                    <span className="font-medium text-foreground/70">{it.label}:</span>{" "}
+                    {it.node}
+                  </span>
+                ))}
+              </div>
+            ) : null;
+          })()}
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           {/* Snabbmeny (ersätter tidigare sticky-navigering): hoppa till sektion. */}

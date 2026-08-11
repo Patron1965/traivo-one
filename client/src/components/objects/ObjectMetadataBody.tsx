@@ -5,7 +5,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
-  Info, ListFilter,
+  ChevronsDownUp, Info, ListFilter,
 } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -104,6 +104,8 @@ export function ObjectMetadataBody({
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   // BILD 2/3: filtrera listan på metadataområden (tom = visa alla).
   const [areaFilter, setAreaFilter] = useState<Set<string>>(new Set());
+  // Task #1533 (mockup-gap 3): hopfällbara metadataområden + "Expandera alla".
+  const [collapsedAreas, setCollapsedAreas] = useState<Set<string>>(new Set());
 
   const { data: areas = [] } = useQuery<MetadataAreaMeta[]>({
     queryKey: ["/api/metadata/areas"],
@@ -185,6 +187,28 @@ export function ObjectMetadataBody({
             {filterActive ? `${visibleCount} av ${carouselEntries.length}` : carouselEntries.length} metadatafält
           </h2>
           <div className="flex items-center gap-2">
+            {groups.length > 1 && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() =>
+                  setCollapsedAreas((prev) =>
+                    prev.size > 0 ? new Set() : new Set(groups.map((g) => g.area)),
+                  )
+                }
+                data-testid="button-toggle-all-areas"
+              >
+                {collapsedAreas.size > 0 ? (
+                  <>
+                    <ChevronsDownUp className="h-4 w-4 mr-1.5 rotate-180" /> Expandera alla
+                  </>
+                ) : (
+                  <>
+                    <ChevronsDownUp className="h-4 w-4 mr-1.5" /> Fäll ihop alla
+                  </>
+                )}
+              </Button>
+            )}
             {groups.length > 0 && (
               <Popover>
                 <PopoverTrigger asChild>
@@ -294,6 +318,15 @@ export function ObjectMetadataBody({
             key={g.area}
             areaKey={anchorSlug(g.area)}
             label={g.label}
+            collapsed={collapsedAreas.has(g.area)}
+            onToggleCollapsed={() =>
+              setCollapsedAreas((prev) => {
+                const next = new Set(prev);
+                if (next.has(g.area)) next.delete(g.area);
+                else next.add(g.area);
+                return next;
+              })
+            }
             cards={[
               // System-/samlingskorten leder sina metadataområden —
               // fria fält följer efter i samma sektion.

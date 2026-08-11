@@ -18,10 +18,16 @@ export function MetadataAreaSection({
   areaKey,
   label,
   cards,
+  collapsed = false,
+  onToggleCollapsed,
 }: {
   areaKey: string;
   label: string;
   cards: { key: string; node: ReactNode }[];
+  /** Task #1533 (mockup-gap 3): området kan fällas ihop; styrs av föräldern
+   *  så att "Expandera alla / Fäll ihop alla" fungerar över alla områden. */
+  collapsed?: boolean;
+  onToggleCollapsed?: () => void;
 }) {
   const [expanded, setExpanded] = useState(false);
   const [mobileIndex, setMobileIndex] = useState(0);
@@ -46,13 +52,27 @@ export function MetadataAreaSection({
       className="scroll-mt-24 space-y-3"
       data-testid={`section-meta-area-${areaKey}`}
     >
-      <div className="flex items-center gap-2">
-        <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+      <button
+        type="button"
+        className="flex items-center gap-2 group"
+        onClick={onToggleCollapsed}
+        disabled={!onToggleCollapsed}
+        aria-expanded={!collapsed}
+        data-testid={`button-toggle-area-${areaKey}`}
+      >
+        <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground group-hover:text-foreground">
           {label}
         </h3>
         <Badge variant="secondary" className="text-[10px]">{cards.length}</Badge>
-      </div>
+        {onToggleCollapsed && (
+          collapsed
+            ? <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+            : <ChevronUp className="h-3.5 w-3.5 text-muted-foreground" />
+        )}
+      </button>
 
+      {collapsed ? null : (
+      <>
       {/* Mobil: swipebar karusell med positionsindikering + antal. */}
       <div className="sm:hidden">
         <div
@@ -115,6 +135,8 @@ export function MetadataAreaSection({
           </Button>
         )}
       </div>
+      </>
+      )}
     </section>
   );
 }

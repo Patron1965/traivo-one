@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 // OBS: lucide `History` aliasas — oaliasad import skuggar globala inbyggda (lint:icon-shadowing).
-import { ClipboardList, History as HistoryIcon, ListChecks, Search } from "lucide-react";
+import { ClipboardList, ExternalLink, History as HistoryIcon, ListChecks, Search } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -60,6 +60,7 @@ interface LinkedWorkOrder {
   createdAt?: string | Date | null;
   objectId?: string | null;
   objectName?: string | null;
+  resourceName?: string | null;
 }
 
 interface LinkedAssignment {
@@ -73,6 +74,7 @@ interface LinkedAssignment {
   createdAt?: string | null;
   objectId?: string | null;
   objectName?: string | null;
+  resourceName?: string | null;
 }
 
 interface LinkedWorkResponse {
@@ -111,6 +113,8 @@ interface LinkedRow {
   orderConceptName: string | null;
   objectId: string | null;
   objectName: string | null;
+  /** Task #1533: utförare (tilldelad resurs), när sådan finns. */
+  resourceName: string | null;
   status: UppgiftStatus;
   statusLabel: string;
   date: Date | null;
@@ -158,12 +162,15 @@ function LinkedRowsTable({
   showOrderColumn,
   showObjectColumn = false,
   showTypeColumn = false,
+  showResourceColumn = false,
 }: {
   rows: LinkedRow[];
   testidPrefix: string;
   showOrderColumn: boolean;
   showObjectColumn?: boolean;
   showTypeColumn?: boolean;
+  /** Task #1533: kolumnen "Utförare" (tilldelad resurs). */
+  showResourceColumn?: boolean;
 }) {
   return (
     <div className="overflow-x-auto">
@@ -176,6 +183,7 @@ function LinkedRowsTable({
             <TableHead>Källa</TableHead>
             <TableHead>Orderkoncept</TableHead>
             {showObjectColumn && <TableHead>Objekt</TableHead>}
+            {showResourceColumn && <TableHead>Utförare</TableHead>}
             <TableHead>Status</TableHead>
             <TableHead>Datum</TableHead>
           </TableRow>
@@ -258,6 +266,11 @@ function LinkedRowsTable({
                   )}
                 </TableCell>
               )}
+              {showResourceColumn && (
+                <TableCell className="whitespace-nowrap text-xs" data-testid={`text-resource-${row.key}`}>
+                  {row.resourceName || <span className="text-muted-foreground">—</span>}
+                </TableCell>
+              )}
               <TableCell>
                 <Badge variant="secondary">{row.statusLabel}</Badge>
               </TableCell>
@@ -296,6 +309,7 @@ function useWoRows(workOrders: LinkedWorkOrder[]): LinkedRow[] {
             orderConceptName: wo.orderConceptName ?? null,
             objectId: wo.objectId ?? null,
             objectName: wo.objectName ?? null,
+            resourceName: wo.resourceName ?? null,
             status,
             statusLabel: UPPGIFT_STATUS_LABELS[status],
             date: toDate(wo.scheduledDate) ?? toDate(wo.createdAt),
@@ -328,6 +342,7 @@ function useAsgRows(assignments: LinkedAssignment[]): LinkedRow[] {
             orderConceptName: a.orderConceptName ?? null,
             objectId: a.objectId ?? null,
             objectName: a.objectName ?? null,
+            resourceName: a.resourceName ?? null,
             status,
             statusLabel: UPPGIFT_STATUS_LABELS[status],
             date: toDate(a.scheduledDate) ?? toDate(a.createdAt),
@@ -560,11 +575,26 @@ export function ObjectTasksNav({ objectId }: ObjectScopedProps) {
               </Badge>
             )}
           </CardTitle>
-          <SubtreeToggle
-            id="tasks-nav-subtree"
-            checked={includeSubtree}
-            onChange={setIncludeSubtree}
-          />
+          <div className="flex items-center gap-3 flex-wrap">
+            {/* Task #1533: öppna hela Uppgiftsnavet förfiltrerat på objektet
+                (grid-endpointens ?objectId= = rotobjekt + hela subträdet). */}
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 px-2.5 text-xs"
+              asChild
+              data-testid="button-open-tasks-nav"
+            >
+              <Link href={`/grovplanering?objectId=${objectId}`}>
+                <ExternalLink className="h-3.5 w-3.5 mr-1.5" /> Öppna i Uppgiftsnavet
+              </Link>
+            </Button>
+            <SubtreeToggle
+              id="tasks-nav-subtree"
+              checked={includeSubtree}
+              onChange={setIncludeSubtree}
+            />
+          </div>
         </div>
         <p className="text-xs text-muted-foreground">
           {includeSubtree
@@ -642,6 +672,7 @@ export function ObjectTasksNav({ objectId }: ObjectScopedProps) {
             showOrderColumn
             showObjectColumn={includeSubtree}
             showTypeColumn
+            showResourceColumn
           />
         )}
       </CardContent>

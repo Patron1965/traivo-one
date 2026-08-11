@@ -23,6 +23,7 @@ import {
   assignments,
   customerCommunications,
   customers,
+  metadataHistorik,
   metadataKatalog,
   metadataVarden,
   objects,
@@ -205,6 +206,10 @@ export type SystemInfoGroup = {
   // direkta barn. Härleds via subträds-CTE:n — ingen ny kolumn.
   descendantCount: number;
   hierarchyDepth: number | null;
+  // Task #1533: senaste verkliga metadata-ändringen (max andrad_vid ur
+  // metadata_historik för objektet) — riktig logg-data, aldrig fabricerad.
+  // null = ingen historik alls.
+  lastMetadataChangeAt: string | null;
 };
 
 export type ObjectSystemGeneratedMetadata = {
@@ -651,7 +656,7 @@ export async function getObjectSystemGeneratedMetadata(
   // Task #1370: Systeminformation — riktiga objekt-kolumner + förälder/barn.
   let systemInfo: SystemInfoGroup | null = null;
   if (object && object.tenantId === tenantId) {
-    const [parentRow, childRow, interimRow, subtreeIds] = await Promise.all([
+    const [parentRow, childRow, interimRow, subtreeIds, lastChangeRow] = await Promise.all([
       object.parentId
         ? db
             .select({ id: objects.id, name: objects.name })
@@ -686,6 +691,14 @@ export async function getObjectSystemGeneratedMetadata(
       // Task #1474: totalt antal underordnade i grenen (rekursivt, tenant-scopad
       // CTE — inkluderar roten, därav -1 nedan).
       storage.getObjectSubtreeIds(tenantId, objectId),
+      // Task #1533: senaste verkliga metadata-ändringen ur historiken.
+      db
+        .select({ last: sql<string | null>`max(${metadataHistorik.andradVid})` })
+        .from(metadataHistorik)
+        .where(and(
+          eq(metadataHistorik.tenantId, tenantId),
+          eq(metadataHistorik.objektId, objectId),
+        )),
     ]);
     // Källsystem härleds ur riktiga kolumner: importBatchId (importerad) och
     // isInterimObject (interim från import). Saknas båda ⇒ skapad i Traivo.
@@ -708,6 +721,9 @@ export async function getObjectSystemGeneratedMetadata(
       childCount: Number(childRow[0]?.count ?? 0),
       descendantCount: Math.max(0, subtreeIds.length - 1),
       hierarchyDepth: object.hierarchyDepth ?? null,
+      lastMetadataChangeAt: lastChangeRow[0]?.last
+        ? new Date(lastChangeRow[0].last).toISOString()
+        : null,
     };
   }
 

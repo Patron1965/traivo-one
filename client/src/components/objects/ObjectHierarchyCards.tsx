@@ -18,6 +18,13 @@ import {
   Trash2,
 } from "lucide-react";
 import { KopplaObjektDialog } from "./KopplaObjektDialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
 
 interface ObjectParentRelation {
   id: string;
@@ -59,6 +66,23 @@ export function ObjectHierarchyCards({
   const { toast } = useToast();
   const [kopplaOpen, setKopplaOpen] = useState(false);
   const [kopplaMode, setKopplaMode] = useState<"parent" | "child">("parent");
+  // Task #1533 (mockup-gap 2): hela hierarkin från rotobjektet i en dialog.
+  const [fullTreeOpen, setFullTreeOpen] = useState(false);
+  const rootId = slaktnamnChain.length > 0 ? slaktnamnChain[0].id : objectId;
+  const rootName =
+    slaktnamnChain.length > 0
+      ? slaktnamnChain[0].name
+      : object.name || object.objectNumber || "Objekt";
+
+  const { data: rootDescendants = [], isLoading: fullTreeLoading } = useQuery<ServiceObject[]>({
+    queryKey: ["/api/objects", rootId, "descendants"],
+    queryFn: async () => {
+      const res = await fetch(`/api/objects/${rootId}/descendants`, { credentials: "include" });
+      if (!res.ok) return [];
+      return res.json();
+    },
+    enabled: fullTreeOpen && !!rootId,
+  });
 
   const { data: parents = [], isLoading: parentsLoading } = useQuery<ObjectParentRelation[]>({
     queryKey: ["/api/objects", objectId, "parents"],
@@ -167,7 +191,83 @@ export function ObjectHierarchyCards({
         <Button variant="outline" size="sm" onClick={onCopy} data-testid="button-open-copy">
           <Copy className="h-4 w-4 mr-2" /> Kopiera objekt/gren
         </Button>
+        {/* Task #1533 (mockup-gap 2): hela hierarkin från roten i en dialog. */}
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => setFullTreeOpen(true)}
+          data-testid="button-show-full-hierarchy"
+        >
+          <GitFork className="h-4 w-4 mr-2" /> Visa hela hierarkin
+        </Button>
       </div>
+
+      <Dialog open={fullTreeOpen} onOpenChange={setFullTreeOpen}>
+        <DialogContent className="max-w-lg" data-testid="dialog-full-hierarchy">
+          <DialogHeader>
+            <DialogTitle>Hela hierarkin</DialogTitle>
+            <DialogDescription>
+              Trädet från rotobjektet {rootName} — aktuellt objekt är markerat.
+            </DialogDescription>
+          </DialogHeader>
+          {fullTreeLoading ? (
+            <p className="text-sm text-muted-foreground py-4">Laddar…</p>
+          ) : (
+            <div className="max-h-[60vh] overflow-y-auto space-y-0.5">
+              {(() => {
+                const byParent = new Map<string, ServiceObject[]>();
+                for (const d of rootDescendants) {
+                  const p = d.parentId || "";
+                  if (!byParent.has(p)) byParent.set(p, []);
+                  byParent.get(p)!.push(d);
+                }
+                const ordered: Array<{ id: string; name: string; depth: number }> = [
+                  { id: rootId, name: rootName, depth: 0 },
+                ];
+                const walk = (parentId: string, depth: number) => {
+                  for (const k of byParent.get(parentId) || []) {
+                    ordered.push({ id: k.id, name: k.name || k.objectNumber || k.id.slice(0, 8), depth });
+                    walk(k.id, depth + 1);
+                  }
+                };
+                walk(rootId, 1);
+                // Bruten kedja (t.ex. mellanled utanför svaret) → lägg sist, odjupat.
+                const seen = new Set(ordered.map((o) => o.id));
+                for (const d of rootDescendants) {
+                  if (!seen.has(d.id)) {
+                    ordered.push({ id: d.id, name: d.name || d.objectNumber || d.id.slice(0, 8), depth: 1 });
+                  }
+                }
+                return ordered.map((node) => (
+                  <button
+                    key={node.id}
+                    type="button"
+                    className={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-muted/50 ${
+                      node.id === objectId ? "bg-primary/10 font-semibold" : ""
+                    }`}
+                    style={{ paddingLeft: `${node.depth * 16 + 8}px` }}
+                    onClick={() => {
+                      setFullTreeOpen(false);
+                      if (node.id !== objectId) navigate(`/objects/${node.id}`);
+                    }}
+                    data-testid={`full-tree-node-${node.id}`}
+                  >
+                    {node.depth > 0 && (
+                      <ChevronRight className="h-3 w-3 text-muted-foreground shrink-0" />
+                    )}
+                    <span className="truncate">{node.name}</span>
+                    {node.id === objectId && (
+                      <Badge variant="secondary" className="ml-auto text-[10px] shrink-0">
+                        Detta objekt
+                      </Badge>
+                    )}
+                  </button>
+                ));
+              })()}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {/* FÖRÄLDRAR / ÖVERORDNADE */}

@@ -16,8 +16,10 @@ import {
   Loader2,
   RotateCcw,
   Users,
+  X,
   XCircle,
 } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/button";
@@ -114,6 +116,10 @@ interface AppliedFilter {
   executionCodes: string[];
   // Task #1410: objekturval via metadatavillkor (delade motorn med objektlistan).
   conditions: ConditionFilter[];
+  // Task #1533: förfiltrering på ett rotobjekt (inkl. hela subträdet) — sätts
+  // via ?objectId= i adressraden (länken "Öppna i Uppgiftsnavet" på objektsidan).
+  // Ingår inte i det persisterade filterutkastet; rensas via chip eller "Rensa".
+  objectId?: string;
 }
 
 const EMPTY_APPLIED: AppliedFilter = {
@@ -207,6 +213,8 @@ function buildFilterParams(applied: AppliedFilter, groupBy: GroupBy): URLSearchP
   // som objektlistan) och matchas där via den delade villkorsmotorn.
   if (applied.conditions.length)
     p.set("conditions", JSON.stringify(applied.conditions));
+  // Task #1533: rotobjekt-scope (servern expanderar till hela subträdet).
+  if (applied.objectId) p.set("objectId", applied.objectId);
   return p;
 }
 
@@ -320,7 +328,23 @@ export default function GrovplaneringPage() {
   );
   const [applied, setApplied] = useState<AppliedFilter>(() => {
     const persisted = loadPersistedFilter();
-    return persisted ? deriveApplied(persisted) : EMPTY_APPLIED;
+    const base = persisted ? deriveApplied(persisted) : EMPTY_APPLIED;
+    // Task #1533: ?objectId= i adressraden förfiltrerar på objektet + subträdet.
+    const objectId = new URLSearchParams(window.location.search).get("objectId");
+    return objectId ? { ...base, objectId } : base;
+  });
+
+  // Task #1533: namn för objekt-scope-chippen (endast när scope är satt).
+  const { data: scopeObject } = useQuery<{ name?: string | null; objectNumber?: string | null }>({
+    // Egen key-form ("detail"-suffix) så att den aldrig kolliderar med den
+    // globala objektlistans ["/api/objects", ...]-nycklar i cachen.
+    queryKey: ["/api/objects", applied.objectId, "detail"],
+    queryFn: async () => {
+      const res = await fetch(`/api/objects/${applied.objectId}`, { credentials: "include" });
+      if (!res.ok) throw new Error("Kunde inte hämta objektet");
+      return res.json();
+    },
+    enabled: !!applied.objectId,
   });
 
   // Delad vecko-/dagkälla för kartvyn (MapTimeline/ClusterWeekSlider) och
@@ -732,7 +756,8 @@ export default function GrovplaneringPage() {
 
   // Filter apply/clear.
   const applyFilters = () => {
-    setApplied(deriveApplied(draft));
+    // Behåll ev. objekt-scope (chip) tills det rensas explicit.
+    setApplied({ ...deriveApplied(draft), objectId: applied.objectId });
     setOffset(0);
     persistFilter(draft);
   };
@@ -753,7 +778,7 @@ export default function GrovplaneringPage() {
       // måndag 00:00 (CET/CEST) till föregående dag/vecka.
       const nextDraft = { ...draft, anchor: formatDate(d, "yyyy-MM-dd") };
       setDraft(nextDraft);
-      setApplied(deriveApplied(nextDraft));
+      setApplied({ ...deriveApplied(nextDraft), objectId: applied.objectId });
       setOffset(0);
       persistFilter(nextDraft);
     }
@@ -870,12 +895,35 @@ export default function GrovplaneringPage() {
           current={draft}
           onApply={(next) => {
             setDraft(next);
-            setApplied(deriveApplied(next));
+            setApplied({ ...deriveApplied(next), objectId: applied.objectId });
             setOffset(0);
             persistFilter(next);
           }}
         />
       </div>
+
+      {/* Task #1533: objekt-scope-chip (?objectId= från objektsidan). */}
+      {applied.objectId && (
+        <div className="flex items-center gap-2" data-testid="chip-object-scope">
+          <Badge variant="secondary" className="gap-1.5 pr-1">
+            Objekt: {scopeObject?.name || scopeObject?.objectNumber || applied.objectId.slice(0, 8)}
+            <span className="text-muted-foreground font-normal">inkl. underordnade</span>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-4 w-4 p-0"
+              onClick={() => {
+                setApplied((prev) => ({ ...prev, objectId: undefined }));
+                setOffset(0);
+              }}
+              aria-label="Ta bort objektfilter"
+              data-testid="button-clear-object-scope"
+            >
+              <X className="h-3 w-3" />
+            </Button>
+          </Badge>
+        </div>
+      )}
 
       {/* Filterpanel */}
       <RoughFilterPanel

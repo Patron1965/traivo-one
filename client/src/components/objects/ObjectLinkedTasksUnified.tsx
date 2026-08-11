@@ -3,8 +3,17 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
-  ClipboardList, Zap, Link as LinkIcon, Loader2, Cog, Calendar, Users,
+  ClipboardList, Zap, Link as LinkIcon, Loader2, Cog, Calendar, ChevronDown, ChevronUp, Users,
 } from "lucide-react";
+import { useState } from "react";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 
 // Produktägarbeslut 2026-08-10 (Objekt-360, sektion 4 i skissen):
 // orderkoncept-uppgifter, snabbordrar och andra uppgiftskällor redovisas i
@@ -92,6 +101,9 @@ export function ObjectLinkedTasksUnified({
   const { data, isLoading } = useQuery<SystemMetaResponse>({
     queryKey: ["/api/objects", objectId, "system-generated-metadata"],
   });
+  // Task #1533 (mockup-gap 6): enhetlig tabell med kapad lista + "Visa alla (N)".
+  const [showAll, setShowAll] = useState(false);
+  const ROW_CAP = 8;
 
   const orders = data?.tasksHistory ?? [];
 
@@ -185,71 +197,108 @@ export function ObjectLinkedTasksUnified({
           </p>
         ) : (
           <div className="space-y-2">
-            {rows.map((row) => (
-              <div
-                key={row.key}
-                className="rounded-lg border border-border p-3"
-                data-testid={`linked-task-row-${row.key}`}
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0 flex-1">
-                    <div className="text-sm font-medium truncate" data-testid={`text-linked-task-title-${row.key}`}>
-                      {row.title}
-                    </div>
-                    <div className="mt-1 flex items-center gap-3 flex-wrap text-xs text-muted-foreground">
-                      {row.scheduledDate && (
-                        <span className="flex items-center gap-1">
-                          <Calendar className="h-3 w-3" />
-                          {fmtDate(row.scheduledDate)}
-                        </span>
-                      )}
-                      {row.meta.map((m) => (
-                        <span key={m}>{m}</span>
-                      ))}
-                      {row.statusLabel && (
-                        <Badge variant="secondary" className="text-[10px]">
-                          {row.statusLabel}
+            {/* Task #1533 (mockup-gap 6): enhetlig tabell — alla källor
+                (orderkoncept/snabborder/order) i samma kolumnuppsättning. */}
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Uppgift</TableHead>
+                    <TableHead>Datum</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Källa</TableHead>
+                    <TableHead className="text-right">Åtgärd</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {(showAll ? rows : rows.slice(0, ROW_CAP)).map((row) => (
+                    <TableRow key={row.key} data-testid={`linked-task-row-${row.key}`}>
+                      <TableCell className="max-w-[240px]">
+                        <div className="text-sm font-medium truncate" data-testid={`text-linked-task-title-${row.key}`}>
+                          {row.title}
+                        </div>
+                        {row.meta.length > 0 && (
+                          <div className="text-xs text-muted-foreground truncate">
+                            {row.meta.join(" · ")}
+                          </div>
+                        )}
+                      </TableCell>
+                      <TableCell className="whitespace-nowrap text-xs">
+                        {row.scheduledDate ? (
+                          <span className="flex items-center gap-1">
+                            <Calendar className="h-3 w-3" />
+                            {fmtDate(row.scheduledDate)}
+                          </span>
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {row.statusLabel ? (
+                          <Badge variant="secondary" className="text-[10px]">{row.statusLabel}</Badge>
+                        ) : (
+                          <span className="text-muted-foreground text-xs">—</span>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        <Badge
+                          variant="outline"
+                          className="text-[10px] inline-flex items-center gap-1"
+                          data-testid={`badge-kalla-${row.key}`}
+                        >
+                          {kallaIcon(row.kalla)}
+                          {row.kallaLabel}
                         </Badge>
-                      )}
-                    </div>
-                  </div>
-                  <Badge
-                    variant="outline"
-                    className="text-[10px] inline-flex items-center gap-1 shrink-0"
-                    data-testid={`badge-kalla-${row.key}`}
-                  >
-                    {kallaIcon(row.kalla)}
-                    Källa: {row.kallaLabel}
-                  </Badge>
-                </div>
-                <div className="mt-2 flex items-center gap-2 flex-wrap">
-                  {row.linkPath && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="h-7 px-2 text-xs"
-                      onClick={() => navigate(row.linkPath!)}
-                      data-testid={`link-source-${row.key}`}
-                    >
-                      {kallaIcon(row.kalla)}
-                      <span className="ml-1">{row.linkLabel}</span>
-                    </Button>
-                  )}
-                  {row.secondaryPath && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-7 px-2 text-xs"
-                      onClick={() => navigate(row.secondaryPath!)}
-                      data-testid={`link-secondary-${row.key}`}
-                    >
-                      {row.secondaryIcon === "users" && <Users className="h-3 w-3 mr-1" />}
-                      {row.secondaryLabel}
-                    </Button>
-                  )}
-                </div>
-              </div>
-            ))}
+                      </TableCell>
+                      <TableCell className="text-right whitespace-nowrap">
+                        {row.linkPath && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-7 px-2 text-xs"
+                            onClick={() => navigate(row.linkPath!)}
+                            data-testid={`link-source-${row.key}`}
+                          >
+                            {kallaIcon(row.kalla)}
+                            <span className="ml-1">{row.linkLabel}</span>
+                          </Button>
+                        )}
+                        {row.secondaryPath && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 px-2 text-xs ml-1"
+                            onClick={() => navigate(row.secondaryPath!)}
+                            data-testid={`link-secondary-${row.key}`}
+                          >
+                            {row.secondaryIcon === "users" && <Users className="h-3 w-3 mr-1" />}
+                            {row.secondaryLabel}
+                          </Button>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+            {rows.length > ROW_CAP && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowAll((v) => !v)}
+                data-testid="button-linked-tasks-show-all"
+              >
+                {showAll ? (
+                  <>
+                    <ChevronUp className="h-3.5 w-3.5 mr-1.5" /> Visa färre
+                  </>
+                ) : (
+                  <>
+                    <ChevronDown className="h-3.5 w-3.5 mr-1.5" /> Visa alla ({rows.length})
+                  </>
+                )}
+              </Button>
+            )}
           </div>
         )}
       </CardContent>

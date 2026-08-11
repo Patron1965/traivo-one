@@ -1028,6 +1028,8 @@ app.get("/api/objects/:id/linked-work", asyncHandler(async (req, res) => {
         createdAt: workOrders.createdAt,
         objectId: workOrders.objectId,
         objectName: objects.name,
+        // Task #1533: utförare (tilldelad resurs) för uppgiftsnavets kolumn.
+        resourceName: resources.name,
       })
       .from(workOrders)
       .leftJoin(orderConcepts, and(
@@ -1035,6 +1037,10 @@ app.get("/api/objects/:id/linked-work", asyncHandler(async (req, res) => {
         eq(orderConcepts.tenantId, tenantId),
       ))
       .leftJoin(objects, eq(workOrders.objectId, objects.id))
+      .leftJoin(resources, and(
+        eq(workOrders.resourceId, resources.id),
+        eq(resources.tenantId, tenantId),
+      ))
       .where(and(
         eq(workOrders.tenantId, tenantId),
         inArray(workOrders.objectId, objectIds),
@@ -1057,6 +1063,8 @@ app.get("/api/objects/:id/linked-work", asyncHandler(async (req, res) => {
         createdAt: assignments.createdAt,
         objectId: assignments.objectId,
         objectName: objects.name,
+        // Task #1533: utförare (tilldelad resurs) för uppgiftsnavets kolumn.
+        resourceName: resources.name,
       })
       .from(assignments)
       .leftJoin(orderConcepts, and(
@@ -1068,6 +1076,10 @@ app.get("/api/objects/:id/linked-work", asyncHandler(async (req, res) => {
         eq(customers.tenantId, tenantId),
       ))
       .leftJoin(objects, eq(assignments.objectId, objects.id))
+      .leftJoin(resources, and(
+        eq(assignments.resourceId, resources.id),
+        eq(resources.tenantId, tenantId),
+      ))
       .where(and(
         eq(assignments.tenantId, tenantId),
         inArray(assignments.objectId, objectIds),

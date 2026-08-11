@@ -1,6 +1,17 @@
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Cpu, Loader2 } from "lucide-react";
+import { Cpu, FileText, Loader2 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { versionedUrl } from "@/lib/queryClient";
 
 // Task #1370 (krav 12): Systeminformation — separat read-only sektion längst
 // ned på objektsidan, åtskild från redigerbar metadata. Visar ENBART fält som
@@ -25,7 +36,25 @@ interface SystemInfoGroup {
   childCount: number;
   descendantCount: number;
   hierarchyDepth: number | null;
+  // Task #1533: senaste verkliga metadata-ändringen (metadata_historik).
+  lastMetadataChangeAt?: string | null;
 }
+
+// Task #1533 (mockup-gap 7): teknisk logg = objektets verkliga livscykel-
+// historik (status/arkivering/återställning) — visas endast när poster finns.
+interface LifecycleEntry {
+  id: string;
+  action: string;
+  changedAt: string;
+  actorName: string | null;
+  changes?: { from?: string | null; to?: string | null } | null;
+}
+
+const LIFECYCLE_ACTION_LABELS: Record<string, string> = {
+  "object.status_change": "Statusändring",
+  "object.archive": "Arkivering",
+  "object.restore": "Återställning",
+};
 
 interface SystemGeneratedResponse {
   systemInfo?: SystemInfoGroup | null;
@@ -61,6 +90,22 @@ export function ObjectSystemInfoSection({ objectId }: { objectId: string }) {
   });
 
   const info = data?.systemInfo;
+
+  // Task #1533 (mockup-gap 7): teknisk logg — samma endpoint som huvudets
+  // "Senast ändrad av"-etikett; knappen visas endast när riktiga poster finns.
+  const [logOpen, setLogOpen] = useState(false);
+  const { data: statusHistory } = useQuery<{ entries?: LifecycleEntry[] }>({
+    queryKey: ["/api/objects", objectId, "status-history"],
+    queryFn: async () => {
+      const res = await fetch(versionedUrl(`/api/objects/${objectId}/status-history`), {
+        credentials: "include",
+      });
+      if (!res.ok) return { entries: [] };
+      return res.json();
+    },
+    enabled: !!objectId,
+  });
+  const logEntries = statusHistory?.entries ?? [];
 
   return (
     <Card data-testid="card-system-info">
@@ -104,9 +149,63 @@ export function ObjectSystemInfoSection({ objectId }: { objectId: string }) {
               value={info.hierarchyDepth != null ? String(info.hierarchyDepth) : null}
               testId="text-sysinfo-depth"
             />
+            {/* Task #1533: senaste verkliga metadata-ändringen — utelämnas helt
+                när historik saknas (aldrig fabricerat). */}
+            <Row
+              label="Senaste metadata-ändring"
+              value={formatDate(info.lastMetadataChangeAt ?? null)}
+              testId="text-sysinfo-last-metadata-change"
+            />
+            {logEntries.length > 0 && (
+              <div className="pt-3">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setLogOpen(true)}
+                  data-testid="button-show-technical-log"
+                >
+                  <FileText className="h-3.5 w-3.5 mr-1.5" /> Visa teknisk logg ({logEntries.length})
+                </Button>
+              </div>
+            )}
           </div>
         )}
       </CardContent>
+
+      <Dialog open={logOpen} onOpenChange={setLogOpen}>
+        <DialogContent className="max-w-md" data-testid="dialog-technical-log">
+          <DialogHeader>
+            <DialogTitle>Teknisk logg</DialogTitle>
+            <DialogDescription>
+              Objektets livscykelhändelser (status, arkivering, återställning).
+            </DialogDescription>
+          </DialogHeader>
+          <div className="max-h-[60vh] overflow-y-auto space-y-2">
+            {logEntries.map((e) => (
+              <div
+                key={e.id}
+                className="rounded-md border px-3 py-2 text-sm"
+                data-testid={`log-entry-${e.id}`}
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <Badge variant="secondary" className="text-[10px]">
+                    {LIFECYCLE_ACTION_LABELS[e.action] ?? e.action}
+                  </Badge>
+                  <span className="text-xs text-muted-foreground">
+                    {formatDate(e.changedAt)}
+                  </span>
+                </div>
+                <div className="mt-1 text-xs text-muted-foreground">
+                  {e.changes?.from || e.changes?.to
+                    ? `${e.changes?.from ?? "—"} → ${e.changes?.to ?? "—"}`
+                    : null}
+                  {e.actorName ? `${e.changes?.from || e.changes?.to ? " · " : ""}av ${e.actorName}` : null}
+                </div>
+              </div>
+            ))}
+          </div>
+        </DialogContent>
+      </Dialog>
     </Card>
   );
 }
