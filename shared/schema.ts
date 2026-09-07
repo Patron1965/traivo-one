@@ -3,7 +3,7 @@ import { pgTable, text, varchar, integer, serial, timestamp, date, jsonb, boolea
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 import type { FrozenTimeRulePackage } from "./delivery-restrictions";
-import type { Uppgiftspaket } from "./uppgift-contract";
+import type { Uppgiftspaket, Uppgiftsvarden } from "./uppgift-contract";
 
 export const tenants = pgTable("tenants", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -459,6 +459,8 @@ export const workOrders = pgTable("work_orders", {
   // (isUppgiftFrozen via deriveUppgiftStatus) röres aldrig. Nullable
   // (expand-contract): legacy-rader utan paket beter sig som idag.
   uppgiftspaket: jsonb("uppgiftspaket").$type<Uppgiftspaket>(),
+  // Task #131: entydig värdelivscykel. Nullable för legacy; se uppgift-contract.
+  uppgiftsvarden: jsonb("uppgiftsvarden").$type<Uppgiftsvarden>(),
   // === ADR v3 §2.3 (Task #556): Frozen fakturamottagare ===
   // Vinnande mottagare bestäms vid expansion och fryses här. Fortnox-export
   // läser dessa fält och faller tillbaka till object_payers/objects.customer_id
@@ -679,6 +681,18 @@ export const workOrderLines = pgTable("work_order_lines", {
   returnedQuantity: integer("returned_quantity").default(0),
   wasteQuantity: integer("waste_quantity").default(0),
   quantityReconciliationNote: text("quantity_reconciliation_note"),
+  // Task #131: immutable per-rad-underlag. Billable-fälten är de enda nya
+  // uppgifter som fakturaradbyggaren får använda efter frysning.
+  frozenQuantity: real("frozen_quantity"),
+  frozenTimeMinutes: integer("frozen_time_minutes"),
+  frozenValueOre: integer("frozen_value_ore"),
+  billableQuantity: real("billable_quantity"),
+  billableTimeMinutes: integer("billable_time_minutes"),
+  billableValueOre: integer("billable_value_ore"),
+  // Task #131: rapporterat faktiskt utfall, skilt från plan/faktura.
+  actualQuantity: integer("actual_quantity"),
+  actualTimeMinutes: integer("actual_time_minutes"),
+  actualValueOre: integer("actual_value_ore"),
   // Lagermodell (Motor 8): netto-förbrukning (taget - retur) som REDAN dragits från
   // lagersaldot för denna rad. Idempotens-spärr så att om-registrering/omslutförande
   // bara applicerar DELTAT mot saldot, aldrig hela beloppet på nytt. NULL/0 = inget
@@ -3608,6 +3622,8 @@ export const assignments = pgTable("assignments", {
   // Se work_orders.uppgiftspaket. 1 logisk uppgift spänner över assignments +
   // work_orders (uppgiftskontrakt v1) — paketet finns därför på BÅDA lagren.
   uppgiftspaket: jsonb("uppgiftspaket").$type<Uppgiftspaket>(),
+  // Task #131: samma värdekontrakt på det pre-materialiserade uppgiftslagret.
+  uppgiftsvarden: jsonb("uppgiftsvarden").$type<Uppgiftsvarden>(),
   // === Klumpningsmotorer (ADR klumpning v1): Alt B — fält på BÅDA tabellerna ===
   // Täcker koncept-genererade uppgifter (assignments) som ännu ej materialiserats
   // till work_orders. Se work_orders.stopClusterId för kommentarer om lock-semantik.

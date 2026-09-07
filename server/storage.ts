@@ -229,6 +229,17 @@ import {
 } from "./association-service";
 import { getObjectWithAllMetadata, getObjectAtkomstFields } from "./metadata-queries";
 import { buildUppgiftspaket, stampArtikelSnapshot } from "./services/uppgiftspaket";
+import type {
+  Uppgiftsvarden,
+  TidsstampeladeUppgiftMatvarden,
+} from "@shared/uppgift-contract";
+import {
+  createUppgiftsvarden,
+  distributeActualMinutes,
+  assertUppgiftQuantity,
+  freezeUppgiftsvarden,
+  updateOpenUppgiftsvarden,
+} from "@shared/uppgiftsvarden";
 import type { InsertAssignment as InsertAssignmentType } from "@shared/schema";
 import { haversineDistanceKm } from "./distance-matrix-service";
 import { groupTeamLiveRows } from "./services/team-live-positions";
@@ -4473,6 +4484,16 @@ export class DatabaseStorage implements IStorage {
         frystFakturamottagareId: values.frozenInvoiceRecipientId ?? null,
         artikel: artikel ?? null,
       });
+      if (!values.uppgiftsvarden) {
+        const vid = new Date().toISOString();
+        const initial: TidsstampeladeUppgiftMatvarden = {
+          antal: values.frozenQuantity ?? null,
+          tidMinuter: values.estimatedDuration ?? values.cachedProductionMinutes ?? null,
+          vardeOre: values.cachedValue ?? null,
+          vid,
+        };
+        values.uppgiftsvarden = createUppgiftsvarden(initial, vid);
+      }
     } catch (err) {
       console.error("[uppgiftspaket] fyllnad vid createWorkOrder misslyckades:", err);
       throw new Error(
@@ -4499,6 +4520,16 @@ export class DatabaseStorage implements IStorage {
             ? { debiteringsmodell: values.isFixedPrice ? "fast" : "lopande" }
             : null,
       });
+      if (!values.uppgiftsvarden) {
+        const vid = new Date().toISOString();
+        const initial: TidsstampeladeUppgiftMatvarden = {
+          antal: values.quantity ?? null,
+          tidMinuter: values.estimatedDuration ?? null,
+          vardeOre: values.cachedValue ?? null,
+          vid,
+        };
+        values.uppgiftsvarden = createUppgiftsvarden(initial, vid);
+      }
     } catch (err) {
       console.error("[uppgiftspaket] fyllnad vid createAssignment misslyckades:", err);
       throw new Error(
@@ -4510,6 +4541,7 @@ export class DatabaseStorage implements IStorage {
 
   async createWorkOrder(insertWorkOrder: InsertWorkOrder): Promise<WorkOrder> {
     const values = { ...insertWorkOrder };
+    delete values.uppgiftsvarden;
     if (values.objectId && (values.taskLatitude == null || values.taskLongitude == null)) {
       const [obj] = await db.select({ latitude: objects.latitude, longitude: objects.longitude })
         .from(objects).where(eq(objects.id, values.objectId)).limit(1);
@@ -4552,6 +4584,9 @@ export class DatabaseStorage implements IStorage {
     opts?: { assignOrderNumber?: boolean },
   ): Promise<{ workOrder: WorkOrder; lines: WorkOrderLine[] }> {
     const values = { ...insertWorkOrder };
+    for (const line of lines) assertUppgiftQuantity(line.quantity ?? null);
+    // Värdelivscykeln är alltid serverhärledd; ignorera eventuell API-payload.
+    delete values.uppgiftsvarden;
     if (values.objectId && (values.taskLatitude == null || values.taskLongitude == null)) {
       const [obj] = await db.select({ latitude: objects.latitude, longitude: objects.longitude })
         .from(objects).where(eq(objects.id, values.objectId)).limit(1);
@@ -4569,6 +4604,8 @@ export class DatabaseStorage implements IStorage {
       );
     }
     const result = await db.transaction(async (tx) => {
+      let assignmentValues: Uppgiftsvarden | null = null;
+      let effectiveLines = lines;
       // Task #1506: HELA paketbygget + artikel-snapshoten sker i SAMMA
       // transaktion som WO- och rad-inserterna, så att alla snapshotfält
       // (namn/nummer från registret, pris/kostnad/tid från raderna) kommer
@@ -4590,12 +4627,45 @@ export class DatabaseStorage implements IStorage {
         );
         values.orderNumber = await this.computeNextWorkOrderNumber(values.tenantId, tx);
       }
+      // Plan→materialisering delar assignment-lås med assignment_articles-
+      // mutationerna. När låset släpps finns antingen hela gamla planen eller
+      // hela nya planen på WO:n, aldrig en blandning.
+      if (values.sourceAssignmentId) {
+        await tx.execute(sql`SELECT id FROM assignments WHERE id = ${values.sourceAssignmentId} FOR UPDATE`);
+        const [source] = await tx.select({ uppgiftsvarden: assignments.uppgiftsvarden })
+          .from(assignments).where(eq(assignments.id, values.sourceAssignmentId)).limit(1);
+        assignmentValues = (source?.uppgiftsvarden as Uppgiftsvarden | null) ?? null;
+        // Callern kan ha läst planen före låset. Läs därför om raderna under
+        // samma assignment-lås; snapshot och WO-rader kommer från exakt samma
+        // commit och kan inte bli en stale/current-blandning.
+        const currentPlanRows = await tx.select().from(assignmentArticles)
+          .where(eq(assignmentArticles.assignmentId, values.sourceAssignmentId))
+          .orderBy(assignmentArticles.sequenceOrder);
+        effectiveLines = currentPlanRows.map((row) => ({
+          articleId: row.articleId,
+          quantity: row.quantity ?? 1,
+          resolvedPrice: row.unitPrice ?? 0,
+          resolvedCost: row.unitCost ?? 0,
+          resolvedProductionMinutes: row.unitTime ?? 0,
+        }));
+      }
       const [workOrder] = await tx.insert(workOrders).values(values).returning();
 
       const insertedLines: WorkOrderLine[] = [];
-      for (const line of lines) {
+      for (const line of effectiveLines) {
         const [wol] = await tx.insert(workOrderLines).values({
           ...line,
+          // Serverägt Task #131-underlag; inkommande API-data får aldrig förfrysa
+          // eller fabricera fakturerbara värden.
+          frozenQuantity: null,
+          frozenTimeMinutes: null,
+          frozenValueOre: null,
+          billableQuantity: null,
+          billableTimeMinutes: null,
+          billableValueOre: null,
+          actualQuantity: null,
+          actualTimeMinutes: null,
+          actualValueOre: null,
           tenantId: workOrder.tenantId,
           workOrderId: workOrder.id,
         }).returning();
@@ -4609,7 +4679,7 @@ export class DatabaseStorage implements IStorage {
       let totalMinutes = 0;
       for (const line of insertedLines) {
         if (!line.isOptional) {
-          const qty = line.quantity || 1;
+          const qty = line.quantity ?? 1;
           totalValue += (line.resolvedPrice || 0) * qty;
           totalCost += (line.resolvedCost || 0) * qty;
           totalMinutes += (line.resolvedProductionMinutes || 0) * qty;
@@ -4619,6 +4689,16 @@ export class DatabaseStorage implements IStorage {
         cachedValue: totalValue,
         cachedCost: totalCost,
         cachedProductionMinutes: totalMinutes,
+        uppgiftsvarden: assignmentValues ?? (() => {
+          const vid = new Date().toISOString();
+          const initial: TidsstampeladeUppgiftMatvarden = {
+            antal: insertedLines.reduce((sum, line) => sum + Number(line.quantity ?? 0), 0),
+            tidMinuter: totalMinutes,
+            vardeOre: totalValue,
+            vid,
+          };
+          return createUppgiftsvarden(initial, vid);
+        })(),
       }).where(eq(workOrders.id, workOrder.id)).returning();
 
       // Task #1506: frys artikel-snapshoten ATOMÄRT i samma transaktion —
@@ -4667,6 +4747,15 @@ export class DatabaseStorage implements IStorage {
     // direkta db.update (t.ex. materialiseraren).
     delete updates.sourceType;
     delete updates.orderConceptId;
+    delete updates.uppgiftsvarden;
+    // Frysta värden är serverägda och immutable. De sätts endast av
+    // freezeWorkOrder via tenant-scopad direktuppdatering.
+    delete updates.frozenUnit;
+    delete updates.frozenQuantity;
+    delete updates.frozenUnitPrice;
+    delete updates.frozenUnitCost;
+    delete updates.frozenUnitTime;
+    delete updates.frozenAt;
     // Om payloaden ENBART bestod av strippade fält: no-op, returnera nuvarande rad.
     if (Object.keys(updates).length === 0) return this.getWorkOrder(id);
     // Auto-fill task_latitude/longitude from object ENDAST när objectId byts till nytt värde
@@ -5552,6 +5641,38 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Work Order Lines
+  private async recalculateWorkOrderTotalsTx(tx: any, workOrderId: string): Promise<WorkOrder | undefined> {
+    const lines = await tx.select().from(workOrderLines).where(eq(workOrderLines.workOrderId, workOrderId)) as WorkOrderLine[];
+    const [existing] = await tx.select().from(workOrders).where(eq(workOrders.id, workOrderId)).limit(1);
+    if (!existing) return undefined;
+    let totalValue = 0;
+    let totalCost = 0;
+    let totalMinutes = 0;
+    for (const line of lines) {
+      if (!line.isOptional) {
+        const qty = line.quantity ?? 1;
+        totalValue += (line.resolvedPrice || 0) * qty;
+        totalCost += (line.resolvedCost || 0) * qty;
+        totalMinutes += (line.resolvedProductionMinutes || 0) * qty;
+      }
+    }
+    const previous = existing.uppgiftsvarden as Uppgiftsvarden | null;
+    const updatedValues = previous?.frystSnapshot == null && existing.frozenAt == null
+      ? updateOpenUppgiftsvarden(previous, {
+          antal: lines.reduce((sum, line) => sum + Number(line.quantity ?? 0), 0),
+          tidMinuter: totalMinutes,
+          vardeOre: totalValue,
+        }, new Date().toISOString())
+      : undefined;
+    const [updated] = await tx.update(workOrders).set({
+      cachedValue: totalValue,
+      cachedCost: totalCost,
+      cachedProductionMinutes: totalMinutes,
+      ...(updatedValues ? { uppgiftsvarden: updatedValues } : {}),
+    }).where(eq(workOrders.id, workOrderId)).returning();
+    return updated;
+  }
+
   async getWorkOrderLines(workOrderId: string): Promise<WorkOrderLine[]> {
     return db.select().from(workOrderLines).where(eq(workOrderLines.workOrderId, workOrderId));
   }
@@ -5562,12 +5683,36 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createWorkOrderLine(line: InsertWorkOrderLine, options?: { skipRecalc?: boolean }): Promise<WorkOrderLine> {
+    assertUppgiftQuantity(line.quantity ?? null);
     // Task #1506: rad-insert + artikel-snapshot-stämpling är ATOMÄRT (samma tx) —
     // misslyckas stämplingen rullas raden tillbaka; ingen artikelbärande uppgift
     // kan bli stående utan snapshot. Stämplingen är idempotent CAS (första
     // artikeln vinner, frysta uppgifter röres aldrig).
     const wol = await db.transaction(async (tx) => {
-      const [inserted] = await tx.insert(workOrderLines).values(line).returning();
+      await tx.execute(sql`SELECT id FROM work_orders WHERE id = ${line.workOrderId} AND tenant_id = ${line.tenantId} FOR UPDATE`);
+      const [parent] = await tx.select({
+        frozenAt: workOrders.frozenAt,
+        invoiceQueueState: workOrders.invoiceQueueState,
+      }).from(workOrders).where(and(
+        eq(workOrders.id, line.workOrderId),
+        eq(workOrders.tenantId, line.tenantId),
+      )).limit(1);
+      if (!parent) throw new Error("Arbetsorder hittades inte");
+      if (parent.frozenAt || parent.invoiceQueueState) {
+        throw new Error("Fakturarad kan inte ändras efter frysning eller fakturakö");
+      }
+      const [inserted] = await tx.insert(workOrderLines).values({
+        ...line,
+        frozenQuantity: null,
+        frozenTimeMinutes: null,
+        frozenValueOre: null,
+        billableQuantity: null,
+        billableTimeMinutes: null,
+        billableValueOre: null,
+        actualQuantity: null,
+        actualTimeMinutes: null,
+        actualValueOre: null,
+      }).returning();
       if (inserted?.articleId && inserted.tenantId && inserted.workOrderId) {
         await stampArtikelSnapshot({
           tenantId: inserted.tenantId,
@@ -5582,67 +5727,64 @@ export class DatabaseStorage implements IStorage {
           dbx: tx,
         });
       }
+      if (!options?.skipRecalc) await this.recalculateWorkOrderTotalsTx(tx, inserted.workOrderId);
       return inserted;
     });
-    if (!options?.skipRecalc && wol?.workOrderId) {
-      await this.recalculateWorkOrderTotals(wol.workOrderId);
-    }
-    // Task #1506: första artikelbärande raden fryser artikel-snapshoten i
-    // uppgiftspaketet (idempotent CAS — redan satt artikelId röres aldrig).
-    // OBLIGATORISK: misslyckas stämplingen propagerar felet högljutt (raden är
-    // redan skriven; stämplingen är idempotent så en omkörning läker snapshoten).
-    if (wol?.articleId && wol.tenantId && wol.workOrderId) {
-      try {
-        await stampArtikelSnapshot({
-          tenantId: wol.tenantId,
-          lager: "work_order",
-          uppgiftId: wol.workOrderId,
-          artikelId: wol.articleId,
-          overrides: {
-            prisOre: wol.resolvedPrice ?? undefined,
-            kostnadOre: wol.resolvedCost ?? undefined,
-            produktionstidMin: wol.resolvedProductionMinutes ?? undefined,
-          },
-        });
-      } catch (err) {
-        console.error("[uppgiftspaket] artikel-snapshot vid orderradsskapande misslyckades:", err);
-        throw new Error(
-          "Artikel-snapshoten kunde inte frysas i uppgiftspaketet — försök igen.",
-          { cause: err },
-        );
-      }
-    }
     return wol;
   }
 
   async updateWorkOrderLine(id: string, data: Partial<InsertWorkOrderLine>, options?: { skipRecalc?: boolean }): Promise<WorkOrderLine | undefined> {
-    let oldWorkOrderId: string | null = null;
-    if (!options?.skipRecalc) {
-      const existing = await this.getWorkOrderLine(id);
-      oldWorkOrderId = existing?.workOrderId ?? null;
-    }
-    const [wol] = await db.update(workOrderLines).set(data).where(eq(workOrderLines.id, id)).returning();
-    if (!options?.skipRecalc) {
-      const ids = new Set<string>();
-      if (oldWorkOrderId) ids.add(oldWorkOrderId);
-      if (wol?.workOrderId) ids.add(wol.workOrderId);
-      for (const woId of ids) {
-        await this.recalculateWorkOrderTotals(woId);
+    if (data.quantity !== undefined) assertUppgiftQuantity(data.quantity ?? null);
+    const safeData = { ...data };
+    delete safeData.frozenQuantity;
+    delete safeData.frozenTimeMinutes;
+    delete safeData.frozenValueOre;
+    delete safeData.billableQuantity;
+    delete safeData.billableTimeMinutes;
+    delete safeData.billableValueOre;
+    delete safeData.actualQuantity;
+    delete safeData.actualTimeMinutes;
+    delete safeData.actualValueOre;
+    // Identitet/ägarskap är immutable; annars kan raden flyttas efter att vi låst
+    // fel parent.
+    delete safeData.tenantId;
+    delete safeData.workOrderId;
+    const wol = await db.transaction(async (tx) => {
+      const [existing] = await tx.select().from(workOrderLines)
+        .where(eq(workOrderLines.id, id)).limit(1);
+      if (!existing) return undefined;
+      await tx.execute(sql`SELECT id FROM work_orders WHERE id = ${existing.workOrderId} AND tenant_id = ${existing.tenantId} FOR UPDATE`);
+      const [parent] = await tx.select({
+        frozenAt: workOrders.frozenAt,
+        invoiceQueueState: workOrders.invoiceQueueState,
+      }).from(workOrders).where(eq(workOrders.id, existing.workOrderId)).limit(1);
+      if (parent?.frozenAt || parent?.invoiceQueueState) {
+        throw new Error("Fakturarad kan inte ändras efter frysning eller fakturakö");
       }
-    }
+      const [updated] = await tx.update(workOrderLines).set(safeData)
+        .where(eq(workOrderLines.id, id)).returning();
+      if (updated && !options?.skipRecalc) await this.recalculateWorkOrderTotalsTx(tx, existing.workOrderId);
+      return updated;
+    });
     return wol || undefined;
   }
 
   async deleteWorkOrderLine(id: string, options?: { skipRecalc?: boolean }): Promise<void> {
-    let workOrderId: string | null = null;
-    if (!options?.skipRecalc) {
-      const existing = await this.getWorkOrderLine(id);
-      workOrderId = existing?.workOrderId ?? null;
-    }
-    await db.delete(workOrderLines).where(eq(workOrderLines.id, id));
-    if (!options?.skipRecalc && workOrderId) {
-      await this.recalculateWorkOrderTotals(workOrderId);
-    }
+    await db.transaction(async (tx) => {
+      const [existing] = await tx.select().from(workOrderLines)
+        .where(eq(workOrderLines.id, id)).limit(1);
+      if (!existing) return;
+      await tx.execute(sql`SELECT id FROM work_orders WHERE id = ${existing.workOrderId} AND tenant_id = ${existing.tenantId} FOR UPDATE`);
+      const [parent] = await tx.select({
+        frozenAt: workOrders.frozenAt,
+        invoiceQueueState: workOrders.invoiceQueueState,
+      }).from(workOrders).where(eq(workOrders.id, existing.workOrderId)).limit(1);
+      if (parent?.frozenAt || parent?.invoiceQueueState) {
+        throw new Error("Fakturarad kan inte ändras efter frysning eller fakturakö");
+      }
+      await tx.delete(workOrderLines).where(eq(workOrderLines.id, id));
+      if (!options?.skipRecalc) await this.recalculateWorkOrderTotalsTx(tx, existing.workOrderId);
+    });
   }
 
   // Work Order Objects
@@ -6105,26 +6247,10 @@ export class DatabaseStorage implements IStorage {
 
   // Recalculate work order totals from lines
   async recalculateWorkOrderTotals(workOrderId: string): Promise<WorkOrder | undefined> {
-    const lines = await this.getWorkOrderLines(workOrderId);
-    
-    let totalValue = 0;
-    let totalCost = 0;
-    let totalMinutes = 0;
-    
-    for (const line of lines) {
-      if (!line.isOptional) {
-        const qty = line.quantity || 1;
-        totalValue += (line.resolvedPrice || 0) * qty;
-        totalCost += (line.resolvedCost || 0) * qty;
-        totalMinutes += (line.resolvedProductionMinutes || 0) * qty;
-      }
-    }
-    
-    const [wo] = await db.update(workOrders).set({
-      cachedValue: totalValue,
-      cachedCost: totalCost,
-      cachedProductionMinutes: totalMinutes
-    }).where(eq(workOrders.id, workOrderId)).returning();
+    const wo = await db.transaction(async (tx) => {
+      await tx.execute(sql`SELECT id FROM work_orders WHERE id = ${workOrderId} FOR UPDATE`);
+      return this.recalculateWorkOrderTotalsTx(tx, workOrderId);
+    });
 
     if (wo?.tenantId) {
       invalidateWorkflowCaches(wo.tenantId);
@@ -7863,8 +7989,16 @@ export class DatabaseStorage implements IStorage {
     tenantId: string,
     opts: { force?: boolean } = {}
   ) {
-    const wo = await this.getWorkOrder(workOrderId);
+    // One transaction and a fixed lock order (WO, then its rows) make the
+    // snapshot an observable all-or-nothing fact. Row writers take the same WO
+    // lock before touching a line.
+    return db.transaction(async (tx) => {
+    await tx.execute(sql`SELECT id FROM work_orders WHERE id = ${workOrderId} AND tenant_id = ${tenantId} FOR UPDATE`);
+    const [wo] = await tx.select().from(workOrders).where(and(
+      eq(workOrders.id, workOrderId), eq(workOrders.tenantId, tenantId),
+    )).limit(1);
     if (!wo || wo.tenantId !== tenantId) throw new Error("Arbetsorder hittades inte");
+    await tx.execute(sql`SELECT id FROM work_order_lines WHERE work_order_id = ${workOrderId} ORDER BY id FOR UPDATE`);
     // Komplett frozen-state kraver alla 5 falten satta (skydd mot partial legacy state)
     const alreadyFrozen =
       wo.frozenUnitPrice != null &&
@@ -7872,7 +8006,10 @@ export class DatabaseStorage implements IStorage {
       wo.frozenUnitCost != null &&
       wo.frozenUnitTime != null &&
       wo.frozenUnit != null;
-    if (alreadyFrozen && !opts.force) {
+    // Task #131: ett fryst snapshot är historik och därför immutable. Den gamla
+    // force-parametern behålls i API-signaturen för kompatibilitet men får inte
+    // längre skriva om ett komplett snapshot.
+    if (alreadyFrozen) {
       return {
         workOrderId,
         frozenUnit: wo.frozenUnit ?? "st",
@@ -7883,11 +8020,66 @@ export class DatabaseStorage implements IStorage {
         alreadyFrozen: true,
       };
     }
-    const lines = await this.getWorkOrderLines(workOrderId);
-    const totalQty = lines.reduce((s, l) => s + Number(l.quantity ?? 0), 0);
-    const totalPrice = lines.reduce((s, l) => s + Number(l.resolvedPrice ?? 0) * Number(l.quantity ?? 1), 0);
-    const totalCost = lines.reduce((s, l) => s + Number(l.resolvedCost ?? 0) * Number(l.quantity ?? 1), 0);
-    const totalMin = lines.reduce((s, l) => s + Number(l.resolvedProductionMinutes ?? 0) * Number(l.quantity ?? 1), 0);
+    const lines = await tx.select().from(workOrderLines)
+      .where(eq(workOrderLines.workOrderId, workOrderId))
+      .orderBy(workOrderLines.id);
+    // Läs en gång och kopiera varje rad till immutable frozen + billable. Om en
+    // partiellt fryst legacyrad finns bevaras redan satta värden.
+    const frozenLines = lines.map((line) => {
+      const quantity = Number(line.frozenQuantity ?? line.quantity ?? 0);
+      const timeMinutes = Number(
+        line.frozenTimeMinutes ??
+          Number(line.resolvedProductionMinutes ?? 0) * quantity,
+      );
+      const valueOre = Number(
+        line.frozenValueOre ?? Number(line.resolvedPrice ?? 0) * quantity,
+      );
+      return {
+        line,
+        quantity,
+        timeMinutes,
+        valueOre,
+        billableQuantity: Number(line.billableQuantity ?? quantity),
+        billableTimeMinutes: Number(line.billableTimeMinutes ?? timeMinutes),
+        billableValueOre: Number(line.billableValueOre ?? valueOre),
+      };
+    });
+    for (const frozen of frozenLines) {
+      await tx.update(workOrderLines).set({
+        frozenQuantity: frozen.quantity,
+        frozenTimeMinutes: frozen.timeMinutes,
+        frozenValueOre: frozen.valueOre,
+        billableQuantity: frozen.billableQuantity,
+        billableTimeMinutes: frozen.billableTimeMinutes,
+        billableValueOre: frozen.billableValueOre,
+      }).where(eq(workOrderLines.id, frozen.line.id));
+    }
+    const totalQty = frozenLines.reduce((s, l) => s + l.quantity, 0);
+    const totalPrice = frozenLines.reduce((s, l) => s + l.valueOre, 0);
+    const totalCost = lines.reduce((s, l) => s + Number(l.resolvedCost ?? 0) * Number(l.frozenQuantity ?? l.quantity ?? 0), 0);
+    const totalMin = frozenLines.reduce((s, l) => s + l.timeMinutes, 0);
+    // actualDuration rapporteras på WO. Fördela den deterministiskt på rader
+    // efter fryst produktionstid (sista raden tar avrundningsresten).
+    const actualTotalMinutes = Number(wo.actualDuration ?? totalMin);
+    const actualMinutesByLine = distributeActualMinutes(
+      actualTotalMinutes,
+      frozenLines.map((line) => line.timeMinutes),
+    );
+    for (let i = 0; i < frozenLines.length; i++) {
+      const frozen = frozenLines[i];
+      const actualTimeMinutes = actualMinutesByLine[i];
+      // quantity är den rapporterade leveransen. Värdet beräknas exklusivt
+      // från fryst pris (frozenValue/frozenQuantity), aldrig live resolvedPrice.
+      const actualQuantity = Number(frozen.line.quantity ?? 0);
+      const actualValueOre = frozen.quantity !== 0
+        ? Math.round(frozen.valueOre / frozen.quantity * actualQuantity)
+        : 0;
+      await tx.update(workOrderLines).set({
+        actualQuantity,
+        actualTimeMinutes,
+        actualValueOre,
+      }).where(eq(workOrderLines.id, frozen.line.id));
+    }
     const safeQty = totalQty > 0 ? totalQty : 1;
     const frozenUnit = "st";
     const frozenQuantity = totalQty;
@@ -7901,6 +8093,36 @@ export class DatabaseStorage implements IStorage {
       metadataSnapshot = meta ?? {};
     }
     const frozenAt = new Date();
+    const frozenVid = frozenAt.toISOString();
+    const previousValues = wo.uppgiftsvarden as Uppgiftsvarden | null;
+    const frozenSnapshot: TidsstampeladeUppgiftMatvarden = {
+      antal: totalQty,
+      tidMinuter: totalMin,
+      vardeOre: totalPrice,
+      vid: frozenVid,
+    };
+    const billable: TidsstampeladeUppgiftMatvarden = {
+      antal: frozenLines.reduce((s, l) => s + l.billableQuantity, 0),
+      tidMinuter: frozenLines.reduce((s, l) => s + l.billableTimeMinutes, 0),
+      vardeOre: frozenLines.reduce((s, l) => s + l.billableValueOre, 0),
+      vid: frozenVid,
+    };
+    const uppgiftsvarden: Uppgiftsvarden = freezeUppgiftsvarden(
+      previousValues,
+      frozenSnapshot,
+      {
+        // quantity är kontraktets levererade/fakturerade antal. takenQuantity är
+        // lagerutfall (plockat/förbrukat) och får aldrig ändra faktiskt uppgiftsantal.
+        antal: lines.reduce((sum, line) => sum + Number(line.quantity ?? 0), 0),
+        tidMinuter: wo.actualDuration ?? totalMin,
+        vardeOre: frozenLines.reduce((sum, line) => {
+          const qty = Number(line.line.quantity ?? 0);
+          return sum + (line.quantity !== 0 ? Math.round(line.valueOre / line.quantity * qty) : 0);
+        }, 0),
+      },
+      billable,
+      frozenVid,
+    );
 
     // ADR v3 §2.3 (Task #556): Frys vinnande fakturamottagare samtidigt.
     // Vi rör inte befintliga frozen_invoice_* om de redan är satta (omfrysning
@@ -7922,7 +8144,7 @@ export class DatabaseStorage implements IStorage {
       }
     }
 
-    await db.update(workOrders).set({
+    await tx.update(workOrders).set({
       frozenUnit,
       frozenQuantity,
       frozenUnitPrice,
@@ -7930,9 +8152,11 @@ export class DatabaseStorage implements IStorage {
       frozenUnitTime,
       frozenAt,
       metadataSnapshot,
+      uppgiftsvarden,
       ...recipientUpdate,
     }).where(and(eq(workOrders.id, workOrderId), eq(workOrders.tenantId, tenantId)));
     return { workOrderId, frozenUnit, frozenQuantity, frozenUnitPrice, frozenUnitCost, frozenUnitTime, frozenAt, alreadyFrozen };
+    });
   }
 
   // ======
@@ -8183,6 +8407,7 @@ export class DatabaseStorage implements IStorage {
 
   async createAssignment(assignment: InsertAssignment): Promise<Assignment> {
     const values = { ...assignment };
+    delete values.uppgiftsvarden;
     await this.fillAssignmentUppgiftspaket(values);
     const [result] = await db.insert(assignments).values(values).returning();
     if (result?.tenantId) invalidateWorkflowCaches(result.tenantId);
@@ -8195,6 +8420,7 @@ export class DatabaseStorage implements IStorage {
     const updates: Partial<InsertAssignment> = { ...data };
     delete updates.sourceType;
     delete updates.orderConceptId;
+    delete updates.uppgiftsvarden;
     // Om payloaden ENBART bestod av strippade fält: no-op, returnera nuvarande rad.
     if (Object.keys(updates).length === 0) {
       const existing = await this.getAssignment(id);
@@ -8243,10 +8469,15 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createAssignmentArticle(article: InsertAssignmentArticle): Promise<AssignmentArticle> {
+    assertUppgiftQuantity(article.quantity ?? null);
     // Task #1506: artikel-insert + snapshot-stämpling är ATOMÄRT (samma tx) —
     // misslyckas stämplingen rullas artikelkopplingen tillbaka. Idempotent CAS.
     // OBS: assignment_articles saknar tenant_id — hämta den från assignmenten.
-    return await db.transaction(async (tx) => {
+    const result = await db.transaction(async (tx) => {
+      await tx.execute(sql`SELECT id FROM assignments WHERE id = ${article.assignmentId} FOR UPDATE`);
+      const [materialized] = await tx.select({ id: workOrders.id }).from(workOrders)
+        .where(eq(workOrders.sourceAssignmentId, article.assignmentId)).limit(1);
+      if (materialized) throw new Error("Assignment-artiklar kan inte ändras efter materialisering");
       const [result] = await tx.insert(assignmentArticles).values(article).returning();
       if (result?.articleId && result.assignmentId) {
         const [parent] = await tx
@@ -8269,26 +8500,88 @@ export class DatabaseStorage implements IStorage {
           });
         }
       }
+      await this.refreshAssignmentUppgiftsvardenTx(tx, article.assignmentId);
       return result;
     });
+    return result;
   }
 
   async updateAssignmentArticle(id: string, assignmentId: string, data: Partial<InsertAssignmentArticle>): Promise<AssignmentArticle | undefined> {
-    const [result] = await db.update(assignmentArticles)
-      .set(data)
-      .where(and(
-        eq(assignmentArticles.id, id),
-        eq(assignmentArticles.assignmentId, assignmentId)
-      ))
-      .returning();
+    if (data.quantity !== undefined) assertUppgiftQuantity(data.quantity ?? null);
+    const safeData = { ...data };
+    delete safeData.assignmentId;
+    const result = await db.transaction(async (tx) => {
+      await tx.execute(sql`SELECT id FROM assignments WHERE id = ${assignmentId} FOR UPDATE`);
+      const [materialized] = await tx.select({ id: workOrders.id }).from(workOrders)
+        .where(eq(workOrders.sourceAssignmentId, assignmentId)).limit(1);
+      if (materialized) throw new Error("Assignment-artiklar kan inte ändras efter materialisering");
+      const [updated] = await tx.update(assignmentArticles)
+        .set(safeData)
+        .where(and(
+          eq(assignmentArticles.id, id),
+          eq(assignmentArticles.assignmentId, assignmentId)
+        ))
+        .returning();
+      if (updated) await this.refreshAssignmentUppgiftsvardenTx(tx, assignmentId);
+      return updated;
+    });
     return result || undefined;
   }
 
   async deleteAssignmentArticle(id: string, assignmentId: string): Promise<void> {
-    await db.delete(assignmentArticles).where(and(
-      eq(assignmentArticles.id, id),
-      eq(assignmentArticles.assignmentId, assignmentId)
-    ));
+    await db.transaction(async (tx) => {
+      await tx.execute(sql`SELECT id FROM assignments WHERE id = ${assignmentId} FOR UPDATE`);
+      const [materialized] = await tx.select({ id: workOrders.id }).from(workOrders)
+        .where(eq(workOrders.sourceAssignmentId, assignmentId)).limit(1);
+      if (materialized) throw new Error("Assignment-artiklar kan inte ändras efter materialisering");
+      await tx.delete(assignmentArticles).where(and(
+        eq(assignmentArticles.id, id),
+        eq(assignmentArticles.assignmentId, assignmentId)
+      ));
+      await this.refreshAssignmentUppgiftsvardenTx(tx, assignmentId);
+    });
+  }
+
+  /**
+   * Assignment är planlagret. Varje ändring av dess artikelrader uppdaterar
+   * `uppdaterat`; när första raden tillkommer etableras även källa/plan. Vid
+   * materialisering läser ensureWorkOrderForAssignmentExecution samma aktuella
+   * assignment_articles och skapar WO-rader atomärt, så WO:ns frysning fångar
+   * exakt denna plan och aldrig artikelregistrets senare live-värden.
+   */
+  private async refreshAssignmentUppgiftsvardenTx(tx: any, assignmentId: string): Promise<void> {
+    const [assignment] = await tx.select({
+      id: assignments.id,
+      uppgiftsvarden: assignments.uppgiftsvarden,
+      invoicedAt: assignments.invoicedAt,
+    }).from(assignments).where(eq(assignments.id, assignmentId)).limit(1);
+    if (!assignment || assignment.invoicedAt) return;
+    const rows = await tx.select().from(assignmentArticles)
+      .where(eq(assignmentArticles.assignmentId, assignmentId))
+      .orderBy(assignmentArticles.sequenceOrder) as AssignmentArticle[];
+    const values = {
+      antal: rows.reduce((sum, row) => sum + Number(row.quantity ?? 0), 0),
+      tidMinuter: rows.reduce(
+        (sum, row) => sum + Number(row.unitTime ?? 0) * Number(row.quantity ?? 0), 0,
+      ),
+      vardeOre: rows.reduce(
+        (sum, row) => sum + Number(row.unitPrice ?? 0) * Number(row.quantity ?? 0), 0,
+      ),
+    };
+    const previous = assignment.uppgiftsvarden as Uppgiftsvarden | null;
+    // Assignment skapas före dess rader; den första artikeln är därför den
+    // faktiska källan och ursprungliga planen, inte create-defaulten.
+    const isEmptyInitialPlan =
+      rows.length === 1 &&
+      previous?.frystSnapshot == null &&
+      Number(previous?.uppdaterat?.antal ?? 0) === 0 &&
+      Number(previous?.uppdaterat?.tidMinuter ?? 0) === 0 &&
+      Number(previous?.uppdaterat?.vardeOre ?? 0) === 0;
+    const next = isEmptyInitialPlan
+      ? createUppgiftsvarden(values, new Date().toISOString())
+      : updateOpenUppgiftsvarden(previous, values, new Date().toISOString());
+    await tx.update(assignments).set({ uppgiftsvarden: next })
+      .where(eq(assignments.id, assignmentId));
   }
 
   // ======

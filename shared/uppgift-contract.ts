@@ -408,6 +408,48 @@ export function isUppgiftFrozen(status: UppgiftStatus): boolean {
   );
 }
 
+/* ============================================================
+ * TASK 131 · UPPGIFTENS MÄTBARA VÄRDEN
+ * ============================================================
+ * Samtliga led använder samma tre enheter:
+ *   antal       = icke-negativt heltal i uppgiftens livscykel. Eventuell
+ *                 betalarandel räknas först i fakturaexporten och ingår inte här.
+ *   tidMinuter  = total tid i minuter
+ *   vardeOre    = totalt ekonomiskt värde i öre (aldrig kronor/flyttal)
+ *
+ * Ledens betydelse är avsiktligt skild:
+ *   kallaLive       register-/radvärdet som gällde när uppgiften skapades
+ *   planerat        planerarens ursprungliga kalkyl
+ *   uppdaterat      senaste tillåtna omräkning medan uppgiften är öppen
+ *   frystSnapshot   immutable kopia när uppgiften stängs för fakturering
+ *   faktisktUtfall  vad som faktiskt utfördes/rapporterades
+ *   fakturerbart    det belopp/antal/tid fakturan SKA använda
+ *
+ * Fakturerbart kopieras vid frysning och får därefter aldrig räknas om från
+ * artikelregister eller föränderliga orderrader. Nullable led/fält betyder
+ * "historiskt okänt", inte noll. Det gör kontraktet additivt för legacydata.
+ */
+export interface UppgiftMatvarden {
+  antal: number | null;
+  tidMinuter: number | null;
+  vardeOre: number | null;
+}
+
+export interface TidsstampeladeUppgiftMatvarden extends UppgiftMatvarden {
+  /** ISO-8601; tidpunkten då just detta led fångades. */
+  vid: string;
+}
+
+export interface Uppgiftsvarden {
+  version: 1;
+  kallaLive: TidsstampeladeUppgiftMatvarden | null;
+  planerat: TidsstampeladeUppgiftMatvarden | null;
+  frystSnapshot: TidsstampeladeUppgiftMatvarden | null;
+  uppdaterat: TidsstampeladeUppgiftMatvarden | null;
+  faktisktUtfall: TidsstampeladeUppgiftMatvarden | null;
+  fakturerbart: TidsstampeladeUppgiftMatvarden | null;
+}
+
 export type UppgiftKallaSkapare =
   | "orderkoncept"
   | "snabborder"

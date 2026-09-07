@@ -14,8 +14,9 @@ import {
 import { eq } from "drizzle-orm";
 import { storage } from "../../server/storage";
 import { materializeCompletedAssignmentForInvoice } from "../../server/services/assignment-invoice-materializer";
+import { distributeActualTime } from "../../server/services/actual-time-distribution";
 import { propagateUppgiftspaket } from "../../server/services/uppgiftspaket";
-import type { Uppgiftspaket } from "@shared/uppgift-contract";
+import type { Uppgiftspaket, Uppgiftsvarden } from "@shared/uppgift-contract";
 import { chooseWoSnapshotValues, runBackfill } from "../../scripts/backfill-uppgiftspaket";
 
 // Task #1506 — Fundament: uppgifts-ID + garanterad artikel-snapshot.
@@ -98,6 +99,140 @@ async function getWoPaket(id: string): Promise<Uppgiftspaket | null> {
 }
 
 describe("uppgiftspaket artikel-snapshot (Task #1506)", () => {
+  it("Task #131: materialiseringsrace ger aldrig gamla lifecycle-värden med nya rader", async () => {
+    const assignment = await storage.createAssignment({
+      tenantId: TENANT, orderConceptId: conceptId, objectId, customerId,
+      title: "Materialiseringsrace", billingMethod: "call_off", status: "completed",
+    });
+    const row = await storage.createAssignmentArticle({
+      assignmentId: assignment.id, articleId, quantity: 1,
+      unitPrice: 1000, unitTime: 10,
+    });
+    await Promise.allSettled([
+      storage.updateAssignmentArticle(row.id, assignment.id, { quantity: 2 }),
+      materializeCompletedAssignmentForInvoice(TENANT, assignment.id),
+    ]);
+    const [wo] = await db.select().from(workOrders)
+      .where(eq(workOrders.sourceAssignmentId, assignment.id));
+    expect(wo).toBeTruthy();
+    const woLines = await storage.getWorkOrderLines(wo.id);
+    const values = wo.uppgiftsvarden as Uppgiftsvarden;
+    const rowQuantity = woLines.reduce((sum, line) => sum + line.quantity, 0);
+    expect(values.uppdaterat?.antal).toBe(rowQuantity);
+    expect(values.frystSnapshot?.antal).toBe(rowQuantity);
+  }, 30000);
+
+  it("Task #131: ogiltiga radantal avvisas före write och lämnar DB oförändrad", async () => {
+    const { workOrder, lines } = await storage.createWorkOrderWithLines(
+      { tenantId: TENANT, customerId, objectId, title: "Antalsvalidering" },
+      [{ articleId, quantity: 1, resolvedPrice: 1000 }],
+    );
+    await expect(storage.createWorkOrderLine({
+      tenantId: TENANT, workOrderId: workOrder.id, articleId, quantity: -1,
+    })).rejects.toThrow(/icke-negativt heltal/);
+    await expect(storage.updateWorkOrderLine(lines[0].id, { quantity: 1.5 as any }))
+      .rejects.toThrow(/icke-negativt heltal/);
+    const persisted = await storage.getWorkOrderLines(workOrder.id);
+    expect(persisted).toHaveLength(1);
+    expect(persisted[0].quantity).toBe(1);
+
+    const assignment = await storage.createAssignment({
+      tenantId: TENANT, orderConceptId: conceptId, objectId, customerId,
+      title: "Assignment-antalsvalidering",
+    });
+    await expect(storage.createAssignmentArticle({
+      assignmentId: assignment.id, articleId, quantity: -1,
+    })).rejects.toThrow(/icke-negativt heltal/);
+    const valid = await storage.createAssignmentArticle({
+      assignmentId: assignment.id, articleId, quantity: 1,
+    });
+    await expect(storage.updateAssignmentArticle(valid.id, assignment.id, { quantity: 1.2 as any }))
+      .rejects.toThrow(/icke-negativt heltal/);
+    expect((await storage.getAssignmentArticles(assignment.id))[0].quantity).toBe(1);
+  }, 30000);
+
+  it("Task #131: verklig tidsfördelning avvisas atomiskt om en WO är fryst", async () => {
+    const makeWo = (title: string) => storage.createWorkOrderWithLines(
+      { tenantId: TENANT, customerId, objectId, title, estimatedDuration: 30 },
+      [{ articleId, quantity: 1, resolvedPrice: 1000, resolvedProductionMinutes: 30 }],
+    );
+    const first = await makeWo("Tid öppen");
+    const second = await makeWo("Tid fryst");
+    await storage.freezeWorkOrder(second.workOrder.id, TENANT);
+    await expect(distributeActualTime({
+      tenantId: TENANT,
+      workOrderIds: [first.workOrder.id, second.workOrder.id],
+      totalActualMinutes: 60,
+      groupKey: "atomic-reject",
+      actor: { type: "system" },
+    })).rejects.toThrow(/efter frysning/);
+    const [unchanged] = await db.select({ actualDuration: workOrders.actualDuration })
+      .from(workOrders).where(eq(workOrders.id, first.workOrder.id));
+    expect(unchanged.actualDuration).toBeNull();
+  }, 30000);
+
+  it("Task #131: ändring före frysning följer med, omladdat snapshot förblir immutable", async () => {
+    const { workOrder, lines } = await storage.createWorkOrderWithLines(
+      {
+        tenantId: TENANT,
+        customerId,
+        objectId,
+        title: "Värdelivscykel-WO",
+        actualDuration: 37,
+      },
+      [{
+        articleId,
+        quantity: 1,
+        resolvedPrice: 10000,
+        resolvedCost: 5000,
+        resolvedProductionMinutes: 20,
+      }],
+    );
+
+    // Tillåten live-/uppdaterad ändring innan frysning.
+    await storage.updateWorkOrderLine(lines[0].id, {
+      quantity: 3,
+      resolvedPrice: 12000,
+      resolvedProductionMinutes: 25,
+    });
+    await storage.freezeWorkOrder(workOrder.id, TENANT);
+
+    const [reloaded] = await db.select().from(workOrders).where(eq(workOrders.id, workOrder.id));
+    const frozen = reloaded.uppgiftsvarden as Uppgiftsvarden;
+    expect(frozen.kallaLive).toMatchObject({ antal: 1, tidMinuter: 20, vardeOre: 10000 });
+    expect(frozen.uppdaterat).toMatchObject({ antal: 3, tidMinuter: 75, vardeOre: 36000 });
+    expect(frozen.frystSnapshot).toMatchObject({ antal: 3, tidMinuter: 75, vardeOre: 36000 });
+    expect(frozen.faktisktUtfall).toMatchObject({ antal: 3, tidMinuter: 37 });
+    expect(frozen.fakturerbart).toMatchObject({ antal: 3, tidMinuter: 75, vardeOre: 36000 });
+
+    // Historiken får inte skrivas om, ens via legacy-force efter live-drift.
+    await expect(storage.updateWorkOrderLine(lines[0].id, {
+      quantity: 9,
+      resolvedPrice: 99000,
+      resolvedProductionMinutes: 99,
+    })).rejects.toThrow(/kan inte ändras efter frysning/);
+    await expect(storage.deleteWorkOrderLine(lines[0].id))
+      .rejects.toThrow(/kan inte ändras efter frysning/);
+    await storage.freezeWorkOrder(workOrder.id, TENANT, { force: true });
+    const [after] = await db.select().from(workOrders).where(eq(workOrders.id, workOrder.id));
+    expect(after.uppgiftsvarden).toEqual(frozen);
+    const [frozenLine] = await db
+      .select()
+      .from(workOrderLines)
+      .where(eq(workOrderLines.id, lines[0].id));
+    expect(frozenLine).toMatchObject({
+      frozenQuantity: 3,
+      frozenTimeMinutes: 75,
+      frozenValueOre: 36000,
+      billableQuantity: 3,
+      billableTimeMinutes: 75,
+      billableValueOre: 36000,
+      actualQuantity: 3,
+      actualTimeMinutes: 37,
+      actualValueOre: 36000,
+    });
+  }, 30000);
+
   it("fryser artikelvärden vid createWorkOrderWithLines och är immun mot registeränd­ringar", async () => {
     const { workOrder } = await storage.createWorkOrderWithLines(
       {
@@ -211,19 +346,20 @@ describe("uppgiftspaket artikel-snapshot (Task #1506)", () => {
       ],
     );
     const fore = await getWoPaket(workOrder.id);
+    await storage.freezeWorkOrder(workOrder.id, TENANT);
 
-    // Ny artikel + ny rad på den frysta WO:n → snapshoten får inte röras.
+    // Ny artikel + ny rad på den frysta WO:n avvisas → snapshoten får inte röras.
     const [annanArtikel] = await db
       .insert(articles)
       .values({ tenantId: TENANT, articleNumber: "SNAP-200", name: "Annan tjänst", listPrice: 77700 })
       .returning();
-    await storage.createWorkOrderLine({
+    await expect(storage.createWorkOrderLine({
       tenantId: TENANT,
       workOrderId: workOrder.id,
       articleId: annanArtikel.id,
       quantity: 1,
       resolvedPrice: 77700,
-    });
+    })).rejects.toThrow(/kan inte ändras efter frysning/);
 
     const efter = await getWoPaket(workOrder.id);
     expect(efter?.artikel).toEqual(fore?.artikel);
@@ -425,7 +561,7 @@ describe("uppgiftspaket artikel-snapshot (Task #1506)", () => {
       status: "completed",
       completedAt: new Date(),
     });
-    await storage.createAssignmentArticle({
+    const assignmentArticle = await storage.createAssignmentArticle({
       assignmentId: assignment.id,
       articleId,
       quantity: 1,
@@ -433,17 +569,42 @@ describe("uppgiftspaket artikel-snapshot (Task #1506)", () => {
       unitCost: 30000,
       unitTime: 45,
     });
+    await storage.updateAssignmentArticle(assignmentArticle.id, assignment.id, {
+      quantity: 2,
+      unitTime: 60,
+    });
+    const assignmentBeforeMaterialization = await storage.getAssignment(assignment.id);
+    const assignmentValues = assignmentBeforeMaterialization!.uppgiftsvarden as Uppgiftsvarden;
+    expect(assignmentValues.kallaLive).toMatchObject({ antal: 1, tidMinuter: 45, vardeOre: 50000 });
+    expect(assignmentValues.planerat).toMatchObject({ antal: 1, tidMinuter: 45, vardeOre: 50000 });
+    expect(assignmentValues.uppdaterat).toMatchObject({ antal: 2, tidMinuter: 120, vardeOre: 100000 });
 
     const result = await materializeCompletedAssignmentForInvoice(TENANT, assignment.id);
     expect(result.workOrderId).toBeTruthy();
 
     const [wo] = await db
-      .select({ sourceAssignmentId: workOrders.sourceAssignmentId, uppgiftspaket: workOrders.uppgiftspaket })
+      .select({
+        sourceAssignmentId: workOrders.sourceAssignmentId,
+        uppgiftspaket: workOrders.uppgiftspaket,
+        uppgiftsvarden: workOrders.uppgiftsvarden,
+      })
       .from(workOrders)
       .where(eq(workOrders.id, result.workOrderId!));
     expect(wo.sourceAssignmentId).toBe(assignment.id);
     const paket = wo.uppgiftspaket as Uppgiftspaket | null;
     expect(paket?.artikel?.artikelId).toBe(articleId);
     expect(paket?.artikel?.prisOre).toBe(50000);
+    const woValues = wo.uppgiftsvarden as Uppgiftsvarden;
+    expect(woValues.kallaLive).toEqual(assignmentValues.kallaLive);
+    expect(woValues.planerat).toEqual(assignmentValues.planerat);
+    expect(woValues.uppdaterat).toEqual(assignmentValues.uppdaterat);
+    expect(woValues.frystSnapshot).toMatchObject({ antal: 2, tidMinuter: 120, vardeOre: 100000 });
+    await expect(storage.updateAssignmentArticle(
+      assignmentArticle.id,
+      assignment.id,
+      { quantity: 9 },
+    )).rejects.toThrow(/efter materialisering/);
+    await expect(storage.deleteAssignmentArticle(assignmentArticle.id, assignment.id))
+      .rejects.toThrow(/efter materialisering/);
   }, 30000);
 });
