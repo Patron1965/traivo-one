@@ -227,6 +227,68 @@ describe("buildFortnoxLogicalRowsForWorkOrder — paritet enskild vs konsolidera
 });
 
 describe("buildFortnoxLogicalRowsForWorkOrder — pris/antal/filter", () => {
+  it("fakturaraden använder fakturerbart/fryst underlag efter att live-raden ändrats", async () => {
+    const rows = await buildFortnoxLogicalRowsForWorkOrder(
+      makeParams({
+        workOrder: { id: "wo-fryst", frozenUnitPrice: 5000, frozenQuantity: 2 },
+        lines: [{
+          articleId: "art-1",
+          // Senare live-ändring (ska vara irrelevant för fakturan).
+          quantity: 99,
+          resolvedPrice: 99999,
+          // Snapshot/fakturerbart från frysögonblicket.
+          frozenQuantity: 2,
+          frozenValueOre: 10000,
+          billableQuantity: 2,
+          billableValueOre: 10000,
+        }],
+      }),
+    );
+    expect(rows[0].chargeRow.DeliveredQuantity).toBe(2);
+    expect(rows[0].chargeRow.Price).toBe(5000);
+  });
+
+  it("ett fryst värde med antal noll använder aldrig senare live-pris", async () => {
+    const rows = await buildFortnoxLogicalRowsForWorkOrder(
+      makeParams({
+        workOrder: { id: "wo-noll" },
+        lines: [{
+          articleId: "art-1",
+          quantity: 99,
+          resolvedPrice: 99999,
+          billableQuantity: 0,
+          billableValueOre: 0,
+        }],
+      }),
+    );
+    expect(rows[0].chargeRow.DeliveredQuantity).toBe(0);
+    expect(rows[0].chargeRow.Price).toBe(0);
+  });
+
+  it("fail-closed när en ny fryst WO saknar radens snapshot", async () => {
+    await expect(buildFortnoxLogicalRowsForWorkOrder(
+      makeParams({
+        workOrder: {
+          id: "wo-incomplete",
+          uppgiftsvarden: {
+            version: 1, kallaLive: null, planerat: null, uppdaterat: null,
+            frystSnapshot: { antal: 1, tidMinuter: 10, vardeOre: 1000, vid: "2026-01-01T00:00:00.000Z" },
+            faktisktUtfall: null, fakturerbart: null,
+          },
+        },
+        lines: [{ articleId: "art-1", quantity: 1, resolvedPrice: 99999 }],
+      }),
+    )).rejects.toThrow(/saknar frozen\/billable/);
+  });
+
+  it("legacy-WO utan uppgiftsvarden behåller kompatibel resolvedPrice-fallback", async () => {
+    const rows = await buildFortnoxLogicalRowsForWorkOrder(makeParams({
+      workOrder: { id: "wo-legacy" },
+      lines: [{ articleId: "art-1", quantity: 2, resolvedPrice: 1234 }],
+    }));
+    expect(rows[0].chargeRow).toMatchObject({ DeliveredQuantity: 2, Price: 1234 });
+  });
+
   it("payerPercentage skalar DeliveredQuantity", async () => {
     const rows = await buildFortnoxLogicalRowsForWorkOrder(
       makeParams({

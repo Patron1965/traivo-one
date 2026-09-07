@@ -28,6 +28,7 @@ import {
   type ObjectInvoiceRefs,
 } from "./invoice-line-enrichment";
 import type { FrozenInvoiceRowReferences } from "./invoice-reference-resolver";
+import type { Uppgiftsvarden } from "@shared/uppgift-contract";
 
 // Fortnox radbeskrivning är kort — håll info-raderna konservativt korta.
 const INFO_ROW_MAX_LENGTH = 50;
@@ -57,6 +58,11 @@ interface BuilderLine {
   articleId?: string | null;
   quantity: number;
   resolvedPrice?: number | null;
+  /** Task #131: fryst/fakturerbart underlag. Null = legacyrad. */
+  frozenQuantity?: number | null;
+  frozenValueOre?: number | null;
+  billableQuantity?: number | null;
+  billableValueOre?: number | null;
   notes?: string | null;
   description?: string | null;
   // Informationspaket fält 26 & 27 (artikel-nivå fakturaflaggor, upplösta av caller).
@@ -77,6 +83,7 @@ interface BuilderWorkOrder {
   frozenQuantity?: number | null;
   frozenIsFixedPrice?: boolean | null;
   frozenInvoiceRowReferences?: FrozenInvoiceRowReferences | null;
+  uppgiftsvarden?: Uppgiftsvarden | null;
 }
 
 export interface BuildLogicalRowsParams {
@@ -179,6 +186,19 @@ export async function buildFortnoxLogicalRowsForWorkOrder(
   const proj = project || undefined;
 
   const out: FortnoxLogicalRow[] = [];
+  // En Task #131-fryst WO är aldrig legacy: saknat radunderlag är ett datafel,
+  // inte en anledning att läsa föränderliga resolved*-värden.
+  if (workOrder.uppgiftsvarden?.frystSnapshot) {
+    const incomplete = lines.find((line) =>
+      line.frozenQuantity == null || line.frozenValueOre == null ||
+      line.billableQuantity == null || line.billableValueOre == null,
+    );
+    if (incomplete) {
+      throw new Error(
+        `[fortnox] Fryst arbetsorder ${workOrder.id} saknar frozen/billable-radunderlag (${incomplete.articleId ?? "fritext"}); exporten avbryts.`,
+      );
+    }
+  }
   let lineIndex = -1;
   for (const line of lines) {
     lineIndex++;
@@ -201,14 +221,29 @@ export async function buildFortnoxLogicalRowsForWorkOrder(
       continue;
     }
 
-    const quantity = Number(line.quantity) * (payerPercentage / 100);
+    // Nya rader faktureras uteslutande från billable/frozen-snapshoten. Endast
+    // legacyrader där båda saknas faller tillbaka på de gamla live-kolumnerna.
+    const invoiceQuantity =
+      line.billableQuantity ?? line.frozenQuantity ?? line.quantity;
+    const quantity = Number(invoiceQuantity) * (payerPercentage / 100);
     const basePrice = Number(line.resolvedPrice ?? 0);
+    const frozenLineValue = line.billableValueOre ?? line.frozenValueOre;
+    const deterministicUnitPrice =
+      frozenLineValue != null
+        ? Number(invoiceQuantity) !== 0
+          ? Number(frozenLineValue) / Number(invoiceQuantity)
+          // Ett explicit fryst värde med antal noll får aldrig läcka ett senare
+          // resolvedPrice. Price=0 gör den deterministiska nollraden tydlig.
+          : 0
+        : null;
     // Informationspaket fält 27: "Fakturera till kund" = false ⇒ pris 0 (raden visas
     // men debiteras inte). Sätts efter fryst-skalningen så andelen dras bort från summan.
     const notCharged = line.invoiceToCustomer === false;
     const price = notCharged
       ? 0
-      : useFrozen
+      : deterministicUnitPrice != null
+        ? deterministicUnitPrice
+        : useFrozen
         ? Math.round(basePrice * scale * 100) / 100
         : line.resolvedPrice || undefined;
 
