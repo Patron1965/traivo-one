@@ -8,10 +8,11 @@
     "build": "tsx scripts/build.ts",
     "start": "NODE_ENV=production node dist/index.cjs",
     "check": "tsc",
+    "check:traivo-go-api-match": "tsx scripts/check-traivo-go-api-match.ts",
     "lint:icon-shadowing": "tsx scripts/lint-lucide-builtin-shadowing.ts",
     "lint:frozen-dropdown": "tsx scripts/lint-frozen-dropdown-dialog.ts",
     "db:push": "drizzle-kit push",
-    "test": "vitest run"
+    "test": "pnpm run check:traivo-go-api-match && vitest run"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
